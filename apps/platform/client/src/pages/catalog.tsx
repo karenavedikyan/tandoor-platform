@@ -69,14 +69,14 @@ export default function CatalogPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-foreground">Каталог</h1>
+    <div className="space-y-5">
+      <div className="flex items-center justify-between rounded-2xl bg-card px-4 py-3 shadow-sm">
+        <h1 className="text-2xl font-semibold uppercase text-foreground">Каталог</h1>
         <StatusBadge type="availability" status={`${products.length} товар(ов)`} />
       </div>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {products.map((product) => (
-          <Card key={product.id} data-testid={`catalog-card-${product.id}`} className="shadow-sm">
+          <Card key={product.id} data-testid={`catalog-card-${product.id}`} className="rounded-2xl border-border/80 shadow-sm">
             <CardHeader className="pb-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -107,7 +107,7 @@ export default function CatalogPage() {
               </div>
               <Button
                 asChild
-                className="mt-2 w-full rounded-xl"
+                className="mt-2 w-full rounded-xl bg-primary font-bold uppercase text-primary-foreground"
                 data-testid={`button-add-product-${product.id}`}
               >
                 <Link href="/orders/new">Создать заказ с этим артикулом</Link>

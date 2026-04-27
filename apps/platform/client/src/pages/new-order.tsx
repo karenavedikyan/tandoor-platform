@@ -211,7 +211,7 @@ export default function NewOrderPage() {
     <div className="space-y-6" data-testid="new-order-page">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-semibold text-foreground">Создание заказа дилера</h1>
+          <h1 className="text-2xl font-bold uppercase tracking-[0.02em] text-foreground">Создание заказа дилера</h1>
           <p className="text-sm text-muted-foreground">
             Сформируйте новый заказ Tandoor на основе активного каталога.
           </p>
@@ -225,7 +225,7 @@ export default function NewOrderPage() {
         </Button>
       </div>
 
-      <Card>
+      <Card className="rounded-2xl">
         <CardHeader>
           <CardTitle>Дилер</CardTitle>
           <CardDescription>Выберите дилерскую компанию для этого заказа.</CardDescription>
@@ -256,7 +256,7 @@ export default function NewOrderPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="rounded-2xl">
         <CardHeader>
           <CardTitle>Товары</CardTitle>
           <CardDescription>Выберите товары и укажите количество для заказа.</CardDescription>
@@ -267,7 +267,7 @@ export default function NewOrderPage() {
             return (
               <div
                 key={product.id}
-                className="rounded-xl border border-border bg-background p-4"
+                className="rounded-2xl border border-border bg-muted/30 p-4"
                 data-testid={`product-card-${product.id}`}
               >
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -306,6 +306,7 @@ export default function NewOrderPage() {
                       <Button
                         onClick={() => handleAddProduct(product.id)}
                         data-testid={`button-add-product-${product.id}`}
+                        className="uppercase tracking-wide"
                       >
                         <Plus className="mr-2 h-4 w-4" />
                         Добавить товар
@@ -319,7 +320,7 @@ export default function NewOrderPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="rounded-2xl">
         <CardHeader>
           <CardTitle>Сводка заказа</CardTitle>
           <CardDescription>Выбранные товары и итоговая сумма.</CardDescription>
@@ -345,7 +346,7 @@ export default function NewOrderPage() {
               </div>
             ))
           )}
-          <div className="flex items-center justify-between rounded-xl border border-primary/25 bg-primary/10 p-4">
+          <div className="flex items-center justify-between rounded-2xl border border-primary/25 bg-primary/10 p-4">
             <span className="font-medium">Сумма заказа</span>
             <span className="text-lg font-semibold" data-testid="text-order-total">
               {formatCurrency(orderTotalCents, "RUB")}
@@ -354,7 +355,7 @@ export default function NewOrderPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="rounded-2xl">
         <CardHeader>
           <CardTitle>Комментарий и отправка</CardTitle>
           <CardDescription>Добавьте комментарий и отправьте заказ.</CardDescription>
@@ -379,7 +380,7 @@ export default function NewOrderPage() {
           )}
 
           <Button
-            className="rounded-full px-6"
+            className="w-full rounded-xl px-6 py-3 text-sm font-bold uppercase tracking-[0.08em]"
             onClick={onSubmit}
             disabled={isSubmitDisabled}
             data-testid="button-submit-order"

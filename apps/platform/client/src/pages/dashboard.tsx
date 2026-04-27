@@ -1,15 +1,17 @@
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
-  ArrowRight,
-  ArrowUpRight,
-  Boxes,
-  Briefcase,
-  ClipboardList,
-  FileWarning,
-  PackageSearch,
+  Building2,
+  ChevronRight,
+  Network,
+  ScrollText,
   PlusCircle,
+  ShoppingCart,
+  ClipboardList,
+  Boxes,
+  Activity,
   UsersRound,
+  FileWarning,
 } from "lucide-react";
 import type { ActivityEvent, Claim, Dealer, Order, Product } from "@/lib/api-types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -100,11 +102,13 @@ export default function DashboardPage() {
   const recentActivity = activity.slice(0, 5);
   const recentOrders = orders.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 5);
 
-  const quickLinks = [
-    { href: "/orders", label: "Заказы", icon: ClipboardList },
-    { href: "/dealers", label: "Дилеры", icon: Briefcase },
-    { href: "/catalog", label: "Каталог", icon: PackageSearch },
-    { href: "/claims", label: "Рекламации", icon: FileWarning },
+  const quickTiles = [
+    { href: "/dealers", label: "Дилеры", icon: Building2 },
+    { href: "/catalog", label: "Каталог", icon: Boxes },
+    { href: "/orders", label: "Заказы", icon: ShoppingCart },
+    { href: "/claims", label: "Рекламации", icon: ScrollText },
+    { href: "/activity", label: "События", icon: Activity },
+    { href: "/architecture", label: "Архитектура", icon: Network },
   ];
 
   const kpiCards = [
@@ -116,8 +120,34 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6" data-testid="dashboard-page">
-      <div className="flex justify-end">
-        <Button asChild data-testid="button-create-order">
+      <div className="space-y-3 rounded-2xl border border-border/80 bg-card p-5 shadow-sm">
+        <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Главная</p>
+        <h1 className="text-[24px] font-bold leading-tight text-foreground">Платформа Tandoor</h1>
+        <p className="text-sm text-muted-foreground">Добро пожаловать в операционный кабинет дилерского контура.</p>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3" data-testid="dashboard-quick-tiles">
+        {quickTiles.map((tile) => (
+          <Link
+            key={tile.href}
+            href={tile.href}
+            className="group rounded-[14px] border border-border/80 bg-[#e8e8e8] px-4 py-4 transition-colors hover:bg-[#e2e2e2]"
+            data-testid={`quick-tile-${tile.href.replace("/", "") || "root"}`}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-sm font-semibold text-foreground">{tile.label}</p>
+              <tile.icon className="size-4 text-foreground/70 transition-transform group-hover:translate-x-0.5" />
+            </div>
+          </Link>
+        ))}
+      </div>
+
+      <div>
+        <Button
+          asChild
+          data-testid="button-create-order"
+          className="h-11 w-full rounded-[10px] bg-primary text-[13px] font-bold uppercase tracking-[0.08em] text-primary-foreground hover:bg-primary/90"
+        >
           <Link href="/orders/new">
             <PlusCircle className="size-4" />
             Создать заказ
@@ -128,7 +158,7 @@ export default function DashboardPage() {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {kpiCards.map((card) => (
           <Card key={card.label} data-testid={`kpi-${card.label.toLowerCase().replaceAll(" ", "-")}`}>
-            <CardHeader className="space-y-3">
+            <CardHeader className="space-y-3 pb-4">
               <div className="flex items-center justify-between">
                 <CardDescription>{card.label}</CardDescription>
                 <card.icon className="size-4 text-muted-foreground" />
@@ -139,10 +169,10 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1.5fr,1fr]">
+      <div className="grid gap-6 xl:grid-cols-[1.45fr,1fr]">
         <Card data-testid="orders-status-summary">
           <CardHeader>
-            <CardTitle className="text-xl">Статусы заказов</CardTitle>
+            <CardTitle className="text-xl uppercase tracking-[0.06em]">Статусы заказов</CardTitle>
             <CardDescription>Текущее распределение заказов</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -160,16 +190,16 @@ export default function DashboardPage() {
 
         <Card data-testid="quick-links-card">
           <CardHeader>
-            <CardTitle className="text-xl">Быстрый переход</CardTitle>
+            <CardTitle className="text-xl uppercase tracking-[0.06em]">Быстрые действия</CardTitle>
             <CardDescription>Переход к ключевым разделам</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
-            {quickLinks.map((link) => (
+            {quickTiles.slice(0, 4).map((link) => (
               <Button
                 key={link.href}
                 asChild
                 variant="outline"
-                className="w-full justify-between rounded-xl bg-card"
+                className="h-10 w-full justify-between rounded-[10px] border-border/80 bg-muted/30"
                 data-testid={`quick-link-${link.href.replace("/", "") || "root"}`}
               >
                 <Link href={link.href}>
@@ -177,7 +207,7 @@ export default function DashboardPage() {
                     <link.icon className="size-4" />
                     {link.label}
                   </span>
-                  <ArrowRight className="size-4" />
+                  <ChevronRight className="size-4" />
                 </Link>
               </Button>
             ))}

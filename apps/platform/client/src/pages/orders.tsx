@@ -50,19 +50,19 @@ export default function OrdersPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-semibold text-foreground" data-testid="page-title-orders">
+          <h1 className="text-3xl font-bold uppercase tracking-tight text-foreground" data-testid="page-title-orders">
             Заказы
           </h1>
           <p className="text-sm text-muted-foreground">Воронка заказов в дилерском контуре.</p>
         </div>
-        <Button asChild data-testid="button-create-order" className="rounded-full">
+        <Button asChild data-testid="button-create-order" className="rounded-xl px-5 font-bold uppercase tracking-wide">
           <Link href="/orders/new">Создать заказ</Link>
         </Button>
       </div>
 
       <Card className="shadow-sm">
         <CardHeader className="pb-4">
-          <CardTitle className="text-lg">Реестр заказов</CardTitle>
+          <CardTitle className="text-lg font-bold uppercase tracking-wide">Реестр заказов</CardTitle>
         </CardHeader>
         <CardContent>
           {isOrdersLoading ? (
@@ -75,10 +75,10 @@ export default function OrdersPage() {
               </AlertDescription>
             </Alert>
           ) : (
-            <div className="rounded-xl border border-border bg-white">
+            <div className="overflow-hidden rounded-2xl border border-border bg-white">
               <Table data-testid="orders-table">
                 <TableHeader>
-                  <TableRow>
+                  <TableRow className="bg-[#f6f6f6] hover:bg-[#f6f6f6]">
                     <TableHead>Заказ</TableHead>
                     <TableHead>Дилер</TableHead>
                     <TableHead>Статус</TableHead>
@@ -109,7 +109,7 @@ export default function OrdersPage() {
                             : "—"}
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button asChild size="sm" className="rounded-full" data-testid={`view-order-${order.id}`}>
+                          <Button asChild size="sm" className="rounded-xl px-4 font-semibold" data-testid={`view-order-${order.id}`}>
                             <Link href={`/orders/${order.id}`}>Открыть</Link>
                           </Button>
                         </TableCell>

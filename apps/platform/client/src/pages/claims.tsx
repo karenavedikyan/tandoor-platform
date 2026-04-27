@@ -102,7 +102,7 @@ export default function ClaimsPage() {
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Реестр рекламаций</CardTitle>
+          <CardTitle className="text-base uppercase tracking-wide">Реестр рекламаций</CardTitle>
         </CardHeader>
         <CardContent>
           <Table data-testid="claims-table">

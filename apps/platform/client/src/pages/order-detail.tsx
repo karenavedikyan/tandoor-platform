@@ -109,6 +109,7 @@ export default function OrderDetailPage() {
 
   return (
     <div className="space-y-6" data-testid="order-detail-page">
+      <div className="rounded-2xl border border-border/80 bg-card px-5 py-4 shadow-sm sm:px-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <Button asChild variant="outline" size="sm" className="mb-3">
@@ -124,22 +125,23 @@ export default function OrderDetailPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button data-testid="create-claim-action">
+          <Button data-testid="create-claim-action" className="rounded-xl uppercase tracking-wide">
             <ShieldAlert className="mr-2 h-4 w-4" />
             Создать рекламацию
           </Button>
-          <Button variant="outline" data-testid="download-documents-action">
+          <Button variant="outline" data-testid="download-documents-action" className="rounded-xl">
             <Download className="mr-2 h-4 w-4" />
             Скачать документы
           </Button>
-          <Button variant="outline" data-testid="repeat-order-action">
+          <Button variant="outline" data-testid="repeat-order-action" className="rounded-xl">
             <Copy className="mr-2 h-4 w-4" />
             Повторить заказ
           </Button>
         </div>
       </div>
+      </div>
 
-      <Card>
+      <Card className="rounded-2xl border-border/80 shadow-sm">
         <CardHeader>
           <CardTitle>Карточка заказа</CardTitle>
           <CardDescription>Информация о дилере, статус и ход исполнения.</CardDescription>
@@ -237,7 +239,7 @@ export default function OrderDetailPage() {
             order.documents.map((document) => (
               <div
                 key={document.id}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/20 p-3"
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-muted/20 p-3"
                 data-testid={`order-document-${document.id}`}
               >
                 <div className="flex items-center gap-2">

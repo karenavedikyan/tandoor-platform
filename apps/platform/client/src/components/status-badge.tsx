@@ -15,34 +15,34 @@ type StatusBadgeProps = {
 };
 
 const orderStyles: Record<string, string> = {
-  draft: "bg-muted text-muted-foreground border-border",
-  submitted: "bg-primary/10 text-primary border-primary/20",
-  reserved: "bg-lime-100 text-lime-800 border-lime-200",
+  draft: "bg-neutral-100 text-neutral-700 border-neutral-200",
+  submitted: "bg-primary/15 text-foreground border-primary/35",
+  reserved: "bg-[#dff2c7] text-[#37551a] border-[#cbe7a8]",
   assembling: "bg-amber-100 text-amber-800 border-amber-200",
-  shipped: "bg-sky-100 text-sky-800 border-sky-200",
-  delivered: "bg-emerald-100 text-emerald-800 border-emerald-200",
+  shipped: "bg-[#ddeffe] text-[#24537d] border-[#c4def5]",
+  delivered: "bg-[#dff2c7] text-[#37551a] border-[#cbe7a8]",
   cancelled: "bg-rose-100 text-rose-800 border-rose-200",
 };
 
 const claimStyles: Record<string, string> = {
-  new: "bg-primary/10 text-primary border-primary/20",
+  new: "bg-primary/15 text-foreground border-primary/35",
   in_review: "bg-amber-100 text-amber-800 border-amber-200",
-  waiting_info: "bg-violet-100 text-violet-800 border-violet-200",
-  resolved: "bg-emerald-100 text-emerald-800 border-emerald-200",
+  waiting_info: "bg-neutral-100 text-neutral-700 border-neutral-200",
+  resolved: "bg-[#dff2c7] text-[#37551a] border-[#cbe7a8]",
   rejected: "bg-rose-100 text-rose-800 border-rose-200",
 };
 
 const dealerStyles: Record<string, string> = {
-  active: "bg-emerald-100 text-emerald-800 border-emerald-200",
-  inactive: "bg-slate-100 text-slate-700 border-slate-200",
+  active: "bg-[#dff2c7] text-[#37551a] border-[#cbe7a8]",
+  inactive: "bg-neutral-100 text-neutral-700 border-neutral-200",
   paused: "bg-amber-100 text-amber-800 border-amber-200",
 };
 
 const availabilityStyles: Record<string, string> = {
-  in_stock: "bg-emerald-100 text-emerald-800 border-emerald-200",
+  in_stock: "bg-[#dff2c7] text-[#37551a] border-[#cbe7a8]",
   limited: "bg-amber-100 text-amber-800 border-amber-200",
-  backorder: "bg-rose-100 text-rose-800 border-rose-200",
-  out_of_stock: "bg-slate-100 text-slate-700 border-slate-200",
+  backorder: "bg-neutral-100 text-neutral-700 border-neutral-200",
+  out_of_stock: "bg-neutral-100 text-neutral-700 border-neutral-200",
 };
 
 const labels: Record<string, string> = {
@@ -93,7 +93,7 @@ function styleFor(kind: StatusKind, value: string) {
     return dealerStyles[value] ?? dealerStyles.inactive;
   }
 
-  return availabilityStyles[value] ?? "bg-muted text-muted-foreground border-border";
+  return availabilityStyles[value] ?? "bg-neutral-100 text-neutral-700 border-neutral-200";
 }
 
 export function StatusBadge({

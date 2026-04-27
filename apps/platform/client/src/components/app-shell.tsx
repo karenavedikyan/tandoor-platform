@@ -4,6 +4,7 @@ import {
   Boxes,
   Building2,
   LayoutDashboard,
+  Search,
   Menu,
   Network,
   ScrollText,
@@ -20,6 +21,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { TandoorLogo } from "@/components/tandoor-logo";
 
@@ -79,14 +81,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-muted/30 text-foreground" data-testid="app-shell">
+    <div className="min-h-screen bg-background text-foreground" data-testid="app-shell">
       <div className="mx-auto flex max-w-[1440px]">
         <aside className="hidden min-h-screen w-72 border-r border-sidebar-border bg-sidebar px-4 py-6 lg:block">
           <div className="px-2">
             <TandoorLogo className="h-10 w-auto" data-testid="tandoor-logo-sidebar" />
-            <p className="mt-3 text-xs text-muted-foreground">
-              Дилерская платформа
-            </p>
+            <p className="mt-3 text-xs text-muted-foreground">Дилерская платформа</p>
           </div>
           <div className="mt-8">
             <SidebarNav location={location} />
@@ -94,14 +94,44 @@ export function AppShell({ children }: { children: ReactNode }) {
         </aside>
 
         <div className="flex min-h-screen flex-1 flex-col">
-          <header className="sticky top-0 z-30 border-b border-border/80 bg-background/90 px-4 py-3 backdrop-blur lg:px-8">
-            <div className="flex items-center justify-between gap-3">
+          <header className="sticky top-0 z-30 border-b border-border/90 bg-background/95 px-4 py-3 backdrop-blur lg:px-8">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <TandoorLogo className="h-9 w-auto lg:hidden" compact data-testid="tandoor-logo-mobile-header" />
+                  <div className="hidden lg:block">
+                    <h1 className="text-lg font-bold tracking-tight" data-testid="platform-title">
+                      Платформа Tandoor
+                    </h1>
+                    <p className="text-xs text-muted-foreground sm:text-sm" data-testid="platform-subtitle">
+                      MVP B2B2C-экосистемы
+                    </p>
+                  </div>
+                </div>
+                <Badge
+                  className="hidden rounded-full border-border bg-white px-3 py-1 text-[11px] font-semibold text-muted-foreground sm:inline-flex"
+                  variant="outline"
+                  data-testid="workspace-badge"
+                >
+                  Продажи / дилерский контур
+                </Badge>
+              </div>
+
               <div className="flex items-center gap-3">
+                <div className="relative flex-1" data-testid="header-search">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    type="search"
+                    placeholder="Поиск"
+                    aria-label="Поиск"
+                    className="h-10 rounded-xl border-border bg-[#E8E8E8] pl-9 text-sm shadow-none focus-visible:ring-1"
+                  />
+                </div>
                 <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
                   <SheetTrigger asChild>
                     <Button
-                      className="lg:hidden"
-                      variant="outline"
+                      className="h-10 w-10 rounded-[10px] bg-primary text-primary-foreground hover:bg-primary/90 lg:hidden"
+                      variant="default"
                       size="icon"
                       data-testid="mobile-menu-trigger"
                     >
@@ -118,24 +148,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                     <SidebarNav location={location} onNavigate={() => setMobileOpen(false)} />
                   </SheetContent>
                 </Sheet>
-
-                <div>
-                  <h1 className="text-base font-semibold tracking-tight sm:text-lg" data-testid="platform-title">
-                    Платформа Tandoor
-                  </h1>
-                  <p className="text-xs text-muted-foreground sm:text-sm" data-testid="platform-subtitle">
-                    MVP B2B2C-экосистемы
-                  </p>
-                </div>
               </div>
-
-              <Badge
-                className="rounded-full border-primary/30 bg-primary/10 px-3 py-1 text-[11px] font-medium text-foreground sm:text-xs"
-                variant="outline"
-                data-testid="workspace-badge"
-              >
-                Продажи / дилерский контур
-              </Badge>
             </div>
           </header>
 

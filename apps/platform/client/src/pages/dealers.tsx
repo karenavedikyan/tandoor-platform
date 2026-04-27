@@ -85,15 +85,15 @@ export default function DealersPage() {
   }
 
   return (
-    <section className="space-y-4">
+    <section className="space-y-4 rounded-2xl border border-border/80 bg-card p-4 shadow-sm sm:p-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Дилеры</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">ДИЛЕРЫ</h1>
         <p className="text-sm text-muted-foreground">Региональная партнерская сеть и контактные лица.</p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {dealerCards.map((dealer) => (
-          <Card key={dealer.id} data-testid={`dealer-card-${dealer.id}`}>
+          <Card key={dealer.id} data-testid={`dealer-card-${dealer.id}`} className="rounded-2xl border-border/80 shadow-sm">
             <CardHeader className="space-y-3 pb-3">
               <div className="flex items-start justify-between gap-4">
                 <CardTitle className="text-base">{dealer.organizationName}</CardTitle>

@@ -43,7 +43,7 @@ const upcoming = [
 export default function ArchitecturePage() {
   return (
     <div className="space-y-6">
-      <Card data-testid="architecture-overview-card">
+      <Card data-testid="architecture-overview-card" className="rounded-[16px] border-border/70 shadow-sm">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-xl">
             <Layers className="h-5 w-5 text-primary" />
@@ -64,7 +64,7 @@ export default function ArchitecturePage() {
       </Card>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Card data-testid="architecture-implemented-card">
+        <Card data-testid="architecture-implemented-card" className="rounded-[16px] border-border/70 shadow-sm">
           <CardHeader>
             <CardTitle className="text-lg">Реализованные блоки MVP</CardTitle>
           </CardHeader>
@@ -78,7 +78,7 @@ export default function ArchitecturePage() {
           </CardContent>
         </Card>
 
-        <Card data-testid="architecture-upcoming-card">
+        <Card data-testid="architecture-upcoming-card" className="rounded-[16px] border-border/70 shadow-sm">
           <CardHeader>
             <CardTitle className="text-lg">Следующие блоки</CardTitle>
           </CardHeader>
@@ -93,7 +93,7 @@ export default function ArchitecturePage() {
         </Card>
       </div>
 
-      <Card data-testid="architecture-map-card">
+      <Card data-testid="architecture-map-card" className="rounded-[16px] border-border/70 shadow-sm">
         <CardHeader>
           <CardTitle className="text-lg">Карта модулей</CardTitle>
         </CardHeader>

@@ -55,7 +55,7 @@ export default function ActivityPage() {
   }
 
   return (
-    <div className="space-y-4" data-testid="activity-page">
+    <div className="space-y-4 rounded-[16px] border border-border/70 bg-card px-4 py-5 shadow-sm sm:px-5 sm:py-6" data-testid="activity-page">
       <div>
         <h1 className="text-2xl font-semibold">События</h1>
         <p className="text-sm text-muted-foreground">Операционный журнал жизненного цикла заказов и рекламаций.</p>
@@ -63,7 +63,7 @@ export default function ActivityPage() {
       {activity?.map((event) => {
         const Icon = eventIcon(event.eventType);
         return (
-          <Card key={event.id} className="shadow-sm">
+          <Card key={event.id} className="rounded-2xl border-border/80 shadow-sm">
             <CardHeader className="pb-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3">
@@ -96,7 +96,7 @@ export default function ActivityPage() {
         );
       })}
       {!activity?.length && (
-        <Card data-testid="activity-empty">
+        <Card data-testid="activity-empty" className="rounded-2xl border-border/80 shadow-sm">
           <CardHeader>
             <CardTitle>Событий пока нет</CardTitle>
             <CardDescription>Журнал начнет наполняться по мере работы модулей платформы.</CardDescription>
