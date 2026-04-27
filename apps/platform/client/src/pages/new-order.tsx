@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, statusLabel } from "@/lib/format";
 import type {
   CreateOrderPayload,
   Dealer,
@@ -86,14 +86,14 @@ export default function NewOrderPage() {
       queryClient.setQueryData(["/api/orders", String(createdOrder.id)], createdOrder);
 
       toast({
-        title: "Order created",
-        description: `${createdOrder.orderNumber} is now submitted.`,
+        title: "Заказ создан",
+        description: `${createdOrder.orderNumber} успешно отправлен.`,
       });
       navigate(`/orders/${createdOrder.id}`);
     },
     onError: (error) => {
       const message =
-        error instanceof Error ? error.message : "Unable to create order, please check the form and retry.";
+        error instanceof Error ? error.message : "Не удалось создать заказ. Проверьте данные и повторите попытку.";
       setFormError(message);
     },
   });
@@ -141,19 +141,19 @@ export default function NewOrderPage() {
     setFormError(null);
 
     if (!dealerId) {
-      setFormError("Select a dealer before submitting the order.");
+      setFormError("Выберите дилера перед отправкой заказа.");
       return;
     }
     if (!salesManager) {
-      setFormError("No platform user available for order creation.");
+      setFormError("В системе нет пользователя для создания заказа.");
       return;
     }
     if (draftItems.length === 0) {
-      setFormError("Add at least one product to create an order.");
+      setFormError("Добавьте хотя бы один товар для создания заказа.");
       return;
     }
     if (hasInvalidQuantity) {
-      setFormError("Every selected product must have quantity of at least 1.");
+      setFormError("Количество по каждому товару должно быть не меньше 1.");
       return;
     }
 
@@ -184,9 +184,9 @@ export default function NewOrderPage() {
   if (hasLoadingError) {
     return (
       <Alert variant="destructive" data-testid="new-order-load-error">
-        <AlertTitle>Unable to load order creation data</AlertTitle>
+        <AlertTitle>Не удалось загрузить данные для создания заказа</AlertTitle>
         <AlertDescription>
-          Please verify dealers, products and users are available before creating an order.
+          Проверьте, что дилеры, товары и пользователи доступны перед созданием заказа.
         </AlertDescription>
       </Alert>
     );
@@ -196,11 +196,11 @@ export default function NewOrderPage() {
     return (
       <Card data-testid="new-order-empty-state">
         <CardHeader>
-          <CardTitle>Order creation is unavailable</CardTitle>
+          <CardTitle>Создание заказа недоступно</CardTitle>
           <CardDescription>
             {dealers.length === 0
-              ? "No dealers found. Add dealer data first."
-              : "No products found. Add catalog data first."}
+              ? "Дилеры не найдены. Сначала добавьте дилерские данные."
+              : "Товары не найдены. Сначала добавьте каталог."}
           </CardDescription>
         </CardHeader>
       </Card>
@@ -211,9 +211,9 @@ export default function NewOrderPage() {
     <div className="space-y-6" data-testid="new-order-page">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-semibold text-foreground">Create dealer order</h1>
+          <h1 className="text-3xl font-semibold text-foreground">Создание заказа дилера</h1>
           <p className="text-sm text-muted-foreground">
-            Build a new Tandoor order from the active catalog.
+            Сформируйте новый заказ Tandoor на основе активного каталога.
           </p>
         </div>
         <Button
@@ -221,17 +221,17 @@ export default function NewOrderPage() {
           onClick={() => navigate("/orders")}
           data-testid="button-back-orders"
         >
-          Back to orders
+          К списку заказов
         </Button>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Dealer</CardTitle>
-          <CardDescription>Select the dealer company for this order.</CardDescription>
+          <CardTitle>Дилер</CardTitle>
+          <CardDescription>Выберите дилерскую компанию для этого заказа.</CardDescription>
         </CardHeader>
         <CardContent>
-          <Label htmlFor="dealer-select">Dealer</Label>
+          <Label htmlFor="dealer-select">Дилер</Label>
           <Select
             value={dealerId ? String(dealerId) : undefined}
             onValueChange={(value) => {
@@ -240,14 +240,14 @@ export default function NewOrderPage() {
             }}
           >
             <SelectTrigger id="dealer-select" data-testid="select-dealer" className="mt-2 max-w-xl">
-              <SelectValue placeholder="Select dealer" />
+              <SelectValue placeholder="Выберите дилера" />
             </SelectTrigger>
             <SelectContent>
               {dealers.map((dealer) => {
                 const dealerOrg = organizationById.get(dealer.organizationId);
                 return (
                   <SelectItem key={dealer.id} value={String(dealer.id)}>
-                    {dealerOrg?.name ?? `Dealer #${dealer.id}`}
+                    {dealerOrg?.name ?? `Дилер #${dealer.id}`}
                   </SelectItem>
                 );
               })}
@@ -258,8 +258,8 @@ export default function NewOrderPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Products</CardTitle>
-          <CardDescription>Select products and quantities for the order.</CardDescription>
+          <CardTitle>Товары</CardTitle>
+          <CardDescription>Выберите товары и укажите количество для заказа.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {products.map((product) => {
@@ -273,9 +273,9 @@ export default function NewOrderPage() {
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <p className="font-medium">{product.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {product.sku} · {product.finishColor}
-                    </p>
+                  <p className="text-xs text-muted-foreground">
+                    {product.sku} · {product.finishColor} · {statusLabel(product.availabilityStatus)}
+                  </p>
                     <p className="mt-1 text-sm font-semibold">
                       {formatCurrency(product.priceCents, product.currency)}
                     </p>
@@ -299,7 +299,7 @@ export default function NewOrderPage() {
                           data-testid={`button-remove-product-${product.id}`}
                         >
                           <Trash2 className="mr-2 h-4 w-4" />
-                          Remove
+                          Удалить
                         </Button>
                       </>
                     ) : (
@@ -308,7 +308,7 @@ export default function NewOrderPage() {
                         data-testid={`button-add-product-${product.id}`}
                       >
                         <Plus className="mr-2 h-4 w-4" />
-                        Add product
+                        Добавить товар
                       </Button>
                     )}
                   </div>
@@ -321,12 +321,12 @@ export default function NewOrderPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Order summary</CardTitle>
-          <CardDescription>Selected products and calculated total.</CardDescription>
+          <CardTitle>Сводка заказа</CardTitle>
+          <CardDescription>Выбранные товары и итоговая сумма.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {summaryRows.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No products selected yet.</p>
+            <p className="text-sm text-muted-foreground">Товары пока не выбраны.</p>
           ) : (
             summaryRows.map((row) => (
               <div
@@ -336,7 +336,7 @@ export default function NewOrderPage() {
                 <div>
                   <p className="font-medium">{row.product.name}</p>
                   <p className="text-xs text-muted-foreground">
-                    Qty {row.quantity} × {formatCurrency(row.product.priceCents, row.product.currency)}
+                    Кол-во {row.quantity} × {formatCurrency(row.product.priceCents, row.product.currency)}
                   </p>
                 </div>
                 <p className="font-semibold">
@@ -346,7 +346,7 @@ export default function NewOrderPage() {
             ))
           )}
           <div className="flex items-center justify-between rounded-xl border border-primary/25 bg-primary/10 p-4">
-            <span className="font-medium">Order total</span>
+            <span className="font-medium">Сумма заказа</span>
             <span className="text-lg font-semibold" data-testid="text-order-total">
               {formatCurrency(orderTotalCents, "RUB")}
             </span>
@@ -356,24 +356,24 @@ export default function NewOrderPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Comment and submit</CardTitle>
-          <CardDescription>Add context and create the order.</CardDescription>
+          <CardTitle>Комментарий и отправка</CardTitle>
+          <CardDescription>Добавьте комментарий и отправьте заказ.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <Label htmlFor="order-comment">Comment (optional)</Label>
+            <Label htmlFor="order-comment">Комментарий (необязательно)</Label>
             <Textarea
               id="order-comment"
               value={comment}
               onChange={(event) => setComment(event.target.value)}
-              placeholder="Delivery window, installation requirements, or dealer note"
+              placeholder="Окно доставки, условия монтажа или примечание дилера"
               className="mt-2"
             />
           </div>
 
           {formError && (
             <Alert variant="destructive" data-testid="new-order-submit-error">
-              <AlertTitle>Cannot submit order</AlertTitle>
+              <AlertTitle>Не удалось отправить заказ</AlertTitle>
               <AlertDescription>{formError}</AlertDescription>
             </Alert>
           )}
@@ -385,7 +385,7 @@ export default function NewOrderPage() {
             data-testid="button-submit-order"
           >
             <ShoppingCart className="mr-2 h-4 w-4" />
-            {createOrderMutation.isPending ? "Creating order..." : "Submit order"}
+            {createOrderMutation.isPending ? "Создаем заказ..." : "Отправить заказ"}
           </Button>
         </CardContent>
       </Card>

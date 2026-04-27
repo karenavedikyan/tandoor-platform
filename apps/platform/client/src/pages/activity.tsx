@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import type { ActivityEvent } from "@/lib/api-types";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, statusLabel } from "@/lib/format";
 
 function eventIcon(type: string) {
   switch (type) {
@@ -48,14 +48,18 @@ export default function ActivityPage() {
     return (
       <Alert variant="destructive" data-testid="activity-error">
         <AlertCircle className="h-4 w-4" />
-        <AlertTitle>Unable to load activity log</AlertTitle>
-        <AlertDescription>{error instanceof Error ? error.message : "Unknown error"}</AlertDescription>
+        <AlertTitle>Не удалось загрузить журнал событий</AlertTitle>
+        <AlertDescription>{error instanceof Error ? error.message : "Неизвестная ошибка"}</AlertDescription>
       </Alert>
     );
   }
 
   return (
     <div className="space-y-4" data-testid="activity-page">
+      <div>
+        <h1 className="text-2xl font-semibold">События</h1>
+        <p className="text-sm text-muted-foreground">Операционный журнал жизненного цикла заказов и рекламаций.</p>
+      </div>
       {activity?.map((event) => {
         const Icon = eventIcon(event.eventType);
         return (
@@ -67,7 +71,7 @@ export default function ActivityPage() {
                     <Icon className="h-4 w-4 text-primary" />
                   </div>
                   <div>
-                    <CardTitle className="text-base capitalize">{event.eventType.replaceAll("_", " ")}</CardTitle>
+                    <CardTitle className="text-base">{statusLabel(event.eventType)}</CardTitle>
                     <CardDescription className="mt-1 text-sm">{event.message}</CardDescription>
                   </div>
                 </div>
@@ -76,16 +80,16 @@ export default function ActivityPage() {
             </CardHeader>
             <CardContent className="grid gap-2 pt-0 text-sm text-muted-foreground sm:grid-cols-4">
               <div data-testid={`activity-entity-${event.id}`}>
-                Entity: <span className="font-medium text-foreground">{event.entityType}</span> #{event.entityId}
+                Сущность: <span className="font-medium text-foreground">{statusLabel(event.entityType)}</span> #{event.entityId}
               </div>
               <div data-testid={`activity-org-${event.id}`}>
-                Org ID: <span className="font-medium text-foreground">{event.organizationId}</span>
+                ID организации: <span className="font-medium text-foreground">{event.organizationId}</span>
               </div>
               <div data-testid={`activity-user-${event.id}`}>
-                Actor user ID: <span className="font-medium text-foreground">{event.userId}</span>
+                ID пользователя: <span className="font-medium text-foreground">{event.userId}</span>
               </div>
               <div data-testid={`activity-order-${event.id}`}>
-                Related order: <span className="font-medium text-foreground">{event.orderId ?? "—"}</span>
+                Связанный заказ: <span className="font-medium text-foreground">{event.orderId ?? "—"}</span>
               </div>
             </CardContent>
           </Card>
@@ -94,8 +98,8 @@ export default function ActivityPage() {
       {!activity?.length && (
         <Card data-testid="activity-empty">
           <CardHeader>
-            <CardTitle>No events yet</CardTitle>
-            <CardDescription>Operational lifecycle events will appear here as modules start writing logs.</CardDescription>
+            <CardTitle>Событий пока нет</CardTitle>
+            <CardDescription>Журнал начнет наполняться по мере работы модулей платформы.</CardDescription>
           </CardHeader>
         </Card>
       )}

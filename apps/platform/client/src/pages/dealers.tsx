@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { StatusBadge } from "@/components/status-badge";
+import { formatDate } from "@/lib/format";
 import type { Dealer, Organization, User } from "@/lib/api-types";
 
 export default function DealersPage() {
@@ -36,9 +37,9 @@ export default function DealersPage() {
 
       return {
         ...dealer,
-        organizationName: org?.name ?? `Dealer organization #${dealer.organizationId}`,
-        city: org?.city ?? "N/A",
-        managerName: manager ? `${manager.firstName} ${manager.lastName}` : "Not assigned",
+        organizationName: org?.name ?? `Дилерская организация #${dealer.organizationId}`,
+        city: org?.city ?? "—",
+        managerName: manager ? `${manager.firstName} ${manager.lastName}` : "Не назначен",
       };
     });
   }, [dealers, organizations, users]);
@@ -60,11 +61,11 @@ export default function DealersPage() {
     return (
       <Alert variant="destructive" data-testid="dealers-error-state">
         <AlertCircle className="h-4 w-4" />
-        <AlertTitle>Failed to load dealers</AlertTitle>
+          <AlertTitle>Не удалось загрузить дилеров</AlertTitle>
         <AlertDescription>
           {dealersError instanceof Error
             ? dealersError.message
-            : "An unexpected error occurred while loading dealers."}
+            : "Произошла непредвиденная ошибка при загрузке дилеров."}
         </AlertDescription>
       </Alert>
     );
@@ -74,10 +75,10 @@ export default function DealersPage() {
     return (
       <Card data-testid="dealers-empty-state">
         <CardHeader>
-          <CardTitle>No dealers yet</CardTitle>
+          <CardTitle>Дилеры пока отсутствуют</CardTitle>
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground">
-          Dealer organizations will appear here once they are connected to the platform.
+          Дилерские компании появятся здесь после подключения к платформе.
         </CardContent>
       </Card>
     );
@@ -86,8 +87,8 @@ export default function DealersPage() {
   return (
     <section className="space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Dealers</h1>
-        <p className="text-sm text-muted-foreground">Regional partner network and account contacts.</p>
+        <h1 className="text-2xl font-semibold tracking-tight">Дилеры</h1>
+        <p className="text-sm text-muted-foreground">Региональная партнерская сеть и контактные лица.</p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -99,23 +100,23 @@ export default function DealersPage() {
                 <StatusBadge type="dealer" status={dealer.status} />
               </div>
               <p className="text-sm text-muted-foreground">
-                {dealer.tier ? `${dealer.tier.toUpperCase()} segment` : "Standard segment"}
+                {dealer.tier ? `Сегмент ${dealer.tier.toUpperCase()}` : "Стандартный сегмент"}
               </p>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               <div className="flex items-center gap-2 text-foreground">
                 <MapPin className="h-4 w-4 text-muted-foreground" />
                 <span>
-                  {dealer.region ?? "No region"}, {dealer.city}
+                  {dealer.region ?? "Регион не указан"}, {dealer.city}
                 </span>
               </div>
               <div className="flex items-center gap-2 text-foreground">
                 <UserCircle2 className="h-4 w-4 text-muted-foreground" />
-                <span>Manager: {dealer.managerName}</span>
+                <span>Менеджер: {dealer.managerName}</span>
               </div>
               <div className="flex items-center gap-2 text-muted-foreground">
                 <Building2 className="h-4 w-4" />
-                <span>Onboarded: {new Date(dealer.createdAt).toLocaleDateString("en-GB")}</span>
+                <span>Подключен: {formatDate(dealer.createdAt)}</span>
               </div>
             </CardContent>
           </Card>

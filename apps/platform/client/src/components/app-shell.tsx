@@ -30,13 +30,13 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
-  { label: "Dashboard", path: "/", icon: LayoutDashboard },
-  { label: "Dealers", path: "/dealers", icon: Building2 },
-  { label: "Catalog", path: "/catalog", icon: Boxes },
-  { label: "Orders", path: "/orders", icon: ShoppingCart },
-  { label: "Claims", path: "/claims", icon: ScrollText },
-  { label: "Activity", path: "/activity", icon: Activity },
-  { label: "Architecture", path: "/architecture", icon: Network },
+  { label: "Дашборд", path: "/", icon: LayoutDashboard },
+  { label: "Дилеры", path: "/dealers", icon: Building2 },
+  { label: "Каталог", path: "/catalog", icon: Boxes },
+  { label: "Заказы", path: "/orders", icon: ShoppingCart },
+  { label: "Рекламации", path: "/claims", icon: ScrollText },
+  { label: "События", path: "/activity", icon: Activity },
+  { label: "Архитектура", path: "/architecture", icon: Network },
 ];
 
 function SidebarNav({
@@ -85,7 +85,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="px-2">
             <TandoorLogo className="h-10 w-auto" data-testid="tandoor-logo-sidebar" />
             <p className="mt-3 text-xs text-muted-foreground">
-              Dealer operations platform
+              Дилерская платформа
             </p>
           </div>
           <div className="mt-8">
@@ -106,7 +106,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                       data-testid="mobile-menu-trigger"
                     >
                       <Menu className="h-5 w-5" />
-                      <span className="sr-only">Open navigation</span>
+                      <span className="sr-only">Открыть навигацию</span>
                     </Button>
                   </SheetTrigger>
                   <SheetContent side="left" className="w-[290px] border-r border-border p-5">
@@ -121,10 +121,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
                 <div>
                   <h1 className="text-base font-semibold tracking-tight sm:text-lg" data-testid="platform-title">
-                    Tandoor Platform
+                    Платформа Tandoor
                   </h1>
                   <p className="text-xs text-muted-foreground sm:text-sm" data-testid="platform-subtitle">
-                    B2B2C ecosystem MVP
+                    MVP B2B2C-экосистемы
                   </p>
                 </div>
               </div>
@@ -134,7 +134,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 variant="outline"
                 data-testid="workspace-badge"
               >
-                Sales / Dealer operations
+                Продажи / дилерский контур
               </Badge>
             </div>
           </header>

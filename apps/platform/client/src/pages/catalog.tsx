@@ -42,12 +42,12 @@ export default function CatalogPage() {
     const errorMessage =
       productsQuery.error instanceof Error
         ? productsQuery.error.message
-        : "Unexpected error while loading catalog";
+        : "Непредвиденная ошибка при загрузке каталога";
 
     return (
       <Alert variant="destructive" data-testid="catalog-error">
         <PackageSearch className="h-4 w-4" />
-        <AlertTitle>Unable to load catalog</AlertTitle>
+        <AlertTitle>Не удалось загрузить каталог</AlertTitle>
         <AlertDescription>{errorMessage}</AlertDescription>
       </Alert>
     );
@@ -59,10 +59,10 @@ export default function CatalogPage() {
     return (
       <Card data-testid="catalog-empty">
         <CardHeader>
-          <CardTitle>Catalog is empty</CardTitle>
+          <CardTitle>Каталог пуст</CardTitle>
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground">
-          Door products will appear here once they are added to the platform.
+          Товары появятся здесь после добавления в платформу.
         </CardContent>
       </Card>
     );
@@ -71,8 +71,8 @@ export default function CatalogPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-foreground">Catalog</h1>
-        <StatusBadge type="availability" status={`${products.length} SKUs`} />
+        <h1 className="text-2xl font-semibold text-foreground">Каталог</h1>
+        <StatusBadge type="availability" status={`${products.length} товар(ов)`} />
       </div>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {products.map((product) => (
@@ -94,15 +94,15 @@ export default function CatalogPage() {
                 <span className="font-medium">{product.sku}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Finish</span>
+                <span className="text-muted-foreground">Отделка</span>
                 <span>{product.finishColor}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Price</span>
+                <span className="text-muted-foreground">Цена</span>
                 <span className="font-semibold">{formatCurrency(product.priceCents, product.currency)}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Availability</span>
+                <span className="text-muted-foreground">Наличие</span>
                 <StatusBadge kind="availability" status={product.availabilityStatus} />
               </div>
               <Button
@@ -110,7 +110,7 @@ export default function CatalogPage() {
                 className="mt-2 w-full rounded-xl"
                 data-testid={`button-add-product-${product.id}`}
               >
-                <Link href="/orders/new">Create order with this SKU</Link>
+                <Link href="/orders/new">Создать заказ с этим артикулом</Link>
               </Button>
             </CardContent>
           </Card>

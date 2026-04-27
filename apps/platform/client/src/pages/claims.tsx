@@ -12,7 +12,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertCircle, MessageSquareWarning } from "lucide-react";
 import type { Claim, Dealer, Order, Organization } from "@/lib/api-types";
-import { formatDate } from "@/lib/format";
+import { formatDate, statusLabel } from "@/lib/format";
 import { StatusBadge } from "@/components/status-badge";
 
 export default function ClaimsPage() {
@@ -69,7 +69,7 @@ export default function ClaimsPage() {
       <Card data-testid="claims-error">
         <CardContent className="flex items-center gap-3 p-6 text-sm">
           <AlertCircle className="h-4 w-4 text-destructive" />
-          Failed to load claims data.
+          Не удалось загрузить данные по рекламациям.
         </CardContent>
       </Card>
     );
@@ -82,9 +82,9 @@ export default function ClaimsPage() {
       <Card data-testid="claims-empty">
         <CardContent className="flex flex-col items-center gap-2 p-10 text-center">
           <MessageSquareWarning className="h-8 w-8 text-muted-foreground" />
-          <p className="font-semibold">No claims found</p>
+          <p className="font-semibold">Рекламации отсутствуют</p>
           <p className="text-sm text-muted-foreground">
-            Claims will appear here once dealer reclamations are submitted.
+            Здесь появятся обращения дилеров после создания рекламаций.
           </p>
         </CardContent>
       </Card>
@@ -94,26 +94,26 @@ export default function ClaimsPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold">Claims</h1>
+        <h1 className="text-2xl font-semibold">Рекламации</h1>
         <p className="text-sm text-muted-foreground">
-          Reclamations and service claims across partner operations.
+          Рекламации и сервисные обращения в партнерском контуре.
         </p>
       </div>
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Claims register</CardTitle>
+          <CardTitle className="text-base">Реестр рекламаций</CardTitle>
         </CardHeader>
         <CardContent>
           <Table data-testid="claims-table">
             <TableHeader>
               <TableRow>
-                <TableHead>Claim</TableHead>
-                <TableHead>Order</TableHead>
-                <TableHead>Dealer</TableHead>
-                <TableHead>Reason</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Created</TableHead>
+                <TableHead>Рекламация</TableHead>
+                <TableHead>Заказ</TableHead>
+                <TableHead>Дилер</TableHead>
+                <TableHead>Причина</TableHead>
+                <TableHead>Статус</TableHead>
+                <TableHead>Дата создания</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -127,9 +127,9 @@ export default function ClaimsPage() {
                 return (
                   <TableRow key={claim.id} data-testid={`claim-row-${claim.id}`}>
                     <TableCell className="font-medium">{claim.claimNumber}</TableCell>
-                    <TableCell>{order?.orderNumber ?? "Not linked"}</TableCell>
-                    <TableCell>{dealerOrganization?.name ?? `Dealer #${claim.dealerId}`}</TableCell>
-                    <TableCell>{claim.reason}</TableCell>
+                    <TableCell>{order?.orderNumber ?? "Не привязан"}</TableCell>
+                    <TableCell>{dealerOrganization?.name ?? `Дилер #${claim.dealerId}`}</TableCell>
+                    <TableCell>{statusLabel(claim.reason)}</TableCell>
                     <TableCell>
                       <StatusBadge type="claim" status={claim.status} />
                     </TableCell>

@@ -46,10 +46,27 @@ const availabilityStyles: Record<string, string> = {
 };
 
 const labels: Record<string, string> = {
-  in_review: "In review",
-  waiting_info: "Waiting info",
-  in_stock: "In stock",
-  out_of_stock: "Out of stock",
+  draft: "Черновик",
+  submitted: "Отправлен",
+  reserved: "Зарезервирован",
+  assembling: "Комплектация",
+  shipped: "Отгружен",
+  delivered: "Доставлен",
+  cancelled: "Отменен",
+  new: "Новая",
+  in_review: "На рассмотрении",
+  waiting_info: "Ожидает данные",
+  resolved: "Решена",
+  rejected: "Отклонена",
+  active: "Активен",
+  paused: "Приостановлен",
+  inactive: "Неактивен",
+  in_stock: "В наличии",
+  low_stock: "Мало",
+  limited: "Мало",
+  out_of_stock: "Нет в наличии",
+  expected: "Ожидается",
+  backorder: "Ожидается",
 };
 
 function prettify(value: string) {
@@ -98,7 +115,7 @@ export function StatusBadge({
       data-testid={testId ?? `${effectiveKind}-status-${raw}`}
       className={cn("font-medium", styleFor(effectiveKind, raw), className)}
     >
-      {prettify(status ?? value ?? "Unknown")}
+      {prettify(status ?? value ?? "Неизвестно")}
     </Badge>
   );
 }

@@ -61,6 +61,53 @@ export function toTitleWords(value: string) {
     .join(" ");
 }
 
+const russianLabels: Record<string, string> = {
+  // Order statuses
+  draft: "Черновик",
+  submitted: "Отправлен",
+  reserved: "Зарезервирован",
+  assembling: "Комплектация",
+  shipped: "Отгружен",
+  delivered: "Доставлен",
+  cancelled: "Отменен",
+  // Claim statuses
+  new: "Новая",
+  in_review: "На рассмотрении",
+  waiting_info: "Ожидает данные",
+  resolved: "Решена",
+  rejected: "Отклонена",
+  // Dealer statuses
+  active: "Активен",
+  paused: "Приостановлен",
+  inactive: "Неактивен",
+  // Availability
+  in_stock: "В наличии",
+  low_stock: "Мало",
+  out_of_stock: "Нет в наличии",
+  expected: "Ожидается",
+  limited: "Ограничено",
+  backorder: "Под заказ",
+  // Activity types
+  order_created: "Заказ создан",
+  order_status_changed: "Статус заказа изменен",
+  claim_created: "Рекламация создана",
+  document_added: "Документ добавлен",
+  // Entity types
+  order: "Заказ",
+  claim: "Рекламация",
+  document: "Документ",
+  // Document types / statuses
+  invoice: "Счет",
+  contract: "Договор",
+  closing_document: "Закрывающий документ",
+  act: "Акт",
+  shipment_document: "Отгрузочный документ",
+  published: "Опубликован",
+  // Claim reasons
+  packaging_damage: "Повреждение упаковки",
+  wrong_finish_color: "Неверный цвет отделки",
+};
+
 export function statusLabel(value: string) {
-  return toTitleWords(value);
+  return russianLabels[value] ?? toTitleWords(value);
 }

@@ -10,14 +10,14 @@ export default function NotFound() {
         <CardContent className="pt-6">
           <div className="mb-4 flex gap-2">
             <AlertCircle className="h-8 w-8 text-destructive" />
-            <h1 className="text-2xl font-bold text-foreground">404 Page Not Found</h1>
+            <h1 className="text-2xl font-bold text-foreground">404 Страница не найдена</h1>
           </div>
 
           <p className="mt-4 text-sm text-muted-foreground">
-            This workspace page does not exist.
+            Такой страницы в платформе не существует.
           </p>
           <Button asChild className="mt-4" data-testid="button-back-dashboard">
-            <Link href="/">Go to dashboard</Link>
+            <Link href="/">Перейти в дашборд</Link>
           </Button>
         </CardContent>
       </Card>

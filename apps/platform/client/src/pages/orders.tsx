@@ -51,27 +51,27 @@ export default function OrdersPage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-3xl font-semibold text-foreground" data-testid="page-title-orders">
-            Orders
+            Заказы
           </h1>
-          <p className="text-sm text-muted-foreground">Order pipeline across dealer operations.</p>
+          <p className="text-sm text-muted-foreground">Воронка заказов в дилерском контуре.</p>
         </div>
         <Button asChild data-testid="button-create-order" className="rounded-full">
-          <Link href="/orders/new">Create order</Link>
+          <Link href="/orders/new">Создать заказ</Link>
         </Button>
       </div>
 
       <Card className="shadow-sm">
         <CardHeader className="pb-4">
-          <CardTitle className="text-lg">Order registry</CardTitle>
+          <CardTitle className="text-lg">Реестр заказов</CardTitle>
         </CardHeader>
         <CardContent>
           {isOrdersLoading ? (
             <OrdersTableSkeleton />
           ) : isOrdersError ? (
             <Alert variant="destructive" data-testid="orders-error-state">
-              <AlertTitle>Unable to load orders</AlertTitle>
+              <AlertTitle>Не удалось загрузить заказы</AlertTitle>
               <AlertDescription>
-                {ordersError instanceof Error ? ordersError.message : "Unexpected error"}
+                {ordersError instanceof Error ? ordersError.message : "Неожиданная ошибка"}
               </AlertDescription>
             </Alert>
           ) : (
@@ -79,13 +79,13 @@ export default function OrdersPage() {
               <Table data-testid="orders-table">
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Order</TableHead>
-                    <TableHead>Dealer</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Total</TableHead>
-                    <TableHead>Created</TableHead>
-                    <TableHead>Expected shipment</TableHead>
-                    <TableHead className="text-right">Action</TableHead>
+                    <TableHead>Заказ</TableHead>
+                    <TableHead>Дилер</TableHead>
+                    <TableHead>Статус</TableHead>
+                    <TableHead>Сумма</TableHead>
+                    <TableHead>Создан</TableHead>
+                    <TableHead>План отгрузки</TableHead>
+                    <TableHead className="text-right">Действие</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -97,7 +97,7 @@ export default function OrdersPage() {
                     return (
                       <TableRow key={order.id} data-testid={`order-row-${order.id}`}>
                         <TableCell className="font-medium">{order.orderNumber}</TableCell>
-                        <TableCell>{dealerOrganization?.name ?? `Dealer #${order.dealerId}`}</TableCell>
+                        <TableCell>{dealerOrganization?.name ?? `Дилер #${order.dealerId}`}</TableCell>
                         <TableCell>
                           <OrderStatusBadge status={order.status} />
                         </TableCell>
@@ -106,11 +106,11 @@ export default function OrdersPage() {
                         <TableCell>
                           {order.requestedDeliveryDate
                             ? formatDate(order.requestedDeliveryDate)
-                            : "TBD"}
+                            : "—"}
                         </TableCell>
                         <TableCell className="text-right">
                           <Button asChild size="sm" className="rounded-full" data-testid={`view-order-${order.id}`}>
-                            <Link href={`/orders/${order.id}`}>View</Link>
+                            <Link href={`/orders/${order.id}`}>Открыть</Link>
                           </Button>
                         </TableCell>
                       </TableRow>

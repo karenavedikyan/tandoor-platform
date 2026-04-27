@@ -16,7 +16,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/status-badge";
-import { formatCurrency, formatDateTime, toTitleWords } from "@/lib/format";
+import { formatCurrency, formatDateTime, statusLabel } from "@/lib/format";
 
 function statusSummary(orders: Order[]) {
   const counters = new Map<string, number>();
@@ -46,7 +46,7 @@ export default function DashboardPage() {
     ordersQuery.error ??
     claimsQuery.error ??
     activityQuery.error;
-  const errorMessage = error instanceof Error ? error.message : "Unexpected error";
+  const errorMessage = error instanceof Error ? error.message : "Неожиданная ошибка";
 
   if (isLoading) {
     return (
@@ -79,8 +79,8 @@ export default function DashboardPage() {
     return (
       <Card data-testid="dashboard-error">
         <CardHeader>
-          <CardTitle>Dashboard is temporarily unavailable</CardTitle>
-          <CardDescription>Unable to load one or more API data sources.</CardDescription>
+          <CardTitle>Дашборд временно недоступен</CardTitle>
+          <CardDescription>Не удалось загрузить один или несколько источников данных.</CardDescription>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">{errorMessage}</p>
@@ -101,17 +101,17 @@ export default function DashboardPage() {
   const recentOrders = orders.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 5);
 
   const quickLinks = [
-    { href: "/orders", label: "Orders", icon: ClipboardList },
-    { href: "/dealers", label: "Dealers", icon: Briefcase },
-    { href: "/catalog", label: "Catalog", icon: PackageSearch },
-    { href: "/claims", label: "Claims", icon: FileWarning },
+    { href: "/orders", label: "Заказы", icon: ClipboardList },
+    { href: "/dealers", label: "Дилеры", icon: Briefcase },
+    { href: "/catalog", label: "Каталог", icon: PackageSearch },
+    { href: "/claims", label: "Рекламации", icon: FileWarning },
   ];
 
   const kpiCards = [
-    { label: "Total dealers", value: dealers.length, icon: UsersRound },
-    { label: "Active orders", value: activeOrders, icon: ClipboardList },
-    { label: "Catalog products", value: products.length, icon: Boxes },
-    { label: "Open claims", value: openClaims, icon: FileWarning },
+    { label: "Дилеры", value: dealers.length, icon: UsersRound },
+    { label: "Активные заказы", value: activeOrders, icon: ClipboardList },
+    { label: "Товары в каталоге", value: products.length, icon: Boxes },
+    { label: "Открытые рекламации", value: openClaims, icon: FileWarning },
   ];
 
   return (
@@ -120,7 +120,7 @@ export default function DashboardPage() {
         <Button asChild data-testid="button-create-order">
           <Link href="/orders/new">
             <PlusCircle className="size-4" />
-            Create order
+            Создать заказ
           </Link>
         </Button>
       </div>
@@ -142,15 +142,15 @@ export default function DashboardPage() {
       <div className="grid gap-6 xl:grid-cols-[1.5fr,1fr]">
         <Card data-testid="orders-status-summary">
           <CardHeader>
-            <CardTitle className="text-xl">Order status summary</CardTitle>
-            <CardDescription>Current operational order distribution</CardDescription>
+            <CardTitle className="text-xl">Статусы заказов</CardTitle>
+            <CardDescription>Текущее распределение заказов</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {statusSummary(orders).map(([status, count]) => (
               <div key={status} className="flex items-center justify-between rounded-lg border border-border/80 bg-background p-3">
                 <div className="flex items-center gap-2">
                   <StatusBadge type="order" status={status} />
-                  <span className="text-sm text-muted-foreground">{toTitleWords(status)}</span>
+                  <span className="text-sm text-muted-foreground">{statusLabel(status)}</span>
                 </div>
                 <span className="text-sm font-semibold">{count}</span>
               </div>
@@ -160,8 +160,8 @@ export default function DashboardPage() {
 
         <Card data-testid="quick-links-card">
           <CardHeader>
-            <CardTitle className="text-xl">Quick links</CardTitle>
-            <CardDescription>Jump to operational modules</CardDescription>
+            <CardTitle className="text-xl">Быстрый переход</CardTitle>
+            <CardDescription>Переход к ключевым разделам</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
             {quickLinks.map((link) => (
@@ -170,7 +170,7 @@ export default function DashboardPage() {
                 asChild
                 variant="outline"
                 className="w-full justify-between rounded-xl bg-card"
-                data-testid={`quick-link-${link.label.toLowerCase()}`}
+                data-testid={`quick-link-${link.href.replace("/", "") || "root"}`}
               >
                 <Link href={link.href}>
                   <span className="flex items-center gap-2">
@@ -189,11 +189,11 @@ export default function DashboardPage() {
         <Card data-testid="recent-orders-card">
           <CardHeader className="flex-row items-start justify-between space-y-0">
             <div>
-              <CardTitle className="text-xl">Recent orders</CardTitle>
-              <CardDescription>Latest dealer order flow</CardDescription>
+              <CardTitle className="text-xl">Последние заказы</CardTitle>
+              <CardDescription>Актуальные заказы дилерского контура</CardDescription>
             </div>
             <Button asChild size="sm" variant="outline">
-              <Link href="/orders">View all</Link>
+              <Link href="/orders">Смотреть все</Link>
             </Button>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -217,11 +217,11 @@ export default function DashboardPage() {
         <Card data-testid="recent-activity-card">
           <CardHeader className="flex-row items-start justify-between space-y-0">
             <div>
-              <CardTitle className="text-xl">Recent activity</CardTitle>
-              <CardDescription>Important lifecycle events</CardDescription>
+              <CardTitle className="text-xl">Последние события</CardTitle>
+              <CardDescription>Ключевые события жизненного цикла</CardDescription>
             </div>
             <Button asChild size="sm" variant="outline">
-              <Link href="/activity">View log</Link>
+              <Link href="/activity">Открыть журнал</Link>
             </Button>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -229,7 +229,7 @@ export default function DashboardPage() {
               <div key={event.id} className="rounded-lg border border-border/80 bg-background p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="font-medium">{toTitleWords(event.eventType)}</p>
+                    <p className="font-medium">{statusLabel(event.eventType)}</p>
                     <p className="text-sm text-muted-foreground">{event.message}</p>
                   </div>
                   <ArrowUpRight className="mt-1 size-4 text-muted-foreground" />
