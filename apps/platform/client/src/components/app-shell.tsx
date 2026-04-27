@@ -88,7 +88,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <aside className="hidden min-h-screen w-72 border-r border-sidebar-border bg-sidebar px-4 py-6 lg:block">
           <div className="px-2">
             <TandoorLogo
-              className="h-10 w-auto max-h-11"
+              className="h-10 w-auto max-w-[190px]"
               data-testid="img-tandoor-logo-sidebar"
             />
             <p className="mt-3 text-xs text-muted-foreground">Дилерская платформа</p>
@@ -104,7 +104,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <TandoorLogo
-                    className="h-8 w-auto sm:h-9"
+                    className="h-7 w-auto max-w-[120px] sm:h-8 sm:max-w-[150px]"
                     compact
                     data-testid="img-tandoor-logo-header"
                   />
@@ -152,7 +152,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                     <SheetHeader className="mb-6">
                       <SheetTitle className="text-left">
                         <TandoorLogo
-                          className="h-9 w-auto"
+                          className="h-9 w-auto max-w-[170px]"
                           data-testid="img-tandoor-logo-compact"
                         />
                       </SheetTitle>
