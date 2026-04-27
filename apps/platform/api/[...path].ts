@@ -141,6 +141,87 @@ type DealerListItem = {
   regionalManager: UserPublic | null;
   salesManagerName: string;
   regionalManagerName: string;
+  clientLifecycleStatus: "active" | "potential" | "paused" | "lost" | "archived";
+  source: "one_c" | "bitrix24" | "excel" | "manual";
+};
+
+type ClientImportSource = {
+  id: string;
+  source: "one_c" | "bitrix24" | "excel" | "manual";
+  status: "planned_integration" | "available_mvp";
+  title: string;
+  description: string;
+};
+
+type ClientImportTemplateField = {
+  key: string;
+  title: string;
+  required: boolean;
+  description: string;
+  example: string;
+};
+
+type ClientImportSummary = {
+  totalRows: number;
+  newDealers: number;
+  updates: number;
+  duplicates: number;
+  errors: number;
+  unassigned: number;
+  active: number;
+  potential: number;
+};
+
+type ClientImportPreviewRow = {
+  id: string;
+  dealerName: string;
+  importStatus: "new" | "update" | "duplicate" | "error" | "skipped";
+  city: string;
+  clientStatus: "active" | "potential" | "paused" | "lost" | "archived";
+  salesManagerName: string | null;
+  regionalManagerName: string | null;
+  reason?: string;
+  source: "one_c" | "bitrix24" | "excel" | "manual";
+};
+
+type ClientImportIssue = {
+  id: string;
+  severity: "critical" | "warning";
+  title: string;
+  rowRef: string;
+  description: string;
+};
+
+type ClientImportDuplicate = {
+  id: string;
+  dealerName: string;
+  duplicateWith: string;
+  reason: string;
+  recommendation: string;
+};
+
+type ClientImportAssignmentGap = {
+  type: "sales_manager_missing" | "regional_manager_missing" | "region_missing" | "team_unknown";
+  count: number;
+  description: string;
+};
+
+type ClientImportPreview = {
+  sources: ClientImportSource[];
+  summary: ClientImportSummary;
+  rows: ClientImportPreviewRow[];
+  issues: ClientImportIssue[];
+  duplicates: ClientImportDuplicate[];
+  assignmentGaps: ClientImportAssignmentGap[];
+};
+
+type ClientImportCommitResult = {
+  importedCount: number;
+  updatedCount: number;
+  skippedDuplicates: number;
+  failedRows: number;
+  createdAt: string;
+  message: string;
 };
 
 type DealerDetail = {
@@ -950,6 +1031,311 @@ const distributionReportItemsSeed: DistributionReportItem[] = [
   },
 ];
 
+const clientImportTemplateFieldsSeed: ClientImportTemplateField[] = [
+  {
+    key: "dealer_name",
+    title: "Название дилера",
+    required: true,
+    description: "Юридическое или коммерческое название дилера для единой клиентской базы.",
+    example: "Двери Кубани",
+  },
+  {
+    key: "inn_or_code",
+    title: "ИНН или внутренний код",
+    required: true,
+    description: "Ключ идентификации дилера для сверки дублей при импорте.",
+    example: "2312019999",
+  },
+  {
+    key: "city",
+    title: "Город",
+    required: true,
+    description: "Город основной торговой точки дилера.",
+    example: "Краснодар",
+  },
+  {
+    key: "trade_point_address",
+    title: "Адрес торговой точки",
+    required: true,
+    description: "Фактический адрес торговой точки для проверки совпадений по базе.",
+    example: "ул. Северная, 120",
+  },
+  {
+    key: "dealer_type",
+    title: "Тип дилера",
+    required: true,
+    description: "Формат клиента: сетевой или одиночный.",
+    example: "сетевой",
+  },
+  {
+    key: "client_status",
+    title: "Статус клиента",
+    required: true,
+    description: "Жизненный цикл клиента: активный, потенциальный, приостановлен, потерян.",
+    example: "потенциальный",
+  },
+  {
+    key: "sales_manager",
+    title: "Ответственный менеджер продаж",
+    required: true,
+    description: "ФИО менеджера продаж, закрепляемого за дилером.",
+    example: "Анна Кравченко",
+  },
+  {
+    key: "regional_manager",
+    title: "Ответственный региональный менеджер",
+    required: true,
+    description: "ФИО регионального менеджера, который ведет территорию.",
+    example: "Игорь Мельников",
+  },
+  {
+    key: "phone",
+    title: "Телефон",
+    required: false,
+    description: "Контактный телефон дилера или торговой точки.",
+    example: "+7 918 123-45-67",
+  },
+  {
+    key: "email",
+    title: "Email",
+    required: false,
+    description: "Контактный email для коммуникаций и документооборота.",
+    example: "sales@kuban-doors.ru",
+  },
+  {
+    key: "store_format",
+    title: "Формат торговой точки",
+    required: false,
+    description: "Тип торговой точки: шоурум, розничный магазин, смешанный формат.",
+    example: "showroom",
+  },
+  {
+    key: "store_area",
+    title: "Площадь магазина",
+    required: false,
+    description: "Площадь торгового пространства в квадратных метрах.",
+    example: "120",
+  },
+  {
+    key: "assortment",
+    title: "Ассортимент",
+    required: false,
+    description: "Краткое описание ассортиментного профиля точки.",
+    example: "входные и межкомнатные",
+  },
+  {
+    key: "comment",
+    title: "Комментарий",
+    required: false,
+    description: "Дополнительные заметки менеджера по клиенту.",
+    example: "Нужна повторная проверка POSM",
+  },
+  {
+    key: "source",
+    title: "Источник",
+    required: false,
+    description: "Система происхождения данных (1С, Битрикс24, Excel).",
+    example: "excel",
+  },
+  {
+    key: "last_contact_date",
+    title: "Дата последнего контакта",
+    required: false,
+    description: "Дата последней коммуникации с дилером.",
+    example: "2026-04-20",
+  },
+];
+
+const clientImportPreviewSeed: ClientImportPreview = {
+  sources: [
+    {
+      id: "source-1c",
+      source: "one_c",
+      status: "planned_integration",
+      title: "1С",
+      description: "Контрагенты, ИНН, договоры, заказы, отгрузки и оплаты.",
+    },
+    {
+      id: "source-bitrix24",
+      source: "bitrix24",
+      status: "planned_integration",
+      title: "Битрикс24",
+      description: "Лиды, сделки, звонки, задачи и история общения.",
+    },
+    {
+      id: "source-excel",
+      source: "excel",
+      status: "available_mvp",
+      title: "Excel / CSV",
+      description: "Первичная массовая загрузка и рабочие таблицы менеджеров.",
+    },
+  ],
+  summary: {
+    totalRows: 1240,
+    newDealers: 890,
+    updates: 260,
+    duplicates: 47,
+    errors: 43,
+    unassigned: 180,
+    active: 620,
+    potential: 390,
+  },
+  rows: [
+    {
+      id: "preview-row-1",
+      dealerName: "Двери Кубани",
+      importStatus: "new",
+      city: "Краснодар",
+      lifecycleStatus: "potential",
+      salesManagerName: null,
+      regionalManagerName: null,
+      reason: null,
+      source: "excel",
+    },
+    {
+      id: "preview-row-2",
+      dealerName: "Дверной Дом Юг",
+      importStatus: "update",
+      city: "Краснодар",
+      lifecycleStatus: "active",
+      salesManagerName: "Анна Кравченко",
+      regionalManagerName: "Игорь Мельников",
+      reason: null,
+      source: "one_c",
+    },
+    {
+      id: "preview-row-3",
+      dealerName: "Салон Северный",
+      importStatus: "duplicate",
+      city: "Ростов-на-Дону",
+      lifecycleStatus: "active",
+      salesManagerName: "Анна Кравченко",
+      regionalManagerName: "Игорь Мельников",
+      reason: "Совпадение по ИНН/адресу",
+      source: "bitrix24",
+    },
+    {
+      id: "preview-row-4",
+      dealerName: "Мир Дверей Анапа",
+      importStatus: "error",
+      city: "Анапа",
+      lifecycleStatus: "potential",
+      salesManagerName: null,
+      regionalManagerName: null,
+      reason: "Не заполнен ИНН или код клиента",
+      source: "excel",
+    },
+  ],
+  issues: [
+    {
+      id: "issue-1",
+      severity: "critical",
+      message: "Не заполнен город",
+      rowId: "preview-row-4",
+      dealerName: "Мир Дверей Анапа",
+      recommendation: "Заполнить город в исходном файле и повторить проверку.",
+    },
+    {
+      id: "issue-2",
+      severity: "high",
+      message: "Не найден ответственный менеджер",
+      rowId: "preview-row-1",
+      dealerName: "Двери Кубани",
+      recommendation: "Назначить менеджера продаж перед загрузкой в CRM.",
+    },
+    {
+      id: "issue-3",
+      severity: "medium",
+      message: "Некорректный телефон",
+      rowId: "preview-row-4",
+      dealerName: "Мир Дверей Анапа",
+      recommendation: "Проверить формат номера телефона (международный/локальный).",
+    },
+  ],
+  duplicates: [
+    {
+      id: "duplicate-1",
+      dealerName: "Салон Северный",
+      matchedDealerName: "Салон дверей Северный",
+      matchReason: "Совпадение по ИНН с существующим дилером",
+      suggestedAction: "Объединить карточки или пропустить дубль.",
+    },
+    {
+      id: "duplicate-2",
+      dealerName: "Дверной Дом Юг Краснодар",
+      matchedDealerName: "Дверной Дом Юг",
+      matchReason: "Совпадение адреса торговой точки",
+      suggestedAction: "Проверить ИНН и обновить существующую запись.",
+    },
+  ],
+  assignmentGaps: [
+    {
+      type: "sales_manager_missing",
+      count: 180,
+      description: "Клиентов без менеджера продаж",
+    },
+    {
+      type: "regional_manager_missing",
+      count: 95,
+      description: "Клиентов без регионального менеджера",
+    },
+    {
+      type: "region_missing",
+      count: 37,
+      description: "Клиентов без региона",
+    },
+    {
+      type: "team_unknown",
+      count: 22,
+      description: "Клиентов с неизвестной командой",
+    },
+  ],
+};
+
+const clientImportCommitResultSeed: ClientImportCommitResult = {
+  importedCount: 890,
+  updatedCount: 260,
+  skippedDuplicates: 47,
+  failedRows: 43,
+  createdAt: "2026-04-27T16:25:00.000Z",
+  message:
+    "Импорт завершен в демо-режиме. Данные подготовлены для загрузки в единую клиентскую базу и дальнейшего распределения по ответственным.",
+};
+
+function getClientImportTemplateRoute(): ApiResult {
+  return {
+    status: 200,
+    body: clientImportTemplateFieldsSeed,
+  };
+}
+
+function getClientImportPreviewRoute(): ApiResult {
+  return {
+    status: 200,
+    body: clientImportPreviewSeed,
+  };
+}
+
+function validateClientImportRoute(): ApiResult {
+  return {
+    status: 200,
+    body: {
+      ...clientImportPreviewSeed,
+      status: "validated",
+    },
+  };
+}
+
+function commitClientImportRoute(): ApiResult {
+  return {
+    status: 200,
+    body: {
+      ...clientImportCommitResultSeed,
+      createdAt: new Date().toISOString(),
+    },
+  };
+}
+
 const showcaseGoalsSeed: ShowcaseGoal[] = [
   {
     id: 1,
@@ -1306,6 +1692,9 @@ function toDealerListItem(dealer: Dealer): DealerListItem {
     regionalManager: userToPublic(getUserById(regionalId)),
     salesManagerName: userNameById(salesId),
     regionalManagerName: userNameById(regionalId),
+    clientLifecycleStatus:
+      dealer.id === 2 ? "potential" : dealer.id === 3 ? "paused" : ("active" as const),
+    source: dealer.id === 1 ? "one_c" : dealer.id === 2 ? "excel" : "bitrix24",
   };
 }
 
@@ -3104,6 +3493,18 @@ function routeApiRequest(method: string, pathname: string, body: unknown): ApiRe
   }
   if (upperMethod === "GET" && normalized === "/api/sales/manager-workspace") {
     return getSalesManagerWorkspaceRoute();
+  }
+  if (upperMethod === "GET" && normalized === "/api/sales/client-import/template") {
+    return getClientImportTemplateRoute();
+  }
+  if (upperMethod === "GET" && normalized === "/api/sales/client-import/preview") {
+    return getClientImportPreviewRoute();
+  }
+  if (upperMethod === "POST" && normalized === "/api/sales/client-import/validate") {
+    return validateClientImportRoute();
+  }
+  if (upperMethod === "POST" && normalized === "/api/sales/client-import/commit") {
+    return commitClientImportRoute();
   }
   const salesTaskDetailMatch = /^\/api\/sales\/tasks\/(\d+)$/.exec(normalized);
   if (upperMethod === "GET" && salesTaskDetailMatch) {

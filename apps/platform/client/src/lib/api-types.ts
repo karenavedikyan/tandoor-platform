@@ -68,6 +68,8 @@ export interface DealerListItem {
   regionalManager: UserPublic | null;
   salesManagerName: string;
   regionalManagerName: string;
+  clientLifecycleStatus?: "active" | "potential" | "paused" | "lost" | "archived";
+  source?: "one_c" | "bitrix24" | "excel" | "manual";
 }
 
 export interface DealerDetail {
@@ -561,6 +563,88 @@ export interface SalesManagerWorkspace {
   staleDealers: StaleDealerItem[];
   regionalSignals: RegionalSignalItem[];
   quickActions: ManagerQuickAction[];
+}
+
+export interface ClientImportSource {
+  id: string;
+  source: "one_c" | "bitrix24" | "excel" | "manual";
+  status: "planned_integration" | "available_mvp";
+  title: string;
+  description: string;
+}
+
+export interface ClientImportTemplateField {
+  key: string;
+  title: string;
+  required: boolean;
+  description: string;
+  example: string;
+}
+
+export interface ClientImportSummary {
+  totalRows: number;
+  newDealers: number;
+  updates: number;
+  duplicates: number;
+  errors: number;
+  unassigned: number;
+  active: number;
+  potential: number;
+}
+
+export interface ClientImportPreviewRow {
+  id: string;
+  dealerName: string;
+  importStatus: "new" | "update" | "duplicate" | "error" | "skipped";
+  city: string;
+  clientStatus: "active" | "potential" | "paused" | "lost" | "archived";
+  salesManagerName: string | null;
+  regionalManagerName: string | null;
+  duplicateReason: string | null;
+  errorReason: string | null;
+  source: "one_c" | "bitrix24" | "excel" | "manual";
+}
+
+export interface ClientImportIssue {
+  id: string;
+  severity: "critical" | "high" | "medium";
+  issueType: "validation" | "assignment" | "duplicate";
+  message: string;
+  count: number;
+  recommendation: string;
+}
+
+export interface ClientImportDuplicate {
+  id: string;
+  dealerName: string;
+  matchType: "inn" | "address" | "name";
+  existingDealerName: string;
+  reason: string;
+}
+
+export interface ClientImportAssignmentGap {
+  type: "sales_manager_missing" | "regional_manager_missing" | "region_missing" | "team_unknown";
+  count: number;
+  description: string;
+}
+
+export interface ClientImportPreview {
+  status: "draft" | "validated";
+  sources: ClientImportSource[];
+  summary: ClientImportSummary;
+  rows: ClientImportPreviewRow[];
+  issues: ClientImportIssue[];
+  duplicates: ClientImportDuplicate[];
+  assignmentGaps: ClientImportAssignmentGap[];
+}
+
+export interface ClientImportCommitResult {
+  importedCount: number;
+  updatedCount: number;
+  skippedDuplicates: number;
+  failedRows: number;
+  createdAt: string;
+  message: string;
 }
 
 export interface ShowcaseGoalStatusUpdateResponse {

@@ -21,6 +21,10 @@ import {
   getSalesShowcaseGoalById,
   getSalesShowcaseGoals,
   getSalesLeadershipDashboard,
+  getClientImportTemplate,
+  getClientImportPreview,
+  validateClientImport,
+  commitClientImport,
   getSalesManagerWorkspace,
   getSalesTaskById,
   getSalesTasks,
@@ -127,6 +131,18 @@ export async function registerRoutes(
   );
   app.get("/api/sales/manager-workspace", async (_req, res) =>
     send(res, await getSalesManagerWorkspace()),
+  );
+  app.get("/api/sales/client-import/template", async (_req, res) =>
+    send(res, await getClientImportTemplate()),
+  );
+  app.get("/api/sales/client-import/preview", async (_req, res) =>
+    send(res, await getClientImportPreview()),
+  );
+  app.post("/api/sales/client-import/validate", async (_req, res) =>
+    send(res, await validateClientImport()),
+  );
+  app.post("/api/sales/client-import/commit", async (_req, res) =>
+    send(res, await commitClientImport()),
   );
   app.get("/api/sales/tasks/:id", async (req: Request, res) => {
     const raw = req.params.id;

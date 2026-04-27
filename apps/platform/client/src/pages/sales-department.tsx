@@ -4,6 +4,7 @@ import {
   BarChart3,
   BriefcaseBusiness,
   ClipboardList,
+  Database,
   ClipboardCheck,
   Clock3,
   FlagTriangleRight,
@@ -366,6 +367,37 @@ export default function SalesDepartmentPage() {
         </CardContent>
       </Card>
 
+      <Card
+        className="rounded-2xl border-border/80 shadow-sm"
+        data-testid="section-sales-client-import-entry"
+      >
+        <CardHeader>
+          <CardTitle className="text-lg font-bold uppercase tracking-wide">
+            Импорт клиентской базы
+          </CardTitle>
+          <CardDescription>
+            Загрузка дилеров из 1С, Битрикс24 и Excel с проверкой дублей, ошибок и распределением по
+            ответственным.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-[14px] border border-border/80 bg-[#f5f5f5] p-3 text-sm text-muted-foreground">
+            В demo-режиме доступен сценарий проверки файла и предпросмотра импорта перед загрузкой в
+            единую клиентскую базу дилеров.
+          </div>
+          <Button
+            asChild
+            className="h-11 justify-between rounded-xl"
+            data-testid="button-open-client-import"
+          >
+            <Link href="/sales/client-import">
+              Импорт клиентской базы
+              <Database className="h-4 w-4" />
+            </Link>
+          </Button>
+        </CardContent>
+      </Card>
+
       <Card className="rounded-2xl border-border/80 shadow-sm">
         <CardHeader>
           <CardTitle className="text-lg font-bold uppercase tracking-wide">Быстрые действия</CardTitle>
@@ -386,6 +418,17 @@ export default function SalesDepartmentPage() {
           <Button asChild variant="outline" className="h-11 justify-between rounded-xl bg-white" data-testid="button-open-orders">
             <Link href="/orders">
               Открыть заказы
+              <ArrowRightCircle className="h-4 w-4" />
+            </Link>
+          </Button>
+          <Button
+            asChild
+            variant="outline"
+            className="h-11 justify-between rounded-xl bg-white"
+            data-testid="button-quick-client-import"
+          >
+            <Link href="/sales/client-import">
+              Импорт клиентской базы
               <ArrowRightCircle className="h-4 w-4" />
             </Link>
           </Button>

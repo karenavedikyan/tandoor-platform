@@ -33,6 +33,8 @@ export type DealerListItem = {
   regionalManager: UserPublic | null;
   salesManagerName: string;
   regionalManagerName: string;
+  clientLifecycleStatus: "active" | "potential" | "paused" | "lost" | "archived";
+  source: "one_c" | "bitrix24" | "excel" | "manual";
 };
 
 export type DealerTaskView = DealerTask & {
@@ -96,6 +98,21 @@ export function toDealerListItem(
   interactions: DealerInteraction[],
   organizations: Organization[] = [],
 ): DealerListItem {
+  const dealerImportMetaById: Record<
+    number,
+    { clientLifecycleStatus: DealerListItem["clientLifecycleStatus"]; source: DealerListItem["source"] }
+  > = {
+    1: { clientLifecycleStatus: "active", source: "one_c" },
+    2: { clientLifecycleStatus: "potential", source: "excel" },
+    3: { clientLifecycleStatus: "active", source: "bitrix24" },
+  };
+  const lifecycleByDealerStatus: Record<string, DealerListItem["clientLifecycleStatus"]> = {
+    active: "active",
+    development: "potential",
+    paused: "paused",
+    archived: "archived",
+  };
+  const importMeta = dealerImportMetaById[dealer.id];
   const salesManagerId = dealer.salesManagerId ?? dealer.managerUserId ?? null;
   const regionalManagerId = dealer.regionalManagerId ?? null;
   const salesManager = users.find((user) => user.id === salesManagerId);
@@ -132,5 +149,8 @@ export function toDealerListItem(
     regionalManager: userToPublic(regionalManager),
     salesManagerName: personName(salesManager),
     regionalManagerName: personName(regionalManager),
+    clientLifecycleStatus:
+      importMeta?.clientLifecycleStatus ?? lifecycleByDealerStatus[dealer.status] ?? "potential",
+    source: importMeta?.source ?? "manual",
   };
 }

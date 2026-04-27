@@ -366,6 +366,65 @@ export function quickActionTypeLabel(value: string): string {
   return map[value] ?? value;
 }
 
+export function importSourceLabel(value: string): string {
+  const map: Record<string, string> = {
+    one_c: "1С",
+    bitrix24: "Битрикс24",
+    excel: "Excel / CSV",
+    manual: "Ручное добавление",
+  };
+  return map[value] ?? value;
+}
+
+export function importSourceStatusLabel(value: string): string {
+  const map: Record<string, string> = {
+    planned: "Планируется интеграция",
+    available: "Доступно в MVP",
+    connected: "Подключено",
+  };
+  return map[value] ?? value;
+}
+
+export function importRowStatusLabel(value: string): string {
+  const map: Record<string, string> = {
+    new: "Новый",
+    update: "Обновление",
+    duplicate: "Дубль",
+    error: "Ошибка",
+    skipped: "Пропущен",
+  };
+  return map[value] ?? value;
+}
+
+export function importIssueSeverityLabel(value: string): string {
+  const map: Record<string, string> = {
+    critical: "Критическая",
+    warning: "Предупреждение",
+  };
+  return map[value] ?? value;
+}
+
+export function clientLifecycleStatusLabel(value: string): string {
+  const map: Record<string, string> = {
+    active: "Активный",
+    potential: "Потенциальный",
+    paused: "Приостановлен",
+    lost: "Потерян",
+    archived: "Архивный",
+  };
+  return map[value] ?? value;
+}
+
+export function assignmentGapTypeLabel(value: string): string {
+  const map: Record<string, string> = {
+    sales_manager: "Без менеджера продаж",
+    regional_manager: "Без регионального менеджера",
+    region: "Без региона",
+    team: "Неизвестная команда",
+  };
+  return map[value] ?? value;
+}
+
 export function priorityLabel(value: string): string {
   return taskPriorityLabel(value);
 }

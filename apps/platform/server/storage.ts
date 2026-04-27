@@ -383,6 +383,88 @@ export type ManagerQuickAction = {
   actionType: string;
 };
 
+export type ClientImportSource = {
+  id: "one_c" | "bitrix24" | "excel" | "manual";
+  name: string;
+  status: "planned" | "available" | "connected";
+  description: string;
+};
+
+export type ClientImportTemplateField = {
+  key: string;
+  title: string;
+  required: boolean;
+  description: string;
+  example: string;
+};
+
+export type ClientImportSummary = {
+  totalRows: number;
+  newDealers: number;
+  updates: number;
+  duplicates: number;
+  errors: number;
+  unassigned: number;
+  active: number;
+  potential: number;
+};
+
+export type ClientImportPreviewRow = {
+  id: string;
+  dealerName: string;
+  importStatus: "new" | "update" | "duplicate" | "error" | "skipped";
+  city: string;
+  lifecycleStatus: "active" | "potential" | "paused" | "lost" | "archived";
+  source: ClientImportSource["id"];
+  salesManagerName: string | null;
+  regionalManagerName: string | null;
+  reason?: string;
+};
+
+export type ClientImportIssue = {
+  id: string;
+  severity: "critical" | "warning";
+  code: string;
+  message: string;
+  rowRef: string;
+};
+
+export type ClientImportDuplicate = {
+  id: string;
+  rowRef: string;
+  dealerName: string;
+  matchType: "inn" | "address" | "name";
+  matchedDealerId: number | null;
+  matchedDealerName: string;
+  recommendation: string;
+};
+
+export type ClientImportAssignmentGap = {
+  id: string;
+  type: "sales_manager" | "regional_manager" | "region" | "team";
+  count: number;
+  message: string;
+};
+
+export type ClientImportPreview = {
+  status: "draft" | "validated";
+  sources: ClientImportSource[];
+  summary: ClientImportSummary;
+  rows: ClientImportPreviewRow[];
+  issues: ClientImportIssue[];
+  duplicates: ClientImportDuplicate[];
+  assignmentGaps: ClientImportAssignmentGap[];
+};
+
+export type ClientImportCommitResult = {
+  importedCount: number;
+  updatedCount: number;
+  skippedDuplicates: number;
+  failedRows: number;
+  createdAt: string;
+  message: string;
+};
+
 export type SalesManagerWorkspace = {
   manager: SalesManagerProfile;
   kpis: SalesManagerWorkspaceKpis;
@@ -451,6 +533,10 @@ export interface IStorage {
   ): Promise<{ success: true; message: string; goal: ShowcaseGoalListItem }>;
   getSalesLeadershipDashboard(): Promise<SalesLeadershipDashboard>;
   getSalesManagerWorkspace(): Promise<SalesManagerWorkspace>;
+  getClientImportTemplateFields(): Promise<ClientImportTemplateField[]>;
+  getClientImportPreview(): Promise<ClientImportPreview>;
+  validateClientImport(): Promise<ClientImportPreview & { status: "validated" }>;
+  commitClientImport(): Promise<ClientImportCommitResult>;
 }
 
 const organizationsSeed: Organization[] = [
@@ -1426,6 +1512,280 @@ const distributionReportItemsSeed: DistributionReportItem[] = [
     comment: "Данные по доступности уточняются с менеджером салона.",
   },
 ];
+
+const clientImportTemplateFieldsSeed: ClientImportTemplateField[] = [
+  {
+    key: "dealer_name",
+    title: "Название дилера",
+    required: true,
+    description: "Юридическое или коммерческое название дилера",
+    example: "Двери Кубани",
+  },
+  {
+    key: "dealer_tax_id_or_code",
+    title: "ИНН или внутренний код",
+    required: true,
+    description: "ИНН контрагента или внутренний идентификатор из текущей системы",
+    example: "2312012999",
+  },
+  {
+    key: "city",
+    title: "Город",
+    required: true,
+    description: "Город основной торговой точки",
+    example: "Краснодар",
+  },
+  {
+    key: "trade_point_address",
+    title: "Адрес торговой точки",
+    required: true,
+    description: "Фактический адрес точки продаж",
+    example: "ул. Ставропольская, 100",
+  },
+  {
+    key: "dealer_type",
+    title: "Тип дилера",
+    required: true,
+    description: "Тип дилера: сетевой или одиночный",
+    example: "network",
+  },
+  {
+    key: "client_lifecycle_status",
+    title: "Статус клиента",
+    required: true,
+    description: "Жизненный цикл клиента: активный/потенциальный/приостановлен/потерян",
+    example: "potential",
+  },
+  {
+    key: "sales_manager_name",
+    title: "Ответственный менеджер продаж",
+    required: true,
+    description: "ФИО менеджера продаж",
+    example: "Анна Кравченко",
+  },
+  {
+    key: "regional_manager_name",
+    title: "Ответственный региональный менеджер",
+    required: true,
+    description: "ФИО регионального менеджера",
+    example: "Игорь Мельников",
+  },
+  {
+    key: "phone",
+    title: "Телефон",
+    required: false,
+    description: "Контактный номер дилера",
+    example: "+7 900 123-45-67",
+  },
+  {
+    key: "email",
+    title: "Email",
+    required: false,
+    description: "Контактный email дилера",
+    example: "info@doors-kuban.ru",
+  },
+  {
+    key: "trade_point_format",
+    title: "Формат торговой точки",
+    required: false,
+    description: "Формат точки: шоурум/магазин/смешанный",
+    example: "showroom",
+  },
+  {
+    key: "store_area",
+    title: "Площадь магазина",
+    required: false,
+    description: "Площадь торговой точки в м2",
+    example: "120",
+  },
+  {
+    key: "assortment",
+    title: "Ассортимент",
+    required: false,
+    description: "Профиль ассортимента дилера",
+    example: "входные и межкомнатные двери",
+  },
+  {
+    key: "comment",
+    title: "Комментарий",
+    required: false,
+    description: "Свободный комментарий менеджера",
+    example: "Точка в развитии, нужен follow-up",
+  },
+  {
+    key: "source",
+    title: "Источник",
+    required: false,
+    description: "Система-источник записи",
+    example: "excel",
+  },
+  {
+    key: "last_contact_date",
+    title: "Дата последнего контакта",
+    required: false,
+    description: "Дата последнего контакта с дилером",
+    example: "2026-04-20",
+  },
+];
+
+const clientImportPreviewSeed: ClientImportPreview = {
+  sources: [
+    {
+      id: "source-1c",
+      source: "one_c",
+      title: "1С",
+      status: "planned",
+      description:
+        "Контрагенты, ИНН, договоры, заказы, отгрузки и оплаты будут синхронизированы в единую CRM-структуру.",
+    },
+    {
+      id: "source-bitrix24",
+      source: "bitrix24",
+      title: "Битрикс24",
+      status: "planned",
+      description:
+        "Лиды, сделки, звонки, задачи и история коммуникаций будут сопоставлены с дилерской карточкой.",
+    },
+    {
+      id: "source-excel",
+      source: "excel",
+      title: "Excel / CSV",
+      status: "available_mvp",
+      description:
+        "Первичная массовая загрузка и рабочие таблицы менеджеров доступны в демо-режиме MVP.",
+    },
+  ],
+  summary: {
+    totalRows: 1240,
+    newDealers: 890,
+    updates: 260,
+    duplicates: 47,
+    errors: 43,
+    unassigned: 180,
+    active: 620,
+    potential: 390,
+  },
+  rows: [
+    {
+      id: "row-1",
+      dealerName: "Двери Кубани",
+      importStatus: "new",
+      city: "Краснодар",
+      clientStatus: "potential",
+      responsibleSalesManager: null,
+      responsibleRegionalManager: null,
+      reason: "Новый дилер из Excel, требуется распределение по ответственным.",
+      source: "excel",
+    },
+    {
+      id: "row-2",
+      dealerName: "Дверной Дом Юг",
+      importStatus: "update",
+      city: "Краснодар",
+      clientStatus: "active",
+      responsibleSalesManager: "Анна Кравченко",
+      responsibleRegionalManager: "Игорь Мельников",
+      reason: "Найдена существующая запись, будут обновлены контакты и комментарии.",
+      source: "one_c",
+    },
+    {
+      id: "row-3",
+      dealerName: "Салон Северный",
+      importStatus: "duplicate",
+      city: "Ростов-на-Дону",
+      clientStatus: "potential",
+      responsibleSalesManager: "Анна Кравченко",
+      responsibleRegionalManager: "Игорь Мельников",
+      reason: "Совпадение по ИНН и адресу с существующим дилером.",
+      source: "bitrix24",
+    },
+    {
+      id: "row-4",
+      dealerName: "Мир Дверей Анапа",
+      importStatus: "error",
+      city: "Анапа",
+      clientStatus: "potential",
+      responsibleSalesManager: null,
+      responsibleRegionalManager: null,
+      reason: "Не заполнен ИНН или код клиента.",
+      source: "excel",
+    },
+  ],
+  issues: [
+    {
+      id: "issue-1",
+      severity: "critical",
+      message: "Не заполнен город",
+      rowId: "row-4",
+    },
+    {
+      id: "issue-2",
+      severity: "high",
+      message: "Не найден ответственный менеджер",
+      rowId: "row-1",
+    },
+    {
+      id: "issue-3",
+      severity: "medium",
+      message: "Некорректный телефон",
+      rowId: "row-2",
+    },
+  ],
+  duplicates: [
+    {
+      id: "duplicate-1",
+      rowId: "row-3",
+      dealerName: "Салон Северный",
+      duplicateReason: "Совпадение по ИНН с существующим дилером",
+      matchedDealerName: "Салон дверей Северный",
+      suggestedAction: "Объединить карточки или пропустить импорт строки.",
+    },
+    {
+      id: "duplicate-2",
+      rowId: "row-3",
+      dealerName: "Салон Северный",
+      duplicateReason: "Совпадение адреса торговой точки",
+      matchedDealerName: "Салон дверей Северный",
+      suggestedAction: "Подтвердить объединение по адресу перед загрузкой в CRM.",
+    },
+  ],
+  assignmentGaps: [
+    {
+      id: "gap-1",
+      type: "sales_manager",
+      count: 180,
+      description: "Клиентов без менеджера продаж",
+    },
+    {
+      id: "gap-2",
+      type: "regional_manager",
+      count: 95,
+      description: "Клиентов без регионального менеджера",
+    },
+    {
+      id: "gap-3",
+      type: "region",
+      count: 37,
+      description: "Клиентов без региона",
+    },
+    {
+      id: "gap-4",
+      type: "team",
+      count: 22,
+      description: "Клиентов с неизвестной командой",
+    },
+  ],
+};
+
+const clientImportCommitResultSeed: ClientImportCommitResult = {
+  importedCount: 890,
+  updatedCount: 260,
+  skippedDuplicates: 47,
+  failedRows: 43,
+  createdAt: "2026-04-27T16:20:00.000Z",
+  message:
+    "Импорт выполнен в демо-режиме: новые дилеры добавлены, существующие обновлены, дубли и ошибки вынесены на ручную проверку.",
+};
 
 const showcaseGoalsSeed: ShowcaseGoal[] = [
   {
@@ -3287,6 +3647,28 @@ export class DatabaseStorage implements IStorage {
           actionType: "open_regional_route",
         },
       ],
+    };
+  }
+
+  async getClientImportTemplateFields(): Promise<ClientImportTemplateField[]> {
+    return clientImportTemplateFieldsSeed;
+  }
+
+  async getClientImportPreview(): Promise<ClientImportPreview> {
+    return clientImportPreviewSeed;
+  }
+
+  async validateClientImport(): Promise<ClientImportPreview & { status: "validated" }> {
+    return {
+      ...clientImportPreviewSeed,
+      status: "validated",
+    };
+  }
+
+  async commitClientImport(): Promise<ClientImportCommitResult> {
+    return {
+      ...clientImportCommitResultSeed,
+      createdAt: new Date().toISOString(),
     };
   }
 

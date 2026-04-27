@@ -263,6 +263,22 @@ export async function getSalesManagerWorkspace(): Promise<ApiResult> {
   return { status: 200, body: await storage.getSalesManagerWorkspace() };
 }
 
+export async function getClientImportTemplate(): Promise<ApiResult> {
+  return { status: 200, body: await storage.getClientImportTemplateFields() };
+}
+
+export async function getClientImportPreview(): Promise<ApiResult> {
+  return { status: 200, body: await storage.getClientImportPreview() };
+}
+
+export async function validateClientImport(): Promise<ApiResult> {
+  return { status: 200, body: await storage.validateClientImport() };
+}
+
+export async function commitClientImport(): Promise<ApiResult> {
+  return { status: 200, body: await storage.commitClientImport() };
+}
+
 export async function getSalesTaskById(rawId: string): Promise<ApiResult> {
   const id = parseIdParam(rawId);
   if (id == null) {
@@ -505,6 +521,18 @@ export async function routeApiRequest(
   }
   if (upperMethod === "GET" && normalized === "/api/sales/manager-workspace") {
     return getSalesManagerWorkspace();
+  }
+  if (upperMethod === "GET" && normalized === "/api/sales/client-import/template") {
+    return getClientImportTemplate();
+  }
+  if (upperMethod === "GET" && normalized === "/api/sales/client-import/preview") {
+    return getClientImportPreview();
+  }
+  if (upperMethod === "POST" && normalized === "/api/sales/client-import/validate") {
+    return validateClientImport();
+  }
+  if (upperMethod === "POST" && normalized === "/api/sales/client-import/commit") {
+    return commitClientImport();
   }
   const salesTaskDetailMatch = /^\/api\/sales\/tasks\/(\d+)$/.exec(normalized);
   if (upperMethod === "GET" && salesTaskDetailMatch) {

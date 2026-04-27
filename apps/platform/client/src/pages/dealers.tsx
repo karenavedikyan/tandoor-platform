@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { AlertCircle, MapPin, Network, Store, Target } from "lucide-react";
+import { AlertCircle, ArrowRightCircle, MapPin, Network, Store, Target } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -9,7 +9,13 @@ import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { DealerListItem } from "@/lib/api-types";
-import { dealerTypeLabel, dealerStatusLabel, potentialLevelLabel } from "@/lib/labels";
+import {
+  clientLifecycleStatusLabel,
+  dealerTypeLabel,
+  dealerStatusLabel,
+  importSourceLabel,
+  potentialLevelLabel,
+} from "@/lib/labels";
 
 type QuickFilter = "all" | "network" | "single" | "high" | "development";
 
@@ -122,6 +128,19 @@ export default function DealersPage() {
         <p className="mt-2 text-sm text-muted-foreground max-w-3xl">
           Общие клиенты отдела продаж: менеджеры, региональные менеджеры, торговые точки и задачи
         </p>
+        <div className="mt-3">
+          <Button
+            asChild
+            variant="outline"
+            className="h-10 rounded-xl bg-white"
+            data-testid="button-open-client-import"
+          >
+            <Link href="/sales/client-import">
+              Импорт базы
+              <ArrowRightCircle className="ml-2 h-4 w-4" />
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -223,6 +242,14 @@ export default function DealersPage() {
                 >
                   <span className="text-muted-foreground">Региональный:</span>{" "}
                   <span className="font-medium text-foreground">{dealer.regionalManagerName}</span>
+                </p>
+              </div>
+              <div className="grid gap-1 text-xs text-muted-foreground sm:grid-cols-2">
+                <p data-testid={`text-dealer-client-status-${dealer.id}`}>
+                  Статус клиента: {clientLifecycleStatusLabel(dealer.clientLifecycleStatus)}
+                </p>
+                <p data-testid={`text-dealer-source-${dealer.id}`}>
+                  Источник: {importSourceLabel(dealer.source)}
                 </p>
               </div>
               <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
