@@ -13,7 +13,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { OrderStatusBadge } from "@/components/status-badge";
-import type { Dealer, Order } from "@/lib/api-types";
+import type { Dealer, Order, Organization } from "@/lib/api-types";
 import { formatCurrency, formatDate } from "@/lib/format";
 
 function OrdersTableSkeleton() {
@@ -39,8 +39,12 @@ export default function OrdersPage() {
   const { data: dealers } = useQuery<Dealer[]>({
     queryKey: ["/api/dealers"],
   });
+  const { data: organizations } = useQuery<Organization[]>({
+    queryKey: ["/api/organizations"],
+  });
 
   const dealerById = new Map((dealers ?? []).map((dealer) => [dealer.id, dealer]));
+  const organizationById = new Map((organizations ?? []).map((organization) => [organization.id, organization]));
 
   return (
     <div className="space-y-6">
@@ -80,10 +84,13 @@ export default function OrdersPage() {
                 <TableBody>
                   {orders?.map((order) => {
                     const dealer = dealerById.get(order.dealerId);
+                    const dealerOrganization = dealer
+                      ? organizationById.get(dealer.organizationId)
+                      : undefined;
                     return (
                       <TableRow key={order.id} data-testid={`order-row-${order.id}`}>
                         <TableCell className="font-medium">{order.orderNumber}</TableCell>
-                        <TableCell>{dealer?.name ?? `Dealer #${order.dealerId}`}</TableCell>
+                        <TableCell>{dealerOrganization?.name ?? `Dealer #${order.dealerId}`}</TableCell>
                         <TableCell>
                           <OrderStatusBadge status={order.status} />
                         </TableCell>
