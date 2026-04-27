@@ -44,6 +44,7 @@ const navItems: NavItem[] = [
   { label: "Рабочий стол", path: "/sales/manager-workspace", icon: ClipboardList },
   { label: "Импорт базы", path: "/sales/client-import", icon: Database },
   { label: "Панель продаж", path: "/sales/leadership", icon: BarChart3 },
+  { label: "ЛК регионала", path: "/regional-manager/workspace", icon: MapPinned },
   { label: "Маршрут РМ", path: "/regional-manager/route", icon: MapPinned },
   { label: "Цели по витринам", path: "/sales/showcase-goals", icon: ClipboardCheck },
   { label: "Задачи продаж", path: "/sales/tasks", icon: ListTodo },
@@ -88,6 +89,8 @@ function SidebarNav({
                   ? "nav-sales-client-import"
                 : item.path === "/sales/leadership"
                   ? "nav-sales-leadership"
+                : item.path === "/regional-manager/workspace"
+                  ? "nav-regional-manager-workspace"
                 : item.path === "/regional-manager/route"
                   ? "nav-regional-manager-route"
                   : item.path === "/sales/showcase-goals"

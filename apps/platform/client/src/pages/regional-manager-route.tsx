@@ -85,6 +85,19 @@ export default function RegionalManagerRoutePage() {
         <p className="mt-2 text-sm text-muted-foreground">
           План посещений торговых точек, контроль дистрибуции и подготовка целей по витринам.
         </p>
+        <div className="mt-3">
+          <Button
+            asChild
+            variant="outline"
+            className="h-10 rounded-xl bg-white"
+            data-testid="button-back-to-regional-workspace"
+          >
+            <Link href="/regional-manager/workspace">
+              Вернуться в ЛК регионала
+              <ArrowRightCircle className="ml-2 h-4 w-4" />
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <Card className="rounded-2xl border-border/80 shadow-sm" data-testid="card-route-summary">

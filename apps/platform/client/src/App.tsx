@@ -21,6 +21,7 @@ import SalesManagerWorkspacePage from "@/pages/sales-manager-workspace";
 import SalesClientImportPage from "@/pages/sales-client-import";
 import RegionalManagerRoutePage from "@/pages/regional-manager-route";
 import RegionalManagerVisitPage from "@/pages/regional-manager-visit";
+import RegionalManagerWorkspacePage from "@/pages/regional-manager-workspace";
 import ShowcaseGoalsPage from "@/pages/showcase-goals";
 import ShowcaseGoalDetailPage from "@/pages/showcase-goal-detail";
 import SalesTasksPage from "@/pages/sales-tasks";
@@ -44,6 +45,7 @@ function AppRouter() {
         <Route path="/sales/client-import" component={SalesClientImportPage} />
         <Route path="/sales/manager-workspace" component={SalesManagerWorkspacePage} />
         <Route path="/sales/leadership" component={SalesLeadershipDashboardPage} />
+        <Route path="/regional-manager/workspace" component={RegionalManagerWorkspacePage} />
         <Route path="/sales/showcase-goals" component={ShowcaseGoalsPage} />
         <Route path="/sales/showcase-goals/:id" component={ShowcaseGoalDetailPage} />
         <Route path="/sales/tasks" component={SalesTasksPage} />

@@ -272,6 +272,17 @@ export default function RegionalManagerVisitPage() {
               Назад к маршруту
             </Link>
           </Button>
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            className="w-fit rounded-xl"
+            data-testid="button-back-regional-workspace"
+          >
+            <Link href="/regional-manager/workspace">
+              <ArrowLeft className="mr-2 h-4 w-4" />В ЛК регионала
+            </Link>
+          </Button>
           <div className="space-y-1">
             <CardTitle className="text-xl">{data.visit.dealer.name}</CardTitle>
             <CardDescription>{data.visit.tradePoint.name}</CardDescription>

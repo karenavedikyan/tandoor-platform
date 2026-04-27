@@ -425,6 +425,40 @@ export function assignmentGapTypeLabel(value: string): string {
   return map[value] ?? value;
 }
 
+export function regionalTaskTypeLabel(value: string): string {
+  const map: Record<string, string> = {
+    visit: "Визит",
+    distribution_report: "Отчет дистрибуции",
+    showcase_check: "Проверка витрины",
+    photo_report: "Фотоотчет",
+    dealer_feedback: "Обратная связь дилера",
+    pos_materials: "POS-материалы",
+    competitor_check: "Проверка конкурентов",
+    contact_update: "Обновление контактов",
+  };
+  return map[value] ?? value;
+}
+
+export function distributionFocusPriorityLabel(value: string): string {
+  const map: Record<string, string> = {
+    low: "Низкий приоритет",
+    medium: "Средний приоритет",
+    high: "Высокий приоритет",
+  };
+  return map[value] ?? value;
+}
+
+export function regionalActivityTypeLabel(value: string): string {
+  const map: Record<string, string> = {
+    visit_completed: "Визит завершен",
+    distribution_report_filled: "Отчет дистрибуции заполнен",
+    showcase_goal_created: "Создана цель по витрине",
+    task_overdue: "Задача просрочена",
+    dealer_at_risk: "Дилер в зоне риска",
+  };
+  return map[value] ?? value;
+}
+
 export function priorityLabel(value: string): string {
   return taskPriorityLabel(value);
 }

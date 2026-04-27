@@ -253,6 +253,136 @@ export type SalesLeadershipDashboard = {
   nextActions: LeadershipNextAction[];
 };
 
+export type RegionalManagerWorkspaceManager = {
+  id: number;
+  name: string;
+  role: string;
+  region: string;
+  teamName: string;
+};
+
+export type RegionalManagerWorkspacePeriod = {
+  label: string;
+  dateFrom: string;
+  dateTo: string;
+};
+
+export type RegionalManagerWorkspaceKpis = {
+  plannedVisits: number;
+  completedVisits: number;
+  inProgressVisits: number;
+  overdueVisits: number;
+  distributionReports: number;
+  missingModels: number;
+  showcaseGoalsCreated: number;
+  openTasks: number;
+  overdueTasks: number;
+  atRiskDealers: number;
+};
+
+export type RegionalTodayRoute = {
+  id: number;
+  title: string;
+  city: string;
+  date: string;
+  status: RegionalRoute["status"];
+  progressPercent: number;
+  visitsTotal: number;
+  visitsCompleted: number;
+  nextVisitId: number | null;
+  nextDealerName: string | null;
+  nextTradePointAddress: string | null;
+};
+
+export type RegionalUpcomingVisit = {
+  id: number;
+  dealerId: number;
+  dealerName: string;
+  tradePointId: number;
+  tradePointName: string;
+  address: string;
+  city: string;
+  plannedTime: string;
+  status: RouteVisit["visitStatus"];
+  priority: RouteVisit["priority"];
+  hasDistributionReport: boolean;
+  hasOpenShowcaseGoal: boolean;
+};
+
+export type RegionalWorkspaceTask = {
+  id: string;
+  title: string;
+  dealerName: string;
+  tradePointName: string;
+  dueDate: string;
+  status: "new" | "in_progress" | "done" | "overdue";
+  priority: "low" | "medium" | "high";
+  type:
+    | "visit"
+    | "distribution_report"
+    | "showcase_check"
+    | "photo_report"
+    | "dealer_feedback"
+    | "pos_materials"
+    | "competitor_check"
+    | "contact_update";
+};
+
+export type RegionalAtRiskDealer = {
+  dealerId: number;
+  dealerName: string;
+  city: string;
+  reason: string;
+  riskLevel: "medium" | "high" | "critical";
+  lastVisitDate: string | null;
+  nextAction: string;
+};
+
+export type RegionalShowcaseGoalSummary = {
+  id: number;
+  title: string;
+  dealerName: string;
+  tradePointName: string;
+  status: ShowcaseGoal["goalStatus"];
+  dueDate: string;
+  progressPercent: number;
+  sourceVisitId: number | null;
+};
+
+export type RegionalDistributionFocusItem = {
+  category: string;
+  missingModels: number;
+  affectedTradePoints: number;
+  priority: "low" | "medium" | "high";
+  recommendation: string;
+};
+
+export type RegionalRecentActivityItem = {
+  id: string;
+  type:
+    | "visit_completed"
+    | "distribution_report_filled"
+    | "showcase_goal_created"
+    | "task_overdue"
+    | "dealer_at_risk";
+  title: string;
+  description: string;
+  createdAt: string;
+};
+
+export type RegionalManagerWorkspace = {
+  manager: RegionalManagerWorkspaceManager;
+  period: RegionalManagerWorkspacePeriod;
+  kpis: RegionalManagerWorkspaceKpis;
+  todayRoute: RegionalTodayRoute;
+  upcomingVisits: RegionalUpcomingVisit[];
+  tasks: RegionalWorkspaceTask[];
+  atRiskDealers: RegionalAtRiskDealer[];
+  showcaseGoals: RegionalShowcaseGoalSummary[];
+  distributionFocus: RegionalDistributionFocusItem[];
+  recentActivity: RegionalRecentActivityItem[];
+};
+
 export type SalesManagerProfile = {
   id: number;
   name: string;
@@ -532,6 +662,7 @@ export interface IStorage {
     visitId: number,
   ): Promise<{ success: true; message: string; goal: ShowcaseGoalListItem }>;
   getSalesLeadershipDashboard(): Promise<SalesLeadershipDashboard>;
+  getRegionalManagerWorkspace(): Promise<RegionalManagerWorkspace>;
   getSalesManagerWorkspace(): Promise<SalesManagerWorkspace>;
   getClientImportTemplateFields(): Promise<ClientImportTemplateField[]>;
   getClientImportPreview(): Promise<ClientImportPreview>;
@@ -3192,6 +3323,395 @@ export class DatabaseStorage implements IStorage {
           priority: "medium",
         },
       ],
+    };
+  }
+
+  async getRegionalManagerWorkspace(): Promise<RegionalManagerWorkspace> {
+    const managerId = 7;
+    const manager = getUserById(managerId);
+    if (!manager) {
+      throw new StorageError(404, "Региональный менеджер не найден");
+    }
+
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const managerRoutes = regionalRoutesSeed
+      .filter((route) => route.regionalManagerId === managerId)
+      .slice()
+      .sort((a, b) => b.routeDate.localeCompare(a.routeDate));
+    const currentRoute = managerRoutes[0];
+    if (!currentRoute) {
+      throw new StorageError(404, "Маршруты регионального менеджера не найдены");
+    }
+
+    const routeVisits = routeVisitsSeed
+      .filter((visit) => visit.routeId === currentRoute.id)
+      .slice()
+      .sort((a, b) => a.plannedTime.localeCompare(b.plannedTime));
+    const routeVisitIds = new Set(routeVisits.map((visit) => visit.id));
+    const routeDealerIds = new Set(routeVisits.map((visit) => visit.dealerId));
+
+    const allOpenTasks = salesTasksSeed.filter(
+      (task) => task.taskStatus !== "done" && task.taskStatus !== "cancelled",
+    );
+    const allOverdueTasks = allOpenTasks.filter(
+      (task) =>
+        task.taskStatus === "overdue" || Date.parse(task.dueDate) < Date.parse(`${todayIso}T00:00:00.000Z`),
+    );
+
+    const reportForVisit = (visitId: number) =>
+      distributionReportsSeed.find((report) => report.visitId === visitId);
+
+    const openGoalForVisit = (visitId: number) =>
+      showcaseGoalsSeed.find(
+        (goal) =>
+          goal.distributionReportId != null &&
+          distributionReportsSeed.some(
+            (report) => report.id === goal.distributionReportId && report.visitId === visitId,
+          ) &&
+          goal.goalStatus !== "completed" &&
+          goal.goalStatus !== "rejected",
+      );
+
+    const upcomingVisits: RegionalUpcomingVisit[] = routeVisits.map((visit) => {
+      const dealer = dealerListItemById(visit.dealerId);
+      const tradePoint = tradePointsSeed.find((entry) => entry.id === visit.tradePointId);
+      const report = reportForVisit(visit.id);
+      const hasOpenShowcaseGoal = Boolean(openGoalForVisit(visit.id));
+      return {
+        id: visit.id,
+        dealerId: visit.dealerId,
+        dealerName: dealer?.name ?? `Дилер #${visit.dealerId}`,
+        tradePointId: visit.tradePointId,
+        tradePointName: tradePoint?.name ?? "Торговая точка",
+        address: tradePoint?.address ?? "Адрес не указан",
+        city: tradePoint?.city ?? dealer?.city ?? "Не указан",
+        plannedTime: visit.plannedTime,
+        status: visit.visitStatus,
+        priority: visit.priority,
+        hasDistributionReport: Boolean(report),
+        hasOpenShowcaseGoal,
+      };
+    });
+
+    const nextVisit = routeVisits.find((visit) => visit.visitStatus === "planned") ?? null;
+    const nextVisitDealer = nextVisit ? dealerListItemById(nextVisit.dealerId) : null;
+    const nextVisitTradePoint = nextVisit
+      ? tradePointsSeed.find((entry) => entry.id === nextVisit.tradePointId)
+      : null;
+
+    const visitsCompleted = routeVisits.filter((visit) => visit.visitStatus === "completed").length;
+    const progressPercent =
+      routeVisits.length > 0 ? Math.round((visitsCompleted / routeVisits.length) * 100) : 0;
+
+    const managerShowcaseGoals = showcaseGoalsSeed
+      .filter((goal) => goal.createdByUserId === managerId || routeDealerIds.has(goal.dealerId))
+      .map((goal) => toShowcaseGoalListItem(goal))
+      .slice()
+      .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+
+    const managerTasks: RegionalWorkspaceTask[] = [
+      ...routeVisits.map((visit): RegionalWorkspaceTask => {
+        const dealer = dealerListItemById(visit.dealerId);
+        const tradePoint = tradePointsSeed.find((entry) => entry.id === visit.tradePointId);
+        return {
+          id: `visit-${visit.id}`,
+          title: `Визит: ${dealer?.name ?? `Дилер #${visit.dealerId}`}`,
+          dealerName: dealer?.name ?? `Дилер #${visit.dealerId}`,
+          tradePointName: tradePoint?.name ?? "Торговая точка",
+          dueDate: currentRoute.routeDate,
+          status:
+            visit.visitStatus === "completed"
+              ? ("done" as const)
+              : visit.visitStatus === "in_progress"
+                ? ("in_progress" as const)
+                : ("new" as const),
+          priority: visit.priority as RegionalWorkspaceTask["priority"],
+          type: "visit" as const,
+        };
+      }),
+      ...distributionReportsSeed
+        .filter((report) => routeVisitIds.has(report.visitId))
+        .map((report): RegionalWorkspaceTask => {
+          const dealer = dealerListItemById(report.dealerId);
+          const tradePoint = tradePointsSeed.find((entry) => entry.id === report.tradePointId);
+          return {
+            id: `distribution-report-${report.id}`,
+            title: `Отчет дистрибуции: ${dealer?.name ?? `Дилер #${report.dealerId}`}`,
+            dealerName: dealer?.name ?? `Дилер #${report.dealerId}`,
+            tradePointName: tradePoint?.name ?? "Торговая точка",
+            dueDate: currentRoute.routeDate,
+            status:
+              report.reportStatus === "submitted" || report.reportStatus === "reviewed"
+                ? ("done" as const)
+                : ("in_progress" as const),
+            priority: (report.missingModelsCount > 0 ? "high" : "medium") as RegionalWorkspaceTask["priority"],
+            type: "distribution_report" as const,
+          };
+        }),
+      ...allOpenTasks
+        .filter((task) => routeDealerIds.has(task.dealerId))
+        .slice(0, 8)
+        .map((task): RegionalWorkspaceTask => {
+          const tradePoint = task.tradePointId
+            ? tradePointsSeed.find((entry) => entry.id === task.tradePointId)
+            : null;
+          const titleByType: Record<RegionalWorkspaceTask["type"], string> = {
+            visit: task.title,
+            distribution_report: task.title,
+            showcase_check: task.title,
+            photo_report: task.title,
+            dealer_feedback: task.title,
+            pos_materials: task.title,
+            competitor_check: task.title,
+            contact_update: task.title,
+          };
+          const typeByTaskType: Record<SalesTask["taskType"], RegionalWorkspaceTask["type"]> = {
+            showcase_goal: "showcase_check",
+            call_dealer: "dealer_feedback",
+            prepare_offer: "contact_update",
+            coordinate_delivery: "pos_materials",
+            update_documents: "photo_report",
+            follow_up: "competitor_check",
+            other: "contact_update",
+          };
+          const mappedType = typeByTaskType[task.taskType];
+          const isOverdue =
+            task.taskStatus === "overdue" ||
+            Date.parse(task.dueDate) < Date.parse(`${todayIso}T00:00:00.000Z`);
+          const normalizedPriority: RegionalWorkspaceTask["priority"] =
+            task.priority === "high" || task.priority === "medium" || task.priority === "low"
+              ? task.priority
+              : "medium";
+
+          return {
+            id: `sales-task-${task.id}`,
+            title: titleByType[mappedType],
+            dealerName: dealerListItemById(task.dealerId)?.name ?? `Дилер #${task.dealerId}`,
+            tradePointName: tradePoint?.name ?? "Торговая точка",
+            dueDate: task.dueDate,
+            status: isOverdue
+              ? ("overdue" as const)
+              : task.taskStatus === "in_progress"
+                ? ("in_progress" as const)
+                : ("new" as const),
+            priority: normalizedPriority,
+            type: mappedType,
+          };
+        }),
+    ]
+      .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+      .slice(0, 12);
+
+    const atRiskDealers: RegionalAtRiskDealer[] = Array.from(routeDealerIds)
+      .map((dealerId) => {
+        const dealer = dealerListItemById(dealerId);
+        const dealerVisits = routeVisits
+          .filter((visit) => visit.dealerId === dealerId)
+          .slice()
+          .sort((a, b) => (b.completedAt ?? "").localeCompare(a.completedAt ?? ""));
+        const dealerReports = distributionReportsSeed.filter((report) => report.dealerId === dealerId);
+        const missingModels = dealerReports.reduce((sum, report) => sum + report.missingModelsCount, 0);
+        const openGoals = managerShowcaseGoals.filter(
+          (goal) =>
+            goal.dealerId === dealerId &&
+            goal.goalStatus !== "completed" &&
+            goal.goalStatus !== "rejected",
+        ).length;
+        const riskLevel: RegionalAtRiskDealer["riskLevel"] =
+          missingModels >= 3 || openGoals >= 2 ? "critical" : missingModels >= 1 ? "high" : "medium";
+        const reason =
+          riskLevel === "critical"
+            ? "Высокий риск: отсутствуют ключевые модели и несколько незакрытых целей."
+            : riskLevel === "high"
+              ? "Есть пробелы дистрибуции, нужна приоритизация действий."
+              : "Нужен регулярный контроль после визитов.";
+        return {
+          dealerId,
+          dealerName: dealer?.name ?? `Дилер #${dealerId}`,
+          city: dealer?.city ?? "Не указан",
+          reason,
+          riskLevel,
+          lastVisitDate: dealerVisits[0]?.completedAt ?? dealerVisits[0]?.startedAt ?? null,
+          nextAction:
+            riskLevel === "critical"
+              ? "Назначить follow-up с менеджером продаж и зафиксировать план закрытия пробелов."
+              : riskLevel === "high"
+                ? "Проверить статус целей по витрине и подтвердить следующую поставку."
+                : "Продолжить плановый контроль по маршруту.",
+        };
+      })
+      .sort((a, b) => {
+        const score = (value: RegionalAtRiskDealer["riskLevel"]) =>
+          value === "critical" ? 3 : value === "high" ? 2 : 1;
+        return score(b.riskLevel) - score(a.riskLevel);
+      })
+      .slice(0, 6);
+
+    const showcaseGoals: RegionalShowcaseGoalSummary[] = managerShowcaseGoals.map((goal) => {
+      const sourceReport = goal.distributionReportId
+        ? distributionReportsSeed.find((report) => report.id === goal.distributionReportId)
+        : null;
+      return {
+        id: goal.id,
+        title: goal.title,
+        dealerName: goal.dealer.name,
+        tradePointName: goal.tradePoint.name,
+        status: goal.goalStatus,
+        dueDate: goal.dueDate,
+        progressPercent: goal.progressPercent,
+        sourceVisitId: sourceReport?.visitId ?? null,
+      };
+    });
+
+    const distributionFocus: RegionalDistributionFocusItem[] = (() => {
+      const grouped = new Map<
+        string,
+        { missingModels: number; tradePoints: Set<number>; priority: "low" | "medium" | "high" }
+      >();
+      for (const item of distributionReportItemsSeed) {
+        if (item.isPresent === 1 && item.isOnShowcase === 1) {
+          continue;
+        }
+        const report = distributionReportsSeed.find((entry) => entry.id === item.reportId);
+        if (!report || !routeVisitIds.has(report.visitId)) {
+          continue;
+        }
+        const current = grouped.get(item.category) ?? {
+          missingModels: 0,
+          tradePoints: new Set<number>(),
+          priority: "low" as const,
+        };
+        current.missingModels += 1;
+        current.tradePoints.add(report.tradePointId);
+        current.priority =
+          current.missingModels >= 3 ? "high" : current.missingModels >= 2 ? "medium" : "low";
+        grouped.set(item.category, current);
+      }
+      const categoryLabel: Record<string, string> = {
+        entry_door: "Входные двери",
+        interior_door: "Межкомнатные двери",
+        fire_door: "Противопожарные двери",
+      };
+      return Array.from(grouped.entries())
+        .map(([category, value]) => ({
+          category: categoryLabel[category] ?? category,
+          missingModels: value.missingModels,
+          affectedTradePoints: value.tradePoints.size,
+          priority: value.priority,
+          recommendation:
+            value.priority === "high"
+              ? "Сформировать цели на расширение витрины и ускорить поставку."
+              : value.priority === "medium"
+                ? "Провести проверку выкладки и синхронизировать план с продажами."
+                : "Поддерживать регулярный контроль в рамках маршрута.",
+        }))
+        .sort((a, b) => b.missingModels - a.missingModels)
+        .slice(0, 6);
+    })();
+
+    const recentActivity: RegionalRecentActivityItem[] = [
+      ...routeVisits
+        .filter((visit) => visit.visitStatus === "completed")
+        .map((visit) => {
+          const dealer = dealerListItemById(visit.dealerId);
+          const tradePoint = tradePointsSeed.find((entry) => entry.id === visit.tradePointId);
+          return {
+            id: `visit-completed-${visit.id}`,
+            type: "visit_completed" as const,
+            title: "Визит завершен",
+            description: `${dealer?.name ?? "Дилер"} · ${tradePoint?.name ?? "ТТ"} (${visit.plannedTime})`,
+            createdAt: visit.completedAt ?? `${currentRoute.routeDate}T${visit.plannedTime}:00.000Z`,
+          };
+        }),
+      ...distributionReportsSeed
+        .filter((report) => routeVisitIds.has(report.visitId))
+        .map((report) => ({
+          id: `distribution-report-${report.id}`,
+          type: "distribution_report_filled" as const,
+          title: "Отчет дистрибуции заполнен",
+          description: report.recommendation,
+          createdAt: report.submittedAt ?? report.createdAt,
+        })),
+      ...showcaseGoals
+        .filter((goal) => goal.sourceVisitId != null)
+        .map((goal) => ({
+          id: `showcase-goal-${goal.id}`,
+          type: "showcase_goal_created" as const,
+          title: "Создана цель по витрине",
+          description: `${goal.title} · ${goal.dealerName}`,
+          createdAt:
+            showcaseGoalsSeed.find((entry) => entry.id === goal.id)?.createdAt ?? `${todayIso}T00:00:00.000Z`,
+        })),
+      ...allOverdueTasks
+        .filter((task) => routeDealerIds.has(task.dealerId))
+        .map((task) => ({
+          id: `task-overdue-${task.id}`,
+          type: "task_overdue" as const,
+          title: "Задача просрочена",
+          description: task.title,
+          createdAt: `${task.dueDate}T00:00:00.000Z`,
+        })),
+      ...atRiskDealers.map((dealer) => ({
+        id: `dealer-risk-${dealer.dealerId}`,
+        type: "dealer_at_risk" as const,
+        title: "Дилер отмечен в зоне риска",
+        description: `${dealer.dealerName}: ${dealer.reason}`,
+        createdAt: todayIso + "T12:00:00.000Z",
+      })),
+    ]
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, 12);
+
+    const distributionReports = distributionReportsSeed.filter((report) =>
+      routeVisitIds.has(report.visitId),
+    );
+    const missingModels = distributionReports.reduce((sum, report) => sum + report.missingModelsCount, 0);
+    const showcaseGoalsCreated = showcaseGoals.filter((goal) => goal.sourceVisitId != null).length;
+
+    return {
+      manager: {
+        id: manager.id,
+        name: `${manager.firstName} ${manager.lastName}`,
+        role: "Региональный менеджер",
+        region: currentRoute.region,
+        teamName: "Команда Юг",
+      },
+      period: {
+        label: "Текущая неделя",
+        dateFrom: currentRoute.routeDate,
+        dateTo: currentRoute.routeDate,
+      },
+      kpis: {
+        plannedVisits: routeVisits.length,
+        completedVisits: routeVisits.filter((visit) => visit.visitStatus === "completed").length,
+        inProgressVisits: routeVisits.filter((visit) => visit.visitStatus === "in_progress").length,
+        overdueVisits: routeVisits.filter((visit) => visit.visitStatus === "skipped").length,
+        distributionReports: distributionReports.length,
+        missingModels,
+        showcaseGoalsCreated,
+        openTasks: allOpenTasks.filter((task) => routeDealerIds.has(task.dealerId)).length,
+        overdueTasks: allOverdueTasks.filter((task) => routeDealerIds.has(task.dealerId)).length,
+        atRiskDealers: atRiskDealers.length,
+      },
+      todayRoute: {
+        id: currentRoute.id,
+        title: currentRoute.title,
+        city: upcomingVisits[0]?.city ?? "Не указан",
+        date: currentRoute.routeDate,
+        status: currentRoute.status,
+        progressPercent,
+        visitsTotal: routeVisits.length,
+        visitsCompleted,
+        nextVisitId: nextVisit?.id ?? null,
+        nextDealerName: nextVisitDealer?.name ?? null,
+        nextTradePointAddress: nextVisitTradePoint?.address ?? null,
+      },
+      upcomingVisits,
+      tasks: managerTasks,
+      atRiskDealers,
+      showcaseGoals,
+      distributionFocus,
+      recentActivity,
     };
   }
 

@@ -18,6 +18,7 @@ import {
   getRegionalRoutes,
   getRegionalVisitById,
   getRegionalVisitDistributionReport,
+  getRegionalManagerWorkspace,
   getSalesShowcaseGoalById,
   getSalesShowcaseGoals,
   getSalesLeadershipDashboard,
@@ -69,6 +70,9 @@ export async function registerRoutes(
   });
   app.get("/api/regional-manager/routes", async (_req, res) =>
     send(res, await getRegionalRoutes()),
+  );
+  app.get("/api/regional-manager/workspace", async (_req, res) =>
+    send(res, await getRegionalManagerWorkspace()),
   );
   app.get("/api/regional-manager/routes/:id", async (req: Request, res) => {
     const raw = req.params.id;

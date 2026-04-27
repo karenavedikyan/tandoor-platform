@@ -565,6 +565,136 @@ export interface SalesManagerWorkspace {
   quickActions: ManagerQuickAction[];
 }
 
+export interface RegionalManagerWorkspaceManager {
+  id: number;
+  name: string;
+  role: string;
+  region: string;
+  teamName: string;
+}
+
+export interface RegionalManagerWorkspacePeriod {
+  label: string;
+  dateFrom: string;
+  dateTo: string;
+}
+
+export interface RegionalManagerWorkspaceKpis {
+  plannedVisits: number;
+  completedVisits: number;
+  inProgressVisits: number;
+  overdueVisits: number;
+  distributionReports: number;
+  missingModels: number;
+  showcaseGoalsCreated: number;
+  openTasks: number;
+  overdueTasks: number;
+  atRiskDealers: number;
+}
+
+export interface RegionalTodayRoute {
+  id: number;
+  title: string;
+  city: string;
+  date: string;
+  status: "planned" | "in_progress" | "completed";
+  progressPercent: number;
+  visitsTotal: number;
+  visitsCompleted: number;
+  nextVisitId: number | null;
+  nextDealerName: string | null;
+  nextTradePointAddress: string | null;
+}
+
+export interface RegionalUpcomingVisit {
+  id: number;
+  dealerId: number;
+  dealerName: string;
+  tradePointId: number;
+  tradePointName: string;
+  address: string;
+  city: string;
+  plannedTime: string;
+  status: "planned" | "in_progress" | "completed" | "skipped";
+  priority: "low" | "medium" | "high";
+  hasDistributionReport: boolean;
+  hasOpenShowcaseGoal: boolean;
+}
+
+export interface RegionalWorkspaceTask {
+  id: string;
+  title: string;
+  dealerName: string;
+  tradePointName: string;
+  dueDate: string;
+  status: "new" | "in_progress" | "done" | "overdue";
+  priority: "low" | "medium" | "high";
+  type:
+    | "visit"
+    | "distribution_report"
+    | "showcase_check"
+    | "photo_report"
+    | "dealer_feedback"
+    | "pos_materials"
+    | "competitor_check"
+    | "contact_update";
+}
+
+export interface RegionalAtRiskDealer {
+  dealerId: number;
+  dealerName: string;
+  city: string;
+  reason: string;
+  riskLevel: "medium" | "high" | "critical";
+  lastVisitDate: string | null;
+  nextAction: string;
+}
+
+export interface RegionalShowcaseGoalSummary {
+  id: number;
+  title: string;
+  dealerName: string;
+  tradePointName: string;
+  status: ShowcaseGoal["goalStatus"];
+  dueDate: string;
+  progressPercent: number;
+  sourceVisitId: number | null;
+}
+
+export interface RegionalDistributionFocusItem {
+  category: string;
+  missingModels: number;
+  affectedTradePoints: number;
+  priority: "low" | "medium" | "high";
+  recommendation: string;
+}
+
+export interface RegionalRecentActivityItem {
+  id: string;
+  type:
+    | "visit_completed"
+    | "distribution_report_filled"
+    | "showcase_goal_created"
+    | "task_overdue"
+    | "dealer_at_risk";
+  title: string;
+  description: string;
+  createdAt: string;
+}
+
+export interface RegionalManagerWorkspace {
+  manager: RegionalManagerWorkspaceManager;
+  period: RegionalManagerWorkspacePeriod;
+  kpis: RegionalManagerWorkspaceKpis;
+  todayRoute: RegionalTodayRoute;
+  upcomingVisits: RegionalUpcomingVisit[];
+  tasks: RegionalWorkspaceTask[];
+  atRiskDealers: RegionalAtRiskDealer[];
+  showcaseGoals: RegionalShowcaseGoalSummary[];
+  distributionFocus: RegionalDistributionFocusItem[];
+  recentActivity: RegionalRecentActivityItem[];
+}
+
 export interface ClientImportSource {
   id: string;
   source: "one_c" | "bitrix24" | "excel" | "manual";

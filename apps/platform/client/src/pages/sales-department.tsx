@@ -307,6 +307,37 @@ export default function SalesDepartmentPage() {
 
       <Card
         className="rounded-2xl border-border/80 shadow-sm"
+        data-testid="section-regional-manager-workspace-entry"
+      >
+        <CardHeader>
+          <CardTitle className="text-lg font-bold uppercase tracking-wide">
+            ЛК регионального менеджера
+          </CardTitle>
+          <CardDescription>
+            Единый рабочий стол регионала: маршрут, визиты, отчеты дистрибуции, рисковые дилеры и
+            цели по витринам.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-[14px] border border-border/80 bg-[#f5f5f5] p-3 text-sm text-muted-foreground">
+            Главный вход для регионального менеджера, где собраны задачи дня/недели и переходы к
+            маршруту, визитам, дилерам, целям и задачам отдела продаж.
+          </div>
+          <Button
+            asChild
+            className="h-11 justify-between rounded-xl"
+            data-testid="button-open-regional-manager-workspace"
+          >
+            <Link href="/regional-manager/workspace">
+              ЛК регионального менеджера
+              <MapPinned className="h-4 w-4" />
+            </Link>
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card
+        className="rounded-2xl border-border/80 shadow-sm"
         data-testid="section-sales-leadership-entry"
       >
         <CardHeader>
@@ -412,6 +443,17 @@ export default function SalesDepartmentPage() {
           <Button asChild variant="outline" className="h-11 justify-between rounded-xl bg-white" data-testid="button-open-regional-route">
             <Link href="/regional-manager/route">
               Открыть маршрут РМ
+              <ArrowRightCircle className="h-4 w-4" />
+            </Link>
+          </Button>
+          <Button
+            asChild
+            variant="outline"
+            className="h-11 justify-between rounded-xl bg-white"
+            data-testid="button-quick-regional-manager-workspace"
+          >
+            <Link href="/regional-manager/workspace">
+              ЛК регионального менеджера
               <ArrowRightCircle className="h-4 w-4" />
             </Link>
           </Button>

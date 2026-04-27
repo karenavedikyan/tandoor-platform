@@ -134,6 +134,10 @@ export async function getRegionalRoutes(): Promise<ApiResult> {
   return { status: 200, body: await storage.listRegionalRoutes() };
 }
 
+export async function getRegionalManagerWorkspace(): Promise<ApiResult> {
+  return { status: 200, body: await storage.getRegionalManagerWorkspace() };
+}
+
 export async function getRegionalRouteById(rawId: string): Promise<ApiResult> {
   const id = parseIdParam(rawId);
   if (id == null) {
@@ -470,6 +474,9 @@ export async function routeApiRequest(
   }
   if (upperMethod === "GET" && normalized === "/api/regional-manager/routes") {
     return getRegionalRoutes();
+  }
+  if (upperMethod === "GET" && normalized === "/api/regional-manager/workspace") {
+    return getRegionalManagerWorkspace();
   }
   const regionalRouteDetailMatch = /^\/api\/regional-manager\/routes\/(\d+)$/.exec(normalized);
   if (upperMethod === "GET" && regionalRouteDetailMatch) {
