@@ -14,6 +14,7 @@ import NewOrderPage from "@/pages/new-order";
 import ClaimsPage from "@/pages/claims";
 import ActivityPage from "@/pages/activity";
 import ArchitecturePage from "@/pages/architecture";
+import SalesDepartmentPage from "@/pages/sales-department";
 import NotFound from "@/pages/not-found";
 
 function AppRouter() {
@@ -29,6 +30,7 @@ function AppRouter() {
         <Route path="/claims" component={ClaimsPage} />
         <Route path="/activity" component={ActivityPage} />
         <Route path="/architecture" component={ArchitecturePage} />
+        <Route path="/sales-department" component={SalesDepartmentPage} />
         <Route component={NotFound} />
       </Switch>
     </AppShell>
