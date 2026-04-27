@@ -459,6 +459,17 @@ export function regionalActivityTypeLabel(value: string): string {
   return map[value] ?? value;
 }
 
+export function regionalOperationalStatusLabel(value: string): string {
+  const map: Record<string, string> = {
+    critical: "Критично",
+    attention: "Требует внимания",
+    in_progress: "В работе",
+    normal: "В норме",
+    completed: "Завершено",
+  };
+  return map[value] ?? value;
+}
+
 export function priorityLabel(value: string): string {
   return taskPriorityLabel(value);
 }

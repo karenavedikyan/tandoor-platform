@@ -798,6 +798,13 @@ type RegionalManagerWorkspaceKpis = {
   atRiskDealers: number;
 };
 
+type RegionalOperationalStatus =
+  | "critical"
+  | "attention"
+  | "in_progress"
+  | "normal"
+  | "completed";
+
 type RegionalTodayRoute = {
   id: number;
   title: string;
@@ -888,10 +895,67 @@ type RegionalRecentActivityItem = {
   createdAt: string;
 };
 
+type RegionalMainNowItem = {
+  id: "attention" | "overdue" | "risk_objects" | "today_tasks" | "missing_reports";
+  title: string;
+  value: number;
+  description: string;
+  status: RegionalOperationalStatus;
+  actionLabel: string;
+  actionHref: string;
+};
+
+type RegionalRegionObject = {
+  id: string;
+  dealerId: number;
+  title: string;
+  city: string;
+  address: string;
+  status: RegionalOperationalStatus;
+  reason: string;
+  lastActivityAt: string | null;
+  salesManagerName: string;
+  isProblem: boolean;
+  isOverdue: boolean;
+  isToday: boolean;
+  href: string;
+};
+
+type RegionalSystemSectionItem = {
+  id:
+    | "objects"
+    | "employees"
+    | "tasks"
+    | "checks"
+    | "reports"
+    | "requests"
+    | "kpi"
+    | "documents"
+    | "notifications"
+    | "settings";
+  title: string;
+  description: string;
+  count: number;
+  status: RegionalOperationalStatus;
+  href: string | null;
+  isFuture: boolean;
+};
+
+type RegionalNotificationsSummary = {
+  critical: number;
+  attention: number;
+  inProgress: number;
+  total: number;
+};
+
 type RegionalManagerWorkspace = {
   manager: RegionalManagerWorkspaceManager;
   period: RegionalManagerWorkspacePeriod;
   kpis: RegionalManagerWorkspaceKpis;
+  mainNow: RegionalMainNowItem[];
+  regionObjects: RegionalRegionObject[];
+  systemSections: RegionalSystemSectionItem[];
+  notificationsSummary: RegionalNotificationsSummary;
   todayRoute: RegionalTodayRoute;
   upcomingVisits: RegionalUpcomingVisit[];
   tasks: RegionalWorkspaceTask[];
@@ -3614,6 +3678,307 @@ function getRegionalManagerWorkspaceRoute(): ApiResult {
   );
   const missingModels = distributionReports.reduce((sum, report) => sum + report.missingModelsCount, 0);
   const showcaseGoalsCreated = showcaseGoals.filter((goal) => goal.sourceVisitId != null).length;
+  const overdueTasksCount = allOverdueTasks.filter((task) => routeDealerIds.has(task.dealerId)).length;
+  const overdueVisitsCount = routeVisits.filter((visit) => visit.visitStatus === "skipped").length;
+  const visitsWithoutReportsCount = Math.max(routeVisits.length - distributionReports.length, 0);
+  const todayTasksCount = allOpenTasks.filter(
+    (task) => routeDealerIds.has(task.dealerId) && task.dueDate === todayIso,
+  ).length;
+
+  const statusScore = (status: RegionalOperationalStatus): number => {
+    if (status === "critical") return 5;
+    if (status === "attention") return 4;
+    if (status === "in_progress") return 3;
+    if (status === "normal") return 2;
+    return 1;
+  };
+
+  const regionObjects: RegionalRegionObject[] = (() => {
+    const grouped = new Map<string, { dealerId: number; tradePointId: number; visits: RouteVisit[] }>();
+    for (const visit of routeVisits) {
+      const key = `${visit.dealerId}-${visit.tradePointId}`;
+      const current = grouped.get(key) ?? {
+        dealerId: visit.dealerId,
+        tradePointId: visit.tradePointId,
+        visits: [],
+      };
+      current.visits.push(visit);
+      grouped.set(key, current);
+    }
+
+    return Array.from(grouped.entries())
+      .map(([key, value]) => {
+        const dealer = dealerListItemById(value.dealerId);
+        const tradePoint = tradePointsSeed.find((entry) => entry.id === value.tradePointId);
+        const objectRisk = atRiskDealers.find((riskDealer) => riskDealer.dealerId === value.dealerId);
+        const objectOverdueTasks = allOverdueTasks.filter(
+          (task) =>
+            task.dealerId === value.dealerId &&
+            (task.tradePointId == null || task.tradePointId === value.tradePointId),
+        );
+        const missingReportsForObject = value.visits.filter((visit) => !reportForVisit(visit.id)).length;
+        const hasSkippedVisit = value.visits.some((visit) => visit.visitStatus === "skipped");
+        const hasInProgressVisit = value.visits.some((visit) => visit.visitStatus === "in_progress");
+        const isCompletedObject =
+          value.visits.length > 0 && value.visits.every((visit) => visit.visitStatus === "completed");
+
+        const status: RegionalOperationalStatus =
+          hasSkippedVisit || objectOverdueTasks.length > 0 || objectRisk?.riskLevel === "critical"
+            ? "critical"
+            : missingReportsForObject > 0 || objectRisk?.riskLevel === "high"
+              ? "attention"
+              : hasInProgressVisit
+                ? "in_progress"
+                : isCompletedObject
+                  ? "completed"
+                  : "normal";
+
+        const latestVisitActivity = value.visits
+          .map(
+            (visit) =>
+              visit.completedAt ??
+              visit.startedAt ??
+              `${currentRoute.routeDate}T${visit.plannedTime}:00.000Z`,
+          )
+          .sort((a, b) => b.localeCompare(a))[0];
+        const latestDealerActivity = dealerInteractionsSeed
+          .filter(
+            (interaction) =>
+              interaction.dealerId === value.dealerId &&
+              (interaction.tradePointId == null || interaction.tradePointId === value.tradePointId),
+          )
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+        const lastActivityAt = [latestVisitActivity, latestDealerActivity?.createdAt]
+          .filter((entry): entry is string => Boolean(entry))
+          .sort((a, b) => b.localeCompare(a))[0] ?? null;
+
+        const reason =
+          status === "critical"
+            ? hasSkippedVisit
+              ? "Просрочен визит по точке."
+              : "Есть просроченные задачи и риски по дилеру."
+            : status === "attention"
+              ? missingReportsForObject > 0
+                ? "По визитам не закрыты отчеты дистрибуции."
+                : objectRisk?.reason ?? "Нужен контроль регионального менеджера."
+              : status === "in_progress"
+                ? "По точке идет активная работа в рамках маршрута."
+                : status === "completed"
+                  ? "План по точке выполнен."
+                  : "Стабильная точка, отклонений не обнаружено.";
+
+        return {
+          id: key,
+          dealerId: value.dealerId,
+          title: tradePoint?.name ?? dealer?.name ?? `Дилер #${value.dealerId}`,
+          city: tradePoint?.city ?? dealer?.city ?? "Не указан",
+          address: tradePoint?.address ?? "Адрес не указан",
+          status,
+          reason,
+          lastActivityAt,
+          salesManagerName:
+            dealer?.salesManagerName ??
+            userNameById(dealer?.salesManagerId ?? null),
+          isProblem: status === "critical" || status === "attention",
+          isOverdue: hasSkippedVisit || objectOverdueTasks.length > 0,
+          isToday: value.visits.some((visit) => visit.visitStatus !== "completed"),
+          href: `/dealers/${value.dealerId}`,
+        };
+      })
+      .sort((a, b) => {
+        const byStatus = statusScore(b.status) - statusScore(a.status);
+        if (byStatus !== 0) {
+          return byStatus;
+        }
+        return (b.lastActivityAt ?? "").localeCompare(a.lastActivityAt ?? "");
+      })
+      .slice(0, 12);
+  })();
+
+  const mainNow: RegionalMainNowItem[] = [
+    {
+      id: "attention",
+      title: "Требует внимания",
+      value: atRiskDealers.length + overdueTasksCount + overdueVisitsCount,
+      description: "точки, задачи и визиты с отклонениями",
+      status:
+        atRiskDealers.length + overdueTasksCount + overdueVisitsCount > 0 ? "attention" : "normal",
+      actionLabel: "Открыть список",
+      actionHref: "/dealers",
+    },
+    {
+      id: "overdue",
+      title: "Просрочено",
+      value: overdueTasksCount + overdueVisitsCount,
+      description: "задачи и визиты вне срока",
+      status: overdueTasksCount + overdueVisitsCount > 0 ? "critical" : "normal",
+      actionLabel: "Разобрать",
+      actionHref: "/sales/tasks",
+    },
+    {
+      id: "risk_objects",
+      title: "Точки в зоне риска",
+      value: atRiskDealers.length,
+      description: "нужен контроль регионала",
+      status: atRiskDealers.length > 0 ? "attention" : "normal",
+      actionLabel: "Показать точки",
+      actionHref: "/dealers",
+    },
+    {
+      id: "today_tasks",
+      title: "Задачи на сегодня",
+      value: todayTasksCount,
+      description: "что нужно закрыть сегодня",
+      status: todayTasksCount > 0 ? "in_progress" : "completed",
+      actionLabel: "Открыть задачи",
+      actionHref: "/sales/tasks",
+    },
+    {
+      id: "missing_reports",
+      title: "Отчеты не закрыты",
+      value: visitsWithoutReportsCount,
+      description: "визиты без отчета дистрибуции",
+      status: visitsWithoutReportsCount > 0 ? "attention" : "completed",
+      actionLabel: "Заполнить",
+      actionHref: "/regional-manager/route",
+    },
+  ];
+
+  const criticalObjects = regionObjects.filter((item) => item.status === "critical").length;
+  const attentionObjects = regionObjects.filter((item) => item.status === "attention").length;
+  const managerIds = new Set(
+    Array.from(routeDealerIds)
+      .map((dealerId) => dealerListItemById(dealerId)?.salesManagerId ?? null)
+      .filter((value): value is number => value != null),
+  );
+
+  const systemSections: RegionalSystemSectionItem[] = [
+    {
+      id: "objects",
+      title: "Объекты / точки",
+      description: "Дилеры и торговые точки региона",
+      count: regionObjects.length,
+      status: criticalObjects > 0 ? "critical" : attentionObjects > 0 ? "attention" : "normal",
+      href: "/dealers",
+      isFuture: false,
+    },
+    {
+      id: "employees",
+      title: "Сотрудники",
+      description: "Команда продаж в регионе",
+      count: managerIds.size,
+      status: managerIds.size > 0 ? "in_progress" : "normal",
+      href: null,
+      isFuture: true,
+    },
+    {
+      id: "tasks",
+      title: "Задачи",
+      description: "Операционный контроль задач",
+      count: allOpenTasks.filter((task) => routeDealerIds.has(task.dealerId)).length,
+      status:
+        overdueTasksCount > 0
+          ? "critical"
+          : allOpenTasks.filter((task) => routeDealerIds.has(task.dealerId)).length > 0
+            ? "in_progress"
+            : "completed",
+      href: "/sales/tasks",
+      isFuture: false,
+    },
+    {
+      id: "checks",
+      title: "Проверки",
+      description: "Маршрут и статусы визитов",
+      count: routeVisits.length,
+      status:
+        overdueVisitsCount > 0
+          ? "critical"
+          : routeVisits.some((visit) => visit.visitStatus === "in_progress")
+            ? "in_progress"
+            : "normal",
+      href: "/regional-manager/route",
+      isFuture: false,
+    },
+    {
+      id: "reports",
+      title: "Отчеты",
+      description: "Отчеты дистрибуции по визитам",
+      count: distributionReports.length,
+      status:
+        visitsWithoutReportsCount > 0
+          ? "attention"
+          : distributionReports.length > 0
+            ? "normal"
+            : "in_progress",
+      href: "/regional-manager/route",
+      isFuture: false,
+    },
+    {
+      id: "requests",
+      title: "Заявки",
+      description: "Запросы и обращения дилеров",
+      count: 0,
+      status: "normal",
+      href: null,
+      isFuture: true,
+    },
+    {
+      id: "kpi",
+      title: "KPI",
+      description: "Управленческие метрики региона",
+      count: atRiskDealers.length + overdueTasksCount,
+      status: atRiskDealers.length > 0 || overdueTasksCount > 0 ? "attention" : "normal",
+      href: "/sales/leadership",
+      isFuture: false,
+    },
+    {
+      id: "documents",
+      title: "Документы",
+      description: "Материалы и регламенты",
+      count: documentsSeed.length,
+      status: "normal",
+      href: "/architecture",
+      isFuture: false,
+    },
+    {
+      id: "notifications",
+      title: "Уведомления",
+      description: "Сигналы по рискам и просрочкам",
+      count: mainNow.filter((item) => item.value > 0).length,
+      status:
+        overdueTasksCount + overdueVisitsCount > 0
+          ? "critical"
+          : atRiskDealers.length > 0 || visitsWithoutReportsCount > 0
+            ? "attention"
+            : "normal",
+      href: null,
+      isFuture: true,
+    },
+    {
+      id: "settings",
+      title: "Настройки",
+      description: "Персональные настройки кабинета",
+      count: 0,
+      status: "normal",
+      href: null,
+      isFuture: true,
+    },
+  ];
+
+  const notificationsSummary: RegionalNotificationsSummary = {
+    critical:
+      mainNow.filter((item) => item.status === "critical").length +
+      regionObjects.filter((item) => item.status === "critical").length,
+    attention:
+      mainNow.filter((item) => item.status === "attention").length +
+      regionObjects.filter((item) => item.status === "attention").length,
+    inProgress:
+      mainNow.filter((item) => item.status === "in_progress").length +
+      systemSections.filter((item) => item.status === "in_progress").length,
+    total:
+      mainNow.filter((item) => item.value > 0).length +
+      regionObjects.filter((item) => item.isProblem).length,
+  };
 
   return {
     status: 200,
@@ -3639,9 +4004,13 @@ function getRegionalManagerWorkspaceRoute(): ApiResult {
         missingModels,
         showcaseGoalsCreated,
         openTasks: allOpenTasks.filter((task) => routeDealerIds.has(task.dealerId)).length,
-        overdueTasks: allOverdueTasks.filter((task) => routeDealerIds.has(task.dealerId)).length,
+        overdueTasks: overdueTasksCount,
         atRiskDealers: atRiskDealers.length,
       },
+      mainNow,
+      regionObjects,
+      systemSections,
+      notificationsSummary,
       todayRoute: {
         id: currentRoute.id,
         title: currentRoute.title,

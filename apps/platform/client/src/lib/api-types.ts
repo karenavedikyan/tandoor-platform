@@ -592,6 +592,13 @@ export interface RegionalManagerWorkspaceKpis {
   atRiskDealers: number;
 }
 
+export type RegionalOperationalStatus =
+  | "critical"
+  | "attention"
+  | "in_progress"
+  | "normal"
+  | "completed";
+
 export interface RegionalTodayRoute {
   id: number;
   title: string;
@@ -682,10 +689,67 @@ export interface RegionalRecentActivityItem {
   createdAt: string;
 }
 
+export interface RegionalMainNowItem {
+  id: "attention" | "overdue" | "risk_objects" | "today_tasks" | "missing_reports";
+  title: string;
+  value: number;
+  description: string;
+  status: RegionalOperationalStatus;
+  actionLabel: string;
+  actionHref: string;
+}
+
+export interface RegionalRegionObject {
+  id: string;
+  dealerId: number;
+  title: string;
+  city: string;
+  address: string;
+  status: RegionalOperationalStatus;
+  reason: string;
+  lastActivityAt: string | null;
+  salesManagerName: string;
+  isProblem: boolean;
+  isOverdue: boolean;
+  isToday: boolean;
+  href: string;
+}
+
+export interface RegionalSystemSectionItem {
+  id:
+    | "objects"
+    | "employees"
+    | "tasks"
+    | "checks"
+    | "reports"
+    | "requests"
+    | "kpi"
+    | "documents"
+    | "notifications"
+    | "settings";
+  title: string;
+  description: string;
+  count: number;
+  status: RegionalOperationalStatus;
+  href: string | null;
+  isFuture: boolean;
+}
+
+export interface RegionalNotificationsSummary {
+  critical: number;
+  attention: number;
+  inProgress: number;
+  total: number;
+}
+
 export interface RegionalManagerWorkspace {
   manager: RegionalManagerWorkspaceManager;
   period: RegionalManagerWorkspacePeriod;
   kpis: RegionalManagerWorkspaceKpis;
+  mainNow: RegionalMainNowItem[];
+  regionObjects: RegionalRegionObject[];
+  systemSections: RegionalSystemSectionItem[];
+  notificationsSummary: RegionalNotificationsSummary;
   todayRoute: RegionalTodayRoute;
   upcomingVisits: RegionalUpcomingVisit[];
   tasks: RegionalWorkspaceTask[];

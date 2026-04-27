@@ -1,12 +1,20 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
+  Activity,
   AlertCircle,
   ArrowRightCircle,
-  BriefcaseBusiness,
-  CheckCircle2,
+  Bell,
+  Building2,
+  ClipboardCheck,
+  ClipboardList,
   Clock3,
+  Cog,
+  FileText,
+  LayoutDashboard,
   MapPin,
+  ShieldAlert,
+  Users,
   Route as RouteIcon,
   Target,
 } from "lucide-react";
@@ -23,12 +31,15 @@ import {
   distributionFocusPriorityLabel,
   priorityLabel,
   regionalActivityTypeLabel,
+  regionalOperationalStatusLabel,
   regionalTaskTypeLabel,
   riskLevelLabel,
   routeStatusLabel,
   showcaseGoalStatusLabel,
   visitStatusLabel,
 } from "@/lib/labels";
+
+type RegionObjectFilter = "all" | "problem" | "normal" | "overdue" | "today";
 
 function statusClass(status: string): string {
   if (status === "completed" || status === "done") {
@@ -55,12 +66,59 @@ function riskClass(level: string): string {
   return "bg-sky-100 text-sky-800 border-sky-200";
 }
 
+function operationalStatusBadgeClass(status: string): string {
+  if (status === "critical") return "border-rose-200 bg-rose-100 text-rose-800";
+  if (status === "attention") return "border-amber-200 bg-amber-100 text-amber-800";
+  if (status === "in_progress") return "border-sky-200 bg-sky-100 text-sky-800";
+  if (status === "completed") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  return "border-emerald-200 bg-emerald-100 text-emerald-800";
+}
+
+function mainNowCardClass(status: string): string {
+  if (status === "critical") return "border-rose-200 bg-rose-50";
+  if (status === "attention") return "border-amber-200 bg-amber-50";
+  if (status === "in_progress") return "border-sky-200 bg-sky-50";
+  if (status === "completed") return "border-emerald-200 bg-emerald-50";
+  return "border-border bg-white";
+}
+
+function systemSectionIcon(sectionId: string) {
+  if (sectionId === "objects") return Building2;
+  if (sectionId === "employees") return Users;
+  if (sectionId === "tasks") return ClipboardList;
+  if (sectionId === "checks") return ClipboardCheck;
+  if (sectionId === "reports") return FileText;
+  if (sectionId === "requests") return ShieldAlert;
+  if (sectionId === "kpi") return LayoutDashboard;
+  if (sectionId === "documents") return FileText;
+  if (sectionId === "notifications") return Bell;
+  return Cog;
+}
+
+function systemSectionCardTestId(sectionId: string): string {
+  if (sectionId === "objects") return "card-regional-section-objects";
+  if (sectionId === "employees") return "card-regional-section-employees";
+  if (sectionId === "tasks") return "card-regional-section-tasks";
+  if (sectionId === "checks") return "card-regional-section-checks";
+  if (sectionId === "reports") return "card-regional-section-reports";
+  if (sectionId === "requests") return "card-regional-section-requests";
+  if (sectionId === "kpi") return "card-regional-section-kpi";
+  if (sectionId === "documents") return "card-regional-section-documents";
+  if (sectionId === "notifications") return "card-regional-section-notifications";
+  return "card-regional-section-settings";
+}
+
 export default function RegionalManagerWorkspacePage() {
   const workspaceQuery = useQuery<RegionalManagerWorkspace>({
     queryKey: ["/api/regional-manager/workspace"],
   });
+  const [objectsFilter, setObjectsFilter] = useState<RegionObjectFilter>("all");
 
   const tasks = workspaceQuery.data?.tasks;
+  const regionObjects = workspaceQuery.data?.regionObjects ?? [];
+  const mainNow = workspaceQuery.data?.mainNow ?? [];
+  const systemSections = workspaceQuery.data?.systemSections ?? [];
+  const notificationsSummary = workspaceQuery.data?.notificationsSummary;
   const taskStats = useMemo(
     () => ({
       done: tasks?.filter((task) => task.status === "done").length ?? 0,
@@ -68,6 +126,26 @@ export default function RegionalManagerWorkspacePage() {
       overdue: tasks?.filter((task) => task.status === "overdue").length ?? 0,
     }),
     [tasks],
+  );
+
+  const filteredRegionObjects = useMemo(
+    () =>
+      regionObjects.filter((item) => {
+        if (objectsFilter === "problem") {
+          return item.isProblem;
+        }
+        if (objectsFilter === "normal") {
+          return item.status === "normal" || item.status === "completed";
+        }
+        if (objectsFilter === "overdue") {
+          return item.isOverdue;
+        }
+        if (objectsFilter === "today") {
+          return item.isToday;
+        }
+        return true;
+      }),
+    [objectsFilter, regionObjects],
   );
 
   if (workspaceQuery.isLoading) {
@@ -110,103 +188,265 @@ export default function RegionalManagerWorkspacePage() {
   const nextVisitHref = workspace.todayRoute.nextVisitId
     ? `/regional-manager/visits/${workspace.todayRoute.nextVisitId}`
     : "/regional-manager/route";
+  const mainNowById = new Map(mainNow.map((item) => [item.id, item]));
+  const mainNowCards = [
+    { id: "attention", testId: "card-main-now-attention" },
+    { id: "overdue", testId: "card-main-now-overdue" },
+    { id: "risk_objects", testId: "card-main-now-risk-objects" },
+    { id: "today_tasks", testId: "card-main-now-today-tasks" },
+    { id: "missing_reports", testId: "card-main-now-missing-reports" },
+  ] as const;
 
   return (
-    <div className="space-y-6" data-testid="page-regional-manager-workspace">
-      <div className="rounded-2xl border border-border/80 bg-card p-5 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">ЛК регионального менеджера</h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Единая рабочая зона: маршрут, визиты, отчеты дистрибуции, риски дилеров и цели по
-              витринам.
-            </p>
-          </div>
-          <Button asChild className="h-10 rounded-xl" data-testid="button-open-current-route">
-            <Link href="/regional-manager/route">
-              Открыть маршрут
-              <ArrowRightCircle className="ml-2 h-4 w-4" />
-            </Link>
-          </Button>
-        </div>
-      </div>
-
-      <Card className="rounded-2xl border-border/80 shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-lg uppercase tracking-wide">Профиль регионала</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <div className="rounded-xl border border-border bg-white p-3">
-            <p className="text-xs text-muted-foreground">Имя</p>
-            <p className="mt-1 font-semibold">{workspace.manager.name}</p>
-          </div>
-          <div className="rounded-xl border border-border bg-white p-3">
-            <p className="text-xs text-muted-foreground">Роль</p>
-            <p className="mt-1 font-semibold">{workspace.manager.role}</p>
-          </div>
-          <div className="rounded-xl border border-border bg-white p-3">
-            <p className="text-xs text-muted-foreground">Регион</p>
-            <p className="mt-1 font-semibold">{workspace.manager.region}</p>
-          </div>
-          <div className="rounded-xl border border-border bg-white p-3">
-            <p className="text-xs text-muted-foreground">Команда</p>
-            <p className="mt-1 font-semibold">{workspace.manager.teamName}</p>
-          </div>
-          <div className="rounded-xl border border-border bg-white p-3 sm:col-span-2 lg:col-span-2">
-            <p className="text-xs text-muted-foreground">Период</p>
-            <p className="mt-1 font-semibold">{workspace.period.label}</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {formatDate(workspace.period.dateFrom)} — {formatDate(workspace.period.dateTo)}
-            </p>
+    <div className="space-y-6 bg-slate-50/70" data-testid="page-regional-manager-workspace">
+      <Card className="rounded-2xl border-border/80 bg-card shadow-sm" data-testid="section-regional-hero">
+        <CardContent className="space-y-4 p-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="space-y-2">
+              <h1 className="text-2xl font-bold text-foreground">Центр управления регионом</h1>
+              <p className="text-sm text-muted-foreground">
+                Операционный кабинет регионального менеджера
+              </p>
+              <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                <span className="rounded-full border border-border bg-white px-3 py-1">
+                  {workspace.manager.name}
+                </span>
+                <span className="rounded-full border border-border bg-white px-3 py-1">
+                  Регион: {workspace.manager.region}
+                </span>
+                <span className="rounded-full border border-border bg-white px-3 py-1">
+                  Период: {workspace.period.label}
+                </span>
+                <span className="rounded-full border border-border bg-white px-3 py-1">
+                  {workspace.manager.teamName}
+                </span>
+              </div>
+            </div>
+            <div className="grid w-full gap-2 sm:w-auto sm:grid-cols-2 lg:grid-cols-3">
+              <Button asChild className="h-10 rounded-xl" data-testid="button-regional-hero-open-route">
+                <Link href="/regional-manager/route">
+                  Маршрут на сегодня
+                  <RouteIcon className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+              <Button
+                asChild
+                variant="outline"
+                className="h-10 rounded-xl bg-white"
+                data-testid="button-regional-hero-start-next-visit"
+              >
+                <Link href={nextVisitHref}>
+                  Начать следующий визит
+                  <ArrowRightCircle className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+              <Button
+                asChild
+                variant="outline"
+                className="h-10 rounded-xl bg-white sm:col-span-2 lg:col-span-1"
+                data-testid="button-regional-hero-open-tasks"
+              >
+                <Link href="/sales/tasks">
+                  Открыть задачи
+                  <Clock3 className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      <Card className="rounded-2xl border-border/80 shadow-sm">
+      <Card className="rounded-2xl border-border/80 shadow-sm" data-testid="section-regional-main-now">
         <CardHeader>
-          <CardTitle className="text-lg uppercase tracking-wide">KPI</CardTitle>
+          <CardTitle className="text-lg uppercase tracking-wide">Главное сейчас</CardTitle>
+          <CardDescription>
+            Сигналы, которые требуют быстрых управленческих действий сегодня.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <div className="rounded-xl border border-border bg-white p-3" data-testid="metric-regional-planned-visits">
-            <p className="text-xs text-muted-foreground">Визитов запланировано</p>
-            <p className="mt-1 text-xl font-semibold">{workspace.kpis.plannedVisits}</p>
+        <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          {mainNowCards.map((meta) => {
+            const item = mainNowById.get(meta.id);
+            if (!item) {
+              return (
+                <div key={meta.id} className="rounded-xl border border-dashed border-border bg-white p-4">
+                  <p className="text-sm text-muted-foreground">Показатель недоступен</p>
+                </div>
+              );
+            }
+            return (
+              <div
+                key={item.id}
+                className={`space-y-3 rounded-xl border p-4 ${mainNowCardClass(item.status)}`}
+                data-testid={meta.testId}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-semibold">{item.title}</p>
+                  <Badge variant="outline" className={operationalStatusBadgeClass(item.status)}>
+                    {regionalOperationalStatusLabel(item.status)}
+                  </Badge>
+                </div>
+                <p className="text-3xl font-bold text-foreground">{item.value}</p>
+                <p className="text-xs text-muted-foreground">{item.description}</p>
+                <Button asChild size="sm" variant="outline" className="h-9 rounded-lg bg-white">
+                  <Link href={item.actionHref}>
+                    {item.actionLabel}
+                    <ArrowRightCircle className="ml-2 h-4 w-4" />
+                  </Link>
+                </Button>
+              </div>
+            );
+          })}
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-2xl border-border/80 shadow-sm" data-testid="section-regional-objects">
+        <CardHeader>
+          <CardTitle className="text-lg uppercase tracking-wide">Объекты региона</CardTitle>
+          <CardDescription>
+            Быстрый обзор точек и дилеров по операционному статусу.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+            <Button
+              type="button"
+              variant={objectsFilter === "all" ? "default" : "outline"}
+              className="h-9 rounded-full whitespace-nowrap"
+              onClick={() => setObjectsFilter("all")}
+              data-testid="filter-regional-objects-all"
+            >
+              Все
+            </Button>
+            <Button
+              type="button"
+              variant={objectsFilter === "problem" ? "default" : "outline"}
+              className="h-9 rounded-full whitespace-nowrap"
+              onClick={() => setObjectsFilter("problem")}
+              data-testid="filter-regional-objects-problem"
+            >
+              Проблемные
+            </Button>
+            <Button
+              type="button"
+              variant={objectsFilter === "normal" ? "default" : "outline"}
+              className="h-9 rounded-full whitespace-nowrap"
+              onClick={() => setObjectsFilter("normal")}
+              data-testid="filter-regional-objects-normal"
+            >
+              В норме
+            </Button>
+            <Button
+              type="button"
+              variant={objectsFilter === "overdue" ? "default" : "outline"}
+              className="h-9 rounded-full whitespace-nowrap"
+              onClick={() => setObjectsFilter("overdue")}
+              data-testid="filter-regional-objects-overdue"
+            >
+              Просроченные
+            </Button>
+            <Button
+              type="button"
+              variant={objectsFilter === "today" ? "default" : "outline"}
+              className="h-9 rounded-full whitespace-nowrap"
+              onClick={() => setObjectsFilter("today")}
+              data-testid="filter-regional-objects-today"
+            >
+              Сегодня
+            </Button>
           </div>
-          <div className="rounded-xl border border-border bg-white p-3" data-testid="metric-regional-completed-visits">
-            <p className="text-xs text-muted-foreground">Визитов выполнено</p>
-            <p className="mt-1 text-xl font-semibold">{workspace.kpis.completedVisits}</p>
-          </div>
-          <div className="rounded-xl border border-border bg-white p-3">
-            <p className="text-xs text-muted-foreground">В работе</p>
-            <p className="mt-1 text-xl font-semibold">{workspace.kpis.inProgressVisits}</p>
-          </div>
-          <div className="rounded-xl border border-border bg-white p-3">
-            <p className="text-xs text-muted-foreground">Просрочено визитов</p>
-            <p className="mt-1 text-xl font-semibold">{workspace.kpis.overdueVisits}</p>
-          </div>
-          <div className="rounded-xl border border-border bg-white p-3" data-testid="metric-regional-distribution-reports">
-            <p className="text-xs text-muted-foreground">Отчетов дистрибуции</p>
-            <p className="mt-1 text-xl font-semibold">{workspace.kpis.distributionReports}</p>
-          </div>
-          <div className="rounded-xl border border-border bg-white p-3" data-testid="metric-regional-missing-models">
-            <p className="text-xs text-muted-foreground">Отсутствующих моделей</p>
-            <p className="mt-1 text-xl font-semibold">{workspace.kpis.missingModels}</p>
-          </div>
-          <div className="rounded-xl border border-border bg-white p-3" data-testid="metric-regional-showcase-goals">
-            <p className="text-xs text-muted-foreground">Целей по витринам создано</p>
-            <p className="mt-1 text-xl font-semibold">{workspace.kpis.showcaseGoalsCreated}</p>
-          </div>
-          <div className="rounded-xl border border-border bg-white p-3" data-testid="metric-regional-open-tasks">
-            <p className="text-xs text-muted-foreground">Открытых задач</p>
-            <p className="mt-1 text-xl font-semibold">{workspace.kpis.openTasks}</p>
-          </div>
-          <div className="rounded-xl border border-border bg-white p-3">
-            <p className="text-xs text-muted-foreground">Просроченных задач</p>
-            <p className="mt-1 text-xl font-semibold">{workspace.kpis.overdueTasks}</p>
-          </div>
-          <div className="rounded-xl border border-border bg-white p-3" data-testid="metric-regional-at-risk-dealers">
-            <p className="text-xs text-muted-foreground">Дилеров в зоне риска</p>
-            <p className="mt-1 text-xl font-semibold">{workspace.kpis.atRiskDealers}</p>
-          </div>
+          {filteredRegionObjects.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4 text-sm text-muted-foreground">
+              Для выбранного фильтра объекты не найдены.
+            </div>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {filteredRegionObjects.map((item) => (
+                <div
+                  key={item.id}
+                  className="space-y-3 rounded-xl border border-border bg-white p-4"
+                  data-testid={`card-regional-object-${item.id}`}
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="text-base font-semibold">{item.title}</p>
+                      <p className="text-sm text-muted-foreground">{item.city}</p>
+                      <p className="text-xs text-muted-foreground">{item.address}</p>
+                    </div>
+                    <Badge variant="outline" className={operationalStatusBadgeClass(item.status)}>
+                      {regionalOperationalStatusLabel(item.status)}
+                    </Badge>
+                  </div>
+                  <p className="text-sm text-muted-foreground">{item.reason}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Последняя активность:{" "}
+                    {item.lastActivityAt ? formatDateTime(item.lastActivityAt) : "не зафиксирована"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Ответственный менеджер: {item.salesManagerName}
+                  </p>
+                  <Button
+                    asChild
+                    size="sm"
+                    variant="outline"
+                    className="h-9 rounded-lg bg-white"
+                    data-testid={`button-open-regional-object-${item.id}`}
+                  >
+                    <Link href={item.href}>
+                      Открыть
+                      <ArrowRightCircle className="ml-2 h-4 w-4" />
+                    </Link>
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-2xl border-border/80 shadow-sm" data-testid="section-regional-system-sections">
+        <CardHeader>
+          <CardTitle className="text-lg uppercase tracking-wide">Разделы системы</CardTitle>
+          <CardDescription>
+            Все ключевые функции кабинета в одном месте.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          {systemSections.map((section) => {
+            const Icon = systemSectionIcon(section.id);
+            return (
+              <div
+                key={section.id}
+                className={`space-y-3 rounded-xl border p-4 ${
+                  section.isFuture ? "border-dashed bg-slate-50/80" : "border-border bg-white"
+                }`}
+                data-testid={systemSectionCardTestId(section.id)}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Icon className="h-4 w-4 text-muted-foreground" />
+                    <p className="text-sm font-semibold">{section.title}</p>
+                  </div>
+                  <Badge variant="outline" className={operationalStatusBadgeClass(section.status)}>
+                    {regionalOperationalStatusLabel(section.status)}
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">{section.description}</p>
+                <p className="text-2xl font-semibold text-foreground">{section.count}</p>
+                {section.href ? (
+                  <Button asChild size="sm" variant="outline" className="h-9 rounded-lg bg-white">
+                    <Link href={section.href}>
+                      Перейти
+                      <ArrowRightCircle className="ml-2 h-4 w-4" />
+                    </Link>
+                  </Button>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+                    Будет добавлено следующим блоком
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </CardContent>
       </Card>
 
@@ -493,7 +733,7 @@ export default function RegionalManagerWorkspacePage() {
 
       <Card className="rounded-2xl border-border/80 shadow-sm" data-testid="section-regional-recent-activity">
         <CardHeader>
-          <CardTitle className="text-lg uppercase tracking-wide">Последняя активность</CardTitle>
+          <CardTitle className="text-lg uppercase tracking-wide">Последние события</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
           {workspace.recentActivity.length === 0 ? (
@@ -554,13 +794,16 @@ export default function RegionalManagerWorkspacePage() {
         </CardContent>
       </Card>
 
-      <Card className="rounded-2xl border-border/80 bg-[#f5f5f5] shadow-sm">
-        <CardContent className="flex items-start gap-3 p-4 text-sm text-muted-foreground">
-          <BriefcaseBusiness className="mt-0.5 h-4 w-4 text-primary" />
-          <p>
-            Вся операционная работа регионального менеджера собрана в одном месте: маршрут, визиты,
-            риски дилеров и передача действий в отдел продаж.
-          </p>
+      <Card className="rounded-2xl border-border/80 bg-white shadow-sm">
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <Activity className="h-4 w-4 text-muted-foreground" />
+            <span>
+              Сигналы: критичные {notificationsSummary?.critical ?? 0}, внимание{" "}
+              {notificationsSummary?.attention ?? 0}, в работе {notificationsSummary?.inProgress ?? 0}
+            </span>
+          </div>
+          <span>Период: {formatDate(workspace.period.dateFrom)} — {formatDate(workspace.period.dateTo)}</span>
         </CardContent>
       </Card>
     </div>
