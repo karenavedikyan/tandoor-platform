@@ -18,6 +18,7 @@ import type {
   DistributionReportItem,
   DistributionReportPayload,
   DistributionReportResponse,
+  ShowcaseGoal,
   VisitDetail,
 } from "@/lib/api-types";
 import { formatDateTime } from "@/lib/format";
@@ -155,6 +156,36 @@ export default function RegionalManagerVisitPage() {
     },
   });
 
+  const [createdGoalLink, setCreatedGoalLink] = useState<string | null>(null);
+  const [createdGoalText, setCreatedGoalText] = useState<string | null>(null);
+
+  const createGoalMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest(
+        "POST",
+        `/api/regional-manager/visits/${visitId}/distribution-report/create-showcase-goal`,
+      );
+      return (await response.json()) as {
+        success: true;
+        message: string;
+        goal?: ShowcaseGoal;
+      };
+    },
+    onSuccess: (result) => {
+      toast({
+        title: result.message ?? "Цель по витрине сформирована и передана менеджеру продаж.",
+      });
+      const goalId = result.goal?.id;
+      if (goalId) {
+        setCreatedGoalLink(`/sales/showcase-goals/${goalId}`);
+        setCreatedGoalText("Открыть цель");
+      } else {
+        setCreatedGoalLink("/sales/showcase-goals");
+        setCreatedGoalText("Открыть список целей");
+      }
+    },
+  });
+
   const summary = useMemo(() => {
     if (!form) {
       return {
@@ -228,7 +259,8 @@ export default function RegionalManagerVisitPage() {
   }
 
   const safeForm: FormState = form;
-  const isMutating = draftMutation.isPending || submitMutation.isPending;
+  const isMutating =
+    draftMutation.isPending || submitMutation.isPending || createGoalMutation.isPending;
 
   return (
     <div className="space-y-6" data-testid="page-regional-manager-visit">
@@ -578,6 +610,37 @@ export default function RegionalManagerVisitPage() {
               {summary.missing > 0 ? `Добавить минимум ${summary.missing} моделей` : "Поддерживать текущий уровень"}
             </p>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-2xl border-border/80 shadow-sm" data-testid="section-create-showcase-goal">
+        <CardHeader>
+          <CardTitle className="text-lg uppercase tracking-wide">
+            Следующий шаг: цель по витрине
+          </CardTitle>
+          <CardDescription>
+            На основании отсутствующих моделей можно сформировать цель для менеджера продаж.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Button
+            onClick={() => createGoalMutation.mutate()}
+            disabled={isMutating}
+            className="rounded-xl"
+            data-testid="button-create-showcase-goal"
+          >
+            Сформировать цель по витрине
+          </Button>
+          {createdGoalLink && createdGoalText ? (
+            <Button
+              asChild
+              variant="outline"
+              className="rounded-xl"
+              data-testid="link-open-created-showcase-goal"
+            >
+              <Link href={createdGoalLink}>{createdGoalText}</Link>
+            </Button>
+          ) : null}
         </CardContent>
       </Card>
 

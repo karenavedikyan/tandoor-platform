@@ -187,3 +187,84 @@ export function stockStatusLabel(value: string): string {
   };
   return map[value] ?? value;
 }
+
+export function showcaseGoalStatusLabel(value: string): string {
+  const map: Record<string, string> = {
+    new: "Новая",
+    in_progress: "В работе",
+    agreed: "Согласована",
+    completed: "Выполнена",
+    rejected: "Отклонена",
+    overdue: "Просрочена",
+  };
+  return map[value] ?? value;
+}
+
+export function showcaseGoalSourceLabel(value: string): string {
+  const map: Record<string, string> = {
+    distribution_report: "Отчет дистрибуции",
+    sales_head: "Руководитель продаж",
+    regional_manager: "Региональный менеджер",
+    manual: "Ручная постановка",
+  };
+  return map[value] ?? value;
+}
+
+export function showcaseGoalItemStatusLabel(value: string): string {
+  const map: Record<string, string> = {
+    new: "Новая",
+    agreed: "Согласована",
+    ordered: "Заказана",
+    completed: "Выполнена",
+    rejected: "Отклонена",
+  };
+  return map[value] ?? value;
+}
+
+export function showcaseGoalCurrentStateLabel(value: string): string {
+  const map: Record<string, string> = {
+    missing: "Отсутствует",
+    in_stock_not_showcase: "Есть в наличии, не на витрине",
+    on_showcase: "На витрине",
+    unknown: "Неизвестно",
+  };
+  return map[value] ?? value;
+}
+
+export function showcaseGoalTargetStateLabel(value: string): string {
+  const map: Record<string, string> = {
+    on_showcase: "Выставить на витрину",
+    in_stock: "Поддерживать в наличии",
+    ordered: "Заказать",
+  };
+  return map[value] ?? value;
+}
+
+export function salesTaskTypeLabel(value: string): string {
+  const map: Record<string, string> = {
+    showcase_goal: "Цель по витрине",
+    call_dealer: "Звонок дилеру",
+    prepare_offer: "Подготовка КП",
+    coordinate_delivery: "Координация доставки",
+    update_documents: "Документы и POSM",
+    follow_up: "Контроль выполнения",
+    other: "Другое",
+  };
+  return map[value] ?? value;
+}
+
+export function salesTaskStatusLabel(value: string): string {
+  const map: Record<string, string> = {
+    new: "Новая",
+    in_progress: "В работе",
+    waiting_dealer: "Ожидает дилера",
+    done: "Выполнена",
+    overdue: "Просрочена",
+    cancelled: "Отменена",
+  };
+  return map[value] ?? value;
+}
+
+export function priorityLabel(value: string): string {
+  return taskPriorityLabel(value);
+}

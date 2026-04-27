@@ -39,6 +39,28 @@ const distributionReportPayloadSchema = z.object({
   items: z.array(distributionReportItemSchema).min(1),
 });
 
+const showcaseGoalStatusUpdateSchema = z.object({
+  status: z.enum([
+    "new",
+    "in_progress",
+    "agreed",
+    "completed",
+    "rejected",
+    "overdue",
+  ]),
+});
+
+const salesTaskStatusUpdateSchema = z.object({
+  status: z.enum([
+    "new",
+    "in_progress",
+    "waiting_dealer",
+    "done",
+    "overdue",
+    "cancelled",
+  ]),
+});
+
 export async function getOrganizations(): Promise<ApiResult> {
   return { status: 200, body: await storage.listOrganizations() };
 }
@@ -213,6 +235,117 @@ export async function submitRegionalVisitDistributionReport(
   }
 }
 
+export async function getSalesShowcaseGoals(): Promise<ApiResult> {
+  return { status: 200, body: await storage.listShowcaseGoals() };
+}
+
+export async function getSalesShowcaseGoalById(rawId: string): Promise<ApiResult> {
+  const id = parseIdParam(rawId);
+  if (id == null) {
+    return { status: 400, body: { message: "ID цели должен быть числом" } };
+  }
+  const detail = await storage.getShowcaseGoalById(id);
+  if (!detail) {
+    return { status: 404, body: { message: "Цель по витрине не найдена" } };
+  }
+  return { status: 200, body: detail };
+}
+
+export async function getSalesTasks(): Promise<ApiResult> {
+  return { status: 200, body: await storage.listSalesTasks() };
+}
+
+export async function getSalesTaskById(rawId: string): Promise<ApiResult> {
+  const id = parseIdParam(rawId);
+  if (id == null) {
+    return { status: 400, body: { message: "ID задачи должен быть числом" } };
+  }
+  const detail = await storage.getSalesTaskById(id);
+  if (!detail) {
+    return { status: 404, body: { message: "Задача отдела продаж не найдена" } };
+  }
+  return { status: 200, body: detail };
+}
+
+export async function updateSalesShowcaseGoalStatus(
+  rawId: string,
+  body: unknown,
+): Promise<ApiResult> {
+  const id = parseIdParam(rawId);
+  if (id == null) {
+    return { status: 400, body: { message: "ID цели должен быть числом" } };
+  }
+  const parsed = showcaseGoalStatusUpdateSchema.safeParse(body);
+  if (!parsed.success) {
+    return {
+      status: 400,
+      body: {
+        message: "Некорректный статус цели",
+        issues: parsed.error.issues.map((issue) => ({
+          path: issue.path.join("."),
+          message: issue.message,
+        })),
+      },
+    };
+  }
+  try {
+    return { status: 200, body: await storage.updateShowcaseGoalStatus(id, parsed.data.status) };
+  } catch (error) {
+    if (error instanceof StorageError) {
+      return { status: error.status, body: { message: error.message } };
+    }
+    return { status: 500, body: { message: "Не удалось обновить статус цели" } };
+  }
+}
+
+export async function updateSalesTaskStatus(
+  rawId: string,
+  body: unknown,
+): Promise<ApiResult> {
+  const id = parseIdParam(rawId);
+  if (id == null) {
+    return { status: 400, body: { message: "ID задачи должен быть числом" } };
+  }
+  const parsed = salesTaskStatusUpdateSchema.safeParse(body);
+  if (!parsed.success) {
+    return {
+      status: 400,
+      body: {
+        message: "Некорректный статус задачи",
+        issues: parsed.error.issues.map((issue) => ({
+          path: issue.path.join("."),
+          message: issue.message,
+        })),
+      },
+    };
+  }
+  try {
+    return { status: 200, body: await storage.updateSalesTaskStatus(id, parsed.data.status) };
+  } catch (error) {
+    if (error instanceof StorageError) {
+      return { status: error.status, body: { message: error.message } };
+    }
+    return { status: 500, body: { message: "Не удалось обновить статус задачи" } };
+  }
+}
+
+export async function createShowcaseGoalFromVisitDistributionReport(
+  rawId: string,
+): Promise<ApiResult> {
+  const id = parseIdParam(rawId);
+  if (id == null) {
+    return { status: 400, body: { message: "ID визита должен быть числом" } };
+  }
+  try {
+    return { status: 200, body: await storage.createShowcaseGoalFromDistributionReport(id) };
+  } catch (error) {
+    if (error instanceof StorageError) {
+      return { status: error.status, body: { message: error.message } };
+    }
+    return { status: 500, body: { message: "Не удалось сформировать цель по витрине" } };
+  }
+}
+
 export async function getOrders(): Promise<ApiResult> {
   return { status: 200, body: await storage.listOrders() };
 }
@@ -336,6 +469,36 @@ export async function routeApiRequest(
     /^\/api\/regional-manager\/visits\/(\d+)\/distribution-report\/submit$/.exec(normalized);
   if (upperMethod === "POST" && regionalVisitSubmitMatch) {
     return submitRegionalVisitDistributionReport(regionalVisitSubmitMatch[1], body);
+  }
+  const regionalVisitCreateGoalMatch =
+    /^\/api\/regional-manager\/visits\/(\d+)\/distribution-report\/create-showcase-goal$/.exec(
+      normalized,
+    );
+  if (upperMethod === "POST" && regionalVisitCreateGoalMatch) {
+    return createShowcaseGoalFromVisitDistributionReport(regionalVisitCreateGoalMatch[1]);
+  }
+  if (upperMethod === "GET" && normalized === "/api/sales/showcase-goals") {
+    return getSalesShowcaseGoals();
+  }
+  const salesShowcaseGoalDetailMatch = /^\/api\/sales\/showcase-goals\/(\d+)$/.exec(normalized);
+  if (upperMethod === "GET" && salesShowcaseGoalDetailMatch) {
+    return getSalesShowcaseGoalById(salesShowcaseGoalDetailMatch[1]);
+  }
+  const salesShowcaseGoalStatusMatch =
+    /^\/api\/sales\/showcase-goals\/(\d+)\/status$/.exec(normalized);
+  if (upperMethod === "POST" && salesShowcaseGoalStatusMatch) {
+    return updateSalesShowcaseGoalStatus(salesShowcaseGoalStatusMatch[1], body);
+  }
+  if (upperMethod === "GET" && normalized === "/api/sales/tasks") {
+    return getSalesTasks();
+  }
+  const salesTaskDetailMatch = /^\/api\/sales\/tasks\/(\d+)$/.exec(normalized);
+  if (upperMethod === "GET" && salesTaskDetailMatch) {
+    return getSalesTaskById(salesTaskDetailMatch[1]);
+  }
+  const salesTaskStatusMatch = /^\/api\/sales\/tasks\/(\d+)\/status$/.exec(normalized);
+  if (upperMethod === "POST" && salesTaskStatusMatch) {
+    return updateSalesTaskStatus(salesTaskStatusMatch[1], body);
   }
   const dealerDetailMatch = /^\/api\/dealers\/(\d+)$/.exec(normalized);
   if (upperMethod === "GET" && dealerDetailMatch) {

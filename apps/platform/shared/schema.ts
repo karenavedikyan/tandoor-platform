@@ -36,6 +36,42 @@ export type DistributionReportStatus = "draft" | "submitted" | "reviewed";
 export type DistributionDisplayQuality = "excellent" | "good" | "average" | "poor";
 export type DistributionCompetitorPresence = "none" | "low" | "medium" | "high";
 export type DistributionStockStatus = "in_stock" | "low_stock" | "out_of_stock" | "unknown";
+export type ShowcaseGoalStatus =
+  | "new"
+  | "in_progress"
+  | "agreed"
+  | "completed"
+  | "rejected"
+  | "overdue";
+export type ShowcaseGoalPriority = "low" | "medium" | "high";
+export type ShowcaseGoalSource =
+  | "distribution_report"
+  | "sales_head"
+  | "regional_manager"
+  | "manual";
+export type ShowcaseGoalItemCurrentState =
+  | "missing"
+  | "in_stock_not_showcase"
+  | "on_showcase"
+  | "unknown";
+export type ShowcaseGoalItemTargetState = "on_showcase" | "in_stock" | "ordered";
+export type ShowcaseGoalItemStatus = "new" | "agreed" | "ordered" | "completed" | "rejected";
+export type SalesTaskType =
+  | "showcase_goal"
+  | "call_dealer"
+  | "prepare_offer"
+  | "coordinate_delivery"
+  | "update_documents"
+  | "follow_up"
+  | "other";
+export type SalesTaskStatus =
+  | "new"
+  | "in_progress"
+  | "waiting_dealer"
+  | "done"
+  | "overdue"
+  | "cancelled";
+export type SalesTaskPriority = "low" | "medium" | "high";
 
 export const organizations = sqliteTable("organizations", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -232,6 +268,71 @@ export const distributionReportItems = sqliteTable("distribution_report_items", 
   comment: text("comment"),
 });
 
+export const showcaseGoals = sqliteTable("showcase_goals", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  dealerId: integer("dealer_id")
+    .notNull()
+    .references(() => dealers.id),
+  tradePointId: integer("trade_point_id")
+    .notNull()
+    .references(() => tradePoints.id),
+  distributionReportId: integer("distribution_report_id").references(() => distributionReports.id),
+  createdByUserId: integer("created_by_user_id")
+    .notNull()
+    .references(() => users.id),
+  assignedToUserId: integer("assigned_to_user_id")
+    .notNull()
+    .references(() => users.id),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  goalStatus: text("goal_status").notNull().default("new"),
+  priority: text("priority").notNull().default("medium"),
+  dueDate: text("due_date").notNull(),
+  source: text("source").notNull().default("manual"),
+  targetModelsCount: integer("target_models_count").notNull().default(0),
+  completedModelsCount: integer("completed_models_count").notNull().default(0),
+  createdAt: text("created_at").notNull(),
+  completedAt: text("completed_at"),
+});
+
+export const showcaseGoalItems = sqliteTable("showcase_goal_items", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  goalId: integer("goal_id")
+    .notNull()
+    .references(() => showcaseGoals.id),
+  productId: integer("product_id").references(() => products.id),
+  modelName: text("model_name").notNull(),
+  sku: text("sku").notNull(),
+  category: text("category").notNull(),
+  currentState: text("current_state").notNull().default("unknown"),
+  targetState: text("target_state").notNull().default("on_showcase"),
+  itemStatus: text("item_status").notNull().default("new"),
+  comment: text("comment"),
+});
+
+export const salesTasks = sqliteTable("sales_tasks", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  dealerId: integer("dealer_id")
+    .notNull()
+    .references(() => dealers.id),
+  tradePointId: integer("trade_point_id").references(() => tradePoints.id),
+  showcaseGoalId: integer("showcase_goal_id").references(() => showcaseGoals.id),
+  assignedToUserId: integer("assigned_to_user_id")
+    .notNull()
+    .references(() => users.id),
+  createdByUserId: integer("created_by_user_id")
+    .notNull()
+    .references(() => users.id),
+  taskType: text("task_type").notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  taskStatus: text("task_status").notNull().default("new"),
+  priority: text("priority").notNull().default("medium"),
+  dueDate: text("due_date").notNull(),
+  createdAt: text("created_at").notNull(),
+  completedAt: text("completed_at"),
+});
+
 export const products = sqliteTable("products", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   sku: text("sku").notNull().unique(),
@@ -362,6 +463,15 @@ export const insertDistributionReportSchema = createInsertSchema(distributionRep
 export const insertDistributionReportItemSchema = createInsertSchema(distributionReportItems).omit({
   id: true,
 });
+export const insertShowcaseGoalSchema = createInsertSchema(showcaseGoals).omit({
+  id: true,
+});
+export const insertShowcaseGoalItemSchema = createInsertSchema(showcaseGoalItems).omit({
+  id: true,
+});
+export const insertSalesTaskSchema = createInsertSchema(salesTasks).omit({
+  id: true,
+});
 export const insertProductSchema = createInsertSchema(products).omit({
   id: true,
 });
@@ -405,6 +515,12 @@ export type InsertDistributionReport = z.infer<typeof insertDistributionReportSc
 export type DistributionReport = typeof distributionReports.$inferSelect;
 export type InsertDistributionReportItem = z.infer<typeof insertDistributionReportItemSchema>;
 export type DistributionReportItem = typeof distributionReportItems.$inferSelect;
+export type InsertShowcaseGoal = z.infer<typeof insertShowcaseGoalSchema>;
+export type ShowcaseGoal = typeof showcaseGoals.$inferSelect;
+export type InsertShowcaseGoalItem = z.infer<typeof insertShowcaseGoalItemSchema>;
+export type ShowcaseGoalItem = typeof showcaseGoalItems.$inferSelect;
+export type InsertSalesTask = z.infer<typeof insertSalesTaskSchema>;
+export type SalesTask = typeof salesTasks.$inferSelect;
 export type InsertProduct = z.infer<typeof insertProductSchema>;
 export type Product = typeof products.$inferSelect;
 export type InsertOrder = z.infer<typeof insertOrderSchema>;

@@ -1,6 +1,7 @@
 import type { Express, Request, Response } from "express";
 import type { Server } from "node:http";
 import {
+  createShowcaseGoalFromVisitDistributionReport,
   createOrder,
   getActivity,
   getClaims,
@@ -17,8 +18,14 @@ import {
   getRegionalRoutes,
   getRegionalVisitById,
   getRegionalVisitDistributionReport,
+  getSalesShowcaseGoalById,
+  getSalesShowcaseGoals,
+  getSalesTaskById,
+  getSalesTasks,
   saveRegionalVisitDistributionDraft,
   submitRegionalVisitDistributionReport,
+  updateSalesShowcaseGoalStatus,
+  updateSalesTaskStatus,
   getUsers,
   type ApiResult,
 } from "./api-handlers";
@@ -91,6 +98,38 @@ export async function registerRoutes(
       return send(res, await submitRegionalVisitDistributionReport(id ?? "", req.body));
     },
   );
+  app.post(
+    "/api/regional-manager/visits/:id/distribution-report/create-showcase-goal",
+    async (req: Request, res) => {
+      const raw = req.params.id;
+      const id = Array.isArray(raw) ? raw[0] : raw;
+      return send(res, await createShowcaseGoalFromVisitDistributionReport(id ?? ""));
+    },
+  );
+  app.get("/api/sales/showcase-goals", async (_req, res) =>
+    send(res, await getSalesShowcaseGoals()),
+  );
+  app.get("/api/sales/showcase-goals/:id", async (req: Request, res) => {
+    const raw = req.params.id;
+    const id = Array.isArray(raw) ? raw[0] : raw;
+    return send(res, await getSalesShowcaseGoalById(id ?? ""));
+  });
+  app.post("/api/sales/showcase-goals/:id/status", async (req: Request, res) => {
+    const raw = req.params.id;
+    const id = Array.isArray(raw) ? raw[0] : raw;
+    return send(res, await updateSalesShowcaseGoalStatus(id ?? "", req.body));
+  });
+  app.get("/api/sales/tasks", async (_req, res) => send(res, await getSalesTasks()));
+  app.get("/api/sales/tasks/:id", async (req: Request, res) => {
+    const raw = req.params.id;
+    const id = Array.isArray(raw) ? raw[0] : raw;
+    return send(res, await getSalesTaskById(id ?? ""));
+  });
+  app.post("/api/sales/tasks/:id/status", async (req: Request, res) => {
+    const raw = req.params.id;
+    const id = Array.isArray(raw) ? raw[0] : raw;
+    return send(res, await updateSalesTaskStatus(id ?? "", req.body));
+  });
   app.get("/api/products", async (_req, res) => send(res, await getProducts()));
   app.get("/api/orders", async (_req, res) => send(res, await getOrders()));
   app.post("/api/orders", async (req: Request, res) =>

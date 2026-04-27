@@ -212,6 +212,126 @@ export interface DistributionReportItem {
   comment: string | null;
 }
 
+export interface ShowcaseGoal {
+  id: number;
+  dealerId: number;
+  tradePointId: number;
+  distributionReportId: number | null;
+  createdByUserId: number;
+  assignedToUserId: number;
+  title: string;
+  description: string;
+  goalStatus: "new" | "in_progress" | "agreed" | "completed" | "rejected" | "overdue";
+  priority: "low" | "medium" | "high";
+  dueDate: string;
+  source: "distribution_report" | "sales_head" | "regional_manager" | "manual";
+  targetModelsCount: number;
+  completedModelsCount: number;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+export interface ShowcaseGoalReportSummary {
+  id: number;
+  visitId: number;
+  reportStatus: string;
+  missingModelsCount: number;
+  presentModelsCount: number;
+  recommendation: string;
+  nextAction: string;
+}
+
+export interface ShowcaseGoalListItem extends ShowcaseGoal {
+  dealer: DealerListItem;
+  tradePoint: TradePoint;
+  assignedTo: User | null;
+  createdBy: User | null;
+  progressPercent: number;
+  isOverdue: boolean;
+  distributionReportSummary: ShowcaseGoalReportSummary | null;
+}
+
+export interface ShowcaseGoalItem {
+  id: number;
+  goalId: number;
+  productId: number | null;
+  modelName: string;
+  sku: string;
+  category: string;
+  currentState: "missing" | "in_stock_not_showcase" | "on_showcase" | "unknown";
+  targetState: "on_showcase" | "in_stock" | "ordered";
+  itemStatus: "new" | "agreed" | "ordered" | "completed" | "rejected";
+  comment: string | null;
+}
+
+export interface SalesTask {
+  id: number;
+  dealerId: number;
+  tradePointId: number | null;
+  showcaseGoalId: number | null;
+  assignedToUserId: number;
+  createdByUserId: number;
+  taskType:
+    | "showcase_goal"
+    | "call_dealer"
+    | "prepare_offer"
+    | "coordinate_delivery"
+    | "update_documents"
+    | "follow_up"
+    | "other";
+  title: string;
+  description: string;
+  taskStatus: "new" | "in_progress" | "waiting_dealer" | "done" | "overdue" | "cancelled";
+  priority: "low" | "medium" | "high";
+  dueDate: string;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+export interface SalesTaskListItem extends SalesTask {
+  dealer: DealerListItem;
+  tradePoint: TradePoint | null;
+  assignedTo: User | null;
+  createdBy: User | null;
+  showcaseGoal: ShowcaseGoal | null;
+}
+
+export interface ShowcaseGoalDetail {
+  goal: ShowcaseGoalListItem;
+  dealer: DealerListItem;
+  tradePoint: TradePoint;
+  assignedTo: User | null;
+  createdBy: User | null;
+  sourceDistributionReportSummary: ShowcaseGoalReportSummary | null;
+  items: ShowcaseGoalItem[];
+  relatedSalesTasks: SalesTaskListItem[];
+}
+
+export interface SalesTaskDetail {
+  task: SalesTaskListItem;
+  dealer: DealerListItem;
+  tradePoint: TradePoint | null;
+  assignedTo: User | null;
+  createdBy: User | null;
+  showcaseGoal: ShowcaseGoalListItem | null;
+}
+
+export interface ShowcaseGoalStatusUpdateResponse {
+  success: true;
+  goal: ShowcaseGoalListItem;
+}
+
+export interface SalesTaskStatusUpdateResponse {
+  success: true;
+  task: SalesTaskListItem;
+}
+
+export interface CreateShowcaseGoalFromVisitResponse {
+  success: true;
+  message: string;
+  goal: ShowcaseGoalListItem;
+}
+
 export interface DistributionReportResponse {
   report: DistributionReport;
   items: DistributionReportItem[];

@@ -3,6 +3,7 @@ import {
   ArrowRightCircle,
   BriefcaseBusiness,
   ClipboardCheck,
+  Clock3,
   FlagTriangleRight,
   LineChart,
   MapPinned,
@@ -16,6 +17,8 @@ import {
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { useQuery } from "@tanstack/react-query";
+import type { SalesTask, ShowcaseGoal } from "@/lib/api-types";
 
 type RoleCard = {
   title: string;
@@ -82,6 +85,18 @@ const workflowSteps = [
 ];
 
 export default function SalesDepartmentPage() {
+  const goalsQuery = useQuery<ShowcaseGoal[]>({
+    queryKey: ["/api/sales/showcase-goals"],
+  });
+  const tasksQuery = useQuery<SalesTask[]>({
+    queryKey: ["/api/sales/tasks"],
+  });
+  const activeGoals = (goalsQuery.data ?? []).filter(
+    (goal) => goal.goalStatus === "new" || goal.goalStatus === "in_progress" || goal.goalStatus === "agreed",
+  );
+  const modelsTarget = (goalsQuery.data ?? []).reduce((sum, goal) => sum + goal.targetModelsCount, 0);
+  const modelsDone = (goalsQuery.data ?? []).reduce((sum, goal) => sum + goal.completedModelsCount, 0);
+
   return (
     <div className="space-y-6" data-testid="page-sales-department">
       <div className="rounded-2xl border border-border/80 bg-card p-5 shadow-sm">
@@ -187,6 +202,106 @@ export default function SalesDepartmentPage() {
         </CardContent>
       </Card>
 
+      <Card
+        className="rounded-2xl border-border/80 shadow-sm"
+        data-testid="section-sales-goals-and-tasks"
+      >
+        <CardHeader>
+          <CardTitle className="text-lg font-bold uppercase tracking-wide">
+            Цели и задачи по витринам
+          </CardTitle>
+          <CardDescription>
+            Связка отчета дистрибуции РМ и работы отдела продаж по дилерам.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-[14px] border border-border/80 bg-white p-4">
+              <p className="text-xs text-muted-foreground">Активные цели</p>
+              <p className="mt-2 text-2xl font-bold">{activeGoals.length}</p>
+              <p className="mt-1 text-xs text-muted-foreground">показываем до 3 целей в фокусе</p>
+            </div>
+            <div className="rounded-[14px] border border-border/80 bg-white p-4">
+              <p className="text-xs text-muted-foreground">Задачи отдела продаж</p>
+              <p className="mt-2 text-2xl font-bold">{(tasksQuery.data ?? []).length}</p>
+              <p className="mt-1 text-xs text-muted-foreground">показываем до 5 ближайших</p>
+            </div>
+            <div className="rounded-[14px] border border-border/80 bg-white p-4">
+              <p className="text-xs text-muted-foreground">Прогресс моделей</p>
+              <p className="mt-2 text-2xl font-bold">
+                {modelsDone}/{modelsTarget}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">выставлено / к выставлению</p>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-[14px] border border-border/80 bg-[#f5f5f5] p-3">
+              <p className="text-xs font-semibold text-muted-foreground">Активные цели (топ-3)</p>
+              <ul className="mt-2 space-y-2 text-sm">
+                {activeGoals.slice(0, 3).map((goal) => (
+                  <li key={goal.id} className="rounded-lg border border-border/70 bg-white p-2">
+                    <p className="font-medium">{goal.title}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {goal.completedModelsCount}/{goal.targetModelsCount} моделей · до {goal.dueDate}
+                    </p>
+                  </li>
+                ))}
+                {activeGoals.length === 0 && (
+                  <li className="rounded-lg border border-dashed border-border/70 bg-white p-2 text-xs text-muted-foreground">
+                    Активных целей пока нет.
+                  </li>
+                )}
+              </ul>
+            </div>
+            <div className="rounded-[14px] border border-border/80 bg-[#f5f5f5] p-3">
+              <p className="text-xs font-semibold text-muted-foreground">Задачи продаж (топ-5)</p>
+              <ul className="mt-2 space-y-2 text-sm">
+                {(tasksQuery.data ?? []).slice(0, 5).map((task) => (
+                  <li key={task.id} className="rounded-lg border border-border/70 bg-white p-2">
+                    <p className="font-medium">{task.title}</p>
+                    <p className="text-xs text-muted-foreground">
+                      <Clock3 className="mr-1 inline h-3 w-3" />
+                      срок {task.dueDate}
+                    </p>
+                  </li>
+                ))}
+                {(tasksQuery.data ?? []).length === 0 && (
+                  <li className="rounded-lg border border-dashed border-border/70 bg-white p-2 text-xs text-muted-foreground">
+                    Задач пока нет.
+                  </li>
+                )}
+              </ul>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Button
+              asChild
+              variant="outline"
+              className="h-11 justify-between rounded-xl bg-white"
+              data-testid="button-open-showcase-goals"
+            >
+              <Link href="/sales/showcase-goals">
+                Открыть цели по витринам
+                <ArrowRightCircle className="h-4 w-4" />
+              </Link>
+            </Button>
+            <Button
+              asChild
+              variant="outline"
+              className="h-11 justify-between rounded-xl bg-white"
+              data-testid="button-open-sales-tasks"
+            >
+              <Link href="/sales/tasks">
+                Открыть задачи отдела продаж
+                <ArrowRightCircle className="h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       <Card className="rounded-2xl border-border/80 shadow-sm">
         <CardHeader>
           <CardTitle className="text-lg font-bold uppercase tracking-wide">Быстрые действия</CardTitle>
@@ -207,6 +322,28 @@ export default function SalesDepartmentPage() {
           <Button asChild variant="outline" className="h-11 justify-between rounded-xl bg-white" data-testid="button-open-orders">
             <Link href="/orders">
               Открыть заказы
+              <ArrowRightCircle className="h-4 w-4" />
+            </Link>
+          </Button>
+          <Button
+            asChild
+            variant="outline"
+            className="h-11 justify-between rounded-xl bg-white"
+            data-testid="button-quick-showcase-goals"
+          >
+            <Link href="/sales/showcase-goals">
+              Цели по витринам
+              <ArrowRightCircle className="h-4 w-4" />
+            </Link>
+          </Button>
+          <Button
+            asChild
+            variant="outline"
+            className="h-11 justify-between rounded-xl bg-white"
+            data-testid="button-quick-sales-tasks"
+          >
+            <Link href="/sales/tasks">
+              Задачи продаж
               <ArrowRightCircle className="h-4 w-4" />
             </Link>
           </Button>

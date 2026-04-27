@@ -4,7 +4,9 @@ import {
   BriefcaseBusiness,
   Boxes,
   Building2,
+  ClipboardCheck,
   LayoutDashboard,
+  ListTodo,
   MapPinned,
   Search,
   Menu,
@@ -37,6 +39,8 @@ const navItems: NavItem[] = [
   { label: "Дашборд", path: "/", icon: LayoutDashboard },
   { label: "ЛК отдела продаж", path: "/sales-department", icon: BriefcaseBusiness },
   { label: "Маршрут РМ", path: "/regional-manager/route", icon: MapPinned },
+  { label: "Цели по витринам", path: "/sales/showcase-goals", icon: ClipboardCheck },
+  { label: "Задачи продаж", path: "/sales/tasks", icon: ListTodo },
   { label: "Дилеры", path: "/dealers", icon: Building2 },
   { label: "Каталог", path: "/catalog", icon: Boxes },
   { label: "Заказы", path: "/orders", icon: ShoppingCart },
@@ -74,6 +78,10 @@ function SidebarNav({
                 ? "nav-sales-department"
                 : item.path === "/regional-manager/route"
                   ? "nav-regional-manager-route"
+                  : item.path === "/sales/showcase-goals"
+                    ? "nav-showcase-goals"
+                    : item.path === "/sales/tasks"
+                      ? "nav-sales-tasks"
                   : `nav-${item.label.toLowerCase()}`
             }
           >

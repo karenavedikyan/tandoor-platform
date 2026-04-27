@@ -297,6 +297,62 @@ type DistributionReportItem = {
   comment: string | null;
 };
 
+type ShowcaseGoal = {
+  id: number;
+  dealerId: number;
+  tradePointId: number;
+  distributionReportId: number | null;
+  createdByUserId: number;
+  assignedToUserId: number;
+  title: string;
+  description: string;
+  goalStatus: "new" | "in_progress" | "agreed" | "completed" | "rejected" | "overdue";
+  priority: "low" | "medium" | "high";
+  dueDate: string;
+  source: "distribution_report" | "sales_head" | "regional_manager" | "manual";
+  targetModelsCount: number;
+  completedModelsCount: number;
+  createdAt: string;
+  completedAt: string | null;
+};
+
+type ShowcaseGoalItem = {
+  id: number;
+  goalId: number;
+  productId: number | null;
+  modelName: string;
+  sku: string;
+  category: string;
+  currentState: "missing" | "in_stock_not_showcase" | "on_showcase" | "unknown";
+  targetState: "on_showcase" | "in_stock" | "ordered";
+  itemStatus: "new" | "agreed" | "ordered" | "completed" | "rejected";
+  comment: string | null;
+};
+
+type SalesTask = {
+  id: number;
+  dealerId: number;
+  tradePointId: number | null;
+  showcaseGoalId: number | null;
+  assignedToUserId: number;
+  createdByUserId: number;
+  taskType:
+    | "showcase_goal"
+    | "call_dealer"
+    | "prepare_offer"
+    | "coordinate_delivery"
+    | "update_documents"
+    | "follow_up"
+    | "other";
+  title: string;
+  description: string;
+  taskStatus: "new" | "in_progress" | "waiting_dealer" | "done" | "overdue" | "cancelled";
+  priority: "low" | "medium" | "high";
+  dueDate: string;
+  createdAt: string;
+  completedAt: string | null;
+};
+
 type RouteVisitDetail = RouteVisit & {
   dealer: DealerListItem;
   tradePoint: TradePoint;
@@ -334,6 +390,54 @@ type VisitDetail = {
   activeTaskCount: number;
   distributionReport: DistributionReportResponse | null;
   productChecklist: DistributionReportItem[];
+};
+
+type ShowcaseGoalReportSummary = {
+  id: number;
+  visitId: number;
+  reportStatus: string;
+  missingModelsCount: number;
+  presentModelsCount: number;
+  recommendation: string;
+  nextAction: string;
+};
+
+type ShowcaseGoalListItem = ShowcaseGoal & {
+  dealer: DealerListItem;
+  tradePoint: TradePoint;
+  assignedTo: User | null;
+  createdBy: User | null;
+  progressPercent: number;
+  isOverdue: boolean;
+  distributionReportSummary: ShowcaseGoalReportSummary | null;
+};
+
+type SalesTaskListItem = SalesTask & {
+  dealer: DealerListItem;
+  tradePoint: TradePoint | null;
+  assignedTo: User | null;
+  createdBy: User | null;
+  showcaseGoal: ShowcaseGoal | null;
+};
+
+type ShowcaseGoalDetail = {
+  goal: ShowcaseGoalListItem;
+  dealer: DealerListItem;
+  tradePoint: TradePoint;
+  assignedTo: User | null;
+  createdBy: User | null;
+  sourceDistributionReportSummary: ShowcaseGoalReportSummary | null;
+  items: ShowcaseGoalItem[];
+  relatedSalesTasks: SalesTaskListItem[];
+};
+
+type SalesTaskDetail = {
+  task: SalesTaskListItem;
+  dealer: DealerListItem;
+  tradePoint: TradePoint | null;
+  assignedTo: User | null;
+  createdBy: User | null;
+  showcaseGoal: ShowcaseGoalListItem | null;
 };
 
 // ---------- Seed data (must stay in sync with server/storage.ts) ----------
@@ -596,6 +700,261 @@ const distributionReportItemsSeed: DistributionReportItem[] = [
     isOnShowcase: 0,
     stockStatus: "unknown",
     comment: "Данные по доступности уточняются с менеджером салона.",
+  },
+];
+
+const showcaseGoalsSeed: ShowcaseGoal[] = [
+  {
+    id: 1,
+    dealerId: 1,
+    tradePointId: 1,
+    distributionReportId: 1,
+    createdByUserId: 7,
+    assignedToUserId: 5,
+    title: "Выставить недостающие модели премиум-серии",
+    description:
+      "На основании отчета дистрибуции визита №1 согласовать и довести до витрины недостающие модели премиум-серии.",
+    goalStatus: "in_progress",
+    priority: "high",
+    dueDate: "2026-05-05",
+    source: "distribution_report",
+    targetModelsCount: 3,
+    completedModelsCount: 1,
+    createdAt: "2026-04-27T10:45:00.000Z",
+    completedAt: null,
+  },
+  {
+    id: 2,
+    dealerId: 2,
+    tradePointId: 4,
+    distributionReportId: null,
+    createdByUserId: 4,
+    assignedToUserId: 5,
+    title: "Согласовать базовую витрину Tandoor",
+    description:
+      "Сформировать и утвердить базовую матрицу витрины по 4 моделям для точки в Краснодаре.",
+    goalStatus: "new",
+    priority: "high",
+    dueDate: "2026-05-10",
+    source: "regional_manager",
+    targetModelsCount: 4,
+    completedModelsCount: 0,
+    createdAt: "2026-04-27T11:40:00.000Z",
+    completedAt: null,
+  },
+  {
+    id: 3,
+    dealerId: 3,
+    tradePointId: 5,
+    distributionReportId: null,
+    createdByUserId: 2,
+    assignedToUserId: 5,
+    title: "Обновить POSM и добавить сезонные модели",
+    description:
+      "Подготовить обновление витрины в Сочи: POSM-материалы и 2 сезонные модели для курортного трафика.",
+    goalStatus: "agreed",
+    priority: "medium",
+    dueDate: "2026-05-15",
+    source: "sales_head",
+    targetModelsCount: 2,
+    completedModelsCount: 1,
+    createdAt: "2026-04-27T12:20:00.000Z",
+    completedAt: null,
+  },
+];
+
+const showcaseGoalItemsSeed: ShowcaseGoalItem[] = [
+  {
+    id: 1,
+    goalId: 1,
+    productId: 3,
+    modelName: "Tandoor Premium 100",
+    sku: "TD-LINE-GLASS-WHT",
+    category: "interior_door",
+    currentState: "missing",
+    targetState: "on_showcase",
+    itemStatus: "new",
+    comment: "Отсутствует в ТТ, требуется выставление на центральной витрине.",
+  },
+  {
+    id: 2,
+    goalId: 1,
+    productId: 4,
+    modelName: "Tandoor Urban White",
+    sku: "TD-FIRE-900-MTL",
+    category: "fire_door",
+    currentState: "missing",
+    targetState: "on_showcase",
+    itemStatus: "agreed",
+    comment: "Согласовать с дилером место в витринной матрице.",
+  },
+  {
+    id: 3,
+    goalId: 1,
+    productId: 5,
+    modelName: "Tandoor Loft Graphite",
+    sku: "TD-LOFT-880-GRN",
+    category: "entry_door",
+    currentState: "in_stock_not_showcase",
+    targetState: "on_showcase",
+    itemStatus: "completed",
+    comment: "Модель выставлена по согласованию с дилером.",
+  },
+  {
+    id: 4,
+    goalId: 2,
+    productId: 1,
+    modelName: "Tandoor Entry 860",
+    sku: "TD-ENTRY-860-BLK",
+    category: "entry_door",
+    currentState: "unknown",
+    targetState: "on_showcase",
+    itemStatus: "new",
+    comment: "Требуется согласование базовой позиции.",
+  },
+  {
+    id: 5,
+    goalId: 2,
+    productId: 2,
+    modelName: "Tandoor Entry 960",
+    sku: "TD-ENTRY-960-OAK",
+    category: "entry_door",
+    currentState: "unknown",
+    targetState: "on_showcase",
+    itemStatus: "new",
+    comment: "Проверить позиционирование на витрине.",
+  },
+  {
+    id: 6,
+    goalId: 2,
+    productId: 3,
+    modelName: "Tandoor Premium 100",
+    sku: "TD-LINE-GLASS-WHT",
+    category: "interior_door",
+    currentState: "missing",
+    targetState: "on_showcase",
+    itemStatus: "new",
+    comment: "Добавить в обязательную витринную матрицу.",
+  },
+  {
+    id: 7,
+    goalId: 2,
+    productId: 4,
+    modelName: "Tandoor Urban White",
+    sku: "TD-FIRE-900-MTL",
+    category: "fire_door",
+    currentState: "missing",
+    targetState: "on_showcase",
+    itemStatus: "new",
+    comment: "Согласовать поставку образца.",
+  },
+  {
+    id: 8,
+    goalId: 3,
+    productId: 1,
+    modelName: "Tandoor Entry 860",
+    sku: "TD-ENTRY-860-BLK",
+    category: "entry_door",
+    currentState: "in_stock_not_showcase",
+    targetState: "on_showcase",
+    itemStatus: "completed",
+    comment: "Модель уже выставлена после согласования.",
+  },
+  {
+    id: 9,
+    goalId: 3,
+    productId: null,
+    modelName: "Сезонная модель Summer Line",
+    sku: "TD-SUMMER-LINE",
+    category: "interior_door",
+    currentState: "missing",
+    targetState: "ordered",
+    itemStatus: "ordered",
+    comment: "Ожидается поставка образца к майской кампании.",
+  },
+];
+
+const salesTasksSeed: SalesTask[] = [
+  {
+    id: 1,
+    dealerId: 1,
+    tradePointId: 1,
+    showcaseGoalId: 1,
+    assignedToUserId: 5,
+    createdByUserId: 7,
+    taskType: "call_dealer",
+    title: "Позвонить дилеру и согласовать выставление Premium 100",
+    description:
+      "Связаться с управляющим ТТ и согласовать финальный слот на витрине для Premium 100.",
+    taskStatus: "in_progress",
+    priority: "high",
+    dueDate: "2026-05-01",
+    createdAt: "2026-04-27T10:50:00.000Z",
+    completedAt: null,
+  },
+  {
+    id: 2,
+    dealerId: 1,
+    tradePointId: 1,
+    showcaseGoalId: 1,
+    assignedToUserId: 5,
+    createdByUserId: 4,
+    taskType: "prepare_offer",
+    title: "Подготовить коммерческое предложение по витринным образцам",
+    description: "Сформировать КП на образцы и условия доставки для точки в Краснодаре.",
+    taskStatus: "new",
+    priority: "high",
+    dueDate: "2026-05-02",
+    createdAt: "2026-04-27T10:55:00.000Z",
+    completedAt: null,
+  },
+  {
+    id: 3,
+    dealerId: 1,
+    tradePointId: 1,
+    showcaseGoalId: 1,
+    assignedToUserId: 6,
+    createdByUserId: 5,
+    taskType: "follow_up",
+    title: "Проверить наличие Urban White на складе",
+    description: "Уточнить остатки и подтвердить возможность быстрой отгрузки.",
+    taskStatus: "waiting_dealer",
+    priority: "medium",
+    dueDate: "2026-05-03",
+    createdAt: "2026-04-27T11:00:00.000Z",
+    completedAt: null,
+  },
+  {
+    id: 4,
+    dealerId: 3,
+    tradePointId: 5,
+    showcaseGoalId: 3,
+    assignedToUserId: 6,
+    createdByUserId: 2,
+    taskType: "update_documents",
+    title: "Передать ассистенту задачу подготовить POSM",
+    description: "Подготовить документы и макеты POSM для обновления витрины в Сочи.",
+    taskStatus: "in_progress",
+    priority: "medium",
+    dueDate: "2026-05-07",
+    createdAt: "2026-04-27T12:25:00.000Z",
+    completedAt: null,
+  },
+  {
+    id: 5,
+    dealerId: 2,
+    tradePointId: 4,
+    showcaseGoalId: 2,
+    assignedToUserId: 4,
+    createdByUserId: 5,
+    taskType: "follow_up",
+    title: "Запланировать повторную проверку РМ",
+    description: "Согласовать дату повторного визита РМ после выставления базовой витрины.",
+    taskStatus: "new",
+    priority: "high",
+    dueDate: "2026-05-10",
+    createdAt: "2026-04-27T11:45:00.000Z",
+    completedAt: null,
   },
 ];
 
@@ -870,6 +1229,104 @@ function defaultChecklistItems(): DistributionReportItem[] {
   }));
 }
 
+function goalReportSummaryById(reportId: number | null): ShowcaseGoalReportSummary | null {
+  if (reportId == null) {
+    return null;
+  }
+  const report = distributionReportsSeed.find((entry) => entry.id === reportId);
+  if (!report) {
+    return null;
+  }
+  return {
+    id: report.id,
+    visitId: report.visitId,
+    reportStatus: report.reportStatus,
+    missingModelsCount: report.missingModelsCount,
+    presentModelsCount: report.presentModelsCount,
+    recommendation: report.recommendation,
+    nextAction: report.nextAction,
+  };
+}
+
+function normalizeGoalStatus(goal: ShowcaseGoal): ShowcaseGoal["goalStatus"] {
+  if (goal.goalStatus === "completed" || goal.goalStatus === "rejected") {
+    return goal.goalStatus;
+  }
+  const dueDate = Date.parse(goal.dueDate);
+  if (!Number.isNaN(dueDate) && dueDate < Date.now()) {
+    return "overdue";
+  }
+  return goal.goalStatus;
+}
+
+function isGoalOverdue(goal: ShowcaseGoal): boolean {
+  return normalizeGoalStatus(goal) === "overdue";
+}
+
+function toShowcaseGoalListItem(goal: ShowcaseGoal): ShowcaseGoalListItem {
+  const dealer = dealerListItemById(goal.dealerId);
+  const tradePoint = tradePointsSeed.find((entry) => entry.id === goal.tradePointId);
+  if (!dealer || !tradePoint) {
+    throw new StorageError(500, `Не удалось собрать контекст цели #${goal.id}`);
+  }
+  const normalizedStatus = normalizeGoalStatus(goal);
+  const effectiveCompletedCount =
+    normalizedStatus === "completed"
+      ? Math.max(goal.targetModelsCount, goal.completedModelsCount)
+      : goal.completedModelsCount;
+  const progressPercent =
+    goal.targetModelsCount > 0
+      ? Math.min(100, Math.round((effectiveCompletedCount / goal.targetModelsCount) * 100))
+      : 0;
+  return {
+    ...goal,
+    goalStatus: normalizedStatus,
+    completedModelsCount: effectiveCompletedCount,
+    dealer,
+    tradePoint,
+    assignedTo: getUserById(goal.assignedToUserId) ?? null,
+    createdBy: getUserById(goal.createdByUserId) ?? null,
+    progressPercent,
+    isOverdue: isGoalOverdue(goal),
+    distributionReportSummary: goalReportSummaryById(goal.distributionReportId),
+  };
+}
+
+function toSalesTaskListItem(task: SalesTask): SalesTaskListItem {
+  const dealer = dealerListItemById(task.dealerId);
+  if (!dealer) {
+    throw new StorageError(500, `Не удалось собрать контекст задачи #${task.id}`);
+  }
+  return {
+    ...task,
+    dealer,
+    tradePoint:
+      task.tradePointId != null
+        ? tradePointsSeed.find((entry) => entry.id === task.tradePointId) ?? null
+        : null,
+    assignedTo: getUserById(task.assignedToUserId) ?? null,
+    createdBy: getUserById(task.createdByUserId) ?? null,
+    showcaseGoal:
+      task.showcaseGoalId != null
+        ? showcaseGoalsSeed.find((entry) => entry.id === task.showcaseGoalId) ?? null
+        : null,
+  };
+}
+
+function recalculateGoalCompletion(goalId: number): void {
+  const goal = showcaseGoalsSeed.find((entry) => entry.id === goalId);
+  if (!goal) {
+    return;
+  }
+  const items = showcaseGoalItemsSeed.filter((entry) => entry.goalId === goalId);
+  goal.targetModelsCount = items.length;
+  goal.completedModelsCount = items.filter((entry) => entry.itemStatus === "completed").length;
+  if (goal.completedModelsCount >= goal.targetModelsCount && goal.targetModelsCount > 0) {
+    goal.goalStatus = "completed";
+    goal.completedAt = goal.completedAt ?? new Date().toISOString();
+  }
+}
+
 const createOrderRequestSchema = z.object({
   dealerId: z.number().int().positive(),
   createdByUserId: z.number().int().positive().optional(),
@@ -898,6 +1355,28 @@ const distributionReportPayloadSchema = z.object({
       }),
     )
     .min(1),
+});
+
+const showcaseGoalStatusUpdateSchema = z.object({
+  status: z.enum([
+    "new",
+    "in_progress",
+    "agreed",
+    "completed",
+    "rejected",
+    "overdue",
+  ]),
+});
+
+const salesTaskStatusUpdateSchema = z.object({
+  status: z.enum([
+    "new",
+    "in_progress",
+    "waiting_dealer",
+    "done",
+    "overdue",
+    "cancelled",
+  ]),
 });
 
 type DistributionReportPayload = z.infer<typeof distributionReportPayloadSchema>;
@@ -1160,6 +1639,231 @@ function submitRegionalVisitDistributionReportRoute(rawId: string, body: unknown
   };
 }
 
+function getSalesShowcaseGoalsRoute(): ApiResult {
+  return {
+    status: 200,
+    body: showcaseGoalsSeed
+      .slice()
+      .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+      .map((goal) => toShowcaseGoalListItem(goal)),
+  };
+}
+
+function getSalesShowcaseGoalByIdRoute(rawId: string): ApiResult {
+  const id = parseIdParam(rawId);
+  if (id == null) return { status: 400, body: { message: "ID цели должен быть числом" } };
+  const goal = showcaseGoalsSeed.find((entry) => entry.id === id);
+  if (!goal) return { status: 404, body: { message: "Цель по витрине не найдена" } };
+  const goalView = toShowcaseGoalListItem(goal);
+  const detail: ShowcaseGoalDetail = {
+    goal: goalView,
+    dealer: goalView.dealer,
+    tradePoint: goalView.tradePoint,
+    assignedTo: goalView.assignedTo,
+    createdBy: goalView.createdBy,
+    sourceDistributionReportSummary: goalView.distributionReportSummary,
+    items: showcaseGoalItemsSeed
+      .filter((item) => item.goalId === goal.id)
+      .sort((a, b) => a.id - b.id),
+    relatedSalesTasks: salesTasksSeed
+      .filter((task) => task.showcaseGoalId === goal.id)
+      .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+      .map((task) => toSalesTaskListItem(task)),
+  };
+  return { status: 200, body: detail };
+}
+
+function getSalesTasksRoute(): ApiResult {
+  return {
+    status: 200,
+    body: salesTasksSeed
+      .slice()
+      .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+      .map((task) => toSalesTaskListItem(task)),
+  };
+}
+
+function getSalesTaskByIdRoute(rawId: string): ApiResult {
+  const id = parseIdParam(rawId);
+  if (id == null) return { status: 400, body: { message: "ID задачи должен быть числом" } };
+  const task = salesTasksSeed.find((entry) => entry.id === id);
+  if (!task) return { status: 404, body: { message: "Задача отдела продаж не найдена" } };
+  const taskView = toSalesTaskListItem(task);
+  const detail: SalesTaskDetail = {
+    task: taskView,
+    dealer: taskView.dealer,
+    tradePoint: taskView.tradePoint,
+    assignedTo: taskView.assignedTo,
+    createdBy: taskView.createdBy,
+    showcaseGoal:
+      taskView.showcaseGoalId != null
+        ? toShowcaseGoalListItem(
+            showcaseGoalsSeed.find((entry) => entry.id === taskView.showcaseGoalId)!,
+          )
+        : null,
+  };
+  return { status: 200, body: detail };
+}
+
+function updateSalesShowcaseGoalStatusRoute(rawId: string, body: unknown): ApiResult {
+  const id = parseIdParam(rawId);
+  if (id == null) return { status: 400, body: { message: "ID цели должен быть числом" } };
+  const parsed = showcaseGoalStatusUpdateSchema.safeParse(body);
+  if (!parsed.success) {
+    return {
+      status: 400,
+      body: {
+        message: "Некорректный статус цели",
+        issues: parsed.error.issues.map((issue) => ({
+          path: issue.path.join("."),
+          message: issue.message,
+        })),
+      },
+    };
+  }
+  const goal = showcaseGoalsSeed.find((entry) => entry.id === id);
+  if (!goal) return { status: 404, body: { message: "Цель по витрине не найдена" } };
+  goal.goalStatus = parsed.data.status;
+  if (goal.goalStatus === "completed") {
+    goal.completedAt = goal.completedAt ?? new Date().toISOString();
+    goal.completedModelsCount = Math.max(goal.completedModelsCount, goal.targetModelsCount);
+    for (const item of showcaseGoalItemsSeed) {
+      if (item.goalId === goal.id && item.itemStatus !== "rejected") {
+        item.itemStatus = "completed";
+        item.currentState = "on_showcase";
+      }
+    }
+    recalculateGoalCompletion(goal.id);
+  } else {
+    goal.completedAt = null;
+  }
+  return { status: 200, body: { success: true, goal: toShowcaseGoalListItem(goal) } };
+}
+
+function updateSalesTaskStatusRoute(rawId: string, body: unknown): ApiResult {
+  const id = parseIdParam(rawId);
+  if (id == null) return { status: 400, body: { message: "ID задачи должен быть числом" } };
+  const parsed = salesTaskStatusUpdateSchema.safeParse(body);
+  if (!parsed.success) {
+    return {
+      status: 400,
+      body: {
+        message: "Некорректный статус задачи",
+        issues: parsed.error.issues.map((issue) => ({
+          path: issue.path.join("."),
+          message: issue.message,
+        })),
+      },
+    };
+  }
+  const task = salesTasksSeed.find((entry) => entry.id === id);
+  if (!task) return { status: 404, body: { message: "Задача отдела продаж не найдена" } };
+  task.taskStatus = parsed.data.status;
+  if (task.taskStatus === "done") {
+    task.completedAt = task.completedAt ?? new Date().toISOString();
+  } else {
+    task.completedAt = null;
+  }
+  return { status: 200, body: { success: true, task: toSalesTaskListItem(task) } };
+}
+
+function createShowcaseGoalFromVisitDistributionReportRoute(rawId: string): ApiResult {
+  const id = parseIdParam(rawId);
+  if (id == null) return { status: 400, body: { message: "ID визита должен быть числом" } };
+  const visit = routeVisitsSeed.find((entry) => entry.id === id);
+  if (!visit) return { status: 404, body: { message: "Визит не найден" } };
+  const report = distributionReportsSeed.find((entry) => entry.visitId === id);
+  if (!report) return { status: 404, body: { message: "Отчет дистрибуции по визиту не найден" } };
+  const existing = showcaseGoalsSeed.find((entry) => entry.distributionReportId === report.id);
+  if (existing) {
+    return {
+      status: 200,
+      body: {
+        success: true,
+        message: "Цель по витрине уже сформирована и передана менеджеру продаж.",
+        goal: toShowcaseGoalListItem(existing),
+      },
+    };
+  }
+
+  const reportItems = distributionReportItemsSeed
+    .filter((item) => item.reportId === report.id)
+    .filter((item) => item.isPresent === 0 || item.isOnShowcase === 0)
+    .slice(0, 6);
+  const targetCount = Math.max(reportItems.length, Math.max(1, report.missingModelsCount));
+
+  const newGoal: ShowcaseGoal = {
+    id: getNextId(showcaseGoalsSeed),
+    dealerId: visit.dealerId,
+    tradePointId: visit.tradePointId,
+    distributionReportId: report.id,
+    createdByUserId: report.regionalManagerId,
+    assignedToUserId: dealerListItemById(visit.dealerId)?.salesManagerId ?? 5,
+    title: "Цель по витрине из отчета дистрибуции",
+    description:
+      "Сформирована автоматически по результатам визита РМ: отсутствующие или невыставленные модели.",
+    goalStatus: "new",
+    priority: "high",
+    dueDate: "2026-05-12",
+    source: "distribution_report",
+    targetModelsCount: targetCount,
+    completedModelsCount: 0,
+    createdAt: new Date().toISOString(),
+    completedAt: null,
+  };
+  showcaseGoalsSeed.push(newGoal);
+
+  const newItemsStart = getNextId(showcaseGoalItemsSeed);
+  const createdItems: ShowcaseGoalItem[] = reportItems.map((item, index) => ({
+    id: newItemsStart + index,
+    goalId: newGoal.id,
+    productId: item.productId,
+    modelName: item.modelName,
+    sku: item.sku,
+    category: item.category,
+    currentState:
+      item.isPresent === 0
+        ? "missing"
+        : item.isOnShowcase === 0
+          ? "in_stock_not_showcase"
+          : "on_showcase",
+    targetState: item.isPresent === 0 ? "ordered" : "on_showcase",
+    itemStatus: "new",
+    comment: item.comment,
+  }));
+  if (createdItems.length > 0) {
+    showcaseGoalItemsSeed.push(...createdItems);
+  }
+
+  const followUpTask: SalesTask = {
+    id: getNextId(salesTasksSeed),
+    dealerId: newGoal.dealerId,
+    tradePointId: newGoal.tradePointId,
+    showcaseGoalId: newGoal.id,
+    assignedToUserId: newGoal.assignedToUserId,
+    createdByUserId: newGoal.createdByUserId,
+    taskType: "showcase_goal",
+    title: "Согласовать цель по витрине с дилером",
+    description:
+      "Подтвердить план выставления моделей, сроки и ответственных по итогам визита РМ.",
+    taskStatus: "new",
+    priority: newGoal.priority,
+    dueDate: newGoal.dueDate,
+    createdAt: new Date().toISOString(),
+    completedAt: null,
+  };
+  salesTasksSeed.push(followUpTask);
+
+  return {
+    status: 200,
+    body: {
+      success: true,
+      message: "Цель по витрине сформирована и передана менеджеру продаж.",
+      goal: toShowcaseGoalListItem(newGoal),
+    },
+  };
+}
+
 function getOrderByIdRoute(rawId: string): ApiResult {
   const id = Number.parseInt(rawId, 10);
   if (Number.isNaN(id)) return { status: 400, body: { message: "Order id must be a valid number" } };
@@ -1293,6 +1997,36 @@ function routeApiRequest(method: string, pathname: string, body: unknown): ApiRe
   if (upperMethod === "POST" && regionalVisitDraftMatch) return saveRegionalVisitDistributionDraftRoute(regionalVisitDraftMatch[1], body);
   const regionalVisitSubmitMatch = /^\/api\/regional-manager\/visits\/(\d+)\/distribution-report\/submit$/.exec(normalized);
   if (upperMethod === "POST" && regionalVisitSubmitMatch) return submitRegionalVisitDistributionReportRoute(regionalVisitSubmitMatch[1], body);
+  const regionalVisitCreateGoalMatch =
+    /^\/api\/regional-manager\/visits\/(\d+)\/distribution-report\/create-showcase-goal$/.exec(
+      normalized,
+    );
+  if (upperMethod === "POST" && regionalVisitCreateGoalMatch) {
+    return createShowcaseGoalFromVisitDistributionReportRoute(regionalVisitCreateGoalMatch[1]);
+  }
+  if (upperMethod === "GET" && normalized === "/api/sales/showcase-goals") {
+    return getSalesShowcaseGoalsRoute();
+  }
+  const salesShowcaseGoalDetailMatch = /^\/api\/sales\/showcase-goals\/(\d+)$/.exec(normalized);
+  if (upperMethod === "GET" && salesShowcaseGoalDetailMatch) {
+    return getSalesShowcaseGoalByIdRoute(salesShowcaseGoalDetailMatch[1]);
+  }
+  const salesShowcaseGoalStatusMatch =
+    /^\/api\/sales\/showcase-goals\/(\d+)\/status$/.exec(normalized);
+  if (upperMethod === "POST" && salesShowcaseGoalStatusMatch) {
+    return updateSalesShowcaseGoalStatusRoute(salesShowcaseGoalStatusMatch[1], body);
+  }
+  if (upperMethod === "GET" && normalized === "/api/sales/tasks") {
+    return getSalesTasksRoute();
+  }
+  const salesTaskDetailMatch = /^\/api\/sales\/tasks\/(\d+)$/.exec(normalized);
+  if (upperMethod === "GET" && salesTaskDetailMatch) {
+    return getSalesTaskByIdRoute(salesTaskDetailMatch[1]);
+  }
+  const salesTaskStatusMatch = /^\/api\/sales\/tasks\/(\d+)\/status$/.exec(normalized);
+  if (upperMethod === "POST" && salesTaskStatusMatch) {
+    return updateSalesTaskStatusRoute(salesTaskStatusMatch[1], body);
+  }
   const dealerTradeMatch = /^\/api\/dealers\/(\d+)\/trade-points$/.exec(normalized);
   if (upperMethod === "GET" && dealerTradeMatch) return getDealerTradePointsRoute(dealerTradeMatch[1]);
   const dealerTasksMatch = /^\/api\/dealers\/(\d+)\/tasks$/.exec(normalized);
