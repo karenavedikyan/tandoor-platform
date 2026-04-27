@@ -714,6 +714,7 @@ function routeApiRequest(method: string, pathname: string, body: unknown): ApiRe
 type VercelRequest = {
   method?: string;
   url?: string;
+  query?: Record<string, string | string[] | undefined>;
   headers: Record<string, string | string[] | undefined>;
   body?: unknown;
 };
@@ -739,10 +740,54 @@ function readJsonBody(req: VercelRequest): unknown {
   return req.body;
 }
 
+function getPathQueryFromUrl(rawUrl: string): string | string[] | undefined {
+  const queryString = rawUrl.includes("?") ? rawUrl.slice(rawUrl.indexOf("?") + 1) : "";
+  if (!queryString) {
+    return undefined;
+  }
+  const params = new URLSearchParams(queryString);
+  const values = params.getAll("path").filter((value) => value.length > 0);
+  if (values.length === 0) {
+    return undefined;
+  }
+  return values.length === 1 ? values[0] : values;
+}
+
+function normalizeRequestedPath(rawPath: string | string[] | undefined): string | undefined {
+  if (rawPath == null) {
+    return undefined;
+  }
+  const merged = Array.isArray(rawPath) ? rawPath.join("/") : rawPath;
+  const cleaned = merged
+    .split("/")
+    .map((part) => decodeURIComponent(part).trim())
+    .filter((part) => part.length > 0)
+    .join("/");
+  if (!cleaned || cleaned === "[...path]") {
+    return "/api";
+  }
+  if (cleaned.startsWith("api/")) {
+    return `/${cleaned}`;
+  }
+  if (cleaned.startsWith("/api/")) {
+    return cleaned;
+  }
+  return `/api/${cleaned}`;
+}
+
+function resolvePathname(req: VercelRequest): string {
+  const rawUrl = req.url ?? "/";
+  const queryPath = req.query?.path ?? getPathQueryFromUrl(rawUrl);
+  const normalizedFromQuery = normalizeRequestedPath(queryPath);
+  if (normalizedFromQuery) {
+    return normalizedFromQuery;
+  }
+  return rawUrl.split("?")[0] ?? "/";
+}
+
 export default function handler(req: VercelRequest, res: VercelResponse): void {
   const method = req.method ?? "GET";
-  const rawUrl = req.url ?? "/";
-  const pathname = rawUrl.split("?")[0] ?? "/";
+  const pathname = resolvePathname(req);
   const body =
     method === "POST" || method === "PUT" || method === "PATCH"
       ? readJsonBody(req)
