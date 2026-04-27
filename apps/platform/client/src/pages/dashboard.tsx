@@ -2,6 +2,7 @@ import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
   Building2,
+  ArrowUpRight,
   ChevronRight,
   Network,
   ScrollText,
