@@ -544,6 +544,149 @@ type SalesLeadershipDashboard = {
   nextActions: LeadershipNextAction[];
 };
 
+type SalesManagerProfile = {
+  id: number;
+  name: string;
+  role: string;
+  team: string;
+  region: string;
+  email: string;
+  phone: string;
+};
+
+type SalesManagerWorkspaceKpis = {
+  assignedDealersCount: number;
+  activeGoalsCount: number;
+  activeTasksCount: number;
+  overdueTasksCount: number;
+  todayTasksCount: number;
+  highPriorityItemsCount: number;
+  dealersWithoutRecentActivityCount: number;
+  openOrdersCount: number;
+};
+
+type TodayFocusItem = {
+  id: string;
+  type:
+    | "call_dealer"
+    | "showcase_goal"
+    | "prepare_offer"
+    | "follow_up"
+    | "check_order"
+    | "assistant_task";
+  title: string;
+  dealerId: number;
+  dealerName: string;
+  tradePointName?: string;
+  priority: "low" | "medium" | "high";
+  dueTime?: string;
+  dueDate: string;
+  source: "showcase_goal" | "regional_report" | "manual" | "order" | "leadership";
+  href: string;
+  status: "new" | "in_progress" | "waiting_dealer" | "done" | "overdue";
+};
+
+type AssignedDealerWorkspaceItem = {
+  dealerId: number;
+  dealerName: string;
+  dealerType: string;
+  city: string;
+  region: string;
+  segment: string;
+  potentialLevel: string;
+  status: string;
+  tradePointCount: number;
+  activeGoalsCount: number;
+  activeTasksCount: number;
+  overdueTasksCount: number;
+  lastInteractionDate: string | null;
+  nextAction: string;
+  href: string;
+};
+
+type ActiveShowcaseGoalWorkspaceItem = {
+  id: number;
+  title: string;
+  dealerId: number;
+  dealerName: string;
+  tradePointName: string;
+  status: ShowcaseGoal["goalStatus"];
+  priority: ShowcaseGoal["priority"];
+  dueDate: string;
+  progressText: string;
+  completedModelsCount: number;
+  targetModelsCount: number;
+  href: string;
+};
+
+type SalesTaskWorkspaceItem = {
+  id: number;
+  title: string;
+  dealerId: number;
+  dealerName: string;
+  tradePointName?: string;
+  taskType: SalesTask["taskType"];
+  status: SalesTask["taskStatus"];
+  priority: SalesTask["priority"];
+  dueDate: string;
+  showcaseGoalId?: number;
+  href: string;
+};
+
+type ManagerOverdueItem = {
+  id: string;
+  type: "sales_task" | "showcase_goal" | "dealer_follow_up";
+  title: string;
+  dealerName: string;
+  dueDate: string;
+  severity: "medium" | "high" | "critical";
+  href: string;
+};
+
+type StaleDealerItem = {
+  dealerId: number;
+  dealerName: string;
+  city: string;
+  lastInteractionDate: string | null;
+  daysWithoutActivity: number;
+  riskReason: string;
+  nextAction: string;
+  href: string;
+};
+
+type RegionalSignalItem = {
+  id: string;
+  sourceType: "visit" | "distribution_report" | "showcase_gap" | "comment";
+  dealerId: number;
+  dealerName: string;
+  tradePointName: string;
+  title: string;
+  summary: string;
+  createdAt: string;
+  priority: "low" | "medium" | "high";
+  href: string;
+};
+
+type ManagerQuickAction = {
+  title: string;
+  description: string;
+  href: string;
+  actionType: string;
+};
+
+type SalesManagerWorkspace = {
+  manager: SalesManagerProfile;
+  kpis: SalesManagerWorkspaceKpis;
+  todayFocus: TodayFocusItem[];
+  assignedDealers: AssignedDealerWorkspaceItem[];
+  activeShowcaseGoals: ActiveShowcaseGoalWorkspaceItem[];
+  salesTasks: SalesTaskWorkspaceItem[];
+  overdueItems: ManagerOverdueItem[];
+  staleDealers: StaleDealerItem[];
+  regionalSignals: RegionalSignalItem[];
+  quickActions: ManagerQuickAction[];
+};
+
 // ---------- Seed data (must stay in sync with server/storage.ts) ----------
 
 const organizationsSeed: Organization[] = [
@@ -2171,6 +2314,455 @@ function getSalesLeadershipDashboardRoute(): ApiResult {
   };
 }
 
+function getSalesManagerWorkspaceRoute(): ApiResult {
+  const managerId = 5;
+  const manager = getUserById(managerId);
+  if (!manager) {
+    return { status: 404, body: { message: "Менеджер продаж не найден" } };
+  }
+
+  const now = Date.now();
+  const dayMs = 24 * 60 * 60 * 1000;
+  const todayIso = new Date().toISOString().slice(0, 10);
+
+  const isSalesTaskOpen = (task: SalesTask): boolean =>
+    task.taskStatus !== "done" && task.taskStatus !== "cancelled";
+
+  const isSalesTaskOverdue = (task: SalesTask): boolean => {
+    if (!isSalesTaskOpen(task)) {
+      return false;
+    }
+    if (task.taskStatus === "overdue") {
+      return true;
+    }
+    const dueDate = Date.parse(task.dueDate);
+    return !Number.isNaN(dueDate) && dueDate < now;
+  };
+
+  const isDealerTaskOpen = (task: DealerTask): boolean =>
+    task.status !== "done" && task.status !== "rejected";
+
+  const isDealerTaskOverdue = (task: DealerTask): boolean => {
+    if (!isDealerTaskOpen(task)) {
+      return false;
+    }
+    if (task.status === "overdue") {
+      return true;
+    }
+    const dueDate = Date.parse(task.dueDate);
+    return !Number.isNaN(dueDate) && dueDate < now;
+  };
+
+  const severityByPriority = (
+    priority: "low" | "medium" | "high",
+  ): ManagerOverdueItem["severity"] => {
+    if (priority === "high") {
+      return "critical";
+    }
+    if (priority === "medium") {
+      return "high";
+    }
+    return "medium";
+  };
+
+  const managerDealers = dealersSeed.filter(
+    (dealer) => (dealer.salesManagerId ?? dealer.managerUserId) === managerId,
+  );
+  const managerDealerIds = new Set(managerDealers.map((dealer) => dealer.id));
+
+  const managerGoals = showcaseGoalsSeed
+    .filter((goal) => goal.assignedToUserId === managerId)
+    .map((goal) => toShowcaseGoalListItem(goal));
+  const activeGoals = managerGoals.filter(
+    (goal) => goal.goalStatus !== "completed" && goal.goalStatus !== "rejected",
+  );
+
+  const managerSalesTasks = salesTasksSeed
+    .filter((task) => task.assignedToUserId === managerId)
+    .map((task) => toSalesTaskListItem(task));
+  const delegatedTasks = salesTasksSeed
+    .filter((task) => task.createdByUserId === managerId && task.assignedToUserId !== managerId)
+    .map((task) => toSalesTaskListItem(task));
+  const managerDealerTasks = dealerTasksSeed.filter((task) => task.assignedToUserId === managerId);
+
+  const todayFocusFromSalesTasks: TodayFocusItem[] = managerSalesTasks
+    .filter((task) => isSalesTaskOpen(task))
+    .map((task) => {
+      let type: TodayFocusItem["type"] = "follow_up";
+      if (task.taskType === "call_dealer") {
+        type = "call_dealer";
+      } else if (task.taskType === "prepare_offer") {
+        type = "prepare_offer";
+      } else if (task.taskType === "showcase_goal") {
+        type = "showcase_goal";
+      } else if (task.taskType === "coordinate_delivery") {
+        type = "check_order";
+      }
+      return {
+        id: `task-${task.id}`,
+        type,
+        title: task.title,
+        dealerId: task.dealerId,
+        dealerName: task.dealer.name,
+        tradePointName: task.tradePoint?.name ?? undefined,
+        priority: task.priority as TodayFocusItem["priority"],
+        dueDate: task.dueDate,
+        source:
+          task.showcaseGoalId != null
+            ? ("showcase_goal" as TodayFocusItem["source"])
+            : ("manual" as TodayFocusItem["source"]),
+        href: task.showcaseGoalId != null ? `/sales/showcase-goals/${task.showcaseGoalId}` : "/sales/tasks",
+        status: isSalesTaskOverdue(task)
+          ? ("overdue" as TodayFocusItem["status"])
+          : task.taskStatus === "done" || task.taskStatus === "cancelled"
+            ? ("done" as TodayFocusItem["status"])
+            : (task.taskStatus as TodayFocusItem["status"]),
+      };
+    });
+  const todayFocusFromDelegatedTasks: TodayFocusItem[] = delegatedTasks
+    .filter((task) => isSalesTaskOpen(task))
+    .map((task) => ({
+      id: `delegated-${task.id}`,
+      type: "assistant_task" as const,
+      title: `Контроль делегирования: ${task.title}`,
+      dealerId: task.dealerId,
+      dealerName: task.dealer.name,
+      tradePointName: task.tradePoint?.name ?? undefined,
+      priority: task.priority as TodayFocusItem["priority"],
+      dueDate: task.dueDate,
+      source: "manual" as const,
+      href: "/sales/tasks",
+      status: isSalesTaskOverdue(task)
+        ? ("overdue" as const)
+        : task.taskStatus === "done" || task.taskStatus === "cancelled"
+          ? ("done" as const)
+          : (task.taskStatus as TodayFocusItem["status"]),
+    }));
+  const todayFocusFromGoals: TodayFocusItem[] = activeGoals.map((goal) => ({
+      id: `goal-${goal.id}`,
+      type: "showcase_goal" as const,
+      title: goal.title,
+      dealerId: goal.dealerId,
+      dealerName: goal.dealer.name,
+      tradePointName: goal.tradePoint.name,
+      priority: goal.priority as TodayFocusItem["priority"],
+      dueDate: goal.dueDate,
+      source:
+        goal.source === "distribution_report" || goal.source === "regional_manager"
+          ? ("regional_report" as const)
+          : ("showcase_goal" as const),
+      href: `/sales/showcase-goals/${goal.id}`,
+      status:
+        goal.goalStatus === "new"
+          ? ("new" as const)
+          : goal.goalStatus === "overdue"
+            ? ("overdue" as const)
+            : ("in_progress" as const),
+    }));
+  const todayFocus: TodayFocusItem[] = [
+    ...todayFocusFromSalesTasks,
+    ...todayFocusFromDelegatedTasks,
+    ...todayFocusFromGoals,
+  ]
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+    .slice(0, 10);
+
+  const openOrdersCount = ordersSeed.filter(
+    (order) =>
+      managerDealerIds.has(order.dealerId) &&
+      order.status !== "delivered" &&
+      order.status !== "cancelled",
+  ).length;
+
+  const assignedDealers: AssignedDealerWorkspaceItem[] = managerDealers.map((dealer) => {
+    const dealerList = toDealerListItem(dealer);
+    const activeGoalsCount = activeGoals.filter((goal) => goal.dealerId === dealer.id).length;
+    const activeTasksCount =
+      managerSalesTasks.filter((task) => task.dealerId === dealer.id && isSalesTaskOpen(task)).length +
+      managerDealerTasks.filter((task) => task.dealerId === dealer.id && isDealerTaskOpen(task)).length;
+    const overdueTasksCount =
+      managerSalesTasks.filter((task) => task.dealerId === dealer.id && isSalesTaskOverdue(task)).length +
+      managerDealerTasks.filter((task) => task.dealerId === dealer.id && isDealerTaskOverdue(task)).length;
+    return {
+      dealerId: dealer.id,
+      dealerName: dealer.name,
+      dealerType: dealer.dealerType,
+      city: dealer.city ?? "Не указан",
+      region: dealer.region ?? "Не указан",
+      segment: dealer.segment ?? "Без сегмента",
+      potentialLevel: dealer.potentialLevel ?? "medium",
+      status: dealer.status,
+      tradePointCount: dealerList.tradePointCount,
+      activeGoalsCount,
+      activeTasksCount,
+      overdueTasksCount,
+      lastInteractionDate: dealerList.lastInteractionDate,
+      nextAction:
+        overdueTasksCount > 0
+          ? "Закрыть просроченные задачи и обновить статус дилера."
+          : activeGoalsCount > 0
+            ? "Согласовать сроки выполнения цели по витрине."
+            : "Связаться с дилером и уточнить текущие потребности.",
+      href: `/dealers/${dealer.id}`,
+    };
+  });
+
+  const activeShowcaseGoals: ActiveShowcaseGoalWorkspaceItem[] = activeGoals
+    .slice()
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+    .map((goal) => ({
+      id: goal.id,
+      title: goal.title,
+      dealerId: goal.dealerId,
+      dealerName: goal.dealer.name,
+      tradePointName: goal.tradePoint.name,
+      status: goal.goalStatus,
+      priority: goal.priority,
+      dueDate: goal.dueDate,
+      progressText: `${goal.completedModelsCount}/${goal.targetModelsCount}`,
+      completedModelsCount: goal.completedModelsCount,
+      targetModelsCount: goal.targetModelsCount,
+      href: `/sales/showcase-goals/${goal.id}`,
+    }));
+
+  const salesTasks: SalesTaskWorkspaceItem[] = managerSalesTasks
+    .slice()
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+    .map((task) => ({
+      id: task.id,
+      title: task.title,
+      dealerId: task.dealerId,
+      dealerName: task.dealer.name,
+      tradePointName: task.tradePoint?.name ?? undefined,
+      taskType: task.taskType,
+      status: isSalesTaskOverdue(task) ? "overdue" : task.taskStatus,
+      priority: task.priority,
+      dueDate: task.dueDate,
+      showcaseGoalId: task.showcaseGoalId ?? undefined,
+      href: task.showcaseGoalId ? `/sales/showcase-goals/${task.showcaseGoalId}` : "/sales/tasks",
+    }));
+
+  const overdueItems: ManagerOverdueItem[] = [
+    ...managerSalesTasks.filter((task) => isSalesTaskOverdue(task)).map((task) => ({
+      id: `sales-task-${task.id}`,
+      type: "sales_task" as const,
+      title: task.title,
+      dealerName: task.dealer.name,
+      dueDate: task.dueDate,
+      severity: severityByPriority(task.priority as "low" | "medium" | "high"),
+      href: task.showcaseGoalId ? `/sales/showcase-goals/${task.showcaseGoalId}` : "/sales/tasks",
+    })),
+    ...activeGoals
+      .filter((goal) => goal.goalStatus === "overdue")
+      .map((goal) => ({
+        id: `showcase-goal-${goal.id}`,
+        type: "showcase_goal" as const,
+        title: goal.title,
+        dealerName: goal.dealer.name,
+        dueDate: goal.dueDate,
+        severity: severityByPriority(goal.priority as "low" | "medium" | "high"),
+        href: `/sales/showcase-goals/${goal.id}`,
+      })),
+    ...managerDealerTasks.filter((task) => isDealerTaskOverdue(task)).map((task) => ({
+      id: `dealer-follow-up-${task.id}`,
+      type: "dealer_follow_up" as const,
+      title: task.title,
+      dealerName: dealerListItemById(task.dealerId)?.name ?? `Дилер #${task.dealerId}`,
+      dueDate: task.dueDate,
+      severity: severityByPriority(task.priority as "low" | "medium" | "high"),
+      href: `/dealers/${task.dealerId}`,
+    })),
+  ].sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+
+  const staleDealers: StaleDealerItem[] = assignedDealers
+    .map((dealer) => {
+      const interactionDate = dealer.lastInteractionDate ? Date.parse(dealer.lastInteractionDate) : NaN;
+      const daysWithoutActivity = Number.isNaN(interactionDate)
+        ? 999
+        : Math.max(0, Math.floor((now - interactionDate) / dayMs));
+      return {
+        dealerId: dealer.dealerId,
+        dealerName: dealer.dealerName,
+        city: dealer.city,
+        lastInteractionDate: dealer.lastInteractionDate,
+        daysWithoutActivity,
+        riskReason:
+          daysWithoutActivity >= 14
+            ? "Длительное отсутствие контакта с дилером."
+            : "Нужна регулярная фиксация активности по дилеру.",
+        nextAction:
+          daysWithoutActivity >= 14
+            ? "Назначить звонок и обновить план действий по дилеру."
+            : "Провести короткий follow-up и зафиксировать результат.",
+        href: dealer.href,
+      };
+    })
+    .filter((dealer) => dealer.daysWithoutActivity >= 7)
+    .sort((a, b) => b.daysWithoutActivity - a.daysWithoutActivity);
+
+  const regionalSignals: RegionalSignalItem[] = [
+    ...routeVisitsSeed
+      .filter((visit) => managerDealerIds.has(visit.dealerId))
+      .map((visit) => {
+        const dealer = dealersSeed.find((entry) => entry.id === visit.dealerId);
+        const tradePoint = tradePointsSeed.find((entry) => entry.id === visit.tradePointId);
+        const route = regionalRoutesSeed.find((entry) => entry.id === visit.routeId);
+        return {
+          id: `visit-${visit.id}`,
+          sourceType: "visit" as const,
+          dealerId: visit.dealerId,
+          dealerName: dealer?.name ?? `Дилер #${visit.dealerId}`,
+          tradePointName: tradePoint?.name ?? "Торговая точка",
+          title: `Визит РМ: ${visit.plannedTime}`,
+          summary: visit.comment ?? "РМ оставил сигнал после визита.",
+          createdAt:
+            visit.completedAt ??
+            visit.startedAt ??
+            `${route?.routeDate ?? todayIso}T${visit.plannedTime}:00.000Z`,
+          priority: visit.priority as RegionalSignalItem["priority"],
+          href: `/regional-manager/visits/${visit.id}`,
+        };
+      }),
+    ...distributionReportsSeed
+      .filter((report) => managerDealerIds.has(report.dealerId))
+      .map((report) => {
+        const dealer = dealersSeed.find((entry) => entry.id === report.dealerId);
+        const tradePoint = tradePointsSeed.find((entry) => entry.id === report.tradePointId);
+        return {
+          id: `distribution-report-${report.id}`,
+          sourceType: "distribution_report" as const,
+          dealerId: report.dealerId,
+          dealerName: dealer?.name ?? `Дилер #${report.dealerId}`,
+          tradePointName: tradePoint?.name ?? "Торговая точка",
+          title: "Отчет дистрибуции требует действий",
+          summary: report.recommendation,
+          createdAt: report.submittedAt ?? report.createdAt,
+          priority: (report.missingModelsCount > 0 ? "high" : "medium") as RegionalSignalItem["priority"],
+          href: `/regional-manager/visits/${report.visitId}`,
+        };
+      }),
+    ...distributionReportItemsSeed
+      .filter((item) => item.isOnShowcase === 0)
+      .slice(0, 4)
+      .map((item) => {
+        const report = distributionReportsSeed.find((entry) => entry.id === item.reportId);
+        const dealer = report ? dealersSeed.find((entry) => entry.id === report.dealerId) : undefined;
+        const tradePoint = report
+          ? tradePointsSeed.find((entry) => entry.id === report.tradePointId)
+          : undefined;
+        return {
+          id: `showcase-gap-${item.id}`,
+          sourceType: "showcase_gap" as const,
+          dealerId: report?.dealerId ?? 0,
+          dealerName: dealer?.name ?? "Дилер",
+          tradePointName: tradePoint?.name ?? "Торговая точка",
+          title: "Пробел в витрине по модели",
+          summary: `${item.modelName} не выставлена на витрине (${item.sku}).`,
+          createdAt: report?.createdAt ?? todayIso,
+          priority: "high" as const,
+          href: report ? `/regional-manager/visits/${report.visitId}` : "/sales/showcase-goals",
+        };
+      })
+      .filter((signal) => signal.dealerId !== 0 && managerDealerIds.has(signal.dealerId)),
+    ...dealerInteractionsSeed
+      .filter(
+        (interaction) =>
+          managerDealerIds.has(interaction.dealerId) && interaction.roleContext === "regional_manager",
+      )
+      .map((interaction) => {
+        const dealer = dealersSeed.find((entry) => entry.id === interaction.dealerId);
+        const tradePoint = interaction.tradePointId
+          ? tradePointsSeed.find((entry) => entry.id === interaction.tradePointId)
+          : undefined;
+        return {
+          id: `interaction-${interaction.id}`,
+          sourceType: "comment" as const,
+          dealerId: interaction.dealerId,
+          dealerName: dealer?.name ?? `Дилер #${interaction.dealerId}`,
+          tradePointName: tradePoint?.name ?? "Торговая точка",
+          title: "Комментарий регионального менеджера",
+          summary: interaction.summary,
+          createdAt: interaction.createdAt,
+          priority: "medium" as const,
+          href: `/dealers/${interaction.dealerId}`,
+        };
+      }),
+  ]
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 10);
+
+  const highPriorityItemsCount =
+    activeGoals.filter((goal) => goal.priority === "high").length +
+    managerSalesTasks.filter((task) => isSalesTaskOpen(task) && task.priority === "high").length +
+    managerDealerTasks.filter((task) => isDealerTaskOpen(task) && task.priority === "high").length;
+
+  return {
+    status: 200,
+    body: {
+      manager: {
+        id: manager.id,
+        name: `${manager.firstName} ${manager.lastName}`,
+        role: "Менеджер продаж",
+        team: "Команда Юг",
+        region: managerDealers[0]?.region ?? "Краснодарский край",
+        email: manager.email,
+        phone: manager.phone ?? "Не указан",
+      },
+      kpis: {
+        assignedDealersCount: managerDealers.length,
+        activeGoalsCount: activeGoals.length,
+        activeTasksCount:
+          managerSalesTasks.filter((task) => isSalesTaskOpen(task)).length +
+          managerDealerTasks.filter((task) => isDealerTaskOpen(task)).length,
+        overdueTasksCount: overdueItems.length,
+        todayTasksCount: todayFocus.length,
+        highPriorityItemsCount,
+        dealersWithoutRecentActivityCount: staleDealers.length,
+        openOrdersCount,
+      },
+      todayFocus,
+      assignedDealers,
+      activeShowcaseGoals,
+      salesTasks,
+      overdueItems,
+      staleDealers,
+      regionalSignals,
+      quickActions: [
+        {
+          title: "Открыть цели по витринам",
+          description: "Перейти к активным целям по дилерам и торговым точкам.",
+          href: "/sales/showcase-goals",
+          actionType: "open_showcase_goals",
+        },
+        {
+          title: "Открыть задачи продаж",
+          description: "Контроль статусов задач и быстрый переход к просрочкам.",
+          href: "/sales/tasks",
+          actionType: "open_sales_tasks",
+        },
+        {
+          title: "Открыть клиентскую базу",
+          description: "Проверить карточки закрепленных дилеров и их активность.",
+          href: "/dealers",
+          actionType: "open_dealers",
+        },
+        {
+          title: "Открыть панель руководителя",
+          description: "Сверить фокус менеджера с управленческим контуром.",
+          href: "/sales/leadership",
+          actionType: "open_leadership",
+        },
+        {
+          title: "Открыть маршрут РМ",
+          description: "Посмотреть сигналы от регионального менеджера по визитам.",
+          href: "/regional-manager/route",
+          actionType: "open_regional_route",
+        },
+      ],
+    } satisfies SalesManagerWorkspace,
+  };
+}
+
 function getSalesTaskByIdRoute(rawId: string): ApiResult {
   const id = parseIdParam(rawId);
   if (id == null) return { status: 400, body: { message: "ID задачи должен быть числом" } };
@@ -2509,6 +3101,9 @@ function routeApiRequest(method: string, pathname: string, body: unknown): ApiRe
   }
   if (upperMethod === "GET" && normalized === "/api/sales/leadership-dashboard") {
     return getSalesLeadershipDashboardRoute();
+  }
+  if (upperMethod === "GET" && normalized === "/api/sales/manager-workspace") {
+    return getSalesManagerWorkspaceRoute();
   }
   const salesTaskDetailMatch = /^\/api\/sales\/tasks\/(\d+)$/.exec(normalized);
   if (upperMethod === "GET" && salesTaskDetailMatch) {

@@ -420,6 +420,149 @@ export interface SalesLeadershipDashboard {
   nextActions: LeadershipNextAction[];
 }
 
+export interface SalesManagerProfile {
+  id: number;
+  name: string;
+  role: string;
+  team: string;
+  region: string;
+  email: string;
+  phone: string;
+}
+
+export interface SalesManagerWorkspaceKpis {
+  assignedDealersCount: number;
+  activeGoalsCount: number;
+  activeTasksCount: number;
+  overdueTasksCount: number;
+  todayTasksCount: number;
+  highPriorityItemsCount: number;
+  dealersWithoutRecentActivityCount: number;
+  openOrdersCount: number;
+}
+
+export interface TodayFocusItem {
+  id: string;
+  type:
+    | "call_dealer"
+    | "showcase_goal"
+    | "prepare_offer"
+    | "follow_up"
+    | "check_order"
+    | "assistant_task";
+  title: string;
+  dealerId: number;
+  dealerName: string;
+  tradePointName?: string;
+  priority: "low" | "medium" | "high";
+  dueTime?: string;
+  dueDate: string;
+  source: "showcase_goal" | "regional_report" | "manual" | "order" | "leadership";
+  href: string;
+  status: "new" | "in_progress" | "waiting_dealer" | "done" | "overdue";
+}
+
+export interface AssignedDealerWorkspaceItem {
+  dealerId: number;
+  dealerName: string;
+  dealerType: string;
+  city: string;
+  region: string;
+  segment: string;
+  potentialLevel: string;
+  status: string;
+  tradePointCount: number;
+  activeGoalsCount: number;
+  activeTasksCount: number;
+  overdueTasksCount: number;
+  lastInteractionDate: string | null;
+  nextAction: string;
+  href: string;
+}
+
+export interface ActiveShowcaseGoalWorkspaceItem {
+  id: number;
+  title: string;
+  dealerId: number;
+  dealerName: string;
+  tradePointName: string;
+  status: ShowcaseGoal["goalStatus"];
+  priority: ShowcaseGoal["priority"];
+  dueDate: string;
+  progressText: string;
+  completedModelsCount: number;
+  targetModelsCount: number;
+  href: string;
+}
+
+export interface SalesTaskWorkspaceItem {
+  id: number;
+  title: string;
+  dealerId: number;
+  dealerName: string;
+  tradePointName?: string;
+  taskType: SalesTask["taskType"];
+  status: SalesTask["taskStatus"];
+  priority: SalesTask["priority"];
+  dueDate: string;
+  showcaseGoalId?: number;
+  href: string;
+}
+
+export interface ManagerOverdueItem {
+  id: string;
+  type: "sales_task" | "showcase_goal" | "dealer_follow_up";
+  title: string;
+  dealerName: string;
+  dueDate: string;
+  severity: "medium" | "high" | "critical";
+  href: string;
+}
+
+export interface StaleDealerItem {
+  dealerId: number;
+  dealerName: string;
+  city: string;
+  lastInteractionDate: string | null;
+  daysWithoutActivity: number;
+  riskReason: string;
+  nextAction: string;
+  href: string;
+}
+
+export interface RegionalSignalItem {
+  id: string;
+  sourceType: "visit" | "distribution_report" | "showcase_gap" | "comment";
+  dealerId: number;
+  dealerName: string;
+  tradePointName: string;
+  title: string;
+  summary: string;
+  createdAt: string;
+  priority: "low" | "medium" | "high";
+  href: string;
+}
+
+export interface ManagerQuickAction {
+  title: string;
+  description: string;
+  href: string;
+  actionType: string;
+}
+
+export interface SalesManagerWorkspace {
+  manager: SalesManagerProfile;
+  kpis: SalesManagerWorkspaceKpis;
+  todayFocus: TodayFocusItem[];
+  assignedDealers: AssignedDealerWorkspaceItem[];
+  activeShowcaseGoals: ActiveShowcaseGoalWorkspaceItem[];
+  salesTasks: SalesTaskWorkspaceItem[];
+  overdueItems: ManagerOverdueItem[];
+  staleDealers: StaleDealerItem[];
+  regionalSignals: RegionalSignalItem[];
+  quickActions: ManagerQuickAction[];
+}
+
 export interface ShowcaseGoalStatusUpdateResponse {
   success: true;
   goal: ShowcaseGoalListItem;

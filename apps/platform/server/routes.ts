@@ -21,6 +21,7 @@ import {
   getSalesShowcaseGoalById,
   getSalesShowcaseGoals,
   getSalesLeadershipDashboard,
+  getSalesManagerWorkspace,
   getSalesTaskById,
   getSalesTasks,
   saveRegionalVisitDistributionDraft,
@@ -123,6 +124,9 @@ export async function registerRoutes(
   app.get("/api/sales/tasks", async (_req, res) => send(res, await getSalesTasks()));
   app.get("/api/sales/leadership-dashboard", async (_req, res) =>
     send(res, await getSalesLeadershipDashboard()),
+  );
+  app.get("/api/sales/manager-workspace", async (_req, res) =>
+    send(res, await getSalesManagerWorkspace()),
   );
   app.get("/api/sales/tasks/:id", async (req: Request, res) => {
     const raw = req.params.id;

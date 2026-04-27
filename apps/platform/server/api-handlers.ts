@@ -259,6 +259,10 @@ export async function getSalesLeadershipDashboard(): Promise<ApiResult> {
   return { status: 200, body: await storage.getSalesLeadershipDashboard() };
 }
 
+export async function getSalesManagerWorkspace(): Promise<ApiResult> {
+  return { status: 200, body: await storage.getSalesManagerWorkspace() };
+}
+
 export async function getSalesTaskById(rawId: string): Promise<ApiResult> {
   const id = parseIdParam(rawId);
   if (id == null) {
@@ -498,6 +502,9 @@ export async function routeApiRequest(
   }
   if (upperMethod === "GET" && normalized === "/api/sales/leadership-dashboard") {
     return getSalesLeadershipDashboard();
+  }
+  if (upperMethod === "GET" && normalized === "/api/sales/manager-workspace") {
+    return getSalesManagerWorkspace();
   }
   const salesTaskDetailMatch = /^\/api\/sales\/tasks\/(\d+)$/.exec(normalized);
   if (upperMethod === "GET" && salesTaskDetailMatch) {

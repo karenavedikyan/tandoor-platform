@@ -313,6 +313,59 @@ export function severityLabel(value: string): string {
   return map[value] ?? value;
 }
 
+export function todayFocusTypeLabel(value: string): string {
+  const map: Record<string, string> = {
+    call_dealer: "Звонок дилеру",
+    showcase_goal: "Цель по витрине",
+    prepare_offer: "Подготовка КП",
+    follow_up: "Контроль выполнения",
+    check_order: "Проверка заказа",
+    assistant_task: "Задача ассистенту",
+  };
+  return map[value] ?? value;
+}
+
+export function todayFocusSourceLabel(value: string): string {
+  const map: Record<string, string> = {
+    showcase_goal: "Цель по витрине",
+    regional_report: "Сигнал РМ / отчет",
+    manual: "Ручная постановка",
+    order: "Заказ",
+    leadership: "Управленческий контур",
+  };
+  return map[value] ?? value;
+}
+
+export function managerOverdueTypeLabel(value: string): string {
+  const map: Record<string, string> = {
+    sales_task: "Задача продаж",
+    showcase_goal: "Цель по витрине",
+    dealer_follow_up: "Follow-up по дилеру",
+  };
+  return map[value] ?? value;
+}
+
+export function regionalSignalTypeLabel(value: string): string {
+  const map: Record<string, string> = {
+    visit: "Визит РМ",
+    distribution_report: "Отчет дистрибуции",
+    showcase_gap: "Пробел витрины",
+    comment: "Комментарий РМ",
+  };
+  return map[value] ?? value;
+}
+
+export function quickActionTypeLabel(value: string): string {
+  const map: Record<string, string> = {
+    open_showcase_goals: "Цели по витринам",
+    open_sales_tasks: "Задачи продаж",
+    open_dealers: "Клиентская база",
+    open_leadership: "Панель руководителя",
+    open_regional_route: "Маршрут РМ",
+  };
+  return map[value] ?? value;
+}
+
 export function priorityLabel(value: string): string {
   return taskPriorityLabel(value);
 }

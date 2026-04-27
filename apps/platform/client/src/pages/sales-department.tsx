@@ -3,6 +3,7 @@ import {
   ArrowRightCircle,
   BarChart3,
   BriefcaseBusiness,
+  ClipboardList,
   ClipboardCheck,
   Clock3,
   FlagTriangleRight,
@@ -334,6 +335,37 @@ export default function SalesDepartmentPage() {
         </CardContent>
       </Card>
 
+      <Card
+        className="rounded-2xl border-border/80 shadow-sm"
+        data-testid="section-sales-manager-workspace-entry"
+      >
+        <CardHeader>
+          <CardTitle className="text-lg font-bold uppercase tracking-wide">
+            Рабочий стол менеджера
+          </CardTitle>
+          <CardDescription>
+            Ежедневный фокус менеджера продаж: дилеры, задачи, цели по витринам, просрочки и
+            сигналы от РМ.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-[14px] border border-border/80 bg-[#f5f5f5] p-3 text-sm text-muted-foreground">
+            Операционный экран менеджера продаж с фокусом на ежедневные действия, follow-up по
+            дилерам и обработку сигналов после визитов регионального менеджера.
+          </div>
+          <Button
+            asChild
+            className="h-11 justify-between rounded-xl"
+            data-testid="button-open-sales-manager-workspace"
+          >
+            <Link href="/sales/manager-workspace">
+              Открыть рабочий стол
+              <ClipboardList className="h-4 w-4" />
+            </Link>
+          </Button>
+        </CardContent>
+      </Card>
+
       <Card className="rounded-2xl border-border/80 shadow-sm">
         <CardHeader>
           <CardTitle className="text-lg font-bold uppercase tracking-wide">Быстрые действия</CardTitle>
@@ -376,6 +408,17 @@ export default function SalesDepartmentPage() {
           >
             <Link href="/sales/tasks">
               Задачи продаж
+              <ArrowRightCircle className="h-4 w-4" />
+            </Link>
+          </Button>
+          <Button
+            asChild
+            variant="outline"
+            className="h-11 justify-between rounded-xl bg-white"
+            data-testid="button-quick-sales-manager-workspace"
+          >
+            <Link href="/sales/manager-workspace">
+              Рабочий стол менеджера
               <ArrowRightCircle className="h-4 w-4" />
             </Link>
           </Button>

@@ -17,6 +17,7 @@ import ActivityPage from "@/pages/activity";
 import ArchitecturePage from "@/pages/architecture";
 import SalesDepartmentPage from "@/pages/sales-department";
 import SalesLeadershipDashboardPage from "@/pages/sales-leadership-dashboard";
+import SalesManagerWorkspacePage from "@/pages/sales-manager-workspace";
 import RegionalManagerRoutePage from "@/pages/regional-manager-route";
 import RegionalManagerVisitPage from "@/pages/regional-manager-visit";
 import ShowcaseGoalsPage from "@/pages/showcase-goals";
@@ -39,6 +40,7 @@ function AppRouter() {
         <Route path="/activity" component={ActivityPage} />
         <Route path="/architecture" component={ArchitecturePage} />
         <Route path="/sales-department" component={SalesDepartmentPage} />
+        <Route path="/sales/manager-workspace" component={SalesManagerWorkspacePage} />
         <Route path="/sales/leadership" component={SalesLeadershipDashboardPage} />
         <Route path="/sales/showcase-goals" component={ShowcaseGoalsPage} />
         <Route path="/sales/showcase-goals/:id" component={ShowcaseGoalDetailPage} />
