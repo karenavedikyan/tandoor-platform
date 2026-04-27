@@ -265,6 +265,54 @@ export function salesTaskStatusLabel(value: string): string {
   return map[value] ?? value;
 }
 
+export function leadershipRoleLabel(value: string): string {
+  const map: Record<string, string> = {
+    sales_head: "Руководитель отдела продаж",
+    team_head: "Руководитель команды",
+    regional_head: "Руководитель региональных менеджеров",
+    sales_manager: "Менеджер продаж",
+    regional_manager: "Региональный менеджер",
+    sales_assistant: "Ассистент продаж",
+  };
+  return map[value] ?? value;
+}
+
+export function workloadStatusLabel(value: string): string {
+  const map: Record<string, string> = {
+    normal: "Норма",
+    high: "Высокая",
+    overloaded: "Перегрузка",
+  };
+  return map[value] ?? value;
+}
+
+export function riskLevelLabel(value: string): string {
+  const map: Record<string, string> = {
+    medium: "Средний",
+    high: "Высокий",
+    critical: "Критический",
+  };
+  return map[value] ?? value;
+}
+
+export function overdueItemTypeLabel(value: string): string {
+  const map: Record<string, string> = {
+    showcase_goal: "Цель по витрине",
+    sales_task: "Задача продаж",
+    visit_follow_up: "Контроль после визита",
+  };
+  return map[value] ?? value;
+}
+
+export function severityLabel(value: string): string {
+  const map: Record<string, string> = {
+    medium: "Средний",
+    high: "Высокий",
+    critical: "Критический",
+  };
+  return map[value] ?? value;
+}
+
 export function priorityLabel(value: string): string {
   return taskPriorityLabel(value);
 }

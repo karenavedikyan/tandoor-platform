@@ -1,6 +1,7 @@
 import { Link } from "wouter";
 import {
   ArrowRightCircle,
+  BarChart3,
   BriefcaseBusiness,
   ClipboardCheck,
   Clock3,
@@ -302,6 +303,37 @@ export default function SalesDepartmentPage() {
         </CardContent>
       </Card>
 
+      <Card
+        className="rounded-2xl border-border/80 shadow-sm"
+        data-testid="section-sales-leadership-entry"
+      >
+        <CardHeader>
+          <CardTitle className="text-lg font-bold uppercase tracking-wide">
+            Управленческий контроль
+          </CardTitle>
+          <CardDescription>
+            Сводная панель для руководителя отдела продаж: цели, задачи, маршруты РМ, рисковые
+            дилеры и просрочки.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-[14px] border border-border/80 bg-[#f5f5f5] p-3 text-sm text-muted-foreground">
+            Управленческая панель объединяет KPI по дилерам, активности РМ, нагрузке команды,
+            просрочкам и зонам риска для принятия быстрых решений.
+          </div>
+          <Button
+            asChild
+            className="h-11 justify-between rounded-xl"
+            data-testid="button-open-sales-leadership"
+          >
+            <Link href="/sales/leadership">
+              Панель руководителя
+              <BarChart3 className="h-4 w-4" />
+            </Link>
+          </Button>
+        </CardContent>
+      </Card>
+
       <Card className="rounded-2xl border-border/80 shadow-sm">
         <CardHeader>
           <CardTitle className="text-lg font-bold uppercase tracking-wide">Быстрые действия</CardTitle>
@@ -344,6 +376,17 @@ export default function SalesDepartmentPage() {
           >
             <Link href="/sales/tasks">
               Задачи продаж
+              <ArrowRightCircle className="h-4 w-4" />
+            </Link>
+          </Button>
+          <Button
+            asChild
+            variant="outline"
+            className="h-11 justify-between rounded-xl bg-white"
+            data-testid="button-quick-sales-leadership"
+          >
+            <Link href="/sales/leadership">
+              Панель руководителя
               <ArrowRightCircle className="h-4 w-4" />
             </Link>
           </Button>

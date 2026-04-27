@@ -316,6 +316,110 @@ export interface SalesTaskDetail {
   showcaseGoal: ShowcaseGoalListItem | null;
 }
 
+export interface SalesLeadershipKpis {
+  dealersTotal: number;
+  tradePointsTotal: number;
+  visitsPlanned: number;
+  visitsCompleted: number;
+  distributionReportsSubmitted: number;
+  showcaseGoalsTotal: number;
+  showcaseGoalsCompleted: number;
+  salesTasksTotal: number;
+  salesTasksOverdue: number;
+  atRiskDealersCount: number;
+}
+
+export interface SalesLeadershipRoleSummary {
+  role: "sales_head" | "team_head" | "regional_head";
+  title: string;
+  ownerName: string;
+  focus: string;
+  mainMetrics: string[];
+  actionLabel: string;
+  actionHref: string;
+}
+
+export interface TeamWorkloadItem {
+  userId: number;
+  name: string;
+  role:
+    | "sales_head"
+    | "team_head"
+    | "regional_head"
+    | "sales_manager"
+    | "regional_manager"
+    | "sales_assistant";
+  team: string;
+  activeGoalsCount: number;
+  activeTasksCount: number;
+  overdueTasksCount: number;
+  visitsCount: number;
+  reportsCount: number;
+  workloadStatus: "normal" | "high" | "overloaded";
+  nextFocus: string;
+}
+
+export interface ShowcaseGoalPipelineItem {
+  status: "new" | "in_progress" | "agreed" | "completed" | "overdue";
+  label: string;
+  count: number;
+  colorTone: string;
+}
+
+export interface RegionalActivitySummary {
+  routesToday: number;
+  visitsToday: number;
+  completedVisits: number;
+  inProgressVisits: number;
+  reportsCreated: number;
+  reportsSubmitted: number;
+  nextVisitTitle: string;
+  nextVisitTime: string;
+  linkToRoute: string;
+}
+
+export interface AtRiskDealer {
+  dealerId: number;
+  dealerName: string;
+  tradePointId?: number;
+  tradePointName?: string;
+  city: string;
+  riskReason: string;
+  riskLevel: "medium" | "high" | "critical";
+  responsibleName: string;
+  lastAction: string;
+  nextAction: string;
+  actionHref: string;
+}
+
+export interface OverdueLeadershipItem {
+  id: string;
+  type: "showcase_goal" | "sales_task" | "visit_follow_up";
+  title: string;
+  ownerName: string;
+  dueDate: string;
+  severity: "medium" | "high" | "critical";
+  href: string;
+}
+
+export interface LeadershipNextAction {
+  title: string;
+  description: string;
+  href: string;
+  priority: "low" | "medium" | "high";
+}
+
+export interface SalesLeadershipDashboard {
+  kpis: SalesLeadershipKpis;
+  roleSummaries: SalesLeadershipRoleSummary[];
+  teamWorkload: TeamWorkloadItem[];
+  showcaseGoalPipeline: ShowcaseGoalPipelineItem[];
+  regionalActivity: RegionalActivitySummary;
+  atRiskDealers: AtRiskDealer[];
+  overdueItems: OverdueLeadershipItem[];
+  nextActions: LeadershipNextAction[];
+}
+
 export interface ShowcaseGoalStatusUpdateResponse {
   success: true;
   goal: ShowcaseGoalListItem;

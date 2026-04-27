@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   Activity,
+  BarChart3,
   BriefcaseBusiness,
   Boxes,
   Building2,
@@ -38,6 +39,7 @@ type NavItem = {
 const navItems: NavItem[] = [
   { label: "Дашборд", path: "/", icon: LayoutDashboard },
   { label: "ЛК отдела продаж", path: "/sales-department", icon: BriefcaseBusiness },
+  { label: "Панель продаж", path: "/sales/leadership", icon: BarChart3 },
   { label: "Маршрут РМ", path: "/regional-manager/route", icon: MapPinned },
   { label: "Цели по витринам", path: "/sales/showcase-goals", icon: ClipboardCheck },
   { label: "Задачи продаж", path: "/sales/tasks", icon: ListTodo },
@@ -76,6 +78,8 @@ function SidebarNav({
             data-testid={
               item.path === "/sales-department"
                 ? "nav-sales-department"
+                : item.path === "/sales/leadership"
+                  ? "nav-sales-leadership"
                 : item.path === "/regional-manager/route"
                   ? "nav-regional-manager-route"
                   : item.path === "/sales/showcase-goals"

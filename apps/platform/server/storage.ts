@@ -149,6 +149,110 @@ export type SalesTaskDetail = {
   showcaseGoal: ShowcaseGoalListItem | null;
 };
 
+export type SalesLeadershipKpis = {
+  dealersTotal: number;
+  tradePointsTotal: number;
+  visitsPlanned: number;
+  visitsCompleted: number;
+  distributionReportsSubmitted: number;
+  showcaseGoalsTotal: number;
+  showcaseGoalsCompleted: number;
+  salesTasksTotal: number;
+  salesTasksOverdue: number;
+  atRiskDealersCount: number;
+};
+
+export type SalesLeadershipRoleSummary = {
+  role: "sales_head" | "team_head" | "regional_head";
+  title: string;
+  ownerName: string;
+  focus: string;
+  mainMetrics: string[];
+  actionLabel: string;
+  actionHref: string;
+};
+
+export type TeamWorkloadItem = {
+  userId: number;
+  name: string;
+  role:
+    | "sales_head"
+    | "team_head"
+    | "regional_head"
+    | "sales_manager"
+    | "regional_manager"
+    | "sales_assistant";
+  team: string;
+  activeGoalsCount: number;
+  activeTasksCount: number;
+  overdueTasksCount: number;
+  visitsCount: number;
+  reportsCount: number;
+  workloadStatus: "normal" | "high" | "overloaded";
+  nextFocus: string;
+};
+
+export type ShowcaseGoalPipelineItem = {
+  status: "new" | "in_progress" | "agreed" | "completed" | "overdue";
+  label: string;
+  count: number;
+  colorTone: string;
+};
+
+export type RegionalActivitySummary = {
+  routesToday: number;
+  visitsToday: number;
+  completedVisits: number;
+  inProgressVisits: number;
+  reportsCreated: number;
+  reportsSubmitted: number;
+  nextVisitTitle: string;
+  nextVisitTime: string;
+  linkToRoute: string;
+};
+
+export type AtRiskDealer = {
+  dealerId: number;
+  dealerName: string;
+  tradePointId?: number;
+  tradePointName?: string;
+  city: string;
+  riskReason: string;
+  riskLevel: "medium" | "high" | "critical";
+  responsibleName: string;
+  lastAction: string;
+  nextAction: string;
+  actionHref: string;
+};
+
+export type OverdueLeadershipItem = {
+  id: string;
+  type: "showcase_goal" | "sales_task" | "visit_follow_up";
+  title: string;
+  ownerName: string;
+  dueDate: string;
+  severity: "medium" | "high" | "critical";
+  href: string;
+};
+
+export type LeadershipNextAction = {
+  title: string;
+  description: string;
+  href: string;
+  priority: "low" | "medium" | "high";
+};
+
+export type SalesLeadershipDashboard = {
+  kpis: SalesLeadershipKpis;
+  roleSummaries: SalesLeadershipRoleSummary[];
+  teamWorkload: TeamWorkloadItem[];
+  showcaseGoalPipeline: ShowcaseGoalPipelineItem[];
+  regionalActivity: RegionalActivitySummary;
+  atRiskDealers: AtRiskDealer[];
+  overdueItems: OverdueLeadershipItem[];
+  nextActions: LeadershipNextAction[];
+};
+
 export class StorageError extends Error {
   constructor(
     public status: number,
@@ -202,6 +306,7 @@ export interface IStorage {
   createShowcaseGoalFromDistributionReport(
     visitId: number,
   ): Promise<{ success: true; message: string; goal: ShowcaseGoalListItem }>;
+  getSalesLeadershipDashboard(): Promise<SalesLeadershipDashboard>;
 }
 
 const organizationsSeed: Organization[] = [
@@ -2195,6 +2300,389 @@ export class DatabaseStorage implements IStorage {
       success: true,
       message: "Цель по витрине сформирована и передана менеджеру продаж.",
       goal: toShowcaseGoalListItem(newGoal),
+    };
+  }
+
+  async getSalesLeadershipDashboard(): Promise<SalesLeadershipDashboard> {
+    const now = Date.now();
+    const goals = showcaseGoalsSeed.map((goal) => toShowcaseGoalListItem(goal));
+    const salesTasks = salesTasksSeed.map((task) => toSalesTaskListItem(task));
+    const todayIso = new Date().toISOString().slice(0, 10);
+
+    const mapPriorityToSeverity = (priority: string): OverdueLeadershipItem["severity"] => {
+      if (priority === "high") {
+        return "critical";
+      }
+      if (priority === "medium") {
+        return "high";
+      }
+      return "medium";
+    };
+
+    const isSalesTaskOverdue = (task: SalesTask): boolean => {
+      if (task.taskStatus === "done" || task.taskStatus === "cancelled") {
+        return false;
+      }
+      if (task.taskStatus === "overdue") {
+        return true;
+      }
+      const dueDate = Date.parse(task.dueDate);
+      return !Number.isNaN(dueDate) && dueDate < now;
+    };
+
+    const isDealerTaskOverdue = (task: DealerTask): boolean => {
+      if (task.status === "done" || task.status === "rejected") {
+        return false;
+      }
+      if (task.status === "overdue") {
+        return true;
+      }
+      const dueDate = Date.parse(task.dueDate);
+      return !Number.isNaN(dueDate) && dueDate < now;
+    };
+
+    const todayRoutes = regionalRoutesSeed.filter((route) => route.routeDate === todayIso);
+    const todayRouteIds = new Set(todayRoutes.map((route) => route.id));
+    const todayVisits = routeVisitsSeed.filter((visit) => todayRouteIds.has(visit.routeId));
+    const reportsCreatedToday = distributionReportsSeed.filter((report) => {
+      const visit = routeVisitsSeed.find((entry) => entry.id === report.visitId);
+      if (!visit) {
+        return false;
+      }
+      return todayRouteIds.has(visit.routeId);
+    });
+
+    const nextVisit =
+      todayVisits
+        .filter((visit) => visit.visitStatus === "planned")
+        .sort((a, b) => a.plannedTime.localeCompare(b.plannedTime))[0] ??
+      routeVisitsSeed
+        .filter((visit) => visit.visitStatus === "planned")
+        .sort((a, b) => a.plannedTime.localeCompare(b.plannedTime))[0];
+    const nextVisitDealer = nextVisit
+      ? dealersSeed.find((dealer) => dealer.id === nextVisit.dealerId)
+      : null;
+    const nextVisitTradePoint = nextVisit
+      ? tradePointsSeed.find((tradePoint) => tradePoint.id === nextVisit.tradePointId)
+      : null;
+
+    const teamProfiles: Array<{
+      userId: number;
+      role: TeamWorkloadItem["role"];
+      team: string;
+      nextFocus: string;
+    }> = [
+      {
+        userId: 5,
+        role: "sales_manager",
+        team: "Команда Юг / продажи",
+        nextFocus: "Закрыть согласования по целям витрин и снять блокеры дилеров.",
+      },
+      {
+        userId: 7,
+        role: "regional_manager",
+        team: "Команда Юг / региональные менеджеры",
+        nextFocus: "Дозакрыть визиты маршрута и передать отчеты в отдел продаж.",
+      },
+      {
+        userId: 6,
+        role: "sales_assistant",
+        team: "Команда Юг / поддержка продаж",
+        nextFocus: "Подготовить POSM и документы по витринным задачам.",
+      },
+      {
+        userId: 3,
+        role: "team_head",
+        team: "Команда Юг / управление",
+        nextFocus: "Перераспределить просроченные задачи после визитов между менеджерами.",
+      },
+      {
+        userId: 4,
+        role: "regional_head",
+        team: "Руководство РМ / Юг",
+        nextFocus: "Проверить качество отчетов РМ и назначить повторные проверки.",
+      },
+    ];
+
+    const teamWorkload: TeamWorkloadItem[] = teamProfiles.map((profile) => {
+      const user = getUserById(profile.userId);
+      const activeGoalsCount = goals.filter(
+        (goal) =>
+          goal.assignedToUserId === profile.userId &&
+          goal.goalStatus !== "completed" &&
+          goal.goalStatus !== "rejected",
+      ).length;
+      const activeSalesTasks = salesTasksSeed.filter(
+        (task) =>
+          task.assignedToUserId === profile.userId &&
+          task.taskStatus !== "done" &&
+          task.taskStatus !== "cancelled",
+      );
+      const activeDealerTasks = dealerTasksSeed.filter(
+        (task) =>
+          task.assignedToUserId === profile.userId &&
+          task.status !== "done" &&
+          task.status !== "rejected",
+      );
+      const overdueTasksCount =
+        activeSalesTasks.filter((task) => isSalesTaskOverdue(task)).length +
+        activeDealerTasks.filter((task) => isDealerTaskOverdue(task)).length;
+      const visitsCount = routeVisitsSeed.filter((visit) => {
+        const route = regionalRoutesSeed.find((entry) => entry.id === visit.routeId);
+        return route?.regionalManagerId === profile.userId;
+      }).length;
+      const reportsCount = distributionReportsSeed.filter(
+        (report) => report.regionalManagerId === profile.userId,
+      ).length;
+      const loadScore =
+        activeGoalsCount +
+        activeSalesTasks.length +
+        activeDealerTasks.length +
+        overdueTasksCount * 2 +
+        (profile.role === "regional_manager" ? visitsCount : 0);
+      const workloadStatus: TeamWorkloadItem["workloadStatus"] =
+        loadScore >= 10 ? "overloaded" : loadScore >= 6 ? "high" : "normal";
+      return {
+        userId: profile.userId,
+        name: user ? `${user.firstName} ${user.lastName}` : `Сотрудник #${profile.userId}`,
+        role: profile.role,
+        team: profile.team,
+        activeGoalsCount,
+        activeTasksCount: activeSalesTasks.length + activeDealerTasks.length,
+        overdueTasksCount,
+        visitsCount,
+        reportsCount,
+        workloadStatus,
+        nextFocus: profile.nextFocus,
+      };
+    });
+
+    const atRiskDealers: AtRiskDealer[] = [
+      {
+        dealerId: 2,
+        dealerName: "Салон дверей Северный",
+        tradePointId: 4,
+        tradePointName: "Салон дверей Северный",
+        city: "Краснодар",
+        riskReason:
+          "Нет базовой витрины Tandoor: цель новая, требуется согласование и фиксация ответственных.",
+        riskLevel: "critical",
+        responsibleName: "Анна Кравченко",
+        lastAction:
+          dealerInteractionsSeed
+            .filter((interaction) => interaction.dealerId === 2)
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]?.summary ??
+          "Последнее действие не зафиксировано.",
+        nextAction: "Провести звонок с дилером и зафиксировать сроки по базовой матрице.",
+        actionHref: "/dealers/2",
+      },
+      {
+        dealerId: 1,
+        dealerName: "Дверной Дом Юг",
+        tradePointId: 2,
+        tradePointName: "Дверной Дом Юг — Анапа",
+        city: "Анапа",
+        riskReason:
+          "Отчет дистрибуции получен, но POSM-материалы и часть витрины в Анапе не обновлены.",
+        riskLevel: "high",
+        responsibleName: "Сергей Волков",
+        lastAction:
+          dealerInteractionsSeed
+            .filter((interaction) => interaction.dealerId === 1)
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]?.summary ??
+          "Последнее действие не зафиксировано.",
+        nextAction: "Подтвердить поставку POSM и назначить повторную проверку РМ.",
+        actionHref: "/dealers/1",
+      },
+      {
+        dealerId: 3,
+        dealerName: "Дом дверей Сочи",
+        tradePointId: 5,
+        tradePointName: "Дом дверей Сочи",
+        city: "Сочи",
+        riskReason: "Сезонные модели выставлены частично, есть риск потери сезонного спроса.",
+        riskLevel: "medium",
+        responsibleName: "Анна Кравченко",
+        lastAction:
+          dealerInteractionsSeed
+            .filter((interaction) => interaction.dealerId === 3)
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]?.summary ??
+          "Последнее действие не зафиксировано.",
+        nextAction: "Ускорить согласование поставки сезонных моделей и обновить витрину.",
+        actionHref: "/dealers/3",
+      },
+    ];
+
+    const overdueGoalItems: OverdueLeadershipItem[] = goals
+      .filter((goal) => goal.goalStatus === "overdue")
+      .map((goal) => ({
+        id: `showcase-goal-${goal.id}`,
+        type: "showcase_goal" as const,
+        title: goal.title,
+        ownerName: goal.assignedTo
+          ? `${goal.assignedTo.firstName} ${goal.assignedTo.lastName}`
+          : "Не назначен",
+        dueDate: goal.dueDate,
+        severity: mapPriorityToSeverity(goal.priority),
+        href: `/sales/showcase-goals/${goal.id}`,
+      }));
+
+    const overdueSalesTaskItems: OverdueLeadershipItem[] = salesTasks
+      .filter((task) => isSalesTaskOverdue(task))
+      .map((task) => ({
+        id: `sales-task-${task.id}`,
+        type: "sales_task" as const,
+        title: task.title,
+        ownerName: task.assignedTo
+          ? `${task.assignedTo.firstName} ${task.assignedTo.lastName}`
+          : "Не назначен",
+        dueDate: task.dueDate,
+        severity: mapPriorityToSeverity(task.priority),
+        href: "/sales/tasks",
+      }));
+
+    const overdueFollowUps: OverdueLeadershipItem[] = dealerTasksSeed
+      .filter((task) => isDealerTaskOverdue(task))
+      .map((task) => ({
+        id: `dealer-task-${task.id}`,
+        type: task.type === "showcase_goal" ? "showcase_goal" : ("visit_follow_up" as const),
+        title: task.title,
+        ownerName: userNameById(task.assignedToUserId),
+        dueDate: task.dueDate,
+        severity: mapPriorityToSeverity(task.priority),
+        href: task.type === "showcase_goal" ? "/sales/showcase-goals" : `/dealers/${task.dealerId}`,
+      }));
+
+    const overdueItems = [...overdueGoalItems, ...overdueSalesTaskItems, ...overdueFollowUps].sort(
+      (a, b) => a.dueDate.localeCompare(b.dueDate),
+    );
+
+    const showcaseGoalPipelineTemplate: Array<
+      Pick<ShowcaseGoalPipelineItem, "status" | "label" | "colorTone">
+    > = [
+      { status: "new", label: "Новые", colorTone: "lime" },
+      { status: "in_progress", label: "В работе", colorTone: "amber" },
+      { status: "agreed", label: "Согласованы", colorTone: "sky" },
+      { status: "completed", label: "Выполнены", colorTone: "emerald" },
+      { status: "overdue", label: "Просрочены", colorTone: "rose" },
+    ];
+    const showcaseGoalPipeline: ShowcaseGoalPipelineItem[] = showcaseGoalPipelineTemplate.map((item) => ({
+      ...item,
+      count: goals.filter((goal) => goal.goalStatus === item.status).length,
+    }));
+
+    const regionalActivity: RegionalActivitySummary = {
+      routesToday: todayRoutes.length,
+      visitsToday: todayVisits.length,
+      completedVisits: todayVisits.filter((visit) => visit.visitStatus === "completed").length,
+      inProgressVisits: todayVisits.filter((visit) => visit.visitStatus === "in_progress").length,
+      reportsCreated: reportsCreatedToday.length,
+      reportsSubmitted: reportsCreatedToday.filter(
+        (report) => report.reportStatus === "submitted" || report.reportStatus === "reviewed",
+      ).length,
+      nextVisitTitle: nextVisit
+        ? `${nextVisitDealer?.name ?? "Дилер"} — ${nextVisitTradePoint?.name ?? "Торговая точка"}`
+        : "Нет запланированных визитов",
+      nextVisitTime: nextVisit?.plannedTime ?? "—",
+      linkToRoute: "/regional-manager/route",
+    };
+
+    const activeGoalsCount = goals.filter(
+      (goal) =>
+        goal.goalStatus === "new" ||
+        goal.goalStatus === "in_progress" ||
+        goal.goalStatus === "agreed" ||
+        goal.goalStatus === "overdue",
+    ).length;
+    const salesTasksOverdue = salesTasks.filter((task) => isSalesTaskOverdue(task)).length;
+
+    return {
+      kpis: {
+        dealersTotal: dealersSeed.length,
+        tradePointsTotal: tradePointsSeed.length,
+        visitsPlanned: routeVisitsSeed.length,
+        visitsCompleted: routeVisitsSeed.filter((visit) => visit.visitStatus === "completed").length,
+        distributionReportsSubmitted: distributionReportsSeed.filter(
+          (report) => report.reportStatus === "submitted" || report.reportStatus === "reviewed",
+        ).length,
+        showcaseGoalsTotal: goals.length,
+        showcaseGoalsCompleted: goals.filter((goal) => goal.goalStatus === "completed").length,
+        salesTasksTotal: salesTasks.length,
+        salesTasksOverdue,
+        atRiskDealersCount: atRiskDealers.length,
+      },
+      roleSummaries: [
+        {
+          role: "sales_head",
+          title: "Руководитель отдела продаж",
+          ownerName: "Ольга Соколова",
+          focus: "Выполнение целей по витринам, просрочки, дилеры в зоне риска.",
+          mainMetrics: [
+            `Цели в работе: ${activeGoalsCount}`,
+            `Просроченные задачи продаж: ${salesTasksOverdue}`,
+            `Дилеры с высоким потенциалом: ${dealersSeed.filter((dealer) => dealer.potentialLevel === "high").length}`,
+          ],
+          actionLabel: "Открыть контроль просрочек",
+          actionHref: "/sales/tasks",
+        },
+        {
+          role: "team_head",
+          title: "Руководитель команды",
+          ownerName: "Дмитрий Романов",
+          focus: "Баланс нагрузки сотрудников, снятие блокеров и контроль задач после визитов.",
+          mainMetrics: [
+            `Сотрудников в фокусе: ${teamWorkload.length}`,
+            `Задач в работе: ${salesTasks.filter((task) => task.taskStatus !== "done" && task.taskStatus !== "cancelled").length}`,
+            `Просрочки после визитов: ${overdueItems.filter((item) => item.type === "visit_follow_up").length}`,
+          ],
+          actionLabel: "Перейти к задачам команды",
+          actionHref: "/sales/tasks",
+        },
+        {
+          role: "regional_head",
+          title: "Руководитель региональных менеджеров",
+          ownerName: "Мария Лебедева",
+          focus: "Маршруты РМ, закрытие визитов и своевременная отправка отчетов дистрибуции.",
+          mainMetrics: [
+            `Маршрутов сегодня: ${regionalActivity.routesToday}`,
+            `Визитов закрыто: ${regionalActivity.completedVisits}/${regionalActivity.visitsToday}`,
+            `Отчеты отправлены: ${regionalActivity.reportsSubmitted}`,
+          ],
+          actionLabel: "Открыть маршрут РМ",
+          actionHref: "/regional-manager/route",
+        },
+      ],
+      teamWorkload,
+      showcaseGoalPipeline,
+      regionalActivity,
+      atRiskDealers,
+      overdueItems,
+      nextActions: [
+        {
+          title: "Проверить просроченные задачи продаж",
+          description: `В контроле ${salesTasksOverdue} просроченных задач продаж, требуется перераспределение.`,
+          href: "/sales/tasks",
+          priority: "high",
+        },
+        {
+          title: "Открыть цели по витринам",
+          description: `Активных целей по витринам: ${activeGoalsCount}.`,
+          href: "/sales/showcase-goals",
+          priority: "high",
+        },
+        {
+          title: "Посмотреть маршрут регионального менеджера",
+          description: `Сегодня ${regionalActivity.visitsToday} визитов, следующий в ${regionalActivity.nextVisitTime}.`,
+          href: "/regional-manager/route",
+          priority: "medium",
+        },
+        {
+          title: "Связаться с ответственным менеджером по рисковым дилерам",
+          description: `Дилеров в зоне внимания: ${atRiskDealers.length}.`,
+          href: "/sales/leadership",
+          priority: "medium",
+        },
+      ],
     };
   }
 

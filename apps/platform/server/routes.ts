@@ -20,6 +20,7 @@ import {
   getRegionalVisitDistributionReport,
   getSalesShowcaseGoalById,
   getSalesShowcaseGoals,
+  getSalesLeadershipDashboard,
   getSalesTaskById,
   getSalesTasks,
   saveRegionalVisitDistributionDraft,
@@ -120,6 +121,9 @@ export async function registerRoutes(
     return send(res, await updateSalesShowcaseGoalStatus(id ?? "", req.body));
   });
   app.get("/api/sales/tasks", async (_req, res) => send(res, await getSalesTasks()));
+  app.get("/api/sales/leadership-dashboard", async (_req, res) =>
+    send(res, await getSalesLeadershipDashboard()),
+  );
   app.get("/api/sales/tasks/:id", async (req: Request, res) => {
     const raw = req.params.id;
     const id = Array.isArray(raw) ? raw[0] : raw;
