@@ -16,6 +16,8 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    target: ["es2020", "edge90", "firefox90", "chrome90", "safari14.1"],
+    cssTarget: ["edge90", "firefox90", "chrome90", "safari14.1"],
   },
   server: {
     fs: {
