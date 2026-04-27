@@ -21,6 +21,24 @@ const createOrderRequestSchema = z.object({
     .min(1),
 });
 
+const distributionReportItemSchema = z.object({
+  productId: z.number().int().positive(),
+  isPresent: z.boolean(),
+  isOnShowcase: z.boolean(),
+  stockStatus: z.enum(["in_stock", "low_stock", "out_of_stock", "unknown"]),
+  comment: z.string().trim().max(500).optional().nullable(),
+});
+
+const distributionReportPayloadSchema = z.object({
+  hasShowcase: z.boolean(),
+  showcaseDoorsCount: z.number().int().min(0),
+  displayQuality: z.enum(["excellent", "good", "average", "poor"]),
+  competitorPresence: z.enum(["none", "low", "medium", "high"]),
+  recommendation: z.string().trim().min(1),
+  nextAction: z.string().trim().min(1),
+  items: z.array(distributionReportItemSchema).min(1),
+});
+
 export async function getOrganizations(): Promise<ApiResult> {
   return { status: 200, body: await storage.listOrganizations() };
 }
@@ -88,6 +106,111 @@ export async function getDealerInteractions(dealerId: string): Promise<ApiResult
 
 export async function getProducts(): Promise<ApiResult> {
   return { status: 200, body: await storage.listProducts() };
+}
+
+export async function getRegionalRoutes(): Promise<ApiResult> {
+  return { status: 200, body: await storage.listRegionalRoutes() };
+}
+
+export async function getRegionalRouteById(rawId: string): Promise<ApiResult> {
+  const id = parseIdParam(rawId);
+  if (id == null) {
+    return { status: 400, body: { message: "ID маршрута должен быть числом" } };
+  }
+  const detail = await storage.getRegionalRouteById(id);
+  if (!detail) {
+    return { status: 404, body: { message: "Маршрут не найден" } };
+  }
+  return { status: 200, body: detail };
+}
+
+export async function getRegionalVisitById(rawId: string): Promise<ApiResult> {
+  const id = parseIdParam(rawId);
+  if (id == null) {
+    return { status: 400, body: { message: "ID визита должен быть числом" } };
+  }
+  const detail = await storage.getRegionalManagerVisitById(id);
+  if (!detail) {
+    return { status: 404, body: { message: "Визит не найден" } };
+  }
+  return { status: 200, body: detail };
+}
+
+export async function getRegionalVisitDistributionReport(rawId: string): Promise<ApiResult> {
+  const id = parseIdParam(rawId);
+  if (id == null) {
+    return { status: 400, body: { message: "ID визита должен быть числом" } };
+  }
+  const report = await storage.getDistributionReportByVisitId(id);
+  if (!report) {
+    return { status: 404, body: { message: "Отчет по визиту не найден" } };
+  }
+  return { status: 200, body: report };
+}
+
+export async function saveRegionalVisitDistributionDraft(
+  rawId: string,
+  body: unknown,
+): Promise<ApiResult> {
+  const id = parseIdParam(rawId);
+  if (id == null) {
+    return { status: 400, body: { message: "ID визита должен быть числом" } };
+  }
+  const parsed = distributionReportPayloadSchema.safeParse(body);
+  if (!parsed.success) {
+    return {
+      status: 400,
+      body: {
+        message: "Некорректные данные отчета",
+        issues: parsed.error.issues.map((issue) => ({
+          path: issue.path.join("."),
+          message: issue.message,
+        })),
+      },
+    };
+  }
+  try {
+    return { status: 200, body: await storage.saveDistributionReportDraft(id, parsed.data) };
+  } catch (error) {
+    if (error instanceof StorageError) {
+      return { status: error.status, body: { message: error.message } };
+    }
+    return { status: 500, body: { message: "Не удалось сохранить черновик отчета" } };
+  }
+}
+
+export async function submitRegionalVisitDistributionReport(
+  rawId: string,
+  body: unknown,
+): Promise<ApiResult> {
+  const id = parseIdParam(rawId);
+  if (id == null) {
+    return { status: 400, body: { message: "ID визита должен быть числом" } };
+  }
+  const parsed = distributionReportPayloadSchema.safeParse(body);
+  if (!parsed.success) {
+    return {
+      status: 400,
+      body: {
+        message: "Некорректные данные отчета",
+        issues: parsed.error.issues.map((issue) => ({
+          path: issue.path.join("."),
+          message: issue.message,
+        })),
+      },
+    };
+  }
+  try {
+    return {
+      status: 200,
+      body: await storage.submitDistributionReport(id, parsed.data),
+    };
+  } catch (error) {
+    if (error instanceof StorageError) {
+      return { status: error.status, body: { message: error.message } };
+    }
+    return { status: 500, body: { message: "Не удалось отправить отчет" } };
+  }
 }
 
 export async function getOrders(): Promise<ApiResult> {
@@ -187,6 +310,32 @@ export async function routeApiRequest(
   }
   if (upperMethod === "GET" && normalized === "/api/dealers") {
     return getDealers();
+  }
+  if (upperMethod === "GET" && normalized === "/api/regional-manager/routes") {
+    return getRegionalRoutes();
+  }
+  const regionalRouteDetailMatch = /^\/api\/regional-manager\/routes\/(\d+)$/.exec(normalized);
+  if (upperMethod === "GET" && regionalRouteDetailMatch) {
+    return getRegionalRouteById(regionalRouteDetailMatch[1]);
+  }
+  const regionalVisitMatch = /^\/api\/regional-manager\/visits\/(\d+)$/.exec(normalized);
+  if (upperMethod === "GET" && regionalVisitMatch) {
+    return getRegionalVisitById(regionalVisitMatch[1]);
+  }
+  const regionalVisitReportMatch =
+    /^\/api\/regional-manager\/visits\/(\d+)\/distribution-report$/.exec(normalized);
+  if (upperMethod === "GET" && regionalVisitReportMatch) {
+    return getRegionalVisitDistributionReport(regionalVisitReportMatch[1]);
+  }
+  const regionalVisitDraftMatch =
+    /^\/api\/regional-manager\/visits\/(\d+)\/distribution-report\/draft$/.exec(normalized);
+  if (upperMethod === "POST" && regionalVisitDraftMatch) {
+    return saveRegionalVisitDistributionDraft(regionalVisitDraftMatch[1], body);
+  }
+  const regionalVisitSubmitMatch =
+    /^\/api\/regional-manager\/visits\/(\d+)\/distribution-report\/submit$/.exec(normalized);
+  if (upperMethod === "POST" && regionalVisitSubmitMatch) {
+    return submitRegionalVisitDistributionReport(regionalVisitSubmitMatch[1], body);
   }
   const dealerDetailMatch = /^\/api\/dealers\/(\d+)$/.exec(normalized);
   if (upperMethod === "GET" && dealerDetailMatch) {

@@ -238,6 +238,104 @@ type OrderDetails = Order & {
   documents: Document[];
 };
 
+type RegionalRoute = {
+  id: number;
+  regionalManagerId: number;
+  routeDate: string;
+  title: string;
+  region: string;
+  status: "planned" | "in_progress" | "completed";
+  plannedVisitsCount: number;
+  completedVisitsCount: number;
+  createdAt: string;
+};
+
+type RouteVisit = {
+  id: number;
+  routeId: number;
+  dealerId: number;
+  tradePointId: number;
+  plannedTime: string;
+  visitStatus: "planned" | "in_progress" | "completed" | "skipped";
+  visitPurpose: "distribution_check" | "showcase_check" | "training" | "order_follow_up" | "claim_follow_up";
+  priority: "low" | "medium" | "high";
+  comment: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+};
+
+type DistributionReport = {
+  id: number;
+  visitId: number;
+  dealerId: number;
+  tradePointId: number;
+  regionalManagerId: number;
+  reportStatus: "draft" | "submitted" | "reviewed";
+  hasShowcase: 0 | 1;
+  showcaseDoorsCount: number;
+  totalModelsChecked: number;
+  presentModelsCount: number;
+  missingModelsCount: number;
+  displayQuality: "excellent" | "good" | "average" | "poor";
+  competitorPresence: "none" | "low" | "medium" | "high";
+  recommendation: string;
+  nextAction: string;
+  createdAt: string;
+  submittedAt: string | null;
+};
+
+type DistributionReportItem = {
+  id: number;
+  reportId: number;
+  productId: number;
+  modelName: string;
+  sku: string;
+  category: string;
+  isPresent: 0 | 1;
+  isOnShowcase: 0 | 1;
+  stockStatus: "in_stock" | "low_stock" | "out_of_stock" | "unknown";
+  comment: string | null;
+};
+
+type RouteVisitDetail = RouteVisit & {
+  dealer: DealerListItem;
+  tradePoint: TradePoint;
+};
+
+type RegionalRouteDetail = RegionalRoute & {
+  regionalManager: User;
+  visits: RouteVisitDetail[];
+  summary: {
+    planned: number;
+    completed: number;
+    inProgress: number;
+    skipped: number;
+  };
+};
+
+type DistributionReportResponse = {
+  report: DistributionReport;
+  items: DistributionReportItem[];
+  summary: {
+    totalModelsChecked: number;
+    presentModelsCount: number;
+    missingModelsCount: number;
+    showcaseModelsCount: number;
+  };
+};
+
+type VisitDetail = {
+  visit: RouteVisitDetail;
+  route: RegionalRoute;
+  dealer: DealerListItem;
+  tradePoint: TradePoint;
+  salesManager: User | null;
+  regionalManager: User | null;
+  activeTaskCount: number;
+  distributionReport: DistributionReportResponse | null;
+  productChecklist: DistributionReportItem[];
+};
+
 // ---------- Seed data (must stay in sync with server/storage.ts) ----------
 
 const organizationsSeed: Organization[] = [
@@ -331,6 +429,174 @@ const activityEventsSeed: ActivityEvent[] = [
   { id: 4, eventType: "order_status_changed", entityType: "order", entityId: 3, organizationId: 1, userId: 5, orderId: 3, claimId: null, message: "Заказ ORD-2026-0003 отгружен со склада.", createdAt: "2026-01-24T07:30:00.000Z" },
   { id: 5, eventType: "claim_created", entityType: "claim", entityId: 1, organizationId: 1, userId: 5, orderId: 3, claimId: 1, message: "Создана рекламация CLM-2026-001 по заказу ORD-2026-0003.", createdAt: "2026-01-25T11:10:00.000Z" },
   { id: 6, eventType: "claim_created", entityType: "claim", entityId: 2, organizationId: 1, userId: 5, orderId: null, claimId: 2, message: "Создана рекламация CLM-2026-002 без привязки к заказу.", createdAt: "2026-01-26T09:25:00.000Z" },
+];
+
+const regionalRoutesSeed: RegionalRoute[] = [
+  {
+    id: 1,
+    regionalManagerId: 7,
+    routeDate: "2026-04-27",
+    title: "Маршрут Юг / Краснодар",
+    region: "Краснодарский край",
+    status: "in_progress",
+    plannedVisitsCount: 5,
+    completedVisitsCount: 2,
+    createdAt: "2026-04-27T07:00:00.000Z",
+  },
+];
+
+const routeVisitsSeed: RouteVisit[] = [
+  {
+    id: 1,
+    routeId: 1,
+    dealerId: 1,
+    tradePointId: 1,
+    plannedTime: "09:30",
+    visitStatus: "completed",
+    visitPurpose: "distribution_check",
+    priority: "high",
+    comment: "Витрина в хорошем состоянии, есть пробелы по премиум-моделям.",
+    startedAt: "2026-04-27T09:35:00.000Z",
+    completedAt: "2026-04-27T10:20:00.000Z",
+  },
+  {
+    id: 2,
+    routeId: 1,
+    dealerId: 2,
+    tradePointId: 4,
+    plannedTime: "11:30",
+    visitStatus: "in_progress",
+    visitPurpose: "showcase_check",
+    priority: "high",
+    comment: "Идет фотофиксация выкладки и проверка POSM.",
+    startedAt: "2026-04-27T11:42:00.000Z",
+    completedAt: null,
+  },
+  {
+    id: 3,
+    routeId: 1,
+    dealerId: 1,
+    tradePointId: 2,
+    plannedTime: "14:30",
+    visitStatus: "planned",
+    visitPurpose: "distribution_check",
+    priority: "medium",
+    comment: "Проверка представленности ключевых моделей.",
+    startedAt: null,
+    completedAt: null,
+  },
+  {
+    id: 4,
+    routeId: 1,
+    dealerId: 1,
+    tradePointId: 3,
+    plannedTime: "16:30",
+    visitStatus: "planned",
+    visitPurpose: "training",
+    priority: "medium",
+    comment: "Короткое обучение консультантов по новой линейке.",
+    startedAt: null,
+    completedAt: null,
+  },
+  {
+    id: 5,
+    routeId: 1,
+    dealerId: 3,
+    tradePointId: 5,
+    plannedTime: "18:00",
+    visitStatus: "planned",
+    visitPurpose: "order_follow_up",
+    priority: "low",
+    comment: "Проверка статуса заказов и обновление приоритетов.",
+    startedAt: null,
+    completedAt: null,
+  },
+];
+
+const distributionReportsSeed: DistributionReport[] = [
+  {
+    id: 1,
+    visitId: 1,
+    dealerId: 1,
+    tradePointId: 1,
+    regionalManagerId: 7,
+    reportStatus: "draft",
+    hasShowcase: 1,
+    showcaseDoorsCount: 12,
+    totalModelsChecked: 8,
+    presentModelsCount: 5,
+    missingModelsCount: 3,
+    displayQuality: "good",
+    competitorPresence: "medium",
+    recommendation: "Усилить премиум-серию и обновить POSM.",
+    nextAction:
+      "Поставить цель менеджеру продаж: согласовать выставление 3 недостающих моделей.",
+    createdAt: "2026-04-27T10:25:00.000Z",
+    submittedAt: null,
+  },
+];
+
+const distributionReportItemsSeed: DistributionReportItem[] = [
+  {
+    id: 1,
+    reportId: 1,
+    productId: 1,
+    modelName: "Tandoor Classic 80",
+    sku: "TD-ENTRY-860-BLK",
+    category: "entry_door",
+    isPresent: 1,
+    isOnShowcase: 1,
+    stockStatus: "in_stock",
+    comment: "Стабильный спрос, модель стоит на центральной витрине.",
+  },
+  {
+    id: 2,
+    reportId: 1,
+    productId: 2,
+    modelName: "Tandoor Line 90",
+    sku: "TD-ENTRY-960-OAK",
+    category: "entry_door",
+    isPresent: 1,
+    isOnShowcase: 0,
+    stockStatus: "low_stock",
+    comment: "Есть в остатках, но не выставлена фронтально.",
+  },
+  {
+    id: 3,
+    reportId: 1,
+    productId: 3,
+    modelName: "Tandoor Premium 100",
+    sku: "TD-LINE-GLASS-WHT",
+    category: "interior_door",
+    isPresent: 0,
+    isOnShowcase: 0,
+    stockStatus: "out_of_stock",
+    comment: "Не представлена в торговом зале.",
+  },
+  {
+    id: 4,
+    reportId: 1,
+    productId: 5,
+    modelName: "Tandoor Loft Graphite",
+    sku: "TD-LOFT-880-GRN",
+    category: "entry_door",
+    isPresent: 1,
+    isOnShowcase: 1,
+    stockStatus: "low_stock",
+    comment: "Хорошая выкладка, нужна дозаявка.",
+  },
+  {
+    id: 5,
+    reportId: 1,
+    productId: 4,
+    modelName: "Tandoor Urban White",
+    sku: "TD-FIRE-900-MTL",
+    category: "fire_door",
+    isPresent: 0,
+    isOnShowcase: 0,
+    stockStatus: "unknown",
+    comment: "Данные по доступности уточняются с менеджером салона.",
+  },
 ];
 
 // Suppress "unused" warnings for the role/userRole shapes — kept for parity
@@ -503,6 +769,107 @@ function getDealerDetail(id: number): DealerDetail | undefined {
   };
 }
 
+function dealerListItemById(id: number): DealerListItem | undefined {
+  const dealer = dealersSeed.find((entry) => entry.id === id);
+  return dealer ? toDealerListItem(dealer) : undefined;
+}
+
+function routeVisitDetail(visit: RouteVisit): RouteVisitDetail | undefined {
+  const dealer = dealerListItemById(visit.dealerId);
+  const tradePoint = tradePointsSeed.find((point) => point.id === visit.tradePointId);
+  if (!dealer || !tradePoint) return undefined;
+  return {
+    ...visit,
+    dealer,
+    tradePoint,
+  };
+}
+
+function reportResponseForVisit(visitId: number): DistributionReportResponse | undefined {
+  const report = distributionReportsSeed.find((entry) => entry.visitId === visitId);
+  if (!report) return undefined;
+  const items = distributionReportItemsSeed
+    .filter((entry) => entry.reportId === report.id)
+    .sort((a, b) => a.id - b.id);
+  return {
+    report,
+    items,
+    summary: {
+      totalModelsChecked: report.totalModelsChecked,
+      presentModelsCount: report.presentModelsCount,
+      missingModelsCount: report.missingModelsCount,
+      showcaseModelsCount: items.filter((item) => item.isOnShowcase === 1).length,
+    },
+  };
+}
+
+function rebuildReportFromPayload(
+  existing: DistributionReport,
+  payload: DistributionReportPayload,
+  status: "draft" | "submitted",
+): DistributionReport {
+  const totalModelsChecked = payload.items.length;
+  const presentModelsCount = payload.items.filter((item) => item.isPresent).length;
+  const missingModelsCount = totalModelsChecked - presentModelsCount;
+  return {
+    ...existing,
+    reportStatus: status,
+    hasShowcase: payload.hasShowcase ? 1 : 0,
+    showcaseDoorsCount: payload.showcaseDoorsCount,
+    totalModelsChecked,
+    presentModelsCount,
+    missingModelsCount,
+    displayQuality: payload.displayQuality,
+    competitorPresence: payload.competitorPresence,
+    recommendation: payload.recommendation,
+    nextAction: payload.nextAction,
+    submittedAt: status === "submitted" ? new Date().toISOString() : null,
+  };
+}
+
+function applyReportItems(
+  reportId: number,
+  payloadItems: DistributionReportPayload["items"],
+): void {
+  for (let index = distributionReportItemsSeed.length - 1; index >= 0; index -= 1) {
+    if (distributionReportItemsSeed[index].reportId === reportId) {
+      distributionReportItemsSeed.splice(index, 1);
+    }
+  }
+  const nextIdStart = getNextId(distributionReportItemsSeed);
+  const normalizedItems: DistributionReportItem[] = payloadItems.map((item, idx) => {
+    const product = productsSeed.find((entry) => entry.id === item.productId);
+    return {
+      id: nextIdStart + idx,
+      reportId,
+      productId: item.productId,
+      modelName: product?.name ?? `Модель #${item.productId}`,
+      sku: product?.sku ?? "N/A",
+      category: product?.category ?? "unknown",
+      isPresent: item.isPresent ? 1 : 0,
+      isOnShowcase: item.isOnShowcase ? 1 : 0,
+      stockStatus: item.stockStatus,
+      comment: item.comment ?? null,
+    };
+  });
+  distributionReportItemsSeed.push(...normalizedItems);
+}
+
+function defaultChecklistItems(): DistributionReportItem[] {
+  return productsSeed.slice(0, 5).map((product, index) => ({
+    id: 10_000 + index + 1,
+    reportId: 0,
+    productId: product.id,
+    modelName: product.name,
+    sku: product.sku,
+    category: product.category,
+    isPresent: 0,
+    isOnShowcase: 0,
+    stockStatus: "unknown",
+    comment: null,
+  }));
+}
+
 const createOrderRequestSchema = z.object({
   dealerId: z.number().int().positive(),
   createdByUserId: z.number().int().positive().optional(),
@@ -512,6 +879,28 @@ const createOrderRequestSchema = z.object({
     .array(z.object({ productId: z.number().int().positive(), quantity: z.number().int() }))
     .min(1),
 });
+
+const distributionReportPayloadSchema = z.object({
+  hasShowcase: z.boolean(),
+  showcaseDoorsCount: z.number().int().min(0),
+  displayQuality: z.enum(["excellent", "good", "average", "poor"]),
+  competitorPresence: z.enum(["none", "low", "medium", "high"]),
+  recommendation: z.string().trim().min(1),
+  nextAction: z.string().trim().min(1),
+  items: z
+    .array(
+      z.object({
+        productId: z.number().int().positive(),
+        isPresent: z.boolean(),
+        isOnShowcase: z.boolean(),
+        stockStatus: z.enum(["in_stock", "low_stock", "out_of_stock", "unknown"]),
+        comment: z.string().trim().max(500).optional().nullable(),
+      }),
+    )
+    .min(1),
+});
+
+type DistributionReportPayload = z.infer<typeof distributionReportPayloadSchema>;
 
 type ApiResult = { status: number; body: unknown };
 
@@ -566,6 +955,209 @@ function listOrders(): ApiResult {
 function listClaims(): ApiResult { return { status: 200, body: claimsSeed }; }
 function listActivity(): ApiResult {
   return { status: 200, body: [...activityEventsSeed].sort((a, b) => b.createdAt.localeCompare(a.createdAt)) };
+}
+
+function parseIdParam(raw: string): number | null {
+  const id = Number.parseInt(raw, 10);
+  return Number.isNaN(id) ? null : id;
+}
+
+function getRegionalRoutesRoute(): ApiResult {
+  return {
+    status: 200,
+    body: regionalRoutesSeed.slice().sort((a, b) => a.routeDate.localeCompare(b.routeDate)),
+  };
+}
+
+function getRegionalRouteByIdRoute(rawId: string): ApiResult {
+  const id = parseIdParam(rawId);
+  if (id == null) return { status: 400, body: { message: "ID маршрута должен быть числом" } };
+  const route = regionalRoutesSeed.find((entry) => entry.id === id);
+  if (!route) return { status: 404, body: { message: "Маршрут не найден" } };
+  const regionalManager = usersSeed.find((entry) => entry.id === route.regionalManagerId);
+  if (!regionalManager) return { status: 404, body: { message: "Региональный менеджер не найден" } };
+  const visits = routeVisitsSeed
+    .filter((visit) => visit.routeId === route.id)
+    .map(routeVisitDetail)
+    .filter((entry): entry is RouteVisitDetail => Boolean(entry))
+    .sort((a, b) => a.plannedTime.localeCompare(b.plannedTime));
+  const detail: RegionalRouteDetail = {
+    ...route,
+    regionalManager,
+    visits,
+    summary: {
+      planned: visits.filter((visit) => visit.visitStatus === "planned").length,
+      completed: visits.filter((visit) => visit.visitStatus === "completed").length,
+      inProgress: visits.filter((visit) => visit.visitStatus === "in_progress").length,
+      skipped: visits.filter((visit) => visit.visitStatus === "skipped").length,
+    },
+  };
+  return { status: 200, body: detail };
+}
+
+function getRegionalVisitByIdRoute(rawId: string): ApiResult {
+  const id = parseIdParam(rawId);
+  if (id == null) return { status: 400, body: { message: "ID визита должен быть числом" } };
+  const visit = routeVisitsSeed.find((entry) => entry.id === id);
+  if (!visit) return { status: 404, body: { message: "Визит не найден" } };
+  const detailedVisit = routeVisitDetail(visit);
+  if (!detailedVisit) return { status: 404, body: { message: "Визит не найден" } };
+  const route = regionalRoutesSeed.find((entry) => entry.id === visit.routeId);
+  if (!route) return { status: 404, body: { message: "Маршрут не найден" } };
+  const dealer = detailedVisit.dealer;
+  const distributionReport = reportResponseForVisit(id) ?? null;
+  const detail: VisitDetail = {
+    visit: detailedVisit,
+    route,
+    dealer,
+    tradePoint: detailedVisit.tradePoint,
+    salesManager: usersSeed.find((entry) => entry.id === dealer.salesManagerId) ?? null,
+    regionalManager: usersSeed.find((entry) => entry.id === dealer.regionalManagerId) ?? null,
+    activeTaskCount: dealer.activeTaskCount,
+    distributionReport,
+    productChecklist: distributionReport?.items ?? defaultChecklistItems(),
+  };
+  return { status: 200, body: detail };
+}
+
+function getRegionalVisitDistributionReportRoute(rawId: string): ApiResult {
+  const id = parseIdParam(rawId);
+  if (id == null) return { status: 400, body: { message: "ID визита должен быть числом" } };
+  const visit = routeVisitsSeed.find((entry) => entry.id === id);
+  if (!visit) return { status: 404, body: { message: "Визит не найден" } };
+  const existing = reportResponseForVisit(id);
+  if (existing) return { status: 200, body: existing };
+  return {
+    status: 200,
+    body: {
+      report: {
+        id: 0,
+        visitId: id,
+        dealerId: visit.dealerId,
+        tradePointId: visit.tradePointId,
+        regionalManagerId: regionalRoutesSeed.find((entry) => entry.id === visit.routeId)?.regionalManagerId ?? 7,
+        reportStatus: "draft",
+        hasShowcase: 0,
+        showcaseDoorsCount: 0,
+        totalModelsChecked: 0,
+        presentModelsCount: 0,
+        missingModelsCount: 0,
+        displayQuality: "average",
+        competitorPresence: "none",
+        recommendation: "",
+        nextAction: "",
+        createdAt: new Date().toISOString(),
+        submittedAt: null,
+      },
+      items: defaultChecklistItems(),
+      summary: {
+        totalModelsChecked: 0,
+        presentModelsCount: 0,
+        missingModelsCount: 0,
+        showcaseModelsCount: 0,
+      },
+    } satisfies DistributionReportResponse,
+  };
+}
+
+function saveRegionalVisitDistributionDraftRoute(rawId: string, body: unknown): ApiResult {
+  const id = parseIdParam(rawId);
+  if (id == null) return { status: 400, body: { message: "ID визита должен быть числом" } };
+  const parsed = distributionReportPayloadSchema.safeParse(body);
+  if (!parsed.success) {
+    return {
+      status: 400,
+      body: {
+        message: "Некорректные данные отчета",
+        issues: parsed.error.issues.map((issue) => ({ path: issue.path.join("."), message: issue.message })),
+      },
+    };
+  }
+  const visit = routeVisitsSeed.find((entry) => entry.id === id);
+  if (!visit) return { status: 404, body: { message: "Визит не найден" } };
+  if (parsed.data.items.length === 0) return { status: 422, body: { message: "Список моделей для отчета пуст" } };
+  const route = regionalRoutesSeed.find((entry) => entry.id === visit.routeId);
+  if (!route) return { status: 404, body: { message: "Маршрут не найден" } };
+  const existing = distributionReportsSeed.find((entry) => entry.visitId === id);
+  const now = new Date().toISOString();
+  const baseReport: DistributionReport = existing ?? {
+    id: getNextId(distributionReportsSeed),
+    visitId: id,
+    dealerId: visit.dealerId,
+    tradePointId: visit.tradePointId,
+    regionalManagerId: route.regionalManagerId,
+    reportStatus: "draft",
+    hasShowcase: 0,
+    showcaseDoorsCount: 0,
+    totalModelsChecked: 0,
+    presentModelsCount: 0,
+    missingModelsCount: 0,
+    displayQuality: "average",
+    competitorPresence: "none",
+    recommendation: "",
+    nextAction: "",
+    createdAt: now,
+    submittedAt: null,
+  };
+  const rebuilt = rebuildReportFromPayload(baseReport, parsed.data, "draft");
+  if (existing) {
+    const index = distributionReportsSeed.findIndex((entry) => entry.id === existing.id);
+    distributionReportsSeed[index] = rebuilt;
+  } else {
+    distributionReportsSeed.push(rebuilt);
+  }
+  applyReportItems(rebuilt.id, parsed.data.items);
+  const report = reportResponseForVisit(id);
+  if (!report) return { status: 500, body: { message: "Не удалось подготовить ответ по отчету" } };
+  return { status: 200, body: { success: true, report } };
+}
+
+function submitRegionalVisitDistributionReportRoute(rawId: string, body: unknown): ApiResult {
+  const draftResponse = saveRegionalVisitDistributionDraftRoute(rawId, body);
+  if (draftResponse.status !== 200) return draftResponse;
+
+  const id = parseIdParam(rawId);
+  if (id == null) return { status: 400, body: { message: "ID визита должен быть числом" } };
+  const parsed = distributionReportPayloadSchema.safeParse(body);
+  if (!parsed.success) {
+    return {
+      status: 400,
+      body: {
+        message: "Некорректные данные отчета",
+        issues: parsed.error.issues.map((issue) => ({ path: issue.path.join("."), message: issue.message })),
+      },
+    };
+  }
+
+  const report = distributionReportsSeed.find((entry) => entry.visitId === id);
+  if (!report) return { status: 500, body: { message: "Отчет не найден" } };
+
+  const submitted = rebuildReportFromPayload(report, parsed.data, "submitted");
+  const reportIndex = distributionReportsSeed.findIndex((entry) => entry.id === report.id);
+  distributionReportsSeed[reportIndex] = submitted;
+  const visit = routeVisitsSeed.find((entry) => entry.id === id);
+  if (visit) {
+    visit.visitStatus = "completed";
+    visit.completedAt = new Date().toISOString();
+  }
+  const route = visit ? regionalRoutesSeed.find((entry) => entry.id === visit.routeId) : undefined;
+  if (route) {
+    route.completedVisitsCount = routeVisitsSeed.filter(
+      (entry) => entry.routeId === route.id && entry.visitStatus === "completed",
+    ).length;
+    if (route.completedVisitsCount >= route.plannedVisitsCount) route.status = "completed";
+  }
+  const response = reportResponseForVisit(id);
+  if (!response) return { status: 500, body: { message: "Не удалось подготовить ответ по отчету" } };
+
+  return {
+    status: 200,
+    body: {
+      success: true,
+      message: "Отчет дистрибуции отправлен. На его основании будут сформированы цели по витрине.",
+      report: response,
+    },
+  };
 }
 
 function getOrderByIdRoute(rawId: string): ApiResult {
@@ -690,6 +1282,17 @@ function routeApiRequest(method: string, pathname: string, body: unknown): ApiRe
   if (upperMethod === "GET" && normalized === "/api/organizations") return listOrganizations();
   if (upperMethod === "GET" && normalized === "/api/users") return listUsers();
   if (upperMethod === "GET" && normalized === "/api/dealers") return listDealers();
+  if (upperMethod === "GET" && normalized === "/api/regional-manager/routes") return getRegionalRoutesRoute();
+  const regionalRouteMatch = /^\/api\/regional-manager\/routes\/(\d+)$/.exec(normalized);
+  if (upperMethod === "GET" && regionalRouteMatch) return getRegionalRouteByIdRoute(regionalRouteMatch[1]);
+  const regionalVisitMatch = /^\/api\/regional-manager\/visits\/(\d+)$/.exec(normalized);
+  if (upperMethod === "GET" && regionalVisitMatch) return getRegionalVisitByIdRoute(regionalVisitMatch[1]);
+  const regionalVisitReportMatch = /^\/api\/regional-manager\/visits\/(\d+)\/distribution-report$/.exec(normalized);
+  if (upperMethod === "GET" && regionalVisitReportMatch) return getRegionalVisitDistributionReportRoute(regionalVisitReportMatch[1]);
+  const regionalVisitDraftMatch = /^\/api\/regional-manager\/visits\/(\d+)\/distribution-report\/draft$/.exec(normalized);
+  if (upperMethod === "POST" && regionalVisitDraftMatch) return saveRegionalVisitDistributionDraftRoute(regionalVisitDraftMatch[1], body);
+  const regionalVisitSubmitMatch = /^\/api\/regional-manager\/visits\/(\d+)\/distribution-report\/submit$/.exec(normalized);
+  if (upperMethod === "POST" && regionalVisitSubmitMatch) return submitRegionalVisitDistributionReportRoute(regionalVisitSubmitMatch[1], body);
   const dealerTradeMatch = /^\/api\/dealers\/(\d+)\/trade-points$/.exec(normalized);
   if (upperMethod === "GET" && dealerTradeMatch) return getDealerTradePointsRoute(dealerTradeMatch[1]);
   const dealerTasksMatch = /^\/api\/dealers\/(\d+)\/tasks$/.exec(normalized);

@@ -137,6 +137,120 @@ export interface DealerInteractionWithUser extends DealerInteraction {
   userName: string;
 }
 
+export interface RegionalRoute {
+  id: number;
+  regionalManagerId: number;
+  routeDate: string;
+  title: string;
+  region: string;
+  status: "planned" | "in_progress" | "completed";
+  plannedVisitsCount: number;
+  completedVisitsCount: number;
+  createdAt: string;
+}
+
+export interface RouteVisit {
+  id: number;
+  routeId: number;
+  dealerId: number;
+  tradePointId: number;
+  plannedTime: string;
+  visitStatus: "planned" | "in_progress" | "completed" | "skipped";
+  visitPurpose: "distribution_check" | "showcase_check" | "training" | "order_follow_up" | "claim_follow_up";
+  priority: "low" | "medium" | "high";
+  comment: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
+export interface RouteVisitDetail extends RouteVisit {
+  dealer: DealerListItem;
+  tradePoint: TradePoint;
+}
+
+export interface RegionalRouteDetail extends RegionalRoute {
+  regionalManager: User;
+  visits: RouteVisitDetail[];
+  summary: {
+    planned: number;
+    completed: number;
+    inProgress: number;
+    skipped: number;
+  };
+}
+
+export interface DistributionReport {
+  id: number;
+  visitId: number;
+  dealerId: number;
+  tradePointId: number;
+  regionalManagerId: number;
+  reportStatus: "draft" | "submitted" | "reviewed";
+  hasShowcase: 0 | 1;
+  showcaseDoorsCount: number;
+  totalModelsChecked: number;
+  presentModelsCount: number;
+  missingModelsCount: number;
+  displayQuality: "excellent" | "good" | "average" | "poor";
+  competitorPresence: "none" | "low" | "medium" | "high";
+  recommendation: string;
+  nextAction: string;
+  createdAt: string;
+  submittedAt: string | null;
+}
+
+export interface DistributionReportItem {
+  id: number;
+  reportId: number;
+  productId: number;
+  modelName: string;
+  sku: string;
+  category: string;
+  isPresent: 0 | 1;
+  isOnShowcase: 0 | 1;
+  stockStatus: "in_stock" | "low_stock" | "out_of_stock" | "unknown";
+  comment: string | null;
+}
+
+export interface DistributionReportResponse {
+  report: DistributionReport;
+  items: DistributionReportItem[];
+  summary: {
+    totalModelsChecked: number;
+    presentModelsCount: number;
+    missingModelsCount: number;
+    showcaseModelsCount: number;
+  };
+}
+
+export interface DistributionReportPayload {
+  hasShowcase: boolean;
+  showcaseDoorsCount: number;
+  displayQuality: "excellent" | "good" | "average" | "poor";
+  competitorPresence: "none" | "low" | "medium" | "high";
+  recommendation: string;
+  nextAction: string;
+  items: Array<{
+    productId: number;
+    isPresent: boolean;
+    isOnShowcase: boolean;
+    stockStatus: "in_stock" | "low_stock" | "out_of_stock" | "unknown";
+    comment?: string | null;
+  }>;
+}
+
+export interface VisitDetail {
+  visit: RouteVisitDetail;
+  route: RegionalRoute;
+  dealer: DealerListItem;
+  tradePoint: TradePoint;
+  salesManager: User | null;
+  regionalManager: User | null;
+  activeTaskCount: number;
+  distributionReport: DistributionReportResponse | null;
+  productChecklist: DistributionReportItem[];
+}
+
 export interface Product {
   id: number;
   sku: string;

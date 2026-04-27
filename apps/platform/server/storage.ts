@@ -4,12 +4,16 @@ import type {
   Dealer,
   DealerInteraction,
   DealerTask,
+  DistributionReport,
+  DistributionReportItem,
   Document,
   Order,
   OrderItem,
   Organization,
   Product,
+  RegionalRoute,
   Role,
+  RouteVisit,
   TradePoint,
   User,
   UserRole,
@@ -39,6 +43,61 @@ export type CreateOrderInput = {
   comment?: string;
 };
 
+export type RouteVisitDetail = RouteVisit & {
+  dealer: DealerListItem;
+  tradePoint: TradePoint;
+};
+
+export type RegionalRouteDetail = RegionalRoute & {
+  regionalManager: User;
+  visits: RouteVisitDetail[];
+  summary: {
+    planned: number;
+    completed: number;
+    inProgress: number;
+    skipped: number;
+  };
+};
+
+export type DistributionReportResponse = {
+  report: DistributionReport;
+  items: DistributionReportItem[];
+  summary: {
+    totalModelsChecked: number;
+    presentModelsCount: number;
+    missingModelsCount: number;
+    showcaseModelsCount: number;
+  };
+};
+
+export type VisitDetail = {
+  visit: RouteVisitDetail;
+  route: RegionalRoute;
+  dealer: DealerListItem;
+  tradePoint: TradePoint;
+  salesManager: User | null;
+  regionalManager: User | null;
+  activeTaskCount: number;
+  distributionReport: DistributionReportResponse | null;
+  productChecklist: DistributionReportItem[];
+};
+
+export type DemoDistributionReportPayload = {
+  hasShowcase: boolean;
+  showcaseDoorsCount: number;
+  displayQuality: string;
+  competitorPresence: string;
+  recommendation: string;
+  nextAction: string;
+  items: Array<{
+    productId: number;
+    isPresent: boolean;
+    isOnShowcase: boolean;
+    stockStatus: string;
+    comment?: string | null;
+  }>;
+};
+
 export class StorageError extends Error {
   constructor(
     public status: number,
@@ -65,6 +124,18 @@ export interface IStorage {
   createOrder(input: CreateOrderInput): Promise<OrderDetails>;
   listClaims(): Promise<Claim[]>;
   listActivityEvents(): Promise<ActivityEvent[]>;
+  listRegionalRoutes(): Promise<RegionalRoute[]>;
+  getRegionalRouteById(id: number): Promise<RegionalRouteDetail | undefined>;
+  getRegionalManagerVisitById(id: number): Promise<VisitDetail | undefined>;
+  getDistributionReportByVisitId(visitId: number): Promise<DistributionReportResponse | undefined>;
+  saveDistributionReportDraft(
+    visitId: number,
+    payload: DemoDistributionReportPayload,
+  ): Promise<{ success: true; report: DistributionReportResponse }>;
+  submitDistributionReport(
+    visitId: number,
+    payload: DemoDistributionReportPayload,
+  ): Promise<{ success: true; message: string; report: DistributionReportResponse }>;
 }
 
 const organizationsSeed: Organization[] = [
@@ -873,6 +944,174 @@ const activityEventsSeed: ActivityEvent[] = [
   },
 ];
 
+const regionalRoutesSeed: RegionalRoute[] = [
+  {
+    id: 1,
+    regionalManagerId: 7,
+    routeDate: "2026-04-27",
+    title: "Маршрут Юг / Краснодар",
+    region: "Краснодарский край",
+    status: "in_progress",
+    plannedVisitsCount: 5,
+    completedVisitsCount: 2,
+    createdAt: "2026-04-27T07:00:00.000Z",
+  },
+];
+
+const routeVisitsSeed: RouteVisit[] = [
+  {
+    id: 1,
+    routeId: 1,
+    dealerId: 1,
+    tradePointId: 1,
+    plannedTime: "09:30",
+    visitStatus: "completed",
+    visitPurpose: "distribution_check",
+    priority: "high",
+    comment: "Витрина в хорошем состоянии, есть пробелы по премиум-моделям.",
+    startedAt: "2026-04-27T09:35:00.000Z",
+    completedAt: "2026-04-27T10:20:00.000Z",
+  },
+  {
+    id: 2,
+    routeId: 1,
+    dealerId: 2,
+    tradePointId: 4,
+    plannedTime: "11:30",
+    visitStatus: "in_progress",
+    visitPurpose: "showcase_check",
+    priority: "high",
+    comment: "Идет фотофиксация выкладки и проверка POSM.",
+    startedAt: "2026-04-27T11:42:00.000Z",
+    completedAt: null,
+  },
+  {
+    id: 3,
+    routeId: 1,
+    dealerId: 1,
+    tradePointId: 2,
+    plannedTime: "14:30",
+    visitStatus: "planned",
+    visitPurpose: "distribution_check",
+    priority: "medium",
+    comment: "Проверка представленности ключевых моделей.",
+    startedAt: null,
+    completedAt: null,
+  },
+  {
+    id: 4,
+    routeId: 1,
+    dealerId: 1,
+    tradePointId: 3,
+    plannedTime: "16:30",
+    visitStatus: "planned",
+    visitPurpose: "training",
+    priority: "medium",
+    comment: "Короткое обучение консультантов по новой линейке.",
+    startedAt: null,
+    completedAt: null,
+  },
+  {
+    id: 5,
+    routeId: 1,
+    dealerId: 3,
+    tradePointId: 5,
+    plannedTime: "18:00",
+    visitStatus: "planned",
+    visitPurpose: "order_follow_up",
+    priority: "low",
+    comment: "Проверка статуса заказов и обновление приоритетов.",
+    startedAt: null,
+    completedAt: null,
+  },
+];
+
+const distributionReportsSeed: DistributionReport[] = [
+  {
+    id: 1,
+    visitId: 1,
+    dealerId: 1,
+    tradePointId: 1,
+    regionalManagerId: 7,
+    reportStatus: "draft",
+    hasShowcase: 1,
+    showcaseDoorsCount: 12,
+    totalModelsChecked: 8,
+    presentModelsCount: 5,
+    missingModelsCount: 3,
+    displayQuality: "good",
+    competitorPresence: "medium",
+    recommendation: "Усилить премиум-серию и обновить POSM.",
+    nextAction:
+      "Поставить цель менеджеру продаж: согласовать выставление 3 недостающих моделей.",
+    createdAt: "2026-04-27T10:25:00.000Z",
+    submittedAt: null,
+  },
+];
+
+const distributionReportItemsSeed: DistributionReportItem[] = [
+  {
+    id: 1,
+    reportId: 1,
+    productId: 1,
+    modelName: "Tandoor Classic 80",
+    sku: "TD-ENTRY-860-BLK",
+    category: "entry_door",
+    isPresent: 1,
+    isOnShowcase: 1,
+    stockStatus: "in_stock",
+    comment: "Стабильный спрос, модель стоит на центральной витрине.",
+  },
+  {
+    id: 2,
+    reportId: 1,
+    productId: 2,
+    modelName: "Tandoor Line 90",
+    sku: "TD-ENTRY-960-OAK",
+    category: "entry_door",
+    isPresent: 1,
+    isOnShowcase: 0,
+    stockStatus: "low_stock",
+    comment: "Есть в остатках, но не выставлена фронтально.",
+  },
+  {
+    id: 3,
+    reportId: 1,
+    productId: 3,
+    modelName: "Tandoor Premium 100",
+    sku: "TD-LINE-GLASS-WHT",
+    category: "interior_door",
+    isPresent: 0,
+    isOnShowcase: 0,
+    stockStatus: "out_of_stock",
+    comment: "Не представлена в торговом зале.",
+  },
+  {
+    id: 4,
+    reportId: 1,
+    productId: 5,
+    modelName: "Tandoor Loft Graphite",
+    sku: "TD-LOFT-880-GRN",
+    category: "entry_door",
+    isPresent: 1,
+    isOnShowcase: 1,
+    stockStatus: "low_stock",
+    comment: "Хорошая выкладка, нужна дозаявка.",
+  },
+  {
+    id: 5,
+    reportId: 1,
+    productId: 4,
+    modelName: "Tandoor Urban White",
+    sku: "TD-FIRE-900-MTL",
+    category: "fire_door",
+    isPresent: 0,
+    isOnShowcase: 0,
+    stockStatus: "unknown",
+    comment: "Данные по доступности уточняются с менеджером салона.",
+  },
+];
+
 function getNextId<T extends { id: number }>(entries: T[]): number {
   return entries.reduce((maxId, entry) => Math.max(maxId, entry.id), 0) + 1;
 }
@@ -910,6 +1149,120 @@ function userNameById(id: number | null | undefined): string {
     return "Не назначен";
   }
   return `${user.firstName} ${user.lastName}`.trim();
+}
+
+function dealerListItemById(id: number): DealerListItem | undefined {
+  const dealer = dealersSeed.find((entry) => entry.id === id);
+  if (!dealer) return undefined;
+  return toDealerListItem(
+    dealer,
+    usersSeed,
+    tradePointsSeed,
+    dealerTasksSeed,
+    dealerInteractionsSeed,
+    organizationsSeed,
+  );
+}
+
+function routeVisitDetail(visit: RouteVisit): RouteVisitDetail | undefined {
+  const dealer = dealerListItemById(visit.dealerId);
+  const tradePoint = tradePointsSeed.find((point) => point.id === visit.tradePointId);
+  if (!dealer || !tradePoint) {
+    return undefined;
+  }
+  return {
+    ...visit,
+    dealer,
+    tradePoint,
+  };
+}
+
+function reportResponseForVisit(visitId: number): DistributionReportResponse | undefined {
+  const report = distributionReportsSeed.find((entry) => entry.visitId === visitId);
+  if (!report) {
+    return undefined;
+  }
+  const items = distributionReportItemsSeed
+    .filter((entry) => entry.reportId === report.id)
+    .sort((a, b) => a.id - b.id);
+  return {
+    report,
+    items,
+    summary: {
+      totalModelsChecked: report.totalModelsChecked,
+      presentModelsCount: report.presentModelsCount,
+      missingModelsCount: report.missingModelsCount,
+      showcaseModelsCount: items.filter((item) => item.isOnShowcase === 1).length,
+    },
+  };
+}
+
+function rebuildReportFromPayload(
+  existing: DistributionReport,
+  payload: DemoDistributionReportPayload,
+  status: "draft" | "submitted",
+): DistributionReport {
+  const totalModelsChecked = payload.items.length;
+  const presentModelsCount = payload.items.filter((item) => item.isPresent).length;
+  const missingModelsCount = totalModelsChecked - presentModelsCount;
+  return {
+    ...existing,
+    reportStatus: status,
+    hasShowcase: payload.hasShowcase ? 1 : 0,
+    showcaseDoorsCount: payload.showcaseDoorsCount,
+    totalModelsChecked,
+    presentModelsCount,
+    missingModelsCount,
+    displayQuality: payload.displayQuality,
+    competitorPresence: payload.competitorPresence,
+    recommendation: payload.recommendation,
+    nextAction: payload.nextAction,
+    submittedAt: status === "submitted" ? new Date().toISOString() : null,
+  };
+}
+
+function applyReportItems(
+  reportId: number,
+  payloadItems: DemoDistributionReportPayload["items"],
+): void {
+  for (let index = distributionReportItemsSeed.length - 1; index >= 0; index -= 1) {
+    if (distributionReportItemsSeed[index].reportId === reportId) {
+      distributionReportItemsSeed.splice(index, 1);
+    }
+  }
+
+  const nextIdStart = getNextId(distributionReportItemsSeed);
+  const normalizedItems: DistributionReportItem[] = payloadItems.map((item, idx) => {
+    const product = productsSeed.find((entry) => entry.id === item.productId);
+    return {
+      id: nextIdStart + idx,
+      reportId,
+      productId: item.productId,
+      modelName: product?.name ?? `Модель #${item.productId}`,
+      sku: product?.sku ?? "N/A",
+      category: product?.category ?? "unknown",
+      isPresent: item.isPresent ? 1 : 0,
+      isOnShowcase: item.isOnShowcase ? 1 : 0,
+      stockStatus: item.stockStatus,
+      comment: item.comment ?? null,
+    };
+  });
+  distributionReportItemsSeed.push(...normalizedItems);
+}
+
+function defaultChecklistItems(): DistributionReportItem[] {
+  return productsSeed.slice(0, 5).map((product, index) => ({
+    id: 10_000 + index + 1,
+    reportId: 0,
+    productId: product.id,
+    modelName: product.name,
+    sku: product.sku,
+    category: product.category,
+    isPresent: 0,
+    isOnShowcase: 0,
+    stockStatus: "unknown",
+    comment: null,
+  }));
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1031,6 +1384,201 @@ export class DatabaseStorage implements IStorage {
         ...interaction,
         userName: userNameById(interaction.userId),
       }));
+  }
+
+  async listRegionalRoutes(): Promise<RegionalRoute[]> {
+    return regionalRoutesSeed
+      .slice()
+      .sort((a, b) => a.routeDate.localeCompare(b.routeDate));
+  }
+
+  async getRegionalRouteById(id: number): Promise<RegionalRouteDetail | undefined> {
+    const route = regionalRoutesSeed.find((entry) => entry.id === id);
+    if (!route) {
+      return undefined;
+    }
+    const regionalManager = getUserById(route.regionalManagerId);
+    if (!regionalManager) {
+      return undefined;
+    }
+    const visits = routeVisitsSeed
+      .filter((visit) => visit.routeId === id)
+      .map(routeVisitDetail)
+      .filter((entry): entry is RouteVisitDetail => Boolean(entry))
+      .sort((a, b) => a.plannedTime.localeCompare(b.plannedTime));
+    return {
+      ...route,
+      regionalManager,
+      visits,
+      summary: {
+        planned: visits.filter((visit) => visit.visitStatus === "planned").length,
+        completed: visits.filter((visit) => visit.visitStatus === "completed").length,
+        inProgress: visits.filter((visit) => visit.visitStatus === "in_progress").length,
+        skipped: visits.filter((visit) => visit.visitStatus === "skipped").length,
+      },
+    };
+  }
+
+  async getRegionalManagerVisitById(id: number): Promise<VisitDetail | undefined> {
+    const visit = routeVisitsSeed.find((entry) => entry.id === id);
+    if (!visit) {
+      return undefined;
+    }
+    const detailedVisit = routeVisitDetail(visit);
+    if (!detailedVisit) {
+      return undefined;
+    }
+    const route = regionalRoutesSeed.find((entry) => entry.id === visit.routeId);
+    if (!route) {
+      return undefined;
+    }
+    const dealer = detailedVisit.dealer;
+    const salesManager = getUserById(dealer.salesManagerId);
+    const regionalManager = getUserById(dealer.regionalManagerId);
+    const distributionReport = reportResponseForVisit(id) ?? null;
+    return {
+      visit: detailedVisit,
+      route,
+      dealer,
+      tradePoint: detailedVisit.tradePoint,
+      salesManager: salesManager ?? null,
+      regionalManager: regionalManager ?? null,
+      activeTaskCount: dealer.activeTaskCount,
+      distributionReport,
+      productChecklist: distributionReport?.items ?? defaultChecklistItems(),
+    };
+  }
+
+  async getDistributionReportByVisitId(
+    visitId: number,
+  ): Promise<DistributionReportResponse | undefined> {
+    const visit = routeVisitsSeed.find((entry) => entry.id === visitId);
+    if (!visit) {
+      return undefined;
+    }
+    const existing = reportResponseForVisit(visitId);
+    if (existing) {
+      return existing;
+    }
+    return {
+      report: {
+        id: 0,
+        visitId,
+        dealerId: visit.dealerId,
+        tradePointId: visit.tradePointId,
+        regionalManagerId:
+          regionalRoutesSeed.find((entry) => entry.id === visit.routeId)?.regionalManagerId ?? 7,
+        reportStatus: "draft",
+        hasShowcase: 0,
+        showcaseDoorsCount: 0,
+        totalModelsChecked: 0,
+        presentModelsCount: 0,
+        missingModelsCount: 0,
+        displayQuality: "average",
+        competitorPresence: "none",
+        recommendation: "",
+        nextAction: "",
+        createdAt: new Date().toISOString(),
+        submittedAt: null,
+      },
+      items: defaultChecklistItems(),
+      summary: {
+        totalModelsChecked: 0,
+        presentModelsCount: 0,
+        missingModelsCount: 0,
+        showcaseModelsCount: 0,
+      },
+    };
+  }
+
+  async saveDistributionReportDraft(
+    visitId: number,
+    payload: DemoDistributionReportPayload,
+  ): Promise<{ success: true; report: DistributionReportResponse }> {
+    const visit = routeVisitsSeed.find((entry) => entry.id === visitId);
+    if (!visit) {
+      throw new StorageError(404, "Визит не найден");
+    }
+    if (payload.items.length === 0) {
+      throw new StorageError(422, "Список моделей для отчета пуст");
+    }
+    const route = regionalRoutesSeed.find((entry) => entry.id === visit.routeId);
+    if (!route) {
+      throw new StorageError(404, "Маршрут не найден");
+    }
+    const existing = distributionReportsSeed.find((entry) => entry.visitId === visitId);
+    const now = new Date().toISOString();
+    const baseReport: DistributionReport =
+      existing ??
+      {
+        id: getNextId(distributionReportsSeed),
+        visitId,
+        dealerId: visit.dealerId,
+        tradePointId: visit.tradePointId,
+        regionalManagerId: route.regionalManagerId,
+        reportStatus: "draft",
+        hasShowcase: 0,
+        showcaseDoorsCount: 0,
+        totalModelsChecked: 0,
+        presentModelsCount: 0,
+        missingModelsCount: 0,
+        displayQuality: "average",
+        competitorPresence: "none",
+        recommendation: "",
+        nextAction: "",
+        createdAt: now,
+        submittedAt: null,
+      };
+    const rebuilt = rebuildReportFromPayload(baseReport, payload, "draft");
+    if (existing) {
+      const index = distributionReportsSeed.findIndex((entry) => entry.id === existing.id);
+      distributionReportsSeed[index] = rebuilt;
+    } else {
+      distributionReportsSeed.push(rebuilt);
+    }
+    applyReportItems(rebuilt.id, payload.items);
+    const report = reportResponseForVisit(visitId);
+    if (!report) {
+      throw new StorageError(500, "Не удалось подготовить ответ по отчету");
+    }
+    return { success: true, report };
+  }
+
+  async submitDistributionReport(
+    visitId: number,
+    payload: DemoDistributionReportPayload,
+  ): Promise<{ success: true; message: string; report: DistributionReportResponse }> {
+    const draft = await this.saveDistributionReportDraft(visitId, payload);
+    const report = distributionReportsSeed.find((entry) => entry.visitId === visitId);
+    if (!report) {
+      throw new StorageError(500, "Отчет не найден");
+    }
+    const submitted = rebuildReportFromPayload(report, payload, "submitted");
+    const reportIndex = distributionReportsSeed.findIndex((entry) => entry.id === report.id);
+    distributionReportsSeed[reportIndex] = submitted;
+
+    const visit = routeVisitsSeed.find((entry) => entry.id === visitId);
+    if (visit) {
+      visit.visitStatus = "completed";
+      visit.completedAt = new Date().toISOString();
+    }
+    const route = visit ? regionalRoutesSeed.find((entry) => entry.id === visit.routeId) : undefined;
+    if (route) {
+      route.completedVisitsCount = routeVisitsSeed.filter(
+        (entry) => entry.routeId === route.id && entry.visitStatus === "completed",
+      ).length;
+      if (route.completedVisitsCount >= route.plannedVisitsCount) {
+        route.status = "completed";
+      }
+    }
+
+    const response = reportResponseForVisit(visitId) ?? draft.report;
+    return {
+      success: true,
+      message:
+        "Отчет дистрибуции отправлен. На его основании будут сформированы цели по витрине.",
+      report: response,
+    };
   }
 
   async listProducts(): Promise<Product[]> {
@@ -1171,6 +1719,10 @@ export {
   tradePointsSeed,
   dealerTasksSeed,
   dealerInteractionsSeed,
+  regionalRoutesSeed,
+  routeVisitsSeed,
+  distributionReportsSeed,
+  distributionReportItemsSeed,
   productsSeed,
   ordersSeed,
   orderItemsSeed,

@@ -23,6 +23,19 @@ export type DealerInteractionRoleContext =
   | "sales_head"
   | "system";
 export type DealerInteractionType = "call" | "meeting" | "visit" | "report" | "task_created" | "order" | "claim";
+export type RegionalRouteStatus = "planned" | "in_progress" | "completed";
+export type RouteVisitStatus = "planned" | "in_progress" | "completed" | "skipped";
+export type RouteVisitPurpose =
+  | "distribution_check"
+  | "showcase_check"
+  | "training"
+  | "order_follow_up"
+  | "claim_follow_up";
+export type RouteVisitPriority = "low" | "medium" | "high";
+export type DistributionReportStatus = "draft" | "submitted" | "reviewed";
+export type DistributionDisplayQuality = "excellent" | "good" | "average" | "poor";
+export type DistributionCompetitorPresence = "none" | "low" | "medium" | "high";
+export type DistributionStockStatus = "in_stock" | "low_stock" | "out_of_stock" | "unknown";
 
 export const organizations = sqliteTable("organizations", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -138,6 +151,85 @@ export const dealerInteractions = sqliteTable("dealer_interactions", {
   type: text("type").notNull(),
   summary: text("summary").notNull(),
   createdAt: text("created_at").notNull(),
+});
+
+export const regionalRoutes = sqliteTable("regional_routes", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  regionalManagerId: integer("regional_manager_id")
+    .notNull()
+    .references(() => users.id),
+  routeDate: text("route_date").notNull(),
+  title: text("title").notNull(),
+  region: text("region").notNull(),
+  status: text("status").notNull().default("planned"),
+  plannedVisitsCount: integer("planned_visits_count").notNull().default(0),
+  completedVisitsCount: integer("completed_visits_count").notNull().default(0),
+  createdAt: text("created_at").notNull(),
+});
+
+export const routeVisits = sqliteTable("route_visits", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  routeId: integer("route_id")
+    .notNull()
+    .references(() => regionalRoutes.id),
+  dealerId: integer("dealer_id")
+    .notNull()
+    .references(() => dealers.id),
+  tradePointId: integer("trade_point_id")
+    .notNull()
+    .references(() => tradePoints.id),
+  plannedTime: text("planned_time").notNull(),
+  visitStatus: text("visit_status").notNull().default("planned"),
+  visitPurpose: text("visit_purpose").notNull(),
+  priority: text("priority").notNull().default("medium"),
+  comment: text("comment"),
+  startedAt: text("started_at"),
+  completedAt: text("completed_at"),
+});
+
+export const distributionReports = sqliteTable("distribution_reports", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  visitId: integer("visit_id")
+    .notNull()
+    .references(() => routeVisits.id),
+  dealerId: integer("dealer_id")
+    .notNull()
+    .references(() => dealers.id),
+  tradePointId: integer("trade_point_id")
+    .notNull()
+    .references(() => tradePoints.id),
+  regionalManagerId: integer("regional_manager_id")
+    .notNull()
+    .references(() => users.id),
+  reportStatus: text("report_status").notNull().default("draft"),
+  hasShowcase: integer("has_showcase").notNull().default(0),
+  showcaseDoorsCount: integer("showcase_doors_count").notNull().default(0),
+  totalModelsChecked: integer("total_models_checked").notNull().default(0),
+  presentModelsCount: integer("present_models_count").notNull().default(0),
+  missingModelsCount: integer("missing_models_count").notNull().default(0),
+  displayQuality: text("display_quality").notNull().default("average"),
+  competitorPresence: text("competitor_presence").notNull().default("none"),
+  recommendation: text("recommendation").notNull(),
+  nextAction: text("next_action").notNull(),
+  createdAt: text("created_at").notNull(),
+  submittedAt: text("submitted_at"),
+});
+
+export const distributionReportItems = sqliteTable("distribution_report_items", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  reportId: integer("report_id")
+    .notNull()
+    .references(() => distributionReports.id),
+  productId: integer("product_id")
+    .notNull()
+    .references(() => products.id),
+  modelName: text("model_name").notNull(),
+  sku: text("sku").notNull(),
+  category: text("category").notNull(),
+  isPresent: integer("is_present").notNull().default(0),
+  isOnShowcase: integer("is_on_showcase").notNull().default(0),
+  stockStatus: text("stock_status").notNull().default("unknown"),
+  comment: text("comment"),
 });
 
 export const products = sqliteTable("products", {
@@ -258,6 +350,18 @@ export const insertDealerTaskSchema = createInsertSchema(dealerTasks).omit({
 export const insertDealerInteractionSchema = createInsertSchema(dealerInteractions).omit({
   id: true,
 });
+export const insertRegionalRouteSchema = createInsertSchema(regionalRoutes).omit({
+  id: true,
+});
+export const insertRouteVisitSchema = createInsertSchema(routeVisits).omit({
+  id: true,
+});
+export const insertDistributionReportSchema = createInsertSchema(distributionReports).omit({
+  id: true,
+});
+export const insertDistributionReportItemSchema = createInsertSchema(distributionReportItems).omit({
+  id: true,
+});
 export const insertProductSchema = createInsertSchema(products).omit({
   id: true,
 });
@@ -293,6 +397,14 @@ export type InsertDealerTask = z.infer<typeof insertDealerTaskSchema>;
 export type DealerTask = typeof dealerTasks.$inferSelect;
 export type InsertDealerInteraction = z.infer<typeof insertDealerInteractionSchema>;
 export type DealerInteraction = typeof dealerInteractions.$inferSelect;
+export type InsertRegionalRoute = z.infer<typeof insertRegionalRouteSchema>;
+export type RegionalRoute = typeof regionalRoutes.$inferSelect;
+export type InsertRouteVisit = z.infer<typeof insertRouteVisitSchema>;
+export type RouteVisit = typeof routeVisits.$inferSelect;
+export type InsertDistributionReport = z.infer<typeof insertDistributionReportSchema>;
+export type DistributionReport = typeof distributionReports.$inferSelect;
+export type InsertDistributionReportItem = z.infer<typeof insertDistributionReportItemSchema>;
+export type DistributionReportItem = typeof distributionReportItems.$inferSelect;
 export type InsertProduct = z.infer<typeof insertProductSchema>;
 export type Product = typeof products.$inferSelect;
 export type InsertOrder = z.infer<typeof insertOrderSchema>;

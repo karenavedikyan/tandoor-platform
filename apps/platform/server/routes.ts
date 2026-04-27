@@ -13,6 +13,12 @@ import {
   getOrders,
   getOrganizations,
   getProducts,
+  getRegionalRouteById,
+  getRegionalRoutes,
+  getRegionalVisitById,
+  getRegionalVisitDistributionReport,
+  saveRegionalVisitDistributionDraft,
+  submitRegionalVisitDistributionReport,
   getUsers,
   type ApiResult,
 } from "./api-handlers";
@@ -48,6 +54,43 @@ export async function registerRoutes(
     const id = Array.isArray(raw) ? raw[0] : raw;
     return send(res, await getDealerInteractions(id ?? ""));
   });
+  app.get("/api/regional-manager/routes", async (_req, res) =>
+    send(res, await getRegionalRoutes()),
+  );
+  app.get("/api/regional-manager/routes/:id", async (req: Request, res) => {
+    const raw = req.params.id;
+    const id = Array.isArray(raw) ? raw[0] : raw;
+    return send(res, await getRegionalRouteById(id ?? ""));
+  });
+  app.get("/api/regional-manager/visits/:id", async (req: Request, res) => {
+    const raw = req.params.id;
+    const id = Array.isArray(raw) ? raw[0] : raw;
+    return send(res, await getRegionalVisitById(id ?? ""));
+  });
+  app.get(
+    "/api/regional-manager/visits/:id/distribution-report",
+    async (req: Request, res) => {
+      const raw = req.params.id;
+      const id = Array.isArray(raw) ? raw[0] : raw;
+      return send(res, await getRegionalVisitDistributionReport(id ?? ""));
+    },
+  );
+  app.post(
+    "/api/regional-manager/visits/:id/distribution-report/draft",
+    async (req: Request, res) => {
+      const raw = req.params.id;
+      const id = Array.isArray(raw) ? raw[0] : raw;
+      return send(res, await saveRegionalVisitDistributionDraft(id ?? "", req.body));
+    },
+  );
+  app.post(
+    "/api/regional-manager/visits/:id/distribution-report/submit",
+    async (req: Request, res) => {
+      const raw = req.params.id;
+      const id = Array.isArray(raw) ? raw[0] : raw;
+      return send(res, await submitRegionalVisitDistributionReport(id ?? "", req.body));
+    },
+  );
   app.get("/api/products", async (_req, res) => send(res, await getProducts()));
   app.get("/api/orders", async (_req, res) => send(res, await getOrders()));
   app.post("/api/orders", async (req: Request, res) =>

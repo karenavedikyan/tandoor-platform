@@ -109,3 +109,81 @@ export function tradePointStatusLabel(value: string): string {
   };
   return map[value] ?? value;
 }
+
+export function routeStatusLabel(value: string): string {
+  const map: Record<string, string> = {
+    planned: "Запланирован",
+    in_progress: "В работе",
+    completed: "Завершен",
+  };
+  return map[value] ?? value;
+}
+
+export function visitStatusLabel(value: string): string {
+  const map: Record<string, string> = {
+    planned: "Запланирован",
+    in_progress: "В процессе",
+    completed: "Завершен",
+    skipped: "Пропущен",
+  };
+  return map[value] ?? value;
+}
+
+export function visitPurposeLabel(value: string): string {
+  const map: Record<string, string> = {
+    distribution_check: "Проверка дистрибуции",
+    showcase_check: "Проверка витрины",
+    training: "Обучение команды",
+    order_follow_up: "Контроль заказа",
+    claim_follow_up: "Контроль рекламации",
+  };
+  return map[value] ?? value;
+}
+
+export function visitPriorityLabel(value: string): string {
+  const map: Record<string, string> = {
+    low: "Низкий",
+    medium: "Средний",
+    high: "Высокий",
+  };
+  return map[value] ?? value;
+}
+
+export function reportStatusLabel(value: string): string {
+  const map: Record<string, string> = {
+    draft: "Черновик",
+    submitted: "Отправлен",
+    reviewed: "Проверен",
+  };
+  return map[value] ?? value;
+}
+
+export function displayQualityLabel(value: string): string {
+  const map: Record<string, string> = {
+    excellent: "Отлично",
+    good: "Хорошо",
+    average: "Средне",
+    poor: "Слабо",
+  };
+  return map[value] ?? value;
+}
+
+export function competitorPresenceLabel(value: string): string {
+  const map: Record<string, string> = {
+    none: "Нет",
+    low: "Низкое",
+    medium: "Среднее",
+    high: "Высокое",
+  };
+  return map[value] ?? value;
+}
+
+export function stockStatusLabel(value: string): string {
+  const map: Record<string, string> = {
+    in_stock: "В наличии",
+    low_stock: "Остаток низкий",
+    out_of_stock: "Нет в наличии",
+    unknown: "Неизвестно",
+  };
+  return map[value] ?? value;
+}

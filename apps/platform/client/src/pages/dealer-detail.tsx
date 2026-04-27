@@ -115,6 +115,12 @@ export default function DealerDetailPage() {
           <h1 className="text-2xl font-bold uppercase tracking-[0.02em] text-foreground">Карточка дилера</h1>
           <p className="text-sm text-muted-foreground">Единый клиентский контекст продаж и регионального блока.</p>
         </div>
+        <Button asChild variant="outline" className="rounded-xl" data-testid="button-open-regional-route">
+          <Link href="/regional-manager/route">
+            <Route className="mr-2 h-4 w-4" />
+            Перейти к маршруту РМ
+          </Link>
+        </Button>
       </div>
 
       <Card className="rounded-2xl border-border/80 shadow-sm">
