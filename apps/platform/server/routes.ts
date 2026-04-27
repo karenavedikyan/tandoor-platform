@@ -1,6 +1,22 @@
 import type { Express } from "express";
 import type { Server } from 'node:http';
-import { storage } from "./storage";
+import { z } from "zod";
+import { StorageError, storage } from "./storage";
+
+const createOrderRequestSchema = z.object({
+  dealerId: z.number().int().positive(),
+  createdByUserId: z.number().int().positive().optional(),
+  salesManagerId: z.number().int().positive().optional(),
+  comment: z.string().trim().max(1000).optional(),
+  items: z
+    .array(
+      z.object({
+        productId: z.number().int().positive(),
+        quantity: z.number().int(),
+      }),
+    )
+    .min(1),
+});
 
 export async function registerRoutes(
   httpServer: Server,
@@ -29,6 +45,52 @@ export async function registerRoutes(
   app.get("/api/orders", async (_req, res) => {
     const orders = await storage.listOrders();
     return res.json(orders);
+  });
+
+  app.post("/api/orders", async (req, res) => {
+    const parsed = createOrderRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        message: "Invalid order payload",
+        issues: parsed.error.issues.map((issue) => ({
+          path: issue.path.join("."),
+          message: issue.message,
+        })),
+      });
+    }
+
+    const payload = parsed.data;
+    const createdByUserId = payload.createdByUserId ?? payload.salesManagerId;
+    if (!createdByUserId) {
+      return res.status(400).json({
+        message: "Either createdByUserId or salesManagerId must be provided",
+      });
+    }
+
+    const hasInvalidQuantity = payload.items.some(
+      (item) => !Number.isInteger(item.quantity) || item.quantity < 1,
+    );
+    if (hasInvalidQuantity) {
+      return res.status(422).json({
+        message: "Each order item quantity must be at least 1",
+      });
+    }
+
+    try {
+      const createdOrder = await storage.createOrder({
+        dealerId: payload.dealerId,
+        createdByUserId,
+        comment: payload.comment,
+        items: payload.items,
+      });
+      return res.status(201).json(createdOrder);
+    } catch (error) {
+      if (error instanceof StorageError) {
+        return res.status(error.status).json({ message: error.message });
+      }
+
+      return res.status(500).json({ message: "Failed to create order" });
+    }
   });
 
   app.get("/api/orders/:id", async (req, res) => {

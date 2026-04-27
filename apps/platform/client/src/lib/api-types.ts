@@ -65,6 +65,18 @@ export interface OrderItem {
   totalPriceCents: number;
 }
 
+export interface CreateOrderItemPayload {
+  productId: number;
+  quantity: number;
+}
+
+export interface CreateOrderPayload {
+  dealerId: number;
+  createdByUserId: number;
+  items: CreateOrderItemPayload[];
+  comment?: string;
+}
+
 export interface Document {
   id: number;
   organizationId: number;

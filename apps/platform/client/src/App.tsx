@@ -10,6 +10,7 @@ import DealersPage from "@/pages/dealers";
 import CatalogPage from "@/pages/catalog";
 import OrdersPage from "@/pages/orders";
 import OrderDetailPage from "@/pages/order-detail";
+import NewOrderPage from "@/pages/new-order";
 import ClaimsPage from "@/pages/claims";
 import ActivityPage from "@/pages/activity";
 import ArchitecturePage from "@/pages/architecture";
@@ -23,6 +24,7 @@ function AppRouter() {
         <Route path="/dealers" component={DealersPage} />
         <Route path="/catalog" component={CatalogPage} />
         <Route path="/orders" component={OrdersPage} />
+        <Route path="/orders/new" component={NewOrderPage} />
         <Route path="/orders/:id" component={OrderDetailPage} />
         <Route path="/claims" component={ClaimsPage} />
         <Route path="/activity" component={ActivityPage} />

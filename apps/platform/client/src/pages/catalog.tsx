@@ -3,9 +3,11 @@ import { DoorOpen, PackageSearch } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
 import type { Product } from "@/lib/api-types";
 import { formatCurrency } from "@/lib/format";
+import { Link } from "wouter";
 
 function CatalogSkeleton() {
   return (
@@ -103,6 +105,13 @@ export default function CatalogPage() {
                 <span className="text-muted-foreground">Availability</span>
                 <StatusBadge kind="availability" status={product.availabilityStatus} />
               </div>
+              <Button
+                asChild
+                className="mt-2 w-full rounded-xl"
+                data-testid={`button-add-product-${product.id}`}
+              >
+                <Link href="/orders/new">Create order with this SKU</Link>
+              </Button>
             </CardContent>
           </Card>
         ))}

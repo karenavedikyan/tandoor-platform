@@ -48,11 +48,16 @@ export default function OrdersPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-semibold text-foreground" data-testid="page-title-orders">
-          Orders
-        </h1>
-        <p className="text-sm text-muted-foreground">Order pipeline across dealer operations.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-semibold text-foreground" data-testid="page-title-orders">
+            Orders
+          </h1>
+          <p className="text-sm text-muted-foreground">Order pipeline across dealer operations.</p>
+        </div>
+        <Button asChild data-testid="button-create-order" className="rounded-full">
+          <Link href="/orders/new">Create order</Link>
+        </Button>
       </div>
 
       <Card className="shadow-sm">
@@ -65,7 +70,9 @@ export default function OrdersPage() {
           ) : isOrdersError ? (
             <Alert variant="destructive" data-testid="orders-error-state">
               <AlertTitle>Unable to load orders</AlertTitle>
-              <AlertDescription>{ordersError.message}</AlertDescription>
+              <AlertDescription>
+                {ordersError instanceof Error ? ordersError.message : "Unexpected error"}
+              </AlertDescription>
             </Alert>
           ) : (
             <div className="rounded-xl border border-border bg-white">

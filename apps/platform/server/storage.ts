@@ -17,6 +17,28 @@ export type OrderDetails = Order & {
   documents: Document[];
 };
 
+export type CreateOrderItemInput = {
+  productId: number;
+  quantity: number;
+};
+
+export type CreateOrderInput = {
+  dealerId: number;
+  createdByUserId: number;
+  items: CreateOrderItemInput[];
+  comment?: string;
+};
+
+export class StorageError extends Error {
+  constructor(
+    public status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "StorageError";
+  }
+}
+
 export interface IStorage {
   listOrganizations(): Promise<Organization[]>;
   listUsers(): Promise<User[]>;
@@ -26,6 +48,7 @@ export interface IStorage {
   listProducts(): Promise<Product[]>;
   listOrders(): Promise<Order[]>;
   getOrderById(id: number): Promise<OrderDetails | undefined>;
+  createOrder(input: CreateOrderInput): Promise<OrderDetails>;
   listClaims(): Promise<Claim[]>;
   listActivityEvents(): Promise<ActivityEvent[]>;
 }
@@ -495,6 +518,30 @@ const activityEventsSeed: ActivityEvent[] = [
   },
 ];
 
+function getNextId<T extends { id: number }>(entries: T[]): number {
+  return entries.reduce((maxId, entry) => Math.max(maxId, entry.id), 0) + 1;
+}
+
+function generateOrderNumber(): string {
+  const year = new Date().getFullYear();
+  const maxSequence = ordersSeed.reduce((maxValue, order) => {
+    const matched = /^ORD-(\d{4})-(\d+)$/.exec(order.orderNumber);
+    if (!matched) {
+      return maxValue;
+    }
+
+    const matchedYear = Number.parseInt(matched[1], 10);
+    const matchedSequence = Number.parseInt(matched[2], 10);
+    if (matchedYear !== year || Number.isNaN(matchedSequence)) {
+      return maxValue;
+    }
+
+    return Math.max(maxValue, matchedSequence);
+  }, 0);
+
+  return `ORD-${year}-${String(maxSequence + 1).padStart(4, "0")}`;
+}
+
 export class DatabaseStorage implements IStorage {
   async listOrganizations(): Promise<Organization[]> {
     return organizationsSeed;
@@ -521,7 +568,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async listOrders(): Promise<Order[]> {
-    return ordersSeed;
+    return [...ordersSeed].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
   async getOrderById(id: number): Promise<OrderDetails | undefined> {
@@ -537,12 +584,99 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
+  async createOrder(input: CreateOrderInput): Promise<OrderDetails> {
+    const dealer = dealersSeed.find((entry) => entry.id === input.dealerId);
+    if (!dealer) {
+      throw new StorageError(404, "Dealer not found");
+    }
+
+    const createdByUser = usersSeed.find((entry) => entry.id === input.createdByUserId);
+    if (!createdByUser) {
+      throw new StorageError(404, "User not found");
+    }
+
+    const mergedItems = new Map<number, number>();
+    for (const item of input.items) {
+      const quantity = mergedItems.get(item.productId) ?? 0;
+      mergedItems.set(item.productId, quantity + item.quantity);
+    }
+
+    let totalCents = 0;
+    let nextOrderItemId = getNextId(orderItemsSeed);
+    const newOrderId = getNextId(ordersSeed);
+    const newOrderItems: OrderItem[] = [];
+
+    for (const [productId, quantity] of Array.from(mergedItems.entries())) {
+      if (!Number.isInteger(quantity) || quantity < 1) {
+        throw new StorageError(422, "Each order item quantity must be at least 1");
+      }
+
+      const product = productsSeed.find((entry) => entry.id === productId);
+      if (!product) {
+        throw new StorageError(404, `Product ${productId} not found`);
+      }
+
+      const totalPriceCents = product.priceCents * quantity;
+      totalCents += totalPriceCents;
+
+      newOrderItems.push({
+        id: nextOrderItemId,
+        orderId: newOrderId,
+        productId,
+        quantity,
+        unitPriceCents: product.priceCents,
+        totalPriceCents,
+      });
+      nextOrderItemId += 1;
+    }
+
+    const nowIso = new Date().toISOString();
+    const order: Order = {
+      id: newOrderId,
+      orderNumber: generateOrderNumber(),
+      organizationId: createdByUser.organizationId,
+      dealerId: dealer.id,
+      createdByUserId: createdByUser.id,
+      status: "submitted",
+      totalCents,
+      currency: "RUB",
+      requestedDeliveryDate: null,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+
+    ordersSeed.push(order);
+    orderItemsSeed.push(...newOrderItems);
+
+    const dealerOrganization = organizationsSeed.find((entry) => entry.id === dealer.organizationId);
+    const commentSuffix = input.comment?.trim() ? ` Comment: ${input.comment.trim()}` : "";
+    activityEventsSeed.push({
+      id: getNextId(activityEventsSeed),
+      eventType: "order_created",
+      entityType: "order",
+      entityId: order.id,
+      organizationId: order.organizationId,
+      userId: order.createdByUserId,
+      orderId: order.id,
+      claimId: null,
+      message: `Order ${order.orderNumber} created for ${dealerOrganization?.name ?? `dealer #${dealer.id}`}.${commentSuffix}`,
+      createdAt: nowIso,
+    });
+
+    const createdOrder = await this.getOrderById(order.id);
+    if (!createdOrder) {
+      throw new StorageError(500, "Failed to build created order response");
+    }
+
+    return createdOrder;
+  }
+
   async listClaims(): Promise<Claim[]> {
     return claimsSeed;
   }
 
   async listActivityEvents(): Promise<ActivityEvent[]> {
-    return activityEventsSeed;
+    return [...activityEventsSeed].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 }
 

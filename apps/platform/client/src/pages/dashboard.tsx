@@ -1,6 +1,16 @@
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, ArrowUpRight, Boxes, Briefcase, ClipboardList, FileWarning, PackageSearch, UsersRound } from "lucide-react";
+import {
+  ArrowRight,
+  ArrowUpRight,
+  Boxes,
+  Briefcase,
+  ClipboardList,
+  FileWarning,
+  PackageSearch,
+  PlusCircle,
+  UsersRound,
+} from "lucide-react";
 import type { ActivityEvent, Claim, Dealer, Order, Product } from "@/lib/api-types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -106,6 +116,15 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6" data-testid="dashboard-page">
+      <div className="flex justify-end">
+        <Button asChild data-testid="button-create-order">
+          <Link href="/orders/new">
+            <PlusCircle className="size-4" />
+            Create order
+          </Link>
+        </Button>
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {kpiCards.map((card) => (
           <Card key={card.label} data-testid={`kpi-${card.label.toLowerCase().replaceAll(" ", "-")}`}>
