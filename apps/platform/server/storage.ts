@@ -384,9 +384,10 @@ export type ManagerQuickAction = {
 };
 
 export type ClientImportSource = {
-  id: "one_c" | "bitrix24" | "excel" | "manual";
-  name: string;
-  status: "planned" | "available" | "connected";
+  id: string;
+  source: "one_c" | "bitrix24" | "excel" | "manual";
+  status: "planned_integration" | "available_mvp";
+  title: string;
   description: string;
 };
 
@@ -414,36 +415,35 @@ export type ClientImportPreviewRow = {
   dealerName: string;
   importStatus: "new" | "update" | "duplicate" | "error" | "skipped";
   city: string;
-  lifecycleStatus: "active" | "potential" | "paused" | "lost" | "archived";
-  source: ClientImportSource["id"];
+  clientStatus: "active" | "potential" | "paused" | "lost" | "archived";
   salesManagerName: string | null;
   regionalManagerName: string | null;
-  reason?: string;
+  duplicateReason: string | null;
+  errorReason: string | null;
+  source: "one_c" | "bitrix24" | "excel" | "manual";
 };
 
 export type ClientImportIssue = {
   id: string;
-  severity: "critical" | "warning";
-  code: string;
+  severity: "critical" | "high" | "medium";
+  issueType: "validation" | "assignment" | "duplicate";
   message: string;
-  rowRef: string;
+  count: number;
+  recommendation: string;
 };
 
 export type ClientImportDuplicate = {
   id: string;
-  rowRef: string;
   dealerName: string;
   matchType: "inn" | "address" | "name";
-  matchedDealerId: number | null;
-  matchedDealerName: string;
-  recommendation: string;
+  existingDealerName: string;
+  reason: string;
 };
 
 export type ClientImportAssignmentGap = {
-  id: string;
-  type: "sales_manager" | "regional_manager" | "region" | "team";
+  type: "sales_manager_missing" | "regional_manager_missing" | "region_missing" | "team_unknown";
   count: number;
-  message: string;
+  description: string;
 };
 
 export type ClientImportPreview = {
@@ -1629,12 +1629,13 @@ const clientImportTemplateFieldsSeed: ClientImportTemplateField[] = [
 ];
 
 const clientImportPreviewSeed: ClientImportPreview = {
+  status: "draft",
   sources: [
     {
       id: "source-1c",
       source: "one_c",
       title: "1С",
-      status: "planned",
+      status: "planned_integration",
       description:
         "Контрагенты, ИНН, договоры, заказы, отгрузки и оплаты будут синхронизированы в единую CRM-структуру.",
     },
@@ -1642,7 +1643,7 @@ const clientImportPreviewSeed: ClientImportPreview = {
       id: "source-bitrix24",
       source: "bitrix24",
       title: "Битрикс24",
-      status: "planned",
+      status: "planned_integration",
       description:
         "Лиды, сделки, звонки, задачи и история коммуникаций будут сопоставлены с дилерской карточкой.",
     },
@@ -1672,9 +1673,10 @@ const clientImportPreviewSeed: ClientImportPreview = {
       importStatus: "new",
       city: "Краснодар",
       clientStatus: "potential",
-      responsibleSalesManager: null,
-      responsibleRegionalManager: null,
-      reason: "Новый дилер из Excel, требуется распределение по ответственным.",
+      salesManagerName: null,
+      regionalManagerName: null,
+      duplicateReason: null,
+      errorReason: null,
       source: "excel",
     },
     {
@@ -1683,9 +1685,10 @@ const clientImportPreviewSeed: ClientImportPreview = {
       importStatus: "update",
       city: "Краснодар",
       clientStatus: "active",
-      responsibleSalesManager: "Анна Кравченко",
-      responsibleRegionalManager: "Игорь Мельников",
-      reason: "Найдена существующая запись, будут обновлены контакты и комментарии.",
+      salesManagerName: "Анна Кравченко",
+      regionalManagerName: "Игорь Мельников",
+      duplicateReason: null,
+      errorReason: null,
       source: "one_c",
     },
     {
@@ -1694,9 +1697,10 @@ const clientImportPreviewSeed: ClientImportPreview = {
       importStatus: "duplicate",
       city: "Ростов-на-Дону",
       clientStatus: "potential",
-      responsibleSalesManager: "Анна Кравченко",
-      responsibleRegionalManager: "Игорь Мельников",
-      reason: "Совпадение по ИНН и адресу с существующим дилером.",
+      salesManagerName: "Анна Кравченко",
+      regionalManagerName: "Игорь Мельников",
+      duplicateReason: "Совпадение по ИНН и адресу с существующим дилером.",
+      errorReason: null,
       source: "bitrix24",
     },
     {
@@ -1705,9 +1709,10 @@ const clientImportPreviewSeed: ClientImportPreview = {
       importStatus: "error",
       city: "Анапа",
       clientStatus: "potential",
-      responsibleSalesManager: null,
-      responsibleRegionalManager: null,
-      reason: "Не заполнен ИНН или код клиента.",
+      salesManagerName: null,
+      regionalManagerName: null,
+      duplicateReason: null,
+      errorReason: "Не заполнен ИНН или код клиента.",
       source: "excel",
     },
   ],
@@ -1715,62 +1720,62 @@ const clientImportPreviewSeed: ClientImportPreview = {
     {
       id: "issue-1",
       severity: "critical",
+      issueType: "validation",
       message: "Не заполнен город",
-      rowId: "row-4",
+      count: 14,
+      recommendation: "Заполнить город в исходном файле и повторить проверку.",
     },
     {
       id: "issue-2",
       severity: "high",
+      issueType: "assignment",
       message: "Не найден ответственный менеджер",
-      rowId: "row-1",
+      count: 180,
+      recommendation: "Назначить менеджера продаж перед загрузкой в CRM.",
     },
     {
       id: "issue-3",
       severity: "medium",
+      issueType: "validation",
       message: "Некорректный телефон",
-      rowId: "row-2",
+      count: 29,
+      recommendation: "Проверить формат номера телефона и повторно провалидировать файл.",
     },
   ],
   duplicates: [
     {
       id: "duplicate-1",
-      rowId: "row-3",
       dealerName: "Салон Северный",
-      duplicateReason: "Совпадение по ИНН с существующим дилером",
-      matchedDealerName: "Салон дверей Северный",
-      suggestedAction: "Объединить карточки или пропустить импорт строки.",
+      matchType: "inn",
+      existingDealerName: "Салон дверей Северный",
+      reason: "Совпадение по ИНН с существующим дилером",
     },
     {
       id: "duplicate-2",
-      rowId: "row-3",
       dealerName: "Салон Северный",
-      duplicateReason: "Совпадение адреса торговой точки",
-      matchedDealerName: "Салон дверей Северный",
-      suggestedAction: "Подтвердить объединение по адресу перед загрузкой в CRM.",
+      matchType: "address",
+      existingDealerName: "Салон дверей Северный",
+      reason: "Совпадение адреса торговой точки",
     },
   ],
   assignmentGaps: [
     {
-      id: "gap-1",
-      type: "sales_manager",
+      type: "sales_manager_missing",
       count: 180,
       description: "Клиентов без менеджера продаж",
     },
     {
-      id: "gap-2",
-      type: "regional_manager",
+      type: "regional_manager_missing",
       count: 95,
       description: "Клиентов без регионального менеджера",
     },
     {
-      id: "gap-3",
-      type: "region",
+      type: "region_missing",
       count: 37,
       description: "Клиентов без региона",
     },
     {
-      id: "gap-4",
-      type: "team",
+      type: "team_unknown",
       count: 22,
       description: "Клиентов с неизвестной командой",
     },

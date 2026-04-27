@@ -425,7 +425,7 @@ export default function SalesClientImportPage() {
                   <Badge variant="outline">{importIssueSeverityLabel(issue.severity)}</Badge>
                 </div>
                 <p className="mt-1 text-muted-foreground">
-                  {issue.description} · {issue.rowRef}
+                  Количество: {issue.count} · {issue.recommendation}
                 </p>
               </div>
             ))}
@@ -441,7 +441,7 @@ export default function SalesClientImportPage() {
               <div key={duplicate.id} className="rounded-xl border border-border bg-white p-3 text-sm">
                 <p className="font-medium">{duplicate.dealerName}</p>
                 <p className="text-muted-foreground">
-                  Совпадение: {duplicate.matchedDealerName} · {duplicate.recommendation}
+                  Совпадение: {duplicate.existingDealerName} · {duplicate.reason}
                 </p>
               </div>
             ))}
@@ -458,10 +458,10 @@ export default function SalesClientImportPage() {
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {preview.assignmentGaps.map((gap) => (
-            <div key={gap.id} className="rounded-xl border border-border bg-white p-3 text-sm">
+            <div key={gap.type} className="rounded-xl border border-border bg-white p-3 text-sm">
               <p className="text-xs text-muted-foreground">{assignmentGapTypeLabel(gap.type)}</p>
               <p className="mt-1 text-xl font-semibold">{gap.count}</p>
-              <p className="mt-1 text-xs text-muted-foreground">{gap.message}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{gap.description}</p>
             </div>
           ))}
         </CardContent>

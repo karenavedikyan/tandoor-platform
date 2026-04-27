@@ -180,24 +180,26 @@ type ClientImportPreviewRow = {
   clientStatus: "active" | "potential" | "paused" | "lost" | "archived";
   salesManagerName: string | null;
   regionalManagerName: string | null;
-  reason?: string;
+  duplicateReason: string | null;
+  errorReason: string | null;
   source: "one_c" | "bitrix24" | "excel" | "manual";
 };
 
 type ClientImportIssue = {
   id: string;
-  severity: "critical" | "warning";
-  title: string;
-  rowRef: string;
-  description: string;
+  severity: "critical" | "high" | "medium";
+  issueType: "validation" | "assignment" | "duplicate";
+  message: string;
+  count: number;
+  recommendation: string;
 };
 
 type ClientImportDuplicate = {
   id: string;
   dealerName: string;
-  duplicateWith: string;
+  matchType: "inn" | "address" | "name";
+  existingDealerName: string;
   reason: string;
-  recommendation: string;
 };
 
 type ClientImportAssignmentGap = {
@@ -207,6 +209,7 @@ type ClientImportAssignmentGap = {
 };
 
 type ClientImportPreview = {
+  status: "draft" | "validated";
   sources: ClientImportSource[];
   summary: ClientImportSummary;
   rows: ClientImportPreviewRow[];
@@ -1147,6 +1150,7 @@ const clientImportTemplateFieldsSeed: ClientImportTemplateField[] = [
 ];
 
 const clientImportPreviewSeed: ClientImportPreview = {
+  status: "draft",
   sources: [
     {
       id: "source-1c",
@@ -1186,10 +1190,11 @@ const clientImportPreviewSeed: ClientImportPreview = {
       dealerName: "Двери Кубани",
       importStatus: "new",
       city: "Краснодар",
-      lifecycleStatus: "potential",
+      clientStatus: "potential",
       salesManagerName: null,
       regionalManagerName: null,
-      reason: null,
+      duplicateReason: null,
+      errorReason: null,
       source: "excel",
     },
     {
@@ -1197,10 +1202,11 @@ const clientImportPreviewSeed: ClientImportPreview = {
       dealerName: "Дверной Дом Юг",
       importStatus: "update",
       city: "Краснодар",
-      lifecycleStatus: "active",
+      clientStatus: "active",
       salesManagerName: "Анна Кравченко",
       regionalManagerName: "Игорь Мельников",
-      reason: null,
+      duplicateReason: null,
+      errorReason: null,
       source: "one_c",
     },
     {
@@ -1208,10 +1214,11 @@ const clientImportPreviewSeed: ClientImportPreview = {
       dealerName: "Салон Северный",
       importStatus: "duplicate",
       city: "Ростов-на-Дону",
-      lifecycleStatus: "active",
+      clientStatus: "active",
       salesManagerName: "Анна Кравченко",
       regionalManagerName: "Игорь Мельников",
-      reason: "Совпадение по ИНН/адресу",
+      duplicateReason: "Совпадение по ИНН/адресу",
+      errorReason: null,
       source: "bitrix24",
     },
     {
@@ -1219,10 +1226,11 @@ const clientImportPreviewSeed: ClientImportPreview = {
       dealerName: "Мир Дверей Анапа",
       importStatus: "error",
       city: "Анапа",
-      lifecycleStatus: "potential",
+      clientStatus: "potential",
       salesManagerName: null,
       regionalManagerName: null,
-      reason: "Не заполнен ИНН или код клиента",
+      duplicateReason: null,
+      errorReason: "Не заполнен ИНН или код клиента",
       source: "excel",
     },
   ],
@@ -1230,25 +1238,25 @@ const clientImportPreviewSeed: ClientImportPreview = {
     {
       id: "issue-1",
       severity: "critical",
+      issueType: "validation",
       message: "Не заполнен город",
-      rowId: "preview-row-4",
-      dealerName: "Мир Дверей Анапа",
+      count: 14,
       recommendation: "Заполнить город в исходном файле и повторить проверку.",
     },
     {
       id: "issue-2",
       severity: "high",
+      issueType: "assignment",
       message: "Не найден ответственный менеджер",
-      rowId: "preview-row-1",
-      dealerName: "Двери Кубани",
+      count: 180,
       recommendation: "Назначить менеджера продаж перед загрузкой в CRM.",
     },
     {
       id: "issue-3",
       severity: "medium",
+      issueType: "validation",
       message: "Некорректный телефон",
-      rowId: "preview-row-4",
-      dealerName: "Мир Дверей Анапа",
+      count: 29,
       recommendation: "Проверить формат номера телефона (международный/локальный).",
     },
   ],
@@ -1256,16 +1264,16 @@ const clientImportPreviewSeed: ClientImportPreview = {
     {
       id: "duplicate-1",
       dealerName: "Салон Северный",
-      matchedDealerName: "Салон дверей Северный",
-      matchReason: "Совпадение по ИНН с существующим дилером",
-      suggestedAction: "Объединить карточки или пропустить дубль.",
+      matchType: "inn",
+      existingDealerName: "Салон дверей Северный",
+      reason: "Совпадение по ИНН с существующим дилером",
     },
     {
       id: "duplicate-2",
       dealerName: "Дверной Дом Юг Краснодар",
-      matchedDealerName: "Дверной Дом Юг",
-      matchReason: "Совпадение адреса торговой точки",
-      suggestedAction: "Проверить ИНН и обновить существующую запись.",
+      matchType: "address",
+      existingDealerName: "Дверной Дом Юг",
+      reason: "Совпадение адреса торговой точки",
     },
   ],
   assignmentGaps: [

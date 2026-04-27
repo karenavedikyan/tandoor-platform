@@ -246,10 +246,10 @@ export default function DealersPage() {
               </div>
               <div className="grid gap-1 text-xs text-muted-foreground sm:grid-cols-2">
                 <p data-testid={`text-dealer-client-status-${dealer.id}`}>
-                  Статус клиента: {clientLifecycleStatusLabel(dealer.clientLifecycleStatus)}
+                  Статус клиента: {clientLifecycleStatusLabel(dealer.clientLifecycleStatus ?? "potential")}
                 </p>
                 <p data-testid={`text-dealer-source-${dealer.id}`}>
-                  Источник: {importSourceLabel(dealer.source)}
+                  Источник: {importSourceLabel(dealer.source ?? "manual")}
                 </p>
               </div>
               <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">

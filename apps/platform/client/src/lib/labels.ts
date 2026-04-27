@@ -378,9 +378,8 @@ export function importSourceLabel(value: string): string {
 
 export function importSourceStatusLabel(value: string): string {
   const map: Record<string, string> = {
-    planned: "Планируется интеграция",
-    available: "Доступно в MVP",
-    connected: "Подключено",
+    planned_integration: "Планируется интеграция",
+    available_mvp: "Доступно в MVP",
   };
   return map[value] ?? value;
 }
@@ -399,7 +398,8 @@ export function importRowStatusLabel(value: string): string {
 export function importIssueSeverityLabel(value: string): string {
   const map: Record<string, string> = {
     critical: "Критическая",
-    warning: "Предупреждение",
+    high: "Высокая",
+    medium: "Средняя",
   };
   return map[value] ?? value;
 }
@@ -417,10 +417,10 @@ export function clientLifecycleStatusLabel(value: string): string {
 
 export function assignmentGapTypeLabel(value: string): string {
   const map: Record<string, string> = {
-    sales_manager: "Без менеджера продаж",
-    regional_manager: "Без регионального менеджера",
-    region: "Без региона",
-    team: "Неизвестная команда",
+    sales_manager_missing: "Без менеджера продаж",
+    regional_manager_missing: "Без регионального менеджера",
+    region_missing: "Без региона",
+    team_unknown: "Неизвестная команда",
   };
   return map[value] ?? value;
 }
