@@ -54,11 +54,96 @@ type UserRole = {
 type Dealer = {
   id: number;
   organizationId: number;
-  managerUserId: number | null;
+  name: string;
+  dealerType: string;
+  segment: string | null;
   region: string | null;
-  tier: string | null;
+  city: string | null;
+  salesManagerId: number | null;
+  regionalManagerId: number | null;
+  potentialLevel: string | null;
   status: string;
+  managerUserId: number | null;
+  tier: string | null;
+  comment: string | null;
   createdAt: string;
+};
+
+type TradePoint = {
+  id: number;
+  dealerId: number;
+  name: string;
+  city: string;
+  address: string;
+  storeFormat: string;
+  areaSqm: number;
+  assortmentProfile: string;
+  status: string;
+  comment: string | null;
+};
+
+type DealerTask = {
+  id: number;
+  dealerId: number;
+  tradePointId: number | null;
+  assignedToUserId: number;
+  createdByUserId: number;
+  type: string;
+  title: string;
+  description: string;
+  status: string;
+  priority: string;
+  dueDate: string;
+  source: string;
+  createdAt: string;
+  completedAt: string | null;
+};
+
+type DealerInteraction = {
+  id: number;
+  dealerId: number;
+  tradePointId: number | null;
+  userId: number;
+  roleContext: string;
+  type: string;
+  summary: string;
+  createdAt: string;
+};
+
+type UserPublic = {
+  id: number;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string | null;
+};
+
+type DealerListItem = {
+  id: number;
+  organizationId: number;
+  name: string;
+  dealerType: string;
+  segment: string | null;
+  status: string;
+  salesManagerId: number | null;
+  regionalManagerId: number | null;
+  region: string | null;
+  city: string | null;
+  potentialLevel: string | null;
+  tradePointCount: number;
+  activeTaskCount: number;
+  comment: string | null;
+  createdAt: string;
+  salesManager: UserPublic | null;
+  regionalManager: UserPublic | null;
+};
+
+type DealerDetail = {
+  dealer: Dealer;
+  salesManager: UserPublic | null;
+  regionalManager: UserPublic | null;
+  tradePointCount: number;
+  activeTaskCount: number;
 };
 
 type Product = {
@@ -140,26 +225,60 @@ type OrderDetails = Order & {
   documents: Document[];
 };
 
-// ---------- Seed data ----------
+// ---------- Seed data (must stay in sync with server/storage.ts) ----------
 
 const organizationsSeed: Organization[] = [
   { id: 1, name: "Tandoor HQ", orgType: "tandoor", taxId: "770401001", city: "Moscow", status: "active", createdAt: "2026-01-10T09:00:00.000Z" },
-  { id: 2, name: "Volga Doors Dealer LLC", orgType: "dealer", taxId: "6312012456", city: "Samara", status: "active", createdAt: "2026-01-12T08:15:00.000Z" },
-  { id: 3, name: "Ural Build Partner", orgType: "dealer", taxId: "6678990102", city: "Yekaterinburg", status: "active", createdAt: "2026-01-13T10:25:00.000Z" },
-  { id: 4, name: "SteelCore Supplier JSC", orgType: "supplier", taxId: "7722334455", city: "Tula", status: "active", createdAt: "2026-01-15T11:05:00.000Z" },
+  { id: 2, name: "Дверной Дом Юг", orgType: "dealer", taxId: "2312012345", city: "Краснодар", status: "active", createdAt: "2026-01-12T08:15:00.000Z" },
+  { id: 3, name: "Салон дверей Северный", orgType: "dealer", taxId: "2312012346", city: "Краснодар", status: "active", createdAt: "2026-01-13T10:25:00.000Z" },
+  { id: 4, name: "Дом дверей Сочи", orgType: "dealer", taxId: "2312012347", city: "Сочи", status: "active", createdAt: "2026-01-15T11:05:00.000Z" },
+  { id: 5, name: "SteelCore Supplier JSC", orgType: "supplier", taxId: "7722334455", city: "Tula", status: "active", createdAt: "2026-01-15T12:00:00.000Z" },
 ];
 
 const usersSeed: User[] = [
   { id: 1, organizationId: 1, firstName: "Karen", lastName: "Avedikyan", email: "k.avedikyan@tandoor.ru", phone: "+7 900 000-10-10", status: "active", createdAt: "2026-01-10T09:30:00.000Z" },
-  { id: 2, organizationId: 1, firstName: "Olga", lastName: "Morozova", email: "o.morozova@tandoor.ru", phone: "+7 900 000-10-20", status: "active", createdAt: "2026-01-10T10:00:00.000Z" },
-  { id: 3, organizationId: 2, firstName: "Denis", lastName: "Karpov", email: "d.karpov@volgadoors.ru", phone: "+7 902 111-22-33", status: "active", createdAt: "2026-01-12T08:45:00.000Z" },
-  { id: 4, organizationId: 3, firstName: "Irina", lastName: "Sokolova", email: "i.sokolova@uralbuild.ru", phone: "+7 912 444-55-66", status: "active", createdAt: "2026-01-13T11:20:00.000Z" },
-  { id: 5, organizationId: 4, firstName: "Pavel", lastName: "Serov", email: "p.serov@steelcore.ru", phone: "+7 487 200-44-11", status: "active", createdAt: "2026-01-15T12:05:00.000Z" },
+  { id: 2, organizationId: 1, firstName: "Ольга", lastName: "Соколова", email: "o.sokolova@tandoor.ru", phone: "+7 900 000-10-20", status: "active", createdAt: "2026-01-10T10:00:00.000Z" },
+  { id: 3, organizationId: 1, firstName: "Дмитрий", lastName: "Романов", email: "d.romanov@tandoor.ru", phone: "+7 900 000-10-30", status: "active", createdAt: "2026-01-10T10:10:00.000Z" },
+  { id: 4, organizationId: 1, firstName: "Мария", lastName: "Лебедева", email: "m.lebedeva@tandoor.ru", phone: "+7 900 000-10-40", status: "active", createdAt: "2026-01-10T10:20:00.000Z" },
+  { id: 5, organizationId: 1, firstName: "Анна", lastName: "Кравченко", email: "a.kravchenko@tandoor.ru", phone: "+7 900 000-10-50", status: "active", createdAt: "2026-01-10T10:30:00.000Z" },
+  { id: 6, organizationId: 1, firstName: "Сергей", lastName: "Волков", email: "s.volkov@tandoor.ru", phone: "+7 900 000-10-60", status: "active", createdAt: "2026-01-10T10:40:00.000Z" },
+  { id: 7, organizationId: 1, firstName: "Игорь", lastName: "Мельников", email: "i.melnikov@tandoor.ru", phone: "+7 900 000-10-70", status: "active", createdAt: "2026-01-10T10:50:00.000Z" },
+  { id: 8, organizationId: 5, firstName: "Павел", lastName: "Серов", email: "p.serov@steelcore.ru", phone: "+7 487 200-44-11", status: "active", createdAt: "2026-01-15T12:05:00.000Z" },
 ];
 
 const dealersSeed: Dealer[] = [
-  { id: 1, organizationId: 2, managerUserId: 3, region: "Volga Federal District", tier: "gold", status: "active", createdAt: "2026-01-12T08:50:00.000Z" },
-  { id: 2, organizationId: 3, managerUserId: 4, region: "Ural Federal District", tier: "silver", status: "active", createdAt: "2026-01-13T11:25:00.000Z" },
+  { id: 1, organizationId: 2, name: "Дверной Дом Юг", dealerType: "network", segment: "сеть салонов дверей", region: "Краснодарский край", city: "Краснодар", salesManagerId: 5, regionalManagerId: 7, potentialLevel: "high", status: "active", managerUserId: 5, tier: "high", comment: "Ключевой сетевой партнёр на Юге, растущая выкладка и витрины.", createdAt: "2026-01-12T08:50:00.000Z" },
+  { id: 2, organizationId: 3, name: "Салон дверей Северный", dealerType: "single", segment: "одиночный салон", region: "Краснодарский край", city: "Краснодар", salesManagerId: 5, regionalManagerId: 7, potentialLevel: "medium", status: "development", managerUserId: 5, tier: "medium", comment: "Точка в развитии: согласование ассортимента и обучение персонала.", createdAt: "2026-01-13T11:25:00.000Z" },
+  { id: 3, organizationId: 4, name: "Дом дверей Сочи", dealerType: "single", segment: "региональный дилер", region: "Краснодарский край", city: "Сочи", salesManagerId: 5, regionalManagerId: 7, potentialLevel: "medium", status: "active", managerUserId: 5, tier: "medium", comment: "Стабильные заказы, фокус на витрине премиум-серии в сезон.", createdAt: "2026-01-14T09:15:00.000Z" },
+];
+
+const tradePointsSeed: TradePoint[] = [
+  { id: 1, dealerId: 1, name: "Дверной Дом Юг — Краснодар", city: "Краснодар", address: "ул. Северная, 320", storeFormat: "showroom", areaSqm: 180, assortmentProfile: "входные и межкомнатные, премиум", status: "active", comment: null },
+  { id: 2, dealerId: 1, name: "Дверной Дом Юг — Анапа", city: "Анапа", address: "ул. Ленина, 14", storeFormat: "showroom", areaSqm: 95, assortmentProfile: "входные, массив", status: "active", comment: null },
+  { id: 3, dealerId: 1, name: "Дверной Дом Юг — Новороссийск", city: "Новороссийск", address: "пр-т Дзержинского, 211", storeFormat: "mixed", areaSqm: 120, assortmentProfile: "смешанный формат, усиление витрины", status: "development", comment: null },
+  { id: 4, dealerId: 2, name: "Салон дверей Северный", city: "Краснодар", address: "ул. Российская, 74", storeFormat: "showroom", areaSqm: 65, assortmentProfile: "межкомнатные, средний сегмент", status: "development", comment: null },
+  { id: 5, dealerId: 3, name: "Дом дверей Сочи", city: "Сочи", address: "ул. Пластунская, 52", storeFormat: "market_point", areaSqm: 45, assortmentProfile: "компактная витрина, курортный трафик", status: "active", comment: null },
+];
+
+const dealerTasksSeed: DealerTask[] = [
+  { id: 1, dealerId: 1, tradePointId: 1, assignedToUserId: 5, createdByUserId: 7, type: "showcase_goal", title: "Цель по витрине: линия Loft в Краснодаре", description: "Согласовать план выкладки серии Loft в основном зале до конца квартала.", status: "in_progress", priority: "high", dueDate: "2026-04-15", source: "regional_manager", createdAt: "2026-04-01T10:00:00.000Z", completedAt: null },
+  { id: 2, dealerId: 1, tradePointId: null, assignedToUserId: 5, createdByUserId: 5, type: "call", title: "Звонок по отгрузке и условиям", description: "Уточнить сроки поставки и коммерческие условия по текущему договору.", status: "done", priority: "medium", dueDate: "2026-03-28", source: "sales_manager", createdAt: "2026-03-20T11:00:00.000Z", completedAt: "2026-03-27T16:00:00.000Z" },
+  { id: 3, dealerId: 1, tradePointId: 2, assignedToUserId: 7, createdByUserId: 2, type: "visit_followup", title: "Follow-up после визита в Анапу", description: "Закрепить договорённости по фокусу на входные двери премиум.", status: "new", priority: "medium", dueDate: "2026-04-20", source: "sales_head", createdAt: "2026-04-10T08:00:00.000Z", completedAt: null },
+  { id: 4, dealerId: 2, tradePointId: 4, assignedToUserId: 6, createdByUserId: 5, type: "documents", title: "Комплект документов к договору", description: "Подготовить шаблоны актов и спецификации для подписания.", status: "in_progress", priority: "low", dueDate: "2026-04-12", source: "sales_manager", createdAt: "2026-04-05T12:00:00.000Z", completedAt: null },
+  { id: 5, dealerId: 2, tradePointId: null, assignedToUserId: 5, createdByUserId: 7, type: "other", title: "Синхронизация по ТТ в развитии", description: "Согласовать график выездов и приоритеты витрины.", status: "new", priority: "medium", dueDate: "2026-04-18", source: "regional_manager", createdAt: "2026-04-08T14:00:00.000Z", completedAt: null },
+  { id: 6, dealerId: 3, tradePointId: 5, assignedToUserId: 7, createdByUserId: 5, type: "order_support", title: "Сопровождение срочного заказа", description: "Согласовать замену позиции в заказе из-за сроков производства.", status: "in_progress", priority: "high", dueDate: "2026-04-11", source: "sales_manager", createdAt: "2026-04-09T09:30:00.000Z", completedAt: null },
+  { id: 7, dealerId: 3, tradePointId: 5, assignedToUserId: 5, createdByUserId: 7, type: "visit_followup", title: "Итоги визита в Сочи", description: "Передать в офис фото витрины и список SKU для доработки.", status: "overdue", priority: "medium", dueDate: "2026-04-01", source: "regional_manager", createdAt: "2026-03-25T10:00:00.000Z", completedAt: null },
+];
+
+const dealerInteractionsSeed: DealerInteraction[] = [
+  { id: 1, dealerId: 1, tradePointId: 1, userId: 5, roleContext: "sales_manager", type: "call", summary: "Короткий звонок: подтверждение поставки и согласование встречи по витрине.", createdAt: "2026-04-02T09:00:00.000Z" },
+  { id: 2, dealerId: 1, tradePointId: 1, userId: 7, roleContext: "regional_manager", type: "visit", summary: "Полевой визит в Краснодар, осмотр основной витрины, отметка по дистрибуции.", createdAt: "2026-04-03T11:30:00.000Z" },
+  { id: 3, dealerId: 1, tradePointId: 2, userId: 7, roleContext: "regional_manager", type: "distribution_report", summary: "Черновик отчёта дистрибуции по точке в Анапе (фото витрины, топ SKU).", createdAt: "2026-04-04T08:15:00.000Z" },
+  { id: 4, dealerId: 2, tradePointId: 4, userId: 5, roleContext: "sales_manager", type: "meeting", summary: "Онлайн-встреча с владельцем: дорожная карта развития точки.", createdAt: "2026-04-05T10:00:00.000Z" },
+  { id: 5, dealerId: 2, tradePointId: null, userId: 2, roleContext: "head", type: "task_created", summary: "Создана операционная задача ассистенту по подготовке документов к договору.", createdAt: "2026-04-05T12:00:00.000Z" },
+  { id: 6, dealerId: 2, tradePointId: null, userId: 6, roleContext: "assistant", type: "message", summary: "Уточнение реквизитов и сроков подготовки спецификации.", createdAt: "2026-04-05T15:00:00.000Z" },
+  { id: 7, dealerId: 3, tradePointId: 5, userId: 7, roleContext: "regional_manager", type: "visit", summary: "Плановый визит в Сочи, согласование площади под новую витрину.", createdAt: "2026-04-07T13:00:00.000Z" },
+  { id: 8, dealerId: 3, tradePointId: 5, userId: 5, roleContext: "sales_manager", type: "message", summary: "Согласованы скидка и сроки по срочному заказу; передано в производство.", createdAt: "2026-04-09T09:00:00.000Z" },
 ];
 
 const productsSeed: Product[] = [
@@ -171,9 +290,9 @@ const productsSeed: Product[] = [
 ];
 
 const ordersSeed: Order[] = [
-  { id: 1, orderNumber: "ORD-2026-0001", organizationId: 1, dealerId: 1, createdByUserId: 2, status: "submitted", totalCents: 20670000, currency: "RUB", requestedDeliveryDate: "2026-02-05", createdAt: "2026-01-20T10:15:00.000Z", updatedAt: "2026-01-20T10:15:00.000Z" },
-  { id: 2, orderNumber: "ORD-2026-0002", organizationId: 1, dealerId: 2, createdByUserId: 2, status: "assembling", totalCents: 14900000, currency: "RUB", requestedDeliveryDate: "2026-02-08", createdAt: "2026-01-21T09:40:00.000Z", updatedAt: "2026-01-23T12:00:00.000Z" },
-  { id: 3, orderNumber: "ORD-2026-0003", organizationId: 1, dealerId: 1, createdByUserId: 2, status: "shipped", totalCents: 9120000, currency: "RUB", requestedDeliveryDate: "2026-01-30", createdAt: "2026-01-18T14:10:00.000Z", updatedAt: "2026-01-24T07:30:00.000Z" },
+  { id: 1, orderNumber: "ORD-2026-0001", organizationId: 1, dealerId: 1, createdByUserId: 5, status: "submitted", totalCents: 20670000, currency: "RUB", requestedDeliveryDate: "2026-02-05", createdAt: "2026-01-20T10:15:00.000Z", updatedAt: "2026-01-20T10:15:00.000Z" },
+  { id: 2, orderNumber: "ORD-2026-0002", organizationId: 1, dealerId: 2, createdByUserId: 5, status: "assembling", totalCents: 14900000, currency: "RUB", requestedDeliveryDate: "2026-02-08", createdAt: "2026-01-21T09:40:00.000Z", updatedAt: "2026-01-23T12:00:00.000Z" },
+  { id: 3, orderNumber: "ORD-2026-0003", organizationId: 1, dealerId: 1, createdByUserId: 5, status: "shipped", totalCents: 9120000, currency: "RUB", requestedDeliveryDate: "2026-01-30", createdAt: "2026-01-18T14:10:00.000Z", updatedAt: "2026-01-24T07:30:00.000Z" },
 ];
 
 const orderItemsSeed: OrderItem[] = [
@@ -196,12 +315,12 @@ const claimsSeed: Claim[] = [
 ];
 
 const activityEventsSeed: ActivityEvent[] = [
-  { id: 1, eventType: "order_created", entityType: "order", entityId: 1, organizationId: 1, userId: 2, orderId: 1, claimId: null, message: "Order ORD-2026-0001 created by sales manager.", createdAt: "2026-01-20T10:15:00.000Z" },
-  { id: 2, eventType: "document_added", entityType: "document", entityId: 1, organizationId: 1, userId: 2, orderId: 1, claimId: null, message: "Invoice INV-0001 added to order ORD-2026-0001.", createdAt: "2026-01-20T10:20:00.000Z" },
-  { id: 3, eventType: "order_status_changed", entityType: "order", entityId: 2, organizationId: 1, userId: 2, orderId: 2, claimId: null, message: "Order ORD-2026-0002 moved to assembling.", createdAt: "2026-01-23T12:00:00.000Z" },
-  { id: 4, eventType: "order_status_changed", entityType: "order", entityId: 3, organizationId: 1, userId: 2, orderId: 3, claimId: null, message: "Order ORD-2026-0003 shipped from warehouse.", createdAt: "2026-01-24T07:30:00.000Z" },
-  { id: 5, eventType: "claim_created", entityType: "claim", entityId: 1, organizationId: 1, userId: 3, orderId: 3, claimId: 1, message: "Claim CLM-2026-001 created for order ORD-2026-0003.", createdAt: "2026-01-25T11:10:00.000Z" },
-  { id: 6, eventType: "claim_created", entityType: "claim", entityId: 2, organizationId: 1, userId: 4, orderId: null, claimId: 2, message: "Claim CLM-2026-002 created without linked order.", createdAt: "2026-01-26T09:25:00.000Z" },
+  { id: 1, eventType: "order_created", entityType: "order", entityId: 1, organizationId: 1, userId: 5, orderId: 1, claimId: null, message: "Создан заказ ORD-2026-0001 менеджером продаж.", createdAt: "2026-01-20T10:15:00.000Z" },
+  { id: 2, eventType: "document_added", entityType: "document", entityId: 1, organizationId: 1, userId: 5, orderId: 1, claimId: null, message: "К заказу ORD-2026-0001 добавлен счёт INV-0001.", createdAt: "2026-01-20T10:20:00.000Z" },
+  { id: 3, eventType: "order_status_changed", entityType: "order", entityId: 2, organizationId: 1, userId: 5, orderId: 2, claimId: null, message: "Заказ ORD-2026-0002 переведён в комплектацию.", createdAt: "2026-01-23T12:00:00.000Z" },
+  { id: 4, eventType: "order_status_changed", entityType: "order", entityId: 3, organizationId: 1, userId: 5, orderId: 3, claimId: null, message: "Заказ ORD-2026-0003 отгружен со склада.", createdAt: "2026-01-24T07:30:00.000Z" },
+  { id: 5, eventType: "claim_created", entityType: "claim", entityId: 1, organizationId: 1, userId: 5, orderId: 3, claimId: 1, message: "Создана рекламация CLM-2026-001 по заказу ORD-2026-0003.", createdAt: "2026-01-25T11:10:00.000Z" },
+  { id: 6, eventType: "claim_created", entityType: "claim", entityId: 2, organizationId: 1, userId: 5, orderId: null, claimId: 2, message: "Создана рекламация CLM-2026-002 без привязки к заказу.", createdAt: "2026-01-26T09:25:00.000Z" },
 ];
 
 // Suppress "unused" warnings for the role/userRole shapes — kept for parity
@@ -246,6 +365,69 @@ function getOrderDetails(id: number): OrderDetails | undefined {
   };
 }
 
+function getUserById(id: number | null | undefined): User | undefined {
+  if (id == null) return undefined;
+  return usersSeed.find((user) => user.id === id);
+}
+
+function userToPublic(user: User | undefined): UserPublic | null {
+  if (!user) return null;
+  return {
+    id: user.id,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    email: user.email,
+    phone: user.phone,
+  };
+}
+
+function countActiveTasks(tasks: DealerTask[]): number {
+  return tasks.filter((t) => t.status === "new" || t.status === "in_progress" || t.status === "overdue").length;
+}
+
+function getDealerSummaryList(): DealerListItem[] {
+  return dealersSeed.map((dealer) => {
+    const tradePointCount = tradePointsSeed.filter((p) => p.dealerId === dealer.id).length;
+    const tasksForDealer = dealerTasksSeed.filter((t) => t.dealerId === dealer.id);
+    const salesId = dealer.salesManagerId ?? dealer.managerUserId;
+    const regionalId = dealer.regionalManagerId;
+    return {
+      id: dealer.id,
+      organizationId: dealer.organizationId,
+      name: dealer.name,
+      dealerType: dealer.dealerType,
+      segment: dealer.segment,
+      status: dealer.status,
+      salesManagerId: salesId,
+      regionalManagerId: regionalId,
+      region: dealer.region,
+      city: dealer.city,
+      potentialLevel: dealer.potentialLevel,
+      tradePointCount,
+      activeTaskCount: countActiveTasks(tasksForDealer),
+      comment: dealer.comment,
+      createdAt: dealer.createdAt,
+      salesManager: userToPublic(getUserById(salesId)),
+      regionalManager: userToPublic(getUserById(regionalId)),
+    };
+  });
+}
+
+function getDealerDetail(id: number): DealerDetail | undefined {
+  const dealer = dealersSeed.find((d) => d.id === id);
+  if (!dealer) return undefined;
+  const salesId = dealer.salesManagerId ?? dealer.managerUserId;
+  const tradePointCount = tradePointsSeed.filter((p) => p.dealerId === dealer.id).length;
+  const activeTaskCount = countActiveTasks(dealerTasksSeed.filter((t) => t.dealerId === dealer.id));
+  return {
+    dealer,
+    salesManager: userToPublic(getUserById(salesId)),
+    regionalManager: userToPublic(getUserById(dealer.regionalManagerId)),
+    tradePointCount,
+    activeTaskCount,
+  };
+}
+
 const createOrderRequestSchema = z.object({
   dealerId: z.number().int().positive(),
   createdByUserId: z.number().int().positive().optional(),
@@ -260,7 +442,35 @@ type ApiResult = { status: number; body: unknown };
 
 function listOrganizations(): ApiResult { return { status: 200, body: organizationsSeed }; }
 function listUsers(): ApiResult { return { status: 200, body: usersSeed }; }
-function listDealers(): ApiResult { return { status: 200, body: dealersSeed }; }
+function listDealers(): ApiResult { return { status: 200, body: getDealerSummaryList() }; }
+function getDealerByIdRoute(rawId: string): ApiResult {
+  const id = Number.parseInt(rawId, 10);
+  if (Number.isNaN(id)) return { status: 400, body: { message: "ID дилера должен быть числом" } };
+  const detail = getDealerDetail(id);
+  if (!detail) return { status: 404, body: { message: "Дилер не найден" } };
+  return { status: 200, body: detail };
+}
+function getDealerTradePointsRoute(rawId: string): ApiResult {
+  const id = Number.parseInt(rawId, 10);
+  if (Number.isNaN(id)) return { status: 400, body: { message: "ID дилера должен быть числом" } };
+  if (!dealersSeed.find((d) => d.id === id)) return { status: 404, body: { message: "Дилер не найден" } };
+  const list = tradePointsSeed.filter((p) => p.dealerId === id).sort((a, b) => a.id - b.id);
+  return { status: 200, body: list };
+}
+function getDealerTasksRoute(rawId: string): ApiResult {
+  const id = Number.parseInt(rawId, 10);
+  if (Number.isNaN(id)) return { status: 400, body: { message: "ID дилера должен быть числом" } };
+  if (!dealersSeed.find((d) => d.id === id)) return { status: 404, body: { message: "Дилер не найден" } };
+  const list = dealerTasksSeed.filter((t) => t.dealerId === id).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return { status: 200, body: list };
+}
+function getDealerInteractionsRoute(rawId: string): ApiResult {
+  const id = Number.parseInt(rawId, 10);
+  if (Number.isNaN(id)) return { status: 400, body: { message: "ID дилера должен быть числом" } };
+  if (!dealersSeed.find((d) => d.id === id)) return { status: 404, body: { message: "Дилер не найден" } };
+  const list = dealerInteractionsSeed.filter((e) => e.dealerId === id).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return { status: 200, body: list };
+}
 function listProducts(): ApiResult { return { status: 200, body: productsSeed }; }
 function listOrders(): ApiResult {
   return { status: 200, body: [...ordersSeed].sort((a, b) => b.createdAt.localeCompare(a.createdAt)) };
@@ -352,7 +562,7 @@ function createOrder(body: unknown): ApiResult {
     orderItemsSeed.push(...newOrderItems);
 
     const dealerOrganization = organizationsSeed.find((entry) => entry.id === dealer.organizationId);
-    const commentSuffix = payload.comment?.trim() ? ` Comment: ${payload.comment.trim()}` : "";
+    const commentSuffix = payload.comment?.trim() ? ` Комментарий: ${payload.comment.trim()}` : "";
     activityEventsSeed.push({
       id: getNextId(activityEventsSeed),
       eventType: "order_created",
@@ -362,7 +572,7 @@ function createOrder(body: unknown): ApiResult {
       userId: order.createdByUserId,
       orderId: order.id,
       claimId: null,
-      message: `Order ${order.orderNumber} created for ${dealerOrganization?.name ?? `dealer #${dealer.id}`}.${commentSuffix}`,
+      message: `Создан заказ ${order.orderNumber} для дилера ${dealerOrganization?.name ?? `№${dealer.id}`}.${commentSuffix}`,
       createdAt: nowIso,
     });
 
@@ -382,6 +592,14 @@ function routeApiRequest(method: string, pathname: string, body: unknown): ApiRe
   if (upperMethod === "GET" && normalized === "/api/organizations") return listOrganizations();
   if (upperMethod === "GET" && normalized === "/api/users") return listUsers();
   if (upperMethod === "GET" && normalized === "/api/dealers") return listDealers();
+  const dealerTradeMatch = /^\/api\/dealers\/(\d+)\/trade-points$/.exec(normalized);
+  if (upperMethod === "GET" && dealerTradeMatch) return getDealerTradePointsRoute(dealerTradeMatch[1]);
+  const dealerTasksMatch = /^\/api\/dealers\/(\d+)\/tasks$/.exec(normalized);
+  if (upperMethod === "GET" && dealerTasksMatch) return getDealerTasksRoute(dealerTasksMatch[1]);
+  const dealerIntMatch = /^\/api\/dealers\/(\d+)\/interactions$/.exec(normalized);
+  if (upperMethod === "GET" && dealerIntMatch) return getDealerInteractionsRoute(dealerIntMatch[1]);
+  const dealerIdMatch = /^\/api\/dealers\/(\d+)$/.exec(normalized);
+  if (upperMethod === "GET" && dealerIdMatch) return getDealerByIdRoute(dealerIdMatch[1]);
   if (upperMethod === "GET" && normalized === "/api/products") return listProducts();
   if (upperMethod === "GET" && normalized === "/api/orders") return listOrders();
   if (upperMethod === "POST" && normalized === "/api/orders") return createOrder(body);

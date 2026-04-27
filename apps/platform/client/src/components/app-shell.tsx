@@ -87,7 +87,10 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="mx-auto flex max-w-[1440px]">
         <aside className="hidden min-h-screen w-72 border-r border-sidebar-border bg-sidebar px-4 py-6 lg:block">
           <div className="px-2">
-            <TandoorLogo className="h-10 w-auto" data-testid="tandoor-logo-sidebar" />
+            <TandoorLogo
+              className="h-10 w-auto max-h-11"
+              data-testid="img-tandoor-logo-sidebar"
+            />
             <p className="mt-3 text-xs text-muted-foreground">Дилерская платформа</p>
           </div>
           <div className="mt-8">
@@ -100,7 +103,11 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <TandoorLogo className="h-9 w-auto lg:hidden" compact data-testid="tandoor-logo-mobile-header" />
+                  <TandoorLogo
+                    className="h-8 w-auto sm:h-9"
+                    compact
+                    data-testid="img-tandoor-logo-header"
+                  />
                   <div className="hidden lg:block">
                     <h1 className="text-lg font-bold tracking-tight" data-testid="platform-title">
                       Платформа Tandoor
@@ -144,7 +151,10 @@ export function AppShell({ children }: { children: ReactNode }) {
                   <SheetContent side="left" className="w-[290px] border-r border-border p-5">
                     <SheetHeader className="mb-6">
                       <SheetTitle className="text-left">
-                        <TandoorLogo className="h-9 w-auto" data-testid="tandoor-logo-mobile" />
+                        <TandoorLogo
+                          className="h-9 w-auto"
+                          data-testid="img-tandoor-logo-compact"
+                        />
                       </SheetTitle>
                     </SheetHeader>
                     <SidebarNav location={location} onNavigate={() => setMobileOpen(false)} />

@@ -14,7 +14,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { formatCurrency, statusLabel } from "@/lib/format";
 import type {
   CreateOrderPayload,
-  Dealer,
+  DealerListItem,
   OrderDetail,
   Organization,
   Product,
@@ -36,7 +36,7 @@ export default function NewOrderPage() {
   const [comment, setComment] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
 
-  const dealersQuery = useQuery<Dealer[]>({ queryKey: ["/api/dealers"] });
+  const dealersQuery = useQuery<DealerListItem[]>({ queryKey: ["/api/dealers"] });
   const organizationsQuery = useQuery<Organization[]>({ queryKey: ["/api/organizations"] });
   const productsQuery = useQuery<Product[]>({ queryKey: ["/api/products"] });
   const usersQuery = useQuery<User[]>({ queryKey: ["/api/users"] });
@@ -53,7 +53,7 @@ export default function NewOrderPage() {
   const dealers = dealersQuery.data ?? [];
   const products = productsQuery.data ?? [];
   const salesManager =
-    (usersQuery.data ?? []).find((user) => user.email === "o.morozova@tandoor.ru") ??
+    (usersQuery.data ?? []).find((user) => user.email === "a.kravchenko@tandoor.ru") ??
     (usersQuery.data ?? [])[0];
 
   const summaryRows = draftItems
@@ -247,7 +247,7 @@ export default function NewOrderPage() {
                 const dealerOrg = organizationById.get(dealer.organizationId);
                 return (
                   <SelectItem key={dealer.id} value={String(dealer.id)}>
-                    {dealerOrg?.name ?? `Дилер #${dealer.id}`}
+                    {dealer.name ?? dealerOrg?.name ?? `Дилер #${dealer.id}`}
                   </SelectItem>
                 );
               })}

@@ -34,8 +34,10 @@ const claimStyles: Record<string, string> = {
 
 const dealerStyles: Record<string, string> = {
   active: "bg-[#dff2c7] text-[#37551a] border-[#cbe7a8]",
+  development: "bg-sky-100 text-sky-900 border-sky-200",
   inactive: "bg-neutral-100 text-neutral-700 border-neutral-200",
   paused: "bg-amber-100 text-amber-800 border-amber-200",
+  archived: "bg-neutral-200 text-neutral-600 border-neutral-300",
 };
 
 const availabilityStyles: Record<string, string> = {
@@ -59,8 +61,10 @@ const labels: Record<string, string> = {
   resolved: "Решена",
   rejected: "Отклонена",
   active: "Активен",
+  development: "В развитии",
   paused: "Приостановлен",
   inactive: "Неактивен",
+  archived: "В архиве",
   in_stock: "В наличии",
   low_stock: "Мало",
   limited: "Мало",

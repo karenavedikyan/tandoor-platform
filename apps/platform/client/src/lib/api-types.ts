@@ -19,13 +19,99 @@ export interface User {
   createdAt: string;
 }
 
+export interface UserPublic {
+  id: number;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string | null;
+}
+
 export interface Dealer {
   id: number;
   organizationId: number;
-  managerUserId: number | null;
+  name: string;
+  dealerType: string;
+  segment: string | null;
   region: string | null;
-  tier: string | null;
+  city: string | null;
+  salesManagerId: number | null;
+  regionalManagerId: number | null;
+  potentialLevel: string | null;
   status: string;
+  /** @deprecated use salesManagerId */
+  managerUserId: number | null;
+  tier: string | null;
+  comment: string | null;
+  createdAt: string;
+}
+
+export interface DealerListItem {
+  id: number;
+  organizationId: number;
+  name: string;
+  dealerType: string;
+  segment: string | null;
+  status: string;
+  salesManagerId: number | null;
+  regionalManagerId: number | null;
+  region: string | null;
+  city: string | null;
+  potentialLevel: string | null;
+  tradePointCount: number;
+  activeTaskCount: number;
+  comment: string | null;
+  createdAt: string;
+  salesManager: UserPublic | null;
+  regionalManager: UserPublic | null;
+}
+
+export interface DealerDetail {
+  dealer: Dealer;
+  salesManager: UserPublic | null;
+  regionalManager: UserPublic | null;
+  tradePointCount: number;
+  activeTaskCount: number;
+}
+
+export interface TradePoint {
+  id: number;
+  dealerId: number;
+  name: string;
+  city: string;
+  address: string;
+  storeFormat: string;
+  areaSqm: number;
+  assortmentProfile: string;
+  status: string;
+  comment: string | null;
+}
+
+export interface DealerTask {
+  id: number;
+  dealerId: number;
+  tradePointId: number | null;
+  assignedToUserId: number;
+  createdByUserId: number;
+  type: string;
+  title: string;
+  description: string;
+  status: string;
+  priority: string;
+  dueDate: string;
+  source: string;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+export interface DealerInteraction {
+  id: number;
+  dealerId: number;
+  tradePointId: number | null;
+  userId: number;
+  roleContext: string;
+  type: string;
+  summary: string;
   createdAt: string;
 }
 

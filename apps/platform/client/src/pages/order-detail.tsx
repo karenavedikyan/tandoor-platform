@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/status-badge";
-import type { Dealer, OrderDetail, Product, Organization, User } from "@/lib/api-types";
+import type { DealerListItem, OrderDetail, Product, Organization, User } from "@/lib/api-types";
 import { formatCurrency, formatDate, statusLabel } from "@/lib/format";
 
 function OrderDetailSkeleton() {
@@ -38,7 +38,7 @@ export default function OrderDetailPage() {
     enabled: Number.isFinite(orderId),
   });
 
-  const dealersQuery = useQuery<Dealer[]>({
+  const dealersQuery = useQuery<DealerListItem[]>({
     queryKey: ["/api/dealers"],
   });
 
@@ -150,7 +150,9 @@ export default function OrderDetailPage() {
           <div className="grid gap-3 md:grid-cols-4">
             <div className="rounded-xl border border-border bg-muted/30 p-4">
               <p className="text-xs uppercase tracking-wide text-muted-foreground">Дилер</p>
-              <p className="mt-1 font-medium">{dealerOrganization?.name ?? "Неизвестный дилер"}</p>
+              <p className="mt-1 font-medium">
+                {dealer?.name ?? dealerOrganization?.name ?? "Неизвестный дилер"}
+              </p>
             </div>
             <div className="rounded-xl border border-border bg-muted/30 p-4">
               <p className="text-xs uppercase tracking-wide text-muted-foreground">Желаемая доставка</p>

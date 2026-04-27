@@ -14,7 +14,7 @@ import {
   UsersRound,
   FileWarning,
 } from "lucide-react";
-import type { ActivityEvent, Claim, Dealer, Order, Product } from "@/lib/api-types";
+import type { ActivityEvent, Claim, DealerListItem, Order, Product } from "@/lib/api-types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -30,7 +30,7 @@ function statusSummary(orders: Order[]) {
 }
 
 export default function DashboardPage() {
-  const dealersQuery = useQuery<Dealer[]>({ queryKey: ["/api/dealers"] });
+  const dealersQuery = useQuery<DealerListItem[]>({ queryKey: ["/api/dealers"] });
   const productsQuery = useQuery<Product[]>({ queryKey: ["/api/products"] });
   const ordersQuery = useQuery<Order[]>({ queryKey: ["/api/orders"] });
   const claimsQuery = useQuery<Claim[]>({ queryKey: ["/api/claims"] });

@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertCircle, MessageSquareWarning } from "lucide-react";
-import type { Claim, Dealer, Order, Organization } from "@/lib/api-types";
+import type { Claim, DealerListItem, Order, Organization } from "@/lib/api-types";
 import { formatDate, statusLabel } from "@/lib/format";
 import { StatusBadge } from "@/components/status-badge";
 
@@ -19,7 +19,7 @@ export default function ClaimsPage() {
   const claimsQuery = useQuery<Claim[]>({
     queryKey: ["/api/claims"],
   });
-  const dealersQuery = useQuery<Dealer[]>({
+  const dealersQuery = useQuery<DealerListItem[]>({
     queryKey: ["/api/dealers"],
   });
   const organizationsQuery = useQuery<Organization[]>({
@@ -42,7 +42,7 @@ export default function ClaimsPage() {
 
   const dealerById = useMemo(() => {
     const dealers = dealersQuery.data ?? [];
-    return new Map<number, Dealer>(dealers.map((dealer) => [dealer.id, dealer]));
+    return new Map<number, DealerListItem>(dealers.map((dealer) => [dealer.id, dealer]));
   }, [dealersQuery.data]);
 
   const orgById = useMemo(() => {
@@ -122,13 +122,14 @@ export default function ClaimsPage() {
                 const dealerOrganization = dealer
                   ? orgById.get(dealer.organizationId)
                   : undefined;
+                const dealerLabel = dealer?.name ?? dealerOrganization?.name;
                 const order = claim.orderId ? orderById.get(claim.orderId) : undefined;
 
                 return (
                   <TableRow key={claim.id} data-testid={`claim-row-${claim.id}`}>
                     <TableCell className="font-medium">{claim.claimNumber}</TableCell>
                     <TableCell>{order?.orderNumber ?? "Не привязан"}</TableCell>
-                    <TableCell>{dealerOrganization?.name ?? `Дилер #${claim.dealerId}`}</TableCell>
+                    <TableCell>{dealerLabel ?? `Дилер #${claim.dealerId}`}</TableCell>
                     <TableCell>{statusLabel(claim.reason)}</TableCell>
                     <TableCell>
                       <StatusBadge type="claim" status={claim.status} />

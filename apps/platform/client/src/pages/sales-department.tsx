@@ -152,7 +152,7 @@ export default function SalesDepartmentPage() {
           </p>
           <p className="flex items-center gap-2">
             <MapPinned className="h-4 w-4 text-primary" />
-            <span className="font-medium">Сергей Волков</span> — руководитель региональных менеджеров
+            <span className="font-medium">Мария Лебедева</span> — руководитель региональных менеджеров
           </p>
           <p className="flex items-center gap-2">
             <LineChart className="h-4 w-4 text-primary" />
@@ -160,7 +160,7 @@ export default function SalesDepartmentPage() {
           </p>
           <p className="flex items-center gap-2">
             <UserSquare2 className="h-4 w-4 text-primary" />
-            <span className="font-medium">Мария Лебедева</span> — ассистент продаж
+            <span className="font-medium">Сергей Волков</span> — ассистент продаж
           </p>
           <p className="flex items-center gap-2">
             <Route className="h-4 w-4 text-primary" />

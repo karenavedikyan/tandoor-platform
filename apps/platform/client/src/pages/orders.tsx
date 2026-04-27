@@ -13,7 +13,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { OrderStatusBadge } from "@/components/status-badge";
-import type { Dealer, Order, Organization } from "@/lib/api-types";
+import type { DealerListItem, Order, Organization } from "@/lib/api-types";
 import { formatCurrency, formatDate } from "@/lib/format";
 
 function OrdersTableSkeleton() {
@@ -36,7 +36,7 @@ export default function OrdersPage() {
     queryKey: ["/api/orders"],
   });
 
-  const { data: dealers } = useQuery<Dealer[]>({
+  const { data: dealers } = useQuery<DealerListItem[]>({
     queryKey: ["/api/dealers"],
   });
   const { data: organizations } = useQuery<Organization[]>({
@@ -97,7 +97,9 @@ export default function OrdersPage() {
                     return (
                       <TableRow key={order.id} data-testid={`order-row-${order.id}`}>
                         <TableCell className="font-medium">{order.orderNumber}</TableCell>
-                        <TableCell>{dealerOrganization?.name ?? `Дилер #${order.dealerId}`}</TableCell>
+                        <TableCell>
+                          {dealer?.name ?? dealerOrganization?.name ?? `Дилер #${order.dealerId}`}
+                        </TableCell>
                         <TableCell>
                           <OrderStatusBadge status={order.status} />
                         </TableCell>

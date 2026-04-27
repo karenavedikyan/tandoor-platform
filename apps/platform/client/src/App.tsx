@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppShell } from "@/components/app-shell";
 import DashboardPage from "@/pages/dashboard";
 import DealersPage from "@/pages/dealers";
+import DealerDetailPage from "@/pages/dealer-detail";
 import CatalogPage from "@/pages/catalog";
 import OrdersPage from "@/pages/orders";
 import OrderDetailPage from "@/pages/order-detail";
@@ -22,6 +23,7 @@ function AppRouter() {
     <AppShell>
       <Switch>
         <Route path="/" component={DashboardPage} />
+        <Route path="/dealers/:id" component={DealerDetailPage} />
         <Route path="/dealers" component={DealersPage} />
         <Route path="/catalog" component={CatalogPage} />
         <Route path="/orders" component={OrdersPage} />

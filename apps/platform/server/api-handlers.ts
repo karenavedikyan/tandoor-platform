@@ -30,7 +30,60 @@ export async function getUsers(): Promise<ApiResult> {
 }
 
 export async function getDealers(): Promise<ApiResult> {
-  return { status: 200, body: await storage.listDealers() };
+  return { status: 200, body: await storage.getDealerSummary() };
+}
+
+function parseIdParam(raw: string | undefined): number | null {
+  if (raw == null) {
+    return null;
+  }
+  const id = Number.parseInt(raw, 10);
+  return Number.isNaN(id) ? null : id;
+}
+
+export async function getDealerById(rawId: string): Promise<ApiResult> {
+  const id = parseIdParam(rawId);
+  if (id == null) {
+    return { status: 400, body: { message: "ID дилера должен быть числом" } };
+  }
+  const detail = await storage.getDealerDetailById(id);
+  if (!detail) {
+    return { status: 404, body: { message: "Дилер не найден" } };
+  }
+  return { status: 200, body: detail };
+}
+
+export async function getDealerTradePoints(dealerId: string): Promise<ApiResult> {
+  const id = parseIdParam(dealerId);
+  if (id == null) {
+    return { status: 400, body: { message: "ID дилера должен быть числом" } };
+  }
+  if (!(await storage.getDealerById(id))) {
+    return { status: 404, body: { message: "Дилер не найден" } };
+  }
+  return { status: 200, body: await storage.getTradePointsByDealerId(id) };
+}
+
+export async function getDealerTasks(dealerId: string): Promise<ApiResult> {
+  const id = parseIdParam(dealerId);
+  if (id == null) {
+    return { status: 400, body: { message: "ID дилера должен быть числом" } };
+  }
+  if (!(await storage.getDealerById(id))) {
+    return { status: 404, body: { message: "Дилер не найден" } };
+  }
+  return { status: 200, body: await storage.getDealerTasksByDealerId(id) };
+}
+
+export async function getDealerInteractions(dealerId: string): Promise<ApiResult> {
+  const id = parseIdParam(dealerId);
+  if (id == null) {
+    return { status: 400, body: { message: "ID дилера должен быть числом" } };
+  }
+  if (!(await storage.getDealerById(id))) {
+    return { status: 404, body: { message: "Дилер не найден" } };
+  }
+  return { status: 200, body: await storage.getDealerInteractionsByDealerId(id) };
 }
 
 export async function getProducts(): Promise<ApiResult> {
@@ -134,6 +187,22 @@ export async function routeApiRequest(
   }
   if (upperMethod === "GET" && normalized === "/api/dealers") {
     return getDealers();
+  }
+  const dealerDetailMatch = /^\/api\/dealers\/(\d+)$/.exec(normalized);
+  if (upperMethod === "GET" && dealerDetailMatch) {
+    return getDealerById(dealerDetailMatch[1]);
+  }
+  const tradePointsMatch = /^\/api\/dealers\/(\d+)\/trade-points$/.exec(normalized);
+  if (upperMethod === "GET" && tradePointsMatch) {
+    return getDealerTradePoints(tradePointsMatch[1]);
+  }
+  const tasksMatch = /^\/api\/dealers\/(\d+)\/tasks$/.exec(normalized);
+  if (upperMethod === "GET" && tasksMatch) {
+    return getDealerTasks(tasksMatch[1]);
+  }
+  const interactionsMatch = /^\/api\/dealers\/(\d+)\/interactions$/.exec(normalized);
+  if (upperMethod === "GET" && interactionsMatch) {
+    return getDealerInteractions(interactionsMatch[1]);
   }
   if (upperMethod === "GET" && normalized === "/api/products") {
     return getProducts();

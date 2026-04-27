@@ -48,10 +48,73 @@ export const dealers = sqliteTable("dealers", {
   organizationId: integer("organization_id")
     .notNull()
     .references(() => organizations.id),
+  /** @deprecated use salesManagerId; kept for backwards compatibility with older API payloads */
   managerUserId: integer("manager_user_id").references(() => users.id),
+  name: text("name").notNull(),
+  dealerType: text("dealer_type").notNull().default("single"),
+  segment: text("segment"),
   region: text("region"),
-  tier: text("tier"),
+  city: text("city"),
+  salesManagerId: integer("sales_manager_id").references(() => users.id),
+  regionalManagerId: integer("regional_manager_id").references(() => users.id),
+  potentialLevel: text("potential_level"),
   status: text("status").notNull().default("active"),
+  /** Legacy display field; prefer segment in new UI */
+  tier: text("tier"),
+  comment: text("comment"),
+  createdAt: text("created_at").notNull(),
+});
+
+export const tradePoints = sqliteTable("trade_points", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  dealerId: integer("dealer_id")
+    .notNull()
+    .references(() => dealers.id),
+  name: text("name").notNull(),
+  city: text("city").notNull(),
+  address: text("address").notNull(),
+  storeFormat: text("store_format").notNull(),
+  areaSqm: integer("area_sqm").notNull(),
+  assortmentProfile: text("assortment_profile").notNull(),
+  status: text("status").notNull().default("active"),
+  comment: text("comment"),
+});
+
+export const dealerTasks = sqliteTable("dealer_tasks", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  dealerId: integer("dealer_id")
+    .notNull()
+    .references(() => dealers.id),
+  tradePointId: integer("trade_point_id").references(() => tradePoints.id),
+  assignedToUserId: integer("assigned_to_user_id")
+    .notNull()
+    .references(() => users.id),
+  createdByUserId: integer("created_by_user_id")
+    .notNull()
+    .references(() => users.id),
+  type: text("type").notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  status: text("status").notNull(),
+  priority: text("priority").notNull().default("medium"),
+  dueDate: text("due_date").notNull(),
+  source: text("source").notNull(),
+  createdAt: text("created_at").notNull(),
+  completedAt: text("completed_at"),
+});
+
+export const dealerInteractions = sqliteTable("dealer_interactions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  dealerId: integer("dealer_id")
+    .notNull()
+    .references(() => dealers.id),
+  tradePointId: integer("trade_point_id").references(() => tradePoints.id),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id),
+  roleContext: text("role_context").notNull(),
+  type: text("type").notNull(),
+  summary: text("summary").notNull(),
   createdAt: text("created_at").notNull(),
 });
 
@@ -164,6 +227,15 @@ export const insertUserRoleSchema = createInsertSchema(userRoles).omit({
 export const insertDealerSchema = createInsertSchema(dealers).omit({
   id: true,
 });
+export const insertTradePointSchema = createInsertSchema(tradePoints).omit({
+  id: true,
+});
+export const insertDealerTaskSchema = createInsertSchema(dealerTasks).omit({
+  id: true,
+});
+export const insertDealerInteractionSchema = createInsertSchema(dealerInteractions).omit({
+  id: true,
+});
 export const insertProductSchema = createInsertSchema(products).omit({
   id: true,
 });
@@ -193,6 +265,12 @@ export type InsertUserRole = z.infer<typeof insertUserRoleSchema>;
 export type UserRole = typeof userRoles.$inferSelect;
 export type InsertDealer = z.infer<typeof insertDealerSchema>;
 export type Dealer = typeof dealers.$inferSelect;
+export type InsertTradePoint = z.infer<typeof insertTradePointSchema>;
+export type TradePoint = typeof tradePoints.$inferSelect;
+export type InsertDealerTask = z.infer<typeof insertDealerTaskSchema>;
+export type DealerTask = typeof dealerTasks.$inferSelect;
+export type InsertDealerInteraction = z.infer<typeof insertDealerInteractionSchema>;
+export type DealerInteraction = typeof dealerInteractions.$inferSelect;
 export type InsertProduct = z.infer<typeof insertProductSchema>;
 export type Product = typeof products.$inferSelect;
 export type InsertOrder = z.infer<typeof insertOrderSchema>;
