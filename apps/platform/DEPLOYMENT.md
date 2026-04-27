@@ -47,9 +47,21 @@ All endpoints from local Express dev are reachable on the Vercel deployment:
 - `GET /api/claims`
 - `GET /api/activity`
 
-The Vercel function and the local Express server share the same handler logic
-in `server/api-handlers.ts`, so there is one source of truth for routing,
-validation, and business logic.
+## A note on the Vercel API function
+
+The Vercel function file at `apps/platform/api/[...path].ts` is intentionally
+**self-contained**: it does not import from `server/*` or use the `@shared/*`
+TypeScript path alias. Vercel's serverless Node bundler does not resolve
+`tsconfig` path aliases at function build time, and importing through
+`@shared/schema` previously caused `FUNCTION_INVOCATION_FAILED` at runtime.
+The handler also avoids pulling in `drizzle-orm` / `better-sqlite3`, which
+are only needed for the Express dev path.
+
+The local Express server still uses `server/api-handlers.ts` and
+`server/storage.ts` (which import shared schema types). The two paths are
+small enough that duplicating the demo data and routing in the Vercel
+function is the simplest robust solution; if the API grows we can extract
+the shared logic into a dependency-free module reachable by relative import.
 
 ## Local development
 
