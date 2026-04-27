@@ -60,6 +60,16 @@ export default function RegionalManagerWorkspacePage() {
     queryKey: ["/api/regional-manager/workspace"],
   });
 
+  const tasks = workspaceQuery.data?.tasks;
+  const taskStats = useMemo(
+    () => ({
+      done: tasks?.filter((task) => task.status === "done").length ?? 0,
+      active: tasks?.filter((task) => task.status === "in_progress").length ?? 0,
+      overdue: tasks?.filter((task) => task.status === "overdue").length ?? 0,
+    }),
+    [tasks],
+  );
+
   if (workspaceQuery.isLoading) {
     return (
       <div className="space-y-4" data-testid="page-regional-manager-workspace">
@@ -100,15 +110,6 @@ export default function RegionalManagerWorkspacePage() {
   const nextVisitHref = workspace.todayRoute.nextVisitId
     ? `/regional-manager/visits/${workspace.todayRoute.nextVisitId}`
     : "/regional-manager/route";
-
-  const taskStats = useMemo(
-    () => ({
-      done: workspace.tasks.filter((task) => task.status === "done").length,
-      active: workspace.tasks.filter((task) => task.status === "in_progress").length,
-      overdue: workspace.tasks.filter((task) => task.status === "overdue").length,
-    }),
-    [workspace.tasks],
-  );
 
   return (
     <div className="space-y-6" data-testid="page-regional-manager-workspace">
