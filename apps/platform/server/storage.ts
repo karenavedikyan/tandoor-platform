@@ -14,8 +14,13 @@ import type {
   User,
   UserRole,
 } from "@shared/schema";
-import type { DealerDetail, DealerListItem } from "./dealer-crm";
-import { countActiveTasks, userToPublic } from "./dealer-crm";
+import type {
+  DealerDetail,
+  DealerInteractionWithUser,
+  DealerListItem,
+  DealerTaskWithUsers,
+} from "./dealer-crm";
+import { countActiveTasks, toDealerListItem } from "./dealer-crm";
 
 export type OrderDetails = Order & {
   items: OrderItem[];
@@ -49,13 +54,11 @@ export interface IStorage {
   listUsers(): Promise<User[]>;
   listRoles(): Promise<Role[]>;
   listUserRoles(): Promise<UserRole[]>;
-  listDealers(): Promise<Dealer[]>;
-  getDealerById(id: number): Promise<Dealer | undefined>;
-  getDealerSummary(): Promise<DealerListItem[]>;
-  getDealerDetailById(id: number): Promise<DealerDetail | undefined>;
+  listDealers(): Promise<DealerListItem[]>;
+  getDealerById(id: number): Promise<DealerDetail | undefined>;
   getTradePointsByDealerId(dealerId: number): Promise<TradePoint[]>;
-  getDealerTasksByDealerId(dealerId: number): Promise<DealerTask[]>;
-  getDealerInteractionsByDealerId(dealerId: number): Promise<DealerInteraction[]>;
+  getDealerTasksByDealerId(dealerId: number): Promise<DealerTaskWithUsers[]>;
+  getDealerInteractionsByDealerId(dealerId: number): Promise<DealerInteractionWithUser[]>;
   listProducts(): Promise<Product[]>;
   listOrders(): Promise<Order[]>;
   getOrderById(id: number): Promise<OrderDetails | undefined>;
@@ -294,7 +297,7 @@ const dealersSeed: Dealer[] = [
     salesManagerId: 5,
     regionalManagerId: 7,
     potentialLevel: "medium",
-    status: "development",
+    status: "active",
     managerUserId: 5,
     tier: "medium",
     comment: "Точка в развитии: согласование ассортимента и обучение персонала.",
@@ -331,6 +334,7 @@ const tradePointsSeed: TradePoint[] = [
     assortmentProfile: "входные и межкомнатные, премиум",
     status: "active",
     comment: null,
+    createdAt: "2026-01-12T08:55:00.000Z",
   },
   {
     id: 2,
@@ -343,6 +347,7 @@ const tradePointsSeed: TradePoint[] = [
     assortmentProfile: "входные, массив",
     status: "active",
     comment: null,
+    createdAt: "2026-01-16T10:05:00.000Z",
   },
   {
     id: 3,
@@ -353,8 +358,9 @@ const tradePointsSeed: TradePoint[] = [
     storeFormat: "mixed",
     areaSqm: 120,
     assortmentProfile: "смешанный формат, усиление витрины",
-    status: "development",
+    status: "active",
     comment: null,
+    createdAt: "2026-01-19T11:20:00.000Z",
   },
   {
     id: 4,
@@ -365,8 +371,9 @@ const tradePointsSeed: TradePoint[] = [
     storeFormat: "showroom",
     areaSqm: 65,
     assortmentProfile: "межкомнатные, средний сегмент",
-    status: "development",
+    status: "active",
     comment: null,
+    createdAt: "2026-01-13T11:35:00.000Z",
   },
   {
     id: 5,
@@ -374,11 +381,12 @@ const tradePointsSeed: TradePoint[] = [
     name: "Дом дверей Сочи",
     city: "Сочи",
     address: "ул. Пластунская, 52",
-    storeFormat: "market_point",
+    storeFormat: "showroom",
     areaSqm: 45,
     assortmentProfile: "компактная витрина, курортный трафик",
     status: "active",
     comment: null,
+    createdAt: "2026-01-14T09:25:00.000Z",
   },
 ];
 
@@ -395,7 +403,7 @@ const dealerTasksSeed: DealerTask[] = [
     status: "in_progress",
     priority: "high",
     dueDate: "2026-04-15",
-    source: "regional_manager",
+    source: "manual",
     createdAt: "2026-04-01T10:00:00.000Z",
     completedAt: null,
   },
@@ -405,13 +413,13 @@ const dealerTasksSeed: DealerTask[] = [
     tradePointId: null,
     assignedToUserId: 5,
     createdByUserId: 5,
-    type: "call",
+    type: "distribution_gap",
     title: "Звонок по отгрузке и условиям",
     description: "Уточнить сроки поставки и коммерческие условия по текущему договору.",
     status: "done",
     priority: "medium",
     dueDate: "2026-03-28",
-    source: "sales_manager",
+    source: "distribution_report",
     createdAt: "2026-03-20T11:00:00.000Z",
     completedAt: "2026-03-27T16:00:00.000Z",
   },
@@ -421,13 +429,13 @@ const dealerTasksSeed: DealerTask[] = [
     tradePointId: 2,
     assignedToUserId: 7,
     createdByUserId: 2,
-    type: "visit_followup",
-    title: "Follow-up после визита в Анапу",
-    description: "Закрепить договорённости по фокусу на входные двери премиум.",
+    type: "other",
+    title: "Проверить наличие POSM",
+    description: "Проверить наличие и корректность размещения POSM-материалов.",
     status: "new",
     priority: "medium",
     dueDate: "2026-04-20",
-    source: "sales_head",
+    source: "visit",
     createdAt: "2026-04-10T08:00:00.000Z",
     completedAt: null,
   },
@@ -437,13 +445,13 @@ const dealerTasksSeed: DealerTask[] = [
     tradePointId: 4,
     assignedToUserId: 6,
     createdByUserId: 5,
-    type: "documents",
+    type: "sales_follow_up",
     title: "Комплект документов к договору",
     description: "Подготовить шаблоны актов и спецификации для подписания.",
     status: "in_progress",
     priority: "low",
     dueDate: "2026-04-12",
-    source: "sales_manager",
+    source: "order",
     createdAt: "2026-04-05T12:00:00.000Z",
     completedAt: null,
   },
@@ -459,7 +467,7 @@ const dealerTasksSeed: DealerTask[] = [
     status: "new",
     priority: "medium",
     dueDate: "2026-04-18",
-    source: "regional_manager",
+    source: "visit",
     createdAt: "2026-04-08T14:00:00.000Z",
     completedAt: null,
   },
@@ -469,30 +477,30 @@ const dealerTasksSeed: DealerTask[] = [
     tradePointId: 5,
     assignedToUserId: 7,
     createdByUserId: 5,
-    type: "order_support",
-    title: "Сопровождение срочного заказа",
-    description: "Согласовать замену позиции в заказе из-за сроков производства.",
-    status: "in_progress",
+    type: "visit_follow_up",
+    title: "Обновить витрину входных дверей",
+    description: "Обновить выкладку входных дверей по результатам визита РМ.",
+    status: "new",
     priority: "high",
     dueDate: "2026-04-11",
-    source: "sales_manager",
+    source: "visit",
     createdAt: "2026-04-09T09:30:00.000Z",
     completedAt: null,
   },
   {
     id: 7,
     dealerId: 3,
-    tradePointId: 5,
-    assignedToUserId: 5,
-    createdByUserId: 7,
-    type: "visit_followup",
-    title: "Итоги визита в Сочи",
-    description: "Передать в офис фото витрины и список SKU для доработки.",
-    status: "overdue",
-    priority: "medium",
-    dueDate: "2026-04-01",
-    source: "regional_manager",
-    createdAt: "2026-03-25T10:00:00.000Z",
+    tradePointId: null,
+    assignedToUserId: 4,
+    createdByUserId: 3,
+    type: "document",
+    title: "Подготовить пакет документов по дилеру",
+    description: "Проверить и подготовить документы для обновления условий сотрудничества.",
+    status: "new",
+    priority: "low",
+    dueDate: "2026-04-22",
+    source: "manual",
+    createdAt: "2026-04-12T10:00:00.000Z",
     completedAt: null,
   },
 ];
@@ -524,8 +532,8 @@ const dealerInteractionsSeed: DealerInteraction[] = [
     tradePointId: 2,
     userId: 7,
     roleContext: "regional_manager",
-    type: "distribution_report",
-    summary: "Черновик отчёта дистрибуции по точке в Анапе (фото витрины, топ SKU).",
+    type: "task_created",
+    summary: "Создана задача по расширению матрицы в Анапе.",
     createdAt: "2026-04-04T08:15:00.000Z",
   },
   {
@@ -542,8 +550,8 @@ const dealerInteractionsSeed: DealerInteraction[] = [
     id: 5,
     dealerId: 2,
     tradePointId: null,
-    userId: 2,
-    roleContext: "head",
+    userId: 1,
+    roleContext: "system",
     type: "task_created",
     summary: "Создана операционная задача ассистенту по подготовке документов к договору.",
     createdAt: "2026-04-05T12:00:00.000Z",
@@ -552,10 +560,10 @@ const dealerInteractionsSeed: DealerInteraction[] = [
     id: 6,
     dealerId: 2,
     tradePointId: null,
-    userId: 6,
-    roleContext: "assistant",
-    type: "message",
-    summary: "Уточнение реквизитов и сроков подготовки спецификации.",
+    userId: 5,
+    roleContext: "sales_manager",
+    type: "order",
+    summary: "Оформлен заказ по обновленной матрице дилера.",
     createdAt: "2026-04-05T15:00:00.000Z",
   },
   {
@@ -574,8 +582,8 @@ const dealerInteractionsSeed: DealerInteraction[] = [
     tradePointId: 5,
     userId: 5,
     roleContext: "sales_manager",
-    type: "message",
-    summary: "Согласованы скидка и сроки по срочному заказу; передано в производство.",
+    type: "claim",
+    summary: "Зафиксирована рекламация по повреждению упаковки, согласованы корректирующие действия.",
     createdAt: "2026-04-09T09:00:00.000Z",
   },
 ];
@@ -896,6 +904,14 @@ function getUserById(id: number | null | undefined): User | undefined {
   return usersSeed.find((user) => user.id === id);
 }
 
+function userNameById(id: number | null | undefined): string {
+  const user = getUserById(id);
+  if (!user) {
+    return "Не назначен";
+  }
+  return `${user.firstName} ${user.lastName}`.trim();
+}
+
 export class DatabaseStorage implements IStorage {
   async listOrganizations(): Promise<Organization[]> {
     return organizationsSeed;
@@ -913,59 +929,80 @@ export class DatabaseStorage implements IStorage {
     return userRolesSeed;
   }
 
-  async listDealers(): Promise<Dealer[]> {
-    return dealersSeed;
+  async listDealers(): Promise<DealerListItem[]> {
+    return dealersSeed.map((dealer) =>
+      toDealerListItem(
+        dealer,
+        usersSeed,
+        tradePointsSeed,
+        dealerTasksSeed,
+        dealerInteractionsSeed,
+        organizationsSeed,
+      ),
+    );
   }
 
-  async getDealerById(id: number): Promise<Dealer | undefined> {
-    return dealersSeed.find((entry) => entry.id === id);
-  }
-
-  async getDealerSummary(): Promise<DealerListItem[]> {
-    return dealersSeed.map((dealer) => {
-      const tradePointCount = tradePointsSeed.filter((point) => point.dealerId === dealer.id).length;
-      const tasksForDealer = dealerTasksSeed.filter((task) => task.dealerId === dealer.id);
-      const salesId = dealer.salesManagerId ?? dealer.managerUserId;
-      const regionalId = dealer.regionalManagerId;
-
-      return {
-        id: dealer.id,
-        organizationId: dealer.organizationId,
-        name: dealer.name,
-        dealerType: dealer.dealerType,
-        segment: dealer.segment,
-        status: dealer.status,
-        salesManagerId: salesId,
-        regionalManagerId: regionalId,
-        region: dealer.region,
-        city: dealer.city,
-        potentialLevel: dealer.potentialLevel,
-        tradePointCount,
-        activeTaskCount: countActiveTasks(tasksForDealer),
-        comment: dealer.comment,
-        createdAt: dealer.createdAt,
-        salesManager: userToPublic(getUserById(salesId)),
-        regionalManager: userToPublic(getUserById(regionalId)),
-      };
-    });
-  }
-
-  async getDealerDetailById(id: number): Promise<DealerDetail | undefined> {
+  async getDealerById(id: number): Promise<DealerDetail | undefined> {
     const dealer = dealersSeed.find((entry) => entry.id === id);
     if (!dealer) {
       return undefined;
     }
 
-    const salesId = dealer.salesManagerId ?? dealer.managerUserId;
-    const tradePointCount = tradePointsSeed.filter((point) => point.dealerId === dealer.id).length;
-    const activeTaskCount = countActiveTasks(dealerTasksSeed.filter((task) => task.dealerId === dealer.id));
-
-    return {
+    const listItem = toDealerListItem(
       dealer,
-      salesManager: userToPublic(getUserById(salesId)),
-      regionalManager: userToPublic(getUserById(dealer.regionalManagerId)),
-      tradePointCount,
-      activeTaskCount,
+      usersSeed,
+      tradePointsSeed,
+      dealerTasksSeed,
+      dealerInteractionsSeed,
+      organizationsSeed,
+    );
+    const tradePoints = await this.getTradePointsByDealerId(id);
+    const tasks = await this.getDealerTasksByDealerId(id);
+    const interactions = await this.getDealerInteractionsByDealerId(id);
+    const recentOrders = ordersSeed
+      .filter((order) => order.dealerId === id)
+      .slice()
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, 5);
+    const recentClaims = claimsSeed
+      .filter((claim) => claim.dealerId === id)
+      .slice()
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, 5);
+    const activeShowcaseGoals = dealerTasksSeed.filter(
+      (task) =>
+        task.dealerId === id &&
+        task.type === "showcase_goal" &&
+        task.status !== "done" &&
+        task.status !== "rejected",
+    ).length;
+    const activeDistributionTasks = dealerTasksSeed.filter(
+      (task) =>
+        task.dealerId === id &&
+        task.type === "distribution_gap" &&
+        task.status !== "done" &&
+        task.status !== "rejected",
+    ).length;
+    return {
+      dealer: {
+        ...listItem,
+        organizationName: organizationsSeed.find((organization) => organization.id === dealer.organizationId)?.name ?? listItem.name,
+      },
+      salesManager: listItem.salesManager,
+      regionalManager: listItem.regionalManager,
+      tradePoints,
+      tasks,
+      interactions,
+      recentOrders,
+      recentClaims,
+      distributionSummary: {
+        tradePointsCovered: tradePoints.filter((point) => point.status === "active").length,
+        totalTradePoints: tradePoints.length,
+        activeShowcaseGoals,
+        activeDistributionTasks,
+        placeholder:
+          "Здесь будет отображаться покрытие моделей Tandoor по торговым точкам дилера после запуска отчетов дистрибуции.",
+      },
     };
   }
 
@@ -975,16 +1012,25 @@ export class DatabaseStorage implements IStorage {
       .sort((a, b) => a.id - b.id);
   }
 
-  async getDealerTasksByDealerId(dealerId: number): Promise<DealerTask[]> {
+  async getDealerTasksByDealerId(dealerId: number): Promise<DealerTaskWithUsers[]> {
     return dealerTasksSeed
       .filter((task) => task.dealerId === dealerId)
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map((task) => ({
+        ...task,
+        assignedToUserName: userNameById(task.assignedToUserId),
+        createdByUserName: userNameById(task.createdByUserId),
+      }));
   }
 
-  async getDealerInteractionsByDealerId(dealerId: number): Promise<DealerInteraction[]> {
+  async getDealerInteractionsByDealerId(dealerId: number): Promise<DealerInteractionWithUser[]> {
     return dealerInteractionsSeed
       .filter((entry) => entry.dealerId === dealerId)
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map((interaction) => ({
+        ...interaction,
+        userName: userNameById(interaction.userId),
+      }));
   }
 
   async listProducts(): Promise<Product[]> {
@@ -1086,6 +1132,16 @@ export class DatabaseStorage implements IStorage {
       message: `Создан заказ ${order.orderNumber} для дилера ${dealerOrganization?.name ?? `№${dealer.id}`}.${commentSuffix}`,
       createdAt: nowIso,
     });
+    dealerInteractionsSeed.push({
+      id: getNextId(dealerInteractionsSeed),
+      dealerId: dealer.id,
+      tradePointId: null,
+      userId: createdByUser.id,
+      roleContext: "sales_manager",
+      type: "order",
+      summary: `Оформлен заказ ${order.orderNumber}.`,
+      createdAt: nowIso,
+    });
 
     const createdOrder = await this.getOrderById(order.id);
     if (!createdOrder) {
@@ -1105,3 +1161,20 @@ export class DatabaseStorage implements IStorage {
 }
 
 export const storage = new DatabaseStorage();
+
+export {
+  organizationsSeed,
+  rolesSeed,
+  usersSeed,
+  userRolesSeed,
+  dealersSeed,
+  tradePointsSeed,
+  dealerTasksSeed,
+  dealerInteractionsSeed,
+  productsSeed,
+  ordersSeed,
+  orderItemsSeed,
+  documentsSeed,
+  claimsSeed,
+  activityEventsSeed,
+};

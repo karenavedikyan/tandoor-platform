@@ -72,6 +72,8 @@ const russianLabels: Record<string, string> = {
   cancelled: "Отменен",
   // Claim statuses
   new: "Новая",
+  in_progress: "В работе",
+  done: "Выполнена",
   in_review: "На рассмотрении",
   waiting_info: "Ожидает данные",
   resolved: "Решена",
@@ -80,6 +82,7 @@ const russianLabels: Record<string, string> = {
   active: "Активен",
   paused: "Приостановлен",
   inactive: "Неактивен",
+  development: "В развитии",
   // Availability
   in_stock: "В наличии",
   low_stock: "Мало",
@@ -106,6 +109,32 @@ const russianLabels: Record<string, string> = {
   // Claim reasons
   packaging_damage: "Повреждение упаковки",
   wrong_finish_color: "Неверный цвет отделки",
+  // Dealer and CRM labels
+  network: "Сетевой",
+  single: "Одиночный",
+  high: "Высокий",
+  medium: "Средний",
+  low: "Низкий",
+  showroom: "Шоурум",
+  retail_store: "Розничный магазин",
+  warehouse: "Склад",
+  mixed: "Смешанный формат",
+  sales_follow_up: "Доработка продаж",
+  showcase_goal: "Цель по витрине",
+  distribution_gap: "Пробел дистрибуции",
+  visit_follow_up: "Действие после визита",
+  distribution_report: "Отчёт дистрибуции",
+  manual: "Вручную",
+  visit: "Визит",
+  sales_manager: "Менеджер продаж",
+  regional_manager: "Региональный менеджер",
+  sales_assistant: "Ассистент продаж",
+  sales_head: "Руководитель продаж",
+  system: "Система",
+  call: "Звонок",
+  meeting: "Встреча",
+  report: "Отчёт",
+  task_created: "Создана задача",
 };
 
 export function statusLabel(value: string) {

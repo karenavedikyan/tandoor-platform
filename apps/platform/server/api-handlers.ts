@@ -30,7 +30,7 @@ export async function getUsers(): Promise<ApiResult> {
 }
 
 export async function getDealers(): Promise<ApiResult> {
-  return { status: 200, body: await storage.getDealerSummary() };
+  return { status: 200, body: await storage.listDealers() };
 }
 
 function parseIdParam(raw: string | undefined): number | null {
@@ -46,7 +46,7 @@ export async function getDealerById(rawId: string): Promise<ApiResult> {
   if (id == null) {
     return { status: 400, body: { message: "ID дилера должен быть числом" } };
   }
-  const detail = await storage.getDealerDetailById(id);
+  const detail = await storage.getDealerById(id);
   if (!detail) {
     return { status: 404, body: { message: "Дилер не найден" } };
   }

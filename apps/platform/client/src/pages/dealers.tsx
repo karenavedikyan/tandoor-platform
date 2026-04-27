@@ -13,13 +13,6 @@ import { dealerTypeLabel, dealerStatusLabel, potentialLevelLabel } from "@/lib/l
 
 type QuickFilter = "all" | "network" | "single" | "high" | "development";
 
-function personName(
-  u: { firstName: string; lastName: string } | null | undefined,
-): string {
-  if (!u) return "—";
-  return `${u.firstName} ${u.lastName}`.trim();
-}
-
 const filterChips: { id: QuickFilter; label: string }[] = [
   { id: "all", label: "Все" },
   { id: "network", label: "Сетевые" },
@@ -127,7 +120,7 @@ export default function DealersPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">Клиентская база дилеров</h1>
         <p className="mt-2 text-sm text-muted-foreground max-w-3xl">
-          Единая база клиентов отдела продаж: дилеры, торговые точки, ответственные менеджеры и текущие задачи.
+          Общие клиенты отдела продаж: менеджеры, региональные менеджеры, торговые точки и задачи
         </p>
       </div>
 
@@ -222,14 +215,14 @@ export default function DealersPage() {
                   data-testid={`text-dealer-sales-manager-${dealer.id}`}
                 >
                   <span className="text-muted-foreground">Менеджер продаж:</span>{" "}
-                  <span className="font-medium text-foreground">{personName(dealer.salesManager)}</span>
+                  <span className="font-medium text-foreground">{dealer.salesManagerName}</span>
                 </p>
                 <p
                   className="flex items-center gap-1"
                   data-testid={`text-dealer-regional-manager-${dealer.id}`}
                 >
                   <span className="text-muted-foreground">Региональный:</span>{" "}
-                  <span className="font-medium text-foreground">{personName(dealer.regionalManager)}</span>
+                  <span className="font-medium text-foreground">{dealer.regionalManagerName}</span>
                 </p>
               </div>
               <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">

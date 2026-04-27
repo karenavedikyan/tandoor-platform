@@ -49,6 +49,7 @@ export interface Dealer {
 export interface DealerListItem {
   id: number;
   organizationId: number;
+  organizationName: string;
   name: string;
   dealerType: string;
   segment: string | null;
@@ -60,18 +61,29 @@ export interface DealerListItem {
   potentialLevel: string | null;
   tradePointCount: number;
   activeTaskCount: number;
+  lastInteractionDate: string | null;
   comment: string | null;
   createdAt: string;
   salesManager: UserPublic | null;
   regionalManager: UserPublic | null;
+  salesManagerName: string;
+  regionalManagerName: string;
 }
 
 export interface DealerDetail {
-  dealer: Dealer;
-  salesManager: UserPublic | null;
-  regionalManager: UserPublic | null;
-  tradePointCount: number;
-  activeTaskCount: number;
+  dealer: DealerListItem;
+  tradePoints: TradePoint[];
+  tasks: DealerTaskWithUsers[];
+  interactions: DealerInteractionWithUser[];
+  recentOrders: Order[];
+  recentClaims: Claim[];
+  distributionSummary: {
+    tradePointsCovered: number;
+    totalTradePoints: number;
+    activeShowcaseGoals: number;
+    activeDistributionTasks: number;
+    placeholder: string;
+  };
 }
 
 export interface TradePoint {
@@ -81,10 +93,11 @@ export interface TradePoint {
   city: string;
   address: string;
   storeFormat: string;
-  areaSqm: number;
+  areaSqm: number | null;
   assortmentProfile: string;
   status: string;
   comment: string | null;
+  createdAt: string;
 }
 
 export interface DealerTask {
@@ -104,6 +117,11 @@ export interface DealerTask {
   completedAt: string | null;
 }
 
+export interface DealerTaskWithUsers extends DealerTask {
+  assignedToUserName: string;
+  createdByUserName: string;
+}
+
 export interface DealerInteraction {
   id: number;
   dealerId: number;
@@ -113,6 +131,10 @@ export interface DealerInteraction {
   type: string;
   summary: string;
   createdAt: string;
+}
+
+export interface DealerInteractionWithUser extends DealerInteraction {
+  userName: string;
 }
 
 export interface Product {

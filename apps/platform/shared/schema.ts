@@ -2,6 +2,28 @@ import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+export type DealerType = "network" | "single";
+export type DealerPotentialLevel = "high" | "medium" | "low";
+export type TradePointFormat = "showroom" | "retail_store" | "warehouse" | "mixed";
+export type TradePointStatus = "active" | "inactive";
+export type DealerTaskType =
+  | "sales_follow_up"
+  | "showcase_goal"
+  | "distribution_gap"
+  | "visit_follow_up"
+  | "document"
+  | "other";
+export type DealerTaskStatus = "new" | "in_progress" | "done" | "rejected";
+export type DealerTaskPriority = "high" | "medium" | "low";
+export type DealerTaskSource = "manual" | "distribution_report" | "visit" | "order";
+export type DealerInteractionRoleContext =
+  | "sales_manager"
+  | "regional_manager"
+  | "sales_assistant"
+  | "sales_head"
+  | "system";
+export type DealerInteractionType = "call" | "meeting" | "visit" | "report" | "task_created" | "order" | "claim";
+
 export const organizations = sqliteTable("organizations", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
@@ -48,19 +70,18 @@ export const dealers = sqliteTable("dealers", {
   organizationId: integer("organization_id")
     .notNull()
     .references(() => organizations.id),
-  /** @deprecated use salesManagerId; kept for backwards compatibility with older API payloads */
-  managerUserId: integer("manager_user_id").references(() => users.id),
   name: text("name").notNull(),
   dealerType: text("dealer_type").notNull().default("single"),
-  segment: text("segment"),
+  segment: text("segment").notNull(),
   region: text("region"),
   city: text("city"),
   salesManagerId: integer("sales_manager_id").references(() => users.id),
   regionalManagerId: integer("regional_manager_id").references(() => users.id),
-  potentialLevel: text("potential_level"),
-  status: text("status").notNull().default("active"),
-  /** Legacy display field; prefer segment in new UI */
+  // Deprecated compatibility fields (kept for older payloads/views).
+  managerUserId: integer("manager_user_id").references(() => users.id),
   tier: text("tier"),
+  potentialLevel: text("potential_level").notNull().default("medium"),
+  status: text("status").notNull().default("active"),
   comment: text("comment"),
   createdAt: text("created_at").notNull(),
 });
@@ -74,10 +95,11 @@ export const tradePoints = sqliteTable("trade_points", {
   city: text("city").notNull(),
   address: text("address").notNull(),
   storeFormat: text("store_format").notNull(),
-  areaSqm: integer("area_sqm").notNull(),
+  areaSqm: integer("area_sqm"),
   assortmentProfile: text("assortment_profile").notNull(),
   status: text("status").notNull().default("active"),
   comment: text("comment"),
+  createdAt: text("created_at").notNull(),
 });
 
 export const dealerTasks = sqliteTable("dealer_tasks", {
