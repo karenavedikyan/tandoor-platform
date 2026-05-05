@@ -1,3 +1,5 @@
+@import url("https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -9,51 +11,51 @@
   --opaque-button-border-intensity: -8;
   --elevate-1: rgba(0, 0, 0, 0.03);
   --elevate-2: rgba(0, 0, 0, 0.08);
-  --background: 0 0% 100%;
-  --foreground: 0 0% 9%;
-  --border: 0 0% 91%;
-  --card: 0 0% 98%;
-  --card-foreground: 0 0% 9%;
-  --card-border: 0 0% 94%;
-  --sidebar: 0 0% 96%;
-  --sidebar-foreground: 0 0% 9%;
-  --sidebar-border: 0 0% 92%;
-  --sidebar-primary: 221 83% 53%;
-  --sidebar-primary-foreground: 0 0% 98%;
-  --sidebar-accent: 0 0% 89%;
-  --sidebar-accent-foreground: 0 0% 9%;
-  --sidebar-ring: 221 83% 53%;
-  --popover: 0 0% 95%;
-  --popover-foreground: 0 0% 9%;
-  --popover-border: 0 0% 91%;
-  --primary: 221 83% 53%;
-  --primary-foreground: 0 0% 98%;
-  --secondary: 0 0% 92%;
-  --secondary-foreground: 0 0% 9%;
-  --muted: 0 0% 93%;
-  --muted-foreground: 0 0% 40%;
-  --accent: 220 14% 92%;
-  --accent-foreground: 0 0% 9%;
+  --background: 0 0% 94%;
+  --foreground: 0 0% 13%;
+  --border: 0 0% 86%;
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 13%;
+  --card-border: 0 0% 89%;
+  --sidebar: 0 0% 100%;
+  --sidebar-foreground: 0 0% 13%;
+  --sidebar-border: 0 0% 88%;
+  --sidebar-primary: 82 100% 38%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 0 0% 91%;
+  --sidebar-accent-foreground: 0 0% 13%;
+  --sidebar-ring: 82 100% 38%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 0 0% 13%;
+  --popover-border: 0 0% 88%;
+  --primary: 82 100% 38%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 0 0% 94%;
+  --secondary-foreground: 0 0% 13%;
+  --muted: 0 0% 91%;
+  --muted-foreground: 0 0% 53%;
+  --accent: 95 50% 53%;
+  --accent-foreground: 0 0% 13%;
   --destructive: 0 84% 42%;
   --destructive-foreground: 0 0% 98%;
-  --input: 0 0% 75%;
-  --ring: 221 83% 53%;
-  --chart-1: 221 83% 45%;
-  --chart-2: 262 83% 48%;
-  --chart-3: 173 58% 39%;
-  --chart-4: 43 74% 49%;
-  --chart-5: 27 87% 55%;
-  --font-sans: Open Sans, sans-serif;
+  --input: 0 0% 85%;
+  --ring: 82 100% 38%;
+  --chart-1: 82 100% 38%;
+  --chart-2: 95 50% 53%;
+  --chart-3: 0 0% 26%;
+  --chart-4: 38 86% 52%;
+  --chart-5: 0 74% 56%;
+  --font-sans: Nunito, Inter, Open Sans, sans-serif;
   --font-serif: Georgia, serif;
   --font-mono: Menlo, monospace;
-  --radius: 0.5rem;
+  --radius: 1rem;
   --shadow-2xs: 0px 2px 0px 0px hsl(0 0% 0% / 0);
   --shadow-xs: 0px 2px 0px 0px hsl(0 0% 0% / 0);
-  --shadow-sm: 0px 2px 0px 0px hsl(0 0% 0% / 0), 0px 1px 2px -1px hsl(0 0% 0% / 0);
-  --shadow: 0px 2px 0px 0px hsl(0 0% 0% / 0), 0px 1px 2px -1px hsl(0 0% 0% / 0);
-  --shadow-md: 0px 2px 0px 0px hsl(0 0% 0% / 0), 0px 2px 4px -1px hsl(0 0% 0% / 0);
-  --shadow-lg: 0px 2px 0px 0px hsl(0 0% 0% / 0), 0px 4px 6px -1px hsl(0 0% 0% / 0);
-  --shadow-xl: 0px 2px 0px 0px hsl(0 0% 0% / 0), 0px 8px 10px -1px hsl(0 0% 0% / 0);
+  --shadow-sm: 0px 6px 14px -12px hsl(0 0% 15% / 0.35), 0px 2px 8px -6px hsl(0 0% 15% / 0.2);
+  --shadow: 0px 8px 16px -14px hsl(0 0% 15% / 0.36), 0px 2px 10px -6px hsl(0 0% 15% / 0.2);
+  --shadow-md: 0px 10px 22px -16px hsl(0 0% 15% / 0.38), 0px 3px 12px -8px hsl(0 0% 15% / 0.22);
+  --shadow-lg: 0px 14px 30px -20px hsl(0 0% 15% / 0.42), 0px 5px 14px -10px hsl(0 0% 15% / 0.24);
+  --shadow-xl: 0px 18px 42px -24px hsl(0 0% 15% / 0.45), 0px 8px 16px -12px hsl(0 0% 15% / 0.26);
   --shadow-2xl: 0px 2px 0px 0px hsl(0 0% 0% / 0);
   --tracking-normal: 0em;
   --spacing: 0.25rem;
@@ -116,15 +118,15 @@
   --sidebar: 0 0% 11%;
   --sidebar-foreground: 0 0% 98%;
   --sidebar-border: 0 0% 15%;
-  --sidebar-primary: 221 83% 53%;
+  --sidebar-primary: 82 100% 38%;
   --sidebar-primary-foreground: 0 0% 98%;
   --sidebar-accent: 0 0% 16%;
   --sidebar-accent-foreground: 0 0% 98%;
-  --sidebar-ring: 221 83% 53%;
+  --sidebar-ring: 82 100% 38%;
   --popover: 0 0% 13%;
   --popover-foreground: 0 0% 98%;
   --popover-border: 0 0% 17%;
-  --primary: 221 83% 53%;
+  --primary: 82 100% 38%;
   --primary-foreground: 0 0% 98%;
   --secondary: 0 0% 18%;
   --secondary-foreground: 0 0% 98%;
@@ -135,7 +137,7 @@
   --destructive: 0 84% 42%;
   --destructive-foreground: 0 0% 98%;
   --input: 0 0% 30%;
-  --ring: 221 83% 53%;
+  --ring: 82 100% 38%;
   --chart-1: 221 83% 65%;
   --chart-2: 262 83% 68%;
   --chart-3: 173 58% 55%;
@@ -200,6 +202,12 @@
 
   body {
     @apply font-sans antialiased bg-background text-foreground;
+    font-size: 15px;
+    line-height: 1.4;
+  }
+
+  #root {
+    @apply min-h-screen;
   }
 }
 
