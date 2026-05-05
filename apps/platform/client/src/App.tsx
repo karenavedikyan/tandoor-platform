@@ -7,7 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppShell } from "@/components/layout/app-shell";
 import NotFound from "@/pages/not-found";
 import DealerBase from "@/pages/dealer-base";
-import DealerCardFoundation from "@/pages/dealer-card-foundation";
+import DealerCardFoundation, { DealerCardPage } from "@/pages/dealer-card-foundation";
 import PreviewUnavailable from "@/pages/preview-unavailable";
 import InternalPrototypePlaceholder from "@/pages/internal-prototype-placeholder";
 import { INTERNAL_PROTOTYPE_ROUTES } from "@/lib/preview-config";
@@ -18,6 +18,7 @@ function AppRouter() {
       <Switch>
         <Route path="/" component={DealerBase} />
         <Route path="/dealer-base" component={DealerBase} />
+        <Route path="/dealers/:id" component={DealerCardPage} />
         <Route path="/dealer-card-foundation" component={DealerCardFoundation} />
         <Route path="/platform-architecture" component={PreviewUnavailable} />
         {INTERNAL_PROTOTYPE_ROUTES.map((path) => (

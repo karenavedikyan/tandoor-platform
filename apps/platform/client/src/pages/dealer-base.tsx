@@ -294,7 +294,7 @@ export default function DealerBase() {
                     <p className="text-xs text-foreground/90">Далее: {row.nextAction}</p>
                   </div>
                   <Button asChild className="min-h-11 shrink-0 font-semibold" data-testid={`button-open-dealer-${row.id}`}>
-                    <Link href="/dealer-card-foundation">Открыть</Link>
+                    <Link href={`/dealers/${row.id}`}>Открыть</Link>
                   </Button>
                 </CardContent>
               </Card>
@@ -349,7 +349,7 @@ export default function DealerBase() {
                   ) : null}
                   <p className="text-xs text-muted-foreground">Далее: {row.nextAction}</p>
                   <Button asChild className="mt-auto min-h-11 w-full font-semibold" data-testid={`button-open-dealer-${row.id}`}>
-                    <Link href="/dealer-card-foundation">Открыть</Link>
+                    <Link href={`/dealers/${row.id}`}>Открыть</Link>
                   </Button>
                 </CardContent>
               </Card>
@@ -377,7 +377,7 @@ export default function DealerBase() {
                       Дистр. {row.distribution}% · {row.showcaseStatus}
                     </p>
                     <Button asChild className="min-h-11 w-full font-semibold" data-testid={`button-open-dealer-${row.id}`}>
-                      <Link href="/dealer-card-foundation">Открыть</Link>
+                      <Link href={`/dealers/${row.id}`}>Открыть</Link>
                     </Button>
                   </CardContent>
                 </Card>
@@ -421,7 +421,7 @@ export default function DealerBase() {
                       <td className="max-w-[120px] truncate px-3 py-3 text-xs">{row.nextAction}</td>
                       <td className="px-3 py-3">
                         <Button asChild size="sm" className="font-semibold" data-testid={`button-open-dealer-${row.id}`}>
-                          <Link href="/dealer-card-foundation">Открыть</Link>
+                          <Link href={`/dealers/${row.id}`}>Открыть</Link>
                         </Button>
                       </td>
                     </tr>
