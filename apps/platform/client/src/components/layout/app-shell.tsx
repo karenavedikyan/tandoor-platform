@@ -23,8 +23,8 @@ function navClassForHref(href: string, location: string, isActiveFromLink?: bool
   return cn(
     "inline-flex min-h-10 items-center rounded-full px-4 text-sm font-medium transition-colors",
     active
-      ? "bg-[#7DC400] text-[#142200] shadow-sm shadow-[#7DC400]/25"
-      : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900",
+      ? "bg-primary text-primary-foreground shadow-sm shadow-primary/25"
+      : "text-muted-foreground hover:bg-muted hover:text-foreground",
   );
 }
 
@@ -34,8 +34,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const showMobileMenu = PREVIEW_NAV.length > 1;
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-[#eef0ed]" data-testid="app-shell-preview">
-      <header className="sticky top-0 z-40 border-b border-neutral-200/90 bg-white/90 shadow-[0_1px_0_rgba(0,0,0,0.04)] backdrop-blur-md supports-[backdrop-filter]:bg-white/85">
+    <div className="min-h-screen overflow-x-hidden bg-background" data-testid="app-shell-preview">
+      <header className="sticky top-0 z-40 border-b border-border/80 bg-card/95 shadow-sm backdrop-blur-md supports-[backdrop-filter]:bg-card/90">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3 sm:gap-4 sm:px-5">
           <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
             {showMobileMenu ? (
@@ -44,12 +44,12 @@ export function AppShell({ children }: { children: ReactNode }) {
                   <Button
                     variant="outline"
                     size="icon"
-                    className="h-10 w-10 shrink-0 border-neutral-200 bg-white md:hidden"
+                    className="h-10 w-10 shrink-0 border-border bg-card md:hidden"
                     type="button"
                     data-testid="button-mobile-nav-open"
                     aria-label="Открыть меню"
                   >
-                    <Menu className="h-5 w-5 text-neutral-700" />
+                    <Menu className="h-5 w-5 text-muted-foreground" />
                   </Button>
                 </SheetTrigger>
                 <SheetContent side="left" className="w-[min(100vw-2rem,280px)]">
@@ -75,8 +75,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Link href={FIRST_STAGE_HREF} className="min-w-0 shrink no-underline">
               <BrandMark />
             </Link>
-            <div className="hidden h-8 w-px shrink-0 bg-neutral-200 sm:block" aria-hidden />
-            <p className="hidden min-w-0 truncate text-sm font-medium text-neutral-600 sm:block sm:max-w-[14rem] md:max-w-xs">
+            <div className="hidden h-8 w-px shrink-0 bg-border sm:block" aria-hidden />
+            <p className="hidden min-w-0 truncate text-sm font-medium text-muted-foreground sm:block sm:max-w-[14rem] md:max-w-xs">
               Единая карточка дилера
             </p>
           </div>
