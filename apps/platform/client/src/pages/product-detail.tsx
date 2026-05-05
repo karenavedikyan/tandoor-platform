@@ -1,7 +1,7 @@
 import type { ComponentProps, ComponentType, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
-import { Building2, ChevronRight, MapPin, Package, Store, Users } from "lucide-react";
+import { Building2, ChevronRight, Clock, MapPin, Package, Store, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,34 +9,37 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { getProductById, type CatalogProduct } from "@/lib/catalog-data";
 
-const SECTION_IDS = ["overview", "specs", "equipment", "showcases", "dealers", "tasks"] as const;
+const SECTION_IDS = ["overview", "specs", "variants", "showcases", "dealers", "tasks", "history"] as const;
 type SectionId = (typeof SECTION_IDS)[number];
 
 const SECTION_DOM_IDS: Record<SectionId, string> = {
   overview: "product-section-overview",
   specs: "product-section-specs",
-  equipment: "product-section-equipment",
+  variants: "product-section-variants",
   showcases: "product-section-showcases",
   dealers: "product-section-dealers",
   tasks: "product-section-tasks",
+  history: "product-section-history",
 };
 
 const SECTION_LABELS: Record<SectionId, string> = {
   overview: "Общее",
   specs: "Характеристики",
-  equipment: "Комплектация",
+  variants: "Комплектация и варианты",
   showcases: "Витрины",
   dealers: "Дилеры и точки",
   tasks: "Задачи",
+  history: "История",
 };
 
 const NAV_TEST_IDS: Record<SectionId, string> = {
   overview: "product-section-nav-overview",
   specs: "product-section-nav-specs",
-  equipment: "product-section-nav-equipment",
+  variants: "product-section-nav-variants",
   showcases: "product-section-nav-showcases",
   dealers: "product-section-nav-dealers",
   tasks: "product-section-nav-tasks",
+  history: "product-section-nav-history",
 };
 
 function scrollToSection(id: SectionId) {
@@ -85,10 +88,10 @@ function ProductHeroImage({ product }: { product: CatalogProduct }) {
     return <img src={product.image} alt="" className="h-full w-full object-contain" />;
   }
   return (
-    <div className="flex h-full min-h-[200px] w-full flex-col items-center justify-center bg-muted/50 p-6 text-center">
+    <div className="flex h-full min-h-[260px] w-full flex-col items-center justify-center bg-muted/50 p-6 text-center">
       <Package className="h-12 w-12 text-muted-foreground/70" aria-hidden />
-      <p className="mt-3 text-sm font-medium text-muted-foreground">Изображение модели</p>
-      <p className="mt-1 text-xs text-muted-foreground">Файл не прикреплён в каталоге</p>
+      <p className="mt-3 text-sm font-medium text-muted-foreground">{product.doorKind} · серия «{product.series}»</p>
+      <p className="mt-1 text-xs text-muted-foreground">Файл изображения не прикреплён в каталоге</p>
     </div>
   );
 }
@@ -197,6 +200,39 @@ function priorityClass(p: string) {
   return "border-border bg-muted text-muted-foreground";
 }
 
+function ProductBadges({ product }: { product: CatalogProduct }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {product.isTop ? (
+        <Badge variant="outline" className="border-primary/40 bg-primary/15 font-semibold">
+          Хит
+        </Badge>
+      ) : null}
+      {product.isNew ? (
+        <Badge variant="outline" className="border-sky-200 bg-sky-50 text-sky-950">
+          Новинка
+        </Badge>
+      ) : null}
+      {product.isExclusive ? (
+        <Badge variant="outline" className="border-purple-200 bg-purple-50 text-purple-950">
+          Эксклюзив
+        </Badge>
+      ) : null}
+      {product.isAction ? (
+        <Badge variant="outline" className="border-rose-200 bg-rose-50 text-rose-950">
+          Акция
+        </Badge>
+      ) : null}
+      <Badge variant="outline" className="rounded-full border-border bg-muted/50">
+        {product.status}
+      </Badge>
+      <Badge variant="outline" className={cn("rounded-full", product.inStock ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-amber-200 bg-amber-50 text-amber-950")}>
+        {product.inStock ? "В наличии" : "Под заказ"}
+      </Badge>
+    </div>
+  );
+}
+
 function ProductNotFound() {
   return (
     <div className="mx-auto max-w-md space-y-6 py-8" data-testid="page-product-not-found">
@@ -247,25 +283,16 @@ function ProductFound({ product }: { product: CatalogProduct }) {
           <ProductHeroImage product={product} />
         </div>
         <div className="space-y-4 lg:col-span-7">
-          <div className="flex flex-wrap gap-2">
-            {product.isNew ? (
-              <Badge variant="outline" className="border-sky-200 bg-sky-50 text-sky-950">
-                Новинка
-              </Badge>
-            ) : null}
-            {product.isTop ? (
-              <Badge variant="outline" className="border-primary/40 bg-primary/15 font-semibold">
-                TOP
-              </Badge>
-            ) : null}
-            <Badge variant="outline" className="rounded-full border-border bg-muted/50">
-              {product.status}
-            </Badge>
-          </div>
+          <ProductBadges product={product} />
           <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">{product.name}</h1>
           <p className="font-mono text-sm text-muted-foreground sm:text-base">Артикул: {product.article}</p>
           <p className="text-sm text-muted-foreground sm:text-base">
-            {product.category} · серия «{product.series}» · тип: {product.type}
+            {product.category} · серия «{product.series}» · {product.doorKind.toLowerCase()}
+          </p>
+          <p className="text-sm text-muted-foreground">
+            Покрытие: <span className="font-medium text-foreground">{product.coating}</span>
+            {" · "}
+            Размеры: <span className="font-medium text-foreground">{product.sizes.join(", ")}</span>
           </p>
           <div className="grid gap-3 text-sm sm:grid-cols-2">
             <SurfaceCard>
@@ -290,14 +317,16 @@ function ProductFound({ product }: { product: CatalogProduct }) {
       <div className="lg:grid lg:grid-cols-12 lg:items-start lg:gap-8">
         <div className="min-w-0 space-y-4 sm:space-y-6 lg:col-span-8">
           <section id={SECTION_DOM_IDS.overview} data-testid="section-product-overview" className="scroll-mt-28 space-y-4 sm:scroll-mt-32">
-            <SectionTitle subtitle="Описание и классификация.">Общее</SectionTitle>
+            <SectionTitle subtitle="Описание и классификация модели.">Общее</SectionTitle>
             <SurfaceCard className="mt-3">
               <CardContent className="space-y-4 pt-5">
                 <FieldRow label="Название" value={product.name} />
                 <FieldRow label="Артикул" value={product.article} />
                 <FieldRow label="Категория" value={product.category} />
                 <FieldRow label="Серия" value={product.series} />
-                <FieldRow label="Тип" value={product.type} />
+                <FieldRow label="Вид двери" value={product.doorKind} />
+                <FieldRow label="Производитель" value={product.manufacturer} />
+                <FieldRow label="Гарантия" value={product.warranty} />
                 <FieldRow label="Статус" value={product.status} />
                 <Separator />
                 <p className="text-sm leading-relaxed text-foreground">{product.description}</p>
@@ -320,39 +349,56 @@ function ProductFound({ product }: { product: CatalogProduct }) {
           </section>
 
           <section id={SECTION_DOM_IDS.specs} data-testid="section-product-specs" className="scroll-mt-28 space-y-4 sm:scroll-mt-32">
-            <SectionTitle subtitle="Технические параметры.">Характеристики</SectionTitle>
+            <SectionTitle subtitle="Технические параметры полотна и фурнитуры.">Характеристики</SectionTitle>
             <SurfaceCard className="mt-3">
               <CardContent className="pt-5">
                 {product.specs.map((s) => (
                   <FieldRow key={s.label} label={s.label} value={s.value} />
                 ))}
                 <Separator className="my-4" />
+                <FieldRow label="Покрытие" value={product.coating} />
+                <FieldRow label="Тип открывания" value={product.openType} />
                 <FieldRow label="Цвета" value={product.colors.join(", ")} />
                 <FieldRow label="Размеры / исполнения" value={product.sizes.join(", ")} />
               </CardContent>
             </SurfaceCard>
           </section>
 
-          <section id={SECTION_DOM_IDS.equipment} data-testid="section-product-equipment" className="scroll-mt-28 space-y-4 sm:scroll-mt-32">
-            <SectionTitle subtitle="Состав поставки.">Комплектация</SectionTitle>
-            <SurfaceCard className="mt-3">
-              <CardContent className="pt-5">
-                <ul className="space-y-2 text-sm text-foreground">
-                  {product.equipment.map((line) => (
-                    <li key={line} className="flex gap-2">
-                      <span className="text-primary" aria-hidden>
-                        ·
-                      </span>
-                      <span>{line}</span>
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-            </SurfaceCard>
+          <section id={SECTION_DOM_IDS.variants} data-testid="section-product-variants" className="scroll-mt-28 space-y-4 sm:scroll-mt-32">
+            <SectionTitle subtitle="Состав поставки и варианты исполнения.">Комплектация и варианты</SectionTitle>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <SurfaceCard>
+                <CardHeader className="pb-2 pt-4">
+                  <CardTitle className="text-base">В комплекте</CardTitle>
+                </CardHeader>
+                <CardContent className="pb-4 pt-0">
+                  <ul className="space-y-2 text-sm text-foreground">
+                    {product.equipment.map((line) => (
+                      <li key={line} className="flex gap-2">
+                        <span className="text-primary" aria-hidden>·</span>
+                        <span>{line}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </SurfaceCard>
+              <SurfaceCard>
+                <CardHeader className="pb-2 pt-4">
+                  <CardTitle className="text-base">Варианты исполнения</CardTitle>
+                </CardHeader>
+                <CardContent className="pb-4 pt-0">
+                  {product.variants.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Без дополнительных вариантов.</p>
+                  ) : (
+                    product.variants.map((v) => <FieldRow key={v.label} label={v.label} value={v.value} />)
+                  )}
+                </CardContent>
+              </SurfaceCard>
+            </div>
           </section>
 
           <section id={SECTION_DOM_IDS.showcases} data-testid="section-product-showcases" className="scroll-mt-28 space-y-4 sm:scroll-mt-32">
-            <SectionTitle subtitle="Приоритет и рекомендации по витрине.">Витрины</SectionTitle>
+            <SectionTitle subtitle="Приоритет выкладки и рекомендации мерчандайзинга.">Витрины и мерчандайзинг</SectionTitle>
             <SurfaceCard className="mt-3">
               <CardContent className="space-y-3 pt-5 text-sm">
                 <p>
@@ -363,7 +409,7 @@ function ProductFound({ product }: { product: CatalogProduct }) {
                   <span className="text-muted-foreground">Рекомендация: </span>
                   <span className="font-medium text-foreground">
                     {product.recommendedForShowcase
-                      ? "Включить в основную витрину и стенд МК."
+                      ? "Включить в основную витрину и стенд серии."
                       : "Использовать точечно или после пополнения склада."}
                   </span>
                 </p>
@@ -371,12 +417,17 @@ function ProductFound({ product }: { product: CatalogProduct }) {
                   Связь с продажами: приоритет в отчётах отдела соответствует значению{" "}
                   <span className="font-mono font-medium text-foreground">{product.salesPriority}</span>.
                 </p>
+                <Separator />
+                <p className="text-muted-foreground">
+                  Рекомендованная комплектация для стенда: <span className="font-medium text-foreground">{product.equipment.slice(0, 3).join(", ")}</span>
+                  {product.equipment.length > 3 ? " и др." : "."}
+                </p>
               </CardContent>
             </SurfaceCard>
           </section>
 
           <section id={SECTION_DOM_IDS.dealers} data-testid="section-product-dealers" className="scroll-mt-28 space-y-4 sm:scroll-mt-32">
-            <SectionTitle subtitle="Клиенты и торговые точки, где позиция фигурирует в учёте.">Дилеры и точки</SectionTitle>
+            <SectionTitle subtitle="Клиенты и торговые точки, где модель в работе.">Дилеры и торговые точки</SectionTitle>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <SurfaceCard>
                 <CardHeader className="pb-2 pt-4">
@@ -391,6 +442,7 @@ function ProductFound({ product }: { product: CatalogProduct }) {
                       key={id}
                       href={`/dealers/${id}`}
                       className="flex min-h-10 items-center justify-between rounded-xl border border-border bg-card px-3 py-2 text-sm font-medium text-foreground no-underline transition-colors hover:border-primary/40 hover:bg-muted/50"
+                      data-testid={`link-product-dealer-${id}`}
                     >
                       <span>Клиент №{id}</span>
                       <ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden />
@@ -413,6 +465,7 @@ function ProductFound({ product }: { product: CatalogProduct }) {
                         key={tpId}
                         href={`/dealers/${dealerId}/trade-points/${tpId}`}
                         className="flex min-h-10 items-center justify-between rounded-xl border border-border bg-card px-3 py-2 text-sm font-medium text-foreground no-underline transition-colors hover:border-primary/40 hover:bg-muted/50"
+                        data-testid={`link-product-trade-point-${tpId}`}
                       >
                         <span className="font-mono text-xs sm:text-sm">ТТ {tpId}</span>
                         <MapPin className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -424,8 +477,8 @@ function ProductFound({ product }: { product: CatalogProduct }) {
             </div>
           </section>
 
-          <section id={SECTION_DOM_IDS.tasks} data-testid="section-product-tasks" className="scroll-mt-28 space-y-4 pb-2 sm:scroll-mt-32">
-            <SectionTitle subtitle="Задачи по модели в отделе продаж.">Задачи</SectionTitle>
+          <section id={SECTION_DOM_IDS.tasks} data-testid="section-product-tasks" className="scroll-mt-28 space-y-4 sm:scroll-mt-32">
+            <SectionTitle subtitle="Задачи по продаже и выставлению модели.">Задачи</SectionTitle>
             <p className="text-xs text-muted-foreground">Всего в учёте: {product.relatedTaskCount}</p>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               {tasks.map((t, idx) => (
@@ -455,6 +508,31 @@ function ProductFound({ product }: { product: CatalogProduct }) {
                 </SurfaceCard>
               ))}
             </div>
+          </section>
+
+          <section id={SECTION_DOM_IDS.history} data-testid="section-product-history" className="scroll-mt-28 space-y-4 pb-2 sm:scroll-mt-32">
+            <SectionTitle subtitle="Изменения по модели и активность отдела.">История</SectionTitle>
+            <SurfaceCard className="mt-3">
+              <CardContent className="pt-5">
+                {product.history.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Записей пока нет.</p>
+                ) : (
+                  <ul className="space-y-3 text-sm">
+                    {product.history.map((h, idx) => (
+                      <li key={`${product.id}-h-${idx}`} className="flex gap-3 border-b border-border pb-3 last:border-0">
+                        <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                          <Clock className="h-4 w-4" aria-hidden />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{h.date}</p>
+                          <p className="mt-0.5 break-words text-sm text-foreground">{h.event}</p>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </CardContent>
+            </SurfaceCard>
           </section>
         </div>
 

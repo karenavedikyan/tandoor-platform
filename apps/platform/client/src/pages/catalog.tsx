@@ -17,28 +17,31 @@ import { cn } from "@/lib/utils";
 import { CATALOG_PRODUCTS, type CatalogProduct } from "@/lib/catalog-data";
 
 type ViewMode = "cards" | "list" | "table";
-type QuickChip = "all" | "new" | "top" | "showcase" | "attention";
+type QuickChip = "all" | "hit" | "new" | "exclusive" | "action" | "stock";
 
 const CHIPS: { id: QuickChip; label: string; testId: string }[] = [
   { id: "all", label: "Все", testId: "filter-catalog-all" },
+  { id: "hit", label: "Хиты", testId: "filter-catalog-hit" },
   { id: "new", label: "Новинки", testId: "filter-catalog-new" },
-  { id: "top", label: "TOP", testId: "filter-catalog-top" },
-  { id: "showcase", label: "Для витрины", testId: "filter-catalog-showcase" },
-  { id: "attention", label: "Требуют внимания", testId: "filter-catalog-attention" },
+  { id: "exclusive", label: "Эксклюзив", testId: "filter-catalog-exclusive" },
+  { id: "action", label: "Акции", testId: "filter-catalog-action" },
+  { id: "stock", label: "В наличии", testId: "filter-catalog-stock" },
 ];
 
 function applyChip(p: CatalogProduct, chip: QuickChip): boolean {
   switch (chip) {
     case "all":
       return true;
+    case "hit":
+      return p.isTop;
     case "new":
       return p.isNew;
-    case "top":
-      return p.isTop;
-    case "showcase":
-      return p.recommendedForShowcase;
-    case "attention":
-      return p.status.includes("Требует") || p.status.includes("Ограничен");
+    case "exclusive":
+      return p.isExclusive;
+    case "action":
+      return p.isAction;
+    case "stock":
+      return p.inStock;
     default:
       return true;
   }
@@ -50,8 +53,40 @@ function ProductImage({ product }: { product: CatalogProduct }) {
   }
   return (
     <div className="flex h-full min-h-[120px] w-full flex-col items-center justify-center bg-muted/60 p-4 text-center">
-      <p className="text-xs font-medium text-muted-foreground">Изображение</p>
-      <p className="mt-1 text-[11px] text-muted-foreground">Нет файла в каталоге</p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{product.doorKind}</p>
+      <p className="mt-1 text-[11px] text-muted-foreground">Изображение модели не загружено</p>
+    </div>
+  );
+}
+
+function ProductBadges({ p }: { p: CatalogProduct }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {p.isTop ? (
+        <Badge variant="outline" className="border-primary/40 bg-primary/15 font-semibold">
+          Хит
+        </Badge>
+      ) : null}
+      {p.isNew ? (
+        <Badge variant="outline" className="border-sky-200 bg-sky-50 text-sky-950">
+          Новинка
+        </Badge>
+      ) : null}
+      {p.isExclusive ? (
+        <Badge variant="outline" className="border-purple-200 bg-purple-50 text-purple-950">
+          Эксклюзив
+        </Badge>
+      ) : null}
+      {p.isAction ? (
+        <Badge variant="outline" className="border-rose-200 bg-rose-50 text-rose-950">
+          Акция
+        </Badge>
+      ) : null}
+      {p.recommendedForShowcase ? (
+        <Badge variant="outline" className="border-border bg-muted/60">
+          Витрина
+        </Badge>
+      ) : null}
     </div>
   );
 }
@@ -62,12 +97,12 @@ export default function CatalogPage() {
   const [chip, setChip] = useState<QuickChip>("all");
   const [category, setCategory] = useState<string>("all");
   const [series, setSeries] = useState<string>("all");
-  const [type, setType] = useState<string>("all");
+  const [doorKind, setDoorKind] = useState<string>("all");
   const [status, setStatus] = useState<string>("all");
 
   const categories = useMemo(() => Array.from(new Set(CATALOG_PRODUCTS.map((p) => p.category))).sort(), []);
   const seriesList = useMemo(() => Array.from(new Set(CATALOG_PRODUCTS.map((p) => p.series))).sort(), []);
-  const types = useMemo(() => Array.from(new Set(CATALOG_PRODUCTS.map((p) => p.type))).sort(), []);
+  const doorKinds = useMemo(() => Array.from(new Set(CATALOG_PRODUCTS.map((p) => p.doorKind))).sort(), []);
   const statuses = useMemo(() => Array.from(new Set(CATALOG_PRODUCTS.map((p) => p.status))).sort(), []);
 
   const filtered = useMemo(() => {
@@ -76,24 +111,25 @@ export default function CatalogPage() {
       if (!applyChip(p, chip)) return false;
       if (category !== "all" && p.category !== category) return false;
       if (series !== "all" && p.series !== series) return false;
-      if (type !== "all" && p.type !== type) return false;
+      if (doorKind !== "all" && p.doorKind !== doorKind) return false;
       if (status !== "all" && p.status !== status) return false;
       if (!q) return true;
       return (
         p.name.toLowerCase().includes(q) ||
         p.article.toLowerCase().includes(q) ||
         p.series.toLowerCase().includes(q) ||
-        p.category.toLowerCase().includes(q)
+        p.category.toLowerCase().includes(q) ||
+        p.doorKind.toLowerCase().includes(q)
       );
     });
-  }, [search, chip, category, series, type, status]);
+  }, [search, chip, category, series, doorKind, status]);
 
   return (
     <div className="space-y-6 sm:space-y-8" data-testid="page-catalog">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Каталог</h1>
         <p className="mt-1 text-sm text-muted-foreground sm:text-base">
-          Модели и позиции: поиск по названию, артикулу и серии, фильтры и переход в карточку.
+          Входные, межкомнатные и скрытые двери Tandoor: поиск по названию и артикулу, фильтры и переход в карточку модели.
         </p>
       </div>
 
@@ -163,14 +199,14 @@ export default function CatalogPage() {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Тип</Label>
-            <Select value={type} onValueChange={setType}>
-              <SelectTrigger className="min-h-11 rounded-xl bg-card" data-testid="select-catalog-type">
+            <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Вид двери</Label>
+            <Select value={doorKind} onValueChange={setDoorKind}>
+              <SelectTrigger className="min-h-11 rounded-xl bg-card" data-testid="select-catalog-door-kind">
                 <SelectValue placeholder="Все" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Все типы</SelectItem>
-                {types.map((t) => (
+                <SelectItem value="all">Любой</SelectItem>
+                {doorKinds.map((t) => (
                   <SelectItem key={t} value={t}>
                     {t}
                   </SelectItem>
@@ -232,25 +268,12 @@ export default function CatalogPage() {
                 <ProductImage product={p} />
               </div>
               <CardHeader className="space-y-2 pb-2">
-                <div className="flex flex-wrap gap-1.5">
-                  {p.isNew ? (
-                    <Badge variant="outline" className="border-sky-200 bg-sky-50 text-sky-950">
-                      Новинка
-                    </Badge>
-                  ) : null}
-                  {p.isTop ? (
-                    <Badge variant="outline" className="border-primary/40 bg-primary/15 font-semibold">
-                      TOP
-                    </Badge>
-                  ) : null}
-                  {p.recommendedForShowcase ? (
-                    <Badge variant="outline" className="border-border bg-muted/60">
-                      Витрина
-                    </Badge>
-                  ) : null}
-                </div>
+                <ProductBadges p={p} />
                 <CardTitle className="text-lg leading-snug">{p.name}</CardTitle>
                 <p className="text-sm font-mono text-muted-foreground">{p.article}</p>
+                <p className="text-xs text-muted-foreground">
+                  {p.doorKind} · серия «{p.series}» · {p.coating}
+                </p>
                 <p className="line-clamp-2 text-sm text-muted-foreground">{p.shortDescription}</p>
               </CardHeader>
               <CardContent className="pt-0">
@@ -269,11 +292,12 @@ export default function CatalogPage() {
             <li key={p.id}>
               <Card className="rounded-2xl border border-border/80 bg-card shadow-sm">
                 <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0 flex-1 space-y-1">
                     <p className="font-semibold text-foreground">{p.name}</p>
                     <p className="text-sm text-muted-foreground">
-                      {p.article} · {p.series} · {p.status}
+                      {p.article} · {p.doorKind} · серия «{p.series}» · {p.status}
                     </p>
+                    <ProductBadges p={p} />
                   </div>
                   <Button asChild variant="outline" className="min-h-10 shrink-0 border-border bg-card" data-testid={`button-catalog-open-${p.id}`}>
                     <Link href={`/catalog/${p.id}`}>Открыть</Link>
@@ -288,11 +312,12 @@ export default function CatalogPage() {
       {view === "table" ? (
         <Card className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-md" data-testid="section-catalog-results-table">
           <div className="overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:thin]">
-            <table className="w-full min-w-[520px] text-left text-sm">
+            <table className="w-full min-w-[640px] text-left text-sm">
               <thead className="border-b border-border bg-muted/40">
                 <tr>
                   <th className="px-4 py-3 font-semibold">Модель</th>
                   <th className="px-4 py-3 font-semibold">Артикул</th>
+                  <th className="px-4 py-3 font-semibold">Вид</th>
                   <th className="px-4 py-3 font-semibold">Серия</th>
                   <th className="px-4 py-3 font-semibold">Статус</th>
                   <th className="px-4 py-3 font-semibold"> </th>
@@ -303,6 +328,7 @@ export default function CatalogPage() {
                   <tr key={p.id} className="border-b border-border/80 last:border-0">
                     <td className="max-w-[200px] px-4 py-3 font-medium break-words">{p.name}</td>
                     <td className="whitespace-nowrap px-4 py-3 font-mono text-muted-foreground">{p.article}</td>
+                    <td className="px-4 py-3">{p.doorKind}</td>
                     <td className="px-4 py-3">{p.series}</td>
                     <td className="px-4 py-3 text-muted-foreground">{p.status}</td>
                     <td className="px-4 py-3">
