@@ -4,15 +4,27 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { AppShell } from "@/components/layout/app-shell";
 import NotFound from "@/pages/not-found";
+import PreviewHome from "@/pages/preview-home";
+import DealerCardFoundation from "@/pages/dealer-card-foundation";
+import PlatformArchitecture from "@/pages/platform-architecture";
+import InternalPrototypePlaceholder from "@/pages/internal-prototype-placeholder";
+import { INTERNAL_PROTOTYPE_ROUTES } from "@/lib/preview-config";
 
 function AppRouter() {
   return (
-    <Switch>
-      {/* Register a <Route path="..." component={...} /> for EVERY page linked in your sidebar/nav. Missing routes cause 404. */}
-      {/* <Route path="/" component={Home}/> */}
-      <Route component={NotFound} />
-    </Switch>
+    <AppShell>
+      <Switch>
+        <Route path="/" component={PreviewHome} />
+        <Route path="/dealer-card-foundation" component={DealerCardFoundation} />
+        <Route path="/platform-architecture" component={PlatformArchitecture} />
+        {INTERNAL_PROTOTYPE_ROUTES.map((path) => (
+          <Route key={path} path={path} component={InternalPrototypePlaceholder} />
+        ))}
+        <Route component={NotFound} />
+      </Switch>
+    </AppShell>
   );
 }
 
