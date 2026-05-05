@@ -13,12 +13,12 @@ export default function NotFound() {
             <div>
               <h1 className="text-xl font-semibold text-foreground">Страница не найдена</h1>
               <p className="mt-2 text-sm text-muted-foreground">
-                Такого маршрута нет в preview-режиме. Проверьте адрес или вернитесь на главную.
+                Такого маршрута нет в preview-режиме. Проверьте адрес или вернитесь к первому этапу.
               </p>
             </div>
           </div>
-          <Button variant="outline" asChild className="w-full border-neutral-200 bg-white">
-            <Link href="/">На главную</Link>
+          <Button variant="outline" asChild className="w-full border-neutral-200 bg-white" data-testid="button-not-found-to-stage">
+            <Link href="/dealer-card-foundation">К первому этапу</Link>
           </Button>
         </CardContent>
       </Card>
