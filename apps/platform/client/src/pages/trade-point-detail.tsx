@@ -9,6 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { getDealerById, getTradePointByIds, type DealerRow, type DealerTradePoint } from "@/lib/dealer-base-mock-data";
+import { getTradePointProductPreview, tradePointShowcaseStatusForProduct } from "@/lib/catalog-data";
 
 const SECTION_IDS = ["overview", "showcase", "distribution", "tasks", "history", "photos"] as const;
 type SectionId = (typeof SECTION_IDS)[number];
@@ -217,6 +218,7 @@ function TradePointDetailContent({ dealer, point }: { dealer: DealerRow; point: 
     () => (dealer.hasProblem ? "Есть вопросы по витрине — согласовать с РМ план работ." : "Состояние в норме для текущего цикла."),
     [dealer.hasProblem],
   );
+  const tpProducts = useMemo(() => getTradePointProductPreview(dealer.id, point.id, 5), [dealer.id, point.id]);
 
   const breadcrumbDealerLabel = `Дилер №${dealer.id}`;
 
@@ -325,6 +327,28 @@ function TradePointDetailContent({ dealer, point }: { dealer: DealerRow; point: 
                 </p>
               </CardContent>
             </SurfaceCard>
+
+            <div className="mt-6" data-testid="section-trade-point-products">
+              <SectionTitle subtitle="Позиции каталога на витрине точки.">Модели на витрине</SectionTitle>
+              <div className="mt-3 space-y-3">
+                {tpProducts.map((p) => (
+                  <SurfaceCard key={p.id}>
+                    <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <p className="font-semibold leading-snug text-foreground">{p.name}</p>
+                        <p className="font-mono text-xs text-muted-foreground">{p.article}</p>
+                        <Badge variant="outline" className="w-fit border-border bg-muted/50 text-xs font-medium">
+                          {tradePointShowcaseStatusForProduct(p)}
+                        </Badge>
+                      </div>
+                      <Button asChild variant="outline" className="min-h-10 shrink-0 border-border bg-card" data-testid={`button-open-product-${p.id}`}>
+                        <Link href={`/catalog/${p.id}`}>Открыть модель</Link>
+                      </Button>
+                    </CardContent>
+                  </SurfaceCard>
+                ))}
+              </div>
+            </div>
           </section>
 
           <section

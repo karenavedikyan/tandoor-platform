@@ -8,16 +8,29 @@ import { BrandMark } from "@/components/brand/brand-mark";
 import { cn } from "@/lib/utils";
 
 const DEALER_BASE_HREF = "/dealer-base";
+const CATALOG_HREF = "/catalog";
 
-const PREVIEW_NAV = [{ href: DEALER_BASE_HREF, label: "Клиентская база", testId: "nav-dealer-base" }] as const;
+const PREVIEW_NAV = [
+  { href: DEALER_BASE_HREF, label: "Клиентская база", testId: "nav-dealer-base" },
+  { href: CATALOG_HREF, label: "Каталог", testId: "nav-catalog" },
+] as const;
 
 function isDealerBasePath(path: string) {
   return path === "/" || path === DEALER_BASE_HREF;
 }
 
+function isCatalogPath(path: string) {
+  return path === CATALOG_HREF || path.startsWith(`${CATALOG_HREF}/`);
+}
+
 function navClassForHref(href: string, location: string, isActiveFromLink?: boolean) {
   const active =
-    isActiveFromLink ?? (href === DEALER_BASE_HREF ? isDealerBasePath(location) : location === href);
+    isActiveFromLink ??
+    (href === DEALER_BASE_HREF
+      ? isDealerBasePath(location)
+      : href === CATALOG_HREF
+        ? isCatalogPath(location)
+        : location === href);
   return cn(
     "inline-flex min-h-10 items-center rounded-full px-4 text-sm font-medium transition-colors",
     active
@@ -74,8 +87,8 @@ export function AppShell({ children }: { children: ReactNode }) {
               <BrandMark />
             </Link>
             <div className="hidden h-8 w-px shrink-0 bg-border sm:block" aria-hidden />
-            <p className="hidden min-w-0 truncate text-sm font-medium text-muted-foreground sm:block sm:max-w-[14rem] md:max-w-xs">
-              Клиентская база
+            <p className="hidden min-w-0 truncate text-sm font-medium text-muted-foreground sm:block sm:max-w-[18rem] md:max-w-xs">
+              {isCatalogPath(location) ? "Каталог" : "Клиентская база"}
             </p>
           </div>
           <nav className="hidden shrink-0 items-center gap-2 md:flex" data-testid="nav-preview-desktop">

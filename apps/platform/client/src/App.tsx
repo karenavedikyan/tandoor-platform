@@ -9,6 +9,8 @@ import NotFound from "@/pages/not-found";
 import DealerBase from "@/pages/dealer-base";
 import DealerCardFoundation, { DealerCardPage } from "@/pages/dealer-card-foundation";
 import { TradePointDetailPage } from "@/pages/trade-point-detail";
+import CatalogPage from "@/pages/catalog";
+import { ProductDetailPage } from "@/pages/product-detail";
 import PreviewUnavailable from "@/pages/preview-unavailable";
 import InternalPrototypePlaceholder from "@/pages/internal-prototype-placeholder";
 import { INTERNAL_PROTOTYPE_ROUTES } from "@/lib/preview-config";
@@ -19,6 +21,8 @@ function AppRouter() {
       <Switch>
         <Route path="/" component={DealerBase} />
         <Route path="/dealer-base" component={DealerBase} />
+        <Route path="/catalog/:productId" component={ProductDetailPage} />
+        <Route path="/catalog" component={CatalogPage} />
         <Route path="/dealers/:dealerId/trade-points/:pointId" component={TradePointDetailPage} />
         <Route path="/dealers/:id" component={DealerCardPage} />
         <Route path="/dealer-card-foundation" component={DealerCardFoundation} />

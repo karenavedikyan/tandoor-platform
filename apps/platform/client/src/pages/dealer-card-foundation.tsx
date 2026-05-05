@@ -26,6 +26,7 @@ import {
   type DealerCategory,
   type DealerStatus,
 } from "@/lib/dealer-base-mock-data";
+import { dealerRowStatusForProduct, getDealerProductPreview } from "@/lib/catalog-data";
 
 const SECTION_IDS = [
   "overview",
@@ -315,6 +316,7 @@ function DealerCardContent({ row }: { row: DealerRow }) {
   const activeSection = useActiveSection();
   const historyEvents = useMemo(() => buildHistoryEvents(row), [row]);
   const tasks = useMemo(() => buildTasks(row), [row]);
+  const dealerProducts = useMemo(() => getDealerProductPreview(row.id, 5), [row.id]);
 
   const salesComment =
     row.hasProblem
@@ -615,6 +617,28 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                   <p className="mt-2 text-sm leading-relaxed text-foreground">{salesComment}</p>
                 </CardContent>
               </SurfaceCard>
+
+              <div className="mt-6" data-testid="section-dealer-products">
+                <SectionTitle subtitle="Позиции каталога в работе по клиенту.">Модели в работе</SectionTitle>
+                <div className="mt-3 space-y-3">
+                  {dealerProducts.map((p) => (
+                    <SurfaceCard key={p.id}>
+                      <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <p className="font-semibold leading-snug text-foreground">{p.name}</p>
+                          <p className="font-mono text-xs text-muted-foreground">{p.article}</p>
+                          <Badge variant="outline" className="w-fit border-border bg-muted/50 text-xs font-medium">
+                            {dealerRowStatusForProduct(p)}
+                          </Badge>
+                        </div>
+                        <Button asChild variant="outline" className="min-h-10 shrink-0 border-border bg-card" data-testid={`button-open-product-${p.id}`}>
+                          <Link href={`/catalog/${p.id}`}>Открыть модель</Link>
+                        </Button>
+                      </CardContent>
+                    </SurfaceCard>
+                  ))}
+                </div>
+              </div>
             </section>
 
             <section
