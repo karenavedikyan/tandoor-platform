@@ -1,7 +1,7 @@
 import type { ComponentProps, ComponentType, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
-import { Camera, ChevronRight, MapPin, PieChart, Store } from "lucide-react";
+import { Camera, ChevronRight, MapPin, PieChart, Plus, Store } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,12 +10,21 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { getDealerById, getTradePointByIds, type DealerRow, type DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import { getTradePointProductPreview, tradePointShowcaseStatusForProduct } from "@/lib/catalog-data";
+import {
+  filterMatrix,
+  getTradePointMatrix,
+  summarizeMatrix,
+  type MatrixFilterId,
+  type MatrixPresenceStatus,
+  type TradePointProductMatrixItem,
+} from "@/lib/trade-point-matrix-data";
 
-const SECTION_IDS = ["overview", "showcase", "distribution", "tasks", "history", "photos"] as const;
+const SECTION_IDS = ["overview", "matrix", "showcase", "distribution", "tasks", "history", "photos"] as const;
 type SectionId = (typeof SECTION_IDS)[number];
 
 const SECTION_DOM_IDS: Record<SectionId, string> = {
   overview: "trade-point-section-overview",
+  matrix: "section-trade-point-matrix",
   showcase: "trade-point-section-showcase",
   distribution: "trade-point-section-distribution",
   tasks: "trade-point-section-tasks",
@@ -25,6 +34,7 @@ const SECTION_DOM_IDS: Record<SectionId, string> = {
 
 const SECTION_LABELS: Record<SectionId, string> = {
   overview: "Общее",
+  matrix: "Матрица",
   showcase: "Витрина",
   distribution: "Дистрибуция",
   tasks: "Задачи",
@@ -34,6 +44,7 @@ const SECTION_LABELS: Record<SectionId, string> = {
 
 const NAV_TEST_IDS: Record<SectionId, string> = {
   overview: "trade-point-section-nav-overview",
+  matrix: "trade-point-section-nav-matrix",
   showcase: "trade-point-section-nav-showcase",
   distribution: "trade-point-section-nav-distribution",
   tasks: "trade-point-section-nav-tasks",
@@ -86,6 +97,28 @@ function priorityClass(p: "Высокий" | "Средний" | "Низкий") 
   if (p === "Высокий") return "border-red-200 bg-red-50 text-red-900";
   if (p === "Средний") return "border-amber-200 bg-amber-50 text-amber-950";
   return "border-border bg-muted text-muted-foreground";
+}
+
+const MATRIX_FILTERS: { id: MatrixFilterId; label: string; testId: string }[] = [
+  { id: "all", label: "Все", testId: "filter-trade-point-matrix-all" },
+  { id: "present", label: "Есть на витрине", testId: "filter-trade-point-matrix-present" },
+  { id: "missing", label: "Нет на витрине", testId: "filter-trade-point-matrix-missing" },
+  { id: "zone-a", label: "Зона A", testId: "filter-trade-point-matrix-zone-a" },
+  { id: "entrance", label: "Входные", testId: "filter-trade-point-matrix-entrance" },
+  { id: "interior", label: "Межкомнатные", testId: "filter-trade-point-matrix-interior" },
+];
+
+function presenceTone(p: MatrixPresenceStatus) {
+  if (p === "есть на витрине") return "border-emerald-200 bg-emerald-50 text-emerald-900";
+  if (p === "нужно добавить") return "border-red-200 bg-red-50 text-red-900";
+  if (p === "на проверке") return "border-amber-200 bg-amber-50 text-amber-950";
+  return "border-amber-200 bg-amber-50 text-amber-950";
+}
+
+function zoneTone(zone: "A" | "B" | "C") {
+  if (zone === "A") return "border-primary/40 bg-primary/10 text-primary";
+  if (zone === "B") return "border-border bg-muted text-foreground";
+  return "border-border bg-muted/60 text-muted-foreground";
 }
 
 function useActiveSection() {
@@ -210,6 +243,126 @@ function distributionConclusion(d: DealerTradePoint["distribution"]) {
   return "Нужны меры по усилению дистрибуции и контролю выкладки.";
 }
 
+function MatrixSummary({ items }: { items: TradePointProductMatrixItem[] }) {
+  const summary = useMemo(() => summarizeMatrix(items), [items]);
+  const tiles = [
+    { label: "Должно быть", value: summary.totalRequired, tone: "border-border bg-muted/40 text-foreground" },
+    { label: "На витрине", value: summary.totalPresent, tone: "border-emerald-200 bg-emerald-50 text-emerald-900" },
+    { label: "Отсутствует", value: summary.totalMissing, tone: "border-red-200 bg-red-50 text-red-900" },
+    { label: "На проверке", value: summary.totalUnderReview, tone: "border-amber-200 bg-amber-50 text-amber-950" },
+  ];
+
+  return (
+    <SurfaceCard data-testid="card-trade-point-matrix-summary">
+      <CardContent className="space-y-4 pt-5">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {tiles.map((t) => (
+            <div key={t.label} className={cn("rounded-xl border px-3 py-2.5", t.tone)}>
+              <p className="text-[11px] font-semibold uppercase tracking-wide opacity-80">{t.label}</p>
+              <p className="mt-1 text-2xl font-bold tabular-nums">{t.value}</p>
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { label: "Зона A", value: summary.zoneA },
+            { label: "Зона B", value: summary.zoneB },
+            { label: "Зона C", value: summary.zoneC },
+          ].map((z) => (
+            <div key={z.label} className="rounded-xl border border-border bg-card px-3 py-2 text-center">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{z.label}</p>
+              <p className="mt-0.5 text-lg font-semibold tabular-nums text-foreground">{z.value}</p>
+            </div>
+          ))}
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <div className="rounded-xl border border-border bg-card px-3 py-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Портал входных дверей
+            </p>
+            <p className="mt-0.5 text-sm font-semibold text-foreground">
+              <span className="tabular-nums">{summary.entrancePresent}</span>
+              <span className="text-muted-foreground"> / {summary.entranceRequired}</span>
+            </p>
+          </div>
+          <div className="rounded-xl border border-border bg-card px-3 py-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Портал межкомнатных дверей
+            </p>
+            <p className="mt-0.5 text-sm font-semibold text-foreground">
+              <span className="tabular-nums">{summary.interiorPresent}</span>
+              <span className="text-muted-foreground"> / {summary.interiorRequired}</span>
+            </p>
+          </div>
+        </div>
+      </CardContent>
+    </SurfaceCard>
+  );
+}
+
+function MatrixItemCard({ item }: { item: TradePointProductMatrixItem }) {
+  return (
+    <SurfaceCard data-testid={`card-trade-point-matrix-item-${item.productId}`}>
+      <CardContent className="space-y-3 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold leading-snug text-foreground">{item.productName}</p>
+            <p className="font-mono text-xs text-muted-foreground">{item.productArticle}</p>
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-1.5">
+            <Badge variant="outline" className={cn("font-medium", presenceTone(item.presence))}>
+              {item.presence}
+            </Badge>
+            <Badge variant="outline" className={cn("font-medium", zoneTone(item.zone))}>
+              Зона {item.zone}
+            </Badge>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs sm:grid-cols-3">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Категория</p>
+            <p className="mt-0.5 text-sm font-medium text-foreground">{item.doorCategory}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Портал</p>
+            <p className="mt-0.5 text-sm font-medium text-foreground">{item.portal}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Образцы</p>
+            <p className="mt-0.5 text-sm font-medium tabular-nums text-foreground">
+              {item.actualSamples} / {item.targetSamples}
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Действие</p>
+            <p className="mt-0.5 text-sm font-medium text-foreground">{item.action}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Приоритет</p>
+            <p className="mt-0.5">
+              <Badge variant="outline" className={cn("font-medium", priorityClass(item.priority))}>
+                {item.priority}
+              </Badge>
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Проверено</p>
+            <p className="mt-0.5 text-sm font-medium tabular-nums text-foreground">{item.lastCheckedAt}</p>
+          </div>
+        </div>
+        <Button
+          asChild
+          variant="outline"
+          className="min-h-10 w-full border-border bg-card sm:w-auto"
+          data-testid={`button-open-matrix-product-${item.productId}`}
+        >
+          <Link href={`/catalog/${item.productId}`}>Открыть модель</Link>
+        </Button>
+      </CardContent>
+    </SurfaceCard>
+  );
+}
+
 function TradePointDetailContent({ dealer, point }: { dealer: DealerRow; point: DealerTradePoint }) {
   const activeSection = useActiveSection();
   const dist = point.distribution;
@@ -219,6 +372,10 @@ function TradePointDetailContent({ dealer, point }: { dealer: DealerRow; point: 
     [dealer.hasProblem],
   );
   const tpProducts = useMemo(() => getTradePointProductPreview(dealer.id, point.id, 5), [dealer.id, point.id]);
+  const matrixItems = useMemo(() => getTradePointMatrix(dealer.id, point.id), [dealer.id, point.id]);
+  const matrixSummary = useMemo(() => summarizeMatrix(matrixItems), [matrixItems]);
+  const [matrixFilter, setMatrixFilter] = useState<MatrixFilterId>("all");
+  const filteredMatrix = useMemo(() => filterMatrix(matrixItems, matrixFilter), [matrixItems, matrixFilter]);
 
   const breadcrumbDealerLabel = `Дилер №${dealer.id}`;
 
@@ -309,6 +466,75 @@ function TradePointDetailContent({ dealer, point }: { dealer: DealerRow; point: 
           </section>
 
           <section
+            id={SECTION_DOM_IDS.matrix}
+            data-testid="section-trade-point-matrix"
+            className="scroll-mt-28 space-y-4 sm:scroll-mt-32"
+          >
+            <SectionTitle subtitle="Позиции каталога, которые должны быть представлены в этой торговой точке.">
+              Матрица товаров
+            </SectionTitle>
+            <MatrixSummary items={matrixItems} />
+
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-muted-foreground">
+                Выберите модель в каталоге и добавьте её в матрицу точки.
+              </p>
+              <Button
+                asChild
+                variant="default"
+                className="min-h-10 font-semibold"
+                data-testid="button-add-products-from-catalog"
+              >
+                <Link href="/catalog">
+                  <Plus className="mr-1.5 h-4 w-4" aria-hidden />
+                  Добавить из каталога
+                </Link>
+              </Button>
+            </div>
+
+            <div
+              className="-mx-4 overflow-x-auto px-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:px-0"
+              role="tablist"
+              aria-label="Фильтры матрицы товаров"
+            >
+              <div className="flex gap-2 pb-1">
+                {MATRIX_FILTERS.map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={matrixFilter === f.id}
+                    onClick={() => setMatrixFilter(f.id)}
+                    data-testid={f.testId}
+                    className={cn(
+                      "min-h-10 shrink-0 rounded-full border px-3.5 py-2 text-sm font-medium transition-colors",
+                      matrixFilter === f.id
+                        ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                        : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground",
+                    )}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {filteredMatrix.length === 0 ? (
+              <SurfaceCard>
+                <CardContent className="pt-5 text-sm text-muted-foreground">
+                  По выбранному фильтру позиций нет.
+                </CardContent>
+              </SurfaceCard>
+            ) : (
+              <div className="space-y-3">
+                {filteredMatrix.map((item) => (
+                  <MatrixItemCard key={item.productId} item={item} />
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section
             id={SECTION_DOM_IDS.showcase}
             data-testid="section-trade-point-showcase"
             className="scroll-mt-28 space-y-4 sm:scroll-mt-32"
@@ -320,6 +546,37 @@ function TradePointDetailContent({ dealer, point }: { dealer: DealerRow; point: 
                 <FieldRow label="Что нужно добавить" value={point.showcaseNeeds} />
                 <FieldRow label="Оборудование" value={point.equipment} />
                 <FieldRow label="Комментарий" value={showcaseComment} />
+                <Separator className="my-4" />
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <div className="rounded-xl border border-border bg-muted/40 px-3 py-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Должно быть
+                    </p>
+                    <p className="mt-0.5 text-lg font-semibold tabular-nums text-foreground">
+                      {matrixSummary.totalRequired}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-900/80">
+                      На витрине
+                    </p>
+                    <p className="mt-0.5 text-lg font-semibold tabular-nums text-emerald-900">
+                      {matrixSummary.totalPresent}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-red-900/80">
+                      Отсутствует
+                    </p>
+                    <p className="mt-0.5 text-lg font-semibold tabular-nums text-red-900">
+                      {matrixSummary.totalMissing}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-primary/40 bg-primary/10 px-3 py-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-primary/80">Зона A</p>
+                    <p className="mt-0.5 text-lg font-semibold tabular-nums text-primary">{matrixSummary.zoneA}</p>
+                  </div>
+                </div>
                 <Separator className="my-4" />
                 <p className="text-sm font-medium text-foreground">
                   <span className="text-muted-foreground">Ближайшее действие: </span>

@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { getProductById, type CatalogProduct } from "@/lib/catalog-data";
+import { getMatrixPresencesForProduct, type MatrixPresenceStatus } from "@/lib/trade-point-matrix-data";
 
 const SECTION_IDS = ["overview", "specs", "variants", "showcases", "dealers", "tasks", "history"] as const;
 type SectionId = (typeof SECTION_IDS)[number];
@@ -251,9 +252,21 @@ function ProductNotFound() {
   );
 }
 
+function presenceTone(p: MatrixPresenceStatus) {
+  if (p === "есть на витрине") return "border-emerald-200 bg-emerald-50 text-emerald-900";
+  if (p === "нужно добавить") return "border-red-200 bg-red-50 text-red-900";
+  return "border-amber-200 bg-amber-50 text-amber-950";
+}
+
 function ProductFound({ product }: { product: CatalogProduct }) {
   const active = useActiveSection();
   const tasks = useMemo(() => buildProductTasks(product), [product]);
+  const matrixPresences = useMemo(() => getMatrixPresencesForProduct(product.id), [product.id]);
+  const presenceByPoint = useMemo(() => {
+    const map = new Map<string, { presence: MatrixPresenceStatus; zone: "A" | "B" | "C" }>();
+    for (const p of matrixPresences) map.set(p.pointId, { presence: p.presence, zone: p.zone });
+    return map;
+  }, [matrixPresences]);
 
   return (
     <div className="space-y-4 sm:space-y-6" data-testid="page-product-detail">
@@ -460,14 +473,25 @@ function ProductFound({ product }: { product: CatalogProduct }) {
                 <CardContent className="space-y-2 pb-4">
                   {product.relatedTradePointIds.map((tpId) => {
                     const dealerId = tpId.split("-")[0] ?? "";
+                    const matrixInfo = presenceByPoint.get(tpId);
                     return (
                       <Link
                         key={tpId}
                         href={`/dealers/${dealerId}/trade-points/${tpId}`}
-                        className="flex min-h-10 items-center justify-between rounded-xl border border-border bg-card px-3 py-2 text-sm font-medium text-foreground no-underline transition-colors hover:border-primary/40 hover:bg-muted/50"
+                        className="flex min-h-10 items-center justify-between gap-2 rounded-xl border border-border bg-card px-3 py-2 text-sm font-medium text-foreground no-underline transition-colors hover:border-primary/40 hover:bg-muted/50"
                         data-testid={`link-product-trade-point-${tpId}`}
                       >
-                        <span className="font-mono text-xs sm:text-sm">ТТ {tpId}</span>
+                        <span className="min-w-0 flex-1 font-mono text-xs sm:text-sm">ТТ {tpId}</span>
+                        {matrixInfo ? (
+                          <span className="flex shrink-0 items-center gap-1.5">
+                            <Badge variant="outline" className={cn("text-[10px] font-medium", presenceTone(matrixInfo.presence))}>
+                              {matrixInfo.presence}
+                            </Badge>
+                            <Badge variant="outline" className="border-border bg-muted/60 text-[10px] font-medium">
+                              Зона {matrixInfo.zone}
+                            </Badge>
+                          </span>
+                        ) : null}
                         <MapPin className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
                       </Link>
                     );
