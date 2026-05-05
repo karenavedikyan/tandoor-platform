@@ -1,0 +1,29 @@
+# Секреты и локальная конфигурация (не коммитить реальные значения)
+.env
+.env.*
+!.env.example
+!apps/platform/.env.example
+
+# Логи и дампы
+*.log
+logs/
+*.sql
+*.dump
+*.sqlite
+*.db
+*.db-shm
+*.db-wal
+
+# Выгрузки с потенциально чувствительными данными (рабочие копии)
+*.csv
+*.xlsx
+imports/
+exports/
+data-exports/
+
+# ОС и IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
