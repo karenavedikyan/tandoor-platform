@@ -21,32 +21,31 @@ const TITLE_BY_PATH: Record<string, string> = {
 
 export default function InternalPrototypePlaceholder() {
   const [location] = useLocation();
-  const title = TITLE_BY_PATH[location] ?? "Внутренний прототип";
+  const title = TITLE_BY_PATH[location] ?? "Раздел в разработке";
   const isKnown = (INTERNAL_PROTOTYPE_ROUTES as readonly string[]).includes(location);
 
   return (
     <div className="mx-auto max-w-lg" data-testid="page-internal-prototype-placeholder">
-      <Card className="border-neutral-200/80 bg-white shadow-sm">
+      <Card className="border-border bg-card shadow-sm">
         <CardHeader className="space-y-2">
-          <div className="flex items-center gap-2 text-[#5a9e00]">
+          <div className="flex items-center gap-2 text-primary">
             <Construction className="h-5 w-5 shrink-0" aria-hidden />
             <CardTitle className="text-lg">{title}</CardTitle>
           </div>
         </CardHeader>
         <CardContent className="space-y-4 text-sm text-muted-foreground">
           <p>
-            Этот раздел относится к <strong className="text-foreground">внутреннему прототипу</strong> и скрыт из
-            публичной навигации preview-режима.
+            Раздел в подготовке и скрыт из основного меню. Откройте карточку дилера из шапки.
           </p>
           {!isKnown ? (
-            <p>Маршрут зарезервирован под будущую реализацию.</p>
+            <p>Маршрут зарезервирован.</p>
           ) : (
-            <p>Маршрут сохранён для команды разработки и не входит в публичный preview.</p>
+            <p>Скоро будет доступен в общем интерфейсе.</p>
           )}
-          <Button variant="outline" asChild className="min-h-11 border-neutral-200 bg-white" data-testid="button-internal-back-home">
-            <Link href="/dealer-card-foundation">
+          <Button variant="outline" asChild className="min-h-11 border-border bg-card" data-testid="button-internal-back-home">
+            <Link href="/dealer-base">
               <ArrowLeft className="h-4 w-4" />
-              К первому этапу
+              К клиентской базе
             </Link>
           </Button>
         </CardContent>

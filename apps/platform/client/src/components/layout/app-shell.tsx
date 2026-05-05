@@ -7,19 +7,17 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { BrandMark } from "@/components/brand/brand-mark";
 import { cn } from "@/lib/utils";
 
-const FIRST_STAGE_HREF = "/dealer-card-foundation";
+const DEALER_BASE_HREF = "/dealer-base";
 
-const PREVIEW_NAV = [
-  { href: FIRST_STAGE_HREF, label: "Единая карточка дилера", testId: "nav-dealer-card-foundation" },
-] as const;
+const PREVIEW_NAV = [{ href: DEALER_BASE_HREF, label: "Клиентская база", testId: "nav-dealer-base" }] as const;
 
-function isFirstStagePath(path: string) {
-  return path === "/" || path === FIRST_STAGE_HREF;
+function isDealerBasePath(path: string) {
+  return path === "/" || path === DEALER_BASE_HREF;
 }
 
 function navClassForHref(href: string, location: string, isActiveFromLink?: boolean) {
   const active =
-    isActiveFromLink ?? (href === FIRST_STAGE_HREF ? isFirstStagePath(location) : location === href);
+    isActiveFromLink ?? (href === DEALER_BASE_HREF ? isDealerBasePath(location) : location === href);
   return cn(
     "inline-flex min-h-10 items-center rounded-full px-4 text-sm font-medium transition-colors",
     active
@@ -72,12 +70,12 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </SheetContent>
               </Sheet>
             ) : null}
-            <Link href={FIRST_STAGE_HREF} className="min-w-0 shrink no-underline">
+            <Link href={DEALER_BASE_HREF} className="min-w-0 shrink no-underline">
               <BrandMark />
             </Link>
             <div className="hidden h-8 w-px shrink-0 bg-border sm:block" aria-hidden />
             <p className="hidden min-w-0 truncate text-sm font-medium text-muted-foreground sm:block sm:max-w-[14rem] md:max-w-xs">
-              Единая карточка дилера
+              Клиентская база
             </p>
           </div>
           <nav className="hidden shrink-0 items-center gap-2 md:flex" data-testid="nav-preview-desktop">
