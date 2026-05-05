@@ -1,4 +1,6 @@
+import { DEALER_BASE_ROWS } from "./dealer-base-mock-data";
 import {
+  getTradePointMatrix,
   type MatrixActionKind,
   type ShowcasePortal,
   type ShowcaseZone,
@@ -219,6 +221,49 @@ export function summarizeMatrixTasks(tasks: MatrixTask[]): MatrixTaskSummary {
     overdueCount,
     highPriorityCount,
   };
+}
+
+export type MatrixTaskWithContext = MatrixTask & {
+  dealerName: string;
+};
+
+/**
+ * Сводный список задач по всем дилерам и их торговым точкам.
+ * Источник — матрицы товаров каждой ТТ. Используется на общей странице задач.
+ */
+export function getAllMatrixTasks(): MatrixTaskWithContext[] {
+  const result: MatrixTaskWithContext[] = [];
+  for (const dealer of DEALER_BASE_ROWS) {
+    for (const point of dealer.tradePoints) {
+      const matrix = getTradePointMatrix(dealer.id, point.id);
+      const recs = buildRecommendedMatrixTasks(dealer.id, point.id, point.name, matrix);
+      for (const r of recs) {
+        result.push({
+          taskId: r.taskId,
+          productId: r.productId,
+          productName: r.productName,
+          productArticle: r.productArticle,
+          dealerId: r.dealerId,
+          tradePointId: r.tradePointId,
+          tradePointName: r.tradePointName,
+          type: r.type,
+          title: r.title,
+          description: r.description,
+          priority: r.priority,
+          status: r.status,
+          assigneeRole: r.assigneeRole,
+          dueDate: r.dueDate,
+          source: r.source,
+          zone: r.zone,
+          portal: r.portal,
+          targetSamples: r.targetSamples,
+          actualSamples: r.actualSamples,
+          dealerName: dealer.name,
+        });
+      }
+    }
+  }
+  return result;
 }
 
 /**

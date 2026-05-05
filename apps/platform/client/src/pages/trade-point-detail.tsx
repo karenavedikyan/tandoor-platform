@@ -976,7 +976,17 @@ function TradePointDetailContent({ dealer, point }: { dealer: DealerRow; point: 
           </section>
 
           <section id={SECTION_DOM_IDS.tasks} data-testid="section-trade-point-tasks" className="scroll-mt-28 space-y-4 sm:scroll-mt-32">
-            <SectionTitle subtitle="Задачи по этой торговой точке.">Задачи</SectionTitle>
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <SectionTitle subtitle="Задачи по этой торговой точке.">Задачи</SectionTitle>
+              <Button
+                asChild
+                variant="outline"
+                className="min-h-10 border-border bg-card"
+                data-testid="button-open-all-tasks"
+              >
+                <Link href="/tasks">Все задачи</Link>
+              </Button>
+            </div>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               {point.tasks.map((task, idx) => (
                 <SurfaceCard key={`${point.id}-task-${idx}`}>

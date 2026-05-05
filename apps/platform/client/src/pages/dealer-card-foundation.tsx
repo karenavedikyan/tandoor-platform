@@ -405,6 +405,15 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                     >
                       Дистрибуция
                     </Button>
+                    <Button
+                      asChild
+                      variant="outline"
+                      size="sm"
+                      className="min-h-10 border-border bg-card"
+                      data-testid="button-open-all-tasks"
+                    >
+                      <Link href="/tasks">Все задачи</Link>
+                    </Button>
                   </div>
                 </div>
               </div>

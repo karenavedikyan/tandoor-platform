@@ -9,10 +9,12 @@ import { cn } from "@/lib/utils";
 
 const DEALER_BASE_HREF = "/dealer-base";
 const CATALOG_HREF = "/catalog";
+const TASKS_HREF = "/tasks";
 
 const PREVIEW_NAV = [
   { href: DEALER_BASE_HREF, label: "Клиентская база", testId: "nav-dealer-base" },
   { href: CATALOG_HREF, label: "Каталог", testId: "nav-catalog" },
+  { href: TASKS_HREF, label: "Задачи", testId: "nav-tasks" },
 ] as const;
 
 function isDealerBasePath(path: string) {
@@ -23,6 +25,10 @@ function isCatalogPath(path: string) {
   return path === CATALOG_HREF || path.startsWith(`${CATALOG_HREF}/`);
 }
 
+function isTasksPath(path: string) {
+  return path === TASKS_HREF || path.startsWith(`${TASKS_HREF}/`);
+}
+
 function navClassForHref(href: string, location: string, isActiveFromLink?: boolean) {
   const active =
     isActiveFromLink ??
@@ -30,7 +36,9 @@ function navClassForHref(href: string, location: string, isActiveFromLink?: bool
       ? isDealerBasePath(location)
       : href === CATALOG_HREF
         ? isCatalogPath(location)
-        : location === href);
+        : href === TASKS_HREF
+          ? isTasksPath(location)
+          : location === href);
   return cn(
     "inline-flex min-h-10 items-center rounded-full px-4 text-sm font-medium transition-colors",
     active
@@ -88,7 +96,11 @@ export function AppShell({ children }: { children: ReactNode }) {
             </Link>
             <div className="hidden h-8 w-px shrink-0 bg-border sm:block" aria-hidden />
             <p className="hidden min-w-0 truncate text-sm font-medium text-muted-foreground sm:block sm:max-w-[18rem] md:max-w-xs">
-              {isCatalogPath(location) ? "Каталог" : "Клиентская база"}
+              {isCatalogPath(location)
+                ? "Каталог"
+                : isTasksPath(location)
+                  ? "Задачи"
+                  : "Клиентская база"}
             </p>
           </div>
           <nav className="hidden shrink-0 items-center gap-2 md:flex" data-testid="nav-preview-desktop">
