@@ -4,6 +4,7 @@ import { Menu } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { BrandMark } from "@/components/brand/brand-mark";
 import { cn } from "@/lib/utils";
 
 const FIRST_STAGE_HREF = "/dealer-card-foundation";
@@ -20,8 +21,10 @@ function navClassForHref(href: string, location: string, isActiveFromLink?: bool
   const active =
     isActiveFromLink ?? (href === FIRST_STAGE_HREF ? isFirstStagePath(location) : location === href);
   return cn(
-    "block rounded-md px-3 py-2 text-sm font-medium transition-colors",
-    active ? "bg-[#7DC400]/15 text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
+    "inline-flex min-h-10 items-center rounded-full px-4 text-sm font-medium transition-colors",
+    active
+      ? "bg-[#7DC400] text-[#142200] shadow-sm shadow-[#7DC400]/25"
+      : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900",
   );
 }
 
@@ -31,29 +34,29 @@ export function AppShell({ children }: { children: ReactNode }) {
   const showMobileMenu = PREVIEW_NAV.length > 1;
 
   return (
-    <div className="min-h-screen bg-[#f7f8f6]" data-testid="app-shell-preview">
-      <header className="sticky top-0 z-40 border-b border-border/60 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-          <div className="flex min-w-0 flex-1 items-center gap-3">
+    <div className="min-h-screen overflow-x-hidden bg-[#eef0ed]" data-testid="app-shell-preview">
+      <header className="sticky top-0 z-40 border-b border-neutral-200/90 bg-white/90 shadow-[0_1px_0_rgba(0,0,0,0.04)] backdrop-blur-md supports-[backdrop-filter]:bg-white/85">
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3 sm:gap-4 sm:px-5">
+          <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
             {showMobileMenu ? (
               <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
                 <SheetTrigger asChild>
                   <Button
                     variant="outline"
                     size="icon"
-                    className="shrink-0 border-neutral-200 md:hidden"
+                    className="h-10 w-10 shrink-0 border-neutral-200 bg-white md:hidden"
                     type="button"
                     data-testid="button-mobile-nav-open"
                     aria-label="Открыть меню"
                   >
-                    <Menu className="h-5 w-5" />
+                    <Menu className="h-5 w-5 text-neutral-700" />
                   </Button>
                 </SheetTrigger>
                 <SheetContent side="left" className="w-[min(100vw-2rem,280px)]">
                   <SheetHeader>
                     <SheetTitle className="text-left">Меню</SheetTitle>
                   </SheetHeader>
-                  <nav className="mt-6 flex flex-col gap-1" data-testid="nav-preview-mobile">
+                  <nav className="mt-6 flex flex-col gap-2" data-testid="nav-preview-mobile">
                     {PREVIEW_NAV.map((item) => (
                       <Link
                         key={item.href}
@@ -69,16 +72,15 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </SheetContent>
               </Sheet>
             ) : null}
-            <div className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-3">
-              <Link href={FIRST_STAGE_HREF} className="shrink-0 no-underline">
-                <span className="flex cursor-pointer flex-col leading-tight" data-testid="link-app-brand">
-                  <span className="text-base font-semibold tracking-tight text-foreground">Tandoor Platform</span>
-                  <span className="text-xs text-muted-foreground">Единая карточка дилера</span>
-                </span>
-              </Link>
-            </div>
+            <Link href={FIRST_STAGE_HREF} className="min-w-0 shrink no-underline">
+              <BrandMark />
+            </Link>
+            <div className="hidden h-8 w-px shrink-0 bg-neutral-200 sm:block" aria-hidden />
+            <p className="hidden min-w-0 truncate text-sm font-medium text-neutral-600 sm:block sm:max-w-[14rem] md:max-w-xs">
+              Единая карточка дилера
+            </p>
           </div>
-          <nav className="hidden shrink-0 items-center gap-1 md:flex" data-testid="nav-preview-desktop">
+          <nav className="hidden shrink-0 items-center gap-2 md:flex" data-testid="nav-preview-desktop">
             {PREVIEW_NAV.map((item) => (
               <Link
                 key={item.href}
@@ -92,7 +94,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </nav>
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">{children}</main>
+      <main className="mx-auto max-w-5xl px-4 py-5 sm:px-5 sm:py-7">{children}</main>
     </div>
   );
 }
