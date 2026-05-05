@@ -6,9 +6,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppShell } from "@/components/layout/app-shell";
 import NotFound from "@/pages/not-found";
-import PreviewHome from "@/pages/preview-home";
-import DealerCardFoundation from "@/pages/dealer-card-foundation";
-import PlatformArchitecture from "@/pages/platform-architecture";
+import DealerCardFoundation, { DealerCardFoundationContent } from "@/pages/dealer-card-foundation";
+import PreviewUnavailable from "@/pages/preview-unavailable";
 import InternalPrototypePlaceholder from "@/pages/internal-prototype-placeholder";
 import { INTERNAL_PROTOTYPE_ROUTES } from "@/lib/preview-config";
 
@@ -16,9 +15,9 @@ function AppRouter() {
   return (
     <AppShell>
       <Switch>
-        <Route path="/" component={PreviewHome} />
+        <Route path="/" component={DealerCardFoundationContent} />
         <Route path="/dealer-card-foundation" component={DealerCardFoundation} />
-        <Route path="/platform-architecture" component={PlatformArchitecture} />
+        <Route path="/platform-architecture" component={PreviewUnavailable} />
         {INTERNAL_PROTOTYPE_ROUTES.map((path) => (
           <Route key={path} path={path} component={InternalPrototypePlaceholder} />
         ))}

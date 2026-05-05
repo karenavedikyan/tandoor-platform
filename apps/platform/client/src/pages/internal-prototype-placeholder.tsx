@@ -41,15 +41,12 @@ export default function InternalPrototypePlaceholder() {
           {!isKnown ? (
             <p>Маршрут зарезервирован под будущую реализацию.</p>
           ) : (
-            <p>
-              Навигация для тестировщиков сейчас содержит только главную, карточку дилера и архитектуру. Код и маршрут
-              сохранены для команды.
-            </p>
+            <p>Маршрут сохранён для команды разработки и не входит в публичный preview.</p>
           )}
           <Button variant="outline" asChild className="min-h-11 border-neutral-200 bg-white" data-testid="button-internal-back-home">
-            <Link href="/">
+            <Link href="/dealer-card-foundation">
               <ArrowLeft className="h-4 w-4" />
-              Вернуться на главную (preview)
+              К первому этапу
             </Link>
           </Button>
         </CardContent>
