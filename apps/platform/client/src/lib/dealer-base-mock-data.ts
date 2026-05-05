@@ -62,13 +62,41 @@ export type DealerResponsibles = {
   assistant: string;
 };
 
+export type TradePointTask = {
+  title: string;
+  priority: "Высокий" | "Средний" | "Низкий";
+  status: "Новая" | "В работе" | "Запланирована" | "Закрыта";
+  due: string;
+  assignee: string;
+};
+
+export type TradePointActivity = {
+  text: string;
+  date: string;
+};
+
 export type DealerTradePoint = {
-  label: string;
+  id: string;
+  name: string;
+  city: string;
   address: string;
   format: string;
+  /** Статус торговой точки */
+  status: string;
   equipment: string;
-  warehouseNote: string;
-  updatedAt: string;
+  hardwareStockStatus: string;
+  doorsStockStatus: string;
+  distribution: { mk: number; vh: number; total: number };
+  showcaseStatus: string;
+  showcaseNeeds: string;
+  lastVisitDate: string;
+  nextVisitDate: string;
+  responsibleRegionalManager: string;
+  issues: string;
+  tasks: TradePointTask[];
+  activityHistory: TradePointActivity[];
+  /** Заглушка: вложения фото пока нет */
+  photos: { attached: boolean };
 };
 
 export type DealerRow = {
@@ -139,14 +167,77 @@ function buildRow(i: number): DealerRow {
   const legalEntity = `ООО «Торговый партнёр ${id}»`;
   const outlets = format === "сетевой" ? 2 + (i % 5) : 1;
   const tradePoints: DealerTradePoint[] = [];
-  for (let t = 0; t < Math.min(outlets, 3); t += 1) {
+  const pointCount = Math.min(outlets, 3);
+  for (let t = 0; t < pointCount; t += 1) {
+    const pointSuffix = String(t + 1).padStart(2, "0");
+    const pointId = `${id}-${pointSuffix}`;
+    const mkAdj = Math.max(38, Math.min(96, mkPct + (t - 1) * 5));
+    const vhAdj = Math.max(35, Math.min(94, vhPct + (t - 1) * 4));
+    const totalAdj = Math.round((mkAdj + vhAdj) / 2);
+    const tpStatuses = ["Активна", "Под наблюдением", "В работе", "На проверке"];
+    const hardwareOpts = ["По графику, без задержек", "Частично закрытые позиции", "Пополнение на следующей неделе"];
+    const doorsOpts = ["Под заказ, срок согласован", "В наличии на региональном складе", "По заявке менеджера точки"];
+    const historyTemplates: TradePointActivity[] = [
+      { text: "Проведён визит", date: `${3 + ((i + t) % 12)}.${String(((i + t) % 9) + 1).padStart(2, "0")}.2026` },
+      { text: "Обновлена информация по витрине", date: `${7 + ((i + t) % 10)}.${String(((i + t + 1) % 9) + 1).padStart(2, "0")}.2026` },
+      { text: "Проверена дистрибуция", date: `${11 + ((i + t) % 8)}.${String(((i + t + 2) % 9) + 1).padStart(2, "0")}.2026` },
+      { text: "Добавлен комментарий", date: `${15 + ((i + t) % 7)}.${String(((i + t + 3) % 9) + 1).padStart(2, "0")}.2026` },
+    ];
+    const taskPool: TradePointTask[] = [
+      {
+        title: "Проверить выкладку МК",
+        priority: "Высокий",
+        status: "В работе",
+        due: `${18 + ((i + t) % 5)}.05.2026`,
+        assignee: regional,
+      },
+      {
+        title: "Согласовать дату следующего визита",
+        priority: "Средний",
+        status: "Запланирована",
+        due: `${22 + ((i + t) % 4)}.05.2026`,
+        assignee: manager,
+      },
+      {
+        title: "Обновить фото витрины",
+        priority: "Низкий",
+        status: "Новая",
+        due: `${26 + ((i + t) % 3)}.05.2026`,
+        assignee: regional,
+      },
+      {
+        title: "Уточнить складские остатки по дверям",
+        priority: "Средний",
+        status: "В работе",
+        due: `${28 + ((i + t) % 2)}.05.2026`,
+        assignee: manager,
+      },
+    ];
+    const taskCount = hasProblem ? 4 : 2 + (t % 2);
+    const issuesText = hasProblem
+      ? "Требуется контроль витрины и согласование поставки образцов."
+      : "Замечаний по точке в текущем цикле нет.";
+
     tradePoints.push({
-      label: `Торговая точка №${t + 1}`,
-      address: `ул. Примерная, д. ${1 + t}, г. ${city}`,
+      id: pointId,
+      name: `Торговая точка №${t + 1}`,
+      city,
+      address: `г. ${city}, торговая точка №${t + 1}`,
       format: t === 0 ? "Монобрендовый салон" : "Фирменный отдел",
+      status: tpStatuses[(i + t) % tpStatuses.length],
       equipment: t === 0 ? "Стенд МК, образцы ВХ" : "Стенд МК",
-      warehouseNote: "Да, по согласованному графику",
-      updatedAt: `${12 + ((i + t) % 16)}.${String(((i + t) % 8) + 1).padStart(2, "0")}.2026`,
+      hardwareStockStatus: hardwareOpts[(i + t) % hardwareOpts.length],
+      doorsStockStatus: doorsOpts[(i + t * 2) % doorsOpts.length],
+      distribution: { mk: mkAdj, vh: vhAdj, total: totalAdj },
+      showcaseStatus: `${55 + ((i + t * 3) % 40)}% — ${showcaseOk ? "в норме" : "нужны доработки"}`,
+      showcaseNeeds: t === 0 ? "Дополнительные образцы фурнитуры" : "Актуализация ценников на стенде",
+      lastVisitDate: `${2 + ((i + t) % 14)}.${String(((i + t) % 9) + 1).padStart(2, "0")}.2026`,
+      nextVisitDate: `${24 + ((i + t) % 6)}.${String(((i + t + 1) % 9) + 1).padStart(2, "0")}.2026`,
+      responsibleRegionalManager: regional,
+      issues: issuesText,
+      tasks: taskPool.slice(0, taskCount),
+      activityHistory: historyTemplates,
+      photos: { attached: false },
     });
   }
   const competitorSets = [
@@ -259,4 +350,28 @@ export function normalizeDealerId(raw: string): string {
 export function getDealerById(rawId: string): DealerRow | undefined {
   const id = normalizeDealerId(rawId);
   return DEALER_BASE_ROWS.find((r) => r.id === id);
+}
+
+/** Нормализует id точки вида `001-1` → `001-01` для дилера `001`. */
+export function normalizeTradePointId(dealerPaddedId: string, rawPointId: string): string {
+  const d = normalizeDealerId(dealerPaddedId);
+  const t = rawPointId.trim();
+  const m = t.match(/^(\d{3})-(\d{1,3})$/);
+  if (m && m[1] === d) {
+    return `${d}-${String(parseInt(m[2], 10)).padStart(2, "0")}`;
+  }
+  if (/^\d{3}-\d{2}$/.test(t)) return t;
+  return t;
+}
+
+export function getTradePointByIds(
+  rawDealerId: string,
+  rawPointId: string,
+): { dealer: DealerRow; point: DealerTradePoint } | undefined {
+  const dealer = getDealerById(rawDealerId);
+  if (!dealer) return undefined;
+  const normalizedPoint = normalizeTradePointId(dealer.id, rawPointId);
+  const point = dealer.tradePoints.find((p) => p.id === normalizedPoint);
+  if (!point) return undefined;
+  return { dealer, point };
 }

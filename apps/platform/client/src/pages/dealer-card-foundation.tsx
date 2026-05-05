@@ -559,17 +559,24 @@ function DealerCardContent({ row }: { row: DealerRow }) {
               <div className="space-y-4">
                 {row.tradePoints.map((tp, idx) => (
                   <SurfaceCard key={`${row.id}-tp-${idx}`}>
-                    <CardHeader className="flex flex-row items-center gap-2 pb-0 pt-5">
-                      <Store className="h-5 w-5 text-primary" aria-hidden />
-                      <CardTitle className="text-base font-semibold">{tp.label}</CardTitle>
+                    <CardHeader className="flex flex-col gap-3 pb-0 pt-5 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="flex flex-row items-center gap-2">
+                        <Store className="h-5 w-5 shrink-0 text-primary" aria-hidden />
+                        <CardTitle className="text-base font-semibold">{tp.name}</CardTitle>
+                      </div>
+                      <Button asChild variant="default" className="min-h-10 w-full shrink-0 sm:w-auto" data-testid={`button-open-trade-point-${tp.id}`}>
+                        <Link href={`/dealers/${row.id}/trade-points/${tp.id}`}>Открыть точку</Link>
+                      </Button>
                     </CardHeader>
                     <CardContent className="space-y-1 pt-2">
-                      <FieldRow label="Город" value={row.city} />
+                      <FieldRow label="Город" value={tp.city} />
                       <FieldRow label="Адрес" value={tp.address} icon={MapPin} />
+                      <FieldRow label="Статус" value={tp.status} />
                       <FieldRow label="Формат точки" value={tp.format} />
                       <FieldRow label="Оборудование" value={tp.equipment} />
-                      <FieldRow label="Склад фурнитура / двери" value={tp.warehouseNote} />
-                      <FieldRow label="Дата последнего обновления" value={tp.updatedAt} />
+                      <FieldRow label="Склад фурнитуры" value={tp.hardwareStockStatus} />
+                      <FieldRow label="Склад дверей" value={tp.doorsStockStatus} />
+                      <FieldRow label="Последний визит" value={tp.lastVisitDate} />
                       <Separator className="my-4 bg-border" />
                       <div className="rounded-xl border border-dashed border-border bg-muted/50 p-4">
                         <div className="flex items-start gap-3">

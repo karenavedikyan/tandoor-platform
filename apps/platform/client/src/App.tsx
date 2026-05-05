@@ -8,6 +8,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import NotFound from "@/pages/not-found";
 import DealerBase from "@/pages/dealer-base";
 import DealerCardFoundation, { DealerCardPage } from "@/pages/dealer-card-foundation";
+import { TradePointDetailPage } from "@/pages/trade-point-detail";
 import PreviewUnavailable from "@/pages/preview-unavailable";
 import InternalPrototypePlaceholder from "@/pages/internal-prototype-placeholder";
 import { INTERNAL_PROTOTYPE_ROUTES } from "@/lib/preview-config";
@@ -18,6 +19,7 @@ function AppRouter() {
       <Switch>
         <Route path="/" component={DealerBase} />
         <Route path="/dealer-base" component={DealerBase} />
+        <Route path="/dealers/:dealerId/trade-points/:pointId" component={TradePointDetailPage} />
         <Route path="/dealers/:id" component={DealerCardPage} />
         <Route path="/dealer-card-foundation" component={DealerCardFoundation} />
         <Route path="/platform-architecture" component={PreviewUnavailable} />
