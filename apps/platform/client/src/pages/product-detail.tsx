@@ -8,7 +8,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { getProductById, type CatalogProduct } from "@/lib/catalog-data";
-import { getMatrixPresencesForProduct, type MatrixPresenceStatus } from "@/lib/trade-point-matrix-data";
+import {
+  getMatrixPresencesForProduct,
+  getTradePointMatrix,
+  type MatrixPresenceStatus,
+} from "@/lib/trade-point-matrix-data";
+import {
+  getMatrixTaskHintForProductInPoint,
+  MATRIX_TASK_TYPE_LABEL,
+  type MatrixTaskPriority,
+  type MatrixTaskType,
+} from "@/lib/trade-point-task-data";
 
 const SECTION_IDS = ["overview", "specs", "variants", "showcases", "dealers", "tasks", "history"] as const;
 type SectionId = (typeof SECTION_IDS)[number];
@@ -267,6 +277,17 @@ function ProductFound({ product }: { product: CatalogProduct }) {
     for (const p of matrixPresences) map.set(p.pointId, { presence: p.presence, zone: p.zone });
     return map;
   }, [matrixPresences]);
+  const taskHintByPoint = useMemo(() => {
+    const map = new Map<string, { type: MatrixTaskType; priority: MatrixTaskPriority }>();
+    for (const tpId of product.relatedTradePointIds) {
+      const dealerId = tpId.split("-")[0] ?? "";
+      if (!dealerId) continue;
+      const matrix = getTradePointMatrix(dealerId, tpId);
+      const hint = getMatrixTaskHintForProductInPoint(matrix, product.id);
+      if (hint) map.set(tpId, hint);
+    }
+    return map;
+  }, [product.id, product.relatedTradePointIds]);
 
   return (
     <div className="space-y-4 sm:space-y-6" data-testid="page-product-detail">
@@ -474,24 +495,41 @@ function ProductFound({ product }: { product: CatalogProduct }) {
                   {product.relatedTradePointIds.map((tpId) => {
                     const dealerId = tpId.split("-")[0] ?? "";
                     const matrixInfo = presenceByPoint.get(tpId);
+                    const taskHint = taskHintByPoint.get(tpId);
                     return (
                       <Link
                         key={tpId}
                         href={`/dealers/${dealerId}/trade-points/${tpId}`}
-                        className="flex min-h-10 items-center justify-between gap-2 rounded-xl border border-border bg-card px-3 py-2 text-sm font-medium text-foreground no-underline transition-colors hover:border-primary/40 hover:bg-muted/50"
+                        className="flex min-h-10 flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-card px-3 py-2 text-sm font-medium text-foreground no-underline transition-colors hover:border-primary/40 hover:bg-muted/50"
                         data-testid={`link-product-trade-point-${tpId}`}
                       >
                         <span className="min-w-0 flex-1 font-mono text-xs sm:text-sm">ТТ {tpId}</span>
-                        {matrixInfo ? (
-                          <span className="flex shrink-0 items-center gap-1.5">
-                            <Badge variant="outline" className={cn("text-[10px] font-medium", presenceTone(matrixInfo.presence))}>
-                              {matrixInfo.presence}
+                        <span className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+                          {matrixInfo ? (
+                            <>
+                              <Badge variant="outline" className={cn("text-[10px] font-medium", presenceTone(matrixInfo.presence))}>
+                                {matrixInfo.presence}
+                              </Badge>
+                              <Badge variant="outline" className="border-border bg-muted/60 text-[10px] font-medium">
+                                Зона {matrixInfo.zone}
+                              </Badge>
+                            </>
+                          ) : null}
+                          {taskHint ? (
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "text-[10px] font-medium",
+                                taskHint.priority === "high"
+                                  ? "border-red-200 bg-red-50 text-red-900"
+                                  : "border-amber-200 bg-amber-50 text-amber-950",
+                              )}
+                              data-testid={`badge-product-trade-point-task-${tpId}`}
+                            >
+                              Задача: {MATRIX_TASK_TYPE_LABEL[taskHint.type]}
                             </Badge>
-                            <Badge variant="outline" className="border-border bg-muted/60 text-[10px] font-medium">
-                              Зона {matrixInfo.zone}
-                            </Badge>
-                          </span>
-                        ) : null}
+                          ) : null}
+                        </span>
                         <MapPin className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
                       </Link>
                     );

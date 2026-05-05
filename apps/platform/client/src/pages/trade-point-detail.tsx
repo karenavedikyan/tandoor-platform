@@ -1,7 +1,7 @@
 import type { ComponentProps, ComponentType, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
-import { Camera, ChevronRight, MapPin, PieChart, Plus, Store } from "lucide-react";
+import { Camera, ChevronDown, ChevronRight, ChevronUp, MapPin, PieChart, Plus, Store } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +18,17 @@ import {
   type MatrixPresenceStatus,
   type TradePointProductMatrixItem,
 } from "@/lib/trade-point-matrix-data";
+import {
+  buildRecommendedMatrixTasks,
+  summarizeMatrixTasks,
+  MATRIX_TASK_PRIORITY_LABEL,
+  MATRIX_TASK_ROLE_LABEL,
+  MATRIX_TASK_STATUS_LABEL,
+  MATRIX_TASK_TYPE_LABEL,
+  type MatrixTask,
+  type MatrixTaskRecommendation,
+  type MatrixTaskStatus,
+} from "@/lib/trade-point-task-data";
 
 const SECTION_IDS = ["overview", "matrix", "showcase", "distribution", "tasks", "history", "photos"] as const;
 type SectionId = (typeof SECTION_IDS)[number];
@@ -99,6 +110,16 @@ function priorityClass(p: "Высокий" | "Средний" | "Низкий") 
   return "border-border bg-muted text-muted-foreground";
 }
 
+type MatrixTaskFilterId = "all" | "new" | "in_progress" | "overdue" | "high";
+
+const MATRIX_TASK_FILTERS: { id: MatrixTaskFilterId; label: string; testId: string }[] = [
+  { id: "all", label: "Все", testId: "filter-trade-point-tasks-matrix-all" },
+  { id: "new", label: "Новые", testId: "filter-trade-point-tasks-matrix-new" },
+  { id: "in_progress", label: "В работе", testId: "filter-trade-point-tasks-matrix-in-progress" },
+  { id: "overdue", label: "Просрочено", testId: "filter-trade-point-tasks-matrix-overdue" },
+  { id: "high", label: "Высокий приоритет", testId: "filter-trade-point-tasks-matrix-high" },
+];
+
 const MATRIX_FILTERS: { id: MatrixFilterId; label: string; testId: string }[] = [
   { id: "all", label: "Все", testId: "filter-trade-point-matrix-all" },
   { id: "present", label: "Есть на витрине", testId: "filter-trade-point-matrix-present" },
@@ -119,6 +140,19 @@ function zoneTone(zone: "A" | "B" | "C") {
   if (zone === "A") return "border-primary/40 bg-primary/10 text-primary";
   if (zone === "B") return "border-border bg-muted text-foreground";
   return "border-border bg-muted/60 text-muted-foreground";
+}
+
+function taskStatusTone(status: MatrixTaskStatus) {
+  if (status === "new") return "border-primary/40 bg-primary/10 text-primary";
+  if (status === "in_progress") return "border-amber-200 bg-amber-50 text-amber-950";
+  if (status === "overdue") return "border-red-200 bg-red-50 text-red-900";
+  return "border-emerald-200 bg-emerald-50 text-emerald-900";
+}
+
+function taskPriorityTone(priority: MatrixTask["priority"]) {
+  if (priority === "high") return "border-red-200 bg-red-50 text-red-900";
+  if (priority === "medium") return "border-amber-200 bg-amber-50 text-amber-950";
+  return "border-border bg-muted text-muted-foreground";
 }
 
 function useActiveSection() {
@@ -300,7 +334,20 @@ function MatrixSummary({ items }: { items: TradePointProductMatrixItem[] }) {
   );
 }
 
-function MatrixItemCard({ item }: { item: TradePointProductMatrixItem }) {
+function MatrixItemCard({
+  item,
+  recommendation,
+  createdTask,
+  onCreateTask,
+  onScrollToTask,
+}: {
+  item: TradePointProductMatrixItem;
+  recommendation?: MatrixTaskRecommendation;
+  createdTask?: MatrixTask;
+  onCreateTask: (rec: MatrixTaskRecommendation) => void;
+  onScrollToTask: (taskId: string) => void;
+}) {
+  const hasTask = Boolean(createdTask);
   return (
     <SurfaceCard data-testid={`card-trade-point-matrix-item-${item.productId}`}>
       <CardContent className="space-y-3 p-4">
@@ -350,14 +397,157 @@ function MatrixItemCard({ item }: { item: TradePointProductMatrixItem }) {
             <p className="mt-0.5 text-sm font-medium tabular-nums text-foreground">{item.lastCheckedAt}</p>
           </div>
         </div>
-        <Button
-          asChild
-          variant="outline"
-          className="min-h-10 w-full border-border bg-card sm:w-auto"
-          data-testid={`button-open-matrix-product-${item.productId}`}
-        >
-          <Link href={`/catalog/${item.productId}`}>Открыть модель</Link>
-        </Button>
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+          {recommendation ? (
+            hasTask && createdTask ? (
+              <Button
+                type="button"
+                variant="secondary"
+                className="min-h-10 w-full border border-border sm:w-auto"
+                data-testid={`status-matrix-task-${item.productId}`}
+                onClick={() => onScrollToTask(createdTask.taskId)}
+              >
+                {MATRIX_TASK_STATUS_LABEL[createdTask.status]} · открыть
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="default"
+                className="min-h-10 w-full font-semibold sm:w-auto"
+                data-testid={`button-create-matrix-task-${item.productId}`}
+                onClick={() => onCreateTask(recommendation)}
+              >
+                Создать задачу
+              </Button>
+            )
+          ) : null}
+          <Button
+            asChild
+            variant="outline"
+            className="min-h-10 w-full border-border bg-card sm:w-auto"
+            data-testid={`button-open-matrix-product-${item.productId}`}
+          >
+            <Link href={`/catalog/${item.productId}`}>Открыть модель</Link>
+          </Button>
+        </div>
+      </CardContent>
+    </SurfaceCard>
+  );
+}
+
+function MatrixTaskSummaryCard({ tasks }: { tasks: MatrixTask[] }) {
+  const summary = useMemo(() => summarizeMatrixTasks(tasks), [tasks]);
+  const tiles = [
+    { label: "Всего", value: summary.total, tone: "border-border bg-muted/40 text-foreground" },
+    { label: "Новые", value: summary.newCount, tone: "border-primary/40 bg-primary/10 text-primary" },
+    { label: "В работе", value: summary.inProgressCount, tone: "border-amber-200 bg-amber-50 text-amber-950" },
+    { label: "Просрочено", value: summary.overdueCount, tone: "border-red-200 bg-red-50 text-red-900" },
+    { label: "Высокий приоритет", value: summary.highPriorityCount, tone: "border-border bg-card text-foreground" },
+  ];
+  return (
+    <SurfaceCard data-testid="card-trade-point-matrix-task-summary">
+      <CardContent className="space-y-3 pt-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Сводка по задачам матрицы
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+          {tiles.map((t) => (
+            <div key={t.label} className={cn("rounded-xl border px-3 py-2.5", t.tone)}>
+              <p className="text-[11px] font-semibold uppercase tracking-wide opacity-80">{t.label}</p>
+              <p className="mt-1 text-2xl font-bold tabular-nums">{t.value}</p>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </SurfaceCard>
+  );
+}
+
+function MatrixTaskCard({
+  task,
+  expanded,
+  onToggle,
+}: {
+  task: MatrixTask;
+  expanded: boolean;
+  onToggle: (taskId: string) => void;
+}) {
+  return (
+    <SurfaceCard data-testid={`card-matrix-task-${task.taskId}`} id={`card-matrix-task-${task.taskId}`}>
+      <CardHeader className="space-y-2 pb-2 pt-4">
+        <CardTitle className="text-base font-semibold leading-snug">{task.title}</CardTitle>
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="outline" className={cn("font-medium", taskPriorityTone(task.priority))}>
+            {MATRIX_TASK_PRIORITY_LABEL[task.priority]}
+          </Badge>
+          <Badge variant="outline" className={cn("font-medium", taskStatusTone(task.status))}>
+            {MATRIX_TASK_STATUS_LABEL[task.status]}
+          </Badge>
+          <Badge variant="outline" className="border-border bg-muted/60 font-medium">
+            {MATRIX_TASK_TYPE_LABEL[task.type]}
+          </Badge>
+          <Badge variant="outline" className="border-border bg-card font-medium">
+            Зона {task.zone}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3 pb-4 text-sm text-muted-foreground">
+        <div className="grid gap-2 sm:grid-cols-2">
+          <p>
+            <span className="font-semibold text-foreground">Срок:</span> {task.dueDate}
+          </p>
+          <p>
+            <span className="font-semibold text-foreground">Ответственный:</span>{" "}
+            {MATRIX_TASK_ROLE_LABEL[task.assigneeRole]}
+          </p>
+          <p>
+            <span className="font-semibold text-foreground">Точка:</span> {task.tradePointName}
+          </p>
+          <p>
+            <span className="font-semibold text-foreground">Образцы:</span>{" "}
+            <span className="tabular-nums">
+              {task.actualSamples} / {task.targetSamples}
+            </span>
+          </p>
+        </div>
+        {expanded ? (
+          <div className="rounded-xl border border-border bg-muted/40 p-3 text-foreground">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Описание</p>
+            <p className="mt-1 text-sm leading-relaxed">{task.description}</p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Источник: матрица товаров · {task.portal}
+            </p>
+          </div>
+        ) : null}
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-10 w-full border-border bg-card sm:w-auto"
+            data-testid={`button-expand-matrix-task-${task.taskId}`}
+            onClick={() => onToggle(task.taskId)}
+          >
+            {expanded ? (
+              <>
+                <ChevronUp className="mr-1.5 h-4 w-4" aria-hidden /> Свернуть
+              </>
+            ) : (
+              <>
+                <ChevronDown className="mr-1.5 h-4 w-4" aria-hidden /> Подробнее
+              </>
+            )}
+          </Button>
+          <Button
+            asChild
+            variant="outline"
+            className="min-h-10 w-full border-border bg-card sm:w-auto"
+            data-testid={`button-open-matrix-task-${task.taskId}`}
+          >
+            <Link href={`/catalog/${task.productId}`}>Открыть модель</Link>
+          </Button>
+        </div>
       </CardContent>
     </SurfaceCard>
   );
@@ -376,6 +566,76 @@ function TradePointDetailContent({ dealer, point }: { dealer: DealerRow; point: 
   const matrixSummary = useMemo(() => summarizeMatrix(matrixItems), [matrixItems]);
   const [matrixFilter, setMatrixFilter] = useState<MatrixFilterId>("all");
   const filteredMatrix = useMemo(() => filterMatrix(matrixItems, matrixFilter), [matrixItems, matrixFilter]);
+
+  const recommendations = useMemo(
+    () => buildRecommendedMatrixTasks(dealer.id, point.id, point.name, matrixItems),
+    [dealer.id, point.id, point.name, matrixItems],
+  );
+  const recommendationByProductId = useMemo(() => {
+    const map = new Map<string, MatrixTaskRecommendation>();
+    for (const r of recommendations) map.set(r.productId, r);
+    return map;
+  }, [recommendations]);
+
+  const [createdTasks, setCreatedTasks] = useState<MatrixTask[]>([]);
+  const [expandedTaskIds, setExpandedTaskIds] = useState<Set<string>>(() => new Set());
+  const [matrixTaskFilter, setMatrixTaskFilter] = useState<MatrixTaskFilterId>("all");
+
+  useEffect(() => {
+    setCreatedTasks([]);
+    setExpandedTaskIds(new Set());
+    setMatrixTaskFilter("all");
+  }, [dealer.id, point.id]);
+
+  const createdTaskByProductId = useMemo(() => {
+    const map = new Map<string, MatrixTask>();
+    for (const t of createdTasks) map.set(t.productId, t);
+    return map;
+  }, [createdTasks]);
+
+  const handleCreateTask = useCallback((rec: MatrixTaskRecommendation) => {
+    setCreatedTasks((prev) => {
+      if (prev.some((t) => t.taskId === rec.taskId)) return prev;
+      const created: MatrixTask = { ...rec, recommended: false } as MatrixTask;
+      return [...prev, created];
+    });
+    setExpandedTaskIds((prev) => {
+      const next = new Set(prev);
+      next.add(rec.taskId);
+      return next;
+    });
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`card-matrix-task-${rec.taskId}`);
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }, []);
+
+  const handleToggleTask = useCallback((taskId: string) => {
+    setExpandedTaskIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(taskId)) next.delete(taskId);
+      else next.add(taskId);
+      return next;
+    });
+  }, []);
+
+  const handleScrollToTask = useCallback((taskId: string) => {
+    setExpandedTaskIds((prev) => {
+      const next = new Set(prev);
+      next.add(taskId);
+      return next;
+    });
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`card-matrix-task-${taskId}`);
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }, []);
+
+  const filteredCreatedTasks = useMemo(() => {
+    if (matrixTaskFilter === "all") return createdTasks;
+    if (matrixTaskFilter === "high") return createdTasks.filter((t) => t.priority === "high");
+    return createdTasks.filter((t) => t.status === matrixTaskFilter);
+  }, [createdTasks, matrixTaskFilter]);
 
   const breadcrumbDealerLabel = `Дилер №${dealer.id}`;
 
@@ -528,10 +788,74 @@ function TradePointDetailContent({ dealer, point }: { dealer: DealerRow; point: 
             ) : (
               <div className="space-y-3">
                 {filteredMatrix.map((item) => (
-                  <MatrixItemCard key={item.productId} item={item} />
+                  <MatrixItemCard
+                    key={item.productId}
+                    item={item}
+                    recommendation={recommendationByProductId.get(item.productId)}
+                    createdTask={createdTaskByProductId.get(item.productId)}
+                    onCreateTask={handleCreateTask}
+                    onScrollToTask={handleScrollToTask}
+                  />
                 ))}
               </div>
             )}
+
+            <MatrixTaskSummaryCard tasks={createdTasks} />
+
+            <div data-testid="section-trade-point-matrix-recommended-tasks" className="space-y-3">
+              <SectionTitle subtitle="Задачи, сформированные на основе матрицы. Создайте задачу, чтобы взять её в работу.">
+                Рекомендованные задачи
+              </SectionTitle>
+              {recommendations.length === 0 ? (
+                <SurfaceCard>
+                  <CardContent className="pt-5 text-sm text-muted-foreground">
+                    По матрице сейчас нет действий — выкладка соответствует целевой.
+                  </CardContent>
+                </SurfaceCard>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {recommendations.slice(0, 6).map((rec) => {
+                    const created = createdTaskByProductId.get(rec.productId);
+                    return (
+                      <SurfaceCard key={rec.taskId}>
+                        <CardContent className="space-y-2 p-4">
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <p className="font-semibold leading-snug text-foreground">{rec.title}</p>
+                            <Badge variant="outline" className={cn("font-medium", taskPriorityTone(rec.priority))}>
+                              {MATRIX_TASK_PRIORITY_LABEL[rec.priority]}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            {MATRIX_TASK_TYPE_LABEL[rec.type]} · Зона {rec.zone} · Срок {rec.dueDate}
+                          </p>
+                          {created ? (
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              className="min-h-10 w-full border border-border"
+                              data-testid={`button-open-matrix-task-recommended-${rec.taskId}`}
+                              onClick={() => handleScrollToTask(created.taskId)}
+                            >
+                              {MATRIX_TASK_STATUS_LABEL[created.status]} · открыть
+                            </Button>
+                          ) : (
+                            <Button
+                              type="button"
+                              variant="default"
+                              className="min-h-10 w-full font-semibold"
+                              data-testid={`button-create-matrix-task-recommended-${rec.taskId}`}
+                              onClick={() => handleCreateTask(rec)}
+                            >
+                              Создать задачу
+                            </Button>
+                          )}
+                        </CardContent>
+                      </SurfaceCard>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </section>
 
           <section
@@ -668,6 +992,68 @@ function TradePointDetailContent({ dealer, point }: { dealer: DealerRow; point: 
                   </CardContent>
                 </SurfaceCard>
               ))}
+            </div>
+
+            <div className="space-y-3 pt-2">
+              <SectionTitle subtitle="Задачи, созданные из матрицы товаров торговой точки.">
+                Задачи по матрице
+              </SectionTitle>
+              <MatrixTaskSummaryCard tasks={createdTasks} />
+
+              {createdTasks.length > 0 ? (
+                <div
+                  className="-mx-4 overflow-x-auto px-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:px-0"
+                  role="tablist"
+                  aria-label="Фильтры задач по матрице"
+                  data-testid="filter-trade-point-tasks-matrix"
+                >
+                  <div className="flex gap-2 pb-1">
+                    {MATRIX_TASK_FILTERS.map((f) => (
+                      <button
+                        key={f.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={matrixTaskFilter === f.id}
+                        onClick={() => setMatrixTaskFilter(f.id)}
+                        data-testid={f.testId}
+                        className={cn(
+                          "min-h-10 shrink-0 rounded-full border px-3.5 py-2 text-sm font-medium transition-colors",
+                          matrixTaskFilter === f.id
+                            ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                            : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground",
+                        )}
+                      >
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {createdTasks.length === 0 ? (
+                <SurfaceCard>
+                  <CardContent className="pt-5 text-sm text-muted-foreground">
+                    Пока нет созданных задач по матрице. Создайте задачу из раздела «Матрица товаров».
+                  </CardContent>
+                </SurfaceCard>
+              ) : filteredCreatedTasks.length === 0 ? (
+                <SurfaceCard>
+                  <CardContent className="pt-5 text-sm text-muted-foreground">
+                    По выбранному фильтру задач нет.
+                  </CardContent>
+                </SurfaceCard>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {filteredCreatedTasks.map((task) => (
+                    <MatrixTaskCard
+                      key={task.taskId}
+                      task={task}
+                      expanded={expandedTaskIds.has(task.taskId)}
+                      onToggle={handleToggleTask}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           </section>
 
