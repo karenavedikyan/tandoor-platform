@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { CATALOG_PRODUCTS, type CatalogProduct } from "@/lib/catalog-data";
+import { FloatingBackButton } from "@/components/navigation/floating-back-button";
 
 type ViewMode = "cards" | "list" | "table";
 type QuickChip = "all" | "hit" | "new" | "exclusive" | "action" | "stock";
@@ -349,6 +350,13 @@ export default function CatalogPage() {
           Ничего не найдено — измените фильтры или запрос.
         </p>
       ) : null}
+
+      <FloatingBackButton
+        href="/dealer-base"
+        label="К базе"
+        testId="floating-back-to-dealer-base"
+        ariaLabel="Назад к клиентской базе"
+      />
     </div>
   );
 }

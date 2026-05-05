@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { FloatingBackButton } from "@/components/navigation/floating-back-button";
 import { cn } from "@/lib/utils";
 import {
   getAllMatrixTasks,
@@ -29,6 +30,41 @@ type TasksFilterId =
   | "regional_manager";
 
 type ViewMode = "cards" | "list";
+
+type RoleViewId = "all" | "manager" | "regional_manager" | "leadership";
+
+const ROLE_VIEWS: {
+  id: RoleViewId;
+  label: string;
+  testId: string;
+  description: string;
+}[] = [
+  {
+    id: "all",
+    label: "Все",
+    testId: "filter-tasks-role-all",
+    description:
+      "Все задачи: общий рабочий список по дилерам, торговым точкам и моделям.",
+  },
+  {
+    id: "manager",
+    label: "Менеджер",
+    testId: "filter-tasks-role-manager",
+    description: "Менеджер: задачи по продажам и моделям.",
+  },
+  {
+    id: "regional_manager",
+    label: "Регионал",
+    testId: "filter-tasks-role-regional-manager",
+    description: "Регионал: задачи по точкам, витринам и проверкам.",
+  },
+  {
+    id: "leadership",
+    label: "Руководитель",
+    testId: "filter-tasks-role-leadership",
+    description: "Руководитель: просрочки и высокий приоритет по команде.",
+  },
+];
 
 const FILTERS: { id: TasksFilterId; label: string; testId: string }[] = [
   { id: "all", label: "Все", testId: "filter-tasks-all" },
@@ -57,6 +93,12 @@ function zoneTone(z: "A" | "B" | "C") {
   if (z === "A") return "border-primary/40 bg-primary/10 text-primary";
   if (z === "B") return "border-border bg-muted text-foreground";
   return "border-border bg-muted/60 text-muted-foreground";
+}
+
+function applyRole(tasks: MatrixTaskWithContext[], role: RoleViewId) {
+  if (role === "all" || role === "leadership") return tasks;
+  const target: MatrixTaskAssigneeRole = role;
+  return tasks.filter((t) => t.assigneeRole === target);
 }
 
 function applyFilter(tasks: MatrixTaskWithContext[], filter: TasksFilterId) {
@@ -102,6 +144,19 @@ function sortTasks(tasks: MatrixTaskWithContext[]) {
     if (so !== 0) return so;
     const po = priorityOrder(a.priority) - priorityOrder(b.priority);
     if (po !== 0) return po;
+    return a.taskId.localeCompare(b.taskId);
+  });
+}
+
+function sortLeadership(tasks: MatrixTaskWithContext[]) {
+  return [...tasks].sort((a, b) => {
+    const aOver = a.status === "overdue" ? 0 : 1;
+    const bOver = b.status === "overdue" ? 0 : 1;
+    if (aOver !== bOver) return aOver - bOver;
+    const po = priorityOrder(a.priority) - priorityOrder(b.priority);
+    if (po !== 0) return po;
+    const so = statusOrder(a.status) - statusOrder(b.status);
+    if (so !== 0) return so;
     return a.taskId.localeCompare(b.taskId);
   });
 }
@@ -320,16 +375,92 @@ function TaskListRow({ task }: { task: MatrixTaskWithContext }) {
   );
 }
 
+function LeadershipAttentionCard({ task }: { task: MatrixTaskWithContext }) {
+  return (
+    <Card
+      className="rounded-2xl border border-red-200 bg-red-50/40 shadow-md"
+      data-testid={`card-leadership-attention-${task.taskId}`}
+    >
+      <CardContent className="space-y-2.5 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold leading-snug text-foreground">{task.title}</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {task.dealerName} · {task.tradePointName}
+            </p>
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-1.5">
+            <Badge variant="outline" className={cn("font-medium", statusTone(task.status))}>
+              {MATRIX_TASK_STATUS_LABEL[task.status]}
+            </Badge>
+            <Badge variant="outline" className={cn("font-medium", priorityTone(task.priority))}>
+              {MATRIX_TASK_PRIORITY_LABEL[task.priority]}
+            </Badge>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-1.5 text-xs">
+          <Badge variant="outline" className="border-border bg-card font-medium">
+            {MATRIX_TASK_ROLE_LABEL[task.assigneeRole]}
+          </Badge>
+          <Badge variant="outline" className="border-border bg-card font-medium tabular-nums">
+            Срок {task.dueDate}
+          </Badge>
+          <Badge variant="outline" className={cn("font-medium", zoneTone(task.zone))}>
+            Зона {task.zone}
+          </Badge>
+        </div>
+        <div className="flex flex-wrap gap-2 pt-1">
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            className="min-h-9 border-border bg-card"
+            data-testid={`button-open-leadership-task-dealer-${task.taskId}`}
+          >
+            <Link href={`/dealers/${task.dealerId}`}>Дилер</Link>
+          </Button>
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            className="min-h-9 border-border bg-card"
+            data-testid={`button-open-leadership-task-trade-point-${task.taskId}`}
+          >
+            <Link href={`/dealers/${task.dealerId}/trade-points/${task.tradePointId}`}>Точка</Link>
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function TasksPage() {
   const allTasks = useMemo(() => sortTasks(getAllMatrixTasks()), []);
+  const [role, setRole] = useState<RoleViewId>("all");
   const [filter, setFilter] = useState<TasksFilterId>("all");
   const [query, setQuery] = useState("");
   const [view, setView] = useState<ViewMode>("cards");
 
+  const roleScopedTasks = useMemo(() => applyRole(allTasks, role), [allTasks, role]);
+
+  const baseList = useMemo(() => {
+    if (role === "leadership") return sortLeadership(roleScopedTasks);
+    return roleScopedTasks;
+  }, [role, roleScopedTasks]);
+
   const filtered = useMemo(
-    () => applySearch(applyFilter(allTasks, filter), query),
-    [allTasks, filter, query],
+    () => applySearch(applyFilter(baseList, filter), query),
+    [baseList, filter, query],
   );
+
+  const leadershipAttention = useMemo(() => {
+    if (role !== "leadership") return [] as MatrixTaskWithContext[];
+    return roleScopedTasks
+      .filter((t) => t.status === "overdue" || t.priority === "high")
+      .slice(0, 8);
+  }, [role, roleScopedTasks]);
+
+  const activeRoleView = ROLE_VIEWS.find((r) => r.id === role) ?? ROLE_VIEWS[0];
 
   return (
     <div className="space-y-4 sm:space-y-6" data-testid="page-tasks">
@@ -348,7 +479,64 @@ export default function TasksPage() {
         </div>
       </header>
 
-      <TasksKpis tasks={allTasks} />
+      <div
+        className="-mx-4 overflow-x-auto px-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:px-0"
+        role="tablist"
+        aria-label="Роли и режимы просмотра задач"
+      >
+        <div className="flex gap-2 pb-1">
+          {ROLE_VIEWS.map((r) => (
+            <button
+              key={r.id}
+              type="button"
+              role="tab"
+              aria-selected={role === r.id}
+              onClick={() => setRole(r.id)}
+              data-testid={r.testId}
+              className={cn(
+                "min-h-10 shrink-0 rounded-full border px-4 py-2 text-sm font-semibold transition-colors",
+                role === r.id
+                  ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                  : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground",
+              )}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <p
+        className="text-sm text-muted-foreground"
+        data-testid="text-tasks-role-description"
+      >
+        {activeRoleView.description}
+      </p>
+
+      <TasksKpis tasks={roleScopedTasks} />
+
+      {role === "leadership" && leadershipAttention.length > 0 ? (
+        <Card
+          className="rounded-2xl border border-red-200 bg-card shadow-md"
+          data-testid="section-tasks-leadership-attention"
+        >
+          <CardContent className="space-y-3 pt-5">
+            <div className="space-y-1">
+              <h2 className="text-base font-semibold text-foreground sm:text-lg">
+                Требует внимания руководителя
+              </h2>
+              <p className="text-xs text-muted-foreground sm:text-sm">
+                Просрочки и задачи с высоким приоритетом по команде — выводятся первыми.
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {leadershipAttention.map((t) => (
+                <LeadershipAttentionCard key={t.taskId} task={t} />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
         <div className="relative flex-1">
@@ -429,13 +617,13 @@ export default function TasksPage() {
       <p className="text-sm text-muted-foreground" data-testid="text-tasks-count">
         Показано задач:{" "}
         <span className="font-semibold tabular-nums text-foreground">{filtered.length}</span> из{" "}
-        <span className="tabular-nums">{allTasks.length}</span>
+        <span className="tabular-nums">{roleScopedTasks.length}</span>
       </p>
 
       {filtered.length === 0 ? (
         <Card className="rounded-2xl border border-border/80 bg-card shadow-md">
           <CardContent className="pt-5 text-sm text-muted-foreground">
-            По выбранным условиям задач нет. Измените фильтр или поисковый запрос.
+            По выбранным условиям задач нет. Измените роль, фильтр или поисковый запрос.
           </CardContent>
         </Card>
       ) : view === "cards" ? (
@@ -451,6 +639,13 @@ export default function TasksPage() {
           ))}
         </div>
       )}
+
+      <FloatingBackButton
+        href="/dealer-base"
+        label="К базе"
+        testId="floating-back-to-dealer-base"
+        ariaLabel="Назад к клиентской базе"
+      />
     </div>
   );
 }

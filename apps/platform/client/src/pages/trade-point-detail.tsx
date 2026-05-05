@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { FloatingBackButton } from "@/components/navigation/floating-back-button";
 import { getDealerById, getTradePointByIds, type DealerRow, type DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import { getTradePointProductPreview, tradePointShowcaseStatusForProduct } from "@/lib/catalog-data";
 import {
@@ -1121,6 +1122,13 @@ function TradePointDetailContent({ dealer, point }: { dealer: DealerRow; point: 
           <TradePointSectionNav active={activeSection} variant="sidebar" />
         </aside>
       </div>
+
+      <FloatingBackButton
+        href={`/dealers/${dealer.id}`}
+        label="К дилеру"
+        testId="floating-back-to-dealer-card"
+        ariaLabel="Назад к карточке дилера"
+      />
     </div>
   );
 }

@@ -27,6 +27,7 @@ import {
   type DealerStatus,
 } from "@/lib/dealer-base-mock-data";
 import { dealerRowStatusForProduct, getDealerProductPreview } from "@/lib/catalog-data";
+import { FloatingBackButton } from "@/components/navigation/floating-back-button";
 
 const SECTION_IDS = [
   "overview",
@@ -764,6 +765,13 @@ function DealerCardContent({ row }: { row: DealerRow }) {
           </aside>
         </div>
       </div>
+
+      <FloatingBackButton
+        href="/dealer-base"
+        label="К базе"
+        testId="floating-back-to-dealer-base"
+        ariaLabel="Назад к клиентской базе"
+      />
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { FloatingBackButton } from "@/components/navigation/floating-back-button";
 import { getProductById, type CatalogProduct } from "@/lib/catalog-data";
 import {
   getMatrixPresencesForProduct,
@@ -602,6 +603,13 @@ function ProductFound({ product }: { product: CatalogProduct }) {
           <ProductSectionNav active={active} variant="sidebar" />
         </aside>
       </div>
+
+      <FloatingBackButton
+        href="/catalog"
+        label="К каталогу"
+        testId="floating-back-to-catalog"
+        ariaLabel="Назад к каталогу"
+      />
     </div>
   );
 }
