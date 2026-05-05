@@ -34,15 +34,13 @@ export default function InternalPrototypePlaceholder() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4 text-sm text-muted-foreground">
-          <p>
-            Раздел в подготовке и скрыт из основного меню. Откройте карточку дилера из шапки.
-          </p>
+          <p>Раздел в подготовке и скрыт из основного меню. Вернитесь к клиентской базе.</p>
           {!isKnown ? (
             <p>Маршрут зарезервирован.</p>
           ) : (
             <p>Скоро будет доступен в общем интерфейсе.</p>
           )}
-          <Button variant="outline" asChild className="min-h-11 border-border bg-card" data-testid="button-internal-back-home">
+          <Button variant="outline" asChild className="min-h-11 border-border bg-card" data-testid="button-back-to-dealer-base">
             <Link href="/dealer-base">
               <ArrowLeft className="h-4 w-4" />
               К клиентской базе

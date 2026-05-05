@@ -17,7 +17,7 @@ export default function NotFound() {
               </p>
             </div>
           </div>
-          <Button variant="outline" asChild className="w-full border-border bg-card" data-testid="button-not-found-to-stage">
+          <Button variant="outline" asChild className="w-full border-border bg-card" data-testid="button-back-to-dealer-base">
             <Link href="/dealer-base">К клиентской базе</Link>
           </Button>
         </CardContent>
