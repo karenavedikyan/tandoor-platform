@@ -48,9 +48,7 @@ export const INTERNAL_PROTOTYPE_ROUTES: readonly string[] = [
   "/claims",
   "/events",
   "/import",
-  "/tasks",
   "/goals",
-  "/sales-manager",
   "/leadership",
 ] as const;
 

@@ -13,9 +13,7 @@ const TITLE_BY_PATH: Record<string, string> = {
   "/claims": "Рекламации",
   "/events": "События",
   "/import": "Импорт клиентской базы",
-  "/tasks": "Задачи",
   "/goals": "Цели по витринам",
-  "/sales-manager": "Рабочий стол менеджера продаж",
   "/leadership": "Панель руководителя",
 };
 

@@ -642,7 +642,7 @@ export default function TasksPage() {
 
       <FloatingBackButton
         href="/dealer-base"
-        label="К базе"
+        label="К клиентской базе"
         testId="floating-back-to-dealer-base"
         ariaLabel="Назад к клиентской базе"
       />

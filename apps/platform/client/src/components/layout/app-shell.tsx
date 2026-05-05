@@ -10,12 +10,22 @@ import { cn } from "@/lib/utils";
 const DEALER_BASE_HREF = "/dealer-base";
 const CATALOG_HREF = "/catalog";
 const TASKS_HREF = "/tasks";
+const SALES_MANAGER_HREF = "/sales-manager";
 
 const PREVIEW_NAV = [
   { href: DEALER_BASE_HREF, label: "Клиентская база", testId: "nav-dealer-base" },
   { href: CATALOG_HREF, label: "Каталог", testId: "nav-catalog" },
   { href: TASKS_HREF, label: "Задачи", testId: "nav-tasks" },
+  { href: SALES_MANAGER_HREF, label: "Менеджер", testId: "nav-sales-manager" },
 ] as const;
+
+function isTasksPath(path: string) {
+  return path === TASKS_HREF || path.startsWith(`${TASKS_HREF}/`);
+}
+
+function isSalesManagerPath(path: string) {
+  return path === SALES_MANAGER_HREF;
+}
 
 function isDealerBasePath(path: string) {
   return path === "/" || path === DEALER_BASE_HREF;
@@ -23,10 +33,6 @@ function isDealerBasePath(path: string) {
 
 function isCatalogPath(path: string) {
   return path === CATALOG_HREF || path.startsWith(`${CATALOG_HREF}/`);
-}
-
-function isTasksPath(path: string) {
-  return path === TASKS_HREF || path.startsWith(`${TASKS_HREF}/`);
 }
 
 function navClassForHref(href: string, location: string, isActiveFromLink?: boolean) {
@@ -38,7 +44,9 @@ function navClassForHref(href: string, location: string, isActiveFromLink?: bool
         ? isCatalogPath(location)
         : href === TASKS_HREF
           ? isTasksPath(location)
-          : location === href);
+          : href === SALES_MANAGER_HREF
+            ? isSalesManagerPath(location)
+            : location === href);
   return cn(
     "inline-flex min-h-10 items-center rounded-full px-4 text-sm font-medium transition-colors",
     active
@@ -96,11 +104,13 @@ export function AppShell({ children }: { children: ReactNode }) {
             </Link>
             <div className="hidden h-8 w-px shrink-0 bg-border sm:block" aria-hidden />
             <p className="hidden min-w-0 truncate text-sm font-medium text-muted-foreground sm:block sm:max-w-[18rem] md:max-w-xs">
-              {isCatalogPath(location)
-                ? "Каталог"
+              {isSalesManagerPath(location)
+                ? "Кабинет менеджера"
                 : isTasksPath(location)
                   ? "Задачи"
-                  : "Клиентская база"}
+                  : isCatalogPath(location)
+                    ? "Каталог"
+                    : "Клиентская база"}
             </p>
           </div>
           <nav className="hidden shrink-0 items-center gap-2 md:flex" data-testid="nav-preview-desktop">
