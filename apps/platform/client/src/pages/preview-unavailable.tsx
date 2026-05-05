@@ -12,7 +12,7 @@ export default function PreviewUnavailable() {
         <CardContent className="space-y-4 text-sm text-muted-foreground">
           <p>Этот адрес сейчас не используется.</p>
           <Button asChild variant="outline" className="w-full border-border bg-card" data-testid="button-preview-unavailable-to-dealer">
-            <Link href="/dealer-card-foundation">К карточке дилера</Link>
+            <Link href="/dealer-base">К клиентской базе</Link>
           </Button>
         </CardContent>
       </Card>

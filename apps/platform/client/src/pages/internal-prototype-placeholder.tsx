@@ -43,9 +43,9 @@ export default function InternalPrototypePlaceholder() {
             <p>Скоро будет доступен в общем интерфейсе.</p>
           )}
           <Button variant="outline" asChild className="min-h-11 border-border bg-card" data-testid="button-internal-back-home">
-            <Link href="/dealer-card-foundation">
+            <Link href="/dealer-base">
               <ArrowLeft className="h-4 w-4" />
-              К карточке дилера
+              К клиентской базе
             </Link>
           </Button>
         </CardContent>
