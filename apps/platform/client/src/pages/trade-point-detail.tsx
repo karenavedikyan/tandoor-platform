@@ -435,7 +435,13 @@ function MatrixItemCard({
   );
 }
 
-function MatrixTaskSummaryCard({ tasks }: { tasks: MatrixTask[] }) {
+function MatrixTaskSummaryCard({
+  tasks,
+  testId = "card-trade-point-matrix-task-summary",
+}: {
+  tasks: MatrixTask[];
+  testId?: string;
+}) {
   const summary = useMemo(() => summarizeMatrixTasks(tasks), [tasks]);
   const tiles = [
     { label: "Всего", value: summary.total, tone: "border-border bg-muted/40 text-foreground" },
@@ -445,7 +451,7 @@ function MatrixTaskSummaryCard({ tasks }: { tasks: MatrixTask[] }) {
     { label: "Высокий приоритет", value: summary.highPriorityCount, tone: "border-border bg-card text-foreground" },
   ];
   return (
-    <SurfaceCard data-testid="card-trade-point-matrix-task-summary">
+    <SurfaceCard data-testid={testId}>
       <CardContent className="space-y-3 pt-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -800,7 +806,10 @@ function TradePointDetailContent({ dealer, point }: { dealer: DealerRow; point: 
               </div>
             )}
 
-            <MatrixTaskSummaryCard tasks={createdTasks} />
+            <MatrixTaskSummaryCard
+              tasks={createdTasks}
+              testId="card-trade-point-matrix-recommendation-summary"
+            />
 
             <div data-testid="section-trade-point-matrix-recommended-tasks" className="space-y-3">
               <SectionTitle subtitle="Задачи, сформированные на основе матрицы. Создайте задачу, чтобы взять её в работу.">
@@ -833,7 +842,7 @@ function TradePointDetailContent({ dealer, point }: { dealer: DealerRow; point: 
                               type="button"
                               variant="secondary"
                               className="min-h-10 w-full border border-border"
-                              data-testid={`button-open-matrix-task-recommended-${rec.taskId}`}
+                              data-testid={`button-focus-recommended-matrix-task-${rec.taskId}`}
                               onClick={() => handleScrollToTask(created.taskId)}
                             >
                               {MATRIX_TASK_STATUS_LABEL[created.status]} · открыть
