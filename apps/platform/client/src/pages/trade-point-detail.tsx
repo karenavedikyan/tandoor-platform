@@ -30,8 +30,15 @@ import {
   type MatrixTaskRecommendation,
   type MatrixTaskStatus,
 } from "@/lib/trade-point-task-data";
+import {
+  getDealerWarehouses,
+  getOrdersForTradePoint,
+  ORDER_PAYMENT_TONE,
+  ORDER_SHIPMENT_TONE,
+  ORDER_STATUS_TONE,
+} from "@/lib/order-data";
 
-const SECTION_IDS = ["overview", "matrix", "showcase", "distribution", "tasks", "history", "photos"] as const;
+const SECTION_IDS = ["overview", "matrix", "showcase", "distribution", "orders", "tasks", "history", "photos"] as const;
 type SectionId = (typeof SECTION_IDS)[number];
 
 const SECTION_DOM_IDS: Record<SectionId, string> = {
@@ -39,6 +46,7 @@ const SECTION_DOM_IDS: Record<SectionId, string> = {
   matrix: "section-trade-point-matrix",
   showcase: "trade-point-section-showcase",
   distribution: "trade-point-section-distribution",
+  orders: "section-trade-point-orders",
   tasks: "trade-point-section-tasks",
   history: "trade-point-section-history",
   photos: "trade-point-section-photos",
@@ -49,6 +57,7 @@ const SECTION_LABELS: Record<SectionId, string> = {
   matrix: "Матрица",
   showcase: "Витрина",
   distribution: "Дистрибуция",
+  orders: "Заказы",
   tasks: "Задачи",
   history: "История",
   photos: "Фото",
@@ -59,6 +68,7 @@ const NAV_TEST_IDS: Record<SectionId, string> = {
   matrix: "trade-point-section-nav-matrix",
   showcase: "trade-point-section-nav-showcase",
   distribution: "trade-point-section-nav-distribution",
+  orders: "trade-point-section-nav-orders",
   tasks: "trade-point-section-nav-tasks",
   history: "trade-point-section-nav-history",
   photos: "trade-point-section-nav-photos",
@@ -569,6 +579,11 @@ function TradePointDetailContent({ dealer, point }: { dealer: DealerRow; point: 
     [dealer.hasProblem],
   );
   const tpProducts = useMemo(() => getTradePointProductPreview(dealer.id, point.id, 5), [dealer.id, point.id]);
+  const tpOrders = useMemo(() => getOrdersForTradePoint(dealer.id, point.id), [dealer.id, point.id]);
+  const tpWarehouse = useMemo(() => {
+    const warehouses = getDealerWarehouses(dealer.id);
+    return warehouses.find((w) => w.tradePointIds.includes(point.id)) ?? warehouses[0];
+  }, [dealer.id, point.id]);
   const matrixItems = useMemo(() => getTradePointMatrix(dealer.id, point.id), [dealer.id, point.id]);
   const matrixSummary = useMemo(() => summarizeMatrix(matrixItems), [matrixItems]);
   const [matrixFilter, setMatrixFilter] = useState<MatrixFilterId>("all");
@@ -974,6 +989,113 @@ function TradePointDetailContent({ dealer, point }: { dealer: DealerRow; point: 
                 <p className="mt-2 text-sm leading-relaxed text-foreground">{conclusion}</p>
               </CardContent>
             </SurfaceCard>
+          </section>
+
+          <section
+            id={SECTION_DOM_IDS.orders}
+            data-testid="section-trade-point-orders"
+            className="scroll-mt-28 space-y-4 sm:scroll-mt-32"
+          >
+            <SectionTitle subtitle="Заказы по этой торговой точке из синхронизированного контура ЛК дилера. Менеджер видит их через тот же контур.">
+              Заказы
+            </SectionTitle>
+            {tpWarehouse ? (
+              <SurfaceCard data-testid="card-trade-point-warehouse">
+                <CardContent className="space-y-1 pt-5 text-sm text-muted-foreground">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-semibold text-foreground">{tpWarehouse.name}</p>
+                    {tpWarehouse.isPrimary ? (
+                      <Badge variant="outline" className="border-primary/40 bg-primary/10 text-[11px] font-medium text-primary">
+                        Основной
+                      </Badge>
+                    ) : null}
+                    <Badge variant="outline" className="border-border bg-muted/60 text-[11px] font-medium text-foreground">
+                      {tpWarehouse.type}
+                    </Badge>
+                  </div>
+                  <p>
+                    <span className="font-medium text-foreground">Город склада:</span> {tpWarehouse.city}
+                  </p>
+                  <p>
+                    <span className="font-medium text-foreground">Зона доставки:</span> {tpWarehouse.deliveryZone}
+                  </p>
+                  <p>
+                    <span className="font-medium text-foreground">Статус склада:</span> {tpWarehouse.status}
+                  </p>
+                </CardContent>
+              </SurfaceCard>
+            ) : null}
+            {tpOrders.length === 0 ? (
+              <SurfaceCard>
+                <CardContent className="pt-5 text-sm text-muted-foreground">
+                  По точке пока нет заказов в синхронизированном контуре.
+                </CardContent>
+              </SurfaceCard>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {tpOrders.map((order) => (
+                  <SurfaceCard
+                    key={order.id}
+                    data-testid={`card-trade-point-order-${order.id}`}
+                  >
+                    <CardHeader className="space-y-2 pb-2 pt-4">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="outline" className={cn("text-xs font-medium", ORDER_STATUS_TONE[order.status])}>
+                          {order.status}
+                        </Badge>
+                        <Badge variant="outline" className={cn("text-xs font-medium", ORDER_PAYMENT_TONE[order.paymentStatus])}>
+                          Оплата: {order.paymentStatus}
+                        </Badge>
+                        <Badge variant="outline" className={cn("text-xs font-medium", ORDER_SHIPMENT_TONE[order.shipmentStatus])}>
+                          Отгрузка: {order.shipmentStatus}
+                        </Badge>
+                      </div>
+                      <CardTitle className="text-base font-semibold leading-snug">
+                        Заказ {order.number}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2 pb-4 text-sm text-muted-foreground">
+                      <p>
+                        <span className="font-medium text-foreground">Дата:</span> {order.date}
+                      </p>
+                      <p>
+                        <span className="font-medium text-foreground">Склад:</span> {order.warehouseName}
+                      </p>
+                      <p>
+                        <span className="font-medium text-foreground">Позиций:</span>{" "}
+                        <span className="tabular-nums">{order.items.length}</span> · {order.totalAmountLabel}
+                      </p>
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {order.items.slice(0, 3).map((item) => (
+                          <Badge
+                            key={`${order.id}-${item.productId}`}
+                            variant="outline"
+                            className="border-border bg-muted/50 text-[11px] font-medium text-foreground"
+                          >
+                            {item.productArticle} · {item.quantity}
+                          </Badge>
+                        ))}
+                        {order.items.length > 3 ? (
+                          <Badge variant="outline" className="border-border bg-card text-[11px] font-medium text-muted-foreground">
+                            ещё {order.items.length - 3}
+                          </Badge>
+                        ) : null}
+                      </div>
+                      <p>
+                        <span className="font-medium text-foreground">Дальше:</span> {order.nextAction}
+                      </p>
+                      <Button
+                        asChild
+                        className="mt-2 w-full min-h-10 font-semibold"
+                        data-testid={`button-trade-point-open-order-${order.id}`}
+                      >
+                        <Link href={`/orders/${order.id}`}>Открыть заказ</Link>
+                      </Button>
+                    </CardContent>
+                  </SurfaceCard>
+                ))}
+              </div>
+            )}
           </section>
 
           <section id={SECTION_DOM_IDS.tasks} data-testid="section-trade-point-tasks" className="scroll-mt-28 space-y-4 sm:scroll-mt-32">
