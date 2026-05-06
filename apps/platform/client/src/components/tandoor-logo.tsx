@@ -1,12 +1,12 @@
 import { cn } from "@/lib/utils";
-import logoDark from "@/assets/brand/tandoor-logo-dark.svg";
+import logoOfficial from "@/assets/brand/tandoor-logo-official.svg";
 import logoLight from "@/assets/brand/tandoor-logo-light.svg";
 
 type LogoVariant = "onLight" | "onDark";
 
 type TandoorLogoProps = {
   className?: string;
-  /** Mobile header: ~28px height. */
+  /** Компактный размер для встроенных мест (шапки и т.п.). */
   compact?: boolean;
   variant?: LogoVariant;
   "data-testid"?: string;
@@ -18,17 +18,17 @@ export function TandoorLogo({
   variant = "onLight",
   "data-testid": testId,
 }: TandoorLogoProps) {
+  const src = variant === "onDark" ? logoLight : logoOfficial;
+
   return (
     <img
-      src={variant === "onDark" ? logoLight : logoDark}
+      src={src}
       alt="Tandoor"
       className={cn(
-        "block h-9 w-auto max-w-full shrink-0 object-contain object-left",
-        compact && "h-8",
+        "block h-auto w-auto max-w-full shrink-0 object-contain object-left",
+        compact ? "max-h-8 max-w-[9.5rem]" : "max-h-[60px] max-w-[168px]",
         className,
       )}
-      width={2215}
-      height={632}
       loading="eager"
       decoding="async"
       data-testid={testId}

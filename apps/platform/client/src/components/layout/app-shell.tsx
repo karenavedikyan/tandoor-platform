@@ -78,19 +78,10 @@ function headerContextLabel(location: string) {
 
 function BrandBlock({ className }: { className?: string }) {
   return (
-    <div className={cn("flex flex-col items-start", className)}>
-      <Link href={MAIN_HREF} className="block leading-none no-underline">
-        <TandoorLogo
-          className="h-10 w-auto max-w-full object-contain object-left lg:h-[2.75rem]"
-          data-testid="brand-logo-tandoor"
-        />
+    <div className={cn("flex flex-col items-start px-0.5", className)}>
+      <Link href={MAIN_HREF} className="block w-full max-w-[168px] leading-none no-underline">
+        <TandoorLogo className="max-h-[58px] w-full max-w-[168px] object-contain object-left" data-testid="brand-logo-tandoor" />
       </Link>
-      <p
-        data-testid="text-brand-subtitle"
-        className="mt-1.5 max-w-full text-[11px] font-medium leading-tight tracking-[0.03em] text-muted-foreground"
-      >
-        двери / фурнитура
-      </p>
     </div>
   );
 }
