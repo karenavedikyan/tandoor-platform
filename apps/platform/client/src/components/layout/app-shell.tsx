@@ -4,7 +4,7 @@ import { Menu } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { BrandMark } from "@/components/brand/brand-mark";
+import { TandoorLogo } from "@/components/tandoor-logo";
 import { cn } from "@/lib/utils";
 
 const MAIN_HREF = "/main";
@@ -30,10 +30,6 @@ function isDealerBasePath(path: string) {
   return path === DEALER_BASE_HREF;
 }
 
-function isOrdersPath(path: string) {
-  return path === ORDERS_HREF || path.startsWith(`${ORDERS_HREF}/`);
-}
-
 function isOrdersListPath(path: string) {
   return path === ORDERS_HREF;
 }
@@ -46,22 +42,24 @@ function isTasksPath(path: string) {
   return path === TASKS_HREF || path.startsWith(`${TASKS_HREF}/`);
 }
 
-function navClassForHref(href: string, location: string, isActiveFromLink?: boolean) {
-  const active =
-    isActiveFromLink ??
-    (href === MAIN_HREF
-      ? isMainPath(location)
-      : href === DEALER_BASE_HREF
-        ? isDealerBasePath(location)
-        : href === ORDERS_HREF
-          ? isOrdersListPath(location)
-          : href === CATALOG_HREF
-            ? isCatalogPath(location)
-            : href === TASKS_HREF
-              ? isTasksPath(location)
-              : location === href);
+function isNavActive(href: string, location: string, isActiveFromLink?: boolean): boolean {
+  if (isActiveFromLink !== undefined) return isActiveFromLink;
+  if (href === MAIN_HREF) return isMainPath(location);
+  if (href === DEALER_BASE_HREF) return isDealerBasePath(location);
+  if (href === ORDERS_HREF) return isOrdersListPath(location);
+  if (href === CATALOG_HREF) return isCatalogPath(location);
+  if (href === TASKS_HREF) return isTasksPath(location);
+  return location === href;
+}
+
+function navLinkClass(href: string, location: string, variant: "sidebar" | "drawer", isActiveFromLink?: boolean) {
+  const active = isNavActive(href, location, isActiveFromLink);
+  const base =
+    variant === "sidebar"
+      ? "flex w-full min-h-10 items-center rounded-xl px-3 py-2.5 text-sm font-medium no-underline transition-colors"
+      : "flex w-full min-h-10 items-center rounded-full px-4 py-2 text-sm font-medium no-underline transition-colors";
   return cn(
-    "inline-flex min-h-10 items-center rounded-full px-4 text-sm font-medium transition-colors",
+    base,
     active
       ? "bg-primary text-primary-foreground shadow-sm shadow-primary/25"
       : "text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -71,101 +69,119 @@ function navClassForHref(href: string, location: string, isActiveFromLink?: bool
 function headerContextLabel(location: string) {
   if (isMainPath(location)) return "Главное";
   if (isDealerBasePath(location)) return "Клиентская база";
-  if (isOrdersPath(location)) return "Заказы";
+  if (location === ORDERS_HREF || location.startsWith(`${ORDERS_HREF}/`)) return "Заказы";
   if (isTasksPath(location)) return "Задачи";
   if (isCatalogPath(location)) return "Каталог";
   if (location.startsWith("/dealers/")) return "Карточка клиента";
   return "";
 }
 
+function BrandBlock({ className }: { className?: string }) {
+  return (
+    <div className={cn("space-y-2", className)}>
+      <Link href={MAIN_HREF} className="block no-underline">
+        <TandoorLogo className="h-9 w-auto max-w-full object-left lg:h-11" data-testid="brand-logo-tandoor" />
+      </Link>
+      <p data-testid="text-brand-subtitle" className="text-xs font-medium normal-case tracking-wide text-muted-foreground">
+        двери / фурнитура
+      </p>
+      <p data-testid="text-brand-slogan" className="text-sm leading-snug text-muted-foreground">
+        Сравнивая выбирают нас
+      </p>
+    </div>
+  );
+}
+
+function NavLinks({
+  location,
+  variant,
+  onNavigate,
+  "data-testid": navTestId,
+}: {
+  location: string;
+  variant: "sidebar" | "drawer";
+  onNavigate?: () => void;
+  "data-testid": string;
+}) {
+  return (
+    <nav className="flex flex-col gap-1" data-testid={navTestId}>
+      {PREVIEW_NAV.map((item) => (
+        <Link
+          key={item.href}
+          href={item.href}
+          onClick={onNavigate}
+          className={(active) => navLinkClass(item.href, location, variant, active)}
+          data-testid={item.testId}
+        >
+          {item.label}
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const showMobileMenu = PREVIEW_NAV.length > 1;
   const ctx = headerContextLabel(location);
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-background" data-testid="app-shell-preview">
-      <header className="sticky top-0 z-40 border-b border-border/80 bg-card/95 shadow-sm backdrop-blur-md supports-[backdrop-filter]:bg-card/90">
-        <div className="mx-auto max-w-5xl px-4 py-3 sm:px-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-            <div className="flex min-w-0 items-start gap-2 sm:items-center sm:gap-3">
-              {showMobileMenu ? (
-                <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-                  <SheetTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="mt-0.5 h-10 w-10 shrink-0 border-border bg-card sm:mt-0 md:hidden"
-                      type="button"
-                      data-testid="button-mobile-nav-open"
-                      aria-label="Открыть меню"
-                    >
-                      <Menu className="h-5 w-5 text-muted-foreground" />
-                    </Button>
-                  </SheetTrigger>
-                  <SheetContent side="left" className="w-[min(100vw-2rem,280px)]">
-                    <SheetHeader>
-                      <SheetTitle className="text-left">Меню</SheetTitle>
-                    </SheetHeader>
-                    <nav className="mt-6 flex flex-col gap-2" data-testid="nav-preview-mobile">
-                      {PREVIEW_NAV.map((item) => (
-                        <Link
-                          key={item.href}
-                          href={item.href}
-                          onClick={() => setMobileOpen(false)}
-                          className={(active) => cn(navClassForHref(item.href, location, active), "no-underline")}
-                          data-testid={item.testId}
-                        >
-                          {item.label}
-                        </Link>
-                      ))}
-                    </nav>
-                  </SheetContent>
-                </Sheet>
-              ) : null}
-
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-1">
-                <Link href={MAIN_HREF} className="flex shrink-0 flex-col gap-0.5 no-underline">
-                  <BrandMark />
-                  <p
-                    data-testid="text-brand-subtitle"
-                    className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground sm:text-xs"
-                  >
-                    двери / фурнитура
-                  </p>
-                </Link>
-                <p
-                  data-testid="text-brand-slogan"
-                  className="hidden max-w-[11rem] text-sm font-semibold leading-snug text-foreground sm:block sm:max-w-[13rem] md:max-w-xs md:text-base"
-                >
-                  Сравнивая выбирают нас
-                </p>
-              </div>
-            </div>
-
-            {ctx ? (
-              <p className="hidden min-w-0 truncate text-sm font-medium text-muted-foreground sm:block sm:max-w-[10rem] md:max-w-[14rem] lg:max-w-xs">
-                {ctx}
-              </p>
-            ) : null}
-
-            <nav className="hidden shrink-0 flex-wrap items-center justify-end gap-2 md:flex" data-testid="nav-preview-desktop">
-              {PREVIEW_NAV.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={(active) => cn(navClassForHref(item.href, location, active), "no-underline")}
-                  data-testid={item.testId}
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </nav>
-          </div>
+    <div className="flex min-h-screen overflow-x-hidden bg-background" data-testid="app-shell-preview">
+      <aside
+        className="sticky top-0 z-30 hidden h-screen w-[272px] shrink-0 flex-col border-r border-border/80 bg-card px-4 py-6 shadow-sm lg:flex"
+        aria-label="Основная навигация"
+      >
+        <BrandBlock className="border-b border-border/60 pb-5" />
+        <div className="flex-1 overflow-y-auto overflow-x-hidden pt-5">
+          <NavLinks location={location} variant="sidebar" data-testid="nav-preview-desktop" />
         </div>
-      </header>
-      <main className="mx-auto max-w-5xl px-4 py-5 sm:px-5 sm:py-7">{children}</main>
+      </aside>
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-40 border-b border-border/80 bg-card/95 backdrop-blur-md supports-[backdrop-filter]:bg-card/90 lg:hidden">
+          <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3 sm:px-5">
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+                <SheetTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-10 w-10 shrink-0 border-border bg-card"
+                    type="button"
+                    data-testid="button-mobile-nav-open"
+                    aria-label="Открыть меню"
+                  >
+                    <Menu className="h-5 w-5 text-muted-foreground" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="left" className="flex w-[min(100vw-2rem,300px)] flex-col gap-0 overflow-y-auto p-0">
+                  <div className="border-b border-border/80 px-5 pb-4 pt-5">
+                    <BrandBlock />
+                  </div>
+                  <SheetHeader className="px-5 pt-4 text-left">
+                    <SheetTitle className="text-left text-base">Разделы</SheetTitle>
+                  </SheetHeader>
+                  <div className="flex-1 px-5 pb-6 pt-2">
+                    <NavLinks
+                      location={location}
+                      variant="drawer"
+                      onNavigate={() => setMobileOpen(false)}
+                      data-testid="nav-preview-mobile"
+                    />
+                  </div>
+                </SheetContent>
+              </Sheet>
+              {ctx ? (
+                <p className="min-w-0 truncate text-sm font-medium text-muted-foreground" data-testid="text-mobile-header-context">
+                  {ctx}
+                </p>
+              ) : null}
+            </div>
+          </div>
+        </header>
+
+        <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-5 sm:px-5 sm:py-7 lg:px-6 lg:py-8">{children}</main>
+      </div>
     </div>
   );
 }
