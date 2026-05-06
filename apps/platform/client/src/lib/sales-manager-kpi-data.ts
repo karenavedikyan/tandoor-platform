@@ -125,6 +125,63 @@ export type AnalyticsPlanSummary = {
   periodLabel: string;
 };
 
+export type AnalyticsViewMode = "summary" | "infographics";
+
+export type InfographicPlanItem = {
+  category: "mk" | "vh" | "hardware";
+  label: string;
+  unit: "units" | "money";
+  plan: number;
+  fact: number;
+  forecast: number;
+  completionPercent: number;
+};
+
+export type InfographicMonthlyPoint = {
+  month: string;
+  mkUnits: number;
+  vhUnits: number;
+  hardwareTurnoverRub: number;
+};
+
+export type InfographicYoYItem = {
+  category: "mk" | "vh" | "hardware";
+  label: string;
+  unit: "units" | "money";
+  currentValue: number;
+  previousYearValue: number;
+  absoluteDelta: number;
+  percentDelta: number;
+  trend: "up" | "down" | "flat";
+};
+
+export type InfographicCityItem = {
+  id: string;
+  city: string;
+  clientsCount: number;
+  regionSharePercent: number;
+  topCategory: string;
+  mkUnits: number;
+  vhUnits: number;
+  hardwareTurnoverRub: number;
+};
+
+export type InfographicTopItem = {
+  id: string;
+  name: string;
+  category: "mk" | "vh" | "hardware";
+  unit: "units" | "money";
+  value: number;
+  sharePercent: number;
+};
+
+export type HardwareConversionFunnelStep = {
+  id: string;
+  label: string;
+  value: number;
+  percent: number;
+};
+
 const MONTH_NAMES = [
   "января",
   "февраля",
@@ -541,6 +598,118 @@ const TOP_PARTNERS: PartnerTopItem[] = [
     conversionHint: "Топ по валовке в регионе",
   },
 ];
+
+/** Обезличенная динамика по месяцам (региональный срез). */
+const INFOGRAPHIC_MONTHLY: InfographicMonthlyPoint[] = [
+  { month: "янв.", mkUnits: 980, vhUnits: 310, hardwareTurnoverRub: 2_650_000 },
+  { month: "фев.", mkUnits: 1020, vhUnits: 298, hardwareTurnoverRub: 2_720_000 },
+  { month: "мар.", mkUnits: 1105, vhUnits: 322, hardwareTurnoverRub: 2_880_000 },
+  { month: "апр.", mkUnits: 1088, vhUnits: 305, hardwareTurnoverRub: 2_910_000 },
+  { month: "май", mkUnits: 1150, vhUnits: 318, hardwareTurnoverRub: 3_050_000 },
+  { month: "июн.", mkUnits: 1188, vhUnits: 330, hardwareTurnoverRub: 3_120_000 },
+];
+
+const HARDWARE_FUNNEL: HardwareConversionFunnelStep[] = [
+  { id: "s1", label: "Клиенты с заказами в периоде", value: 186, percent: 100 },
+  { id: "s2", label: "С позицией фурнитуры в заказе", value: 112, percent: 60 },
+  { id: "s3", label: "С повторной фурнитурой в году", value: 48, percent: 26 },
+  { id: "s4", label: "Итоговая конверсия воронки", value: 41, percent: 22 },
+];
+
+function productCategoryFromId(productId: string): "mk" | "vh" | "hardware" {
+  if (productId.startsWith("vh-")) return "vh";
+  if (productId.startsWith("mk-")) return "mk";
+  if (productId.startsWith("sk-")) return "mk";
+  return "hardware";
+}
+
+export function getAnalyticsInfographicPlanItems(): InfographicPlanItem[] {
+  return SALES_PLAN_METRICS.map((m) => ({
+    category: m.category,
+    label: m.label,
+    unit: m.unit,
+    plan: m.monthPlan,
+    fact: m.monthFact,
+    forecast: m.monthForecast,
+    completionPercent: planCompletionPercent(m.monthPlan, m.monthFact),
+  }));
+}
+
+export function getAnalyticsMonthlyDynamics(): InfographicMonthlyPoint[] {
+  return INFOGRAPHIC_MONTHLY;
+}
+
+export function getAnalyticsYoYItems(): InfographicYoYItem[] {
+  return getYearOverYearComparisons().map((c) => ({
+    category: c.category,
+    label: c.label,
+    unit: c.unit,
+    currentValue: c.currentValue,
+    previousYearValue: c.previousValue,
+    absoluteDelta: c.absoluteDelta,
+    percentDelta: c.percentDelta,
+    trend: c.trend,
+  }));
+}
+
+export function getAnalyticsInfographicCities(): InfographicCityItem[] {
+  return CITY_ROWS.map((c) => ({
+    id: c.cityId,
+    city: c.name,
+    clientsCount: c.clientCount,
+    regionSharePercent: c.shareInRegionPercent,
+    topCategory: c.partnerCategoriesLabel.includes("TOP") ? "TOP / активные" : "Активные / прочие",
+    mkUnits: c.mkUnits,
+    vhUnits: c.vhUnits,
+    hardwareTurnoverRub: c.hardwareTurnoverRub,
+  }));
+}
+
+export function getAnalyticsTopProductsTerritory(): InfographicTopItem[] {
+  return TOP_PRODUCTS.map((p) => {
+    const cat = productCategoryFromId(p.productId);
+    const useUnits = (p.territoryUnits ?? 0) > 0;
+    return {
+      id: p.productId,
+      name: p.name,
+      category: cat,
+      unit: useUnits ? "units" : "money",
+      value: useUnits ? (p.territoryUnits as number) : p.territorySalesRub,
+      sharePercent: p.contributionPercent,
+    };
+  });
+}
+
+export function getAnalyticsTopProductsCity(): InfographicTopItem[] {
+  return TOP_PRODUCTS.map((p) => {
+    const cat = productCategoryFromId(p.productId);
+    const useUnits = (p.cityUnits ?? 0) > 0;
+    return {
+      id: `${p.productId}-city`,
+      name: p.name,
+      category: cat,
+      unit: useUnits ? "units" : "money",
+      value: useUnits ? (p.cityUnits as number) : p.citySalesRub,
+      sharePercent: Math.round(p.contributionPercent * 0.72 * 10) / 10,
+    };
+  });
+}
+
+/** Топ партнёров для диаграмм инфографики (оборот, ₽). */
+export function getAnalyticsTopPartners(): InfographicTopItem[] {
+  return TOP_PARTNERS.map((p) => ({
+    id: p.dealerId,
+    name: p.name,
+    category: "hardware",
+    unit: "money",
+    value: p.salesRub,
+    sharePercent: p.contributionPercent,
+  }));
+}
+
+export function getHardwareConversionFunnel(): HardwareConversionFunnelStep[] {
+  return HARDWARE_FUNNEL;
+}
 
 export type AnalyticsFilterState = {
   periodKey: "month" | "quarter" | "year";

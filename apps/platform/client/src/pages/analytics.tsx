@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AnalyticsInfographicsPanel } from "@/components/analytics/analytics-infographics-panel";
 import {
   Select,
   SelectContent,
@@ -41,6 +43,7 @@ function toneForChange(p: number) {
 }
 
 export default function AnalyticsPage() {
+  const [view, setView] = useState<"summary" | "infographics">("summary");
   const [filters, setFilters] = useState<AnalyticsFilterState>({
     periodKey: "month",
     territoryId: "south",
@@ -89,6 +92,32 @@ export default function AnalyticsPage() {
         </div>
       </section>
 
+      <Tabs
+        value={view}
+        onValueChange={(v) => setView(v as "summary" | "infographics")}
+        className="w-full min-w-0 space-y-6"
+      >
+        <TabsList
+          data-testid="tabs-analytics-view"
+          className="grid h-auto w-full min-w-0 max-w-full grid-cols-2 gap-1 p-1 sm:inline-flex sm:w-auto"
+        >
+          <TabsTrigger
+            value="summary"
+            className="min-h-10 flex-1 px-2 text-xs sm:flex-initial sm:text-sm"
+            data-testid="tab-analytics-summary"
+          >
+            Сводка
+          </TabsTrigger>
+          <TabsTrigger
+            value="infographics"
+            className="min-h-10 flex-1 px-2 text-xs sm:flex-initial sm:text-sm"
+            data-testid="tab-analytics-infographics"
+          >
+            Инфографика
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="summary" className="mt-6 space-y-8 focus-visible:ring-0" data-testid="section-analytics-summary-view">
       <section className="space-y-4" data-testid="section-analytics-plan-summary">
         <h2 className="text-lg font-semibold text-foreground sm:text-xl">План месяца по линейкам</h2>
         <p className="text-sm text-muted-foreground">Период: {planSummary.periodLabel}. МК и ВХ — в штуках, фурнитура — в обороте (₽).</p>
@@ -484,6 +513,17 @@ export default function AnalyticsPage() {
           </Button>
         </div>
       </section>
+
+        </TabsContent>
+
+        <TabsContent
+          value="infographics"
+          className="mt-6 space-y-8 focus-visible:ring-0"
+          data-testid="section-analytics-infographics-view"
+        >
+          <AnalyticsInfographicsPanel />
+        </TabsContent>
+      </Tabs>
 
       <FloatingBackButton href="/main" label="К главному" testId="floating-back-to-main" ariaLabel="К главному" />
     </div>
