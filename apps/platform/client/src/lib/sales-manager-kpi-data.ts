@@ -1,74 +1,58 @@
 /**
- * Обезличенные показатели плана и аналитики для кабинета менеджера.
- * Структура рассчитана на последующую подмену ответами API (1С, Bitrix и др.).
+ * Обезличенные показатели планов отдела продаж для кабинета менеджера.
+ * МК и ВХ — в штуках, фурнитура — в обороте (₽). Структура готова к подмене данными API.
  */
 
-export type ManagerMonthlyKpi = {
-  periodLabel: string;
-  planRub: number;
-  factRub: number;
-  forecastRub: number;
-  completionPercent: number;
-  status: "в норме" | "требует внимания" | "риск";
-  remainingToPlanRub: number;
+export type SalesPlanCategory = "mk" | "vh" | "hardware";
+
+export type SalesPlanMetric = {
+  category: SalesPlanCategory;
+  label: string;
+  unit: "units" | "money";
+  monthPlan: number;
+  monthFact: number;
+  monthForecast: number;
+  previousMonthFact: number;
+  previousYearSamePeriodFact: number;
 };
 
-export type ManagerGrossSales = {
-  grossRub: number;
-  units: number;
-  vsPrevMonthPercent: number;
-  avgOrderRub: number;
-  activePartners: number;
+export type SalesPlanComparison = {
+  category: SalesPlanCategory;
+  label: string;
+  unit: "units" | "money";
+  currentValue: number;
+  previousValue: number;
+  absoluteDelta: number;
+  percentDelta: number;
+  trend: "up" | "down" | "flat";
+};
+
+export type ManagerYearScenario = {
+  scenario: "pessimistic" | "optimal" | "optimistic";
+  label: string;
+  mkPlanUnits: number;
+  vhPlanUnits: number;
+  hardwarePlanMoney: number;
+  mkFactUnits: number;
+  vhFactUnits: number;
+  hardwareFactMoney: number;
+  mkForecastUnits: number;
+  vhForecastUnits: number;
+  hardwareForecastMoney: number;
+};
+
+export type YearForecastSummary = {
+  bandDescription: string;
+  gapToOptimalDescription: string;
+  managerHint: string;
+};
+
+export type ManagerPerformanceInsight = {
+  id: string;
+  text: string;
 };
 
 export type ProductLine = "ВХ" | "МК" | "Фурнитура";
-
-export type ManagerCategoryKpi = {
-  line: ProductLine;
-  planRub: number;
-  factRub: number;
-  forecastRub: number;
-  completionPercent: number;
-  units: number;
-  grossRub: number;
-  status: "в норме" | "требует внимания" | "риск";
-};
-
-export type ManagerHardwareConversion = {
-  ordersWithHardwareSharePercent: number;
-  clientConversionPercent: number;
-  plannedConversionPercent: number;
-  actualConversionPercent: number;
-  diffPercent: number;
-  hint: string;
-};
-
-export type RankingPeer = {
-  place: number;
-  name: string;
-  scoreLabel: string;
-  scoreValue: number;
-};
-
-export type ManagerRanking = {
-  place: number;
-  totalManagers: number;
-  metricLabel: string;
-  ownScore: number;
-  gapToNextAbove: number | null;
-  gapToNextBelow: number | null;
-  topThree: RankingPeer[];
-};
-
-export type ManagerMonthTask = {
-  taskId: string;
-  title: string;
-  status: "новая" | "в работе" | "ожидает" | "выполнена";
-  progressPercent: number;
-  kpiImpact: string;
-  deadline: string;
-  relatedLabel: string;
-};
 
 export type TerritoryAnalytics = {
   territoryId: string;
@@ -91,7 +75,8 @@ export type CityAnalytics = {
   changeVsPrevPercent: number;
   vhUnits: number;
   mkUnits: number;
-  hardwareUnits: number;
+  /** Оборот по фурнитуре в рублях (не штуки) */
+  hardwareTurnoverRub: number;
 };
 
 export type PartnerCategoryAnalytics = {
@@ -105,10 +90,9 @@ export type PartnerCategoryAnalytics = {
 
 export type ProductCategoryAnalytics = {
   line: ProductLine;
-  salesRub: number;
-  units: number;
-  planRub: number;
-  factRub: number;
+  metric: "units" | "money";
+  plan: number;
+  fact: number;
   changeVsPrevPercent: number;
   conversionPercent: number;
 };
@@ -119,7 +103,9 @@ export type ProductTopItem = {
   article: string;
   territorySalesRub: number;
   citySalesRub: number;
-  units: number;
+  /** Для дверей — штуки; для фурнитуры можно 0 и не показывать как шт. */
+  territoryUnits: number | null;
+  cityUnits: number | null;
   contributionPercent: number;
 };
 
@@ -130,6 +116,13 @@ export type PartnerTopItem = {
   salesRub: number;
   contributionPercent: number;
   conversionHint: string;
+};
+
+export type AnalyticsPlanSummary = {
+  mkCompletionPercent: number;
+  vhCompletionPercent: number;
+  hardwareCompletionPercent: number;
+  periodLabel: string;
 };
 
 const MONTH_NAMES = [
@@ -147,6 +140,81 @@ const MONTH_NAMES = [
   "декабря",
 ];
 
+const SALES_PLAN_METRICS: SalesPlanMetric[] = [
+  {
+    category: "mk",
+    label: "МК",
+    unit: "units",
+    monthPlan: 1240,
+    monthFact: 798,
+    monthForecast: 1188,
+    previousMonthFact: 722,
+    previousYearSamePeriodFact: 685,
+  },
+  {
+    category: "vh",
+    label: "ВХ",
+    unit: "units",
+    monthPlan: 428,
+    monthFact: 266,
+    monthForecast: 402,
+    previousMonthFact: 248,
+    previousYearSamePeriodFact: 239,
+  },
+  {
+    category: "hardware",
+    label: "Фурнитура",
+    unit: "money",
+    monthPlan: 3_420_000,
+    monthFact: 2_080_000,
+    monthForecast: 3_140_000,
+    previousMonthFact: 1_960_000,
+    previousYearSamePeriodFact: 1_820_000,
+  },
+];
+
+const YEAR_SCENARIOS: ManagerYearScenario[] = [
+  {
+    scenario: "pessimistic",
+    label: "Пессимистичный план",
+    mkPlanUnits: 12_800,
+    vhPlanUnits: 4_650,
+    hardwarePlanMoney: 28_000_000,
+    mkFactUnits: 6120,
+    vhFactUnits: 2188,
+    hardwareFactMoney: 14_200_000,
+    mkForecastUnits: 12_400,
+    vhForecastUnits: 4_420,
+    hardwareForecastMoney: 26_800_000,
+  },
+  {
+    scenario: "optimal",
+    label: "Оптимальный план",
+    mkPlanUnits: 15_200,
+    vhPlanUnits: 5_520,
+    hardwarePlanMoney: 34_200_000,
+    mkFactUnits: 6120,
+    vhFactUnits: 2188,
+    hardwareFactMoney: 14_200_000,
+    mkForecastUnits: 14_880,
+    vhForecastUnits: 5_380,
+    hardwareForecastMoney: 32_500_000,
+  },
+  {
+    scenario: "optimistic",
+    label: "Оптимистичный план",
+    mkPlanUnits: 17_400,
+    vhPlanUnits: 6_280,
+    hardwarePlanMoney: 39_500_000,
+    mkFactUnits: 6120,
+    vhFactUnits: 2188,
+    hardwareFactMoney: 14_200_000,
+    mkForecastUnits: 16_200,
+    vhForecastUnits: 5_840,
+    hardwareForecastMoney: 35_100_000,
+  },
+];
+
 export function formatRub(n: number): string {
   return new Intl.NumberFormat("ru-RU", {
     style: "currency",
@@ -161,166 +229,138 @@ export function formatCompactRub(n: number): string {
   return formatRub(n);
 }
 
+export function formatUnits(value: number): string {
+  return `${value.toLocaleString("ru-RU")} шт.`;
+}
+
+export function formatMoney(value: number): string {
+  return formatCompactRub(value);
+}
+
+/** value — число процентов (например 72 означает 72%). */
+export function formatPercent(value: number): string {
+  const rounded = Math.round(value * 10) / 10;
+  const s = Number.isInteger(rounded) ? String(Math.round(rounded)) : String(rounded).replace(".", ",");
+  return `${s}%`;
+}
+
+export function getTrendLabel(trend: SalesPlanComparison["trend"]): string {
+  if (trend === "up") return "Рост";
+  if (trend === "down") return "Снижение";
+  return "Без изменений";
+}
+
+export function getTrendColorClass(trend: SalesPlanComparison["trend"]): string {
+  if (trend === "up") return "text-emerald-700";
+  if (trend === "down") return "text-red-700";
+  return "text-muted-foreground";
+}
+
 export function currentMonthPeriodLabel(): string {
   const d = new Date();
   return `${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`;
 }
 
-export function getManagerMonthlyKpi(): ManagerMonthlyKpi {
-  const planRub = 18_400_000;
-  const factRub = 11_250_000;
-  const forecastRub = 17_100_000;
-  const completionPercent = Math.round((factRub / planRub) * 100);
-  const remainingToPlanRub = Math.max(0, planRub - factRub);
-  const forecastRatio = forecastRub / planRub;
-  const status: ManagerMonthlyKpi["status"] =
-    forecastRatio >= 0.98 ? "в норме" : forecastRatio >= 0.92 ? "требует внимания" : "риск";
+export function getSalesPlanMetrics(): SalesPlanMetric[] {
+  return SALES_PLAN_METRICS;
+}
+
+function buildComparison(
+  category: SalesPlanCategory,
+  label: string,
+  unit: "units" | "money",
+  currentValue: number,
+  previousValue: number,
+): SalesPlanComparison {
+  const absoluteDelta = currentValue - previousValue;
+  let percentDelta = 0;
+  if (previousValue !== 0) {
+    percentDelta = (absoluteDelta / Math.abs(previousValue)) * 100;
+  } else if (currentValue !== 0) {
+    percentDelta = 100;
+  }
+  const trend: SalesPlanComparison["trend"] =
+    Math.abs(percentDelta) < 0.6 ? "flat" : percentDelta > 0 ? "up" : "down";
   return {
+    category,
+    label,
+    unit,
+    currentValue,
+    previousValue,
+    absoluteDelta,
+    percentDelta: Math.round(percentDelta * 10) / 10,
+    trend,
+  };
+}
+
+/** Текущий месяц vs предыдущий месяц (факт к факту). */
+export function getMonthOverMonthComparisons(): SalesPlanComparison[] {
+  return SALES_PLAN_METRICS.map((m) =>
+    buildComparison(m.category, m.label, m.unit, m.monthFact, m.previousMonthFact),
+  );
+}
+
+/** Текущий месяц (факт) vs аналогичный период прошлого года. */
+export function getYearOverYearComparisons(): SalesPlanComparison[] {
+  return SALES_PLAN_METRICS.map((m) =>
+    buildComparison(m.category, m.label, m.unit, m.monthFact, m.previousYearSamePeriodFact),
+  );
+}
+
+export function planCompletionPercent(plan: number, fact: number): number {
+  if (plan <= 0) return 0;
+  return Math.min(100, Math.round((fact / plan) * 100));
+}
+
+export function remainingToPlan(plan: number, fact: number): number {
+  return Math.max(0, plan - fact);
+}
+
+export function getManagerYearScenarios(): ManagerYearScenario[] {
+  return YEAR_SCENARIOS;
+}
+
+export function scenarioLineCompletion(plan: number, forecast: number): number {
+  if (plan <= 0) return 0;
+  return Math.round((forecast / plan) * 100);
+}
+
+export function getYearForecastSummary(): YearForecastSummary {
+  return {
+    bandDescription:
+      "По текущей динамике вы находитесь между пессимистичным и оптимальным годовыми сценариями: прогноз по МК ближе к оптимальному, по ВХ — ниже оптимального коридора, по фурнитуре — между сценариями.",
+    gapToOptimalDescription:
+      "До оптимального сценария на конец года: МК — добрать около 320 шт. к прогнозу, ВХ — около 140 шт., фурнитура — около 1,7 млн ₽ оборота при сохранении темпа отгрузок.",
+    managerHint:
+      "Основной разрыв — ВХ к оптимальному сценарию; ближайший резерв — партнёры с активными заказами и точки с неполной матрицей.",
+  };
+}
+
+export function getManagerPerformanceInsights(): ManagerPerformanceInsight[] {
+  return [
+    {
+      id: "1",
+      text: "МК идёт выше темпа прошлого месяца — важно удержать дисциплину отгрузок и не смещать фокус с подтверждённых заказов.",
+    },
+    {
+      id: "2",
+      text: "По ВХ есть отставание от месячного плана; ближайший резерв — клиенты с открытыми заказами и согласованными датами отгрузки.",
+    },
+    {
+      id: "3",
+      text: "Фурнитура растёт к прошлому месяцу, но годовой прогноз пока ниже оптимального сценария — усиление доли фурнитуры в заказах МК даст наибольший эффект для прогноза года.",
+    },
+  ];
+}
+
+export function getAnalyticsPlanSummary(): AnalyticsPlanSummary {
+  const [mk, vh, hw] = SALES_PLAN_METRICS;
+  return {
+    mkCompletionPercent: planCompletionPercent(mk.monthPlan, mk.monthFact),
+    vhCompletionPercent: planCompletionPercent(vh.monthPlan, vh.monthFact),
+    hardwareCompletionPercent: planCompletionPercent(hw.monthPlan, hw.monthFact),
     periodLabel: currentMonthPeriodLabel(),
-    planRub,
-    factRub,
-    forecastRub,
-    completionPercent,
-    status,
-    remainingToPlanRub,
   };
-}
-
-export function getManagerGrossSales(): ManagerGrossSales {
-  return {
-    grossRub: 14_680_000,
-    units: 1840,
-    vsPrevMonthPercent: 6.4,
-    avgOrderRub: 186_500,
-    activePartners: 42,
-  };
-}
-
-export function getManagerCategoryKpis(): ManagerCategoryKpi[] {
-  return [
-    {
-      line: "ВХ",
-      planRub: 6_200_000,
-      factRub: 3_980_000,
-      forecastRub: 5_910_000,
-      completionPercent: 64,
-      units: 412,
-      grossRub: 5_020_000,
-      status: "требует внимания",
-    },
-    {
-      line: "МК",
-      planRub: 8_800_000,
-      factRub: 5_640_000,
-      forecastRub: 8_450_000,
-      completionPercent: 64,
-      units: 1188,
-      grossRub: 7_210_000,
-      status: "требует внимания",
-    },
-    {
-      line: "Фурнитура",
-      planRub: 3_400_000,
-      factRub: 1_630_000,
-      forecastRub: 2_740_000,
-      completionPercent: 48,
-      units: 9560,
-      grossRub: 2_450_000,
-      status: "риск",
-    },
-  ];
-}
-
-export function categoryTestId(line: ProductLine): string {
-  if (line === "ВХ") return "card-manager-category-vh";
-  if (line === "МК") return "card-manager-category-mk";
-  return "card-manager-category-hardware";
-}
-
-export function getManagerHardwareConversion(): ManagerHardwareConversion {
-  return {
-    ordersWithHardwareSharePercent: 38,
-    clientConversionPercent: 27,
-    plannedConversionPercent: 35,
-    actualConversionPercent: 27,
-    diffPercent: -8,
-    hint: "Усилить предложение фурнитуры в заказах МК и при отгрузке ВХ — быстрый вклад в валовку.",
-  };
-}
-
-export function getManagerRanking(): ManagerRanking {
-  return {
-    place: 4,
-    totalManagers: 18,
-    metricLabel: "выполнение плана по валовке, %",
-    ownScore: 61,
-    gapToNextAbove: 2.4,
-    gapToNextBelow: 1.1,
-    topThree: [
-      { place: 1, name: "Смирнов А.В.", scoreLabel: "план, %", scoreValue: 108 },
-      { place: 2, name: "Козлова Е.С.", scoreLabel: "план, %", scoreValue: 97 },
-      { place: 3, name: "Иванов Д.К.", scoreLabel: "план, %", scoreValue: 89 },
-    ],
-  };
-}
-
-export function getManagerMonthTasks(): ManagerMonthTask[] {
-  return [
-    {
-      taskId: "month-task-vh",
-      title: "Добрать ВХ до планового коридора",
-      status: "в работе",
-      progressPercent: 64,
-      kpiImpact: "до +6 п.п. к выполнению плана",
-      deadline: "18.05.2026",
-      relatedLabel: "ВХ · ключевые партнёры",
-    },
-    {
-      taskId: "month-task-mk",
-      title: "Добрать МК по сетевым точкам",
-      status: "в работе",
-      progressPercent: 58,
-      kpiImpact: "до +4 п.п. к выполнению плана",
-      deadline: "22.05.2026",
-      relatedLabel: "МК · сеть «Север»",
-    },
-    {
-      taskId: "month-task-hardware",
-      title: "Поднять долю фурнитуры в заказах",
-      status: "ожидает",
-      progressPercent: 32,
-      kpiImpact: "до +3 п.п. к валовке",
-      deadline: "28.05.2026",
-      relatedLabel: "Фурнитура · все активные",
-    },
-    {
-      taskId: "month-task-inactive",
-      title: "Вернуть клиентов без активности",
-      status: "новая",
-      progressPercent: 12,
-      kpiImpact: "стабилизация базы",
-      deadline: "25.05.2026",
-      relatedLabel: "7 партнёров в зоне",
-    },
-    {
-      taskId: "month-task-overdue",
-      title: "Закрыть просроченные согласования",
-      status: "в работе",
-      progressPercent: 45,
-      kpiImpact: "ускорение отгрузок",
-      deadline: "12.05.2026",
-      relatedLabel: "Заказы · оплата и отгрузка",
-    },
-    {
-      taskId: "month-task-tops",
-      title: "Отработать TOP по витрине и матрице",
-      status: "в работе",
-      progressPercent: 71,
-      kpiImpact: "рост среднего заказа",
-      deadline: "20.05.2026",
-      relatedLabel: "TOP · витрина и дистрибуция",
-    },
-  ];
 }
 
 const TERRITORY_ROWS: TerritoryAnalytics[] = [
@@ -367,7 +407,7 @@ const CITY_ROWS: CityAnalytics[] = [
     changeVsPrevPercent: 4.2,
     vhUnits: 128,
     mkUnits: 312,
-    hardwareUnits: 1840,
+    hardwareTurnoverRub: 4_120_000,
   },
   {
     cityId: "rostov",
@@ -379,7 +419,7 @@ const CITY_ROWS: CityAnalytics[] = [
     changeVsPrevPercent: 3.0,
     vhUnits: 96,
     mkUnits: 241,
-    hardwareUnits: 1520,
+    hardwareTurnoverRub: 3_280_000,
   },
   {
     cityId: "volgograd",
@@ -391,7 +431,7 @@ const CITY_ROWS: CityAnalytics[] = [
     changeVsPrevPercent: -0.8,
     vhUnits: 74,
     mkUnits: 188,
-    hardwareUnits: 1210,
+    hardwareTurnoverRub: 2_410_000,
   },
   {
     cityId: "sochi",
@@ -403,7 +443,7 @@ const CITY_ROWS: CityAnalytics[] = [
     changeVsPrevPercent: 7.1,
     vhUnits: 88,
     mkUnits: 156,
-    hardwareUnits: 980,
+    hardwareTurnoverRub: 2_060_000,
   },
 ];
 
@@ -418,28 +458,25 @@ const PARTNER_CAT_ROWS: PartnerCategoryAnalytics[] = [
 const PRODUCT_CAT_ROWS: ProductCategoryAnalytics[] = [
   {
     line: "ВХ",
-    salesRub: 19_200_000,
-    units: 2156,
-    planRub: 20_000_000,
-    factRub: 19_200_000,
+    metric: "units",
+    plan: 2150,
+    fact: 2048,
     changeVsPrevPercent: 4.0,
     conversionPercent: 22,
   },
   {
     line: "МК",
-    salesRub: 28_400_000,
-    units: 6120,
-    planRub: 30_500_000,
-    factRub: 28_400_000,
+    metric: "units",
+    plan: 6120,
+    fact: 5890,
     changeVsPrevPercent: 2.3,
     conversionPercent: 41,
   },
   {
     line: "Фурнитура",
-    salesRub: 9_800_000,
-    units: 48_200,
-    planRub: 12_000_000,
-    factRub: 9_800_000,
+    metric: "money",
+    plan: 12_000_000,
+    fact: 9_800_000,
     changeVsPrevPercent: -1.1,
     conversionPercent: 29,
   },
@@ -452,7 +489,8 @@ const TOP_PRODUCTS: ProductTopItem[] = [
     article: "VH-GRAND-3",
     territorySalesRub: 2_420_000,
     citySalesRub: 680_000,
-    units: 186,
+    territoryUnits: 186,
+    cityUnits: 52,
     contributionPercent: 5.7,
   },
   {
@@ -461,7 +499,8 @@ const TOP_PRODUCTS: ProductTopItem[] = [
     article: "MK-GRAND-3",
     territorySalesRub: 1_980_000,
     citySalesRub: 540_000,
-    units: 312,
+    territoryUnits: 312,
+    cityUnits: 86,
     contributionPercent: 4.6,
   },
   {
@@ -470,7 +509,8 @@ const TOP_PRODUCTS: ProductTopItem[] = [
     article: "SK-LINE",
     territorySalesRub: 1_260_000,
     citySalesRub: 410_000,
-    units: 8420,
+    territoryUnits: 420,
+    cityUnits: 138,
     contributionPercent: 3.0,
   },
 ];

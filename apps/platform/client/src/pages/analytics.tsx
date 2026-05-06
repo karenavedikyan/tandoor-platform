@@ -20,7 +20,10 @@ import {
   ANALYTICS_TERRITORY_OPTIONS,
   analyticsPeriodSuffix,
   formatCompactRub,
+  formatPercent,
   formatRub,
+  formatUnits,
+  getAnalyticsPlanSummary,
   getCityAnalyticsRows,
   getPartnerCategoryRows,
   getProductCategoryRows,
@@ -55,9 +58,8 @@ export default function AnalyticsPage() {
   const productCats = useMemo(() => getProductCategoryRows(filters.productLine), [filters.productLine]);
   const topProducts = useMemo(() => getTopProducts(), []);
   const topPartners = useMemo(() => getTopPartners(), []);
+  const planSummary = useMemo(() => getAnalyticsPlanSummary(), []);
   const periodNote = analyticsPeriodSuffix(filters.periodKey);
-
-  const totalUnitsCity = (c: (typeof cities)[0]) => c.vhUnits + c.mkUnits + c.hardwareUnits;
 
   return (
     <div className="space-y-8 pb-28 sm:space-y-10" data-testid="page-analytics">
@@ -85,6 +87,43 @@ export default function AnalyticsPage() {
             </Button>
           </div>
         </div>
+      </section>
+
+      <section className="space-y-4" data-testid="section-analytics-plan-summary">
+        <h2 className="text-lg font-semibold text-foreground sm:text-xl">План месяца по линейкам</h2>
+        <p className="text-sm text-muted-foreground">Период: {planSummary.periodLabel}. МК и ВХ — в штуках, фурнитура — в обороте (₽).</p>
+        <div className="grid min-w-0 gap-3 sm:grid-cols-3">
+          <Card className="rounded-2xl border border-border/80 bg-card shadow-md">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">МК</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-semibold tabular-nums text-foreground">{formatPercent(planSummary.mkCompletionPercent)}</p>
+              <p className="mt-1 text-xs text-muted-foreground">выполнение плана, шт.</p>
+            </CardContent>
+          </Card>
+          <Card className="rounded-2xl border border-border/80 bg-card shadow-md">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">ВХ</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-semibold tabular-nums text-foreground">{formatPercent(planSummary.vhCompletionPercent)}</p>
+              <p className="mt-1 text-xs text-muted-foreground">выполнение плана, шт.</p>
+            </CardContent>
+          </Card>
+          <Card className="rounded-2xl border border-border/80 bg-card shadow-md">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Фурнитура</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-semibold tabular-nums text-foreground">{formatPercent(planSummary.hardwareCompletionPercent)}</p>
+              <p className="mt-1 text-xs text-muted-foreground">выполнение плана, оборот</p>
+            </CardContent>
+          </Card>
+        </div>
+        <Button asChild variant="outline" className="min-h-10 border-border bg-card font-semibold">
+          <Link href="/main">К главному</Link>
+        </Button>
       </section>
 
       <section className="space-y-4" data-testid="section-analytics-filters">
@@ -252,12 +291,7 @@ export default function AnalyticsPage() {
       <section className="space-y-4" data-testid="section-analytics-city-breakdown">
         <h2 className="text-lg font-semibold text-foreground sm:text-xl">Населённые пункты</h2>
         <div className="grid gap-3 sm:grid-cols-2">
-          {cities.map((c) => {
-            const u = totalUnitsCity(c);
-            const vhPct = Math.round((c.vhUnits / u) * 100);
-            const mkPct = Math.round((c.mkUnits / u) * 100);
-            const hwPct = 100 - vhPct - mkPct;
-            return (
+          {cities.map((c) => (
               <Card
                 key={c.cityId}
                 className="min-w-0 rounded-2xl border border-border/80 bg-card shadow-md"
@@ -278,28 +312,28 @@ export default function AnalyticsPage() {
                     </Badge>
                   </div>
                   <p>
-                    <span className="text-muted-foreground">Продажи:</span>{" "}
+                    <span className="text-muted-foreground">Общий оборот по городу:</span>{" "}
                     <span className="font-semibold text-foreground">{formatCompactRub(c.salesRub)}</span>
                   </p>
                   <p>
                     <span className="text-muted-foreground">Клиентов:</span>{" "}
                     <span className="font-semibold tabular-nums text-foreground">{c.clientCount}</span>
                   </p>
-                  <div className="space-y-1">
-                    <p className="text-xs font-medium text-muted-foreground">ВХ / МК / фурнитура (штуки)</p>
-                    <div className="flex h-2 w-full overflow-hidden rounded-full bg-muted">
-                      <div className="bg-primary" style={{ width: `${vhPct}%` }} title="ВХ" />
-                      <div className="bg-primary/60" style={{ width: `${mkPct}%` }} title="МК" />
-                      <div className="bg-primary/30" style={{ width: `${Math.max(0, hwPct)}%` }} title="Фурнитура" />
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      ВХ {c.vhUnits} · МК {c.mkUnits} · фурнитура {c.hardwareUnits}
+                  <div className="space-y-1.5 rounded-lg border border-border/60 bg-muted/15 p-3">
+                    <p className="text-xs font-medium text-muted-foreground">Структура (разные единицы)</p>
+                    <p className="tabular-nums text-foreground">
+                      ВХ: <span className="font-semibold">{formatUnits(c.vhUnits)}</span>
+                    </p>
+                    <p className="tabular-nums text-foreground">
+                      МК: <span className="font-semibold">{formatUnits(c.mkUnits)}</span>
+                    </p>
+                    <p className="tabular-nums text-foreground">
+                      Фурнитура (оборот): <span className="font-semibold">{formatCompactRub(c.hardwareTurnoverRub)}</span>
                     </p>
                   </div>
                 </CardContent>
               </Card>
-            );
-          })}
+            ))}
         </div>
       </section>
 
@@ -330,28 +364,33 @@ export default function AnalyticsPage() {
 
       <section className="space-y-4" data-testid="section-analytics-product-categories">
         <h2 className="text-lg font-semibold text-foreground sm:text-xl">ВХ · МК · Фурнитура</h2>
+        <p className="text-sm text-muted-foreground">ВХ и МК — план и факт в штуках; фурнитура — план и факт в обороте (₽).</p>
         <div className="grid gap-3 sm:grid-cols-3">
           {productCats.map((p) => (
             <Card key={p.line} className="rounded-2xl border border-border/80 bg-card shadow-md">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">{p.line}</CardTitle>
+                <p className="text-xs text-muted-foreground">{p.metric === "units" ? "Учёт: шт." : "Учёт: оборот, ₽"}</p>
               </CardHeader>
               <CardContent className="space-y-2 text-sm text-muted-foreground">
                 <p>
-                  Продажи: <span className="font-semibold text-foreground">{formatCompactRub(p.salesRub)}</span>
+                  План:{" "}
+                  <span className="font-semibold text-foreground">
+                    {p.metric === "units" ? formatUnits(p.plan) : formatCompactRub(p.plan)}
+                  </span>
                 </p>
                 <p>
-                  Штуки: <span className="font-semibold tabular-nums text-foreground">{p.units.toLocaleString("ru-RU")}</span>
-                </p>
-                <p>
-                  План: {formatCompactRub(p.planRub)} · Факт: {formatCompactRub(p.factRub)}
+                  Факт:{" "}
+                  <span className="font-semibold text-foreground">
+                    {p.metric === "units" ? formatUnits(p.fact) : formatCompactRub(p.fact)}
+                  </span>
                 </p>
                 <p className={cn("font-medium", toneForChange(p.changeVsPrevPercent))}>
                   Динамика: {p.changeVsPrevPercent > 0 ? "+" : ""}
                   {p.changeVsPrevPercent}%
                 </p>
                 <p>
-                  Конверсия в заказе: <span className="font-semibold text-foreground">{p.conversionPercent}%</span>
+                  Конверсия в заказе: <span className="font-semibold text-foreground">{formatPercent(p.conversionPercent)}</span>
                 </p>
               </CardContent>
             </Card>
@@ -379,14 +418,18 @@ export default function AnalyticsPage() {
                 </CardHeader>
                 <CardContent className="space-y-1 text-sm text-muted-foreground">
                   <p>
-                    По территории: <span className="font-semibold text-foreground">{formatCompactRub(p.territorySalesRub)}</span>
+                    Оборот по территории: <span className="font-semibold text-foreground">{formatCompactRub(p.territorySalesRub)}</span>
                   </p>
                   <p>
-                    По городу (срез): <span className="font-semibold text-foreground">{formatCompactRub(p.citySalesRub)}</span>
+                    Оборот по городу (срез): <span className="font-semibold text-foreground">{formatCompactRub(p.citySalesRub)}</span>
                   </p>
-                  <p className="tabular-nums">
-                    Штуки: <span className="font-semibold text-foreground">{p.units}</span> · вклад ~{p.contributionPercent}%
-                  </p>
+                  {p.territoryUnits != null && p.cityUnits != null ? (
+                    <p className="tabular-nums">
+                      Отбор в штуках: <span className="font-semibold text-foreground">{formatUnits(p.territoryUnits)}</span> по
+                      территории, <span className="font-semibold text-foreground">{formatUnits(p.cityUnits)}</span> по городу
+                    </p>
+                  ) : null}
+                  <p className="tabular-nums">Вклад в результат: ~{p.contributionPercent}%</p>
                 </CardContent>
               </Card>
             ))}

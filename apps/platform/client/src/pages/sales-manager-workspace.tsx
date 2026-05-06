@@ -31,16 +31,24 @@ import {
   ORDER_STATUS_TONE,
 } from "@/lib/order-data";
 import {
-  categoryTestId,
-  formatRub,
-  getManagerCategoryKpis,
-  getManagerGrossSales,
-  getManagerHardwareConversion,
-  getManagerMonthlyKpi,
-  getManagerMonthTasks,
-  getManagerRanking,
-  type ManagerCategoryKpi,
-  type ManagerMonthTask,
+  currentMonthPeriodLabel,
+  formatMoney,
+  formatPercent,
+  formatUnits,
+  getManagerPerformanceInsights,
+  getManagerYearScenarios,
+  getMonthOverMonthComparisons,
+  getSalesPlanMetrics,
+  getTrendColorClass,
+  getTrendLabel,
+  getYearForecastSummary,
+  getYearOverYearComparisons,
+  planCompletionPercent,
+  remainingToPlan,
+  scenarioLineCompletion,
+  type ManagerYearScenario,
+  type SalesPlanComparison,
+  type SalesPlanMetric,
 } from "@/lib/sales-manager-kpi-data";
 
 function statusBadgeClass(status: DealerRow["status"]) {
@@ -68,27 +76,163 @@ function priorityBadgeClass(p: MatrixTaskWithContext["priority"]) {
   return "border-border bg-muted text-muted-foreground";
 }
 
-function planStatusBadgeClass(s: ManagerCategoryKpi["status"] | ReturnType<typeof getManagerMonthlyKpi>["status"]) {
-  if (s === "риск") return "border-red-200 bg-red-50 text-red-900";
-  if (s === "требует внимания") return "border-amber-200 bg-amber-50 text-amber-950";
-  return "border-emerald-200 bg-emerald-50 text-emerald-900";
+function formatDelta(c: SalesPlanComparison): string {
+  if (c.unit === "money") {
+    const sign = c.absoluteDelta >= 0 ? "+" : "−";
+    const v = Math.abs(c.absoluteDelta);
+    return `${sign}${formatMoney(v)}`;
+  }
+  const sign = c.absoluteDelta >= 0 ? "+" : "−";
+  return `${sign}${formatUnits(Math.abs(c.absoluteDelta))}`;
 }
 
-function monthTaskStatusClass(s: ManagerMonthTask["status"]) {
-  if (s === "выполнена") return "border-emerald-200 bg-emerald-50 text-emerald-900";
-  if (s === "в работе") return "border-primary/30 bg-primary/10 text-foreground";
-  if (s === "ожидает") return "border-amber-200 bg-amber-50 text-amber-950";
-  return "border-border bg-muted text-muted-foreground";
+function PlanMonthCard({
+  metric,
+  testId,
+  title,
+}: {
+  metric: SalesPlanMetric;
+  testId: string;
+  title: string;
+}) {
+  const pct = planCompletionPercent(metric.monthPlan, metric.monthFact);
+  const rem = remainingToPlan(metric.monthPlan, metric.monthFact);
+  const isUnits = metric.unit === "units";
+  return (
+    <Card className="min-w-0 rounded-2xl border border-border/80 bg-card shadow-md" data-testid={testId}>
+      <CardHeader className="space-y-1 pb-2">
+        <CardTitle className="text-base">{title}</CardTitle>
+        <p className="text-xs text-muted-foreground">{isUnits ? "Учёт в штуках" : "Учёт в обороте, ₽"}</p>
+      </CardHeader>
+      <CardContent className="space-y-3 text-sm text-muted-foreground">
+        <div className="grid gap-2 sm:grid-cols-2">
+          <p>
+            План месяца:{" "}
+            <span className="font-semibold text-foreground">{isUnits ? formatUnits(metric.monthPlan) : formatMoney(metric.monthPlan)}</span>
+          </p>
+          <p>
+            Факт на сегодня:{" "}
+            <span className="font-semibold text-foreground">{isUnits ? formatUnits(metric.monthFact) : formatMoney(metric.monthFact)}</span>
+          </p>
+          <p className="sm:col-span-2">
+            Прогноз на конец месяца:{" "}
+            <span className="font-semibold text-foreground">
+              {isUnits ? formatUnits(metric.monthForecast) : formatMoney(metric.monthForecast)}
+            </span>
+          </p>
+        </div>
+        <div>
+          <div className="mb-1 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <span>Выполнение</span>
+            <span className="font-semibold tabular-nums text-foreground">{formatPercent(pct)}</span>
+          </div>
+          <div className="h-2 w-full max-w-full overflow-hidden rounded-full bg-muted">
+            <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+          </div>
+        </div>
+        <p>
+          Осталось до плана:{" "}
+          <span className="font-semibold text-foreground">{isUnits ? formatUnits(rem) : formatMoney(rem)}</span>
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ComparisonRows({ rows }: { rows: SalesPlanComparison[] }) {
+  return (
+    <div className="space-y-4">
+      {rows.map((c) => (
+        <div
+          key={c.category}
+          className="flex flex-col gap-2 rounded-xl border border-border/60 bg-background/50 px-3 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"
+        >
+          <div className="min-w-0">
+            <p className="font-semibold text-foreground">{c.label}</p>
+            <p className="text-xs text-muted-foreground">{c.unit === "units" ? "Штуки" : "Оборот, ₽"}</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-muted-foreground">Сейчас:</span>
+            <span className="font-semibold tabular-nums text-foreground">
+              {c.unit === "units" ? formatUnits(c.currentValue) : formatMoney(c.currentValue)}
+            </span>
+            <span className="text-muted-foreground">· было:</span>
+            <span className="tabular-nums text-foreground">
+              {c.unit === "units" ? formatUnits(c.previousValue) : formatMoney(c.previousValue)}
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className={cn("text-xs font-semibold", getTrendColorClass(c.trend))}>
+              {getTrendLabel(c.trend)}
+            </Badge>
+            <span className={cn("text-sm font-semibold tabular-nums", getTrendColorClass(c.trend))}>
+              {formatDelta(c)} ({c.percentDelta > 0 ? "+" : ""}
+              {String(c.percentDelta).replace(".", ",")}%)
+            </span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function YearScenarioCard({ s }: { s: ManagerYearScenario }) {
+  const testId =
+    s.scenario === "pessimistic"
+      ? "card-manager-year-plan-pessimistic"
+      : s.scenario === "optimal"
+        ? "card-manager-year-plan-optimal"
+        : "card-manager-year-plan-optimistic";
+  const mkPct = scenarioLineCompletion(s.mkPlanUnits, s.mkForecastUnits);
+  const vhPct = scenarioLineCompletion(s.vhPlanUnits, s.vhForecastUnits);
+  const hwPct = scenarioLineCompletion(s.hardwarePlanMoney, s.hardwareForecastMoney);
+  return (
+    <Card className="min-w-0 rounded-2xl border border-border/80 bg-card shadow-md" data-testid={testId}>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">{s.label}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4 text-sm text-muted-foreground">
+        <div className="space-y-2 rounded-lg border border-border/50 bg-muted/20 p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-foreground">Годовой план</p>
+          <p>МК: <span className="font-semibold text-foreground">{formatUnits(s.mkPlanUnits)}</span></p>
+          <p>ВХ: <span className="font-semibold text-foreground">{formatUnits(s.vhPlanUnits)}</span></p>
+          <p>Фурнитура: <span className="font-semibold text-foreground">{formatMoney(s.hardwarePlanMoney)}</span></p>
+        </div>
+        <div className="space-y-2 rounded-lg border border-border/50 bg-background/80 p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-foreground">Факт с начала года</p>
+          <p>МК: <span className="font-semibold text-foreground">{formatUnits(s.mkFactUnits)}</span></p>
+          <p>ВХ: <span className="font-semibold text-foreground">{formatUnits(s.vhFactUnits)}</span></p>
+          <p>Фурнитура: <span className="font-semibold text-foreground">{formatMoney(s.hardwareFactMoney)}</span></p>
+        </div>
+        <div className="space-y-2 rounded-lg border border-border/50 bg-background/80 p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-foreground">Прогноз на конец года</p>
+          <p>МК: <span className="font-semibold text-foreground">{formatUnits(s.mkForecastUnits)}</span></p>
+          <p>ВХ: <span className="font-semibold text-foreground">{formatUnits(s.vhForecastUnits)}</span></p>
+          <p>Фурнитура: <span className="font-semibold text-foreground">{formatMoney(s.hardwareForecastMoney)}</span></p>
+        </div>
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-foreground">Прогноз к сценарию</p>
+          <p className="tabular-nums">МК: {formatPercent(mkPct)} выполнения</p>
+          <p className="tabular-nums">ВХ: {formatPercent(vhPct)} выполнения</p>
+          <p className="tabular-nums">Фурнитура: {formatPercent(hwPct)} выполнения</p>
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function SalesManagerWorkspace() {
   const kpis = useMemo(() => getWorkspaceKpis(), []);
-  const monthly = useMemo(() => getManagerMonthlyKpi(), []);
-  const gross = useMemo(() => getManagerGrossSales(), []);
-  const categories = useMemo(() => getManagerCategoryKpis(), []);
-  const hardwareConv = useMemo(() => getManagerHardwareConversion(), []);
-  const ranking = useMemo(() => getManagerRanking(), []);
-  const monthTasks = useMemo(() => getManagerMonthTasks(), []);
+  const planMetrics = useMemo(() => getSalesPlanMetrics(), []);
+  const mom = useMemo(() => getMonthOverMonthComparisons(), []);
+  const yoy = useMemo(() => getYearOverYearComparisons(), []);
+  const yearScenarios = useMemo(() => getManagerYearScenarios(), []);
+  const yearSummary = useMemo(() => getYearForecastSummary(), []);
+  const insights = useMemo(() => getManagerPerformanceInsights(), []);
+  const mkMetric = planMetrics.find((m) => m.category === "mk")!;
+  const vhMetric = planMetrics.find((m) => m.category === "vh")!;
+  const hwMetric = planMetrics.find((m) => m.category === "hardware")!;
+
   const myDealers = useMemo(() => getMyDealers(), []);
   const tasks = useMemo(() => getSalesManagerMatrixTasks().slice(0, 12), []);
   const focusProducts = useMemo(() => getFocusProducts(8), []);
@@ -104,9 +248,9 @@ export default function SalesManagerWorkspace() {
         <div className="pointer-events-none absolute left-0 top-0 h-full w-1 rounded-l-2xl bg-primary" aria-hidden />
         <div className="relative space-y-4 pl-3 sm:pl-4">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Кабинет менеджера</h1>
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Главное</h1>
             <p className="mt-1 max-w-2xl text-sm text-muted-foreground sm:text-base">
-              План месяца, продажи по линейкам, партнёры и задачи: где вы по плану, что дожать и что сделать сегодня.
+              Выполнение плана месяца по МК, ВХ и фурнитуре, сравнение с прошлыми периодами и прогноз относительно годовых сценариев.
             </p>
           </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -144,252 +288,79 @@ export default function SalesManagerWorkspace() {
         </div>
       </section>
 
-      <section className="space-y-4" data-testid="section-sales-manager-month-kpi">
-        <div className="flex flex-wrap items-end justify-between gap-2">
-          <div>
-            <h2 className="text-lg font-semibold text-foreground sm:text-xl">План и факт месяца</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Период: {monthly.periodLabel}</p>
-          </div>
-          <Badge variant="outline" className={cn("text-xs font-semibold", planStatusBadgeClass(monthly.status))}>
-            {monthly.status}
-          </Badge>
+      <section className="space-y-4" data-testid="section-manager-month-plan">
+        <div>
+          <h2 className="text-lg font-semibold text-foreground sm:text-xl">План месяца</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Период: {currentMonthPeriodLabel()}</p>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Card className="rounded-2xl border border-border/80 bg-card shadow-md" data-testid="card-manager-kpi-plan">
+        <div className="grid min-w-0 gap-3 lg:grid-cols-3">
+          <PlanMonthCard metric={mkMetric} testId="card-manager-plan-mk" title="МК, шт." />
+          <PlanMonthCard metric={vhMetric} testId="card-manager-plan-vh" title="ВХ, шт." />
+          <PlanMonthCard metric={hwMetric} testId="card-manager-plan-hardware" title="Фурнитура, ₽" />
+        </div>
+      </section>
+
+      <section className="space-y-4" data-testid="section-manager-period-comparison">
+        <h2 className="text-lg font-semibold text-foreground sm:text-xl">Сравнение периодов</h2>
+        <div className="grid min-w-0 gap-3 lg:grid-cols-2">
+          <Card className="min-w-0 rounded-2xl border border-border/80 bg-card shadow-md" data-testid="card-manager-mom-comparison">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">План месяца</CardTitle>
+              <CardTitle className="text-base">Месяц к месяцу</CardTitle>
+              <p className="text-sm text-muted-foreground">Текущий месяц (факт) к факту прошлого месяца</p>
             </CardHeader>
             <CardContent>
-              <p className="text-xl font-semibold tabular-nums text-foreground sm:text-2xl">{formatRub(monthly.planRub)}</p>
-              <p className="mt-2 text-xs text-muted-foreground">Целевой объём отгрузок по зоне</p>
+              <ComparisonRows rows={mom} />
             </CardContent>
           </Card>
-          <Card className="rounded-2xl border border-border/80 bg-card shadow-md" data-testid="card-manager-kpi-fact">
+          <Card className="min-w-0 rounded-2xl border border-border/80 bg-card shadow-md" data-testid="card-manager-yoy-comparison">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Факт на сегодня</CardTitle>
+              <CardTitle className="text-base">Год к году</CardTitle>
+              <p className="text-sm text-muted-foreground">Факт текущего месяца к аналогичному периоду прошлого года</p>
             </CardHeader>
             <CardContent>
-              <p className="text-xl font-semibold tabular-nums text-foreground sm:text-2xl">{formatRub(monthly.factRub)}</p>
-              <p className="mt-2 text-xs text-muted-foreground">Подтверждённые отгрузки</p>
-            </CardContent>
-          </Card>
-          <Card className="rounded-2xl border border-border/80 bg-card shadow-md" data-testid="card-manager-kpi-forecast">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Прогноз месяца</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-xl font-semibold tabular-nums text-foreground sm:text-2xl">{formatRub(monthly.forecastRub)}</p>
-              <p className="mt-2 text-xs text-muted-foreground">По текущему темпу и воронке</p>
-            </CardContent>
-          </Card>
-          <Card className="rounded-2xl border border-border/80 bg-card shadow-md" data-testid="card-manager-kpi-completion">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Выполнение</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-xl font-semibold tabular-nums text-foreground sm:text-2xl">{monthly.completionPercent}%</p>
-              <p className="mt-2 text-xs text-muted-foreground">
-                До плана осталось: <span className="font-semibold text-foreground">{formatRub(monthly.remainingToPlanRub)}</span>
-              </p>
+              <ComparisonRows rows={yoy} />
             </CardContent>
           </Card>
         </div>
       </section>
 
-      <section className="space-y-4" data-testid="section-sales-manager-gross-sales">
-        <h2 className="text-lg font-semibold text-foreground sm:text-xl">Валовая выручка</h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Card className="rounded-2xl border border-border/80 bg-card shadow-md" data-testid="card-manager-gross-money">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">В деньгах</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-xl font-semibold tabular-nums text-foreground sm:text-2xl">{formatRub(gross.grossRub)}</p>
-              <p className={cn("mt-2 text-xs font-medium", gross.vsPrevMonthPercent >= 0 ? "text-emerald-700" : "text-red-700")}>
-                к прошлому месяцу: {gross.vsPrevMonthPercent > 0 ? "+" : ""}
-                {gross.vsPrevMonthPercent}%
-              </p>
-            </CardContent>
-          </Card>
-          <Card className="rounded-2xl border border-border/80 bg-card shadow-md" data-testid="card-manager-gross-units">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">В штуках</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-xl font-semibold tabular-nums text-foreground sm:text-2xl">{gross.units.toLocaleString("ru-RU")}</p>
-              <p className="mt-2 text-xs text-muted-foreground">Отгружено позиций по зоне</p>
-            </CardContent>
-          </Card>
-          <Card className="rounded-2xl border border-border/80 bg-card shadow-md" data-testid="card-manager-average-order">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Средний заказ</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-xl font-semibold tabular-nums text-foreground sm:text-2xl">{formatRub(gross.avgOrderRub)}</p>
-            </CardContent>
-          </Card>
-          <Card className="rounded-2xl border border-border/80 bg-card shadow-md" data-testid="card-manager-active-partners">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Активные клиенты</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-xl font-semibold tabular-nums text-foreground sm:text-2xl">{gross.activePartners}</p>
-              <p className="mt-2 text-xs text-muted-foreground">С отгрузками в текущем периоде</p>
-            </CardContent>
-          </Card>
-        </div>
-      </section>
-
-      <section className="space-y-4" data-testid="section-sales-manager-category-breakdown">
-        <h2 className="text-lg font-semibold text-foreground sm:text-xl">Разбивка по категориям</h2>
-        <div className="grid gap-3 sm:grid-cols-3">
-          {categories.map((c) => (
-            <Card
-              key={c.line}
-              className="rounded-2xl border border-border/80 bg-card shadow-md"
-              data-testid={categoryTestId(c.line)}
-            >
-              <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2 space-y-0 pb-2">
-                <CardTitle className="text-base">{c.line}</CardTitle>
-                <Badge variant="outline" className={cn("text-[11px] font-semibold", planStatusBadgeClass(c.status))}>
-                  {c.status}
-                </Badge>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm text-muted-foreground">
-                <p>
-                  План: <span className="font-semibold text-foreground">{formatRub(c.planRub)}</span>
-                </p>
-                <p>
-                  Факт: <span className="font-semibold text-foreground">{formatRub(c.factRub)}</span>
-                </p>
-                <p>
-                  Прогноз: <span className="font-semibold text-foreground">{formatRub(c.forecastRub)}</span>
-                </p>
-                <p className="tabular-nums">
-                  Выполнение: <span className="font-semibold text-foreground">{c.completionPercent}%</span>
-                </p>
-                <p className="tabular-nums">
-                  Штуки: <span className="font-semibold text-foreground">{c.units.toLocaleString("ru-RU")}</span>
-                </p>
-                <p>
-                  Валовка: <span className="font-semibold text-foreground">{formatRub(c.grossRub)}</span>
-                </p>
-              </CardContent>
-            </Card>
+      <section className="space-y-4" data-testid="section-manager-year-plan">
+        <h2 className="text-lg font-semibold text-foreground sm:text-xl">Годовой план и прогноз</h2>
+        <p className="max-w-3xl text-sm text-muted-foreground">
+          Три сценария отдела продаж и текущий прогноз на конец года. Проценты — насколько прогноз закрывает годовой план выбранного сценария.
+        </p>
+        <div className="grid min-w-0 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {yearScenarios.map((s) => (
+            <YearScenarioCard key={s.scenario} s={s} />
           ))}
         </div>
-      </section>
-
-      <section className="space-y-3" data-testid="section-sales-manager-hardware-conversion">
-        <h2 className="text-lg font-semibold text-foreground sm:text-xl">Конверсия по фурнитуре</h2>
-        <Card className="rounded-2xl border border-border/80 bg-card shadow-md" data-testid="card-manager-hardware-conversion">
-          <CardContent className="grid gap-4 p-4 sm:grid-cols-2 sm:p-5 lg:grid-cols-4">
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Доля заказов с фурнитурой</p>
-              <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{hardwareConv.ordersWithHardwareSharePercent}%</p>
-            </div>
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Конверсия клиентов</p>
-              <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{hardwareConv.clientConversionPercent}%</p>
-            </div>
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">План / факт</p>
-              <p className="mt-1 text-sm text-foreground">
-                <span className="font-semibold tabular-nums">{hardwareConv.plannedConversionPercent}%</span>
-                {" → "}
-                <span className="font-semibold tabular-nums">{hardwareConv.actualConversionPercent}%</span>
-              </p>
-              <p className={cn("mt-1 text-xs font-medium", hardwareConv.diffPercent < 0 ? "text-red-700" : "text-emerald-700")}>
-                Разница: {hardwareConv.diffPercent > 0 ? "+" : ""}
-                {hardwareConv.diffPercent} п.п.
-              </p>
-            </div>
-            <div className="rounded-xl border border-dashed border-border bg-muted/30 p-3 text-sm text-muted-foreground sm:col-span-2 lg:col-span-1">
-              {hardwareConv.hint}
-            </div>
+        <Card className="rounded-2xl border border-primary/25 bg-primary/5 shadow-md" data-testid="card-manager-year-forecast-summary">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Сводка по прогнозу</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm text-muted-foreground">
+            <p>
+              <span className="font-medium text-foreground">Позиция по сценариям:</span> {yearSummary.bandDescription}
+            </p>
+            <p>
+              <span className="font-medium text-foreground">До оптимального сценария:</span> {yearSummary.gapToOptimalDescription}
+            </p>
+            <p className="rounded-lg border border-dashed border-border bg-card/80 p-3 text-foreground">{yearSummary.managerHint}</p>
           </CardContent>
         </Card>
       </section>
 
-      <section className="space-y-4" data-testid="section-sales-manager-ranking">
-        <h2 className="text-lg font-semibold text-foreground sm:text-xl">Личный рейтинг</h2>
-        <div className="grid gap-3 lg:grid-cols-2">
-          <Card className="rounded-2xl border border-border/80 bg-card shadow-md" data-testid="card-manager-personal-ranking">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Ваше место</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm text-muted-foreground">
-              <p className="text-3xl font-semibold tabular-nums text-foreground">
-                {ranking.place} <span className="text-lg font-normal text-muted-foreground">/ {ranking.totalManagers}</span>
-              </p>
-              <p>
-                <span className="font-medium text-foreground">{ranking.metricLabel}:</span>{" "}
-                <span className="font-semibold tabular-nums text-foreground">{ranking.ownScore}%</span>
-              </p>
-              {ranking.gapToNextAbove != null ? (
-                <p>
-                  До следующего места: <span className="font-semibold text-foreground">{ranking.gapToNextAbove} п.п.</span>
-                </p>
-              ) : null}
-              {ranking.gapToNextBelow != null ? (
-                <p>
-                  Преимущество над следующим: <span className="font-semibold text-foreground">{ranking.gapToNextBelow} п.п.</span>
-                </p>
-              ) : null}
-            </CardContent>
-          </Card>
-          <Card className="rounded-2xl border border-border/80 bg-card shadow-md">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Топ-3 менеджеров</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ol className="list-decimal space-y-2 pl-5 text-sm text-muted-foreground" data-testid="list-manager-ranking-top">
-                {ranking.topThree.map((p) => (
-                  <li key={p.place}>
-                    <span className="font-medium text-foreground">{p.name}</span> — {p.scoreLabel}{" "}
-                    <span className="tabular-nums font-semibold text-foreground">{p.scoreValue}%</span>
-                  </li>
-                ))}
-              </ol>
-            </CardContent>
-          </Card>
-        </div>
-      </section>
-
-      <section className="space-y-4" data-testid="section-sales-manager-month-tasks">
-        <h2 className="text-lg font-semibold text-foreground sm:text-xl">Задачи месяца под KPI</h2>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {monthTasks.map((t) => (
+      <section className="space-y-4" data-testid="section-manager-performance-insights">
+        <h2 className="text-lg font-semibold text-foreground sm:text-xl">Подсказки по выполнению</h2>
+        <div className="grid min-w-0 gap-3 md:grid-cols-3">
+          {insights.map((ins, i) => (
             <Card
-              key={t.taskId}
-              className="rounded-2xl border border-border/80 bg-card shadow-md"
-              data-testid={`card-manager-month-task-${t.taskId}`}
+              key={ins.id}
+              className="min-w-0 rounded-2xl border border-border/80 bg-card shadow-md"
+              data-testid={`card-manager-insight-${i + 1}`}
             >
-              <CardHeader className="space-y-2 pb-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <CardTitle className="text-base leading-snug">{t.title}</CardTitle>
-                  <Badge variant="outline" className={cn("text-xs font-semibold", monthTaskStatusClass(t.status))}>
-                    {t.status}
-                  </Badge>
-                </div>
-                <p className="text-xs text-muted-foreground">Срок: {t.deadline}</p>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm text-muted-foreground">
-                <div>
-                  <div className="mb-1 flex justify-between text-xs">
-                    <span>Прогресс</span>
-                    <span className="tabular-nums font-medium text-foreground">{t.progressPercent}%</span>
-                  </div>
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                    <div className="h-full rounded-full bg-primary" style={{ width: `${t.progressPercent}%` }} />
-                  </div>
-                </div>
-                <p>
-                  <span className="font-medium text-foreground">Влияние на KPI:</span> {t.kpiImpact}
-                </p>
-                <p>
-                  <span className="font-medium text-foreground">Связь:</span> {t.relatedLabel}
-                </p>
+              <CardContent className="p-4 text-sm text-muted-foreground">
+                <p className="leading-relaxed text-foreground">{ins.text}</p>
               </CardContent>
             </Card>
           ))}
