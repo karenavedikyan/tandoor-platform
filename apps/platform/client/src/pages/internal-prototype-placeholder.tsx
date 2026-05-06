@@ -9,7 +9,6 @@ const TITLE_BY_PATH: Record<string, string> = {
   "/regional-manager/workspace": "ЛК регионального менеджера",
   "/dealers": "Дилеры",
   "/catalog": "Каталог",
-  "/orders": "Заказы",
   "/claims": "Рекламации",
   "/events": "События",
   "/import": "Импорт клиентской базы",

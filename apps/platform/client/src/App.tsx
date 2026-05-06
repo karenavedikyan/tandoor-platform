@@ -13,7 +13,8 @@ import CatalogPage from "@/pages/catalog";
 import { ProductDetailPage } from "@/pages/product-detail";
 import SalesManagerWorkspace from "@/pages/sales-manager-workspace";
 import TasksPage from "@/pages/tasks";
-import { OrderDetailPage } from "@/pages/order-detail";
+import OrdersPage from "@/pages/orders";
+import OrderDetailPage from "@/pages/order-detail";
 import PreviewUnavailable from "@/pages/preview-unavailable";
 import InternalPrototypePlaceholder from "@/pages/internal-prototype-placeholder";
 import { INTERNAL_PROTOTYPE_ROUTES } from "@/lib/preview-config";
@@ -22,13 +23,15 @@ function AppRouter() {
   return (
     <AppShell>
       <Switch>
-        <Route path="/" component={DealerBase} />
+        <Route path="/" component={SalesManagerWorkspace} />
+        <Route path="/main" component={SalesManagerWorkspace} />
+        <Route path="/sales-manager" component={SalesManagerWorkspace} />
         <Route path="/dealer-base" component={DealerBase} />
         <Route path="/catalog/:productId" component={ProductDetailPage} />
         <Route path="/catalog" component={CatalogPage} />
-        <Route path="/sales-manager" component={SalesManagerWorkspace} />
         <Route path="/tasks" component={TasksPage} />
         <Route path="/orders/:orderId" component={OrderDetailPage} />
+        <Route path="/orders" component={OrdersPage} />
         <Route path="/dealers/:dealerId/trade-points/:pointId" component={TradePointDetailPage} />
         <Route path="/dealers/:id" component={DealerCardPage} />
         <Route path="/dealer-card-foundation" component={DealerCardFoundation} />

@@ -44,7 +44,6 @@ export const INTERNAL_PROTOTYPE_ROUTES: readonly string[] = [
   "/regional-manager/workspace",
   "/dealers",
   "/catalog",
-  "/orders",
   "/claims",
   "/events",
   "/import",

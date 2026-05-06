@@ -22,8 +22,8 @@ import {
 function OrderNotFound() {
   return (
     <div className="mx-auto max-w-md space-y-6 py-8" data-testid="page-order-not-found">
-      <Button asChild variant="outline" className="min-h-11 w-full border-border bg-card" data-testid="button-back-to-sales-manager">
-        <Link href="/sales-manager">К кабинету менеджера</Link>
+      <Button asChild variant="outline" className="min-h-11 w-full border-border bg-card" data-testid="button-back-to-main">
+        <Link href="/main">К главному</Link>
       </Button>
       <Card className="rounded-2xl border border-border bg-card shadow-md">
         <CardHeader>
@@ -76,9 +76,9 @@ function OrderDetailContent({ order }: { order: OrderRow }) {
           asChild
           variant="outline"
           className="min-h-11 w-full border-border bg-card sm:w-auto"
-          data-testid="button-back-to-sales-manager"
+          data-testid="button-back-to-main"
         >
-          <Link href="/sales-manager">К кабинету менеджера</Link>
+          <Link href="/main">К главному</Link>
         </Button>
         <Button
           asChild
@@ -103,8 +103,8 @@ function OrderDetailContent({ order }: { order: OrderRow }) {
       </div>
 
       <nav className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground sm:text-sm" aria-label="Навигация">
-        <Link href="/sales-manager" className="font-medium text-foreground underline-offset-4 hover:underline">
-          Кабинет менеджера
+        <Link href="/main" className="font-medium text-foreground underline-offset-4 hover:underline">
+          Главное
         </Link>
         <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-60" aria-hidden />
         <Link href={`/dealers/${order.dealerId}`} className="font-medium text-foreground underline-offset-4 hover:underline">
@@ -419,12 +419,7 @@ function OrderDetailContent({ order }: { order: OrderRow }) {
         </Card>
       </section>
 
-      <FloatingBackButton
-        href="/sales-manager"
-        label="К кабинету менеджера"
-        testId="floating-back-to-sales-manager"
-        ariaLabel="Назад к кабинету менеджера"
-      />
+      <FloatingBackButton href="/main" label="К главному" testId="floating-back-to-main" ariaLabel="К главному экрану" />
     </div>
   );
 }

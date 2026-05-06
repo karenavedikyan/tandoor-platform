@@ -518,3 +518,54 @@ export const ORDER_FLAG_TONE: Record<OrderAttentionFlag, string> = {
   "связан с матрицей": "border-sky-200 bg-sky-50 text-sky-950",
   "связан с витриной": "border-sky-200 bg-sky-50 text-sky-950",
 };
+
+/** Быстрые фильтры журнала заказов на `/orders`. */
+export type OrdersQuickFilter = "all" | "new" | "payment" | "shipment" | "attention";
+
+export function orderAwaitingConfirmation(o: OrderRow): boolean {
+  return o.status === "на подтверждении" || o.status === "новый" || o.attentionFlags.includes("на подтверждении");
+}
+
+export function orderPaymentProblem(o: OrderRow): boolean {
+  return o.paymentStatus === "проблема оплаты" || o.attentionFlags.includes("проблема оплаты");
+}
+
+export function orderShipmentProblem(o: OrderRow): boolean {
+  return o.shipmentStatus === "проблема отгрузки" || o.attentionFlags.includes("проблема отгрузки");
+}
+
+export function summarizeOrdersKpis(rows: OrderRow[]) {
+  return {
+    total: rows.length,
+    attention: rows.filter(orderNeedsManagerAttention).length,
+    awaiting: rows.filter(orderAwaitingConfirmation).length,
+    pay: rows.filter(orderPaymentProblem).length,
+    ship: rows.filter(orderShipmentProblem).length,
+  };
+}
+
+export function applyOrdersQuickFilter(rows: OrderRow[], f: OrdersQuickFilter): OrderRow[] {
+  if (f === "all") return rows;
+  if (f === "new") return rows.filter(orderAwaitingConfirmation);
+  if (f === "payment") return rows.filter(orderPaymentProblem);
+  if (f === "shipment") return rows.filter(orderShipmentProblem);
+  return rows.filter(orderNeedsManagerAttention);
+}
+
+export function applyOrdersSearch(rows: OrderRow[], q: string): OrderRow[] {
+  const n = q.trim().toLowerCase();
+  if (!n) return rows;
+  return rows.filter((o) => {
+    if (o.number.toLowerCase().includes(n) || o.id.toLowerCase().includes(n)) return true;
+    if (o.dealerName.toLowerCase().includes(n)) return true;
+    if (o.warehouseName.toLowerCase().includes(n)) return true;
+    if (o.tradePointName?.toLowerCase().includes(n)) return true;
+    if (o.nextAction.toLowerCase().includes(n)) return true;
+    return o.items.some(
+      (it) =>
+        it.productName.toLowerCase().includes(n) ||
+        it.productArticle.toLowerCase().includes(n) ||
+        it.productId.toLowerCase().includes(n),
+    );
+  });
+}
