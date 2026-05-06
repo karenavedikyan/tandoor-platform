@@ -78,15 +78,18 @@ function headerContextLabel(location: string) {
 
 function BrandBlock({ className }: { className?: string }) {
   return (
-    <div className={cn("space-y-2", className)}>
-      <Link href={MAIN_HREF} className="block no-underline">
-        <TandoorLogo className="h-9 w-auto max-w-full object-left lg:h-11" data-testid="brand-logo-tandoor" />
+    <div className={cn("flex flex-col items-start", className)}>
+      <Link href={MAIN_HREF} className="block leading-none no-underline">
+        <TandoorLogo
+          className="h-10 w-auto max-w-full object-contain object-left lg:h-[2.75rem]"
+          data-testid="brand-logo-tandoor"
+        />
       </Link>
-      <p data-testid="text-brand-subtitle" className="text-xs font-medium normal-case tracking-wide text-muted-foreground">
+      <p
+        data-testid="text-brand-subtitle"
+        className="mt-1.5 max-w-full text-[11px] font-medium leading-tight tracking-[0.03em] text-muted-foreground"
+      >
         двери / фурнитура
-      </p>
-      <p data-testid="text-brand-slogan" className="text-sm leading-snug text-muted-foreground">
-        Сравнивая выбирают нас
       </p>
     </div>
   );
@@ -128,11 +131,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen overflow-x-hidden bg-background" data-testid="app-shell-preview">
       <aside
-        className="sticky top-0 z-30 hidden h-screen w-[272px] shrink-0 flex-col border-r border-border/80 bg-card px-4 py-6 shadow-sm lg:flex"
+        className="sticky top-0 z-30 hidden h-screen w-[272px] shrink-0 flex-col border-r border-border/80 bg-card px-4 py-5 shadow-sm lg:flex"
         aria-label="Основная навигация"
       >
-        <BrandBlock className="border-b border-border/60 pb-5" />
-        <div className="flex-1 overflow-y-auto overflow-x-hidden pt-5">
+        <BrandBlock className="border-b border-border/60 pb-4" />
+        <div className="flex-1 overflow-y-auto overflow-x-hidden pt-4">
           <NavLinks location={location} variant="sidebar" data-testid="nav-preview-desktop" />
         </div>
       </aside>
@@ -155,10 +158,10 @@ export function AppShell({ children }: { children: ReactNode }) {
                   </Button>
                 </SheetTrigger>
                 <SheetContent side="left" className="flex w-[min(100vw-2rem,300px)] flex-col gap-0 overflow-y-auto p-0">
-                  <div className="border-b border-border/80 px-5 pb-4 pt-5">
+                  <div className="border-b border-border/80 px-5 pb-3 pt-4">
                     <BrandBlock />
                   </div>
-                  <SheetHeader className="px-5 pt-4 text-left">
+                  <SheetHeader className="px-5 pt-3 text-left">
                     <SheetTitle className="text-left text-base">Разделы</SheetTitle>
                   </SheetHeader>
                   <div className="flex-1 px-5 pb-6 pt-2">
