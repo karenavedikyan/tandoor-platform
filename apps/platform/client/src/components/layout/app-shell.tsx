@@ -12,6 +12,7 @@ const DEALER_BASE_HREF = "/dealer-base";
 const ORDERS_HREF = "/orders";
 const CATALOG_HREF = "/catalog";
 const TASKS_HREF = "/tasks";
+const ANALYTICS_HREF = "/analytics";
 const SALES_MANAGER_HREF = "/sales-manager";
 
 const PREVIEW_NAV = [
@@ -20,6 +21,7 @@ const PREVIEW_NAV = [
   { href: ORDERS_HREF, label: "Заказы", testId: "nav-orders" },
   { href: CATALOG_HREF, label: "Каталог", testId: "nav-catalog" },
   { href: TASKS_HREF, label: "Задачи", testId: "nav-tasks" },
+  { href: ANALYTICS_HREF, label: "Аналитика", testId: "nav-analytics" },
 ] as const;
 
 function isMainPath(path: string) {
@@ -42,6 +44,10 @@ function isTasksPath(path: string) {
   return path === TASKS_HREF || path.startsWith(`${TASKS_HREF}/`);
 }
 
+function isAnalyticsPath(path: string) {
+  return path === ANALYTICS_HREF;
+}
+
 function isNavActive(href: string, location: string, isActiveFromLink?: boolean): boolean {
   if (isActiveFromLink !== undefined) return isActiveFromLink;
   if (href === MAIN_HREF) return isMainPath(location);
@@ -49,6 +55,7 @@ function isNavActive(href: string, location: string, isActiveFromLink?: boolean)
   if (href === ORDERS_HREF) return isOrdersListPath(location);
   if (href === CATALOG_HREF) return isCatalogPath(location);
   if (href === TASKS_HREF) return isTasksPath(location);
+  if (href === ANALYTICS_HREF) return isAnalyticsPath(location);
   return location === href;
 }
 
@@ -72,6 +79,7 @@ function headerContextLabel(location: string) {
   if (location === ORDERS_HREF || location.startsWith(`${ORDERS_HREF}/`)) return "Заказы";
   if (isTasksPath(location)) return "Задачи";
   if (isCatalogPath(location)) return "Каталог";
+  if (isAnalyticsPath(location)) return "Аналитика";
   if (location.startsWith("/dealers/")) return "Карточка клиента";
   return "";
 }

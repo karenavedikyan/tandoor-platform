@@ -15,6 +15,7 @@ import {
   isMatrixTaskDueToday,
   isMatrixTaskOverdue,
   matrixTaskContextHref,
+  SALES_MANAGER_PUBLIC_NAME,
 } from "@/lib/sales-manager-workspace-data";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import {
@@ -29,7 +30,18 @@ import {
   ORDER_SHIPMENT_TONE,
   ORDER_STATUS_TONE,
 } from "@/lib/order-data";
-import { SALES_MANAGER_PUBLIC_NAME } from "@/lib/sales-manager-workspace-data";
+import {
+  categoryTestId,
+  formatRub,
+  getManagerCategoryKpis,
+  getManagerGrossSales,
+  getManagerHardwareConversion,
+  getManagerMonthlyKpi,
+  getManagerMonthTasks,
+  getManagerRanking,
+  type ManagerCategoryKpi,
+  type ManagerMonthTask,
+} from "@/lib/sales-manager-kpi-data";
 
 function statusBadgeClass(status: DealerRow["status"]) {
   if (status === "требует внимания") return "border-amber-300 bg-amber-50 text-amber-950";
@@ -56,8 +68,27 @@ function priorityBadgeClass(p: MatrixTaskWithContext["priority"]) {
   return "border-border bg-muted text-muted-foreground";
 }
 
+function planStatusBadgeClass(s: ManagerCategoryKpi["status"] | ReturnType<typeof getManagerMonthlyKpi>["status"]) {
+  if (s === "риск") return "border-red-200 bg-red-50 text-red-900";
+  if (s === "требует внимания") return "border-amber-200 bg-amber-50 text-amber-950";
+  return "border-emerald-200 bg-emerald-50 text-emerald-900";
+}
+
+function monthTaskStatusClass(s: ManagerMonthTask["status"]) {
+  if (s === "выполнена") return "border-emerald-200 bg-emerald-50 text-emerald-900";
+  if (s === "в работе") return "border-primary/30 bg-primary/10 text-foreground";
+  if (s === "ожидает") return "border-amber-200 bg-amber-50 text-amber-950";
+  return "border-border bg-muted text-muted-foreground";
+}
+
 export default function SalesManagerWorkspace() {
   const kpis = useMemo(() => getWorkspaceKpis(), []);
+  const monthly = useMemo(() => getManagerMonthlyKpi(), []);
+  const gross = useMemo(() => getManagerGrossSales(), []);
+  const categories = useMemo(() => getManagerCategoryKpis(), []);
+  const hardwareConv = useMemo(() => getManagerHardwareConversion(), []);
+  const ranking = useMemo(() => getManagerRanking(), []);
+  const monthTasks = useMemo(() => getManagerMonthTasks(), []);
   const myDealers = useMemo(() => getMyDealers(), []);
   const tasks = useMemo(() => getSalesManagerMatrixTasks().slice(0, 12), []);
   const focusProducts = useMemo(() => getFocusProducts(8), []);
@@ -75,7 +106,7 @@ export default function SalesManagerWorkspace() {
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Кабинет менеджера</h1>
             <p className="mt-1 max-w-2xl text-sm text-muted-foreground sm:text-base">
-              Рабочий центр по клиентам, задачам и продажам: приоритеты, переходы в карточки и каталог.
+              План месяца, продажи по линейкам, партнёры и задачи: где вы по плану, что дожать и что сделать сегодня.
             </p>
           </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -97,13 +128,271 @@ export default function SalesManagerWorkspace() {
             <Button asChild className="min-h-10 font-semibold" data-testid="button-sales-manager-open-dealers">
               <Link href="/dealer-base">К клиентской базе</Link>
             </Button>
+            <Button asChild variant="secondary" className="min-h-10 font-semibold" data-testid="button-sales-manager-open-orders">
+              <Link href="/orders">К заказам</Link>
+            </Button>
             <Button asChild variant="secondary" className="min-h-10 font-semibold" data-testid="button-sales-manager-open-tasks">
               <Link href="/tasks">К задачам</Link>
+            </Button>
+            <Button asChild variant="default" className="min-h-10 font-semibold" data-testid="button-sales-manager-open-analytics">
+              <Link href="/analytics">Аналитика</Link>
             </Button>
             <Button asChild variant="outline" className="min-h-10 border-border bg-card font-semibold" data-testid="button-sales-manager-open-catalog">
               <Link href="/catalog">К каталогу</Link>
             </Button>
           </div>
+        </div>
+      </section>
+
+      <section className="space-y-4" data-testid="section-sales-manager-month-kpi">
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <h2 className="text-lg font-semibold text-foreground sm:text-xl">План и факт месяца</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Период: {monthly.periodLabel}</p>
+          </div>
+          <Badge variant="outline" className={cn("text-xs font-semibold", planStatusBadgeClass(monthly.status))}>
+            {monthly.status}
+          </Badge>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Card className="rounded-2xl border border-border/80 bg-card shadow-md" data-testid="card-manager-kpi-plan">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">План месяца</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-xl font-semibold tabular-nums text-foreground sm:text-2xl">{formatRub(monthly.planRub)}</p>
+              <p className="mt-2 text-xs text-muted-foreground">Целевой объём отгрузок по зоне</p>
+            </CardContent>
+          </Card>
+          <Card className="rounded-2xl border border-border/80 bg-card shadow-md" data-testid="card-manager-kpi-fact">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Факт на сегодня</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-xl font-semibold tabular-nums text-foreground sm:text-2xl">{formatRub(monthly.factRub)}</p>
+              <p className="mt-2 text-xs text-muted-foreground">Подтверждённые отгрузки</p>
+            </CardContent>
+          </Card>
+          <Card className="rounded-2xl border border-border/80 bg-card shadow-md" data-testid="card-manager-kpi-forecast">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Прогноз месяца</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-xl font-semibold tabular-nums text-foreground sm:text-2xl">{formatRub(monthly.forecastRub)}</p>
+              <p className="mt-2 text-xs text-muted-foreground">По текущему темпу и воронке</p>
+            </CardContent>
+          </Card>
+          <Card className="rounded-2xl border border-border/80 bg-card shadow-md" data-testid="card-manager-kpi-completion">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Выполнение</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-xl font-semibold tabular-nums text-foreground sm:text-2xl">{monthly.completionPercent}%</p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                До плана осталось: <span className="font-semibold text-foreground">{formatRub(monthly.remainingToPlanRub)}</span>
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      </section>
+
+      <section className="space-y-4" data-testid="section-sales-manager-gross-sales">
+        <h2 className="text-lg font-semibold text-foreground sm:text-xl">Валовая выручка</h2>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Card className="rounded-2xl border border-border/80 bg-card shadow-md" data-testid="card-manager-gross-money">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">В деньгах</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-xl font-semibold tabular-nums text-foreground sm:text-2xl">{formatRub(gross.grossRub)}</p>
+              <p className={cn("mt-2 text-xs font-medium", gross.vsPrevMonthPercent >= 0 ? "text-emerald-700" : "text-red-700")}>
+                к прошлому месяцу: {gross.vsPrevMonthPercent > 0 ? "+" : ""}
+                {gross.vsPrevMonthPercent}%
+              </p>
+            </CardContent>
+          </Card>
+          <Card className="rounded-2xl border border-border/80 bg-card shadow-md" data-testid="card-manager-gross-units">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">В штуках</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-xl font-semibold tabular-nums text-foreground sm:text-2xl">{gross.units.toLocaleString("ru-RU")}</p>
+              <p className="mt-2 text-xs text-muted-foreground">Отгружено позиций по зоне</p>
+            </CardContent>
+          </Card>
+          <Card className="rounded-2xl border border-border/80 bg-card shadow-md" data-testid="card-manager-average-order">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Средний заказ</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-xl font-semibold tabular-nums text-foreground sm:text-2xl">{formatRub(gross.avgOrderRub)}</p>
+            </CardContent>
+          </Card>
+          <Card className="rounded-2xl border border-border/80 bg-card shadow-md" data-testid="card-manager-active-partners">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Активные клиенты</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-xl font-semibold tabular-nums text-foreground sm:text-2xl">{gross.activePartners}</p>
+              <p className="mt-2 text-xs text-muted-foreground">С отгрузками в текущем периоде</p>
+            </CardContent>
+          </Card>
+        </div>
+      </section>
+
+      <section className="space-y-4" data-testid="section-sales-manager-category-breakdown">
+        <h2 className="text-lg font-semibold text-foreground sm:text-xl">Разбивка по категориям</h2>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {categories.map((c) => (
+            <Card
+              key={c.line}
+              className="rounded-2xl border border-border/80 bg-card shadow-md"
+              data-testid={categoryTestId(c.line)}
+            >
+              <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2 space-y-0 pb-2">
+                <CardTitle className="text-base">{c.line}</CardTitle>
+                <Badge variant="outline" className={cn("text-[11px] font-semibold", planStatusBadgeClass(c.status))}>
+                  {c.status}
+                </Badge>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm text-muted-foreground">
+                <p>
+                  План: <span className="font-semibold text-foreground">{formatRub(c.planRub)}</span>
+                </p>
+                <p>
+                  Факт: <span className="font-semibold text-foreground">{formatRub(c.factRub)}</span>
+                </p>
+                <p>
+                  Прогноз: <span className="font-semibold text-foreground">{formatRub(c.forecastRub)}</span>
+                </p>
+                <p className="tabular-nums">
+                  Выполнение: <span className="font-semibold text-foreground">{c.completionPercent}%</span>
+                </p>
+                <p className="tabular-nums">
+                  Штуки: <span className="font-semibold text-foreground">{c.units.toLocaleString("ru-RU")}</span>
+                </p>
+                <p>
+                  Валовка: <span className="font-semibold text-foreground">{formatRub(c.grossRub)}</span>
+                </p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      <section className="space-y-3" data-testid="section-sales-manager-hardware-conversion">
+        <h2 className="text-lg font-semibold text-foreground sm:text-xl">Конверсия по фурнитуре</h2>
+        <Card className="rounded-2xl border border-border/80 bg-card shadow-md" data-testid="card-manager-hardware-conversion">
+          <CardContent className="grid gap-4 p-4 sm:grid-cols-2 sm:p-5 lg:grid-cols-4">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Доля заказов с фурнитурой</p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{hardwareConv.ordersWithHardwareSharePercent}%</p>
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Конверсия клиентов</p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{hardwareConv.clientConversionPercent}%</p>
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">План / факт</p>
+              <p className="mt-1 text-sm text-foreground">
+                <span className="font-semibold tabular-nums">{hardwareConv.plannedConversionPercent}%</span>
+                {" → "}
+                <span className="font-semibold tabular-nums">{hardwareConv.actualConversionPercent}%</span>
+              </p>
+              <p className={cn("mt-1 text-xs font-medium", hardwareConv.diffPercent < 0 ? "text-red-700" : "text-emerald-700")}>
+                Разница: {hardwareConv.diffPercent > 0 ? "+" : ""}
+                {hardwareConv.diffPercent} п.п.
+              </p>
+            </div>
+            <div className="rounded-xl border border-dashed border-border bg-muted/30 p-3 text-sm text-muted-foreground sm:col-span-2 lg:col-span-1">
+              {hardwareConv.hint}
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="space-y-4" data-testid="section-sales-manager-ranking">
+        <h2 className="text-lg font-semibold text-foreground sm:text-xl">Личный рейтинг</h2>
+        <div className="grid gap-3 lg:grid-cols-2">
+          <Card className="rounded-2xl border border-border/80 bg-card shadow-md" data-testid="card-manager-personal-ranking">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Ваше место</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm text-muted-foreground">
+              <p className="text-3xl font-semibold tabular-nums text-foreground">
+                {ranking.place} <span className="text-lg font-normal text-muted-foreground">/ {ranking.totalManagers}</span>
+              </p>
+              <p>
+                <span className="font-medium text-foreground">{ranking.metricLabel}:</span>{" "}
+                <span className="font-semibold tabular-nums text-foreground">{ranking.ownScore}%</span>
+              </p>
+              {ranking.gapToNextAbove != null ? (
+                <p>
+                  До следующего места: <span className="font-semibold text-foreground">{ranking.gapToNextAbove} п.п.</span>
+                </p>
+              ) : null}
+              {ranking.gapToNextBelow != null ? (
+                <p>
+                  Преимущество над следующим: <span className="font-semibold text-foreground">{ranking.gapToNextBelow} п.п.</span>
+                </p>
+              ) : null}
+            </CardContent>
+          </Card>
+          <Card className="rounded-2xl border border-border/80 bg-card shadow-md">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Топ-3 менеджеров</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ol className="list-decimal space-y-2 pl-5 text-sm text-muted-foreground" data-testid="list-manager-ranking-top">
+                {ranking.topThree.map((p) => (
+                  <li key={p.place}>
+                    <span className="font-medium text-foreground">{p.name}</span> — {p.scoreLabel}{" "}
+                    <span className="tabular-nums font-semibold text-foreground">{p.scoreValue}%</span>
+                  </li>
+                ))}
+              </ol>
+            </CardContent>
+          </Card>
+        </div>
+      </section>
+
+      <section className="space-y-4" data-testid="section-sales-manager-month-tasks">
+        <h2 className="text-lg font-semibold text-foreground sm:text-xl">Задачи месяца под KPI</h2>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {monthTasks.map((t) => (
+            <Card
+              key={t.taskId}
+              className="rounded-2xl border border-border/80 bg-card shadow-md"
+              data-testid={`card-manager-month-task-${t.taskId}`}
+            >
+              <CardHeader className="space-y-2 pb-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <CardTitle className="text-base leading-snug">{t.title}</CardTitle>
+                  <Badge variant="outline" className={cn("text-xs font-semibold", monthTaskStatusClass(t.status))}>
+                    {t.status}
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">Срок: {t.deadline}</p>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm text-muted-foreground">
+                <div>
+                  <div className="mb-1 flex justify-between text-xs">
+                    <span>Прогресс</span>
+                    <span className="tabular-nums font-medium text-foreground">{t.progressPercent}%</span>
+                  </div>
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                    <div className="h-full rounded-full bg-primary" style={{ width: `${t.progressPercent}%` }} />
+                  </div>
+                </div>
+                <p>
+                  <span className="font-medium text-foreground">Влияние на KPI:</span> {t.kpiImpact}
+                </p>
+                <p>
+                  <span className="font-medium text-foreground">Связь:</span> {t.relatedLabel}
+                </p>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       </section>
 
@@ -159,7 +448,13 @@ export default function SalesManagerWorkspace() {
       </section>
 
       <section className="space-y-4" data-testid="section-sales-manager-dealers">
-        <h2 className="text-lg font-semibold text-foreground sm:text-xl">Мои клиенты</h2>
+        <div>
+          <h2 className="text-lg font-semibold text-foreground sm:text-xl">Партнёры в фокусе</h2>
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+            Клиенты зоны, влияющие на выполнение плана: TOP, без активности, значимая валовка, просадки по линейкам, потенциал по
+            фурнитуре и внимание по заказам.
+          </p>
+        </div>
         <div className="grid gap-3 sm:grid-cols-2">
           {myDealers.map((d) => (
             <Card key={d.id} className="rounded-2xl border border-border/80 bg-card shadow-md">
@@ -402,6 +697,12 @@ export default function SalesManagerWorkspace() {
         <div className="flex flex-wrap gap-2">
           <Button asChild variant="outline" className="min-h-10 border-border bg-card">
             <Link href="/dealer-base">Клиентская база</Link>
+          </Button>
+          <Button asChild variant="outline" className="min-h-10 border-border bg-card">
+            <Link href="/orders">Заказы</Link>
+          </Button>
+          <Button asChild variant="outline" className="min-h-10 border-border bg-card">
+            <Link href="/analytics">Аналитика</Link>
           </Button>
           <Button asChild variant="outline" className="min-h-10 border-border bg-card">
             <Link href="/catalog">Каталог</Link>

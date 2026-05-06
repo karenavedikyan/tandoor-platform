@@ -15,6 +15,7 @@ import SalesManagerWorkspace from "@/pages/sales-manager-workspace";
 import TasksPage from "@/pages/tasks";
 import OrdersPage from "@/pages/orders";
 import OrderDetailPage from "@/pages/order-detail";
+import AnalyticsPage from "@/pages/analytics";
 import PreviewUnavailable from "@/pages/preview-unavailable";
 import InternalPrototypePlaceholder from "@/pages/internal-prototype-placeholder";
 import { INTERNAL_PROTOTYPE_ROUTES } from "@/lib/preview-config";
@@ -30,6 +31,7 @@ function AppRouter() {
         <Route path="/catalog/:productId" component={ProductDetailPage} />
         <Route path="/catalog" component={CatalogPage} />
         <Route path="/tasks" component={TasksPage} />
+        <Route path="/analytics" component={AnalyticsPage} />
         <Route path="/orders/:orderId" component={OrderDetailPage} />
         <Route path="/orders" component={OrdersPage} />
         <Route path="/dealers/:dealerId/trade-points/:pointId" component={TradePointDetailPage} />
