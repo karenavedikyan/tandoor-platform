@@ -4,6 +4,7 @@
  */
 
 import type { TrainingSectionKey } from "./training-data";
+import { WAVE1_PUBLISHED_TRAINING_BY_WIKI_MAP_ID } from "./training-wave1-publish";
 
 export type WikiTrainingPriority = "P0" | "P1" | "P2";
 
@@ -135,6 +136,8 @@ export interface WikiTrainingPublishQueueItem {
   reason: string;
   blockers: string[];
   nextAction: string;
+  /** Если задан — материал уже перенесён в обучение (первая волна). */
+  trainingMaterialId?: string;
 }
 
 export const WIKI_PUBLISH_WAVE_LABEL: Record<WikiTrainingPublishWave, string> = {
@@ -184,10 +187,10 @@ const _WIKI_MAP_SEED: WikiTrainingContentMapSeedRow[] = [
     workContexts: ["catalog", "showcase", "trade_point"],
     targetProgramIds: ["prog-product-lines"],
     recommendedMaterialType: "article",
-    reviewStatus: "needs_review",
+    reviewStatus: "approved",
     reason: "База консультаций по МК в салоне; без свода высокий риск ошибок в размерах и сериях.",
     safeSummary: "Свод по межкомнатным дверям: серии и логика чтения для консультанта; в публичном контуре только структура.",
-    migrationNotes: ["Сверить с актуальной версией во внутренней базе после полного export."],
+    migrationNotes: ["Основной текст перенесён в раздел «Обучение» (материал tr-prod-mk-assortment).", "При обновлении линеек сверять формулировки с каталогом."],
   },
   {
     id: "wcm-p0-vh-competitors-table",
@@ -199,10 +202,10 @@ const _WIKI_MAP_SEED: WikiTrainingContentMapSeedRow[] = [
     workContexts: ["catalog", "showcase", "sales_script"],
     targetProgramIds: ["prog-product-lines"],
     recommendedMaterialType: "article",
-    reviewStatus: "needs_review",
+    reviewStatus: "approved",
     reason: "Ключевой оптовый сценарий сравнения ВХ; нужен для единых формулировок на витрине.",
     safeSummary: "Сравнительная выборка по входным группам без раскрытия закрытых цен.",
-    migrationNotes: ["Убрать чувствительные колонки при нормализации; сверка с закрытым источником."],
+    migrationNotes: ["Материал перенесён в «Обучение» (tr-prod-vh-sales-pack) без ценовых колонок.", "При смене модельного ряда обновить аргументацию по карточкам каталога."],
   },
   {
     id: "wcm-p0-vh-warehouse-table",
@@ -217,7 +220,7 @@ const _WIKI_MAP_SEED: WikiTrainingContentMapSeedRow[] = [
     reviewStatus: "approved",
     reason: "Связка складской программы с консультацией по ВХ.",
     safeSummary: "Сводная логика складской программы: что уточнять у снабжения.",
-    migrationNotes: [],
+    migrationNotes: ["Содержание перенесено в «Обучение» (tr-prod-ent-card); сроки и складские позиции сверять с партнёром."],
   },
   {
     id: "wcm-p0-vh-locks",
@@ -232,7 +235,7 @@ const _WIKI_MAP_SEED: WikiTrainingContentMapSeedRow[] = [
     reviewStatus: "approved",
     reason: "Частые вопросы клиента по безопасности и комплектации замков.",
     safeSummary: "Группы замков и вопросы совместимости для первой линии консультации.",
-    migrationNotes: [],
+    migrationNotes: ["Перенесено в «Обучение» (tr-prod-vh-locks-guide)."],
   },
   {
     id: "wcm-p0-mk-presentation",
@@ -242,12 +245,12 @@ const _WIKI_MAP_SEED: WikiTrainingContentMapSeedRow[] = [
     audiences: ["sales_manager", "new_employee"],
     productScope: "mk",
     workContexts: ["showcase", "trade_point", "sales_script"],
-    targetProgramIds: ["prog-product-lines"],
+    targetProgramIds: ["prog-product-lines", "prog-sales-hits"],
     recommendedMaterialType: "course",
     reviewStatus: "approved",
     reason: "Единый сценарий визита по МК в шоуруме.",
     safeSummary: "Порядок демонстрации МК: открытие, покрытие, следующий шаг.",
-    migrationNotes: [],
+    migrationNotes: ["Сценарий визита и подготовка к консультации вынесены в «Обучение» (tr-sales-consult-prep)."],
   },
   {
     id: "wcm-p0-acoustic-doors",
@@ -259,10 +262,10 @@ const _WIKI_MAP_SEED: WikiTrainingContentMapSeedRow[] = [
     workContexts: ["catalog", "showcase"],
     targetProgramIds: ["prog-product-lines"],
     recommendedMaterialType: "article",
-    reviewStatus: "needs_review",
+    reviewStatus: "approved",
     reason: "Высокая частота возражений и вопросов по акустике.",
     safeSummary: "Базовые тезисы по звукоизоляции без ссылок на закрытые лабораторные отчёты.",
-    migrationNotes: ["Добавить иллюстрации после ревью юридического/технического контура."],
+    migrationNotes: ["Раздел по акустике и покрытиям объединён в материале «Обучение» tr-prod-int-coatings."],
   },
   {
     id: "wcm-p0-pet-material",
@@ -277,7 +280,7 @@ const _WIKI_MAP_SEED: WikiTrainingContentMapSeedRow[] = [
     reviewStatus: "approved",
     reason: "Популярное покрытие; нужна быстрая выдача фактов на витрине.",
     safeSummary: "ПЭТ: внешний вид, уход и ограничения для витрины.",
-    migrationNotes: [],
+    migrationNotes: ["Перенесено в «Обучение» в составе материала tr-prod-materials-mdf."],
   },
   {
     id: "wcm-p0-hidden-dera-2026",
@@ -289,10 +292,10 @@ const _WIKI_MAP_SEED: WikiTrainingContentMapSeedRow[] = [
     workContexts: ["showcase", "catalog"],
     targetProgramIds: ["prog-product-lines"],
     recommendedMaterialType: "article",
-    reviewStatus: "needs_review",
+    reviewStatus: "approved",
     reason: "Новинка сезона; риск разрозненных формулировок без единого материала.",
     safeSummary: "Презентация скрытых дверей: отличия и монтажные акценты.",
-    migrationNotes: ["Чертежи и условия поставки — только из закрытого хранилища после ревью."],
+    migrationNotes: ["Перенесено в «Обучение» (tr-prod-mk-lines-diff); монтажные детали сверять с инструкцией серии."],
   },
   // ——— P0 Sales ———
   {
@@ -682,6 +685,8 @@ const WIKI_READY_TO_PUBLISH_IDS = new Set<string>([
   "wcm-p0-guarantee-opt",
 ]);
 
+const WAVE1_PUBLISHED_WIKI_MAP_IDS = new Set(Object.keys(WAVE1_PUBLISHED_TRAINING_BY_WIKI_MAP_ID));
+
 function buildReviewMeta(row: WikiTrainingContentMapSeedRow): WikiTrainingReviewMeta {
   const linkedProgram = row.targetProgramIds.length > 0;
   const linkedProductOrScenario = row.productScope !== "none" && row.workContexts.length > 0;
@@ -698,7 +703,7 @@ function buildReviewMeta(row: WikiTrainingContentMapSeedRow): WikiTrainingReview
   let decision: WikiTrainingReviewDecision = "pending";
   if (row.id === "wcm-p2-sku-wiki-binding") decision = "do_not_import";
   else if (row.id === "wcm-p2-milliana" || row.id === "wcm-p2-paradise") decision = "archive";
-  else if (WIKI_READY_TO_PUBLISH_IDS.has(row.id)) decision = "ready_to_publish";
+  else if (WIKI_READY_TO_PUBLISH_IDS.has(row.id) || WAVE1_PUBLISHED_WIKI_MAP_IDS.has(row.id)) decision = "ready_to_publish";
   else if (row.reviewStatus === "needs_review" && (row.priority === "P0" || row.priority === "P1")) decision = "rewrite";
 
   return {
@@ -916,10 +921,34 @@ function hasCatalogOrScenarioLink(item: WikiTrainingContentMapItem): boolean {
 }
 
 function buildWikiTrainingPublishQueueItem(item: WikiTrainingContentMapItem): WikiTrainingPublishQueueItem {
+  const publishedTrainingId = WAVE1_PUBLISHED_TRAINING_BY_WIKI_MAP_ID[item.id];
+  if (publishedTrainingId) {
+    const chk = getWikiTrainingReviewChecklistScore(item);
+    return {
+      id: `pub-${item.id}`,
+      sourceItemId: item.id,
+      wikiTitle: item.wikiTitle,
+      priority: item.priority,
+      decision: item.reviewMeta.decision,
+      recommendedFormat: item.reviewMeta.recommendedFormat,
+      targetProgramIds: [...item.targetProgramIds],
+      audiences: [...item.audiences],
+      productScope: item.productScope,
+      workContexts: [...item.workContexts],
+      checklistPercent: chk.percent,
+      reason: item.reason,
+      readiness: "ready",
+      wave: "later",
+      blockers: [],
+      nextAction: "Материал перенесён в раздел «Обучение»; откройте карточку материала по ссылке ниже.",
+      trainingMaterialId: publishedTrainingId,
+    };
+  }
+
   const d = item.reviewMeta.decision;
   const chk = getWikiTrainingReviewChecklistScore(item);
   const risks = getWikiTrainingReviewRiskFlags(item);
-  const base: Omit<WikiTrainingPublishQueueItem, "readiness" | "wave" | "blockers" | "nextAction"> = {
+  const base: Omit<WikiTrainingPublishQueueItem, "readiness" | "wave" | "blockers" | "nextAction" | "trainingMaterialId"> = {
     id: `pub-${item.id}`,
     sourceItemId: item.id,
     wikiTitle: item.wikiTitle,

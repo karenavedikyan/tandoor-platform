@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { Link } from "wouter";
-import { Check, X } from "lucide-react";
+import { Check, ChevronRight, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -86,7 +86,7 @@ export default function TrainingWikiMapPage() {
     () =>
       basePublishQueue.map((q) => ({
         ...q,
-        wave: waveOverrides[q.sourceItemId] ?? q.wave,
+        wave: q.trainingMaterialId ? q.wave : (waveOverrides[q.sourceItemId] ?? q.wave),
       })),
     [basePublishQueue, waveOverrides],
   );
@@ -885,8 +885,12 @@ function WikiPublishItemCard({
   onSetWave: (sourceItemId: string, wave: WikiTrainingPublishWave) => void;
 }) {
   const firstProgramId = row.targetProgramIds[0];
+  const isPublished = Boolean(row.trainingMaterialId);
   return (
-    <Card className="min-w-0 overflow-hidden border-border/70 shadow-xs" data-testid={`card-wiki-publish-item-${row.id}`}>
+    <Card
+      className={`min-w-0 overflow-hidden border-border/70 shadow-xs${isPublished ? " border-emerald-500/40 bg-emerald-500/[0.06]" : ""}`}
+      data-testid={`card-wiki-publish-item-${row.id}`}
+    >
       <CardHeader className="min-w-0 space-y-2 pb-2 pt-4">
         <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
           <CardTitle className="min-w-0 text-base leading-snug">{row.wikiTitle}</CardTitle>
@@ -894,6 +898,15 @@ function WikiPublishItemCard({
             <Badge variant="secondary" className="font-semibold tabular-nums">
               {row.priority}
             </Badge>
+            {isPublished ? (
+              <Badge
+                className="border-emerald-600/50 bg-emerald-600/15 text-emerald-950 dark:text-emerald-50"
+                variant="outline"
+                data-testid={`badge-wiki-publish-published-${row.id}`}
+              >
+                В «Обучении»
+              </Badge>
+            ) : null}
             <Badge variant="outline" className="text-xs font-medium">
               {WIKI_PUBLISH_WAVE_LABEL[row.wave]}
             </Badge>
@@ -948,44 +961,61 @@ function WikiPublishItemCard({
             ))}
           </div>
         </div>
-        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
-          <Button
-            type="button"
-            variant="default"
-            className="min-h-11 w-full font-semibold sm:w-auto"
-            data-testid={`button-wiki-publish-mark-wave-1-${row.id}`}
-            onClick={() => onSetWave(row.sourceItemId, "wave_1")}
-          >
-            В первую волну
-          </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            className="min-h-11 w-full font-semibold sm:w-auto"
-            data-testid={`button-wiki-publish-mark-wave-2-${row.id}`}
-            onClick={() => onSetWave(row.sourceItemId, "wave_2")}
-          >
-            Во вторую волну
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className="min-h-11 w-full border-border font-semibold sm:w-auto"
-            data-testid={`button-wiki-publish-mark-later-${row.id}`}
-            onClick={() => onSetWave(row.sourceItemId, "later")}
-          >
-            Отложить
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            className="min-h-11 w-full font-semibold sm:w-auto"
-            data-testid={`button-wiki-publish-mark-blocked-${row.id}`}
-            onClick={() => onSetWave(row.sourceItemId, "blocked")}
-          >
-            Заблокировать
-          </Button>
-        </div>
+        {isPublished && row.trainingMaterialId ? (
+          <div className="flex min-w-0 flex-col gap-2 border-t border-border/60 pt-3 sm:flex-row sm:flex-wrap">
+            <Button
+              asChild
+              variant="default"
+              size="sm"
+              className="min-h-10 w-full font-semibold sm:w-auto"
+              data-testid={`button-wiki-publish-open-material-${row.id}`}
+            >
+              <Link href={`/training/${row.trainingMaterialId}`}>
+                Открыть материал
+                <ChevronRight className="h-4 w-4" aria-hidden />
+              </Link>
+            </Button>
+          </div>
+        ) : (
+          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
+            <Button
+              type="button"
+              variant="default"
+              className="min-h-11 w-full font-semibold sm:w-auto"
+              data-testid={`button-wiki-publish-mark-wave-1-${row.id}`}
+              onClick={() => onSetWave(row.sourceItemId, "wave_1")}
+            >
+              В первую волну
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              className="min-h-11 w-full font-semibold sm:w-auto"
+              data-testid={`button-wiki-publish-mark-wave-2-${row.id}`}
+              onClick={() => onSetWave(row.sourceItemId, "wave_2")}
+            >
+              Во вторую волну
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11 w-full border-border font-semibold sm:w-auto"
+              data-testid={`button-wiki-publish-mark-later-${row.id}`}
+              onClick={() => onSetWave(row.sourceItemId, "later")}
+            >
+              Отложить
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              className="min-h-11 w-full font-semibold sm:w-auto"
+              data-testid={`button-wiki-publish-mark-blocked-${row.id}`}
+              onClick={() => onSetWave(row.sourceItemId, "blocked")}
+            >
+              Заблокировать
+            </Button>
+          </div>
+        )}
         <div className="flex min-w-0 flex-col gap-2 border-t border-border/60 pt-3 sm:flex-row sm:flex-wrap">
           {firstProgramId ? (
             <Button asChild variant="secondary" size="sm" className="min-h-10 w-full font-semibold sm:w-auto" data-testid={`button-wiki-publish-open-program-${row.id}`}>
