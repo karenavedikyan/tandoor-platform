@@ -59,6 +59,8 @@ export type CatalogProduct = {
   catalogSearchText?: string;
   /** Если false — позиция не попадает в мок матрицы витрин ТТ (по умолчанию true). */
   includeInTradePointMatrix?: boolean;
+  /** Галерея с публичного импорта (главное фото дублируется в `image`). */
+  catalogImages?: { src: string; alt: string }[];
 };
 
 function cleanPublicDescription(raw: string | undefined): string | undefined {
@@ -100,7 +102,11 @@ function mapPublicSeedToCatalogProduct(row: TandoorRealCatalogSeedItem): Catalog
   }
   if (row.id === "tc-mk-m-36-emal-belaya-dg-2000-800") boostTags.push("Mona", "мона");
   const mergedTags = [...row.tags, ...boostTags];
-  const searchText = [row.searchText, ...boostTags].join(" ").toLowerCase();
+  const catalogImages = (row.images ?? [{ src: row.imageSrc, alt: row.imageAlt }]).map((im) => ({
+    src: im.src,
+    alt: im.alt,
+  }));
+  const searchText = [row.searchText, ...boostTags, ...catalogImages.map((c) => c.alt)].join(" ").toLowerCase();
   const specs: { label: string; value: string }[] = [];
   if (typeof row.priceRetail === "number") {
     specs.push({ label: "Розничная цена, ₽", value: String(row.priceRetail) });
@@ -117,7 +123,7 @@ function mapPublicSeedToCatalogProduct(row: TandoorRealCatalogSeedItem): Catalog
     type: row.category === "hardware" ? "Артикул" : "Модель",
     doorKind,
     status: "В продаже",
-    image: row.imageSrc,
+    image: catalogImages[0]?.src ?? row.imageSrc,
     shortDescription,
     description: shortDescription,
     features: mergedTags,
@@ -147,6 +153,7 @@ function mapPublicSeedToCatalogProduct(row: TandoorRealCatalogSeedItem): Catalog
     catalogTags: mergedTags,
     catalogSearchText: searchText,
     includeInTradePointMatrix: false,
+    catalogImages: catalogImages.length > 1 ? catalogImages : undefined,
   };
 }
 
@@ -798,6 +805,7 @@ export function buildCatalogProductSearchHaystack(p: CatalogProduct): string {
     p.description,
     ...(p.features ?? []),
     ...(p.catalogTags ?? []),
+    ...(p.catalogImages ?? []).map((c) => c.alt),
     p.catalogSearchText ?? "",
   ]
     .join(" ")
@@ -810,9 +818,16 @@ export function catalogSearchQueryMatchesHaystack(rawQuery: string, haystack: st
   if (!q) return true;
   if (q === "вх" || q === "vh") return haystack.includes("входн") || haystack.includes("входная");
   if (q === "мк" || q === "mk") return haystack.includes("межкомнат");
+  if (q === "входные" || (q.includes("входн") && q.length >= 4)) return haystack.includes("вход");
+  if (q === "межкомнатные" || (q.includes("межкомнат") && q.length >= 6)) return haystack.includes("межкомнат");
   if (q === "фурнитура" || q === "замки" || q === "замок") {
     return haystack.includes("фурнитур") || haystack.includes("замок");
   }
+  if (q.includes("ручк")) return haystack.includes("ручк");
+  if (q.includes("петл")) return haystack.includes("петл");
+  if (q.includes("термо")) return haystack.includes("терм");
+  if (q.includes("бел")) return haystack.includes("бел");
+  if (q.includes("графит")) return haystack.includes("графит");
   const parts = q.split(/\s+/).filter((w) => w.length > 0);
   if (parts.length >= 2) return parts.some((w) => w.length >= 2 && haystack.includes(w));
   return haystack.includes(q);
