@@ -1,7 +1,24 @@
 import { useMemo } from "react";
+import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import {
+  OPERATIONAL_DEFAULT_GLOBAL_FILTERS,
+  filterEquipmentRows,
+  getInfographicCitySegments,
+  getInfographicClientSegmentCards,
+  getInfographicEquipmentNomenclatureBars,
+  getInfographicEquipmentTopClients,
+  getInfographicHardwareOperationalKpi,
+  getInfographicHardwareRiskClients,
+  getInfographicShowcaseModels,
+  getInfographicShowcaseProfitabilityBars,
+  getInfographicShowcaseRiskClients,
+  kpiEquipment,
+  type ShowcaseAttentionZone,
+} from "@/lib/analytics-operational-data";
 import {
   formatCompactRub,
   formatPercent,
@@ -205,6 +222,27 @@ function HorizontalBarRow({
   );
 }
 
+function attentionZoneLabel(zone: ShowcaseAttentionZone): string {
+  switch (zone) {
+    case "high_profit":
+      return "Высокая маржа";
+    case "low_profit":
+      return "Низкая маржа";
+    case "many_competitors":
+      return "Сильная конкуренция";
+    case "no_showcase_sales":
+      return "Слабые продажи с витрины";
+    default:
+      return "Зона внимания";
+  }
+}
+
+function segmentCardTestId(segment: string): string {
+  if (segment === "top500") return "card-infographic-segment-top500";
+  if (segment === "fiveHundredPlus") return "card-infographic-segment-500-plus";
+  return "card-infographic-segment-tandoor-club";
+}
+
 function TopBars({ items, testId, subtitle }: { items: InfographicTopItem[]; testId: string; subtitle: string }) {
   const max = Math.max(...items.map((i) => i.value), 1);
   return (
@@ -247,6 +285,25 @@ export function AnalyticsInfographicsPanel() {
   const topsCity = useMemo(() => getAnalyticsTopProductsCity(), []);
   const topsPartners = useMemo(() => getAnalyticsTopPartners(), []);
   const funnel = useMemo(() => getHardwareConversionFunnel(), []);
+
+  const opFilters = OPERATIONAL_DEFAULT_GLOBAL_FILTERS;
+  const segmentCards = useMemo(() => getInfographicClientSegmentCards(opFilters), []);
+  const profitabilityBars = useMemo(() => getInfographicShowcaseProfitabilityBars(opFilters), []);
+  const showcaseRiskClients = useMemo(() => getInfographicShowcaseRiskClients(opFilters), []);
+  const hwOpKpi = useMemo(() => getInfographicHardwareOperationalKpi(opFilters), []);
+  const hwRiskClients = useMemo(() => getInfographicHardwareRiskClients(opFilters), []);
+  const equipmentKpi = useMemo(
+    () => kpiEquipment(filterEquipmentRows(opFilters, "all", "", "all")),
+    [],
+  );
+  const equipmentNomBars = useMemo(() => getInfographicEquipmentNomenclatureBars(opFilters), []);
+  const equipmentClients = useMemo(() => getInfographicEquipmentTopClients(opFilters), []);
+  const citySegments = useMemo(() => getInfographicCitySegments(opFilters), []);
+  const modelsMk = useMemo(() => getInfographicShowcaseModels(opFilters, "mk"), []);
+  const modelsVh = useMemo(() => getInfographicShowcaseModels(opFilters, "vh"), []);
+
+  const maxProfitScore = Math.max(...profitabilityBars.map((b) => b.profitabilityScore), 1);
+  const maxEquipRub = Math.max(...equipmentNomBars.map((b) => b.amountRub), 1);
 
   const mk = planItems.find((p) => p.category === "mk")!;
   const vh = planItems.find((p) => p.category === "vh")!;
@@ -310,6 +367,392 @@ export function AnalyticsInfographicsPanel() {
               }
             />
           ))}
+        </div>
+      </section>
+
+      <section className="space-y-4" data-testid="section-infographic-client-segments">
+        <h2 className="text-lg font-semibold text-foreground sm:text-xl">Клиентские сегменты</h2>
+        <p className="text-sm text-muted-foreground">
+          Срез по витринам и моделям: ТОП 500, 500+, Tandoor Club. Показатели по клиентской базе и выкладке.
+        </p>
+        <div className="grid min-w-0 gap-4 sm:grid-cols-3">
+          {segmentCards.map((s) => (
+            <Card
+              key={s.segment}
+              className="min-w-0 rounded-2xl border border-border/80 bg-card shadow-md"
+              data-testid={segmentCardTestId(s.segment)}
+            >
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">{s.label}</CardTitle>
+                <p className="text-xs text-muted-foreground">Клиенты с витриной в сегменте</p>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm text-muted-foreground">
+                <p>
+                  Клиентов: <span className="font-semibold tabular-nums text-foreground">{s.clients}</span>
+                </p>
+                <p>
+                  Моделей на витринах: <span className="font-semibold tabular-nums text-foreground">{s.modelsOnShowcase}</span>
+                </p>
+                <p>
+                  Продажи с витрины:{" "}
+                  <span className="font-semibold tabular-nums text-foreground">{formatCompactRub(s.showcaseSales)}</span>
+                </p>
+                <p>
+                  Средняя конверсия:{" "}
+                  <span className="font-semibold tabular-nums text-foreground">{formatPercent(s.avgConversionPercent)}</span>
+                </p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      <section className="space-y-4" data-testid="section-infographic-showcase-profitability">
+        <h2 className="text-lg font-semibold text-foreground sm:text-xl">Рентабельность витрин</h2>
+        <p className="text-sm text-muted-foreground">
+          Клиенты с наименьшим индексом рентабельности (условный рейтинг). Доля продаж с витрины и витрины «мы / конкуренты».
+        </p>
+        <Card className="rounded-2xl border border-border/80 bg-card shadow-md">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Рейтинг по рентабельности</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4" data-testid="chart-infographic-showcase-profitability">
+            {profitabilityBars.map((b) => (
+              <div key={b.dealerId} className="min-w-0 space-y-1">
+                <div className="flex flex-wrap justify-between gap-2 text-xs">
+                  <span className="min-w-0 truncate font-medium text-foreground">
+                    {b.clientName} · {b.city}
+                  </span>
+                  <span className="shrink-0 tabular-nums text-muted-foreground">
+                    {b.profitabilityLabel} · {b.shareShowcasePercent}% с витрины
+                  </span>
+                </div>
+                <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-primary"
+                    style={{ width: `${Math.round((b.profitabilityScore / maxProfitScore) * 100)}%` }}
+                  />
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Наши витрины: {b.ourShowcases} · конкуренты: {b.competitorShowcases}
+                </p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+        <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {showcaseRiskClients.map((r) => (
+            <Card
+              key={r.dealerId}
+              className="min-w-0 rounded-2xl border border-amber-500/25 bg-card shadow-md"
+              data-testid={`card-infographic-showcase-risk-${r.dealerId}`}
+            >
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base leading-snug">{r.clientName}</CardTitle>
+                <p className="text-xs text-muted-foreground">{r.city}</p>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm text-muted-foreground">
+                <Badge variant="outline" className="text-xs">
+                  {attentionZoneLabel(r.attentionZone)}
+                </Badge>
+                <p>
+                  Рентабельность: <span className="font-semibold text-foreground">{r.profitabilityLabel}</span> (
+                  {r.profitabilityScore})
+                </p>
+                <p className="tabular-nums">
+                  Доля с витрины: {r.shareShowcasePercent}% · наши / конкуренты: {r.ourShowcases} / {r.competitorShowcases}
+                </p>
+                <Button asChild variant="outline" className="w-full min-h-9 border-border bg-card text-xs font-semibold">
+                  <Link href={`/dealers/${r.dealerId}`}>Карточка клиента</Link>
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      <section className="space-y-4" data-testid="section-infographic-hardware-conversion-operational">
+        <h2 className="text-lg font-semibold text-foreground sm:text-xl">Конверсия фурнитуры (операционный срез)</h2>
+        <p className="text-sm text-muted-foreground">
+          Суммарные отгрузки МК и фурнитуры по выборке и средняя конверсия; клиенты с низкой конверсией.
+        </p>
+        <Card className="rounded-2xl border border-border/80 bg-card shadow-md">
+          <CardContent className="space-y-4 p-4 sm:p-6" data-testid="chart-infographic-hardware-conversion-operational">
+            <div className="grid gap-3 sm:grid-cols-4">
+              <div className="rounded-xl border border-border/60 bg-muted/15 p-3 text-center">
+                <p className="text-xs text-muted-foreground">МК, шт.</p>
+                <p className="text-lg font-semibold tabular-nums text-foreground">{formatUnits(hwOpKpi.mk)}</p>
+              </div>
+              <div className="rounded-xl border border-border/60 bg-muted/15 p-3 text-center">
+                <p className="text-xs text-muted-foreground">Фурнитура, шт.</p>
+                <p className="text-lg font-semibold tabular-nums text-foreground">{formatUnits(hwOpKpi.hw)}</p>
+              </div>
+              <div className="rounded-xl border border-border/60 bg-muted/15 p-3 text-center">
+                <p className="text-xs text-muted-foreground">Средняя конверсия</p>
+                <p className="text-lg font-semibold tabular-nums text-foreground">{formatPercent(hwOpKpi.avg)}</p>
+              </div>
+              <div className="rounded-xl border border-border/60 bg-muted/15 p-3 text-center">
+                <p className="text-xs text-muted-foreground">Низкая / нет</p>
+                <p className="text-lg font-semibold tabular-nums text-foreground">{hwOpKpi.low}</p>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">Структура: МК (база) и фурнитура как доля от суммы отгрузок по выборке</p>
+              <div className="flex h-8 w-full overflow-hidden rounded-lg bg-muted">
+                <div
+                  className="bg-primary/55"
+                  title="МК"
+                  style={{
+                    width: `${hwOpKpi.mk + hwOpKpi.hw > 0 ? Math.round((hwOpKpi.mk / (hwOpKpi.mk + hwOpKpi.hw)) * 100) : 0}%`,
+                  }}
+                />
+                <div
+                  className="bg-primary"
+                  title="Фурнитура"
+                  style={{
+                    width: `${hwOpKpi.mk + hwOpKpi.hw > 0 ? Math.round((hwOpKpi.hw / (hwOpKpi.mk + hwOpKpi.hw)) * 100) : 0}%`,
+                  }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Слева — доля МК, справа — доля фурнитуры в сумме (МК + фурнитура) по синтетическим строкам клиентской базы.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+        <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {hwRiskClients.map((r) => (
+            <Card
+              key={r.dealerId}
+              className="min-w-0 rounded-2xl border border-border/80 bg-card shadow-md"
+              data-testid={`card-infographic-hardware-risk-${r.dealerId}`}
+            >
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base leading-snug">{r.clientName}</CardTitle>
+                <p className="text-xs text-muted-foreground">{r.city}</p>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm text-muted-foreground">
+                <p>
+                  Конверсия:{" "}
+                  <span className="font-semibold text-foreground">{formatPercent(r.conversionPercent)}</span> · МК{" "}
+                  {formatUnits(r.mkSales)}, фурнитура {formatUnits(r.hardwareSales)}
+                </p>
+                <p className="text-xs">Конкуренты: {r.competitorsSummary || "—"}</p>
+                <p className="text-xs">Модели у конкурентов: {r.topCompetitorModels}</p>
+                <p className="text-xs">Причина не у нас: {r.reasonNotWithUs}</p>
+                <Button asChild variant="outline" className="w-full min-h-9 border-border bg-card text-xs font-semibold">
+                  <Link href={`/dealers/${r.dealerId}`}>Карточка клиента</Link>
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      <section className="space-y-4" data-testid="section-infographic-equipment">
+        <h2 className="text-lg font-semibold text-foreground sm:text-xl">Оборудование</h2>
+        <p className="text-sm text-muted-foreground">Суммы и количество по номенклатуре, клиенты с отгрузками оборудования.</p>
+        <div className="grid min-w-0 gap-3 sm:grid-cols-4">
+          <Card className="rounded-2xl border border-border/80 bg-card shadow-md">
+            <CardContent className="p-4 text-center text-sm">
+              <p className="text-xs text-muted-foreground">Сумма, ₽</p>
+              <p className="mt-1 font-semibold tabular-nums text-foreground">{formatCompactRub(equipmentKpi.sum)}</p>
+            </CardContent>
+          </Card>
+          <Card className="rounded-2xl border border-border/80 bg-card shadow-md">
+            <CardContent className="p-4 text-center text-sm">
+              <p className="text-xs text-muted-foreground">Кол-во единиц</p>
+              <p className="mt-1 font-semibold tabular-nums text-foreground">{equipmentKpi.units}</p>
+            </CardContent>
+          </Card>
+          <Card className="rounded-2xl border border-border/80 bg-card shadow-md">
+            <CardContent className="p-4 text-center text-sm">
+              <p className="text-xs text-muted-foreground">Клиентов</p>
+              <p className="mt-1 font-semibold tabular-nums text-foreground">{equipmentKpi.clients}</p>
+            </CardContent>
+          </Card>
+          <Card className="rounded-2xl border border-border/80 bg-card shadow-md">
+            <CardContent className="p-4 text-center text-sm">
+              <p className="text-xs text-muted-foreground">Средний заказ / мес.</p>
+              <p className="mt-1 font-semibold tabular-nums text-foreground">{formatCompactRub(equipmentKpi.avgM)}</p>
+            </CardContent>
+          </Card>
+        </div>
+        <Card className="rounded-2xl border border-border/80 bg-card shadow-md">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Структура по номенклатуре</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3" data-testid="chart-infographic-equipment">
+            {equipmentNomBars.map((b) => (
+              <HorizontalBarRow
+                key={b.name}
+                label={b.name}
+                value={b.amountRub}
+                max={maxEquipRub}
+                valueText={formatCompactRub(b.amountRub)}
+                suffix={`${b.quantity} шт.`}
+              />
+            ))}
+          </CardContent>
+        </Card>
+        <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {equipmentClients.map((c) => (
+            <Card
+              key={c.dealerId}
+              className="min-w-0 rounded-2xl border border-border/80 bg-card shadow-md"
+              data-testid={`card-infographic-equipment-client-${c.dealerId}`}
+            >
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base leading-snug">{c.clientName}</CardTitle>
+                <p className="text-xs text-muted-foreground">{c.city}</p>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm text-muted-foreground">
+                <p>
+                  Сумма оборудования: <span className="font-semibold text-foreground">{formatCompactRub(c.amountRub)}</span>
+                </p>
+                <p className="tabular-nums">
+                  Единиц: {c.quantity} · средний заказ / мес.: {formatCompactRub(c.avgMonthlyOrderRub)}
+                </p>
+                <Button asChild variant="outline" className="w-full min-h-9 border-border bg-card text-xs font-semibold">
+                  <Link href={`/dealers/${c.dealerId}`}>Карточка клиента</Link>
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      <section className="space-y-4" data-testid="section-infographic-city-segments">
+        <h2 className="text-lg font-semibold text-foreground sm:text-xl">Города и категории клиентов</h2>
+        <p className="text-sm text-muted-foreground">
+          Доли TOP / A / B / C и вхождение в сегменты витрины; продажи с витрины и конверсия по городу.
+        </p>
+        <div className="space-y-4" data-testid="chart-infographic-city-segments">
+          {citySegments.map((c) => (
+            <Card
+              key={c.cityId}
+              className="min-w-0 rounded-2xl border border-border/80 bg-card shadow-md"
+              data-testid={`card-infographic-city-segment-${c.cityId}`}
+            >
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">{c.cityName}</CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  {c.clients} клиентов · продажи с витрины {formatCompactRub(c.showcaseSales)} · конверсия{" "}
+                  {formatPercent(c.avgConversionPercent)}
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-4 text-sm">
+                <div>
+                  <p className="mb-1 text-xs font-medium text-muted-foreground">Категории клиентов</p>
+                  <div className="flex h-3 w-full overflow-hidden rounded-full bg-muted text-[0]">
+                    {c.shareTopPercent > 0 ? (
+                      <div className="bg-primary" style={{ width: `${c.shareTopPercent}%` }} title={`TOP ${c.shareTopPercent}%`} />
+                    ) : null}
+                    {c.shareAPercent > 0 ? (
+                      <div className="bg-primary/70" style={{ width: `${c.shareAPercent}%` }} title={`A ${c.shareAPercent}%`} />
+                    ) : null}
+                    {c.shareBPercent > 0 ? (
+                      <div className="bg-primary/45" style={{ width: `${c.shareBPercent}%` }} title={`B ${c.shareBPercent}%`} />
+                    ) : null}
+                    {c.shareCPercent > 0 ? (
+                      <div className="bg-muted-foreground/35" style={{ width: `${c.shareCPercent}%` }} title={`C ${c.shareCPercent}%`} />
+                    ) : null}
+                  </div>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    TOP {c.shareTopPercent}% · A {c.shareAPercent}% · B {c.shareBPercent}% · C {c.shareCPercent}%
+                  </p>
+                </div>
+                <div>
+                  <p className="mb-1 text-xs font-medium text-muted-foreground">Сегменты витрины</p>
+                  <div className="flex h-3 w-full overflow-hidden rounded-full bg-muted">
+                    {c.shareTop500Percent > 0 ? (
+                      <div className="bg-emerald-600/80" style={{ width: `${c.shareTop500Percent}%` }} title="ТОП 500" />
+                    ) : null}
+                    {c.shareFiveHundredPlusPercent > 0 ? (
+                      <div
+                        className="bg-sky-600/70"
+                        style={{ width: `${c.shareFiveHundredPlusPercent}%` }}
+                        title="500+"
+                      />
+                    ) : null}
+                    {c.shareClubPercent > 0 ? (
+                      <div className="bg-violet-600/70" style={{ width: `${c.shareClubPercent}%` }} title="Club" />
+                    ) : null}
+                  </div>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    ТОП 500: {c.shareTop500Percent}% · 500+: {c.shareFiveHundredPlusPercent}% · Club: {c.shareClubPercent}%
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      <section className="space-y-4" data-testid="section-infographic-showcase-models">
+        <h2 className="text-lg font-semibold text-foreground sm:text-xl">Модели на витринах</h2>
+        <p className="text-sm text-muted-foreground">Топ моделей МК и ВХ по синтетическим витринам клиентской базы.</p>
+        <div className="grid min-w-0 gap-4 lg:grid-cols-2">
+          <Card className="min-w-0 rounded-2xl border border-border/80 bg-card shadow-md">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">МК</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3" data-testid="chart-infographic-showcase-models-mk">
+              {modelsMk.map((m) => (
+                <div
+                  key={m.productId}
+                  className="flex flex-col gap-2 rounded-xl border border-border/60 bg-muted/10 p-3 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium leading-snug text-foreground">{m.label}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Клиентов: {m.clientCount} · продажи с витрины {formatCompactRub(m.showcaseSales)} · конверсия{" "}
+                      {formatPercent(m.avgConversionPercent)} · на витрине ~{formatUnits(m.unitsOnShowcase)} шт.
+                    </p>
+                  </div>
+                  <Button
+                    asChild
+                    size="sm"
+                    variant="secondary"
+                    className="shrink-0 font-semibold"
+                    data-testid={`button-infographic-open-product-${m.productId}`}
+                  >
+                    <Link href={`/catalog/${m.productId}`}>К товару</Link>
+                  </Button>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+          <Card className="min-w-0 rounded-2xl border border-border/80 bg-card shadow-md">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">ВХ</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3" data-testid="chart-infographic-showcase-models-vh">
+              {modelsVh.map((m) => (
+                <div
+                  key={m.productId}
+                  className="flex flex-col gap-2 rounded-xl border border-border/60 bg-muted/10 p-3 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium leading-snug text-foreground">{m.label}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Клиентов: {m.clientCount} · продажи с витрины {formatCompactRub(m.showcaseSales)} · конверсия{" "}
+                      {formatPercent(m.avgConversionPercent)} · на витрине ~{formatUnits(m.unitsOnShowcase)} шт.
+                    </p>
+                  </div>
+                  <Button
+                    asChild
+                    size="sm"
+                    variant="secondary"
+                    className="shrink-0 font-semibold"
+                    data-testid={`button-infographic-open-product-${m.productId}`}
+                  >
+                    <Link href={`/catalog/${m.productId}`}>К товару</Link>
+                  </Button>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
         </div>
       </section>
 

@@ -466,3 +466,296 @@ export const OPERATIONAL_PRODUCT_LINE_OPTIONS: { value: OperationalProductLineKe
   { value: "vh", label: "ВХ" },
   { value: "hardware", label: "Фурнитура" },
 ];
+
+/** Все клиенты витрин по глобальным фильтрам (без фильтра по сегменту). */
+export function filterClientShowcaseRowsAllSegments(filters: OperationalGlobalFilters): OperationalClientShowcaseRow[] {
+  const cityName = cityNameFromFilter(filters.cityId);
+  return CLIENT_SHOWCASE_ROWS.filter((row) => {
+    if (!territoryKeepsDealer(filters.territoryId, row.dealerId)) return false;
+    if (cityName && row.city !== cityName) return false;
+    if (filters.dealerCategory !== "all" && row.clientCategory !== filters.dealerCategory) return false;
+    if (!rowMatchesProductLine(row, filters.productLine)) return false;
+    if (!matchesSearch(row, filters.search)) return false;
+    return true;
+  });
+}
+
+const CITY_SLUG_FOR_INFOGRAPHIC: Record<string, string> = {
+  Краснодар: "krasnodar",
+  "Ростов-на-Дону": "rostov",
+  Сочи: "sochi",
+  Волгоград: "volgograd",
+  Ставрополь: "stavropol",
+  Астрахань: "astrakhan",
+};
+
+export function citySlugForInfographic(cityName: string): string {
+  return CITY_SLUG_FOR_INFOGRAPHIC[cityName] ?? `city-${cityName.length}-${cityName.charCodeAt(0) ?? 0}`;
+}
+
+export type InfographicClientSegmentCard = {
+  segment: PartnerSegment;
+  label: string;
+  clients: number;
+  modelsOnShowcase: number;
+  showcaseSales: number;
+  avgConversionPercent: number;
+};
+
+export function getInfographicClientSegmentCards(
+  filters: OperationalGlobalFilters = OPERATIONAL_DEFAULT_GLOBAL_FILTERS,
+): InfographicClientSegmentCard[] {
+  const labels: Record<PartnerSegment, string> = {
+    top500: "ТОП 500",
+    fiveHundredPlus: "500+",
+    tandoorClub: "Tandoor Club",
+  };
+  const order: PartnerSegment[] = ["top500", "fiveHundredPlus", "tandoorClub"];
+  return order.map((segment) => {
+    const rows = filterClientShowcaseRows(segment, filters, "all");
+    const k = kpiForClientShowcase(rows);
+    return {
+      segment,
+      label: labels[segment],
+      clients: k.clients,
+      modelsOnShowcase: k.models,
+      showcaseSales: k.showcaseSales,
+      avgConversionPercent: k.avgConv,
+    };
+  });
+}
+
+export type InfographicProfitabilityBar = {
+  dealerId: string;
+  clientName: string;
+  city: string;
+  profitabilityLabel: string;
+  profitabilityScore: number;
+  shareShowcasePercent: number;
+  ourShowcases: number;
+  competitorShowcases: number;
+};
+
+export function getInfographicShowcaseProfitabilityBars(
+  filters: OperationalGlobalFilters = OPERATIONAL_DEFAULT_GLOBAL_FILTERS,
+  limit = 10,
+): InfographicProfitabilityBar[] {
+  const rows = filterShowcaseProfitabilityRows(filters, "all");
+  const byDealer = new Map<string, OperationalShowcaseProfitabilityRow>();
+  for (const r of rows) {
+    if (!r.tradePointId) byDealer.set(r.dealerId, r);
+  }
+  return Array.from(byDealer.values())
+    .sort((a, b) => a.profitabilityScore - b.profitabilityScore)
+    .slice(0, limit)
+    .map((r) => ({
+      dealerId: r.dealerId,
+      clientName: r.clientName,
+      city: r.city,
+      profitabilityLabel: r.profitabilityLabel,
+      profitabilityScore: r.profitabilityScore,
+      shareShowcasePercent: r.shareShowcasePercent,
+      ourShowcases: r.ourShowcases,
+      competitorShowcases: r.competitorShowcases,
+    }));
+}
+
+export function getInfographicShowcaseRiskClients(
+  filters: OperationalGlobalFilters = OPERATIONAL_DEFAULT_GLOBAL_FILTERS,
+  limit = 6,
+): OperationalShowcaseProfitabilityRow[] {
+  const rows = filterShowcaseProfitabilityRows(filters, "all");
+  const risky = rows.filter((r) => r.attentionZone !== "high_profit");
+  const seen = new Set<string>();
+  const out: OperationalShowcaseProfitabilityRow[] = [];
+  for (const r of risky) {
+    if (seen.has(r.dealerId)) continue;
+    seen.add(r.dealerId);
+    out.push(r);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+export function getInfographicHardwareOperationalKpi(filters: OperationalGlobalFilters = OPERATIONAL_DEFAULT_GLOBAL_FILTERS) {
+  const rows = filterHardwareRows(filters, "all", null, null);
+  return kpiHardware(rows);
+}
+
+export function getInfographicHardwareRiskClients(
+  filters: OperationalGlobalFilters = OPERATIONAL_DEFAULT_GLOBAL_FILTERS,
+  limit = 5,
+): OperationalHardwareConversionRow[] {
+  const rows = filterHardwareRows(filters, "all", null, null).filter(
+    (r) => r.conversionLevel === "low" || r.conversionLevel === "none",
+  );
+  const seen = new Set<string>();
+  const out: OperationalHardwareConversionRow[] = [];
+  for (const r of rows) {
+    if (seen.has(r.dealerId)) continue;
+    seen.add(r.dealerId);
+    out.push(r);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+export type InfographicEquipmentNomenclatureBar = { name: string; quantity: number; amountRub: number };
+
+export function getInfographicEquipmentNomenclatureBars(
+  filters: OperationalGlobalFilters = OPERATIONAL_DEFAULT_GLOBAL_FILTERS,
+): InfographicEquipmentNomenclatureBar[] {
+  const rows = filterEquipmentRows(filters, "all", "", "all");
+  const map = new Map<string, { quantity: number; amountRub: number }>();
+  for (const r of rows) {
+    const cur = map.get(r.nomenclature) ?? { quantity: 0, amountRub: 0 };
+    cur.quantity += r.quantity;
+    cur.amountRub += r.amountRub;
+    map.set(r.nomenclature, cur);
+  }
+  return Array.from(map.entries())
+    .map(([name, v]) => ({ name, quantity: v.quantity, amountRub: v.amountRub }))
+    .sort((a, b) => b.amountRub - a.amountRub);
+}
+
+export type InfographicEquipmentClientCard = {
+  dealerId: string;
+  clientName: string;
+  city: string;
+  amountRub: number;
+  quantity: number;
+  avgMonthlyOrderRub: number;
+};
+
+export function getInfographicEquipmentTopClients(
+  filters: OperationalGlobalFilters = OPERATIONAL_DEFAULT_GLOBAL_FILTERS,
+  limit = 6,
+): InfographicEquipmentClientCard[] {
+  const rows = filterEquipmentRows(filters, "all", "", "all");
+  const byDealer = new Map<string, InfographicEquipmentClientCard>();
+  for (const r of rows) {
+    const cur =
+      byDealer.get(r.dealerId) ??
+      ({
+        dealerId: r.dealerId,
+        clientName: r.clientName,
+        city: r.city,
+        amountRub: 0,
+        quantity: 0,
+        avgMonthlyOrderRub: r.avgMonthlyOrderRub,
+      } satisfies InfographicEquipmentClientCard);
+    cur.amountRub += r.amountRub;
+    cur.quantity += r.quantity;
+    cur.avgMonthlyOrderRub = r.avgMonthlyOrderRub;
+    byDealer.set(r.dealerId, cur);
+  }
+  return Array.from(byDealer.values()).sort((a, b) => b.amountRub - a.amountRub).slice(0, limit);
+}
+
+export type InfographicCitySegment = {
+  cityId: string;
+  cityName: string;
+  clients: number;
+  shareTopPercent: number;
+  shareAPercent: number;
+  shareBPercent: number;
+  shareCPercent: number;
+  shareTop500Percent: number;
+  shareFiveHundredPlusPercent: number;
+  shareClubPercent: number;
+  showcaseSales: number;
+  avgConversionPercent: number;
+};
+
+function pct(part: number, total: number): number {
+  return total ? Math.round((part / total) * 100) : 0;
+}
+
+export function getInfographicCitySegments(
+  filters: OperationalGlobalFilters = OPERATIONAL_DEFAULT_GLOBAL_FILTERS,
+): InfographicCitySegment[] {
+  const rows = filterClientShowcaseRowsAllSegments(filters);
+  const byCity = new Map<string, OperationalClientShowcaseRow[]>();
+  for (const r of rows) {
+    const arr = byCity.get(r.city) ?? [];
+    arr.push(r);
+    byCity.set(r.city, arr);
+  }
+  const out: InfographicCitySegment[] = [];
+  for (const [cityName, list] of Array.from(byCity.entries())) {
+    const n = list.length;
+    const cat = (c: DealerCategory) => list.filter((r: OperationalClientShowcaseRow) => r.clientCategory === c).length;
+    const seg = (s: PartnerSegment) => list.filter((r: OperationalClientShowcaseRow) => r.segments.includes(s)).length;
+    const showcaseSales = list.reduce((s: number, r: OperationalClientShowcaseRow) => s + r.showcaseSales, 0);
+    const avgConversion = n ? Math.round(list.reduce((s, r) => s + r.conversionPercent, 0) / n) : 0;
+    out.push({
+      cityId: citySlugForInfographic(cityName),
+      cityName,
+      clients: n,
+      shareTopPercent: pct(cat("TOP"), n),
+      shareAPercent: pct(cat("A"), n),
+      shareBPercent: pct(cat("B"), n),
+      shareCPercent: pct(cat("C"), n),
+      shareTop500Percent: pct(seg("top500"), n),
+      shareFiveHundredPlusPercent: pct(seg("fiveHundredPlus"), n),
+      shareClubPercent: pct(seg("tandoorClub"), n),
+      showcaseSales,
+      avgConversionPercent: avgConversion,
+    });
+  }
+  return out.sort((a, b) => b.showcaseSales - a.showcaseSales);
+}
+
+export type InfographicShowcaseModelRow = {
+  productId: string;
+  label: string;
+  line: "mk" | "vh";
+  clientCount: number;
+  showcaseSales: number;
+  avgConversionPercent: number;
+  unitsOnShowcase: number;
+};
+
+export function getInfographicShowcaseModels(
+  filters: OperationalGlobalFilters = OPERATIONAL_DEFAULT_GLOBAL_FILTERS,
+  line: "mk" | "vh",
+  limit = 8,
+): InfographicShowcaseModelRow[] {
+  const rows = filterClientShowcaseRowsAllSegments(filters);
+  type Agg = { label: string; clients: Set<string>; sales: number; convSum: number; convN: number; units: number };
+  const map = new Map<string, Agg>();
+  for (const r of rows) {
+    const models = line === "mk" ? r.mkModels : r.vhModels;
+    const denom = Math.max(1, models.length);
+    for (const m of models) {
+      const cur =
+        map.get(m.productId) ??
+        ({
+          label: m.label,
+          clients: new Set<string>(),
+          sales: 0,
+          convSum: 0,
+          convN: 0,
+          units: 0,
+        } satisfies Agg);
+      cur.clients.add(r.dealerId);
+      cur.sales += r.showcaseSales / denom;
+      cur.convSum += r.conversionPercent;
+      cur.convN += 1;
+      cur.units += r.unitsOnShowcase / denom;
+      map.set(m.productId, cur);
+    }
+  }
+  return Array.from(map.entries())
+    .map(([productId, v]) => ({
+      productId,
+      label: v.label,
+      line,
+      clientCount: v.clients.size,
+      showcaseSales: Math.round(v.sales),
+      avgConversionPercent: v.convN ? Math.round(v.convSum / v.convN) : 0,
+      unitsOnShowcase: Math.round(v.units),
+    }))
+    .sort((a, b) => b.showcaseSales - a.showcaseSales)
+    .slice(0, limit);
+}
