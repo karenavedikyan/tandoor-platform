@@ -1,0 +1,429 @@
+import { useMemo } from "react";
+import { Link } from "wouter";
+import { MapPinned } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { FloatingBackButton } from "@/components/navigation/floating-back-button";
+import { cn } from "@/lib/utils";
+import { ORDER_STATUS_TONE, type OrderRow } from "@/lib/order-data";
+import {
+  MATRIX_TASK_PRIORITY_LABEL,
+  MATRIX_TASK_STATUS_LABEL,
+  MATRIX_TASK_TYPE_LABEL,
+  type MatrixTaskWithContext,
+} from "@/lib/trade-point-task-data";
+import { formatCompactRub, formatPercent, formatUnits, planCompletionPercent } from "@/lib/sales-manager-kpi-data";
+import {
+  getTerritoryCities,
+  getTerritoryFocusItems,
+  getTerritoryPlanLines,
+  getTerritoryRecentOrders,
+  getTerritoryRisks,
+  getTerritoryShowcases,
+  getTerritorySummary,
+  getTerritoryTasks,
+  getTerritoryTradePoints,
+  type TerritoryCitySummary,
+  type TerritoryPlanLine,
+  type TerritoryRiskItem,
+} from "@/lib/territory-card-data";
+
+function riskTone(level: TerritoryRiskItem["level"]) {
+  if (level === "critical") return "border-red-200 bg-red-50 text-red-900";
+  if (level === "attention") return "border-amber-200 bg-amber-50 text-amber-950";
+  return "border-border bg-muted/50 text-foreground";
+}
+
+function planCardTestId(key: TerritoryPlanLine["key"]) {
+  if (key === "mk") return "card-territory-plan-mk";
+  if (key === "vh") return "card-territory-plan-vh";
+  return "card-territory-plan-hardware";
+}
+
+function formatPlanValue(line: TerritoryPlanLine): string {
+  if (line.key === "hardware") return formatCompactRub(line.plan);
+  return formatUnits(line.plan);
+}
+
+function formatFactValue(line: TerritoryPlanLine): string {
+  if (line.key === "hardware") return formatCompactRub(line.fact);
+  return formatUnits(line.fact);
+}
+
+function formatRemainder(line: TerritoryPlanLine): string {
+  if (line.key === "hardware") return formatCompactRub(line.remainder);
+  return formatUnits(line.remainder);
+}
+
+function cityCompletion(plan: number, fact: number) {
+  return planCompletionPercent(plan, fact);
+}
+
+export default function TerritoryCardPage() {
+  const summary = useMemo(() => getTerritorySummary(), []);
+  const planLines = useMemo(() => getTerritoryPlanLines(), []);
+  const cities = useMemo(() => getTerritoryCities(), []);
+  const focus = useMemo(() => getTerritoryFocusItems(), []);
+  const orders = useMemo(() => getTerritoryRecentOrders(8), []);
+  const tasks = useMemo(() => getTerritoryTasks(10), []);
+  const tradePoints = useMemo(() => getTerritoryTradePoints(12), []);
+  const showcases = useMemo(() => getTerritoryShowcases(), []);
+  const risks = useMemo(() => getTerritoryRisks(), []);
+
+  return (
+    <div className="space-y-8 pb-28 sm:space-y-10" data-testid="page-territory-card">
+      <section
+        className="relative overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-lg sm:p-8"
+        data-testid="section-territory-hero"
+      >
+        <div className="pointer-events-none absolute left-0 top-0 h-full w-1 rounded-l-2xl bg-primary" aria-hidden />
+        <div className="relative flex flex-col gap-5 pl-3 sm:flex-row sm:items-start sm:justify-between sm:pl-4">
+          <div className="min-w-0 space-y-2">
+            <div className="flex items-center gap-2 text-primary">
+              <MapPinned className="h-7 w-7 shrink-0" aria-hidden />
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Территория «{summary.territoryLabel}»
+              </span>
+            </div>
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Карточка территории</h1>
+            <p className="max-w-2xl text-sm text-muted-foreground sm:text-base">
+              Операционная сводка по клиентам, заказам, задачам и торговым точкам территории.
+            </p>
+          </div>
+          <div className="grid w-full gap-2 sm:w-auto sm:min-w-[220px]">
+            <Button asChild className="min-h-11 w-full font-semibold" data-testid="button-territory-open-main">
+              <Link href="/main">К главному</Link>
+            </Button>
+            <Button asChild variant="outline" className="min-h-11 w-full border-border bg-card font-semibold" data-testid="button-territory-open-dealers">
+              <Link href="/dealer-base">К клиентам</Link>
+            </Button>
+            <Button asChild variant="outline" className="min-h-11 w-full border-border bg-card font-semibold" data-testid="button-territory-open-orders">
+              <Link href="/orders">К заказам</Link>
+            </Button>
+            <Button asChild variant="outline" className="min-h-11 w-full border-border bg-card font-semibold" data-testid="button-territory-open-analytics">
+              <Link href="/analytics">К аналитике</Link>
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      <section className="space-y-4" data-testid="section-territory-summary">
+        <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Сводка территории</h2>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          <Card className="border-border/70 shadow-xs" data-testid="card-territory-dealers">
+            <CardHeader className="pb-2 pt-4">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Клиенты</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-1 pb-4 pt-0">
+              <p className="text-2xl font-semibold tabular-nums text-foreground">{summary.dealersTotal}</p>
+              <p className="text-xs text-muted-foreground">активных: {summary.dealersActive}</p>
+            </CardContent>
+          </Card>
+          <Card className="border-border/70 shadow-xs" data-testid="card-territory-trade-points">
+            <CardHeader className="pb-2 pt-4">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Торговые точки</CardTitle>
+            </CardHeader>
+            <CardContent className="pb-4 pt-0">
+              <p className="text-2xl font-semibold tabular-nums text-foreground">{summary.tradePointsTotal}</p>
+            </CardContent>
+          </Card>
+          <Card className="border-border/70 shadow-xs" data-testid="card-territory-orders">
+            <CardHeader className="pb-2 pt-4">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Заказы в работе</CardTitle>
+            </CardHeader>
+            <CardContent className="pb-4 pt-0">
+              <p className="text-2xl font-semibold tabular-nums text-foreground">{summary.ordersInProgress}</p>
+            </CardContent>
+          </Card>
+          <Card className="border-border/70 shadow-xs" data-testid="card-territory-tasks">
+            <CardHeader className="pb-2 pt-4">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Задачи</CardTitle>
+            </CardHeader>
+            <CardContent className="pb-4 pt-0">
+              <p className="text-2xl font-semibold tabular-nums text-foreground">{summary.tasksOpen}</p>
+              <p className="text-xs text-muted-foreground">открыто по матрице</p>
+            </CardContent>
+          </Card>
+          <Card className="border-border/70 shadow-xs" data-testid="card-territory-showcases">
+            <CardHeader className="pb-2 pt-4">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Витрины и матрица</CardTitle>
+            </CardHeader>
+            <CardContent className="pb-4 pt-0">
+              <p className="text-2xl font-semibold tabular-nums text-foreground">{summary.showcaseFollowUps}</p>
+              <p className="text-xs text-muted-foreground">точек с контролем выкладки</p>
+            </CardContent>
+          </Card>
+          <Card className="border-border/70 shadow-xs" data-testid="card-territory-attention">
+            <CardHeader className="pb-2 pt-4">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Зоны внимания</CardTitle>
+            </CardHeader>
+            <CardContent className="pb-4 pt-0">
+              <p className="text-2xl font-semibold tabular-nums text-foreground">{summary.attentionSignals}</p>
+              <p className="text-xs text-muted-foreground">сигналов по клиентам и заказам</p>
+            </CardContent>
+          </Card>
+        </div>
+      </section>
+
+      <section className="space-y-4" data-testid="section-territory-plan">
+        <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Выполнение плана территории</h2>
+        <div className="grid gap-3 lg:grid-cols-3">
+          {planLines.map((line) => (
+            <Card key={line.key} className="border-border/70 shadow-xs" data-testid={planCardTestId(line.key)}>
+              <CardHeader className="pb-2 pt-4">
+                <CardTitle className="text-base">{line.label}</CardTitle>
+                <p className="text-xs text-muted-foreground">{line.unitLabel === "₽" ? "Оборот" : "Объём в штуках"}</p>
+              </CardHeader>
+              <CardContent className="space-y-3 pb-4">
+                <div className="flex flex-wrap justify-between gap-2 text-sm">
+                  <span className="text-muted-foreground">
+                    План: <span className="font-semibold text-foreground">{formatPlanValue(line)}</span>
+                  </span>
+                  <span className="text-muted-foreground">
+                    Факт: <span className="font-semibold text-foreground">{formatFactValue(line)}</span>
+                  </span>
+                </div>
+                <div>
+                  <div className="mb-1 flex justify-between text-xs text-muted-foreground">
+                    <span>Выполнение</span>
+                    <span className="font-semibold text-foreground">{formatPercent(line.completionPercent)}</span>
+                  </div>
+                  <Progress value={Math.min(100, line.completionPercent)} className="h-2" />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Остаток до плана: <span className="font-medium text-foreground">{formatRemainder(line)}</span>
+                </p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      <section className="space-y-4" data-testid="section-territory-cities">
+        <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Города и населённые пункты</h2>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {cities.map((c: TerritoryCitySummary) => (
+            <Card key={c.id} className="border-border/70 shadow-xs" data-testid={`card-territory-city-${c.id}`}>
+              <CardHeader className="space-y-1 pb-2 pt-4">
+                <CardTitle className="text-lg">{c.name}</CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  Клиенты: <span className="font-semibold text-foreground">{c.dealersCount}</span> · активные:{" "}
+                  <span className="font-semibold text-foreground">{c.activeDealersCount}</span> · TOP:{" "}
+                  <span className="font-semibold text-foreground">{c.topDealersCount}</span> · внимание:{" "}
+                  <span className="font-semibold text-foreground">{c.attentionDealersCount}</span>
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-3 pb-4 text-sm text-muted-foreground">
+                <p>
+                  Торговые точки: <span className="font-medium text-foreground">{c.tradePointsCount}</span>
+                  {" · "}
+                  Заказы: <span className="font-medium text-foreground">{c.ordersCount}</span>
+                  {" · "}
+                  Задачи: <span className="font-medium text-foreground">{c.tasksCount}</span>
+                </p>
+                <div className="rounded-lg border border-border/60 bg-muted/20 p-3 text-xs leading-relaxed">
+                  <p>
+                    МК: план {formatUnits(c.mkPlanUnits)}, факт {formatUnits(c.mkFactUnits)} (
+                    {formatPercent(cityCompletion(c.mkPlanUnits, c.mkFactUnits))})
+                  </p>
+                  <p className="mt-1">
+                    ВХ: план {formatUnits(c.vhPlanUnits)}, факт {formatUnits(c.vhFactUnits)} (
+                    {formatPercent(cityCompletion(c.vhPlanUnits, c.vhFactUnits))})
+                  </p>
+                  <p className="mt-1">
+                    Фурнитура: план {formatCompactRub(c.hardwarePlanMoney)}, факт {formatCompactRub(c.hardwareFactMoney)} (
+                    {formatPercent(cityCompletion(c.hardwarePlanMoney, c.hardwareFactMoney))})
+                  </p>
+                </div>
+                <Button asChild variant="outline" className="w-full min-h-11 border-border font-semibold" data-testid={`button-open-city-dealers-${c.id}`}>
+                  <Link href="/dealer-base">Открыть клиентов</Link>
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      <section className="space-y-4" data-testid="section-territory-focus-dealers">
+        <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Клиенты в фокусе</h2>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {focus.map((f) => {
+            const dealerId = f.href.replace("/dealers/", "");
+            return (
+              <Card key={f.id} className="border-border/70 shadow-xs" data-testid={`card-territory-focus-dealer-${dealerId}`}>
+                <CardHeader className="pb-2 pt-4">
+                  <CardTitle className="text-base leading-snug">{f.title}</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 pb-4">
+                  <p className="text-sm text-muted-foreground">{f.description}</p>
+                  <Button asChild className="w-full min-h-11 font-semibold" data-testid={`button-open-territory-dealer-${dealerId}`}>
+                    <Link href={f.href}>Карточка клиента</Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="space-y-4" data-testid="section-territory-orders">
+        <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Заказы территории</h2>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {orders.map((o: OrderRow) => (
+            <Card key={o.id} className="border-border/70 shadow-xs" data-testid={`card-territory-order-${o.id}`}>
+              <CardHeader className="space-y-2 pb-2 pt-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <CardTitle className="text-base">Заказ {o.number}</CardTitle>
+                  <Badge variant="outline" className={cn("text-xs font-medium", ORDER_STATUS_TONE[o.status])}>
+                    {o.status}
+                  </Badge>
+                </div>
+                <p className="text-sm text-muted-foreground">{o.dealerName}</p>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-3 pb-4 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-muted-foreground">
+                  Сумма: <span className="font-medium text-foreground">{o.totalAmountLabel}</span>
+                </p>
+                <Button asChild variant="outline" size="sm" className="w-full shrink-0 font-semibold sm:w-auto" data-testid={`button-open-territory-order-${o.id}`}>
+                  <Link href={`/orders/${o.id}`}>Открыть</Link>
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      <section className="space-y-4" data-testid="section-territory-tasks">
+        <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Задачи территории</h2>
+        <p className="text-sm text-muted-foreground">Продажи, витрины, матрица; связь с обучением — через общий список задач.</p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {tasks.map((t: MatrixTaskWithContext) => (
+            <Card key={t.taskId} className="border-border/70 shadow-xs" data-testid={`card-territory-task-${t.taskId}`}>
+              <CardHeader className="space-y-2 pb-2 pt-4">
+                <CardTitle className="text-base leading-snug">{t.title}</CardTitle>
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant="outline" className="text-[11px] font-medium">
+                    {MATRIX_TASK_TYPE_LABEL[t.type]}
+                  </Badge>
+                  <Badge variant="outline" className="text-[11px] font-medium">
+                    {MATRIX_TASK_STATUS_LABEL[t.status]}
+                  </Badge>
+                  <Badge variant="outline" className="text-[11px] font-medium">
+                    {MATRIX_TASK_PRIORITY_LABEL[t.priority]}
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-2 pb-4 text-sm text-muted-foreground">
+                <p>{t.dealerName}</p>
+                <p>Срок: {t.dueDate}</p>
+                <Button asChild variant="outline" className="mt-2 w-full min-h-11 font-semibold sm:w-auto" data-testid={`button-open-territory-task-${t.taskId}`}>
+                  <Link href="/tasks">К задачам</Link>
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      <section className="space-y-4" data-testid="section-territory-trade-points">
+        <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Торговые точки и витрины</h2>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {tradePoints.map((tp) => (
+            <Card key={tp.pointId} className="border-border/70 shadow-xs" data-testid={`card-territory-trade-point-${tp.pointId}`}>
+              <CardHeader className="space-y-1 pb-2 pt-4">
+                <CardTitle className="text-base">{tp.pointLabel}</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  {tp.city} · {tp.dealerLabel}
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-2 pb-4 text-sm text-muted-foreground">
+                <p>
+                  Статус: <span className="font-medium text-foreground">{tp.status}</span>
+                </p>
+                <p>
+                  Матрица (сводно): <span className="font-medium text-foreground">{tp.matrixPercent}%</span>
+                </p>
+                <p className="text-xs leading-relaxed">Витрина: {tp.showcaseLine}</p>
+                <p className="text-xs">Активность: {tp.lastActivity}</p>
+                <p className="text-xs leading-relaxed">{tp.issuesShort}</p>
+                <Button
+                  asChild
+                  variant="outline"
+                  className="mt-2 w-full min-h-11 border-border font-semibold"
+                  data-testid={`button-open-territory-trade-point-${tp.pointId}`}
+                >
+                  <Link href={`/dealers/${tp.dealerId}/trade-points/${tp.pointId}`}>Открыть точку</Link>
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+        <div className="rounded-2xl border border-border/70 bg-card p-4 shadow-xs">
+          <h3 className="text-sm font-semibold text-foreground">Витрины (сводка)</h3>
+          <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
+            {showcases.slice(0, 6).map((s) => (
+              <li key={s.id} className="flex flex-col gap-1 border-b border-border/60 pb-2 last:border-0 sm:flex-row sm:items-center sm:justify-between">
+                <span className="min-w-0 font-medium text-foreground">{s.headline}</span>
+                <span className="shrink-0 text-xs">{s.statusLine}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
+      <section className="space-y-4" data-testid="section-territory-risks">
+        <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Зоны внимания</h2>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {risks.map((r: TerritoryRiskItem) => (
+            <Card key={r.id} className={cn("border shadow-xs", riskTone(r.level))} data-testid={`card-territory-risk-${r.id}`}>
+              <CardHeader className="pb-2 pt-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <CardTitle className="text-base leading-snug">{r.title}</CardTitle>
+                  <Badge variant="outline" className="text-[10px] font-semibold uppercase">
+                    {r.level === "critical" ? "Критично" : r.level === "attention" ? "Внимание" : "Норма"}
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">{r.city}</p>
+              </CardHeader>
+              <CardContent className="space-y-2 pb-4 text-sm">
+                <p>
+                  <span className="font-semibold text-foreground">Причина: </span>
+                  {r.reason}
+                </p>
+                <p className="text-muted-foreground">
+                  <span className="font-semibold text-foreground">Следующий шаг: </span>
+                  {r.nextAction}
+                </p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      <section className="space-y-4 rounded-2xl border border-border bg-card p-4 shadow-xs sm:p-6" data-testid="section-territory-quick-actions">
+        <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Быстрые действия</h2>
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+          <Button asChild variant="outline" className="min-h-11 w-full border-border font-semibold sm:w-auto" data-testid="button-territory-quick-dealers">
+            <Link href="/dealer-base">К клиентской базе</Link>
+          </Button>
+          <Button asChild variant="outline" className="min-h-11 w-full border-border font-semibold sm:w-auto" data-testid="button-territory-quick-orders">
+            <Link href="/orders">К заказам</Link>
+          </Button>
+          <Button asChild variant="outline" className="min-h-11 w-full border-border font-semibold sm:w-auto" data-testid="button-territory-quick-tasks">
+            <Link href="/tasks">К задачам</Link>
+          </Button>
+          <Button asChild variant="outline" className="min-h-11 w-full border-border font-semibold sm:w-auto" data-testid="button-territory-quick-analytics">
+            <Link href="/analytics">К аналитике</Link>
+          </Button>
+          <Button asChild className="min-h-11 w-full font-semibold sm:w-auto" data-testid="button-territory-quick-training">
+            <Link href="/training">К обучению</Link>
+          </Button>
+        </div>
+      </section>
+
+      <FloatingBackButton href="/main" label="К главному" testId="floating-back-to-main" ariaLabel="К главному экрану" />
+    </div>
+  );
+}

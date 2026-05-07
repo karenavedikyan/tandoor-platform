@@ -21,7 +21,7 @@ import { TandoorLogo } from "@/components/tandoor-logo";
 import { cn } from "@/lib/utils";
 
 const MAIN_HREF = "/main";
-const TERRITORY_HREF = "/analytics";
+const TERRITORY_CARD_HREF = "/territory-card";
 const DEALER_BASE_HREF = "/dealer-base";
 const ORDERS_HREF = "/orders";
 const CATALOG_HREF = "/catalog";
@@ -44,7 +44,7 @@ type NavDef = {
 
 const NAV_ITEMS: NavDef[] = [
   { href: MAIN_HREF, label: "Главная", testId: "nav-main" },
-  { href: TERRITORY_HREF, label: "Карточка территории", testId: "nav-territory-card" },
+  { href: TERRITORY_CARD_HREF, label: "Карточка территории", testId: "nav-territory-card" },
   { href: DEALER_BASE_HREF, label: "Клиенты", testId: "nav-dealer-base", badge: NAV_BADGE_CLIENTS },
   { href: ORDERS_HREF, label: "Заказы", testId: "nav-orders", badge: NAV_BADGE_ORDERS },
   { href: CATALOG_HREF, label: "Каталог", testId: "nav-catalog" },
@@ -55,7 +55,7 @@ const NAV_ITEMS: NavDef[] = [
 
 const ICON_RAIL: { href: string; label: string; icon: LucideIcon }[] = [
   { href: MAIN_HREF, label: "Главная", icon: Home },
-  { href: TERRITORY_HREF, label: "Территория", icon: MapPinned },
+  { href: TERRITORY_CARD_HREF, label: "Территория", icon: MapPinned },
   { href: DEALER_BASE_HREF, label: "Клиенты", icon: Users },
   { href: ORDERS_HREF, label: "Заказы", icon: Package },
   { href: CATALOG_HREF, label: "Каталог", icon: LayoutGrid },
@@ -87,6 +87,10 @@ function isAnalyticsPath(path: string) {
   return path === ANALYTICS_HREF;
 }
 
+function isTerritoryCardPath(path: string) {
+  return path === TERRITORY_CARD_HREF;
+}
+
 function isTrainingPath(path: string) {
   return path === TRAINING_HREF || path.startsWith(`${TRAINING_HREF}/`);
 }
@@ -98,7 +102,8 @@ function isNavItemActive(item: NavDef, location: string, isActiveFromLink?: bool
   if (item.testId === "nav-orders") return isOrdersSectionPath(location);
   if (item.testId === "nav-catalog") return isCatalogPath(location);
   if (item.testId === "nav-tasks") return isTasksPath(location);
-  if (item.testId === "nav-territory-card" || item.testId === "nav-analytics") return isAnalyticsPath(location);
+  if (item.testId === "nav-territory-card") return isTerritoryCardPath(location);
+  if (item.testId === "nav-analytics") return isAnalyticsPath(location);
   if (item.testId === "nav-training") return isTrainingPath(location);
   return location === item.href;
 }
@@ -109,7 +114,7 @@ function isIconRailActive(href: string, location: string) {
   if (href === ORDERS_HREF) return isOrdersSectionPath(location);
   if (href === CATALOG_HREF) return isCatalogPath(location);
   if (href === TASKS_HREF) return isTasksPath(location);
-  if (href === TERRITORY_HREF) return isAnalyticsPath(location);
+  if (href === TERRITORY_CARD_HREF) return isTerritoryCardPath(location);
   if (href === TRAINING_HREF) return isTrainingPath(location);
   return false;
 }
@@ -134,6 +139,7 @@ function headerContextLabel(location: string) {
   if (isOrdersSectionPath(location)) return "Заказы";
   if (isTasksPath(location)) return "Задачи";
   if (isCatalogPath(location)) return "Каталог";
+  if (isTerritoryCardPath(location)) return "Карточка территории";
   if (isAnalyticsPath(location)) return "Аналитика";
   if (isTrainingPath(location)) return "Обучение";
   if (location.startsWith("/dealers/")) return "Карточка клиента";

@@ -18,6 +18,7 @@ import OrderDetailPage from "@/pages/order-detail";
 import AnalyticsPage from "@/pages/analytics";
 import TrainingPage from "@/pages/training";
 import TrainingArticlePage from "@/pages/training-article";
+import TerritoryCardPage from "@/pages/territory-card";
 import PreviewUnavailable from "@/pages/preview-unavailable";
 import InternalPrototypePlaceholder from "@/pages/internal-prototype-placeholder";
 import { INTERNAL_PROTOTYPE_ROUTES } from "@/lib/preview-config";
@@ -35,6 +36,7 @@ function AppRouter() {
         <Route path="/tasks" component={TasksPage} />
         <Route path="/training/:articleId" component={TrainingArticlePage} />
         <Route path="/training" component={TrainingPage} />
+        <Route path="/territory-card" component={TerritoryCardPage} />
         <Route path="/analytics" component={AnalyticsPage} />
         <Route path="/orders/:orderId" component={OrderDetailPage} />
         <Route path="/orders" component={OrdersPage} />
