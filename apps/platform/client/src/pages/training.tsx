@@ -32,7 +32,7 @@ import {
 } from "@/lib/training-data";
 import { getProductById } from "@/lib/catalog-data";
 import { getWikiTrainingImportSummary } from "@/lib/training-wiki-import";
-import { getWikiTrainingContentByPriority, getWikiTrainingContentMapSummary } from "@/lib/training-wiki-content-map";
+import { getWikiTrainingContentByPriority, getWikiTrainingContentMapSummary, WIKI_MAP_REVIEW_LABEL } from "@/lib/training-wiki-content-map";
 
 type StatusFilter = "all" | TrainingMaterialStatus;
 
@@ -101,12 +101,6 @@ function statusBadgeClass(status: TrainingMaterial["status"]) {
   if (status === "updated") return "border-amber-200 bg-amber-50 text-amber-950";
   return "border-border bg-muted/60 text-foreground";
 }
-
-const WIKI_MAP_REVIEW_LABEL: Record<"needs_review" | "approved" | "archive_candidate", string> = {
-  needs_review: "На проверке",
-  approved: "Проверено",
-  archive_candidate: "Кандидат в архив",
-};
 
 export default function TrainingPage() {
   const all = useMemo(() => getAllTrainingMaterials(), []);
@@ -588,11 +582,16 @@ export default function TrainingPage() {
       </section>
 
       <section className="space-y-4 rounded-2xl border border-border/80 bg-card p-5 shadow-xs sm:p-6" data-testid="section-training-wiki-map">
-        <div className="min-w-0 space-y-1">
-          <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Карта наполнения Wiki</h2>
-          <p className="max-w-3xl text-sm text-muted-foreground">
-            План переноса тем из закрытой базы в учебные программы: приоритеты, роли и сценарии без полных текстов и внутренних ссылок.
-          </p>
+        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 space-y-1">
+            <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Карта наполнения Wiki</h2>
+            <p className="max-w-3xl text-sm text-muted-foreground">
+              План переноса тем из закрытой базы в учебные программы: приоритеты, роли и сценарии без полных текстов и внутренних ссылок.
+            </p>
+          </div>
+          <Button asChild className="h-11 min-h-[44px] w-full shrink-0 font-semibold sm:w-auto sm:min-w-[11rem]" data-testid="button-training-open-wiki-map">
+            <Link href="/training/wiki-map">Открыть карту Wiki</Link>
+          </Button>
         </div>
         <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Card className="min-w-0 border-border/70 shadow-xs" data-testid="card-training-wiki-map-total">
