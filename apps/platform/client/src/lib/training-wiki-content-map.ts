@@ -61,6 +61,54 @@ export const WIKI_TRAINING_WORK_CONTEXT_LABEL: Record<WikiTrainingWorkContext, s
   onboarding: "Онбординг",
 };
 
+export type WikiTrainingReviewDecision =
+  | "pending"
+  | "ready_to_publish"
+  | "rewrite"
+  | "archive"
+  | "do_not_import";
+
+export type WikiTrainingPublishFormat =
+  | "article"
+  | "checklist"
+  | "sales_script"
+  | "course_module"
+  | "regulation"
+  | "product_note";
+
+export interface WikiTrainingReviewChecklist {
+  noClosedData: boolean;
+  noInternalLinks: boolean;
+  actualForCurrentCatalog: boolean;
+  usefulForManager: boolean;
+  linkedToProgram: boolean;
+  linkedToProductOrScenario: boolean;
+}
+
+export interface WikiTrainingReviewMeta {
+  decision: WikiTrainingReviewDecision;
+  recommendedFormat: WikiTrainingPublishFormat;
+  checklist: WikiTrainingReviewChecklist;
+  reviewerNote: string;
+}
+
+export const WIKI_REVIEW_DECISION_LABEL: Record<WikiTrainingReviewDecision, string> = {
+  pending: "На проверке",
+  ready_to_publish: "Готово к публикации",
+  rewrite: "Переписать",
+  archive: "В архив",
+  do_not_import: "Не переносить",
+};
+
+export const WIKI_PUBLISH_FORMAT_LABEL: Record<WikiTrainingPublishFormat, string> = {
+  article: "Статья",
+  checklist: "Чек-лист",
+  sales_script: "Скрипт продаж",
+  course_module: "Модуль курса",
+  regulation: "Регламент",
+  product_note: "Продуктовая заметка",
+};
+
 export interface WikiTrainingContentMapItem {
   id: string;
   wikiTitle: string;
@@ -76,9 +124,12 @@ export interface WikiTrainingContentMapItem {
   reason: string;
   safeSummary: string;
   migrationNotes: string[];
+  reviewMeta: WikiTrainingReviewMeta;
 }
 
-const WIKI_TRAINING_CONTENT_MAP: WikiTrainingContentMapItem[] = [
+type WikiTrainingContentMapSeedRow = Omit<WikiTrainingContentMapItem, "reviewMeta">;
+
+const _WIKI_MAP_SEED: WikiTrainingContentMapSeedRow[] = [
   // ——— P0 Product ———
   {
     id: "wcm-p0-mk-svod-jun2025",
@@ -567,6 +618,59 @@ const WIKI_TRAINING_CONTENT_MAP: WikiTrainingContentMapItem[] = [
   },
 ];
 
+function mapRecommendedTypeToPublishFormat(
+  m: WikiTrainingContentMapSeedRow["recommendedMaterialType"],
+): WikiTrainingPublishFormat {
+  if (m === "article") return "article";
+  if (m === "checklist") return "checklist";
+  if (m === "script") return "sales_script";
+  if (m === "course") return "course_module";
+  if (m === "regulation") return "regulation";
+  return "course_module";
+}
+
+const WIKI_READY_TO_PUBLISH_IDS = new Set<string>([
+  "wcm-p0-vh-warehouse-table",
+  "wcm-p0-vh-locks",
+  "wcm-p0-mk-presentation",
+  "wcm-p0-pet-material",
+  "wcm-p0-anp-spin",
+  "wcm-p0-bitrix24-onboard",
+  "wcm-p0-guarantee-opt",
+]);
+
+function buildReviewMeta(row: WikiTrainingContentMapSeedRow): WikiTrainingReviewMeta {
+  const linkedProgram = row.targetProgramIds.length > 0;
+  const linkedProductOrScenario = row.productScope !== "none" && row.workContexts.length > 0;
+  const checklist: WikiTrainingReviewChecklist = {
+    noClosedData: row.reviewStatus === "approved" || row.priority === "P2",
+    noInternalLinks: row.reviewStatus === "approved",
+    actualForCurrentCatalog: row.productScope !== "none",
+    usefulForManager:
+      row.section === "product" || row.section === "sales" || row.section === "onboarding" || row.section === "regulations",
+    linkedToProgram: linkedProgram,
+    linkedToProductOrScenario: linkedProductOrScenario,
+  };
+
+  let decision: WikiTrainingReviewDecision = "pending";
+  if (row.id === "wcm-p2-sku-wiki-binding") decision = "do_not_import";
+  else if (row.id === "wcm-p2-milliana" || row.id === "wcm-p2-paradise") decision = "archive";
+  else if (WIKI_READY_TO_PUBLISH_IDS.has(row.id)) decision = "ready_to_publish";
+  else if (row.reviewStatus === "needs_review" && (row.priority === "P0" || row.priority === "P1")) decision = "rewrite";
+
+  return {
+    decision,
+    recommendedFormat: mapRecommendedTypeToPublishFormat(row.recommendedMaterialType),
+    checklist,
+    reviewerNote: "",
+  };
+}
+
+const WIKI_TRAINING_CONTENT_MAP: WikiTrainingContentMapItem[] = _WIKI_MAP_SEED.map((row) => ({
+  ...row,
+  reviewMeta: buildReviewMeta(row),
+}));
+
 export function getWikiTrainingContentMap(): WikiTrainingContentMapItem[] {
   return WIKI_TRAINING_CONTENT_MAP;
 }
@@ -678,4 +782,86 @@ export function getWikiTrainingMapAudienceRolesCoveredCount(): number {
     for (const a of item.audiences) s.add(a);
   }
   return s.size;
+}
+
+export type WikiTrainingReviewSummary = {
+  total: number;
+  pending: number;
+  ready_to_publish: number;
+  rewrite: number;
+  archive: number;
+  do_not_import: number;
+  withoutProgram: number;
+  withoutCatalogOrScenario: number;
+  avgChecklistPercent: number;
+};
+
+export function getWikiTrainingReviewChecklistScore(item: WikiTrainingContentMapItem): {
+  score: number;
+  total: number;
+  percent: number;
+} {
+  const c = item.reviewMeta.checklist;
+  const flags = [
+    c.noClosedData,
+    c.noInternalLinks,
+    c.actualForCurrentCatalog,
+    c.usefulForManager,
+    c.linkedToProgram,
+    c.linkedToProductOrScenario,
+  ];
+  const score = flags.filter(Boolean).length;
+  const total = 6;
+  return { score, total, percent: Math.round((score / total) * 100) };
+}
+
+export function getWikiTrainingReviewRiskFlags(item: WikiTrainingContentMapItem): string[] {
+  const flags: string[] = [];
+  if (item.targetProgramIds.length === 0) flags.push("Нет программы");
+  if (!item.reviewMeta.checklist.linkedToProductOrScenario) flags.push("Нет связи с каталогом или сценарием");
+  if (item.reviewStatus === "needs_review") flags.push("Нужно проверить актуальность");
+  if (item.reviewMeta.decision === "rewrite") flags.push("Требует переписывания");
+  return flags;
+}
+
+export function getWikiTrainingReviewSummary(items: WikiTrainingContentMapItem[]): WikiTrainingReviewSummary {
+  let pending = 0;
+  let ready_to_publish = 0;
+  let rewrite = 0;
+  let archive = 0;
+  let do_not_import = 0;
+  let withoutProgram = 0;
+  let withoutCatalogOrScenario = 0;
+  let percentSum = 0;
+  for (const item of items) {
+    const d = item.reviewMeta.decision;
+    if (d === "pending") pending += 1;
+    else if (d === "ready_to_publish") ready_to_publish += 1;
+    else if (d === "rewrite") rewrite += 1;
+    else if (d === "archive") archive += 1;
+    else if (d === "do_not_import") do_not_import += 1;
+    if (item.targetProgramIds.length === 0) withoutProgram += 1;
+    if (!item.reviewMeta.checklist.linkedToProductOrScenario) withoutCatalogOrScenario += 1;
+    percentSum += getWikiTrainingReviewChecklistScore(item).percent;
+  }
+  const n = items.length;
+  return {
+    total: n,
+    pending,
+    ready_to_publish,
+    rewrite,
+    archive,
+    do_not_import,
+    withoutProgram,
+    withoutCatalogOrScenario,
+    avgChecklistPercent: n ? Math.round(percentSum / n) : 0,
+  };
+}
+
+export function getWikiTrainingReviewItemsByDecision(
+  decision: WikiTrainingReviewDecision | "all",
+  items: WikiTrainingContentMapItem[],
+): WikiTrainingContentMapItem[] {
+  if (decision === "all") return items;
+  return items.filter((i) => i.reviewMeta.decision === decision);
 }
