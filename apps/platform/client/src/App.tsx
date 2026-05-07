@@ -16,6 +16,8 @@ import TasksPage from "@/pages/tasks";
 import OrdersPage from "@/pages/orders";
 import OrderDetailPage from "@/pages/order-detail";
 import AnalyticsPage from "@/pages/analytics";
+import TrainingPage from "@/pages/training";
+import TrainingArticlePage from "@/pages/training-article";
 import PreviewUnavailable from "@/pages/preview-unavailable";
 import InternalPrototypePlaceholder from "@/pages/internal-prototype-placeholder";
 import { INTERNAL_PROTOTYPE_ROUTES } from "@/lib/preview-config";
@@ -31,6 +33,8 @@ function AppRouter() {
         <Route path="/catalog/:productId" component={ProductDetailPage} />
         <Route path="/catalog" component={CatalogPage} />
         <Route path="/tasks" component={TasksPage} />
+        <Route path="/training/:articleId" component={TrainingArticlePage} />
+        <Route path="/training" component={TrainingPage} />
         <Route path="/analytics" component={AnalyticsPage} />
         <Route path="/orders/:orderId" component={OrderDetailPage} />
         <Route path="/orders" component={OrdersPage} />
