@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AnalyticsInfographicsPanel } from "@/components/analytics/analytics-infographics-panel";
+import { AnalyticsOperationalPanel } from "@/components/analytics/analytics-operational-panel";
 import {
   Select,
   SelectContent,
@@ -43,7 +44,7 @@ function toneForChange(p: number) {
 }
 
 export default function AnalyticsPage() {
-  const [view, setView] = useState<"summary" | "infographics">("summary");
+  const [view, setView] = useState<"summary" | "infographics" | "operational">("summary");
   const [filters, setFilters] = useState<AnalyticsFilterState>({
     periodKey: "month",
     territoryId: "south",
@@ -94,12 +95,12 @@ export default function AnalyticsPage() {
 
       <Tabs
         value={view}
-        onValueChange={(v) => setView(v as "summary" | "infographics")}
+        onValueChange={(v) => setView(v as "summary" | "infographics" | "operational")}
         className="w-full min-w-0 space-y-6"
       >
         <TabsList
           data-testid="tabs-analytics-view"
-          className="grid h-auto w-full min-w-0 max-w-full grid-cols-2 gap-1 p-1 sm:inline-flex sm:w-auto"
+          className="grid h-auto w-full min-w-0 max-w-full grid-cols-3 gap-1 p-1 sm:inline-flex sm:w-auto"
         >
           <TabsTrigger
             value="summary"
@@ -114,6 +115,13 @@ export default function AnalyticsPage() {
             data-testid="tab-analytics-infographics"
           >
             Инфографика
+          </TabsTrigger>
+          <TabsTrigger
+            value="operational"
+            className="min-h-10 flex-1 px-2 text-xs sm:flex-initial sm:text-sm"
+            data-testid="tab-analytics-operational"
+          >
+            Операционные таблицы
           </TabsTrigger>
         </TabsList>
 
@@ -522,6 +530,10 @@ export default function AnalyticsPage() {
           data-testid="section-analytics-infographics-view"
         >
           <AnalyticsInfographicsPanel />
+        </TabsContent>
+
+        <TabsContent value="operational" className="mt-6 space-y-6 focus-visible:ring-0" data-testid="section-analytics-operational-view">
+          <AnalyticsOperationalPanel />
         </TabsContent>
       </Tabs>
 
