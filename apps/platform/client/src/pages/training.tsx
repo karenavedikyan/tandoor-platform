@@ -22,6 +22,7 @@ import {
   TRAINING_SECTION_LABEL,
   TRAINING_STATUS_LABEL,
   TRAINING_TYPE_LABEL,
+  TRAINING_WIKI_REVIEW_LABEL,
   type TrainingMaterial,
   type TrainingMaterialStatus,
   type TrainingMaterialType,
@@ -30,6 +31,7 @@ import {
   type TrainingSection,
 } from "@/lib/training-data";
 import { getProductById } from "@/lib/catalog-data";
+import { getWikiTrainingImportSummary } from "@/lib/training-wiki-import";
 
 type StatusFilter = "all" | TrainingMaterialStatus;
 
@@ -105,6 +107,7 @@ export default function TrainingPage() {
   const dashboard = useMemo(() => getTrainingDashboardSummary(), []);
   const programs = useMemo(() => getTrainingPrograms(), []);
   const assignments = useMemo(() => getTrainingAssignments(), []);
+  const wikiSummary = useMemo(() => getWikiTrainingImportSummary(), []);
   const materialsRef = useRef<HTMLElement>(null);
 
   const [search, setSearch] = useState("");
@@ -113,19 +116,22 @@ export default function TrainingPage() {
   const [type, setType] = useState<typeof ALL | TrainingMaterialType>(ALL);
   const [requiredFilter, setRequiredFilter] = useState<"all" | "required" | "optional">("all");
   const [progressFilter, setProgressFilter] = useState<typeof ALL | TrainingProgressStatus>(ALL);
+  const [sourceFilter, setSourceFilter] = useState<typeof ALL | "wiki" | "manual">(ALL);
   const [statusChip, setStatusChip] = useState<StatusFilter>("all");
 
   const filtered = useMemo(() => {
     const req = requiredFilter === "required" ? "required" : requiredFilter === "optional" ? "optional" : "all";
     const prog = progressFilter === ALL ? "all" : progressFilter;
+    const src = sourceFilter === ALL ? "all" : sourceFilter;
     return searchTrainingMaterials(search, {
       section: section === ALL ? "all" : section,
       role: role === ALL ? "all" : role,
       type: type === ALL ? "all" : type,
       required: req,
       progressStatus: prog,
+      source: src,
     }).filter((m) => statusChip === "all" || m.status === statusChip);
-  }, [all, search, section, role, type, statusChip, requiredFilter, progressFilter]);
+  }, [all, search, section, role, type, statusChip, requiredFilter, progressFilter, sourceFilter]);
 
   const scrollToMaterials = useCallback(() => {
     materialsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -177,7 +183,7 @@ export default function TrainingPage() {
 
       <section className="space-y-4" data-testid="section-training-kpis">
         <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Показатели обучения</h2>
-        <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           <Card className="min-w-0 border-border/70 shadow-xs" data-testid="card-training-kpi-progress">
             <CardHeader className="pb-2 pt-4">
               <CardTitle className="text-sm font-medium text-muted-foreground">Прогресс месяца</CardTitle>
@@ -215,6 +221,15 @@ export default function TrainingPage() {
             <CardContent className="pb-4 pt-0">
               <p className="text-3xl font-semibold tabular-nums text-foreground">{dashboard.attentionCount}</p>
               <p className="text-xs text-muted-foreground">Назначения с высоким приоритетом</p>
+            </CardContent>
+          </Card>
+          <Card className="min-w-0 border-border/70 shadow-xs" data-testid="card-training-kpi-wiki-imported">
+            <CardHeader className="pb-2 pt-4">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Из Wiki</CardTitle>
+            </CardHeader>
+            <CardContent className="pb-4 pt-0">
+              <p className="text-3xl font-semibold tabular-nums text-foreground">{wikiSummary.totalImported}</p>
+              <p className="text-xs text-muted-foreground">Материалов импортировано</p>
             </CardContent>
           </Card>
         </div>
@@ -305,7 +320,7 @@ export default function TrainingPage() {
 
         <div className="space-y-4 rounded-2xl border border-border bg-card p-4 shadow-xs sm:p-6">
           <h3 className="text-sm font-semibold text-foreground">Поиск и фильтры</h3>
-          <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7">
             <div className="min-w-0 sm:col-span-2 xl:col-span-2">
               <label className="mb-1.5 block text-xs font-medium text-muted-foreground" htmlFor="input-training-search">
                 Поиск
@@ -394,6 +409,19 @@ export default function TrainingPage() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="min-w-0">
+              <span className="mb-1.5 block text-xs font-medium text-muted-foreground">Источник</span>
+              <Select value={sourceFilter} onValueChange={(v) => setSourceFilter(v as typeof ALL | "wiki" | "manual")}>
+                <SelectTrigger className="h-11 min-h-[44px] w-full min-w-0" data-testid="select-training-source">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL}>Все</SelectItem>
+                  <SelectItem value="wiki">Wiki</SelectItem>
+                  <SelectItem value="manual">Ручные</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <div className="flex flex-wrap gap-2" role="group" aria-label="Статус публикации материала">
             {STATUS_CHIPS.map((c) => (
@@ -444,6 +472,15 @@ export default function TrainingPage() {
                       <Badge variant="outline" className="text-muted-foreground">
                         Сложность: {m.difficulty === "easy" ? "лёгкая" : m.difficulty === "hard" ? "высокая" : "средняя"}
                       </Badge>
+                      {m.sourceType === "wiki" ? (
+                        <Badge
+                          variant="secondary"
+                          className="border-primary/30 bg-primary/5 font-semibold"
+                          data-testid={`badge-training-material-source-${m.id}`}
+                        >
+                          Wiki · {TRAINING_WIKI_REVIEW_LABEL[m.reviewStatus ?? m.wikiSource?.wikiReviewStatus ?? "needs_review"]}
+                        </Badge>
+                      ) : null}
                     </div>
                     {m.knowledgeTags.length > 0 ? (
                       <div className="flex flex-wrap gap-1.5">
@@ -507,10 +544,38 @@ export default function TrainingPage() {
       </section>
 
       <section className="rounded-2xl border border-dashed border-border/80 bg-muted/20 p-5 sm:p-6" data-testid="section-training-wiki-import">
-        <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Подготовка к импорту Wiki</h2>
+        <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Импорт из корпоративной Wiki</h2>
         <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-          Структура готова к загрузке материалов из закрытой базы знаний после подключения безопасного импорта.
+          Материалы загружены из закрытой базы знаний в безопасном формате. Полные тексты подключаются после ревью и настройки закрытого хранилища.
         </p>
+        <div className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
+          <p className="font-medium text-foreground">
+            Импортировано материалов: <span className="tabular-nums">{wikiSummary.totalImported}</span>
+          </p>
+          <p className="font-medium text-foreground">
+            На проверке: <span className="tabular-nums">{wikiSummary.needsReview}</span>
+          </p>
+        </div>
+        <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+          <p>Распределение по разделам:</p>
+          <ul className="flex flex-wrap gap-x-3 gap-y-1">
+            {Object.entries(wikiSummary.bySection)
+              .filter(([, count]) => count > 0)
+              .map(([s, count]) => (
+              <li key={s} className="flex items-center gap-1">
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
+                <span>
+                  {s === "other"
+                    ? "Прочее"
+                    : s in TRAINING_SECTION_LABEL
+                      ? TRAINING_SECTION_LABEL[s as TrainingSection]
+                      : s}
+                  : {count}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
       </section>
     </div>
   );
