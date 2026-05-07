@@ -24,6 +24,7 @@ const LazyOrdersPage = lazy(() => import("@/pages/orders"));
 const LazyOrderDetailPage = lazy(() => import("@/pages/order-detail"));
 const LazyAnalyticsPage = lazy(() => import("@/pages/analytics"));
 const LazyTrainingPage = lazy(() => import("@/pages/training"));
+const LazyTrainingProgramPage = lazy(() => import("@/pages/training-program"));
 const LazyTrainingArticlePage = lazy(() => import("@/pages/training-article"));
 const LazyTerritoryCardPage = lazy(() => import("@/pages/territory-card"));
 
@@ -48,6 +49,7 @@ const OrdersPageRoute = suspensePage(LazyOrdersPage);
 const OrderDetailPageRoute = suspensePage(LazyOrderDetailPage);
 const AnalyticsPageRoute = suspensePage(LazyAnalyticsPage);
 const TrainingPageRoute = suspensePage(LazyTrainingPage);
+const TrainingProgramPageRoute = suspensePage(LazyTrainingProgramPage);
 const TrainingArticlePageRoute = suspensePage(LazyTrainingArticlePage);
 const TerritoryCardPageRoute = suspensePage(LazyTerritoryCardPage);
 
@@ -62,6 +64,7 @@ function AppRouter() {
         <Route path="/catalog/:productId" component={ProductDetailPageRoute} />
         <Route path="/catalog" component={CatalogPageRoute} />
         <Route path="/tasks" component={TasksPageRoute} />
+        <Route path="/training/programs/:programId" component={TrainingProgramPageRoute} />
         <Route path="/training/:articleId" component={TrainingArticlePageRoute} />
         <Route path="/training" component={TrainingPageRoute} />
         <Route path="/territory-card" component={TerritoryCardPageRoute} />

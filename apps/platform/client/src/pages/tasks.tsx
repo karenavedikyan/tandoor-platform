@@ -19,6 +19,7 @@ import {
   type MatrixTaskStatus,
   type MatrixTaskWithContext,
 } from "@/lib/trade-point-task-data";
+import { getTrainingArticleIdForTask } from "@/lib/training-data";
 
 type TasksFilterId =
   | "all"
@@ -204,6 +205,10 @@ function TasksKpis({ tasks }: { tasks: MatrixTaskWithContext[] }) {
 }
 
 function TaskCard({ task }: { task: MatrixTaskWithContext }) {
+  const trainingArticleId = getTrainingArticleIdForTask({
+    insightDomain: task.insightDomain,
+    productId: task.productId,
+  });
   return (
     <Card
       className="rounded-2xl border border-border/80 bg-card shadow-md"
@@ -288,6 +293,16 @@ function TaskCard({ task }: { task: MatrixTaskWithContext }) {
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+          {trainingArticleId ? (
+            <Button
+              asChild
+              variant="outline"
+              className="min-h-10 w-full border-border bg-card sm:w-auto"
+              data-testid={`button-task-open-training-material-${task.taskId}`}
+            >
+              <Link href={`/training/${trainingArticleId}`}>Материал по теме</Link>
+            </Button>
+          ) : null}
           <Button
             asChild
             variant="outline"
@@ -321,6 +336,10 @@ function TaskCard({ task }: { task: MatrixTaskWithContext }) {
 }
 
 function TaskListRow({ task }: { task: MatrixTaskWithContext }) {
+  const trainingArticleId = getTrainingArticleIdForTask({
+    insightDomain: task.insightDomain,
+    productId: task.productId,
+  });
   return (
     <Card
       className="rounded-2xl border border-border/80 bg-card shadow-sm"
@@ -360,6 +379,17 @@ function TaskListRow({ task }: { task: MatrixTaskWithContext }) {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {trainingArticleId ? (
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              className="min-h-9 border-border bg-card"
+              data-testid={`button-task-open-training-material-${task.taskId}`}
+            >
+              <Link href={`/training/${trainingArticleId}`}>Материал</Link>
+            </Button>
+          ) : null}
           <Button
             asChild
             variant="outline"
