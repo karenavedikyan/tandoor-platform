@@ -20,6 +20,7 @@ import {
   type MatrixTaskPriority,
   type MatrixTaskType,
 } from "@/lib/trade-point-task-data";
+import { getTrainingMaterialsForProduct } from "@/lib/training-data";
 
 const SECTION_IDS = ["overview", "specs", "variants", "showcases", "dealers", "tasks", "history"] as const;
 type SectionId = (typeof SECTION_IDS)[number];
@@ -289,6 +290,7 @@ function ProductFound({ product }: { product: CatalogProduct }) {
     }
     return map;
   }, [product.id, product.relatedTradePointIds]);
+  const trainingMaterials = useMemo(() => getTrainingMaterialsForProduct(product.id), [product.id]);
 
   return (
     <div className="space-y-4 sm:space-y-6" data-testid="page-product-detail">
@@ -381,6 +383,39 @@ function ProductFound({ product }: { product: CatalogProduct }) {
                 </div>
               </CardContent>
             </SurfaceCard>
+          </section>
+
+          <section data-testid="section-product-training-materials" className="scroll-mt-28 space-y-4 sm:scroll-mt-32">
+            <SectionTitle subtitle="Материалы из раздела обучения, где упоминается эта модель.">Обучение и база знаний</SectionTitle>
+            {trainingMaterials.length === 0 ? (
+              <SurfaceCard className="mt-3">
+                <CardContent className="py-6 text-sm text-muted-foreground">Для этой модели пока нет привязанных материалов в разделе обучения.</CardContent>
+              </SurfaceCard>
+            ) : (
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                {trainingMaterials.map((m) => (
+                  <SurfaceCard key={m.id}>
+                    <CardHeader className="space-y-2 pb-2 pt-4">
+                      <CardTitle className="text-base font-semibold leading-snug">{m.title}</CardTitle>
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant="outline" className="text-[11px] font-medium">
+                          {m.readTimeMinutes} мин
+                        </Badge>
+                        <Badge variant="outline" className="text-[11px] font-medium">
+                          Прогресс {m.progressPercent}%
+                        </Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="pb-4 pt-0">
+                      <p className="text-sm text-muted-foreground">{m.description}</p>
+                      <Button asChild variant="outline" size="sm" className="mt-4 w-full font-semibold sm:w-auto" data-testid={`button-open-product-training-material-${m.id}`}>
+                        <Link href={`/training/${m.id}`}>Открыть материал</Link>
+                      </Button>
+                    </CardContent>
+                  </SurfaceCard>
+                ))}
+              </div>
+            )}
           </section>
 
           <section id={SECTION_DOM_IDS.specs} data-testid="section-product-specs" className="scroll-mt-28 space-y-4 sm:scroll-mt-32">
