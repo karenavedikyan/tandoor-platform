@@ -224,13 +224,16 @@ export const TRAINING_PROGRAMS: TrainingProgram[] = [
     section: "sales",
     role: "manager",
     level: "basic",
-    durationMinutes: 95,
+    durationMinutes: 118,
     required: true,
     progressPercent: 20,
     completedMaterials: 1,
-    totalMaterials: 8,
+    totalMaterials: 11,
     status: "in_progress",
     materialIds: [
+      "tr-sales-scripts-core",
+      "tr-sales-objections-ready-answers",
+      "tr-sales-client-reactions-playbook",
       "tr-sales-consult-prep",
       "tr-sales-explaining-price-value",
       "tr-sales-stock-availability-flow",
@@ -338,19 +341,26 @@ export const TRAINING_MODULES: TrainingModule[] = [
   {
     id: "mod-sl-core",
     programId: "prog-sales-hits",
-    title: "Подготовка к визиту и скрипты",
+    title: "Скрипты, звонки и возражения",
     order: 1,
     materialIds: [
-      "tr-sales-consult-prep",
-      "tr-sales-explaining-price-value",
-      "tr-sales-stock-availability-flow",
-      "tr-prod-compare-models-on-floor",
-      "tr-sales-expensive",
+      "tr-sales-scripts-core",
       "tr-sales-call",
       "tr-sales-wholesale",
+      "tr-sales-objections-ready-answers",
+      "tr-sales-expensive",
+      "tr-sales-explaining-price-value",
+      "tr-sales-stock-availability-flow",
     ],
   },
-  { id: "mod-sl-adv", programId: "prog-sales-hits", title: "Сравнение и видео", order: 2, materialIds: ["tr-sales-compare-models"] },
+  {
+    id: "mod-sl-reactions-consult",
+    programId: "prog-sales-hits",
+    title: "Реакции клиента и консультация",
+    order: 2,
+    materialIds: ["tr-sales-client-reactions-playbook", "tr-sales-consult-prep", "tr-prod-compare-models-on-floor"],
+  },
+  { id: "mod-sl-adv", programId: "prog-sales-hits", title: "Сравнение и видео", order: 3, materialIds: ["tr-sales-compare-models"] },
   { id: "mod-ad-weeks", programId: "prog-adapt-2026", title: "Две недели старта", order: 1, materialIds: ["tr-onboard-manager", "tr-onboard-wholesale-staff", "tr-onboard-retail-staff"] },
   { id: "mod-rg-set", programId: "prog-regional-control", title: "Регламенты сервиса", order: 1, materialIds: ["tr-reg-claims", "tr-reg-service", "tr-reg-purchasing"] },
 ];
@@ -1424,9 +1434,12 @@ const _RAW_MATERIALS: LegacyTrainingMaterial[] = [
     progressPercent: 0,
     relatedProductIds: [],
     relatedTaskIds: [],
-    tags: ["звонок"],
+    tags: ["звонок", "скрипт", "телефон"],
     updatedAt: "27.04.2026",
-    contentBlocks: [block("План", "Открытие, цель звонка, фиксация договорённостей.")],
+    contentBlocks: [
+      block("План", "Открытие, цель звонка, фиксация договорённостей."),
+      block("Скрипт первого касания", "Коротко представьтесь, назовите цель звонка и спросите, удобно ли говорить сейчас. Зафиксируйте договорённость о следующем шаге: визит, отправка подборки или повторный звонок."),
+    ],
   },
   {
     id: "tr-sales-wholesale",
@@ -1456,9 +1469,173 @@ const _RAW_MATERIALS: LegacyTrainingMaterial[] = [
     progressPercent: 0,
     relatedProductIds: ["vh-kvarc", "vh-siriys"],
     relatedTaskIds: [],
-    tags: ["сравнение"],
+    tags: ["сравнение", "консультация", "шоурум"],
     updatedAt: "04.05.2026",
     contentBlocks: [block("Сюжет", "Последовательность вопросов и демонстрации без записи экрана внутренних систем.")],
+  },
+  {
+    id: "tr-sales-objections-ready-answers",
+    title: "Возражения клиента: готовые ответы и следующий вопрос",
+    section: "sales",
+    type: "course",
+    audience: ["managers", "dealers", "regional_managers"],
+    status: "required",
+    description:
+      "Практичный справочник: типовая ситуация, цель ответа, готовая фраза, чего избегать и какой вопрос задать дальше.",
+    readTimeMinutes: 22,
+    progressPercent: 0,
+    relatedProductIds: [],
+    relatedTaskIds: [],
+    tags: ["возражения", "дорого", "конкуренты", "подумаю", "качество", "доставка", "цвет", "размер", "скрипт"],
+    updatedAt: "06.05.2026",
+    summaryBullets: [
+      "Каждое возражение — сигнал уточнить мотив, бюджет и срок, а не спорить о цене.",
+      "Готовая фраза снижает стресс менеджера и удерживает диалог в уважительном тоне.",
+      "Следующий вопрос возвращает инициативу и ведёт к замеру или подбору.",
+    ],
+    checklist: [
+      "Назвал возражение вслух и подтвердил понимание.",
+      "Ответил без обесценивания выбора клиента.",
+      "Задал один уточняющий вопрос и зафиксировал следующий шаг.",
+    ],
+    contentBlocks: [
+      block(
+        "«Дорого»",
+        "Ситуация: клиент сжимает бюджет. Цель: показать ценность комплекта и сервиса. Фраза: «Понимаю, сумма заметная — давайте разложу, из чего она складывается, и что можно скорректировать без потери безопасности». Не говорите «это же недорого» и не обещайте скидку без полномочий. Вопрос: «Что для вас важнее сейчас — срок, комплектация или финальный вид?»",
+      ),
+      block(
+        "«Подумаю» / «нужно посоветоваться»",
+        "Ситуация: откладывание решения. Цель: дать повод вернуться. Фраза: «Хорошо, это взрослое решение — что поможет вам сравнить варианты: образцы, расчёт комплекта или визит вместе с тем, с кем советуетесь?» Не давите сроком «только сегодня». Вопрос: «Когда вам удобно созвониться с коротким итогом?»",
+      ),
+      block(
+        "«У конкурентов дешевле»",
+        "Ситуация: сравнение с другой витриной. Цель: уйти от ценовой дуэли к проверяемым отличиям. Фраза: «Сравнение нормальное — давайте сверим комплектацию, гарантию и срок, чтобы понять, что входит в цену». Не клеймите чужой бренд. Вопрос: «По каким трём пунктам вы сравниваете предложения?»",
+      ),
+      block(
+        "«Нет времени»",
+        "Ситуация: спешка. Цель: сократить контакт до сути. Фраза: «Тогда за минуту: что нужно решить сегодня — подбор модели, срок или счёт?» Не удлиняйте монолог. Вопрос: «Когда у вас 15 минут без спешки?»",
+      ),
+      block(
+        "«Просто смотрю»",
+        "Ситуация: низкая вовлечённость. Цель: мягко выявить интерес. Фраза: «Окей, покажу два варианта под разные бюджеты — скажите, что откликается по стилю». Не перегружайте каталогом. Вопрос: «Для какой комнаты смотрите в первую очередь?»",
+      ),
+      block(
+        "«Нет нужного цвета / размера / модели»",
+        "Ситуация: ограничение ассортимента. Цель: честность и альтернатива. Фраза: «Такой позиции сейчас нет в доступной поставке — могу предложить ближайший аналог по стилю и сроку». Не обещайте «найдём любую». Вопрос: «Что для вас неприкосновенно: цвет, фрезеровка или срок?»",
+      ),
+      block(
+        "«Доставка долго»",
+        "Ситуация: нетерпение по сроку. Цель: прозрачность. Фраза: «Срок сейчас такой из-за этапа производства — покажу, что можно ускорить за счёт складской программы или комплектации». Не врите о сроках. Вопрос: «К какой дате вам нужно войти в квартиру?»",
+      ),
+      block(
+        "«Не уверен в качестве»",
+        "Ситуация: недоверие. Цель: опора на факты карточки и гарантию. Фраза: «Давайте пройдём по сертификации серии и условиям гарантии — это проверяемые вещи». Не спорьте эмоциями. Вопрос: «Что именно вызывает сомнение — покрытие, шум или монтаж?»",
+      ),
+    ],
+  },
+  {
+    id: "tr-sales-client-reactions-playbook",
+    title: "Реакции клиента: как понять ситуацию и продолжить диалог",
+    section: "sales",
+    type: "article",
+    audience: ["managers", "dealers"],
+    status: "recommended",
+    description:
+      "Типичные реакции в зале и по телефону: как распознать, что делать менеджеру и какой вопрос задать, чтобы вернуть разговор в продуктивное русло.",
+    readTimeMinutes: 16,
+    progressPercent: 0,
+    relatedProductIds: [],
+    relatedTaskIds: [],
+    tags: ["реакция", "клиент", "сомневается", "торгуется", "молчит", "консультация", "возражения"],
+    updatedAt: "06.05.2026",
+    summaryBullets: [
+      "Много технических вопросов часто означает страх ошибки — дайте структуру и запись.",
+      "Молчание может быть перегрузом информацией — сузьте выбор до двух моделей.",
+      "Торг без согласования скидок ведёт в тупик — переведите в ценность и комплектацию.",
+    ],
+    checklist: [
+      "Определил тип реакции за одно-два наблюдения.",
+      "Не перебил клиента в момент сомнения.",
+      "Предложил конкретный следующий шаг: образец, замер, расчёт.",
+    ],
+    contentBlocks: [
+      block(
+        "Много технических вопросов",
+        "Признак: уточняет всё подряд, перебивает. Действие: дайте «дорожную карту» из трёх шагов и предложите записать. Вопрос: «С чего начнём — проём, стиль или бюджет комплекта?» Откройте карточку модели в каталоге вместе с клиентом.",
+      ),
+      block(
+        "Клиент молчит",
+        "Признак: смотрит, не комментирует. Действие: смените формат — два образца, один вопрос «что ближе по дому?». Не засыпайте вариантами. Вопрос: «Вам спокойнее классика или современный минимализм?»",
+      ),
+      block(
+        "Торгуется и давит на цену",
+        "Признак: просит скидку без обсуждения комплекта. Действие: признайте запрос, разложите цену по комплекту, предложите честный диапазон без обещаний. Вопрос: «Что готовы скорректировать в комплектации, если бюджет жёсткий?»",
+      ),
+      block(
+        "Сравнивает с конкурентами",
+        "Признак: называет другую витрину. Действие: три проверяемых отличия, сервис бренда. Вопрос: «По каким критериям вы уже сравнили предложения?»",
+      ),
+      block(
+        "Сомневается и откладывает",
+        "Признак: «не уверен», «посмотрю ещё». Действие: зафиксируйте, что уже понравилось, договоритесь о дате контакта. Вопрос: «Что поможет принять решение — образец дома или расчёт с монтажом?»",
+      ),
+      block(
+        "Спешит",
+        "Признак: смотрит на часы. Действие: один ключевой тезис и визитка/чат для продолжения. Вопрос: «Когда перезвонить — сегодня вечером или завтра утром?»",
+      ),
+      block(
+        "«Просто посмотреть» и выбор для другого человека",
+        "Признак: низкая вовлечённость или «жена/муж решит». Действие: соберите критерии «для кого дверь» и визуальные якоря. Вопрос: «Какие два-три параметра должен одобрить второй человек?»",
+      ),
+    ],
+  },
+  {
+    id: "tr-sales-scripts-core",
+    title: "Скрипты продаж: звонок, консультация, подбор и повторное касание",
+    section: "sales",
+    type: "course",
+    audience: ["managers", "dealers"],
+    status: "required",
+    description:
+      "Каркас разговора: первый звонок, визит в шоурум, подбор двери и фурнитуры, повторный контакт — без жёсткого «читать роботом».",
+    readTimeMinutes: 18,
+    progressPercent: 0,
+    relatedProductIds: [],
+    relatedTaskIds: [],
+    tags: ["скрипт", "звонок", "консультация", "шоурум", "фурнитура", "повторное касание"],
+    updatedAt: "06.05.2026",
+    summaryBullets: [
+      "Скрипт — это порядок шагов и формулировки-опоры, а не текст наизусть.",
+      "Консультация в зале строится от сценария жилья, а не от каталога.",
+      "Повторное касание фиксирует договорённость и снимает «забыли».",
+    ],
+    checklist: [
+      "Перед звонком открыл карточку клиента или заметки по прошлому визиту.",
+      "В зале начал с вопроса о текущей двери или ремонте.",
+      "После визита отправил короткое резюме и следующий шаг.",
+    ],
+    contentBlocks: [
+      block(
+        "Первый звонок",
+        "Цель — договориться о времени и цели встречи. Структура: приветствие, цель, вопрос об удобстве, два слота, фиксация в календаре. Избегайте длинного монолога о компании.",
+      ),
+      block(
+        "Консультация в шоуруме",
+        "От проёма и стиля к двум моделям, затем к комплектации и сроку. Показывайте фурнитуру до обсуждения скидок. Закрывайте визит датой следующего шага.",
+      ),
+      block(
+        "Подбор двери",
+        "Свяжите МК/ВХ с задачей комнаты, влажностью и привычками семьи. Используйте карточку модели как опору, а не как чтение вслух.",
+      ),
+      block(
+        "Допродажа фурнитуры",
+        "После согласования полотна предложите «минимально правильный» и «комфортный» комплект петель и ручки. Объясните риск покупки фурнитуры отдельно.",
+      ),
+      block(
+        "Повторное касание",
+        "Если клиент «думает», назовите дату и причину звонка: «вернусь с расчётом комплекта» или «привезу образец». Не звоните без повода.",
+      ),
+    ],
   },
   {
     id: "tr-onboard-manager",
@@ -1710,6 +1887,30 @@ if (_linkMaterial && _matrixTaskIds.length > 0) {
   _linkMaterial.relatedTaskIds = [..._matrixTaskIds];
 }
 
+export type TrainingProductQuickTrack = "vh" | "mk" | "hardware";
+
+/** Быстрые входы на главной обучения: материалы раздела «Продукт» по направлению ВХ / МК / фурнитура. */
+export function matchesTrainingProductQuickTrack(m: TrainingMaterial, track: TrainingProductQuickTrack): boolean {
+  if (m.section !== "product") return false;
+  const tagStr = m.tags.join(" ").toLowerCase();
+  const hay = `${m.title} ${m.description} ${tagStr}`.toLowerCase();
+  const hasMk = tagStr.includes("мк") || m.wikiCatalogLine === "mk" || hay.includes("межкомнат") || hay.includes("скрыт");
+  const hasVh = tagStr.includes("вх") || m.wikiCatalogLine === "vh" || /\bвходн/.test(hay);
+  const hasHw =
+    tagStr.includes("фурнитур") ||
+    m.wikiCatalogLine === "hardware" ||
+    m.id.includes("hw-") ||
+    hay.includes("фурнитур") ||
+    (hay.includes("комплектац") && (hay.includes("петл") || hay.includes("ручк") || hay.includes("замк")));
+  if (track === "hardware") return Boolean(hasHw);
+  if (track === "vh") return Boolean(hasVh);
+  return Boolean(hasMk);
+}
+
+export function countTrainingMaterialsForProductQuickTrack(track: TrainingProductQuickTrack): number {
+  return MATERIALS.filter((m) => matchesTrainingProductQuickTrack(m, track)).length;
+}
+
 export function getAllTrainingMaterials(): TrainingMaterial[] {
   return MATERIALS;
 }
@@ -1847,6 +2048,9 @@ export function buildTrainingMaterialSearchHaystack(m: TrainingMaterial): string
       parts.push("фурнитура", "петли", "ручки", "замки", "доборы");
     }
   }
+  if (m.section === "sales") {
+    parts.push("продажи", "скрипт", "звонок", "консультация", "возражение", "реакция", "клиент");
+  }
   return parts.join("\n").toLowerCase();
 }
 
@@ -1868,7 +2072,47 @@ export function expandTrainingSearchQueryVariants(raw: string): string[] {
   if (q.includes("hdf")) out.add("hdf");
   if (q.includes("spc")) out.add("spc");
   if (q.includes("пэт") || q.includes("pet")) out.add("пэт");
+  if (q.includes("скрипт") || q.includes("звонок")) {
+    out.add("скрипт");
+    out.add("звонок");
+  }
+  if (q.includes("возраж")) {
+    out.add("возражение");
+    out.add("дорого");
+  }
+  if (q.includes("дорог")) out.add("дорого");
+  if (q.includes("конкурент")) out.add("конкурент");
+  if (q.includes("подумаю") || q.includes("посовет")) {
+    out.add("подумаю");
+    out.add("совет");
+  }
+  if (q.includes("нет времени") || q.includes("времени")) out.add("времени");
+  if (q.includes("качеств")) out.add("качество");
+  if (q.includes("доставк")) out.add("доставка");
+  if (q.includes("реакц") || q.includes("сомнева") || q.includes("торгу") || q.includes("молч")) {
+    out.add("реакция");
+    out.add("клиент");
+  }
+  if (q.includes("консульт")) out.add("консультация");
+  if (q.includes("цвет") || q.includes("размер")) {
+    out.add("цвет");
+    out.add("размер");
+  }
+  if (q.includes("просто смотрю") || q.includes("смотрю")) out.add("смотрю");
   return Array.from(out);
+}
+
+/** Проверка совпадения запроса с haystack: несколько слов — по OR отдельных слов; одно слово — через варианты. */
+export function searchQueryMatchesTrainingHaystack(query: string, haystack: string): boolean {
+  const nq = query.trim().toLowerCase();
+  if (!nq) return true;
+  const chunks = nq.split(/\s+/).filter((c) => c.length > 0);
+  const variantHit = (segment: string) =>
+    expandTrainingSearchQueryVariants(segment).some((v) => v.length > 0 && haystack.includes(v));
+  if (chunks.length === 1) {
+    return variantHit(chunks[0]!);
+  }
+  return chunks.some((c) => (c.length >= 2 || c === "вх" || c === "мк") && variantHit(c)) || variantHit(nq);
 }
 
 export function searchTrainingMaterials(query: string, filters: TrainingMaterialSearchFilters): TrainingMaterial[] {
@@ -1876,8 +2120,7 @@ export function searchTrainingMaterials(query: string, filters: TrainingMaterial
   return MATERIALS.filter((m) => {
     if (q) {
       const haystack = buildTrainingMaterialSearchHaystack(m);
-      const variants = expandTrainingSearchQueryVariants(q);
-      const hit = variants.some((token) => token.length > 0 && haystack.includes(token));
+      const hit = searchQueryMatchesTrainingHaystack(q, haystack);
       if (!hit) return false;
     }
     if (filters.section && filters.section !== "all" && m.section !== filters.section) return false;
