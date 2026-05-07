@@ -154,8 +154,10 @@ function TrainingArticleFound({ articleId }: { articleId: string }) {
                 Дата импорта:{" "}
                 <span className="font-semibold tabular-nums text-foreground">{material.wikiSource.wikiImportedAt}</span>
               </p>
-              <p className="text-xs text-muted-foreground">
-                Полное содержимое доступно после ревью и подключения закрытого хранилища Wiki.
+              <p className="text-xs text-muted-foreground" data-testid="text-training-article-source-status">
+                {(material.reviewStatus ?? material.wikiSource.wikiReviewStatus) === "approved"
+                  ? "Текст материала подготовлен на основе базы знаний и размещён в этом разделе. Служебные адреса Wiki не отображаются."
+                  : "Полное содержимое из закрытой Wiki может дополняться после ревью; служебные ссылки не отображаются."}
               </p>
             </CardContent>
           </Card>
