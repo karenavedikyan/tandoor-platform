@@ -295,7 +295,7 @@ const _WIKI_MAP_SEED: WikiTrainingContentMapSeedRow[] = [
     reviewStatus: "approved",
     reason: "Новинка сезона; риск разрозненных формулировок без единого материала.",
     safeSummary: "Презентация скрытых дверей: отличия и монтажные акценты.",
-    migrationNotes: ["Перенесено в «Обучение» (tr-prod-mk-lines-diff); монтажные детали сверять с инструкцией серии."],
+    migrationNotes: ["Опубликовано в «Обучение» (tr-prod-mk-lines-diff); монтажные детали сверять с инструкцией серии."],
   },
   // ——— P0 Sales ———
   {
@@ -310,7 +310,7 @@ const _WIKI_MAP_SEED: WikiTrainingContentMapSeedRow[] = [
     recommendedMaterialType: "script",
     reviewStatus: "approved",
     reason: "Каркас оптового диалога; снижает хаотичность первых визитов.",
-    safeSummary: "Краткое описание подходов АНП и СПИН без внутренних скриптов закрытой базы.",
+    safeSummary: "Краткое описание подходов АНП и СПИН для оптового диалога: вопросы, потребность, переход к подбору решения.",
     migrationNotes: [],
   },
   {
@@ -325,7 +325,7 @@ const _WIKI_MAP_SEED: WikiTrainingContentMapSeedRow[] = [
     recommendedMaterialType: "checklist",
     reviewStatus: "needs_review",
     reason: "Стандартизация реакции на возражения в опте.",
-    safeSummary: "Семь правил в сжатой формулировке; кейсы расширяются после ревью.",
+    safeSummary: "Семь правил работы с возражениями: сохранить диалог, уточнить сомнение, предложить следующий шаг.",
     migrationNotes: ["Связать с задачами из CRM после интеграции."],
   },
   {
