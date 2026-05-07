@@ -14,11 +14,15 @@ import {
   getWikiTrainingContentMap,
   getWikiTrainingContentMapSummary,
   getWikiTrainingMapAudienceRolesCoveredCount,
+  getWikiTrainingPublishQueue,
+  getWikiTrainingPublishQueueSummary,
   getWikiTrainingReviewChecklistScore,
   getWikiTrainingReviewRiskFlags,
   getWikiTrainingReviewSummary,
   WIKI_MAP_REVIEW_LABEL,
   WIKI_PUBLISH_FORMAT_LABEL,
+  WIKI_PUBLISH_READINESS_LABEL,
+  WIKI_PUBLISH_WAVE_LABEL,
   WIKI_REVIEW_DECISION_LABEL,
   WIKI_TRAINING_AUDIENCE_LABEL,
   WIKI_TRAINING_PRODUCT_SCOPE_LABEL,
@@ -29,6 +33,9 @@ import {
   type WikiTrainingPriority,
   type WikiTrainingProductScope,
   type WikiTrainingPublishFormat,
+  type WikiTrainingPublishQueueItem,
+  type WikiTrainingPublishReadiness,
+  type WikiTrainingPublishWave,
   type WikiTrainingReviewDecision,
 } from "@/lib/training-wiki-content-map";
 import { getTrainingProgramById, TRAINING_SECTION_LABEL, type TrainingSectionKey } from "@/lib/training-data";
@@ -62,12 +69,27 @@ export default function TrainingWikiMapPage() {
   const audienceRolesCovered = useMemo(() => getWikiTrainingMapAudienceRolesCoveredCount(), []);
 
   const [decisionOverrides, setDecisionOverrides] = useState<Record<string, WikiTrainingReviewDecision>>({});
+  const [waveOverrides, setWaveOverrides] = useState<Record<string, WikiTrainingPublishWave>>({});
 
   const effectiveMap = useMemo(() => mergeDecisions(baseMap, decisionOverrides), [baseMap, decisionOverrides]);
 
   const setDecision = useCallback((id: string, decision: WikiTrainingReviewDecision) => {
     setDecisionOverrides((prev) => ({ ...prev, [id]: decision }));
   }, []);
+
+  const setWave = useCallback((sourceItemId: string, wave: WikiTrainingPublishWave) => {
+    setWaveOverrides((prev) => ({ ...prev, [sourceItemId]: wave }));
+  }, []);
+
+  const basePublishQueue = useMemo(() => getWikiTrainingPublishQueue(effectiveMap), [effectiveMap]);
+  const displayPublishQueue = useMemo(
+    () =>
+      basePublishQueue.map((q) => ({
+        ...q,
+        wave: waveOverrides[q.sourceItemId] ?? q.wave,
+      })),
+    [basePublishQueue, waveOverrides],
+  );
 
   const [search, setSearch] = useState("");
   const [priority, setPriority] = useState<typeof ALL | WikiTrainingPriority>(ALL);
@@ -142,6 +164,9 @@ export default function TrainingWikiMapPage() {
           </TabsTrigger>
           <TabsTrigger value="review" className="min-w-0 flex-1 px-3 sm:flex-none" data-testid="tab-wiki-map-review">
             Ревью
+          </TabsTrigger>
+          <TabsTrigger value="publish" className="min-w-0 flex-1 px-3 sm:flex-none" data-testid="tab-wiki-map-publish">
+            Публикация
           </TabsTrigger>
         </TabsList>
 
@@ -368,6 +393,13 @@ export default function TrainingWikiMapPage() {
 
         <TabsContent value="review" className="min-w-0 space-y-8 focus-visible:outline-none" data-testid="section-wiki-map-review-view">
           <WikiReviewPanel items={effectiveMap} onSetDecision={setDecision} />
+        </TabsContent>
+
+        <TabsContent value="publish" className="min-w-0 space-y-8 focus-visible:outline-none" data-testid="section-wiki-map-publish-view">
+          <p className="max-w-3xl text-sm text-muted-foreground">
+            Очередь показывает, какие материалы можно переносить в обучение первой волной, а какие требуют программы, связи с каталогом или переписывания.
+          </p>
+          <WikiPublishPanel queue={displayPublishQueue} programIds={programIds} onSetWave={setWave} />
         </TabsContent>
       </Tabs>
 
@@ -605,6 +637,367 @@ function WikiReviewPanel({
         )}
       </section>
     </>
+  );
+}
+
+function WikiPublishPanel({
+  queue,
+  programIds,
+  onSetWave,
+}: {
+  queue: WikiTrainingPublishQueueItem[];
+  programIds: string[];
+  onSetWave: (sourceItemId: string, wave: WikiTrainingPublishWave) => void;
+}) {
+  const publishSummary = useMemo(() => getWikiTrainingPublishQueueSummary(queue), [queue]);
+
+  const [pubSearch, setPubSearch] = useState("");
+  const [pubWave, setPubWave] = useState<typeof ALL | WikiTrainingPublishWave>(ALL);
+  const [pubReadiness, setPubReadiness] = useState<typeof ALL | WikiTrainingPublishReadiness>(ALL);
+  const [pubFormat, setPubFormat] = useState<typeof ALL | WikiTrainingPublishFormat>(ALL);
+  const [pubProgram, setPubProgram] = useState<typeof ALL | string>(ALL);
+  const [pubAudience, setPubAudience] = useState<typeof ALL | WikiTrainingAudience>(ALL);
+
+  const resetPubFilters = useCallback(() => {
+    setPubSearch("");
+    setPubWave(ALL);
+    setPubReadiness(ALL);
+    setPubFormat(ALL);
+    setPubProgram(ALL);
+    setPubAudience(ALL);
+  }, []);
+
+  const filteredPublish = useMemo(() => {
+    const q = pubSearch.trim().toLowerCase();
+    return queue.filter((row) => {
+      if (q) {
+        const blob = `${row.wikiTitle} ${row.reason} ${row.nextAction} ${row.blockers.join(" ")}`.toLowerCase();
+        if (!blob.includes(q)) return false;
+      }
+      if (pubWave !== ALL && row.wave !== pubWave) return false;
+      if (pubReadiness !== ALL && row.readiness !== pubReadiness) return false;
+      if (pubFormat !== ALL && row.recommendedFormat !== pubFormat) return false;
+      if (pubAudience !== ALL && !row.audiences.includes(pubAudience)) return false;
+      if (pubProgram !== ALL && !row.targetProgramIds.includes(pubProgram)) return false;
+      return true;
+    });
+  }, [queue, pubSearch, pubWave, pubReadiness, pubFormat, pubProgram, pubAudience]);
+
+  return (
+    <>
+      <section className="space-y-4" data-testid="section-wiki-publish-kpis">
+        <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Очередь публикации</h2>
+        <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          <Card className="min-w-0 border-border/70 shadow-xs" data-testid="card-wiki-publish-wave-1">
+            <CardHeader className="pb-2 pt-4">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Первая волна</CardTitle>
+            </CardHeader>
+            <CardContent className="pb-4 pt-0">
+              <p className="text-3xl font-semibold tabular-nums text-foreground">{publishSummary.wave_1}</p>
+            </CardContent>
+          </Card>
+          <Card className="min-w-0 border-border/70 shadow-xs" data-testid="card-wiki-publish-wave-2">
+            <CardHeader className="pb-2 pt-4">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Вторая волна</CardTitle>
+            </CardHeader>
+            <CardContent className="pb-4 pt-0">
+              <p className="text-3xl font-semibold tabular-nums text-foreground">{publishSummary.wave_2}</p>
+            </CardContent>
+          </Card>
+          <Card className="min-w-0 border-border/70 shadow-xs" data-testid="card-wiki-publish-needs-program">
+            <CardHeader className="pb-2 pt-4">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Требует программы</CardTitle>
+            </CardHeader>
+            <CardContent className="pb-4 pt-0">
+              <p className="text-3xl font-semibold tabular-nums text-foreground">{publishSummary.needs_program}</p>
+            </CardContent>
+          </Card>
+          <Card className="min-w-0 border-border/70 shadow-xs" data-testid="card-wiki-publish-needs-catalog">
+            <CardHeader className="pb-2 pt-4">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Требует связи с каталогом</CardTitle>
+            </CardHeader>
+            <CardContent className="pb-4 pt-0">
+              <p className="text-3xl font-semibold tabular-nums text-foreground">{publishSummary.needs_catalog_link}</p>
+            </CardContent>
+          </Card>
+          <Card className="min-w-0 border-border/70 shadow-xs" data-testid="card-wiki-publish-needs-rewrite">
+            <CardHeader className="pb-2 pt-4">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Переписать</CardTitle>
+            </CardHeader>
+            <CardContent className="pb-4 pt-0">
+              <p className="text-3xl font-semibold tabular-nums text-foreground">{publishSummary.needs_rewrite}</p>
+            </CardContent>
+          </Card>
+          <Card className="min-w-0 border-border/70 shadow-xs" data-testid="card-wiki-publish-blocked">
+            <CardHeader className="pb-2 pt-4">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Заблокировано</CardTitle>
+            </CardHeader>
+            <CardContent className="pb-4 pt-0">
+              <p className="text-3xl font-semibold tabular-nums text-foreground">{publishSummary.blockedReadiness}</p>
+            </CardContent>
+          </Card>
+        </div>
+      </section>
+
+      <section className="space-y-4 rounded-2xl border border-border bg-card p-4 shadow-xs sm:p-6" data-testid="section-wiki-publish-filters">
+        <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Фильтры очереди</h2>
+        <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div className="min-w-0">
+            <label className="mb-1.5 block text-xs font-medium text-muted-foreground" htmlFor="input-wiki-publish-search">
+              Поиск
+            </label>
+            <Input
+              id="input-wiki-publish-search"
+              value={pubSearch}
+              onChange={(e) => setPubSearch(e.target.value)}
+              placeholder="Заголовок, причина, действие…"
+              className="h-11 min-h-[44px] w-full min-w-0"
+              data-testid="input-wiki-publish-search"
+            />
+          </div>
+          <div className="min-w-0">
+            <span className="mb-1.5 block text-xs font-medium text-muted-foreground">Волна</span>
+            <Select value={pubWave} onValueChange={(v) => setPubWave(v as typeof ALL | WikiTrainingPublishWave)}>
+              <SelectTrigger className="h-11 min-h-[44px] w-full min-w-0" data-testid="select-wiki-publish-wave">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>Все</SelectItem>
+                <SelectItem value="wave_1">{WIKI_PUBLISH_WAVE_LABEL.wave_1}</SelectItem>
+                <SelectItem value="wave_2">{WIKI_PUBLISH_WAVE_LABEL.wave_2}</SelectItem>
+                <SelectItem value="later">{WIKI_PUBLISH_WAVE_LABEL.later}</SelectItem>
+                <SelectItem value="blocked">{WIKI_PUBLISH_WAVE_LABEL.blocked}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="min-w-0">
+            <span className="mb-1.5 block text-xs font-medium text-muted-foreground">Готовность</span>
+            <Select value={pubReadiness} onValueChange={(v) => setPubReadiness(v as typeof ALL | WikiTrainingPublishReadiness)}>
+              <SelectTrigger className="h-11 min-h-[44px] w-full min-w-0" data-testid="select-wiki-publish-readiness">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>Все</SelectItem>
+                <SelectItem value="ready">{WIKI_PUBLISH_READINESS_LABEL.ready}</SelectItem>
+                <SelectItem value="needs_program">{WIKI_PUBLISH_READINESS_LABEL.needs_program}</SelectItem>
+                <SelectItem value="needs_catalog_link">{WIKI_PUBLISH_READINESS_LABEL.needs_catalog_link}</SelectItem>
+                <SelectItem value="needs_rewrite">{WIKI_PUBLISH_READINESS_LABEL.needs_rewrite}</SelectItem>
+                <SelectItem value="blocked">{WIKI_PUBLISH_READINESS_LABEL.blocked}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="min-w-0">
+            <span className="mb-1.5 block text-xs font-medium text-muted-foreground">Формат</span>
+            <Select value={pubFormat} onValueChange={(v) => setPubFormat(v as typeof ALL | WikiTrainingPublishFormat)}>
+              <SelectTrigger className="h-11 min-h-[44px] w-full min-w-0" data-testid="select-wiki-publish-format">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>Все</SelectItem>
+                {(Object.keys(WIKI_PUBLISH_FORMAT_LABEL) as WikiTrainingPublishFormat[]).map((f) => (
+                  <SelectItem key={f} value={f}>
+                    {WIKI_PUBLISH_FORMAT_LABEL[f]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="min-w-0">
+            <span className="mb-1.5 block text-xs font-medium text-muted-foreground">Программа</span>
+            <Select value={pubProgram} onValueChange={(v) => setPubProgram(v as typeof ALL | string)}>
+              <SelectTrigger className="h-11 min-h-[44px] w-full min-w-0" data-testid="select-wiki-publish-program">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>Все</SelectItem>
+                {programIds.map((pid) => (
+                  <SelectItem key={pid} value={pid}>
+                    {programShortLabel(pid)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="min-w-0">
+            <span className="mb-1.5 block text-xs font-medium text-muted-foreground">Роль</span>
+            <Select value={pubAudience} onValueChange={(v) => setPubAudience(v as typeof ALL | WikiTrainingAudience)}>
+              <SelectTrigger className="h-11 min-h-[44px] w-full min-w-0" data-testid="select-wiki-publish-audience">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>Все</SelectItem>
+                {(Object.keys(WIKI_TRAINING_AUDIENCE_LABEL) as WikiTrainingAudience[]).map((a) => (
+                  <SelectItem key={a} value={a}>
+                    {WIKI_TRAINING_AUDIENCE_LABEL[a]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          <p className="text-sm text-muted-foreground">
+            Найдено:{" "}
+            <span className="font-semibold tabular-nums text-foreground" data-testid="text-wiki-publish-results-count">
+              {filteredPublish.length}
+            </span>
+          </p>
+          <Button type="button" variant="outline" className="min-h-11 w-full font-semibold sm:w-auto" data-testid="button-wiki-publish-reset-filters" onClick={resetPubFilters}>
+            Сбросить фильтры
+          </Button>
+        </div>
+      </section>
+
+      <section className="space-y-4" data-testid="section-wiki-publish-list">
+        <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Материалы в очереди</h2>
+        {filteredPublish.length === 0 ? (
+          <Card className="border-dashed border-border/80 bg-muted/20" data-testid="empty-wiki-publish-results">
+            <CardContent className="flex min-w-0 flex-col gap-3 p-6 text-center sm:text-left">
+              <p className="text-sm text-muted-foreground">По выбранным фильтрам материалов нет.</p>
+              <Button
+                type="button"
+                variant="secondary"
+                className="mx-auto min-h-11 w-full max-w-xs font-semibold sm:mx-0 sm:w-auto"
+                data-testid="button-wiki-publish-empty-reset"
+                onClick={resetPubFilters}
+              >
+                Сбросить фильтры
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid min-w-0 grid-cols-1 gap-3">
+            {filteredPublish.map((row) => (
+              <WikiPublishItemCard key={row.id} row={row} onSetWave={onSetWave} />
+            ))}
+          </div>
+        )}
+      </section>
+    </>
+  );
+}
+
+function WikiPublishItemCard({
+  row,
+  onSetWave,
+}: {
+  row: WikiTrainingPublishQueueItem;
+  onSetWave: (sourceItemId: string, wave: WikiTrainingPublishWave) => void;
+}) {
+  const firstProgramId = row.targetProgramIds[0];
+  return (
+    <Card className="min-w-0 overflow-hidden border-border/70 shadow-xs" data-testid={`card-wiki-publish-item-${row.id}`}>
+      <CardHeader className="min-w-0 space-y-2 pb-2 pt-4">
+        <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+          <CardTitle className="min-w-0 text-base leading-snug">{row.wikiTitle}</CardTitle>
+          <div className="flex shrink-0 flex-wrap gap-1.5">
+            <Badge variant="secondary" className="font-semibold tabular-nums">
+              {row.priority}
+            </Badge>
+            <Badge variant="outline" className="text-xs font-medium">
+              {WIKI_PUBLISH_WAVE_LABEL[row.wave]}
+            </Badge>
+            <Badge variant="outline" className="text-xs font-medium">
+              {WIKI_PUBLISH_READINESS_LABEL[row.readiness]}
+            </Badge>
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Решение ревью: <span className="font-medium text-foreground">{WIKI_REVIEW_DECISION_LABEL[row.decision]}</span> · Формат:{" "}
+          <span className="font-medium text-foreground">{WIKI_PUBLISH_FORMAT_LABEL[row.recommendedFormat]}</span> · Чек-лист:{" "}
+          <span className="tabular-nums font-medium text-foreground">{row.checklistPercent}%</span>
+        </p>
+      </CardHeader>
+      <CardContent className="min-w-0 space-y-3 pb-4 pt-0">
+        {row.blockers.length > 0 ? (
+          <div className="flex min-w-0 flex-wrap gap-1.5">
+            {row.blockers.map((b) => (
+              <Badge key={b} variant="secondary" className="max-w-full whitespace-normal text-left text-[11px] font-normal">
+                {b}
+              </Badge>
+            ))}
+          </div>
+        ) : null}
+        <p className="text-sm text-muted-foreground">{row.reason}</p>
+        <p className="text-sm text-muted-foreground">
+          <span className="font-medium text-foreground">Следующий шаг:</span> {row.nextAction}
+        </p>
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-muted-foreground">Программы</p>
+          <p className="mt-1 break-words text-xs text-foreground">
+            {row.targetProgramIds.length > 0 ? row.targetProgramIds.map(programShortLabel).join(" · ") : "—"}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {row.audiences.map((a) => (
+            <Badge key={a} variant="outline" className="text-[11px] font-normal">
+              {WIKI_TRAINING_AUDIENCE_LABEL[a]}
+            </Badge>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Категория: <span className="font-medium text-foreground">{WIKI_TRAINING_PRODUCT_SCOPE_LABEL[row.productScope]}</span>
+        </p>
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-muted-foreground">Сценарии</p>
+          <div className="mt-1 flex flex-wrap gap-1.5">
+            {row.workContexts.map((w) => (
+              <Badge key={w} variant="secondary" className="rounded-md text-[11px] font-normal">
+                {WIKI_TRAINING_WORK_CONTEXT_LABEL[w]}
+              </Badge>
+            ))}
+          </div>
+        </div>
+        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
+          <Button
+            type="button"
+            variant="default"
+            className="min-h-11 w-full font-semibold sm:w-auto"
+            data-testid={`button-wiki-publish-mark-wave-1-${row.id}`}
+            onClick={() => onSetWave(row.sourceItemId, "wave_1")}
+          >
+            В первую волну
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            className="min-h-11 w-full font-semibold sm:w-auto"
+            data-testid={`button-wiki-publish-mark-wave-2-${row.id}`}
+            onClick={() => onSetWave(row.sourceItemId, "wave_2")}
+          >
+            Во вторую волну
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11 w-full border-border font-semibold sm:w-auto"
+            data-testid={`button-wiki-publish-mark-later-${row.id}`}
+            onClick={() => onSetWave(row.sourceItemId, "later")}
+          >
+            Отложить
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            className="min-h-11 w-full font-semibold sm:w-auto"
+            data-testid={`button-wiki-publish-mark-blocked-${row.id}`}
+            onClick={() => onSetWave(row.sourceItemId, "blocked")}
+          >
+            Заблокировать
+          </Button>
+        </div>
+        <div className="flex min-w-0 flex-col gap-2 border-t border-border/60 pt-3 sm:flex-row sm:flex-wrap">
+          {firstProgramId ? (
+            <Button asChild variant="secondary" size="sm" className="min-h-10 w-full font-semibold sm:w-auto" data-testid={`button-wiki-publish-open-program-${row.id}`}>
+              <Link href={`/training/programs/${firstProgramId}`}>К программе</Link>
+            </Button>
+          ) : null}
+          <Button asChild variant="outline" size="sm" className="min-h-10 w-full border-border bg-card font-semibold sm:w-auto" data-testid={`button-wiki-publish-open-training-${row.id}`}>
+            <Link href="/training">К обучению</Link>
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
