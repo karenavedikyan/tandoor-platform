@@ -23,7 +23,6 @@ import {
   TRAINING_SECTION_LABEL,
   TRAINING_STATUS_LABEL,
   TRAINING_TYPE_LABEL,
-  TRAINING_WIKI_REVIEW_LABEL,
   type TrainingMaterial,
   type TrainingMaterialStatus,
   type TrainingMaterialType,
@@ -32,8 +31,6 @@ import {
   type TrainingSection,
 } from "@/lib/training-data";
 import { getProductById } from "@/lib/catalog-data";
-import { getWikiTrainingImportSummary } from "@/lib/training-wiki-import";
-import { getWikiTrainingContentByPriority, getWikiTrainingContentMapSummary, WIKI_MAP_REVIEW_LABEL } from "@/lib/training-wiki-content-map";
 
 type StatusFilter = "all" | TrainingMaterialStatus;
 
@@ -109,9 +106,6 @@ export default function TrainingPage() {
   const dashboard = useMemo(() => getTrainingDashboardSummary(), []);
   const programs = useMemo(() => getTrainingPrograms(), []);
   const assignments = useMemo(() => getTrainingAssignments(), []);
-  const wikiSummary = useMemo(() => getWikiTrainingImportSummary(), []);
-  const wikiMapSummary = useMemo(() => getWikiTrainingContentMapSummary(), []);
-  const wikiMapP0Preview = useMemo(() => getWikiTrainingContentByPriority("P0").slice(0, 8), []);
   const materialsRef = useRef<HTMLElement>(null);
 
   const [search, setSearch] = useState("");
@@ -120,22 +114,20 @@ export default function TrainingPage() {
   const [type, setType] = useState<typeof ALL | TrainingMaterialType>(ALL);
   const [requiredFilter, setRequiredFilter] = useState<"all" | "required" | "optional">("all");
   const [progressFilter, setProgressFilter] = useState<typeof ALL | TrainingProgressStatus>(ALL);
-  const [sourceFilter, setSourceFilter] = useState<typeof ALL | "wiki" | "manual">(ALL);
   const [statusChip, setStatusChip] = useState<StatusFilter>("all");
 
   const filtered = useMemo(() => {
     const req = requiredFilter === "required" ? "required" : requiredFilter === "optional" ? "optional" : "all";
     const prog = progressFilter === ALL ? "all" : progressFilter;
-    const src = sourceFilter === ALL ? "all" : sourceFilter;
     return searchTrainingMaterials(search, {
       section: section === ALL ? "all" : section,
       role: role === ALL ? "all" : role,
       type: type === ALL ? "all" : type,
       required: req,
       progressStatus: prog,
-      source: src,
+      source: "all",
     }).filter((m) => statusChip === "all" || m.status === statusChip);
-  }, [all, search, section, role, type, statusChip, requiredFilter, progressFilter, sourceFilter]);
+  }, [all, search, section, role, type, statusChip, requiredFilter, progressFilter]);
 
   const scrollToMaterials = useCallback(() => {
     materialsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -150,7 +142,6 @@ export default function TrainingPage() {
       setRole(ALL);
       setRequiredFilter("all");
       setProgressFilter(ALL);
-      setSourceFilter(ALL);
       requestAnimationFrame(() => scrollToMaterials());
     },
     [scrollToMaterials],
@@ -164,7 +155,6 @@ export default function TrainingPage() {
     setRole(ALL);
     setRequiredFilter("all");
     setProgressFilter(ALL);
-    setSourceFilter(ALL);
   }, []);
 
   const vhMaterialCount = useMemo(() => countTrainingMaterialsForProductQuickTrack("vh"), []);
@@ -296,6 +286,26 @@ export default function TrainingPage() {
             onClick={() => applySearchPreset("скрипт звонок консультация", "sales")}
           >
             Скрипты
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="min-h-9 shrink-0 rounded-full border-border font-medium"
+            data-testid="button-training-search-chip-sales"
+            onClick={() => applySearchPreset("продажи консультация подготовка", "sales")}
+          >
+            Продажи
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="min-h-9 shrink-0 rounded-full border-border font-medium"
+            data-testid="button-training-search-chip-reactions"
+            onClick={() => applySearchPreset("реакция клиента молчит торгуется", "sales")}
+          >
+            Реакции
           </Button>
           <Button
             type="button"
@@ -513,63 +523,6 @@ export default function TrainingPage() {
         </div>
       </section>
 
-      <section className="space-y-4" data-testid="section-training-kpis">
-        <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Показатели обучения</h2>
-        <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-          <Card className="min-w-0 border-border/70 shadow-xs" data-testid="card-training-kpi-progress">
-            <CardHeader className="pb-2 pt-4">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Прогресс месяца</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 pb-4 pt-0">
-              <p className="text-3xl font-semibold tabular-nums text-foreground">{dashboard.monthProgressPercent}%</p>
-              <Progress value={dashboard.monthProgressPercent} className="h-2" />
-              <p className="text-xs text-muted-foreground">Средняя заполненность материалов по выборке.</p>
-            </CardContent>
-          </Card>
-          <Card className="min-w-0 border-border/70 shadow-xs" data-testid="card-training-kpi-required">
-            <CardHeader className="pb-2 pt-4">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Обязательные</CardTitle>
-            </CardHeader>
-            <CardContent className="pb-4 pt-0">
-              <p className="text-3xl font-semibold tabular-nums text-foreground">
-                {dashboard.requiredCompleted}/{dashboard.requiredTotal}
-              </p>
-              <p className="text-xs text-muted-foreground">Завершено из обязательных материалов</p>
-            </CardContent>
-          </Card>
-          <Card className="min-w-0 border-border/70 shadow-xs" data-testid="card-training-kpi-in-progress">
-            <CardHeader className="pb-2 pt-4">
-              <CardTitle className="text-sm font-medium text-muted-foreground">В работе</CardTitle>
-            </CardHeader>
-            <CardContent className="pb-4 pt-0">
-              <p className="text-3xl font-semibold tabular-nums text-foreground">{dashboard.inProgressCount}</p>
-              <p className="text-xs text-muted-foreground">Материалы с частичным прогрессом</p>
-            </CardContent>
-          </Card>
-          <Card className="min-w-0 border-border/70 shadow-xs" data-testid="card-training-kpi-attention">
-            <CardHeader className="pb-2 pt-4">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Требует внимания</CardTitle>
-            </CardHeader>
-            <CardContent className="pb-4 pt-0">
-              <p className="text-3xl font-semibold tabular-nums text-foreground">{dashboard.attentionCount}</p>
-              <p className="text-xs text-muted-foreground">Назначения с высоким приоритетом</p>
-            </CardContent>
-          </Card>
-          <Card className="min-w-0 border-border/70 shadow-xs" data-testid="card-training-kpi-wiki-imported">
-            <CardHeader className="pb-2 pt-4">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Из Wiki</CardTitle>
-            </CardHeader>
-            <CardContent className="pb-4 pt-0">
-              <p className="text-3xl font-semibold tabular-nums text-foreground">{wikiSummary.totalImported}</p>
-              <p className="text-xs text-muted-foreground">Материалов импортировано</p>
-            </CardContent>
-          </Card>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Всего материалов в базе: {kpis.total}. Доступно для партнёров: {kpis.dealerAccess}.
-        </p>
-      </section>
-
       <section className="space-y-4" data-testid="section-training-programs">
         <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Мои программы</h2>
         <div className="grid min-w-0 gap-3 sm:grid-cols-2">
@@ -601,47 +554,6 @@ export default function TrainingPage() {
         </div>
       </section>
 
-      <section className="space-y-4" data-testid="section-training-assignments">
-        <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Назначено мне</h2>
-        <div className="grid min-w-0 gap-3">
-          {assignments.map((a) => (
-            <Card key={a.id} className="min-w-0 border-border/70 shadow-xs" data-testid={`card-training-assignment-${a.id}`}>
-              <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0 space-y-1">
-                  <p className="font-semibold text-foreground">{a.title}</p>
-                  <p className="text-xs text-muted-foreground">
-                    Срок {a.dueDate} · приоритет {a.priority === "high" ? "высокий" : a.priority === "medium" ? "средний" : "низкий"} ·{" "}
-                    {TRAINING_PROGRESS_STATUS_LABEL[a.status]}
-                  </p>
-                </div>
-                <Button asChild variant="secondary" className="min-h-10 w-full shrink-0 font-semibold sm:w-auto" data-testid={`button-open-training-assignment-${a.id}`}>
-                  <Link href={`/training/${a.materialId}`}>Открыть</Link>
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </section>
-
-      <section className="space-y-4" data-testid="section-training-sections">
-        <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Разделы базы знаний</h2>
-        <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-          {(Object.keys(TRAINING_SECTION_LABEL) as TrainingSection[]).map((key) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => pickSection(key)}
-              data-testid={SECTION_CARD_TEST[key]}
-              className="group flex min-h-[120px] flex-col items-start justify-between rounded-2xl border border-border bg-card p-4 text-left shadow-xs transition-colors hover:border-primary/40 hover:bg-muted/30"
-            >
-              <BookOpen className="h-6 w-6 text-primary" aria-hidden />
-              <span className="text-sm font-semibold leading-snug text-foreground">{TRAINING_SECTION_LABEL[key]}</span>
-              <span className="text-xs text-muted-foreground">Показать материалы раздела</span>
-            </button>
-          ))}
-        </div>
-      </section>
-
       <section ref={materialsRef} className="scroll-mt-28 space-y-4 sm:scroll-mt-32" data-testid="section-training-materials">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0 space-y-1">
@@ -660,7 +572,7 @@ export default function TrainingPage() {
 
         <div className="space-y-4 rounded-2xl border border-border bg-card p-4 shadow-xs sm:p-6">
           <h3 className="text-sm font-semibold text-foreground">Фильтры списка</h3>
-          <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+          <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             <div className="min-w-0">
               <span className="mb-1.5 block text-xs font-medium text-muted-foreground">Раздел</span>
               <Select value={section} onValueChange={(v) => setSection(v as typeof ALL | TrainingSection)}>
@@ -736,21 +648,8 @@ export default function TrainingPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="min-w-0">
-              <span className="mb-1.5 block text-xs font-medium text-muted-foreground">Источник</span>
-              <Select value={sourceFilter} onValueChange={(v) => setSourceFilter(v as typeof ALL | "wiki" | "manual")}>
-                <SelectTrigger className="h-11 min-h-[44px] w-full min-w-0" data-testid="select-training-source">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL}>Все</SelectItem>
-                  <SelectItem value="wiki">Wiki</SelectItem>
-                  <SelectItem value="manual">Ручные</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
           </div>
-          <div className="flex flex-wrap gap-2" role="group" aria-label="Статус публикации материала">
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Статус материала">
             {STATUS_CHIPS.map((c) => (
               <button
                 key={c.id}
@@ -806,15 +705,6 @@ export default function TrainingPage() {
                         <Badge variant="outline" className="text-muted-foreground">
                           Сложность: {m.difficulty === "easy" ? "лёгкая" : m.difficulty === "hard" ? "высокая" : "средняя"}
                         </Badge>
-                        {m.sourceType === "wiki" ? (
-                          <Badge
-                            variant="secondary"
-                            className="border-primary/30 bg-primary/5 font-semibold"
-                            data-testid={`badge-training-material-source-${m.id}`}
-                          >
-                            Wiki · {TRAINING_WIKI_REVIEW_LABEL[m.reviewStatus ?? m.wikiSource?.wikiReviewStatus ?? "needs_review"]}
-                          </Badge>
-                        ) : null}
                       </div>
                       {m.knowledgeTags.length > 0 ? (
                         <div className="flex flex-wrap gap-1.5">
@@ -873,118 +763,92 @@ export default function TrainingPage() {
         )}
       </section>
 
-      <section className="rounded-2xl border border-dashed border-border/80 bg-muted/20 p-5 sm:p-6" data-testid="section-training-wiki-import">
-        <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Импорт из корпоративной Wiki</h2>
-        <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-          Материалы загружены из закрытой базы знаний в безопасном формате. Полные тексты подключаются после ревью и настройки закрытого хранилища.
-        </p>
-        <div className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
-          <p className="font-medium text-foreground">
-            Импортировано материалов: <span className="tabular-nums">{wikiSummary.totalImported}</span>
-          </p>
-          <p className="font-medium text-foreground">
-            На проверке: <span className="tabular-nums">{wikiSummary.needsReview}</span>
-          </p>
+      <section className="space-y-4" data-testid="section-training-kpis">
+        <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Показатели обучения</h2>
+        <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Card className="min-w-0 border-border/70 shadow-xs" data-testid="card-training-kpi-progress">
+            <CardHeader className="pb-2 pt-4">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Прогресс месяца</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 pb-4 pt-0">
+              <p className="text-3xl font-semibold tabular-nums text-foreground">{dashboard.monthProgressPercent}%</p>
+              <Progress value={dashboard.monthProgressPercent} className="h-2" />
+              <p className="text-xs text-muted-foreground">Средняя заполненность материалов по выборке.</p>
+            </CardContent>
+          </Card>
+          <Card className="min-w-0 border-border/70 shadow-xs" data-testid="card-training-kpi-required">
+            <CardHeader className="pb-2 pt-4">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Обязательные</CardTitle>
+            </CardHeader>
+            <CardContent className="pb-4 pt-0">
+              <p className="text-3xl font-semibold tabular-nums text-foreground">
+                {dashboard.requiredCompleted}/{dashboard.requiredTotal}
+              </p>
+              <p className="text-xs text-muted-foreground">Завершено из обязательных материалов</p>
+            </CardContent>
+          </Card>
+          <Card className="min-w-0 border-border/70 shadow-xs" data-testid="card-training-kpi-in-progress">
+            <CardHeader className="pb-2 pt-4">
+              <CardTitle className="text-sm font-medium text-muted-foreground">В работе</CardTitle>
+            </CardHeader>
+            <CardContent className="pb-4 pt-0">
+              <p className="text-3xl font-semibold tabular-nums text-foreground">{dashboard.inProgressCount}</p>
+              <p className="text-xs text-muted-foreground">Материалы с частичным прогрессом</p>
+            </CardContent>
+          </Card>
+          <Card className="min-w-0 border-border/70 shadow-xs" data-testid="card-training-kpi-attention">
+            <CardHeader className="pb-2 pt-4">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Требует внимания</CardTitle>
+            </CardHeader>
+            <CardContent className="pb-4 pt-0">
+              <p className="text-3xl font-semibold tabular-nums text-foreground">{dashboard.attentionCount}</p>
+              <p className="text-xs text-muted-foreground">Назначения с высоким приоритетом</p>
+            </CardContent>
+          </Card>
         </div>
-        <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-          <p>Распределение по разделам:</p>
-          <ul className="flex flex-wrap gap-x-3 gap-y-1">
-            {Object.entries(wikiSummary.bySection)
-              .filter(([, count]) => count > 0)
-              .map(([s, count]) => (
-              <li key={s} className="flex items-center gap-1">
-                <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
-                <span>
-                  {s === "other"
-                    ? "Прочее"
-                    : s in TRAINING_SECTION_LABEL
-                      ? TRAINING_SECTION_LABEL[s as TrainingSection]
-                      : s}
-                  : {count}
-                </span>
-              </li>
-            ))}
-          </ul>
+        <p className="text-xs text-muted-foreground">
+          Всего материалов в базе: {kpis.total}. Доступно для партнёров: {kpis.dealerAccess}.
+        </p>
+      </section>
+
+      <section className="space-y-4" data-testid="section-training-assignments">
+        <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Назначено мне</h2>
+        <div className="grid min-w-0 gap-3">
+          {assignments.map((a) => (
+            <Card key={a.id} className="min-w-0 border-border/70 shadow-xs" data-testid={`card-training-assignment-${a.id}`}>
+              <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0 space-y-1">
+                  <p className="font-semibold text-foreground">{a.title}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Срок {a.dueDate} · приоритет {a.priority === "high" ? "высокий" : a.priority === "medium" ? "средний" : "низкий"} ·{" "}
+                    {TRAINING_PROGRESS_STATUS_LABEL[a.status]}
+                  </p>
+                </div>
+                <Button asChild variant="secondary" className="min-h-10 w-full shrink-0 font-semibold sm:w-auto" data-testid={`button-open-training-assignment-${a.id}`}>
+                  <Link href={`/training/${a.materialId}`}>Открыть</Link>
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       </section>
 
-      <section className="space-y-4 rounded-2xl border border-border/80 bg-card p-5 shadow-xs sm:p-6" data-testid="section-training-wiki-map">
-        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0 space-y-1">
-            <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Карта наполнения Wiki</h2>
-            <p className="max-w-3xl text-sm text-muted-foreground">
-              План переноса тем из закрытой базы в учебные программы: приоритеты, роли и сценарии без полных текстов и внутренних ссылок.
-            </p>
-          </div>
-          <Button asChild className="h-11 min-h-[44px] w-full shrink-0 font-semibold sm:w-auto sm:min-w-[11rem]" data-testid="button-training-open-wiki-map">
-            <Link href="/training/wiki-map">Открыть карту Wiki</Link>
-          </Button>
-        </div>
-        <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Card className="min-w-0 border-border/70 shadow-xs" data-testid="card-training-wiki-map-total">
-            <CardHeader className="pb-2 pt-4">
-              <CardTitle className="text-sm font-medium text-muted-foreground">В карте</CardTitle>
-            </CardHeader>
-            <CardContent className="pb-4 pt-0">
-              <p className="text-3xl font-semibold tabular-nums text-foreground">{wikiMapSummary.total}</p>
-              <p className="text-xs text-muted-foreground">Позиций дорожной карты</p>
-            </CardContent>
-          </Card>
-          <Card className="min-w-0 border-border/70 shadow-xs" data-testid="card-training-wiki-map-p0">
-            <CardHeader className="pb-2 pt-4">
-              <CardTitle className="text-sm font-medium text-muted-foreground">P0</CardTitle>
-            </CardHeader>
-            <CardContent className="pb-4 pt-0">
-              <p className="text-3xl font-semibold tabular-nums text-foreground">{wikiMapSummary.byPriority.P0}</p>
-              <p className="text-xs text-muted-foreground">Первая очередь переноса</p>
-            </CardContent>
-          </Card>
-          <Card className="min-w-0 border-border/70 shadow-xs" data-testid="card-training-wiki-map-review">
-            <CardHeader className="pb-2 pt-4">
-              <CardTitle className="text-sm font-medium text-muted-foreground">На ревью</CardTitle>
-            </CardHeader>
-            <CardContent className="pb-4 pt-0">
-              <p className="text-3xl font-semibold tabular-nums text-foreground">{wikiMapSummary.needsReview}</p>
-              <p className="text-xs text-muted-foreground">Требуют проверки перед импортом</p>
-            </CardContent>
-          </Card>
-          <Card className="min-w-0 border-border/70 shadow-xs" data-testid="card-training-wiki-map-catalog">
-            <CardHeader className="pb-2 pt-4">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Каталог</CardTitle>
-            </CardHeader>
-            <CardContent className="pb-4 pt-0">
-              <p className="text-3xl font-semibold tabular-nums text-foreground">{wikiMapSummary.catalogLinked}</p>
-              <p className="text-xs text-muted-foreground">Связка с линейками / ассортиментом</p>
-            </CardContent>
-          </Card>
-        </div>
-        <div className="space-y-2">
-          <h3 className="text-sm font-semibold text-foreground">P0 — первая очередь (фрагмент)</h3>
-          <ul className="min-w-0 space-y-2">
-            {wikiMapP0Preview.map((item) => (
-              <li
-                key={item.id}
-                data-testid={`card-training-wiki-map-item-${item.id}`}
-                className="flex min-w-0 flex-col gap-2 rounded-xl border border-border/60 bg-muted/10 p-3 sm:flex-row sm:items-start sm:justify-between"
-              >
-                <div className="min-w-0 space-y-1">
-                  <p className="text-sm font-medium text-foreground">{item.wikiTitle}</p>
-                  <p className="text-xs text-muted-foreground">{item.safeSummary}</p>
-                  <p className="text-xs text-muted-foreground">
-                    <span className="font-medium text-foreground">Зачем:</span> {item.reason}
-                  </p>
-                </div>
-                <div className="flex shrink-0 flex-wrap gap-1.5 sm:flex-col sm:items-end">
-                  <Badge variant="secondary" className="font-semibold tabular-nums">
-                    {item.priority}
-                  </Badge>
-                  <Badge variant="outline" className="text-xs font-medium">
-                    {WIKI_MAP_REVIEW_LABEL[item.reviewStatus]}
-                  </Badge>
-                </div>
-              </li>
-            ))}
-          </ul>
+      <section className="space-y-4" data-testid="section-training-sections">
+        <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Разделы базы знаний</h2>
+        <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+          {(Object.keys(TRAINING_SECTION_LABEL) as TrainingSection[]).map((key) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => pickSection(key)}
+              data-testid={SECTION_CARD_TEST[key]}
+              className="group flex min-h-[120px] flex-col items-start justify-between rounded-2xl border border-border bg-card p-4 text-left shadow-xs transition-colors hover:border-primary/40 hover:bg-muted/30"
+            >
+              <BookOpen className="h-6 w-6 text-primary" aria-hidden />
+              <span className="text-sm font-semibold leading-snug text-foreground">{TRAINING_SECTION_LABEL[key]}</span>
+              <span className="text-xs text-muted-foreground">Показать материалы раздела</span>
+            </button>
+          ))}
         </div>
       </section>
     </div>

@@ -19,7 +19,6 @@ import {
   TRAINING_SECTION_LABEL,
   TRAINING_STATUS_LABEL,
   TRAINING_TYPE_LABEL,
-  TRAINING_WIKI_REVIEW_LABEL,
   type RelatedTaskContext,
 } from "@/lib/training-data";
 import { getProductById } from "@/lib/catalog-data";
@@ -129,40 +128,6 @@ function TrainingArticleFound({ articleId }: { articleId: string }) {
           ) : null}
         </div>
       </section>
-
-      {material.sourceType === "wiki" && material.wikiSource ? (
-        <section className="space-y-3" data-testid="section-training-article-source">
-          <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Источник материала</h2>
-          <Card className="border-border/70 shadow-xs">
-            <CardContent className="space-y-2 p-4 sm:p-5">
-              <Badge variant="outline" className="font-medium" data-testid="badge-training-article-source">
-                Источник: база знаний Wiki
-              </Badge>
-              <p className="text-sm text-muted-foreground">
-                Исходный заголовок:{" "}
-                <span className="font-semibold text-foreground" data-testid="text-training-article-original-title">
-                  {material.originalTitle ?? material.wikiSource.wikiTitle}
-                </span>
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Статус проверки:{" "}
-                <span className="font-semibold text-foreground" data-testid="text-training-article-review-status">
-                  {TRAINING_WIKI_REVIEW_LABEL[material.reviewStatus ?? material.wikiSource.wikiReviewStatus]}
-                </span>
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Дата импорта:{" "}
-                <span className="font-semibold tabular-nums text-foreground">{material.wikiSource.wikiImportedAt}</span>
-              </p>
-              <p className="text-xs text-muted-foreground" data-testid="text-training-article-source-status">
-                {(material.reviewStatus ?? material.wikiSource.wikiReviewStatus) === "approved"
-                  ? "Текст материала подготовлен на основе базы знаний и размещён в этом разделе. Служебные адреса Wiki не отображаются."
-                  : "Полное содержимое из закрытой Wiki может дополняться после ревью; служебные ссылки не отображаются."}
-              </p>
-            </CardContent>
-          </Card>
-        </section>
-      ) : null}
 
       <section className="space-y-3" data-testid="section-training-article-summary">
         <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Кратко</h2>
