@@ -161,6 +161,7 @@ export function getTradePointMatrix(
   const items: TradePointProductMatrixItem[] = [];
 
   CATALOG_PRODUCTS.forEach((p, idx) => {
+    if (p.includeInTradePointMatrix === false) return;
     if (!shouldIncludeInMatrix(p, normalizedPoint, dealerSeed, pointSeed, idx)) return;
 
     const isOnShowcase = p.relatedTradePointIds.includes(normalizedPoint);

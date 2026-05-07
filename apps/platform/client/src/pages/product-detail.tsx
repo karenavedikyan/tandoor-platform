@@ -330,8 +330,30 @@ function ProductFound({ product }: { product: CatalogProduct }) {
           <p className="text-sm text-muted-foreground">
             Покрытие: <span className="font-medium text-foreground">{product.coating}</span>
             {" · "}
-            Размеры: <span className="font-medium text-foreground">{product.sizes.join(", ")}</span>
+            Размеры:{" "}
+            <span className="font-medium text-foreground">{product.sizes.length ? product.sizes.join(", ") : "—"}</span>
           </p>
+          {typeof product.priceRetailRub === "number" ? (
+            <p className="text-sm text-muted-foreground">
+              Ориентир по цене с публичной витрины:{" "}
+              <span className="font-semibold text-foreground">
+                {product.priceRetailRub.toLocaleString("ru-RU")} ₽
+              </span>
+            </p>
+          ) : null}
+          {product.sourcePublicUrl ? (
+            <p className="text-sm">
+              <a
+                href={product.sourcePublicUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-primary underline-offset-4 hover:underline"
+                data-testid="link-product-public-page"
+              >
+                Открыть карточку на сайте Tandoor
+              </a>
+            </p>
+          ) : null}
           <div className="grid gap-3 text-sm sm:grid-cols-2">
             <SurfaceCard>
               <CardContent className="pt-4">

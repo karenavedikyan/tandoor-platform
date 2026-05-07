@@ -31,6 +31,7 @@ export type TrainingModelPhotoPilotItem = {
 const PILOT_ITEMS: TrainingModelPhotoPilotItem[] = [
   {
     id: "pilot-vh-grand-3",
+    productId: "tc-vh-panteon-bukle-temno-seryy-belyy-sneg-860kh2050-levaya",
     title: "Пантеон",
     category: "vh",
     imageSrc: pilotWebp("pilot-vh-grand-3"),
@@ -56,6 +57,7 @@ const PILOT_ITEMS: TrainingModelPhotoPilotItem[] = [
   },
   {
     id: "pilot-vh-grand-4",
+    productId: "tc-vh-era-grafit-belyy-matovyy-860kh2050-levaya",
     title: "Эра",
     category: "vh",
     imageSrc: pilotWebp("pilot-vh-grand-4"),
@@ -80,6 +82,7 @@ const PILOT_ITEMS: TrainingModelPhotoPilotItem[] = [
   },
   {
     id: "pilot-vh-grand-5",
+    productId: "tc-vh-ultra-pikhtovyy-emalit-belyy-860kh2050-levaya",
     title: "Ультра",
     category: "vh",
     imageSrc: pilotWebp("pilot-vh-grand-5"),
@@ -104,6 +107,7 @@ const PILOT_ITEMS: TrainingModelPhotoPilotItem[] = [
   },
   {
     id: "pilot-vh-neapol",
+    productId: "tc-vh-pandora-dub-korichnevyy-belyy-mat-860kh2050-levaya",
     title: "Пандора",
     category: "vh",
     imageSrc: pilotWebp("pilot-vh-neapol"),
@@ -128,6 +132,7 @@ const PILOT_ITEMS: TrainingModelPhotoPilotItem[] = [
   },
   {
     id: "pilot-vh-kvarc",
+    productId: "tc-vh-layt-bukle-grafit-kanadskiy-dub-860kh2050-levaya",
     title: "Лайт",
     category: "vh",
     imageSrc: pilotWebp("pilot-vh-kvarc"),
@@ -152,6 +157,7 @@ const PILOT_ITEMS: TrainingModelPhotoPilotItem[] = [
   },
   {
     id: "pilot-mk-grand-3-mk",
+    productId: "tc-mk-benatti-1-0-belyy-zhemchug-dg-2100-800",
     title: "Гранд 13 · Medzhik",
     category: "mk",
     imageSrc: pilotWebp("pilot-mk-grand-3-mk"),
@@ -176,6 +182,7 @@ const PILOT_ITEMS: TrainingModelPhotoPilotItem[] = [
   },
   {
     id: "pilot-mk-grand-4",
+    productId: "tc-mk-benatti-2-belyy-zhemchug-dg-2000-800",
     title: "Гранд 13 · Zefir",
     category: "mk",
     imageSrc: pilotWebp("pilot-mk-grand-4"),
@@ -201,6 +208,7 @@ const PILOT_ITEMS: TrainingModelPhotoPilotItem[] = [
   },
   {
     id: "pilot-mk-grand-5",
+    productId: "tc-mk-m-36-emal-belaya-dg-2000-800",
     title: "Mona 01 · brown",
     category: "mk",
     imageSrc: pilotWebp("pilot-mk-grand-5"),
@@ -225,6 +233,7 @@ const PILOT_ITEMS: TrainingModelPhotoPilotItem[] = [
   },
   {
     id: "pilot-mk-kapelli",
+    productId: "tc-mk-new-kantata-emal-belaya-dg-2000-800",
     title: "Кантата · белая",
     category: "mk",
     imageSrc: pilotWebp("pilot-mk-kapelli"),
@@ -249,6 +258,7 @@ const PILOT_ITEMS: TrainingModelPhotoPilotItem[] = [
   },
   {
     id: "pilot-mk-sk-line",
+    productId: "tc-mk-sk-2-belyy-matovyy-pet-dg-2000-800-90p",
     title: "SK-2 DG · белая",
     category: "mk",
     imageSrc: pilotWebp("pilot-mk-sk-line"),

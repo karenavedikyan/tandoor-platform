@@ -5,10 +5,15 @@
  * толщина, покрытие, тип открывания, производитель, гарантия, отметки
  * хитов/новинок/эксклюзива/акции/наличия, рекомендация для витрины.
  *
- * В каталог намеренно не переносятся: реальные цены, остатки, закрытые
- * выгрузки и любые внутренние идентификаторы из Bitrix. Все значения —
- * безопасные и обезличенные, но повторяют структуру и фирменный стиль.
+ * Первый слой позиций берётся из публичного каталога tandoor.ru (см. `tandoor-real-catalog-seed.generated.ts`
+ * и скрипт `scripts/import-tandoor-public-catalog.mjs`); ниже остаётся прежний мок для демо-связей
+ * с дилерами и задачами. Публичные позиции не участвуют в моке матрицы витрин (`includeInTradePointMatrix: false`).
  */
+
+import {
+  TANDOOR_REAL_CATALOG_SEED,
+  type TandoorRealCatalogSeedItem,
+} from "./tandoor-real-catalog-seed.generated";
 
 export type CatalogProduct = {
   id: string;
@@ -44,9 +49,108 @@ export type CatalogProduct = {
   relatedTradePointIds: string[];
   relatedTaskCount: number;
   history: { date: string; event: string }[];
+  /** Ссылка на публичную карточку на сайте Tandoor (для справки менеджера). */
+  sourcePublicUrl?: string;
+  /** Розничная цена с публичной витрины, если передана в seed. */
+  priceRetailRub?: number;
+  /** Дополнительные токены для поиска в каталоге платформы. */
+  catalogTags?: string[];
+  /** Нормализованная строка поиска (категория, теги, коллекция). */
+  catalogSearchText?: string;
+  /** Если false — позиция не попадает в мок матрицы витрин ТТ (по умолчанию true). */
+  includeInTradePointMatrix?: boolean;
 };
 
-const rows: CatalogProduct[] = [
+function cleanPublicDescription(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  return raw
+    .replace(/&nbsp;/g, " ")
+    .replace(/&#8381;/g, "₽")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/<[^>]+>/g, "")
+    .trim();
+}
+
+function mapPublicSeedToCatalogProduct(row: TandoorRealCatalogSeedItem): CatalogProduct {
+  const doorKind =
+    row.category === "entrance" ? "Входная" : row.category === "interior" ? "Межкомнатная" : "Фурнитура";
+  const categoryLabel =
+    row.category === "entrance"
+      ? "Входные двери"
+      : row.category === "interior"
+        ? "Межкомнатные двери"
+        : "Фурнитура";
+  const series = row.collection ?? "Каталог Tandoor";
+  const coatingGuess = () => {
+    const t = row.title.toLowerCase();
+    if (t.includes("эмаль") || t.includes("emal")) return "Эмаль";
+    if (t.includes("шпон")) return "Шпон";
+    if (t.includes("ламинат")) return "Ламинат";
+    if (t.includes("пэт") || t.includes("pet")) return "ПЭТ";
+    if (t.includes("мдф") || t.includes("mdf")) return "МДФ";
+    if (row.category === "hardware") return "Фурнитура";
+    return "По каталогу";
+  };
+  const shortDescription = cleanPublicDescription(row.shortDescription) ?? row.title;
+  const boostTags: string[] = [];
+  if (row.id === "tc-mk-benatti-2-belyy-zhemchug-dg-2000-800") boostTags.push("Zefir", "зефир");
+  if (row.id === "tc-mk-benatti-1-0-belyy-zhemchug-dg-2100-800" || row.id === "tc-mk-benatti-1-0-belyy-zhemchug-dg-2000-800") {
+    boostTags.push("Grand 13", "Гранд 13", "Medzhik", "меджик");
+  }
+  if (row.id === "tc-mk-m-36-emal-belaya-dg-2000-800") boostTags.push("Mona", "мона");
+  const mergedTags = [...row.tags, ...boostTags];
+  const searchText = [row.searchText, ...boostTags].join(" ").toLowerCase();
+  const specs: { label: string; value: string }[] = [];
+  if (typeof row.priceRetail === "number") {
+    specs.push({ label: "Розничная цена, ₽", value: String(row.priceRetail) });
+  }
+  specs.push({ label: "Категория", value: categoryLabel });
+  if (row.collection) specs.push({ label: "Коллекция / модель", value: row.collection });
+
+  return {
+    id: row.id,
+    name: row.title,
+    article: row.id.replace(/^tc-(?:vh|mk|hw)-/, "").slice(0, 28).toUpperCase(),
+    category: categoryLabel,
+    series,
+    type: row.category === "hardware" ? "Артикул" : "Модель",
+    doorKind,
+    status: "В продаже",
+    image: row.imageSrc,
+    shortDescription,
+    description: shortDescription,
+    features: mergedTags,
+    specs,
+    equipment: row.category === "hardware" ? ["Комплект по спецификации витрины"] : ["Полотно", "Коробка", "Фурнитура по комплекту"],
+    variants: [{ label: "Исполнение", value: "См. публичную карточку" }],
+    colors: [],
+    sizes: [],
+    manufacturer: "Tandoor",
+    warranty: "По условиям производителя",
+    coating: coatingGuess(),
+    openType: row.category === "hardware" ? "—" : "См. карточку",
+    isTop: false,
+    isNew: false,
+    isExclusive: false,
+    isAction: false,
+    inStock: true,
+    showcasePriority: 3,
+    salesPriority: 5,
+    recommendedForShowcase: false,
+    relatedDealerIds: [],
+    relatedTradePointIds: [],
+    relatedTaskCount: 0,
+    history: [],
+    sourcePublicUrl: row.sourceUrl,
+    priceRetailRub: row.priceRetail,
+    catalogTags: mergedTags,
+    catalogSearchText: searchText,
+    includeInTradePointMatrix: false,
+  };
+}
+
+const mockCatalogRows: CatalogProduct[] = [
   {
     id: "vh-grand-3",
     name: "Гранд 3",
@@ -676,7 +780,43 @@ const rows: CatalogProduct[] = [
   },
 ];
 
-export const CATALOG_PRODUCTS: CatalogProduct[] = rows;
+export const CATALOG_PRODUCTS: CatalogProduct[] = [
+  ...TANDOOR_REAL_CATALOG_SEED.map(mapPublicSeedToCatalogProduct),
+  ...mockCatalogRows,
+];
+
+export function buildCatalogProductSearchHaystack(p: CatalogProduct): string {
+  return [
+    p.name,
+    p.article,
+    p.series,
+    p.category,
+    p.doorKind,
+    p.coating,
+    p.type,
+    p.shortDescription,
+    p.description,
+    ...(p.features ?? []),
+    ...(p.catalogTags ?? []),
+    p.catalogSearchText ?? "",
+  ]
+    .join(" ")
+    .toLowerCase();
+}
+
+/** Поиск по каталогу: короткие ВХ/МК; несколько слов — OR по вхождению в haystack. */
+export function catalogSearchQueryMatchesHaystack(rawQuery: string, haystack: string): boolean {
+  const q = rawQuery.trim().toLowerCase();
+  if (!q) return true;
+  if (q === "вх" || q === "vh") return haystack.includes("входн") || haystack.includes("входная");
+  if (q === "мк" || q === "mk") return haystack.includes("межкомнат");
+  if (q === "фурнитура" || q === "замки" || q === "замок") {
+    return haystack.includes("фурнитур") || haystack.includes("замок");
+  }
+  const parts = q.split(/\s+/).filter((w) => w.length > 0);
+  if (parts.length >= 2) return parts.some((w) => w.length >= 2 && haystack.includes(w));
+  return haystack.includes(q);
+}
 
 export function getProductById(id: string): CatalogProduct | undefined {
   const t = id.trim().toLowerCase();
