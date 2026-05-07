@@ -503,7 +503,7 @@ export default function TrainingPage() {
         </div>
         <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {pilotFiltered.map((row) => {
-            const product = getProductById(row.productId);
+            const product = row.productId ? getProductById(row.productId) : undefined;
             const primaryMaterialId = row.relatedTrainingMaterialIds[0];
             return (
               <Card
@@ -559,7 +559,7 @@ export default function TrainingPage() {
                     <p className="mt-1 text-muted-foreground">{row.objectionAnswer}</p>
                   </div>
                   <div className="mt-auto flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
-                    {product ? (
+                    {product && row.productId ? (
                       <Button asChild variant="secondary" size="sm" className="min-h-10 w-full font-semibold sm:flex-1" data-testid={`button-training-model-open-product-${row.id}`}>
                         <Link href={`/catalog/${row.productId}`}>
                           Открыть товар
