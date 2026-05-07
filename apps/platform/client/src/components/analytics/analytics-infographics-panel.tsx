@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils";
 import {
   OPERATIONAL_DEFAULT_GLOBAL_FILTERS,
   filterEquipmentRows,
+  getFirstEquipmentRowForDealer,
+  getHardwareProductIdForDealer,
   getInfographicCitySegments,
   getInfographicClientSegmentCards,
   getInfographicEquipmentNomenclatureBars,
@@ -16,9 +18,12 @@ import {
   getInfographicShowcaseModels,
   getInfographicShowcaseProfitabilityBars,
   getInfographicShowcaseRiskClients,
+  getProfitabilityTradePointIdForDealer,
   kpiEquipment,
+  type PartnerSegment,
   type ShowcaseAttentionZone,
 } from "@/lib/analytics-operational-data";
+import { EquipmentContractDialog } from "@/components/analytics/equipment-contract-dialog";
 import {
   formatCompactRub,
   formatPercent,
@@ -243,6 +248,18 @@ function segmentCardTestId(segment: string): string {
   return "card-infographic-segment-tandoor-club";
 }
 
+function segmentOpenDealersTestId(segment: PartnerSegment): string {
+  if (segment === "top500") return "button-infographic-segment-open-dealers-top500";
+  if (segment === "fiveHundredPlus") return "button-infographic-segment-open-dealers-500-plus";
+  return "button-infographic-segment-open-dealers-tandoor-club";
+}
+
+function segmentOpenTerritoryTestId(segment: PartnerSegment): string {
+  if (segment === "top500") return "button-infographic-segment-open-territory-top500";
+  if (segment === "fiveHundredPlus") return "button-infographic-segment-open-territory-500-plus";
+  return "button-infographic-segment-open-territory-tandoor-club";
+}
+
 function TopBars({ items, testId, subtitle }: { items: InfographicTopItem[]; testId: string; subtitle: string }) {
   const max = Math.max(...items.map((i) => i.value), 1);
   return (
@@ -310,8 +327,35 @@ export function AnalyticsInfographicsPanel() {
   const hw = planItems.find((p) => p.category === "hardware")!;
   const maxCityShare = Math.max(...cities.map((c) => c.regionSharePercent), 1);
 
+  const [equipmentContractForDealerId, setEquipmentContractForDealerId] = useState<string | null>(null);
+  const equipmentContractEquipmentId = useMemo(() => {
+    if (!equipmentContractForDealerId) return null;
+    return getFirstEquipmentRowForDealer(equipmentContractForDealerId)?.equipmentId ?? null;
+  }, [equipmentContractForDealerId]);
+
   return (
-    <div className="space-y-10">
+    <>
+      <div className="space-y-10">
+        <section
+          className="flex flex-col gap-2 rounded-2xl border border-border/80 bg-card p-4 shadow-md sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"
+          data-testid="section-infographic-quick-actions"
+        >
+          <p className="text-sm font-medium text-foreground">Быстрые действия</p>
+          <div className="flex min-w-0 flex-wrap gap-2">
+            <Button asChild size="sm" variant="secondary" className="min-h-9 shrink-0 font-semibold" data-testid="button-infographic-open-territory">
+              <Link href="/territory-card">К карточке территории</Link>
+            </Button>
+            <Button asChild size="sm" variant="outline" className="min-h-9 shrink-0 border-border bg-card font-semibold" data-testid="button-infographic-open-dealers">
+              <Link href="/dealer-base">К клиентам</Link>
+            </Button>
+            <Button asChild size="sm" variant="outline" className="min-h-9 shrink-0 border-border bg-card font-semibold" data-testid="button-infographic-open-tasks">
+              <Link href="/tasks">К задачам</Link>
+            </Button>
+            <Button asChild size="sm" variant="outline" className="min-h-9 shrink-0 border-border bg-card font-semibold" data-testid="button-infographic-open-catalog">
+              <Link href="/catalog">К каталогу</Link>
+            </Button>
+          </div>
+        </section>
       <section className="space-y-4" data-testid="section-analytics-infographic-plan">
         <h2 className="text-lg font-semibold text-foreground sm:text-xl">Выполнение плана</h2>
         <p className="text-sm text-muted-foreground">МК и ВХ — штуки; фурнитура — оборот в рублях. Рядом с кругом — те же цифры, что в сводке.</p>
@@ -401,6 +445,26 @@ export function AnalyticsInfographicsPanel() {
                   Средняя конверсия:{" "}
                   <span className="font-semibold tabular-nums text-foreground">{formatPercent(s.avgConversionPercent)}</span>
                 </p>
+                <div className="flex flex-wrap gap-2 pt-2">
+                  <Button
+                    asChild
+                    size="sm"
+                    variant="secondary"
+                    className="min-h-9 font-semibold"
+                    data-testid={segmentOpenDealersTestId(s.segment)}
+                  >
+                    <Link href="/dealer-base">К клиентам</Link>
+                  </Button>
+                  <Button
+                    asChild
+                    size="sm"
+                    variant="outline"
+                    className="min-h-9 border-border bg-card font-semibold"
+                    data-testid={segmentOpenTerritoryTestId(s.segment)}
+                  >
+                    <Link href="/territory-card">К территории</Link>
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}
@@ -441,7 +505,9 @@ export function AnalyticsInfographicsPanel() {
           </CardContent>
         </Card>
         <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {showcaseRiskClients.map((r) => (
+          {showcaseRiskClients.map((r) => {
+            const tradePointId = getProfitabilityTradePointIdForDealer(r.dealerId);
+            return (
             <Card
               key={r.dealerId}
               className="min-w-0 rounded-2xl border border-amber-500/25 bg-card shadow-md"
@@ -462,12 +528,38 @@ export function AnalyticsInfographicsPanel() {
                 <p className="tabular-nums">
                   Доля с витрины: {r.shareShowcasePercent}% · наши / конкуренты: {r.ourShowcases} / {r.competitorShowcases}
                 </p>
-                <Button asChild variant="outline" className="w-full min-h-9 border-border bg-card text-xs font-semibold">
-                  <Link href={`/dealers/${r.dealerId}`}>Карточка клиента</Link>
-                </Button>
+                <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:flex-wrap">
+                  <Button
+                    asChild
+                    variant="secondary"
+                    className="min-h-9 w-full font-semibold sm:w-auto"
+                    data-testid={`button-infographic-open-dealer-${r.dealerId}`}
+                  >
+                    <Link href={`/dealers/${r.dealerId}`}>К клиенту</Link>
+                  </Button>
+                  {tradePointId ? (
+                    <Button
+                      asChild
+                      variant="outline"
+                      className="min-h-9 w-full border-border bg-card font-semibold sm:w-auto"
+                      data-testid={`button-infographic-open-trade-point-${tradePointId}`}
+                    >
+                      <Link href={`/dealers/${r.dealerId}/trade-points/${tradePointId}`}>К точке</Link>
+                    </Button>
+                  ) : null}
+                  <Button
+                    asChild
+                    variant="outline"
+                    className="min-h-9 w-full border-border bg-card font-semibold sm:w-auto"
+                    data-testid={`button-infographic-open-tasks-showcase-${r.dealerId}`}
+                  >
+                    <Link href="/tasks">Задачи</Link>
+                  </Button>
+                </div>
               </CardContent>
             </Card>
-          ))}
+          );
+          })}
         </div>
       </section>
 
@@ -521,7 +613,9 @@ export function AnalyticsInfographicsPanel() {
           </CardContent>
         </Card>
         <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {hwRiskClients.map((r) => (
+          {hwRiskClients.map((r) => {
+            const hardwarePid = getHardwareProductIdForDealer(r.dealerId);
+            return (
             <Card
               key={r.dealerId}
               className="min-w-0 rounded-2xl border border-border/80 bg-card shadow-md"
@@ -540,12 +634,38 @@ export function AnalyticsInfographicsPanel() {
                 <p className="text-xs">Конкуренты: {r.competitorsSummary || "—"}</p>
                 <p className="text-xs">Модели у конкурентов: {r.topCompetitorModels}</p>
                 <p className="text-xs">Причина не у нас: {r.reasonNotWithUs}</p>
-                <Button asChild variant="outline" className="w-full min-h-9 border-border bg-card text-xs font-semibold">
-                  <Link href={`/dealers/${r.dealerId}`}>Карточка клиента</Link>
-                </Button>
+                <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:flex-wrap">
+                  <Button
+                    asChild
+                    variant="secondary"
+                    className="min-h-9 w-full font-semibold sm:w-auto"
+                    data-testid={`button-infographic-open-dealer-hardware-${r.dealerId}`}
+                  >
+                    <Link href={`/dealers/${r.dealerId}`}>К клиенту</Link>
+                  </Button>
+                  <Button
+                    asChild
+                    variant="outline"
+                    className="min-h-9 w-full border-border bg-card font-semibold sm:w-auto"
+                    data-testid={`button-infographic-open-tasks-hardware-${r.dealerId}`}
+                  >
+                    <Link href="/tasks">К задачам</Link>
+                  </Button>
+                  {hardwarePid ? (
+                    <Button
+                      asChild
+                      variant="outline"
+                      className="min-h-9 w-full border-border bg-card font-semibold sm:w-auto"
+                      data-testid={`button-infographic-open-hardware-product-${hardwarePid}`}
+                    >
+                      <Link href={`/catalog/${hardwarePid}`}>Товар</Link>
+                    </Button>
+                  ) : null}
+                </div>
               </CardContent>
             </Card>
-          ))}
+          );
+          })}
         </div>
       </section>
 
@@ -613,9 +733,33 @@ export function AnalyticsInfographicsPanel() {
                 <p className="tabular-nums">
                   Единиц: {c.quantity} · средний заказ / мес.: {formatCompactRub(c.avgMonthlyOrderRub)}
                 </p>
-                <Button asChild variant="outline" className="w-full min-h-9 border-border bg-card text-xs font-semibold">
-                  <Link href={`/dealers/${c.dealerId}`}>Карточка клиента</Link>
-                </Button>
+                <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:flex-wrap">
+                  <Button
+                    asChild
+                    variant="secondary"
+                    className="min-h-9 w-full font-semibold sm:w-auto"
+                    data-testid={`button-infographic-equipment-open-dealer-${c.dealerId}`}
+                  >
+                    <Link href={`/dealers/${c.dealerId}`}>К клиенту</Link>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="min-h-9 w-full border-border bg-card font-semibold sm:w-auto"
+                    data-testid={`button-infographic-equipment-check-contract-${c.dealerId}`}
+                    onClick={() => setEquipmentContractForDealerId(c.dealerId)}
+                  >
+                    Проверить договор
+                  </Button>
+                  <Button
+                    asChild
+                    variant="outline"
+                    className="min-h-9 w-full border-border bg-card font-semibold sm:w-auto"
+                    data-testid={`button-infographic-equipment-open-tasks-${c.dealerId}`}
+                  >
+                    <Link href="/tasks">К задачам</Link>
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}
@@ -701,7 +845,7 @@ export function AnalyticsInfographicsPanel() {
               {modelsMk.map((m) => (
                 <div
                   key={m.productId}
-                  className="flex flex-col gap-2 rounded-xl border border-border/60 bg-muted/10 p-3 sm:flex-row sm:items-center sm:justify-between"
+                  className="flex flex-col gap-2 rounded-xl border border-border/60 bg-muted/10 p-3 sm:flex-row sm:items-start sm:justify-between"
                 >
                   <div className="min-w-0">
                     <p className="font-medium leading-snug text-foreground">{m.label}</p>
@@ -710,15 +854,35 @@ export function AnalyticsInfographicsPanel() {
                       {formatPercent(m.avgConversionPercent)} · на витрине ~{formatUnits(m.unitsOnShowcase)} шт.
                     </p>
                   </div>
-                  <Button
-                    asChild
-                    size="sm"
-                    variant="secondary"
-                    className="shrink-0 font-semibold"
-                    data-testid={`button-infographic-open-product-${m.productId}`}
-                  >
-                    <Link href={`/catalog/${m.productId}`}>К товару</Link>
-                  </Button>
+                  <div className="flex min-w-0 flex-wrap gap-2 sm:justify-end">
+                    <Button
+                      asChild
+                      size="sm"
+                      variant="secondary"
+                      className="shrink-0 font-semibold"
+                      data-testid={`button-infographic-open-product-${m.productId}`}
+                    >
+                      <Link href={`/catalog/${m.productId}`}>Товар</Link>
+                    </Button>
+                    <Button
+                      asChild
+                      size="sm"
+                      variant="outline"
+                      className="shrink-0 border-border bg-card font-semibold"
+                      data-testid={`button-infographic-open-product-task-${m.productId}`}
+                    >
+                      <Link href="/tasks">Задача</Link>
+                    </Button>
+                    <Button
+                      asChild
+                      size="sm"
+                      variant="outline"
+                      className="shrink-0 border-border bg-card font-semibold"
+                      data-testid={`button-infographic-open-product-dealers-${m.productId}`}
+                    >
+                      <Link href="/dealer-base">К клиентам</Link>
+                    </Button>
+                  </div>
                 </div>
               ))}
             </CardContent>
@@ -731,7 +895,7 @@ export function AnalyticsInfographicsPanel() {
               {modelsVh.map((m) => (
                 <div
                   key={m.productId}
-                  className="flex flex-col gap-2 rounded-xl border border-border/60 bg-muted/10 p-3 sm:flex-row sm:items-center sm:justify-between"
+                  className="flex flex-col gap-2 rounded-xl border border-border/60 bg-muted/10 p-3 sm:flex-row sm:items-start sm:justify-between"
                 >
                   <div className="min-w-0">
                     <p className="font-medium leading-snug text-foreground">{m.label}</p>
@@ -740,15 +904,35 @@ export function AnalyticsInfographicsPanel() {
                       {formatPercent(m.avgConversionPercent)} · на витрине ~{formatUnits(m.unitsOnShowcase)} шт.
                     </p>
                   </div>
-                  <Button
-                    asChild
-                    size="sm"
-                    variant="secondary"
-                    className="shrink-0 font-semibold"
-                    data-testid={`button-infographic-open-product-${m.productId}`}
-                  >
-                    <Link href={`/catalog/${m.productId}`}>К товару</Link>
-                  </Button>
+                  <div className="flex min-w-0 flex-wrap gap-2 sm:justify-end">
+                    <Button
+                      asChild
+                      size="sm"
+                      variant="secondary"
+                      className="shrink-0 font-semibold"
+                      data-testid={`button-infographic-open-product-${m.productId}`}
+                    >
+                      <Link href={`/catalog/${m.productId}`}>Товар</Link>
+                    </Button>
+                    <Button
+                      asChild
+                      size="sm"
+                      variant="outline"
+                      className="shrink-0 border-border bg-card font-semibold"
+                      data-testid={`button-infographic-open-product-task-${m.productId}`}
+                    >
+                      <Link href="/tasks">Задача</Link>
+                    </Button>
+                    <Button
+                      asChild
+                      size="sm"
+                      variant="outline"
+                      className="shrink-0 border-border bg-card font-semibold"
+                      data-testid={`button-infographic-open-product-dealers-${m.productId}`}
+                    >
+                      <Link href="/dealer-base">К клиентам</Link>
+                    </Button>
+                  </div>
                 </div>
               ))}
             </CardContent>
@@ -869,5 +1053,16 @@ export function AnalyticsInfographicsPanel() {
         </Card>
       </section>
     </div>
+    <EquipmentContractDialog
+      open={equipmentContractForDealerId !== null}
+      onOpenChange={(open) => {
+        if (!open) setEquipmentContractForDealerId(null);
+      }}
+      equipmentId={equipmentContractEquipmentId}
+      contentTestId="dialog-infographic-equipment-contract-placeholder"
+      closeButtonTestId="button-infographic-equipment-contract-close"
+      shortCopy
+    />
+    </>
   );
 }

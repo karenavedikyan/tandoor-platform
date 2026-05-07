@@ -18,6 +18,9 @@ export type MatrixTaskStatus = "new" | "in_progress" | "done" | "overdue";
 export type MatrixTaskPriority = "high" | "medium" | "low";
 export type MatrixTaskAssigneeRole = "manager" | "regional_manager" | "assistant";
 
+/** Откуда в интерфейсе сформирован контекст задачи (для списка задач). */
+export type TaskInsightDomain = "analytics" | "showcase" | "hardware" | "equipment" | "territory";
+
 export type MatrixTask = {
   taskId: string;
   productId: string;
@@ -38,6 +41,8 @@ export type MatrixTask = {
   portal: ShowcasePortal;
   targetSamples: number;
   actualSamples: number;
+  insightDomain?: TaskInsightDomain;
+  insightLabel?: string;
 };
 
 export type MatrixTaskRecommendation = MatrixTask & {
@@ -135,6 +140,28 @@ function charSum(str: string): number {
   return sum;
 }
 
+const TASK_INSIGHT_LABEL: Record<TaskInsightDomain, string> = {
+  analytics: "Аналитика",
+  showcase: "Витрина",
+  hardware: "Фурнитура",
+  equipment: "Оборудование",
+  territory: "Карточка территории",
+};
+
+function insightForTaskId(taskId: string): { insightDomain: TaskInsightDomain; insightLabel: string } {
+  const pool: TaskInsightDomain[] = [
+    "showcase",
+    "showcase",
+    "showcase",
+    "analytics",
+    "hardware",
+    "equipment",
+    "territory",
+  ];
+  const domain = pool[charSum(taskId) % pool.length]!;
+  return { insightDomain: domain, insightLabel: TASK_INSIGHT_LABEL[domain] };
+}
+
 function dueDateFor(dealerId: string, pointId: string, productId: string, type: MatrixTaskType): string {
   const seed = (charSum(dealerId) + charSum(pointId) + charSum(productId)) % 21;
   const offset = type === "add_to_showcase" || type === "approve_replacement" ? 5 : 12;
@@ -177,6 +204,7 @@ export function buildRecommendedMatrixTasks(
     const priority = priorityFromMatrix(item.priority);
     const status = statusFor(item);
     const taskId = `${pointId}-${item.productId}-${type}`;
+    const ins = insightForTaskId(taskId);
     result.push({
       taskId,
       productId: item.productId,
@@ -197,6 +225,8 @@ export function buildRecommendedMatrixTasks(
       portal: item.portal,
       targetSamples: item.targetSamples,
       actualSamples: item.actualSamples,
+      insightDomain: ins.insightDomain,
+      insightLabel: ins.insightLabel,
       recommended: true,
     });
   }
@@ -258,6 +288,8 @@ export function getAllMatrixTasks(): MatrixTaskWithContext[] {
           portal: r.portal,
           targetSamples: r.targetSamples,
           actualSamples: r.actualSamples,
+          insightDomain: r.insightDomain,
+          insightLabel: r.insightLabel,
           dealerName: dealer.name,
         });
       }

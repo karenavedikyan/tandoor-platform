@@ -35,6 +35,7 @@ import {
   ORDER_SHIPMENT_TONE,
   ORDER_STATUS_TONE,
 } from "@/lib/order-data";
+import { getDealerAnalyticsSignalCards } from "@/lib/dealer-analytics-signals";
 
 const SECTION_IDS = [
   "overview",
@@ -332,6 +333,7 @@ function DealerCardContent({ row }: { row: DealerRow }) {
   const dealerOrders = useMemo(() => getOrdersForDealer(row.id), [row.id]);
   const dealerOrdersPreview = useMemo(() => dealerOrders.slice(0, 4), [dealerOrders]);
   const dealerWarehouses = useMemo(() => getDealerWarehouses(row.id), [row.id]);
+  const analyticsSignals = useMemo(() => getDealerAnalyticsSignalCards(row), [row]);
 
   const salesComment =
     row.hasProblem
@@ -493,6 +495,63 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                   <p className="text-sm font-semibold text-foreground sm:text-base">{row.nextAction}</p>
                 </CardContent>
               </SurfaceCard>
+
+              <section
+                data-testid="section-dealer-analytics-signals"
+                className="scroll-mt-28 space-y-3 lg:scroll-mt-32"
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <SectionTitle subtitle="Сводка по тем же показателям, что в разделе аналитики.">
+                    Сигналы аналитики
+                  </SectionTitle>
+                  <Button
+                    asChild
+                    variant="secondary"
+                    size="sm"
+                    className="min-h-9 w-full shrink-0 font-semibold sm:w-auto"
+                    data-testid="button-dealer-signal-open-tasks"
+                  >
+                    <Link href="/tasks">К задачам</Link>
+                  </Button>
+                </div>
+                {analyticsSignals.length === 0 ? (
+                  <SurfaceCard>
+                    <CardContent className="py-4 text-sm text-muted-foreground">
+                      По текущему срезу активных сигналов нет.
+                    </CardContent>
+                  </SurfaceCard>
+                ) : (
+                  <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                    {analyticsSignals.map((sig) => (
+                      <SurfaceCard
+                        key={sig.kind}
+                        data-testid={`card-dealer-analytics-signal-${sig.kind}`}
+                      >
+                        <CardHeader className="space-y-1 pb-2 pt-4">
+                          <CardDescription className="text-[11px] font-bold uppercase tracking-wide text-primary">
+                            {sig.title}
+                          </CardDescription>
+                          <p className="text-xs leading-relaxed text-muted-foreground">{sig.metric}</p>
+                        </CardHeader>
+                        <CardContent className="space-y-3 pb-4 text-sm text-muted-foreground">
+                          <p className="text-sm text-foreground">{sig.actionHint}</p>
+                          {sig.tradePointId ? (
+                            <Button
+                              asChild
+                              variant="outline"
+                              size="sm"
+                              className="min-h-9 w-full border-border bg-card font-semibold sm:w-auto"
+                              data-testid={`button-dealer-signal-open-trade-point-${sig.tradePointId}`}
+                            >
+                              <Link href={`/dealers/${row.id}/trade-points/${sig.tradePointId}`}>К точке</Link>
+                            </Button>
+                          ) : null}
+                        </CardContent>
+                      </SurfaceCard>
+                    ))}
+                  </div>
+                )}
+              </section>
 
               <div className="grid gap-6 lg:grid-cols-2">
                 <div data-testid="section-dealer-terms">
