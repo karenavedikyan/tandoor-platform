@@ -109,6 +109,49 @@ export const WIKI_PUBLISH_FORMAT_LABEL: Record<WikiTrainingPublishFormat, string
   product_note: "Продуктовая заметка",
 };
 
+export type WikiTrainingPublishWave = "wave_1" | "wave_2" | "later" | "blocked";
+
+export type WikiTrainingPublishReadiness =
+  | "ready"
+  | "needs_program"
+  | "needs_catalog_link"
+  | "needs_rewrite"
+  | "blocked";
+
+export interface WikiTrainingPublishQueueItem {
+  id: string;
+  sourceItemId: string;
+  wikiTitle: string;
+  priority: WikiTrainingPriority;
+  decision: WikiTrainingReviewDecision;
+  recommendedFormat: WikiTrainingPublishFormat;
+  readiness: WikiTrainingPublishReadiness;
+  wave: WikiTrainingPublishWave;
+  targetProgramIds: string[];
+  audiences: WikiTrainingAudience[];
+  productScope: WikiTrainingProductScope;
+  workContexts: WikiTrainingWorkContext[];
+  checklistPercent: number;
+  reason: string;
+  blockers: string[];
+  nextAction: string;
+}
+
+export const WIKI_PUBLISH_WAVE_LABEL: Record<WikiTrainingPublishWave, string> = {
+  wave_1: "Первая волна",
+  wave_2: "Вторая волна",
+  later: "Позже",
+  blocked: "Заблокировано",
+};
+
+export const WIKI_PUBLISH_READINESS_LABEL: Record<WikiTrainingPublishReadiness, string> = {
+  ready: "Готово к переносу",
+  needs_program: "Нужна программа",
+  needs_catalog_link: "Нужна связь с каталогом или сценарием",
+  needs_rewrite: "Нужна переработка",
+  blocked: "Заблокировано",
+};
+
 export interface WikiTrainingContentMapItem {
   id: string;
   wikiTitle: string;
@@ -866,4 +909,193 @@ export function getWikiTrainingReviewItemsByDecision(
   const list = items ?? WIKI_TRAINING_CONTENT_MAP;
   if (decision === "all") return list;
   return list.filter((i) => i.reviewMeta.decision === decision);
+}
+
+function hasCatalogOrScenarioLink(item: WikiTrainingContentMapItem): boolean {
+  return item.productScope !== "none" || item.workContexts.length > 0;
+}
+
+function buildWikiTrainingPublishQueueItem(item: WikiTrainingContentMapItem): WikiTrainingPublishQueueItem {
+  const d = item.reviewMeta.decision;
+  const chk = getWikiTrainingReviewChecklistScore(item);
+  const risks = getWikiTrainingReviewRiskFlags(item);
+  const base: Omit<WikiTrainingPublishQueueItem, "readiness" | "wave" | "blockers" | "nextAction"> = {
+    id: `pub-${item.id}`,
+    sourceItemId: item.id,
+    wikiTitle: item.wikiTitle,
+    priority: item.priority,
+    decision: d,
+    recommendedFormat: item.reviewMeta.recommendedFormat,
+    targetProgramIds: [...item.targetProgramIds],
+    audiences: [...item.audiences],
+    productScope: item.productScope,
+    workContexts: [...item.workContexts],
+    checklistPercent: chk.percent,
+    reason: item.reason,
+  };
+
+  if (d === "archive" || d === "do_not_import") {
+    return {
+      ...base,
+      readiness: "blocked",
+      wave: "blocked",
+      blockers: [d === "archive" ? "Решение ревью: в архив" : "Решение ревью: не переносить"],
+      nextAction: "Исключить из очереди импорта.",
+    };
+  }
+
+  if (risks.length >= 3) {
+    return {
+      ...base,
+      readiness: "blocked",
+      wave: "blocked",
+      blockers: [...risks],
+      nextAction: "Снять блокеры ревью и данных, затем повторить оценку.",
+    };
+  }
+
+  if (d === "rewrite" || chk.score < 4) {
+    return {
+      ...base,
+      readiness: "needs_rewrite",
+      wave: "later",
+      blockers: d === "rewrite" ? ["Решение ревью: переписать"] : ["Чек-лист качества ниже порога для публикации"],
+      nextAction: "Обновить материал и пройти ревью повторно.",
+    };
+  }
+
+  const hasProg = item.targetProgramIds.length > 0;
+  if (!hasProg && (d === "ready_to_publish" || d === "pending")) {
+    return {
+      ...base,
+      readiness: "needs_program",
+      wave: "later",
+      blockers: ["Не указана целевая программа обучения"],
+      nextAction: "Добавить программу в карте материала.",
+    };
+  }
+
+  if (hasProg && item.productScope === "none" && item.workContexts.length === 0) {
+    return {
+      ...base,
+      readiness: "needs_catalog_link",
+      wave: "later",
+      blockers: ["Нет привязки к линейке каталога или сценарию работы"],
+      nextAction: "Указать категорию или связать с рабочим контекстом.",
+    };
+  }
+
+  const catalogOk = hasCatalogOrScenarioLink(item);
+
+  if (item.priority === "P0" && d === "ready_to_publish" && chk.score >= 5 && hasProg && catalogOk) {
+    return {
+      ...base,
+      readiness: "ready",
+      wave: "wave_1",
+      blockers: [],
+      nextAction: "Включить в план импорта первой волны после служебного окна.",
+    };
+  }
+
+  if (item.priority === "P1" && d === "ready_to_publish" && chk.score >= 4 && hasProg && catalogOk) {
+    return {
+      ...base,
+      readiness: "ready",
+      wave: "wave_2",
+      blockers: [],
+      nextAction: "Запланировать вторую волну после набора P0.",
+    };
+  }
+
+  if (item.priority === "P2") {
+    return {
+      ...base,
+      readiness: d === "ready_to_publish" && chk.score >= 4 ? "ready" : "needs_rewrite",
+      wave: "later",
+      blockers: d === "pending" ? ["Низкий приоритет — отложено"] : [],
+      nextAction: "Рассмотреть после закрытия волн P0–P1.",
+    };
+  }
+
+  if (d === "pending" && hasProg && catalogOk && chk.score >= 4) {
+    return {
+      ...base,
+      readiness: "ready",
+      wave: "wave_2",
+      blockers: ["Ожидается явное «Готово» в ревью"],
+      nextAction: "Завершить ревью со статусом готовности к публикации.",
+    };
+  }
+
+  return {
+    ...base,
+    readiness: "ready",
+    wave: "later",
+    blockers: d === "pending" ? ["Решение ревью ещё не «готово»"] : [],
+    nextAction: "Согласовать с владельцем контента.",
+  };
+}
+
+export function getWikiTrainingPublishQueue(items?: WikiTrainingContentMapItem[]): WikiTrainingPublishQueueItem[] {
+  const list = items ?? WIKI_TRAINING_CONTENT_MAP;
+  return list.map(buildWikiTrainingPublishQueueItem);
+}
+
+export type WikiTrainingPublishQueueSummary = {
+  wave_1: number;
+  wave_2: number;
+  later: number;
+  blocked: number;
+  needs_program: number;
+  needs_catalog_link: number;
+  needs_rewrite: number;
+  blockedReadiness: number;
+};
+
+export function getWikiTrainingPublishQueueSummary(queue: WikiTrainingPublishQueueItem[]): WikiTrainingPublishQueueSummary {
+  const s: WikiTrainingPublishQueueSummary = {
+    wave_1: 0,
+    wave_2: 0,
+    later: 0,
+    blocked: 0,
+    needs_program: 0,
+    needs_catalog_link: 0,
+    needs_rewrite: 0,
+    blockedReadiness: 0,
+  };
+  for (const q of queue) {
+    if (q.wave === "wave_1") s.wave_1 += 1;
+    else if (q.wave === "wave_2") s.wave_2 += 1;
+    else if (q.wave === "later") s.later += 1;
+    else if (q.wave === "blocked") s.blocked += 1;
+    if (q.readiness === "needs_program") s.needs_program += 1;
+    if (q.readiness === "needs_catalog_link") s.needs_catalog_link += 1;
+    if (q.readiness === "needs_rewrite") s.needs_rewrite += 1;
+    if (q.readiness === "blocked") s.blockedReadiness += 1;
+  }
+  return s;
+}
+
+export function getWikiTrainingPublishQueueByWave(
+  wave: WikiTrainingPublishWave | "all",
+  queue: WikiTrainingPublishQueueItem[],
+): WikiTrainingPublishQueueItem[] {
+  if (wave === "all") return queue;
+  return queue.filter((q) => q.wave === wave);
+}
+
+export function getWikiTrainingPublishQueueByReadiness(
+  readiness: WikiTrainingPublishReadiness | "all",
+  queue: WikiTrainingPublishQueueItem[],
+): WikiTrainingPublishQueueItem[] {
+  if (readiness === "all") return queue;
+  return queue.filter((q) => q.readiness === readiness);
+}
+
+export function getWikiTrainingPublishQueueItemBySourceId(
+  sourceItemId: string,
+  queue?: WikiTrainingPublishQueueItem[],
+): WikiTrainingPublishQueueItem | undefined {
+  const list = queue ?? getWikiTrainingPublishQueue();
+  return list.find((q) => q.sourceItemId === sourceItemId);
 }
