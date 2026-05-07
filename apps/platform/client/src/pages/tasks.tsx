@@ -237,6 +237,15 @@ function TaskCard({ task }: { task: MatrixTaskWithContext }) {
           <Badge variant="outline" className="border-border bg-card font-medium">
             {task.portal}
           </Badge>
+          {task.insightLabel ? (
+            <Badge
+              variant="outline"
+              className="border-primary/30 bg-primary/5 font-medium text-foreground"
+              data-testid={`badge-task-source-${task.taskId}`}
+            >
+              {task.insightLabel}
+            </Badge>
+          ) : null}
         </div>
 
         <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs sm:grid-cols-3">
@@ -283,7 +292,7 @@ function TaskCard({ task }: { task: MatrixTaskWithContext }) {
             asChild
             variant="outline"
             className="min-h-10 w-full border-border bg-card sm:w-auto"
-            data-testid={`button-open-task-dealer-${task.taskId}`}
+            data-testid={`button-task-open-related-dealer-${task.taskId}`}
           >
             <Link href={`/dealers/${task.dealerId}`}>Открыть дилера</Link>
           </Button>
@@ -291,7 +300,7 @@ function TaskCard({ task }: { task: MatrixTaskWithContext }) {
             asChild
             variant="outline"
             className="min-h-10 w-full border-border bg-card sm:w-auto"
-            data-testid={`button-open-task-trade-point-${task.taskId}`}
+            data-testid={`button-task-open-related-trade-point-${task.taskId}`}
           >
             <Link href={`/dealers/${task.dealerId}/trade-points/${task.tradePointId}`}>
               Открыть точку
@@ -301,7 +310,7 @@ function TaskCard({ task }: { task: MatrixTaskWithContext }) {
             asChild
             variant="outline"
             className="min-h-10 w-full border-border bg-card sm:w-auto"
-            data-testid={`button-open-task-product-${task.taskId}`}
+            data-testid={`button-task-open-related-product-${task.taskId}`}
           >
             <Link href={`/catalog/${task.productId}`}>Открыть модель</Link>
           </Button>
@@ -330,6 +339,15 @@ function TaskListRow({ task }: { task: MatrixTaskWithContext }) {
             <Badge variant="outline" className={cn("font-medium", zoneTone(task.zone))}>
               Зона {task.zone}
             </Badge>
+            {task.insightLabel ? (
+              <Badge
+                variant="outline"
+                className="border-primary/30 bg-primary/5 font-medium text-foreground"
+                data-testid={`badge-task-source-${task.taskId}`}
+              >
+                {task.insightLabel}
+              </Badge>
+            ) : null}
           </div>
           <p className="text-xs text-muted-foreground">
             {task.dealerName} · {task.tradePointName} · {task.productName} ·{" "}
@@ -347,7 +365,7 @@ function TaskListRow({ task }: { task: MatrixTaskWithContext }) {
             variant="outline"
             size="sm"
             className="min-h-9 border-border bg-card"
-            data-testid={`button-open-task-dealer-${task.taskId}`}
+            data-testid={`button-task-open-related-dealer-${task.taskId}`}
           >
             <Link href={`/dealers/${task.dealerId}`}>Дилер</Link>
           </Button>
@@ -356,7 +374,7 @@ function TaskListRow({ task }: { task: MatrixTaskWithContext }) {
             variant="outline"
             size="sm"
             className="min-h-9 border-border bg-card"
-            data-testid={`button-open-task-trade-point-${task.taskId}`}
+            data-testid={`button-task-open-related-trade-point-${task.taskId}`}
           >
             <Link href={`/dealers/${task.dealerId}/trade-points/${task.tradePointId}`}>Точка</Link>
           </Button>
@@ -365,7 +383,7 @@ function TaskListRow({ task }: { task: MatrixTaskWithContext }) {
             variant="outline"
             size="sm"
             className="min-h-9 border-border bg-card"
-            data-testid={`button-open-task-product-${task.taskId}`}
+            data-testid={`button-task-open-related-product-${task.taskId}`}
           >
             <Link href={`/catalog/${task.productId}`}>Модель</Link>
           </Button>
@@ -396,6 +414,15 @@ function LeadershipAttentionCard({ task }: { task: MatrixTaskWithContext }) {
             <Badge variant="outline" className={cn("font-medium", priorityTone(task.priority))}>
               {MATRIX_TASK_PRIORITY_LABEL[task.priority]}
             </Badge>
+            {task.insightLabel ? (
+              <Badge
+                variant="outline"
+                className="border-primary/30 bg-primary/5 font-medium text-foreground"
+                data-testid={`badge-task-source-${task.taskId}`}
+              >
+                {task.insightLabel}
+              </Badge>
+            ) : null}
           </div>
         </div>
         <div className="flex flex-wrap gap-1.5 text-xs">

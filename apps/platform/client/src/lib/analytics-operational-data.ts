@@ -759,3 +759,27 @@ export function getInfographicShowcaseModels(
     .sort((a, b) => b.showcaseSales - a.showcaseSales)
     .slice(0, limit);
 }
+
+/** Первая ТТ с отдельной строкой рентабельности — для ссылок «к точке» из аналитики. */
+export function getProfitabilityTradePointIdForDealer(
+  dealerId: string,
+  filters: OperationalGlobalFilters = OPERATIONAL_DEFAULT_GLOBAL_FILTERS,
+): string | undefined {
+  const row = filterShowcaseProfitabilityRows(filters, "all").find(
+    (r) => r.dealerId === dealerId && r.tradePointId,
+  );
+  return row?.tradePointId;
+}
+
+/** Первая позиция фурнитуры на витрине клиента — для ссылки в блоке конверсии. */
+export function getHardwareProductIdForDealer(dealerId: string): string | undefined {
+  return CLIENT_SHOWCASE_ROWS.find((r) => r.dealerId === dealerId)?.hardwareModels[0]?.productId;
+}
+
+/** Первая строка оборудования клиента (для диалога «договор»). */
+export function getFirstEquipmentRowForDealer(
+  dealerId: string,
+  filters: OperationalGlobalFilters = OPERATIONAL_DEFAULT_GLOBAL_FILTERS,
+): OperationalEquipmentRow | undefined {
+  return filterEquipmentRows(filters, "all", "", "all").find((r) => r.dealerId === dealerId);
+}
