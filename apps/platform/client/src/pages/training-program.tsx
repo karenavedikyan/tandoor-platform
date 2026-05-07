@@ -15,9 +15,14 @@ import {
   TRAINING_ROLE_LABEL,
   TRAINING_SECTION_LABEL,
   TRAINING_TYPE_LABEL,
+  type TrainingMaterial,
   type TrainingProgram,
   type TrainingProgramStatus,
 } from "@/lib/training-data";
+
+function isWikiSourceMaterial(m: Pick<TrainingMaterial, "sourceType" | "wikiSource">): boolean {
+  return m.sourceType === "wiki" || Boolean(m.wikiSource);
+}
 
 function programStatusLabel(s: TrainingProgramStatus): string {
   if (s === "not_started") return "Не начато";
@@ -67,7 +72,27 @@ export default function TrainingProgramPage() {
   const program = useMemo(() => getTrainingProgramById(raw), [raw]);
   const modules = useMemo(() => (program ? getTrainingModulesByProgram(program.id) : []), [program]);
   const materials = useMemo(() => (program ? getTrainingMaterialsByProgram(program.id) : []), [program]);
-  const wikiMaterialsCount = useMemo(() => materials.filter((m) => m.sourceType === "wiki").length, [materials]);
+  const wikiMaterialsCount = useMemo(() => materials.filter((m) => isWikiSourceMaterial(m)).length, [materials]);
+
+  const moduleMaterialIdSet = useMemo(() => {
+    const s = new Set<string>();
+    for (const mod of modules) {
+      for (const id of mod.materialIds) {
+        s.add(id);
+      }
+    }
+    return s;
+  }, [modules]);
+
+  const materialsOutsideModules = useMemo(
+    () => materials.filter((m) => !moduleMaterialIdSet.has(m.id)),
+    [materials, moduleMaterialIdSet],
+  );
+
+  const extraMaterialsTitle = useMemo(() => {
+    if (materialsOutsideModules.length === 0) return "";
+    return materialsOutsideModules.every(isWikiSourceMaterial) ? "Материалы из Wiki" : "Дополнительные материалы программы";
+  }, [materialsOutsideModules]);
 
   if (!raw || !program) {
     return <TrainingProgramNotFound />;
@@ -153,15 +178,16 @@ export default function TrainingProgramPage() {
                   return (
                     <div
                       key={mid}
-                      className="flex flex-col gap-3 rounded-xl border border-border/60 bg-muted/10 p-3 sm:flex-row sm:items-center sm:justify-between"
+                      data-testid={`card-training-program-material-${mat.id}`}
+                      className="flex min-w-0 flex-col gap-3 rounded-xl border border-border/60 bg-muted/10 p-3 sm:flex-row sm:items-center sm:justify-between"
                     >
                       <div className="min-w-0 space-y-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-medium text-foreground">{mat.title}</p>
-                          {mat.sourceType === "wiki" ? (
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                          <p className="min-w-0 font-medium text-foreground">{mat.title}</p>
+                          {isWikiSourceMaterial(mat) ? (
                             <Badge
                               variant="secondary"
-                              className="border-primary/30 bg-primary/5 text-foreground"
+                              className="shrink-0 border-primary/30 bg-primary/5 text-foreground"
                               data-testid={`badge-training-program-material-source-${mat.id}`}
                             >
                               Wiki
@@ -187,18 +213,62 @@ export default function TrainingProgramPage() {
               </CardContent>
             </Card>
           ))}
+          {materialsOutsideModules.length > 0 ? (
+            <Card className="border-border/80 shadow-md">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">{extraMaterialsTitle}</CardTitle>
+                <p className="text-xs text-muted-foreground">Подключены к программе; полный текст — после ревью во внутреннем контуре.</p>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {materialsOutsideModules.map((mat) => (
+                  <div
+                    key={mat.id}
+                    data-testid={`card-training-program-material-${mat.id}`}
+                    className="flex min-w-0 flex-col gap-3 rounded-xl border border-border/60 bg-muted/10 p-3 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0 space-y-2">
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <p className="min-w-0 font-medium text-foreground">{mat.title}</p>
+                        {isWikiSourceMaterial(mat) ? (
+                          <Badge
+                            variant="secondary"
+                            className="shrink-0 border-primary/30 bg-primary/5 text-foreground"
+                            data-testid={`badge-training-program-material-source-${mat.id}`}
+                          >
+                            Wiki
+                          </Badge>
+                        ) : null}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {TRAINING_TYPE_LABEL[mat.type]} · {mat.durationMinutes} мин · прогресс {mat.progressPercent}%
+                      </p>
+                    </div>
+                    <Button
+                      asChild
+                      variant="secondary"
+                      size="sm"
+                      className="w-full shrink-0 font-semibold sm:w-auto"
+                      data-testid={`button-open-program-material-${mat.id}`}
+                    >
+                      <Link href={`/training/${mat.id}`}>Открыть материал</Link>
+                    </Button>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          ) : null}
           {modules.length === 0 && materials.length > 0 ? (
             <div className="grid gap-3">
               {materials.map((mat) => (
                 <Card key={mat.id} className="border-border/80 shadow-md" data-testid={`card-training-program-material-${mat.id}`}>
                   <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0 space-y-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-medium text-foreground">{mat.title}</p>
-                        {mat.sourceType === "wiki" ? (
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <p className="min-w-0 font-medium text-foreground">{mat.title}</p>
+                        {isWikiSourceMaterial(mat) ? (
                           <Badge
                             variant="secondary"
-                            className="border-primary/30 bg-primary/5 text-foreground"
+                            className="shrink-0 border-primary/30 bg-primary/5 text-foreground"
                             data-testid={`badge-training-program-material-source-${mat.id}`}
                           >
                             Wiki
