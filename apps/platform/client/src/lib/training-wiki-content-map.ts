@@ -4,7 +4,7 @@
  */
 
 import type { TrainingSectionKey } from "./training-data";
-import { WAVE1_PUBLISHED_TRAINING_BY_WIKI_MAP_ID } from "./training-wave1-publish";
+import { PRODUCT_WIKI_PUBLISHED_TRAINING_BY_WIKI_MAP_ID } from "./training-wave1-publish";
 
 export type WikiTrainingPriority = "P0" | "P1" | "P2";
 
@@ -461,10 +461,10 @@ const _WIKI_MAP_SEED: WikiTrainingContentMapSeedRow[] = [
     workContexts: ["catalog", "showcase"],
     targetProgramIds: ["prog-product-lines"],
     recommendedMaterialType: "article",
-    reviewStatus: "needs_review",
+    reviewStatus: "approved",
     reason: "Углубление по покрытиям после базовых МК-материалов.",
     safeSummary: "Нормализованная аннотация по лаковым системам для витрины.",
-    migrationNotes: ["Нужна сверка с полным Wiki export."],
+    migrationNotes: ["Текст перенесён в «Обучение» (tr-prod-mk-lacquer-finishes)."],
   },
   {
     id: "wcm-p1-engineered-timber",
@@ -476,10 +476,10 @@ const _WIKI_MAP_SEED: WikiTrainingContentMapSeedRow[] = [
     workContexts: ["catalog", "showcase"],
     targetProgramIds: ["prog-product-lines"],
     recommendedMaterialType: "article",
-    reviewStatus: "needs_review",
+    reviewStatus: "approved",
     reason: "Специализированные вопросы по конструкции полотна.",
     safeSummary: "Краткое описание свойств и ограничений для консультанта.",
-    migrationNotes: ["Нужна сверка с полным Wiki export."],
+    migrationNotes: ["Перенесено в «Обучение» (tr-prod-mk-engineered-wood-core)."],
   },
   {
     id: "wcm-p1-mezzo-porte",
@@ -491,10 +491,10 @@ const _WIKI_MAP_SEED: WikiTrainingContentMapSeedRow[] = [
     workContexts: ["catalog", "showcase"],
     targetProgramIds: ["prog-product-lines"],
     recommendedMaterialType: "article",
-    reviewStatus: "needs_review",
+    reviewStatus: "approved",
     reason: "Брендовая линейка требует отдельного каркаса аргументации.",
     safeSummary: "Позиционирование линейки без коммерческих обязательств.",
-    migrationNotes: ["Нужна сверка с полным Wiki export."],
+    migrationNotes: ["Перенесено в «Обучение» (tr-prod-mk-line-mezzo-porte)."],
   },
   {
     id: "wcm-p1-fine-floor",
@@ -506,10 +506,10 @@ const _WIKI_MAP_SEED: WikiTrainingContentMapSeedRow[] = [
     workContexts: ["catalog", "showcase"],
     targetProgramIds: ["prog-product-lines"],
     recommendedMaterialType: "article",
-    reviewStatus: "needs_review",
+    reviewStatus: "approved",
     reason: "Согласованные ответы по сопутствующей линейке.",
     safeSummary: "Краткая аннотация для связки с межкомнатными решениями.",
-    migrationNotes: ["Нужна сверка с полным Wiki export."],
+    migrationNotes: ["Перенесено в «Обучение» (tr-prod-mk-fine-floor-companion)."],
   },
   {
     id: "wcm-p1-galvanized-metal",
@@ -521,10 +521,10 @@ const _WIKI_MAP_SEED: WikiTrainingContentMapSeedRow[] = [
     workContexts: ["catalog", "showcase"],
     targetProgramIds: ["prog-product-lines"],
     recommendedMaterialType: "article",
-    reviewStatus: "needs_review",
+    reviewStatus: "approved",
     reason: "Технические вопросы по входным конструкциям.",
     safeSummary: "Базовые свойства и зоны применения — без заводских чертежей.",
-    migrationNotes: ["Нужна сверка с полным Wiki export."],
+    migrationNotes: ["Перенесено в «Обучение» (tr-prod-vh-galvanized-skin)."],
   },
   {
     id: "wcm-p1-birch-plywood",
@@ -536,10 +536,10 @@ const _WIKI_MAP_SEED: WikiTrainingContentMapSeedRow[] = [
     workContexts: ["catalog"],
     targetProgramIds: ["prog-product-lines"],
     recommendedMaterialType: "article",
-    reviewStatus: "needs_review",
+    reviewStatus: "approved",
     reason: "Материаловедческое углубление для сложных консультаций.",
     safeSummary: "Краткие тезисы по фанере в составе изделий.",
-    migrationNotes: ["Нужна сверка с полным Wiki export."],
+    migrationNotes: ["Перенесено в «Обучение» (tr-prod-mk-birch-plywood-core)."],
   },
   {
     id: "wcm-p1-deart-line",
@@ -551,10 +551,10 @@ const _WIKI_MAP_SEED: WikiTrainingContentMapSeedRow[] = [
     workContexts: ["showcase", "catalog"],
     targetProgramIds: ["prog-product-lines"],
     recommendedMaterialType: "article",
-    reviewStatus: "needs_review",
+    reviewStatus: "approved",
     reason: "Отдельная линейка в коммуникации с дизайн-сегментом.",
     safeSummary: "Позиционирование и отличия — нейтральная выжимка.",
-    migrationNotes: ["Нужна сверка с полным Wiki export."],
+    migrationNotes: ["Перенесено в «Обучение» (tr-prod-mk-line-deart)."],
   },
   {
     id: "wcm-p1-thermo-condensate",
@@ -566,10 +566,10 @@ const _WIKI_MAP_SEED: WikiTrainingContentMapSeedRow[] = [
     workContexts: ["service", "showcase"],
     targetProgramIds: ["prog-product-lines"],
     recommendedMaterialType: "article",
-    reviewStatus: "needs_review",
+    reviewStatus: "approved",
     reason: "Частые постгарантийные вопросы; нужен единый безопасный ответ.",
     safeSummary: "Объяснение явления и шаги эскалации без внутренних актов.",
-    migrationNotes: ["Нужна сверка с полным Wiki export."],
+    migrationNotes: ["Перенесено в «Обучение» (tr-prod-vh-thermo-condensate-care)."],
   },
   {
     id: "wcm-p2-milliana",
@@ -581,10 +581,10 @@ const _WIKI_MAP_SEED: WikiTrainingContentMapSeedRow[] = [
     workContexts: ["catalog"],
     targetProgramIds: ["prog-product-lines"],
     recommendedMaterialType: "article",
-    reviewStatus: "needs_review",
+    reviewStatus: "approved",
     reason: "Узкая тема; приоритет после ядра МК.",
     safeSummary: "Краткая справка по линейке для базы знаний.",
-    migrationNotes: ["Нужна сверка с полным Wiki export."],
+    migrationNotes: ["Перенесено в «Обучение» (tr-prod-mk-line-milliana)."],
   },
   {
     id: "wcm-p2-paradise",
@@ -596,10 +596,10 @@ const _WIKI_MAP_SEED: WikiTrainingContentMapSeedRow[] = [
     workContexts: ["catalog"],
     targetProgramIds: ["prog-product-lines"],
     recommendedMaterialType: "article",
-    reviewStatus: "needs_review",
+    reviewStatus: "approved",
     reason: "Вторичный приоритет относительно сводных таблиц.",
     safeSummary: "Краткая справка по линейке.",
-    migrationNotes: ["Нужна сверка с полным Wiki export."],
+    migrationNotes: ["Перенесено в «Обучение» (tr-prod-mk-line-paradise)."],
   },
   // ——— P2 / other programs & gaps ———
   {
@@ -640,12 +640,12 @@ const _WIKI_MAP_SEED: WikiTrainingContentMapSeedRow[] = [
     audiences: ["sales_manager", "regional_manager"],
     productScope: "hardware",
     workContexts: ["catalog", "showcase", "tasks"],
-    targetProgramIds: ["prog-product-lines"],
+    targetProgramIds: ["prog-hardware-sales", "prog-product-lines"],
     recommendedMaterialType: "course",
-    reviewStatus: "needs_review",
+    reviewStatus: "approved",
     reason: "Нет отдельной программы только по фурнитуре — материалы разрознены.",
     safeSummary: "План объединения статей по фурнитуре в один трек.",
-    migrationNotes: ["Нужна отдельная программа по фурнитуре; сверка с каталогом SKU."],
+    migrationNotes: ["Создана программа «Фурнитура: комплектация и допродажа»; обзорный материал tr-prod-hw-sales-track-overview."],
   },
   {
     id: "wcm-p2-sku-wiki-binding",
@@ -685,7 +685,7 @@ const WIKI_READY_TO_PUBLISH_IDS = new Set<string>([
   "wcm-p0-guarantee-opt",
 ]);
 
-const WAVE1_PUBLISHED_WIKI_MAP_IDS = new Set(Object.keys(WAVE1_PUBLISHED_TRAINING_BY_WIKI_MAP_ID));
+const PRODUCT_PUBLISHED_WIKI_MAP_IDS = new Set(Object.keys(PRODUCT_WIKI_PUBLISHED_TRAINING_BY_WIKI_MAP_ID));
 
 function buildReviewMeta(row: WikiTrainingContentMapSeedRow): WikiTrainingReviewMeta {
   const linkedProgram = row.targetProgramIds.length > 0;
@@ -702,8 +702,7 @@ function buildReviewMeta(row: WikiTrainingContentMapSeedRow): WikiTrainingReview
 
   let decision: WikiTrainingReviewDecision = "pending";
   if (row.id === "wcm-p2-sku-wiki-binding") decision = "do_not_import";
-  else if (row.id === "wcm-p2-milliana" || row.id === "wcm-p2-paradise") decision = "archive";
-  else if (WIKI_READY_TO_PUBLISH_IDS.has(row.id) || WAVE1_PUBLISHED_WIKI_MAP_IDS.has(row.id)) decision = "ready_to_publish";
+  else if (WIKI_READY_TO_PUBLISH_IDS.has(row.id) || PRODUCT_PUBLISHED_WIKI_MAP_IDS.has(row.id)) decision = "ready_to_publish";
   else if (row.reviewStatus === "needs_review" && (row.priority === "P0" || row.priority === "P1")) decision = "rewrite";
 
   return {
@@ -921,7 +920,7 @@ function hasCatalogOrScenarioLink(item: WikiTrainingContentMapItem): boolean {
 }
 
 function buildWikiTrainingPublishQueueItem(item: WikiTrainingContentMapItem): WikiTrainingPublishQueueItem {
-  const publishedTrainingId = WAVE1_PUBLISHED_TRAINING_BY_WIKI_MAP_ID[item.id];
+  const publishedTrainingId = PRODUCT_WIKI_PUBLISHED_TRAINING_BY_WIKI_MAP_ID[item.id];
   if (publishedTrainingId) {
     const chk = getWikiTrainingReviewChecklistScore(item);
     return {
