@@ -107,9 +107,18 @@ export type OperationalGlobalFilters = {
   search: string;
 };
 
+export const OPERATIONAL_DEFAULT_GLOBAL_FILTERS: OperationalGlobalFilters = {
+  periodKey: "month",
+  territoryId: "south",
+  cityId: "all",
+  dealerCategory: "all",
+  productLine: "all",
+  search: "",
+};
+
 /**
  * Раньше сегмент выбирался одним значением с приоритетом Club → TOP, из‑за чего все TOP-клиенты
- * (в демо-данных они же «Участник» Club) попадали только во вкладку Club, а «ТОП 500» оставался пустым.
+ * (в сгенерированных строках они же «Участник» Club) попадали только во вкладку Club, а «ТОП 500» оставался пустым.
  * Явное множество сегментов: TOP — всегда «ТОП 500», Club — «Tandoor Club», «500+» — все не‑TOP.
  */
 function computeDealerSegments(d: DealerRow): PartnerSegment[] {
@@ -240,6 +249,14 @@ export function kpiForClientShowcase(rows: OperationalClientShowcaseRow[]) {
   const showcaseSales = rows.reduce((s, r) => s + r.showcaseSales, 0);
   const avgConv = clients ? Math.round(rows.reduce((s, r) => s + r.conversionPercent, 0) / clients) : 0;
   return { clients, models, showcaseSales, avgConv };
+}
+
+export function kpiForProfitabilityRows(rows: OperationalShowcaseProfitabilityRow[]) {
+  const clients = new Set(rows.map((r) => r.dealerId)).size;
+  const showcaseSlots = rows.reduce((s, r) => s + r.ourShowcases, 0);
+  const showcaseSales = rows.reduce((s, r) => s + r.showcaseSales, 0);
+  const avgShare = rows.length ? Math.round(rows.reduce((s, r) => s + r.shareShowcasePercent, 0) / rows.length) : 0;
+  return { clients, showcaseSlots, showcaseSales, avgShare };
 }
 
 function attentionFromDealer(d: DealerRow, idx: number): ShowcaseAttentionZone {

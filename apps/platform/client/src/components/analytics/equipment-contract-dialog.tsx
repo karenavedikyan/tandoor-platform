@@ -15,13 +15,14 @@ export function EquipmentContractDialog({ open, onOpenChange, equipmentId }: Equ
       <DialogContent className="max-w-md" data-testid="dialog-equipment-contract-placeholder">
         <DialogHeader>
           <DialogTitle>Документ договора</DialogTitle>
-          <DialogDescription>
-            Документ договора будет доступен после подключения закрытого хранилища.
+          <DialogDescription className="space-y-2">
+            <span>
+              Документ договора будет доступен после подключения закрытого хранилища. Подключение выполняется в защищённом контуре компании и не публикует файлы в открытый репозиторий.
+            </span>
             {equipmentId ? (
-              <>
-                {" "}
-                <span className="font-mono text-foreground">Запись: {equipmentId}</span>
-              </>
+              <span className="block font-mono text-sm text-foreground">
+                Запись: {equipmentId}
+              </span>
             ) : null}
           </DialogDescription>
         </DialogHeader>
