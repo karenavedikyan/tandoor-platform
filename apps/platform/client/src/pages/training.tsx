@@ -31,6 +31,11 @@ import {
   type TrainingSection,
 } from "@/lib/training-data";
 import { getProductById } from "@/lib/catalog-data";
+import {
+  filterTrainingModelPhotoPilotItems,
+  getTrainingModelPhotoPilotItems,
+  type TrainingModelPhotoPilotCategory,
+} from "@/lib/training-model-photo-pilot";
 
 type StatusFilter = "all" | TrainingMaterialStatus;
 
@@ -160,6 +165,8 @@ export default function TrainingPage() {
   const vhMaterialCount = useMemo(() => countTrainingMaterialsForProductQuickTrack("vh"), []);
   const mkMaterialCount = useMemo(() => countTrainingMaterialsForProductQuickTrack("mk"), []);
   const hwMaterialCount = useMemo(() => countTrainingMaterialsForProductQuickTrack("hardware"), []);
+  const pilotCatalogItems = useMemo(() => getTrainingModelPhotoPilotItems(), []);
+  const [pilotCategory, setPilotCategory] = useState<typeof ALL | TrainingModelPhotoPilotCategory>(ALL);
 
   const progProductLines = useMemo(() => programs.find((p) => p.id === "prog-product-lines"), [programs]);
   const progHardwareSales = useMemo(() => programs.find((p) => p.id === "prog-hardware-sales"), [programs]);
@@ -172,6 +179,15 @@ export default function TrainingPage() {
       requestAnimationFrame(() => scrollToMaterials());
     },
     [scrollToMaterials],
+  );
+
+  const pilotFiltered = useMemo(
+    () =>
+      filterTrainingModelPhotoPilotItems(pilotCatalogItems, {
+        category: pilotCategory === ALL ? "all" : pilotCategory,
+        searchQuery: search,
+      }),
+    [pilotCatalogItems, pilotCategory, search],
   );
 
   return (
@@ -443,6 +459,125 @@ export default function TrainingPage() {
               </Button>
             </CardContent>
           </Card>
+        </div>
+      </section>
+
+      <section className="space-y-4" data-testid="section-training-model-photo-pilot">
+        <div className="min-w-0 space-y-1">
+          <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Разбор моделей на примерах</h2>
+          <p className="max-w-3xl text-sm text-muted-foreground">
+            10 моделей ВХ и МК дверей с фото, аргументами и готовыми фразами для консультации.
+          </p>
+        </div>
+        <div className="flex min-w-0 flex-wrap gap-2" role="tablist" aria-label="Фильтр примеров моделей">
+          <Button
+            type="button"
+            size="sm"
+            variant={pilotCategory === ALL ? "secondary" : "outline"}
+            className="min-h-9 shrink-0 rounded-full font-medium"
+            data-testid="button-training-model-filter-all"
+            onClick={() => setPilotCategory(ALL)}
+          >
+            Все
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={pilotCategory === "vh" ? "secondary" : "outline"}
+            className="min-h-9 shrink-0 rounded-full font-medium"
+            data-testid="button-training-model-filter-vh"
+            onClick={() => setPilotCategory("vh")}
+          >
+            ВХ
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={pilotCategory === "mk" ? "secondary" : "outline"}
+            className="min-h-9 shrink-0 rounded-full font-medium"
+            data-testid="button-training-model-filter-mk"
+            onClick={() => setPilotCategory("mk")}
+          >
+            МК
+          </Button>
+        </div>
+        <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {pilotFiltered.map((row) => {
+            const product = getProductById(row.productId);
+            const primaryMaterialId = row.relatedTrainingMaterialIds[0];
+            return (
+              <Card
+                key={row.id}
+                className="flex min-w-0 flex-col overflow-hidden border-border/80 shadow-md"
+                data-testid={`card-training-model-photo-${row.id}`}
+              >
+                <div className="relative aspect-[440/550] w-full min-w-0 overflow-hidden bg-muted/40">
+                  <img
+                    src={row.imageSrc}
+                    alt={row.imageAlt}
+                    className="h-full w-full object-cover"
+                    loading="lazy"
+                    decoding="async"
+                    referrerPolicy="no-referrer-when-downgrade"
+                    data-testid={`image-training-model-photo-${row.id}`}
+                  />
+                </div>
+                <CardHeader className="min-w-0 space-y-2 pb-2 pt-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="outline" className="font-semibold" data-testid={`text-training-model-category-${row.id}`}>
+                      {row.category === "vh" ? "ВХ" : "МК"}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">{row.lineOrCollection}</span>
+                  </div>
+                  <CardTitle className="text-base leading-snug">{row.title}</CardTitle>
+                  <p className="text-sm text-muted-foreground">{row.shortPositioning}</p>
+                </CardHeader>
+                <CardContent className="flex min-w-0 flex-1 flex-col gap-3 pb-4 pt-0">
+                  <div className="min-w-0 space-y-1">
+                    <p className="text-xs font-semibold text-foreground">Ключевые факты</p>
+                    <ul className="list-inside list-disc space-y-1 text-xs text-muted-foreground">
+                      {row.keyFacts.map((f, idx) => (
+                        <li key={`${row.id}-kf-${idx}`}>{f}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="min-w-0 space-y-1">
+                    <p className="text-xs font-semibold text-foreground">Когда предлагать</p>
+                    <ul className="list-inside list-disc space-y-1 text-xs text-muted-foreground">
+                      {row.whenToOffer.map((w, idx) => (
+                        <li key={`${row.id}-wo-${idx}`}>{w}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="rounded-lg border border-border/70 bg-muted/20 p-3 text-xs">
+                    <p className="font-semibold text-foreground">Фраза менеджера</p>
+                    <p className="mt-1 text-muted-foreground">{row.clientPitch}</p>
+                  </div>
+                  <div className="rounded-lg border border-primary/25 bg-primary/[0.04] p-3 text-xs">
+                    <p className="font-semibold text-foreground">Возражение</p>
+                    <p className="mt-1 text-muted-foreground">{row.commonObjection}</p>
+                    <p className="mt-2 font-semibold text-foreground">Ответ</p>
+                    <p className="mt-1 text-muted-foreground">{row.objectionAnswer}</p>
+                  </div>
+                  <div className="mt-auto flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
+                    {product ? (
+                      <Button asChild variant="secondary" size="sm" className="min-h-10 w-full font-semibold sm:flex-1" data-testid={`button-training-model-open-product-${row.id}`}>
+                        <Link href={`/catalog/${row.productId}`}>
+                          Открыть товар
+                          <ChevronRight className="h-4 w-4" aria-hidden />
+                        </Link>
+                      </Button>
+                    ) : null}
+                    {primaryMaterialId ? (
+                      <Button asChild variant="outline" size="sm" className="min-h-10 w-full border-border font-semibold sm:flex-1" data-testid={`button-training-model-open-material-${row.id}`}>
+                        <Link href={`/training/${primaryMaterialId}`}>Материал обучения</Link>
+                      </Button>
+                    ) : null}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       </section>
 
