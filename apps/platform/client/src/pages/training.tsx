@@ -32,6 +32,7 @@ import {
 } from "@/lib/training-data";
 import { getProductById } from "@/lib/catalog-data";
 import { getWikiTrainingImportSummary } from "@/lib/training-wiki-import";
+import { getWikiTrainingContentByPriority, getWikiTrainingContentMapSummary } from "@/lib/training-wiki-content-map";
 
 type StatusFilter = "all" | TrainingMaterialStatus;
 
@@ -101,6 +102,12 @@ function statusBadgeClass(status: TrainingMaterial["status"]) {
   return "border-border bg-muted/60 text-foreground";
 }
 
+const WIKI_MAP_REVIEW_LABEL: Record<"needs_review" | "approved" | "archive_candidate", string> = {
+  needs_review: "На проверке",
+  approved: "Проверено",
+  archive_candidate: "Кандидат в архив",
+};
+
 export default function TrainingPage() {
   const all = useMemo(() => getAllTrainingMaterials(), []);
   const kpis = useMemo(() => summarizeTrainingKpis(all), [all]);
@@ -108,6 +115,8 @@ export default function TrainingPage() {
   const programs = useMemo(() => getTrainingPrograms(), []);
   const assignments = useMemo(() => getTrainingAssignments(), []);
   const wikiSummary = useMemo(() => getWikiTrainingImportSummary(), []);
+  const wikiMapSummary = useMemo(() => getWikiTrainingContentMapSummary(), []);
+  const wikiMapP0Preview = useMemo(() => getWikiTrainingContentByPriority("P0").slice(0, 8), []);
   const materialsRef = useRef<HTMLElement>(null);
 
   const [search, setSearch] = useState("");
@@ -572,6 +581,81 @@ export default function TrainingPage() {
                       : s}
                   : {count}
                 </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
+      <section className="space-y-4 rounded-2xl border border-border/80 bg-card p-5 shadow-xs sm:p-6" data-testid="section-training-wiki-map">
+        <div className="min-w-0 space-y-1">
+          <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Карта наполнения Wiki</h2>
+          <p className="max-w-3xl text-sm text-muted-foreground">
+            План переноса тем из закрытой базы в учебные программы: приоритеты, роли и сценарии без полных текстов и внутренних ссылок.
+          </p>
+        </div>
+        <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Card className="min-w-0 border-border/70 shadow-xs" data-testid="card-training-wiki-map-total">
+            <CardHeader className="pb-2 pt-4">
+              <CardTitle className="text-sm font-medium text-muted-foreground">В карте</CardTitle>
+            </CardHeader>
+            <CardContent className="pb-4 pt-0">
+              <p className="text-3xl font-semibold tabular-nums text-foreground">{wikiMapSummary.total}</p>
+              <p className="text-xs text-muted-foreground">Позиций дорожной карты</p>
+            </CardContent>
+          </Card>
+          <Card className="min-w-0 border-border/70 shadow-xs" data-testid="card-training-wiki-map-p0">
+            <CardHeader className="pb-2 pt-4">
+              <CardTitle className="text-sm font-medium text-muted-foreground">P0</CardTitle>
+            </CardHeader>
+            <CardContent className="pb-4 pt-0">
+              <p className="text-3xl font-semibold tabular-nums text-foreground">{wikiMapSummary.byPriority.P0}</p>
+              <p className="text-xs text-muted-foreground">Первая очередь переноса</p>
+            </CardContent>
+          </Card>
+          <Card className="min-w-0 border-border/70 shadow-xs" data-testid="card-training-wiki-map-review">
+            <CardHeader className="pb-2 pt-4">
+              <CardTitle className="text-sm font-medium text-muted-foreground">На ревью</CardTitle>
+            </CardHeader>
+            <CardContent className="pb-4 pt-0">
+              <p className="text-3xl font-semibold tabular-nums text-foreground">{wikiMapSummary.needsReview}</p>
+              <p className="text-xs text-muted-foreground">Требуют проверки перед импортом</p>
+            </CardContent>
+          </Card>
+          <Card className="min-w-0 border-border/70 shadow-xs" data-testid="card-training-wiki-map-catalog">
+            <CardHeader className="pb-2 pt-4">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Каталог</CardTitle>
+            </CardHeader>
+            <CardContent className="pb-4 pt-0">
+              <p className="text-3xl font-semibold tabular-nums text-foreground">{wikiMapSummary.catalogLinked}</p>
+              <p className="text-xs text-muted-foreground">Связка с линейками / ассортиментом</p>
+            </CardContent>
+          </Card>
+        </div>
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold text-foreground">P0 — первая очередь (фрагмент)</h3>
+          <ul className="min-w-0 space-y-2">
+            {wikiMapP0Preview.map((item) => (
+              <li
+                key={item.id}
+                data-testid={`card-training-wiki-map-item-${item.id}`}
+                className="flex min-w-0 flex-col gap-2 rounded-xl border border-border/60 bg-muted/10 p-3 sm:flex-row sm:items-start sm:justify-between"
+              >
+                <div className="min-w-0 space-y-1">
+                  <p className="text-sm font-medium text-foreground">{item.wikiTitle}</p>
+                  <p className="text-xs text-muted-foreground">{item.safeSummary}</p>
+                  <p className="text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">Зачем:</span> {item.reason}
+                  </p>
+                </div>
+                <div className="flex shrink-0 flex-wrap gap-1.5 sm:flex-col sm:items-end">
+                  <Badge variant="secondary" className="font-semibold tabular-nums">
+                    {item.priority}
+                  </Badge>
+                  <Badge variant="outline" className="text-xs font-medium">
+                    {WIKI_MAP_REVIEW_LABEL[item.reviewStatus]}
+                  </Badge>
+                </div>
               </li>
             ))}
           </ul>

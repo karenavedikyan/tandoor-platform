@@ -19,10 +19,17 @@ import {
   type TrainingProgram,
   type TrainingProgramStatus,
 } from "@/lib/training-data";
+import { getWikiTrainingContentByProgram } from "@/lib/training-wiki-content-map";
 
 function isWikiSourceMaterial(m: Pick<TrainingMaterial, "sourceType" | "wikiSource">): boolean {
   return m.sourceType === "wiki" || Boolean(m.wikiSource);
 }
+
+const WIKI_MAP_REVIEW_LABEL: Record<"needs_review" | "approved" | "archive_candidate", string> = {
+  needs_review: "На проверке",
+  approved: "Проверено",
+  archive_candidate: "Кандидат в архив",
+};
 
 function programStatusLabel(s: TrainingProgramStatus): string {
   if (s === "not_started") return "Не начато";
@@ -94,6 +101,11 @@ export default function TrainingProgramPage() {
     return materialsOutsideModules.every(isWikiSourceMaterial) ? "Материалы из Wiki" : "Дополнительные материалы программы";
   }, [materialsOutsideModules]);
 
+  const wikiMapRows = useMemo(() => {
+    if (!program) return [];
+    return getWikiTrainingContentByProgram(program.id).slice(0, 5);
+  }, [program]);
+
   if (!raw || !program) {
     return <TrainingProgramNotFound />;
   }
@@ -161,6 +173,34 @@ export default function TrainingProgramPage() {
           </CardContent>
         </Card>
       </section>
+
+      {wikiMapRows.length > 0 ? (
+        <section className="space-y-3" data-testid="section-training-program-wiki-map">
+          <h2 className="text-base font-semibold text-foreground sm:text-lg">Что ещё нужно перенести из Wiki</h2>
+          <Card className="border-border/80 shadow-md">
+            <CardContent className="space-y-3 p-4 sm:p-5">
+              {wikiMapRows.map((row) => (
+                <div
+                  key={row.id}
+                  data-testid={`card-training-program-wiki-map-item-${row.id}`}
+                  className="min-w-0 space-y-2 rounded-xl border border-border/60 bg-muted/10 p-3"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="secondary" className="font-semibold tabular-nums">
+                      {row.priority}
+                    </Badge>
+                    <Badge variant="outline" className="text-xs font-medium">
+                      {WIKI_MAP_REVIEW_LABEL[row.reviewStatus]}
+                    </Badge>
+                  </div>
+                  <p className="text-sm font-medium text-foreground">{row.wikiTitle}</p>
+                  <p className="text-xs text-muted-foreground">{row.reason}</p>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </section>
+      ) : null}
 
       <section className="space-y-4" data-testid="section-training-program-modules">
         <h2 className="text-base font-semibold text-foreground sm:text-lg">Модули и материалы</h2>
