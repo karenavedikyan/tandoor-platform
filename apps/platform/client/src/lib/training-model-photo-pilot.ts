@@ -1,9 +1,12 @@
 /**
- * Пилот: обучающие карточки моделей с фото с публичного каталога tandoor.ru (resize_cache).
- * Не подменяет основной каталог и не тянет внешние API в runtime — только статические URL.
+ * Пилот: обучающие карточки моделей с фото.
+ * Изображения — локальные WebP в `public/training-model-pilot/`, полученные из официальных
+ * превью каталога tandoor.ru (resize_cache) и оптимизированные для пилота; внешние URL в runtime не используются.
  */
 
-const TANDOOR_ORIGIN = "https://tandoor.ru";
+function pilotWebp(pilotId: string): string {
+  return `/training-model-pilot/${pilotId}.webp`;
+}
 
 export type TrainingModelPhotoPilotCategory = "vh" | "mk";
 
@@ -24,19 +27,13 @@ export type TrainingModelPhotoPilotItem = {
   relatedTrainingMaterialIds: string[];
 };
 
-function u(path: string): string {
-  return `${TANDOOR_ORIGIN}${path}`;
-}
-
 const PILOT_ITEMS: TrainingModelPhotoPilotItem[] = [
   {
     id: "pilot-vh-grand-3",
     productId: "vh-grand-3",
     title: "Гранд 3",
     category: "vh",
-    imageSrc: u(
-      "/upload/resize_cache/iblock/4b7/avm82yhk3hx7gxh2i73jp1f7gezkc3o2/440_550_1/1_panteon__05_05_2026__04_32_13.jpg",
-    ),
+    imageSrc: pilotWebp("pilot-vh-grand-3"),
     imageAlt: "Входная дверь Tandoor, серия Гранд — пример фактуры для консультации",
     lineOrCollection: "Серия «Гранд»",
     shortPositioning: "Флагман входной группы: тепло-, шумоизоляция и представительный вид для квартиры или дома.",
@@ -62,9 +59,7 @@ const PILOT_ITEMS: TrainingModelPhotoPilotItem[] = [
     productId: "vh-grand-4",
     title: "Гранд 4",
     category: "vh",
-    imageSrc: u(
-      "/upload/resize_cache/iblock/5c2/wh1y556tkn4gyakegzbpn7s3vjnuny23/440_550_1/1_era__05_05_2026__04_31_19.jpg",
-    ),
+    imageSrc: pilotWebp("pilot-vh-grand-4"),
     imageAlt: "Входная дверь Tandoor — лаконичная комплектация серии Гранд",
     lineOrCollection: "Серия «Гранд»",
     shortPositioning: "Та же геометрия серии, более простая комплектация — удобная точка входа в линейку.",
@@ -89,9 +84,7 @@ const PILOT_ITEMS: TrainingModelPhotoPilotItem[] = [
     productId: "vh-grand-5",
     title: "Гранд 5",
     category: "vh",
-    imageSrc: u(
-      "/upload/resize_cache/iblock/7a8/3vnvx2t4g0gez6wd5vftlbkj2ek15is3/440_550_1/1_ultra__05_05_2026__04_31_36.jpg",
-    ),
+    imageSrc: pilotWebp("pilot-vh-grand-5"),
     imageAlt: "Входная дверь Tandoor — усиленная комплектация серии Гранд",
     lineOrCollection: "Серия «Гранд»",
     shortPositioning: "Расширенная комплектация для клиентов, которые сразу говорят про дом, шум и безопасность.",
@@ -116,9 +109,7 @@ const PILOT_ITEMS: TrainingModelPhotoPilotItem[] = [
     productId: "vh-neapol",
     title: "Неаполь",
     category: "vh",
-    imageSrc: u(
-      "/upload/resize_cache/iblock/6b4/0mtv48e23k57mkcygu7s655ujrn4lzmg/440_550_1/1_pandora__05_05_2026__04_30_13.jpg",
-    ),
+    imageSrc: pilotWebp("pilot-vh-neapol"),
     imageAlt: "Входная дверь Tandoor с фактурной МДФ-панелью — для консультации по серии Неаполь",
     lineOrCollection: "Серия «Неаполь»",
     shortPositioning: "Классика с фактурными панелями — для клиентов, которые хотят «дорого и спокойно», без эксперимента.",
@@ -143,9 +134,7 @@ const PILOT_ITEMS: TrainingModelPhotoPilotItem[] = [
     productId: "vh-kvarc",
     title: "Кварц",
     category: "vh",
-    imageSrc: u(
-      "/upload/resize_cache/iblock/2e1/vwe42nxfvmwer1fl6btluo3ys5hdf8jy/440_550_1/1_layt_bg__05_05_2026__04_54_34.jpg",
-    ),
+    imageSrc: pilotWebp("pilot-vh-kvarc"),
     imageAlt: "Входная дверь Tandoor среднего сегмента — пример для серии Кварц",
     lineOrCollection: "Серия «Кварц»",
     shortPositioning: "Практичный вход для квартиры: сталь, базовый замок, понятная ценность без «перегруза» опциями.",
@@ -170,9 +159,7 @@ const PILOT_ITEMS: TrainingModelPhotoPilotItem[] = [
     productId: "mk-grand-3-mk",
     title: "Гранд 3 МК",
     category: "mk",
-    imageSrc: u(
-      "/upload/resize_cache/iblock/564/jbejw26kjv3uvxe17vsd0zaf26igbtmp/440_550_1/grand_13_medzhik__05_05_2026__04_30_20.jpg",
-    ),
+    imageSrc: pilotWebp("pilot-mk-grand-3-mk"),
     imageAlt: "Межкомнатная дверь Tandoor серии Гранд — пример для консультации",
     lineOrCollection: "Серия «Гранд» (МК)",
     shortPositioning: "Межкомнатная линия в одной фактуре с входной «Гранд» — продаём комплект «вход + комнаты».",
@@ -197,9 +184,7 @@ const PILOT_ITEMS: TrainingModelPhotoPilotItem[] = [
     productId: "mk-grand-4",
     title: "Гранд 4 МК",
     category: "mk",
-    imageSrc: u(
-      "/upload/resize_cache/iblock/6a2/go9lnx315nmn0ii7vp0sy387vdfj73zd/440_550_1/grand_13_zefir__05_05_2026__04_30_22.jpg",
-    ),
+    imageSrc: pilotWebp("pilot-mk-grand-4"),
     imageAlt: "Межкомнатная дверь Tandoor серии Гранд — базовая комплектация",
     lineOrCollection: "Серия «Гранд» (МК)",
     shortPositioning: "Быстрые проекты и типовые проёмы — базовый комплект без лишнего.",
@@ -224,9 +209,7 @@ const PILOT_ITEMS: TrainingModelPhotoPilotItem[] = [
     productId: "mk-grand-5",
     title: "Гранд 5 МК",
     category: "mk",
-    imageSrc: u(
-      "/upload/resize_cache/iblock/5fb/g2gb2bgb7y9ekbk7sa3oidcplxnm51po/440_550_1/mona_01_brown__05_05_2026__04_31_57.jpg",
-    ),
+    imageSrc: pilotWebp("pilot-mk-grand-5"),
     imageAlt: "Межкомнатная дверь Tandoor — усиленная комплектация серии Гранд",
     lineOrCollection: "Серия «Гранд» (МК)",
     shortPositioning: "Усиленная межкомнатная версия: магнитная защёлка и скрытые петли для витринной зоны.",
@@ -251,9 +234,7 @@ const PILOT_ITEMS: TrainingModelPhotoPilotItem[] = [
     productId: "mk-kapelli",
     title: "Капелли МК",
     category: "mk",
-    imageSrc: u(
-      "/upload/resize_cache/iblock/688/1zwszyg1efskb7rbyb2c6ijrul6j8ypd/440_550_1/kantata_belaya__05_05_2026__04_31_46.jpg",
-    ),
+    imageSrc: pilotWebp("pilot-mk-kapelli"),
     imageAlt: "Межкомнатная дверь Tandoor — лаконичная эмаль, серия Капелли",
     lineOrCollection: "Серия «Капелли»",
     shortPositioning: "Узкая коробка и чистая эмаль — для современных планировок и светлых интерьеров.",
@@ -278,9 +259,7 @@ const PILOT_ITEMS: TrainingModelPhotoPilotItem[] = [
     productId: "sk-line",
     title: "Скрытая дверь «Линия»",
     category: "mk",
-    imageSrc: u(
-      "/upload/resize_cache/iblock/1ad/18r6kw6aozmvl932a1ny35hxwcx45p1y/440_550_1/sk_2_dg_belyy__05_05_2026__04_31_27.jpg",
-    ),
+    imageSrc: pilotWebp("pilot-mk-sk-line"),
     imageAlt: "Скрытая межкомнатная дверь Tandoor под покраску — линейка «Линия»",
     lineOrCollection: "Серия «Линия»",
     shortPositioning: "Полотно под покраску и скрытая коробка — для клиентов с запросом «дверь исчезает в стене».",
