@@ -236,7 +236,11 @@ export default function TrainingPage() {
           <Input
             id="input-training-search"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setSection(ALL);
+              setStatusChip("all");
+            }}
             placeholder="Например: ВХ двери, замки, возражение дорого, скрипт звонка…"
             className="h-12 min-h-[48px] w-full min-w-0 border-border/80 text-base"
             data-testid="input-training-search"

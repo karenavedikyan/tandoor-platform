@@ -2102,13 +2102,25 @@ export function expandTrainingSearchQueryVariants(raw: string): string[] {
   return Array.from(out);
 }
 
+/** Проверка совпадения запроса с haystack: несколько слов — по OR отдельных слов; одно слово — через варианты. */
+export function searchQueryMatchesTrainingHaystack(query: string, haystack: string): boolean {
+  const nq = query.trim().toLowerCase();
+  if (!nq) return true;
+  const chunks = nq.split(/\s+/).filter((c) => c.length > 0);
+  const variantHit = (segment: string) =>
+    expandTrainingSearchQueryVariants(segment).some((v) => v.length > 0 && haystack.includes(v));
+  if (chunks.length === 1) {
+    return variantHit(chunks[0]!);
+  }
+  return chunks.some((c) => (c.length >= 2 || c === "вх" || c === "мк") && variantHit(c)) || variantHit(nq);
+}
+
 export function searchTrainingMaterials(query: string, filters: TrainingMaterialSearchFilters): TrainingMaterial[] {
   const q = query.trim().toLowerCase();
   return MATERIALS.filter((m) => {
     if (q) {
       const haystack = buildTrainingMaterialSearchHaystack(m);
-      const variants = expandTrainingSearchQueryVariants(q);
-      const hit = variants.some((token) => token.length > 0 && haystack.includes(token));
+      const hit = searchQueryMatchesTrainingHaystack(q, haystack);
       if (!hit) return false;
     }
     if (filters.section && filters.section !== "all" && m.section !== filters.section) return false;
