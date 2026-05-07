@@ -385,10 +385,10 @@ export function AnalyticsOperationalPanel() {
               Tandoor Club · {tabCounts.tandoorClub}
             </TabsTrigger>
             <TabsTrigger value="showcaseProfitability" className={tabTriggerClass} data-testid="tab-operational-showcase-profitability">
-              Рентабельность · {tabCounts.showcaseProfitability}
+              Рентабельность витрин · {tabCounts.showcaseProfitability}
             </TabsTrigger>
             <TabsTrigger value="hardwareConversion" className={tabTriggerClass} data-testid="tab-operational-hardware-conversion">
-              Фурнитура · {tabCounts.hardwareConversion}
+              Конверсия фурнитуры · {tabCounts.hardwareConversion}
             </TabsTrigger>
             <TabsTrigger value="equipment" className={tabTriggerClass} data-testid="tab-operational-equipment">
               Оборудование · {tabCounts.equipment}
