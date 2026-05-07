@@ -34,7 +34,8 @@ export type OperationalClientShowcaseRow = {
   clientName: string;
   city: string;
   clientCategory: DealerCategory;
-  segment: PartnerSegment;
+  /** Клиент может одновременно входить в несколько операционных сегментов (вкладки не взаимоисключающие). */
+  segments: PartnerSegment[];
   mkModels: ShowcaseModelRef[];
   vhModels: ShowcaseModelRef[];
   hardwareModels: ShowcaseModelRef[];
@@ -106,10 +107,17 @@ export type OperationalGlobalFilters = {
   search: string;
 };
 
-function segmentForDealer(d: DealerRow): PartnerSegment {
-  if (d.terms.tandoorClub === "Участник") return "tandoorClub";
-  if (d.category === "TOP") return "top500";
-  return "fiveHundredPlus";
+/**
+ * Раньше сегмент выбирался одним значением с приоритетом Club → TOP, из‑за чего все TOP-клиенты
+ * (в демо-данных они же «Участник» Club) попадали только во вкладку Club, а «ТОП 500» оставался пустым.
+ * Явное множество сегментов: TOP — всегда «ТОП 500», Club — «Tandoor Club», «500+» — все не‑TOP.
+ */
+function computeDealerSegments(d: DealerRow): PartnerSegment[] {
+  const s = new Set<PartnerSegment>();
+  if (d.category === "TOP") s.add("top500");
+  if (d.terms.tandoorClub === "Участник") s.add("tandoorClub");
+  if (d.category !== "TOP") s.add("fiveHundredPlus");
+  return Array.from(s);
 }
 
 function productLine(p: CatalogProduct): "mk" | "vh" | "hardware" {
@@ -151,7 +159,7 @@ function buildClientShowcaseRow(d: DealerRow, i: number): OperationalClientShowc
     clientName: d.name,
     city: d.city,
     clientCategory: d.category,
-    segment: segmentForDealer(d),
+    segments: computeDealerSegments(d),
     mkModels,
     vhModels,
     hardwareModels,
@@ -215,7 +223,7 @@ export function filterClientShowcaseRows(
 ): OperationalClientShowcaseRow[] {
   const cityName = cityNameFromFilter(filters.cityId);
   return CLIENT_SHOWCASE_ROWS.filter((row) => {
-    if (row.segment !== segment) return false;
+    if (!row.segments.includes(segment)) return false;
     if (!territoryKeepsDealer(filters.territoryId, row.dealerId)) return false;
     if (cityName && row.city !== cityName) return false;
     if (filters.dealerCategory !== "all" && row.clientCategory !== filters.dealerCategory) return false;
