@@ -15,18 +15,9 @@ import {
   TRAINING_ROLE_LABEL,
   TRAINING_SECTION_LABEL,
   TRAINING_TYPE_LABEL,
-  type TrainingMaterial,
   type TrainingProgram,
   type TrainingProgramStatus,
 } from "@/lib/training-data";
-import {
-  getWikiTrainingContentByProgram,
-  WIKI_MAP_REVIEW_LABEL,
-} from "@/lib/training-wiki-content-map";
-
-function isWikiSourceMaterial(m: Pick<TrainingMaterial, "sourceType" | "wikiSource">): boolean {
-  return m.sourceType === "wiki" || Boolean(m.wikiSource);
-}
 
 function programStatusLabel(s: TrainingProgramStatus): string {
   if (s === "not_started") return "Не начато";
@@ -76,7 +67,6 @@ export default function TrainingProgramPage() {
   const program = useMemo(() => getTrainingProgramById(raw), [raw]);
   const modules = useMemo(() => (program ? getTrainingModulesByProgram(program.id) : []), [program]);
   const materials = useMemo(() => (program ? getTrainingMaterialsByProgram(program.id) : []), [program]);
-  const wikiMaterialsCount = useMemo(() => materials.filter((m) => isWikiSourceMaterial(m)).length, [materials]);
 
   const moduleMaterialIdSet = useMemo(() => {
     const s = new Set<string>();
@@ -95,13 +85,8 @@ export default function TrainingProgramPage() {
 
   const extraMaterialsTitle = useMemo(() => {
     if (materialsOutsideModules.length === 0) return "";
-    return materialsOutsideModules.every(isWikiSourceMaterial) ? "Материалы из Wiki" : "Дополнительные материалы программы";
+    return "Дополнительные материалы программы";
   }, [materialsOutsideModules]);
-
-  const wikiMapRows = useMemo(() => {
-    if (!program) return [];
-    return getWikiTrainingContentByProgram(program.id).slice(0, 5);
-  }, [program]);
 
   if (!raw || !program) {
     return <TrainingProgramNotFound />;
@@ -142,15 +127,6 @@ export default function TrainingProgramPage() {
           <p className="text-sm text-muted-foreground">
             Ориентировочное время: <span className="font-semibold text-foreground">{program.durationMinutes} мин</span> ·
             материалов: <span className="font-semibold text-foreground">{program.totalMaterials}</span>
-            {wikiMaterialsCount > 0 ? (
-              <>
-                {" "}
-                · из Wiki:{" "}
-                <span className="font-semibold tabular-nums text-foreground" data-testid="text-training-program-wiki-count">
-                  {wikiMaterialsCount}
-                </span>
-              </>
-            ) : null}
           </p>
         </div>
       </section>
@@ -169,39 +145,6 @@ export default function TrainingProgramPage() {
             <p className="text-xs text-muted-foreground">Оценка по учебному сценарию без записи во внешние системы.</p>
           </CardContent>
         </Card>
-      </section>
-
-      <section className="space-y-3" data-testid="section-training-program-wiki-map">
-        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="text-base font-semibold text-foreground sm:text-lg">Что ещё нужно перенести из Wiki</h2>
-          <Button asChild variant="outline" size="sm" className="h-10 min-h-10 w-full shrink-0 font-semibold sm:w-auto" data-testid="button-training-program-open-wiki-map">
-            <Link href="/training/wiki-map">К полной карте Wiki</Link>
-          </Button>
-        </div>
-        {wikiMapRows.length > 0 ? (
-          <Card className="border-border/80 shadow-md">
-            <CardContent className="space-y-3 p-4 sm:p-5">
-              {wikiMapRows.map((row) => (
-                <div
-                  key={row.id}
-                  data-testid={`card-training-program-wiki-map-item-${row.id}`}
-                  className="min-w-0 space-y-2 rounded-xl border border-border/60 bg-muted/10 p-3"
-                >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="secondary" className="font-semibold tabular-nums">
-                      {row.priority}
-                    </Badge>
-                    <Badge variant="outline" className="text-xs font-medium">
-                      {WIKI_MAP_REVIEW_LABEL[row.reviewStatus]}
-                    </Badge>
-                  </div>
-                  <p className="text-sm font-medium text-foreground">{row.wikiTitle}</p>
-                  <p className="text-xs text-muted-foreground">{row.reason}</p>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        ) : null}
       </section>
 
       <section className="space-y-4" data-testid="section-training-program-modules">
@@ -226,15 +169,6 @@ export default function TrainingProgramPage() {
                       <div className="min-w-0 space-y-2">
                         <div className="flex min-w-0 flex-wrap items-center gap-2">
                           <p className="min-w-0 font-medium text-foreground">{mat.title}</p>
-                          {isWikiSourceMaterial(mat) ? (
-                            <Badge
-                              variant="secondary"
-                              className="shrink-0 border-primary/30 bg-primary/5 text-foreground"
-                              data-testid={`badge-training-program-material-source-${mat.id}`}
-                            >
-                              Wiki
-                            </Badge>
-                          ) : null}
                         </div>
                         <p className="text-xs text-muted-foreground">
                           {TRAINING_TYPE_LABEL[mat.type]} · {mat.durationMinutes} мин · прогресс {mat.progressPercent}%
@@ -259,7 +193,7 @@ export default function TrainingProgramPage() {
             <Card className="border-border/80 shadow-md">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">{extraMaterialsTitle}</CardTitle>
-                <p className="text-xs text-muted-foreground">Подключены к программе; полный текст — после ревью во внутреннем контуре.</p>
+                <p className="text-xs text-muted-foreground">Входят в программу и открываются по ссылке ниже.</p>
               </CardHeader>
               <CardContent className="space-y-3">
                 {materialsOutsideModules.map((mat) => (
@@ -271,15 +205,6 @@ export default function TrainingProgramPage() {
                     <div className="min-w-0 space-y-2">
                       <div className="flex min-w-0 flex-wrap items-center gap-2">
                         <p className="min-w-0 font-medium text-foreground">{mat.title}</p>
-                        {isWikiSourceMaterial(mat) ? (
-                          <Badge
-                            variant="secondary"
-                            className="shrink-0 border-primary/30 bg-primary/5 text-foreground"
-                            data-testid={`badge-training-program-material-source-${mat.id}`}
-                          >
-                            Wiki
-                          </Badge>
-                        ) : null}
                       </div>
                       <p className="text-xs text-muted-foreground">
                         {TRAINING_TYPE_LABEL[mat.type]} · {mat.durationMinutes} мин · прогресс {mat.progressPercent}%
@@ -307,15 +232,6 @@ export default function TrainingProgramPage() {
                     <div className="min-w-0 space-y-2">
                       <div className="flex min-w-0 flex-wrap items-center gap-2">
                         <p className="min-w-0 font-medium text-foreground">{mat.title}</p>
-                        {isWikiSourceMaterial(mat) ? (
-                          <Badge
-                            variant="secondary"
-                            className="shrink-0 border-primary/30 bg-primary/5 text-foreground"
-                            data-testid={`badge-training-program-material-source-${mat.id}`}
-                          >
-                            Wiki
-                          </Badge>
-                        ) : null}
                       </div>
                       <p className="text-xs text-muted-foreground">{TRAINING_TYPE_LABEL[mat.type]}</p>
                     </div>
