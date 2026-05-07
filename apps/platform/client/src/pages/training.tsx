@@ -446,104 +446,107 @@ export default function TrainingPage() {
           </div>
         </div>
 
-        <div className="grid min-w-0 gap-3">
-          {filtered.map((m) => (
-            <Card key={m.id} className="border-border/70 shadow-xs" data-testid={`card-training-material-${m.id}`}>
-              <CardContent className="space-y-4 p-4 sm:p-5">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0 space-y-2">
-                    <h3 className="text-base font-semibold leading-snug text-foreground sm:text-lg">{m.title}</h3>
-                    <p className="text-sm text-muted-foreground">{m.description}</p>
-                    <div className="flex flex-wrap gap-2">
-                      <Badge variant="outline" className="font-medium">
-                        {TRAINING_SECTION_LABEL[m.section]}
-                      </Badge>
-                      <Badge variant="outline" className="font-medium">
-                        {TRAINING_TYPE_LABEL[m.type]}
-                      </Badge>
-                      <Badge variant="outline" className={cn("font-medium", statusBadgeClass(m.status))}>
-                        {TRAINING_STATUS_LABEL[m.status]}
-                      </Badge>
-                      {m.required ? (
-                        <Badge variant="secondary" className="font-semibold">
-                          Обязательно к прохождению
+        {filtered.length === 0 ? (
+          <Card className="border-dashed border-border/80 bg-muted/20" data-testid="empty-training-materials-results">
+            <CardContent className="p-6 text-center text-sm text-muted-foreground">
+              Нет материалов по выбранным условиям. Измените поиск или фильтры.
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid min-w-0 gap-3">
+            {filtered.map((m) => (
+              <Card key={m.id} className="border-border/70 shadow-xs" data-testid={`card-training-material-${m.id}`}>
+                <CardContent className="space-y-4 p-4 sm:p-5">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0 space-y-2">
+                      <h3 className="text-base font-semibold leading-snug text-foreground sm:text-lg">{m.title}</h3>
+                      <p className="text-sm text-muted-foreground">{m.description}</p>
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant="outline" className="font-medium">
+                          {TRAINING_SECTION_LABEL[m.section]}
                         </Badge>
-                      ) : null}
-                      <Badge variant="outline" className="font-medium">
-                        {TRAINING_PROGRESS_STATUS_LABEL[m.progressStatus]}
-                      </Badge>
-                      <Badge variant="outline" className="text-muted-foreground">
-                        Сложность: {m.difficulty === "easy" ? "лёгкая" : m.difficulty === "hard" ? "высокая" : "средняя"}
-                      </Badge>
-                      {m.sourceType === "wiki" ? (
-                        <Badge
-                          variant="secondary"
-                          className="border-primary/30 bg-primary/5 font-semibold"
-                          data-testid={`badge-training-material-source-${m.id}`}
-                        >
-                          Wiki · {TRAINING_WIKI_REVIEW_LABEL[m.reviewStatus ?? m.wikiSource?.wikiReviewStatus ?? "needs_review"]}
+                        <Badge variant="outline" className="font-medium">
+                          {TRAINING_TYPE_LABEL[m.type]}
                         </Badge>
-                      ) : null}
-                    </div>
-                    {m.knowledgeTags.length > 0 ? (
-                      <div className="flex flex-wrap gap-1.5">
-                        {m.knowledgeTags.map((t) => (
-                          <Badge key={t} variant="secondary" className="rounded-md text-[11px] font-normal">
-                            {t}
+                        <Badge variant="outline" className={cn("font-medium", statusBadgeClass(m.status))}>
+                          {TRAINING_STATUS_LABEL[m.status]}
+                        </Badge>
+                        {m.required ? (
+                          <Badge variant="secondary" className="font-semibold">
+                            Обязательно к прохождению
                           </Badge>
-                        ))}
+                        ) : null}
+                        <Badge variant="outline" className="font-medium">
+                          {TRAINING_PROGRESS_STATUS_LABEL[m.progressStatus]}
+                        </Badge>
+                        <Badge variant="outline" className="text-muted-foreground">
+                          Сложность: {m.difficulty === "easy" ? "лёгкая" : m.difficulty === "hard" ? "высокая" : "средняя"}
+                        </Badge>
+                        {m.sourceType === "wiki" ? (
+                          <Badge
+                            variant="secondary"
+                            className="border-primary/30 bg-primary/5 font-semibold"
+                            data-testid={`badge-training-material-source-${m.id}`}
+                          >
+                            Wiki · {TRAINING_WIKI_REVIEW_LABEL[m.reviewStatus ?? m.wikiSource?.wikiReviewStatus ?? "needs_review"]}
+                          </Badge>
+                        ) : null}
                       </div>
-                    ) : null}
-                    <p className="text-xs text-muted-foreground">
-                      Аудитория:{" "}
-                      <span className="font-medium text-foreground">
-                        {m.audience.map((a) => TRAINING_AUDIENCE_LABEL[a]).join(", ")}
-                      </span>
-                    </p>
-                    <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-                      <span>
-                        Время: <span className="font-medium text-foreground">{m.durationMinutes} мин</span>
-                      </span>
-                      <span>
-                        Прогресс: <span className="font-medium text-foreground">{m.progressPercent}%</span>
-                      </span>
-                      <span>
-                        Обновлено: <span className="font-medium text-foreground">{m.updatedAt}</span>
-                      </span>
-                    </div>
-                    {m.relatedProductIds.length > 0 ? (
+                      {m.knowledgeTags.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {m.knowledgeTags.map((t) => (
+                            <Badge key={t} variant="secondary" className="rounded-md text-[11px] font-normal">
+                              {t}
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : null}
                       <p className="text-xs text-muted-foreground">
-                        Связанные товары:{" "}
+                        Аудитория:{" "}
                         <span className="font-medium text-foreground">
-                          {m.relatedProductIds
-                            .map((pid) => getProductById(pid)?.name ?? pid)
-                            .join(", ")}
+                          {m.audience.map((a) => TRAINING_AUDIENCE_LABEL[a]).join(", ")}
                         </span>
                       </p>
-                    ) : null}
-                    {m.relatedTaskIds.length > 0 ? (
-                      <p className="text-xs text-muted-foreground">
-                        Связанные задачи:{" "}
-                        <span className="font-mono font-medium text-foreground">{m.relatedTaskIds.join(", ")}</span>
-                      </p>
-                    ) : null}
+                      <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                        <span>
+                          Время: <span className="font-medium text-foreground">{m.durationMinutes} мин</span>
+                        </span>
+                        <span>
+                          Прогресс: <span className="font-medium text-foreground">{m.progressPercent}%</span>
+                        </span>
+                        <span>
+                          Обновлено: <span className="font-medium text-foreground">{m.updatedAt}</span>
+                        </span>
+                      </div>
+                      {m.relatedProductIds.length > 0 ? (
+                        <p className="text-xs text-muted-foreground">
+                          Связанные товары:{" "}
+                          <span className="font-medium text-foreground">
+                            {m.relatedProductIds
+                              .map((pid) => getProductById(pid)?.name ?? pid)
+                              .join(", ")}
+                          </span>
+                        </p>
+                      ) : null}
+                      {m.relatedTaskIds.length > 0 ? (
+                        <p className="text-xs text-muted-foreground">
+                          Связанные задачи:{" "}
+                          <span className="font-mono font-medium text-foreground">{m.relatedTaskIds.join(", ")}</span>
+                        </p>
+                      ) : null}
+                    </div>
+                    <Button asChild className="w-full shrink-0 font-semibold sm:w-auto sm:min-w-[8rem]" data-testid={`button-open-training-material-${m.id}`}>
+                      <Link href={`/training/${m.id}`}>
+                        Открыть
+                        <ChevronRight className="h-4 w-4" aria-hidden />
+                      </Link>
+                    </Button>
                   </div>
-                  <Button asChild className="w-full shrink-0 font-semibold sm:w-auto sm:min-w-[8rem]" data-testid={`button-open-training-material-${m.id}`}>
-                    <Link href={`/training/${m.id}`}>
-                      Открыть
-                      <ChevronRight className="h-4 w-4" aria-hidden />
-                    </Link>
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-        {filtered.length === 0 ? (
-          <Card className="border-dashed border-border/80 bg-muted/20">
-            <CardContent className="p-6 text-center text-sm text-muted-foreground">Нет материалов по выбранным условиям. Измените фильтры.</CardContent>
-          </Card>
-        ) : null}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="rounded-2xl border border-dashed border-border/80 bg-muted/20 p-5 sm:p-6" data-testid="section-training-wiki-import">

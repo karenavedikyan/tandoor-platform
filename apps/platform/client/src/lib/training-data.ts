@@ -6,7 +6,7 @@
 import { getAllMatrixTasks, type TaskInsightDomain } from "./trade-point-task-data";
 import { getProductById } from "./catalog-data";
 import { getWikiImportedTrainingMaterials, pickWikiMaterialIdForTaskInsight } from "./training-wiki-import";
-import { WAVE1_TRAINING_WIKI_ANNOTATIONS } from "./training-wave1-publish";
+import { ALL_PRODUCT_WIKI_ANNOTATIONS } from "./training-wave1-publish";
 
 export type TrainingSection =
   | "product"
@@ -165,11 +165,11 @@ export const TRAINING_PROGRAMS: TrainingProgram[] = [
     section: "product",
     role: "manager",
     level: "basic",
-    durationMinutes: 145,
+    durationMinutes: 280,
     required: true,
-    progressPercent: 38,
+    progressPercent: 35,
     completedMaterials: 2,
-    totalMaterials: 10,
+    totalMaterials: 23,
     status: "in_progress",
     materialIds: [
       "tr-prod-mk-assortment",
@@ -182,9 +182,40 @@ export const TRAINING_PROGRAMS: TrainingProgram[] = [
       "tr-prod-materials-mdf",
       "tr-prod-hw-groups",
       "tr-prod-metal-qr",
+      "tr-prod-hw-sales-track-overview",
+      "tr-prod-mk-lacquer-finishes",
+      "tr-prod-mk-engineered-wood-core",
+      "tr-prod-mk-line-mezzo-porte",
+      "tr-prod-mk-fine-floor-companion",
+      "tr-prod-vh-galvanized-skin",
+      "tr-prod-mk-birch-plywood-core",
+      "tr-prod-mk-line-deart",
+      "tr-prod-vh-thermo-condensate-care",
+      "tr-prod-mk-line-milliana",
+      "tr-prod-mk-line-paradise",
+      "tr-prod-mk-interior-align",
+      "tr-prod-mk-compilation-checklist",
+      "tr-prod-compare-models-on-floor",
     ],
     relatedProductCategory: "mk",
     coverTone: "lime",
+  },
+  {
+    id: "prog-hardware-sales",
+    title: "Фурнитура: комплектация и допродажа",
+    description: "Петли, ручки, замки и доборы — продавать комплектом с дверью и без ошибок в заказе.",
+    section: "product",
+    role: "manager",
+    level: "basic",
+    durationMinutes: 72,
+    required: false,
+    progressPercent: 0,
+    completedMaterials: 0,
+    totalMaterials: 4,
+    status: "not_started",
+    materialIds: ["tr-prod-hw-sales-track-overview", "tr-prod-hw-groups", "tr-prod-mk-compilation-checklist", "tr-prod-metal-qr"],
+    relatedProductCategory: "hardware",
+    coverTone: "violet",
   },
   {
     id: "prog-sales-hits",
@@ -193,13 +224,22 @@ export const TRAINING_PROGRAMS: TrainingProgram[] = [
     section: "sales",
     role: "manager",
     level: "basic",
-    durationMinutes: 68,
+    durationMinutes: 95,
     required: true,
-    progressPercent: 22,
+    progressPercent: 20,
     completedMaterials: 1,
-    totalMaterials: 5,
+    totalMaterials: 8,
     status: "in_progress",
-    materialIds: ["tr-sales-consult-prep", "tr-sales-expensive", "tr-sales-call", "tr-sales-wholesale", "tr-sales-compare-models"],
+    materialIds: [
+      "tr-sales-consult-prep",
+      "tr-sales-explaining-price-value",
+      "tr-sales-stock-availability-flow",
+      "tr-prod-compare-models-on-floor",
+      "tr-sales-expensive",
+      "tr-sales-call",
+      "tr-sales-wholesale",
+      "tr-sales-compare-models",
+    ],
     relatedProductCategory: "all",
     coverTone: "sky",
   },
@@ -245,7 +285,14 @@ export const TRAINING_MODULES: TrainingModule[] = [
     programId: "prog-product-lines",
     title: "Ассортимент МК и ВХ, покрытия",
     order: 1,
-    materialIds: ["tr-prod-mk-assortment", "tr-sales-consult-prep", "tr-prod-ent-card", "tr-prod-int-coatings"],
+    materialIds: [
+      "tr-prod-mk-assortment",
+      "tr-sales-consult-prep",
+      "tr-prod-ent-card",
+      "tr-prod-int-coatings",
+      "tr-prod-mk-interior-align",
+      "tr-prod-mk-compilation-checklist",
+    ],
   },
   {
     id: "mod-pl-deep",
@@ -259,14 +306,49 @@ export const TRAINING_MODULES: TrainingModule[] = [
       "tr-prod-vh-locks-guide",
       "tr-prod-hw-groups",
       "tr-prod-metal-qr",
+      "tr-prod-hw-sales-track-overview",
+      "tr-prod-compare-models-on-floor",
     ],
+  },
+  {
+    id: "mod-pl-lines",
+    programId: "prog-product-lines",
+    title: "Линейки каталога и материалы",
+    order: 3,
+    materialIds: [
+      "tr-prod-mk-lacquer-finishes",
+      "tr-prod-mk-engineered-wood-core",
+      "tr-prod-mk-line-mezzo-porte",
+      "tr-prod-mk-fine-floor-companion",
+      "tr-prod-vh-galvanized-skin",
+      "tr-prod-mk-birch-plywood-core",
+      "tr-prod-mk-line-deart",
+      "tr-prod-vh-thermo-condensate-care",
+      "tr-prod-mk-line-milliana",
+      "tr-prod-mk-line-paradise",
+    ],
+  },
+  {
+    id: "mod-hw-core",
+    programId: "prog-hardware-sales",
+    title: "Фурнитура и комплектация",
+    order: 1,
+    materialIds: ["tr-prod-hw-sales-track-overview", "tr-prod-hw-groups", "tr-prod-mk-compilation-checklist", "tr-prod-metal-qr"],
   },
   {
     id: "mod-sl-core",
     programId: "prog-sales-hits",
     title: "Подготовка к визиту и скрипты",
     order: 1,
-    materialIds: ["tr-sales-consult-prep", "tr-sales-expensive", "tr-sales-call", "tr-sales-wholesale"],
+    materialIds: [
+      "tr-sales-consult-prep",
+      "tr-sales-explaining-price-value",
+      "tr-sales-stock-availability-flow",
+      "tr-prod-compare-models-on-floor",
+      "tr-sales-expensive",
+      "tr-sales-call",
+      "tr-sales-wholesale",
+    ],
   },
   { id: "mod-sl-adv", programId: "prog-sales-hits", title: "Сравнение и видео", order: 2, materialIds: ["tr-sales-compare-models"] },
   { id: "mod-ad-weeks", programId: "prog-adapt-2026", title: "Две недели старта", order: 1, materialIds: ["tr-onboard-manager", "tr-onboard-wholesale-staff", "tr-onboard-retail-staff"] },
@@ -455,7 +537,7 @@ const _RAW_MATERIALS: LegacyTrainingMaterial[] = [
     progressPercent: 40,
     relatedProductIds: ["mk-grand-3-mk", "mk-kapelli", "mk-grand-4"],
     relatedTaskIds: [],
-    tags: ["МК", "покрытие", "акустика"],
+    tags: ["МК", "покрытие", "акустика", "звукоизоляция", "межкомнатные"],
     updatedAt: "06.05.2026",
     summaryBullets: [
       "Покрытие отвечает за внешний вид и устойчивость к царапинам и влаге; материал полотна — за вес и жёсткость.",
@@ -701,6 +783,579 @@ const _RAW_MATERIALS: LegacyTrainingMaterial[] = [
     ],
   },
   {
+    id: "tr-prod-hw-sales-track-overview",
+    title: "Фурнитура и комплектация: программа обучения и порядок работы в зале",
+    section: "product",
+    type: "course",
+    audience: ["managers", "dealers", "purchasing"],
+    status: "recommended",
+    description:
+      "Как выстроить разговор о петлях, ручках, замках и доборах после выбора полотна: единый трек без хаоса в заказе.",
+    readTimeMinutes: 14,
+    progressPercent: 0,
+    relatedProductIds: ["sk-line", "mk-grand-3-mk"],
+    relatedTaskIds: [],
+    tags: ["фурнитура", "комплектация", "петли", "ручки", "замки", "доборы"],
+    updatedAt: "06.05.2026",
+    summaryBullets: [
+      "Программа «Фурнитура» объединяет обзорный модуль, группы изделий, чек-лист комплектации и работу с QR-паспортом.",
+      "МК и входные группы требуют разной фурнитуры: не смешивайте аргументы ВХ и МК в одном предложении.",
+      "Комплект продаётся вместе с дверью: так вы защищаете клиента от несовместимости и повторных выездов.",
+    ],
+    checklist: [
+      "Назвал три уровня комплектации: базовый, комфортный, максимальный по безопасности.",
+      "Согласовал цвет и серию фурнитуры с покрытием полотна.",
+      "Зафиксировал в заказе сторону открывания и высоту ручки.",
+    ],
+    contentBlocks: [
+      block(
+        "Зачем отдельный трек по фурнитуре",
+        "Клиент часто воспринимает фурнитуру как «мелочь после скидки на дверь». Менеджер переворачивает логику: петли и ручка определяют срок службы и ощущение от двери каждый день. Короткий обзорный курс снижает ошибки в заказе и ускоряет согласование с монтажом.",
+      ),
+      block(
+        "Порядок модулей",
+        "Начните с групп и аргументов допродажи, затем пройдите чек-лист комплектации и покажите, как читать QR на изделии. Завершите визит фиксацией списка позиций в письменном виде.",
+      ),
+    ],
+  },
+  {
+    id: "tr-prod-mk-lacquer-finishes",
+    title: "Лак и лакированные покрытия межкомнатных дверей",
+    section: "product",
+    type: "article",
+    audience: ["managers", "dealers"],
+    status: "recommended",
+    description:
+      "Как объяснять глянец и матовый лак, уход и риски царапин — без обещаний «вечной стойкости».",
+    readTimeMinutes: 11,
+    progressPercent: 0,
+    relatedProductIds: ["mk-grand-4", "mk-kapelli"],
+    relatedTaskIds: [],
+    tags: ["МК", "межкомнатные", "покрытия", "лак"],
+    updatedAt: "06.05.2026",
+    summaryBullets: [
+      "Лак подчёркивает глубину цвета; на витрине сравнивайте два образца при разном освещении.",
+      "Уход без абразивов; объясните разницу между бытовыми царапинами и повреждением покрытия.",
+      "Для детской и коридора обсудите интенсивность эксплуатации до выбора финиша.",
+    ],
+    checklist: [
+      "Показал клиенту угол освещения, в котором виден глянец.",
+      "Озвучил правила ухода и ограничения по агрессивной химии.",
+      "Сверил серию с карточкой: допускается ли лак в выбранной влажной зоне.",
+    ],
+    contentBlocks: [
+      block(
+        "Клиентский вопрос «почему лак дороже»",
+        "Отвечайте через цикл производства и контроль качества слоя, а не через критику других покрытий. Сравнивайте с матовыми решениями по сценарию уборки и видимости следов.",
+      ),
+      block(
+        "Покрытия и звукоизоляция",
+        "Толщина и состав полотна вместе с уплотнителями влияют на звук сильнее, чем один только лак. Если тема звукоизоляции важна, верните разговор к комплекту короба и монтажу.",
+      ),
+    ],
+  },
+  {
+    id: "tr-prod-mk-engineered-wood-core",
+    title: "Инженерный брус в сердечнике межкомнатного полотна",
+    section: "product",
+    type: "article",
+    audience: ["managers", "dealers"],
+    status: "recommended",
+    description:
+      "Стабильность геометрии, вес полотна и поведение при перепадах влажности — простыми словами для зала.",
+    readTimeMinutes: 10,
+    progressPercent: 0,
+    relatedProductIds: ["mk-grand-5", "mk-grand-3-mk"],
+    relatedTaskIds: [],
+    tags: ["МК", "межкомнатные", "материалы", "MDF", "HDF"],
+    updatedAt: "06.05.2026",
+    summaryBullets: [
+      "Инженерный брус даёт предсказуемую основу под декоративный слой и снижает риск коробления.",
+      "Вес полотна влияет на выбор петель и доводчика — проговаривайте это до заказа.",
+      "Свяжите рассказ с уже известным клиенту блоком про MDF/HDF в общем материале полотна.",
+    ],
+    checklist: [
+      "Объяснил отличие от массива одной фразой без технического перегруза.",
+      "Сверил максимальный вес полотна с каталогом петель.",
+      "Не обещал свойств, которых нет в карточке серии.",
+    ],
+    contentBlocks: [
+      block(
+        "Как не утонуть в терминах",
+        "Скажите: «внутри — ровная инженерная основа, снаружи — выбранное покрытие». Клиенту важна стабильность двери в отопительный сезон, а не название бруса.",
+      ),
+      block(
+        "Связка с покрытиями",
+        "Тяжёлые декоры и стекло увеличивают нагрузку на петли. Если клиент добавляет вставки, пересчитайте комплект фурнитуры сразу.",
+      ),
+    ],
+  },
+  {
+    id: "tr-prod-mk-line-mezzo-porte",
+    title: "Линейка Mezzo Porte: кому подходит и как позиционировать",
+    section: "product",
+    type: "article",
+    audience: ["managers", "regional_managers", "dealers"],
+    status: "recommended",
+    description:
+      "Краткий каркас аргументации по брендовой линейке МК без обещаний по ценам и срокам, которых нет в публичной карточке.",
+    readTimeMinutes: 9,
+    progressPercent: 0,
+    relatedProductIds: ["mk-kapelli"],
+    relatedTaskIds: [],
+    tags: ["МК", "межкомнатные", "линейка", "Mezzo Porte"],
+    updatedAt: "06.05.2026",
+    summaryBullets: [
+      "Сначала сценарий интерьера, затем линейка: так проще обосновать шаг вверх по бюджету.",
+      "Сравнивайте с соседней серией по трём признакам: дизайн, доступные покрытия, комплектация.",
+      "Фиксируйте, какие доборы и фурнитура рекомендованы производителем для гарантии.",
+    ],
+    checklist: [
+      "Нашёл в каталоге ключевые отличия линейки от ближайшего конкурента внутри ассортимента бренда.",
+      "Проверил наличие образцов в точке или срок поставки.",
+      "Не называл закрытые условия поставки.",
+    ],
+    contentBlocks: [
+      block(
+        "Позиционирование",
+        "Опишите линейку как ответ на запрос «выразительный дизайн при понятной логике комплектации». Для дилера добавьте оптовый контекст сервиса и поддержки витрины.",
+      ),
+      block(
+        "Сравнение моделей",
+        "Используйте витринный сценарий: две двери рядом, три отличия вслух, один итог для клиента. Избегайте длинных списков артикулов.",
+      ),
+    ],
+  },
+  {
+    id: "tr-prod-mk-fine-floor-companion",
+    title: "Fine Floor и связка с межкомнатными решениями",
+    section: "product",
+    type: "article",
+    audience: ["managers", "dealers"],
+    status: "recommended",
+    description:
+      "Как аккуратно предлагать сопутствующую линейку напольных решений после подбора двери.",
+    readTimeMinutes: 8,
+    progressPercent: 0,
+    relatedProductIds: ["mk-grand-3-mk"],
+    relatedTaskIds: [],
+    tags: ["МК", "межкомнатные", "Fine Floor", "пол"],
+    updatedAt: "06.05.2026",
+    summaryBullets: [
+      "Связка «дверь + пол» снижает риск цветового диссонанса и упрощает монтажные стыки.",
+      "Не подменяйте консультацию по напольному материалу каталогом ламината другого бренда.",
+      "Зафиксируйте уровень пола и пороговые решения до заказа двери с добором.",
+    ],
+    checklist: [
+      "Согласовал с клиентом высоту чистого пола и переходы.",
+      "Проверил рекомендации производителя по сочетанию коллекций.",
+      "Передал в заказ связку позиций одним списком.",
+    ],
+    contentBlocks: [
+      block(
+        "Сценарий продажи",
+        "После выбора двери спросите про план по полу в смежных комнатах. Если клиент уже купил пол, подберите оттенок наличника и порога. Если пол ещё в проекте, предложите образцы для дизайнера.",
+      ),
+      block(
+        "Ошибки",
+        "Не обещайте идентичность фактуры «на глаз» без образцов в одном свете. Не смешивайте разные системы замков в одной комнате без согласования с монтажником.",
+      ),
+    ],
+  },
+  {
+    id: "tr-prod-vh-galvanized-skin",
+    title: "Оцинкованный металл входных дверей: коррозия, внешний вид, вопросы клиента",
+    section: "product",
+    type: "article",
+    audience: ["managers", "dealers", "employees"],
+    status: "recommended",
+    description:
+      "Базовые свойства оцинковки для ВХ: что говорить про уличную эксплуатацию и уход без запугивания.",
+    readTimeMinutes: 10,
+    progressPercent: 0,
+    relatedProductIds: ["vh-grand-3", "vh-siriys"],
+    relatedTaskIds: [],
+    tags: ["ВХ", "входные", "металл", "конструкция"],
+    updatedAt: "06.05.2026",
+    summaryBullets: [
+      "Оцинковка защищает сталь от коррозии; внешний вид зависит ещё и от финишного покрытия панели.",
+      "Уличная дверь требует обсуждения навеса, козырька и дренажа воды — не только металла.",
+      "Не сравнивайте толщину металла у разных производителей без контекста заполнения и уплотнения.",
+    ],
+    checklist: [
+      "Объяснил клиенту разницу между голым металлом и готовой панелью.",
+      "Предупредил про царапины при монтаже и транспортировке.",
+      "Сверил рекомендации по уходу с карточкой серии.",
+    ],
+    contentBlocks: [
+      block(
+        "Типовые вопросы",
+        "«Ржавеет ли?» — ответ через слой цинка и заводское покрытие, плюс аккуратная установка без повреждения кромки. «Почему тяжёлая?» — через безопасность и заполнение, не через спор о весе.",
+      ),
+      block(
+        "Конструкция",
+        "Свяжите рассказ о металле с жёсткостью короба и качеством уплотнителей. Клиент покупает цельную систему, а не лист стали.",
+      ),
+    ],
+  },
+  {
+    id: "tr-prod-mk-birch-plywood-core",
+    title: "Берёзовая фанера в составе межкомнатного полотна",
+    section: "product",
+    type: "article",
+    audience: ["managers", "dealers"],
+    status: "recommended",
+    description:
+      "Краткие тезисы по фанерному сердечнику: стабильность, вес, влажные ограничения.",
+    readTimeMinutes: 9,
+    progressPercent: 0,
+    relatedProductIds: ["mk-grand-5"],
+    relatedTaskIds: [],
+    tags: ["МК", "межкомнатные", "фанера", "материалы"],
+    updatedAt: "06.05.2026",
+    summaryBullets: [
+      "Фанера даёт ровную основу под шпон или плёнку; важно не смешивать её с массивом в обещаниях по «натуральности».",
+      "Вес и жёсткость влияют на петли — повторите проверку комплекта.",
+      "Для влажных зон опирайтесь на допуск серии, а не на общие слова «влагостойкая».",
+    ],
+    checklist: [
+      "Сказал клиенту, за что отвечает фанера в конструкции, простыми словами.",
+      "Проверил ограничения серии для ванной и кухни.",
+      "Не сравнивал с конкурентом по непроверяемым фактам.",
+    ],
+    contentBlocks: [
+      block(
+        "Материаловедение для зала",
+        "Опишите фанеру как многослойную основу, где переклейка слоёв снижает усадку. Клиенту важно слышать про предсказуемость, а не про сорт шпона.",
+      ),
+      block(
+        "Связка с покрытием",
+        "Тонкие декоры требуют ровной базы. Если клиент выбирает тяжёлую фрезеровку, убедитесь, что серия это допускает.",
+      ),
+    ],
+  },
+  {
+    id: "tr-prod-mk-line-deart",
+    title: "Линейка DeArt: дизайн-сегмент и отличия на витрине",
+    section: "product",
+    type: "article",
+    audience: ["managers", "regional_managers", "dealers"],
+    status: "recommended",
+    description:
+      "Как подавать DeArt в диалоге с дизайнером и конечным клиентом без перегруза внутренними кодами.",
+    readTimeMinutes: 9,
+    progressPercent: 0,
+    relatedProductIds: ["mk-grand-4"],
+    relatedTaskIds: [],
+    tags: ["МК", "межкомнатные", "DeArt", "линейка"],
+    updatedAt: "06.05.2026",
+    summaryBullets: [
+      "Акцент на визуальной выразительности и согласованных доборах.",
+      "Сравнение с базовой серией — по трём признакам, без обесценивания «простых» моделей.",
+      "Заранее обсудите сроки и доступность фурнитуры под фрезеровку.",
+    ],
+    checklist: [
+      "Подготовил витринный маршрут: от входа к образцу DeArt.",
+      "Согласовал с партнёром наличие ключевых размеров.",
+      "Зафиксировал пожелания по цвету фурнитуры.",
+    ],
+    contentBlocks: [
+      block(
+        "Для кого линейка",
+        "Проекты, где важен характер двери как элемента интерьера. Не навязывайте там, где бюджет и сроки требуют базового решения.",
+      ),
+      block(
+        "Сравнение моделей",
+        "Поставьте рядом две двери и назовите отличия в фрезеровке, стекле и комплектации. Закончите вопросом «какой сценарий ближе по дому?».",
+      ),
+    ],
+  },
+  {
+    id: "tr-prod-vh-thermo-condensate-care",
+    title: "Конденсат на термодверях: спокойное объяснение и маршрут эскалации",
+    section: "product",
+    type: "article",
+    audience: ["managers", "regional_managers", "dealers"],
+    status: "recommended",
+    description:
+      "Почему появляется конденсат, что сказать клиенту и когда подключать сервис — без обвинений монтажа «с ходу».",
+    readTimeMinutes: 11,
+    progressPercent: 0,
+    relatedProductIds: ["vh-neapol", "vh-kapelli"],
+    relatedTaskIds: [],
+    tags: ["ВХ", "входные", "термодверь", "конденсат", "сервис"],
+    updatedAt: "06.05.2026",
+    summaryBullets: [
+      "Конденсат чаще связан с перепадом температур и вентиляцией тамбура, а не только с «плохой дверью».",
+      "Сначала фиксируйте факты: сезон, проветривание, положение тёплого контура.",
+      "Эскалацию в сервис — после сбора нейтральных фото и описания режима эксплуатации.",
+    ],
+    checklist: [
+      "Не обещал исчезновения конденсата без диагностики.",
+      "Дал клиенту чек-лист бытовых мер: проветривание, режим отопления.",
+      "Оформил обращение по регламенту партнёра при повторяющемся кейсе.",
+    ],
+    contentBlocks: [
+      block(
+        "Объяснение клиенту",
+        "Сравните с «очками в холодный день»: влага конденсируется на холодной поверхности при тёплом воздухе рядом. Предложите мягкие меры и наблюдение, прежде чем говорить о браке.",
+      ),
+      block(
+        "Конструкция и уплотнение",
+        "Напомните про корректность порога, уплотнителей и зазоров. Если дверь новая, исключите повреждения уплотнителя при транспортировке.",
+      ),
+    ],
+  },
+  {
+    id: "tr-prod-mk-line-milliana",
+    title: "Линейка Мильяна: краткая справка для консультанта",
+    section: "product",
+    type: "article",
+    audience: ["managers", "dealers"],
+    status: "recommended",
+    description:
+      "Быстрый ориентир по позиционированию линейки МК и типовым вопросам в зале.",
+    readTimeMinutes: 7,
+    progressPercent: 0,
+    relatedProductIds: ["mk-grand-3-mk"],
+    relatedTaskIds: [],
+    tags: ["МК", "межкомнатные", "Мильяна", "линейка"],
+    updatedAt: "06.05.2026",
+    summaryBullets: [
+      "Используйте линейку как ответ на запрос «надёжно и понятно по бюджету».",
+      "Сравнение ведите с ближайшей серией по фактуре и комплектации.",
+      "Проверьте актуальность витринных образцов с каталогом.",
+    ],
+    checklist: [
+      "Назвал три сильные стороны линейки без внутренних кодов.",
+      "Сверил доступные размеры и срок.",
+      "Не обещал скидок и акций без подтверждения.",
+    ],
+    contentBlocks: [
+      block(
+        "Сценарий",
+        "Коротко: кому подходит, с чем сочетается, какие доборы типовые. Переведите клиента к замеру или к следующей линейке, если запрос другой.",
+      ),
+    ],
+  },
+  {
+    id: "tr-prod-mk-line-paradise",
+    title: "Линейка Paradise: краткая справка для консультанта",
+    section: "product",
+    type: "article",
+    audience: ["managers", "dealers"],
+    status: "recommended",
+    description:
+      "Нейтральное позиционирование линейки Paradise и связка с общим ассортиментом МК.",
+    readTimeMinutes: 7,
+    progressPercent: 0,
+    relatedProductIds: ["mk-kapelli"],
+    relatedTaskIds: [],
+    tags: ["МК", "межкомнатные", "Paradise", "линейка"],
+    updatedAt: "06.05.2026",
+    summaryBullets: [
+      "Сначала выясните стиль интерьера и бюджет, затем предлагайте Paradise как вариант внутри семейства.",
+      "Сравнение моделей — через визуал и комплектацию, не через длинные таблицы.",
+      "Фиксируйте пожелания по фурнитуре сразу.",
+    ],
+    checklist: [
+      "Показал отличия от соседней серии на витрине.",
+      "Согласовал сроки поставки с партнёром.",
+      "Записал выбранные опции в заказ.",
+    ],
+    contentBlocks: [
+      block(
+        "Подбор под задачу клиента",
+        "Если нужен спокойный минимализм — покажите гладкие модели и матовые покрытия. Если нужен акцент — фрезеровка и контрастная фурнитура.",
+      ),
+    ],
+  },
+  {
+    id: "tr-prod-mk-interior-align",
+    title: "Подбор межкомнатных дверей под интерьер: пол, плинтус, стены",
+    section: "product",
+    type: "article",
+    audience: ["managers", "dealers"],
+    status: "recommended",
+    description:
+      "Практичный чек-лист согласования двери с напольным покрытием и отделкой стен без дизайнерского жаргона.",
+    readTimeMinutes: 12,
+    progressPercent: 0,
+    relatedProductIds: ["mk-grand-4", "mk-grand-5"],
+    relatedTaskIds: [],
+    tags: ["МК", "межкомнатные", "интерьер", "плинтус", "пол"],
+    updatedAt: "06.05.2026",
+    summaryBullets: [
+      "Согласуйте высоту чистого пола и толщину напольного покрытия до выбора короба и доборов.",
+      "Плинтус и наличник должны читаться как единая линия; покажите образцы рядом.",
+      "Цвет стен влияет на восприятие покрытия двери — обсудите при дневном и вечернем свете точки.",
+    ],
+    checklist: [
+      "Спросил про плинтус и высоту пола в смежных комнатах.",
+      "Предложил доборную систему сразу, если проём нестандартный.",
+      "Зафиксировал пожелания по цвету фурнитуры относительно ручек света.",
+    ],
+    contentBlocks: [
+      block(
+        "Типовые ошибки",
+        "Дверь «как на картинке» без учёта реального пола; наличник, который перекрывает розетку; контраст фурнитуры с кухонными ручками напротив.",
+      ),
+      block(
+        "Как продавать комплектом",
+        "Предложите согласованный набор: дверь, короб, наличники, фурнитура, порог. Это снижает риск визуального шва и экономит время монтажника.",
+      ),
+    ],
+  },
+  {
+    id: "tr-prod-mk-compilation-checklist",
+    title: "Комплектация заказа: полотно, короб, наличники, петли, ручки, замки, доборы",
+    section: "product",
+    type: "course",
+    audience: ["managers", "purchasing", "dealers"],
+    status: "required",
+    description:
+      "Пошаговый чек-лист комплектации МК и ВХ: что должно попасть в заказ, чтобы монтаж прошёл без возвратов.",
+    readTimeMinutes: 15,
+    progressPercent: 0,
+    relatedProductIds: ["mk-grand-3-mk", "vh-grand-4", "sk-line"],
+    relatedTaskIds: [],
+    tags: ["комплектация", "фурнитура", "петли", "ручки", "замки", "доборы", "МК", "ВХ", "входные", "межкомнатные"],
+    updatedAt: "06.05.2026",
+    summaryBullets: [
+      "Комплектация — это не только полотно: короб, наличники, доборы, петли, ручка, защёлка или замок, порог.",
+      "Для ВХ отдельно проверьте замковую группу и термоузел, если он есть в серии.",
+      "Письменный список позиций снимает споры после визита.",
+    ],
+    checklist: [
+      "Сверил сторону открывания и количество полотен.",
+      "Проверил совместимость петель с весом и толщиной.",
+      "Доборы: ширина стенки, примыкание к плитке, углы.",
+      "Для ВХ: замки, цилиндр, броненакладка, глазок — по карточке серии.",
+    ],
+    contentBlocks: [
+      block(
+        "МК: минимальный набор",
+        "Полотно, короб с крепёжным комплектом, наличники, петли (часто пара), ручка и механизм защёлки или замка, при необходимости добор и порог. Каждый пункт должен иметь артикул или однозначное описание из каталога.",
+      ),
+      block(
+        "ВХ: минимальный набор",
+        "Полотно с панелями, короб или доборная система под проём, уплотнение, петли, основной и дополнительный замок при необходимости, цилиндры, фурнитура навески. Обсудите улицу/тамбур и козырёк.",
+      ),
+      block(
+        "Типовые ошибки при подборе",
+        "Забытые петли под тяжёлое полотно, ручка без согласования по высоте, отсутствие порога при требованиях по звуку, несовпадение цвета фурнитуры между комнатами.",
+      ),
+    ],
+  },
+  {
+    id: "tr-prod-compare-models-on-floor",
+    title: "Сравнение моделей МК и ВХ на витрине: рабочий сценарий менеджера",
+    section: "product",
+    type: "article",
+    audience: ["managers", "dealers"],
+    status: "recommended",
+    description:
+      "Как вести сравнение двух моделей на глазах у клиента: порядок вопросов, карточка модели и фиксация итога.",
+    readTimeMinutes: 12,
+    progressPercent: 0,
+    relatedProductIds: ["mk-grand-3-mk", "vh-kvarc", "vh-siriys"],
+    relatedTaskIds: [],
+    tags: ["сравнение", "модели", "МК", "ВХ", "входные", "межкомнатные", "витрина", "карточка модели"],
+    updatedAt: "06.05.2026",
+    summaryBullets: [
+      "Сравнивайте не больше двух моделей одновременно, иначе клиент устанет.",
+      "Карточка модели — опора: переносите отличия из неё, а не из памяти.",
+      "Завершите сценарий выбором следующего шага: замер, счёт, отложенное решение с датой.",
+    ],
+    checklist: [
+      "Назвал три отличия: дизайн, эксплуатация, бюджет комплекта.",
+      "Проверил доступность обеих позиций и срок.",
+      "Зафиксировал итог в сообщении клиенту.",
+    ],
+    contentBlocks: [
+      block(
+        "Старт",
+        "Спросите, что не устраивает в текущей двери и какой бюджет ориентировочно комфортен. Две модели выберите вы заранее, исходя из ответа.",
+      ),
+      block(
+        "Сравнение моделей",
+        "Проведите пальцем по фрезеровке и покажите разницу в комплектации. Не уходите в технические подробности, пока клиент не задаст вопрос.",
+      ),
+    ],
+  },
+  {
+    id: "tr-sales-explaining-price-value",
+    title: "Цена и ценность: как объяснять стоимость двери без давления и без обещаний скидок",
+    section: "sales",
+    type: "article",
+    audience: ["managers", "dealers", "regional_managers"],
+    status: "recommended",
+    description:
+      "Связка «что входит в цену»: сервис, гарантия, комплектация, монтажная безопасность — для спокойного диалога.",
+    readTimeMinutes: 10,
+    progressPercent: 0,
+    relatedProductIds: ["mk-grand-3-mk", "vh-grand-3"],
+    relatedTaskIds: [],
+    tags: ["цена", "стоимость", "аргументация", "МК", "ВХ", "входные", "межкомнатные"],
+    updatedAt: "06.05.2026",
+    summaryBullets: [
+      "Цена отражает комплект, покрытие, фурнитуру, сроки и поддержку бренда — разложите это на три тезиса.",
+      "Сначала ценность, потом цифра: клиент слышит оправдание, а не оправдание менеджера.",
+      "Свяжите срок службы и риски дешёвой альтернативы без агрессии к конкурентам.",
+    ],
+    checklist: [
+      "Не называл точные скидки без полномочий.",
+      "Сравнил комплектации, а не только ценники.",
+      "Предложил понятный следующий шаг после обсуждения цены.",
+    ],
+    contentBlocks: [
+      block(
+        "Структура ответа",
+        "Признайте цену «заметной», затем перечислите, что уже включено. Спросите, что для клиента важнее сэкономить сейчас или не возвращаться к замене через год.",
+      ),
+      block(
+        "Связка с остатками",
+        "Если позиция со склада быстрее индивидуального заказа, аккуратно покажите выгоду по времени без давления.",
+      ),
+    ],
+  },
+  {
+    id: "tr-sales-stock-availability-flow",
+    title: "Остатки, сроки поставки и честный разговор с клиентом",
+    section: "sales",
+    type: "article",
+    audience: ["managers", "dealers", "regional_managers"],
+    status: "recommended",
+    description:
+      "Как сверять наличие, складскую программу и производственные сроки, не создавая ложных ожиданий.",
+    readTimeMinutes: 11,
+    progressPercent: 0,
+    relatedProductIds: ["vh-grand-4", "mk-grand-5"],
+    relatedTaskIds: [],
+    tags: ["остатки", "срок", "склад", "поставка", "МК", "ВХ", "входные", "межкомнатные"],
+    updatedAt: "06.05.2026",
+    summaryBullets: [
+      "Сначала уточните у партнёра актуальные остатки и ближайшее пополнение, затем говорите с клиентом.",
+      "Разделяйте «есть на складе», «едет», «под заказ» — разная уверенность в сроке.",
+      "Фиксируйте договорённость письменно после устного обещания срока.",
+    ],
+    checklist: [
+      "Проверил складскую программу и производственные ограничения.",
+      "Назвал клиенту диапазон срока, а не один день без гарантий.",
+      "Связал срок с этапами монтажа и отделки у клиента.",
+    ],
+    contentBlocks: [
+      block(
+        "Сценарий «нет в наличии»",
+        "Предложите ближайший эквивалент по стилю и комплектации или честный срок ожидания. Не переводите разговор в «подождите неделю» без подтверждения.",
+      ),
+      block(
+        "Цена и срок",
+        "Если ускорение связано с доплатой или другой серией, проговорите это прозрачно. Клиент ценит предсказуемость.",
+      ),
+    ],
+  },
+  {
     id: "tr-sales-consult-prep",
     title: "Консультация по модели: подготовка за 10 минут и разбор карточки товара",
     section: "sales",
@@ -713,7 +1368,7 @@ const _RAW_MATERIALS: LegacyTrainingMaterial[] = [
     progressPercent: 0,
     relatedProductIds: ["mk-grand-3-mk", "vh-grand-3"],
     relatedTaskIds: [],
-    tags: ["консультация", "подготовка", "карточка"],
+    tags: ["консультация", "подготовка", "карточка", "карточка модели", "МК", "ВХ", "межкомнатные", "входные"],
     updatedAt: "06.05.2026",
     summaryBullets: [
       "Первые поля карточки: серия, назначение (МК/ВХ), ключевые ограничения по влаге и весу.",
@@ -1005,8 +1660,8 @@ function enrichTrainingMaterial(m: LegacyTrainingMaterial): TrainingMaterial {
   };
 }
 
-function applyWave1WikiAnnotation(m: TrainingMaterial): TrainingMaterial {
-  const ann = WAVE1_TRAINING_WIKI_ANNOTATIONS[m.id];
+function applyPublishedWikiAnnotation(m: TrainingMaterial): TrainingMaterial {
+  const ann = ALL_PRODUCT_WIKI_ANNOTATIONS[m.id];
   if (!ann) return m;
   return {
     ...m,
@@ -1036,7 +1691,7 @@ function mergeWikiIntoProgramDefinitions() {
 
 const MANUAL_MATERIALS: TrainingMaterial[] = _RAW_MATERIALS.map((m) => {
   const enriched = enrichTrainingMaterial(m);
-  const withWiki = applyWave1WikiAnnotation(enriched);
+  const withWiki = applyPublishedWikiAnnotation(enriched);
   return withWiki.sourceType === "wiki"
     ? withWiki
     : { ...withWiki, sourceType: "manual" as const };
@@ -1168,14 +1823,61 @@ function materialMatchesRole(m: TrainingMaterial, role: TrainingRole): boolean {
   return true;
 }
 
+/** Текст для полнотекстового поиска по материалу (заголовки, теги, блоки, чек-лист, исходный заголовок Wiki). */
+export function buildTrainingMaterialSearchHaystack(m: TrainingMaterial): string {
+  const parts: string[] = [
+    m.title,
+    m.description,
+    ...m.knowledgeTags,
+    ...m.summaryBullets,
+    ...m.checklist,
+    ...m.contentBlocks.flatMap((b) => [b.heading, b.body]),
+  ];
+  if (m.originalTitle) parts.push(m.originalTitle);
+  if (m.wikiSource?.wikiTitle) parts.push(m.wikiSource.wikiTitle);
+  if (m.section === "product") {
+    parts.push("продукт", "каталог");
+    if (m.tags.some((t) => t.includes("МК") || t.toLowerCase().includes("мк"))) {
+      parts.push("мк", "межкомнатные", "межкомнатная", "межкомнатные двери");
+    }
+    if (m.tags.some((t) => t.includes("ВХ") || t.toLowerCase().includes("вх"))) {
+      parts.push("вх", "входные", "входная", "входные двери");
+    }
+    if (m.tags.some((t) => t.toLowerCase().includes("фурнитур"))) {
+      parts.push("фурнитура", "петли", "ручки", "замки", "доборы");
+    }
+  }
+  return parts.join("\n").toLowerCase();
+}
+
+/** Дополняет запрос синонимами для частых аббревиатур и форм слов. */
+export function expandTrainingSearchQueryVariants(raw: string): string[] {
+  const q = raw.trim().toLowerCase();
+  const out = new Set<string>([q]);
+  if (!q) return [""];
+  if (q === "мк" || q.includes("мк")) {
+    out.add("межкомнат");
+    out.add("межкомнатн");
+  }
+  if (q === "вх" || q.includes("вх")) {
+    out.add("входн");
+    out.add("входная");
+    out.add("входные");
+  }
+  if (q.includes("mdf")) out.add("mdf");
+  if (q.includes("hdf")) out.add("hdf");
+  if (q.includes("spc")) out.add("spc");
+  if (q.includes("пэт") || q.includes("pet")) out.add("пэт");
+  return Array.from(out);
+}
+
 export function searchTrainingMaterials(query: string, filters: TrainingMaterialSearchFilters): TrainingMaterial[] {
   const q = query.trim().toLowerCase();
   return MATERIALS.filter((m) => {
     if (q) {
-      const hit =
-        m.title.toLowerCase().includes(q) ||
-        m.description.toLowerCase().includes(q) ||
-        m.knowledgeTags.some((t) => t.toLowerCase().includes(q));
+      const haystack = buildTrainingMaterialSearchHaystack(m);
+      const variants = expandTrainingSearchQueryVariants(q);
+      const hit = variants.some((token) => token.length > 0 && haystack.includes(token));
       if (!hit) return false;
     }
     if (filters.section && filters.section !== "all" && m.section !== filters.section) return false;
