@@ -67,6 +67,7 @@ export default function TrainingProgramPage() {
   const program = useMemo(() => getTrainingProgramById(raw), [raw]);
   const modules = useMemo(() => (program ? getTrainingModulesByProgram(program.id) : []), [program]);
   const materials = useMemo(() => (program ? getTrainingMaterialsByProgram(program.id) : []), [program]);
+  const wikiMaterialsCount = useMemo(() => materials.filter((m) => m.sourceType === "wiki").length, [materials]);
 
   if (!raw || !program) {
     return <TrainingProgramNotFound />;
@@ -107,6 +108,15 @@ export default function TrainingProgramPage() {
           <p className="text-sm text-muted-foreground">
             Ориентировочное время: <span className="font-semibold text-foreground">{program.durationMinutes} мин</span> ·
             материалов: <span className="font-semibold text-foreground">{program.totalMaterials}</span>
+            {wikiMaterialsCount > 0 ? (
+              <>
+                {" "}
+                · из Wiki:{" "}
+                <span className="font-semibold tabular-nums text-foreground" data-testid="text-training-program-wiki-count">
+                  {wikiMaterialsCount}
+                </span>
+              </>
+            ) : null}
           </p>
         </div>
       </section>
@@ -145,8 +155,19 @@ export default function TrainingProgramPage() {
                       key={mid}
                       className="flex flex-col gap-3 rounded-xl border border-border/60 bg-muted/10 p-3 sm:flex-row sm:items-center sm:justify-between"
                     >
-                      <div className="min-w-0">
-                        <p className="font-medium text-foreground">{mat.title}</p>
+                      <div className="min-w-0 space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-medium text-foreground">{mat.title}</p>
+                          {mat.sourceType === "wiki" ? (
+                            <Badge
+                              variant="secondary"
+                              className="border-primary/30 bg-primary/5 text-foreground"
+                              data-testid={`badge-training-program-material-source-${mat.id}`}
+                            >
+                              Wiki
+                            </Badge>
+                          ) : null}
+                        </div>
                         <p className="text-xs text-muted-foreground">
                           {TRAINING_TYPE_LABEL[mat.type]} · {mat.durationMinutes} мин · прогресс {mat.progressPercent}%
                         </p>
@@ -171,8 +192,19 @@ export default function TrainingProgramPage() {
               {materials.map((mat) => (
                 <Card key={mat.id} className="border-border/80 shadow-md" data-testid={`card-training-program-material-${mat.id}`}>
                   <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0">
-                      <p className="font-medium text-foreground">{mat.title}</p>
+                    <div className="min-w-0 space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-medium text-foreground">{mat.title}</p>
+                        {mat.sourceType === "wiki" ? (
+                          <Badge
+                            variant="secondary"
+                            className="border-primary/30 bg-primary/5 text-foreground"
+                            data-testid={`badge-training-program-material-source-${mat.id}`}
+                          >
+                            Wiki
+                          </Badge>
+                        ) : null}
+                      </div>
                       <p className="text-xs text-muted-foreground">{TRAINING_TYPE_LABEL[mat.type]}</p>
                     </div>
                     <Button asChild variant="secondary" className="font-semibold" data-testid={`button-open-program-material-${mat.id}`}>

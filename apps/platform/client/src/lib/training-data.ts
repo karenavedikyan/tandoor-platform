@@ -4,6 +4,8 @@
  */
 
 import { getAllMatrixTasks, type TaskInsightDomain } from "./trade-point-task-data";
+import { getProductById } from "./catalog-data";
+import { getWikiImportedTrainingMaterials, pickWikiMaterialIdForTaskInsight } from "./training-wiki-import";
 
 export type TrainingSection =
   | "product"
@@ -96,6 +98,20 @@ export type TrainingAssignment = {
 
 export type TrainingMaterialDifficulty = "easy" | "medium" | "hard";
 
+export type TrainingSourceType = "manual" | "wiki";
+
+export type TrainingWikiReviewStatus = "needs_review" | "approved" | "archived";
+
+export interface TrainingWikiSource {
+  sourceType: "wiki";
+  wikiPageId?: number;
+  wikiTitle: string;
+  wikiImportedAt: string;
+  wikiReviewStatus: TrainingWikiReviewStatus;
+  wikiSectionGuess: TrainingSectionKey | "other";
+  wikiCharCount: number;
+}
+
 export type TrainingMaterial = {
   id: string;
   title: string;
@@ -123,6 +139,12 @@ export type TrainingMaterial = {
   relatedTaskContext: RelatedTaskContext[];
   checklist: string[];
   summaryBullets: string[];
+  sourceType?: TrainingSourceType;
+  wikiSource?: TrainingWikiSource;
+  originalTitle?: string;
+  reviewStatus?: TrainingWikiReviewStatus;
+  /** Линейка каталога для привязки Wiki-материала к карточке товара. */
+  wikiCatalogLine?: "mk" | "vh" | "hardware" | "all";
 };
 
 const block = (heading: string, body: string) => ({ heading, body });
@@ -233,6 +255,11 @@ type LegacyTrainingMaterial = Omit<
   | "relatedTaskContext"
   | "checklist"
   | "summaryBullets"
+  | "sourceType"
+  | "wikiSource"
+  | "originalTitle"
+  | "reviewStatus"
+  | "wikiCatalogLine"
 >;
 
 export const TRAINING_PROGRAM_LEVEL_LABEL: Record<TrainingProgramLevel, string> = {
@@ -273,6 +300,12 @@ export const TRAINING_AUDIENCE_LABEL: Record<TrainingAudience, string> = {
   regional_managers: "Региональные менеджеры",
   purchasing: "Закупки",
   all: "Все роли",
+};
+
+export const TRAINING_WIKI_REVIEW_LABEL: Record<TrainingWikiReviewStatus, string> = {
+  needs_review: "На проверке",
+  approved: "Проверено",
+  archived: "В архиве",
 };
 
 const _RAW_MATERIALS: LegacyTrainingMaterial[] = [
@@ -618,7 +651,23 @@ function enrichTrainingMaterial(m: LegacyTrainingMaterial): TrainingMaterial {
   };
 }
 
-const MATERIALS: TrainingMaterial[] = _RAW_MATERIALS.map(enrichTrainingMaterial);
+function mergeWikiIntoProgramDefinitions() {
+  const wiki = getWikiImportedTrainingMaterials();
+  for (const p of TRAINING_PROGRAMS) {
+    const add = wiki.filter((w) => w.programIds.includes(p.id)).map((w) => w.id);
+    p.materialIds = Array.from(new Set([...p.materialIds, ...add]));
+    p.totalMaterials = p.materialIds.length;
+  }
+}
+
+const MANUAL_MATERIALS: TrainingMaterial[] = _RAW_MATERIALS.map((m) => ({
+  ...enrichTrainingMaterial(m),
+  sourceType: "manual" as const,
+}));
+
+mergeWikiIntoProgramDefinitions();
+
+const MATERIALS: TrainingMaterial[] = [...MANUAL_MATERIALS, ...getWikiImportedTrainingMaterials()];
 
 const _matrixTaskIds = getAllMatrixTasks()
   .slice(0, 2)
@@ -638,7 +687,21 @@ export function getTrainingMaterialById(id: string): TrainingMaterial | undefine
 }
 
 export function getTrainingMaterialsForProduct(productId: string): TrainingMaterial[] {
-  return MATERIALS.filter((m) => m.relatedProductIds.includes(productId));
+  const product = getProductById(productId);
+  const line: "mk" | "vh" | "hardware" | null = product
+    ? product.id.includes("sk-") || product.category.toLowerCase().includes("фурнитур")
+      ? "hardware"
+      : product.doorKind?.includes("Вход")
+        ? "vh"
+        : "mk"
+    : null;
+  return MATERIALS.filter((m) => {
+    if (m.relatedProductIds.includes(productId)) return true;
+    if (m.sourceType !== "wiki" || !line) return false;
+    if (m.wikiCatalogLine === "all" && m.section === "product") return true;
+    if (m.wikiCatalogLine && m.wikiCatalogLine !== "all" && m.wikiCatalogLine === line) return true;
+    return false;
+  });
 }
 
 export function summarizeTrainingKpis(materials: TrainingMaterial[]) {
@@ -717,6 +780,7 @@ export type TrainingMaterialSearchFilters = {
   type?: TrainingMaterialType | "all";
   required?: "all" | "required" | "optional";
   progressStatus?: TrainingProgressStatus | "all";
+  source?: "all" | "wiki" | "manual";
 };
 
 function materialMatchesRole(m: TrainingMaterial, role: TrainingRole): boolean {
@@ -745,6 +809,8 @@ export function searchTrainingMaterials(query: string, filters: TrainingMaterial
     if (filters.progressStatus && filters.progressStatus !== "all" && m.progressStatus !== filters.progressStatus) {
       return false;
     }
+    if (filters.source === "wiki" && m.sourceType !== "wiki") return false;
+    if (filters.source === "manual" && m.sourceType === "wiki") return false;
     return true;
   });
 }
@@ -763,9 +829,22 @@ export function getTrainingArticleIdForTask(params: {
   productId?: string;
 }): string | undefined {
   if (params.productId) {
+    const product = getProductById(params.productId);
+    const line: "mk" | "vh" | "hardware" | null = product
+      ? product.id.includes("sk-") || product.category.toLowerCase().includes("фурнитур")
+        ? "hardware"
+        : product.doorKind?.includes("Вход")
+          ? "vh"
+          : "mk"
+      : null;
+    const wikiPick = pickWikiMaterialIdForTaskInsight(params.insightDomain, line);
     const byProd = getTrainingMaterialsForProduct(params.productId);
+    const wikiMat = wikiPick ? MATERIALS.find((m) => m.id === wikiPick) : undefined;
+    if (wikiMat?.sourceType === "wiki") return wikiMat.id;
     if (byProd[0]) return byProd[0].id;
   }
+  const wikiInsight = pickWikiMaterialIdForTaskInsight(params.insightDomain, null);
+  if (wikiInsight) return wikiInsight;
   switch (params.insightDomain) {
     case "analytics":
       return "tr-sales-expensive";
