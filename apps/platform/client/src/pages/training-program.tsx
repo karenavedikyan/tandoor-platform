@@ -19,17 +19,14 @@ import {
   type TrainingProgram,
   type TrainingProgramStatus,
 } from "@/lib/training-data";
-import { getWikiTrainingContentByProgram } from "@/lib/training-wiki-content-map";
+import {
+  getWikiTrainingContentByProgram,
+  WIKI_MAP_REVIEW_LABEL,
+} from "@/lib/training-wiki-content-map";
 
 function isWikiSourceMaterial(m: Pick<TrainingMaterial, "sourceType" | "wikiSource">): boolean {
   return m.sourceType === "wiki" || Boolean(m.wikiSource);
 }
-
-const WIKI_MAP_REVIEW_LABEL: Record<"needs_review" | "approved" | "archive_candidate", string> = {
-  needs_review: "На проверке",
-  approved: "Проверено",
-  archive_candidate: "Кандидат в архив",
-};
 
 function programStatusLabel(s: TrainingProgramStatus): string {
   if (s === "not_started") return "Не начато";
@@ -174,9 +171,14 @@ export default function TrainingProgramPage() {
         </Card>
       </section>
 
-      {wikiMapRows.length > 0 ? (
-        <section className="space-y-3" data-testid="section-training-program-wiki-map">
+      <section className="space-y-3" data-testid="section-training-program-wiki-map">
+        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-base font-semibold text-foreground sm:text-lg">Что ещё нужно перенести из Wiki</h2>
+          <Button asChild variant="outline" size="sm" className="h-10 min-h-10 w-full shrink-0 font-semibold sm:w-auto" data-testid="button-training-program-open-wiki-map">
+            <Link href="/training/wiki-map">К полной карте Wiki</Link>
+          </Button>
+        </div>
+        {wikiMapRows.length > 0 ? (
           <Card className="border-border/80 shadow-md">
             <CardContent className="space-y-3 p-4 sm:p-5">
               {wikiMapRows.map((row) => (
@@ -199,8 +201,8 @@ export default function TrainingProgramPage() {
               ))}
             </CardContent>
           </Card>
-        </section>
-      ) : null}
+        ) : null}
+      </section>
 
       <section className="space-y-4" data-testid="section-training-program-modules">
         <h2 className="text-base font-semibold text-foreground sm:text-lg">Модули и материалы</h2>

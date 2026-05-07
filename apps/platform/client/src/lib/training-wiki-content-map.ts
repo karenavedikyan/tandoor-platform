@@ -26,6 +26,41 @@ export type WikiTrainingWorkContext =
 
 export type WikiTrainingMapReviewStatus = "needs_review" | "approved" | "archive_candidate";
 
+export const WIKI_MAP_REVIEW_LABEL: Record<WikiTrainingMapReviewStatus, string> = {
+  needs_review: "На проверке",
+  approved: "Проверено",
+  archive_candidate: "Кандидат в архив",
+};
+
+export const WIKI_TRAINING_AUDIENCE_LABEL: Record<WikiTrainingAudience, string> = {
+  sales_manager: "Менеджер продаж",
+  regional_manager: "Региональный менеджер",
+  lead: "Руководитель",
+  new_employee: "Новый сотрудник",
+};
+
+export const WIKI_TRAINING_PRODUCT_SCOPE_LABEL: Record<WikiTrainingProductScope, string> = {
+  mk: "МК",
+  vh: "ВХ",
+  hardware: "Фурнитура",
+  all: "Общие",
+  none: "Нет",
+};
+
+export const WIKI_TRAINING_WORK_CONTEXT_LABEL: Record<WikiTrainingWorkContext, string> = {
+  catalog: "Каталог",
+  dealer_card: "Карточка клиента",
+  trade_point: "Торговая точка",
+  showcase: "Витрина",
+  tasks: "Задачи",
+  orders: "Заказы",
+  analytics: "Аналитика",
+  territory: "Территория",
+  sales_script: "Скрипты продаж",
+  service: "Сервис",
+  onboarding: "Онбординг",
+};
+
 export interface WikiTrainingContentMapItem {
   id: string;
   wikiTitle: string;
@@ -626,4 +661,21 @@ export function getWikiTrainingContentGaps(): string[] {
   gaps.push("Мало видео-сценариев в карте (тип video) — пополнить при появлении безопасных роликов.");
   gaps.push("Нет программы «Развитие» в каталоге учебных программ — завести после согласования с L&D.");
   return gaps;
+}
+
+export function getWikiTrainingAvailableProgramIds(): string[] {
+  const ids = new Set<string>();
+  for (const item of WIKI_TRAINING_CONTENT_MAP) {
+    for (const pid of item.targetProgramIds) ids.add(pid);
+  }
+  return Array.from(ids).sort();
+}
+
+/** Сколько различных ролей карты (из четырёх) встречается хотя бы в одной позиции. */
+export function getWikiTrainingMapAudienceRolesCoveredCount(): number {
+  const s = new Set<WikiTrainingAudience>();
+  for (const item of WIKI_TRAINING_CONTENT_MAP) {
+    for (const a of item.audiences) s.add(a);
+  }
+  return s.size;
 }
