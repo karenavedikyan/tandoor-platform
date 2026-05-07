@@ -824,7 +824,8 @@ export function getWikiTrainingReviewRiskFlags(item: WikiTrainingContentMapItem)
   return flags;
 }
 
-export function getWikiTrainingReviewSummary(items: WikiTrainingContentMapItem[]): WikiTrainingReviewSummary {
+export function getWikiTrainingReviewSummary(items?: WikiTrainingContentMapItem[]): WikiTrainingReviewSummary {
+  const list = items ?? WIKI_TRAINING_CONTENT_MAP;
   let pending = 0;
   let ready_to_publish = 0;
   let rewrite = 0;
@@ -833,7 +834,7 @@ export function getWikiTrainingReviewSummary(items: WikiTrainingContentMapItem[]
   let withoutProgram = 0;
   let withoutCatalogOrScenario = 0;
   let percentSum = 0;
-  for (const item of items) {
+  for (const item of list) {
     const d = item.reviewMeta.decision;
     if (d === "pending") pending += 1;
     else if (d === "ready_to_publish") ready_to_publish += 1;
@@ -844,7 +845,7 @@ export function getWikiTrainingReviewSummary(items: WikiTrainingContentMapItem[]
     if (!item.reviewMeta.checklist.linkedToProductOrScenario) withoutCatalogOrScenario += 1;
     percentSum += getWikiTrainingReviewChecklistScore(item).percent;
   }
-  const n = items.length;
+  const n = list.length;
   return {
     total: n,
     pending,
@@ -860,8 +861,9 @@ export function getWikiTrainingReviewSummary(items: WikiTrainingContentMapItem[]
 
 export function getWikiTrainingReviewItemsByDecision(
   decision: WikiTrainingReviewDecision | "all",
-  items: WikiTrainingContentMapItem[],
+  items?: WikiTrainingContentMapItem[],
 ): WikiTrainingContentMapItem[] {
-  if (decision === "all") return items;
-  return items.filter((i) => i.reviewMeta.decision === decision);
+  const list = items ?? WIKI_TRAINING_CONTENT_MAP;
+  if (decision === "all") return list;
+  return list.filter((i) => i.reviewMeta.decision === decision);
 }
