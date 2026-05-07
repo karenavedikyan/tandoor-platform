@@ -511,14 +511,13 @@ export default function TrainingPage() {
                 className="flex min-w-0 flex-col overflow-hidden border-border/80 shadow-md"
                 data-testid={`card-training-model-photo-${row.id}`}
               >
-                <div className="relative aspect-[440/550] w-full min-w-0 overflow-hidden bg-muted/40">
+                <div className="relative flex w-full min-w-0 items-center justify-center border-b border-border/50 bg-[#F7F8FB] px-3 py-4 sm:px-5 sm:py-6">
                   <img
                     src={row.imageSrc}
                     alt={row.imageAlt}
-                    className="h-full w-full object-cover"
+                    className="mx-auto h-auto max-h-[min(52vh,400px)] w-auto max-w-full object-contain md:max-h-[340px] xl:max-h-[320px]"
                     loading="lazy"
                     decoding="async"
-                    referrerPolicy="no-referrer-when-downgrade"
                     data-testid={`image-training-model-photo-${row.id}`}
                   />
                 </div>
