@@ -1,12 +1,11 @@
-import { useMemo, useState } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
+import { PageLoadingFallback } from "@/components/navigation/page-loading";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AnalyticsInfographicsPanel } from "@/components/analytics/analytics-infographics-panel";
-import { AnalyticsOperationalPanel } from "@/components/analytics/analytics-operational-panel";
 import {
   Select,
   SelectContent,
@@ -36,6 +35,14 @@ import {
   type AnalyticsFilterState,
   type PartnerCategoryAnalytics,
 } from "@/lib/sales-manager-kpi-data";
+
+const LazyAnalyticsInfographicsPanel = lazy(() =>
+  import("@/components/analytics/analytics-infographics-panel").then((m) => ({ default: m.AnalyticsInfographicsPanel })),
+);
+
+const LazyAnalyticsOperationalPanel = lazy(() =>
+  import("@/components/analytics/analytics-operational-panel").then((m) => ({ default: m.AnalyticsOperationalPanel })),
+);
 
 function toneForChange(p: number) {
   if (p > 0) return "text-emerald-700";
@@ -529,11 +536,19 @@ export default function AnalyticsPage() {
           className="mt-6 space-y-8 focus-visible:ring-0"
           data-testid="section-analytics-infographics-view"
         >
-          <AnalyticsInfographicsPanel />
+          {view === "infographics" ? (
+            <Suspense fallback={<PageLoadingFallback />}>
+              <LazyAnalyticsInfographicsPanel />
+            </Suspense>
+          ) : null}
         </TabsContent>
 
         <TabsContent value="operational" className="mt-6 space-y-6 focus-visible:ring-0" data-testid="section-analytics-operational-view">
-          <AnalyticsOperationalPanel />
+          {view === "operational" ? (
+            <Suspense fallback={<PageLoadingFallback />}>
+              <LazyAnalyticsOperationalPanel />
+            </Suspense>
+          ) : null}
         </TabsContent>
       </Tabs>
 
