@@ -20,7 +20,7 @@ import {
   type MatrixTaskPriority,
   type MatrixTaskType,
 } from "@/lib/trade-point-task-data";
-import { getTrainingMaterialsForProduct } from "@/lib/training-data";
+import { getTrainingMaterialsForProduct, getTrainingProgramsForProduct } from "@/lib/training-data";
 
 const SECTION_IDS = ["overview", "specs", "variants", "showcases", "dealers", "tasks", "history"] as const;
 type SectionId = (typeof SECTION_IDS)[number];
@@ -291,6 +291,7 @@ function ProductFound({ product }: { product: CatalogProduct }) {
     return map;
   }, [product.id, product.relatedTradePointIds]);
   const trainingMaterials = useMemo(() => getTrainingMaterialsForProduct(product.id), [product.id]);
+  const trainingPrograms = useMemo(() => getTrainingProgramsForProduct(product.id), [product.id]);
 
   return (
     <div className="space-y-4 sm:space-y-6" data-testid="page-product-detail">
@@ -417,6 +418,33 @@ function ProductFound({ product }: { product: CatalogProduct }) {
               </div>
             )}
           </section>
+
+          {trainingPrograms.length > 0 ? (
+            <section data-testid="section-product-training-programs" className="scroll-mt-28 space-y-4 sm:scroll-mt-32">
+              <SectionTitle subtitle="Программы обучения, где участвует эта модель.">Программы обучения</SectionTitle>
+              <div className="mt-3 grid min-w-0 gap-3 sm:grid-cols-2">
+                {trainingPrograms.map((prog) => (
+                  <SurfaceCard key={prog.id}>
+                    <CardHeader className="space-y-1 pb-2 pt-4">
+                      <CardTitle className="text-base font-semibold leading-snug">{prog.title}</CardTitle>
+                      <p className="text-xs text-muted-foreground line-clamp-2">{prog.description}</p>
+                    </CardHeader>
+                    <CardContent className="pb-4 pt-0">
+                      <Button
+                        asChild
+                        variant="secondary"
+                        size="sm"
+                        className="mt-2 w-full font-semibold sm:w-auto"
+                        data-testid={`button-open-product-training-program-${prog.id}`}
+                      >
+                        <Link href={`/training/programs/${prog.id}`}>Открыть программу</Link>
+                      </Button>
+                    </CardContent>
+                  </SurfaceCard>
+                ))}
+              </div>
+            </section>
+          ) : null}
 
           <section id={SECTION_DOM_IDS.specs} data-testid="section-product-specs" className="scroll-mt-28 space-y-4 sm:scroll-mt-32">
             <SectionTitle subtitle="Технические параметры полотна и фурнитуры.">Характеристики</SectionTitle>

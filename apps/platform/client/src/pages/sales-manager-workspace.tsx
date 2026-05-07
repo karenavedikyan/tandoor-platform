@@ -663,6 +663,43 @@ export default function SalesManagerWorkspace() {
         </div>
       </section>
 
+      <section className="space-y-4" data-testid="section-sales-manager-training">
+        <h2 className="text-lg font-semibold text-foreground sm:text-xl">Обучение</h2>
+        <p className="text-sm text-muted-foreground">Короткий доступ к программам и материалам без выхода из главного экрана.</p>
+        <div className="grid min-w-0 gap-3 sm:grid-cols-3">
+          <Card className="min-w-0 rounded-2xl border border-border/80 bg-card shadow-md" data-testid="card-sales-manager-training-required">
+            <CardHeader className="pb-2 pt-4">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Обязательное</CardTitle>
+            </CardHeader>
+            <CardContent className="pb-4 text-sm text-muted-foreground">
+              <p className="font-medium text-foreground">Продукт и регламенты</p>
+              <p className="mt-1 text-xs">Закреплённые материалы месяца в разделе обучения.</p>
+            </CardContent>
+          </Card>
+          <Card className="min-w-0 rounded-2xl border border-border/80 bg-card shadow-md" data-testid="card-sales-manager-training-product">
+            <CardHeader className="pb-2 pt-4">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Продуктовые знания</CardTitle>
+            </CardHeader>
+            <CardContent className="pb-4 text-sm text-muted-foreground">
+              <p className="font-medium text-foreground">Линейки и витрина</p>
+              <p className="mt-1 text-xs">Карточки моделей, покрытия, фурнитура.</p>
+            </CardContent>
+          </Card>
+          <Card className="min-w-0 rounded-2xl border border-border/80 bg-card shadow-md" data-testid="card-sales-manager-training-sales">
+            <CardHeader className="pb-2 pt-4">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Техника продаж</CardTitle>
+            </CardHeader>
+            <CardContent className="pb-4 text-sm text-muted-foreground">
+              <p className="font-medium text-foreground">Скрипты и сценарии</p>
+              <p className="mt-1 text-xs">Возражения, звонки, сравнение моделей.</p>
+            </CardContent>
+          </Card>
+        </div>
+        <Button asChild variant="secondary" className="min-h-10 font-semibold" data-testid="button-sales-manager-open-training">
+          <Link href="/training">Открыть обучение</Link>
+        </Button>
+      </section>
+
       <section className="space-y-4" data-testid="section-sales-manager-quick-actions">
         <h2 className="text-lg font-semibold text-foreground sm:text-xl">Быстрые действия</h2>
         <div className="flex flex-wrap gap-2">
