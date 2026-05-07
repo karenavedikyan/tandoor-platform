@@ -8,6 +8,7 @@
     "build": "tsx script/build.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
+    "catalog:import": "node scripts/import-tandoor-public-catalog.mjs",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {

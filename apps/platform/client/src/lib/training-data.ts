@@ -453,7 +453,15 @@ const _RAW_MATERIALS: LegacyTrainingMaterial[] = [
       "Как устроены серии и комплектации МК, что спросить у клиента до замера и какие ошибки чаще всего ломают сделку.",
     readTimeMinutes: 18,
     progressPercent: 0,
-    relatedProductIds: ["mk-grand-3-mk", "mk-kapelli", "mk-grand-5"],
+    relatedProductIds: [
+      "mk-grand-3-mk",
+      "mk-kapelli",
+      "mk-grand-5",
+      "tc-mk-new-kantata-emal-belaya-dg-2000-800",
+      "tc-mk-benatti-1-0-belyy-zhemchug-dg-2000-800",
+      "tc-mk-benatti-2-belyy-zhemchug-dg-2000-800",
+      "tc-mk-sk-2-belyy-matovyy-pet-dg-2000-800-90p",
+    ],
     relatedTaskIds: [],
     tags: ["МК", "ассортимент", "подбор"],
     updatedAt: "06.05.2026",
@@ -500,7 +508,13 @@ const _RAW_MATERIALS: LegacyTrainingMaterial[] = [
       "Как читать карточку входной двери: назначение серии, заполнение, замки и складская программа — чтобы не ошибиться в заказе.",
     readTimeMinutes: 16,
     progressPercent: 0,
-    relatedProductIds: ["vh-grand-3", "vh-grand-4", "vh-kapelli"],
+    relatedProductIds: [
+      "vh-grand-3",
+      "vh-grand-4",
+      "vh-kapelli",
+      "tc-vh-panteon-bukle-temno-seryy-belyy-sneg-860kh2050-levaya",
+      "tc-vh-ultra-pikhtovyy-emalit-belyy-860kh2050-levaya",
+    ],
     relatedTaskIds: [],
     tags: ["ВХ", "карточка", "склад"],
     updatedAt: "06.05.2026",
@@ -737,7 +751,7 @@ const _RAW_MATERIALS: LegacyTrainingMaterial[] = [
       "Петли, ручки, защёлки, доводчики и комплекты под скрытую установку — как предлагать вместе с дверью и повышать конверсию комплекта.",
     readTimeMinutes: 22,
     progressPercent: 0,
-    relatedProductIds: ["sk-line", "mk-grand-3-mk"],
+    relatedProductIds: ["sk-line", "mk-grand-3-mk", "tc-hw-zamok-pod-tsilindr-tandoor-tdlb-5085-m-cyl-black-chernyy"],
     relatedTaskIds: [],
     tags: ["Фурнитура", "допродажа", "комплект"],
     updatedAt: "06.05.2026",
@@ -803,7 +817,7 @@ const _RAW_MATERIALS: LegacyTrainingMaterial[] = [
       "Как выстроить разговор о петлях, ручках, замках и доборах после выбора полотна: единый трек без хаоса в заказе.",
     readTimeMinutes: 14,
     progressPercent: 0,
-    relatedProductIds: ["sk-line", "mk-grand-3-mk"],
+    relatedProductIds: ["sk-line", "mk-grand-3-mk", "tc-hw-zamok-pod-tsilindr-tandoor-tdlb-5085-m-cyl-cp-khrom"],
     relatedTaskIds: [],
     tags: ["фурнитура", "комплектация", "петли", "ручки", "замки", "доборы"],
     updatedAt: "06.05.2026",
@@ -1922,7 +1936,9 @@ export function getTrainingMaterialById(id: string): TrainingMaterial | undefine
 export function getTrainingMaterialsForProduct(productId: string): TrainingMaterial[] {
   const product = getProductById(productId);
   const line: "mk" | "vh" | "hardware" | null = product
-    ? product.id.includes("sk-") || product.category.toLowerCase().includes("фурнитур")
+    ? product.id.includes("sk-") ||
+      product.category.toLowerCase().includes("фурнитур") ||
+      product.doorKind === "Фурнитура"
       ? "hardware"
       : product.doorKind?.includes("Вход")
         ? "vh"
@@ -2038,6 +2054,21 @@ export function buildTrainingMaterialSearchHaystack(m: TrainingMaterial): string
   if (m.wikiSource?.wikiTitle) parts.push(m.wikiSource.wikiTitle);
   if (m.section === "product") {
     parts.push("продукт", "каталог");
+    for (const pid of m.relatedProductIds) {
+      const p = getProductById(pid);
+      if (p) {
+        parts.push(
+          p.name,
+          p.article,
+          p.category,
+          p.series,
+          p.doorKind,
+          p.coating,
+          ...(p.catalogTags ?? []),
+          p.catalogSearchText ?? "",
+        );
+      }
+    }
     if (m.tags.some((t) => t.includes("МК") || t.toLowerCase().includes("мк"))) {
       parts.push("мк", "межкомнатные", "межкомнатная", "межкомнатные двери");
     }
@@ -2072,6 +2103,10 @@ export function expandTrainingSearchQueryVariants(raw: string): string[] {
   if (q.includes("hdf")) out.add("hdf");
   if (q.includes("spc")) out.add("spc");
   if (q.includes("пэт") || q.includes("pet")) out.add("пэт");
+  if (q.includes("покрыт")) {
+    out.add("покрытия");
+    out.add("покрыти");
+  }
   if (q.includes("скрипт") || q.includes("звонок")) {
     out.add("скрипт");
     out.add("звонок");
@@ -2153,7 +2188,9 @@ export function getTrainingArticleIdForTask(params: {
   if (params.productId) {
     const product = getProductById(params.productId);
     const line: "mk" | "vh" | "hardware" | null = product
-      ? product.id.includes("sk-") || product.category.toLowerCase().includes("фурнитур")
+      ? product.id.includes("sk-") ||
+        product.category.toLowerCase().includes("фурнитур") ||
+        product.doorKind === "Фурнитура"
         ? "hardware"
         : product.doorKind?.includes("Вход")
           ? "vh"

@@ -14,7 +14,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { CATALOG_PRODUCTS, type CatalogProduct } from "@/lib/catalog-data";
+import {
+  CATALOG_PRODUCTS,
+  buildCatalogProductSearchHaystack,
+  catalogSearchQueryMatchesHaystack,
+  type CatalogProduct,
+} from "@/lib/catalog-data";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
 
 type ViewMode = "cards" | "list" | "table";
@@ -50,7 +55,13 @@ function applyChip(p: CatalogProduct, chip: QuickChip): boolean {
 
 function ProductImage({ product }: { product: CatalogProduct }) {
   if (product.image) {
-    return <img src={product.image} alt="" className="h-full w-full object-cover" />;
+    return (
+      <img
+        src={product.image}
+        alt=""
+        className="mx-auto h-full max-h-[min(52vh,420px)] w-full max-w-full object-contain"
+      />
+    );
   }
   return (
     <div className="flex h-full min-h-[120px] w-full flex-col items-center justify-center bg-muted/60 p-4 text-center">
@@ -115,13 +126,8 @@ export default function CatalogPage() {
       if (doorKind !== "all" && p.doorKind !== doorKind) return false;
       if (status !== "all" && p.status !== status) return false;
       if (!q) return true;
-      return (
-        p.name.toLowerCase().includes(q) ||
-        p.article.toLowerCase().includes(q) ||
-        p.series.toLowerCase().includes(q) ||
-        p.category.toLowerCase().includes(q) ||
-        p.doorKind.toLowerCase().includes(q)
-      );
+      const hay = buildCatalogProductSearchHaystack(p);
+      return catalogSearchQueryMatchesHaystack(q, hay);
     });
   }, [search, chip, category, series, doorKind, status]);
 
@@ -265,7 +271,7 @@ export default function CatalogPage() {
         <div className="grid gap-4 sm:grid-cols-2" data-testid="section-catalog-results-cards">
           {filtered.map((p) => (
             <Card key={p.id} className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-md">
-              <div className="aspect-[4/3] w-full overflow-hidden border-b border-border">
+        <div className="aspect-[4/3] w-full overflow-hidden border-b border-border bg-[#F7F8FB] px-2 py-3 sm:px-4 sm:py-5">
                 <ProductImage product={p} />
               </div>
               <CardHeader className="space-y-2 pb-2">
