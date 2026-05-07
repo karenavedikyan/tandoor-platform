@@ -512,6 +512,7 @@ const _RAW_MATERIALS: LegacyTrainingMaterial[] = [
       "vh-grand-3",
       "vh-grand-4",
       "vh-kapelli",
+      "tc-vh-era-grafit-belyy-matovyy-860kh2050-levaya",
       "tc-vh-panteon-bukle-temno-seryy-belyy-sneg-860kh2050-levaya",
       "tc-vh-ultra-pikhtovyy-emalit-belyy-860kh2050-levaya",
     ],

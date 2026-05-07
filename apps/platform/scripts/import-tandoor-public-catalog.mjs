@@ -9,7 +9,7 @@
  *   - client/src/lib/tandoor-real-catalog-seed.generated.ts — данные для приложения.
  *
  * Скрипт обращается только к публичным URL, не использует авторизацию.
- * Обновление выборки: расширьте массивы LISTING_URLS_* ниже и снова запустите скрипт.
+ * Обновление выборки: массивы LISTING_URLS_* и PINNED_PRODUCT_PATHS в этом файле, затем снова `npm run catalog:import`.
  */
 
 import fs from "node:fs";
@@ -52,8 +52,14 @@ const TARGET_VH = 22;
 const TARGET_MK = 22;
 const TARGET_HW = 12;
 
-/** Дополнительные карточки вне листингов (поиск по сайту и т.п.). */
-const EXTRA_PRODUCT_PATHS = [{ productPath: "/catalog/product/sk-2-belyy-matovyy-pet-dg-2000-800-90p/", kind: "mk" }];
+/**
+ * Карточки, которые должны стабильно попадать в seed независимо от порядка
+ * на листингах (пилот обучения, частые запросы в каталоге).
+ */
+const PINNED_PRODUCT_PATHS = [
+  { productPath: "/catalog/product/era-grafit-belyy-matovyy-860kh2050-levaya/", kind: "vh" },
+  { productPath: "/catalog/product/sk-2-belyy-matovyy-pet-dg-2000-800-90p/", kind: "mk" },
+];
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -135,7 +141,14 @@ function buildTags(kind, title) {
   if (t.includes("hdf") || t.includes("хдф")) tags.add("HDF");
   if (t.includes("spc")) tags.add("SPC");
   if (t.includes("скрыт")) tags.add("скрытая");
-  return [...tags].slice(0, 8);
+  if (kind === "vh" && t.includes("эра")) {
+    tags.add("Эра");
+    tags.add("МДФ");
+    tags.add("белый матовый");
+    tags.add("графит");
+    tags.add("860x2050");
+  }
+  return [...tags].slice(0, 12);
 }
 
 function guessCollection(title) {
@@ -162,6 +175,7 @@ async function collectPaths(pages, target) {
   return paths;
 }
 
+async function main() {
   fs.mkdirSync(OUT_IMG, { recursive: true });
 
   const vhPaths = await collectPaths(VH_PAGES, TARGET_VH);
@@ -169,7 +183,7 @@ async function collectPaths(pages, target) {
   const hwPaths = await collectPaths(HW_PAGES, TARGET_HW);
 
   const jobs = [
-    ...EXTRA_PRODUCT_PATHS,
+    ...PINNED_PRODUCT_PATHS,
     ...vhPaths.map((productPath) => ({ productPath, kind: "vh" })),
     ...mkPaths.map((productPath) => ({ productPath, kind: "mk" })),
     ...hwPaths.map((productPath) => ({ productPath, kind: "hw" })),

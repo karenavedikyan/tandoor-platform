@@ -57,6 +57,7 @@ const PILOT_ITEMS: TrainingModelPhotoPilotItem[] = [
   },
   {
     id: "pilot-vh-grand-4",
+    productId: "tc-vh-era-grafit-belyy-matovyy-860kh2050-levaya",
     title: "Эра",
     category: "vh",
     imageSrc: pilotWebp("pilot-vh-grand-4"),

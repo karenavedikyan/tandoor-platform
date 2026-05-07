@@ -23,6 +23,33 @@ export type TandoorRealCatalogSeedItem = {
 
 export const TANDOOR_REAL_CATALOG_SEED: TandoorRealCatalogSeedItem[] = [
   {
+    "id": "tc-vh-era-grafit-belyy-matovyy-860kh2050-levaya",
+    "sourceUrl": "https://tandoor.ru/catalog/product/era-grafit-belyy-matovyy-860kh2050-levaya/",
+    "title": "Эра Графит / Белый матовый 860х2050 левая",
+    "category": "entrance",
+    "categoryLabel": "Входные двери",
+    "collection": "Эра",
+    "priceRetail": 40310,
+    "imageSrc": "/catalog-real/tc-vh-era-grafit-belyy-matovyy-860kh2050-levaya.webp",
+    "imageAlt": "Эра Графит / Белый матовый 860х2050 левая",
+    "shortDescription": "Интернет-магазин Tandoor.ru предлагает купить входную дверь Эра 860x2050 в Краснодаре по доступной цене 40&nbsp;310 &#8381; рублей. Качественное обслуживание. Доставка.",
+    "tags": [
+      "Эра",
+      "Графит",
+      "Белый",
+      "матовый",
+      "860х2050",
+      "левая",
+      "входные",
+      "ВХ",
+      "входная",
+      "МДФ",
+      "белый матовый",
+      "графит"
+    ],
+    "searchText": "эра графит / белый матовый 860х2050 левая входные двери эра графит белый матовый 860х2050 левая входные вх входная мдф белый матовый графит"
+  },
+  {
     "id": "tc-mk-sk-2-belyy-matovyy-pet-dg-2000-800-90p",
     "sourceUrl": "https://tandoor.ru/catalog/product/sk-2-belyy-matovyy-pet-dg-2000-800-90p/",
     "title": "СК-2 белый матовый ПЭТ ДГ 2000*800 (90П)",
@@ -41,9 +68,10 @@ export const TANDOOR_REAL_CATALOG_SEED: TandoorRealCatalogSeedItem[] = [
       "2000*800",
       "(90П)",
       "межкомнатные",
-      "МК"
+      "МК",
+      "межкомнатная"
     ],
-    "searchText": "ск-2 белый матовый пэт дг 2000*800 (90п) межкомнатные двери ск-2 белый матовый пэт 2000*800 (90п) межкомнатные мк"
+    "searchText": "ск-2 белый матовый пэт дг 2000*800 (90п) межкомнатные двери ск-2 белый матовый пэт 2000*800 (90п) межкомнатные мк межкомнатная"
   },
   {
     "id": "tc-vh-standart-bukle-grafit-velutto-bianco-860kh2050-levaya",
@@ -64,9 +92,10 @@ export const TANDOOR_REAL_CATALOG_SEED: TandoorRealCatalogSeedItem[] = [
       "Bianco",
       "860х2050",
       "входные",
-      "ВХ"
+      "ВХ",
+      "входная"
     ],
-    "searchText": "стандарт букле графит / velutto bianco 860х2050 левая входные двери стандарт букле графит velutto bianco 860х2050 входные вх"
+    "searchText": "стандарт букле графит / velutto bianco 860х2050 левая входные двери стандарт букле графит velutto bianco 860х2050 входные вх входная"
   },
   {
     "id": "tc-vh-panteon-bukle-temno-seryy-chernyy-kvarts-860kh2050-levaya",
@@ -87,9 +116,10 @@ export const TANDOOR_REAL_CATALOG_SEED: TandoorRealCatalogSeedItem[] = [
       "кварц",
       "860х2050",
       "входные",
-      "ВХ"
+      "ВХ",
+      "входная"
     ],
-    "searchText": "пантеон букле темно-серый / черный кварц 860х2050 левая входные двери пантеон букле темно-серый черный кварц 860х2050 входные вх"
+    "searchText": "пантеон букле темно-серый / черный кварц 860х2050 левая входные двери пантеон букле темно-серый черный кварц 860х2050 входные вх входная"
   },
   {
     "id": "tc-vh-panteon-bukle-temno-seryy-belyy-sneg-860kh2050-levaya",
@@ -110,9 +140,10 @@ export const TANDOOR_REAL_CATALOG_SEED: TandoorRealCatalogSeedItem[] = [
       "снег",
       "860х2050",
       "входные",
-      "ВХ"
+      "ВХ",
+      "входная"
     ],
-    "searchText": "пантеон букле темно-серый / белый снег 860х2050 левая входные двери пантеон букле темно-серый белый снег 860х2050 входные вх"
+    "searchText": "пантеон букле темно-серый / белый снег 860х2050 левая входные двери пантеон букле темно-серый белый снег 860х2050 входные вх входная"
   },
   {
     "id": "tc-vh-midas-orekh-pekan-shokolad-emalit-belyy-860kh2050-levaya",
@@ -133,9 +164,10 @@ export const TANDOOR_REAL_CATALOG_SEED: TandoorRealCatalogSeedItem[] = [
       "Эмалит",
       "белый",
       "входные",
-      "ВХ"
+      "ВХ",
+      "входная"
     ],
-    "searchText": "мидас орех пекан шоколад / эмалит белый 860х2050 левая входные двери мидас орех пекан шоколад эмалит белый входные вх"
+    "searchText": "мидас орех пекан шоколад / эмалит белый 860х2050 левая входные двери мидас орех пекан шоколад эмалит белый входные вх входная"
   },
   {
     "id": "tc-vh-panteon-termo-bukle-temno-seryy-mramor-temnyy-860kh2050-levaya",
@@ -156,9 +188,10 @@ export const TANDOOR_REAL_CATALOG_SEED: TandoorRealCatalogSeedItem[] = [
       "Мрамор",
       "темный",
       "входные",
-      "ВХ"
+      "ВХ",
+      "входная"
     ],
-    "searchText": "пантеон термо букле темно-серый / мрамор темный 860х2050 левая входные двери пантеон термо букле темно-серый мрамор темный входные вх"
+    "searchText": "пантеон термо букле темно-серый / мрамор темный 860х2050 левая входные двери пантеон термо букле темно-серый мрамор темный входные вх входная"
   },
   {
     "id": "tc-vh-ultra-pikhtovyy-emalit-belyy-860kh2050-levaya",
@@ -179,9 +212,10 @@ export const TANDOOR_REAL_CATALOG_SEED: TandoorRealCatalogSeedItem[] = [
       "860х2050",
       "левая",
       "входные",
-      "ВХ"
+      "ВХ",
+      "входная"
     ],
-    "searchText": "ультра пихтовый / эмалит белый 860х2050 левая входные двери ультра пихтовый эмалит белый 860х2050 левая входные вх"
+    "searchText": "ультра пихтовый / эмалит белый 860х2050 левая входные двери ультра пихтовый эмалит белый 860х2050 левая входные вх входная"
   },
   {
     "id": "tc-vh-panteon-termo-bukle-temno-seryy-temno-seryy-860kh2050-levaya",
@@ -202,9 +236,10 @@ export const TANDOOR_REAL_CATALOG_SEED: TandoorRealCatalogSeedItem[] = [
       "Темно-серый",
       "860х2050",
       "входные",
-      "ВХ"
+      "ВХ",
+      "входная"
     ],
-    "searchText": "пантеон термо букле темно-серый / темно-серый 860х2050 левая входные двери пантеон термо букле темно-серый темно-серый 860х2050 входные вх"
+    "searchText": "пантеон термо букле темно-серый / темно-серый 860х2050 левая входные двери пантеон термо букле темно-серый темно-серый 860х2050 входные вх входная"
   },
   {
     "id": "tc-vh-pandora-dub-korichnevyy-belyy-mat-860kh2050-levaya",
@@ -225,9 +260,10 @@ export const TANDOOR_REAL_CATALOG_SEED: TandoorRealCatalogSeedItem[] = [
       "мат",
       "860х2050",
       "входные",
-      "ВХ"
+      "ВХ",
+      "входная"
     ],
-    "searchText": "пандора дуб коричневый / белый мат 860х2050 левая входные двери пандора дуб коричневый белый мат 860х2050 входные вх"
+    "searchText": "пандора дуб коричневый / белый мат 860х2050 левая входные двери пандора дуб коричневый белый мат 860х2050 входные вх входная"
   },
   {
     "id": "tc-vh-apart-grafit-rustik-seryy-860kh2050-levaya",
@@ -248,9 +284,10 @@ export const TANDOOR_REAL_CATALOG_SEED: TandoorRealCatalogSeedItem[] = [
       "860х2050",
       "левая",
       "входные",
-      "ВХ"
+      "ВХ",
+      "входная"
     ],
-    "searchText": "апарт графит / рустик серый 860х2050 левая входные двери апарт графит рустик серый 860х2050 левая входные вх"
+    "searchText": "апарт графит / рустик серый 860х2050 левая входные двери апарт графит рустик серый 860х2050 левая входные вх входная"
   },
   {
     "id": "tc-vh-amulet-grafit-seryy-belyy-860kh2050-levaya",
@@ -271,9 +308,10 @@ export const TANDOOR_REAL_CATALOG_SEED: TandoorRealCatalogSeedItem[] = [
       "860х2050",
       "левая",
       "входные",
-      "ВХ"
+      "ВХ",
+      "входная"
     ],
-    "searchText": "амулет графит серый / белый 860х2050 левая входные двери амулет графит серый белый 860х2050 левая входные вх"
+    "searchText": "амулет графит серый / белый 860х2050 левая входные двери амулет графит серый белый 860х2050 левая входные вх входная"
   },
   {
     "id": "tc-vh-standart-antik-mednyy-shokolad-860kh2050-levaya",
@@ -294,9 +332,10 @@ export const TANDOOR_REAL_CATALOG_SEED: TandoorRealCatalogSeedItem[] = [
       "860х2050",
       "левая",
       "входные",
-      "ВХ"
+      "ВХ",
+      "входная"
     ],
-    "searchText": "стандарт антик медный / шоколад 860х2050 левая входные двери стандарт антик медный шоколад 860х2050 левая входные вх"
+    "searchText": "стандарт антик медный / шоколад 860х2050 левая входные двери стандарт антик медный шоколад 860х2050 левая входные вх входная"
   },
   {
     "id": "tc-vh-layt-bukle-grafit-kanadskiy-dub-860kh2050-levaya",
@@ -317,9 +356,10 @@ export const TANDOOR_REAL_CATALOG_SEED: TandoorRealCatalogSeedItem[] = [
       "дуб",
       "860х2050",
       "входные",
-      "ВХ"
+      "ВХ",
+      "входная"
     ],
-    "searchText": "лайт букле графит / канадский дуб 860х2050 левая входные двери лайт букле графит канадский дуб 860х2050 входные вх"
+    "searchText": "лайт букле графит / канадский дуб 860х2050 левая входные двери лайт букле графит канадский дуб 860х2050 входные вх входная"
   },
   {
     "id": "tc-vh-layt-antik-mednyy-larche-shokolad-860kh2050-levaya",
@@ -340,9 +380,10 @@ export const TANDOOR_REAL_CATALOG_SEED: TandoorRealCatalogSeedItem[] = [
       "шоколад",
       "860х2050",
       "входные",
-      "ВХ"
+      "ВХ",
+      "входная"
     ],
-    "searchText": "лайт антик медный / ларче шоколад 860х2050 левая входные двери лайт антик медный ларче шоколад 860х2050 входные вх"
+    "searchText": "лайт антик медный / ларче шоколад 860х2050 левая входные двери лайт антик медный ларче шоколад 860х2050 входные вх входная"
   },
   {
     "id": "tc-vh-stounvud-skol-kamnya-blek-orekh-noche-tertona-850kh2030-levaya",
@@ -363,9 +404,10 @@ export const TANDOOR_REAL_CATALOG_SEED: TandoorRealCatalogSeedItem[] = [
       "Орех",
       "ноче",
       "входные",
-      "ВХ"
+      "ВХ",
+      "входная"
     ],
-    "searchText": "стоунвуд скол камня блэк / орех ноче тертона 850х2030 левая входные двери стоунвуд скол камня блэк орех ноче входные вх"
+    "searchText": "стоунвуд скол камня блэк / орех ноче тертона 850х2030 левая входные двери стоунвуд скол камня блэк орех ноче входные вх входная"
   },
   {
     "id": "tc-vh-praym-antik-mednyy-kedr-860kh2050-levaya",
@@ -386,9 +428,10 @@ export const TANDOOR_REAL_CATALOG_SEED: TandoorRealCatalogSeedItem[] = [
       "860х2050",
       "левая",
       "входные",
-      "ВХ"
+      "ВХ",
+      "входная"
     ],
-    "searchText": "прайм антик медный / кедр 860х2050 левая входные двери прайм антик медный кедр 860х2050 левая входные вх"
+    "searchText": "прайм антик медный / кедр 860х2050 левая входные двери прайм антик медный кедр 860х2050 левая входные вх входная"
   },
   {
     "id": "tc-vh-praym-bukle-grafit-beloe-derevo-860kh2050-levaya",
@@ -409,9 +452,10 @@ export const TANDOOR_REAL_CATALOG_SEED: TandoorRealCatalogSeedItem[] = [
       "дерево",
       "860х2050",
       "входные",
-      "ВХ"
+      "ВХ",
+      "входная"
     ],
-    "searchText": "прайм букле графит / белое дерево 860х2050 левая входные двери прайм букле графит белое дерево 860х2050 входные вх"
+    "searchText": "прайм букле графит / белое дерево 860х2050 левая входные двери прайм букле графит белое дерево 860х2050 входные вх входная"
   },
   {
     "id": "tc-vh-marmoris-toros-grafit-belyy-mat-850kh2030-levaya",
@@ -432,9 +476,10 @@ export const TANDOOR_REAL_CATALOG_SEED: TandoorRealCatalogSeedItem[] = [
       "мат",
       "850х2030",
       "входные",
-      "ВХ"
+      "ВХ",
+      "входная"
     ],
-    "searchText": "марморис торос графит / белый мат 850х2030 левая входные двери марморис торос графит белый мат 850х2030 входные вх"
+    "searchText": "марморис торос графит / белый мат 850х2030 левая входные двери марморис торос графит белый мат 850х2030 входные вх входная"
   },
   {
     "id": "tc-vh-nuar-kvarts-chernyy-belyy-mat-850kh2030-levaya",
@@ -455,9 +500,10 @@ export const TANDOOR_REAL_CATALOG_SEED: TandoorRealCatalogSeedItem[] = [
       "мат",
       "850х2030",
       "входные",
-      "ВХ"
+      "ВХ",
+      "входная"
     ],
-    "searchText": "нуар кварц черный / белый мат 850х2030 левая входные двери нуар кварц черный белый мат 850х2030 входные вх"
+    "searchText": "нуар кварц черный / белый мат 850х2030 левая входные двери нуар кварц черный белый мат 850х2030 входные вх входная"
   },
   {
     "id": "tc-vh-stroysib-1-venge-860kh2050-levaya",
@@ -746,9 +792,10 @@ export const TANDOOR_REAL_CATALOG_SEED: TandoorRealCatalogSeedItem[] = [
       "2000*800",
       "межкомнатные",
       "МК",
-      "межкомнатная"
+      "межкомнатная",
+      "эмаль"
     ],
-    "searchText": "new сити-1 эмаль белая дг 2000*800 межкомнатные двери new сити-1 эмаль белая 2000*800 межкомнатные мк межкомнатная"
+    "searchText": "new сити-1 эмаль белая дг 2000*800 межкомнатные двери new сити-1 эмаль белая 2000*800 межкомнатные мк межкомнатная эмаль"
   },
   {
     "id": "tc-mk-shtorm-2-emal-belaya-dg-2000-800",
@@ -996,9 +1043,11 @@ export const TANDOOR_REAL_CATALOG_SEED: TandoorRealCatalogSeedItem[] = [
       "патина",
       "золото)",
       "межкомнатные",
-      "МК"
+      "МК",
+      "межкомнатная",
+      "эмаль"
     ],
-    "searchText": "багира (5,5мм) (эмаль слон.кость патина золото) с8 межкомнатные двери багира 5мм) (эмаль слон.кость патина золото) межкомнатные мк"
+    "searchText": "багира (5,5мм) (эмаль слон.кость патина золото) с8 межкомнатные двери багира 5мм) (эмаль слон.кость патина золото) межкомнатные мк межкомнатная эмаль"
   },
   {
     "id": "tc-mk-benatti-2-belyy-zhemchug-dg-2000-800",
@@ -1064,9 +1113,10 @@ export const TANDOOR_REAL_CATALOG_SEED: TandoorRealCatalogSeedItem[] = [
       "TDLB",
       "5085-M",
       "фурнитура",
-      "замок"
+      "замок",
+      "комплектующие"
     ],
-    "searchText": "замок под цилиндр tandoor tdlb 5085-m cyl black черный фурнитура замок под цилиндр tandoor tdlb 5085-m фурнитура замок"
+    "searchText": "замок под цилиндр tandoor tdlb 5085-m cyl black черный фурнитура замок под цилиндр tandoor tdlb 5085-m фурнитура замок комплектующие"
   },
   {
     "id": "tc-hw-zamok-pod-tsilindr-tandoor-tdlb-5085-m-cyl-cp-khrom",
@@ -1087,9 +1137,10 @@ export const TANDOOR_REAL_CATALOG_SEED: TandoorRealCatalogSeedItem[] = [
       "TDLB",
       "5085-M",
       "фурнитура",
-      "замок"
+      "замок",
+      "комплектующие"
     ],
-    "searchText": "замок под цилиндр tandoor tdlb 5085-m cyl cp хром фурнитура замок под цилиндр tandoor tdlb 5085-m фурнитура замок"
+    "searchText": "замок под цилиндр tandoor tdlb 5085-m cyl cp хром фурнитура замок под цилиндр tandoor tdlb 5085-m фурнитура замок комплектующие"
   },
   {
     "id": "tc-hw-zamok-pod-tsilindr-tandoor-tdlb-5085-m-cyl-sn-nikel",
@@ -1110,9 +1161,10 @@ export const TANDOOR_REAL_CATALOG_SEED: TandoorRealCatalogSeedItem[] = [
       "TDLB",
       "5085-M",
       "фурнитура",
-      "замок"
+      "замок",
+      "комплектующие"
     ],
-    "searchText": "замок под цилиндр tandoor tdlb 5085-m cyl sn никель фурнитура замок под цилиндр tandoor tdlb 5085-m фурнитура замок"
+    "searchText": "замок под цилиндр tandoor tdlb 5085-m cyl sn никель фурнитура замок под цилиндр tandoor tdlb 5085-m фурнитура замок комплектующие"
   },
   {
     "id": "tc-hw-zamok-pod-tsilindr-tandoor-tdlb-5085-p-cyl-plastic-ab-bronza",
@@ -1133,9 +1185,10 @@ export const TANDOOR_REAL_CATALOG_SEED: TandoorRealCatalogSeedItem[] = [
       "TDLB",
       "5085-P",
       "фурнитура",
-      "замок"
+      "замок",
+      "комплектующие"
     ],
-    "searchText": "замок под цилиндр tandoor tdlb 5085-p cyl plastic ab бронза фурнитура замок под цилиндр tandoor tdlb 5085-p фурнитура замок"
+    "searchText": "замок под цилиндр tandoor tdlb 5085-p cyl plastic ab бронза фурнитура замок под цилиндр tandoor tdlb 5085-p фурнитура замок комплектующие"
   },
   {
     "id": "tc-hw-zamok-pod-tsilindr-tandoor-tdlb-5085-p-cyl-plastic-black-chernyy",
@@ -1156,9 +1209,10 @@ export const TANDOOR_REAL_CATALOG_SEED: TandoorRealCatalogSeedItem[] = [
       "TDLB",
       "5085-P",
       "фурнитура",
-      "замок"
+      "замок",
+      "комплектующие"
     ],
-    "searchText": "замок под цилиндр tandoor tdlb 5085-p cyl plastic black черный фурнитура замок под цилиндр tandoor tdlb 5085-p фурнитура замок"
+    "searchText": "замок под цилиндр tandoor tdlb 5085-p cyl plastic black черный фурнитура замок под цилиндр tandoor tdlb 5085-p фурнитура замок комплектующие"
   },
   {
     "id": "tc-hw-zamok-pod-tsilindr-tandoor-tdlb-5085-p-cyl-plastic-cp-khrom",
@@ -1179,9 +1233,10 @@ export const TANDOOR_REAL_CATALOG_SEED: TandoorRealCatalogSeedItem[] = [
       "TDLB",
       "5085-P",
       "фурнитура",
-      "замок"
+      "замок",
+      "комплектующие"
     ],
-    "searchText": "замок под цилиндр tandoor tdlb 5085-p cyl plastic cp хром фурнитура замок под цилиндр tandoor tdlb 5085-p фурнитура замок"
+    "searchText": "замок под цилиндр tandoor tdlb 5085-p cyl plastic cp хром фурнитура замок под цилиндр tandoor tdlb 5085-p фурнитура замок комплектующие"
   },
   {
     "id": "tc-hw-zamok-pod-tsilindr-tandoor-tdlb-5085-p-cyl-plastic-grf-grafit",
@@ -1202,9 +1257,10 @@ export const TANDOOR_REAL_CATALOG_SEED: TandoorRealCatalogSeedItem[] = [
       "TDLB",
       "5085-P",
       "фурнитура",
-      "замок"
+      "замок",
+      "комплектующие"
     ],
-    "searchText": "замок под цилиндр tandoor tdlb 5085-p cyl plastic grf графит фурнитура замок под цилиндр tandoor tdlb 5085-p фурнитура замок"
+    "searchText": "замок под цилиндр tandoor tdlb 5085-p cyl plastic grf графит фурнитура замок под цилиндр tandoor tdlb 5085-p фурнитура замок комплектующие"
   },
   {
     "id": "tc-hw-zamok-pod-tsilindr-tandoor-tdlb-5085-p-cyl-plastic-sn-nikel",
@@ -1225,9 +1281,10 @@ export const TANDOOR_REAL_CATALOG_SEED: TandoorRealCatalogSeedItem[] = [
       "TDLB",
       "5085-P",
       "фурнитура",
-      "замок"
+      "замок",
+      "комплектующие"
     ],
-    "searchText": "замок под цилиндр tandoor tdlb 5085-p cyl plastic sn никель фурнитура замок под цилиндр tandoor tdlb 5085-p фурнитура замок"
+    "searchText": "замок под цилиндр tandoor tdlb 5085-p cyl plastic sn никель фурнитура замок под цилиндр tandoor tdlb 5085-p фурнитура замок комплектующие"
   },
   {
     "id": "tc-hw-zamok-santekhnicheskiy-tandoor-tdlb-5096-m-wc-ab-bronza",
@@ -1248,9 +1305,10 @@ export const TANDOOR_REAL_CATALOG_SEED: TandoorRealCatalogSeedItem[] = [
       "5096-M",
       "бронза",
       "фурнитура",
-      "замок"
+      "замок",
+      "комплектующие"
     ],
-    "searchText": "замок сантехнический tandoor tdlb 5096-m wc ab бронза фурнитура замок сантехнический tandoor tdlb 5096-m бронза фурнитура замок"
+    "searchText": "замок сантехнический tandoor tdlb 5096-m wc ab бронза фурнитура замок сантехнический tandoor tdlb 5096-m бронза фурнитура замок комплектующие"
   },
   {
     "id": "tc-hw-zamok-santekhnicheskiy-tandoor-tdlb-5096-m-wc-black-chernyy",
@@ -1271,9 +1329,10 @@ export const TANDOOR_REAL_CATALOG_SEED: TandoorRealCatalogSeedItem[] = [
       "5096-M",
       "BLACK",
       "фурнитура",
-      "замок"
+      "замок",
+      "комплектующие"
     ],
-    "searchText": "замок сантехнический tandoor tdlb 5096-m wc black черный фурнитура замок сантехнический tandoor tdlb 5096-m black фурнитура замок"
+    "searchText": "замок сантехнический tandoor tdlb 5096-m wc black черный фурнитура замок сантехнический tandoor tdlb 5096-m black фурнитура замок комплектующие"
   },
   {
     "id": "tc-hw-zamok-santekhnicheskiy-tandoor-tdlb-5096-m-wc-cp-khrom",
@@ -1294,9 +1353,10 @@ export const TANDOOR_REAL_CATALOG_SEED: TandoorRealCatalogSeedItem[] = [
       "5096-M",
       "хром",
       "фурнитура",
-      "замок"
+      "замок",
+      "комплектующие"
     ],
-    "searchText": "замок сантехнический tandoor tdlb 5096-m wc cp хром фурнитура замок сантехнический tandoor tdlb 5096-m хром фурнитура замок"
+    "searchText": "замок сантехнический tandoor tdlb 5096-m wc cp хром фурнитура замок сантехнический tandoor tdlb 5096-m хром фурнитура замок комплектующие"
   },
   {
     "id": "tc-hw-zamok-santekhnicheskiy-tandoor-tdlb-5096-m-wc-grf-grafit",
@@ -1317,8 +1377,9 @@ export const TANDOOR_REAL_CATALOG_SEED: TandoorRealCatalogSeedItem[] = [
       "5096-M",
       "GRF",
       "фурнитура",
-      "замок"
+      "замок",
+      "комплектующие"
     ],
-    "searchText": "замок сантехнический tandoor tdlb 5096-m wc grf графит фурнитура замок сантехнический tandoor tdlb 5096-m grf фурнитура замок"
+    "searchText": "замок сантехнический tandoor tdlb 5096-m wc grf графит фурнитура замок сантехнический tandoor tdlb 5096-m grf фурнитура замок комплектующие"
   }
 ];
