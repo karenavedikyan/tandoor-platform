@@ -559,7 +559,9 @@ export default function TrainingPage() {
         <div className="mt-2 space-y-1 text-xs text-muted-foreground">
           <p>Распределение по разделам:</p>
           <ul className="flex flex-wrap gap-x-3 gap-y-1">
-            {Object.entries(wikiSummary.bySection).map(([s, count]) => (
+            {Object.entries(wikiSummary.bySection)
+              .filter(([, count]) => count > 0)
+              .map(([s, count]) => (
               <li key={s} className="flex items-center gap-1">
                 <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
                 <span>
