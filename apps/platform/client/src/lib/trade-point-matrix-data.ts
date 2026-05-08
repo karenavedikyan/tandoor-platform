@@ -1,4 +1,6 @@
-import { CATALOG_PRODUCTS, type CatalogProduct, normalizeDealerIdForCatalog } from "./catalog-data";
+import type { CatalogProduct } from "./catalog-product-type";
+import { MOCK_CATALOG_PRODUCTS } from "./catalog-mock-products";
+import { normalizeDealerIdForCatalog } from "./catalog-dealer-id";
 
 export type ShowcaseZone = "A" | "B" | "C";
 
@@ -160,7 +162,7 @@ export function getTradePointMatrix(
 
   const items: TradePointProductMatrixItem[] = [];
 
-  CATALOG_PRODUCTS.forEach((p, idx) => {
+  MOCK_CATALOG_PRODUCTS.forEach((p, idx) => {
     if (p.includeInTradePointMatrix === false) return;
     if (!shouldIncludeInMatrix(p, normalizedPoint, dealerSeed, pointSeed, idx)) return;
 
@@ -283,7 +285,7 @@ export type TradePointMatrixPresence = {
  * чтобы показать связь с торговыми точками через матрицу.
  */
 export function getMatrixPresencesForProduct(productId: string): TradePointMatrixPresence[] {
-  const product = CATALOG_PRODUCTS.find((p) => p.id === productId);
+  const product = MOCK_CATALOG_PRODUCTS.find((p) => p.id === productId);
   if (!product) return [];
   const result: TradePointMatrixPresence[] = [];
   for (const tpId of product.relatedTradePointIds) {

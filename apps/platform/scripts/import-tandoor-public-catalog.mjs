@@ -21,6 +21,39 @@ const OUT_IMG = path.join(ROOT, "client/public/catalog-real");
 const OUT_TS = path.join(ROOT, "client/src/lib/tandoor-real-catalog-seed.generated.ts");
 const OUT_TS_TMP = OUT_TS + ".tmp";
 
+let importCleanupHooksRegistered = false;
+
+/** Удаляет временный seed и все `.tmp-*` в каталоге изображений (прерванный ffmpeg/загрузка). */
+function cleanupImportArtifactTemps() {
+  try {
+    if (fs.existsSync(OUT_TS_TMP)) fs.unlinkSync(OUT_TS_TMP);
+  } catch {
+    /* ignore */
+  }
+  if (!fs.existsSync(OUT_IMG)) return;
+  for (const f of fs.readdirSync(OUT_IMG)) {
+    if (!f.startsWith(".tmp-")) continue;
+    try {
+      fs.unlinkSync(path.join(OUT_IMG, f));
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+function registerImportCleanupHooks() {
+  if (importCleanupHooksRegistered) return;
+  importCleanupHooksRegistered = true;
+  process.on("SIGINT", () => {
+    cleanupImportArtifactTemps();
+    process.exit(130);
+  });
+  process.on("SIGTERM", () => {
+    cleanupImportArtifactTemps();
+    process.exit(143);
+  });
+}
+
 const BASE = "https://tandoor.ru";
 const UA = "Mozilla/5.0 TandoorPlatformCatalogSeed/1.0 (educational; +https://tandoor.ru)";
 
@@ -231,29 +264,32 @@ function pad2(n) {
 
 function convertToWebp(srcBuf, ext, destWebp) {
   const tmp = path.join(OUT_IMG, `.tmp-conv-${path.basename(destWebp)}.${ext}`);
-  fs.writeFileSync(tmp, srcBuf);
-  execFileSync(
-    "ffmpeg",
-    [
-      "-y",
-      "-i",
-      tmp,
-      "-c:v",
-      "libwebp",
-      "-q:v",
-      "80",
-      "-preset",
-      "picture",
-      "-vf",
-      "scale=min(iw\\,720):-2:flags=lanczos",
-      destWebp,
-    ],
-    { stdio: "ignore" },
-  );
   try {
-    fs.unlinkSync(tmp);
-  } catch {
-    /* ignore */
+    fs.writeFileSync(tmp, srcBuf);
+    execFileSync(
+      "ffmpeg",
+      [
+        "-y",
+        "-i",
+        tmp,
+        "-c:v",
+        "libwebp",
+        "-q:v",
+        "80",
+        "-preset",
+        "picture",
+        "-vf",
+        "scale=min(iw\\,720):-2:flags=lanczos",
+        destWebp,
+      ],
+      { stdio: "ignore" },
+    );
+  } finally {
+    try {
+      if (fs.existsSync(tmp)) fs.unlinkSync(tmp);
+    } catch {
+      /* ignore */
+    }
   }
 }
 
@@ -309,6 +345,8 @@ function cleanupOrphanWebp(manifestBasenames) {
 }
 
 async function main() {
+  registerImportCleanupHooks();
+  cleanupImportArtifactTemps();
   fs.mkdirSync(OUT_IMG, { recursive: true });
 
   const productKind = new Map();
@@ -490,10 +528,6 @@ async function main() {
 
 main().catch((e) => {
   console.error(e);
-  try {
-    if (fs.existsSync(OUT_TS_TMP)) fs.unlinkSync(OUT_TS_TMP);
-  } catch {
-    /* ignore */
-  }
+  cleanupImportArtifactTemps();
   process.exit(1);
 });
