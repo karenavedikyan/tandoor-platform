@@ -116,10 +116,22 @@ function mapPublicSeedToCatalogProduct(row: TandoorRealCatalogSeedItem): Catalog
   };
 }
 
-export const CATALOG_PRODUCTS: CatalogProduct[] = [
+/** Уникальные `id` — в seed импорта иногда встречаются дубликаты; иначе React ломает список при фильтрации. */
+function dedupeCatalogProductsById(products: CatalogProduct[]): CatalogProduct[] {
+  const seen = new Set<string>();
+  const out: CatalogProduct[] = [];
+  for (const p of products) {
+    if (seen.has(p.id)) continue;
+    seen.add(p.id);
+    out.push(p);
+  }
+  return out;
+}
+
+export const CATALOG_PRODUCTS: CatalogProduct[] = dedupeCatalogProductsById([
   ...TANDOOR_REAL_CATALOG_SEED.map(mapPublicSeedToCatalogProduct),
   ...MOCK_CATALOG_PRODUCTS,
-];
+]);
 
 export function buildCatalogProductSearchHaystack(p: CatalogProduct): string {
   return [

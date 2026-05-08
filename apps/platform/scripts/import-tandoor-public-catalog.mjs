@@ -395,6 +395,7 @@ async function main() {
 
   const records = [];
   const manifestFiles = new Set();
+  const seenProductIds = new Set();
 
   for (const { productPath, kind } of jobs) {
     let html;
@@ -414,6 +415,12 @@ async function main() {
       continue;
     }
     const id = makeId(kind, d.slug);
+    if (seenProductIds.has(id)) {
+      stats.dupSkipped += 1;
+      console.warn("skip duplicate product id (same slug/kind from another URL):", id, productPath);
+      await sleep(40);
+      continue;
+    }
     const images = [];
     let idx = 0;
     for (const rel of d.imageRels) {
@@ -450,6 +457,7 @@ async function main() {
     const tags = buildTags(kind, d.title);
     const searchText = [d.title, categoryLabel, ...tags, ...images.map((im) => im.alt)].join(" ").toLowerCase();
 
+    seenProductIds.add(id);
     records.push({
       id,
       sourceUrl: `${BASE}${productPath}`,
