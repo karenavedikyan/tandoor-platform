@@ -19,6 +19,16 @@ export default defineConfig({
   build: {
     outDir: path.resolve(rootDir, "dist/public"),
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes("tandoor-real-catalog-seed.generated")) {
+            return "catalog-real-seed";
+          }
+          return undefined;
+        },
+      },
+    },
   },
   server: {
     fs: {

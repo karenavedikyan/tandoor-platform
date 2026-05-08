@@ -96,15 +96,70 @@ function SurfaceCard({
   );
 }
 
-function ProductHeroImage({ product }: { product: CatalogProduct }) {
-  if (product.image) {
-    return <img src={product.image} alt="" className="h-full w-full object-contain" />;
+function ProductGallery({ product }: { product: CatalogProduct }) {
+  const slides = useMemo(() => {
+    if (product.catalogImages?.length) return product.catalogImages;
+    if (product.image) return [{ src: product.image, alt: product.name }];
+    return [];
+  }, [product.catalogImages, product.image, product.name]);
+
+  const [active, setActive] = useState(0);
+  useEffect(() => {
+    setActive(0);
+  }, [product.id]);
+
+  const current = slides[active] ?? slides[0];
+
+  if (!slides.length || !current) {
+    return (
+      <div className="flex h-full min-h-[260px] w-full flex-col items-center justify-center bg-muted/50 p-6 text-center">
+        <Package className="h-12 w-12 text-muted-foreground/70" aria-hidden />
+        <p className="mt-3 text-sm font-medium text-muted-foreground">{product.doorKind} · серия «{product.series}»</p>
+        <p className="mt-1 text-xs text-muted-foreground">Файл изображения не прикреплён в каталоге</p>
+      </div>
+    );
   }
+
   return (
-    <div className="flex h-full min-h-[260px] w-full flex-col items-center justify-center bg-muted/50 p-6 text-center">
-      <Package className="h-12 w-12 text-muted-foreground/70" aria-hidden />
-      <p className="mt-3 text-sm font-medium text-muted-foreground">{product.doorKind} · серия «{product.series}»</p>
-      <p className="mt-1 text-xs text-muted-foreground">Файл изображения не прикреплён в каталоге</p>
+    <div className="space-y-3" data-testid="section-product-gallery">
+      <div className="relative flex min-h-[220px] w-full items-center justify-center overflow-hidden rounded-xl border border-border/60 bg-[#F7F8FB] px-3 py-4 sm:min-h-[260px] sm:px-5 sm:py-6">
+        <img
+          src={current.src}
+          alt={current.alt}
+          className="mx-auto h-auto max-h-[min(52vh,420px)] w-auto max-w-full object-contain md:max-h-[360px]"
+          loading="eager"
+          decoding="async"
+          data-testid="image-product-gallery-main"
+        />
+      </div>
+      {slides.length > 1 ? (
+        <div
+          className="flex min-w-0 gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:thin] sm:gap-2.5 [&::-webkit-scrollbar]:h-1.5"
+          aria-label="Дополнительные фото"
+        >
+          {slides.map((s, idx) => (
+            <button
+              key={`${s.src}-${idx}`}
+              type="button"
+              onClick={() => setActive(idx)}
+              data-testid={`button-product-gallery-thumb-${idx}`}
+              className={cn(
+                "shrink-0 rounded-lg border-2 bg-card p-1 transition-colors",
+                active === idx ? "border-primary shadow-sm" : "border-border hover:border-primary/40",
+              )}
+            >
+              <img
+                src={s.src}
+                alt=""
+                className="h-14 w-14 object-contain sm:h-16 sm:w-16"
+                loading="lazy"
+                decoding="async"
+                data-testid={`image-product-gallery-thumb-${idx}`}
+              />
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -318,7 +373,7 @@ function ProductFound({ product }: { product: CatalogProduct }) {
 
       <div className="grid gap-6 lg:grid-cols-12 lg:items-start">
         <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-lg lg:col-span-5">
-          <ProductHeroImage product={product} />
+          <ProductGallery product={product} />
         </div>
         <div className="space-y-4 lg:col-span-7">
           <ProductBadges product={product} />

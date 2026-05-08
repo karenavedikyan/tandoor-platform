@@ -270,7 +270,11 @@ export default function CatalogPage() {
       {view === "cards" ? (
         <div className="grid gap-4 sm:grid-cols-2" data-testid="section-catalog-results-cards">
           {filtered.map((p) => (
-            <Card key={p.id} className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-md">
+            <Card
+              key={p.id}
+              data-testid={`card-catalog-product-${p.id}`}
+              className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-md"
+            >
         <div className="aspect-[4/3] w-full overflow-hidden border-b border-border bg-[#F7F8FB] px-2 py-3 sm:px-4 sm:py-5">
                 <ProductImage product={p} />
               </div>
@@ -296,7 +300,7 @@ export default function CatalogPage() {
       {view === "list" ? (
         <ul className="space-y-2" data-testid="section-catalog-results-list">
           {filtered.map((p) => (
-            <li key={p.id}>
+            <li key={p.id} data-testid={`row-catalog-product-${p.id}`}>
               <Card className="rounded-2xl border border-border/80 bg-card shadow-sm">
                 <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0 flex-1 space-y-1">
@@ -332,7 +336,11 @@ export default function CatalogPage() {
               </thead>
               <tbody>
                 {filtered.map((p) => (
-                  <tr key={p.id} className="border-b border-border/80 last:border-0">
+                  <tr
+                    key={p.id}
+                    data-testid={`table-row-catalog-product-${p.id}`}
+                    className="border-b border-border/80 last:border-0"
+                  >
                     <td className="max-w-[200px] px-4 py-3 font-medium break-words">{p.name}</td>
                     <td className="whitespace-nowrap px-4 py-3 font-mono text-muted-foreground">{p.article}</td>
                     <td className="px-4 py-3">{p.doorKind}</td>
