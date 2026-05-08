@@ -236,6 +236,15 @@ function TaskCard({ task }: { task: MatrixTaskWithContext }) {
           <Badge variant="outline" className="border-border bg-muted/60 font-medium">
             {MATRIX_TASK_TYPE_LABEL[task.type]}
           </Badge>
+          {task.source === "product_training" ? (
+            <Badge
+              variant="outline"
+              className="border-primary/30 bg-primary/5 font-medium text-foreground"
+              data-testid={`badge-task-source-training-${task.taskId}`}
+            >
+              Обучение
+            </Badge>
+          ) : null}
           <Badge variant="outline" className={cn("font-medium", zoneTone(task.zone))}>
             Зона {task.zone}
           </Badge>
@@ -303,6 +312,16 @@ function TaskCard({ task }: { task: MatrixTaskWithContext }) {
               <Link href={`/training/${trainingArticleId}`}>Материал по теме</Link>
             </Button>
           ) : null}
+          {task.source === "product_training" && task.trainingProgramId ? (
+            <Button
+              asChild
+              variant="default"
+              className="min-h-10 w-full font-semibold sm:w-auto"
+              data-testid={`button-task-open-training-${task.taskId}`}
+            >
+              <Link href={`/training/programs/${task.trainingProgramId}`}>К программе обучения</Link>
+            </Button>
+          ) : null}
           <Button
             asChild
             variant="outline"
@@ -355,6 +374,15 @@ function TaskListRow({ task }: { task: MatrixTaskWithContext }) {
             <Badge variant="outline" className={cn("font-medium", priorityTone(task.priority))}>
               {MATRIX_TASK_PRIORITY_LABEL[task.priority]}
             </Badge>
+            {task.source === "product_training" ? (
+              <Badge
+                variant="outline"
+                className="border-primary/30 bg-primary/5 font-medium text-foreground"
+                data-testid={`badge-task-source-training-${task.taskId}`}
+              >
+                Обучение
+              </Badge>
+            ) : null}
             <Badge variant="outline" className={cn("font-medium", zoneTone(task.zone))}>
               Зона {task.zone}
             </Badge>
@@ -388,6 +416,17 @@ function TaskListRow({ task }: { task: MatrixTaskWithContext }) {
               data-testid={`button-task-open-training-material-${task.taskId}`}
             >
               <Link href={`/training/${trainingArticleId}`}>Материал</Link>
+            </Button>
+          ) : null}
+          {task.source === "product_training" && task.trainingProgramId ? (
+            <Button
+              asChild
+              variant="default"
+              size="sm"
+              className="min-h-9 font-semibold"
+              data-testid={`button-task-open-training-${task.taskId}`}
+            >
+              <Link href={`/training/programs/${task.trainingProgramId}`}>Обучение</Link>
             </Button>
           ) : null}
           <Button

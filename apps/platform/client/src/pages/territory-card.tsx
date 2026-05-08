@@ -29,6 +29,7 @@ import {
   type TerritoryPlanLine,
   type TerritoryRiskItem,
 } from "@/lib/territory-card-data";
+import { getTerritoryTrainingAttentionKpis } from "@/lib/training-attention";
 
 function riskTone(level: TerritoryRiskItem["level"]) {
   if (level === "critical") return "border-red-200 bg-red-50 text-red-900";
@@ -71,6 +72,7 @@ export default function TerritoryCardPage() {
   const tradePoints = useMemo(() => getTerritoryTradePoints(12), []);
   const showcases = useMemo(() => getTerritoryShowcases(), []);
   const risks = useMemo(() => getTerritoryRisks(), []);
+  const trainingKpis = useMemo(() => getTerritoryTrainingAttentionKpis(), []);
 
   return (
     <div className="space-y-8 pb-28 sm:space-y-10" data-testid="page-territory-card">
@@ -164,6 +166,56 @@ export default function TerritoryCardPage() {
               <p className="text-xs text-muted-foreground">сигналов по клиентам и заказам</p>
             </CardContent>
           </Card>
+        </div>
+      </section>
+
+      <section className="space-y-4" data-testid="section-territory-training-attention">
+        <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Обучение и внимание к персоналу</h2>
+        <p className="max-w-3xl text-sm text-muted-foreground">
+          Сводка по клиентам территории: кому рекомендуется продуктовое обучение от Tandoor и сколько потребностей уже закрыто.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Card className="border-border/70 shadow-xs" data-testid="card-territory-training-recommended">
+            <CardHeader className="pb-2 pt-4">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Рекомендуется обучение</CardTitle>
+            </CardHeader>
+            <CardContent className="pb-4 pt-0">
+              <p className="text-2xl font-semibold tabular-nums text-foreground">{trainingKpis.recommended}</p>
+              <p className="text-xs text-muted-foreground">клиентов по текущим правилам</p>
+            </CardContent>
+          </Card>
+          <Card className="border-border/70 shadow-xs" data-testid="card-territory-training-priority">
+            <CardHeader className="pb-2 pt-4">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Приоритет на обучение</CardTitle>
+            </CardHeader>
+            <CardContent className="pb-4 pt-0">
+              <p className="text-2xl font-semibold tabular-nums text-foreground">{trainingKpis.priority}</p>
+              <p className="text-xs text-muted-foreground">ключевые кандидаты</p>
+            </CardContent>
+          </Card>
+          <Card className="border-border/70 shadow-xs" data-testid="card-territory-training-indigo">
+            <CardHeader className="pb-2 pt-4">
+              <CardTitle className="text-sm font-medium text-muted-foreground">VIP · ИНДИГО</CardTitle>
+            </CardHeader>
+            <CardContent className="pb-4 pt-0">
+              <p className="text-2xl font-semibold tabular-nums text-foreground">{trainingKpis.indigoCandidates}</p>
+              <p className="text-xs text-muted-foreground">кандидатов на подборку</p>
+            </CardContent>
+          </Card>
+          <Card className="border-border/70 shadow-xs" data-testid="card-territory-training-completed">
+            <CardHeader className="pb-2 pt-4">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Потребность закрыта</CardTitle>
+            </CardHeader>
+            <CardContent className="pb-4 pt-0">
+              <p className="text-2xl font-semibold tabular-nums text-foreground">{trainingKpis.completed}</p>
+              <p className="text-xs text-muted-foreground">отмечено «обучение проведено»</p>
+            </CardContent>
+          </Card>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline" className="min-h-10 border-border bg-card font-semibold" data-testid="button-territory-open-training">
+            <Link href="/training">К разделу обучения</Link>
+          </Button>
         </div>
       </section>
 

@@ -1,10 +1,12 @@
 import type { ComponentProps, ComponentType, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
-import { Camera, ChevronDown, ChevronRight, ChevronUp, MapPin, PieChart, Plus, Store } from "lucide-react";
+import { Camera, ChevronDown, ChevronRight, ChevronUp, MapPin, PieChart, Plus, Store, BookOpen } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
@@ -37,12 +39,18 @@ import {
   ORDER_SHIPMENT_TONE,
   ORDER_STATUS_TONE,
 } from "@/lib/order-data";
+import {
+  getTradePointTrainingAttentionSignal,
+  tradePointProductTrainingStorageKey,
+  trainingAttentionLevelBadgeClass,
+} from "@/lib/training-attention";
 
-const SECTION_IDS = ["overview", "matrix", "showcase", "distribution", "orders", "tasks", "history", "photos"] as const;
+const SECTION_IDS = ["overview", "training", "matrix", "showcase", "distribution", "orders", "tasks", "history", "photos"] as const;
 type SectionId = (typeof SECTION_IDS)[number];
 
 const SECTION_DOM_IDS: Record<SectionId, string> = {
   overview: "trade-point-section-overview",
+  training: "section-trade-point-training-attention",
   matrix: "section-trade-point-matrix",
   showcase: "trade-point-section-showcase",
   distribution: "trade-point-section-distribution",
@@ -54,6 +62,7 @@ const SECTION_DOM_IDS: Record<SectionId, string> = {
 
 const SECTION_LABELS: Record<SectionId, string> = {
   overview: "Общее",
+  training: "Обучение",
   matrix: "Матрица",
   showcase: "Витрина",
   distribution: "Дистрибуция",
@@ -65,6 +74,7 @@ const SECTION_LABELS: Record<SectionId, string> = {
 
 const NAV_TEST_IDS: Record<SectionId, string> = {
   overview: "trade-point-section-nav-overview",
+  training: "trade-point-section-nav-training",
   matrix: "trade-point-section-nav-matrix",
   showcase: "trade-point-section-nav-showcase",
   distribution: "trade-point-section-nav-distribution",
@@ -603,11 +613,32 @@ function TradePointDetailContent({ dealer, point }: { dealer: DealerRow; point: 
   const [expandedTaskIds, setExpandedTaskIds] = useState<Set<string>>(() => new Set());
   const [matrixTaskFilter, setMatrixTaskFilter] = useState<MatrixTaskFilterId>("all");
 
+  const tpTrainingStorageKey = tradePointProductTrainingStorageKey(dealer.id, point.id);
+  const [tpTrainingDone, setTpTrainingDone] = useState(() => {
+    if (typeof window === "undefined") return point.productTrainingCompleted;
+    const s = sessionStorage.getItem(tpTrainingStorageKey);
+    if (s === "1") return true;
+    if (s === "0") return false;
+    return point.productTrainingCompleted;
+  });
+  const tpTrainingSignal = useMemo(
+    () => getTradePointTrainingAttentionSignal(dealer, point, tpTrainingDone),
+    [dealer, point, tpTrainingDone],
+  );
+  const tpTrainingHref =
+    tpTrainingSignal.suggestedTrainingProgramIds[0] != null
+      ? `/training/programs/${tpTrainingSignal.suggestedTrainingProgramIds[0]}`
+      : "/training";
+
   useEffect(() => {
     setCreatedTasks([]);
     setExpandedTaskIds(new Set());
     setMatrixTaskFilter("all");
-  }, [dealer.id, point.id]);
+    const s = sessionStorage.getItem(tpTrainingStorageKey);
+    if (s === "1") setTpTrainingDone(true);
+    else if (s === "0") setTpTrainingDone(false);
+    else setTpTrainingDone(point.productTrainingCompleted);
+  }, [dealer.id, point.id, point.productTrainingCompleted, tpTrainingStorageKey]);
 
   const createdTaskByProductId = useMemo(() => {
     const map = new Map<string, MatrixTask>();
@@ -743,6 +774,67 @@ function TradePointDetailContent({ dealer, point }: { dealer: DealerRow; point: 
                 <FieldRow label="Ответственный РМ" value={point.responsibleRegionalManager} />
                 <FieldRow label="Последний визит" value={point.lastVisitDate} />
                 <FieldRow label="Следующий визит" value={point.nextVisitDate} />
+              </CardContent>
+            </SurfaceCard>
+          </section>
+
+          <section
+            id={SECTION_DOM_IDS.training}
+            data-testid="section-trade-point-training-attention"
+            className="scroll-mt-28 space-y-4 sm:scroll-mt-32"
+          >
+            <SectionTitle subtitle="Нужен ли визит с продуктовым блоком для персонала точки.">
+              Обучение персонала точки
+            </SectionTitle>
+            <SurfaceCard data-testid="card-trade-point-training-signal">
+              <CardHeader className="space-y-2 pb-2 pt-5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline" className={cn("font-semibold", trainingAttentionLevelBadgeClass(tpTrainingSignal.level))}>
+                    {tpTrainingSignal.level === "none" && tpTrainingDone
+                      ? "Потребность закрыта"
+                      : tpTrainingSignal.level === "priority"
+                        ? "Кандидат на обучение"
+                        : tpTrainingSignal.level === "recommended"
+                          ? "Рекомендуется провести продуктовое обучение от Tandoor"
+                          : tpTrainingSignal.level === "watch"
+                            ? "Внимание к персоналу"
+                            : "Обучение не требуется по текущему срезу"}
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4 pb-5">
+                {tpTrainingSignal.reasons.length > 0 ? (
+                  <ul className="list-inside list-disc space-y-1 text-sm text-foreground">
+                    {tpTrainingSignal.reasons.map((r) => (
+                      <li key={r}>{r}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Причины рекомендации отсутствуют по текущему срезу.</p>
+                )}
+                <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                  <Button asChild variant="default" className="min-h-11 font-semibold" data-testid="button-trade-point-open-training">
+                    <Link href={tpTrainingHref}>
+                      <BookOpen className="mr-2 h-4 w-4" aria-hidden />
+                      К обучению
+                    </Link>
+                  </Button>
+                  <div className="flex items-center gap-3 rounded-xl border border-border bg-muted/20 px-3 py-2">
+                    <Checkbox
+                      id={`tp-training-${point.id}`}
+                      checked={tpTrainingDone}
+                      onCheckedChange={(v) => {
+                        const next = v === true;
+                        setTpTrainingDone(next);
+                        sessionStorage.setItem(tpTrainingStorageKey, next ? "1" : "0");
+                      }}
+                      data-testid="checkbox-trade-point-product-training-completed"
+                    />
+                    <Label htmlFor={`tp-training-${point.id}`} className="cursor-pointer text-sm font-medium">
+                      Проведено продуктовое обучение от Tandoor
+                    </Label>
+                  </div>
+                </div>
               </CardContent>
             </SurfaceCard>
           </section>

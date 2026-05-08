@@ -2,6 +2,24 @@ export type DealerCategory = "TOP" | "A" | "B" | "C";
 export type DealerStatus = "активный" | "потенциальный" | "приостановлен" | "требует внимания";
 export type DealerFormat = "сетевой" | "одиночный";
 
+/** Статус продуктового обучения от Tandoor (мок; далее API). */
+export type ProductTrainingStatus = "not_required" | "recommended" | "planned" | "completed";
+
+/** Подборка ИНДИГО для VIP / ключевых партнёров (мок). */
+export type IndigoTrainingStatus = "not_required" | "recommended" | "connected" | "in_progress" | "completed";
+
+export type ProductTrainingFields = {
+  productTrainingStatus: ProductTrainingStatus;
+  productTrainingCompleted: boolean;
+  productTrainingCompletedAt?: string;
+  productTrainingComment?: string;
+};
+
+export type IndigoTrainingFields = {
+  indigoTrainingCandidate: boolean;
+  indigoTrainingStatus?: IndigoTrainingStatus;
+};
+
 export type DealerContacts = {
   lpr: string;
   buyer: string;
@@ -97,7 +115,7 @@ export type DealerTradePoint = {
   activityHistory: TradePointActivity[];
   /** Заглушка: вложения фото пока нет */
   photos: { attached: boolean };
-};
+} & ProductTrainingFields;
 
 export type DealerRow = {
   id: string;
@@ -129,7 +147,7 @@ export type DealerRow = {
   showcase: DealerShowcaseDetail;
   competitors: DealerCompetitorsDetail;
   issues: DealerIssueDetail;
-};
+} & ProductTrainingFields & IndigoTrainingFields;
 
 const managers = ["Петров П.П.", "Сидорова С.С.", "Козлов А.А.", "Орлова Е.В.", "Никитин Д.Д."];
 const rm = ["Сидорова С.С.", "Волков И.И.", "Морозова Н.Н."];
@@ -156,6 +174,7 @@ function buildRow(i: number): DealerRow {
   const format = formats[i % 2];
   const distribution = 40 + ((i * 7) % 55);
   const hasProblem = i % 5 === 0 || i % 11 === 3;
+  const dealerTrainingDone = i % 9 === 0;
   const showcaseOk = distribution >= 55;
   const manager = managers[i % managers.length];
   const regional = rm[i % rm.length];
@@ -218,6 +237,8 @@ function buildRow(i: number): DealerRow {
       ? "Требуется контроль витрины и согласование поставки образцов."
       : "Замечаний по точке в текущем цикле нет.";
 
+    const tpWeak = totalAdj < 68 || issuesText.toLowerCase().includes("витрин");
+    const tpTrainingDone = t === 0 && (i + t * 3) % 14 === 0;
     tradePoints.push({
       id: pointId,
       name: `Торговая точка №${t + 1}`,
@@ -238,6 +259,16 @@ function buildRow(i: number): DealerRow {
       tasks: taskPool.slice(0, taskCount),
       activityHistory: historyTemplates,
       photos: { attached: false },
+      productTrainingCompleted: tpTrainingDone,
+      productTrainingCompletedAt: tpTrainingDone ? `${4 + (t % 5)}.04.2026` : undefined,
+      productTrainingComment: tpTrainingDone ? "Короткий инструктаж на точке." : undefined,
+      productTrainingStatus: tpTrainingDone
+        ? "completed"
+        : tpWeak && t === 0
+          ? "recommended"
+          : tpWeak
+            ? "planned"
+            : "not_required",
     });
   }
   const competitorSets = [
@@ -333,6 +364,23 @@ function buildRow(i: number): DealerRow {
       next: i % 2 === 0 ? "Визит и обновление карточки" : "Согласование плана работ",
       state: hasProblem ? "В работе" : "Закрыто",
     },
+    productTrainingCompleted: dealerTrainingDone,
+    productTrainingCompletedAt: dealerTrainingDone ? `${2 + (i % 6)}.03.2026` : undefined,
+    productTrainingComment: dealerTrainingDone ? "Выездной блок по МК и фурнитуре." : undefined,
+    productTrainingStatus: dealerTrainingDone
+      ? "completed"
+      : category === "TOP" || category === "A"
+        ? "recommended"
+        : category === "B" && totalPct < 58
+          ? "planned"
+          : "not_required",
+    indigoTrainingCandidate: category === "TOP" || (category === "A" && outlets >= 3),
+    indigoTrainingStatus:
+      category === "TOP"
+        ? "recommended"
+        : category === "A" && outlets >= 3
+          ? "recommended"
+          : "not_required",
   };
 }
 
