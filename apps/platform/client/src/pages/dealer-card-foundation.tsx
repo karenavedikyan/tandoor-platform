@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
 import {
   AlertTriangle,
+  BookOpen,
   Building2,
   Camera,
   Handshake,
@@ -14,6 +15,8 @@ import {
   TrendingUp,
   Users,
 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,6 +39,7 @@ import {
   ORDER_STATUS_TONE,
 } from "@/lib/order-data";
 import { getDealerAnalyticsSignalCards } from "@/lib/dealer-analytics-signals";
+import { dealerProductTrainingStorageKey, getDealerTrainingAttentionSignal, trainingAttentionLevelBadgeClass } from "@/lib/training-attention";
 
 const SECTION_IDS = [
   "overview",
@@ -43,6 +47,7 @@ const SECTION_IDS = [
   "sales",
   "distribution",
   "showcases",
+  "training",
   "orders",
   "history",
   "tasks",
@@ -56,6 +61,7 @@ const SECTION_DOM_IDS: Record<SectionId, string> = {
   sales: "dealer-section-sales",
   distribution: "dealer-section-distribution",
   showcases: "dealer-section-showcases",
+  training: "section-dealer-training-attention",
   orders: "section-dealer-orders",
   history: "dealer-section-history",
   tasks: "dealer-section-tasks",
@@ -67,6 +73,7 @@ const SECTION_LABELS: Record<SectionId, string> = {
   sales: "Продажи",
   distribution: "Дистрибуция",
   showcases: "Витрины",
+  training: "Обучение",
   orders: "Заказы",
   history: "История",
   tasks: "Задачи",
@@ -78,6 +85,7 @@ const SECTION_NAV_TEST_IDS: Record<SectionId, string> = {
   sales: "dealer-section-nav-sales",
   distribution: "dealer-section-nav-distribution",
   showcases: "dealer-section-nav-showcases",
+  training: "dealer-section-nav-training",
   orders: "dealer-section-nav-orders",
   history: "dealer-section-nav-history",
   tasks: "dealer-section-nav-tasks",
@@ -201,6 +209,106 @@ function buildTasks(row: DealerRow): DealerTask[] {
     status: statuses[(i + idx) % statuses.length],
     priority: priorities[(i + idx * 2) % priorities.length],
   }));
+}
+
+function DealerTrainingAttentionSection({ row }: { row: DealerRow }) {
+  const storageKey = dealerProductTrainingStorageKey(row.id);
+  const [completed, setCompleted] = useState(() => {
+    if (typeof window === "undefined") return row.productTrainingCompleted;
+    const s = sessionStorage.getItem(storageKey);
+    if (s === "1") return true;
+    if (s === "0") return false;
+    return row.productTrainingCompleted;
+  });
+
+  const signal = useMemo(() => getDealerTrainingAttentionSignal(row, completed), [row, completed]);
+  const trainingHref =
+    signal.suggestedTrainingProgramIds[0] != null
+      ? `/training/programs/${signal.suggestedTrainingProgramIds[0]}`
+      : "/training";
+
+  return (
+    <section
+      id={SECTION_DOM_IDS.training}
+      data-testid="section-dealer-training-attention"
+      className="scroll-mt-28 space-y-4 sm:space-y-6 lg:scroll-mt-32"
+    >
+      <SectionTitle subtitle="Продуктовое обучение и внимание к персоналу партнёра.">
+        Обучение и внимание к персоналу
+      </SectionTitle>
+      <SurfaceCard data-testid="card-dealer-training-signal">
+        <CardHeader className="space-y-2 pb-2 pt-5">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge
+              variant="outline"
+              className={cn("font-semibold", trainingAttentionLevelBadgeClass(signal.level))}
+              data-testid="badge-dealer-training-level"
+            >
+              {signal.label}
+            </Badge>
+            {row.indigoTrainingCandidate ? (
+              <Badge variant="outline" className="border-primary/40 bg-primary/10 font-medium" data-testid="badge-dealer-indigo-candidate">
+                VIP: можно подключить обучение ИНДИГО
+              </Badge>
+            ) : null}
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Проведено продуктовое обучение от Tandoor: {completed ? "да, потребность закрыта" : "нет — при необходимости запланируйте визит."}
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4 pb-5">
+          {signal.reasons.length > 0 ? (
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Почему система обращает внимание</p>
+              <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-foreground">
+                {signal.reasons.map((r) => (
+                  <li key={r}>{r}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {signal.recommendedActions.length > 0 ? (
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Рекомендуемые шаги</p>
+              <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-muted-foreground">
+                {signal.recommendedActions.map((r) => (
+                  <li key={r}>{r}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+            <Button asChild className="min-h-11 font-semibold" data-testid="button-dealer-open-training">
+              <Link href={trainingHref}>
+                <BookOpen className="mr-2 h-4 w-4" aria-hidden />
+                К обучению
+              </Link>
+            </Button>
+            <div className="flex items-center gap-3 rounded-xl border border-border bg-muted/20 px-3 py-2">
+              <Checkbox
+                id={`dealer-training-done-${row.id}`}
+                checked={completed}
+                onCheckedChange={(v) => {
+                  const next = v === true;
+                  setCompleted(next);
+                  sessionStorage.setItem(storageKey, next ? "1" : "0");
+                }}
+                data-testid="checkbox-dealer-product-training-completed"
+              />
+              <Label htmlFor={`dealer-training-done-${row.id}`} className="cursor-pointer text-sm font-medium leading-snug">
+                Проведено продуктовое обучение от Tandoor
+              </Label>
+            </div>
+          </div>
+          {row.indigoTrainingCandidate ? (
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Рекомендуется подборка видеоматериалов и контроль прохождения руководителем партнёра. Интеграция с ИНДИГО — на будущее.
+            </p>
+          ) : null}
+        </CardContent>
+      </SurfaceCard>
+    </section>
+  );
 }
 
 function priorityClass(p: TaskPriority) {
@@ -790,6 +898,8 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                 </CardContent>
               </SurfaceCard>
             </section>
+
+            <DealerTrainingAttentionSection row={row} />
 
             <section
               id={SECTION_DOM_IDS.orders}

@@ -1,4 +1,5 @@
 import { DEALER_BASE_ROWS } from "./dealer-base-mock-data";
+import { getDealerTrainingAttentionSignal, TRAINING_PROGRAM_PRODUCT_BASE } from "./training-attention";
 import {
   getTradePointMatrix,
   type MatrixActionKind,
@@ -12,7 +13,8 @@ export type MatrixTaskType =
   | "check_presence"
   | "update_photo"
   | "approve_replacement"
-  | "maintain_showcase";
+  | "maintain_showcase"
+  | "product_training";
 
 export type MatrixTaskStatus = "new" | "in_progress" | "done" | "overdue";
 export type MatrixTaskPriority = "high" | "medium" | "low";
@@ -36,7 +38,9 @@ export type MatrixTask = {
   status: MatrixTaskStatus;
   assigneeRole: MatrixTaskAssigneeRole;
   dueDate: string;
-  source: "product_matrix";
+  source: "product_matrix" | "product_training";
+  /** Для задач из сигнала обучения — ссылка на программу в разделе «Обучение». */
+  trainingProgramId?: string;
   zone: ShowcaseZone;
   portal: ShowcasePortal;
   targetSamples: number;
@@ -68,6 +72,7 @@ export const MATRIX_TASK_TYPE_LABEL: Record<MatrixTaskType, string> = {
   update_photo: "Обновить фото",
   approve_replacement: "Согласовать замену",
   maintain_showcase: "Поддерживать выкладку",
+  product_training: "Продуктовое обучение",
 };
 
 export const MATRIX_TASK_STATUS_LABEL: Record<MatrixTaskStatus, string> = {
@@ -106,10 +111,12 @@ function priorityFromMatrix(p: TradePointProductMatrixItem["priority"]): MatrixT
 function roleFromType(type: MatrixTaskType): MatrixTaskAssigneeRole {
   if (type === "approve_replacement") return "regional_manager";
   if (type === "update_photo") return "assistant";
+  if (type === "product_training") return "manager";
   return "manager";
 }
 
 function titleFor(type: MatrixTaskType, productName: string): string {
+  if (type === "product_training") return "Провести продуктовое обучение Tandoor";
   if (type === "add_to_showcase") return `Добавить «${productName}» на витрину`;
   if (type === "check_presence") return `Проверить наличие «${productName}»`;
   if (type === "update_photo") return `Обновить фото «${productName}»`;
@@ -118,6 +125,9 @@ function titleFor(type: MatrixTaskType, productName: string): string {
 }
 
 function descriptionFor(item: TradePointProductMatrixItem, type: MatrixTaskType): string {
+  if (type === "product_training") {
+    return "Согласовать визит или сессию для персонала партнёра: ассортимент, витрина, ответы на типовые вопросы покупателя.";
+  }
   const base = `${item.portal}, зона ${item.zone}. Образцы: ${item.actualSamples} / ${item.targetSamples}.`;
   if (type === "add_to_showcase") {
     return `${base} Разместить модель в матрице торговой точки и обеспечить целевое количество образцов.`;
@@ -295,7 +305,48 @@ export function getAllMatrixTasks(): MatrixTaskWithContext[] {
       }
     }
   }
+  result.push(...buildProductTrainingTasks());
   return result;
+}
+
+function buildProductTrainingTasks(): MatrixTaskWithContext[] {
+  const out: MatrixTaskWithContext[] = [];
+  for (const dealer of DEALER_BASE_ROWS) {
+    const sig = getDealerTrainingAttentionSignal(dealer);
+    if (sig.level !== "priority") continue;
+    if (dealer.productTrainingCompleted) continue;
+    const point = dealer.tradePoints[0];
+    if (!point) continue;
+    const programId = sig.suggestedTrainingProgramIds[0] ?? TRAINING_PROGRAM_PRODUCT_BASE;
+    const taskId = `training-${dealer.id}-${point.id}`;
+    out.push({
+      taskId,
+      productId: "mk-grand-3-mk",
+      productName: "Продуктовое обучение Tandoor",
+      productArticle: "TRAINING",
+      dealerId: dealer.id,
+      tradePointId: point.id,
+      tradePointName: point.name,
+      type: "product_training",
+      title: "Провести продуктовое обучение Tandoor",
+      description:
+        "Согласовать визит или сессию для персонала партнёра: ассортимент, витрина, ответы на типовые вопросы покупателя.",
+      priority: "high",
+      status: "new",
+      assigneeRole: "manager",
+      dueDate: `${String(10 + (dealer.id.charCodeAt(2) % 12)).padStart(2, "0")}.05.2026`,
+      source: "product_training",
+      zone: "A",
+      portal: "Стенд / зона",
+      targetSamples: 0,
+      actualSamples: 0,
+      insightDomain: "territory",
+      insightLabel: "Обучение",
+      dealerName: dealer.name,
+      trainingProgramId: programId,
+    });
+  }
+  return out;
 }
 
 /**
