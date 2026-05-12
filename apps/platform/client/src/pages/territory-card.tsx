@@ -63,19 +63,35 @@ function cityCompletion(plan: number, fact: number) {
 }
 
 export default function TerritoryCardPage() {
-  const summary = useMemo(() => getTerritorySummary(), []);
-  const planLines = useMemo(() => getTerritoryPlanLines(), []);
-  const cities = useMemo(() => getTerritoryCities(), []);
-  const focus = useMemo(() => getTerritoryFocusItems(), []);
-  const orders = useMemo(() => getTerritoryRecentOrders(8), []);
-  const tasks = useMemo(() => getTerritoryTasks(10), []);
-  const tradePoints = useMemo(() => getTerritoryTradePoints(12), []);
-  const showcases = useMemo(() => getTerritoryShowcases(), []);
-  const risks = useMemo(() => getTerritoryRisks(), []);
-  const trainingKpis = useMemo(() => getTerritoryTrainingAttentionKpis(), []);
+  const {
+    summary,
+    planLines,
+    cities,
+    focus,
+    orders,
+    tasks,
+    tradePoints,
+    showcases,
+    risks,
+    trainingKpis,
+  } = useMemo(
+    () => ({
+      summary: getTerritorySummary(),
+      planLines: getTerritoryPlanLines(),
+      cities: getTerritoryCities(),
+      focus: getTerritoryFocusItems(),
+      orders: getTerritoryRecentOrders(8),
+      tasks: getTerritoryTasks(10),
+      tradePoints: getTerritoryTradePoints(12),
+      showcases: getTerritoryShowcases(),
+      risks: getTerritoryRisks(),
+      trainingKpis: getTerritoryTrainingAttentionKpis(),
+    }),
+    [],
+  );
 
   return (
-    <div className="space-y-8 pb-28 sm:space-y-10" data-testid="page-territory-card">
+    <div className="min-w-0 max-w-full space-y-8 overflow-x-hidden pb-28 sm:space-y-10" data-testid="page-territory-card">
       <section
         className="relative overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-lg sm:p-8"
         data-testid="section-territory-hero"
@@ -352,7 +368,7 @@ export default function TerritoryCardPage() {
         <p className="text-sm text-muted-foreground">Продажи, витрины, матрица; связь с обучением — через общий список задач.</p>
         <div className="grid gap-3 sm:grid-cols-2">
           {tasks.map((t: MatrixTaskWithContext) => (
-            <Card key={t.taskId} className="border-border/70 shadow-xs" data-testid={`card-territory-task-${t.taskId}`}>
+            <Card key={`${t.dealerId}-${t.taskId}`} className="border-border/70 shadow-xs" data-testid={`card-territory-task-${t.taskId}`}>
               <CardHeader className="space-y-2 pb-2 pt-4">
                 <CardTitle className="text-base leading-snug">{t.title}</CardTitle>
                 <div className="flex flex-wrap gap-2">
