@@ -16,6 +16,11 @@ import {
   type AnalyticsWorkspaceRow,
   type AnalyticsWorkspaceTabId,
 } from "@/lib/analytics-workspace-data";
+import {
+  getRopOptions,
+  isRopOrManagerAllFilter,
+  managerDisplayBelongsToRopTeam,
+} from "@/lib/rop-manager-filters";
 import { cn } from "@/lib/utils";
 
 const ALL = "__all__";
@@ -38,6 +43,7 @@ function TabTable({
 }) {
   const [rows, setRows] = useState<AnalyticsWorkspaceRow[]>(() => getRowsForTab(tab));
   const [mgr, setMgr] = useState(ALL);
+  const [rop, setRop] = useState(ALL);
   const [client, setClient] = useState(ALL);
   const [cat, setCat] = useState(ALL);
   const [city, setCity] = useState(ALL);
@@ -46,20 +52,30 @@ function TabTable({
     setRows(getRowsForTab(tab));
   }, [tab]);
 
-  const managers = useMemo(() => uniq(rows.map((r) => r.manager)), [rows]);
+  const managers = useMemo(() => {
+    const names = uniq(rows.map((r) => r.manager));
+    if (isRopOrManagerAllFilter(rop)) return names;
+    return names.filter((n) => managerDisplayBelongsToRopTeam(n, rop));
+  }, [rows, rop]);
   const clients = useMemo(() => uniq(rows.map((r) => r.client)), [rows]);
   const cats = useMemo(() => uniq(rows.map((r) => r.clientCategory)), [rows]);
   const cities = useMemo(() => uniq(rows.map((r) => r.city)), [rows]);
 
+  useEffect(() => {
+    if (mgr === ALL) return;
+    if (!isRopOrManagerAllFilter(rop) && !managerDisplayBelongsToRopTeam(mgr, rop)) setMgr(ALL);
+  }, [rop, mgr]);
+
   const filtered = useMemo(() => {
     return rows.filter(
       (r) =>
+        (isRopOrManagerAllFilter(rop) || managerDisplayBelongsToRopTeam(r.manager, rop)) &&
         (mgr === ALL || r.manager === mgr) &&
         (client === ALL || r.client === client) &&
         (cat === ALL || r.clientCategory === cat) &&
         (city === ALL || r.city === city),
     );
-  }, [rows, mgr, client, cat, city]);
+  }, [rows, mgr, client, cat, city, rop]);
 
   const patch = useCallback(
     (id: string, field: keyof AnalyticsWorkspaceRow, value: string) => {
@@ -74,32 +90,16 @@ function TabTable({
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground">Менеджер</Label>
-          <Select value={mgr} onValueChange={setMgr}>
-            <SelectTrigger className="h-10">
+          <Label className="text-xs text-muted-foreground">Город</Label>
+          <Select value={city} onValueChange={setCity}>
+            <SelectTrigger className="h-10 min-w-0">
               <SelectValue placeholder="Все" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={ALL}>Все</SelectItem>
-              {managers.map((m) => (
-                <SelectItem key={m} value={m}>
-                  {m}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground">Клиент</Label>
-          <Select value={client} onValueChange={setClient}>
-            <SelectTrigger className="h-10">
-              <SelectValue placeholder="Все" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL}>Все</SelectItem>
-              {clients.map((m) => (
+              {cities.map((m) => (
                 <SelectItem key={m} value={m}>
                   {m}
                 </SelectItem>
@@ -110,7 +110,7 @@ function TabTable({
         <div className="space-y-1.5">
           <Label className="text-xs text-muted-foreground">Категория клиента</Label>
           <Select value={cat} onValueChange={setCat}>
-            <SelectTrigger className="h-10">
+            <SelectTrigger className="h-10 min-w-0">
               <SelectValue placeholder="Все" />
             </SelectTrigger>
             <SelectContent>
@@ -124,14 +124,46 @@ function TabTable({
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground">Город</Label>
-          <Select value={city} onValueChange={setCity}>
-            <SelectTrigger className="h-10">
+          <Label className="text-xs text-muted-foreground">Клиент</Label>
+          <Select value={client} onValueChange={setClient}>
+            <SelectTrigger className="h-10 min-w-0">
               <SelectValue placeholder="Все" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={ALL}>Все</SelectItem>
-              {cities.map((m) => (
+              {clients.map((m) => (
+                <SelectItem key={m} value={m}>
+                  {m}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">РОП</Label>
+          <Select value={rop} onValueChange={setRop}>
+            <SelectTrigger className="h-10 min-w-0" data-testid="select-analytics-workspace-rop">
+              <SelectValue placeholder="Все РОПы" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>Все РОПы</SelectItem>
+              {getRopOptions().map((o) => (
+                <SelectItem key={o.teamId} value={o.teamId}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Менеджер</Label>
+          <Select value={mgr} onValueChange={setMgr}>
+            <SelectTrigger className="h-10 min-w-0" data-testid="select-analytics-workspace-manager">
+              <SelectValue placeholder="Все" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>Все менеджеры</SelectItem>
+              {managers.map((m) => (
                 <SelectItem key={m} value={m}>
                   {m}
                 </SelectItem>

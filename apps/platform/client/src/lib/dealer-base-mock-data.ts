@@ -136,6 +136,10 @@ export type DealerRow = {
   outlets: number;
   manager: string;
   regionalManager: string;
+  /** Команда (РОП) из Release 1 — для фильтров. */
+  releaseTeamId?: string;
+  /** Менеджер (id из sales-control) из Release 1 — для фильтров. */
+  releaseManagerId?: string;
   lastActivity: string;
   nextAction: string;
   distribution: number;
@@ -227,6 +231,8 @@ function mapReleaseClientToDealerRow(c: ReleaseClient): DealerRow {
     outlets: 1,
     manager: mgr,
     regionalManager: rop,
+    releaseTeamId: c.teamId,
+    releaseManagerId: c.managerId,
     lastActivity: "—",
     nextAction: "Актуализация данных в учётных системах (после интеграции).",
     distribution: 0,

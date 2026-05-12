@@ -22,6 +22,7 @@ import {
   SALES_PLAN_PERIODS,
   SALES_TEAMS,
 } from "@/lib/sales-control-data";
+import { getRopOptions } from "@/lib/rop-manager-filters";
 import { cn } from "@/lib/utils";
 
 const ALL = "__all__";
@@ -114,7 +115,7 @@ export default function SalesControlDirectorPage() {
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground">Команда</Label>
+            <Label className="text-xs font-medium text-muted-foreground">РОП</Label>
             <Select
               value={teamFilter}
               onValueChange={(v) => {
@@ -123,13 +124,13 @@ export default function SalesControlDirectorPage() {
               }}
             >
               <SelectTrigger className="w-full" data-testid="select-sales-filter-team">
-                <SelectValue placeholder="Команда" />
+                <SelectValue placeholder="РОП" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={ALL}>Все команды</SelectItem>
-                {SALES_TEAMS.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>
-                    {t.name}
+                <SelectItem value={ALL}>Все РОПы</SelectItem>
+                {getRopOptions().map((r) => (
+                  <SelectItem key={r.teamId} value={r.teamId}>
+                    {r.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -142,7 +143,7 @@ export default function SalesControlDirectorPage() {
                 <SelectValue placeholder="Менеджер" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={ALL}>Все менеджеры (в зоне фильтра)</SelectItem>
+                <SelectItem value={ALL}>Все менеджеры</SelectItem>
                 {getAllSalesManagers()
                   .filter((m) => teamFilter === ALL || m.teamId === teamFilter)
                   .map((m) => (
