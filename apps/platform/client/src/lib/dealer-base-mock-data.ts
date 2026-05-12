@@ -296,8 +296,29 @@ function mapReleaseClientToDealerRow(c: ReleaseClient): DealerRow {
   };
 }
 
+/** Защита от случайных дублей id в исходном Excel: уникализируем суффиксом `-dup-N`. */
+function dedupeDealerIds(rows: DealerRow[]): DealerRow[] {
+  const used = new Set<string>();
+  for (const row of rows) {
+    let id = row.id;
+    if (used.has(id)) {
+      let n = 2;
+      while (used.has(`${row.id}-dup-${n}`)) n += 1;
+      id = `${row.id}-dup-${n}`;
+      row.id = id;
+      const pointSuffix = "-01";
+      const newPointId = `${id}${pointSuffix}`;
+      if (row.tradePoints[0]) row.tradePoints[0].id = newPointId;
+    }
+    used.add(id);
+  }
+  return rows;
+}
+
 /** Клиентская база Release 1: строки из импорта Excel (release-client-seed). */
-export const DEALER_BASE_ROWS: DealerRow[] = getReleaseClients().map(mapReleaseClientToDealerRow);
+export const DEALER_BASE_ROWS: DealerRow[] = dedupeDealerIds(
+  getReleaseClients().map(mapReleaseClientToDealerRow),
+);
 
 function padLegacyDealer(n: number): string {
   return String(n).padStart(3, "0");
