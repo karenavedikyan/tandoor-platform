@@ -158,7 +158,7 @@ function TabTable({
         <div className="space-y-1.5">
           <Label className="text-xs text-muted-foreground">Менеджер</Label>
           <Select value={mgr} onValueChange={setMgr}>
-            <SelectTrigger className="h-10 min-w-0">
+            <SelectTrigger className="h-10 min-w-0" data-testid="select-analytics-workspace-manager">
               <SelectValue placeholder="Все" />
             </SelectTrigger>
             <SelectContent>

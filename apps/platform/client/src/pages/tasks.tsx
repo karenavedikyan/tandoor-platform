@@ -748,7 +748,7 @@ export default function TasksPage() {
         <div className="min-w-0 flex-1 space-y-1.5 sm:max-w-[240px]">
           <Label className="text-xs text-muted-foreground">Менеджер</Label>
           <Select value={mgrFilter} onValueChange={setMgrFilter}>
-            <SelectTrigger className="min-h-11 min-w-0">
+            <SelectTrigger className="min-h-11 min-w-0" data-testid="select-tasks-manager">
               <SelectValue placeholder="Все менеджеры" />
             </SelectTrigger>
             <SelectContent>

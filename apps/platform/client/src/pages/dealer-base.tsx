@@ -256,7 +256,7 @@ export default function DealerBase() {
             <div className="space-y-2">
               <Label className="text-xs font-medium text-muted-foreground">Менеджер</Label>
               <Select value={manager} onValueChange={setManager}>
-                <SelectTrigger className="min-h-11 min-w-0 rounded-xl">
+                <SelectTrigger className="min-h-11 min-w-0 rounded-xl" data-testid="select-dealer-base-manager">
                   <SelectValue placeholder="Менеджер" />
                 </SelectTrigger>
                 <SelectContent>
