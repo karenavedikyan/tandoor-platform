@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
-import { LayoutGrid, List, Search, Table2 } from "lucide-react";
+import { Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,11 +21,31 @@ import {
   isRopOrManagerAllFilter,
   managerDisplayMatchesCatalogName,
 } from "@/lib/rop-manager-filters";
+import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
+import { loadReleaseDemoProfile, getEffectiveTeamLeadTeamId } from "@/lib/release-demo-profile";
+import { getSalesUserById, getTeamManagers, type SalesUser } from "@/lib/sales-control-data";
+import {
+  buildDayPlanTeamRows,
+  dealerNeedsAttention,
+  DEALER_BASE_VIEW_LABELS,
+  defaultWorkViewForAccess,
+  groupLabelsForAccess,
+  isDealerBusinessRisk,
+  isDealerTop,
+  initialRopManagerForProfile,
+  managerOptionsForProfile,
+  mapSalesRoleToDealerBaseAccess,
+  pickTodayContactRows,
+  roleScopedDealerRows,
+  ropOptionsForProfile,
+  viewsInGroupForAccess,
+  workViewsForAccess,
+  type DealerBaseWorkView,
+} from "@/lib/dealer-base-role-views";
 
-/** Максимум строк/карточек в DOM; фильтрация по полному списку клиентов. */
 const DEALER_BASE_DISPLAY_LIMIT = 300;
+const TODAY_LIMIT = 100;
 
-type ViewMode = "list" | "cards" | "table";
 type QuickFilter = "all" | "active" | "potential" | "attention" | "top" | "no_activity";
 
 const QUICK_FILTERS: { id: QuickFilter; label: string; testId: string }[] = [
@@ -68,73 +88,487 @@ function applyQuickFilter(row: DealerRow, q: QuickFilter): boolean {
   }
 }
 
+type PickerArgs = {
+  search: string;
+  quick: QuickFilter;
+  city: string;
+  category: string;
+  ropTeam: string;
+  manager: string;
+  managerCatalogForRop: ReturnType<typeof getManagersForRopTeam>;
+};
+
+function applyPickerFilters(rows: DealerRow[], args: PickerArgs): DealerRow[] {
+  const q = args.search.trim().toLowerCase();
+  return rows.filter((row) => {
+    if (!applyQuickFilter(row, args.quick)) return false;
+    if (args.city !== "all" && row.city !== args.city) return false;
+    if (args.category !== "all" && row.category !== args.category) return false;
+    if (!isRopOrManagerAllFilter(args.ropTeam)) {
+      if (row.releaseTeamId !== args.ropTeam) return false;
+    }
+    if (!isRopOrManagerAllFilter(args.manager)) {
+      let mgrOk = row.releaseManagerId === args.manager;
+      if (!mgrOk) {
+        const cat = args.managerCatalogForRop.find((m) => m.id === args.manager);
+        mgrOk = Boolean(cat && managerDisplayMatchesCatalogName(row.manager, cat.name));
+      }
+      if (!mgrOk) return false;
+    }
+    if (!q) return true;
+    const hay = [
+      row.name,
+      row.city,
+      row.manager,
+      row.regionalManager,
+      row.releaseCode ?? "",
+      row.releaseAddress ?? "",
+      row.clientTypeLabel ?? "",
+      row.id,
+    ]
+      .join(" ")
+      .toLowerCase();
+    return hay.includes(q);
+  });
+}
+
+function managerStatsForRows(rows: DealerRow[]) {
+  const total = rows.length;
+  const active = rows.filter((r) => r.status === "активный").length;
+  const top = rows.filter(isDealerTop).length;
+  const attention = rows.filter(dealerNeedsAttention).length;
+  const potential = rows.filter((r) => r.status === "потенциальный").length;
+  return { total, active, top, attention, potential };
+}
+
+function cityStatsForRows(rows: DealerRow[]) {
+  const map = new Map<
+    string,
+    { total: number; active: number; top: number; attention: number }
+  >();
+  for (const r of rows) {
+    const c = r.city || "—";
+    const cur = map.get(c) ?? { total: 0, active: 0, top: 0, attention: 0 };
+    cur.total += 1;
+    if (r.status === "активный") cur.active += 1;
+    if (isDealerTop(r)) cur.top += 1;
+    if (dealerNeedsAttention(r)) cur.attention += 1;
+    map.set(c, cur);
+  }
+  return Array.from(map.entries())
+    .map(([city, s]) => ({ city, ...s }))
+    .sort((a, b) => b.total - a.total || a.city.localeCompare(b.city));
+}
+
+function groupRowsByManagerKey(rows: DealerRow[]): { key: string; label: string; rows: DealerRow[] }[] {
+  const m = new Map<string, { label: string; rows: DealerRow[] }>();
+  for (const r of rows) {
+    const key = r.releaseManagerId ?? r.manager;
+    const label = r.manager || "—";
+    const cur = m.get(key) ?? { label, rows: [] as DealerRow[] };
+    cur.rows.push(r);
+    if (label !== "—") cur.label = label;
+    m.set(key, cur);
+  }
+  return Array.from(m.entries())
+    .map(([key, v]) => ({ key, label: v.label, rows: v.rows }))
+    .sort((a, b) => b.rows.length - a.rows.length || a.label.localeCompare(b.label));
+}
+
+function viewSectionDataTestId(view: DealerBaseWorkView): string {
+  return `section-dealer-base-view-${view.replace(/_/g, "-")}`;
+}
+
+function rowBelongsToManager(row: DealerRow, m: Pick<SalesUser, "id" | "name">): boolean {
+  if (row.releaseManagerId === m.id) return true;
+  return managerDisplayMatchesCatalogName(row.manager, m.name);
+}
+
+function OpenDealerButton({ id }: { id: string }) {
+  return (
+    <Button asChild className="min-h-11 shrink-0 font-semibold" data-testid={`button-open-dealer-${id}`}>
+      <Link href={`/dealers/${id}`}>Открыть</Link>
+    </Button>
+  );
+}
+
+function ClientListBlock({ rows, empty, compact }: { rows: DealerRow[]; empty: string; compact?: boolean }) {
+  if (rows.length === 0) {
+    return (
+      <Card className="rounded-2xl border border-dashed border-border bg-muted/30 p-8 text-center text-sm text-muted-foreground">
+        {empty}
+      </Card>
+    );
+  }
+  return (
+    <div className={cn("space-y-3", compact && "space-y-2")}>
+      {rows.map((row) => (
+        <Card
+          key={row.id}
+          className="rounded-2xl border border-border/80 bg-card shadow-sm"
+          data-testid={`row-dealer-${row.id}`}
+        >
+          <CardContent
+            className={cn(
+              "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4",
+              compact ? "p-3 sm:gap-3" : "p-4 sm:gap-4",
+            )}
+          >
+            <div className={cn("min-w-0 flex-1", compact ? "space-y-1" : "space-y-2")}>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={cn("font-semibold text-foreground", compact && "text-sm")}>{row.name}</span>
+                <Badge variant="outline" className={cn("text-xs", categoryBadgeClass(row.category))}>
+                  {row.category}
+                </Badge>
+                <Badge variant="outline" className={cn("text-xs", statusBadgeClass(row.status))}>
+                  {row.status}
+                </Badge>
+                {row.hasProblem ? (
+                  <Badge variant="outline" className="border-red-200 bg-red-50 text-xs text-red-800">
+                    Есть вопрос
+                  </Badge>
+                ) : null}
+              </div>
+              <p className={cn("text-muted-foreground", compact ? "text-xs" : "text-sm")}>
+                Код: {row.releaseCode ?? "—"} · {row.city} · {row.manager}
+              </p>
+              {!compact ? (
+                <>
+                  <p className="text-xs text-muted-foreground">РОП: {row.regionalManager}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Тип: {row.clientTypeLabel ?? row.category} · ТТ: {row.outlets}
+                  </p>
+                  {row.releaseAddress ? (
+                    <p className="text-xs text-muted-foreground">Адрес: {row.releaseAddress}</p>
+                  ) : null}
+                </>
+              ) : null}
+            </div>
+            <OpenDealerButton id={row.id} />
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+function ClientTableBlock({ rows }: { rows: DealerRow[] }) {
+  return (
+    <>
+      <div className="space-y-3 sm:hidden">
+        {rows.map((row) => (
+          <Card key={row.id} className="rounded-2xl border border-border/80 bg-card shadow-sm" data-testid={`row-dealer-${row.id}`}>
+            <CardContent className="space-y-2 p-4 text-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-semibold">{row.name}</span>
+                <Badge variant="outline" className={cn("text-xs", categoryBadgeClass(row.category))}>
+                  {row.category}
+                </Badge>
+              </div>
+              <p className="text-muted-foreground">
+                {row.city} · {row.status}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {row.manager} · РОП: {row.regionalManager}
+              </p>
+              {row.releaseAddress ? <p className="text-xs text-muted-foreground line-clamp-2">{row.releaseAddress}</p> : null}
+              <OpenDealerButton id={row.id} />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+      <div className="hidden min-w-0 sm:block sm:max-w-full sm:overflow-x-auto sm:rounded-2xl sm:border sm:border-border/80 sm:bg-card sm:shadow-sm">
+        <table className="w-full min-w-[720px] text-left text-sm">
+          <thead className="border-b border-border bg-muted/40">
+            <tr>
+              {["Код", "Клиент", "Город", "РОП", "Менеджер", "Тип клиента", "Адрес", "Статус", ""].map((h) => (
+                <th key={h} className="whitespace-nowrap px-3 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.id} className="border-b border-border last:border-0" data-testid={`row-dealer-${row.id}`}>
+                <td className="px-3 py-3 font-mono text-xs text-muted-foreground">{row.releaseCode ?? "—"}</td>
+                <td className="max-w-[160px] truncate px-3 py-3 font-medium" title={row.name}>
+                  {row.name}
+                </td>
+                <td className="whitespace-nowrap px-3 py-3">{row.city}</td>
+                <td className="max-w-[120px] truncate px-3 py-3 text-xs" title={row.regionalManager}>
+                  {row.regionalManager}
+                </td>
+                <td className="max-w-[120px] truncate px-3 py-3 text-xs" title={row.manager}>
+                  {row.manager}
+                </td>
+                <td className="max-w-[140px] truncate px-3 py-3 text-xs" title={row.clientTypeLabel}>
+                  {row.clientTypeLabel ?? row.category}
+                </td>
+                <td className="max-w-[180px] truncate px-3 py-3 text-xs text-muted-foreground" title={row.releaseAddress}>
+                  {row.releaseAddress ?? "—"}
+                </td>
+                <td className="px-3 py-3">
+                  <Badge variant="outline" className={cn("text-xs", statusBadgeClass(row.status))}>
+                    {row.status}
+                  </Badge>
+                </td>
+                <td className="px-3 py-3">
+                  <Button asChild size="sm" className="font-semibold" data-testid={`button-open-dealer-${row.id}`}>
+                    <Link href={`/dealers/${row.id}`}>Открыть</Link>
+                  </Button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
 export default function DealerBase() {
-  const [view, setView] = useState<ViewMode>("list");
+  const { profile } = useReleaseDemoProfile();
+  const access = useMemo(() => mapSalesRoleToDealerBaseAccess(profile.role), [profile.role]);
+
+  const [workView, setWorkView] = useState<DealerBaseWorkView>(() => {
+    const p = loadReleaseDemoProfile();
+    return defaultWorkViewForAccess(mapSalesRoleToDealerBaseAccess(p.role));
+  });
   const [search, setSearch] = useState("");
   const [quick, setQuick] = useState<QuickFilter>("all");
   const [city, setCity] = useState<string>("all");
   const [category, setCategory] = useState<string>("all");
-  const [ropTeam, setRopTeam] = useState<string>("all");
-  const [manager, setManager] = useState<string>("all");
+  const [ropTeam, setRopTeam] = useState<string>(() => {
+    const p = loadReleaseDemoProfile();
+    return initialRopManagerForProfile(p, mapSalesRoleToDealerBaseAccess(p.role)).ropTeam;
+  });
+  const [manager, setManager] = useState<string>(() => {
+    const p = loadReleaseDemoProfile();
+    return initialRopManagerForProfile(p, mapSalesRoleToDealerBaseAccess(p.role)).manager;
+  });
 
-  const categoryOptions = useMemo(() => {
-    const s = new Set(DEALER_BASE_ROWS.map((r) => r.category));
-    return Array.from(s).sort() as DealerCategory[];
-  }, []);
+  useEffect(() => {
+    const d = initialRopManagerForProfile(profile, access);
+    setRopTeam(d.ropTeam);
+    setManager(d.manager);
+  }, [profile.role, profile.personaUserId, access]);
 
-  const cities = useMemo(() => {
-    const s = new Set(DEALER_BASE_ROWS.map((r) => r.city));
-    return Array.from(s).sort();
-  }, []);
+  useEffect(() => {
+    const allowed = workViewsForAccess(access);
+    setWorkView((prev) => (allowed.includes(prev) ? prev : defaultWorkViewForAccess(access)));
+  }, [access]);
 
   const managerCatalogForRop = useMemo(() => getManagersForRopTeam(ropTeam), [ropTeam]);
+  const managerOptions = useMemo(
+    () => managerOptionsForProfile(profile, access, ropTeam),
+    [profile, access, ropTeam],
+  );
+  const ropSelectOptions = useMemo(() => ropOptionsForProfile(profile, access), [profile, access]);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return DEALER_BASE_ROWS.filter((row) => {
-      if (!applyQuickFilter(row, quick)) return false;
-      if (city !== "all" && row.city !== city) return false;
-      if (category !== "all" && row.category !== category) return false;
-      if (!isRopOrManagerAllFilter(ropTeam)) {
-        if (row.releaseTeamId !== ropTeam) return false;
-      }
-      if (!isRopOrManagerAllFilter(manager)) {
-        let mgrOk = row.releaseManagerId === manager;
-        if (!mgrOk) {
-          const cat = managerCatalogForRop.find((m) => m.id === manager);
-          mgrOk = Boolean(cat && managerDisplayMatchesCatalogName(row.manager, cat.name));
-        }
-        if (!mgrOk) return false;
-      }
-      if (!q) return true;
-      const hay = [
-        row.name,
-        row.city,
-        row.manager,
-        row.regionalManager,
-        row.releaseCode ?? "",
-        row.releaseAddress ?? "",
-        row.clientTypeLabel ?? "",
-        row.id,
-      ]
-        .join(" ")
-        .toLowerCase();
-      return hay.includes(q);
-    });
-  }, [search, quick, city, category, manager, ropTeam, managerCatalogForRop]);
+  const scopedRows = useMemo(() => roleScopedDealerRows(DEALER_BASE_ROWS, profile), [profile]);
+
+  const pickerArgs = useMemo(
+    () => ({ search, quick, city, category, ropTeam, manager, managerCatalogForRop }),
+    [search, quick, city, category, ropTeam, manager, managerCatalogForRop],
+  );
+
+  const pickerFiltered = useMemo(() => applyPickerFilters(scopedRows, pickerArgs), [scopedRows, pickerArgs]);
 
   const kpis = useMemo(() => {
-    const total = filtered.length;
-    const active = filtered.filter((r) => r.status === "активный").length;
-    const potential = filtered.filter((r) => r.status === "потенциальный").length;
-    const attention = filtered.filter((r) => r.status === "требует внимания" || r.hasProblem).length;
-    const outlets = filtered.reduce((a, r) => a + r.outlets, 0);
+    const total = pickerFiltered.length;
+    const active = pickerFiltered.filter((r) => r.status === "активный").length;
+    const potential = pickerFiltered.filter((r) => r.status === "потенциальный").length;
+    const attention = pickerFiltered.filter((r) => r.status === "требует внимания" || r.hasProblem).length;
+    const outlets = pickerFiltered.reduce((a, r) => a + r.outlets, 0);
     const avgDist =
-      total > 0 ? Math.round(filtered.reduce((a, r) => a + r.distribution, 0) / total) : 0;
+      total > 0 ? Math.round(pickerFiltered.reduce((a, r) => a + r.distribution, 0) / total) : 0;
     return { total, active, potential, attention, outlets, avgDist };
-  }, [filtered]);
+  }, [pickerFiltered]);
 
-  const displayRows = useMemo(() => filtered.slice(0, DEALER_BASE_DISPLAY_LIMIT), [filtered]);
+  const categoryOptions = useMemo(() => {
+    const s = new Set(scopedRows.map((r) => r.category));
+    return Array.from(s).sort() as DealerCategory[];
+  }, [scopedRows]);
+
+  const cities = useMemo(() => {
+    const s = new Set(scopedRows.map((r) => r.city));
+    return Array.from(s).sort();
+  }, [scopedRows]);
+
+  const firstRopTeamId = useMemo(() => getRopOptions()[0]?.teamId ?? "", []);
+
+  const effectiveTeamIdForTeamModes = useMemo(() => {
+    if (access === "team_lead") return getEffectiveTeamLeadTeamId(profile);
+    if (access === "sales_manager") {
+      return getSalesUserById(profile.personaUserId)?.teamId ?? firstRopTeamId;
+    }
+    if (!isRopOrManagerAllFilter(ropTeam)) return ropTeam;
+    return firstRopTeamId;
+  }, [access, profile, ropTeam, firstRopTeamId]);
+
+  const teamRowsForModes = useMemo(
+    () => scopedRows.filter((r) => r.releaseTeamId === effectiveTeamIdForTeamModes),
+    [scopedRows, effectiveTeamIdForTeamModes],
+  );
+
+  const needsManagerSelection =
+    (access === "sales_director" || access === "team_lead") &&
+    (workView === "my_clients" ||
+      workView === "today" ||
+      workView === "my_attention" ||
+      workView === "my_top" ||
+      workView === "my_cities") &&
+    isRopOrManagerAllFilter(manager);
+
+  const managerScopedRows = useMemo(() => {
+    if (isRopOrManagerAllFilter(manager)) return pickerFiltered;
+    const cat = managerCatalogForRop.find((m) => m.id === manager);
+    return pickerFiltered.filter((row) => {
+      if (row.releaseManagerId === manager) return true;
+      return Boolean(cat && managerDisplayMatchesCatalogName(row.manager, cat.name));
+    });
+  }, [pickerFiltered, manager, managerCatalogForRop]);
+
+  const viewRows = useMemo(() => {
+    const limit = DEALER_BASE_DISPLAY_LIMIT;
+    const pick = pickerFiltered;
+    switch (workView) {
+      case "risks_all":
+        return pick.filter(isDealerBusinessRisk).slice(0, limit);
+      case "top_all":
+        return pick.filter(isDealerTop).slice(0, limit);
+      case "team_attention":
+        return teamRowsForModes.filter(dealerNeedsAttention).slice(0, limit);
+      case "day_plan_team":
+        return buildDayPlanTeamRows(teamRowsForModes, limit);
+      case "today":
+        return pickTodayContactRows(needsManagerSelection ? [] : managerScopedRows, TODAY_LIMIT);
+      case "my_attention":
+        return (needsManagerSelection ? [] : managerScopedRows).filter(dealerNeedsAttention).slice(0, limit);
+      case "my_top":
+        return (needsManagerSelection ? [] : managerScopedRows).filter(isDealerTop).slice(0, limit);
+      case "my_cities":
+      case "cities_all":
+      case "by_manager":
+      case "teams":
+      case "my_team":
+        return [];
+      default:
+        return [];
+    }
+  }, [
+    workView,
+    pickerFiltered,
+    teamRowsForModes,
+    managerScopedRows,
+    needsManagerSelection,
+  ]);
+
+  const displayRows = useMemo(() => {
+    const limit = DEALER_BASE_DISPLAY_LIMIT;
+    if (
+      workView === "risks_all" ||
+      workView === "top_all" ||
+      workView === "team_attention" ||
+      workView === "day_plan_team" ||
+      workView === "today" ||
+      workView === "my_attention" ||
+      workView === "my_top"
+    ) {
+      return viewRows;
+    }
+    if (workView === "my_clients") {
+      if (needsManagerSelection) return [];
+      return managerScopedRows.slice(0, limit);
+    }
+    if (workView === "table_all") {
+      return pickerFiltered.slice(0, limit);
+    }
+    if (workView === "table_team") {
+      return applyPickerFilters(teamRowsForModes, pickerArgs).slice(0, limit);
+    }
+    return [];
+  }, [
+    workView,
+    viewRows,
+    pickerFiltered,
+    pickerArgs,
+    teamRowsForModes,
+    managerScopedRows,
+    needsManagerSelection,
+  ]);
+
+  const cap = DEALER_BASE_DISPLAY_LIMIT;
+
+  const onRopChange = useCallback(
+    (v: string) => {
+      setRopTeam(v);
+      setManager((prev) => {
+        if (prev === "all") return prev;
+        const allowed = getManagersForRopTeam(v).some((m) => m.id === prev);
+        return allowed ? prev : "all";
+      });
+    },
+    [],
+  );
+
+  const resultsCapTotal = useMemo(() => {
+    switch (workView) {
+      case "risks_all":
+        return pickerFiltered.filter(isDealerBusinessRisk).length;
+      case "top_all":
+        return pickerFiltered.filter(isDealerTop).length;
+      case "team_attention":
+        return teamRowsForModes.filter(dealerNeedsAttention).length;
+      case "day_plan_team":
+        return buildDayPlanTeamRows(teamRowsForModes, 1_000_000).length;
+      case "today":
+        if (needsManagerSelection) return 0;
+        return managerScopedRows.length;
+      case "my_attention":
+        if (needsManagerSelection) return 0;
+        return managerScopedRows.filter(dealerNeedsAttention).length;
+      case "my_top":
+        if (needsManagerSelection) return 0;
+        return managerScopedRows.filter(isDealerTop).length;
+      case "my_clients":
+        if (needsManagerSelection) return 0;
+        return managerScopedRows.length;
+      case "table_all":
+        return pickerFiltered.length;
+      case "table_team":
+        return applyPickerFilters(teamRowsForModes, pickerArgs).length;
+      default:
+        return null;
+    }
+  }, [
+    workView,
+    pickerFiltered,
+    teamRowsForModes,
+    managerScopedRows,
+    needsManagerSelection,
+    pickerArgs,
+  ]);
+
+  const setRopManagerFromClick = (tid: string, mid: string) => {
+    setRopTeam(tid);
+    setManager(mid);
+  };
+
+  const hintSelectRop =
+    access === "sales_director" && workView === "my_team" && isRopOrManagerAllFilter(ropTeam) ? (
+      <p className="text-sm text-muted-foreground">
+        Выберите РОПа в фильтре выше, чтобы посмотреть команду. Превью: команда «
+        {getRopOptions().find((o) => o.teamId === effectiveTeamIdForTeamModes)?.label ?? "—"}».
+      </p>
+    ) : null;
+
+  const groupUi = groupLabelsForAccess(access);
+
+  const hideResultsCap =
+    needsManagerSelection &&
+    (workView === "my_clients" || workView === "today" || workView === "my_attention" || workView === "my_top");
 
   return (
     <div className="min-w-0 max-w-full overflow-x-hidden space-y-6 sm:space-y-8" data-testid="page-dealer-base">
@@ -174,7 +608,7 @@ export default function DealerBase() {
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Поиск: название, код, город, РОП, менеджер, тип, адрес"
               className="min-h-11 rounded-xl border-border pl-10"
-              data-testid="input-dealer-search"
+              data-testid="input-dealer-base-search"
             />
           </div>
 
@@ -194,8 +628,8 @@ export default function DealerBase() {
             ))}
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="space-y-2">
+          <div className="grid min-w-0 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="min-w-0 space-y-2">
               <Label className="text-xs font-medium text-muted-foreground">Город</Label>
               <Select value={city} onValueChange={setCity}>
                 <SelectTrigger className="min-h-11 min-w-0 rounded-xl">
@@ -211,7 +645,7 @@ export default function DealerBase() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
+            <div className="min-w-0 space-y-2">
               <Label className="text-xs font-medium text-muted-foreground">Классификация (TOP/A/B/C)</Label>
               <Select value={category} onValueChange={setCategory}>
                 <SelectTrigger className="min-h-11 min-w-0 rounded-xl">
@@ -227,25 +661,17 @@ export default function DealerBase() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
+            <div className="min-w-0 space-y-2">
               <Label className="text-xs font-medium text-muted-foreground">РОП</Label>
-              <Select
-                value={ropTeam}
-                onValueChange={(v) => {
-                  setRopTeam(v);
-                  setManager((prev) => {
-                    if (prev === "all") return prev;
-                    const allowed = getManagersForRopTeam(v).some((m) => m.id === prev);
-                    return allowed ? prev : "all";
-                  });
-                }}
-              >
+              <Select value={ropTeam} onValueChange={onRopChange}>
                 <SelectTrigger className="min-h-11 min-w-0 rounded-xl" data-testid="select-dealer-base-rop">
                   <SelectValue placeholder="РОП" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Все РОПы</SelectItem>
-                  {getRopOptions().map((r) => (
+                  {access === "sales_director" ? (
+                    <SelectItem value="all">Все РОПы</SelectItem>
+                  ) : null}
+                  {ropSelectOptions.map((r) => (
                     <SelectItem key={r.teamId} value={r.teamId}>
                       {r.label}
                     </SelectItem>
@@ -253,15 +679,17 @@ export default function DealerBase() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
+            <div className="min-w-0 space-y-2">
               <Label className="text-xs font-medium text-muted-foreground">Менеджер</Label>
               <Select value={manager} onValueChange={setManager}>
                 <SelectTrigger className="min-h-11 min-w-0 rounded-xl" data-testid="select-dealer-base-manager">
                   <SelectValue placeholder="Менеджер" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Все менеджеры</SelectItem>
-                  {managerCatalogForRop.map((m) => (
+                  {access === "sales_director" || access === "team_lead" ? (
+                    <SelectItem value="all">Все менеджеры</SelectItem>
+                  ) : null}
+                  {managerOptions.map((m) => (
                     <SelectItem key={m.id} value={m.id}>
                       {m.name}
                     </SelectItem>
@@ -271,236 +699,279 @@ export default function DealerBase() {
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2 border-t border-border pt-4">
-            <span className="w-full text-xs font-medium text-muted-foreground sm:w-auto sm:py-2">Вид:</span>
-            <Button
-              type="button"
-              size="sm"
-              variant={view === "list" ? "default" : "outline"}
-              className={cn("gap-2 rounded-full", view !== "list" && "border-border bg-card")}
-              onClick={() => setView("list")}
-              data-testid="toggle-view-list"
-            >
-              <List className="h-4 w-4" />
-              Список
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant={view === "cards" ? "default" : "outline"}
-              className={cn("gap-2 rounded-full", view !== "cards" && "border-border bg-card")}
-              onClick={() => setView("cards")}
-              data-testid="toggle-view-cards"
-            >
-              <LayoutGrid className="h-4 w-4" />
-              Карточки
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant={view === "table" ? "default" : "outline"}
-              className={cn("gap-2 rounded-full", view !== "table" && "border-border bg-card")}
-              onClick={() => setView("table")}
-              data-testid="toggle-view-table"
-            >
-              <Table2 className="h-4 w-4" />
-              Таблица
-            </Button>
-          </div>
+          <section className="space-y-4 border-t border-border pt-4" data-testid="section-dealer-base-role-views">
+            <p className="text-xs font-medium text-muted-foreground">Рабочий режим:</p>
+            <div className="flex min-w-0 flex-col gap-6">
+              {groupUi.department ? (
+                <div className="min-w-0 space-y-2" data-testid="section-dealer-base-role-group-department">
+                  <p className="text-sm font-semibold text-foreground">Отдел</p>
+                  <div className="flex flex-wrap gap-2">
+                    {viewsInGroupForAccess(access, "department").map((vid) => (
+                      <Button
+                        key={vid}
+                        type="button"
+                        size="sm"
+                        variant={workView === vid ? "default" : "outline"}
+                        className={cn("rounded-full", workView !== vid && "border-border bg-card")}
+                        onClick={() => setWorkView(vid)}
+                        data-testid={`button-dealer-base-view-${vid}`}
+                      >
+                        {DEALER_BASE_VIEW_LABELS[vid]}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              {groupUi.team ? (
+                <div className="min-w-0 space-y-2" data-testid="section-dealer-base-role-group-team">
+                  <p className="text-sm font-semibold text-foreground">Команда</p>
+                  <div className="flex flex-wrap gap-2">
+                    {viewsInGroupForAccess(access, "team").map((vid) => (
+                      <Button
+                        key={vid}
+                        type="button"
+                        size="sm"
+                        variant={workView === vid ? "default" : "outline"}
+                        className={cn("rounded-full", workView !== vid && "border-border bg-card")}
+                        onClick={() => setWorkView(vid)}
+                        data-testid={`button-dealer-base-view-${vid}`}
+                      >
+                        {DEALER_BASE_VIEW_LABELS[vid]}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              {groupUi.manager ? (
+                <div className="min-w-0 space-y-2" data-testid="section-dealer-base-role-group-manager">
+                  <p className="text-sm font-semibold text-foreground">Менеджер</p>
+                  <div className="flex flex-wrap gap-2">
+                    {viewsInGroupForAccess(access, "manager").map((vid) => (
+                      <Button
+                        key={vid}
+                        type="button"
+                        size="sm"
+                        variant={workView === vid ? "default" : "outline"}
+                        className={cn("rounded-full", workView !== vid && "border-border bg-card")}
+                        onClick={() => setWorkView(vid)}
+                        data-testid={`button-dealer-base-view-${vid}`}
+                      >
+                        {DEALER_BASE_VIEW_LABELS[vid]}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </section>
         </CardContent>
       </Card>
 
-      {filtered.length > 0 ? (
+      {resultsCapTotal !== null && !hideResultsCap ? (
         <p className="text-sm text-muted-foreground" data-testid="text-dealer-base-display-cap">
-          Показано {Math.min(DEALER_BASE_DISPLAY_LIMIT, filtered.length)} из {filtered.length} по фильтрам.
-          {filtered.length > DEALER_BASE_DISPLAY_LIMIT
+          Показано {displayRows.length} из {resultsCapTotal}
+          {workView === "today" ? ` (лимит режима «Сегодня» ${TODAY_LIMIT})` : ""}
+          {workView !== "today" && resultsCapTotal > cap ? ` (лимит отображения ${cap})` : ""}.
+          {resultsCapTotal > displayRows.length && workView !== "today"
             ? " Уточните поиск или фильтры, чтобы сузить список."
             : null}
         </p>
       ) : null}
 
-      <section data-testid="section-dealer-base-results">
-        {filtered.length === 0 ? (
-          <Card className="rounded-2xl border border-dashed border-border bg-muted/30 p-8 text-center text-sm text-muted-foreground">
-            Ничего не найдено. Измените фильтры или поиск.
-          </Card>
-        ) : view === "list" ? (
-          <div className="space-y-3">
-            {displayRows.map((row) => (
-              <Card
-                key={row.id}
-                className="rounded-2xl border border-border/80 bg-card shadow-sm"
-                data-testid={`row-dealer-${row.id}`}
-              >
-                <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-                  <div className="min-w-0 flex-1 space-y-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-semibold text-foreground">{row.name}</span>
-                      <Badge variant="outline" className={cn("text-xs", categoryBadgeClass(row.category))}>
-                        {row.category}
-                      </Badge>
-                      <Badge variant="outline" className={cn("text-xs", statusBadgeClass(row.status))}>
-                        {row.status}
-                      </Badge>
-                      {row.hasProblem ? (
-                        <Badge variant="outline" className="border-red-200 bg-red-50 text-xs text-red-800">
-                          Есть вопрос
-                        </Badge>
-                      ) : null}
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Код: {row.releaseCode ?? "—"} · {row.city} · РОП: {row.regionalManager}
-                    </p>
-                    <p className="text-xs text-muted-foreground">Менеджер: {row.manager}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Тип: {row.clientTypeLabel ?? row.category} · ТТ: {row.outlets}
-                    </p>
-                    {row.releaseAddress ? (
-                      <p className="text-xs text-muted-foreground">Адрес: {row.releaseAddress}</p>
-                    ) : null}
-                    <p className="text-xs text-muted-foreground">
-                      Дистрибуция (пилот): {row.distribution}% · Витрина: {row.showcaseStatus}
-                    </p>
-                    <p className="text-xs text-foreground/90">Далее: {row.nextAction}</p>
-                  </div>
-                  <Button asChild className="min-h-11 shrink-0 font-semibold" data-testid={`button-open-dealer-${row.id}`}>
-                    <Link href={`/dealers/${row.id}`}>Открыть</Link>
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        ) : view === "cards" ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {displayRows.map((row) => (
-              <Card
-                key={row.id}
-                className="flex flex-col rounded-2xl border border-border/80 bg-card shadow-md"
-                data-testid={`card-dealer-${row.id}`}
-              >
-                <CardHeader className="space-y-2 pb-2">
-                  <CardTitle className="text-base leading-snug">{row.name}</CardTitle>
-                  <div className="flex flex-wrap gap-2">
-                    <Badge variant="outline" className={cn("text-xs", statusBadgeClass(row.status))}>
-                      {row.status}
-                    </Badge>
-                    <Badge variant="outline" className={cn("text-xs", categoryBadgeClass(row.category))}>
-                      {row.category}
-                    </Badge>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    {row.city}, {row.region}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Код: {row.releaseCode ?? "—"}</p>
-                  <p className="text-xs text-muted-foreground">Тип: {row.clientTypeLabel ?? row.category}</p>
-                </CardHeader>
-                <CardContent className="mt-auto flex flex-1 flex-col gap-3 pb-4">
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div>
-                      <p className="text-muted-foreground">Дистрибуция</p>
-                      <p className="font-semibold text-foreground">{row.distribution}%</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Витрина</p>
-                      <p className="font-semibold text-foreground">{row.showcaseStatus}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">ТТ</p>
-                      <p className="font-semibold text-foreground">{row.outlets}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Активность</p>
-                      <p className="font-semibold text-foreground">{row.lastActivity}</p>
-                    </div>
-                  </div>
-                  {row.hasProblem ? (
-                    <p className="rounded-lg border border-amber-200 bg-amber-50/80 px-2 py-1.5 text-xs text-amber-950">{row.comment}</p>
-                  ) : null}
-                  <p className="text-xs text-muted-foreground">Далее: {row.nextAction}</p>
-                  <Button asChild className="mt-auto min-h-11 w-full font-semibold" data-testid={`button-open-dealer-${row.id}`}>
-                    <Link href={`/dealers/${row.id}`}>Открыть</Link>
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        ) : (
-          <>
-            <div className="space-y-3 sm:hidden">
-              {displayRows.map((row) => (
-                <Card key={row.id} className="rounded-2xl border border-border/80 bg-card shadow-sm" data-testid={`row-dealer-${row.id}`}>
-                  <CardContent className="space-y-2 p-4 text-sm">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="font-semibold">{row.name}</span>
-                      <Badge variant="outline" className={cn("text-xs", categoryBadgeClass(row.category))}>
-                        {row.category}
-                      </Badge>
-                    </div>
-                    <p className="text-muted-foreground">
-                      {row.city} · {row.status}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {row.manager} · РОП: {row.regionalManager}
-                    </p>
-                    {row.releaseAddress ? <p className="text-xs text-muted-foreground line-clamp-2">{row.releaseAddress}</p> : null}
-                    <p className="text-xs">
-                      Дистр. {row.distribution}% · {row.showcaseStatus}
-                    </p>
-                    <Button asChild className="min-h-11 w-full font-semibold" data-testid={`button-open-dealer-${row.id}`}>
-                      <Link href={`/dealers/${row.id}`}>Открыть</Link>
-                    </Button>
+      <section className="min-w-0" data-testid="section-dealer-base-results">
+        {workView === "teams" ? (
+          <div className="space-y-6" data-testid={viewSectionDataTestId("teams")}>
+            {getRopOptions().map((rop) => {
+              const mgrs = getTeamManagers(rop.teamId);
+              return (
+                <Card key={rop.teamId} className="rounded-2xl border border-border/80 bg-card shadow-md">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-lg">{rop.label}</CardTitle>
+                    <p className="text-xs text-muted-foreground">Команда · карточки менеджеров</p>
+                  </CardHeader>
+                  <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {mgrs.map((m) => {
+                      const rows = DEALER_BASE_ROWS.filter(
+                        (r) => r.releaseTeamId === rop.teamId && rowBelongsToManager(r, m),
+                      );
+                      const st = managerStatsForRows(rows);
+                      return (
+                        <button
+                          key={m.id}
+                          type="button"
+                          className="rounded-xl border border-border/80 bg-muted/20 p-4 text-left transition hover:bg-muted/40"
+                          onClick={() => setRopManagerFromClick(rop.teamId, m.id)}
+                        >
+                          <p className="font-semibold text-foreground">{m.name}</p>
+                          <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                            <span>Всего: {st.total}</span>
+                            <span>Активные: {st.active}</span>
+                            <span>TOP: {st.top}</span>
+                            <span>Внимание: {st.attention}</span>
+                            <span className="col-span-2">Потенциальные: {st.potential}</span>
+                          </div>
+                          <p className="mt-2 text-[11px] text-primary">Нажмите, чтобы применить РОП + менеджера</p>
+                        </button>
+                      );
+                    })}
                   </CardContent>
                 </Card>
-              ))}
+              );
+            })}
+          </div>
+        ) : null}
+
+        {workView === "cities_all" ? (
+          <div className="space-y-3" data-testid={viewSectionDataTestId("cities_all")}>
+            <p className="text-sm text-muted-foreground">Группировка по городам (отдел). Нажмите город, чтобы применить фильтр.</p>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {cityStatsForRows(pickerFiltered)
+                .slice(0, cap)
+                .map((cs) => (
+                  <button
+                    key={cs.city}
+                    type="button"
+                    className="rounded-xl border border-border/80 bg-card p-4 text-left shadow-sm transition hover:border-primary/40"
+                    onClick={() => setCity(cs.city)}
+                  >
+                    <p className="font-semibold text-foreground">{cs.city}</p>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Всего {cs.total} · Активные {cs.active} · TOP {cs.top} · Внимание {cs.attention}
+                    </p>
+                  </button>
+                ))}
             </div>
-            <div className="hidden sm:block sm:max-w-full sm:overflow-x-auto sm:rounded-2xl sm:border sm:border-border/80 sm:bg-card sm:shadow-sm">
-              <table className="w-full min-w-[720px] text-left text-sm">
-                <thead className="border-b border-border bg-muted/40">
-                  <tr>
-                    {["Код", "Клиент", "Город", "РОП", "Менеджер", "Тип клиента", "Адрес", "Статус", ""].map((h) => (
-                      <th key={h} className="whitespace-nowrap px-3 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {displayRows.map((row) => (
-                    <tr key={row.id} className="border-b border-border last:border-0" data-testid={`row-dealer-${row.id}`}>
-                      <td className="px-3 py-3 font-mono text-xs text-muted-foreground">{row.releaseCode ?? "—"}</td>
-                      <td className="max-w-[160px] truncate px-3 py-3 font-medium" title={row.name}>
-                        {row.name}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-3">{row.city}</td>
-                      <td className="max-w-[120px] truncate px-3 py-3 text-xs" title={row.regionalManager}>
-                        {row.regionalManager}
-                      </td>
-                      <td className="max-w-[120px] truncate px-3 py-3 text-xs" title={row.manager}>
-                        {row.manager}
-                      </td>
-                      <td className="max-w-[140px] truncate px-3 py-3 text-xs" title={row.clientTypeLabel}>
-                        {row.clientTypeLabel ?? row.category}
-                      </td>
-                      <td className="max-w-[180px] truncate px-3 py-3 text-xs text-muted-foreground" title={row.releaseAddress}>
-                        {row.releaseAddress ?? "—"}
-                      </td>
-                      <td className="px-3 py-3">
-                        <Badge variant="outline" className={cn("text-xs", statusBadgeClass(row.status))}>
-                          {row.status}
-                        </Badge>
-                      </td>
-                      <td className="px-3 py-3">
-                        <Button asChild size="sm" className="font-semibold" data-testid={`button-open-dealer-${row.id}`}>
-                          <Link href={`/dealers/${row.id}`}>Открыть</Link>
-                        </Button>
-                      </td>
-                    </tr>
+          </div>
+        ) : null}
+
+        {workView === "my_team" ? (
+          <div className="space-y-3" data-testid={viewSectionDataTestId("my_team")}>
+            {hintSelectRop}
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {getTeamManagers(effectiveTeamIdForTeamModes).map((m) => {
+                const rows = teamRowsForModes.filter((r) => rowBelongsToManager(r, m));
+                const st = managerStatsForRows(rows);
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    className="rounded-xl border border-border/80 bg-card p-4 text-left shadow-sm transition hover:border-primary/40"
+                    onClick={() => setRopManagerFromClick(effectiveTeamIdForTeamModes, m.id)}
+                  >
+                    <p className="font-semibold text-foreground">{m.name}</p>
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                      <span>Всего: {st.total}</span>
+                      <span>Активные: {st.active}</span>
+                      <span>TOP: {st.top}</span>
+                      <span>Внимание: {st.attention}</span>
+                      <span className="col-span-2">Потенциальные: {st.potential}</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+
+        {workView === "by_manager" ? (
+          <div className="space-y-6" data-testid={viewSectionDataTestId("by_manager")}>
+            {groupRowsByManagerKey(teamRowsForModes).map((g) => (
+              <Card key={g.key} className="rounded-2xl border border-border/80 bg-card shadow-md">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">{g.label}</CardTitle>
+                  <p className="text-xs text-muted-foreground">{g.rows.length} клиентов</p>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {g.rows.slice(0, 40).map((row) => (
+                    <div
+                      key={row.id}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 px-3 py-2 text-sm"
+                      data-testid={`row-dealer-${row.id}`}
+                    >
+                      <span className="min-w-0 font-medium">{row.name}</span>
+                      <OpenDealerButton id={row.id} />
+                    </div>
                   ))}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
+                  {g.rows.length > 40 ? (
+                    <p className="text-xs text-muted-foreground">Показаны 40 из {g.rows.length} в группе.</p>
+                  ) : null}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : null}
+
+        {workView === "my_cities" ? (
+          <div className="space-y-3" data-testid={viewSectionDataTestId("my_cities")}>
+            {needsManagerSelection ? (
+              <Card className="rounded-2xl border border-dashed border-border bg-muted/30 p-8 text-center text-sm text-muted-foreground">
+                Выберите менеджера в фильтре выше, чтобы увидеть группировку по городам.
+              </Card>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {cityStatsForRows(managerScopedRows).map((cs) => (
+                  <Card key={cs.city} className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
+                    <p className="font-semibold text-foreground">{cs.city}</p>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Всего {cs.total} · Активные {cs.active} · TOP {cs.top} · Внимание {cs.attention}
+                    </p>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : null}
+
+        {needsManagerSelection && workView !== "my_cities" ? (
+          <Card className="rounded-2xl border border-dashed border-border bg-muted/30 p-8 text-center text-sm text-muted-foreground">
+            Выберите менеджера в фильтре выше, чтобы увидеть данные в этом режиме.
+          </Card>
+        ) : null}
+
+        {!needsManagerSelection &&
+        (workView === "risks_all" ||
+          workView === "top_all" ||
+          workView === "team_attention" ||
+          workView === "day_plan_team" ||
+          workView === "today" ||
+          workView === "my_attention" ||
+          workView === "my_top" ||
+          workView === "my_clients") ? (
+          <div
+            data-testid={viewSectionDataTestId(workView)}
+            className={workView === "my_clients" ? "space-y-2" : "space-y-3"}
+          >
+            {workView === "my_clients" ? (
+              <ClientListBlock rows={displayRows} empty="Нет клиентов по выбранным фильтрам." compact />
+            ) : (
+              <ClientListBlock rows={displayRows} empty="Нет записей." />
+            )}
+          </div>
+        ) : null}
+
+        {workView === "table_all" ? (
+          <div data-testid={viewSectionDataTestId("table_all")}>
+            {displayRows.length === 0 ? (
+              <Card className="rounded-2xl border border-dashed border-border bg-muted/30 p-8 text-center text-sm text-muted-foreground">
+                Ничего не найдено.
+              </Card>
+            ) : (
+              <ClientTableBlock rows={displayRows} />
+            )}
+          </div>
+        ) : null}
+
+        {workView === "table_team" ? (
+          <div data-testid={viewSectionDataTestId("table_team")}>
+            {displayRows.length === 0 ? (
+              <Card className="rounded-2xl border border-dashed border-border bg-muted/30 p-8 text-center text-sm text-muted-foreground">
+                Нет клиентов команды по фильтрам.
+              </Card>
+            ) : (
+              <ClientTableBlock rows={displayRows} />
+            )}
+          </div>
+        ) : null}
       </section>
     </div>
   );
