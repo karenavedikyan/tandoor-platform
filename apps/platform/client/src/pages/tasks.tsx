@@ -436,7 +436,7 @@ function TaskListRow({ task }: { task: MatrixTaskWithContext }) {
             className="min-h-9 border-border bg-card"
             data-testid={`button-task-open-related-dealer-${task.taskId}`}
           >
-            <Link href={`/dealers/${task.dealerId}`}>Дилер</Link>
+            <Link href={`/dealers/${task.dealerId}`}>Клиент</Link>
           </Button>
           <Button
             asChild
@@ -513,7 +513,7 @@ function LeadershipAttentionCard({ task }: { task: MatrixTaskWithContext }) {
             className="min-h-9 border-border bg-card"
             data-testid={`button-open-leadership-task-dealer-${task.taskId}`}
           >
-            <Link href={`/dealers/${task.dealerId}`}>Дилер</Link>
+            <Link href={`/dealers/${task.dealerId}`}>Клиент</Link>
           </Button>
           <Button
             asChild

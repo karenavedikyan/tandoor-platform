@@ -572,32 +572,39 @@ const TOP_PRODUCTS: ProductTopItem[] = [
   },
 ];
 
-const TOP_PARTNERS: PartnerTopItem[] = [
+import { getReleaseClients } from "./release-client-data";
+
+const TOP_PARTNER_METRICS: Omit<PartnerTopItem, "dealerId" | "name" | "city">[] = [
   {
-    dealerId: "002",
-    name: "Дилер №002",
-    city: "Ростов-на-Дону",
     salesRub: 3_100_000,
     contributionPercent: 7.3,
     conversionHint: "Фурнитура: ниже целевого уровня на 6 п.п.",
   },
   {
-    dealerId: "001",
-    name: "Дилер №001",
-    city: "Краснодар",
     salesRub: 2_640_000,
     contributionPercent: 6.2,
     conversionHint: "ВХ стабильно, МК — окно для роста",
   },
   {
-    dealerId: "004",
-    name: "Дилер №004",
-    city: "Волгоград",
     salesRub: 2_180_000,
     contributionPercent: 5.1,
     conversionHint: "Топ по валовке в регионе",
   },
 ];
+
+function buildTopPartnersFromRelease(): PartnerTopItem[] {
+  const clients = getReleaseClients();
+  const n = Math.max(clients.length, 1);
+  return TOP_PARTNER_METRICS.map((m, i) => {
+    const c = clients[i % n]!;
+    return {
+      dealerId: c.id,
+      name: c.name,
+      city: c.city || "—",
+      ...m,
+    };
+  });
+}
 
 /** Обезличенная динамика по месяцам (региональный срез). */
 const INFOGRAPHIC_MONTHLY: InfographicMonthlyPoint[] = [
@@ -697,7 +704,7 @@ export function getAnalyticsTopProductsCity(): InfographicTopItem[] {
 
 /** Топ партнёров для диаграмм инфографики (оборот, ₽). */
 export function getAnalyticsTopPartners(): InfographicTopItem[] {
-  return TOP_PARTNERS.map((p) => ({
+  return buildTopPartnersFromRelease().map((p) => ({
     id: p.dealerId,
     name: p.name,
     category: "hardware",
@@ -773,7 +780,7 @@ export function getTopProducts(): ProductTopItem[] {
 }
 
 export function getTopPartners(): PartnerTopItem[] {
-  return TOP_PARTNERS;
+  return buildTopPartnersFromRelease();
 }
 
 export function analyticsPeriodSuffix(periodKey: AnalyticsFilterState["periodKey"]): string {

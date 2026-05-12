@@ -2,8 +2,8 @@ import { CATALOG_PRODUCTS, type CatalogProduct } from "@/lib/catalog-data";
 import { DEALER_BASE_ROWS, type DealerRow, type DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import { getAllMatrixTasks, type MatrixTaskWithContext } from "@/lib/trade-point-task-data";
 
-/** Имя менеджера продаж для привязки «моих» клиентов в публичном сценарии */
-export const SALES_MANAGER_PUBLIC_NAME = "Петров П.П.";
+/** Имя менеджера продаж для привязки «моих» клиентов в публичном сценарии (Release 1 / Excel). */
+export const SALES_MANAGER_PUBLIC_NAME = "Бойко Екатерина Михайловна";
 
 function parseDue(due: string): Date {
   const parts = due.split(".");
