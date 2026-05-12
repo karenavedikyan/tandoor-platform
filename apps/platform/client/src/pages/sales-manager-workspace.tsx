@@ -1,5 +1,7 @@
 import { useMemo } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
+import { MainRoleDashboard } from "@/components/main-role-dashboard";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -222,6 +224,18 @@ function YearScenarioCard({ s }: { s: ManagerYearScenario }) {
 }
 
 export default function SalesManagerWorkspace() {
+  const { user } = useCurrentUser();
+  const [loc] = useLocation();
+  const path = loc && loc.length > 0 ? loc : "/";
+  const isSalesMainDash =
+    (path === "/main" || path === "/") &&
+    user &&
+    (user.role === "sales_manager" || user.role === "team_lead" || user.role === "sales_director");
+
+  if (isSalesMainDash) {
+    return <MainRoleDashboard />;
+  }
+
   const kpis = useMemo(() => getWorkspaceKpis(), []);
   const planMetrics = useMemo(() => getSalesPlanMetrics(), []);
   const mom = useMemo(() => getMonthOverMonthComparisons(), []);
