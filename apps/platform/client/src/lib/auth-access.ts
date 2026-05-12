@@ -74,6 +74,7 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
 
   if (role === "team_lead") {
     return any([
+      (x) => x === "/main" || isUnder(x, "/main"),
       (x) => isUnder(x, "/dealer-base") || isUnder(x, "/dealers"),
       (x) => isUnder(x, "/tasks"),
       (x) => isUnder(x, "/catalog"),
@@ -149,6 +150,7 @@ export function getPilotNavItems(role: SalesRole): PilotNavItem[] {
   }
 
   if (role === "team_lead") {
+    push({ href: "/main", label: "Главная", testId: "nav-main" });
     push({ href: "/dealer-base", label: "Клиенты команды", testId: "nav-dealer-base", badge: NAV_BADGE_CLIENTS });
     push({ href: "/tasks", label: "Задачи команды", testId: "nav-tasks" });
     push({ href: sch, label: "План-факт продаж", testId: "nav-sales-control" });

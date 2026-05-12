@@ -1,0 +1,235 @@
+import { useMemo } from "react";
+import { Link } from "wouter";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { useCurrentUser } from "@/hooks/use-current-user";
+import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
+import { canAccessPath, salesControlHomeHref } from "@/lib/auth-access";
+import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
+import {
+  dealerNeedsAttention,
+  roleScopedDealerRows,
+} from "@/lib/dealer-base-role-views";
+import { getEffectiveTeamLeadTeamId } from "@/lib/release-demo-profile";
+import { getAllMatrixTasks } from "@/lib/trade-point-task-data";
+import { getRopOptions } from "@/lib/rop-manager-filters";
+import { getTeamManagers, type SalesRole } from "@/lib/sales-control-data";
+
+function countOpenTasksForDealers(dealerIds: Set<string>): number {
+  return getAllMatrixTasks().filter((t) => dealerIds.has(t.dealerId) && t.status !== "done").length;
+}
+
+type MainLink = { href: string; label: string; testId: string };
+
+function MainLinkButton({ href, label, testId }: MainLink) {
+  return (
+    <Button asChild variant="secondary" className="min-h-10 min-w-0 shrink font-semibold" data-testid={testId}>
+      <Link href={href}>{label}</Link>
+    </Button>
+  );
+}
+
+export function MainRoleDashboard() {
+  const { user } = useCurrentUser();
+  const { profile } = useReleaseDemoProfile();
+  const role = (user?.role ?? profile.role) as SalesRole;
+
+  const scopedClients = useMemo(() => roleScopedDealerRows(DEALER_BASE_ROWS, profile), [profile]);
+  const dealerIds = useMemo(() => new Set(scopedClients.map((r) => r.id)), [scopedClients]);
+
+  const { totalClients, activeClients, attentionClients, openTasks, extraKpiLabel, extraKpiValue } = useMemo(() => {
+    const total = scopedClients.length;
+    const active = scopedClients.filter((r) => r.status === "активный").length;
+    const attention = scopedClients.filter(dealerNeedsAttention).length;
+    const tasks = countOpenTasksForDealers(dealerIds);
+    if (role === "team_lead") {
+      const tid = getEffectiveTeamLeadTeamId(profile);
+      const mgrs = getTeamManagers(tid).length;
+      return {
+        totalClients: total,
+        activeClients: active,
+        attentionClients: attention,
+        openTasks: tasks,
+        extraKpiLabel: "Менеджеров в команде",
+        extraKpiValue: String(mgrs),
+      };
+    }
+    if (role === "sales_director") {
+      const teams = getRopOptions().length;
+      return {
+        totalClients: total,
+        activeClients: active,
+        attentionClients: attention,
+        openTasks: tasks,
+        extraKpiLabel: "Команд (РОПы)",
+        extraKpiValue: String(teams),
+      };
+    }
+    return {
+      totalClients: total,
+      activeClients: active,
+      attentionClients: attention,
+      openTasks: tasks,
+      extraKpiLabel: null as string | null,
+      extraKpiValue: null as string | null,
+    };
+  }, [scopedClients, dealerIds, role, profile]);
+
+  const can = (path: string) => Boolean(user && canAccessPath(user.role, path));
+
+  const planHref = salesControlHomeHref(role);
+
+  const links: MainLink[] = useMemo(() => {
+    const out: MainLink[] = [];
+    const push = (href: string, label: string, testId: string) => {
+      if (can(href)) out.push({ href, label, testId });
+    };
+
+    if (role === "sales_manager") {
+      push("/dealer-base", "Мои клиенты", "button-main-open-clients");
+      push("/tasks", "Мои задачи", "button-main-open-tasks");
+      push("/catalog", "Каталог", "button-main-open-catalog");
+      push("/training", "Обучение", "button-main-open-training");
+      push(planHref, "План-факт", "button-main-open-sales-control");
+      push("/marketing-briefs", "Брифы", "button-main-open-marketing-briefs");
+      return out;
+    }
+
+    if (role === "team_lead") {
+      push("/dealer-base", "Клиенты команды", "button-main-open-clients");
+      push("/tasks", "Задачи команды", "button-main-open-tasks");
+      push(planHref, "План-факт команды", "button-main-open-sales-control");
+      push("/sales-control/performance", "Выполнение", "button-main-open-sales-performance");
+      push("/catalog", "Каталог", "button-main-open-catalog");
+      push("/training", "Обучение", "button-main-open-training");
+      push("/marketing-briefs", "Брифы", "button-main-open-marketing-briefs");
+      return out;
+    }
+
+    if (role === "sales_director") {
+      push("/territory-card", "Территория", "button-main-open-territory");
+      push("/dealer-base", "Клиентская база", "button-main-open-clients");
+      push("/tasks", "Задачи", "button-main-open-tasks");
+      push("/sales-control/director", "План-факт продаж", "button-main-open-sales-control");
+      push("/sales-control/performance", "Выполнение", "button-main-open-sales-performance");
+      push("/catalog", "Каталог", "button-main-open-catalog");
+      push("/training", "Обучение", "button-main-open-training");
+      push("/marketing-briefs", "Брифы", "button-main-open-marketing-briefs");
+      push("/release-one", "Первый релиз", "button-main-open-release-one");
+      return out;
+    }
+
+    return out;
+  }, [role, user, planHref]);
+
+  const headline =
+    role === "sales_director"
+      ? "Главная руководителя продаж"
+      : "Главная";
+
+  const subline =
+    role === "sales_manager"
+      ? "Рабочий стол менеджера: мои клиенты, задачи, обучение и план-факт."
+      : role === "team_lead"
+        ? "Рабочий стол РОПа: команда, клиенты, задачи и выполнение плана."
+        : role === "sales_director"
+          ? "Сводка по отделу продаж: команды, клиенты, задачи, план-факт."
+          : "Главная страница платформы.";
+
+  const contextLine =
+    role === "sales_manager"
+      ? `Показатели по вашим клиентам (${user?.name ?? "менеджер"}) и связанным задачам — те же данные, что в «Клиентской базе» и «Задачах».`
+      : role === "team_lead"
+        ? `Показатели по команде РОП (${user?.name ?? "РОП"}) — те же данные, что в «Клиентской базе» и «Задачах» с фильтром команды.`
+        : role === "sales_director"
+          ? "Показатели по всем клиентам импорта Release 1 и задачам отдела продаж."
+          : "";
+
+  const kpiClientsLabel =
+    role === "sales_manager"
+      ? "Мои клиенты"
+      : role === "team_lead"
+        ? "Клиентов команды"
+        : "Всего клиентов";
+
+  const kpiTasksLabel =
+    role === "sales_manager"
+      ? "Мои открытые задачи"
+      : role === "team_lead"
+        ? "Открытые задачи команды"
+        : "Открытые задачи";
+
+  if (role !== "sales_manager" && role !== "team_lead" && role !== "sales_director") {
+    return (
+      <div className="min-w-0 max-w-full overflow-x-hidden space-y-4" data-testid="page-main">
+        <p className="text-sm text-muted-foreground">Раздел «Главная» для вашей роли не настроен. Используйте меню слева.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-w-0 max-w-full overflow-x-hidden space-y-6 pb-10 sm:space-y-8" data-testid="page-main">
+      <section className="space-y-4" data-testid="section-main-role-dashboard">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">{headline}</h1>
+          <p className="mt-1 max-w-3xl text-sm text-muted-foreground sm:text-base">{subline}</p>
+          {contextLine ? (
+            <p className="mt-2 max-w-3xl text-sm text-muted-foreground" data-testid="text-main-role-context">
+              {contextLine}
+            </p>
+          ) : null}
+        </div>
+
+        <div
+          className={
+            extraKpiLabel
+              ? "grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5"
+              : "grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-4"
+          }
+        >
+          <Card className="min-w-0 rounded-xl border border-border/80 bg-card shadow-sm" data-testid="card-main-kpi-clients">
+            <CardContent className="p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{kpiClientsLabel}</p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{totalClients}</p>
+            </CardContent>
+          </Card>
+          <Card className="min-w-0 rounded-xl border border-border/80 bg-card shadow-sm" data-testid="card-main-kpi-active">
+            <CardContent className="p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Активные клиенты</p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{activeClients}</p>
+            </CardContent>
+          </Card>
+          <Card className="min-w-0 rounded-xl border border-border/80 bg-card shadow-sm" data-testid="card-main-kpi-attention">
+            <CardContent className="p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Требуют внимания</p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{attentionClients}</p>
+            </CardContent>
+          </Card>
+          <Card className="min-w-0 rounded-xl border border-border/80 bg-card shadow-sm" data-testid="card-main-kpi-tasks">
+            <CardContent className="p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{kpiTasksLabel}</p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{openTasks}</p>
+            </CardContent>
+          </Card>
+          {extraKpiLabel && extraKpiValue ? (
+            <Card
+              className="min-w-0 rounded-xl border border-border/80 bg-card shadow-sm sm:col-span-1"
+              data-testid={role === "team_lead" ? "card-main-kpi-managers" : "card-main-kpi-teams"}
+            >
+              <CardContent className="p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{extraKpiLabel}</p>
+                <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{extraKpiValue}</p>
+              </CardContent>
+            </Card>
+          ) : null}
+        </div>
+
+        <div className="flex min-w-0 flex-wrap gap-2">
+          {links.map((l) => (
+            <MainLinkButton key={l.href + l.label} {...l} />
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
