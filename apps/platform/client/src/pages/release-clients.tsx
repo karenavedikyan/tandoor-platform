@@ -101,7 +101,7 @@ export default function ReleaseClientsPage() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 pb-24" data-testid="page-release-clients">
+    <div className="mx-auto w-full max-w-6xl min-w-0 space-y-6 overflow-x-hidden pb-24" data-testid="page-release-clients">
       <FloatingBackButton href="/release-one" label="К релизу 1" testId="button-floating-back-release-clients" />
       <section
         className="relative overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-lg sm:p-8"

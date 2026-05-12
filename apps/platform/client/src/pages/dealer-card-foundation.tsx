@@ -459,7 +459,7 @@ function DealerCardContent({ row }: { row: DealerRow }) {
   const showcaseNext = `Связано с ближайшим шагом: ${row.nextAction}`;
 
   return (
-    <div className="space-y-4 sm:space-y-6" data-testid="page-dealer-card-foundation">
+    <div className="min-w-0 max-w-full space-y-4 overflow-x-hidden sm:space-y-6" data-testid="page-dealer-card-foundation">
       <div className="flex flex-col gap-3">
         <Button
           asChild

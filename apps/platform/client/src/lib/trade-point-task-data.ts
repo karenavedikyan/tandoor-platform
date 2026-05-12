@@ -279,7 +279,7 @@ export function getAllMatrixTasks(): MatrixTaskWithContext[] {
       const recs = buildRecommendedMatrixTasks(dealer.id, point.id, point.name, matrix);
       for (const r of recs) {
         result.push({
-          taskId: r.taskId,
+          taskId: `${dealer.id}|${r.taskId}`,
           productId: r.productId,
           productName: r.productName,
           productArticle: r.productArticle,
