@@ -122,13 +122,16 @@ export function workViewGroup(view: DealerBaseWorkView): "department" | "team" |
 }
 
 const DEPT_VIEWS: DealerBaseWorkView[] = ["teams", "risks_all", "top_all", "cities_all", "table_all"];
-const TEAM_VIEWS: DealerBaseWorkView[] = [
+
+/** Режимы «команда» (карточки/группировка по команде; фильтр менеджера к ним не относится). */
+export const DEALER_BASE_TEAM_WORK_VIEWS: DealerBaseWorkView[] = [
   "my_team",
   "team_attention",
   "by_manager",
   "day_plan_team",
   "table_team",
 ];
+const TEAM_VIEWS = DEALER_BASE_TEAM_WORK_VIEWS;
 const MGR_VIEWS: DealerBaseWorkView[] = [
   "my_clients",
   "today",
