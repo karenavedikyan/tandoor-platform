@@ -27,6 +27,7 @@ import { getSalesUserById, getTeamManagers, type SalesUser } from "@/lib/sales-c
 import {
   buildDayPlanTeamRows,
   dealerNeedsAttention,
+  DEALER_BASE_TEAM_WORK_VIEWS,
   DEALER_BASE_VIEW_LABELS,
   defaultWorkViewForAccess,
   groupLabelsForAccess,
@@ -39,6 +40,7 @@ import {
   roleScopedDealerRows,
   ropOptionsForProfile,
   viewsInGroupForAccess,
+  workViewGroup,
   workViewsForAccess,
   type DealerBaseWorkView,
 } from "@/lib/dealer-base-role-views";
@@ -412,6 +414,22 @@ export default function DealerBase() {
     [scopedRows, effectiveTeamIdForTeamModes],
   );
 
+  const teamRopDisplayLabel = useMemo(
+    () => getRopOptions().find((o) => o.teamId === effectiveTeamIdForTeamModes)?.label ?? "—",
+    [effectiveTeamIdForTeamModes],
+  );
+
+  const selectedManagerLabel = useMemo(() => {
+    if (isRopOrManagerAllFilter(manager)) return null;
+    const fromCat = managerCatalogForRop.find((m) => m.id === manager);
+    if (fromCat) return fromCat.name;
+    return getSalesUserById(manager)?.name ?? null;
+  }, [manager, managerCatalogForRop]);
+
+  const hideManagerFilterInTeamView =
+    (access === "sales_director" || access === "team_lead") &&
+    DEALER_BASE_TEAM_WORK_VIEWS.includes(workView);
+
   const needsManagerSelection =
     (access === "sales_director" || access === "team_lead") &&
     (workView === "my_clients" ||
@@ -420,6 +438,29 @@ export default function DealerBase() {
       workView === "my_top" ||
       workView === "my_cities") &&
     isRopOrManagerAllFilter(manager);
+
+  const resultsContextLine = useMemo(() => {
+    if ((access === "sales_director" || access === "team_lead") && DEALER_BASE_TEAM_WORK_VIEWS.includes(workView)) {
+      return `Показана команда: ${teamRopDisplayLabel}`;
+    }
+    if (selectedManagerLabel && !isRopOrManagerAllFilter(manager)) {
+      if (access === "sales_manager") {
+        return `Показаны клиенты: ${selectedManagerLabel}`;
+      }
+      if (workViewGroup(workView) === "manager") {
+        return `Показаны клиенты: ${selectedManagerLabel}`;
+      }
+      if (
+        workView === "table_all" ||
+        workView === "risks_all" ||
+        workView === "top_all" ||
+        workView === "cities_all"
+      ) {
+        return `Показаны клиенты: ${selectedManagerLabel}`;
+      }
+    }
+    return null;
+  }, [access, workView, manager, selectedManagerLabel, teamRopDisplayLabel]);
 
   const managerScopedRows = useMemo(() => {
     if (isRopOrManagerAllFilter(manager)) return pickerFiltered;
@@ -513,6 +554,28 @@ export default function DealerBase() {
     [],
   );
 
+  const handleSelectWorkView = useCallback(
+    (v: DealerBaseWorkView) => {
+      setWorkView(v);
+      if (workViewGroup(v) === "team" && (access === "sales_director" || access === "team_lead")) {
+        setManager("all");
+      }
+    },
+    [access],
+  );
+
+  const handleManagerChange = useCallback(
+    (v: string) => {
+      setManager(v);
+      if (!isRopOrManagerAllFilter(v)) {
+        if (workViewsForAccess(access).includes("my_clients")) setWorkView("my_clients");
+      } else if (workViewsForAccess(access).includes("my_team")) {
+        setWorkView("my_team");
+      }
+    },
+    [access],
+  );
+
   const resultsCapTotal = useMemo(() => {
     switch (workView) {
       case "risks_all":
@@ -554,6 +617,7 @@ export default function DealerBase() {
   const setRopManagerFromClick = (tid: string, mid: string) => {
     setRopTeam(tid);
     setManager(mid);
+    if (workViewsForAccess(access).includes("my_clients")) setWorkView("my_clients");
   };
 
   const hintSelectRop =
@@ -628,7 +692,12 @@ export default function DealerBase() {
             ))}
           </div>
 
-          <div className="grid min-w-0 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div
+            className={cn(
+              "grid min-w-0 gap-4 sm:grid-cols-2",
+              hideManagerFilterInTeamView ? "lg:grid-cols-3" : "lg:grid-cols-4",
+            )}
+          >
             <div className="min-w-0 space-y-2">
               <Label className="text-xs font-medium text-muted-foreground">Город</Label>
               <Select value={city} onValueChange={setCity}>
@@ -679,25 +748,33 @@ export default function DealerBase() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="min-w-0 space-y-2">
-              <Label className="text-xs font-medium text-muted-foreground">Менеджер</Label>
-              <Select value={manager} onValueChange={setManager}>
-                <SelectTrigger className="min-h-11 min-w-0 rounded-xl" data-testid="select-dealer-base-manager">
-                  <SelectValue placeholder="Менеджер" />
-                </SelectTrigger>
-                <SelectContent>
-                  {access === "sales_director" || access === "team_lead" ? (
-                    <SelectItem value="all">Все менеджеры</SelectItem>
-                  ) : null}
-                  {managerOptions.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>
-                      {m.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {!hideManagerFilterInTeamView ? (
+              <div className="min-w-0 space-y-2">
+                <Label className="text-xs font-medium text-muted-foreground">Менеджер</Label>
+                <Select value={manager} onValueChange={handleManagerChange}>
+                  <SelectTrigger className="min-h-11 min-w-0 rounded-xl" data-testid="select-dealer-base-manager">
+                    <SelectValue placeholder="Менеджер" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {access === "sales_director" || access === "team_lead" ? (
+                      <SelectItem value="all">Все менеджеры</SelectItem>
+                    ) : null}
+                    {managerOptions.map((m) => (
+                      <SelectItem key={m.id} value={m.id}>
+                        {m.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
           </div>
+
+          {hideManagerFilterInTeamView ? (
+            <p className="text-xs text-muted-foreground" data-testid="text-dealer-base-manager-filter-hint">
+              Выберите режим менеджера, чтобы смотреть клиентов конкретного менеджера.
+            </p>
+          ) : null}
 
           <section className="space-y-4 border-t border-border pt-4" data-testid="section-dealer-base-role-views">
             <p className="text-xs font-medium text-muted-foreground">Рабочий режим:</p>
@@ -713,7 +790,7 @@ export default function DealerBase() {
                         size="sm"
                         variant={workView === vid ? "default" : "outline"}
                         className={cn("rounded-full", workView !== vid && "border-border bg-card")}
-                        onClick={() => setWorkView(vid)}
+                        onClick={() => handleSelectWorkView(vid)}
                         data-testid={`button-dealer-base-view-${vid}`}
                       >
                         {DEALER_BASE_VIEW_LABELS[vid]}
@@ -733,7 +810,7 @@ export default function DealerBase() {
                         size="sm"
                         variant={workView === vid ? "default" : "outline"}
                         className={cn("rounded-full", workView !== vid && "border-border bg-card")}
-                        onClick={() => setWorkView(vid)}
+                        onClick={() => handleSelectWorkView(vid)}
                         data-testid={`button-dealer-base-view-${vid}`}
                       >
                         {DEALER_BASE_VIEW_LABELS[vid]}
@@ -753,7 +830,7 @@ export default function DealerBase() {
                         size="sm"
                         variant={workView === vid ? "default" : "outline"}
                         className={cn("rounded-full", workView !== vid && "border-border bg-card")}
-                        onClick={() => setWorkView(vid)}
+                        onClick={() => handleSelectWorkView(vid)}
                         data-testid={`button-dealer-base-view-${vid}`}
                       >
                         {DEALER_BASE_VIEW_LABELS[vid]}
@@ -779,6 +856,11 @@ export default function DealerBase() {
       ) : null}
 
       <section className="min-w-0" data-testid="section-dealer-base-results">
+        {resultsContextLine ? (
+          <p className="mb-3 text-sm font-medium text-foreground" data-testid="text-dealer-base-results-context">
+            {resultsContextLine}
+          </p>
+        ) : null}
         {workView === "teams" ? (
           <div className="space-y-6" data-testid={viewSectionDataTestId("teams")}>
             {getRopOptions().map((rop) => {
