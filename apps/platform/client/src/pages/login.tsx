@@ -6,12 +6,10 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useMockAuth } from "@/hooks/use-mock-auth";
 import { defaultHomePathForRole } from "@/lib/auth-access";
-import { TandoorLogo } from "@/components/tandoor-logo";
-import { getSalesLoginCredentials, type SalesCredentialEntry } from "@/lib/mock-auth";
+import { MOCK_AUTH_CREDENTIALS } from "@/lib/mock-auth";
+import { getSalesUserById } from "@/lib/sales-control-data";
 import { releaseDemoRoleLabel } from "@/lib/release-demo-profile";
-import type { SalesRole } from "@/lib/sales-control-data";
-
-const ROLE_GROUP_ORDER: SalesRole[] = ["sales_director", "team_lead", "sales_manager"];
+import { TandoorLogo } from "@/components/tandoor-logo";
 
 export default function LoginPage() {
   const [, setLocation] = useLocation();
@@ -20,24 +18,24 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
+  const pilotRows = useMemo(
+    () =>
+      MOCK_AUTH_CREDENTIALS.map((c) => {
+        const u = getSalesUserById(c.userId);
+        return {
+          login: c.username,
+          name: u?.name ?? c.userId,
+          roleLabel: u?.role ? releaseDemoRoleLabel(u.role) : "—",
+        };
+      }),
+    [],
+  );
+
   useEffect(() => {
     if (isAuthenticated && user) {
       setLocation(defaultHomePathForRole(user.role));
     }
   }, [isAuthenticated, user, setLocation]);
-
-  const grouped = useMemo(() => {
-    const all = getSalesLoginCredentials();
-    const byRole = new Map<SalesRole, SalesCredentialEntry[]>();
-    for (const entry of all) {
-      const list = byRole.get(entry.user.role) ?? [];
-      list.push(entry);
-      byRole.set(entry.user.role, list);
-    }
-    return ROLE_GROUP_ORDER
-      .map((role) => ({ role, entries: byRole.get(role) ?? [] }))
-      .filter((g) => g.entries.length > 0);
-  }, []);
 
   if (isAuthenticated && user) {
     return (
@@ -46,6 +44,12 @@ export default function LoginPage() {
       </div>
     );
   }
+
+  const pickLogin = (loginValue: string) => {
+    setUsername(loginValue);
+    setPassword("");
+    setError("");
+  };
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,12 +60,6 @@ export default function LoginPage() {
       return;
     }
     setLocation(defaultHomePathForRole(r.user.role));
-  };
-
-  const quickFill = (entry: SalesCredentialEntry) => {
-    setUsername(entry.username);
-    setPassword(entry.password);
-    setError("");
   };
 
   return (
@@ -77,83 +75,71 @@ export default function LoginPage() {
           <CardTitle className="text-xl">Вход в платформу</CardTitle>
           <p className="text-sm text-muted-foreground">Пилотная авторизация по роли (mock, без 1С).</p>
         </CardHeader>
-        <CardContent>
-          <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
-            <form className="space-y-4" onSubmit={onSubmit}>
-              <div className="space-y-2">
-                <Label htmlFor="login-username">Логин</Label>
-                <Input
-                  id="login-username"
-                  autoComplete="username"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  className="min-h-11"
-                  data-testid="input-login-username"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="login-password">Пароль</Label>
-                <Input
-                  id="login-password"
-                  type="password"
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="min-h-11"
-                  data-testid="input-login-password"
-                />
-              </div>
-              {error ? (
-                <p className="text-sm text-destructive" data-testid="text-login-error">
-                  {error}
-                </p>
-              ) : null}
-              <Button type="submit" className="min-h-11 w-full font-semibold" data-testid="button-login-submit">
-                Войти
-              </Button>
-              <p className="text-[11px] text-muted-foreground">
-                Пароли: РОП продаж — <code>1</code>, тимлид/РОП команды — <code>22</code>, менеджер — <code>333</code>.
-              </p>
-            </form>
-            <section
-              className="rounded-xl border border-border/80 bg-muted/30 p-4"
-              data-testid="section-login-credentials"
-              aria-label="Пилотные учётки"
-            >
-              <div className="mb-3 flex items-baseline justify-between gap-2">
-                <h2 className="text-sm font-semibold">Учётки для пилота</h2>
-                <span className="text-[11px] text-muted-foreground">Нажмите на строку, чтобы подставить</span>
-              </div>
-              <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
-                {grouped.map((group) => (
-                  <div key={group.role} data-testid={`login-group-${group.role}`}>
-                    <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                      {releaseDemoRoleLabel(group.role)} · пароль <code>{group.entries[0].password}</code>
-                    </div>
-                    <ul className="space-y-1">
-                      {group.entries.map((entry) => (
-                        <li key={entry.userId}>
-                          <button
-                            type="button"
-                            onClick={() => quickFill(entry)}
-                            className="flex w-full items-center justify-between gap-3 rounded-md border border-transparent bg-background px-3 py-2 text-left text-xs hover:border-border hover:bg-muted/60 focus:outline-none focus:ring-2 focus:ring-ring"
-                            data-testid={`button-login-quickfill-${entry.username}`}
-                          >
-                            <span className="min-w-0 flex-1 truncate font-medium">{entry.user.name}</span>
-                            <span className="font-mono text-[11px] text-muted-foreground">
-                              <span data-testid={`text-login-username-${entry.username}`}>{entry.username}</span>
-                              <span className="mx-1 opacity-60">/</span>
-                              <span data-testid={`text-login-password-${entry.username}`}>{entry.password}</span>
-                            </span>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
+        <CardContent className="space-y-6">
+          <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Пилотные пользователи
+            </p>
+            <ul className="space-y-2 text-sm" data-testid="list-login-pilot-users">
+              {pilotRows.map((row) => (
+                <li
+                  key={row.login}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 bg-card px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium text-foreground">{row.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {row.roleLabel} · логин: <span className="font-mono text-foreground">{row.login}</span>
+                    </p>
                   </div>
-                ))}
-              </div>
-            </section>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="shrink-0"
+                    data-testid={`button-login-pick-${row.login}`}
+                    onClick={() => pickLogin(row.login)}
+                  >
+                    Выбрать
+                  </Button>
+                </li>
+              ))}
+            </ul>
           </div>
+
+          <form className="space-y-4" onSubmit={onSubmit}>
+            <div className="space-y-2">
+              <Label htmlFor="login-username">Логин</Label>
+              <Input
+                id="login-username"
+                autoComplete="username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="min-h-11"
+                data-testid="input-login-username"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="login-password">Пароль</Label>
+              <Input
+                id="login-password"
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="min-h-11"
+                data-testid="input-login-password"
+              />
+            </div>
+            {error ? (
+              <p className="text-sm text-destructive" data-testid="text-login-error">
+                {error}
+              </p>
+            ) : null}
+            <Button type="submit" className="min-h-11 w-full font-semibold" data-testid="button-login-submit">
+              Войти
+            </Button>
+          </form>
         </CardContent>
       </Card>
     </div>

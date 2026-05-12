@@ -25,8 +25,8 @@ const SALES_ROLE_PASSWORDS: Partial<Record<SalesRole, string>> = {
   sales_manager: "333",
 };
 
-/** Логин для не-продажных ролей (маркетолог/аналитик), чтобы не ломать существующие записи. */
-const SUPPORT_ROLE_PASSWORD = "demo123";
+/** Пароль для не-продажных ролей пилота (маркетолог/аналитик). */
+const SUPPORT_ROLE_PASSWORD = "123";
 
 /** Явное соответствие userId → username. Для пользователей не в карте логин выводится из id. */
 const EXPLICIT_USERNAMES: Record<string, string> = {
@@ -35,9 +35,9 @@ const EXPLICIT_USERNAMES: Record<string, string> = {
   "user-tl-skalaban": "skalaban",
   "user-tl-sapozhkov": "sapozhkov",
   "mgr-boyko-em": "boyko",
-  "user-mkt-morozova": "morozova",
+  "user-mkt-morozova": "marketolog",
   "user-mkt-kotlyarov": "kotlyarov",
-  "user-anl-ivanets": "ivanets",
+  "user-anl-ivanets": "analitik",
 };
 
 function deriveUsernameFromId(userId: string): string {
