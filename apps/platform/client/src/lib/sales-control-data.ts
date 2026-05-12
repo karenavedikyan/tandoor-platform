@@ -102,48 +102,67 @@ export const SALES_PLAN_PERIODS: SalesPlanPeriod[] = [
 ];
 
 const DIRECTOR: SalesUser = {
-  id: "user-dir-1",
-  name: "Сергей Орлов",
+  id: "user-dir-goncharenko",
+  name: "Гончаренко Дмитрий",
   role: "sales_director",
 };
 
 const TEAM_LEADS: SalesUser[] = [
-  { id: "user-tl-1", name: "Марина Волкова", role: "team_lead", teamId: "team-1" },
-  { id: "user-tl-2", name: "Игорь Семёнов", role: "team_lead", teamId: "team-2" },
-  { id: "user-tl-3", name: "Елена Крылова", role: "team_lead", teamId: "team-3" },
+  { id: "user-tl-kupiansky", name: "Купянский Родион", role: "team_lead", teamId: "team-kupiansky" },
+  { id: "user-tl-skalaban", name: "Скалабан Александр", role: "team_lead", teamId: "team-skalaban" },
+  { id: "user-tl-sapozhkov", name: "Сапожков Артем", role: "team_lead", teamId: "team-sapozhkov" },
 ];
 
-const MARKETER: SalesUser = { id: "user-mkt-1", name: "Артём Писков", role: "marketer" };
-const ANALYST: SalesUser = { id: "user-anl-1", name: "Дарья Мельник", role: "analyst" };
+const MARKETERS: SalesUser[] = [
+  { id: "user-mkt-morozova", name: "Морозова Мила", role: "marketer" },
+  { id: "user-mkt-kotlyarov", name: "Котляров Антон", role: "marketer" },
+];
 
-function buildManagers(teamId: string, teamIdx: number): SalesUser[] {
-  const firstNames = ["Антон", "Олег", "Ксения", "Павел", "Виктор", "Наталья", "Дмитрий"];
-  const lastInitials = ["И.", "П.", "С.", "К.", "Л.", "М.", "Т."];
-  return firstNames.map((fn, i) => ({
-    id: `user-sm-t${teamIdx}-m${i + 1}`,
-    name: `${fn} ${lastInitials[i]}`,
-    role: "sales_manager" as const,
-    teamId,
-  }));
-}
+const ANALYST: SalesUser = { id: "user-anl-ivanets", name: "Иванец Данил", role: "analyst" };
+
+const MANAGERS_K: SalesUser[] = [
+  { id: "mgr-boyko-em", name: "Бойко Екатерина Михайловна", role: "sales_manager", teamId: "team-kupiansky" },
+  { id: "mgr-yakubova-ys", name: "Якубова Юлия Сергеевна", role: "sales_manager", teamId: "team-kupiansky" },
+  { id: "mgr-fedorov-dv", name: "Федоров Данил Владимирович", role: "sales_manager", teamId: "team-kupiansky" },
+  { id: "mgr-ponkratova-vv", name: "Понкратова Василиса Владимировна", role: "sales_manager", teamId: "team-kupiansky" },
+  { id: "mgr-avetisyan-rs", name: "Аветисян Рачик Сергеевич", role: "sales_manager", teamId: "team-kupiansky" },
+  { id: "mgr-sklyarov-dv", name: "Скляров Давид Владимирович", role: "sales_manager", teamId: "team-kupiansky" },
+  { id: "mgr-orlov-dv", name: "Орлов Денис Валерьевич", role: "sales_manager", teamId: "team-kupiansky" },
+];
+
+const MANAGERS_S: SalesUser[] = [
+  { id: "mgr-agadzhanyan-rs", name: "Агаджанян Родион Самвелович", role: "sales_manager", teamId: "team-skalaban" },
+  { id: "mgr-doronina-iv", name: "Доронина Ирина Васильевна (Опт)", role: "sales_manager", teamId: "team-skalaban" },
+  { id: "mgr-ilyuchenko-an", name: "Илюченко Александр Николаевич", role: "sales_manager", teamId: "team-skalaban" },
+  { id: "mgr-miroshnichenko-dn", name: "Мирошниченко Денис Николаевич", role: "sales_manager", teamId: "team-skalaban" },
+  { id: "mgr-lysenko-eg", name: "Лысенко Екатерина Геннадьевна", role: "sales_manager", teamId: "team-skalaban" },
+  { id: "mgr-kulakova-os", name: "Кулакова Олеся Сергеевна", role: "sales_manager", teamId: "team-skalaban" },
+  { id: "mgr-yakubova-voronezh", name: "Якубова Юлия (Воронеж)", role: "sales_manager", teamId: "team-skalaban" },
+];
+
+const MANAGERS_SA: SalesUser[] = [
+  { id: "mgr-koteneva-a", name: "Котенева Анастасия", role: "sales_manager", teamId: "team-sapozhkov" },
+  { id: "mgr-netkacheva-ia", name: "Неткачева Инна Алексеевна", role: "sales_manager", teamId: "team-sapozhkov" },
+  { id: "mgr-petrichenko-ev", name: "Петриченко Елена Викторовна", role: "sales_manager", teamId: "team-sapozhkov" },
+  { id: "mgr-arutyunyan-oa", name: "Арутюнян Оганес Ашотович", role: "sales_manager", teamId: "team-sapozhkov" },
+  { id: "mgr-osmanov-fm", name: "Османов Фарид Магомедович", role: "sales_manager", teamId: "team-sapozhkov" },
+  { id: "mgr-chernousova-in", name: "Черноусова Ия Николаевна", role: "sales_manager", teamId: "team-sapozhkov" },
+  { id: "mgr-yarysh-si", name: "Ярыш Сергей Игоревич", role: "sales_manager", teamId: "team-sapozhkov" },
+];
 
 export const SALES_TEAMS: SalesTeam[] = [
-  { id: "team-1", name: "Команда «Север»", leadId: "user-tl-1" },
-  { id: "team-2", name: "Команда «Юг»", leadId: "user-tl-2" },
-  { id: "team-3", name: "Команда «Восток»", leadId: "user-tl-3" },
+  { id: "team-kupiansky", name: "Команда Купянский Родион", leadId: "user-tl-kupiansky" },
+  { id: "team-skalaban", name: "Команда Скалабан Александр", leadId: "user-tl-skalaban" },
+  { id: "team-sapozhkov", name: "Команда Сапожков Артем", leadId: "user-tl-sapozhkov" },
 ];
-
-const MANAGERS_T1 = buildManagers("team-1", 1);
-const MANAGERS_T2 = buildManagers("team-2", 2);
-const MANAGERS_T3 = buildManagers("team-3", 3);
 
 export const SALES_USERS: SalesUser[] = [
   DIRECTOR,
   ...TEAM_LEADS,
-  ...MANAGERS_T1,
-  ...MANAGERS_T2,
-  ...MANAGERS_T3,
-  MARKETER,
+  ...MANAGERS_K,
+  ...MANAGERS_S,
+  ...MANAGERS_SA,
+  ...MARKETERS,
   ANALYST,
 ];
 

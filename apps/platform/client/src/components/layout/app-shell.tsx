@@ -37,6 +37,7 @@ const SALES_CONTROL_HREF = "/sales-control";
 const ANALYTICS_WORKSPACE_HREF = "/analytics-workspace";
 const MARKETING_BRIEFS_HREF = "/marketing-briefs";
 const RELEASE_ONE_HREF = "/release-one";
+const RELEASE_ONE_CLIENTS_HREF = "/release-one/clients";
 const SALES_MANAGER_HREF = "/sales-manager";
 
 const NAV_BADGE_CLIENTS = 28;
@@ -64,6 +65,7 @@ const NAV_ITEMS: NavDef[] = [
   { href: ANALYTICS_WORKSPACE_HREF, label: "Аналитика команды", testId: "nav-analytics-workspace" },
   { href: MARKETING_BRIEFS_HREF, label: "Маркетинговые брифы", testId: "nav-marketing-briefs" },
   { href: RELEASE_ONE_HREF, label: "Первый релиз", testId: "nav-release-one" },
+  { href: RELEASE_ONE_CLIENTS_HREF, label: "Клиенты пилота", testId: "nav-release-clients" },
 ];
 
 const ICON_RAIL: { href: string; label: string; icon: LucideIcon }[] = [
@@ -128,6 +130,10 @@ function isReleaseOnePath(path: string) {
   return path === RELEASE_ONE_HREF;
 }
 
+function isReleaseOneClientsPath(path: string) {
+  return path === RELEASE_ONE_CLIENTS_HREF || path.startsWith(`${RELEASE_ONE_CLIENTS_HREF}/`);
+}
+
 function isNavItemActive(item: NavDef, location: string, isActiveFromLink?: boolean): boolean {
   if (isActiveFromLink !== undefined) return isActiveFromLink;
   if (item.testId === "nav-main") return isMainPath(location);
@@ -142,6 +148,7 @@ function isNavItemActive(item: NavDef, location: string, isActiveFromLink?: bool
   if (item.testId === "nav-analytics-workspace") return isAnalyticsWorkspacePath(location);
   if (item.testId === "nav-marketing-briefs") return isMarketingBriefsPath(location);
   if (item.testId === "nav-release-one") return isReleaseOnePath(location);
+  if (item.testId === "nav-release-clients") return isReleaseOneClientsPath(location);
   return location === item.href;
 }
 
@@ -156,7 +163,7 @@ function isIconRailActive(href: string, location: string) {
   if (href === SALES_CONTROL_HREF) return isSalesControlPath(location);
   if (href === ANALYTICS_WORKSPACE_HREF) return isAnalyticsWorkspacePath(location);
   if (href === MARKETING_BRIEFS_HREF) return isMarketingBriefsPath(location);
-  if (href === RELEASE_ONE_HREF) return isReleaseOnePath(location);
+  if (href === RELEASE_ONE_HREF) return isReleaseOnePath(location) || isReleaseOneClientsPath(location);
   return false;
 }
 
@@ -186,6 +193,7 @@ function headerContextLabel(location: string) {
   if (isSalesControlPath(location)) return "План-факт продаж";
   if (isAnalyticsWorkspacePath(location)) return "Аналитика команды";
   if (isMarketingBriefsPath(location)) return "Маркетинговые брифы";
+  if (isReleaseOneClientsPath(location)) return "Клиенты пилота";
   if (isReleaseOnePath(location)) return "Первый релиз";
   if (location.startsWith("/dealers/")) return "Карточка клиента";
   return "";

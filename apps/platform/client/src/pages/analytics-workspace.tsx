@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -236,6 +237,19 @@ export default function AnalyticsWorkspacePage() {
           </Link>
           .
         </p>
+        <Card className="rounded-2xl border border-primary/20 bg-primary/5 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Клиентская база Release 1</CardTitle>
+            <CardDescription>
+              Отдельный справочник клиентов пилота (Excel): фильтры по команде, менеджеру, городу и типу; видимость по демо-ролям.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild variant="secondary" className="min-h-10 font-semibold">
+              <Link href="/release-one/clients">Открыть клиентов пилота</Link>
+            </Button>
+          </CardContent>
+        </Card>
       </div>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as AnalyticsWorkspaceTabId)} className="w-full min-w-0">
