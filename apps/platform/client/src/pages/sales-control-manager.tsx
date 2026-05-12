@@ -7,7 +7,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
+import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { useSalesControlStoredState } from "@/hooks/use-sales-control-stored-state";
+import { getEffectiveSalesManagerId } from "@/lib/release-demo-profile";
 import {
   applyManagerActualsSave,
   completionPercent,
@@ -24,20 +26,10 @@ import {
   SALES_PLAN_PERIODS,
 } from "@/lib/sales-control-data";
 
-const DEMO_MANAGER_KEY = "sales-control-demo-manager-id";
-const DEFAULT_MANAGER = "user-sm-t1-m1";
-
-function readActingManagerId(): string {
-  if (typeof window !== "undefined" && window.sessionStorage) {
-    const v = window.sessionStorage.getItem(DEMO_MANAGER_KEY);
-    if (v) return v;
-  }
-  return DEFAULT_MANAGER;
-}
-
 export default function SalesControlManagerPage() {
   const [stored, setStored] = useSalesControlStoredState();
-  const [managerId] = useState(readActingManagerId);
+  const { profile } = useReleaseDemoProfile();
+  const managerId = useMemo(() => getEffectiveSalesManagerId(profile), [profile]);
   const [periodId, setPeriodId] = useState(getDefaultSalesPeriodId());
 
   const rollup = useMemo(() => rollupManager(managerId, periodId, stored), [managerId, periodId, stored]);

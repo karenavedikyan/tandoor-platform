@@ -8,8 +8,11 @@ import {
   LayoutGrid,
   ListTodo,
   MapPinned,
+  Megaphone,
   Menu,
   Package,
+  PieChart,
+  Rocket,
   Search,
   Users,
 } from "lucide-react";
@@ -19,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { TandoorLogo } from "@/components/tandoor-logo";
+import { AppTopbarDemoStrip } from "@/components/app-topbar-demo-strip";
 import { cn } from "@/lib/utils";
 
 const MAIN_HREF = "/main";
@@ -30,6 +34,9 @@ const TASKS_HREF = "/tasks";
 const ANALYTICS_HREF = "/analytics";
 const TRAINING_HREF = "/training";
 const SALES_CONTROL_HREF = "/sales-control";
+const ANALYTICS_WORKSPACE_HREF = "/analytics-workspace";
+const MARKETING_BRIEFS_HREF = "/marketing-briefs";
+const RELEASE_ONE_HREF = "/release-one";
 const SALES_MANAGER_HREF = "/sales-manager";
 
 const NAV_BADGE_CLIENTS = 28;
@@ -54,6 +61,9 @@ const NAV_ITEMS: NavDef[] = [
   { href: ANALYTICS_HREF, label: "Аналитика", testId: "nav-analytics" },
   { href: TRAINING_HREF, label: "Обучение", testId: "nav-training" },
   { href: SALES_CONTROL_HREF, label: "План-факт продаж", testId: "nav-sales-control" },
+  { href: ANALYTICS_WORKSPACE_HREF, label: "Аналитика команды", testId: "nav-analytics-workspace" },
+  { href: MARKETING_BRIEFS_HREF, label: "Маркетинговые брифы", testId: "nav-marketing-briefs" },
+  { href: RELEASE_ONE_HREF, label: "Первый релиз", testId: "nav-release-one" },
 ];
 
 const ICON_RAIL: { href: string; label: string; icon: LucideIcon }[] = [
@@ -65,6 +75,9 @@ const ICON_RAIL: { href: string; label: string; icon: LucideIcon }[] = [
   { href: TASKS_HREF, label: "Задачи", icon: ListTodo },
   { href: TRAINING_HREF, label: "Обучение", icon: BookOpen },
   { href: SALES_CONTROL_HREF, label: "План-факт", icon: ClipboardList },
+  { href: ANALYTICS_WORKSPACE_HREF, label: "Аналитика команды", icon: PieChart },
+  { href: MARKETING_BRIEFS_HREF, label: "Брифы", icon: Megaphone },
+  { href: RELEASE_ONE_HREF, label: "Релиз 1", icon: Rocket },
 ];
 
 function isMainPath(path: string) {
@@ -103,6 +116,18 @@ function isSalesControlPath(path: string) {
   return path === SALES_CONTROL_HREF || path.startsWith(`${SALES_CONTROL_HREF}/`);
 }
 
+function isAnalyticsWorkspacePath(path: string) {
+  return path === ANALYTICS_WORKSPACE_HREF || path.startsWith(`${ANALYTICS_WORKSPACE_HREF}/`);
+}
+
+function isMarketingBriefsPath(path: string) {
+  return path === MARKETING_BRIEFS_HREF || path.startsWith(`${MARKETING_BRIEFS_HREF}/`);
+}
+
+function isReleaseOnePath(path: string) {
+  return path === RELEASE_ONE_HREF;
+}
+
 function isNavItemActive(item: NavDef, location: string, isActiveFromLink?: boolean): boolean {
   if (isActiveFromLink !== undefined) return isActiveFromLink;
   if (item.testId === "nav-main") return isMainPath(location);
@@ -114,6 +139,9 @@ function isNavItemActive(item: NavDef, location: string, isActiveFromLink?: bool
   if (item.testId === "nav-analytics") return isAnalyticsPath(location);
   if (item.testId === "nav-training") return isTrainingPath(location);
   if (item.testId === "nav-sales-control") return isSalesControlPath(location);
+  if (item.testId === "nav-analytics-workspace") return isAnalyticsWorkspacePath(location);
+  if (item.testId === "nav-marketing-briefs") return isMarketingBriefsPath(location);
+  if (item.testId === "nav-release-one") return isReleaseOnePath(location);
   return location === item.href;
 }
 
@@ -126,6 +154,9 @@ function isIconRailActive(href: string, location: string) {
   if (href === TERRITORY_CARD_HREF) return isTerritoryCardPath(location);
   if (href === TRAINING_HREF) return isTrainingPath(location);
   if (href === SALES_CONTROL_HREF) return isSalesControlPath(location);
+  if (href === ANALYTICS_WORKSPACE_HREF) return isAnalyticsWorkspacePath(location);
+  if (href === MARKETING_BRIEFS_HREF) return isMarketingBriefsPath(location);
+  if (href === RELEASE_ONE_HREF) return isReleaseOnePath(location);
   return false;
 }
 
@@ -153,6 +184,9 @@ function headerContextLabel(location: string) {
   if (isAnalyticsPath(location)) return "Аналитика";
   if (isTrainingPath(location)) return "Обучение";
   if (isSalesControlPath(location)) return "План-факт продаж";
+  if (isAnalyticsWorkspacePath(location)) return "Аналитика команды";
+  if (isMarketingBriefsPath(location)) return "Маркетинговые брифы";
+  if (isReleaseOnePath(location)) return "Первый релиз";
   if (location.startsWith("/dealers/")) return "Карточка клиента";
   return "";
 }
@@ -313,18 +347,15 @@ export function AppShell({ children }: { children: ReactNode }) {
             </Button>
           </form>
           <div className="ml-auto flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-2 sm:gap-3">
+            <div className="hidden max-w-[min(100%,28rem)] flex-1 basis-full lg:block lg:basis-auto">
+              <AppTopbarDemoStrip />
+            </div>
             <Button type="button" variant="outline" size="sm" className="max-w-[10rem] truncate border-border/80" data-testid="button-current-city">
               <span data-testid="text-current-city">{MOCK_MANAGER_CITY}</span>
             </Button>
             <Button type="button" variant="outline" size="sm" className="max-w-[12rem] truncate border-border/80" data-testid="button-manager-profile">
               {MOCK_MANAGER_NAME}
             </Button>
-            <span
-              className="hidden rounded-md border border-border/70 bg-muted/50 px-2.5 py-1 text-xs font-medium text-secondary-foreground sm:inline-block"
-              data-testid="text-manager-role"
-            >
-              Менеджер Tandoor
-            </span>
           </div>
         </header>
 
@@ -362,6 +393,10 @@ export function AppShell({ children }: { children: ReactNode }) {
                       onNavigate={() => setMobileOpen(false)}
                       data-testid="nav-preview-mobile"
                     />
+                  </div>
+                  <div className="border-t border-border/60 px-5 pb-3 pt-3">
+                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Демо-роль</p>
+                    <AppTopbarDemoStrip />
                   </div>
                   <div className="border-t border-border/60 px-5 pb-6 pt-3">
                     <IntegrationChips />
