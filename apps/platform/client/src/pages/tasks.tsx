@@ -1,10 +1,18 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { LayoutGrid, List, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
 import { cn } from "@/lib/utils";
 import {
@@ -20,6 +28,13 @@ import {
   type MatrixTaskWithContext,
 } from "@/lib/trade-point-task-data";
 import { getTrainingArticleIdForTask } from "@/lib/training-data";
+import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
+import {
+  getManagersForRopTeam,
+  getRopOptions,
+  isRopOrManagerAllFilter,
+  managerDisplayMatchesCatalogName,
+} from "@/lib/rop-manager-filters";
 
 type TasksFilterId =
   | "all"
@@ -540,6 +555,16 @@ export default function TasksPage() {
   const [query, setQuery] = useState("");
   const [view, setView] = useState<ViewMode>("cards");
 
+  const dealerById = useMemo(() => new Map(DEALER_BASE_ROWS.map((d) => [d.id, d])), []);
+  const [ropTeam, setRopTeam] = useState("all");
+  const [mgrFilter, setMgrFilter] = useState("all");
+  const mgrOptions = useMemo(() => getManagersForRopTeam(ropTeam), [ropTeam]);
+
+  useEffect(() => {
+    if (mgrFilter === "all") return;
+    if (!mgrOptions.some((m) => m.id === mgrFilter)) setMgrFilter("all");
+  }, [ropTeam, mgrOptions, mgrFilter]);
+
   const roleScopedTasks = useMemo(() => applyRole(allTasks, role), [allTasks, role]);
 
   const baseList = useMemo(() => {
@@ -547,10 +572,23 @@ export default function TasksPage() {
     return roleScopedTasks;
   }, [role, roleScopedTasks]);
 
-  const filtered = useMemo(
-    () => applySearch(applyFilter(baseList, filter), query),
-    [baseList, filter, query],
-  );
+  const filtered = useMemo(() => {
+    let list = applySearch(applyFilter(baseList, filter), query);
+    if (!isRopOrManagerAllFilter(ropTeam) || !isRopOrManagerAllFilter(mgrFilter)) {
+      list = list.filter((t) => {
+        const d = dealerById.get(t.dealerId);
+        if (!d) return false;
+        if (!isRopOrManagerAllFilter(ropTeam) && d.releaseTeamId !== ropTeam) return false;
+        if (!isRopOrManagerAllFilter(mgrFilter)) {
+          if (d.releaseManagerId === mgrFilter) return true;
+          const cat = mgrOptions.find((m) => m.id === mgrFilter);
+          return Boolean(cat && managerDisplayMatchesCatalogName(d.manager, cat.name));
+        }
+        return true;
+      });
+    }
+    return list;
+  }, [baseList, filter, query, ropTeam, mgrFilter, dealerById, mgrOptions]);
 
   const visibleTasks = useMemo(() => filtered.slice(0, TASKS_DISPLAY_LIMIT), [filtered]);
 
@@ -687,6 +725,41 @@ export default function TasksPage() {
             <List className="mr-1.5 h-4 w-4" aria-hidden />
             Список
           </Button>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+        <div className="min-w-0 flex-1 space-y-1.5 sm:max-w-[240px]">
+          <Label className="text-xs text-muted-foreground">РОП</Label>
+          <Select value={ropTeam} onValueChange={setRopTeam}>
+            <SelectTrigger className="min-h-11 min-w-0" data-testid="select-tasks-rop">
+              <SelectValue placeholder="Все РОПы" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Все РОПы</SelectItem>
+              {getRopOptions().map((r) => (
+                <SelectItem key={r.teamId} value={r.teamId}>
+                  {r.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="min-w-0 flex-1 space-y-1.5 sm:max-w-[240px]">
+          <Label className="text-xs text-muted-foreground">Менеджер</Label>
+          <Select value={mgrFilter} onValueChange={setMgrFilter}>
+            <SelectTrigger className="min-h-11 min-w-0">
+              <SelectValue placeholder="Все менеджеры" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Все менеджеры</SelectItem>
+              {mgrOptions.map((m) => (
+                <SelectItem key={m.id} value={m.id}>
+                  {m.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 

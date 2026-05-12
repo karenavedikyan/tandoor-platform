@@ -1,11 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
 import { useSalesControlStoredState } from "@/hooks/use-sales-control-stored-state";
+import { getManagersForRopTeam, getRopOptions, isRopOrManagerAllFilter } from "@/lib/rop-manager-filters";
 import {
   formatRub,
   formatSalesMetricValue,
@@ -21,33 +21,85 @@ import {
   SALES_PLAN_PERIODS,
 } from "@/lib/sales-control-data";
 
+const ALL = "__all__";
+
 export default function SalesControlPlansPage() {
   const [stored] = useSalesControlStoredState();
   const [periodId, setPeriodId] = useState(getDefaultSalesPeriodId());
-  const rows = useMemo(() => getAllSalesManagers(), []);
+  const [ropTeam, setRopTeam] = useState<string>(ALL);
+  const [managerFilter, setManagerFilter] = useState<string>(ALL);
+
+  const rowsAll = useMemo(() => getAllSalesManagers(), []);
+  const mgrOptions = useMemo(() => getManagersForRopTeam(ropTeam), [ropTeam]);
+
+  const rows = useMemo(() => {
+    let list = rowsAll;
+    if (!isRopOrManagerAllFilter(ropTeam)) list = list.filter((m) => m.teamId === ropTeam);
+    if (!isRopOrManagerAllFilter(managerFilter)) list = list.filter((m) => m.id === managerFilter);
+    return list;
+  }, [rowsAll, ropTeam, managerFilter]);
+
+  useEffect(() => {
+    if (managerFilter === ALL) return;
+    if (!mgrOptions.some((m) => m.id === managerFilter)) setManagerFilter(ALL);
+  }, [ropTeam, mgrOptions, managerFilter]);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 pb-24" data-testid="page-sales-control-plans">
+    <div className="mx-auto max-w-6xl min-w-0 space-y-6 overflow-x-hidden pb-24" data-testid="page-sales-control-plans">
       <FloatingBackButton href="/sales-control" label="К контуру план-факт" testId="button-floating-back-sales-control-plans" />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Сводная таблица планов</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">План, факт и валовая прибыль по каждому менеджеру за период.</p>
         </div>
-        <div className="w-full max-w-xs space-y-1.5">
-          <Label className="text-xs text-muted-foreground">Период</Label>
-          <Select value={periodId} onValueChange={setPeriodId}>
-            <SelectTrigger>
-              <SelectValue placeholder="Период" />
-            </SelectTrigger>
-            <SelectContent>
-              {SALES_PLAN_PERIODS.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  {p.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="grid w-full gap-3 sm:max-w-md sm:grid-cols-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Период</Label>
+            <Select value={periodId} onValueChange={setPeriodId}>
+              <SelectTrigger className="min-w-0">
+                <SelectValue placeholder="Период" />
+              </SelectTrigger>
+              <SelectContent>
+                {SALES_PLAN_PERIODS.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">РОП</Label>
+            <Select value={ropTeam} onValueChange={setRopTeam}>
+              <SelectTrigger className="min-w-0" data-testid="select-sales-plans-rop">
+                <SelectValue placeholder="РОП" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>Все РОПы</SelectItem>
+                {getRopOptions().map((r) => (
+                  <SelectItem key={r.teamId} value={r.teamId}>
+                    {r.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Менеджер</Label>
+            <Select value={managerFilter} onValueChange={setManagerFilter}>
+              <SelectTrigger className="min-w-0" data-testid="select-sales-plans-manager">
+                <SelectValue placeholder="Менеджер" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>Все менеджеры</SelectItem>
+                {mgrOptions.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
 

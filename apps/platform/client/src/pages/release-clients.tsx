@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,6 +21,7 @@ import {
   type ReleaseClientNormalizedType,
 } from "@/lib/release-client-data";
 import { releaseDemoRoleLabel } from "@/lib/release-demo-profile";
+import { getManagersForRopTeam, getRopOptions, isRopOrManagerAllFilter } from "@/lib/rop-manager-filters";
 import { getSalesUserById, SALES_TEAMS } from "@/lib/sales-control-data";
 
 const ALL = "__all__";
@@ -59,15 +60,19 @@ export default function ReleaseClientsPage() {
   const scopeSummary = useMemo(() => getReleaseClientSummary(baseRows), [baseRows]);
 
   const managerOptions = useMemo(() => {
-    const ids = uniqSorted(baseRows.map((r) => r.managerId));
-    return ids
-      .map((id) => {
-        const u = getSalesUserById(id);
-        const label = u?.name ?? baseRows.find((r) => r.managerId === id)?.managerName ?? id;
-        return { id, label };
-      })
+    const pool = getManagersForRopTeam(teamId);
+    return pool
+      .map((m) => ({ id: m.id, label: m.name }))
       .sort((a, b) => a.label.localeCompare(b.label, "ru"));
-  }, [baseRows]);
+  }, [teamId]);
+
+  useEffect(() => {
+    if (managerId === ALL) return;
+    const ok = isRopOrManagerAllFilter(teamId)
+      ? baseRows.some((r) => r.managerId === managerId)
+      : getManagersForRopTeam(teamId).some((m) => m.id === managerId);
+    if (!ok) setManagerId(ALL);
+  }, [teamId, managerId, baseRows]);
 
   const cities = useMemo(() => uniqSorted(baseRows.map((r) => r.city)), [baseRows]);
 
@@ -160,8 +165,8 @@ export default function ReleaseClientsPage() {
           <CardTitle className="text-base">Фильтры</CardTitle>
           <CardDescription>Фильтрация по всему массиву в зоне видимости; таблица может показывать не более {MAX_ROWS} строк.</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <div className="space-y-1.5 sm:col-span-2 lg:col-span-3">
+        <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="space-y-1.5 sm:col-span-2 lg:col-span-4">
             <Label className="text-xs text-muted-foreground">Поиск</Label>
             <Input
               value={query}
@@ -172,41 +177,9 @@ export default function ReleaseClientsPage() {
             />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">РОП / команда</Label>
-            <Select value={teamId} onValueChange={setTeamId}>
-              <SelectTrigger className="h-10" data-testid="select-release-clients-team">
-                <SelectValue placeholder="Команда" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL}>Все команды</SelectItem>
-                {SALES_TEAMS.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>
-                    {t.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Менеджер</Label>
-            <Select value={managerId} onValueChange={setManagerId}>
-              <SelectTrigger className="h-10" data-testid="select-release-clients-manager">
-                <SelectValue placeholder="Менеджер" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL}>Все менеджеры</SelectItem>
-                {managerOptions.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>
-                    {m.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Город</Label>
             <Select value={city} onValueChange={setCity}>
-              <SelectTrigger className="h-10" data-testid="select-release-clients-city">
+              <SelectTrigger className="h-10 min-w-0" data-testid="select-release-clients-city">
                 <SelectValue placeholder="Город" />
               </SelectTrigger>
               <SelectContent>
@@ -219,10 +192,10 @@ export default function ReleaseClientsPage() {
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-1.5 sm:col-span-2 lg:col-span-1">
+          <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Тип клиента</Label>
             <Select value={clientType} onValueChange={(v) => setClientType(v as ReleaseClientNormalizedType | "all")}>
-              <SelectTrigger className="h-10" data-testid="select-release-clients-type">
+              <SelectTrigger className="h-10 min-w-0" data-testid="select-release-clients-type">
                 <SelectValue placeholder="Тип" />
               </SelectTrigger>
               <SelectContent>
@@ -234,7 +207,44 @@ export default function ReleaseClientsPage() {
               </SelectContent>
             </Select>
           </div>
-          <div className="flex flex-col gap-3 sm:col-span-2 lg:col-span-3 lg:flex-row lg:flex-wrap lg:items-center">
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">РОП</Label>
+            <Select
+              value={teamId}
+              onValueChange={(v) => {
+                setTeamId(v);
+              }}
+            >
+              <SelectTrigger className="h-10 min-w-0" data-testid="select-release-clients-rop">
+                <SelectValue placeholder="РОП" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>Все РОПы</SelectItem>
+                {getRopOptions().map((r) => (
+                  <SelectItem key={r.teamId} value={r.teamId}>
+                    {r.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Менеджер</Label>
+            <Select value={managerId} onValueChange={setManagerId}>
+              <SelectTrigger className="h-10 min-w-0" data-testid="select-release-clients-manager">
+                <SelectValue placeholder="Менеджер" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>Все менеджеры</SelectItem>
+                {managerOptions.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-3 sm:col-span-2 lg:col-span-4 lg:flex-row lg:flex-wrap lg:items-center">
             <label className="flex cursor-pointer items-center gap-2 text-sm">
               <Checkbox
                 checked={activeOnly}

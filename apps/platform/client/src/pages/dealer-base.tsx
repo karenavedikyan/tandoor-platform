@@ -15,6 +15,12 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { DEALER_BASE_ROWS, type DealerRow, type DealerCategory, type DealerStatus } from "@/lib/dealer-base-mock-data";
+import {
+  getManagersForRopTeam,
+  getRopOptions,
+  isRopOrManagerAllFilter,
+  managerDisplayMatchesCatalogName,
+} from "@/lib/rop-manager-filters";
 
 /** Максимум строк/карточек в DOM; фильтрация по полному списку клиентов. */
 const DEALER_BASE_DISPLAY_LIMIT = 300;
@@ -68,6 +74,7 @@ export default function DealerBase() {
   const [quick, setQuick] = useState<QuickFilter>("all");
   const [city, setCity] = useState<string>("all");
   const [category, setCategory] = useState<string>("all");
+  const [ropTeam, setRopTeam] = useState<string>("all");
   const [manager, setManager] = useState<string>("all");
 
   const categoryOptions = useMemo(() => {
@@ -80,10 +87,7 @@ export default function DealerBase() {
     return Array.from(s).sort();
   }, []);
 
-  const managers = useMemo(() => {
-    const s = new Set(DEALER_BASE_ROWS.map((r) => r.manager));
-    return Array.from(s).sort();
-  }, []);
+  const managerCatalogForRop = useMemo(() => getManagersForRopTeam(ropTeam), [ropTeam]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -91,7 +95,17 @@ export default function DealerBase() {
       if (!applyQuickFilter(row, quick)) return false;
       if (city !== "all" && row.city !== city) return false;
       if (category !== "all" && row.category !== category) return false;
-      if (manager !== "all" && row.manager !== manager) return false;
+      if (!isRopOrManagerAllFilter(ropTeam)) {
+        if (row.releaseTeamId !== ropTeam) return false;
+      }
+      if (!isRopOrManagerAllFilter(manager)) {
+        let mgrOk = row.releaseManagerId === manager;
+        if (!mgrOk) {
+          const cat = managerCatalogForRop.find((m) => m.id === manager);
+          mgrOk = Boolean(cat && managerDisplayMatchesCatalogName(row.manager, cat.name));
+        }
+        if (!mgrOk) return false;
+      }
       if (!q) return true;
       const hay = [
         row.name,
@@ -107,7 +121,7 @@ export default function DealerBase() {
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [search, quick, city, category, manager]);
+  }, [search, quick, city, category, manager, ropTeam, managerCatalogForRop]);
 
   const kpis = useMemo(() => {
     const total = filtered.length;
@@ -180,11 +194,11 @@ export default function DealerBase() {
             ))}
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div className="space-y-2">
               <Label className="text-xs font-medium text-muted-foreground">Город</Label>
               <Select value={city} onValueChange={setCity}>
-                <SelectTrigger className="min-h-11 rounded-xl">
+                <SelectTrigger className="min-h-11 min-w-0 rounded-xl">
                   <SelectValue placeholder="Город" />
                 </SelectTrigger>
                 <SelectContent>
@@ -200,7 +214,7 @@ export default function DealerBase() {
             <div className="space-y-2">
               <Label className="text-xs font-medium text-muted-foreground">Классификация (TOP/A/B/C)</Label>
               <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger className="min-h-11 rounded-xl">
+                <SelectTrigger className="min-h-11 min-w-0 rounded-xl">
                   <SelectValue placeholder="Категория" />
                 </SelectTrigger>
                 <SelectContent>
@@ -214,16 +228,42 @@ export default function DealerBase() {
               </Select>
             </div>
             <div className="space-y-2">
+              <Label className="text-xs font-medium text-muted-foreground">РОП</Label>
+              <Select
+                value={ropTeam}
+                onValueChange={(v) => {
+                  setRopTeam(v);
+                  setManager((prev) => {
+                    if (prev === "all") return prev;
+                    const allowed = getManagersForRopTeam(v).some((m) => m.id === prev);
+                    return allowed ? prev : "all";
+                  });
+                }}
+              >
+                <SelectTrigger className="min-h-11 min-w-0 rounded-xl" data-testid="select-dealer-base-rop">
+                  <SelectValue placeholder="РОП" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Все РОПы</SelectItem>
+                  {getRopOptions().map((r) => (
+                    <SelectItem key={r.teamId} value={r.teamId}>
+                      {r.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
               <Label className="text-xs font-medium text-muted-foreground">Менеджер</Label>
               <Select value={manager} onValueChange={setManager}>
-                <SelectTrigger className="min-h-11 rounded-xl">
+                <SelectTrigger className="min-h-11 min-w-0 rounded-xl">
                   <SelectValue placeholder="Менеджер" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Все менеджеры</SelectItem>
-                  {managers.map((m) => (
-                    <SelectItem key={m} value={m}>
-                      {m}
+                  {managerCatalogForRop.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {m.name}
                     </SelectItem>
                   ))}
                 </SelectContent>

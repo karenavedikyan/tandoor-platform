@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Progress } from "@/components/ui/progress";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
 import { useSalesControlStoredState } from "@/hooks/use-sales-control-stored-state";
+import { getRopOptions, isRopOrManagerAllFilter } from "@/lib/rop-manager-filters";
 import {
   completionPercent,
   formatSalesMetricValue,
@@ -23,6 +24,7 @@ import {
 export default function SalesControlPerformancePage() {
   const [stored] = useSalesControlStoredState();
   const [periodId, setPeriodId] = useState(getDefaultSalesPeriodId());
+  const [ropTeam, setRopTeam] = useState<string>("__all__");
 
   const teamCards = useMemo(() => {
     return SALES_TEAMS.map((team) => {
@@ -48,33 +50,56 @@ export default function SalesControlPerformancePage() {
     });
   }, [periodId, stored]);
 
+  const visibleTeamCards = useMemo(() => {
+    if (isRopOrManagerAllFilter(ropTeam)) return teamCards;
+    return teamCards.filter((x) => x.team.id === ropTeam);
+  }, [teamCards, ropTeam]);
+
   return (
-    <div className="mx-auto max-w-6xl space-y-6 pb-24" data-testid="page-sales-control-performance">
+    <div className="mx-auto max-w-6xl min-w-0 space-y-6 overflow-x-hidden pb-24" data-testid="page-sales-control-performance">
       <FloatingBackButton href="/sales-control" label="К контуру план-факт" testId="button-floating-back-sales-control-performance" />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Выполнение по командам</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">Сводный прогресс по KPI и валовой прибыли в разрезе команд за выбранный период.</p>
         </div>
-        <div className="w-full max-w-xs space-y-1.5">
-          <Label className="text-xs text-muted-foreground">Период</Label>
-          <Select value={periodId} onValueChange={setPeriodId}>
-            <SelectTrigger>
-              <SelectValue placeholder="Период" />
-            </SelectTrigger>
-            <SelectContent>
-              {SALES_PLAN_PERIODS.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  {p.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="grid w-full gap-3 sm:max-w-md sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Период</Label>
+            <Select value={periodId} onValueChange={setPeriodId}>
+              <SelectTrigger className="min-w-0">
+                <SelectValue placeholder="Период" />
+              </SelectTrigger>
+              <SelectContent>
+                {SALES_PLAN_PERIODS.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">РОП</Label>
+            <Select value={ropTeam} onValueChange={setRopTeam}>
+              <SelectTrigger className="min-w-0" data-testid="select-sales-performance-rop">
+                <SelectValue placeholder="РОП" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">Все РОПы</SelectItem>
+                {getRopOptions().map((r) => (
+                  <SelectItem key={r.teamId} value={r.teamId}>
+                    {r.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        {teamCards.map(({ team, metrics, gross }) => (
+        {visibleTeamCards.map(({ team, metrics, gross }) => (
           <Card key={team.id} className="min-w-0 rounded-2xl border border-border/80 shadow-sm" data-testid={`row-sales-team-${team.id}`}>
             <CardHeader className="pb-2">
               <CardTitle className="text-base">{team.name}</CardTitle>
