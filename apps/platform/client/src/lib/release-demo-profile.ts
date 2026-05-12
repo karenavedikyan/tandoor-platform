@@ -21,17 +21,17 @@ export type ReleaseDemoProfile = {
 
 const DEFAULT: ReleaseDemoProfile = {
   role: "sales_manager",
-  personaUserId: "user-sm-t1-m1",
+  personaUserId: "mgr-boyko-em",
 };
 
 const SALES_CONTROL_MANAGER_KEY = "sales-control-demo-manager-id";
 
 export function defaultPersonaForRole(role: SalesRole): string {
-  if (role === "sales_director") return "user-dir-1";
-  if (role === "team_lead") return "user-tl-1";
-  if (role === "sales_manager") return "user-sm-t1-m1";
-  if (role === "marketer") return "user-mkt-1";
-  return "user-anl-1";
+  if (role === "sales_director") return "user-dir-goncharenko";
+  if (role === "team_lead") return "user-tl-kupiansky";
+  if (role === "sales_manager") return "mgr-boyko-em";
+  if (role === "marketer") return "user-mkt-morozova";
+  return "user-anl-ivanets";
 }
 
 export function listPersonasForRole(role: SalesRole): { id: string; name: string }[] {
@@ -75,7 +75,7 @@ export function getEffectiveSalesManagerId(profile: ReleaseDemoProfile): string 
     return mgrs[0]?.id ?? defaultPersonaForRole("sales_manager");
   }
   if (profile.role === "sales_director" || profile.role === "marketer" || profile.role === "analyst") {
-    return getAllSalesManagers()[0]?.id ?? "user-sm-t1-m1";
+    return getAllSalesManagers()[0]?.id ?? "mgr-boyko-em";
   }
   return defaultPersonaForRole("sales_manager");
 }
@@ -85,7 +85,7 @@ export function getEffectiveTeamLeadTeamId(profile: ReleaseDemoProfile): string 
   const u = getSalesUserById(profile.personaUserId);
   if (u?.role === "team_lead" && u.teamId) return u.teamId;
   if (u?.role === "sales_manager" && u.teamId) return u.teamId;
-  return "team-1";
+  return "team-kupiansky";
 }
 
 export function releaseDemoRoleLabel(role: SalesRole): string {

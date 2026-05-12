@@ -39,6 +39,7 @@ const LazyMarketingBriefPublished = lazy(() =>
   import("@/pages/marketing-briefs").then((m) => ({ default: m.MarketingBriefPublishedPage })),
 );
 const LazyReleaseOne = lazy(() => import("@/pages/release-one"));
+const LazyReleaseClients = lazy(() => import("@/pages/release-clients"));
 
 function suspensePage(Lazy: LazyExoticComponent<ComponentType<any>>): ComponentType<any> {
   const Wrapped: ComponentType<any> = (props) => (
@@ -74,6 +75,7 @@ const AnalyticsWorkspaceRoute = suspensePage(LazyAnalyticsWorkspace);
 const MarketingBriefsRoute = suspensePage(LazyMarketingBriefs);
 const MarketingBriefPublishedRoute = suspensePage(LazyMarketingBriefPublished);
 const ReleaseOneRoute = suspensePage(LazyReleaseOne);
+const ReleaseClientsRoute = suspensePage(LazyReleaseClients);
 
 function AppRouter() {
   return (
@@ -99,6 +101,7 @@ function AppRouter() {
         <Route path="/analytics-workspace" component={AnalyticsWorkspaceRoute} />
         <Route path="/marketing-briefs/view/:id" component={MarketingBriefPublishedRoute} />
         <Route path="/marketing-briefs" component={MarketingBriefsRoute} />
+        <Route path="/release-one/clients" component={ReleaseClientsRoute} />
         <Route path="/release-one" component={ReleaseOneRoute} />
         <Route path="/analytics" component={AnalyticsPageRoute} />
         <Route path="/orders/:orderId" component={OrderDetailPageRoute} />

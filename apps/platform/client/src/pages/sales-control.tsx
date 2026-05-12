@@ -6,7 +6,7 @@ import { FloatingBackButton } from "@/components/navigation/floating-back-button
 import { ReleaseDemoRoleSwitcher } from "@/components/release-demo-role-switcher";
 import { cn } from "@/lib/utils";
 
-const DEFAULT_MANAGER = "user-sm-t1-m1";
+const DEFAULT_MANAGER = "mgr-boyko-em";
 const DEMO_MANAGER_KEY = "sales-control-demo-manager-id";
 
 function setDemoManager(id: string) {

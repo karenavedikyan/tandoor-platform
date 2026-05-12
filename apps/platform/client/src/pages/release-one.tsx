@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { BookOpen, ClipboardList, LayoutGrid, LineChart, ListTodo, Megaphone, Rocket } from "lucide-react";
+import { BookOpen, ClipboardList, LayoutGrid, LineChart, ListTodo, Megaphone, Rocket, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
@@ -102,6 +102,26 @@ export default function ReleaseOnePage() {
           <CardContent>
             <Button asChild variant="secondary" className="min-h-10 w-full font-semibold sm:w-auto">
               <Link href="/marketing-briefs">К брифам</Link>
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl border border-border/80 shadow-sm sm:col-span-2" data-testid="card-release-module-clients">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Users className="h-4 w-4 text-primary" aria-hidden />
+              Клиенты пилота (Excel)
+            </CardTitle>
+            <CardDescription>
+              Полный список клиентов Release 1: РОП, менеджеры, типы, фильтры и видимость по демо-ролям. Данные подгружаются из
+              сгенерированного seed (импорт из «Spisok-klientov-dlia-Karena.xlsx»).
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild className="min-h-10 w-full font-semibold sm:w-auto">
+              <Link href="/release-one/clients" data-testid="link-release-one-clients">
+                Открыть клиентов пилота
+              </Link>
             </Button>
           </CardContent>
         </Card>
