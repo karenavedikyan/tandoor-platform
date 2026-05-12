@@ -267,11 +267,10 @@ export type MatrixTaskWithContext = MatrixTask & {
   dealerName: string;
 };
 
-/**
- * Сводный список задач по всем дилерам и их торговым точкам.
- * Источник — матрицы товаров каждой ТТ. Используется на общей странице задач.
- */
-export function getAllMatrixTasks(): MatrixTaskWithContext[] {
+/** Ленивый кэш полного списка матричных задач (дорого пересчитывать при ~27k строках). */
+let allMatrixTasksCache: MatrixTaskWithContext[] | null = null;
+
+function computeAllMatrixTasks(): MatrixTaskWithContext[] {
   const result: MatrixTaskWithContext[] = [];
   for (const dealer of DEALER_BASE_ROWS) {
     for (const point of dealer.tradePoints) {
@@ -307,6 +306,15 @@ export function getAllMatrixTasks(): MatrixTaskWithContext[] {
   }
   result.push(...buildProductTrainingTasks());
   return result;
+}
+
+/**
+ * Сводный список задач по всем дилерам и их торговым точкам.
+ * Источник — матрицы товаров каждой ТТ. Используется на общей странице задач.
+ */
+export function getAllMatrixTasks(): MatrixTaskWithContext[] {
+  if (!allMatrixTasksCache) allMatrixTasksCache = computeAllMatrixTasks();
+  return allMatrixTasksCache;
 }
 
 function buildProductTrainingTasks(): MatrixTaskWithContext[] {

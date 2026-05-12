@@ -1,6 +1,7 @@
 /**
  * Агрегаты для операционной «Карточки территории» поверх существующих обезличенных данных.
  * Без дублирования крупных массивов — только вычисления и склейка.
+ * Важно: не вызывать getAllMatrixTasks() в цикле по городам — один проход и карты по dealerId.
  */
 
 import { DEALER_BASE_ROWS, type DealerRow } from "@/lib/dealer-base-mock-data";
@@ -118,31 +119,54 @@ function slugCity(name: string): string {
   return `city-${Math.abs(h)}`;
 }
 
-function ordersForDealers(ids: Set<string>): OrderRow[] {
-  return getAllOrders().filter((o) => ids.has(o.dealerId));
+function buildTaskCountByDealerId(tasks: MatrixTaskWithContext[]): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const t of tasks) {
+    m.set(t.dealerId, (m.get(t.dealerId) ?? 0) + 1);
+  }
+  return m;
 }
 
-function matrixTasksForDealers(ids: Set<string>): MatrixTaskWithContext[] {
-  return getAllMatrixTasks().filter((t) => ids.has(t.dealerId));
-}
-
-function aggregateDealersForCity(cityName: string, dealers: DealerRow[]) {
+function aggregateDealersForCity(
+  dealers: DealerRow[],
+  taskCountByDealerId: Map<string, number>,
+  orders: OrderRow[],
+): {
+  dealersCount: number;
+  activeDealersCount: number;
+  topDealersCount: number;
+  attentionDealersCount: number;
+  tradePointsCount: number;
+  ordersCount: number;
+  tasksCount: number;
+} {
+  let ordersCount = 0;
+  let tasksCount = 0;
+  for (const d of dealers) {
+    tasksCount += taskCountByDealerId.get(d.id) ?? 0;
+  }
   const ids = new Set(dealers.map((d) => d.id));
-  const orders = ordersForDealers(ids);
-  const tasks = matrixTasksForDealers(ids);
+  for (const o of orders) {
+    if (ids.has(o.dealerId)) ordersCount += 1;
+  }
   return {
     dealersCount: dealers.length,
     activeDealersCount: dealers.filter((d) => d.status === "активный").length,
     topDealersCount: dealers.filter((d) => d.category === "TOP").length,
     attentionDealersCount: dealers.filter((d) => d.status === "требует внимания" || d.hasProblem).length,
     tradePointsCount: dealers.reduce((s, d) => s + d.tradePoints.length, 0),
-    ordersCount: orders.length,
-    tasksCount: tasks.length,
+    ordersCount,
+    tasksCount,
   };
 }
 
-function buildCityFromKpi(row: CityAnalytics, dealers: DealerRow[]): TerritoryCitySummary {
-  const agg = aggregateDealersForCity(row.name, dealers);
+function buildCityFromKpi(
+  row: CityAnalytics,
+  dealers: DealerRow[],
+  taskCountByDealerId: Map<string, number>,
+  orders: OrderRow[],
+): TerritoryCitySummary {
+  const agg = aggregateDealersForCity(dealers, taskCountByDealerId, orders);
   const mkPlan = Math.max(row.mkUnits, Math.round(row.mkUnits * 1.08));
   const vhPlan = Math.max(row.vhUnits, Math.round(row.vhUnits * 1.1));
   const hwPlan = Math.max(row.hardwareTurnoverRub, Math.round(row.hardwareTurnoverRub * 1.1));
@@ -159,9 +183,13 @@ function buildCityFromKpi(row: CityAnalytics, dealers: DealerRow[]): TerritoryCi
   };
 }
 
-function buildCityFromDealersOnly(cityName: string): TerritoryCitySummary {
-  const dealers = DEALER_BASE_ROWS.filter((d) => d.city === cityName);
-  const agg = aggregateDealersForCity(cityName, dealers);
+function buildCityFromDealersOnly(
+  cityName: string,
+  dealers: DealerRow[],
+  taskCountByDealerId: Map<string, number>,
+  orders: OrderRow[],
+): TerritoryCitySummary {
+  const agg = aggregateDealersForCity(dealers, taskCountByDealerId, orders);
   const avgMk = dealers.length ? Math.round(dealers.reduce((s, d) => s + d.distributionDetail.mk, 0) / dealers.length) : 0;
   const avgVh = dealers.length ? Math.round(dealers.reduce((s, d) => s + d.distributionDetail.vh, 0) / dealers.length) : 0;
   const mkFact = Math.max(40, Math.round(avgMk * 2.4));
@@ -180,6 +208,16 @@ function buildCityFromDealersOnly(cityName: string): TerritoryCitySummary {
   };
 }
 
+function groupDealersByCity(): Map<string, DealerRow[]> {
+  const byCity = new Map<string, DealerRow[]>();
+  for (const d of DEALER_BASE_ROWS) {
+    const arr = byCity.get(d.city);
+    if (arr) arr.push(d);
+    else byCity.set(d.city, [d]);
+  }
+  return byCity;
+}
+
 export function getTerritorySummary(): TerritoryOperationalSummary {
   const territory = getTerritoryAnalytics(TERRITORY_CARD_SCOPE_ID);
   const dealers = DEALER_BASE_ROWS;
@@ -196,9 +234,14 @@ export function getTerritorySummary(): TerritoryOperationalSummary {
     );
   }, 0);
 
+  let overdueCount = 0;
+  for (const t of matrixTasks) {
+    if (t.status === "overdue") overdueCount += 1;
+  }
+
   const attentionSignals =
     dealers.filter((d) => d.hasProblem || d.status === "требует внимания").length +
-    matrixTasks.filter((t) => t.status === "overdue").length +
+    overdueCount +
     orders.filter((o) => orderNeedsManagerAttention(o)).length;
 
   return {
@@ -215,15 +258,21 @@ export function getTerritorySummary(): TerritoryOperationalSummary {
 }
 
 export function getTerritoryCities(): TerritoryCitySummary[] {
+  const matrixTasks = getAllMatrixTasks();
+  const taskCountByDealerId = buildTaskCountByDealerId(matrixTasks);
+  const orders = getAllOrders();
+  const dealersByCity = groupDealersByCity();
+
   const kpiNames = new Set(getCityAnalyticsRows("all").map((c) => c.name));
   const list: TerritoryCitySummary[] = [];
   for (const row of getCityAnalyticsRows("all")) {
-    const dealers = DEALER_BASE_ROWS.filter((d) => d.city === row.name);
-    list.push(buildCityFromKpi(row, dealers));
+    const dealers = dealersByCity.get(row.name) ?? [];
+    list.push(buildCityFromKpi(row, dealers, taskCountByDealerId, orders));
   }
-  const extraCityNames = Array.from(new Set(DEALER_BASE_ROWS.map((d) => d.city))).filter((n) => !kpiNames.has(n));
+  const extraCityNames = Array.from(dealersByCity.keys()).filter((n) => !kpiNames.has(n));
   for (const name of extraCityNames) {
-    list.push(buildCityFromDealersOnly(name));
+    const dealers = dealersByCity.get(name) ?? [];
+    list.push(buildCityFromDealersOnly(name, dealers, taskCountByDealerId, orders));
   }
   return list.sort((a, b) => b.dealersCount - a.dealersCount);
 }
@@ -247,7 +296,7 @@ export function getTerritoryRisks(): TerritoryRiskItem[] {
     n += 1;
     risks.push({
       id: `risk-${n}`,
-      title: `Клиент №${d.id}: витрина и поставки`,
+      title: `${d.name}: витрина и поставки`,
       level: "attention",
       city: d.city,
       dealerId: d.id,
@@ -255,7 +304,14 @@ export function getTerritoryRisks(): TerritoryRiskItem[] {
       nextAction: d.nextAction,
     });
   }
-  const overdue = getAllMatrixTasks().filter((t) => t.status === "overdue").slice(0, 2);
+  const matrixTasks = getAllMatrixTasks();
+  const overdue: MatrixTaskWithContext[] = [];
+  for (const t of matrixTasks) {
+    if (t.status === "overdue") {
+      overdue.push(t);
+      if (overdue.length >= 2) break;
+    }
+  }
   for (const t of overdue) {
     n += 1;
     risks.push({
@@ -314,36 +370,91 @@ export function getTerritoryRecentOrders(limit = 8): OrderRow[] {
   return pool.slice(0, limit);
 }
 
-export function getTerritoryTasks(limit = 10): MatrixTaskWithContext[] {
-  const pool = [...getAllMatrixTasks()].sort((a, b) => {
-    const rank = (t: MatrixTaskWithContext) =>
-      (t.status === "overdue" ? 4 : 0) + (t.priority === "high" ? 2 : 0) + (t.status === "new" ? 1 : 0);
-    return rank(b) - rank(a);
-  });
-  return pool.slice(0, limit);
+function territoryTaskRank(t: MatrixTaskWithContext): number {
+  return (t.status === "overdue" ? 4 : 0) + (t.priority === "high" ? 2 : 0) + (t.status === "new" ? 1 : 0);
 }
 
-export function getTerritoryTradePoints(limit = 12): TerritoryTradePointCard[] {
-  const out: TerritoryTradePointCard[] = [];
-  for (const d of DEALER_BASE_ROWS) {
-    for (const p of d.tradePoints) {
-      out.push({
-        pointId: p.id,
-        dealerId: d.id,
-        dealerLabel: `Клиент №${d.id}`,
-        city: p.city,
-        pointLabel: p.name,
-        status: p.status,
-        matrixPercent: p.distribution.total,
-        showcaseLine: p.showcaseStatus,
-        lastActivity: p.activityHistory[0]?.date ?? p.lastVisitDate,
-        issuesShort: p.issues.length > 72 ? `${p.issues.slice(0, 69)}…` : p.issues,
-      });
+/** Топ задач без сортировки всего массива (~27k). */
+export function getTerritoryTasks(limit = 10): MatrixTaskWithContext[] {
+  const buf: MatrixTaskWithContext[] = [];
+  for (const t of getAllMatrixTasks()) {
+    buf.push(t);
+    if (buf.length > limit) {
+      let minI = 0;
+      let minR = territoryTaskRank(buf[0]!);
+      for (let i = 1; i < buf.length; i += 1) {
+        const r = territoryTaskRank(buf[i]!);
+        if (r < minR || (r === minR && buf[i]!.taskId.localeCompare(buf[minI]!.taskId) < 0)) {
+          minR = r;
+          minI = i;
+        }
+      }
+      buf.splice(minI, 1);
     }
   }
-  return out
-    .sort((a, b) => a.matrixPercent - b.matrixPercent || (a.issuesShort.includes("Требуется") ? -1 : 0))
-    .slice(0, limit);
+  buf.sort((a, b) => {
+    const d = territoryTaskRank(b) - territoryTaskRank(a);
+    if (d !== 0) return d;
+    return a.taskId.localeCompare(b.taskId);
+  });
+  return buf;
+}
+
+function tradePointSortKey(a: TerritoryTradePointCard, b: TerritoryTradePointCard): number {
+  const cmp = a.matrixPercent - b.matrixPercent;
+  if (cmp !== 0) return cmp;
+  const ai = a.issuesShort.includes("Требуется") ? -1 : 0;
+  const bi = b.issuesShort.includes("Требуется") ? -1 : 0;
+  return ai - bi;
+}
+
+/**
+ * Худшие точки по матрице без материализации массива по всем ТТ (~27k).
+ */
+export function getTerritoryTradePoints(limit = 12): TerritoryTradePointCard[] {
+  const buf: TerritoryTradePointCard[] = [];
+
+  const makeCard = (d: DealerRow, p: DealerRow["tradePoints"][number]): TerritoryTradePointCard => ({
+    pointId: p.id,
+    dealerId: d.id,
+    dealerLabel: d.name,
+    city: p.city,
+    pointLabel: p.name,
+    status: p.status,
+    matrixPercent: p.distribution.total,
+    showcaseLine: p.showcaseStatus,
+    lastActivity: p.activityHistory[0]?.date ?? p.lastVisitDate,
+    issuesShort: p.issues.length > 72 ? `${p.issues.slice(0, 69)}…` : p.issues,
+  });
+
+  const refreshWorstIdx = () => {
+    let worst = 0;
+    for (let i = 1; i < buf.length; i += 1) {
+      if (buf[i]!.matrixPercent > buf[worst]!.matrixPercent) worst = i;
+    }
+    return worst;
+  };
+
+  let worstIdx = 0;
+  for (const d of DEALER_BASE_ROWS) {
+    for (const p of d.tradePoints) {
+      const card = makeCard(d, p);
+      if (buf.length < limit) {
+        buf.push(card);
+        if (buf.length === limit) worstIdx = refreshWorstIdx();
+      } else if (
+        card.matrixPercent < buf[worstIdx]!.matrixPercent ||
+        (card.matrixPercent === buf[worstIdx]!.matrixPercent &&
+          card.issuesShort.includes("Требуется") &&
+          !buf[worstIdx]!.issuesShort.includes("Требуется"))
+      ) {
+        buf[worstIdx] = card;
+        worstIdx = refreshWorstIdx();
+      }
+    }
+  }
+  buf.sort(tradePointSortKey);
+  return buf;
 }
 
 export function getTerritoryShowcases(): TerritoryShowcaseItem[] {

@@ -4,6 +4,9 @@ import {
   filterEquipmentRows,
   filterHardwareRows,
   filterShowcaseProfitabilityRows,
+  type OperationalEquipmentRow,
+  type OperationalHardwareConversionRow,
+  type OperationalShowcaseProfitabilityRow,
 } from "@/lib/analytics-operational-data";
 
 export type DealerAnalyticsSignalKind = "showcase" | "hardware" | "equipment";
@@ -16,15 +19,55 @@ export type DealerAnalyticsSignalCard = {
   tradePointId?: string;
 };
 
+type DealerAnalyticsIndex = {
+  showcaseByDealer: Map<string, OperationalShowcaseProfitabilityRow[]>;
+  hardwareByDealer: Map<string, OperationalHardwareConversionRow>;
+  equipmentByDealer: Map<string, OperationalEquipmentRow[]>;
+};
+
+let dealerAnalyticsIndex: DealerAnalyticsIndex | null = null;
+
+function buildDealerAnalyticsIndex(): DealerAnalyticsIndex {
+  const filters = OPERATIONAL_DEFAULT_GLOBAL_FILTERS;
+  const showcaseRows = filterShowcaseProfitabilityRows(filters, "all");
+  const showcaseByDealer = new Map<string, OperationalShowcaseProfitabilityRow[]>();
+  for (const r of showcaseRows) {
+    const arr = showcaseByDealer.get(r.dealerId);
+    if (arr) arr.push(r);
+    else showcaseByDealer.set(r.dealerId, [r]);
+  }
+
+  const hardwareRows = filterHardwareRows(filters, "all", null, null);
+  const hardwareByDealer = new Map<string, OperationalHardwareConversionRow>();
+  for (const r of hardwareRows) {
+    hardwareByDealer.set(r.dealerId, r);
+  }
+
+  const equipmentRows = filterEquipmentRows(filters, "all", "", "all");
+  const equipmentByDealer = new Map<string, OperationalEquipmentRow[]>();
+  for (const r of equipmentRows) {
+    const arr = equipmentByDealer.get(r.dealerId);
+    if (arr) arr.push(r);
+    else equipmentByDealer.set(r.dealerId, [r]);
+  }
+
+  return { showcaseByDealer, hardwareByDealer, equipmentByDealer };
+}
+
+function getDealerAnalyticsIndex(): DealerAnalyticsIndex {
+  if (!dealerAnalyticsIndex) dealerAnalyticsIndex = buildDealerAnalyticsIndex();
+  return dealerAnalyticsIndex;
+}
+
 /**
  * Компактные сигналы по клиенту на основе тех же обезличенных агрегатов, что в аналитике.
  */
 export function getDealerAnalyticsSignalCards(row: DealerRow): DealerAnalyticsSignalCard[] {
-  const filters = OPERATIONAL_DEFAULT_GLOBAL_FILTERS;
+  const { showcaseByDealer, hardwareByDealer, equipmentByDealer } = getDealerAnalyticsIndex();
   const dealerId = row.id;
   const out: DealerAnalyticsSignalCard[] = [];
 
-  const profRows = filterShowcaseProfitabilityRows(filters, "all").filter((r) => r.dealerId === dealerId);
+  const profRows = showcaseByDealer.get(dealerId) ?? [];
   const profMain = profRows.find((r) => !r.tradePointId) ?? profRows[0];
   const profTp = profRows.find((r) => r.tradePointId);
 
@@ -60,7 +103,7 @@ export function getDealerAnalyticsSignalCards(row: DealerRow): DealerAnalyticsSi
     }
   }
 
-  const hw = filterHardwareRows(filters, "all", null, null).find((r) => r.dealerId === dealerId);
+  const hw = hardwareByDealer.get(dealerId);
   if (hw && (hw.conversionLevel === "low" || hw.conversionLevel === "none")) {
     out.push({
       kind: "hardware",
@@ -71,7 +114,7 @@ export function getDealerAnalyticsSignalCards(row: DealerRow): DealerAnalyticsSi
     });
   }
 
-  const eqRows = filterEquipmentRows(filters, "all", "", "all").filter((r) => r.dealerId === dealerId);
+  const eqRows = equipmentByDealer.get(dealerId) ?? [];
   if (eqRows.length > 0) {
     const sum = eqRows.reduce((s, r) => s + r.amountRub, 0);
     out.push({
