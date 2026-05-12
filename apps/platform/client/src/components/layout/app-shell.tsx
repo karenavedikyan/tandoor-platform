@@ -3,6 +3,7 @@ import type { LucideIcon } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
   BookOpen,
+  ClipboardList,
   Home,
   LayoutGrid,
   ListTodo,
@@ -28,6 +29,7 @@ const CATALOG_HREF = "/catalog";
 const TASKS_HREF = "/tasks";
 const ANALYTICS_HREF = "/analytics";
 const TRAINING_HREF = "/training";
+const SALES_CONTROL_HREF = "/sales-control";
 const SALES_MANAGER_HREF = "/sales-manager";
 
 const NAV_BADGE_CLIENTS = 28;
@@ -51,6 +53,7 @@ const NAV_ITEMS: NavDef[] = [
   { href: TASKS_HREF, label: "Задачи", testId: "nav-tasks" },
   { href: ANALYTICS_HREF, label: "Аналитика", testId: "nav-analytics" },
   { href: TRAINING_HREF, label: "Обучение", testId: "nav-training" },
+  { href: SALES_CONTROL_HREF, label: "План-факт продаж", testId: "nav-sales-control" },
 ];
 
 const ICON_RAIL: { href: string; label: string; icon: LucideIcon }[] = [
@@ -61,6 +64,7 @@ const ICON_RAIL: { href: string; label: string; icon: LucideIcon }[] = [
   { href: CATALOG_HREF, label: "Каталог", icon: LayoutGrid },
   { href: TASKS_HREF, label: "Задачи", icon: ListTodo },
   { href: TRAINING_HREF, label: "Обучение", icon: BookOpen },
+  { href: SALES_CONTROL_HREF, label: "План-факт", icon: ClipboardList },
 ];
 
 function isMainPath(path: string) {
@@ -95,6 +99,10 @@ function isTrainingPath(path: string) {
   return path === TRAINING_HREF || path.startsWith(`${TRAINING_HREF}/`);
 }
 
+function isSalesControlPath(path: string) {
+  return path === SALES_CONTROL_HREF || path.startsWith(`${SALES_CONTROL_HREF}/`);
+}
+
 function isNavItemActive(item: NavDef, location: string, isActiveFromLink?: boolean): boolean {
   if (isActiveFromLink !== undefined) return isActiveFromLink;
   if (item.testId === "nav-main") return isMainPath(location);
@@ -105,6 +113,7 @@ function isNavItemActive(item: NavDef, location: string, isActiveFromLink?: bool
   if (item.testId === "nav-territory-card") return isTerritoryCardPath(location);
   if (item.testId === "nav-analytics") return isAnalyticsPath(location);
   if (item.testId === "nav-training") return isTrainingPath(location);
+  if (item.testId === "nav-sales-control") return isSalesControlPath(location);
   return location === item.href;
 }
 
@@ -116,6 +125,7 @@ function isIconRailActive(href: string, location: string) {
   if (href === TASKS_HREF) return isTasksPath(location);
   if (href === TERRITORY_CARD_HREF) return isTerritoryCardPath(location);
   if (href === TRAINING_HREF) return isTrainingPath(location);
+  if (href === SALES_CONTROL_HREF) return isSalesControlPath(location);
   return false;
 }
 
@@ -142,6 +152,7 @@ function headerContextLabel(location: string) {
   if (isTerritoryCardPath(location)) return "Карточка территории";
   if (isAnalyticsPath(location)) return "Аналитика";
   if (isTrainingPath(location)) return "Обучение";
+  if (isSalesControlPath(location)) return "План-факт продаж";
   if (location.startsWith("/dealers/")) return "Карточка клиента";
   return "";
 }

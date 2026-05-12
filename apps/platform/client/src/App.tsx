@@ -27,6 +27,12 @@ const LazyTrainingPage = lazy(() => import("@/pages/training"));
 const LazyTrainingProgramPage = lazy(() => import("@/pages/training-program"));
 const LazyTrainingArticlePage = lazy(() => import("@/pages/training-article"));
 const LazyTerritoryCardPage = lazy(() => import("@/pages/territory-card"));
+const LazySalesControlHub = lazy(() => import("@/pages/sales-control"));
+const LazySalesControlDirector = lazy(() => import("@/pages/sales-control-director"));
+const LazySalesControlTeamLead = lazy(() => import("@/pages/sales-control-team-lead"));
+const LazySalesControlManager = lazy(() => import("@/pages/sales-control-manager"));
+const LazySalesControlPlans = lazy(() => import("@/pages/sales-control-plans"));
+const LazySalesControlPerformance = lazy(() => import("@/pages/sales-control-performance"));
 
 function suspensePage(Lazy: LazyExoticComponent<ComponentType<any>>): ComponentType<any> {
   const Wrapped: ComponentType<any> = (props) => (
@@ -52,6 +58,12 @@ const TrainingPageRoute = suspensePage(LazyTrainingPage);
 const TrainingProgramPageRoute = suspensePage(LazyTrainingProgramPage);
 const TrainingArticlePageRoute = suspensePage(LazyTrainingArticlePage);
 const TerritoryCardPageRoute = suspensePage(LazyTerritoryCardPage);
+const SalesControlHubRoute = suspensePage(LazySalesControlHub);
+const SalesControlDirectorRoute = suspensePage(LazySalesControlDirector);
+const SalesControlTeamLeadRoute = suspensePage(LazySalesControlTeamLead);
+const SalesControlManagerRoute = suspensePage(LazySalesControlManager);
+const SalesControlPlansRoute = suspensePage(LazySalesControlPlans);
+const SalesControlPerformanceRoute = suspensePage(LazySalesControlPerformance);
 
 function AppRouter() {
   return (
@@ -68,6 +80,12 @@ function AppRouter() {
         <Route path="/training/:articleId" component={TrainingArticlePageRoute} />
         <Route path="/training" component={TrainingPageRoute} />
         <Route path="/territory-card" component={TerritoryCardPageRoute} />
+        <Route path="/sales-control/director" component={SalesControlDirectorRoute} />
+        <Route path="/sales-control/team-lead" component={SalesControlTeamLeadRoute} />
+        <Route path="/sales-control/manager" component={SalesControlManagerRoute} />
+        <Route path="/sales-control/plans" component={SalesControlPlansRoute} />
+        <Route path="/sales-control/performance" component={SalesControlPerformanceRoute} />
+        <Route path="/sales-control" component={SalesControlHubRoute} />
         <Route path="/analytics" component={AnalyticsPageRoute} />
         <Route path="/orders/:orderId" component={OrderDetailPageRoute} />
         <Route path="/orders" component={OrdersPageRoute} />

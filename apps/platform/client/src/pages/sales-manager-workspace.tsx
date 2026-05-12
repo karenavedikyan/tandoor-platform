@@ -284,6 +284,9 @@ export default function SalesManagerWorkspace() {
             <Button asChild variant="outline" className="min-h-10 border-border bg-card font-semibold" data-testid="button-sales-manager-open-catalog">
               <Link href="/catalog">К каталогу</Link>
             </Button>
+            <Button asChild variant="outline" className="min-h-10 border-border bg-card font-semibold" data-testid="button-sales-manager-open-sales-control">
+              <Link href="/sales-control">План-факт продаж</Link>
+            </Button>
           </div>
         </div>
       </section>
