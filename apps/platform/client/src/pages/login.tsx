@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,14 +11,49 @@ import { getSalesUserById } from "@/lib/sales-control-data";
 import { releaseDemoRoleLabel } from "@/lib/release-demo-profile";
 import { TandoorLogo } from "@/components/tandoor-logo";
 
+type LoginPickerRow = {
+  login: string;
+  name: string;
+  roleLabel: string;
+};
+
+function rowMatchesQuery(row: LoginPickerRow, q: string): boolean {
+  const t = q.trim().toLowerCase();
+  if (!t) return true;
+  const hay = `${row.name} ${row.roleLabel} ${row.login}`.toLowerCase();
+  return t.split(/\s+/).filter(Boolean).every((p) => hay.includes(p));
+}
+
 export default function LoginPage() {
   const [, setLocation] = useLocation();
   const { login, isAuthenticated, user } = useMockAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loginPickerOpen, setLoginPickerOpen] = useState(false);
+  const blurCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const pilotRows = useMemo(
+  const clearBlurTimer = useCallback(() => {
+    if (blurCloseTimerRef.current) {
+      clearTimeout(blurCloseTimerRef.current);
+      blurCloseTimerRef.current = null;
+    }
+  }, []);
+
+  const openLoginPicker = useCallback(() => {
+    clearBlurTimer();
+    setLoginPickerOpen(true);
+  }, [clearBlurTimer]);
+
+  const scheduleCloseLoginPicker = useCallback(() => {
+    clearBlurTimer();
+    blurCloseTimerRef.current = setTimeout(() => {
+      setLoginPickerOpen(false);
+      blurCloseTimerRef.current = null;
+    }, 180);
+  }, [clearBlurTimer]);
+
+  const loginRows = useMemo(
     () =>
       MOCK_AUTH_CREDENTIALS.map((c) => {
         const u = getSalesUserById(c.userId);
@@ -30,6 +65,27 @@ export default function LoginPage() {
       }),
     [],
   );
+
+  const filteredLoginRows = useMemo(
+    () => loginRows.filter((row) => rowMatchesQuery(row, username)),
+    [loginRows, username],
+  );
+
+  useEffect(() => {
+    return () => clearBlurTimer();
+  }, [clearBlurTimer]);
+
+  useEffect(() => {
+    if (!loginPickerOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        clearBlurTimer();
+        setLoginPickerOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [loginPickerOpen, clearBlurTimer]);
 
   useEffect(() => {
     if (isAuthenticated && user) {
@@ -46,9 +102,11 @@ export default function LoginPage() {
   }
 
   const pickLogin = (loginValue: string) => {
+    clearBlurTimer();
     setUsername(loginValue);
     setPassword("");
     setError("");
+    setLoginPickerOpen(false);
   };
 
   const onSubmit = (e: React.FormEvent) => {
@@ -70,54 +128,66 @@ export default function LoginPage() {
       <div className="mb-8">
         <TandoorLogo className="h-12 w-auto max-w-[200px]" data-testid="brand-logo-tandoor-login" />
       </div>
-      <Card className="w-full max-w-3xl rounded-2xl border border-border/80 shadow-lg">
+      <Card className="w-full max-w-md rounded-2xl border border-border/80 shadow-lg">
         <CardHeader>
           <CardTitle className="text-xl">Вход в платформу</CardTitle>
           <p className="text-sm text-muted-foreground">Пилотная авторизация по роли (mock, без 1С).</p>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Пилотные пользователи
-            </p>
-            <ul className="space-y-2 text-sm" data-testid="list-login-pilot-users">
-              {pilotRows.map((row) => (
-                <li
-                  key={row.login}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 bg-card px-3 py-2"
-                >
-                  <div className="min-w-0">
-                    <p className="font-medium text-foreground">{row.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {row.roleLabel} · логин: <span className="font-mono text-foreground">{row.login}</span>
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    className="shrink-0"
-                    data-testid={`button-login-pick-${row.login}`}
-                    onClick={() => pickLogin(row.login)}
-                  >
-                    Выбрать
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          </div>
-
           <form className="space-y-4" onSubmit={onSubmit}>
             <div className="space-y-2">
               <Label htmlFor="login-username">Логин</Label>
-              <Input
-                id="login-username"
-                autoComplete="username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="min-h-11"
-                data-testid="input-login-username"
-              />
+              <p className="text-xs text-muted-foreground">Начните вводить ФИО или логин</p>
+              <div className="relative">
+                <Input
+                  id="login-username"
+                  autoComplete="username"
+                  value={username}
+                  onChange={(e) => {
+                    setUsername(e.target.value);
+                    setError("");
+                  }}
+                  onFocus={openLoginPicker}
+                  onBlur={scheduleCloseLoginPicker}
+                  className="min-h-11"
+                  data-testid="input-login-username"
+                  aria-autocomplete="list"
+                  aria-expanded={loginPickerOpen}
+                  aria-controls="dropdown-login-users"
+                />
+                {loginPickerOpen ? (
+                  <div
+                    id="dropdown-login-users"
+                    data-testid="dropdown-login-users"
+                    className="absolute left-0 right-0 top-full z-50 mt-1 max-h-64 overflow-y-auto rounded-lg border border-border bg-popover text-popover-foreground shadow-md"
+                    onMouseDown={(e) => e.preventDefault()}
+                  >
+                    <div className="border-b border-border/60 px-3 py-2 text-xs font-medium text-muted-foreground">
+                      Выберите пользователя
+                    </div>
+                    {filteredLoginRows.length === 0 ? (
+                      <div className="px-3 py-3 text-sm text-muted-foreground">Нет совпадений</div>
+                    ) : (
+                      <ul className="py-1">
+                        {filteredLoginRows.map((row) => (
+                          <li key={row.login}>
+                            <button
+                              type="button"
+                              className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left text-sm hover:bg-muted/80"
+                              data-testid={`option-login-user-${row.login}`}
+                              onClick={() => pickLogin(row.login)}
+                            >
+                              <span className="font-medium text-foreground">{row.name}</span>
+                              <span className="text-xs text-muted-foreground">{row.roleLabel}</span>
+                              <span className="font-mono text-xs text-foreground">{row.login}</span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ) : null}
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="login-password">Пароль</Label>

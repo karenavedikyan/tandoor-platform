@@ -54,16 +54,18 @@ function passwordForRole(role: SalesRole): string {
   return SALES_ROLE_PASSWORDS[role] ?? SUPPORT_ROLE_PASSWORD;
 }
 
+function mockUsernameForUser(u: SalesUser): string {
+  if (EXPLICIT_USERNAMES[u.id]) return EXPLICIT_USERNAMES[u.id];
+  if (u.id.startsWith("mgr-")) return u.id.slice(4).toLowerCase();
+  return deriveUsernameFromId(u.id);
+}
+
 function buildCredentials(): CredentialRow[] {
-  const seen = new Set<string>();
-  const rows: CredentialRow[] = [];
-  for (const u of SALES_USERS) {
-    const username = EXPLICIT_USERNAMES[u.id] ?? deriveUsernameFromId(u.id);
-    if (seen.has(username)) continue;
-    seen.add(username);
-    rows.push({ username, password: passwordForRole(u.role), userId: u.id });
-  }
-  return rows;
+  return SALES_USERS.map((u) => ({
+    username: mockUsernameForUser(u),
+    password: passwordForRole(u.role),
+    userId: u.id,
+  }));
 }
 
 /** Пилотные учётки (временные пароли, не для реальной безопасности). */
