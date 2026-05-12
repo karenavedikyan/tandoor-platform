@@ -31,10 +31,17 @@ import { getTrainingArticleIdForTask } from "@/lib/training-data";
 import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
 import {
   getManagersForRopTeam,
-  getRopOptions,
   isRopOrManagerAllFilter,
   managerDisplayMatchesCatalogName,
 } from "@/lib/rop-manager-filters";
+import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
+import {
+  initialRopManagerForProfile,
+  managerOptionsForProfile,
+  mapSalesRoleToDealerBaseAccess,
+  ropOptionsForProfile,
+  roleScopedDealerRows,
+} from "@/lib/dealer-base-role-views";
 
 type TasksFilterId =
   | "all"
@@ -549,16 +556,45 @@ function LeadershipAttentionCard({ task }: { task: MatrixTaskWithContext }) {
 }
 
 export default function TasksPage() {
-  const allTasks = useMemo(() => sortTasks(getAllMatrixTasks()), []);
+  const { profile } = useReleaseDemoProfile();
+  const access = useMemo(() => mapSalesRoleToDealerBaseAccess(profile.role), [profile.role]);
+
+  const allowedDealerIds = useMemo(() => {
+    const scoped = roleScopedDealerRows(DEALER_BASE_ROWS, profile);
+    return new Set(scoped.map((d) => d.id));
+  }, [profile]);
+
+  const allTasks = useMemo(() => {
+    const tasks = sortTasks(getAllMatrixTasks());
+    return tasks.filter((t) => allowedDealerIds.has(t.dealerId));
+  }, [allowedDealerIds]);
+
   const [role, setRole] = useState<RoleViewId>("all");
   const [filter, setFilter] = useState<TasksFilterId>("all");
   const [query, setQuery] = useState("");
   const [view, setView] = useState<ViewMode>("cards");
 
   const dealerById = useMemo(() => new Map(DEALER_BASE_ROWS.map((d) => [d.id, d])), []);
-  const [ropTeam, setRopTeam] = useState("all");
-  const [mgrFilter, setMgrFilter] = useState("all");
-  const mgrOptions = useMemo(() => getManagersForRopTeam(ropTeam), [ropTeam]);
+  const [ropTeam, setRopTeam] = useState<string>("all");
+  const [mgrFilter, setMgrFilter] = useState<string>("all");
+
+  useEffect(() => {
+    const d = initialRopManagerForProfile(profile, access);
+    setRopTeam(d.ropTeam);
+    setMgrFilter(d.manager);
+  }, [profile.role, profile.personaUserId, access]);
+
+  const ropSelectOptions = useMemo(() => ropOptionsForProfile(profile, access), [profile, access]);
+  const mgrOptions = useMemo(() => managerOptionsForProfile(profile, access, ropTeam), [profile, access, ropTeam]);
+
+  const onRopChange = (v: string) => {
+    setRopTeam(v);
+    setMgrFilter((prev) => {
+      if (prev === "all") return prev;
+      const allowed = getManagersForRopTeam(v).some((m) => m.id === prev);
+      return allowed ? prev : "all";
+    });
+  };
 
   useEffect(() => {
     if (mgrFilter === "all") return;
@@ -731,13 +767,15 @@ export default function TasksPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
         <div className="min-w-0 flex-1 space-y-1.5 sm:max-w-[240px]">
           <Label className="text-xs text-muted-foreground">РОП</Label>
-          <Select value={ropTeam} onValueChange={setRopTeam}>
+          <Select value={ropTeam} onValueChange={onRopChange}>
             <SelectTrigger className="min-h-11 min-w-0" data-testid="select-tasks-rop">
-              <SelectValue placeholder="Все РОПы" />
+              <SelectValue placeholder="РОП" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Все РОПы</SelectItem>
-              {getRopOptions().map((r) => (
+              {access === "sales_director" ? (
+                <SelectItem value="all">Все РОПы</SelectItem>
+              ) : null}
+              {ropSelectOptions.map((r) => (
                 <SelectItem key={r.teamId} value={r.teamId}>
                   {r.label}
                 </SelectItem>
@@ -749,10 +787,12 @@ export default function TasksPage() {
           <Label className="text-xs text-muted-foreground">Менеджер</Label>
           <Select value={mgrFilter} onValueChange={setMgrFilter}>
             <SelectTrigger className="min-h-11 min-w-0" data-testid="select-tasks-manager">
-              <SelectValue placeholder="Все менеджеры" />
+              <SelectValue placeholder="Менеджер" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Все менеджеры</SelectItem>
+              {access === "sales_director" || access === "team_lead" ? (
+                <SelectItem value="all">Все менеджеры</SelectItem>
+              ) : null}
               {mgrOptions.map((m) => (
                 <SelectItem key={m.id} value={m.id}>
                   {m.name}

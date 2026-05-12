@@ -1,5 +1,5 @@
-import { lazy, Suspense, type ComponentType, type LazyExoticComponent } from "react";
-import { Switch, Route, Router } from "wouter";
+import { lazy, Suspense, useEffect, type ComponentType, type LazyExoticComponent } from "react";
+import { Switch, Route, Router, useLocation } from "wouter";
 import { useHashLocation } from "wouter/use-hash-location";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -7,6 +7,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageLoadingFallback } from "@/components/navigation/page-loading";
+import { useMockAuth } from "@/hooks/use-mock-auth";
+import { canAccessPath, defaultHomePathForRole, getPilotNavItems } from "@/lib/auth-access";
 import NotFound from "@/pages/not-found";
 import PreviewUnavailable from "@/pages/preview-unavailable";
 import InternalPrototypePlaceholder from "@/pages/internal-prototype-placeholder";
@@ -40,6 +42,7 @@ const LazyMarketingBriefPublished = lazy(() =>
 );
 const LazyReleaseOne = lazy(() => import("@/pages/release-one"));
 const LazyReleaseClients = lazy(() => import("@/pages/release-clients"));
+const LazyLogin = lazy(() => import("@/pages/login"));
 
 function suspensePage(Lazy: LazyExoticComponent<ComponentType<any>>): ComponentType<any> {
   const Wrapped: ComponentType<any> = (props) => (
@@ -77,9 +80,42 @@ const MarketingBriefPublishedRoute = suspensePage(LazyMarketingBriefPublished);
 const ReleaseOneRoute = suspensePage(LazyReleaseOne);
 const ReleaseClientsRoute = suspensePage(LazyReleaseClients);
 
-function AppRouter() {
+function HashRedirect({ to }: { to: string }) {
+  const [, setLoc] = useHashLocation();
+  useEffect(() => {
+    setLoc(to);
+  }, [to, setLoc]);
+  return <PageLoadingFallback />;
+}
+
+function AuthenticatedApp() {
+  const [loc] = useLocation();
+  const [, setLoc] = useHashLocation();
+  const { isAuthenticated, user, logout } = useMockAuth();
+
+  const path = loc && loc.length > 0 ? loc : "/";
+
+  if (!isAuthenticated || !user) {
+    return <HashRedirect to="/login" />;
+  }
+
+  if (!canAccessPath(user.role, path)) {
+    return <HashRedirect to={defaultHomePathForRole(user.role)} />;
+  }
+
+  const navItems = getPilotNavItems(user.role);
+  const homeHref = defaultHomePathForRole(user.role);
+
   return (
-    <AppShell>
+    <AppShell
+      navItems={navItems}
+      homeHref={homeHref}
+      userName={user.name}
+      onLogout={() => {
+        logout();
+        setLoc("/login");
+      }}
+    >
       <Switch>
         <Route path="/" component={SalesManagerWorkspaceRoute} />
         <Route path="/main" component={SalesManagerWorkspaceRoute} />
@@ -117,6 +153,21 @@ function AppRouter() {
       </Switch>
     </AppShell>
   );
+}
+
+function AppRouter() {
+  const [loc] = useLocation();
+  const path = loc && loc.length > 0 ? loc : "/";
+
+  if (path === "/login") {
+    return (
+      <Suspense fallback={<PageLoadingFallback />}>
+        <LazyLogin />
+      </Suspense>
+    );
+  }
+
+  return <AuthenticatedApp />;
 }
 
 function App() {

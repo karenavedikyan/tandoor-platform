@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
 import { ReleaseDemoRoleSwitcher } from "@/components/release-demo-role-switcher";
+import { isDemoAuthBypassEnabled, loadMockAuthSession } from "@/lib/mock-auth";
 import { cn } from "@/lib/utils";
 
 const DEFAULT_MANAGER = "mgr-boyko-em";
@@ -32,9 +33,11 @@ export default function SalesControlHub() {
               На этом этапе данные и сохранения локальные (без сервера). Роль и персона для демо задаются в шапке приложения или ниже.
             </p>
           </div>
-          <div className="max-w-lg rounded-xl border border-dashed border-border/80 bg-muted/15 p-3">
-            <ReleaseDemoRoleSwitcher variant="stacked" />
-          </div>
+          {isDemoAuthBypassEnabled() && !loadMockAuthSession() ? (
+            <div className="max-w-lg rounded-xl border border-dashed border-border/80 bg-muted/15 p-3">
+              <ReleaseDemoRoleSwitcher variant="stacked" />
+            </div>
+          ) : null}
           <div className="flex flex-wrap gap-2">
             <Button asChild className="min-h-10 font-semibold" data-testid="button-sales-control-open-director">
               <Link href="/sales-control/director">Панель руководителя продаж</Link>

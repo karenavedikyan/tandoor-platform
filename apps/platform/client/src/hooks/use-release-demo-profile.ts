@@ -5,6 +5,7 @@ import {
   RELEASE_DEMO_PROFILE_EVENT,
   type ReleaseDemoProfile,
 } from "@/lib/release-demo-profile";
+import { MOCK_AUTH_CHANGED_EVENT } from "@/lib/mock-auth";
 
 export function useReleaseDemoProfile(): {
   profile: ReleaseDemoProfile;
@@ -20,9 +21,11 @@ export function useReleaseDemoProfile(): {
   useEffect(() => {
     const onExt = () => refresh();
     window.addEventListener(RELEASE_DEMO_PROFILE_EVENT, onExt);
+    window.addEventListener(MOCK_AUTH_CHANGED_EVENT, onExt);
     window.addEventListener("storage", onExt);
     return () => {
       window.removeEventListener(RELEASE_DEMO_PROFILE_EVENT, onExt);
+      window.removeEventListener(MOCK_AUTH_CHANGED_EVENT, onExt);
       window.removeEventListener("storage", onExt);
     };
   }, [refresh]);

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
 import { ReleaseDemoRoleSwitcher } from "@/components/release-demo-role-switcher";
+import { isDemoAuthBypassEnabled, loadMockAuthSession } from "@/lib/mock-auth";
 
 export default function ReleaseOnePage() {
   return (
@@ -23,10 +24,12 @@ export default function ReleaseOnePage() {
               подключены учётные системы.
             </p>
           </div>
-          <div className="max-w-md rounded-xl border border-dashed border-border/80 bg-muted/20 p-3">
-            <p className="mb-2 text-xs font-medium text-muted-foreground">Демо-роль (без backend)</p>
-            <ReleaseDemoRoleSwitcher variant="stacked" />
-          </div>
+          {isDemoAuthBypassEnabled() && !loadMockAuthSession() ? (
+            <div className="max-w-md rounded-xl border border-dashed border-border/80 bg-muted/20 p-3">
+              <p className="mb-2 text-xs font-medium text-muted-foreground">Демо-роль (без backend)</p>
+              <ReleaseDemoRoleSwitcher variant="stacked" />
+            </div>
+          ) : null}
         </div>
       </section>
 
