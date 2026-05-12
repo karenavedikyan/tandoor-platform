@@ -2,8 +2,10 @@ import { ReleaseDemoRoleSwitcher } from "@/components/release-demo-role-switcher
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { getSalesUserById } from "@/lib/sales-control-data";
 import { releaseDemoRoleLabel } from "@/lib/release-demo-profile";
+import { isDemoAuthBypassEnabled, loadMockAuthSession } from "@/lib/mock-auth";
 
 export function AppTopbarDemoStrip() {
+  if (!isDemoAuthBypassEnabled() || loadMockAuthSession()) return null;
   const { profile } = useReleaseDemoProfile();
   const u = getSalesUserById(profile.personaUserId);
   return (

@@ -7,6 +7,7 @@ import {
   Home,
   LayoutGrid,
   ListTodo,
+  LogOut,
   MapPinned,
   Megaphone,
   Menu,
@@ -16,7 +17,7 @@ import {
   Search,
   Users,
 } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -24,6 +25,8 @@ import { Badge } from "@/components/ui/badge";
 import { TandoorLogo } from "@/components/tandoor-logo";
 import { AppTopbarDemoStrip } from "@/components/app-topbar-demo-strip";
 import { cn } from "@/lib/utils";
+import type { PilotNavItem } from "@/lib/auth-access";
+import { isDemoAuthBypassEnabled, loadMockAuthSession } from "@/lib/mock-auth";
 
 const MAIN_HREF = "/main";
 const TERRITORY_CARD_HREF = "/territory-card";
@@ -40,47 +43,26 @@ const RELEASE_ONE_HREF = "/release-one";
 const RELEASE_ONE_CLIENTS_HREF = "/release-one/clients";
 const SALES_MANAGER_HREF = "/sales-manager";
 
-const NAV_BADGE_CLIENTS = 28;
-const NAV_BADGE_ORDERS = 14;
-const MOCK_MANAGER_NAME = "Антон Иванов";
-const MOCK_MANAGER_CITY = "Ростов-на-Дону";
-
-type NavDef = {
-  href: string;
-  label: string;
-  testId: string;
-  badge?: number;
+const ICON_BY_TESTID: Partial<Record<string, LucideIcon>> = {
+  "nav-main": Home,
+  "nav-territory-card": MapPinned,
+  "nav-dealer-base": Users,
+  "nav-orders": Package,
+  "nav-catalog": LayoutGrid,
+  "nav-tasks": ListTodo,
+  "nav-training": BookOpen,
+  "nav-sales-control": ClipboardList,
+  "nav-analytics-workspace": PieChart,
+  "nav-marketing-briefs": Megaphone,
+  "nav-release-one": Rocket,
+  "nav-release-clients": Rocket,
 };
 
-const NAV_ITEMS: NavDef[] = [
-  { href: MAIN_HREF, label: "Главная", testId: "nav-main" },
-  { href: TERRITORY_CARD_HREF, label: "Карточка территории", testId: "nav-territory-card" },
-  { href: DEALER_BASE_HREF, label: "Клиенты", testId: "nav-dealer-base", badge: NAV_BADGE_CLIENTS },
-  { href: ORDERS_HREF, label: "Заказы", testId: "nav-orders", badge: NAV_BADGE_ORDERS },
-  { href: CATALOG_HREF, label: "Каталог", testId: "nav-catalog" },
-  { href: TASKS_HREF, label: "Задачи", testId: "nav-tasks" },
-  { href: ANALYTICS_HREF, label: "Аналитика", testId: "nav-analytics" },
-  { href: TRAINING_HREF, label: "Обучение", testId: "nav-training" },
-  { href: SALES_CONTROL_HREF, label: "План-факт продаж", testId: "nav-sales-control" },
-  { href: ANALYTICS_WORKSPACE_HREF, label: "Аналитика команды", testId: "nav-analytics-workspace" },
-  { href: MARKETING_BRIEFS_HREF, label: "Маркетинговые брифы", testId: "nav-marketing-briefs" },
-  { href: RELEASE_ONE_HREF, label: "Первый релиз", testId: "nav-release-one" },
-  { href: RELEASE_ONE_CLIENTS_HREF, label: "Клиенты пилота", testId: "nav-release-clients" },
-];
-
-const ICON_RAIL: { href: string; label: string; icon: LucideIcon }[] = [
-  { href: MAIN_HREF, label: "Главная", icon: Home },
-  { href: TERRITORY_CARD_HREF, label: "Территория", icon: MapPinned },
-  { href: DEALER_BASE_HREF, label: "Клиенты", icon: Users },
-  { href: ORDERS_HREF, label: "Заказы", icon: Package },
-  { href: CATALOG_HREF, label: "Каталог", icon: LayoutGrid },
-  { href: TASKS_HREF, label: "Задачи", icon: ListTodo },
-  { href: TRAINING_HREF, label: "Обучение", icon: BookOpen },
-  { href: SALES_CONTROL_HREF, label: "План-факт", icon: ClipboardList },
-  { href: ANALYTICS_WORKSPACE_HREF, label: "Аналитика команды", icon: PieChart },
-  { href: MARKETING_BRIEFS_HREF, label: "Брифы", icon: Megaphone },
-  { href: RELEASE_ONE_HREF, label: "Релиз 1", icon: Rocket },
-];
+function pathMatchesNavHref(location: string, href: string): boolean {
+  if (location === href) return true;
+  if (href !== "/" && location.startsWith(`${href}/`)) return true;
+  return false;
+}
 
 function isMainPath(path: string) {
   return path === "/" || path === MAIN_HREF || path === SALES_MANAGER_HREF;
@@ -88,6 +70,10 @@ function isMainPath(path: string) {
 
 function isDealerBasePath(path: string) {
   return path === DEALER_BASE_HREF;
+}
+
+function isClientsSectionPath(path: string) {
+  return isDealerBasePath(path) || path.startsWith("/dealers/");
 }
 
 function isOrdersSectionPath(path: string) {
@@ -134,10 +120,10 @@ function isReleaseOneClientsPath(path: string) {
   return path === RELEASE_ONE_CLIENTS_HREF || path.startsWith(`${RELEASE_ONE_CLIENTS_HREF}/`);
 }
 
-function isNavItemActive(item: NavDef, location: string, isActiveFromLink?: boolean): boolean {
+function isNavItemActive(item: PilotNavItem, location: string, isActiveFromLink?: boolean): boolean {
   if (isActiveFromLink !== undefined) return isActiveFromLink;
   if (item.testId === "nav-main") return isMainPath(location);
-  if (item.testId === "nav-dealer-base") return isDealerBasePath(location);
+  if (item.testId === "nav-dealer-base") return isClientsSectionPath(location);
   if (item.testId === "nav-orders") return isOrdersSectionPath(location);
   if (item.testId === "nav-catalog") return isCatalogPath(location);
   if (item.testId === "nav-tasks") return isTasksPath(location);
@@ -149,25 +135,16 @@ function isNavItemActive(item: NavDef, location: string, isActiveFromLink?: bool
   if (item.testId === "nav-marketing-briefs") return isMarketingBriefsPath(location);
   if (item.testId === "nav-release-one") return isReleaseOnePath(location);
   if (item.testId === "nav-release-clients") return isReleaseOneClientsPath(location);
-  return location === item.href;
+  return pathMatchesNavHref(location, item.href);
 }
 
 function isIconRailActive(href: string, location: string) {
   if (href === MAIN_HREF) return isMainPath(location);
-  if (href === DEALER_BASE_HREF) return isDealerBasePath(location);
-  if (href === ORDERS_HREF) return isOrdersSectionPath(location);
-  if (href === CATALOG_HREF) return isCatalogPath(location);
-  if (href === TASKS_HREF) return isTasksPath(location);
-  if (href === TERRITORY_CARD_HREF) return isTerritoryCardPath(location);
-  if (href === TRAINING_HREF) return isTrainingPath(location);
-  if (href === SALES_CONTROL_HREF) return isSalesControlPath(location);
-  if (href === ANALYTICS_WORKSPACE_HREF) return isAnalyticsWorkspacePath(location);
-  if (href === MARKETING_BRIEFS_HREF) return isMarketingBriefsPath(location);
   if (href === RELEASE_ONE_HREF) return isReleaseOnePath(location) || isReleaseOneClientsPath(location);
-  return false;
+  return pathMatchesNavHref(location, href);
 }
 
-function navLinkClass(item: NavDef, location: string, variant: "sidebar" | "drawer", isActiveFromLink?: boolean) {
+function navLinkClass(item: PilotNavItem, location: string, variant: "sidebar" | "drawer", isActiveFromLink?: boolean) {
   const active = isNavItemActive(item, location, isActiveFromLink);
   const base =
     variant === "sidebar"
@@ -183,6 +160,7 @@ function navLinkClass(item: NavDef, location: string, variant: "sidebar" | "draw
 
 function headerContextLabel(location: string) {
   if (isMainPath(location)) return "Главная";
+  if (location.startsWith("/dealers/")) return "Карточка клиента";
   if (isDealerBasePath(location)) return "Клиенты";
   if (isOrdersSectionPath(location)) return "Заказы";
   if (isTasksPath(location)) return "Задачи";
@@ -195,14 +173,13 @@ function headerContextLabel(location: string) {
   if (isMarketingBriefsPath(location)) return "Маркетинговые брифы";
   if (isReleaseOneClientsPath(location)) return "Клиенты пилота";
   if (isReleaseOnePath(location)) return "Первый релиз";
-  if (location.startsWith("/dealers/")) return "Карточка клиента";
   return "";
 }
 
-function BrandBlock({ className }: { className?: string }) {
+function BrandBlock({ className, homeHref }: { className?: string; homeHref: string }) {
   return (
     <div className={cn("flex flex-col items-start px-0.5", className)}>
-      <Link href={MAIN_HREF} className="block w-full max-w-[168px] leading-none no-underline">
+      <Link href={homeHref} className="block w-full max-w-[168px] leading-none no-underline">
         <TandoorLogo className="max-h-[52px] w-full max-w-[168px] object-contain object-left" data-testid="brand-logo-tandoor" />
       </Link>
     </div>
@@ -210,11 +187,13 @@ function BrandBlock({ className }: { className?: string }) {
 }
 
 function NavLinksList({
+  items,
   location,
   variant,
   onNavigate,
   "data-testid": navTestId,
 }: {
+  items: PilotNavItem[];
   location: string;
   variant: "sidebar" | "drawer";
   onNavigate?: () => void;
@@ -222,7 +201,7 @@ function NavLinksList({
 }) {
   return (
     <nav className="flex flex-col gap-0.5" data-testid={navTestId}>
-      {NAV_ITEMS.map((item) => (
+      {items.map((item) => (
         <Link
           key={item.testId}
           href={item.href}
@@ -242,62 +221,48 @@ function NavLinksList({
   );
 }
 
-function IntegrationChips({ className }: { className?: string }) {
-  return (
-    <div className={cn("flex flex-col gap-2", className)}>
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Интеграции</p>
-      <div className="flex flex-col gap-1.5">
-        <button
-          type="button"
-          disabled
-          className="rounded-lg border border-dashed border-border/80 bg-muted/30 px-3 py-2 text-left text-xs font-medium text-muted-foreground"
-          data-testid="quick-integration-tandoor"
-        >
-          Tandoor
-        </button>
-        <button
-          type="button"
-          disabled
-          className="rounded-lg border border-dashed border-border/80 bg-muted/30 px-3 py-2 text-left text-xs font-medium text-muted-foreground"
-          data-testid="quick-integration-bitrix24"
-        >
-          Битрикс 24
-        </button>
-        <button
-          type="button"
-          disabled
-          className="rounded-lg border border-dashed border-border/80 bg-muted/30 px-3 py-2 text-left text-xs font-medium text-muted-foreground"
-          data-testid="quick-integration-1c"
-        >
-          1С
-        </button>
-      </div>
-    </div>
-  );
+function buildIconRail(navItems: PilotNavItem[]): { href: string; label: string; icon: LucideIcon; key: string }[] {
+  const out: { href: string; label: string; icon: LucideIcon; key: string }[] = [];
+  for (const item of navItems) {
+    const Icon = ICON_BY_TESTID[item.testId];
+    if (!Icon) continue;
+    const short = item.label.replace(/\s*\([^)]*\)\s*$/, "").trim();
+    out.push({ href: item.href, label: short || item.label, icon: Icon, key: item.testId });
+  }
+  return out;
 }
 
-export function AppShell({ children }: { children: ReactNode }) {
+export type AppShellProps = {
+  children: ReactNode;
+  navItems: PilotNavItem[];
+  homeHref: string;
+  userName: string;
+  cityLabel?: string;
+  onLogout: () => void;
+};
+
+export function AppShell({ children, navItems, homeHref, userName, cityLabel = "—", onLogout }: AppShellProps) {
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const ctx = headerContextLabel(location);
+  const iconRail = useMemo(() => buildIconRail(navItems), [navItems]);
 
   return (
     <div
       className="flex min-h-screen overflow-x-hidden bg-background text-foreground"
       data-testid="app-shell-desktop"
     >
-      {/* Узкий icon rail — desktop */}
       <aside
         className="sticky top-0 z-30 hidden h-screen w-14 shrink-0 flex-col border-r border-border/70 bg-[hsl(var(--muted))] py-4 lg:flex"
         data-testid="app-shell-icon-rail"
         aria-label="Быстрые разделы"
       >
         <div className="flex flex-1 flex-col items-center gap-2 px-1">
-          {ICON_RAIL.map(({ href, label, icon: Icon }) => {
+          {iconRail.map(({ href, label, icon: Icon, key }) => {
             const active = isIconRailActive(href, location);
             return (
               <Link
-                key={href + label}
+                key={key}
                 href={href}
                 title={label}
                 aria-label={label}
@@ -313,25 +278,23 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      {/* Основной sidebar — desktop */}
       <aside
         className="sticky top-0 z-30 hidden h-screen w-[256px] shrink-0 flex-col border-r border-border/70 bg-card shadow-sm lg:flex"
         data-testid="app-shell-sidebar"
         aria-label="Основная навигация"
       >
         <div className="border-b border-border/60 px-4 pb-4 pt-5">
-          <BrandBlock />
+          <BrandBlock homeHref={homeHref} />
         </div>
         <div className="flex flex-1 flex-col overflow-y-auto overflow-x-hidden px-3 py-4">
-          <NavLinksList location={location} variant="sidebar" data-testid="nav-preview-desktop" />
+          <NavLinksList items={navItems} location={location} variant="sidebar" data-testid="nav-preview-desktop" />
         </div>
         <div className="mt-auto border-t border-border/60 px-4 py-4">
-          <IntegrationChips />
+          <p className="text-[10px] text-muted-foreground">Пилот: интеграции с 1С и Bitrix отключены.</p>
         </div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Desktop topbar */}
         <header
           className="sticky top-0 z-40 hidden min-h-[56px] w-full items-center gap-4 border-b border-border/70 bg-card px-4 py-2 shadow-xs lg:flex"
           data-testid="app-shell-topbar"
@@ -359,15 +322,25 @@ export function AppShell({ children }: { children: ReactNode }) {
               <AppTopbarDemoStrip />
             </div>
             <Button type="button" variant="outline" size="sm" className="max-w-[10rem] truncate border-border/80" data-testid="button-current-city">
-              <span data-testid="text-current-city">{MOCK_MANAGER_CITY}</span>
+              <span data-testid="text-current-city">{cityLabel}</span>
             </Button>
             <Button type="button" variant="outline" size="sm" className="max-w-[12rem] truncate border-border/80" data-testid="button-manager-profile">
-              {MOCK_MANAGER_NAME}
+              {userName}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0 gap-1 border-border/80"
+              data-testid="button-auth-logout"
+              onClick={onLogout}
+            >
+              <LogOut className="h-4 w-4" aria-hidden />
+              Выход
             </Button>
           </div>
         </header>
 
-        {/* Mobile header */}
         <header className="sticky top-0 z-40 border-b border-border/70 bg-card/95 backdrop-blur-md supports-[backdrop-filter]:bg-card/90 lg:hidden">
           <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3 px-4 py-3 sm:px-5">
             <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -389,25 +362,32 @@ export function AppShell({ children }: { children: ReactNode }) {
                   className="flex w-[min(100vw-2rem,300px)] flex-col gap-0 overflow-y-auto border-r border-border/70 bg-card p-0"
                 >
                   <div className="border-b border-border/60 px-5 pb-3 pt-4">
-                    <BrandBlock />
+                    <BrandBlock homeHref={homeHref} />
                   </div>
                   <SheetHeader className="px-5 pt-3 text-left">
                     <SheetTitle className="text-left text-base">Разделы</SheetTitle>
                   </SheetHeader>
                   <div className="flex-1 px-5 pb-4 pt-2">
                     <NavLinksList
+                      items={navItems}
                       location={location}
                       variant="drawer"
                       onNavigate={() => setMobileOpen(false)}
                       data-testid="nav-preview-mobile"
                     />
                   </div>
-                  <div className="border-t border-border/60 px-5 pb-3 pt-3">
-                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Демо-роль</p>
-                    <AppTopbarDemoStrip />
-                  </div>
-                  <div className="border-t border-border/60 px-5 pb-6 pt-3">
-                    <IntegrationChips />
+                  {isDemoAuthBypassEnabled() && !loadMockAuthSession() ? (
+                    <div className="border-t border-border/60 px-5 pb-3 pt-3">
+                      <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Демо-роль</p>
+                      <AppTopbarDemoStrip />
+                    </div>
+                  ) : null}
+                  <div className="border-t border-border/60 px-5 pb-4 pt-3">
+                    <p className="mb-2 text-xs text-muted-foreground">{userName}</p>
+                    <Button type="button" variant="outline" className="w-full gap-2" onClick={onLogout}>
+                      <LogOut className="h-4 w-4" aria-hidden />
+                      Выйти
+                    </Button>
                   </div>
                 </SheetContent>
               </Sheet>

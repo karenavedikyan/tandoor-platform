@@ -9,6 +9,7 @@ import {
   getTeamManagers,
   SALES_USERS,
 } from "@/lib/sales-control-data";
+import { isDemoAuthBypassEnabled, loadMockAuthSession } from "@/lib/mock-auth";
 
 export const RELEASE_DEMO_PROFILE_KEY = "tandoor-release-demo-profile-v1";
 export const RELEASE_DEMO_PROFILE_EVENT = "release-demo-profile-changed";
@@ -40,6 +41,16 @@ export function listPersonasForRole(role: SalesRole): { id: string; name: string
 
 export function loadReleaseDemoProfile(): ReleaseDemoProfile {
   if (typeof window === "undefined" || !window.sessionStorage) return { ...DEFAULT };
+  const auth = loadMockAuthSession();
+  if (auth) {
+    const u = getSalesUserById(auth.userId);
+    if (u?.role) {
+      return { role: u.role, personaUserId: u.id };
+    }
+  }
+  if (!isDemoAuthBypassEnabled()) {
+    return { ...DEFAULT };
+  }
   try {
     const raw = window.sessionStorage.getItem(RELEASE_DEMO_PROFILE_KEY);
     if (!raw) return { ...DEFAULT };
@@ -56,6 +67,8 @@ export function loadReleaseDemoProfile(): ReleaseDemoProfile {
 
 export function saveReleaseDemoProfile(next: ReleaseDemoProfile): void {
   if (typeof window === "undefined" || !window.sessionStorage) return;
+  if (loadMockAuthSession()) return;
+  if (!isDemoAuthBypassEnabled()) return;
   window.sessionStorage.setItem(RELEASE_DEMO_PROFILE_KEY, JSON.stringify(next));
   if (next.role === "sales_manager") {
     const u = getSalesUserById(next.personaUserId);
