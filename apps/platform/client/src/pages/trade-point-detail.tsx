@@ -690,13 +690,13 @@ function TradePointDetailContent({ dealer, point }: { dealer: DealerRow; point: 
     return createdTasks.filter((t) => t.status === matrixTaskFilter);
   }, [createdTasks, matrixTaskFilter]);
 
-  const breadcrumbDealerLabel = `Дилер №${dealer.id}`;
+  const breadcrumbDealerLabel = dealer.name;
 
   return (
     <div className="space-y-4 sm:space-y-6" data-testid="page-trade-point-detail">
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
         <Button asChild variant="outline" className="min-h-11 w-full border-border bg-card sm:w-auto" data-testid="button-back-to-dealer-card">
-          <Link href={`/dealers/${dealer.id}`}>Назад к дилеру</Link>
+          <Link href={`/dealers/${dealer.id}`}>Назад к клиенту</Link>
         </Button>
         <Button asChild variant="secondary" className="min-h-11 w-full border-border sm:w-auto" data-testid="button-back-to-dealer-base">
           <Link href="/dealer-base">К клиентской базе</Link>

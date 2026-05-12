@@ -162,6 +162,19 @@ function normalizeCodeForId(code) {
   return c || "";
 }
 
+/** Возвращает baseId, либо `${baseId}-dup-N` при коллизии (Excel допускает повторы кода). */
+function uniqueId(baseId, usedIds) {
+  if (!usedIds.has(baseId)) {
+    usedIds.add(baseId);
+    return baseId;
+  }
+  let n = 2;
+  while (usedIds.has(`${baseId}-dup-${n}`)) n += 1;
+  const id = `${baseId}-dup-${n}`;
+  usedIds.add(id);
+  return id;
+}
+
 function classifyClientType(raw) {
   const s = String(raw ?? "").trim();
   const n = norm(s);
@@ -244,6 +257,7 @@ function hash32(i) {
 
 function buildSyntheticRows() {
   const rows = [];
+  const usedIds = new Set();
   for (let i = 0; i < SYNTHETIC_COUNT; i++) {
     const h = hash32(i + 1);
     const teamId = SYNTH_TEAM_ORDER[i % SYNTH_TEAM_ORDER.length];
@@ -258,7 +272,8 @@ function buildSyntheticRows() {
     const clientTypeRaw = pickSyntheticType(h);
     const cls = classifyClientType(clientTypeRaw);
     const idSlug = normalizeCodeForId(code);
-    const id = idSlug ? `client-${idSlug}` : `client-row-${i + 1}`;
+    const baseId = idSlug ? `client-${idSlug}` : `client-row-${i + 1}`;
+    const id = uniqueId(baseId, usedIds);
     rows.push({
       id,
       code,
@@ -316,6 +331,7 @@ function readXlsxRows() {
   }
 
   const rows = [];
+  const usedIds = new Set();
   let unmappedManagers = 0;
   for (let r = 1; r < matrix.length; r++) {
     const line = matrix[r];
@@ -335,7 +351,8 @@ function readXlsxRows() {
     }
     const cls = classifyClientType(clientTypeRaw);
     const idSlug = normalizeCodeForId(code);
-    const id = idSlug ? `client-${idSlug}` : `client-row-${rows.length + 1}`;
+    const baseId = idSlug ? `client-${idSlug}` : `client-row-${rows.length + 1}`;
+    const id = uniqueId(baseId, usedIds);
     const row = {
       id,
       code,

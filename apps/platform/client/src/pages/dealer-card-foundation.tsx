@@ -24,6 +24,7 @@ import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import {
+  DEALER_BASE_ROWS,
   getDealerById,
   type DealerRow,
   type DealerCategory,
@@ -325,7 +326,7 @@ function DealerNotFound() {
       </Button>
       <Card className="rounded-2xl border border-border bg-card shadow-md">
         <CardHeader>
-          <CardTitle className="text-xl">Дилер не найден</CardTitle>
+          <CardTitle className="text-xl">Клиент не найден</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 text-sm text-muted-foreground">
           <p>Проверьте номер клиента или вернитесь к клиентской базе.</p>
@@ -433,7 +434,7 @@ function DealerSectionNav({
 }
 
 function DealerCardContent({ row }: { row: DealerRow }) {
-  const catLabel = row.category === "TOP" ? "TOP / ключевой клиент" : row.category;
+  const catLabel = row.clientTypeLabel ?? (row.category === "TOP" ? "TOP / ключевой клиент" : row.category);
   const activeSection = useActiveSection();
   const historyEvents = useMemo(() => buildHistoryEvents(row), [row]);
   const tasks = useMemo(() => buildTasks(row), [row]);
@@ -492,7 +493,7 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                   </div>
                   <h1 className="mt-4 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">{row.name}</h1>
                   <p className="mt-1 text-base font-medium text-muted-foreground sm:text-lg">
-                    № {row.id} · {row.city}, {row.region}
+                    Код {row.releaseCode ?? "—"} · {row.city} · РОП: {row.regionalManager}
                   </p>
                   <p className="mt-2 text-sm text-muted-foreground sm:text-base">Сводная информация по клиенту и торговым точкам</p>
 
@@ -557,16 +558,21 @@ function DealerCardContent({ row }: { row: DealerRow }) {
 
               <div className="grid gap-6 lg:grid-cols-2">
                 <div data-testid="section-dealer-summary">
-                  <SectionTitle subtitle="Ключевые реквизиты и классификация.">Сводка дилера</SectionTitle>
+                  <SectionTitle subtitle="Ключевые реквизиты и классификация.">Сводка клиента</SectionTitle>
                   <SurfaceCard className="mt-3">
                     <CardContent className="pt-5">
-                      <FieldRow label="№" value={row.id} />
+                      <FieldRow label="Код (Excel)" value={row.releaseCode ?? "—"} />
+                      <FieldRow label="Внутренний id" value={row.id} />
                       <FieldRow label="Название клиента" value={row.name} icon={Building2} />
-                      <FieldRow label="Категория клиента" value={catLabel} />
+                      <FieldRow label="Тип клиента" value={catLabel} />
+                      <FieldRow label="Классификация (TOP/A/B/C)" value={row.category} />
                       <FieldRow label="Статус" value={row.status.slice(0, 1).toUpperCase() + row.status.slice(1)} />
                       <FieldRow label="Холдинг / сеть" value={row.holding} />
-                      <FieldRow label="Юрлицо" value={row.legalEntity} />
-                      <FieldRow label="Регион / город" value={`${row.city}, ${row.region}`} icon={MapPin} />
+                      <FieldRow label="Юрлицо / наименование" value={row.legalEntity} />
+                      <FieldRow label="Город" value={row.city} icon={MapPin} />
+                      <FieldRow label="РОП" value={row.regionalManager} />
+                      <FieldRow label="Менеджер" value={row.manager} />
+                      {row.releaseAddress ? <FieldRow label="Адрес" value={row.releaseAddress} /> : null}
                       <FieldRow label="Формат" value={row.format} />
                       <FieldRow label="Торговых точек" value={String(row.outlets)} />
                     </CardContent>
@@ -906,14 +912,14 @@ function DealerCardContent({ row }: { row: DealerRow }) {
               data-testid="section-dealer-orders"
               className="scroll-mt-28 space-y-4 sm:scroll-mt-32"
             >
-              <SectionTitle subtitle="Последние заказы клиента из синхронизированного контура ЛК дилера. Менеджер видит их через тот же контур.">
+              <SectionTitle subtitle="Последние заказы клиента из синхронизированного контура. Менеджер видит их через тот же контур.">
                 Заказы
               </SectionTitle>
               {dealerWarehouses.length > 0 ? (
                 <SurfaceCard>
                   <CardContent className="space-y-2 pt-5">
                     <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      Склады дилера · {dealerWarehouses.length}
+                      Склады · {dealerWarehouses.length}
                     </p>
                     <div className="grid gap-2 sm:grid-cols-2">
                       {dealerWarehouses.map((w) => (
@@ -951,7 +957,7 @@ function DealerCardContent({ row }: { row: DealerRow }) {
               {dealerOrders.length === 0 ? (
                 <SurfaceCard>
                   <CardContent className="pt-5 text-sm text-muted-foreground">
-                    По дилеру пока нет заказов в синхронизированном контуре.
+                    По клиенту пока нет заказов в синхронизированном контуре.
                   </CardContent>
                 </SurfaceCard>
               ) : (
@@ -1088,9 +1094,9 @@ export function DealerCardPage() {
   return <DealerCardContent row={row} />;
 }
 
-/** Маршрут `/dealer-card-foundation` — карточка клиента №001. */
+/** Маршрут `/dealer-card-foundation` — карточка первого клиента из базы Release 1. */
 export default function DealerCardFoundation() {
-  const row = getDealerById("001");
-  if (!row) return <DealerNotFound />;
-  return <DealerCardContent row={row} />;
+  const first = DEALER_BASE_ROWS[0];
+  if (!first) return <DealerNotFound />;
+  return <DealerCardContent row={first} />;
 }

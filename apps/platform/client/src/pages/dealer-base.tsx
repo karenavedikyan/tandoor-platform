@@ -67,6 +67,11 @@ export default function DealerBase() {
   const [category, setCategory] = useState<string>("all");
   const [manager, setManager] = useState<string>("all");
 
+  const categoryOptions = useMemo(() => {
+    const s = new Set(DEALER_BASE_ROWS.map((r) => r.category));
+    return Array.from(s).sort() as DealerCategory[];
+  }, []);
+
   const cities = useMemo(() => {
     const s = new Set(DEALER_BASE_ROWS.map((r) => r.city));
     return Array.from(s).sort();
@@ -85,12 +90,19 @@ export default function DealerBase() {
       if (category !== "all" && row.category !== category) return false;
       if (manager !== "all" && row.manager !== manager) return false;
       if (!q) return true;
-      return (
-        row.name.toLowerCase().includes(q) ||
-        row.city.toLowerCase().includes(q) ||
-        row.manager.toLowerCase().includes(q) ||
-        row.regionalManager.toLowerCase().includes(q)
-      );
+      const hay = [
+        row.name,
+        row.city,
+        row.manager,
+        row.regionalManager,
+        row.releaseCode ?? "",
+        row.releaseAddress ?? "",
+        row.clientTypeLabel ?? "",
+        row.id,
+      ]
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(q);
     });
   }, [search, quick, city, category, manager]);
 
@@ -106,18 +118,18 @@ export default function DealerBase() {
   }, [filtered]);
 
   return (
-    <div className="space-y-6 sm:space-y-8" data-testid="page-dealer-base">
+    <div className="min-w-0 max-w-full space-y-6 sm:space-y-8" data-testid="page-dealer-base">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Клиентская база</h1>
         <p className="mt-1 text-sm text-muted-foreground sm:text-base">
-          Список дилеров и торговых партнёров: поиск, фильтры и переход в карточку клиента.
+          Клиенты пилота Release 1 (импорт Excel): поиск, фильтры и переход в карточку клиента.
         </p>
       </div>
 
       <section className="space-y-3" data-testid="section-dealer-base-kpis">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           {[
-            { label: "Всего дилеров", value: String(kpis.total) },
+            { label: "Всего клиентов", value: String(kpis.total) },
             { label: "Активные", value: String(kpis.active) },
             { label: "Потенциальные", value: String(kpis.potential) },
             { label: "Требуют внимания", value: String(kpis.attention) },
@@ -141,7 +153,7 @@ export default function DealerBase() {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Поиск по названию, городу, ответственному"
+              placeholder="Поиск: название, код, город, РОП, менеджер, тип, адрес"
               className="min-h-11 rounded-xl border-border pl-10"
               data-testid="input-dealer-search"
             />
@@ -181,14 +193,14 @@ export default function DealerBase() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label className="text-xs font-medium text-muted-foreground">Категория</Label>
+              <Label className="text-xs font-medium text-muted-foreground">Классификация (TOP/A/B/C)</Label>
               <Select value={category} onValueChange={setCategory}>
                 <SelectTrigger className="min-h-11 rounded-xl">
                   <SelectValue placeholder="Категория" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Все категории</SelectItem>
-                  {(["TOP", "A", "B", "C"] as DealerCategory[]).map((c) => (
+                  {categoryOptions.map((c) => (
                     <SelectItem key={c} value={c}>
                       {c}
                     </SelectItem>
@@ -197,7 +209,7 @@ export default function DealerBase() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label className="text-xs font-medium text-muted-foreground">Ответственный</Label>
+              <Label className="text-xs font-medium text-muted-foreground">Менеджер</Label>
               <Select value={manager} onValueChange={setManager}>
                 <SelectTrigger className="min-h-11 rounded-xl">
                   <SelectValue placeholder="Менеджер" />
@@ -283,13 +295,17 @@ export default function DealerBase() {
                       ) : null}
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      {row.city}, {row.region} · {row.format} · ТТ: {row.outlets}
+                      Код: {row.releaseCode ?? "—"} · {row.city} · РОП: {row.regionalManager}
                     </p>
+                    <p className="text-xs text-muted-foreground">Менеджер: {row.manager}</p>
                     <p className="text-xs text-muted-foreground">
-                      Менеджер: {row.manager} · РМ: {row.regionalManager}
+                      Тип: {row.clientTypeLabel ?? row.category} · ТТ: {row.outlets}
                     </p>
+                    {row.releaseAddress ? (
+                      <p className="text-xs text-muted-foreground">Адрес: {row.releaseAddress}</p>
+                    ) : null}
                     <p className="text-xs text-muted-foreground">
-                      Активность: {row.lastActivity} · Дистрибуция: {row.distribution}% · Витрина: {row.showcaseStatus}
+                      Дистрибуция (пилот): {row.distribution}% · Витрина: {row.showcaseStatus}
                     </p>
                     <p className="text-xs text-foreground/90">Далее: {row.nextAction}</p>
                   </div>
@@ -321,9 +337,8 @@ export default function DealerBase() {
                   <p className="text-sm text-muted-foreground">
                     {row.city}, {row.region}
                   </p>
-                  <p className="text-xs text-muted-foreground">
-                    {row.manager} · {row.regionalManager}
-                  </p>
+                  <p className="text-xs text-muted-foreground">Код: {row.releaseCode ?? "—"}</p>
+                  <p className="text-xs text-muted-foreground">Тип: {row.clientTypeLabel ?? row.category}</p>
                 </CardHeader>
                 <CardContent className="mt-auto flex flex-1 flex-col gap-3 pb-4">
                   <div className="grid grid-cols-2 gap-2 text-xs">
@@ -371,8 +386,9 @@ export default function DealerBase() {
                       {row.city} · {row.status}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {row.manager} · {row.regionalManager} · ТТ {row.outlets}
+                      {row.manager} · РОП: {row.regionalManager}
                     </p>
+                    {row.releaseAddress ? <p className="text-xs text-muted-foreground line-clamp-2">{row.releaseAddress}</p> : null}
                     <p className="text-xs">
                       Дистр. {row.distribution}% · {row.showcaseStatus}
                     </p>
@@ -383,42 +399,42 @@ export default function DealerBase() {
                 </Card>
               ))}
             </div>
-            <div className="hidden sm:block sm:overflow-x-auto sm:rounded-2xl sm:border sm:border-border/80 sm:bg-card sm:shadow-sm">
-              <table className="w-full min-w-[880px] text-left text-sm">
+            <div className="hidden sm:block sm:max-w-full sm:overflow-x-auto sm:rounded-2xl sm:border sm:border-border/80 sm:bg-card sm:shadow-sm">
+              <table className="w-full min-w-[720px] text-left text-sm">
                 <thead className="border-b border-border bg-muted/40">
                   <tr>
-                    {["№", "Дилер", "Город", "Статус", "Категория", "Менеджер", "РМ", "ТТ", "Дистр.", "Витрина", "Активность", "Действие", ""].map(
-                      (h) => (
-                        <th key={h} className="whitespace-nowrap px-3 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          {h}
-                        </th>
-                      ),
-                    )}
+                    {["Код", "Клиент", "Город", "РОП", "Менеджер", "Тип клиента", "Адрес", "Статус", ""].map((h) => (
+                      <th key={h} className="whitespace-nowrap px-3 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        {h}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.map((row) => (
                     <tr key={row.id} className="border-b border-border last:border-0" data-testid={`row-dealer-${row.id}`}>
-                      <td className="px-3 py-3 font-mono text-xs text-muted-foreground">{row.id}</td>
-                      <td className="max-w-[140px] truncate px-3 py-3 font-medium">{row.name}</td>
+                      <td className="px-3 py-3 font-mono text-xs text-muted-foreground">{row.releaseCode ?? "—"}</td>
+                      <td className="max-w-[160px] truncate px-3 py-3 font-medium" title={row.name}>
+                        {row.name}
+                      </td>
                       <td className="whitespace-nowrap px-3 py-3">{row.city}</td>
+                      <td className="max-w-[120px] truncate px-3 py-3 text-xs" title={row.regionalManager}>
+                        {row.regionalManager}
+                      </td>
+                      <td className="max-w-[120px] truncate px-3 py-3 text-xs" title={row.manager}>
+                        {row.manager}
+                      </td>
+                      <td className="max-w-[140px] truncate px-3 py-3 text-xs" title={row.clientTypeLabel}>
+                        {row.clientTypeLabel ?? row.category}
+                      </td>
+                      <td className="max-w-[180px] truncate px-3 py-3 text-xs text-muted-foreground" title={row.releaseAddress}>
+                        {row.releaseAddress ?? "—"}
+                      </td>
                       <td className="px-3 py-3">
                         <Badge variant="outline" className={cn("text-xs", statusBadgeClass(row.status))}>
                           {row.status}
                         </Badge>
                       </td>
-                      <td className="px-3 py-3">
-                        <Badge variant="outline" className={cn("text-xs", categoryBadgeClass(row.category))}>
-                          {row.category}
-                        </Badge>
-                      </td>
-                      <td className="max-w-[100px] truncate px-3 py-3 text-xs">{row.manager}</td>
-                      <td className="max-w-[100px] truncate px-3 py-3 text-xs">{row.regionalManager}</td>
-                      <td className="px-3 py-3 tabular-nums">{row.outlets}</td>
-                      <td className="px-3 py-3 tabular-nums">{row.distribution}%</td>
-                      <td className="max-w-[90px] truncate px-3 py-3 text-xs">{row.showcaseStatus}</td>
-                      <td className="whitespace-nowrap px-3 py-3 text-xs text-muted-foreground">{row.lastActivity}</td>
-                      <td className="max-w-[120px] truncate px-3 py-3 text-xs">{row.nextAction}</td>
                       <td className="px-3 py-3">
                         <Button asChild size="sm" className="font-semibold" data-testid={`button-open-dealer-${row.id}`}>
                           <Link href={`/dealers/${row.id}`}>Открыть</Link>

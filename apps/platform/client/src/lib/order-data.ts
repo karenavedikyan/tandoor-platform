@@ -165,6 +165,18 @@ function pad3(n: number): string {
   return String(n).padStart(3, "0");
 }
 
+/** Стабильное число для сидов заказов/складов, если id клиента не числовой (Release 1). */
+export function dealerSeedIndex(dealer: { id: string }): number {
+  const n = parseInt(dealer.id, 10);
+  if (Number.isFinite(n) && n > 0) return n;
+  let h = 0;
+  for (let i = 0; i < dealer.id.length; i += 1) {
+    h = (Math.imul(h, 31) + dealer.id.charCodeAt(i)) | 0;
+  }
+  const v = Math.abs(h) % 100000;
+  return v === 0 ? 1 : v;
+}
+
 function dateFor(i: number, offsetDays: number): string {
   const day = ((i * 3 + offsetDays) % 27) + 1;
   const month = ((i + offsetDays) % 5) + 1;
@@ -172,7 +184,7 @@ function dateFor(i: number, offsetDays: number): string {
 }
 
 function buildWarehousesForDealer(dealer: DealerRow): DealerWarehouse[] {
-  const i = parseInt(dealer.id, 10) || 0;
+  const i = dealerSeedIndex(dealer);
   const points = dealer.tradePoints;
   const warehouses: DealerWarehouse[] = [];
 
@@ -342,7 +354,7 @@ function buildHistory(i: number, status: OrderStatus): OrderHistoryEvent[] {
 }
 
 function buildOrdersForDealer(dealer: DealerRow, warehouses: DealerWarehouse[]): OrderRow[] {
-  const i = parseInt(dealer.id, 10) || 1;
+  const i = dealerSeedIndex(dealer);
   const points = dealer.tradePoints;
   const ordersPerDealer = 2 + (i % 3);
   const out: OrderRow[] = [];
