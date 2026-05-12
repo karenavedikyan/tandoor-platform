@@ -287,6 +287,15 @@ export default function SalesManagerWorkspace() {
             <Button asChild variant="outline" className="min-h-10 border-border bg-card font-semibold" data-testid="button-sales-manager-open-sales-control">
               <Link href="/sales-control">План-факт продаж</Link>
             </Button>
+            <Button asChild variant="outline" className="min-h-10 border-border bg-card font-semibold" data-testid="button-sales-manager-open-analytics-workspace">
+              <Link href="/analytics-workspace">Аналитика команды</Link>
+            </Button>
+            <Button asChild variant="outline" className="min-h-10 border-border bg-card font-semibold" data-testid="button-sales-manager-open-marketing-briefs">
+              <Link href="/marketing-briefs">Брифы</Link>
+            </Button>
+            <Button asChild variant="outline" className="min-h-10 border-border bg-card font-semibold" data-testid="button-sales-manager-open-release-one">
+              <Link href="/release-one">Первый релиз</Link>
+            </Button>
           </div>
         </div>
       </section>

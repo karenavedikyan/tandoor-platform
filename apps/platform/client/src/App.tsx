@@ -33,6 +33,12 @@ const LazySalesControlTeamLead = lazy(() => import("@/pages/sales-control-team-l
 const LazySalesControlManager = lazy(() => import("@/pages/sales-control-manager"));
 const LazySalesControlPlans = lazy(() => import("@/pages/sales-control-plans"));
 const LazySalesControlPerformance = lazy(() => import("@/pages/sales-control-performance"));
+const LazyAnalyticsWorkspace = lazy(() => import("@/pages/analytics-workspace"));
+const LazyMarketingBriefs = lazy(() => import("@/pages/marketing-briefs"));
+const LazyMarketingBriefPublished = lazy(() =>
+  import("@/pages/marketing-briefs").then((m) => ({ default: m.MarketingBriefPublishedPage })),
+);
+const LazyReleaseOne = lazy(() => import("@/pages/release-one"));
 
 function suspensePage(Lazy: LazyExoticComponent<ComponentType<any>>): ComponentType<any> {
   const Wrapped: ComponentType<any> = (props) => (
@@ -64,6 +70,10 @@ const SalesControlTeamLeadRoute = suspensePage(LazySalesControlTeamLead);
 const SalesControlManagerRoute = suspensePage(LazySalesControlManager);
 const SalesControlPlansRoute = suspensePage(LazySalesControlPlans);
 const SalesControlPerformanceRoute = suspensePage(LazySalesControlPerformance);
+const AnalyticsWorkspaceRoute = suspensePage(LazyAnalyticsWorkspace);
+const MarketingBriefsRoute = suspensePage(LazyMarketingBriefs);
+const MarketingBriefPublishedRoute = suspensePage(LazyMarketingBriefPublished);
+const ReleaseOneRoute = suspensePage(LazyReleaseOne);
 
 function AppRouter() {
   return (
@@ -86,6 +96,10 @@ function AppRouter() {
         <Route path="/sales-control/plans" component={SalesControlPlansRoute} />
         <Route path="/sales-control/performance" component={SalesControlPerformanceRoute} />
         <Route path="/sales-control" component={SalesControlHubRoute} />
+        <Route path="/analytics-workspace" component={AnalyticsWorkspaceRoute} />
+        <Route path="/marketing-briefs/view/:id" component={MarketingBriefPublishedRoute} />
+        <Route path="/marketing-briefs" component={MarketingBriefsRoute} />
+        <Route path="/release-one" component={ReleaseOneRoute} />
         <Route path="/analytics" component={AnalyticsPageRoute} />
         <Route path="/orders/:orderId" component={OrderDetailPageRoute} />
         <Route path="/orders" component={OrdersPageRoute} />

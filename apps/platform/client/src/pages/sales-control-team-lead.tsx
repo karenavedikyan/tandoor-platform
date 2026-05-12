@@ -8,7 +8,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
+import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { useSalesControlStoredState } from "@/hooks/use-sales-control-stored-state";
+import { getEffectiveTeamLeadTeamId } from "@/lib/release-demo-profile";
 import {
   applyTeamLeadPlanSave,
   completionPercent,
@@ -28,8 +30,6 @@ import {
   loadSalesControlStoredState,
   type SalesControlStoredState,
 } from "@/lib/sales-control-data";
-
-const DEMO_TEAM_ID = "team-1";
 
 type ManagerDraft = {
   metrics: Record<string, string>;
@@ -51,9 +51,11 @@ function buildDraft(periodId: string, managerId: string, st: SalesControlStoredS
 
 export default function SalesControlTeamLeadPage() {
   const [stored, setStored] = useSalesControlStoredState();
+  const { profile } = useReleaseDemoProfile();
+  const activeTeamId = useMemo(() => getEffectiveTeamLeadTeamId(profile), [profile]);
   const [periodId, setPeriodId] = useState(getDefaultSalesPeriodId());
-  const managers = useMemo(() => getTeamManagers(DEMO_TEAM_ID), []);
-  const team = getTeamById(DEMO_TEAM_ID);
+  const managers = useMemo(() => getTeamManagers(activeTeamId), [activeTeamId]);
+  const team = getTeamById(activeTeamId);
 
   const [drafts, setDrafts] = useState<Record<string, ManagerDraft>>({});
 
@@ -122,7 +124,7 @@ export default function SalesControlTeamLeadPage() {
       <div className="space-y-2">
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Руководитель команды</h1>
         <p className="max-w-3xl text-sm text-muted-foreground">
-          Команда: <span className="font-medium text-foreground">{team?.name ?? DEMO_TEAM_ID}</span>. Задайте план по KPI и валовой прибыли для каждого менеджера, добавьте комментарий и сохраните — значения фиксируются в браузере (sessionStorage).
+          Команда: <span className="font-medium text-foreground">{team?.name ?? activeTeamId}</span>. Задайте план по KPI и валовой прибыли для каждого менеджера, добавьте комментарий и сохраните — значения фиксируются в браузере (sessionStorage).
         </p>
         <div className="max-w-xs space-y-1.5">
           <Label className="text-xs text-muted-foreground">Период</Label>
