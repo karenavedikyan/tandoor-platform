@@ -32,6 +32,9 @@ type TasksFilterId =
 
 type ViewMode = "cards" | "list";
 
+/** Максимум карточек/строк задач в DOM; фильтры и поиск по полному списку. */
+const TASKS_DISPLAY_LIMIT = 300;
+
 type RoleViewId = "all" | "manager" | "regional_manager" | "leadership";
 
 const ROLE_VIEWS: {
@@ -328,7 +331,7 @@ function TaskCard({ task }: { task: MatrixTaskWithContext }) {
             className="min-h-10 w-full border-border bg-card sm:w-auto"
             data-testid={`button-task-open-related-dealer-${task.taskId}`}
           >
-            <Link href={`/dealers/${task.dealerId}`}>Открыть дилера</Link>
+            <Link href={`/dealers/${task.dealerId}`}>Клиент</Link>
           </Button>
           <Button
             asChild
@@ -549,6 +552,10 @@ export default function TasksPage() {
     [baseList, filter, query],
   );
 
+  const visibleTasks = useMemo(() => filtered.slice(0, TASKS_DISPLAY_LIMIT), [filtered]);
+
+  const taskRowKey = (t: MatrixTaskWithContext) => `${t.dealerId}|${t.tradePointId}|${t.taskId}`;
+
   const leadershipAttention = useMemo(() => {
     if (role !== "leadership") return [] as MatrixTaskWithContext[];
     return roleScopedTasks
@@ -559,7 +566,7 @@ export default function TasksPage() {
   const activeRoleView = ROLE_VIEWS.find((r) => r.id === role) ?? ROLE_VIEWS[0];
 
   return (
-    <div className="space-y-4 sm:space-y-6" data-testid="page-tasks">
+    <div className="min-w-0 max-w-full space-y-4 overflow-x-hidden sm:space-y-6" data-testid="page-tasks">
       <header className="relative overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-lg sm:p-8">
         <div
           className="pointer-events-none absolute left-0 top-0 h-full w-1 rounded-l-2xl bg-primary"
@@ -626,8 +633,8 @@ export default function TasksPage() {
               </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
-              {leadershipAttention.map((t) => (
-                <LeadershipAttentionCard key={t.taskId} task={t} />
+              {leadershipAttention.map((t, idx) => (
+                <LeadershipAttentionCard key={`leadership-attn-${taskRowKey(t)}-${idx}`} task={t} />
               ))}
             </div>
           </CardContent>
@@ -643,7 +650,7 @@ export default function TasksPage() {
           <Input
             type="search"
             inputMode="search"
-            placeholder="Поиск по дилеру, точке, модели или артикулу"
+            placeholder="Поиск по клиенту, точке, модели или артикулу"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className="h-11 pl-9"
@@ -711,10 +718,23 @@ export default function TasksPage() {
       </div>
 
       <p className="text-sm text-muted-foreground" data-testid="text-tasks-count">
-        Показано задач:{" "}
-        <span className="font-semibold tabular-nums text-foreground">{filtered.length}</span> из{" "}
-        <span className="tabular-nums">{roleScopedTasks.length}</span>
+        Показано{" "}
+        <span className="font-semibold tabular-nums text-foreground">{visibleTasks.length}</span> из{" "}
+        <span className="font-semibold tabular-nums text-foreground">{filtered.length}</span> по фильтру и поиску
+        {roleScopedTasks.length !== filtered.length ? (
+          <>
+            {" "}
+            (в текущей роли без учёта фильтра:{" "}
+            <span className="tabular-nums">{roleScopedTasks.length}</span>)
+          </>
+        ) : null}
       </p>
+      {filtered.length > TASKS_DISPLAY_LIMIT ? (
+        <p className="text-sm text-muted-foreground" data-testid="text-tasks-display-cap">
+          Уточните фильтр или поиск, чтобы сузить список — сейчас в интерфейсе не более {TASKS_DISPLAY_LIMIT}{" "}
+          карточек одновременно.
+        </p>
+      ) : null}
 
       {filtered.length === 0 ? (
         <Card className="rounded-2xl border border-border/80 bg-card shadow-md">
@@ -724,14 +744,14 @@ export default function TasksPage() {
         </Card>
       ) : view === "cards" ? (
         <div className="grid gap-3 sm:grid-cols-2">
-          {filtered.map((t) => (
-            <TaskCard key={t.taskId} task={t} />
+          {visibleTasks.map((t) => (
+            <TaskCard key={taskRowKey(t)} task={t} />
           ))}
         </div>
       ) : (
         <div className="space-y-3">
-          {filtered.map((t) => (
-            <TaskListRow key={t.taskId} task={t} />
+          {visibleTasks.map((t) => (
+            <TaskListRow key={taskRowKey(t)} task={t} />
           ))}
         </div>
       )}

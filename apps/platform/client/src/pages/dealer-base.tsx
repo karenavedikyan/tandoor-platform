@@ -16,6 +16,9 @@ import {
 import { cn } from "@/lib/utils";
 import { DEALER_BASE_ROWS, type DealerRow, type DealerCategory, type DealerStatus } from "@/lib/dealer-base-mock-data";
 
+/** Максимум строк/карточек в DOM; фильтрация по полному списку клиентов. */
+const DEALER_BASE_DISPLAY_LIMIT = 300;
+
 type ViewMode = "list" | "cards" | "table";
 type QuickFilter = "all" | "active" | "potential" | "attention" | "top" | "no_activity";
 
@@ -117,8 +120,10 @@ export default function DealerBase() {
     return { total, active, potential, attention, outlets, avgDist };
   }, [filtered]);
 
+  const displayRows = useMemo(() => filtered.slice(0, DEALER_BASE_DISPLAY_LIMIT), [filtered]);
+
   return (
-    <div className="min-w-0 max-w-full space-y-6 sm:space-y-8" data-testid="page-dealer-base">
+    <div className="min-w-0 max-w-full overflow-x-hidden space-y-6 sm:space-y-8" data-testid="page-dealer-base">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Клиентская база</h1>
         <p className="mt-1 text-sm text-muted-foreground sm:text-base">
@@ -265,6 +270,15 @@ export default function DealerBase() {
         </CardContent>
       </Card>
 
+      {filtered.length > 0 ? (
+        <p className="text-sm text-muted-foreground" data-testid="text-dealer-base-display-cap">
+          Показано {Math.min(DEALER_BASE_DISPLAY_LIMIT, filtered.length)} из {filtered.length} по фильтрам.
+          {filtered.length > DEALER_BASE_DISPLAY_LIMIT
+            ? " Уточните поиск или фильтры, чтобы сузить список."
+            : null}
+        </p>
+      ) : null}
+
       <section data-testid="section-dealer-base-results">
         {filtered.length === 0 ? (
           <Card className="rounded-2xl border border-dashed border-border bg-muted/30 p-8 text-center text-sm text-muted-foreground">
@@ -272,7 +286,7 @@ export default function DealerBase() {
           </Card>
         ) : view === "list" ? (
           <div className="space-y-3">
-            {filtered.map((row) => (
+            {displayRows.map((row) => (
               <Card
                 key={row.id}
                 className="rounded-2xl border border-border/80 bg-card shadow-sm"
@@ -318,7 +332,7 @@ export default function DealerBase() {
           </div>
         ) : view === "cards" ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {filtered.map((row) => (
+            {displayRows.map((row) => (
               <Card
                 key={row.id}
                 className="flex flex-col rounded-2xl border border-border/80 bg-card shadow-md"
@@ -373,7 +387,7 @@ export default function DealerBase() {
         ) : (
           <>
             <div className="space-y-3 sm:hidden">
-              {filtered.map((row) => (
+              {displayRows.map((row) => (
                 <Card key={row.id} className="rounded-2xl border border-border/80 bg-card shadow-sm" data-testid={`row-dealer-${row.id}`}>
                   <CardContent className="space-y-2 p-4 text-sm">
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -411,7 +425,7 @@ export default function DealerBase() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((row) => (
+                  {displayRows.map((row) => (
                     <tr key={row.id} className="border-b border-border last:border-0" data-testid={`row-dealer-${row.id}`}>
                       <td className="px-3 py-3 font-mono text-xs text-muted-foreground">{row.releaseCode ?? "—"}</td>
                       <td className="max-w-[160px] truncate px-3 py-3 font-medium" title={row.name}>
