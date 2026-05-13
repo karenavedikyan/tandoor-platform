@@ -5,26 +5,33 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Progress } from "@/components/ui/progress";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { useSalesControlStoredState } from "@/hooks/use-sales-control-stored-state";
 import { getEffectiveSalesManagerId } from "@/lib/release-demo-profile";
 import {
   applyManagerActualsSave,
-  completionPercent,
   formatRub,
   formatSalesMetricValue,
   getActualValue,
   getDefaultSalesPeriodId,
   getGrossProfitActual,
-  getGrossProfitTarget,
-  getPlanComment,
+  getPublishedAtIso,
+  getPublishedTeamPeriodComment,
+  hasPublishedManagerPlan,
   loadSalesControlStoredState,
+  managerKpiProgressTone,
   rollupManager,
   SALES_KPI_METRICS_SORTED,
   SALES_PLAN_PERIODS,
 } from "@/lib/sales-control-data";
+import { cn } from "@/lib/utils";
+
+function progressBarClass(tone: ReturnType<typeof managerKpiProgressTone>): string {
+  if (tone === "green") return "bg-emerald-500";
+  if (tone === "yellow") return "bg-amber-400";
+  return "bg-red-500";
+}
 
 export default function SalesControlManagerPage() {
   const [stored, setStored] = useSalesControlStoredState();
@@ -32,7 +39,20 @@ export default function SalesControlManagerPage() {
   const managerId = useMemo(() => getEffectiveSalesManagerId(profile), [profile]);
   const [periodId, setPeriodId] = useState(getDefaultSalesPeriodId());
 
-  const rollup = useMemo(() => rollupManager(managerId, periodId, stored), [managerId, periodId, stored]);
+  const rollupDraft = useMemo(() => rollupManager(managerId, periodId, stored, "draft"), [managerId, periodId, stored]);
+  const rollupPublished = useMemo(
+    () => rollupManager(managerId, periodId, stored, "published"),
+    [managerId, periodId, stored],
+  );
+  const publishedGrossTone = useMemo(
+    () => (rollupPublished ? managerKpiProgressTone(rollupPublished.gross.pct) : "red"),
+    [rollupPublished],
+  );
+  const teamId = rollupDraft?.teamId;
+  const publishedTeamNote = useMemo(() => {
+    if (!teamId || !hasPublishedManagerPlan(periodId, managerId, stored)) return undefined;
+    return getPublishedTeamPeriodComment(periodId, teamId, stored);
+  }, [managerId, periodId, stored, teamId]);
 
   const [actualDraft, setActualDraft] = useState<Record<string, string>>({});
   const [grossActualDraft, setGrossActualDraft] = useState("");
@@ -71,7 +91,7 @@ export default function SalesControlManagerPage() {
     setGrossActualDraft(String(getGrossProfitActual(periodId, managerId, next)));
   }
 
-  if (!rollup) {
+  if (!rollupDraft) {
     return (
       <div className="mx-auto max-w-lg space-y-4 pb-24" data-testid="page-sales-manager-dashboard">
         <FloatingBackButton href="/sales-control" label="К контуру план-факт" testId="button-floating-back-sales-control-manager-missing" />
@@ -80,13 +100,19 @@ export default function SalesControlManagerPage() {
     );
   }
 
+  const publishedAtIso = getPublishedAtIso(periodId, managerId, stored);
+  const publishedAtLabel =
+    publishedAtIso != null
+      ? new Date(publishedAtIso).toLocaleString("ru-RU", { dateStyle: "short", timeStyle: "short" })
+      : null;
+
   return (
-    <div className="mx-auto max-w-3xl space-y-6 pb-24" data-testid="page-sales-manager-dashboard">
+    <div className="mx-auto min-w-0 max-w-3xl space-y-6 overflow-x-hidden pb-24" data-testid="page-sales-manager-dashboard">
       <FloatingBackButton href="/sales-control" label="К контуру план-факт" testId="button-floating-back-sales-control-manager" />
-      <div className="space-y-2">
+      <div className="min-w-0 space-y-2">
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Мой план-факт</h1>
         <p className="text-sm text-muted-foreground">
-          {rollup.managerName} · {rollup.teamName}. Факт и валовая прибыль сохраняются локально в браузере.
+          {rollupDraft.managerName} · {rollupDraft.teamName}. Факт и валовая прибыль сохраняются локально в браузере.
         </p>
         <div className="max-w-xs space-y-1.5">
           <Label className="text-xs text-muted-foreground">Период</Label>
@@ -105,44 +131,112 @@ export default function SalesControlManagerPage() {
         </div>
       </div>
 
-      <section className="space-y-3" data-testid="section-manager-plan">
-        <h2 className="text-lg font-semibold text-foreground">План руководителя</h2>
-        <div className="grid gap-3">
-          {rollup.metrics.map(({ metric, target, actual, pct }) => (
-            <Card key={metric.id} className="rounded-2xl border border-border/80 shadow-sm">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold">{metric.label}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <p className="text-muted-foreground">
-                  План: <span className="font-semibold text-foreground">{formatSalesMetricValue(metric, target)}</span>
-                </p>
-                <p className="text-muted-foreground">
-                  Факт (текущий):{" "}
-                  <span className="font-semibold text-foreground">{formatSalesMetricValue(metric, actual)}</span> · {pct}%
-                </p>
-                <Progress value={Math.min(100, pct)} className="h-2" />
-              </CardContent>
-            </Card>
-          ))}
-          <Card className="rounded-2xl border border-border/80 shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold">Валовая прибыль</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm text-muted-foreground">
-              <p>
-                План: <span className="font-semibold text-foreground">{formatRub(getGrossProfitTarget(periodId, managerId, stored))}</span>
+      <section className="min-w-0 space-y-3" data-testid="section-manager-published-plan">
+        <h2 className="text-lg font-semibold text-foreground">План от руководителя</h2>
+        {!rollupPublished ? (
+          <p className="rounded-xl border border-dashed border-border/80 bg-muted/20 px-4 py-6 text-sm text-muted-foreground" data-testid="text-manager-plan-empty">
+            План ещё не выгружен руководителем.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {publishedAtLabel ? (
+              <p className="text-xs text-muted-foreground" data-testid="text-manager-plan-published-at">
+                Дата выгрузки: <span className="font-medium text-foreground">{publishedAtLabel}</span>
               </p>
-              <p>
-                Факт: <span className="font-semibold text-foreground">{formatRub(getGrossProfitActual(periodId, managerId, stored))}</span> ·{" "}
-                {completionPercent(getGrossProfitTarget(periodId, managerId, stored), getGrossProfitActual(periodId, managerId, stored))}%
+            ) : null}
+            {publishedTeamNote ? (
+              <p className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">Комментарий по команде: </span>
+                {publishedTeamNote}
               </p>
-            </CardContent>
-          </Card>
-        </div>
+            ) : null}
+            <div className="grid gap-3">
+              {rollupPublished.metrics.map(({ metric, target, actual, pct }) => {
+                const tone = managerKpiProgressTone(pct);
+                const barW = Math.min(100, Math.max(0, pct));
+                return (
+                  <Card
+                    key={metric.id}
+                    className="min-w-0 rounded-2xl border border-border/80 shadow-sm"
+                    data-testid={`card-manager-kpi-progress-${metric.id}`}
+                  >
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-semibold">{metric.label}</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2 text-sm">
+                      <p className="text-muted-foreground">
+                        План: <span className="font-semibold text-foreground">{formatSalesMetricValue(metric, target)}</span>
+                      </p>
+                      <p className="text-muted-foreground">
+                        Факт: <span className="font-semibold text-foreground">{formatSalesMetricValue(metric, actual)}</span>
+                      </p>
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="text-xs text-muted-foreground">Выполнение</span>
+                        <span
+                          className={cn(
+                            "text-sm font-semibold tabular-nums",
+                            tone === "green" && "text-emerald-600",
+                            tone === "yellow" && "text-amber-600",
+                            tone === "red" && "text-red-600",
+                          )}
+                        >
+                          {pct}%
+                        </span>
+                      </div>
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-secondary" data-testid={`progress-manager-kpi-${metric.id}`}>
+                        <div className={cn("h-2 rounded-full transition-all", progressBarClass(tone))} style={{ width: `${barW}%` }} />
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+              <Card
+                className="min-w-0 rounded-2xl border border-border/80 shadow-sm"
+                data-testid="card-manager-kpi-progress-gross-profit"
+              >
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-semibold">Валовая прибыль</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm text-muted-foreground">
+                  <p>
+                    План: <span className="font-semibold text-foreground">{formatRub(rollupPublished.gross.target)}</span>
+                  </p>
+                  <p>
+                    Факт: <span className="font-semibold text-foreground">{formatRub(rollupPublished.gross.actual)}</span>
+                  </p>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="text-xs text-muted-foreground">Выполнение</span>
+                    <span
+                      className={cn(
+                        "text-sm font-semibold tabular-nums",
+                        publishedGrossTone === "green" && "text-emerald-600",
+                        publishedGrossTone === "yellow" && "text-amber-600",
+                        publishedGrossTone === "red" && "text-red-600",
+                      )}
+                    >
+                      {rollupPublished.gross.pct}%
+                    </span>
+                  </div>
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-secondary" data-testid="progress-manager-kpi-gross-profit">
+                    <div
+                      className={cn("h-2 rounded-full transition-all", progressBarClass(publishedGrossTone))}
+                      style={{ width: `${Math.min(100, Math.max(0, rollupPublished.gross.pct))}%` }}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+            {rollupPublished.comment ? (
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Комментарий руководителя</Label>
+                <Textarea readOnly rows={3} className="resize-y bg-muted/30 text-sm" value={rollupPublished.comment} />
+              </div>
+            ) : null}
+          </div>
+        )}
       </section>
 
-      <section className="space-y-3" data-testid="section-manager-actuals">
+      <section className="min-w-0 space-y-3" data-testid="section-manager-actuals">
         <h2 className="text-lg font-semibold text-foreground">Текущее выполнение</h2>
         <p className="text-xs text-muted-foreground">Внесите факт по показателям и сохраните.</p>
         <div className="grid gap-3 sm:grid-cols-2">
@@ -167,16 +261,6 @@ export default function SalesControlManagerPage() {
             value={grossActualDraft}
             data-testid={`input-sales-gross-profit-actual-${managerId}`}
             onChange={(e) => setGrossActualDraft(e.target.value)}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground">Комментарий руководителя</Label>
-          <Textarea
-            readOnly
-            rows={3}
-            className="resize-y bg-muted/30 text-sm"
-            value={getPlanComment(periodId, managerId, stored)}
-            data-testid={`textarea-sales-plan-comment-${managerId}`}
           />
         </div>
         <Button type="button" className="min-h-10" data-testid={`button-sales-save-actuals-${managerId}`} onClick={saveActuals}>

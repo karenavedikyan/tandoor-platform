@@ -21,6 +21,7 @@ import {
   SALES_KPI_METRICS_SORTED,
   SALES_PLAN_PERIODS,
   SALES_TEAMS,
+  teamPublicationMetrics,
 } from "@/lib/sales-control-data";
 import { getRopOptions } from "@/lib/rop-manager-filters";
 import { cn } from "@/lib/utils";
@@ -41,6 +42,22 @@ export default function SalesControlDirectorPage() {
 
   const kpis = useMemo(() => aggregateDirectorKpis(periodId, managerIdsForAgg, stored), [periodId, managerIdsForAgg, stored]);
   const gross = useMemo(() => aggregateGrossProfit(periodId, managerIdsForAgg, stored), [periodId, managerIdsForAgg, stored]);
+
+  const pubByTeam = useMemo(
+    () => SALES_TEAMS.map((t) => teamPublicationMetrics(t.id, periodId, stored)),
+    [periodId, stored],
+  );
+  const pubTotals = useMemo(() => {
+    return pubByTeam.reduce(
+      (acc, r) => ({
+        managers: acc.managers + r.managerCount,
+        published: acc.published + r.published,
+        draftOnly: acc.draftOnly + r.draftOnly,
+        changedAfterPublish: acc.changedAfterPublish + r.changedAfterPublish,
+      }),
+      { managers: 0, published: 0, draftOnly: 0, changedAfterPublish: 0 },
+    );
+  }, [pubByTeam]);
 
   const managersRows = useMemo(() => {
     let list = getAllSalesManagers();
@@ -93,7 +110,7 @@ export default function SalesControlDirectorPage() {
   }, [managersRows, periodId, stored]);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 pb-24" data-testid="page-sales-director-dashboard">
+    <div className="mx-auto min-w-0 max-w-6xl space-y-6 overflow-x-hidden pb-24" data-testid="page-sales-director-dashboard">
       <FloatingBackButton href="/sales-control" label="К контуру план-факт" testId="button-floating-back-sales-control-director" />
       <section className="space-y-2" data-testid="section-sales-director-filters">
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Руководитель продаж</h1>
@@ -154,6 +171,57 @@ export default function SalesControlDirectorPage() {
               </SelectContent>
             </Select>
           </div>
+        </div>
+      </section>
+
+      <section className="min-w-0 space-y-3" data-testid="section-sales-director-plan-publication">
+        <h2 className="text-lg font-semibold text-foreground">Статус выгрузки планов</h2>
+        <Card className="min-w-0 rounded-2xl border border-border/80 shadow-sm" data-testid="card-director-plan-publication-summary">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">По всем командам</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <p className="text-muted-foreground">Менеджеров</p>
+              <p className="text-lg font-semibold tabular-nums text-foreground">{pubTotals.managers}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Получили план (выгружено)</p>
+              <p className="text-lg font-semibold tabular-nums text-emerald-700">{pubTotals.published}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Только черновик</p>
+              <p className="text-lg font-semibold tabular-nums text-foreground">{pubTotals.draftOnly}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Изменения после выгрузки</p>
+              <p className="text-lg font-semibold tabular-nums text-amber-700">{pubTotals.changedAfterPublish}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <div className="min-w-0 overflow-x-auto rounded-xl border border-border/80">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="min-w-[160px]">Команда</TableHead>
+                <TableHead className="text-right tabular-nums">Менеджеров</TableHead>
+                <TableHead className="text-right tabular-nums">Выгружено</TableHead>
+                <TableHead className="text-right tabular-nums">Черновик</TableHead>
+                <TableHead className="text-right tabular-nums">Есть изменения</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {pubByTeam.map((row) => (
+                <TableRow key={row.teamId} data-testid={`row-director-plan-publication-team-${row.teamId}`}>
+                  <TableCell className="font-medium">{row.teamName}</TableCell>
+                  <TableCell className="text-right tabular-nums text-muted-foreground">{row.managerCount}</TableCell>
+                  <TableCell className="text-right tabular-nums">{row.published}</TableCell>
+                  <TableCell className="text-right tabular-nums">{row.draftOnly}</TableCell>
+                  <TableCell className="text-right tabular-nums">{row.changedAfterPublish}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </div>
       </section>
 
