@@ -1,10 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "wouter";
 import { useHashLocation } from "wouter/use-hash-location";
-import L from "leaflet";
-import { CircleMarker, MapContainer, Popup, TileLayer, useMap } from "react-leaflet";
-import "leaflet/dist/leaflet.css";
 import { Search } from "lucide-react";
+import { ClientMapYandex } from "@/components/client-map-yandex";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,15 +32,16 @@ import {
   coordinateSourceLabel,
   filterClientMapRows,
   listCoordinateSourceForDealer,
-  type ClientMapMarker,
   type ClientMapQuickFilter,
 } from "@/lib/client-map-data";
-import { buildHashPath, useRouteSearchParams } from "@/lib/hash-route-utils";
+import { useRouteSearchParams } from "@/lib/hash-route-utils";
 import { getManagersForRopTeam, getRopOptions, isRopOrManagerAllFilter } from "@/lib/rop-manager-filters";
 import { getEffectiveTeamLeadTeamId, loadReleaseDemoProfile, type ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { getAllSalesManagers, getSalesUserById, type SalesRole } from "@/lib/sales-control-data";
 import { getClientCategoryBadgeClass, getClientCategoryLabel } from "@/lib/client-category";
 import { cn } from "@/lib/utils";
+
+const YANDEX_MAPS_API_KEY = import.meta.env.VITE_YANDEX_MAPS_API_KEY?.trim() ?? "";
 
 const QUICK_FROM_URL: Record<string, ClientMapQuickFilter> = {
   all: "all",
@@ -86,38 +84,6 @@ function managerAllowedForRop(
   return pool.some((m) => m.id === managerId);
 }
 
-function dealerBaseHrefForDealer(d: DealerRow): string {
-  const params: Record<string, string> = { search: d.name, city: d.city };
-  if (d.releaseTeamId) params.team = d.releaseTeamId;
-  if (d.releaseManagerId) params.manager = d.releaseManagerId;
-  return buildHashPath("/dealer-base", params);
-}
-
-function MapFitBounds({ points }: { points: L.LatLngExpression[] }) {
-  const map = useMap();
-  useEffect(() => {
-    if (points.length === 0) {
-      map.setView([47.25, 39.72], 7);
-      return;
-    }
-    if (points.length === 1) {
-      map.setView(points[0] as L.LatLngTuple, 10);
-      return;
-    }
-    map.fitBounds(L.latLngBounds(points), { padding: [36, 36], maxZoom: 10 });
-  }, [map, points]);
-  return null;
-}
-
-function MapFlyTo({ target }: { target: { lat: number; lng: number } | null }) {
-  const map = useMap();
-  useEffect(() => {
-    if (!target) return;
-    map.setView([target.lat, target.lng], 11, { animate: true });
-  }, [map, target]);
-  return null;
-}
-
 function roleSubtitle(role: SalesRole, profile: ReleaseDemoProfile): string {
   if (role === "sales_director") return "Все клиенты отдела";
   if (role === "analyst") return "Все клиенты отдела (аналитика)";
@@ -128,102 +94,6 @@ function roleSubtitle(role: SalesRole, profile: ReleaseDemoProfile): string {
     return `Клиенты команды: ${label}`;
   }
   return "Мои клиенты";
-}
-
-function MarkerLayer({
-  markers,
-  flyTo,
-}: {
-  markers: ClientMapMarker[];
-  flyTo: { lat: number; lng: number } | null;
-}) {
-  const pts = useMemo(() => markers.map((m) => [m.lat, m.lng] as L.LatLngTuple), [markers]);
-  return (
-    <>
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
-      <MapFitBounds points={pts} />
-      <MapFlyTo target={flyTo} />
-      {markers.map((m) => (
-        <CircleMarker
-          key={m.id}
-          ref={(inst: L.CircleMarker | null) => {
-            const el = inst?.getElement?.();
-            if (el) el.setAttribute("data-testid", `marker-client-map-${m.id}`);
-          }}
-          eventHandlers={{
-            add: (event: L.LeafletEvent) => {
-              const el = (event.target as L.CircleMarker).getElement?.();
-              if (el) el.setAttribute("data-testid", `marker-client-map-${m.id}`);
-            },
-          }}
-          center={[m.lat, m.lng]}
-          radius={m.style.radius}
-          pathOptions={{
-            color: m.style.stroke,
-            fillColor: m.style.fill,
-            fillOpacity: 0.88,
-            weight: 2,
-          }}
-        >
-          <Popup>
-            <div className="min-w-[200px] space-y-1 text-sm" data-testid={`popup-client-map-${m.id}`}>
-              <p className="font-semibold leading-snug">{m.dealer.name}</p>
-              <p className="text-muted-foreground">{m.dealer.city}</p>
-              {m.dealer.releaseAddress ? (
-                <p className="text-xs leading-snug text-muted-foreground">
-                  <span className="font-medium text-foreground">Адрес: </span>
-                  {m.dealer.releaseAddress}
-                </p>
-              ) : null}
-              <p className="text-xs font-medium text-foreground">
-                {m.coordinateSource === "address"
-                  ? "Точка по адресу"
-                  : "Точка по городу, адрес требует уточнения"}
-              </p>
-              <p>
-                <span className="text-muted-foreground">РОП:</span> {m.dealer.regionalManager || "—"}
-              </p>
-              <p>
-                <span className="text-muted-foreground">Менеджер:</span> {m.dealer.manager}
-              </p>
-              <p>
-                <span className="text-muted-foreground">Категория:</span>{" "}
-                <Badge
-                  variant="outline"
-                  className={cn("ml-1 align-middle text-[10px]", getClientCategoryBadgeClass(m.dealer.clientCategory))}
-                  data-testid={`badge-client-map-category-${m.dealer.id}`}
-                >
-                  {getClientCategoryLabel(m.dealer.clientCategory)}
-                </Badge>
-              </p>
-              <p>
-                <span className="text-muted-foreground">Статус:</span> {m.dealer.status}
-              </p>
-              <div className="flex flex-col gap-1 pt-1">
-                <Link
-                  href={`/dealers/${m.dealer.id}`}
-                  className="font-medium text-primary underline-offset-2 hover:underline"
-                  data-testid={`link-client-map-open-dealer-${m.dealer.id}`}
-                >
-                  Открыть карточку
-                </Link>
-                <Link
-                  href={dealerBaseHrefForDealer(m.dealer)}
-                  className="text-xs text-primary underline-offset-2 hover:underline"
-                  data-testid={`link-client-map-open-base-${m.dealer.id}`}
-                >
-                  Показать в базе
-                </Link>
-              </div>
-            </div>
-          </Popup>
-        </CircleMarker>
-      ))}
-    </>
-  );
 }
 
 export default function ClientMapPage() {
@@ -500,10 +370,20 @@ export default function ClientMapPage() {
             className="min-h-[min(360px,52vh)] min-w-0 overflow-hidden rounded-xl border border-border/80 lg:min-h-[520px]"
             data-testid="section-client-map-canvas"
           >
-            <MapContainer center={[47.25, 39.72]} zoom={7} className="h-[min(360px,52vh)] w-full min-w-0 lg:h-[520px]" scrollWheelZoom>
-              <MarkerLayer markers={markers} flyTo={flyTo} />
-            </MapContainer>
+            {YANDEX_MAPS_API_KEY ? (
+              <ClientMapYandex apiKey={YANDEX_MAPS_API_KEY} markers={markers} flyTo={flyTo} />
+            ) : (
+              <div
+                className="flex min-h-[min(360px,52vh)] w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border/80 bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground lg:min-h-[520px]"
+                data-testid="section-client-map-yandex-fallback"
+              >
+                <p>Карта Яндекса не настроена. Добавьте VITE_YANDEX_MAPS_API_KEY.</p>
+              </div>
+            )}
           </div>
+          <p className="text-xs text-muted-foreground" data-testid="text-client-map-visible-count">
+            На карте отображается маркеров: {markers.length}
+          </p>
           {truncated ? (
             <p className="text-xs text-muted-foreground">
               Показано на карте {CLIENT_MAP_MAX_MARKERS} из {breakdown.byAddress + breakdown.byCity}; уточните фильтр, чтобы
@@ -519,43 +399,43 @@ export default function ClientMapPage() {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Клиенты (топ {listRows.length})</CardTitle>
           </CardHeader>
-          <CardContent className="max-h-[min(360px,52vh)] min-w-0 space-y-1 overflow-y-auto lg:max-h-[520px]">
+          <CardContent className="max-h-[min(360px,52vh)] min-w-0 space-y-1 overflow-y-auto overflow-x-hidden lg:max-h-[520px]">
             {listRows.map((d) => {
               const coordSrc = listCoordinateSourceForDealer(d);
               return (
-              <button
-                key={d.id}
-                type="button"
-                className={cn(
-                  "flex w-full min-w-0 flex-col gap-0.5 rounded-lg border border-transparent px-2 py-2 text-left text-sm transition hover:border-border hover:bg-muted/50",
-                )}
-                data-testid={`row-client-map-${d.id}`}
-                onClick={() => handleRowClick(d)}
-              >
-                <div className="flex min-w-0 items-center justify-between gap-2">
-                  <span className="truncate font-medium">{d.name}</span>
-                  <div className="flex shrink-0 items-center gap-1">
-                    <Badge
-                      variant="outline"
-                      className={cn("px-1.5 py-0 text-[10px] font-normal", getClientCategoryBadgeClass(d.clientCategory))}
-                      data-testid={`badge-client-map-category-${d.id}`}
-                    >
-                      {getClientCategoryLabel(d.clientCategory)}
-                    </Badge>
-                    <Badge
-                      variant="outline"
-                      className="shrink-0 px-1.5 py-0 text-[10px] font-normal"
-                      data-testid={`badge-client-map-coordinate-source-${d.id}`}
-                    >
-                      {coordinateSourceLabel(coordSrc)}
-                    </Badge>
+                <button
+                  key={d.id}
+                  type="button"
+                  className={cn(
+                    "flex w-full min-w-0 flex-col gap-0.5 rounded-lg border border-transparent px-2 py-2 text-left text-sm transition hover:border-border hover:bg-muted/50",
+                  )}
+                  data-testid={`row-client-map-dealer-${d.id}`}
+                  onClick={() => handleRowClick(d)}
+                >
+                  <div className="flex min-w-0 items-center justify-between gap-2">
+                    <span className="truncate font-medium">{d.name}</span>
+                    <div className="flex max-w-[min(100%,11rem)] shrink-0 flex-wrap items-center justify-end gap-1">
+                      <Badge
+                        variant="outline"
+                        className={cn("max-w-full px-1.5 py-0 text-[10px] font-normal", getClientCategoryBadgeClass(d.clientCategory))}
+                        data-testid={`badge-client-map-category-${d.id}`}
+                      >
+                        {getClientCategoryLabel(d.clientCategory)}
+                      </Badge>
+                      <Badge
+                        variant="outline"
+                        className="shrink-0 px-1.5 py-0 text-[10px] font-normal"
+                        data-testid={`badge-client-map-coordinate-source-${d.id}`}
+                      >
+                        {coordinateSourceLabel(coordSrc)}
+                      </Badge>
+                    </div>
                   </div>
-                </div>
-                <span className="truncate text-xs text-muted-foreground">
-                  {d.city} · {d.manager}
-                </span>
-                <span className="text-xs">{d.status}</span>
-              </button>
+                  <span className="truncate text-xs text-muted-foreground">
+                    {d.city} · {d.manager}
+                  </span>
+                  <span className="text-xs">{d.status}</span>
+                </button>
               );
             })}
           </CardContent>
