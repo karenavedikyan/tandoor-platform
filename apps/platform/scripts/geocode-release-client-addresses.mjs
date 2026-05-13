@@ -63,6 +63,17 @@ function extractUniqueCitiesFromSeed() {
   return Array.from(cities).sort((a, b) => a.localeCompare(b, "ru"));
 }
 
+function extractClientRowsFromSeed() {
+  const text = fs.readFileSync(SEED, "utf8");
+  const marker = "export const RELEASE_CLIENT_ROWS: ReleaseClientSeedRow[] = ";
+  const start = text.indexOf(marker);
+  if (start < 0) throw new Error("RELEASE_CLIENT_ROWS not found");
+  const bodyStart = start + marker.length;
+  const bodyEnd = text.indexOf("] as ReleaseClientSeedRow[]", bodyStart);
+  if (bodyEnd < 0) throw new Error("RELEASE_CLIENT_ROWS tail not found");
+  return JSON.parse(text.slice(bodyStart, bodyEnd + 1));
+}
+
 function httpGetJson(url) {
   return new Promise((resolve, reject) => {
     https
@@ -85,6 +96,39 @@ function httpGetJson(url) {
   });
 }
 
+function haversineKm(aLat, aLng, bLat, bLng) {
+  const r = 6371;
+  const dLat = ((bLat - aLat) * Math.PI) / 180;
+  const dLng = ((bLng - aLng) * Math.PI) / 180;
+  const lat1 = (aLat * Math.PI) / 180;
+  const lat2 = (bLat * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * r * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function normalizeAddressForPhoton(row) {
+  const city = String(row.city || "").trim();
+  const raw = String(row.address || "").trim();
+  if (!city || !raw) return "";
+  const cleaned = raw
+    .replace(/\b\d{6}\b,?\s*/g, "")
+    .replace(/\b(Россия|РФ|Российская Федерация)\b,?\s*/gi, "")
+    .replace(/\b(Респ|Республика|край|обл|область|р-н|район)\b\.?,?\s*/gi, " ")
+    .replace(/\bг\.?\s*/gi, " ")
+    .replace(/\bдом\s*№?\s*/gi, " ")
+    .replace(/\bд\.?\s*/gi, " ")
+    .replace(/\bквартира\s*\d+\b/gi, " ")
+    .replace(/\bкв\.?\s*\d+\b/gi, " ")
+    .replace(/\bкорпус\b/gi, "к")
+    .replace(/\bстроение\b/gi, "стр")
+    .replace(/\s+/g, " ")
+    .replace(/\s+,/g, ",")
+    .trim();
+  return `${city}, ${cleaned}`;
+}
+
 async function photonCityCenter(city, cache) {
   if (cache[city]) return cache[city];
   const q = encodeURIComponent(`${city}, Россия`);
@@ -99,6 +143,25 @@ async function photonCityCenter(city, cache) {
   const [lng, lat] = coords;
   const out = { lat: +lat.toFixed(6), lng: +lng.toFixed(6) };
   cache[city] = out;
+  return out;
+}
+
+async function photonAddress(row, cache) {
+  const q = normalizeAddressForPhoton(row);
+  if (!q) return null;
+  const key = `photon-v2|${row.id}|${q}`;
+  if (Object.prototype.hasOwnProperty.call(cache, key)) return cache[key];
+  const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=1`;
+  const j = await httpGetJson(url);
+  const f = j?.features?.[0];
+  const coords = f?.geometry?.coordinates;
+  if (!coords || coords.length < 2) {
+    cache[key] = null;
+    return null;
+  }
+  const [lng, lat] = coords;
+  const out = { lat: +lat.toFixed(7), lng: +lng.toFixed(7), q };
+  cache[key] = out;
   return out;
 }
 
@@ -141,7 +204,10 @@ async function cmdCitiesPhoton() {
 
 function cmdDryRun() {
   const cities = extractUniqueCitiesFromSeed();
+  const clientRows = extractClientRowsFromSeed();
+  const addressRows = clientRows.filter((r) => String(r.city || "").trim() && String(r.address || "").trim());
   console.log("Seed cities:", cities.length);
+  console.log("Rows with city+address:", addressRows.length);
   console.log("Photon city cache entries:", Object.keys(readJsonSafe(CITY_CACHE, {})).length);
   console.log("Address geocode cache keys:", Object.keys(readJsonSafe(GEOCODE_CACHE, {})).length);
   if (fs.existsSync(DEFAULT_ADDR_CSV)) {
@@ -149,7 +215,57 @@ function cmdDryRun() {
     console.log("Address CSV lines:", lines.length - 1);
   } else console.log("No address CSV at", DEFAULT_ADDR_CSV);
   console.log("\nИмпорт адресов: --import-address-csv (см. data/release-client-address-coordinates.csv).");
-  console.log("Города (Photon): --cities-photon. Заглушка API адресов: --geocode-addresses.");
+  console.log("Города (Photon): --cities-photon. Адреса (Photon, offline cache): --geocode-addresses.");
+}
+
+async function cmdGeocodeAddresses() {
+  const rows = extractClientRowsFromSeed().filter((r) => String(r.city || "").trim() && String(r.address || "").trim());
+  const cityCentersText = fs.readFileSync(OUT_CITY, "utf8");
+  const cityCenters = {};
+  const re = /"((?:[^"\\]|\\.)*)": \{ lat: ([\d.-]+), lng: ([\d.-]+) \}/g;
+  let m;
+  while ((m = re.exec(cityCentersText))) {
+    cityCenters[JSON.parse(`"${m[1]}"`)] = { lat: Number(m[2]), lng: Number(m[3]) };
+  }
+  const cache = readJsonSafe(GEOCODE_CACHE, {});
+  const accepted = [];
+  let missingCity = 0;
+  let notFound = 0;
+  let tooFar = 0;
+  let requested = 0;
+  for (const row of rows) {
+    const city = String(row.city || "").trim();
+    const center = cityCenters[city];
+    if (!center) {
+      missingCity += 1;
+      continue;
+    }
+    try {
+      const hit = await photonAddress(row, cache);
+      if (!hit) {
+        notFound += 1;
+      } else {
+        const d = haversineKm(center.lat, center.lng, hit.lat, hit.lng);
+        if (d <= 80) accepted.push({ id: row.id, lat: hit.lat, lng: hit.lng });
+        else tooFar += 1;
+      }
+      requested += 1;
+      if (requested % 50 === 0) {
+        writeJson(GEOCODE_CACHE, cache);
+        console.log("processed", requested, "accepted", accepted.length, "notFound", notFound, "tooFar", tooFar);
+      }
+      await sleep(220);
+    } catch (e) {
+      notFound += 1;
+      console.error(row.id, e.message);
+      await sleep(500);
+    }
+  }
+  writeJson(GEOCODE_CACHE, cache);
+  const csv = ["clientId,lat,lng", ...accepted.map((r) => `${r.id},${r.lat},${r.lng}`)].join("\n") + "\n";
+  fs.writeFileSync(DEFAULT_ADDR_CSV, csv, "utf8");
+  cmdImportAddressCsv(DEFAULT_ADDR_CSV);
+  console.log("Address geocode done:", { rows: rows.length, accepted: accepted.length, notFound, tooFar, missingCity });
 }
 
 function parseCsvLine(line) {
@@ -236,10 +352,7 @@ if (cmd === "--dry-run") {
 } else if (cmd === "--import-city-csv") {
   cmdImportCityCsv(argv[1] || DEFAULT_CITY_CSV);
 } else if (cmd === "--geocode-addresses") {
-  console.log(
-    "TODO: геокодирование полных адресов (Nominatim / коммерческий API) с записью в geocode-cache.json и release-client-address-coordinates.generated.ts. Пока: --import-address-csv.",
-  );
-  process.exit(0);
+  await cmdGeocodeAddresses();
 } else {
   console.log(`Usage:
   node scripts/geocode-release-client-addresses.mjs --dry-run
