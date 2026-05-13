@@ -145,7 +145,7 @@ function MarkerLayer({
       {markers.map((m) => (
         <CircleMarker
           key={m.id}
-          ref={(inst) => {
+          ref={(inst: L.CircleMarker | null) => {
             const el = inst?.getElement?.();
             if (el) el.setAttribute("data-testid", `marker-client-map-${m.id}`);
           }}
