@@ -149,6 +149,12 @@ function MarkerLayer({
             const el = inst?.getElement?.();
             if (el) el.setAttribute("data-testid", `marker-client-map-${m.id}`);
           }}
+          eventHandlers={{
+            add: (event: L.LeafletEvent) => {
+              const el = (event.target as L.CircleMarker).getElement?.();
+              if (el) el.setAttribute("data-testid", `marker-client-map-${m.id}`);
+            },
+          }}
           center={[m.lat, m.lng]}
           radius={m.style.radius}
           pathOptions={{
