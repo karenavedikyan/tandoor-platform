@@ -26,13 +26,13 @@ type MainLink = { href: string; label: string; testId: string };
 
 function MainKpiLink({ href, testId, children }: { href: string; testId: string; children: ReactNode }) {
   return (
-    <Link
+    <a
       href={href}
       data-testid={testId}
       className="block min-w-0 rounded-xl no-underline outline-none ring-offset-background transition hover:opacity-[0.97] focus-visible:ring-2 focus-visible:ring-ring"
     >
       {children}
-    </Link>
+    </a>
   );
 }
 

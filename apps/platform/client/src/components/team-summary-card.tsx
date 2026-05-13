@@ -1,4 +1,3 @@
-import { Link } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -82,48 +81,48 @@ export function TeamSummaryCard({
 
         {showTeamMetricLinks && !isCompact ? (
           <div className="flex min-w-0 flex-wrap gap-x-2 gap-y-1 border-t border-border/60 pt-2 text-xs">
-            <Link
+            <a
               href={buildHashPath("/dealer-base", { team: tid })}
               className={drillLinkClass}
               data-testid={`link-team-summary-clients-${tid}`}
             >
               Клиенты
-            </Link>
-            <Link
+            </a>
+            <a
               href={buildHashPath("/dealer-base", { team: tid, quick: "active", view: "table_team" })}
               className={drillLinkClass}
               data-testid={`link-team-summary-active-${tid}`}
             >
               Активные
-            </Link>
-            <Link
+            </a>
+            <a
               href={buildHashPath("/dealer-base", { team: tid, quick: "attention", view: "table_team" })}
               className={drillLinkClass}
               data-testid={`link-team-summary-attention-${tid}`}
             >
               Внимание
-            </Link>
-            <Link
+            </a>
+            <a
               href={buildHashPath("/dealer-base", { team: tid, quick: "top", view: "table_team" })}
               className={drillLinkClass}
               data-testid={`link-team-summary-top-${tid}`}
             >
               TOP
-            </Link>
-            <Link
+            </a>
+            <a
               href={buildHashPath("/dealer-base", { team: tid, quick: "potential", view: "table_team" })}
               className={drillLinkClass}
               data-testid={`link-team-summary-potential-${tid}`}
             >
               Потенциальные
-            </Link>
-            <Link
+            </a>
+            <a
               href={buildHashPath("/dealer-base", { team: tid, view: "by_manager" })}
               className={drillLinkClass}
               data-testid={`link-team-summary-managers-${tid}`}
             >
               Менеджеры
-            </Link>
+            </a>
           </div>
         ) : null}
 
@@ -161,7 +160,7 @@ export function TeamSummaryCard({
 
         {showCta ? (
           <Button asChild size="sm" className="w-full min-w-0 font-semibold sm:w-auto" data-testid={`button-team-summary-open-${tid}`}>
-            <Link href={ctaHref}>{ctaLabel}</Link>
+            <a href={ctaHref}>{ctaLabel}</a>
           </Button>
         ) : null}
       </CardContent>
