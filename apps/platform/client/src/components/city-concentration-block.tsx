@@ -12,6 +12,8 @@ type CityConcentrationBlockProps = {
   attentionHref: (city: string) => string;
   /** На странице клиентской базы ссылка «все города» часто не нужна. */
   showAllLink?: boolean;
+  /** Ссылка на карту клиентов (только вариант analytics). */
+  clientMapHref?: string;
 };
 
 function CityRows({
@@ -20,7 +22,7 @@ function CityRows({
   cityHref,
   activeHref,
   attentionHref,
-}: Omit<CityConcentrationBlockProps, "showAllHref" | "showAllLink">) {
+}: Omit<CityConcentrationBlockProps, "showAllHref" | "showAllLink" | "clientMapHref">) {
   return (
     <ul className="min-w-0 space-y-2">
       {rows.map((row) => {
@@ -90,6 +92,7 @@ export function CityConcentrationBlock({
   activeHref,
   attentionHref,
   showAllLink = true,
+  clientMapHref,
 }: CityConcentrationBlockProps) {
   const empty = (
     <div className="rounded-lg border border-dashed border-border/80 bg-muted/30 px-3 py-4 text-sm text-muted-foreground">
@@ -104,10 +107,7 @@ export function CityConcentrationBlock({
       )}
       {showAllLink ? (
         <div className="mt-3 text-center sm:text-left">
-          <a
-            href={showAllHref}
-            className="text-xs font-medium text-primary underline-offset-2 hover:underline"
-          >
+          <a href={showAllHref} className="text-xs font-medium text-primary underline-offset-2 hover:underline">
             Показать все города
           </a>
         </div>
@@ -119,8 +119,23 @@ export function CityConcentrationBlock({
     return (
       <Card className="min-w-0 overflow-hidden rounded-xl border border-border/80 shadow-sm" data-testid="card-analytics-city-concentration">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Города и концентрация клиентов</CardTitle>
-          <CardDescription>Топ‑10 городов по числу клиентов в текущем доступе; «теплота» — доля от лидера по объёму.</CardDescription>
+          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0 space-y-1">
+              <CardTitle className="text-base">Города и концентрация клиентов</CardTitle>
+              <CardDescription>
+                Топ‑10 городов по числу клиентов в текущем доступе; «теплота» — доля от лидера по объёму.
+              </CardDescription>
+            </div>
+            {clientMapHref ? (
+              <a
+                href={clientMapHref}
+                className="shrink-0 text-sm font-medium text-primary underline-offset-2 hover:underline"
+                data-testid="link-analytics-open-client-map"
+              >
+                Открыть карту
+              </a>
+            ) : null}
+          </div>
         </CardHeader>
         <CardContent className="min-w-0">{inner}</CardContent>
       </Card>

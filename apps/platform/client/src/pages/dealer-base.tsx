@@ -775,11 +775,26 @@ export default function DealerBase() {
 
   return (
     <div className="min-w-0 max-w-full overflow-x-hidden space-y-6 sm:space-y-8" data-testid="page-dealer-base">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Клиентская база</h1>
-        <p className="mt-1 text-sm text-muted-foreground sm:text-base">
-          Клиенты пилота Release 1 (импорт Excel): поиск, фильтры и переход в карточку клиента.
-        </p>
+      <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Клиентская база</h1>
+          <p className="mt-1 text-sm text-muted-foreground sm:text-base">
+            Клиенты пилота Release 1 (импорт Excel): поиск, фильтры и переход в карточку клиента.
+          </p>
+        </div>
+        <Button variant="outline" size="sm" className="shrink-0 self-start" asChild>
+          <Link
+            href={buildHashPath("/client-map", {
+              ...(city !== "all" ? { city } : {}),
+              ...(isRopOrManagerAllFilter(ropTeam) ? {} : { team: ropTeam }),
+              ...(isRopOrManagerAllFilter(manager) ? {} : { manager }),
+              ...(quick !== "all" ? { quick } : {}),
+            })}
+            data-testid="button-dealer-base-open-client-map"
+          >
+            Карта клиентов
+          </Link>
+        </Button>
       </div>
 
       <section className="space-y-3" data-testid="section-dealer-base-kpis">

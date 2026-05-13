@@ -8,6 +8,7 @@ import {
   LayoutGrid,
   ListTodo,
   LogOut,
+  Map,
   MapPinned,
   Megaphone,
   Menu,
@@ -31,6 +32,7 @@ import { isDemoAuthBypassEnabled, loadMockAuthSession } from "@/lib/mock-auth";
 const MAIN_HREF = "/main";
 const TERRITORY_CARD_HREF = "/territory-card";
 const DEALER_BASE_HREF = "/dealer-base";
+const CLIENT_MAP_HREF = "/client-map";
 const ORDERS_HREF = "/orders";
 const CATALOG_HREF = "/catalog";
 const TASKS_HREF = "/tasks";
@@ -45,6 +47,7 @@ const SALES_MANAGER_HREF = "/sales-manager";
 
 const ICON_BY_TESTID: Partial<Record<string, LucideIcon>> = {
   "nav-main": Home,
+  "nav-client-map": Map,
   "nav-territory-card": MapPinned,
   "nav-dealer-base": Users,
   "nav-orders": Package,
@@ -70,6 +73,10 @@ function isMainPath(path: string) {
 
 function isDealerBasePath(path: string) {
   return path === DEALER_BASE_HREF;
+}
+
+function isClientMapPath(path: string) {
+  return path === CLIENT_MAP_HREF || path.startsWith(`${CLIENT_MAP_HREF}/`);
 }
 
 function isClientsSectionPath(path: string) {
@@ -132,6 +139,7 @@ function isNavItemActive(item: PilotNavItem, location: string, isActiveFromLink?
   if (item.testId === "nav-training") return isTrainingPath(location);
   if (item.testId === "nav-sales-control") return isSalesControlPath(location);
   if (item.testId === "nav-analytics-workspace") return isAnalyticsWorkspacePath(location);
+  if (item.testId === "nav-client-map") return isClientMapPath(location);
   if (item.testId === "nav-marketing-briefs") return isMarketingBriefsPath(location);
   if (item.testId === "nav-release-one") return isReleaseOnePath(location);
   if (item.testId === "nav-release-clients") return isReleaseOneClientsPath(location);
@@ -162,6 +170,7 @@ function headerContextLabel(location: string) {
   if (isMainPath(location)) return "Главная";
   if (location.startsWith("/dealers/")) return "Карточка клиента";
   if (isDealerBasePath(location)) return "Клиенты";
+  if (isClientMapPath(location)) return "Карта клиентов";
   if (isOrdersSectionPath(location)) return "Заказы";
   if (isTasksPath(location)) return "Задачи";
   if (isCatalogPath(location)) return "Каталог";
