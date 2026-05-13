@@ -59,7 +59,7 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
   if (role === "sales_manager") {
     return any([
       (x) => x === "/" || isUnder(x, "/main") || isUnder(x, "/sales-manager"),
-      (x) => isUnder(x, "/dealer-base") || isUnder(x, "/dealers"),
+      (x) => isUnder(x, "/dealer-base") || isUnder(x, "/dealers") || isUnder(x, "/client-map"),
       (x) => isUnder(x, "/tasks"),
       (x) => isUnder(x, "/catalog"),
       (x) => isUnder(x, "/training"),
@@ -76,7 +76,7 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
     return any([
       (x) => x === "/main" || isUnder(x, "/main"),
       (x) => isUnder(x, "/analytics-workspace"),
-      (x) => isUnder(x, "/dealer-base") || isUnder(x, "/dealers"),
+      (x) => isUnder(x, "/dealer-base") || isUnder(x, "/dealers") || isUnder(x, "/client-map"),
       (x) => isUnder(x, "/tasks"),
       (x) => isUnder(x, "/catalog"),
       (x) => isUnder(x, "/training"),
@@ -94,7 +94,7 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
       (x) => x === "/" || isUnder(x, "/main") || isUnder(x, "/sales-manager"),
       (x) => isUnder(x, "/territory-card"),
       (x) => isUnder(x, "/analytics-workspace"),
-      (x) => isUnder(x, "/dealer-base") || isUnder(x, "/dealers"),
+      (x) => isUnder(x, "/dealer-base") || isUnder(x, "/dealers") || isUnder(x, "/client-map"),
       (x) => isUnder(x, "/tasks"),
       (x) => isUnder(x, "/catalog"),
       (x) => isUnder(x, "/training"),
@@ -110,14 +110,14 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
       (x) => isUnder(x, "/marketing-briefs"),
       (x) => isUnder(x, "/catalog"),
       (x) => isUnder(x, "/training"),
-      (x) => isUnder(x, "/dealer-base") || isUnder(x, "/dealers"),
+      (x) => isUnder(x, "/dealer-base") || isUnder(x, "/dealers") || isUnder(x, "/client-map"),
     ]);
   }
 
   if (role === "analyst") {
     return any([
       (x) => isUnder(x, "/analytics-workspace"),
-      (x) => isUnder(x, "/dealer-base") || isUnder(x, "/dealers"),
+      (x) => isUnder(x, "/dealer-base") || isUnder(x, "/dealers") || isUnder(x, "/client-map"),
       (x) => isUnder(x, "/tasks"),
       (x) => isUnder(x, "/catalog"),
     ]);
@@ -143,6 +143,7 @@ export function getPilotNavItems(role: SalesRole): PilotNavItem[] {
   if (role === "sales_manager") {
     push({ href: "/main", label: "Главная", testId: "nav-main" });
     push({ href: "/dealer-base", label: "Клиенты", testId: "nav-dealer-base", badge: NAV_BADGE_CLIENTS });
+    push({ href: "/client-map", label: "Карта клиентов", testId: "nav-client-map" });
     push({ href: "/tasks", label: "Задачи", testId: "nav-tasks" });
     push({ href: "/catalog", label: "Каталог", testId: "nav-catalog" });
     push({ href: "/training", label: "Обучение", testId: "nav-training" });
@@ -154,6 +155,7 @@ export function getPilotNavItems(role: SalesRole): PilotNavItem[] {
   if (role === "team_lead") {
     push({ href: "/main", label: "Главная", testId: "nav-main" });
     push({ href: "/dealer-base", label: "Клиенты команды", testId: "nav-dealer-base", badge: NAV_BADGE_CLIENTS });
+    push({ href: "/client-map", label: "Карта клиентов", testId: "nav-client-map" });
     push({ href: "/tasks", label: "Задачи команды", testId: "nav-tasks" });
     push({ href: "/analytics-workspace", label: "Аналитика команды", testId: "nav-analytics-workspace" });
     push({ href: sch, label: "План-факт продаж", testId: "nav-sales-control" });
@@ -167,6 +169,7 @@ export function getPilotNavItems(role: SalesRole): PilotNavItem[] {
     push({ href: "/main", label: "Главная", testId: "nav-main" });
     push({ href: "/territory-card", label: "Карточка территории", testId: "nav-territory-card" });
     push({ href: "/dealer-base", label: "Клиенты", testId: "nav-dealer-base", badge: NAV_BADGE_CLIENTS });
+    push({ href: "/client-map", label: "Карта клиентов", testId: "nav-client-map" });
     push({ href: "/tasks", label: "Задачи", testId: "nav-tasks" });
     push({ href: "/analytics-workspace", label: "Аналитика команды", testId: "nav-analytics-workspace" });
     push({ href: sch, label: "План-факт продаж", testId: "nav-sales-control" });
@@ -188,12 +191,14 @@ export function getPilotNavItems(role: SalesRole): PilotNavItem[] {
     push({ href: "/catalog", label: "Каталог", testId: "nav-catalog" });
     push({ href: "/training", label: "Обучение", testId: "nav-training" });
     push({ href: "/dealer-base", label: "Клиенты (просмотр)", testId: "nav-dealer-base", badge: NAV_BADGE_CLIENTS });
+    push({ href: "/client-map", label: "Карта клиентов", testId: "nav-client-map" });
     return items;
   }
 
   if (role === "analyst") {
     push({ href: "/analytics-workspace", label: "Аналитика команды", testId: "nav-analytics-workspace" });
     push({ href: "/dealer-base", label: "Клиенты", testId: "nav-dealer-base", badge: NAV_BADGE_CLIENTS });
+    push({ href: "/client-map", label: "Карта клиентов", testId: "nav-client-map" });
     push({ href: "/tasks", label: "Задачи", testId: "nav-tasks" });
     push({ href: "/catalog", label: "Каталог", testId: "nav-catalog" });
     return items;

@@ -16,6 +16,7 @@ import { INTERNAL_PROTOTYPE_ROUTES } from "@/lib/preview-config";
 
 const LazySalesManagerWorkspace = lazy(() => import("@/pages/sales-manager-workspace"));
 const LazyDealerBase = lazy(() => import("@/pages/dealer-base"));
+const LazyClientMap = lazy(() => import("@/pages/client-map"));
 const LazyDealerCardFoundation = lazy(() => import("@/pages/dealer-card-foundation"));
 const LazyDealerCardPage = lazy(() => import("@/pages/dealer-card-foundation").then((m) => ({ default: m.DealerCardPage })));
 const LazyTradePointDetailPage = lazy(() => import("@/pages/trade-point-detail").then((m) => ({ default: m.TradePointDetailPage })));
@@ -55,6 +56,7 @@ function suspensePage(Lazy: LazyExoticComponent<ComponentType<any>>): ComponentT
 
 const SalesManagerWorkspaceRoute = suspensePage(LazySalesManagerWorkspace);
 const DealerBaseRoute = suspensePage(LazyDealerBase);
+const ClientMapRoute = suspensePage(LazyClientMap);
 const DealerCardFoundationRoute = suspensePage(LazyDealerCardFoundation);
 const DealerCardPageRoute = suspensePage(LazyDealerCardPage);
 const TradePointDetailPageRoute = suspensePage(LazyTradePointDetailPage);
@@ -121,6 +123,7 @@ function AuthenticatedApp() {
         <Route path="/main" component={SalesManagerWorkspaceRoute} />
         <Route path="/sales-manager" component={SalesManagerWorkspaceRoute} />
         <Route path="/dealer-base" component={DealerBaseRoute} />
+        <Route path="/client-map" component={ClientMapRoute} />
         <Route path="/catalog/:productId" component={ProductDetailPageRoute} />
         <Route path="/catalog" component={CatalogPageRoute} />
         <Route path="/tasks" component={TasksPageRoute} />

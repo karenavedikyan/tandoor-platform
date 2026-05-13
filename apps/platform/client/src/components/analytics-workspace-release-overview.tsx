@@ -446,6 +446,7 @@ export function AnalyticsWorkspaceReleaseOverview() {
         cityHref={(c) => buildDealerBaseCityDrillHref(profile.role, profile, c)}
         activeHref={(c) => buildDealerBaseCityDrillHref(profile.role, profile, c, { quick: "active" })}
         attentionHref={(c) => buildDealerBaseCityDrillHref(profile.role, profile, c, { quick: "attention" })}
+        clientMapHref={buildHashPath("/client-map")}
       />
     </div>
   );
