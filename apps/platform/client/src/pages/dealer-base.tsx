@@ -356,7 +356,7 @@ export default function DealerBase() {
   const urlTeamFromLocation = useMemo(() => {
     const idx = loc.indexOf("?");
     const raw = idx >= 0 ? loc.slice(idx + 1) : "";
-    return new URLSearchParams(raw).get("team");
+    return new URLSearchParams(raw).get("team") ?? new URLSearchParams(window.location.search).get("team");
   }, [loc]);
 
   useEffect(() => {
