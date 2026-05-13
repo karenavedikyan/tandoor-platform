@@ -1,6 +1,8 @@
+import { Link } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { buildHashPath } from "@/lib/hash-route-utils";
 import { cn } from "@/lib/utils";
 import { getAttentionLevel, getLoadLevel, type TeamSummary } from "@/lib/team-summary";
 
@@ -12,9 +14,21 @@ type TeamSummaryCardProps = {
   ctaHref: string;
   ctaLabel: string;
   showCta?: boolean;
+  /** Ссылки-переходы по KPI команды (только для полной карточки на главной). */
+  showTeamMetricLinks?: boolean;
 };
 
-export function TeamSummaryCard({ summary, variant = "full", ctaHref, ctaLabel, showCta = true }: TeamSummaryCardProps) {
+const drillLinkClass =
+  "inline-flex max-w-full items-center rounded-md px-2 py-1 text-xs font-medium text-muted-foreground underline-offset-2 transition hover:bg-muted/80 hover:text-foreground";
+
+export function TeamSummaryCard({
+  summary,
+  variant = "full",
+  ctaHref,
+  ctaLabel,
+  showCta = true,
+  showTeamMetricLinks = false,
+}: TeamSummaryCardProps) {
   const tid = summary.teamId;
   const att = getAttentionLevel(summary.pctAttention);
   const load = getLoadLevel(summary.avgClientsPerManager);
@@ -66,6 +80,53 @@ export function TeamSummaryCard({ summary, variant = "full", ctaHref, ctaLabel, 
           <span>Потенциальные: {summary.potentialClients}</span>
         </div>
 
+        {showTeamMetricLinks && !isCompact ? (
+          <div className="flex min-w-0 flex-wrap gap-x-2 gap-y-1 border-t border-border/60 pt-2 text-xs">
+            <Link
+              href={buildHashPath("/dealer-base", { team: tid })}
+              className={drillLinkClass}
+              data-testid={`link-team-summary-clients-${tid}`}
+            >
+              Клиенты
+            </Link>
+            <Link
+              href={buildHashPath("/dealer-base", { team: tid, quick: "active", view: "table_team" })}
+              className={drillLinkClass}
+              data-testid={`link-team-summary-active-${tid}`}
+            >
+              Активные
+            </Link>
+            <Link
+              href={buildHashPath("/dealer-base", { team: tid, quick: "attention", view: "table_team" })}
+              className={drillLinkClass}
+              data-testid={`link-team-summary-attention-${tid}`}
+            >
+              Внимание
+            </Link>
+            <Link
+              href={buildHashPath("/dealer-base", { team: tid, quick: "top", view: "table_team" })}
+              className={drillLinkClass}
+              data-testid={`link-team-summary-top-${tid}`}
+            >
+              TOP
+            </Link>
+            <Link
+              href={buildHashPath("/dealer-base", { team: tid, quick: "potential", view: "table_team" })}
+              className={drillLinkClass}
+              data-testid={`link-team-summary-potential-${tid}`}
+            >
+              Потенциальные
+            </Link>
+            <Link
+              href={buildHashPath("/dealer-base", { team: tid, view: "by_manager" })}
+              className={drillLinkClass}
+              data-testid={`link-team-summary-managers-${tid}`}
+            >
+              Менеджеры
+            </Link>
+          </div>
+        ) : null}
+
         <div className={cn("flex min-w-0 flex-wrap gap-x-3 gap-y-1 text-xs", isCompact && "text-[11px]")}>
           <span className={loadClass} data-testid={`text-team-summary-load-${tid}`}>
             Средняя нагрузка: {summary.avgClientsPerManager}
@@ -100,7 +161,7 @@ export function TeamSummaryCard({ summary, variant = "full", ctaHref, ctaLabel, 
 
         {showCta ? (
           <Button asChild size="sm" className="w-full min-w-0 font-semibold sm:w-auto" data-testid={`button-team-summary-open-${tid}`}>
-            <a href={ctaHref}>{ctaLabel}</a>
+            <Link href={ctaHref}>{ctaLabel}</Link>
           </Button>
         ) : null}
       </CardContent>

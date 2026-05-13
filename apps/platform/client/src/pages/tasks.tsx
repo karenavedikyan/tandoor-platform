@@ -31,6 +31,7 @@ import { getTrainingArticleIdForTask } from "@/lib/training-data";
 import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
 import {
   getManagersForRopTeam,
+  getRopOptions,
   isRopOrManagerAllFilter,
   managerDisplayMatchesCatalogName,
 } from "@/lib/rop-manager-filters";
@@ -41,6 +42,7 @@ import {
   mapSalesRoleToDealerBaseAccess,
   ropOptionsForProfile,
   roleScopedDealerRows,
+  type DealerBaseAccessRole,
 } from "@/lib/dealer-base-role-views";
 import {
   classifyTask,
@@ -60,6 +62,9 @@ import {
   taskMatchesUrgentPresetForBadge,
   type TaskPresetId,
 } from "@/lib/task-presets";
+import { useRouteSearchParams } from "@/lib/hash-route-utils";
+import { getEffectiveTeamLeadTeamId, type ReleaseDemoProfile } from "@/lib/release-demo-profile";
+import { getAllSalesManagers, getSalesUserById } from "@/lib/sales-control-data";
 
 type TasksFilterId =
   | "all"
@@ -119,6 +124,34 @@ const FILTERS: { id: TasksFilterId; label: string; testId: string }[] = [
   { id: "manager", label: "Менеджер", testId: "filter-tasks-manager" },
   { id: "regional_manager", label: "Регионал", testId: "filter-tasks-regional-manager" },
 ];
+
+const VALID_TASK_PRESET_IDS = new Set<TaskPresetId>(["all", ...TASK_PRESETS.map((p) => p.id)]);
+
+const VALID_TASK_CATEGORY_IDS = new Set<TaskCategoryFilterId>(["all", ...TASK_CATEGORIES.map((c) => c.id)]);
+
+function tasksUrlTeamAllowed(teamId: string, profile: ReleaseDemoProfile, access: DealerBaseAccessRole): boolean {
+  if (!getRopOptions().some((o) => o.teamId === teamId)) return false;
+  if (access === "sales_director") return true;
+  if (access === "team_lead") return teamId === getEffectiveTeamLeadTeamId(profile);
+  const u = getSalesUserById(profile.personaUserId);
+  return Boolean(u?.teamId === teamId);
+}
+
+function tasksUrlManagerAllowed(
+  managerId: string,
+  ropTeamId: string,
+  profile: ReleaseDemoProfile,
+  access: DealerBaseAccessRole,
+): boolean {
+  if (access === "sales_manager") {
+    return getSalesUserById(profile.personaUserId)?.id === managerId;
+  }
+  const pool =
+    access === "sales_director" && isRopOrManagerAllFilter(ropTeamId)
+      ? getAllSalesManagers()
+      : getManagersForRopTeam(ropTeamId);
+  return pool.some((m) => m.id === managerId);
+}
 
 function statusTone(s: MatrixTaskStatus) {
   if (s === "new") return "border-primary/40 bg-primary/10 text-primary";
@@ -660,14 +693,84 @@ export default function TasksPage() {
   const [ropTeam, setRopTeam] = useState<string>("all");
   const [mgrFilter, setMgrFilter] = useState<string>("all");
 
-  useEffect(() => {
-    const d = initialRopManagerForProfile(profile, access);
-    setRopTeam(d.ropTeam);
-    setMgrFilter(d.manager);
-  }, [profile.role, profile.personaUserId, access]);
+  const routeQs = useRouteSearchParams();
+  const routeKey = useMemo(() => routeQs.toString(), [routeQs]);
 
   const ropSelectOptions = useMemo(() => ropOptionsForProfile(profile, access), [profile, access]);
   const mgrOptions = useMemo(() => managerOptionsForProfile(profile, access, ropTeam), [profile, access, ropTeam]);
+
+  useEffect(() => {
+    const d = initialRopManagerForProfile(profile, access);
+    if (!routeKey) {
+      setRopTeam(d.ropTeam);
+      setMgrFilter(d.manager);
+      setPresetId("all");
+      setCategoryFilter("all");
+      setFilter("all");
+      setQuery("");
+      setRole("all");
+      return;
+    }
+
+    let rop = d.ropTeam;
+    let mgr = d.manager;
+    let preset: TaskPresetId = "all";
+    let cat: TaskCategoryFilterId = "all";
+    let filt: TasksFilterId = "all";
+    let qv = "";
+    let rv: RoleViewId = "all";
+
+    const teamRaw = (routeQs.get("team") ?? routeQs.get("rop"))?.trim() ?? "";
+    const managerRaw = routeQs.get("manager")?.trim() ?? "";
+    if (teamRaw && tasksUrlTeamAllowed(teamRaw, profile, access)) {
+      rop = teamRaw;
+      mgr = "all";
+    }
+    if (managerRaw && tasksUrlManagerAllowed(managerRaw, rop, profile, access)) {
+      mgr = managerRaw;
+    }
+
+    const presetRaw = routeQs.get("preset")?.trim();
+    if (presetRaw && VALID_TASK_PRESET_IDS.has(presetRaw as TaskPresetId)) {
+      preset = presetRaw as TaskPresetId;
+    }
+    const catRaw = routeQs.get("category")?.trim();
+    if (preset !== "showcase" && preset !== "training" && catRaw && VALID_TASK_CATEGORY_IDS.has(catRaw as TaskCategoryFilterId)) {
+      cat = catRaw as TaskCategoryFilterId;
+    }
+    if (preset === "showcase" || preset === "training") {
+      cat = "all";
+    }
+
+    const tabRaw = (routeQs.get("tab") ?? routeQs.get("status") ?? "").trim().toLowerCase();
+    const TAB_MAP: Record<string, TasksFilterId> = {
+      all: "all",
+      new: "new",
+      in_progress: "in_progress",
+      overdue: "overdue",
+      high: "high",
+      manager: "manager",
+      regional_manager: "regional_manager",
+      open: "all",
+    };
+    if (tabRaw && TAB_MAP[tabRaw]) filt = TAB_MAP[tabRaw]!;
+
+    const roleRaw = routeQs.get("role")?.trim();
+    if (roleRaw === "all" || roleRaw === "manager" || roleRaw === "regional_manager" || roleRaw === "leadership") {
+      rv = roleRaw as RoleViewId;
+    }
+
+    const searchRaw = routeQs.get("search")?.trim();
+    if (searchRaw) qv = searchRaw;
+
+    setRopTeam(rop);
+    setMgrFilter(mgr);
+    setPresetId(preset);
+    setCategoryFilter(cat);
+    setFilter(filt);
+    setQuery(qv);
+    setRole(rv);
+  }, [profile.personaUserId, profile.role, access, routeKey, routeQs]);
 
   const onRopChange = (v: string) => {
     setRopTeam(v);
