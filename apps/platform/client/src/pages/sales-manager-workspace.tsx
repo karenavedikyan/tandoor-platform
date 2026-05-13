@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
+import { canAccessPath } from "@/lib/auth-access";
 import { cn } from "@/lib/utils";
 import {
   getFocusProducts,
@@ -301,9 +302,11 @@ export default function SalesManagerWorkspace() {
             <Button asChild variant="outline" className="min-h-10 border-border bg-card font-semibold" data-testid="button-sales-manager-open-sales-control">
               <Link href="/sales-control">План-факт продаж</Link>
             </Button>
-            <Button asChild variant="outline" className="min-h-10 border-border bg-card font-semibold" data-testid="button-sales-manager-open-analytics-workspace">
-              <Link href="/analytics-workspace">Аналитика команды</Link>
-            </Button>
+            {user && canAccessPath(user.role, "/analytics-workspace") ? (
+              <Button asChild variant="outline" className="min-h-10 border-border bg-card font-semibold" data-testid="button-sales-manager-open-analytics-workspace">
+                <Link href="/analytics-workspace">Аналитика команды</Link>
+              </Button>
+            ) : null}
             <Button asChild variant="outline" className="min-h-10 border-border bg-card font-semibold" data-testid="button-sales-manager-open-marketing-briefs">
               <Link href="/marketing-briefs">Брифы</Link>
             </Button>
