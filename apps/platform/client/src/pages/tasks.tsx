@@ -42,6 +42,15 @@ import {
   ropOptionsForProfile,
   roleScopedDealerRows,
 } from "@/lib/dealer-base-role-views";
+import {
+  classifyTask,
+  filterTasksByCategory,
+  getTaskCategoryCounts,
+  getTaskCategoryLabel,
+  getTaskCategoryMeta,
+  TASK_CATEGORIES,
+  type TaskCategoryFilterId,
+} from "@/lib/task-classification";
 
 type TasksFilterId =
   | "all"
@@ -187,6 +196,22 @@ function sortLeadership(tasks: MatrixTaskWithContext[]) {
   });
 }
 
+function TaskCategoryBadge({ task }: { task: MatrixTaskWithContext }) {
+  const { categoryId } = classifyTask(task);
+  const meta = getTaskCategoryMeta(categoryId);
+  return (
+    <Badge
+      variant="outline"
+      className={cn("font-medium", meta.badgeClass)}
+      data-testid={`badge-task-category-${task.taskId}`}
+      data-task-category={categoryId}
+      data-task-category-label={meta.label}
+    >
+      {meta.shortLabel}
+    </Badge>
+  );
+}
+
 function TasksKpis({ tasks }: { tasks: MatrixTaskWithContext[] }) {
   const summary = useMemo(() => summarizeMatrixTasks(tasks), [tasks]);
   const tiles = [
@@ -234,9 +259,14 @@ function TaskCard({ task }: { task: MatrixTaskWithContext }) {
     insightDomain: task.insightDomain,
     productId: task.productId,
   });
+  const cat = classifyTask(task);
+  const catMeta = getTaskCategoryMeta(cat.categoryId);
   return (
     <Card
-      className="rounded-2xl border border-border/80 bg-card shadow-md"
+      className={cn(
+        "rounded-2xl border border-border/80 bg-card shadow-md border-l-4",
+        catMeta.borderLeftClass,
+      )}
       data-testid={`card-task-${task.taskId}`}
     >
       <CardContent className="space-y-3 p-4">
@@ -248,6 +278,7 @@ function TaskCard({ task }: { task: MatrixTaskWithContext }) {
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap gap-1.5">
+            <TaskCategoryBadge task={task} />
             <Badge variant="outline" className={cn("font-medium", statusTone(task.status))}>
               {MATRIX_TASK_STATUS_LABEL[task.status]}
             </Badge>
@@ -384,14 +415,19 @@ function TaskListRow({ task }: { task: MatrixTaskWithContext }) {
     insightDomain: task.insightDomain,
     productId: task.productId,
   });
+  const catMeta = getTaskCategoryMeta(classifyTask(task).categoryId);
   return (
     <Card
-      className="rounded-2xl border border-border/80 bg-card shadow-sm"
+      className={cn(
+        "rounded-2xl border border-border/80 bg-card shadow-sm border-l-4",
+        catMeta.borderLeftClass,
+      )}
       data-testid={`card-task-${task.taskId}`}
     >
       <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0 flex-1 space-y-1.5">
           <div className="flex flex-wrap items-center gap-2">
+            <TaskCategoryBadge task={task} />
             <p className="font-semibold leading-snug text-foreground">{task.title}</p>
             <Badge variant="outline" className={cn("font-medium", statusTone(task.status))}>
               {MATRIX_TASK_STATUS_LABEL[task.status]}
@@ -488,9 +524,13 @@ function TaskListRow({ task }: { task: MatrixTaskWithContext }) {
 }
 
 function LeadershipAttentionCard({ task }: { task: MatrixTaskWithContext }) {
+  const catMeta = getTaskCategoryMeta(classifyTask(task).categoryId);
   return (
     <Card
-      className="rounded-2xl border border-red-200 bg-red-50/40 shadow-md"
+      className={cn(
+        "rounded-2xl border border-red-200 bg-red-50/40 shadow-md border-l-4",
+        catMeta.borderLeftClass,
+      )}
       data-testid={`card-leadership-attention-${task.taskId}`}
     >
       <CardContent className="space-y-2.5 p-4">
@@ -502,6 +542,7 @@ function LeadershipAttentionCard({ task }: { task: MatrixTaskWithContext }) {
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap gap-1.5">
+            <TaskCategoryBadge task={task} />
             <Badge variant="outline" className={cn("font-medium", statusTone(task.status))}>
               {MATRIX_TASK_STATUS_LABEL[task.status]}
             </Badge>
@@ -573,6 +614,7 @@ export default function TasksPage() {
   const [filter, setFilter] = useState<TasksFilterId>("all");
   const [query, setQuery] = useState("");
   const [view, setView] = useState<ViewMode>("cards");
+  const [categoryFilter, setCategoryFilter] = useState<TaskCategoryFilterId>("all");
 
   const dealerById = useMemo(() => new Map(DEALER_BASE_ROWS.map((d) => [d.id, d])), []);
   const [ropTeam, setRopTeam] = useState<string>("all");
@@ -608,7 +650,7 @@ export default function TasksPage() {
     return roleScopedTasks;
   }, [role, roleScopedTasks]);
 
-  const filtered = useMemo(() => {
+  const filteredBeforeCategory = useMemo(() => {
     let list = applySearch(applyFilter(baseList, filter), query);
     if (!isRopOrManagerAllFilter(ropTeam) || !isRopOrManagerAllFilter(mgrFilter)) {
       list = list.filter((t) => {
@@ -625,6 +667,16 @@ export default function TasksPage() {
     }
     return list;
   }, [baseList, filter, query, ropTeam, mgrFilter, dealerById, mgrOptions]);
+
+  const categoryCounts = useMemo(
+    () => getTaskCategoryCounts(filteredBeforeCategory),
+    [filteredBeforeCategory],
+  );
+
+  const filtered = useMemo(
+    () => filterTasksByCategory(filteredBeforeCategory, categoryFilter),
+    [filteredBeforeCategory, categoryFilter],
+  );
 
   const visibleTasks = useMemo(() => filtered.slice(0, TASKS_DISPLAY_LIMIT), [filtered]);
 
@@ -691,6 +743,39 @@ export default function TasksPage() {
       </p>
 
       <TasksKpis tasks={roleScopedTasks} />
+
+      <div className="min-w-0" data-testid="section-tasks-category-chips">
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            data-testid="chip-task-category-all"
+            onClick={() => setCategoryFilter("all")}
+            className={cn(
+              "min-h-9 max-w-full rounded-full border px-3 py-1.5 text-left text-xs font-semibold transition-colors sm:text-sm",
+              categoryFilter === "all"
+                ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground",
+            )}
+          >
+            Все <span className="tabular-nums">({categoryCounts.all})</span>
+          </button>
+          {TASK_CATEGORIES.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              data-testid={`chip-task-category-${c.id}`}
+              onClick={() => setCategoryFilter(c.id)}
+              className={cn(
+                "min-h-9 max-w-full rounded-full border px-3 py-1.5 text-left text-xs font-semibold transition-colors sm:text-sm",
+                categoryFilter === c.id ? c.chipActiveClass : c.chipInactiveClass,
+              )}
+            >
+              {c.shortLabel}{" "}
+              <span className="tabular-nums">({categoryCounts[c.id]})</span>
+            </button>
+          ))}
+        </div>
+      </div>
 
       {role === "leadership" && leadershipAttention.length > 0 ? (
         <Card
@@ -764,8 +849,8 @@ export default function TasksPage() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
-        <div className="min-w-0 flex-1 space-y-1.5 sm:max-w-[240px]">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 sm:items-end">
+        <div className="min-w-0 space-y-1.5">
           <Label className="text-xs text-muted-foreground">РОП</Label>
           <Select value={ropTeam} onValueChange={onRopChange}>
             <SelectTrigger className="min-h-11 min-w-0" data-testid="select-tasks-rop">
@@ -783,7 +868,7 @@ export default function TasksPage() {
             </SelectContent>
           </Select>
         </div>
-        <div className="min-w-0 flex-1 space-y-1.5 sm:max-w-[240px]">
+        <div className="min-w-0 space-y-1.5">
           <Label className="text-xs text-muted-foreground">Менеджер</Label>
           <Select value={mgrFilter} onValueChange={setMgrFilter}>
             <SelectTrigger className="min-h-11 min-w-0" data-testid="select-tasks-manager">
@@ -796,6 +881,25 @@ export default function TasksPage() {
               {mgrOptions.map((m) => (
                 <SelectItem key={m.id} value={m.id}>
                   {m.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="min-w-0 space-y-1.5 sm:col-span-2 lg:col-span-1">
+          <Label className="text-xs text-muted-foreground">Тип задачи</Label>
+          <Select
+            value={categoryFilter}
+            onValueChange={(v) => setCategoryFilter(v as TaskCategoryFilterId)}
+          >
+            <SelectTrigger className="min-h-11 min-w-0" data-testid="select-tasks-category">
+              <SelectValue placeholder="Тип задачи" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{getTaskCategoryLabel("all")}</SelectItem>
+              {TASK_CATEGORIES.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.label}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -833,7 +937,8 @@ export default function TasksPage() {
       <p className="text-sm text-muted-foreground" data-testid="text-tasks-count">
         Показано{" "}
         <span className="font-semibold tabular-nums text-foreground">{visibleTasks.length}</span> из{" "}
-        <span className="font-semibold tabular-nums text-foreground">{filtered.length}</span> по фильтру и поиску
+        <span className="font-semibold tabular-nums text-foreground">{filtered.length}</span> по фильтрам,
+        поиску и типу задачи
         {roleScopedTasks.length !== filtered.length ? (
           <>
             {" "}
