@@ -26,6 +26,7 @@ export type DealerBaseWorkView =
   | "by_manager"
   | "day_plan_team"
   | "table_team"
+  | "team_cities"
   | "my_clients"
   | "today"
   | "my_attention"
@@ -36,13 +37,14 @@ export const DEALER_BASE_VIEW_LABELS: Record<DealerBaseWorkView, string> = {
   teams: "Команды",
   risks_all: "Риски отдела",
   top_all: "TOP/VIP отдела",
-  cities_all: "Города отдела",
+  cities_all: "Города",
   table_all: "Таблица отдела",
   my_team: "Моя команда",
   team_attention: "Внимание команды",
   by_manager: "По менеджерам",
   day_plan_team: "План дня команды",
   table_team: "Таблица команды",
+  team_cities: "Города",
   my_clients: "Мои клиенты",
   today: "Сегодня",
   my_attention: "Моё внимание",
@@ -83,6 +85,7 @@ export function workViewsForAccess(access: DealerBaseAccessRole): DealerBaseWork
       "by_manager",
       "day_plan_team",
       "table_team",
+      "team_cities",
       "my_clients",
       "today",
       "my_attention",
@@ -114,7 +117,8 @@ export function workViewGroup(view: DealerBaseWorkView): "department" | "team" |
     view === "team_attention" ||
     view === "by_manager" ||
     view === "day_plan_team" ||
-    view === "table_team"
+    view === "table_team" ||
+    view === "team_cities"
   ) {
     return "team";
   }
@@ -130,6 +134,7 @@ export const DEALER_BASE_TEAM_WORK_VIEWS: DealerBaseWorkView[] = [
   "by_manager",
   "day_plan_team",
   "table_team",
+  "team_cities",
 ];
 const TEAM_VIEWS = DEALER_BASE_TEAM_WORK_VIEWS;
 const MGR_VIEWS: DealerBaseWorkView[] = [

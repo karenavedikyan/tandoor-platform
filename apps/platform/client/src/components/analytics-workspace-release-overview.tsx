@@ -1,9 +1,11 @@
 import { useMemo } from "react";
 import { Link } from "wouter";
+import { CityConcentrationBlock } from "@/components/city-concentration-block";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { buildHashPath } from "@/lib/hash-route-utils";
+import { buildDealerBaseAllCitiesHref, buildDealerBaseCityDrillHref, getTopCityConcentrationRows } from "@/lib/city-concentration";
 import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
 import { dealerNeedsAttention, isDealerTop, roleScopedDealerRows } from "@/lib/dealer-base-role-views";
 import { getEffectiveTeamLeadTeamId, releaseDemoRoleLabel, type ReleaseDemoProfile } from "@/lib/release-demo-profile";
@@ -92,6 +94,7 @@ export function AnalyticsWorkspaceReleaseOverview() {
   const presetClock = useMemo(() => new Date(), []);
 
   const scopedRows = useMemo(() => roleScopedDealerRows(DEALER_BASE_ROWS, profile), [profile]);
+  const topCityRows = useMemo(() => getTopCityConcentrationRows(scopedRows, 10), [scopedRows]);
   const dealerIds = useMemo(() => new Set(scopedRows.map((r) => r.id)), [scopedRows]);
 
   const dbScope = useMemo(() => dealerBaseScope(role, profile), [role, profile]);
@@ -435,6 +438,15 @@ export function AnalyticsWorkspaceReleaseOverview() {
           </CardContent>
         </Card>
       </div>
+
+      <CityConcentrationBlock
+        variant="analytics"
+        rows={topCityRows}
+        showAllHref={buildDealerBaseAllCitiesHref(profile.role, profile)}
+        cityHref={(c) => buildDealerBaseCityDrillHref(profile.role, profile, c)}
+        activeHref={(c) => buildDealerBaseCityDrillHref(profile.role, profile, c, { quick: "active" })}
+        attentionHref={(c) => buildDealerBaseCityDrillHref(profile.role, profile, c, { quick: "attention" })}
+      />
     </div>
   );
 }

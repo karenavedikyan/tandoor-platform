@@ -45,8 +45,10 @@ import {
   type DealerBaseAccessRole,
   type DealerBaseWorkView,
 } from "@/lib/dealer-base-role-views";
+import { CityConcentrationBlock } from "@/components/city-concentration-block";
 import { buildTeamSummary } from "@/lib/team-summary";
 import { TeamSummaryCard } from "@/components/team-summary-card";
+import { buildCityConcentrationRows, buildDealerBaseAllCitiesHref, buildDealerBaseCityDrillHref } from "@/lib/city-concentration";
 import { buildHashPath, useRouteSearchParams } from "@/lib/hash-route-utils";
 
 const DEALER_BASE_DISPLAY_LIMIT = 300;
@@ -189,25 +191,6 @@ function managerStatsForRows(rows: DealerRow[]) {
   const attention = rows.filter(dealerNeedsAttention).length;
   const potential = rows.filter((r) => r.status === "потенциальный").length;
   return { total, active, top, attention, potential };
-}
-
-function cityStatsForRows(rows: DealerRow[]) {
-  const map = new Map<
-    string,
-    { total: number; active: number; top: number; attention: number }
-  >();
-  for (const r of rows) {
-    const c = r.city || "—";
-    const cur = map.get(c) ?? { total: 0, active: 0, top: 0, attention: 0 };
-    cur.total += 1;
-    if (r.status === "активный") cur.active += 1;
-    if (isDealerTop(r)) cur.top += 1;
-    if (dealerNeedsAttention(r)) cur.attention += 1;
-    map.set(c, cur);
-  }
-  return Array.from(map.entries())
-    .map(([city, s]) => ({ city, ...s }))
-    .sort((a, b) => b.total - a.total || a.city.localeCompare(b.city));
 }
 
 function groupRowsByManagerKey(rows: DealerRow[]): { key: string; label: string; rows: DealerRow[] }[] {
@@ -469,7 +452,16 @@ export default function DealerBase() {
 
     const teamRaw = (routeQs.get("team") ?? routeQs.get("rop"))?.trim() ?? "";
     const managerRaw = routeQs.get("manager")?.trim() ?? "";
-    const viewParsed = parseWorkViewFromQuery(routeQs.get("view"), access);
+    const viewRaw = routeQs.get("view")?.trim() ?? "";
+    const viewNorm =
+      viewRaw.toLowerCase() === "cities"
+        ? access === "sales_director"
+          ? "cities_all"
+          : access === "team_lead"
+            ? "team_cities"
+            : "my_cities"
+        : viewRaw;
+    const viewParsed = parseWorkViewFromQuery(viewNorm || null, access);
     const quickRaw = (routeQs.get("quick") ?? "").trim().toLowerCase();
     if (quickRaw && QUICK_FROM_URL[quickRaw]) qv = QUICK_FROM_URL[quickRaw]!;
 
@@ -573,9 +565,11 @@ export default function DealerBase() {
       }
       if (
         workView === "table_all" ||
+        workView === "table_team" ||
         workView === "risks_all" ||
         workView === "top_all" ||
-        workView === "cities_all"
+        workView === "cities_all" ||
+        workView === "team_cities"
       ) {
         return `Показаны клиенты: ${selectedManagerLabel}`;
       }
@@ -591,6 +585,29 @@ export default function DealerBase() {
       return Boolean(cat && managerDisplayMatchesCatalogName(row.manager, cat.name));
     });
   }, [pickerFiltered, manager, managerCatalogForRop]);
+
+  const teamTablePickerRows = useMemo(
+    () => applyPickerFilters(teamRowsForModes, pickerArgs),
+    [teamRowsForModes, pickerArgs],
+  );
+
+  const cityRowsDept = useMemo(() => buildCityConcentrationRows(pickerFiltered), [pickerFiltered]);
+  const cityRowsTeam = useMemo(() => buildCityConcentrationRows(teamTablePickerRows), [teamTablePickerRows]);
+  const cityRowsManager = useMemo(() => buildCityConcentrationRows(managerScopedRows), [managerScopedRows]);
+
+  const allCitiesHref = useMemo(() => buildDealerBaseAllCitiesHref(profile.role, profile), [profile]);
+  const cityRowHref = useCallback(
+    (city: string) => buildDealerBaseCityDrillHref(profile.role, profile, city, { ropTeamId: ropTeam }),
+    [profile, ropTeam],
+  );
+  const cityActiveHref = useCallback(
+    (city: string) => buildDealerBaseCityDrillHref(profile.role, profile, city, { quick: "active", ropTeamId: ropTeam }),
+    [profile, ropTeam],
+  );
+  const cityAttentionHref = useCallback(
+    (city: string) => buildDealerBaseCityDrillHref(profile.role, profile, city, { quick: "attention", ropTeamId: ropTeam }),
+    [profile, ropTeam],
+  );
 
   const viewRows = useMemo(() => {
     const limit = DEALER_BASE_DISPLAY_LIMIT;
@@ -612,6 +629,7 @@ export default function DealerBase() {
         return (needsManagerSelection ? [] : managerScopedRows).filter(isDealerTop).slice(0, limit);
       case "my_cities":
       case "cities_all":
+      case "team_cities":
       case "by_manager":
       case "teams":
       case "my_team":
@@ -1036,26 +1054,27 @@ export default function DealerBase() {
         ) : null}
 
         {workView === "cities_all" ? (
-          <div className="space-y-3" data-testid={viewSectionDataTestId("cities_all")}>
-            <p className="text-sm text-muted-foreground">Группировка по городам (отдел). Нажмите город, чтобы применить фильтр.</p>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {cityStatsForRows(pickerFiltered)
-                .slice(0, cap)
-                .map((cs) => (
-                  <button
-                    key={cs.city}
-                    type="button"
-                    className="rounded-xl border border-border/80 bg-card p-4 text-left shadow-sm transition hover:border-primary/40"
-                    onClick={() => setCity(cs.city)}
-                  >
-                    <p className="font-semibold text-foreground">{cs.city}</p>
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      Всего {cs.total} · Активные {cs.active} · TOP {cs.top} · Внимание {cs.attention}
-                    </p>
-                  </button>
-                ))}
-            </div>
-          </div>
+          <CityConcentrationBlock
+            variant="dealer"
+            rows={cityRowsDept}
+            showAllHref={allCitiesHref}
+            cityHref={cityRowHref}
+            activeHref={cityActiveHref}
+            attentionHref={cityAttentionHref}
+            showAllLink={false}
+          />
+        ) : null}
+
+        {workView === "team_cities" ? (
+          <CityConcentrationBlock
+            variant="dealer"
+            rows={cityRowsTeam}
+            showAllHref={allCitiesHref}
+            cityHref={cityRowHref}
+            activeHref={cityActiveHref}
+            attentionHref={cityAttentionHref}
+            showAllLink={false}
+          />
         ) : null}
 
         {workView === "my_team" ? (
@@ -1122,16 +1141,15 @@ export default function DealerBase() {
                 Выберите менеджера в фильтре выше, чтобы увидеть группировку по городам.
               </Card>
             ) : (
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {cityStatsForRows(managerScopedRows).map((cs) => (
-                  <Card key={cs.city} className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
-                    <p className="font-semibold text-foreground">{cs.city}</p>
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      Всего {cs.total} · Активные {cs.active} · TOP {cs.top} · Внимание {cs.attention}
-                    </p>
-                  </Card>
-                ))}
-              </div>
+              <CityConcentrationBlock
+                variant="dealer"
+                rows={cityRowsManager}
+                showAllHref={allCitiesHref}
+                cityHref={cityRowHref}
+                activeHref={cityActiveHref}
+                attentionHref={cityAttentionHref}
+                showAllLink={false}
+              />
             )}
           </div>
         ) : null}
