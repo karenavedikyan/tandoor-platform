@@ -789,21 +789,38 @@ export function AnalyticsInfographicsPanel() {
                 <div>
                   <p className="mb-1 text-xs font-medium text-muted-foreground">Категории клиентов</p>
                   <div className="flex h-3 w-full overflow-hidden rounded-full bg-muted text-[0]">
-                    {c.shareTopPercent > 0 ? (
-                      <div className="bg-primary" style={{ width: `${c.shareTopPercent}%` }} title={`TOP ${c.shareTopPercent}%`} />
+                    {c.shareTopTiersPercent > 0 ? (
+                      <div
+                        className="bg-primary"
+                        style={{ width: `${c.shareTopTiersPercent}%` }}
+                        title={`ТОП 150–500+ ${c.shareTopTiersPercent}%`}
+                      />
                     ) : null}
-                    {c.shareAPercent > 0 ? (
-                      <div className="bg-primary/70" style={{ width: `${c.shareAPercent}%` }} title={`A ${c.shareAPercent}%`} />
+                    {c.sharePotentialPercent > 0 ? (
+                      <div
+                        className="bg-primary/70"
+                        style={{ width: `${c.sharePotentialPercent}%` }}
+                        title={`Потенциальный ${c.sharePotentialPercent}%`}
+                      />
                     ) : null}
-                    {c.shareBPercent > 0 ? (
-                      <div className="bg-primary/45" style={{ width: `${c.shareBPercent}%` }} title={`B ${c.shareBPercent}%`} />
+                    {c.shareLeadPercent > 0 ? (
+                      <div
+                        className="bg-primary/45"
+                        style={{ width: `${c.shareLeadPercent}%` }}
+                        title={`Лид ${c.shareLeadPercent}%`}
+                      />
                     ) : null}
-                    {c.shareCPercent > 0 ? (
-                      <div className="bg-muted-foreground/35" style={{ width: `${c.shareCPercent}%` }} title={`C ${c.shareCPercent}%`} />
+                    {c.shareOtherClientCategoryPercent > 0 ? (
+                      <div
+                        className="bg-muted-foreground/35"
+                        style={{ width: `${c.shareOtherClientCategoryPercent}%` }}
+                        title={`Прочие ${c.shareOtherClientCategoryPercent}%`}
+                      />
                     ) : null}
                   </div>
                   <p className="mt-1 text-[11px] text-muted-foreground">
-                    TOP {c.shareTopPercent}% · A {c.shareAPercent}% · B {c.shareBPercent}% · C {c.shareCPercent}%
+                    ТОП-сегмент {c.shareTopTiersPercent}% · Потенциальный {c.sharePotentialPercent}% · Лид {c.shareLeadPercent}% · Прочие{" "}
+                    {c.shareOtherClientCategoryPercent}%
                   </p>
                 </div>
                 <div>

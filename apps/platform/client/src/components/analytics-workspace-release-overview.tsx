@@ -232,7 +232,13 @@ export function AnalyticsWorkspaceReleaseOverview() {
                 href={buildHashPath("/dealer-base", { ...dbScope, quick: "potential" })}
                 barClass="bg-sky-500/75"
               />
-              <MetricRow label="TOP" count={clientStats.top} total={clientStats.total} href={buildHashPath("/dealer-base", { ...dbScope, quick: "top" })} barClass="bg-amber-500/75" />
+              <MetricRow
+                label="ТОП-сегмент"
+                count={clientStats.top}
+                total={clientStats.total}
+                href={buildHashPath("/dealer-base", { ...dbScope, quick: "top" })}
+                barClass="bg-amber-500/75"
+              />
               <MetricRow
                 label="Требуют внимания"
                 count={clientStats.attention}

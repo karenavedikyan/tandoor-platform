@@ -3,7 +3,8 @@
  * Обезличенные агрегаты и синтетические строки поверх клиентской базы и каталога.
  */
 
-import { DEALER_BASE_ROWS, type DealerCategory, type DealerRow } from "@/lib/dealer-base-mock-data";
+import { getClientCategoryOptions, isClientTopTier, type ClientCategoryId } from "@/lib/client-category";
+import { DEALER_BASE_ROWS, type DealerRow } from "@/lib/dealer-base-mock-data";
 import { CATALOG_PRODUCTS, type CatalogProduct } from "@/lib/catalog-data";
 
 export type PartnerSegment = "top500" | "fiveHundredPlus" | "tandoorClub";
@@ -33,7 +34,7 @@ export type OperationalClientShowcaseRow = {
   dealerId: string;
   clientName: string;
   city: string;
-  clientCategory: DealerCategory;
+  clientCategory: ClientCategoryId;
   /** Клиент может одновременно входить в несколько операционных сегментов (вкладки не взаимоисключающие). */
   segments: PartnerSegment[];
   mkModels: ShowcaseModelRef[];
@@ -56,7 +57,7 @@ export type OperationalShowcaseProfitabilityRow = {
   tradePointId?: string;
   clientName: string;
   city: string;
-  clientCategory: DealerCategory;
+  clientCategory: ClientCategoryId;
   ourShowcases: number;
   competitorShowcases: number;
   totalSales: number;
@@ -73,7 +74,7 @@ export type OperationalHardwareConversionRow = {
   dealerId: string;
   clientName: string;
   city: string;
-  clientCategory: DealerCategory;
+  clientCategory: ClientCategoryId;
   mkSales: number;
   hardwareSales: number;
   conversionPercent: number;
@@ -102,7 +103,7 @@ export type OperationalGlobalFilters = {
   periodKey: "month" | "quarter" | "year";
   territoryId: string;
   cityId: string;
-  dealerCategory: DealerCategory | "all";
+  dealerCategory: ClientCategoryId | "all";
   productLine: OperationalProductLineKey;
   search: string;
 };
@@ -123,9 +124,9 @@ export const OPERATIONAL_DEFAULT_GLOBAL_FILTERS: OperationalGlobalFilters = {
  */
 function computeDealerSegments(d: DealerRow): PartnerSegment[] {
   const s = new Set<PartnerSegment>();
-  if (d.category === "TOP") s.add("top500");
+  if (isClientTopTier(d.clientCategory)) s.add("top500");
   if (d.terms.tandoorClub === "Участник") s.add("tandoorClub");
-  if (d.category !== "TOP") s.add("fiveHundredPlus");
+  if (!isClientTopTier(d.clientCategory)) s.add("fiveHundredPlus");
   return Array.from(s);
 }
 
@@ -167,7 +168,7 @@ function buildClientShowcaseRow(d: DealerRow, i: number): OperationalClientShowc
     dealerId: d.id,
     clientName: d.name,
     city: d.city,
-    clientCategory: d.category,
+    clientCategory: d.clientCategory,
     segments: computeDealerSegments(d),
     mkModels,
     vhModels,
@@ -281,7 +282,7 @@ const SHOWCASE_PROFIT_ROWS: OperationalShowcaseProfitabilityRow[] = DEALER_BASE_
       tradePointId: undefined,
       clientName: d.name,
       city: d.city,
-      clientCategory: d.category,
+      clientCategory: d.clientCategory,
       ourShowcases: d.tradePoints.length,
       competitorShowcases: 1 + (i % 5),
       totalSales,
@@ -300,7 +301,7 @@ const SHOWCASE_PROFIT_ROWS: OperationalShowcaseProfitabilityRow[] = DEALER_BASE_
       tradePointId: tp.id,
       clientName: `${d.name} · ${tp.name}`,
       city: tp.city,
-      clientCategory: d.category,
+      clientCategory: d.clientCategory,
       ourShowcases: 1,
       competitorShowcases: i % 4,
       totalSales: Math.round(totalSales * 0.35),
@@ -347,7 +348,7 @@ const HARDWARE_ROWS: OperationalHardwareConversionRow[] = DEALER_BASE_ROWS.map((
     dealerId: d.id,
     clientName: d.name,
     city: d.city,
-    clientCategory: d.category,
+    clientCategory: d.clientCategory,
     mkSales,
     hardwareSales: hw,
     conversionPercent: conv,
@@ -452,13 +453,8 @@ export function kpiEquipment(rows: OperationalEquipmentRow[]) {
   return { units, sum, clients, avgM };
 }
 
-export const DEALER_CATEGORY_FILTER_OPTIONS: { value: DealerCategory | "all"; label: string }[] = [
-  { value: "all", label: "Все категории" },
-  { value: "TOP", label: "TOP" },
-  { value: "A", label: "A" },
-  { value: "B", label: "B" },
-  { value: "C", label: "C" },
-];
+export const DEALER_CATEGORY_FILTER_OPTIONS: { value: ClientCategoryId | "all"; label: string }[] =
+  getClientCategoryOptions();
 
 export const OPERATIONAL_PRODUCT_LINE_OPTIONS: { value: OperationalProductLineKey; label: string }[] = [
   { value: "all", label: "Все" },
@@ -656,10 +652,12 @@ export type InfographicCitySegment = {
   cityId: string;
   cityName: string;
   clients: number;
-  shareTopPercent: number;
-  shareAPercent: number;
-  shareBPercent: number;
-  shareCPercent: number;
+  /** ТОП 150 / 350 / 500 / 500+ */
+  shareTopTiersPercent: number;
+  sharePotentialPercent: number;
+  shareLeadPercent: number;
+  /** Б/П, без категории и прочие бизнес-метки */
+  shareOtherClientCategoryPercent: number;
   shareTop500Percent: number;
   shareFiveHundredPlusPercent: number;
   shareClubPercent: number;
@@ -684,7 +682,15 @@ export function getInfographicCitySegments(
   const out: InfographicCitySegment[] = [];
   for (const [cityName, list] of Array.from(byCity.entries())) {
     const n = list.length;
-    const cat = (c: DealerCategory) => list.filter((r: OperationalClientShowcaseRow) => r.clientCategory === c).length;
+    let topTier = 0;
+    let pot = 0;
+    let lead = 0;
+    for (const r of list) {
+      if (isClientTopTier(r.clientCategory)) topTier += 1;
+      else if (r.clientCategory === "potential") pot += 1;
+      else if (r.clientCategory === "lead") lead += 1;
+    }
+    const other = Math.max(0, n - topTier - pot - lead);
     const seg = (s: PartnerSegment) => list.filter((r: OperationalClientShowcaseRow) => r.segments.includes(s)).length;
     const showcaseSales = list.reduce((s: number, r: OperationalClientShowcaseRow) => s + r.showcaseSales, 0);
     const avgConversion = n ? Math.round(list.reduce((s, r) => s + r.conversionPercent, 0) / n) : 0;
@@ -692,10 +698,10 @@ export function getInfographicCitySegments(
       cityId: citySlugForInfographic(cityName),
       cityName,
       clients: n,
-      shareTopPercent: pct(cat("TOP"), n),
-      shareAPercent: pct(cat("A"), n),
-      shareBPercent: pct(cat("B"), n),
-      shareCPercent: pct(cat("C"), n),
+      shareTopTiersPercent: pct(topTier, n),
+      sharePotentialPercent: pct(pot, n),
+      shareLeadPercent: pct(lead, n),
+      shareOtherClientCategoryPercent: pct(other, n),
       shareTop500Percent: pct(seg("top500"), n),
       shareFiveHundredPlusPercent: pct(seg("fiveHundredPlus"), n),
       shareClubPercent: pct(seg("tandoorClub"), n),

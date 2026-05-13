@@ -278,7 +278,7 @@ export default function TerritoryCardPage() {
                 <CardTitle className="text-lg">{c.name}</CardTitle>
                 <p className="text-xs text-muted-foreground">
                   Клиенты: <span className="font-semibold text-foreground">{c.dealersCount}</span> · активные:{" "}
-                  <span className="font-semibold text-foreground">{c.activeDealersCount}</span> · TOP:{" "}
+                  <span className="font-semibold text-foreground">{c.activeDealersCount}</span> · ТОП-сегмент:{" "}
                   <span className="font-semibold text-foreground">{c.topDealersCount}</span> · внимание:{" "}
                   <span className="font-semibold text-foreground">{c.attentionDealersCount}</span>
                 </p>

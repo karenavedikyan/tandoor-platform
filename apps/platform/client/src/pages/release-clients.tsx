@@ -10,39 +10,32 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import {
+  deriveReleaseClientCategory,
+  getClientCategoryBadgeClass,
+  getClientCategoryLabel,
+  getClientCategoryOptions,
+  type ClientCategoryId,
+} from "@/lib/client-category";
+import {
   clientStatusLabel,
   filterReleaseClientsForDemoProfile,
   getReleaseClientSummary,
-  getReleaseClientTypeLabel,
-  getReleaseClientTypeTone,
   getReleaseClients,
   searchReleaseClients,
   type ReleaseClient,
-  type ReleaseClientNormalizedType,
 } from "@/lib/release-client-data";
 import { releaseDemoRoleLabel } from "@/lib/release-demo-profile";
 import { getManagersForRopTeam, getRopOptions, isRopOrManagerAllFilter } from "@/lib/rop-manager-filters";
 import { getSalesUserById, SALES_TEAMS } from "@/lib/sales-control-data";
+import { cn } from "@/lib/utils";
 
 const ALL = "__all__";
 const MAX_ROWS = 300;
+const CATEGORY_OPTIONS = getClientCategoryOptions();
 
 function uniqSorted(vals: string[]): string[] {
   return Array.from(new Set(vals.filter(Boolean))).sort((a, b) => a.localeCompare(b, "ru"));
 }
-
-const TYPE_OPTIONS: { value: ReleaseClientNormalizedType | "all"; label: string }[] = [
-  { value: "all", label: "Все типы" },
-  { value: "active", label: "Активный" },
-  { value: "volume", label: "Объемообразующий" },
-  { value: "top150", label: "ТОП 150" },
-  { value: "top350", label: "ТОП 350" },
-  { value: "top500", label: "ТОП 500" },
-  { value: "potential", label: "Потенциальный" },
-  { value: "closed", label: "Закрытый" },
-  { value: "nonTarget", label: "Нецелевой клиент" },
-  { value: "unknown", label: "Без типа" },
-];
 
 export default function ReleaseClientsPage() {
   const { profile } = useReleaseDemoProfile();
@@ -50,7 +43,7 @@ export default function ReleaseClientsPage() {
   const [teamId, setTeamId] = useState<string>(ALL);
   const [managerId, setManagerId] = useState<string>(ALL);
   const [city, setCity] = useState<string>(ALL);
-  const [clientType, setClientType] = useState<ReleaseClientNormalizedType | "all">("all");
+  const [clientCategory, setClientCategory] = useState<ClientCategoryId | "all">("all");
   const [activeOnly, setActiveOnly] = useState(true);
   const [priorityOnly, setPriorityOnly] = useState(false);
   const [includeClosed, setIncludeClosed] = useState(false);
@@ -84,14 +77,14 @@ export default function ReleaseClientsPage() {
           teamId: teamId === ALL ? "all" : teamId,
           managerId: managerId === ALL ? "all" : managerId,
           city: city === ALL ? "all" : city,
-          clientType,
+          clientCategory,
           priorityOnly,
           activeOnly,
           includeClosed,
         },
         baseRows,
       ),
-    [baseRows, query, teamId, managerId, city, clientType, priorityOnly, activeOnly, includeClosed],
+    [baseRows, query, teamId, managerId, city, clientCategory, priorityOnly, activeOnly, includeClosed],
   );
 
   const displayRows = useMemo(() => filtered.slice(0, MAX_ROWS), [filtered]);
@@ -99,11 +92,6 @@ export default function ReleaseClientsPage() {
   const persona = getSalesUserById(profile.personaUserId);
 
   const teamLabel = (tid: string) => SALES_TEAMS.find((t) => t.id === tid)?.name ?? tid;
-
-  const badgeTone = (c: ReleaseClient) => {
-    const t = getReleaseClientTypeTone(c.normalizedClientType);
-    return t;
-  };
 
   return (
     <div className="mx-auto w-full max-w-6xl min-w-0 space-y-6 overflow-x-hidden pb-24" data-testid="page-release-clients">
@@ -193,13 +181,13 @@ export default function ReleaseClientsPage() {
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Тип клиента</Label>
-            <Select value={clientType} onValueChange={(v) => setClientType(v as ReleaseClientNormalizedType | "all")}>
-              <SelectTrigger className="h-10 min-w-0" data-testid="select-release-clients-type">
-                <SelectValue placeholder="Тип" />
+            <Label className="text-xs text-muted-foreground">Категория клиента</Label>
+            <Select value={clientCategory} onValueChange={(v) => setClientCategory(v as ClientCategoryId | "all")}>
+              <SelectTrigger className="h-10 min-w-0" data-testid="select-release-clients-category">
+                <SelectValue placeholder="Категория" />
               </SelectTrigger>
               <SelectContent>
-                {TYPE_OPTIONS.map((o) => (
+                {CATEGORY_OPTIONS.map((o) => (
                   <SelectItem key={o.value} value={o.value}>
                     {o.label}
                   </SelectItem>
@@ -293,7 +281,7 @@ export default function ReleaseClientsPage() {
                 <TableHead className="whitespace-nowrap">Город</TableHead>
                 <TableHead className="whitespace-nowrap">РОП</TableHead>
                 <TableHead>Менеджер</TableHead>
-                <TableHead className="whitespace-nowrap">Тип</TableHead>
+                <TableHead className="whitespace-nowrap">Категория клиента</TableHead>
                 <TableHead>Адрес</TableHead>
                 <TableHead className="whitespace-nowrap">Статус</TableHead>
               </TableRow>
@@ -311,8 +299,15 @@ export default function ReleaseClientsPage() {
                     {c.managerName}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={badgeTone(c)} className="whitespace-nowrap text-xs font-normal">
-                      {c.clientType?.trim() ? c.clientType : getReleaseClientTypeLabel(c.normalizedClientType)}
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "whitespace-nowrap text-xs font-normal",
+                        getClientCategoryBadgeClass(deriveReleaseClientCategory(c)),
+                      )}
+                      data-testid={`text-release-client-category-${c.id}`}
+                    >
+                      {getClientCategoryLabel(deriveReleaseClientCategory(c))}
                     </Badge>
                   </TableCell>
                   <TableCell className="max-w-[220px] truncate text-xs text-muted-foreground" title={c.address}>

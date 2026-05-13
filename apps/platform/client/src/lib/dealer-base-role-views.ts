@@ -3,6 +3,7 @@
  */
 
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
+import { isClientTopTier } from "@/lib/client-category";
 import type { SalesRole, SalesUser } from "@/lib/sales-control-data";
 import { getAllSalesManagers, getSalesUserById, getTeamManagers } from "@/lib/sales-control-data";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
@@ -181,7 +182,7 @@ export function dealerNeedsAttention(row: DealerRow): boolean {
 }
 
 export function isDealerTop(row: DealerRow): boolean {
-  return row.category === "TOP";
+  return isClientTopTier(row.clientCategory);
 }
 
 function hashId(id: string): number {

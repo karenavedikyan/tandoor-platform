@@ -64,7 +64,7 @@ function CityRows({
                 Активные: <span className="tabular-nums text-foreground">{row.active}</span> ({row.pctActive}%)
               </a>
               <span>
-                TOP: <span className="tabular-nums text-foreground">{row.top}</span>
+                ТОП-сегмент: <span className="tabular-nums text-foreground">{row.top}</span>
               </span>
               <a
                 href={attentionHref(row.city)}

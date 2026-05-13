@@ -23,11 +23,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { getClientCategoryBadgeClass, getClientCategoryLabel } from "@/lib/client-category";
 import {
   DEALER_BASE_ROWS,
   getDealerById,
   type DealerRow,
-  type DealerCategory,
   type DealerStatus,
 } from "@/lib/dealer-base-mock-data";
 import { dealerRowStatusForProduct, getDealerProductPreview } from "@/lib/catalog-data";
@@ -161,11 +161,6 @@ function statusBadgeClass(status: DealerStatus) {
   if (status === "потенциальный") return "border-sky-200 bg-sky-50 text-sky-950";
   if (status === "приостановлен") return "border-neutral-200 bg-muted text-muted-foreground";
   return "border-emerald-200 bg-emerald-50 text-emerald-950";
-}
-
-function categoryBadgeClass(cat: DealerCategory) {
-  if (cat === "TOP") return "border-primary/40 bg-primary/15 text-foreground font-semibold";
-  return "border-border bg-muted/60 text-foreground";
 }
 
 function parseDealerIndex(id: string): number {
@@ -434,7 +429,7 @@ function DealerSectionNav({
 }
 
 function DealerCardContent({ row }: { row: DealerRow }) {
-  const catLabel = row.clientTypeLabel ?? (row.category === "TOP" ? "TOP / ключевой клиент" : row.category);
+  const businessCategoryLabel = getClientCategoryLabel(row.clientCategory);
   const activeSection = useActiveSection();
   const historyEvents = useMemo(() => buildHistoryEvents(row), [row]);
   const tasks = useMemo(() => buildTasks(row), [row]);
@@ -484,8 +479,12 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                     <Badge variant="outline" className={cn("rounded-full px-2.5 py-0.5 text-xs font-medium", statusBadgeClass(row.status))}>
                       {row.status}
                     </Badge>
-                    <Badge variant="outline" className={cn("rounded-full px-2.5 py-0.5 text-xs font-medium", categoryBadgeClass(row.category))}>
-                      {row.category}
+                    <Badge
+                      variant="outline"
+                      className={cn("rounded-full px-2.5 py-0.5 text-xs font-medium", getClientCategoryBadgeClass(row.clientCategory))}
+                      data-testid="text-dealer-card-client-category"
+                    >
+                      {businessCategoryLabel}
                     </Badge>
                     <Badge variant="outline" className="rounded-full border-border bg-muted/50 px-2.5 py-0.5 font-medium text-muted-foreground">
                       Активность: {row.lastActivity}
@@ -564,8 +563,8 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                       <FieldRow label="Код (Excel)" value={row.releaseCode ?? "—"} />
                       <FieldRow label="Внутренний id" value={row.id} />
                       <FieldRow label="Название клиента" value={row.name} icon={Building2} />
-                      <FieldRow label="Тип клиента" value={catLabel} />
-                      <FieldRow label="Классификация (TOP/A/B/C)" value={row.category} />
+                      <FieldRow label="Категория клиента" value={businessCategoryLabel} />
+                      {row.clientTypeLabel ? <FieldRow label="Тип в данных (Excel)" value={row.clientTypeLabel} /> : null}
                       <FieldRow label="Статус" value={row.status.slice(0, 1).toUpperCase() + row.status.slice(1)} />
                       <FieldRow label="Холдинг / сеть" value={row.holding} />
                       <FieldRow label="Юрлицо / наименование" value={row.legalEntity} />
