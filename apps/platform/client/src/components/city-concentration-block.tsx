@@ -92,6 +92,12 @@ export function CityConcentrationBlock({
   attentionHref,
   showAllLink = true,
 }: CityConcentrationBlockProps) {
+  const empty = (
+    <div className="rounded-lg border border-dashed border-border/80 bg-muted/30 px-3 py-4 text-sm text-muted-foreground">
+      По текущим фильтрам нет городов для отображения.
+    </div>
+  );
+
   const inner = (
     <>
       {rows.length === 0 ? empty : (
