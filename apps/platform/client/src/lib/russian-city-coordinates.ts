@@ -1,4 +1,4 @@
-import { RUSSIAN_CITY_COORDINATES } from "@/lib/russian-city-coordinates.generated";
+import { RUSSIAN_CITY_CENTERS } from "@/lib/russian-city-centers.generated";
 
 /** Нормализация для поиска в справочнике (без изменения отображаемого названия). */
 export function normalizeCityLookupKey(city: string): string {
@@ -12,11 +12,14 @@ export function normalizeCityLookupKey(city: string): string {
     .trim();
 }
 
-/** Координаты центра населённого пункта из справочника Release 1 или null. */
+/**
+ * Проверенный центр города (Photon / импорт CSV), без детерминированных «фейков».
+ * Если города нет в справочнике — null (карта не рисует точку по городу).
+ */
 export function getCityLatLng(city: string): { lat: number; lng: number } | null {
   const t = city.trim();
-  if (RUSSIAN_CITY_COORDINATES[t]) return RUSSIAN_CITY_COORDINATES[t];
+  if (RUSSIAN_CITY_CENTERS[t]) return RUSSIAN_CITY_CENTERS[t];
   const n = normalizeCityLookupKey(city);
-  if (n !== t && RUSSIAN_CITY_COORDINATES[n]) return RUSSIAN_CITY_COORDINATES[n];
+  if (n !== t && RUSSIAN_CITY_CENTERS[n]) return RUSSIAN_CITY_CENTERS[n];
   return null;
 }

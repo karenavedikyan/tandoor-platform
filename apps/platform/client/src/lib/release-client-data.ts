@@ -142,3 +142,18 @@ export function clientStatusLabel(c: ReleaseClient): string {
   if (c.isPriority) return "Приоритетный";
   return "Активный";
 }
+
+/** Источник координат на карте клиентов (см. release-client-address-coordinates.generated.ts). */
+export type CoordinatesSource = "address" | "city" | "missing";
+
+/**
+ * Опциональные поля для карты: в seed не хранятся, могут появляться после слияния
+ * с `RELEASE_CLIENT_ADDRESS_COORDINATES` или будущего импорта в тип строки.
+ */
+export type ReleaseClientOptionalMapCoords = {
+  addressLat?: number;
+  addressLng?: number;
+  coordinatesSource?: CoordinatesSource;
+};
+
+export type ReleaseClientWithOptionalCoords = ReleaseClient & ReleaseClientOptionalMapCoords;

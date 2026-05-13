@@ -6,6 +6,7 @@ import { CircleMarker, MapContainer, Popup, TileLayer, useMap } from "react-leaf
 import "leaflet/dist/leaflet.css";
 import { Search } from "lucide-react";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,7 +32,9 @@ import {
   CLIENT_MAP_MAX_MARKERS,
   buildClientMapMarkers,
   computeClientMapKpis,
+  coordinateSourceLabel,
   filterClientMapRows,
+  listCoordinateSourceForDealer,
   type ClientMapMarker,
   type ClientMapQuickFilter,
 } from "@/lib/client-map-data";
@@ -162,6 +165,17 @@ function MarkerLayer({
             <div className="min-w-[200px] space-y-1 text-sm" data-testid={`popup-client-map-${m.id}`}>
               <p className="font-semibold leading-snug">{m.dealer.name}</p>
               <p className="text-muted-foreground">{m.dealer.city}</p>
+              {m.dealer.releaseAddress ? (
+                <p className="text-xs leading-snug text-muted-foreground">
+                  <span className="font-medium text-foreground">Адрес: </span>
+                  {m.dealer.releaseAddress}
+                </p>
+              ) : null}
+              <p className="text-xs font-medium text-foreground">
+                {m.coordinateSource === "address"
+                  ? "Точка по адресу"
+                  : "Точка по городу, адрес требует уточнения"}
+              </p>
               <p>
                 <span className="text-muted-foreground">РОП:</span> {m.dealer.regionalManager || "—"}
               </p>
@@ -267,12 +281,9 @@ export default function ClientMapPage() {
 
   const filtered = useMemo(() => filterClientMapRows(scopedRows, pickerArgs), [scopedRows, pickerArgs]);
 
-  const { markers, withCoords, missingCoords, truncated } = useMemo(
-    () => buildClientMapMarkers(filtered, CLIENT_MAP_MAX_MARKERS),
-    [filtered],
-  );
+  const { markers, breakdown, truncated } = useMemo(() => buildClientMapMarkers(filtered, CLIENT_MAP_MAX_MARKERS), [filtered]);
 
-  const kpis = useMemo(() => computeClientMapKpis(filtered, withCoords, missingCoords), [filtered, withCoords, missingCoords]);
+  const kpis = useMemo(() => computeClientMapKpis(filtered, breakdown), [filtered, breakdown]);
 
   const markerById = useMemo(() => new Map(markers.map((m) => [m.id, m])), [markers]);
 
@@ -347,6 +358,32 @@ export default function ClientMapPage() {
           <CardContent className="p-4 pt-0 text-2xl font-semibold tabular-nums">{kpis.attention}</CardContent>
         </Card>
       </section>
+
+      <Card className="rounded-xl border border-border/80" data-testid="card-client-map-address-coordinates">
+        <CardHeader className="p-4 pb-2">
+          <CardTitle className="text-sm font-semibold">Координаты на карте</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-x-6 gap-y-2 p-4 pt-0 text-sm text-muted-foreground">
+          <span>
+            По адресу:{" "}
+            <strong className="tabular-nums text-foreground" data-testid="text-client-map-address-count">
+              {kpis.byAddress}
+            </strong>
+          </span>
+          <span>
+            По городу:{" "}
+            <strong className="tabular-nums text-foreground" data-testid="text-client-map-city-fallback-count">
+              {kpis.byCity}
+            </strong>
+          </span>
+          <span>
+            Без координат:{" "}
+            <strong className="tabular-nums text-foreground" data-testid="text-client-map-missing-count">
+              {kpis.missingCoords}
+            </strong>
+          </span>
+        </CardContent>
+      </Card>
 
       <Card className="min-w-0 overflow-hidden rounded-xl border border-border/80">
         <CardHeader className="pb-2">
@@ -452,9 +489,13 @@ export default function ClientMapPage() {
           </div>
           {truncated ? (
             <p className="text-xs text-muted-foreground">
-              Показано на карте {CLIENT_MAP_MAX_MARKERS} из {withCoords}; уточните фильтр, чтобы увидеть остальные.
+              Показано на карте {CLIENT_MAP_MAX_MARKERS} из {breakdown.byAddress + breakdown.byCity}; уточните фильтр, чтобы
+              увидеть остальные.
             </p>
           ) : null}
+          <p className="text-xs text-muted-foreground">
+            Точные адреса: {breakdown.byAddress} · По городу: {breakdown.byCity} · Без координат: {breakdown.missing}
+          </p>
         </div>
 
         <Card className="min-w-0 shrink-0 lg:w-[320px]" data-testid="section-client-map-list">
@@ -462,7 +503,9 @@ export default function ClientMapPage() {
             <CardTitle className="text-sm">Клиенты (топ {listRows.length})</CardTitle>
           </CardHeader>
           <CardContent className="max-h-[min(360px,52vh)] min-w-0 space-y-1 overflow-y-auto lg:max-h-[520px]">
-            {listRows.map((d) => (
+            {listRows.map((d) => {
+              const coordSrc = listCoordinateSourceForDealer(d);
+              return (
               <button
                 key={d.id}
                 type="button"
@@ -472,13 +515,23 @@ export default function ClientMapPage() {
                 data-testid={`row-client-map-${d.id}`}
                 onClick={() => handleRowClick(d)}
               >
-                <span className="truncate font-medium">{d.name}</span>
+                <div className="flex min-w-0 items-center justify-between gap-2">
+                  <span className="truncate font-medium">{d.name}</span>
+                  <Badge
+                    variant="outline"
+                    className="shrink-0 px-1.5 py-0 text-[10px] font-normal"
+                    data-testid={`badge-client-map-coordinate-source-${d.id}`}
+                  >
+                    {coordinateSourceLabel(coordSrc)}
+                  </Badge>
+                </div>
                 <span className="truncate text-xs text-muted-foreground">
                   {d.city} · {d.manager}
                 </span>
                 <span className="text-xs">{d.status}</span>
               </button>
-            ))}
+              );
+            })}
           </CardContent>
         </Card>
       </div>

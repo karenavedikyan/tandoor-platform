@@ -12,5 +12,7 @@ data.db-journal
 .env.*
 !.env.example
 
-*.log
-.DS_Store
+# Photon / geocode script caches (регенерация — scripts/geocode-release-client-addresses.mjs)
+data/geocode-city-cache.json
+data/geocode-cache.json
+
