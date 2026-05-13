@@ -75,6 +75,7 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
   if (role === "team_lead") {
     return any([
       (x) => x === "/main" || isUnder(x, "/main"),
+      (x) => isUnder(x, "/analytics-workspace"),
       (x) => isUnder(x, "/dealer-base") || isUnder(x, "/dealers"),
       (x) => isUnder(x, "/tasks"),
       (x) => isUnder(x, "/catalog"),
@@ -92,6 +93,7 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
     return any([
       (x) => x === "/" || isUnder(x, "/main") || isUnder(x, "/sales-manager"),
       (x) => isUnder(x, "/territory-card"),
+      (x) => isUnder(x, "/analytics-workspace"),
       (x) => isUnder(x, "/dealer-base") || isUnder(x, "/dealers"),
       (x) => isUnder(x, "/tasks"),
       (x) => isUnder(x, "/catalog"),
@@ -153,6 +155,7 @@ export function getPilotNavItems(role: SalesRole): PilotNavItem[] {
     push({ href: "/main", label: "Главная", testId: "nav-main" });
     push({ href: "/dealer-base", label: "Клиенты команды", testId: "nav-dealer-base", badge: NAV_BADGE_CLIENTS });
     push({ href: "/tasks", label: "Задачи команды", testId: "nav-tasks" });
+    push({ href: "/analytics-workspace", label: "Аналитика команды", testId: "nav-analytics-workspace" });
     push({ href: sch, label: "План-факт продаж", testId: "nav-sales-control" });
     push({ href: "/catalog", label: "Каталог", testId: "nav-catalog" });
     push({ href: "/training", label: "Обучение", testId: "nav-training" });
@@ -165,6 +168,7 @@ export function getPilotNavItems(role: SalesRole): PilotNavItem[] {
     push({ href: "/territory-card", label: "Карточка территории", testId: "nav-territory-card" });
     push({ href: "/dealer-base", label: "Клиенты", testId: "nav-dealer-base", badge: NAV_BADGE_CLIENTS });
     push({ href: "/tasks", label: "Задачи", testId: "nav-tasks" });
+    push({ href: "/analytics-workspace", label: "Аналитика команды", testId: "nav-analytics-workspace" });
     push({ href: sch, label: "План-факт продаж", testId: "nav-sales-control" });
     push({ href: "/catalog", label: "Каталог", testId: "nav-catalog" });
     push({ href: "/training", label: "Обучение", testId: "nav-training" });

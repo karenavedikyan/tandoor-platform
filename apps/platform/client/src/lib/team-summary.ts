@@ -54,7 +54,9 @@ export function getTeamRiskManager(summary: TeamSummary): string {
   return summary.riskManagerName;
 }
 
-type MgrAgg = { id: string; name: string; total: number; active: number; attention: number };
+export type TeamManagerAggRow = { id: string; name: string; total: number; active: number; attention: number };
+
+type MgrAgg = TeamManagerAggRow;
 
 function aggregateManagers(teamId: string, rows: DealerRow[]): MgrAgg[] {
   const managers = getTeamManagers(teamId);
@@ -97,6 +99,12 @@ function pickRisk(aggs: MgrAgg[]): string {
   const top = sorted[0];
   if (!top || top.attention === 0) return "—";
   return top.name;
+}
+
+/** Агрегаты по менеджерам команды (для аналитики и сравнений). */
+export function aggregateManagersForTeam(teamId: string): TeamManagerAggRow[] {
+  const rows = rowsForTeam(teamId);
+  return aggregateManagers(teamId, rows);
 }
 
 export function buildTeamSummary(teamId: string): TeamSummary {
@@ -142,7 +150,7 @@ export function buildTeamSummary(teamId: string): TeamSummary {
 }
 
 export function buildTeamSummaries(profile: ReleaseDemoProfile): TeamSummary[] {
-  if (profile.role === "sales_director") {
+  if (profile.role === "sales_director" || profile.role === "analyst") {
     return getRopOptions().map((o) => buildTeamSummary(o.teamId));
   }
   if (profile.role === "team_lead") {
