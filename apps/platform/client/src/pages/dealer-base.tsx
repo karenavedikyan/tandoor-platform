@@ -14,7 +14,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { DEALER_BASE_ROWS, type DealerRow, type DealerCategory, type DealerStatus } from "@/lib/dealer-base-mock-data";
+import {
+  CLIENT_CATEGORY_META,
+  type ClientCategoryId,
+  clientCategoryMatchesFilter,
+  getClientCategoryBadgeClass,
+  getClientCategoryLabel,
+  isClientTopTier,
+} from "@/lib/client-category";
+import { DEALER_BASE_ROWS, type DealerRow, type DealerStatus } from "@/lib/dealer-base-mock-data";
 import {
   getManagersForRopTeam,
   getRopOptions,
@@ -105,7 +113,7 @@ const QUICK_FILTERS: { id: QuickFilter; label: string; testId: string }[] = [
   { id: "active", label: "Активные", testId: "filter-dealers-active" },
   { id: "potential", label: "Потенциальные", testId: "filter-dealers-potential" },
   { id: "attention", label: "Требуют внимания", testId: "filter-dealers-attention" },
-  { id: "top", label: "TOP", testId: "filter-dealers-top" },
+  { id: "top", label: "ТОП-сегмент", testId: "filter-dealers-top" },
   { id: "no_activity", label: "Без активности", testId: "filter-dealers-no-activity" },
 ];
 
@@ -116,11 +124,7 @@ function statusBadgeClass(status: DealerStatus) {
   return "border-emerald-200 bg-emerald-50 text-emerald-950";
 }
 
-function categoryBadgeClass(cat: DealerCategory) {
-  if (cat === "TOP") return "border-primary/40 bg-primary/15 text-foreground font-semibold";
-  return "border-border bg-muted/60 text-foreground";
-}
-
+type ClientCategoryRouteFilter = ClientCategoryId | "all" | "__top_tier__";
 function applyQuickFilter(row: DealerRow, q: QuickFilter): boolean {
   switch (q) {
     case "all":
@@ -132,7 +136,7 @@ function applyQuickFilter(row: DealerRow, q: QuickFilter): boolean {
     case "attention":
       return row.status === "требует внимания" || row.hasProblem;
     case "top":
-      return row.category === "TOP";
+      return isClientTopTier(row.clientCategory);
     case "no_activity":
       return !row.hasRecentActivity;
     default:
@@ -144,7 +148,7 @@ type PickerArgs = {
   search: string;
   quick: QuickFilter;
   city: string;
-  category: string;
+  category: ClientCategoryRouteFilter;
   ropTeam: string;
   manager: string;
   managerCatalogForRop: ReturnType<typeof getManagersForRopTeam>;
@@ -155,7 +159,7 @@ function applyPickerFilters(rows: DealerRow[], args: PickerArgs): DealerRow[] {
   return rows.filter((row) => {
     if (!applyQuickFilter(row, args.quick)) return false;
     if (args.city !== "all" && row.city !== args.city) return false;
-    if (args.category !== "all" && row.category !== args.category) return false;
+    if (!clientCategoryMatchesFilter(row.clientCategory, args.category)) return false;
     if (!isRopOrManagerAllFilter(args.ropTeam)) {
       if (row.releaseTeamId !== args.ropTeam) return false;
     }
@@ -250,8 +254,12 @@ function ClientListBlock({ rows, empty, compact }: { rows: DealerRow[]; empty: s
             <div className={cn("min-w-0 flex-1", compact ? "space-y-1" : "space-y-2")}>
               <div className="flex flex-wrap items-center gap-2">
                 <span className={cn("font-semibold text-foreground", compact && "text-sm")}>{row.name}</span>
-                <Badge variant="outline" className={cn("text-xs", categoryBadgeClass(row.category))}>
-                  {row.category}
+                <Badge
+                  variant="outline"
+                  className={cn("text-xs", getClientCategoryBadgeClass(row.clientCategory))}
+                  data-testid={`badge-dealer-client-category-${row.id}`}
+                >
+                  {getClientCategoryLabel(row.clientCategory)}
                 </Badge>
                 <Badge variant="outline" className={cn("text-xs", statusBadgeClass(row.status))}>
                   {row.status}
@@ -268,8 +276,9 @@ function ClientListBlock({ rows, empty, compact }: { rows: DealerRow[]; empty: s
               {!compact ? (
                 <>
                   <p className="text-xs text-muted-foreground">РОП: {row.regionalManager}</p>
-                  <p className="text-xs text-muted-foreground">
-                    Тип: {row.clientTypeLabel ?? row.category} · ТТ: {row.outlets}
+                  <p className="text-xs text-muted-foreground" data-testid={`text-dealer-client-category-${row.id}`}>
+                    Категория клиента: {getClientCategoryLabel(row.clientCategory)}
+                    {row.clientTypeLabel ? ` · тип в данных: ${row.clientTypeLabel}` : ""} · ТТ: {row.outlets}
                   </p>
                   {row.releaseAddress ? (
                     <p className="text-xs text-muted-foreground">Адрес: {row.releaseAddress}</p>
@@ -294,8 +303,12 @@ function ClientTableBlock({ rows }: { rows: DealerRow[] }) {
             <CardContent className="space-y-2 p-4 text-sm">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="font-semibold">{row.name}</span>
-                <Badge variant="outline" className={cn("text-xs", categoryBadgeClass(row.category))}>
-                  {row.category}
+                <Badge
+                  variant="outline"
+                  className={cn("text-xs", getClientCategoryBadgeClass(row.clientCategory))}
+                  data-testid={`badge-dealer-client-category-${row.id}`}
+                >
+                  {getClientCategoryLabel(row.clientCategory)}
                 </Badge>
               </div>
               <p className="text-muted-foreground">
@@ -314,7 +327,7 @@ function ClientTableBlock({ rows }: { rows: DealerRow[] }) {
         <table className="w-full min-w-[720px] text-left text-sm">
           <thead className="border-b border-border bg-muted/40">
             <tr>
-              {["Код", "Клиент", "Город", "РОП", "Менеджер", "Тип клиента", "Адрес", "Статус", ""].map((h) => (
+              {["Код", "Клиент", "Город", "РОП", "Менеджер", "Категория клиента", "Адрес", "Статус", ""].map((h) => (
                 <th key={h} className="whitespace-nowrap px-3 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   {h}
                 </th>
@@ -335,8 +348,12 @@ function ClientTableBlock({ rows }: { rows: DealerRow[] }) {
                 <td className="max-w-[120px] truncate px-3 py-3 text-xs" title={row.manager}>
                   {row.manager}
                 </td>
-                <td className="max-w-[140px] truncate px-3 py-3 text-xs" title={row.clientTypeLabel}>
-                  {row.clientTypeLabel ?? row.category}
+                <td
+                  className="max-w-[140px] truncate px-3 py-3 text-xs"
+                  title={getClientCategoryLabel(row.clientCategory)}
+                  data-testid={`text-dealer-client-category-${row.id}`}
+                >
+                  {getClientCategoryLabel(row.clientCategory)}
                 </td>
                 <td className="max-w-[180px] truncate px-3 py-3 text-xs text-muted-foreground" title={row.releaseAddress}>
                   {row.releaseAddress ?? "—"}
@@ -371,7 +388,7 @@ export default function DealerBase() {
   const [search, setSearch] = useState("");
   const [quick, setQuick] = useState<QuickFilter>("all");
   const [city, setCity] = useState<string>("all");
-  const [category, setCategory] = useState<string>("all");
+  const [category, setCategory] = useState<ClientCategoryRouteFilter>("all");
   const [ropTeam, setRopTeam] = useState<string>(() => {
     const p = loadReleaseDemoProfile();
     return initialRopManagerForProfile(p, mapSalesRoleToDealerBaseAccess(p.role)).ropTeam;
@@ -417,8 +434,10 @@ export default function DealerBase() {
   }, [pickerFiltered]);
 
   const categoryOptions = useMemo(() => {
-    const s = new Set(scopedRows.map((r) => r.category));
-    return Array.from(s).sort() as DealerCategory[];
+    const s = new Set<ClientCategoryId>();
+    for (const r of scopedRows) s.add(r.clientCategory);
+    const order = new Map(CLIENT_CATEGORY_META.map((m) => [m.id, m.order]));
+    return Array.from(s).sort((a, b) => (order.get(a) ?? 999) - (order.get(b) ?? 999));
   }, [scopedRows]);
 
   const cities = useMemo(() => {
@@ -443,12 +462,12 @@ export default function DealerBase() {
     let mgr = d.manager;
     let qv: QuickFilter = "all";
     let cityV = "all";
-    let catV = "all";
+    let catV: ClientCategoryRouteFilter = "all";
     let searchV = "";
     let vw: DealerBaseWorkView = defaultWorkViewForAccess(access);
 
     const scoped = roleScopedDealerRows(DEALER_BASE_ROWS, profile);
-    const catOpts = Array.from(new Set(scoped.map((r) => r.category))) as DealerCategory[];
+    const catOpts = Array.from(new Set(scoped.map((r) => r.clientCategory)));
 
     const teamRaw = (routeQs.get("team") ?? routeQs.get("rop"))?.trim() ?? "";
     const managerRaw = routeQs.get("manager")?.trim() ?? "";
@@ -491,7 +510,10 @@ export default function DealerBase() {
     if (cityRaw && cityRaw !== "all" && scoped.some((r) => r.city === cityRaw)) cityV = cityRaw;
 
     const catRaw = routeQs.get("category")?.trim();
-    if (catRaw && catRaw !== "all" && catOpts.includes(catRaw as DealerCategory)) catV = catRaw;
+    if (catRaw && catRaw !== "all") {
+      if (catRaw === "TOP" || catRaw === "top") catV = "__top_tier__";
+      else if (catOpts.includes(catRaw as ClientCategoryId)) catV = catRaw as ClientCategoryId;
+    }
 
     const searchRaw = routeQs.get("search")?.trim();
     if (searchRaw) searchV = searchRaw;
@@ -869,16 +891,16 @@ export default function DealerBase() {
               </Select>
             </div>
             <div className="min-w-0 space-y-2">
-              <Label className="text-xs font-medium text-muted-foreground">Классификация (TOP/A/B/C)</Label>
-              <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger className="min-h-11 min-w-0 rounded-xl">
+              <Label className="text-xs font-medium text-muted-foreground">Категория клиента</Label>
+              <Select value={category} onValueChange={(v) => setCategory(v as ClientCategoryRouteFilter)}>
+                <SelectTrigger className="min-h-11 min-w-0 rounded-xl" data-testid="select-dealer-base-category">
                   <SelectValue placeholder="Категория" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Все категории</SelectItem>
                   {categoryOptions.map((c) => (
                     <SelectItem key={c} value={c}>
-                      {c}
+                      {getClientCategoryLabel(c)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -1053,7 +1075,7 @@ export default function DealerBase() {
                           <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
                             <span>Всего: {st.total}</span>
                             <span>Активные: {st.active}</span>
-                            <span>TOP: {st.top}</span>
+                            <span>ТОП-сегмент: {st.top}</span>
                             <span>Внимание: {st.attention}</span>
                             <span className="col-span-2">Потенциальные: {st.potential}</span>
                           </div>
@@ -1110,7 +1132,7 @@ export default function DealerBase() {
                     <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
                       <span>Всего: {st.total}</span>
                       <span>Активные: {st.active}</span>
-                      <span>TOP: {st.top}</span>
+                      <span>ТОП-сегмент: {st.top}</span>
                       <span>Внимание: {st.attention}</span>
                       <span className="col-span-2">Потенциальные: {st.potential}</span>
                     </div>

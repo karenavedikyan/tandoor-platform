@@ -4,6 +4,7 @@
  * Важно: не вызывать getAllMatrixTasks() в цикле по городам — один проход и карты по dealerId.
  */
 
+import { isClientTopTier } from "@/lib/client-category";
 import { DEALER_BASE_ROWS, type DealerRow } from "@/lib/dealer-base-mock-data";
 import { getAllOrders, orderNeedsManagerAttention, type OrderRow } from "@/lib/order-data";
 import { getAllMatrixTasks, type MatrixTaskWithContext } from "@/lib/trade-point-task-data";
@@ -152,7 +153,7 @@ function aggregateDealersForCity(
   return {
     dealersCount: dealers.length,
     activeDealersCount: dealers.filter((d) => d.status === "активный").length,
-    topDealersCount: dealers.filter((d) => d.category === "TOP").length,
+    topDealersCount: dealers.filter((d) => isClientTopTier(d.clientCategory)).length,
     attentionDealersCount: dealers.filter((d) => d.status === "требует внимания" || d.hasProblem).length,
     tradePointsCount: dealers.reduce((s, d) => s + d.tradePoints.length, 0),
     ordersCount,
@@ -348,7 +349,7 @@ function dCityFromPoint(t: MatrixTaskWithContext): string {
 
 export function getTerritoryFocusItems(): TerritoryFocusItem[] {
   const dealers = [...DEALER_BASE_ROWS].sort((a, b) => {
-    const score = (x: DealerRow) => (x.hasProblem ? 4 : 0) + (x.status === "требует внимания" ? 3 : 0) + (x.category === "TOP" ? 2 : 0);
+    const score = (x: DealerRow) => (x.hasProblem ? 4 : 0) + (x.status === "требует внимания" ? 3 : 0) + (isClientTopTier(x.clientCategory) ? 2 : 0);
     return score(b) - score(a);
   });
   return dealers.slice(0, 8).map((d) => ({

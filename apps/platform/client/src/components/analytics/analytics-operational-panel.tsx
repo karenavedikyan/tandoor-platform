@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { getClientCategoryLabel } from "@/lib/client-category";
 import { cn } from "@/lib/utils";
 import {
   type OperationalAnalyticsTab,
@@ -145,7 +146,7 @@ function PartnerTableDesktop({ rows }: { rows: OperationalClientShowcaseRow[] })
                     <td className="px-3 py-2.5 text-xs text-muted-foreground">{row.city}</td>
                     <td className="px-3 py-2.5">
                       <Badge variant="outline" className="text-[11px] font-medium">
-                        {row.clientCategory}
+                        {getClientCategoryLabel(row.clientCategory)}
                       </Badge>
                     </td>
                     <td className="px-3 py-2.5">
@@ -206,7 +207,7 @@ function PartnerCardsMobile({ rows }: { rows: OperationalClientShowcaseRow[] }) 
               <CardTitle className="text-base font-semibold leading-snug text-foreground">{row.clientName}</CardTitle>
               <div className="flex flex-wrap gap-1.5">
                 <Badge variant="outline" className="text-[11px]">
-                  {row.clientCategory}
+                  {getClientCategoryLabel(row.clientCategory)}
                 </Badge>
                 <Badge variant="outline" className="text-[11px] text-muted-foreground">
                   {row.city}
@@ -673,7 +674,7 @@ function ProfitabilityTables({ rows }: { rows: OperationalShowcaseProfitabilityR
                       <td className="px-3 py-2.5 text-xs text-muted-foreground">{row.city}</td>
                       <td className="px-3 py-2.5">
                         <Badge variant="outline" className="text-[11px]">
-                          {row.clientCategory}
+                          {getClientCategoryLabel(row.clientCategory)}
                         </Badge>
                       </td>
                       <td className="px-3 py-2.5">
@@ -735,7 +736,7 @@ function ProfitabilityTables({ rows }: { rows: OperationalShowcaseProfitabilityR
                 <CardTitle className="text-base font-semibold leading-snug">{row.clientName}</CardTitle>
                 <div className="flex flex-wrap gap-1.5">
                   <Badge variant="outline" className="text-[11px]">
-                    {row.clientCategory}
+                    {getClientCategoryLabel(row.clientCategory)}
                   </Badge>
                   <Badge variant="outline" className="text-[11px] text-muted-foreground">
                     {row.city}
@@ -816,7 +817,7 @@ function HardwareTables({ rows }: { rows: OperationalHardwareConversionRow[] }) 
                     <td className="px-3 py-2.5 text-xs text-muted-foreground">{row.city}</td>
                     <td className="px-3 py-2.5">
                       <Badge variant="outline" className="text-[11px]">
-                        {row.clientCategory}
+                        {getClientCategoryLabel(row.clientCategory)}
                       </Badge>
                     </td>
                     <td className="px-3 py-2.5 text-xs tabular-nums">
@@ -874,7 +875,7 @@ function HardwareTables({ rows }: { rows: OperationalHardwareConversionRow[] }) 
               <CardTitle className="text-base font-semibold">{row.clientName}</CardTitle>
               <div className="flex flex-wrap gap-1.5">
                 <Badge variant="outline" className="text-[11px]">
-                  {row.clientCategory}
+                  {getClientCategoryLabel(row.clientCategory)}
                 </Badge>
                 <Badge variant="outline" className="text-[11px] text-muted-foreground">
                   {row.city}

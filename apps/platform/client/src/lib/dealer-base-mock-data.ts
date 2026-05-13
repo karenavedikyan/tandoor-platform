@@ -1,6 +1,22 @@
+import {
+  deriveReleaseClientCategory,
+  isClientTopTier,
+  type ClientCategoryId,
+} from "@/lib/client-category";
 import { getReleaseClients, getReleaseClientTypeLabel, type ReleaseClient } from "@/lib/release-client-data";
 
-export type DealerCategory = "TOP" | "A" | "B" | "C";
+/** @deprecated Используйте ClientCategoryId из client-category.ts */
+export type DealerCategory = ClientCategoryId;
+
+/** Внутренний уровень для моков (обучение / приоритет), не путать с бизнес-категорией клиента. */
+export type DealerImportanceTier = "vip" | "standard" | "growth" | "baseline";
+
+function deriveImportanceTier(cat: ClientCategoryId): DealerImportanceTier {
+  if (isClientTopTier(cat)) return "vip";
+  if (cat === "potential" || cat === "lead") return "growth";
+  if (cat === "no_sales") return "baseline";
+  return "standard";
+}
 export type DealerStatus = "активный" | "потенциальный" | "приостановлен" | "требует внимания";
 export type DealerFormat = "сетевой" | "одиночный";
 
@@ -130,7 +146,10 @@ export type DealerRow = {
   name: string;
   city: string;
   region: string;
-  category: DealerCategory;
+  /** Бизнес-категория клиента (ТОП 150 … Б/П). */
+  clientCategory: ClientCategoryId;
+  /** Внутренний уровень значимости (не отображать как категорию клиента). */
+  importanceTier: DealerImportanceTier;
   status: DealerStatus;
   format: DealerFormat;
   outlets: number;
@@ -165,13 +184,6 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function mapReleaseCategory(nt: ReleaseClient["normalizedClientType"]): DealerCategory {
-  if (nt === "top150" || nt === "top350" || nt === "top500" || nt === "volume") return "TOP";
-  if (nt === "active") return "A";
-  if (nt === "potential") return "B";
-  return "C";
-}
-
 function mapReleaseStatus(c: ReleaseClient): DealerStatus {
   if (c.isClosed || c.normalizedClientType === "closed") return "приостановлен";
   if (c.normalizedClientType === "potential") return "потенциальный";
@@ -185,7 +197,11 @@ function mapReleaseClientToDealerRow(c: ReleaseClient): DealerRow {
   const city = c.city?.trim() || "—";
   const addr = c.address?.trim() || "";
   const typeLabel = c.clientType?.trim() ? c.clientType : getReleaseClientTypeLabel(c.normalizedClientType);
-  const category = mapReleaseCategory(c.normalizedClientType);
+  const clientCategory = deriveReleaseClientCategory({
+    clientType: c.clientType,
+    normalizedClientType: c.normalizedClientType,
+  });
+  const importanceTier = deriveImportanceTier(clientCategory);
   const status = mapReleaseStatus(c);
   const mkPct = 55;
   const vhPct = 52;
@@ -213,7 +229,7 @@ function mapReleaseClientToDealerRow(c: ReleaseClient): DealerRow {
       activityHistory: [],
       photos: { attached: false },
       productTrainingCompleted: false,
-      productTrainingStatus: category === "TOP" || category === "A" ? "recommended" : "not_required",
+      productTrainingStatus: isClientTopTier(clientCategory) || clientCategory === "lead" ? "recommended" : "not_required",
     },
   ];
   const hasProblem = c.normalizedClientType === "nonTarget" || c.isClosed;
@@ -225,7 +241,8 @@ function mapReleaseClientToDealerRow(c: ReleaseClient): DealerRow {
     name: c.name?.trim() || "Клиент без названия",
     city,
     region: rop,
-    category,
+    clientCategory,
+    importanceTier,
     status,
     format: "одиночный",
     outlets: 1,
@@ -296,9 +313,9 @@ function mapReleaseClientToDealerRow(c: ReleaseClient): DealerRow {
       state: "—",
     },
     productTrainingCompleted: false,
-    productTrainingStatus: category === "TOP" || category === "A" ? "recommended" : "not_required",
-    indigoTrainingCandidate: category === "TOP",
-    indigoTrainingStatus: category === "TOP" ? "recommended" : "not_required",
+    productTrainingStatus: isClientTopTier(clientCategory) || clientCategory === "lead" ? "recommended" : "not_required",
+    indigoTrainingCandidate: isClientTopTier(clientCategory),
+    indigoTrainingStatus: isClientTopTier(clientCategory) ? "recommended" : "not_required",
   };
 }
 

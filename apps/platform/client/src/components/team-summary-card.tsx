@@ -74,7 +74,7 @@ export function TeamSummaryCard({
           <span data-testid={`text-team-summary-managers-${tid}`}>Менеджеров: {summary.managerCount}</span>
           <span data-testid={`text-team-summary-clients-${tid}`}>Клиентов: {summary.totalClients}</span>
           <span data-testid={`text-team-summary-active-${tid}`}>Активные: {summary.activeClients}</span>
-          <span data-testid={`text-team-summary-top-${tid}`}>TOP: {summary.topClients}</span>
+          <span data-testid={`text-team-summary-top-${tid}`}>ТОП-сегмент: {summary.topClients}</span>
           <span data-testid={`text-team-summary-attention-${tid}`}>Внимание: {summary.attentionClients}</span>
           <span>Потенциальные: {summary.potentialClients}</span>
         </div>
@@ -107,7 +107,7 @@ export function TeamSummaryCard({
               className={drillLinkClass}
               data-testid={`link-team-summary-top-${tid}`}
             >
-              TOP
+              ТОП-сегмент
             </a>
             <a
               href={buildHashPath("/dealer-base", { team: tid, quick: "potential", view: "table_team" })}

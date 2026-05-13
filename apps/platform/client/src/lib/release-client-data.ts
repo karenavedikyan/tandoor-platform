@@ -1,4 +1,5 @@
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
+import { deriveReleaseClientCategory, getClientCategoryLabel, type ClientCategoryId } from "@/lib/client-category";
 import { getSalesUserById } from "@/lib/sales-control-data";
 import {
   RELEASE_CLIENT_ROWS,
@@ -14,7 +15,10 @@ export type ReleaseClientSearchFilters = {
   teamId?: string;
   managerId?: string;
   city?: string;
+  /** @deprecated предпочтительно clientCategory */
   clientType?: ReleaseClientNormalizedType | "all";
+  /** Фильтр по бизнес-категории клиента */
+  clientCategory?: ClientCategoryId | "all";
   priorityOnly?: boolean;
   activeOnly?: boolean;
   includeClosed?: boolean;
@@ -53,7 +57,8 @@ function normQ(s: string): string {
 
 function matchesQuery(c: ReleaseClient, q: string): boolean {
   if (!q) return true;
-  return c.searchText.includes(q);
+  const catLabel = getClientCategoryLabel(deriveReleaseClientCategory(c)).toLowerCase();
+  return c.searchText.includes(q) || catLabel.includes(q);
 }
 
 export function searchReleaseClients(filters: ReleaseClientSearchFilters, source?: ReleaseClient[]): ReleaseClient[] {
@@ -63,6 +68,7 @@ export function searchReleaseClients(filters: ReleaseClientSearchFilters, source
   const managerId = filters.managerId && filters.managerId !== "all" ? filters.managerId : undefined;
   const city = filters.city && filters.city !== "all" ? filters.city : undefined;
   const clientType = filters.clientType && filters.clientType !== "all" ? filters.clientType : undefined;
+  const clientCategory = filters.clientCategory && filters.clientCategory !== "all" ? filters.clientCategory : undefined;
   const priorityOnly = filters.priorityOnly === true;
   const activeOnly = filters.activeOnly === true;
   const includeClosed = filters.includeClosed === true;
@@ -72,7 +78,8 @@ export function searchReleaseClients(filters: ReleaseClientSearchFilters, source
     if (teamId && c.teamId !== teamId) return false;
     if (managerId && c.managerId !== managerId) return false;
     if (city && c.city !== city) return false;
-    if (clientType && c.normalizedClientType !== clientType) return false;
+    if (clientCategory && deriveReleaseClientCategory(c) !== clientCategory) return false;
+    if (!clientCategory && clientType && c.normalizedClientType !== clientType) return false;
     if (priorityOnly && !c.isPriority) return false;
     if (activeOnly && !c.isActive) return false;
     if (!includeClosed && c.isClosed) return false;
@@ -119,6 +126,14 @@ export function getReleaseClientTypeTone(type: ReleaseClientNormalizedType): Rel
   if (type === "active") return "secondary";
   if (type === "potential") return "outline";
   return "outline";
+}
+
+export function getReleaseClientBusinessCategory(c: ReleaseClient): ClientCategoryId {
+  return deriveReleaseClientCategory(c);
+}
+
+export function getReleaseClientBusinessCategoryLabel(c: ReleaseClient): string {
+  return getClientCategoryLabel(deriveReleaseClientCategory(c));
 }
 
 /** Ограничение видимости по демо-роли (без backend). */

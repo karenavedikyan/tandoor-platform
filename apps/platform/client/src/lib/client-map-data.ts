@@ -1,4 +1,5 @@
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
+import { isClientTopTier } from "@/lib/client-category";
 import { dealerNeedsAttention, isDealerTop } from "@/lib/dealer-base-role-views";
 import type { getManagersForRopTeam } from "@/lib/rop-manager-filters";
 import { isRopOrManagerAllFilter, managerDisplayMatchesCatalogName } from "@/lib/rop-manager-filters";
@@ -33,7 +34,7 @@ function applyQuickFilter(row: DealerRow, q: ClientMapQuickFilter): boolean {
     case "attention":
       return row.status === "требует внимания" || row.hasProblem;
     case "top":
-      return row.category === "TOP";
+      return isClientTopTier(row.clientCategory);
     case "no_activity":
       return !row.hasRecentActivity;
     default:

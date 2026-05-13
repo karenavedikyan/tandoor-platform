@@ -42,6 +42,7 @@ import { buildHashPath, useRouteSearchParams } from "@/lib/hash-route-utils";
 import { getManagersForRopTeam, getRopOptions, isRopOrManagerAllFilter } from "@/lib/rop-manager-filters";
 import { getEffectiveTeamLeadTeamId, loadReleaseDemoProfile, type ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { getAllSalesManagers, getSalesUserById, type SalesRole } from "@/lib/sales-control-data";
+import { getClientCategoryBadgeClass, getClientCategoryLabel } from "@/lib/client-category";
 import { cn } from "@/lib/utils";
 
 const QUICK_FROM_URL: Record<string, ClientMapQuickFilter> = {
@@ -58,7 +59,7 @@ const QUICK_OPTIONS: { id: ClientMapQuickFilter; label: string }[] = [
   { id: "all", label: "Все" },
   { id: "active", label: "Активные" },
   { id: "attention", label: "Внимание" },
-  { id: "top", label: "TOP" },
+  { id: "top", label: "ТОП-сегмент" },
   { id: "potential", label: "Потенциальные" },
   { id: "no_activity", label: "Без активности" },
 ];
@@ -181,6 +182,16 @@ function MarkerLayer({
               </p>
               <p>
                 <span className="text-muted-foreground">Менеджер:</span> {m.dealer.manager}
+              </p>
+              <p>
+                <span className="text-muted-foreground">Категория:</span>{" "}
+                <Badge
+                  variant="outline"
+                  className={cn("ml-1 align-middle text-[10px]", getClientCategoryBadgeClass(m.dealer.clientCategory))}
+                  data-testid={`badge-client-map-category-${m.dealer.id}`}
+                >
+                  {getClientCategoryLabel(m.dealer.clientCategory)}
+                </Badge>
               </p>
               <p>
                 <span className="text-muted-foreground">Статус:</span> {m.dealer.status}
@@ -517,13 +528,22 @@ export default function ClientMapPage() {
               >
                 <div className="flex min-w-0 items-center justify-between gap-2">
                   <span className="truncate font-medium">{d.name}</span>
-                  <Badge
-                    variant="outline"
-                    className="shrink-0 px-1.5 py-0 text-[10px] font-normal"
-                    data-testid={`badge-client-map-coordinate-source-${d.id}`}
-                  >
-                    {coordinateSourceLabel(coordSrc)}
-                  </Badge>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Badge
+                      variant="outline"
+                      className={cn("px-1.5 py-0 text-[10px] font-normal", getClientCategoryBadgeClass(d.clientCategory))}
+                      data-testid={`badge-client-map-category-${d.id}`}
+                    >
+                      {getClientCategoryLabel(d.clientCategory)}
+                    </Badge>
+                    <Badge
+                      variant="outline"
+                      className="shrink-0 px-1.5 py-0 text-[10px] font-normal"
+                      data-testid={`badge-client-map-coordinate-source-${d.id}`}
+                    >
+                      {coordinateSourceLabel(coordSrc)}
+                    </Badge>
+                  </div>
                 </div>
                 <span className="truncate text-xs text-muted-foreground">
                   {d.city} · {d.manager}
