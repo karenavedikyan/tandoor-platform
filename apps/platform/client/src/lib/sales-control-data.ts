@@ -76,6 +76,7 @@ export type SalesPlanLine = {
 };
 
 const STORAGE_KEY = "tandoor-sales-control-overrides-v1";
+export const SALES_CONTROL_SCHEMA_VERSION = 2 as const;
 
 export function salesControlMetricCellKey(periodId: string, managerId: string, metricId: string): string {
   return `${periodId}|${managerId}|${metricId}`;
@@ -83,6 +84,10 @@ export function salesControlMetricCellKey(periodId: string, managerId: string, m
 
 export function salesControlManagerPeriodKey(periodId: string, managerId: string): string {
   return `${periodId}|${managerId}`;
+}
+
+export function salesControlTeamPeriodKey(periodId: string, teamId: string): string {
+  return `${periodId}|${teamId}`;
 }
 
 /** Справочник KPI — для добавления позиций достаточно дописать элемент сюда. */
@@ -275,39 +280,107 @@ function seedComment(periodId: string, managerId: string): string {
   return variants[seededNumber(`${periodId}|${managerId}|c`, 0, variants.length - 1)];
 }
 
+export type ManagerPlanPublishStatus = "draft" | "published" | "changed_after_publish";
+
+/** План-факт в sessionStorage: черновик РОПа и опубликованная копия для ЛК менеджера. */
 export type SalesControlStoredState = {
-  targets: Record<string, number>;
+  schemaVersion: number;
+  /** Черновик целей по KPI (ключ — salesControlMetricCellKey). */
+  draftTargets: Record<string, number>;
+  draftGrossProfitTargets: Record<string, number>;
+  draftComments: Record<string, string>;
+  /** Опубликованные цели (копия на момент «Выгрузить менеджерам»). */
+  publishedTargets: Record<string, number>;
+  publishedGrossProfitTargets: Record<string, number>;
+  publishedComments: Record<string, string>;
+  /** ISO время последней выгрузки плана менеджеру (ключ — salesControlManagerPeriodKey). */
+  publishedAt: Record<string, string>;
+  /** Общий комментарий РОПа по команде за период (черновик). */
+  draftTeamComments: Record<string, string>;
+  publishedTeamComments: Record<string, string>;
+  publishedTeamAt: Record<string, string>;
   actuals: Record<string, number>;
-  grossProfitTargets: Record<string, number>;
   grossProfitActuals: Record<string, number>;
-  comments: Record<string, string>;
   /** ISO время последнего сохранения по менеджеру и периоду */
   managerPeriodUpdatedAt: Record<string, string>;
 };
 
 const EMPTY_STORED: SalesControlStoredState = {
-  targets: {},
+  schemaVersion: SALES_CONTROL_SCHEMA_VERSION,
+  draftTargets: {},
+  draftGrossProfitTargets: {},
+  draftComments: {},
+  publishedTargets: {},
+  publishedGrossProfitTargets: {},
+  publishedComments: {},
+  publishedAt: {},
+  draftTeamComments: {},
+  publishedTeamComments: {},
+  publishedTeamAt: {},
   actuals: {},
-  grossProfitTargets: {},
   grossProfitActuals: {},
-  comments: {},
   managerPeriodUpdatedAt: {},
 };
+
+type LegacyStoredV1 = {
+  targets?: Record<string, number>;
+  grossProfitTargets?: Record<string, number>;
+  comments?: Record<string, string>;
+  actuals?: Record<string, number>;
+  grossProfitActuals?: Record<string, number>;
+  managerPeriodUpdatedAt?: Record<string, string>;
+};
+
+function migrateSalesControlStoredState(raw: unknown): SalesControlStoredState {
+  if (!raw || typeof raw !== "object") return { ...EMPTY_STORED };
+  const p = raw as Partial<SalesControlStoredState> & LegacyStoredV1;
+  const schemaVersion = typeof p.schemaVersion === "number" ? p.schemaVersion : 1;
+  if (schemaVersion >= SALES_CONTROL_SCHEMA_VERSION && p.draftTargets && typeof p.draftTargets === "object" && p.publishedTargets && typeof p.publishedTargets === "object") {
+    return {
+      schemaVersion: SALES_CONTROL_SCHEMA_VERSION,
+      draftTargets: { ...p.draftTargets },
+      draftGrossProfitTargets: { ...(p.draftGrossProfitTargets ?? {}) },
+      draftComments: { ...(p.draftComments ?? {}) },
+      publishedTargets: { ...p.publishedTargets },
+      publishedGrossProfitTargets: { ...(p.publishedGrossProfitTargets ?? {}) },
+      publishedComments: { ...(p.publishedComments ?? {}) },
+      publishedAt: { ...(p.publishedAt ?? {}) },
+      draftTeamComments: { ...(p.draftTeamComments ?? {}) },
+      publishedTeamComments: { ...(p.publishedTeamComments ?? {}) },
+      publishedTeamAt: { ...(p.publishedTeamAt ?? {}) },
+      actuals: { ...(p.actuals ?? {}) },
+      grossProfitActuals: { ...(p.grossProfitActuals ?? {}) },
+      managerPeriodUpdatedAt: { ...(p.managerPeriodUpdatedAt ?? {}) },
+    };
+  }
+  const draftTargets = { ...(p.draftTargets ?? p.targets ?? {}) };
+  const draftGrossProfitTargets = { ...(p.draftGrossProfitTargets ?? p.grossProfitTargets ?? {}) };
+  const draftComments = { ...(p.draftComments ?? p.comments ?? {}) };
+  return {
+    schemaVersion: SALES_CONTROL_SCHEMA_VERSION,
+    draftTargets,
+    draftGrossProfitTargets,
+    draftComments,
+    publishedTargets: { ...(p.publishedTargets ?? {}) },
+    publishedGrossProfitTargets: { ...(p.publishedGrossProfitTargets ?? {}) },
+    publishedComments: { ...(p.publishedComments ?? {}) },
+    publishedAt: { ...(p.publishedAt ?? {}) },
+    draftTeamComments: { ...(p.draftTeamComments ?? {}) },
+    publishedTeamComments: { ...(p.publishedTeamComments ?? {}) },
+    publishedTeamAt: { ...(p.publishedTeamAt ?? {}) },
+    actuals: { ...(p.actuals ?? {}) },
+    grossProfitActuals: { ...(p.grossProfitActuals ?? {}) },
+    managerPeriodUpdatedAt: { ...(p.managerPeriodUpdatedAt ?? {}) },
+  };
+}
 
 export function loadSalesControlStoredState(): SalesControlStoredState {
   if (typeof window === "undefined" || !window.sessionStorage) return { ...EMPTY_STORED };
   try {
     const raw = window.sessionStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...EMPTY_STORED };
-    const parsed = JSON.parse(raw) as Partial<SalesControlStoredState>;
-    return {
-      targets: parsed.targets ?? {},
-      actuals: parsed.actuals ?? {},
-      grossProfitTargets: parsed.grossProfitTargets ?? {},
-      grossProfitActuals: parsed.grossProfitActuals ?? {},
-      comments: parsed.comments ?? {},
-      managerPeriodUpdatedAt: parsed.managerPeriodUpdatedAt ?? {},
-    };
+    const parsed = JSON.parse(raw) as unknown;
+    return migrateSalesControlStoredState(parsed);
   } catch {
     return { ...EMPTY_STORED };
   }
@@ -347,7 +420,7 @@ export function getTargetValue(
   stored: SalesControlStoredState,
 ): number {
   const key = salesControlMetricCellKey(periodId, managerId, metricId);
-  return mergeStoredNumber(stored.targets, key, getSeedTarget(periodId, managerId, metricId));
+  return mergeStoredNumber(stored.draftTargets, key, getSeedTarget(periodId, managerId, metricId));
 }
 
 export function getActualValue(
@@ -362,7 +435,7 @@ export function getActualValue(
 
 export function getGrossProfitTarget(periodId: string, managerId: string, stored: SalesControlStoredState): number {
   const key = salesControlManagerPeriodKey(periodId, managerId);
-  return mergeStoredNumber(stored.grossProfitTargets, key, seedGrossProfitTarget(periodId, managerId));
+  return mergeStoredNumber(stored.draftGrossProfitTargets, key, seedGrossProfitTarget(periodId, managerId));
 }
 
 export function getGrossProfitActual(periodId: string, managerId: string, stored: SalesControlStoredState): number {
@@ -372,13 +445,177 @@ export function getGrossProfitActual(periodId: string, managerId: string, stored
 
 export function getPlanComment(periodId: string, managerId: string, stored: SalesControlStoredState): string {
   const key = salesControlManagerPeriodKey(periodId, managerId);
-  return mergeStoredString(stored.comments, key, seedComment(periodId, managerId));
+  return mergeStoredString(stored.draftComments, key, seedComment(periodId, managerId));
 }
 
 export function getPlanUpdatedAt(periodId: string, managerId: string, stored: SalesControlStoredState): string {
   const key = salesControlManagerPeriodKey(periodId, managerId);
   if (stored.managerPeriodUpdatedAt[key]) return stored.managerPeriodUpdatedAt[key];
   return "2026-05-01T08:00:00.000Z";
+}
+
+export function hasPublishedManagerPlan(periodId: string, managerId: string, stored: SalesControlStoredState): boolean {
+  const mp = salesControlManagerPeriodKey(periodId, managerId);
+  return Boolean(stored.publishedAt[mp]);
+}
+
+export function getPublishedPlanMetric(
+  periodId: string,
+  managerId: string,
+  metricId: string,
+  stored: SalesControlStoredState,
+): number | undefined {
+  if (!hasPublishedManagerPlan(periodId, managerId, stored)) return undefined;
+  const key = salesControlMetricCellKey(periodId, managerId, metricId);
+  const v = stored.publishedTargets[key];
+  return v !== undefined && !Number.isNaN(v) ? v : undefined;
+}
+
+export function getPublishedGrossProfitTarget(
+  periodId: string,
+  managerId: string,
+  stored: SalesControlStoredState,
+): number | undefined {
+  if (!hasPublishedManagerPlan(periodId, managerId, stored)) return undefined;
+  const mp = salesControlManagerPeriodKey(periodId, managerId);
+  const v = stored.publishedGrossProfitTargets[mp];
+  return v !== undefined && !Number.isNaN(v) ? v : undefined;
+}
+
+export function getPublishedPlanComment(periodId: string, managerId: string, stored: SalesControlStoredState): string | undefined {
+  if (!hasPublishedManagerPlan(periodId, managerId, stored)) return undefined;
+  const mp = salesControlManagerPeriodKey(periodId, managerId);
+  return stored.publishedComments[mp] ?? "";
+}
+
+export function getPublishedAtIso(periodId: string, managerId: string, stored: SalesControlStoredState): string | undefined {
+  const mp = salesControlManagerPeriodKey(periodId, managerId);
+  return stored.publishedAt[mp];
+}
+
+export function getDraftTeamPeriodComment(periodId: string, teamId: string, stored: SalesControlStoredState): string {
+  const tk = salesControlTeamPeriodKey(periodId, teamId);
+  return mergeStoredString(stored.draftTeamComments, tk, "");
+}
+
+export function getPublishedTeamPeriodComment(periodId: string, teamId: string, stored: SalesControlStoredState): string | undefined {
+  const tk = salesControlTeamPeriodKey(periodId, teamId);
+  if (!stored.publishedTeamAt[tk]) return undefined;
+  return stored.publishedTeamComments[tk] ?? "";
+}
+
+function numEq(a: number, b: number): boolean {
+  return Math.abs(a - b) < 0.0001;
+}
+
+export function managerDraftMatchesPublished(periodId: string, managerId: string, stored: SalesControlStoredState): boolean {
+  const mp = salesControlManagerPeriodKey(periodId, managerId);
+  if (!stored.publishedAt[mp]) return false;
+  for (const met of SALES_KPI_METRICS_SORTED) {
+    const key = salesControlMetricCellKey(periodId, managerId, met.id);
+    const pub = stored.publishedTargets[key];
+    const draft = getTargetValue(periodId, managerId, met.id, stored);
+    if (pub === undefined || !numEq(pub, draft)) return false;
+  }
+  const pg = stored.publishedGrossProfitTargets[mp];
+  const dg = getGrossProfitTarget(periodId, managerId, stored);
+  if (pg === undefined || !numEq(pg, dg)) return false;
+  const dc = getPlanComment(periodId, managerId, stored);
+  const pc = stored.publishedComments[mp] ?? "";
+  return dc === pc;
+}
+
+export function getManagerPlanPublishStatus(
+  periodId: string,
+  managerId: string,
+  stored: SalesControlStoredState,
+): ManagerPlanPublishStatus {
+  if (!hasPublishedManagerPlan(periodId, managerId, stored)) return "draft";
+  if (!managerDraftMatchesPublished(periodId, managerId, stored)) return "changed_after_publish";
+  return "published";
+}
+
+export function publishTeamPlansForTeam(prev: SalesControlStoredState, periodId: string, teamId: string): SalesControlStoredState {
+  const managers = getTeamManagers(teamId);
+  const now = new Date().toISOString();
+  const next: SalesControlStoredState = {
+    ...prev,
+    publishedTargets: { ...prev.publishedTargets },
+    publishedGrossProfitTargets: { ...prev.publishedGrossProfitTargets },
+    publishedComments: { ...prev.publishedComments },
+    publishedAt: { ...prev.publishedAt },
+    publishedTeamComments: { ...prev.publishedTeamComments },
+    publishedTeamAt: { ...prev.publishedTeamAt },
+  };
+  for (const m of managers) {
+    const mp = salesControlManagerPeriodKey(periodId, m.id);
+    for (const met of SALES_KPI_METRICS_SORTED) {
+      const key = salesControlMetricCellKey(periodId, m.id, met.id);
+      next.publishedTargets[key] = getTargetValue(periodId, m.id, met.id, prev);
+    }
+    next.publishedGrossProfitTargets[mp] = getGrossProfitTarget(periodId, m.id, prev);
+    next.publishedComments[mp] = getPlanComment(periodId, m.id, prev);
+    next.publishedAt[mp] = now;
+  }
+  const tk = salesControlTeamPeriodKey(periodId, teamId);
+  next.publishedTeamComments[tk] = getDraftTeamPeriodComment(periodId, teamId, prev);
+  next.publishedTeamAt[tk] = now;
+  return next;
+}
+
+export function completionPercentUncapped(target: number, actual: number): number {
+  if (target <= 0) return 0;
+  return Math.round((actual / target) * 1000) / 10;
+}
+
+export function managerKpiProgressTone(pct: number): "green" | "yellow" | "red" {
+  if (pct >= 100) return "green";
+  if (pct >= 70) return "yellow";
+  return "red";
+}
+
+export type TeamPublicationMetrics = {
+  teamId: string;
+  teamName: string;
+  managerCount: number;
+  published: number;
+  draftOnly: number;
+  changedAfterPublish: number;
+};
+
+export function teamPublicationMetrics(teamId: string, periodId: string, stored: SalesControlStoredState): TeamPublicationMetrics {
+  const mgrs = getTeamManagers(teamId);
+  let published = 0;
+  let draftOnly = 0;
+  let changedAfterPublish = 0;
+  for (const m of mgrs) {
+    const s = getManagerPlanPublishStatus(periodId, m.id, stored);
+    if (s === "published") published += 1;
+    else if (s === "draft") draftOnly += 1;
+    else changedAfterPublish += 1;
+  }
+  const team = getTeamById(teamId);
+  return {
+    teamId,
+    teamName: team?.name ?? teamId,
+    managerCount: mgrs.length,
+    published,
+    draftOnly,
+    changedAfterPublish,
+  };
+}
+
+export function applyTeamLeadTeamCommentDraft(
+  prev: SalesControlStoredState,
+  periodId: string,
+  teamId: string,
+  text: string,
+): SalesControlStoredState {
+  const tk = salesControlTeamPeriodKey(periodId, teamId);
+  return {
+    ...prev,
+    draftTeamComments: { ...prev.draftTeamComments, [tk]: text },
+  };
 }
 
 export function buildPlanLine(
@@ -510,26 +747,54 @@ export type SalesManagerPeriodRollup = {
   updatedAt: string;
 };
 
-export function rollupManager(managerId: string, periodId: string, stored: SalesControlStoredState): SalesManagerPeriodRollup | undefined {
+export function rollupManager(
+  managerId: string,
+  periodId: string,
+  stored: SalesControlStoredState,
+  planSource: "draft" | "published" = "draft",
+): SalesManagerPeriodRollup | undefined {
   const u = getSalesUserById(managerId);
   if (!u || u.role !== "sales_manager" || !u.teamId) return undefined;
+  if (planSource === "published" && !hasPublishedManagerPlan(periodId, managerId, stored)) return undefined;
   const team = getTeamById(u.teamId);
   const metrics = SALES_KPI_METRICS_SORTED.map((metric) => {
-    const target = getTargetValue(periodId, managerId, metric.id, stored);
+    let target: number;
+    if (planSource === "published") {
+      const pv = getPublishedPlanMetric(periodId, managerId, metric.id, stored);
+      target = pv !== undefined ? pv : 0;
+    } else {
+      target = getTargetValue(periodId, managerId, metric.id, stored);
+    }
     const actual = getActualValue(periodId, managerId, metric.id, stored);
-    return { metric, target, actual, pct: completionPercent(target, actual) };
+    const pct =
+      planSource === "published" ? completionPercentUncapped(target, actual) : completionPercent(target, actual);
+    return { metric, target, actual, pct };
   });
-  const gt = getGrossProfitTarget(periodId, managerId, stored);
   const ga = getGrossProfitActual(periodId, managerId, stored);
+  let gt: number;
+  if (planSource === "published") {
+    const pg = getPublishedGrossProfitTarget(periodId, managerId, stored);
+    gt = pg !== undefined ? pg : 0;
+  } else {
+    gt = getGrossProfitTarget(periodId, managerId, stored);
+  }
+  const grossPct =
+    planSource === "published" ? completionPercentUncapped(gt, ga) : completionPercent(gt, ga);
+  const comment =
+    planSource === "published" ? (getPublishedPlanComment(periodId, managerId, stored) ?? "") : getPlanComment(periodId, managerId, stored);
+  const updatedAt =
+    planSource === "published"
+      ? (getPublishedAtIso(periodId, managerId, stored) ?? "")
+      : getPlanUpdatedAt(periodId, managerId, stored);
   return {
     managerId,
     managerName: u.name,
     teamId: u.teamId,
     teamName: team?.name ?? u.teamId,
     metrics,
-    gross: { target: gt, actual: ga, pct: completionPercent(gt, ga) },
-    comment: getPlanComment(periodId, managerId, stored),
-    updatedAt: getPlanUpdatedAt(periodId, managerId, stored),
+    gross: { target: gt, actual: ga, pct: grossPct },
+    comment,
+    updatedAt,
   };
 }
 
@@ -548,7 +813,7 @@ function touchManagerPeriod(
   };
 }
 
-/** Руководитель команды: сохранить планы (цели по KPI, валовая прибыль, комментарий). */
+/** Руководитель команды: сохранить черновик плана (цели по KPI, валовая прибыль, комментарий). */
 export function applyTeamLeadPlanSave(
   prev: SalesControlStoredState,
   periodId: string,
@@ -557,14 +822,19 @@ export function applyTeamLeadPlanSave(
   grossProfitTarget: number,
   comment: string,
 ): SalesControlStoredState {
-  let next: SalesControlStoredState = { ...prev, targets: { ...prev.targets }, comments: { ...prev.comments } };
+  let next: SalesControlStoredState = {
+    ...prev,
+    draftTargets: { ...prev.draftTargets },
+    draftComments: { ...prev.draftComments },
+    draftGrossProfitTargets: { ...prev.draftGrossProfitTargets },
+  };
   const mp = salesControlManagerPeriodKey(periodId, managerId);
   for (const [metricId, value] of Object.entries(metricTargets)) {
     const key = salesControlMetricCellKey(periodId, managerId, metricId);
-    next.targets[key] = value;
+    next.draftTargets[key] = value;
   }
-  next.grossProfitTargets = { ...next.grossProfitTargets, [mp]: grossProfitTarget };
-  next.comments = { ...next.comments, [mp]: comment };
+  next.draftGrossProfitTargets = { ...next.draftGrossProfitTargets, [mp]: grossProfitTarget };
+  next.draftComments = { ...next.draftComments, [mp]: comment };
   next = touchManagerPeriod(next, periodId, managerId);
   return next;
 }
