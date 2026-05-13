@@ -1,4 +1,3 @@
-import { Link } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { CityConcentrationRow } from "@/lib/city-concentration";
@@ -35,13 +34,13 @@ function CityRows({
           <li key={row.city} className="min-w-0 rounded-lg border border-border/70 bg-card/60 p-2 sm:p-3" data-testid={rowTestId}>
             <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
               <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <Link
+                <a
                   href={cityHref(row.city)}
                   data-testid={linkCityTestId}
                   className="min-w-0 truncate text-sm font-semibold text-primary underline-offset-2 hover:underline"
                 >
                   {row.city}
-                </Link>
+                </a>
                 {risk === "critical" ? (
                   <Badge variant="destructive" className="shrink-0 text-[10px] font-semibold">
                     Риск
@@ -59,19 +58,19 @@ function CityRows({
               <span>
                 Всего: <span className="tabular-nums text-foreground">{row.total}</span>
               </span>
-              <Link href={activeHref(row.city)} className="underline-offset-2 hover:text-foreground hover:underline" data-testid={linkActiveTestId}>
+              <a href={activeHref(row.city)} className="underline-offset-2 hover:text-foreground hover:underline" data-testid={linkActiveTestId}>
                 Активные: <span className="tabular-nums text-foreground">{row.active}</span> ({row.pctActive}%)
-              </Link>
+              </a>
               <span>
                 TOP: <span className="tabular-nums text-foreground">{row.top}</span>
               </span>
-              <Link
+              <a
                 href={attentionHref(row.city)}
                 className="underline-offset-2 hover:text-foreground hover:underline"
                 data-testid={linkAttentionTestId}
               >
                 Внимание: <span className="tabular-nums text-foreground">{row.attention}</span> ({row.pctAttention}%)
-              </Link>
+              </a>
               <span>
                 Потенциал: <span className="tabular-nums text-foreground">{row.potential}</span>
               </span>
@@ -105,12 +104,12 @@ export function CityConcentrationBlock({
       )}
       {showAllLink ? (
         <div className="mt-3 text-center sm:text-left">
-          <Link
+          <a
             href={showAllHref}
             className="text-xs font-medium text-primary underline-offset-2 hover:underline"
           >
             Показать все города
-          </Link>
+          </a>
         </div>
       ) : null}
     </>
