@@ -27,9 +27,11 @@ import {
   getGrossProfitTarget,
   getManagerPlanPublishStatus,
   getPlanComment,
+  getPublishedDirectorTeamPlan,
   getTargetValue,
   getTeamById,
   getTeamManagers,
+  getTeamDistributionSummary,
   publishTeamPlansForTeam,
   rollupManager,
   SALES_KPI_METRICS_SORTED,
@@ -37,7 +39,9 @@ import {
   loadSalesControlStoredState,
   type ManagerPlanPublishStatus,
   type SalesControlStoredState,
+  type TeamDistributionRow,
 } from "@/lib/sales-control-data";
+import { cn } from "@/lib/utils";
 
 type ManagerDraft = {
   metrics: Record<string, string>;
@@ -67,6 +71,25 @@ function statusBadgeVariant(status: ManagerPlanPublishStatus): "default" | "seco
   if (status === "published") return "default";
   if (status === "changed_after_publish") return "destructive";
   return "secondary";
+}
+
+function distributionBadgeClass(tone: TeamDistributionRow["tone"]): string {
+  if (tone === "green") return "border-emerald-500/50 bg-emerald-500/10 text-emerald-800";
+  if (tone === "yellow") return "border-amber-500/50 bg-amber-500/10 text-amber-900";
+  return "border-red-500/50 bg-red-500/10 text-red-900";
+}
+
+function formatDistributionRemainingText(row: TeamDistributionRow): string {
+  const met = SALES_KPI_METRICS_SORTED.find((m) => m.id === row.metricId);
+  const abs = Math.abs(row.delta);
+  if (row.summaryLabel === "План распределён") return "—";
+  if (row.metricId === "gross-profit") {
+    if (row.summaryLabel === "Превышение") return `Превышение на ${formatRub(abs)}`;
+    return `Осталось распределить: ${formatRub(abs)}`;
+  }
+  if (!met) return row.summaryLabel;
+  if (row.summaryLabel === "Превышение") return `Превышение на ${formatSalesMetricValue(met, abs)}`;
+  return `Осталось распределить: ${formatSalesMetricValue(met, abs)}`;
 }
 
 export default function SalesControlTeamLeadPage() {
@@ -113,6 +136,15 @@ export default function SalesControlTeamLeadPage() {
     }
     return { target: gt, actual: ga, pct: completionPercent(gt, ga) };
   }, [managers, periodId, stored]);
+
+  const directorTeamPub = useMemo(
+    () => getPublishedDirectorTeamPlan(periodId, activeTeamId, stored),
+    [activeTeamId, periodId, stored],
+  );
+  const distribution = useMemo(
+    () => getTeamDistributionSummary(periodId, activeTeamId, stored),
+    [activeTeamId, periodId, stored],
+  );
 
   const persistTeamComment = useCallback(() => {
     setStored((prev) => applyTeamLeadTeamCommentDraft(prev, periodId, activeTeamId, teamCommentDraft));
@@ -184,6 +216,107 @@ export default function SalesControlTeamLeadPage() {
           </Select>
         </div>
       </div>
+
+      <section className="min-w-0 space-y-4" data-testid="section-team-lead-director-plan">
+        <h2 className="text-lg font-semibold text-foreground">План команды от руководителя продаж</h2>
+        {!directorTeamPub ? (
+          <p className="rounded-xl border border-dashed border-border/80 bg-muted/20 px-4 py-4 text-sm text-muted-foreground">
+            Командный план ещё не выгружен руководителем продаж.
+          </p>
+        ) : (
+          <Card className="min-w-0 rounded-2xl border border-border/80 shadow-sm" data-testid="card-team-lead-director-plan">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Опубликованный план на период</CardTitle>
+              <p className="text-xs text-muted-foreground" data-testid="text-team-lead-director-plan-published-at">
+                Дата выгрузки:{" "}
+                <span className="font-medium text-foreground">
+                  {new Date(directorTeamPub.publishedAt).toLocaleString("ru-RU", {
+                    dateStyle: "short",
+                    timeStyle: "short",
+                  })}
+                </span>
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                {SALES_KPI_METRICS_SORTED.map((met) => {
+                  const v = directorTeamPub.metricTargets[met.id] ?? 0;
+                  return (
+                    <div key={met.id} className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
+                      <p className="text-xs text-muted-foreground">{met.label}</p>
+                      <p className="font-semibold tabular-nums text-foreground">{formatSalesMetricValue(met, v)}</p>
+                    </div>
+                  );
+                })}
+                <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2 sm:col-span-2 lg:col-span-1">
+                  <p className="text-xs text-muted-foreground">Валовая прибыль</p>
+                  <p className="font-semibold tabular-nums text-foreground">{formatRub(directorTeamPub.grossProfitTarget)}</p>
+                </div>
+              </div>
+              {directorTeamPub.directorComment ? (
+                <div className="rounded-lg border border-border/50 bg-card px-3 py-2 text-sm">
+                  <span className="font-medium text-foreground">Комментарий директора: </span>
+                  <span className="text-muted-foreground">{directorTeamPub.directorComment}</span>
+                </div>
+              ) : null}
+
+              {directorTeamPub && distribution ? (
+                <div className="min-w-0 space-y-2">
+                  <p className="text-sm font-medium text-foreground">Сверка с черновиками менеджеров</p>
+                  <div className="min-w-0 overflow-x-auto rounded-lg border border-border/70">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="min-w-[120px]">Показатель</TableHead>
+                          <TableHead className="text-right tabular-nums">План команды</TableHead>
+                          <TableHead className="text-right tabular-nums">Сумма по менеджерам</TableHead>
+                          <TableHead className="min-w-[140px]">Остаток / превышение</TableHead>
+                          <TableHead className="min-w-[120px]">Статус</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {[...distribution.rows, distribution.gross].map((row) => {
+                          const isGross = row.metricId === "gross-profit";
+                          const met = SALES_KPI_METRICS_SORTED.find((m) => m.id === row.metricId);
+                          return (
+                            <TableRow key={row.metricId} data-testid={`row-team-lead-distribution-${row.metricId}`}>
+                              <TableCell className="font-medium">{row.metricLabel}</TableCell>
+                              <TableCell className="text-right tabular-nums text-muted-foreground">
+                                {isGross ? formatRub(row.teamPlan) : met ? formatSalesMetricValue(met, row.teamPlan) : row.teamPlan}
+                              </TableCell>
+                              <TableCell className="text-right tabular-nums text-muted-foreground">
+                                {isGross ? formatRub(row.managersSum) : met ? formatSalesMetricValue(met, row.managersSum) : row.managersSum}
+                              </TableCell>
+                              <TableCell
+                                className="text-sm text-muted-foreground"
+                                data-testid={`text-team-lead-distribution-remaining-${row.metricId}`}
+                              >
+                                {formatDistributionRemainingText(row)}
+                              </TableCell>
+                              <TableCell>
+                                <Badge
+                                  variant="outline"
+                                  className={cn(
+                                    "whitespace-normal text-left text-[11px] font-normal",
+                                    distributionBadgeClass(row.tone),
+                                  )}
+                                  data-testid={`badge-team-lead-distribution-status-${row.metricId}`}
+                                >
+                                  {row.summaryLabel}
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+        )}
+      </section>
 
       <section className="min-w-0 space-y-4" data-testid="section-team-lead-plan-editor">
         <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">

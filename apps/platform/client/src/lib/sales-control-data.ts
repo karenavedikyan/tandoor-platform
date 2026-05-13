@@ -76,7 +76,10 @@ export type SalesPlanLine = {
 };
 
 const STORAGE_KEY = "tandoor-sales-control-overrides-v1";
-export const SALES_CONTROL_SCHEMA_VERSION = 2 as const;
+export const SALES_CONTROL_SCHEMA_VERSION = 3 as const;
+
+/** ID пользователя-руководителя продаж (mock). */
+export const SALES_DIRECTOR_USER_ID = "user-dir-goncharenko";
 
 export function salesControlMetricCellKey(periodId: string, managerId: string, metricId: string): string {
   return `${periodId}|${managerId}|${metricId}`;
@@ -282,10 +285,31 @@ function seedComment(periodId: string, managerId: string): string {
 
 export type ManagerPlanPublishStatus = "draft" | "published" | "changed_after_publish";
 
+/** Статус командного плана директора → РОП. */
+export type TeamPlanDirectorStatus = "draft" | "published_to_rop" | "changed_after_publish";
+
+/** Черновик плана команды от руководителя продаж (ключ — salesControlTeamPeriodKey). */
+export type TeamPlanDraftRecord = {
+  metricTargets: Record<string, number>;
+  grossProfitTarget: number;
+  directorComment: string;
+  updatedBy: string;
+  updatedAt: string;
+};
+
+/** Опубликованный РОПу командный план. */
+export type TeamPlanPublicationRecord = {
+  metricTargets: Record<string, number>;
+  grossProfitTarget: number;
+  directorComment: string;
+  publishedBy: string;
+  publishedAt: string;
+};
+
 /** План-факт в sessionStorage: черновик РОПа и опубликованная копия для ЛК менеджера. */
 export type SalesControlStoredState = {
   schemaVersion: number;
-  /** Черновик целей по KPI (ключ — salesControlMetricCellKey). */
+  /** Черновик целей по KPI (ключ — salesControlMetricCellKey) — планы менеджеров от РОП. */
   draftTargets: Record<string, number>;
   draftGrossProfitTargets: Record<string, number>;
   draftComments: Record<string, string>;
@@ -295,6 +319,9 @@ export type SalesControlStoredState = {
   publishedComments: Record<string, string>;
   /** ISO время последней выгрузки плана менеджеру (ключ — salesControlManagerPeriodKey). */
   publishedAt: Record<string, string>;
+  /** Планы команд от директора (ключ — salesControlTeamPeriodKey). */
+  teamPlanDrafts: Record<string, TeamPlanDraftRecord>;
+  teamPlanPublications: Record<string, TeamPlanPublicationRecord>;
   /** Общий комментарий РОПа по команде за период (черновик). */
   draftTeamComments: Record<string, string>;
   publishedTeamComments: Record<string, string>;
@@ -314,6 +341,8 @@ const EMPTY_STORED: SalesControlStoredState = {
   publishedGrossProfitTargets: {},
   publishedComments: {},
   publishedAt: {},
+  teamPlanDrafts: {},
+  teamPlanPublications: {},
   draftTeamComments: {},
   publishedTeamComments: {},
   publishedTeamAt: {},
@@ -335,7 +364,17 @@ function migrateSalesControlStoredState(raw: unknown): SalesControlStoredState {
   if (!raw || typeof raw !== "object") return { ...EMPTY_STORED };
   const p = raw as Partial<SalesControlStoredState> & LegacyStoredV1;
   const schemaVersion = typeof p.schemaVersion === "number" ? p.schemaVersion : 1;
-  if (schemaVersion >= SALES_CONTROL_SCHEMA_VERSION && p.draftTargets && typeof p.draftTargets === "object" && p.publishedTargets && typeof p.publishedTargets === "object") {
+  if (
+    schemaVersion >= SALES_CONTROL_SCHEMA_VERSION &&
+    p.draftTargets &&
+    typeof p.draftTargets === "object" &&
+    p.publishedTargets &&
+    typeof p.publishedTargets === "object" &&
+    p.teamPlanDrafts &&
+    typeof p.teamPlanDrafts === "object" &&
+    p.teamPlanPublications &&
+    typeof p.teamPlanPublications === "object"
+  ) {
     return {
       schemaVersion: SALES_CONTROL_SCHEMA_VERSION,
       draftTargets: { ...p.draftTargets },
@@ -345,6 +384,8 @@ function migrateSalesControlStoredState(raw: unknown): SalesControlStoredState {
       publishedGrossProfitTargets: { ...(p.publishedGrossProfitTargets ?? {}) },
       publishedComments: { ...(p.publishedComments ?? {}) },
       publishedAt: { ...(p.publishedAt ?? {}) },
+      teamPlanDrafts: { ...(p.teamPlanDrafts ?? {}) },
+      teamPlanPublications: { ...(p.teamPlanPublications ?? {}) },
       draftTeamComments: { ...(p.draftTeamComments ?? {}) },
       publishedTeamComments: { ...(p.publishedTeamComments ?? {}) },
       publishedTeamAt: { ...(p.publishedTeamAt ?? {}) },
@@ -365,6 +406,8 @@ function migrateSalesControlStoredState(raw: unknown): SalesControlStoredState {
     publishedGrossProfitTargets: { ...(p.publishedGrossProfitTargets ?? {}) },
     publishedComments: { ...(p.publishedComments ?? {}) },
     publishedAt: { ...(p.publishedAt ?? {}) },
+    teamPlanDrafts: { ...((p as Partial<SalesControlStoredState>).teamPlanDrafts ?? {}) },
+    teamPlanPublications: { ...((p as Partial<SalesControlStoredState>).teamPlanPublications ?? {}) },
     draftTeamComments: { ...(p.draftTeamComments ?? {}) },
     publishedTeamComments: { ...(p.publishedTeamComments ?? {}) },
     publishedTeamAt: { ...(p.publishedTeamAt ?? {}) },
@@ -504,8 +547,122 @@ export function getPublishedTeamPeriodComment(periodId: string, teamId: string, 
   return stored.publishedTeamComments[tk] ?? "";
 }
 
+/** Сумма сидов менеджеров команды по метрике — стартовая база плана директора. */
+export function seedDirectorTeamMetricAggregate(periodId: string, teamId: string, metricId: string): number {
+  let s = 0;
+  for (const m of getTeamManagers(teamId)) {
+    s += getSeedTarget(periodId, m.id, metricId) ?? 0;
+  }
+  return s;
+}
+
+export function seedDirectorTeamGrossAggregate(periodId: string, teamId: string): number {
+  let s = 0;
+  for (const m of getTeamManagers(teamId)) {
+    s += seedGrossProfitTarget(periodId, m.id);
+  }
+  return s;
+}
+
+export function resolveDirectorTeamDraftFull(
+  periodId: string,
+  teamId: string,
+  stored: SalesControlStoredState,
+): { metricTargets: Record<string, number>; grossProfitTarget: number; directorComment: string } {
+  const tk = salesControlTeamPeriodKey(periodId, teamId);
+  const draft = stored.teamPlanDrafts[tk];
+  const metricTargets: Record<string, number> = {};
+  for (const met of SALES_KPI_METRICS_SORTED) {
+    const seedAgg = seedDirectorTeamMetricAggregate(periodId, teamId, met.id);
+    const override = draft?.metricTargets[met.id];
+    metricTargets[met.id] = override !== undefined && !Number.isNaN(override) ? override : seedAgg;
+  }
+  const seedGross = seedDirectorTeamGrossAggregate(periodId, teamId);
+  const grossProfitTarget =
+    draft?.grossProfitTarget !== undefined && !Number.isNaN(draft.grossProfitTarget) ? draft.grossProfitTarget : seedGross;
+  const directorComment = draft?.directorComment ?? "";
+  return { metricTargets, grossProfitTarget, directorComment };
+}
+
+export function applyDirectorTeamPlanSave(
+  prev: SalesControlStoredState,
+  periodId: string,
+  teamId: string,
+  metricTargets: Record<string, number>,
+  grossProfitTarget: number,
+  directorComment: string,
+  updatedBy: string,
+): SalesControlStoredState {
+  const tk = salesControlTeamPeriodKey(periodId, teamId);
+  const now = new Date().toISOString();
+  const rec: TeamPlanDraftRecord = {
+    metricTargets: { ...metricTargets },
+    grossProfitTarget,
+    directorComment,
+    updatedBy,
+    updatedAt: now,
+  };
+  return {
+    ...prev,
+    teamPlanDrafts: { ...prev.teamPlanDrafts, [tk]: rec },
+  };
+}
+
+export function publishTeamPlanToRop(
+  prev: SalesControlStoredState,
+  periodId: string,
+  teamId: string,
+  publishedBy: string,
+): SalesControlStoredState {
+  const tk = salesControlTeamPeriodKey(periodId, teamId);
+  const resolved = resolveDirectorTeamDraftFull(periodId, teamId, prev);
+  const now = new Date().toISOString();
+  const pub: TeamPlanPublicationRecord = {
+    metricTargets: { ...resolved.metricTargets },
+    grossProfitTarget: resolved.grossProfitTarget,
+    directorComment: resolved.directorComment,
+    publishedBy,
+    publishedAt: now,
+  };
+  return {
+    ...prev,
+    teamPlanPublications: { ...prev.teamPlanPublications, [tk]: pub },
+  };
+}
+
+export function hasPublishedDirectorTeamPlan(periodId: string, teamId: string, stored: SalesControlStoredState): boolean {
+  const tk = salesControlTeamPeriodKey(periodId, teamId);
+  return Boolean(stored.teamPlanPublications[tk]);
+}
+
+export function getPublishedDirectorTeamPlan(
+  periodId: string,
+  teamId: string,
+  stored: SalesControlStoredState,
+): TeamPlanPublicationRecord | undefined {
+  const tk = salesControlTeamPeriodKey(periodId, teamId);
+  return stored.teamPlanPublications[tk];
+}
+
 function numEq(a: number, b: number): boolean {
   return Math.abs(a - b) < 0.0001;
+}
+
+function directorTeamDraftMatchesPublication(periodId: string, teamId: string, stored: SalesControlStoredState): boolean {
+  const pub = getPublishedDirectorTeamPlan(periodId, teamId, stored);
+  if (!pub) return false;
+  const d = resolveDirectorTeamDraftFull(periodId, teamId, stored);
+  for (const met of SALES_KPI_METRICS_SORTED) {
+    if (!numEq(pub.metricTargets[met.id] ?? 0, d.metricTargets[met.id] ?? 0)) return false;
+  }
+  if (!numEq(pub.grossProfitTarget, d.grossProfitTarget)) return false;
+  return pub.directorComment === d.directorComment;
+}
+
+export function getTeamPlanPublicationStatus(periodId: string, teamId: string, stored: SalesControlStoredState): TeamPlanDirectorStatus {
+  if (!hasPublishedDirectorTeamPlan(periodId, teamId, stored)) return "draft";
+  if (!directorTeamDraftMatchesPublication(periodId, teamId, stored)) return "changed_after_publish";
+  return "published_to_rop";
 }
 
 export function managerDraftMatchesPublished(periodId: string, managerId: string, stored: SalesControlStoredState): boolean {
@@ -616,6 +773,121 @@ export function applyTeamLeadTeamCommentDraft(
     ...prev,
     draftTeamComments: { ...prev.draftTeamComments, [tk]: text },
   };
+}
+
+export type TeamDistributionRow = {
+  metricId: string;
+  metricLabel: string;
+  metricUnit: SalesKpiUnit;
+  teamPlan: number;
+  managersSum: number;
+  delta: number;
+  relativeDeviationPct: number;
+  tone: "green" | "yellow" | "red";
+  summaryLabel: "Осталось распределить" | "План распределён" | "Превышение";
+};
+
+export type TeamDistributionSummary = {
+  periodId: string;
+  teamId: string;
+  rows: TeamDistributionRow[];
+  gross: TeamDistributionRow;
+};
+
+export function sumManagerDraftTargetsForTeam(
+  periodId: string,
+  teamId: string,
+  stored: SalesControlStoredState,
+): { metricTotals: Record<string, number>; grossTotal: number } {
+  const mgrs = getTeamManagers(teamId);
+  const metricTotals: Record<string, number> = {};
+  for (const met of SALES_KPI_METRICS_SORTED) {
+    let s = 0;
+    for (const m of mgrs) {
+      s += getTargetValue(periodId, m.id, met.id, stored);
+    }
+    metricTotals[met.id] = s;
+  }
+  let grossTotal = 0;
+  for (const m of mgrs) {
+    grossTotal += getGrossProfitTarget(periodId, m.id, stored);
+  }
+  return { metricTotals, grossTotal };
+}
+
+function distributionToneForRow(teamPlan: number, managersSum: number): "green" | "yellow" | "red" {
+  if (teamPlan <= 0) {
+    if (managersSum <= 0) return "green";
+    return "red";
+  }
+  const ratio = managersSum / teamPlan;
+  if (ratio >= 0.98 && ratio <= 1.02) return "green";
+  if (ratio < 0.98) return "yellow";
+  return "red";
+}
+
+function distributionLabel(
+  teamPlan: number,
+  managersSum: number,
+): "Осталось распределить" | "План распределён" | "Превышение" {
+  if (teamPlan <= 0) {
+    if (managersSum <= 0) return "План распределён";
+    return "Превышение";
+  }
+  const ratio = managersSum / teamPlan;
+  if (ratio >= 0.98 && ratio <= 1.02) return "План распределён";
+  if (ratio < 0.98) return "Осталось распределить";
+  return "Превышение";
+}
+
+export function getTeamDistributionSummary(
+  periodId: string,
+  teamId: string,
+  stored: SalesControlStoredState,
+): TeamDistributionSummary | null {
+  const pub = getPublishedDirectorTeamPlan(periodId, teamId, stored);
+  if (!pub) return null;
+  const { metricTotals, grossTotal } = sumManagerDraftTargetsForTeam(periodId, teamId, stored);
+  const rows: TeamDistributionRow[] = SALES_KPI_METRICS_SORTED.map((met) => {
+    const teamPlan = pub.metricTargets[met.id] ?? 0;
+    const managersSum = metricTotals[met.id] ?? 0;
+    const delta = teamPlan - managersSum;
+    const relativeDeviationPct =
+      teamPlan > 0 ? Math.round((Math.abs(managersSum - teamPlan) / teamPlan) * 1000) / 10 : managersSum > 0 ? 100 : 0;
+    return {
+      metricId: met.id,
+      metricLabel: met.label,
+      metricUnit: met.unit,
+      teamPlan,
+      managersSum,
+      delta,
+      relativeDeviationPct,
+      tone: distributionToneForRow(teamPlan, managersSum),
+      summaryLabel: distributionLabel(teamPlan, managersSum),
+    };
+  });
+  const teamGross = pub.grossProfitTarget;
+  const gross: TeamDistributionRow = {
+    metricId: "gross-profit",
+    metricLabel: "Валовая прибыль",
+    metricUnit: "money_rub",
+    teamPlan: teamGross,
+    managersSum: grossTotal,
+    delta: teamGross - grossTotal,
+    relativeDeviationPct:
+      teamGross > 0 ? Math.round((Math.abs(grossTotal - teamGross) / teamGross) * 1000) / 10 : grossTotal > 0 ? 100 : 0,
+    tone: distributionToneForRow(teamGross, grossTotal),
+    summaryLabel: distributionLabel(teamGross, grossTotal),
+  };
+  return { periodId, teamId, rows, gross };
+}
+
+export function compareTeamPlanToManagerDrafts(
+  periodId: string,
+  teamId: string,
+  stored: SalesControlStoredState,
+): TeamDistributionSummary | null {
+  return getTeamDistributionSummary(periodId, teamId, stored);
 }
 
 export function buildPlanLine(
