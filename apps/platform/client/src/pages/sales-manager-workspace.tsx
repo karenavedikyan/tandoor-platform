@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
+import { canAccessPath } from "@/lib/auth-access";
+import { getClientCategoryBadgeClass, getClientCategoryLabel } from "@/lib/client-category";
 import { cn } from "@/lib/utils";
 import {
   getFocusProducts,
@@ -58,11 +60,6 @@ function statusBadgeClass(status: DealerRow["status"]) {
   if (status === "потенциальный") return "border-sky-200 bg-sky-50 text-sky-950";
   if (status === "приостановлен") return "border-neutral-200 bg-muted text-muted-foreground";
   return "border-emerald-200 bg-emerald-50 text-emerald-950";
-}
-
-function categoryBadgeClass(cat: DealerRow["category"]) {
-  if (cat === "TOP") return "border-primary/40 bg-primary/15 text-foreground font-semibold";
-  return "border-border bg-muted/60 text-foreground";
 }
 
 function matrixStatusBadgeClass(t: MatrixTaskWithContext) {
@@ -301,9 +298,11 @@ export default function SalesManagerWorkspace() {
             <Button asChild variant="outline" className="min-h-10 border-border bg-card font-semibold" data-testid="button-sales-manager-open-sales-control">
               <Link href="/sales-control">План-факт продаж</Link>
             </Button>
-            <Button asChild variant="outline" className="min-h-10 border-border bg-card font-semibold" data-testid="button-sales-manager-open-analytics-workspace">
-              <Link href="/analytics-workspace">Аналитика команды</Link>
-            </Button>
+            {user && canAccessPath(user.role, "/analytics-workspace") ? (
+              <Button asChild variant="outline" className="min-h-10 border-border bg-card font-semibold" data-testid="button-sales-manager-open-analytics-workspace">
+                <Link href="/analytics-workspace">Аналитика команды</Link>
+              </Button>
+            ) : null}
             <Button asChild variant="outline" className="min-h-10 border-border bg-card font-semibold" data-testid="button-sales-manager-open-marketing-briefs">
               <Link href="/marketing-briefs">Брифы</Link>
             </Button>
@@ -448,7 +447,7 @@ export default function SalesManagerWorkspace() {
         <div>
           <h2 className="text-lg font-semibold text-foreground sm:text-xl">Партнёры в фокусе</h2>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Клиенты зоны, влияющие на выполнение плана: TOP, без активности, значимая валовка, просадки по линейкам, потенциал по
+            Клиенты зоны, влияющие на выполнение плана: сегмент ТОП 150–500+, без активности, значимая валовка, просадки по линейкам, потенциал по
             фурнитуре и внимание по заказам.
           </p>
         </div>
@@ -460,8 +459,8 @@ export default function SalesManagerWorkspace() {
                   <Badge variant="outline" className={cn("text-xs", statusBadgeClass(d.status))}>
                     {d.status}
                   </Badge>
-                  <Badge variant="outline" className={cn("text-xs", categoryBadgeClass(d.category))}>
-                    {d.category}
+                  <Badge variant="outline" className={cn("text-xs", getClientCategoryBadgeClass(d.clientCategory))}>
+                    {getClientCategoryLabel(d.clientCategory)}
                   </Badge>
                 </div>
                 <CardTitle className="text-base leading-snug sm:text-lg">{d.name}</CardTitle>

@@ -14,7 +14,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { DEALER_BASE_ROWS, type DealerRow, type DealerCategory, type DealerStatus } from "@/lib/dealer-base-mock-data";
+import {
+  CLIENT_CATEGORY_META,
+  type ClientCategoryId,
+  clientCategoryMatchesFilter,
+  getClientCategoryBadgeClass,
+  getClientCategoryLabel,
+  isClientTopTier,
+} from "@/lib/client-category";
+import { DEALER_BASE_ROWS, type DealerRow, type DealerStatus } from "@/lib/dealer-base-mock-data";
 import {
   getManagersForRopTeam,
   getRopOptions,
@@ -22,8 +30,8 @@ import {
   managerDisplayMatchesCatalogName,
 } from "@/lib/rop-manager-filters";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
-import { loadReleaseDemoProfile, getEffectiveTeamLeadTeamId } from "@/lib/release-demo-profile";
-import { getSalesUserById, getTeamManagers, type SalesUser } from "@/lib/sales-control-data";
+import { loadReleaseDemoProfile, getEffectiveTeamLeadTeamId, type ReleaseDemoProfile } from "@/lib/release-demo-profile";
+import { getSalesUserById, getTeamManagers, getAllSalesManagers, type SalesUser } from "@/lib/sales-control-data";
 import {
   buildDayPlanTeamRows,
   dealerNeedsAttention,
@@ -42,20 +50,70 @@ import {
   viewsInGroupForAccess,
   workViewGroup,
   workViewsForAccess,
+  type DealerBaseAccessRole,
   type DealerBaseWorkView,
 } from "@/lib/dealer-base-role-views";
+import { CityConcentrationBlock } from "@/components/city-concentration-block";
+import { buildTeamSummary } from "@/lib/team-summary";
+import { TeamSummaryCard } from "@/components/team-summary-card";
+import { buildCityConcentrationRows, buildDealerBaseAllCitiesHref, buildDealerBaseCityDrillHref } from "@/lib/city-concentration";
+import { buildHashPath, useRouteSearchParams } from "@/lib/hash-route-utils";
 
 const DEALER_BASE_DISPLAY_LIMIT = 300;
 const TODAY_LIMIT = 100;
 
 type QuickFilter = "all" | "active" | "potential" | "attention" | "top" | "no_activity";
 
+const QUICK_FROM_URL: Record<string, QuickFilter> = {
+  all: "all",
+  active: "active",
+  potential: "potential",
+  attention: "attention",
+  top: "top",
+  inactive: "no_activity",
+  no_activity: "no_activity",
+};
+
+function parseWorkViewFromQuery(raw: string | null, access: DealerBaseAccessRole): DealerBaseWorkView | null {
+  if (!raw) return null;
+  const v = raw.trim() as DealerBaseWorkView;
+  return workViewsForAccess(access).includes(v) ? v : null;
+}
+
+function teamAllowedForProfile(
+  teamId: string,
+  profile: ReleaseDemoProfile,
+  access: DealerBaseAccessRole,
+): boolean {
+  if (!getRopOptions().some((o) => o.teamId === teamId)) return false;
+  if (access === "sales_director") return true;
+  if (access === "team_lead") return teamId === getEffectiveTeamLeadTeamId(profile);
+  const u = getSalesUserById(profile.personaUserId);
+  return Boolean(u?.teamId === teamId);
+}
+
+function managerAllowedForRop(
+  managerId: string,
+  ropTeamId: string,
+  profile: ReleaseDemoProfile,
+  access: DealerBaseAccessRole,
+): boolean {
+  if (access === "sales_manager") {
+    const u = getSalesUserById(profile.personaUserId);
+    return Boolean(u?.id === managerId);
+  }
+  const pool = access === "sales_director" && isRopOrManagerAllFilter(ropTeamId)
+    ? getAllSalesManagers()
+    : getManagersForRopTeam(ropTeamId);
+  return pool.some((m) => m.id === managerId);
+}
+
 const QUICK_FILTERS: { id: QuickFilter; label: string; testId: string }[] = [
   { id: "all", label: "Все", testId: "filter-dealers-all" },
   { id: "active", label: "Активные", testId: "filter-dealers-active" },
   { id: "potential", label: "Потенциальные", testId: "filter-dealers-potential" },
   { id: "attention", label: "Требуют внимания", testId: "filter-dealers-attention" },
-  { id: "top", label: "TOP", testId: "filter-dealers-top" },
+  { id: "top", label: "ТОП-сегмент", testId: "filter-dealers-top" },
   { id: "no_activity", label: "Без активности", testId: "filter-dealers-no-activity" },
 ];
 
@@ -66,11 +124,7 @@ function statusBadgeClass(status: DealerStatus) {
   return "border-emerald-200 bg-emerald-50 text-emerald-950";
 }
 
-function categoryBadgeClass(cat: DealerCategory) {
-  if (cat === "TOP") return "border-primary/40 bg-primary/15 text-foreground font-semibold";
-  return "border-border bg-muted/60 text-foreground";
-}
-
+type ClientCategoryRouteFilter = ClientCategoryId | "all" | "__top_tier__";
 function applyQuickFilter(row: DealerRow, q: QuickFilter): boolean {
   switch (q) {
     case "all":
@@ -82,7 +136,7 @@ function applyQuickFilter(row: DealerRow, q: QuickFilter): boolean {
     case "attention":
       return row.status === "требует внимания" || row.hasProblem;
     case "top":
-      return row.category === "TOP";
+      return isClientTopTier(row.clientCategory);
     case "no_activity":
       return !row.hasRecentActivity;
     default:
@@ -94,7 +148,7 @@ type PickerArgs = {
   search: string;
   quick: QuickFilter;
   city: string;
-  category: string;
+  category: ClientCategoryRouteFilter;
   ropTeam: string;
   manager: string;
   managerCatalogForRop: ReturnType<typeof getManagersForRopTeam>;
@@ -105,7 +159,7 @@ function applyPickerFilters(rows: DealerRow[], args: PickerArgs): DealerRow[] {
   return rows.filter((row) => {
     if (!applyQuickFilter(row, args.quick)) return false;
     if (args.city !== "all" && row.city !== args.city) return false;
-    if (args.category !== "all" && row.category !== args.category) return false;
+    if (!clientCategoryMatchesFilter(row.clientCategory, args.category)) return false;
     if (!isRopOrManagerAllFilter(args.ropTeam)) {
       if (row.releaseTeamId !== args.ropTeam) return false;
     }
@@ -141,25 +195,6 @@ function managerStatsForRows(rows: DealerRow[]) {
   const attention = rows.filter(dealerNeedsAttention).length;
   const potential = rows.filter((r) => r.status === "потенциальный").length;
   return { total, active, top, attention, potential };
-}
-
-function cityStatsForRows(rows: DealerRow[]) {
-  const map = new Map<
-    string,
-    { total: number; active: number; top: number; attention: number }
-  >();
-  for (const r of rows) {
-    const c = r.city || "—";
-    const cur = map.get(c) ?? { total: 0, active: 0, top: 0, attention: 0 };
-    cur.total += 1;
-    if (r.status === "активный") cur.active += 1;
-    if (isDealerTop(r)) cur.top += 1;
-    if (dealerNeedsAttention(r)) cur.attention += 1;
-    map.set(c, cur);
-  }
-  return Array.from(map.entries())
-    .map(([city, s]) => ({ city, ...s }))
-    .sort((a, b) => b.total - a.total || a.city.localeCompare(b.city));
 }
 
 function groupRowsByManagerKey(rows: DealerRow[]): { key: string; label: string; rows: DealerRow[] }[] {
@@ -219,8 +254,12 @@ function ClientListBlock({ rows, empty, compact }: { rows: DealerRow[]; empty: s
             <div className={cn("min-w-0 flex-1", compact ? "space-y-1" : "space-y-2")}>
               <div className="flex flex-wrap items-center gap-2">
                 <span className={cn("font-semibold text-foreground", compact && "text-sm")}>{row.name}</span>
-                <Badge variant="outline" className={cn("text-xs", categoryBadgeClass(row.category))}>
-                  {row.category}
+                <Badge
+                  variant="outline"
+                  className={cn("text-xs", getClientCategoryBadgeClass(row.clientCategory))}
+                  data-testid={`badge-dealer-client-category-${row.id}`}
+                >
+                  {getClientCategoryLabel(row.clientCategory)}
                 </Badge>
                 <Badge variant="outline" className={cn("text-xs", statusBadgeClass(row.status))}>
                   {row.status}
@@ -237,8 +276,9 @@ function ClientListBlock({ rows, empty, compact }: { rows: DealerRow[]; empty: s
               {!compact ? (
                 <>
                   <p className="text-xs text-muted-foreground">РОП: {row.regionalManager}</p>
-                  <p className="text-xs text-muted-foreground">
-                    Тип: {row.clientTypeLabel ?? row.category} · ТТ: {row.outlets}
+                  <p className="text-xs text-muted-foreground" data-testid={`text-dealer-client-category-${row.id}`}>
+                    Категория клиента: {getClientCategoryLabel(row.clientCategory)}
+                    {row.clientTypeLabel ? ` · тип в данных: ${row.clientTypeLabel}` : ""} · ТТ: {row.outlets}
                   </p>
                   {row.releaseAddress ? (
                     <p className="text-xs text-muted-foreground">Адрес: {row.releaseAddress}</p>
@@ -263,8 +303,12 @@ function ClientTableBlock({ rows }: { rows: DealerRow[] }) {
             <CardContent className="space-y-2 p-4 text-sm">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="font-semibold">{row.name}</span>
-                <Badge variant="outline" className={cn("text-xs", categoryBadgeClass(row.category))}>
-                  {row.category}
+                <Badge
+                  variant="outline"
+                  className={cn("text-xs", getClientCategoryBadgeClass(row.clientCategory))}
+                  data-testid={`badge-dealer-client-category-${row.id}`}
+                >
+                  {getClientCategoryLabel(row.clientCategory)}
                 </Badge>
               </div>
               <p className="text-muted-foreground">
@@ -283,7 +327,7 @@ function ClientTableBlock({ rows }: { rows: DealerRow[] }) {
         <table className="w-full min-w-[720px] text-left text-sm">
           <thead className="border-b border-border bg-muted/40">
             <tr>
-              {["Код", "Клиент", "Город", "РОП", "Менеджер", "Тип клиента", "Адрес", "Статус", ""].map((h) => (
+              {["Код", "Клиент", "Город", "РОП", "Менеджер", "Категория клиента", "Адрес", "Статус", ""].map((h) => (
                 <th key={h} className="whitespace-nowrap px-3 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   {h}
                 </th>
@@ -304,8 +348,12 @@ function ClientTableBlock({ rows }: { rows: DealerRow[] }) {
                 <td className="max-w-[120px] truncate px-3 py-3 text-xs" title={row.manager}>
                   {row.manager}
                 </td>
-                <td className="max-w-[140px] truncate px-3 py-3 text-xs" title={row.clientTypeLabel}>
-                  {row.clientTypeLabel ?? row.category}
+                <td
+                  className="max-w-[140px] truncate px-3 py-3 text-xs"
+                  title={getClientCategoryLabel(row.clientCategory)}
+                  data-testid={`text-dealer-client-category-${row.id}`}
+                >
+                  {getClientCategoryLabel(row.clientCategory)}
                 </td>
                 <td className="max-w-[180px] truncate px-3 py-3 text-xs text-muted-foreground" title={row.releaseAddress}>
                   {row.releaseAddress ?? "—"}
@@ -340,7 +388,7 @@ export default function DealerBase() {
   const [search, setSearch] = useState("");
   const [quick, setQuick] = useState<QuickFilter>("all");
   const [city, setCity] = useState<string>("all");
-  const [category, setCategory] = useState<string>("all");
+  const [category, setCategory] = useState<ClientCategoryRouteFilter>("all");
   const [ropTeam, setRopTeam] = useState<string>(() => {
     const p = loadReleaseDemoProfile();
     return initialRopManagerForProfile(p, mapSalesRoleToDealerBaseAccess(p.role)).ropTeam;
@@ -350,11 +398,8 @@ export default function DealerBase() {
     return initialRopManagerForProfile(p, mapSalesRoleToDealerBaseAccess(p.role)).manager;
   });
 
-  useEffect(() => {
-    const d = initialRopManagerForProfile(profile, access);
-    setRopTeam(d.ropTeam);
-    setManager(d.manager);
-  }, [profile.role, profile.personaUserId, access]);
+  const routeQs = useRouteSearchParams();
+  const routeKey = useMemo(() => routeQs.toString(), [routeQs]);
 
   useEffect(() => {
     const allowed = workViewsForAccess(access);
@@ -389,14 +434,98 @@ export default function DealerBase() {
   }, [pickerFiltered]);
 
   const categoryOptions = useMemo(() => {
-    const s = new Set(scopedRows.map((r) => r.category));
-    return Array.from(s).sort() as DealerCategory[];
+    const s = new Set<ClientCategoryId>();
+    for (const r of scopedRows) s.add(r.clientCategory);
+    const order = new Map(CLIENT_CATEGORY_META.map((m) => [m.id, m.order]));
+    return Array.from(s).sort((a, b) => (order.get(a) ?? 999) - (order.get(b) ?? 999));
   }, [scopedRows]);
 
   const cities = useMemo(() => {
     const s = new Set(scopedRows.map((r) => r.city));
     return Array.from(s).sort();
   }, [scopedRows]);
+
+  useEffect(() => {
+    const d = initialRopManagerForProfile(profile, access);
+    if (!routeKey) {
+      setRopTeam(d.ropTeam);
+      setManager(d.manager);
+      setQuick("all");
+      setCity("all");
+      setCategory("all");
+      setSearch("");
+      setWorkView(defaultWorkViewForAccess(access));
+      return;
+    }
+
+    let rop = d.ropTeam;
+    let mgr = d.manager;
+    let qv: QuickFilter = "all";
+    let cityV = "all";
+    let catV: ClientCategoryRouteFilter = "all";
+    let searchV = "";
+    let vw: DealerBaseWorkView = defaultWorkViewForAccess(access);
+
+    const scoped = roleScopedDealerRows(DEALER_BASE_ROWS, profile);
+    const catOpts = Array.from(new Set(scoped.map((r) => r.clientCategory)));
+
+    const teamRaw = (routeQs.get("team") ?? routeQs.get("rop"))?.trim() ?? "";
+    const managerRaw = routeQs.get("manager")?.trim() ?? "";
+    const viewRaw = routeQs.get("view")?.trim() ?? "";
+    const viewNorm =
+      viewRaw.toLowerCase() === "cities"
+        ? access === "sales_director"
+          ? "cities_all"
+          : access === "team_lead"
+            ? "team_cities"
+            : "my_cities"
+        : viewRaw;
+    const viewParsed = parseWorkViewFromQuery(viewNorm || null, access);
+    const quickRaw = (routeQs.get("quick") ?? "").trim().toLowerCase();
+    if (quickRaw && QUICK_FROM_URL[quickRaw]) qv = QUICK_FROM_URL[quickRaw]!;
+
+    if (teamRaw && teamAllowedForProfile(teamRaw, profile, access)) {
+      rop = teamRaw;
+      mgr = "all";
+    }
+
+    if (managerRaw && managerAllowedForRop(managerRaw, rop, profile, access)) {
+      mgr = managerRaw;
+    }
+
+    if (viewParsed) {
+      vw = viewParsed;
+    } else if (mgr !== "all" && !isRopOrManagerAllFilter(mgr) && (access === "sales_director" || access === "team_lead")) {
+      vw = "my_clients";
+    } else if (
+      teamRaw &&
+      teamAllowedForProfile(teamRaw, profile, access) &&
+      !managerRaw &&
+      (access === "sales_director" || access === "team_lead")
+    ) {
+      vw = "my_team";
+    }
+
+    const cityRaw = routeQs.get("city")?.trim();
+    if (cityRaw && cityRaw !== "all" && scoped.some((r) => r.city === cityRaw)) cityV = cityRaw;
+
+    const catRaw = routeQs.get("category")?.trim();
+    if (catRaw && catRaw !== "all") {
+      if (catRaw === "TOP" || catRaw === "top") catV = "__top_tier__";
+      else if (catOpts.includes(catRaw as ClientCategoryId)) catV = catRaw as ClientCategoryId;
+    }
+
+    const searchRaw = routeQs.get("search")?.trim();
+    if (searchRaw) searchV = searchRaw;
+
+    setRopTeam(rop);
+    setManager(mgr);
+    setQuick(qv);
+    setCity(cityV);
+    setCategory(catV);
+    setSearch(searchV);
+    setWorkView(vw);
+  }, [profile.personaUserId, profile.role, access, routeKey, routeQs]);
 
   const firstRopTeamId = useMemo(() => getRopOptions()[0]?.teamId ?? "", []);
 
@@ -413,6 +542,12 @@ export default function DealerBase() {
     () => scopedRows.filter((r) => r.releaseTeamId === effectiveTeamIdForTeamModes),
     [scopedRows, effectiveTeamIdForTeamModes],
   );
+
+  const teamSummaryForCompactBanner = useMemo(() => {
+    if (access !== "sales_director" && access !== "team_lead") return null;
+    if (!DEALER_BASE_TEAM_WORK_VIEWS.includes(workView)) return null;
+    return buildTeamSummary(effectiveTeamIdForTeamModes);
+  }, [access, workView, effectiveTeamIdForTeamModes]);
 
   const teamRopDisplayLabel = useMemo(
     () => getRopOptions().find((o) => o.teamId === effectiveTeamIdForTeamModes)?.label ?? "—",
@@ -452,9 +587,11 @@ export default function DealerBase() {
       }
       if (
         workView === "table_all" ||
+        workView === "table_team" ||
         workView === "risks_all" ||
         workView === "top_all" ||
-        workView === "cities_all"
+        workView === "cities_all" ||
+        workView === "team_cities"
       ) {
         return `Показаны клиенты: ${selectedManagerLabel}`;
       }
@@ -470,6 +607,29 @@ export default function DealerBase() {
       return Boolean(cat && managerDisplayMatchesCatalogName(row.manager, cat.name));
     });
   }, [pickerFiltered, manager, managerCatalogForRop]);
+
+  const teamTablePickerRows = useMemo(
+    () => applyPickerFilters(teamRowsForModes, pickerArgs),
+    [teamRowsForModes, pickerArgs],
+  );
+
+  const cityRowsDept = useMemo(() => buildCityConcentrationRows(pickerFiltered), [pickerFiltered]);
+  const cityRowsTeam = useMemo(() => buildCityConcentrationRows(teamTablePickerRows), [teamTablePickerRows]);
+  const cityRowsManager = useMemo(() => buildCityConcentrationRows(managerScopedRows), [managerScopedRows]);
+
+  const allCitiesHref = useMemo(() => buildDealerBaseAllCitiesHref(profile.role, profile), [profile]);
+  const cityRowHref = useCallback(
+    (city: string) => buildDealerBaseCityDrillHref(profile.role, profile, city, { ropTeamId: ropTeam }),
+    [profile, ropTeam],
+  );
+  const cityActiveHref = useCallback(
+    (city: string) => buildDealerBaseCityDrillHref(profile.role, profile, city, { quick: "active", ropTeamId: ropTeam }),
+    [profile, ropTeam],
+  );
+  const cityAttentionHref = useCallback(
+    (city: string) => buildDealerBaseCityDrillHref(profile.role, profile, city, { quick: "attention", ropTeamId: ropTeam }),
+    [profile, ropTeam],
+  );
 
   const viewRows = useMemo(() => {
     const limit = DEALER_BASE_DISPLAY_LIMIT;
@@ -491,6 +651,7 @@ export default function DealerBase() {
         return (needsManagerSelection ? [] : managerScopedRows).filter(isDealerTop).slice(0, limit);
       case "my_cities":
       case "cities_all":
+      case "team_cities":
       case "by_manager":
       case "teams":
       case "my_team":
@@ -636,11 +797,26 @@ export default function DealerBase() {
 
   return (
     <div className="min-w-0 max-w-full overflow-x-hidden space-y-6 sm:space-y-8" data-testid="page-dealer-base">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Клиентская база</h1>
-        <p className="mt-1 text-sm text-muted-foreground sm:text-base">
-          Клиенты пилота Release 1 (импорт Excel): поиск, фильтры и переход в карточку клиента.
-        </p>
+      <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Клиентская база</h1>
+          <p className="mt-1 text-sm text-muted-foreground sm:text-base">
+            Клиенты пилота Release 1 (импорт Excel): поиск, фильтры и переход в карточку клиента.
+          </p>
+        </div>
+        <Button variant="outline" size="sm" className="shrink-0 self-start" asChild>
+          <Link
+            href={buildHashPath("/client-map", {
+              ...(city !== "all" ? { city } : {}),
+              ...(isRopOrManagerAllFilter(ropTeam) ? {} : { team: ropTeam }),
+              ...(isRopOrManagerAllFilter(manager) ? {} : { manager }),
+              ...(quick !== "all" ? { quick } : {}),
+            })}
+            data-testid="button-dealer-base-open-client-map"
+          >
+            Карта клиентов
+          </Link>
+        </Button>
       </div>
 
       <section className="space-y-3" data-testid="section-dealer-base-kpis">
@@ -715,16 +891,16 @@ export default function DealerBase() {
               </Select>
             </div>
             <div className="min-w-0 space-y-2">
-              <Label className="text-xs font-medium text-muted-foreground">Классификация (TOP/A/B/C)</Label>
-              <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger className="min-h-11 min-w-0 rounded-xl">
+              <Label className="text-xs font-medium text-muted-foreground">Категория клиента</Label>
+              <Select value={category} onValueChange={(v) => setCategory(v as ClientCategoryRouteFilter)}>
+                <SelectTrigger className="min-h-11 min-w-0 rounded-xl" data-testid="select-dealer-base-category">
                   <SelectValue placeholder="Категория" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Все категории</SelectItem>
                   {categoryOptions.map((c) => (
                     <SelectItem key={c} value={c}>
-                      {c}
+                      {getClientCategoryLabel(c)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -861,6 +1037,17 @@ export default function DealerBase() {
             {resultsContextLine}
           </p>
         ) : null}
+        {teamSummaryForCompactBanner ? (
+          <div className="mb-4 min-w-0 max-w-full" data-testid="section-dealer-base-team-compact-summary">
+            <TeamSummaryCard
+              variant="compact"
+              summary={teamSummaryForCompactBanner}
+              ctaHref={buildHashPath("/dealer-base", { team: teamSummaryForCompactBanner.teamId })}
+              ctaLabel="Открыть команду"
+              showCta={false}
+            />
+          </div>
+        ) : null}
         {workView === "teams" ? (
           <div className="space-y-6" data-testid={viewSectionDataTestId("teams")}>
             {getRopOptions().map((rop) => {
@@ -888,7 +1075,7 @@ export default function DealerBase() {
                           <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
                             <span>Всего: {st.total}</span>
                             <span>Активные: {st.active}</span>
-                            <span>TOP: {st.top}</span>
+                            <span>ТОП-сегмент: {st.top}</span>
                             <span>Внимание: {st.attention}</span>
                             <span className="col-span-2">Потенциальные: {st.potential}</span>
                           </div>
@@ -904,26 +1091,27 @@ export default function DealerBase() {
         ) : null}
 
         {workView === "cities_all" ? (
-          <div className="space-y-3" data-testid={viewSectionDataTestId("cities_all")}>
-            <p className="text-sm text-muted-foreground">Группировка по городам (отдел). Нажмите город, чтобы применить фильтр.</p>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {cityStatsForRows(pickerFiltered)
-                .slice(0, cap)
-                .map((cs) => (
-                  <button
-                    key={cs.city}
-                    type="button"
-                    className="rounded-xl border border-border/80 bg-card p-4 text-left shadow-sm transition hover:border-primary/40"
-                    onClick={() => setCity(cs.city)}
-                  >
-                    <p className="font-semibold text-foreground">{cs.city}</p>
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      Всего {cs.total} · Активные {cs.active} · TOP {cs.top} · Внимание {cs.attention}
-                    </p>
-                  </button>
-                ))}
-            </div>
-          </div>
+          <CityConcentrationBlock
+            variant="dealer"
+            rows={cityRowsDept}
+            showAllHref={allCitiesHref}
+            cityHref={cityRowHref}
+            activeHref={cityActiveHref}
+            attentionHref={cityAttentionHref}
+            showAllLink={false}
+          />
+        ) : null}
+
+        {workView === "team_cities" ? (
+          <CityConcentrationBlock
+            variant="dealer"
+            rows={cityRowsTeam}
+            showAllHref={allCitiesHref}
+            cityHref={cityRowHref}
+            activeHref={cityActiveHref}
+            attentionHref={cityAttentionHref}
+            showAllLink={false}
+          />
         ) : null}
 
         {workView === "my_team" ? (
@@ -944,7 +1132,7 @@ export default function DealerBase() {
                     <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
                       <span>Всего: {st.total}</span>
                       <span>Активные: {st.active}</span>
-                      <span>TOP: {st.top}</span>
+                      <span>ТОП-сегмент: {st.top}</span>
                       <span>Внимание: {st.attention}</span>
                       <span className="col-span-2">Потенциальные: {st.potential}</span>
                     </div>
@@ -990,16 +1178,15 @@ export default function DealerBase() {
                 Выберите менеджера в фильтре выше, чтобы увидеть группировку по городам.
               </Card>
             ) : (
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {cityStatsForRows(managerScopedRows).map((cs) => (
-                  <Card key={cs.city} className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
-                    <p className="font-semibold text-foreground">{cs.city}</p>
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      Всего {cs.total} · Активные {cs.active} · TOP {cs.top} · Внимание {cs.attention}
-                    </p>
-                  </Card>
-                ))}
-              </div>
+              <CityConcentrationBlock
+                variant="dealer"
+                rows={cityRowsManager}
+                showAllHref={allCitiesHref}
+                cityHref={cityRowHref}
+                activeHref={cityActiveHref}
+                attentionHref={cityAttentionHref}
+                showAllLink={false}
+              />
             )}
           </div>
         ) : null}

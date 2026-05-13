@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AnalyticsWorkspaceReleaseOverview } from "@/components/analytics-workspace-release-overview";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
 import {
   ANALYTICS_WORKSPACE_TAB_META,
@@ -255,7 +256,7 @@ export default function AnalyticsWorkspacePage() {
   const [tab, setTab] = useState<AnalyticsWorkspaceTabId>("top500");
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 pb-24" data-testid="page-analytics-workspace">
+    <div className="mx-auto max-w-6xl min-w-0 space-y-6 overflow-x-hidden pb-24" data-testid="page-analytics-workspace">
       <FloatingBackButton href="/main" label="На главную" testId="button-floating-back-analytics-workspace" />
       <div className="space-y-2">
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Аналитика команды</h1>
@@ -284,14 +285,16 @@ export default function AnalyticsWorkspacePage() {
         </Card>
       </div>
 
+      <AnalyticsWorkspaceReleaseOverview />
+
       <Tabs value={tab} onValueChange={(v) => setTab(v as AnalyticsWorkspaceTabId)} className="w-full min-w-0">
-        <div className="w-full overflow-x-auto pb-2">
-          <TabsList className="inline-flex h-auto min-w-0 flex-nowrap gap-1 bg-muted/50 p-1" data-testid="tabs-analytics-workspace">
+        <div className="w-full min-w-0 pb-2">
+          <TabsList className="flex h-auto min-h-0 w-full min-w-0 flex-wrap gap-1 bg-muted/50 p-1" data-testid="tabs-analytics-workspace">
             {ANALYTICS_WORKSPACE_TAB_META.map((m) => (
               <TabsTrigger
                 key={m.id}
                 value={m.id}
-                className={cn("shrink-0 whitespace-nowrap px-3 py-2 text-xs sm:text-sm")}
+                className={cn("min-w-0 shrink px-3 py-2 text-xs sm:text-sm")}
                 data-testid={m.testId}
               >
                 {m.label}

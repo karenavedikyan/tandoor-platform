@@ -1,5 +1,6 @@
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { Link } from "wouter";
+import { TeamSummaryCard } from "@/components/team-summary-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -10,16 +11,30 @@ import {
   dealerNeedsAttention,
   roleScopedDealerRows,
 } from "@/lib/dealer-base-role-views";
+import { buildHashPath } from "@/lib/hash-route-utils";
 import { getEffectiveTeamLeadTeamId } from "@/lib/release-demo-profile";
 import { getAllMatrixTasks } from "@/lib/trade-point-task-data";
 import { getRopOptions } from "@/lib/rop-manager-filters";
-import { getTeamManagers, type SalesRole } from "@/lib/sales-control-data";
+import { getSalesUserById, getTeamManagers, type SalesRole } from "@/lib/sales-control-data";
+import { buildTeamSummaries } from "@/lib/team-summary";
 
 function countOpenTasksForDealers(dealerIds: Set<string>): number {
   return getAllMatrixTasks().filter((t) => dealerIds.has(t.dealerId) && t.status !== "done").length;
 }
 
 type MainLink = { href: string; label: string; testId: string };
+
+function MainKpiLink({ href, testId, children }: { href: string; testId: string; children: ReactNode }) {
+  return (
+    <a
+      href={href}
+      data-testid={testId}
+      className="block min-w-0 rounded-xl no-underline outline-none ring-offset-background transition hover:opacity-[0.97] focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      {children}
+    </a>
+  );
+}
 
 function MainLinkButton({ href, label, testId }: MainLink) {
   return (
@@ -78,6 +93,42 @@ export function MainRoleDashboard() {
   const can = (path: string) => Boolean(user && canAccessPath(user.role, path));
 
   const planHref = salesControlHomeHref(role);
+
+  const teamSummaries = useMemo(() => buildTeamSummaries(profile), [profile]);
+
+  const kpiHrefs = useMemo(() => {
+    const u = getSalesUserById(profile.personaUserId);
+    if (role === "sales_manager") {
+      const mid = u?.id ?? "";
+      return {
+        clients: buildHashPath("/dealer-base"),
+        active: buildHashPath("/dealer-base", { quick: "active", view: "my_clients", manager: mid }),
+        attention: buildHashPath("/dealer-base", { quick: "attention", view: "my_clients", manager: mid }),
+        tasks: buildHashPath("/tasks", { preset: "all" }),
+        extra: "",
+      };
+    }
+    if (role === "team_lead") {
+      const tid = getEffectiveTeamLeadTeamId(profile);
+      return {
+        clients: buildHashPath("/dealer-base", { view: "table_team", team: tid }),
+        active: buildHashPath("/dealer-base", { quick: "active", view: "table_team", team: tid }),
+        attention: buildHashPath("/dealer-base", { quick: "attention", view: "table_team", team: tid }),
+        tasks: buildHashPath("/tasks", { preset: "all" }),
+        extra: buildHashPath("/dealer-base", { view: "by_manager", team: tid }),
+      };
+    }
+    if (role === "sales_director") {
+      return {
+        clients: buildHashPath("/dealer-base"),
+        active: buildHashPath("/dealer-base", { quick: "active", view: "table_all" }),
+        attention: buildHashPath("/dealer-base", { quick: "attention", view: "table_all" }),
+        tasks: buildHashPath("/tasks", { preset: "all" }),
+        extra: buildHashPath("/dealer-base", { view: "teams" }),
+      };
+    }
+    return { clients: "/", active: "/", attention: "/", tasks: "/", extra: "" };
+  }, [role, profile.personaUserId]);
 
   const links: MainLink[] = useMemo(() => {
     const out: MainLink[] = [];
@@ -187,40 +238,50 @@ export function MainRoleDashboard() {
               : "grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-4"
           }
         >
-          <Card className="min-w-0 rounded-xl border border-border/80 bg-card shadow-sm" data-testid="card-main-kpi-clients">
-            <CardContent className="p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{kpiClientsLabel}</p>
-              <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{totalClients}</p>
-            </CardContent>
-          </Card>
-          <Card className="min-w-0 rounded-xl border border-border/80 bg-card shadow-sm" data-testid="card-main-kpi-active">
-            <CardContent className="p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Активные клиенты</p>
-              <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{activeClients}</p>
-            </CardContent>
-          </Card>
-          <Card className="min-w-0 rounded-xl border border-border/80 bg-card shadow-sm" data-testid="card-main-kpi-attention">
-            <CardContent className="p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Требуют внимания</p>
-              <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{attentionClients}</p>
-            </CardContent>
-          </Card>
-          <Card className="min-w-0 rounded-xl border border-border/80 bg-card shadow-sm" data-testid="card-main-kpi-tasks">
-            <CardContent className="p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{kpiTasksLabel}</p>
-              <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{openTasks}</p>
-            </CardContent>
-          </Card>
-          {extraKpiLabel && extraKpiValue ? (
-            <Card
-              className="min-w-0 rounded-xl border border-border/80 bg-card shadow-sm sm:col-span-1"
-              data-testid={role === "team_lead" ? "card-main-kpi-managers" : "card-main-kpi-teams"}
-            >
+          <MainKpiLink href={kpiHrefs.clients} testId="link-main-kpi-clients">
+            <Card className="min-w-0 rounded-xl border border-border/80 bg-card shadow-sm" data-testid="card-main-kpi-clients">
               <CardContent className="p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{extraKpiLabel}</p>
-                <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{extraKpiValue}</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{kpiClientsLabel}</p>
+                <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{totalClients}</p>
               </CardContent>
             </Card>
+          </MainKpiLink>
+          <MainKpiLink href={kpiHrefs.active} testId="link-main-kpi-active">
+            <Card className="min-w-0 rounded-xl border border-border/80 bg-card shadow-sm" data-testid="card-main-kpi-active">
+              <CardContent className="p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Активные клиенты</p>
+                <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{activeClients}</p>
+              </CardContent>
+            </Card>
+          </MainKpiLink>
+          <MainKpiLink href={kpiHrefs.attention} testId="link-main-kpi-attention">
+            <Card className="min-w-0 rounded-xl border border-border/80 bg-card shadow-sm" data-testid="card-main-kpi-attention">
+              <CardContent className="p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Требуют внимания</p>
+                <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{attentionClients}</p>
+              </CardContent>
+            </Card>
+          </MainKpiLink>
+          <MainKpiLink href={kpiHrefs.tasks} testId="link-main-kpi-tasks">
+            <Card className="min-w-0 rounded-xl border border-border/80 bg-card shadow-sm" data-testid="card-main-kpi-tasks">
+              <CardContent className="p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{kpiTasksLabel}</p>
+                <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{openTasks}</p>
+              </CardContent>
+            </Card>
+          </MainKpiLink>
+          {extraKpiLabel && extraKpiValue && kpiHrefs.extra ? (
+            <MainKpiLink href={kpiHrefs.extra} testId="link-main-kpi-extra">
+              <Card
+                className="min-w-0 rounded-xl border border-border/80 bg-card shadow-sm sm:col-span-1"
+                data-testid={role === "team_lead" ? "card-main-kpi-managers" : "card-main-kpi-teams"}
+              >
+                <CardContent className="p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{extraKpiLabel}</p>
+                  <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{extraKpiValue}</p>
+                </CardContent>
+              </Card>
+            </MainKpiLink>
           ) : null}
         </div>
 
@@ -230,6 +291,36 @@ export function MainRoleDashboard() {
           ))}
         </div>
       </section>
+
+      {(role === "sales_director" || role === "team_lead") && teamSummaries.length > 0 ? (
+        <section className="space-y-3 border-t border-border pt-6" data-testid="section-main-team-summaries">
+          <h2 className="text-lg font-semibold text-foreground">
+            {role === "sales_director" ? "Команды РОПов" : "Моя команда"}
+          </h2>
+          <div
+            className={
+              role === "sales_director"
+                ? "grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
+                : "grid min-w-0 grid-cols-1 gap-4"
+            }
+          >
+            {teamSummaries.map((s) => (
+              <TeamSummaryCard
+                key={s.teamId}
+                summary={s}
+                variant="full"
+                showTeamMetricLinks={role === "sales_director" || role === "team_lead"}
+                ctaHref={
+                  role === "sales_director"
+                    ? buildHashPath("/dealer-base", { team: s.teamId })
+                    : buildHashPath("/dealer-base", { team: s.teamId, view: "table_team" })
+                }
+                ctaLabel={role === "sales_director" ? "Открыть команду" : "К клиентам команды"}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

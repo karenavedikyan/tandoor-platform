@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { LayoutGrid, List, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +31,7 @@ import { getTrainingArticleIdForTask } from "@/lib/training-data";
 import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
 import {
   getManagersForRopTeam,
+  getRopOptions,
   isRopOrManagerAllFilter,
   managerDisplayMatchesCatalogName,
 } from "@/lib/rop-manager-filters";
@@ -41,7 +42,29 @@ import {
   mapSalesRoleToDealerBaseAccess,
   ropOptionsForProfile,
   roleScopedDealerRows,
+  type DealerBaseAccessRole,
 } from "@/lib/dealer-base-role-views";
+import {
+  classifyTask,
+  filterTasksByCategory,
+  getTaskCategoryCounts,
+  getTaskCategoryLabel,
+  getTaskCategoryMeta,
+  TASK_CATEGORIES,
+  type TaskCategoryFilterId,
+} from "@/lib/task-classification";
+import {
+  filterTasksByPreset,
+  getTaskPresetCounts,
+  getTaskPresetLabel,
+  TASK_PRESETS,
+  taskMatchesOverduePresetForBadge,
+  taskMatchesUrgentPresetForBadge,
+  type TaskPresetId,
+} from "@/lib/task-presets";
+import { useRouteSearchParams } from "@/lib/hash-route-utils";
+import { getEffectiveTeamLeadTeamId, type ReleaseDemoProfile } from "@/lib/release-demo-profile";
+import { getAllSalesManagers, getSalesUserById } from "@/lib/sales-control-data";
 
 type TasksFilterId =
   | "all"
@@ -101,6 +124,34 @@ const FILTERS: { id: TasksFilterId; label: string; testId: string }[] = [
   { id: "manager", label: "Менеджер", testId: "filter-tasks-manager" },
   { id: "regional_manager", label: "Регионал", testId: "filter-tasks-regional-manager" },
 ];
+
+const VALID_TASK_PRESET_IDS = new Set<TaskPresetId>(["all", ...TASK_PRESETS.map((p) => p.id)]);
+
+const VALID_TASK_CATEGORY_IDS = new Set<TaskCategoryFilterId>(["all", ...TASK_CATEGORIES.map((c) => c.id)]);
+
+function tasksUrlTeamAllowed(teamId: string, profile: ReleaseDemoProfile, access: DealerBaseAccessRole): boolean {
+  if (!getRopOptions().some((o) => o.teamId === teamId)) return false;
+  if (access === "sales_director") return true;
+  if (access === "team_lead") return teamId === getEffectiveTeamLeadTeamId(profile);
+  const u = getSalesUserById(profile.personaUserId);
+  return Boolean(u?.teamId === teamId);
+}
+
+function tasksUrlManagerAllowed(
+  managerId: string,
+  ropTeamId: string,
+  profile: ReleaseDemoProfile,
+  access: DealerBaseAccessRole,
+): boolean {
+  if (access === "sales_manager") {
+    return getSalesUserById(profile.personaUserId)?.id === managerId;
+  }
+  const pool =
+    access === "sales_director" && isRopOrManagerAllFilter(ropTeamId)
+      ? getAllSalesManagers()
+      : getManagersForRopTeam(ropTeamId);
+  return pool.some((m) => m.id === managerId);
+}
 
 function statusTone(s: MatrixTaskStatus) {
   if (s === "new") return "border-primary/40 bg-primary/10 text-primary";
@@ -187,6 +238,49 @@ function sortLeadership(tasks: MatrixTaskWithContext[]) {
   });
 }
 
+function TaskCategoryBadge({ task }: { task: MatrixTaskWithContext }) {
+  const { categoryId } = classifyTask(task);
+  const meta = getTaskCategoryMeta(categoryId);
+  return (
+    <Badge
+      variant="outline"
+      className={cn("font-medium", meta.badgeClass)}
+      data-testid={`badge-task-category-${task.taskId}`}
+      data-task-category={categoryId}
+      data-task-category-label={meta.label}
+    >
+      {meta.shortLabel}
+    </Badge>
+  );
+}
+
+function TaskPresetMarkers({ task, now }: { task: MatrixTaskWithContext; now: Date }) {
+  const overdue = taskMatchesOverduePresetForBadge(task, now);
+  const urgent = taskMatchesUrgentPresetForBadge(task, now);
+  return (
+    <>
+      {overdue ? (
+        <Badge
+          variant="outline"
+          className="border-red-300 bg-red-50 font-semibold text-red-900 dark:bg-red-950/30 dark:text-red-50"
+          data-testid={`badge-task-preset-overdue-${task.taskId}`}
+        >
+          Просрочена
+        </Badge>
+      ) : null}
+      {urgent ? (
+        <Badge
+          variant="outline"
+          className="border-amber-300 bg-amber-50 font-semibold text-amber-950 dark:bg-amber-950/30 dark:text-amber-50"
+          data-testid={`badge-task-preset-urgent-${task.taskId}`}
+        >
+          Горящая
+        </Badge>
+      ) : null}
+    </>
+  );
+}
+
 function TasksKpis({ tasks }: { tasks: MatrixTaskWithContext[] }) {
   const summary = useMemo(() => summarizeMatrixTasks(tasks), [tasks]);
   const tiles = [
@@ -229,14 +323,19 @@ function TasksKpis({ tasks }: { tasks: MatrixTaskWithContext[] }) {
   );
 }
 
-function TaskCard({ task }: { task: MatrixTaskWithContext }) {
+function TaskCard({ task, presetClock }: { task: MatrixTaskWithContext; presetClock: Date }) {
   const trainingArticleId = getTrainingArticleIdForTask({
     insightDomain: task.insightDomain,
     productId: task.productId,
   });
+  const cat = classifyTask(task);
+  const catMeta = getTaskCategoryMeta(cat.categoryId);
   return (
     <Card
-      className="rounded-2xl border border-border/80 bg-card shadow-md"
+      className={cn(
+        "rounded-2xl border border-border/80 bg-card shadow-md border-l-4",
+        catMeta.borderLeftClass,
+      )}
       data-testid={`card-task-${task.taskId}`}
     >
       <CardContent className="space-y-3 p-4">
@@ -248,6 +347,8 @@ function TaskCard({ task }: { task: MatrixTaskWithContext }) {
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap gap-1.5">
+            <TaskCategoryBadge task={task} />
+            <TaskPresetMarkers task={task} now={presetClock} />
             <Badge variant="outline" className={cn("font-medium", statusTone(task.status))}>
               {MATRIX_TASK_STATUS_LABEL[task.status]}
             </Badge>
@@ -379,19 +480,25 @@ function TaskCard({ task }: { task: MatrixTaskWithContext }) {
   );
 }
 
-function TaskListRow({ task }: { task: MatrixTaskWithContext }) {
+function TaskListRow({ task, presetClock }: { task: MatrixTaskWithContext; presetClock: Date }) {
   const trainingArticleId = getTrainingArticleIdForTask({
     insightDomain: task.insightDomain,
     productId: task.productId,
   });
+  const catMeta = getTaskCategoryMeta(classifyTask(task).categoryId);
   return (
     <Card
-      className="rounded-2xl border border-border/80 bg-card shadow-sm"
+      className={cn(
+        "rounded-2xl border border-border/80 bg-card shadow-sm border-l-4",
+        catMeta.borderLeftClass,
+      )}
       data-testid={`card-task-${task.taskId}`}
     >
       <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0 flex-1 space-y-1.5">
           <div className="flex flex-wrap items-center gap-2">
+            <TaskCategoryBadge task={task} />
+            <TaskPresetMarkers task={task} now={presetClock} />
             <p className="font-semibold leading-snug text-foreground">{task.title}</p>
             <Badge variant="outline" className={cn("font-medium", statusTone(task.status))}>
               {MATRIX_TASK_STATUS_LABEL[task.status]}
@@ -488,9 +595,13 @@ function TaskListRow({ task }: { task: MatrixTaskWithContext }) {
 }
 
 function LeadershipAttentionCard({ task }: { task: MatrixTaskWithContext }) {
+  const catMeta = getTaskCategoryMeta(classifyTask(task).categoryId);
   return (
     <Card
-      className="rounded-2xl border border-red-200 bg-red-50/40 shadow-md"
+      className={cn(
+        "rounded-2xl border border-red-200 bg-red-50/40 shadow-md border-l-4",
+        catMeta.borderLeftClass,
+      )}
       data-testid={`card-leadership-attention-${task.taskId}`}
     >
       <CardContent className="space-y-2.5 p-4">
@@ -502,6 +613,7 @@ function LeadershipAttentionCard({ task }: { task: MatrixTaskWithContext }) {
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap gap-1.5">
+            <TaskCategoryBadge task={task} />
             <Badge variant="outline" className={cn("font-medium", statusTone(task.status))}>
               {MATRIX_TASK_STATUS_LABEL[task.status]}
             </Badge>
@@ -573,19 +685,92 @@ export default function TasksPage() {
   const [filter, setFilter] = useState<TasksFilterId>("all");
   const [query, setQuery] = useState("");
   const [view, setView] = useState<ViewMode>("cards");
+  const [categoryFilter, setCategoryFilter] = useState<TaskCategoryFilterId>("all");
+  const [presetId, setPresetId] = useState<TaskPresetId>("all");
+  const [presetClock] = useState(() => new Date());
 
   const dealerById = useMemo(() => new Map(DEALER_BASE_ROWS.map((d) => [d.id, d])), []);
   const [ropTeam, setRopTeam] = useState<string>("all");
   const [mgrFilter, setMgrFilter] = useState<string>("all");
 
-  useEffect(() => {
-    const d = initialRopManagerForProfile(profile, access);
-    setRopTeam(d.ropTeam);
-    setMgrFilter(d.manager);
-  }, [profile.role, profile.personaUserId, access]);
+  const routeQs = useRouteSearchParams();
+  const routeKey = useMemo(() => routeQs.toString(), [routeQs]);
 
   const ropSelectOptions = useMemo(() => ropOptionsForProfile(profile, access), [profile, access]);
   const mgrOptions = useMemo(() => managerOptionsForProfile(profile, access, ropTeam), [profile, access, ropTeam]);
+
+  useEffect(() => {
+    const d = initialRopManagerForProfile(profile, access);
+    if (!routeKey) {
+      setRopTeam(d.ropTeam);
+      setMgrFilter(d.manager);
+      setPresetId("all");
+      setCategoryFilter("all");
+      setFilter("all");
+      setQuery("");
+      setRole("all");
+      return;
+    }
+
+    let rop = d.ropTeam;
+    let mgr = d.manager;
+    let preset: TaskPresetId = "all";
+    let cat: TaskCategoryFilterId = "all";
+    let filt: TasksFilterId = "all";
+    let qv = "";
+    let rv: RoleViewId = "all";
+
+    const teamRaw = (routeQs.get("team") ?? routeQs.get("rop"))?.trim() ?? "";
+    const managerRaw = routeQs.get("manager")?.trim() ?? "";
+    if (teamRaw && tasksUrlTeamAllowed(teamRaw, profile, access)) {
+      rop = teamRaw;
+      mgr = "all";
+    }
+    if (managerRaw && tasksUrlManagerAllowed(managerRaw, rop, profile, access)) {
+      mgr = managerRaw;
+    }
+
+    const presetRaw = routeQs.get("preset")?.trim();
+    if (presetRaw && VALID_TASK_PRESET_IDS.has(presetRaw as TaskPresetId)) {
+      preset = presetRaw as TaskPresetId;
+    }
+    const catRaw = routeQs.get("category")?.trim();
+    if (preset !== "showcase" && preset !== "training" && catRaw && VALID_TASK_CATEGORY_IDS.has(catRaw as TaskCategoryFilterId)) {
+      cat = catRaw as TaskCategoryFilterId;
+    }
+    if (preset === "showcase" || preset === "training") {
+      cat = "all";
+    }
+
+    const tabRaw = (routeQs.get("tab") ?? routeQs.get("status") ?? "").trim().toLowerCase();
+    const TAB_MAP: Record<string, TasksFilterId> = {
+      all: "all",
+      new: "new",
+      in_progress: "in_progress",
+      overdue: "overdue",
+      high: "high",
+      manager: "manager",
+      regional_manager: "regional_manager",
+      open: "all",
+    };
+    if (tabRaw && TAB_MAP[tabRaw]) filt = TAB_MAP[tabRaw]!;
+
+    const roleRaw = routeQs.get("role")?.trim();
+    if (roleRaw === "all" || roleRaw === "manager" || roleRaw === "regional_manager" || roleRaw === "leadership") {
+      rv = roleRaw as RoleViewId;
+    }
+
+    const searchRaw = routeQs.get("search")?.trim();
+    if (searchRaw) qv = searchRaw;
+
+    setRopTeam(rop);
+    setMgrFilter(mgr);
+    setPresetId(preset);
+    setCategoryFilter(cat);
+    setFilter(filt);
+    setQuery(qv);
+    setRole(rv);
+  }, [profile.personaUserId, profile.role, access, routeKey, routeQs]);
 
   const onRopChange = (v: string) => {
     setRopTeam(v);
@@ -608,7 +793,7 @@ export default function TasksPage() {
     return roleScopedTasks;
   }, [role, roleScopedTasks]);
 
-  const filtered = useMemo(() => {
+  const filteredBeforePreset = useMemo(() => {
     let list = applySearch(applyFilter(baseList, filter), query);
     if (!isRopOrManagerAllFilter(ropTeam) || !isRopOrManagerAllFilter(mgrFilter)) {
       list = list.filter((t) => {
@@ -626,6 +811,26 @@ export default function TasksPage() {
     return list;
   }, [baseList, filter, query, ropTeam, mgrFilter, dealerById, mgrOptions]);
 
+  const presetCounts = useMemo(
+    () => getTaskPresetCounts(filteredBeforePreset, presetClock),
+    [filteredBeforePreset, presetClock],
+  );
+
+  const filteredAfterPreset = useMemo(
+    () => filterTasksByPreset(filteredBeforePreset, presetId, presetClock),
+    [filteredBeforePreset, presetId, presetClock],
+  );
+
+  const categoryCounts = useMemo(
+    () => getTaskCategoryCounts(filteredAfterPreset),
+    [filteredAfterPreset],
+  );
+
+  const filtered = useMemo(
+    () => filterTasksByCategory(filteredAfterPreset, categoryFilter),
+    [filteredAfterPreset, categoryFilter],
+  );
+
   const visibleTasks = useMemo(() => filtered.slice(0, TASKS_DISPLAY_LIMIT), [filtered]);
 
   const taskRowKey = (t: MatrixTaskWithContext) => `${t.dealerId}|${t.tradePointId}|${t.taskId}`;
@@ -638,6 +843,13 @@ export default function TasksPage() {
   }, [role, roleScopedTasks]);
 
   const activeRoleView = ROLE_VIEWS.find((r) => r.id === role) ?? ROLE_VIEWS[0];
+
+  const selectPreset = useCallback((id: TaskPresetId) => {
+    setPresetId(id);
+    if (id === "showcase" || id === "training") {
+      setCategoryFilter("all");
+    }
+  }, []);
 
   return (
     <div className="min-w-0 max-w-full space-y-4 overflow-x-hidden sm:space-y-6" data-testid="page-tasks">
@@ -691,6 +903,82 @@ export default function TasksPage() {
       </p>
 
       <TasksKpis tasks={roleScopedTasks} />
+
+      <div className="min-w-0 space-y-2" data-testid="section-tasks-presets">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Быстрые виды
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            data-testid="chip-task-preset-all"
+            title="Сбросить пресет и показать все задачи по текущим фильтрам."
+            onClick={() => selectPreset("all")}
+            className={cn(
+              "min-h-9 max-w-full rounded-full border px-3 py-1.5 text-left text-xs font-semibold transition-colors sm:text-sm",
+              presetId === "all"
+                ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground",
+            )}
+          >
+            Все задачи <span className="tabular-nums">({presetCounts.all})</span>
+          </button>
+          {TASK_PRESETS.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              data-testid={`chip-task-preset-${p.id}`}
+              title={p.description}
+              onClick={() => selectPreset(p.id)}
+              className={cn(
+                "min-h-9 max-w-full rounded-full border px-3 py-1.5 text-left text-xs font-semibold transition-colors sm:text-sm",
+                presetId === p.id
+                  ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                  : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground",
+              )}
+            >
+              {p.label}{" "}
+              <span className="tabular-nums">({presetCounts[p.id]})</span>
+            </button>
+          ))}
+        </div>
+        <p className="text-sm text-muted-foreground" data-testid="text-tasks-active-preset">
+          Показан вид: {getTaskPresetLabel(presetId)}
+        </p>
+      </div>
+
+      <div className="min-w-0" data-testid="section-tasks-category-chips">
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            data-testid="chip-task-category-all"
+            onClick={() => setCategoryFilter("all")}
+            className={cn(
+              "min-h-9 max-w-full rounded-full border px-3 py-1.5 text-left text-xs font-semibold transition-colors sm:text-sm",
+              categoryFilter === "all"
+                ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground",
+            )}
+          >
+            Все <span className="tabular-nums">({categoryCounts.all})</span>
+          </button>
+          {TASK_CATEGORIES.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              data-testid={`chip-task-category-${c.id}`}
+              onClick={() => setCategoryFilter(c.id)}
+              className={cn(
+                "min-h-9 max-w-full rounded-full border px-3 py-1.5 text-left text-xs font-semibold transition-colors sm:text-sm",
+                categoryFilter === c.id ? c.chipActiveClass : c.chipInactiveClass,
+              )}
+            >
+              {c.shortLabel}{" "}
+              <span className="tabular-nums">({categoryCounts[c.id]})</span>
+            </button>
+          ))}
+        </div>
+      </div>
 
       {role === "leadership" && leadershipAttention.length > 0 ? (
         <Card
@@ -764,8 +1052,8 @@ export default function TasksPage() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
-        <div className="min-w-0 flex-1 space-y-1.5 sm:max-w-[240px]">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 sm:items-end">
+        <div className="min-w-0 space-y-1.5">
           <Label className="text-xs text-muted-foreground">РОП</Label>
           <Select value={ropTeam} onValueChange={onRopChange}>
             <SelectTrigger className="min-h-11 min-w-0" data-testid="select-tasks-rop">
@@ -783,7 +1071,7 @@ export default function TasksPage() {
             </SelectContent>
           </Select>
         </div>
-        <div className="min-w-0 flex-1 space-y-1.5 sm:max-w-[240px]">
+        <div className="min-w-0 space-y-1.5">
           <Label className="text-xs text-muted-foreground">Менеджер</Label>
           <Select value={mgrFilter} onValueChange={setMgrFilter}>
             <SelectTrigger className="min-h-11 min-w-0" data-testid="select-tasks-manager">
@@ -796,6 +1084,25 @@ export default function TasksPage() {
               {mgrOptions.map((m) => (
                 <SelectItem key={m.id} value={m.id}>
                   {m.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="min-w-0 space-y-1.5 sm:col-span-2 lg:col-span-1">
+          <Label className="text-xs text-muted-foreground">Тип задачи</Label>
+          <Select
+            value={categoryFilter}
+            onValueChange={(v) => setCategoryFilter(v as TaskCategoryFilterId)}
+          >
+            <SelectTrigger className="min-h-11 min-w-0" data-testid="select-tasks-category">
+              <SelectValue placeholder="Тип задачи" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{getTaskCategoryLabel("all")}</SelectItem>
+              {TASK_CATEGORIES.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.label}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -833,7 +1140,8 @@ export default function TasksPage() {
       <p className="text-sm text-muted-foreground" data-testid="text-tasks-count">
         Показано{" "}
         <span className="font-semibold tabular-nums text-foreground">{visibleTasks.length}</span> из{" "}
-        <span className="font-semibold tabular-nums text-foreground">{filtered.length}</span> по фильтру и поиску
+        <span className="font-semibold tabular-nums text-foreground">{filtered.length}</span> по фильтрам,
+        виду, поиску и типу задачи
         {roleScopedTasks.length !== filtered.length ? (
           <>
             {" "}
@@ -852,19 +1160,19 @@ export default function TasksPage() {
       {filtered.length === 0 ? (
         <Card className="rounded-2xl border border-border/80 bg-card shadow-md">
           <CardContent className="pt-5 text-sm text-muted-foreground">
-            По выбранным условиям задач нет. Измените роль, фильтр или поисковый запрос.
+            По выбранным условиям задач нет. Измените роль, фильтр, быстрый вид, тип задачи или поисковый запрос.
           </CardContent>
         </Card>
       ) : view === "cards" ? (
         <div className="grid gap-3 sm:grid-cols-2">
           {visibleTasks.map((t) => (
-            <TaskCard key={taskRowKey(t)} task={t} />
+            <TaskCard key={taskRowKey(t)} task={t} presetClock={presetClock} />
           ))}
         </div>
       ) : (
         <div className="space-y-3">
           {visibleTasks.map((t) => (
-            <TaskListRow key={taskRowKey(t)} task={t} />
+            <TaskListRow key={taskRowKey(t)} task={t} presetClock={presetClock} />
           ))}
         </div>
       )}
