@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { Link } from "wouter";
+import { TeamSummaryCard } from "@/components/team-summary-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -14,6 +15,7 @@ import { getEffectiveTeamLeadTeamId } from "@/lib/release-demo-profile";
 import { getAllMatrixTasks } from "@/lib/trade-point-task-data";
 import { getRopOptions } from "@/lib/rop-manager-filters";
 import { getTeamManagers, type SalesRole } from "@/lib/sales-control-data";
+import { buildTeamSummaries } from "@/lib/team-summary";
 
 function countOpenTasksForDealers(dealerIds: Set<string>): number {
   return getAllMatrixTasks().filter((t) => dealerIds.has(t.dealerId) && t.status !== "done").length;
@@ -78,6 +80,8 @@ export function MainRoleDashboard() {
   const can = (path: string) => Boolean(user && canAccessPath(user.role, path));
 
   const planHref = salesControlHomeHref(role);
+
+  const teamSummaries = useMemo(() => buildTeamSummaries(profile), [profile]);
 
   const links: MainLink[] = useMemo(() => {
     const out: MainLink[] = [];
@@ -230,6 +234,35 @@ export function MainRoleDashboard() {
           ))}
         </div>
       </section>
+
+      {(role === "sales_director" || role === "team_lead") && teamSummaries.length > 0 ? (
+        <section className="space-y-3 border-t border-border pt-6" data-testid="section-main-team-summaries">
+          <h2 className="text-lg font-semibold text-foreground">
+            {role === "sales_director" ? "Команды РОПов" : "Моя команда"}
+          </h2>
+          <div
+            className={
+              role === "sales_director"
+                ? "grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
+                : "grid min-w-0 grid-cols-1 gap-4"
+            }
+          >
+            {teamSummaries.map((s) => (
+              <TeamSummaryCard
+                key={s.teamId}
+                summary={s}
+                variant="full"
+                ctaHref={
+                  role === "sales_director"
+                    ? `/dealer-base?team=${encodeURIComponent(s.teamId)}`
+                    : "/dealer-base"
+                }
+                ctaLabel={role === "sales_director" ? "Открыть команду" : "К клиентам команды"}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }
