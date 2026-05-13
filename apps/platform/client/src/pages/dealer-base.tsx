@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -44,6 +44,8 @@ import {
   workViewsForAccess,
   type DealerBaseWorkView,
 } from "@/lib/dealer-base-role-views";
+import { buildTeamSummary } from "@/lib/team-summary";
+import { TeamSummaryCard } from "@/components/team-summary-card";
 
 const DEALER_BASE_DISPLAY_LIMIT = 300;
 const TODAY_LIMIT = 100;
@@ -350,11 +352,34 @@ export default function DealerBase() {
     return initialRopManagerForProfile(p, mapSalesRoleToDealerBaseAccess(p.role)).manager;
   });
 
+  const [loc] = useLocation();
+  const urlTeamFromLocation = useMemo(() => {
+    const idx = loc.indexOf("?");
+    const raw = idx >= 0 ? loc.slice(idx + 1) : "";
+    return new URLSearchParams(raw).get("team");
+  }, [loc]);
+
   useEffect(() => {
     const d = initialRopManagerForProfile(profile, access);
     setRopTeam(d.ropTeam);
     setManager(d.manager);
   }, [profile.role, profile.personaUserId, access]);
+
+  useEffect(() => {
+    if (!urlTeamFromLocation) return;
+    if (!getRopOptions().some((o) => o.teamId === urlTeamFromLocation)) return;
+    if (access === "sales_director") {
+      setRopTeam(urlTeamFromLocation);
+      setManager("all");
+      setWorkView("my_team");
+      return;
+    }
+    if (access === "team_lead" && urlTeamFromLocation === getEffectiveTeamLeadTeamId(profile)) {
+      setRopTeam(urlTeamFromLocation);
+      setManager("all");
+      setWorkView("my_team");
+    }
+  }, [urlTeamFromLocation, access, profile.personaUserId, profile.role]);
 
   useEffect(() => {
     const allowed = workViewsForAccess(access);
@@ -413,6 +438,12 @@ export default function DealerBase() {
     () => scopedRows.filter((r) => r.releaseTeamId === effectiveTeamIdForTeamModes),
     [scopedRows, effectiveTeamIdForTeamModes],
   );
+
+  const teamSummaryForCompactBanner = useMemo(() => {
+    if (access !== "sales_director" && access !== "team_lead") return null;
+    if (!DEALER_BASE_TEAM_WORK_VIEWS.includes(workView)) return null;
+    return buildTeamSummary(effectiveTeamIdForTeamModes);
+  }, [access, workView, effectiveTeamIdForTeamModes]);
 
   const teamRopDisplayLabel = useMemo(
     () => getRopOptions().find((o) => o.teamId === effectiveTeamIdForTeamModes)?.label ?? "—",
@@ -860,6 +891,17 @@ export default function DealerBase() {
           <p className="mb-3 text-sm font-medium text-foreground" data-testid="text-dealer-base-results-context">
             {resultsContextLine}
           </p>
+        ) : null}
+        {teamSummaryForCompactBanner ? (
+          <div className="mb-4 min-w-0 max-w-full" data-testid="section-dealer-base-team-compact-summary">
+            <TeamSummaryCard
+              variant="compact"
+              summary={teamSummaryForCompactBanner}
+              ctaHref={`/dealer-base?team=${encodeURIComponent(teamSummaryForCompactBanner.teamId)}`}
+              ctaLabel="Открыть команду"
+              showCta={false}
+            />
+          </div>
         ) : null}
         {workView === "teams" ? (
           <div className="space-y-6" data-testid={viewSectionDataTestId("teams")}>
