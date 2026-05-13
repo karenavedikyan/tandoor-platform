@@ -252,11 +252,11 @@ export function MainRoleDashboard() {
                 key={s.teamId}
                 summary={s}
                 variant="full"
-                ctaHref={
-                  role === "sales_director"
-                    ? `/dealer-base?team=${encodeURIComponent(s.teamId)}`
-                    : "/dealer-base"
-                }
+                  ctaHref={
+                    role === "sales_director"
+                      ? `/#/dealer-base?team=${encodeURIComponent(s.teamId)}`
+                      : "/#/dealer-base"
+                  }
                 ctaLabel={role === "sales_director" ? "Открыть команду" : "К клиентам команды"}
               />
             ))}

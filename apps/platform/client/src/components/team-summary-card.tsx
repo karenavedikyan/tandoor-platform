@@ -1,4 +1,3 @@
-import { Link } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -101,7 +100,7 @@ export function TeamSummaryCard({ summary, variant = "full", ctaHref, ctaLabel, 
 
         {showCta ? (
           <Button asChild size="sm" className="w-full min-w-0 font-semibold sm:w-auto" data-testid={`button-team-summary-open-${tid}`}>
-            <Link href={ctaHref}>{ctaLabel}</Link>
+            <a href={ctaHref}>{ctaLabel}</a>
           </Button>
         ) : null}
       </CardContent>
