@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
 import { Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,8 +22,8 @@ import {
   managerDisplayMatchesCatalogName,
 } from "@/lib/rop-manager-filters";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
-import { loadReleaseDemoProfile, getEffectiveTeamLeadTeamId } from "@/lib/release-demo-profile";
-import { getSalesUserById, getTeamManagers, type SalesUser } from "@/lib/sales-control-data";
+import { loadReleaseDemoProfile, getEffectiveTeamLeadTeamId, type ReleaseDemoProfile } from "@/lib/release-demo-profile";
+import { getSalesUserById, getTeamManagers, getAllSalesManagers, type SalesUser } from "@/lib/sales-control-data";
 import {
   buildDayPlanTeamRows,
   dealerNeedsAttention,
@@ -42,15 +42,61 @@ import {
   viewsInGroupForAccess,
   workViewGroup,
   workViewsForAccess,
+  type DealerBaseAccessRole,
   type DealerBaseWorkView,
 } from "@/lib/dealer-base-role-views";
 import { buildTeamSummary } from "@/lib/team-summary";
 import { TeamSummaryCard } from "@/components/team-summary-card";
+import { buildHashPath, useRouteSearchParams } from "@/lib/hash-route-utils";
 
 const DEALER_BASE_DISPLAY_LIMIT = 300;
 const TODAY_LIMIT = 100;
 
 type QuickFilter = "all" | "active" | "potential" | "attention" | "top" | "no_activity";
+
+const QUICK_FROM_URL: Record<string, QuickFilter> = {
+  all: "all",
+  active: "active",
+  potential: "potential",
+  attention: "attention",
+  top: "top",
+  inactive: "no_activity",
+  no_activity: "no_activity",
+};
+
+function parseWorkViewFromQuery(raw: string | null, access: DealerBaseAccessRole): DealerBaseWorkView | null {
+  if (!raw) return null;
+  const v = raw.trim() as DealerBaseWorkView;
+  return workViewsForAccess(access).includes(v) ? v : null;
+}
+
+function teamAllowedForProfile(
+  teamId: string,
+  profile: ReleaseDemoProfile,
+  access: DealerBaseAccessRole,
+): boolean {
+  if (!getRopOptions().some((o) => o.teamId === teamId)) return false;
+  if (access === "sales_director") return true;
+  if (access === "team_lead") return teamId === getEffectiveTeamLeadTeamId(profile);
+  const u = getSalesUserById(profile.personaUserId);
+  return Boolean(u?.teamId === teamId);
+}
+
+function managerAllowedForRop(
+  managerId: string,
+  ropTeamId: string,
+  profile: ReleaseDemoProfile,
+  access: DealerBaseAccessRole,
+): boolean {
+  if (access === "sales_manager") {
+    const u = getSalesUserById(profile.personaUserId);
+    return Boolean(u?.id === managerId);
+  }
+  const pool = access === "sales_director" && isRopOrManagerAllFilter(ropTeamId)
+    ? getAllSalesManagers()
+    : getManagersForRopTeam(ropTeamId);
+  return pool.some((m) => m.id === managerId);
+}
 
 const QUICK_FILTERS: { id: QuickFilter; label: string; testId: string }[] = [
   { id: "all", label: "Все", testId: "filter-dealers-all" },
@@ -352,34 +398,8 @@ export default function DealerBase() {
     return initialRopManagerForProfile(p, mapSalesRoleToDealerBaseAccess(p.role)).manager;
   });
 
-  const [loc] = useLocation();
-  const urlTeamFromLocation = useMemo(() => {
-    const idx = loc.indexOf("?");
-    const raw = idx >= 0 ? loc.slice(idx + 1) : "";
-    return new URLSearchParams(raw).get("team") ?? new URLSearchParams(window.location.search).get("team");
-  }, [loc]);
-
-  useEffect(() => {
-    const d = initialRopManagerForProfile(profile, access);
-    setRopTeam(d.ropTeam);
-    setManager(d.manager);
-  }, [profile.role, profile.personaUserId, access]);
-
-  useEffect(() => {
-    if (!urlTeamFromLocation) return;
-    if (!getRopOptions().some((o) => o.teamId === urlTeamFromLocation)) return;
-    if (access === "sales_director") {
-      setRopTeam(urlTeamFromLocation);
-      setManager("all");
-      setWorkView("my_team");
-      return;
-    }
-    if (access === "team_lead" && urlTeamFromLocation === getEffectiveTeamLeadTeamId(profile)) {
-      setRopTeam(urlTeamFromLocation);
-      setManager("all");
-      setWorkView("my_team");
-    }
-  }, [urlTeamFromLocation, access, profile.personaUserId, profile.role]);
+  const routeQs = useRouteSearchParams();
+  const routeKey = useMemo(() => routeQs.toString(), [routeQs]);
 
   useEffect(() => {
     const allowed = workViewsForAccess(access);
@@ -422,6 +442,76 @@ export default function DealerBase() {
     const s = new Set(scopedRows.map((r) => r.city));
     return Array.from(s).sort();
   }, [scopedRows]);
+
+  useEffect(() => {
+    const d = initialRopManagerForProfile(profile, access);
+    if (!routeKey) {
+      setRopTeam(d.ropTeam);
+      setManager(d.manager);
+      setQuick("all");
+      setCity("all");
+      setCategory("all");
+      setSearch("");
+      setWorkView(defaultWorkViewForAccess(access));
+      return;
+    }
+
+    let rop = d.ropTeam;
+    let mgr = d.manager;
+    let qv: QuickFilter = "all";
+    let cityV = "all";
+    let catV = "all";
+    let searchV = "";
+    let vw: DealerBaseWorkView = defaultWorkViewForAccess(access);
+
+    const scoped = roleScopedDealerRows(DEALER_BASE_ROWS, profile);
+    const catOpts = Array.from(new Set(scoped.map((r) => r.category))) as DealerCategory[];
+
+    const teamRaw = (routeQs.get("team") ?? routeQs.get("rop"))?.trim() ?? "";
+    const managerRaw = routeQs.get("manager")?.trim() ?? "";
+    const viewParsed = parseWorkViewFromQuery(routeQs.get("view"), access);
+    const quickRaw = (routeQs.get("quick") ?? "").trim().toLowerCase();
+    if (quickRaw && QUICK_FROM_URL[quickRaw]) qv = QUICK_FROM_URL[quickRaw]!;
+
+    if (teamRaw && teamAllowedForProfile(teamRaw, profile, access)) {
+      rop = teamRaw;
+      mgr = "all";
+    }
+
+    if (managerRaw && managerAllowedForRop(managerRaw, rop, profile, access)) {
+      mgr = managerRaw;
+    }
+
+    if (viewParsed) {
+      vw = viewParsed;
+    } else if (mgr !== "all" && !isRopOrManagerAllFilter(mgr) && (access === "sales_director" || access === "team_lead")) {
+      vw = "my_clients";
+    } else if (
+      teamRaw &&
+      teamAllowedForProfile(teamRaw, profile, access) &&
+      !managerRaw &&
+      (access === "sales_director" || access === "team_lead")
+    ) {
+      vw = "my_team";
+    }
+
+    const cityRaw = routeQs.get("city")?.trim();
+    if (cityRaw && cityRaw !== "all" && scoped.some((r) => r.city === cityRaw)) cityV = cityRaw;
+
+    const catRaw = routeQs.get("category")?.trim();
+    if (catRaw && catRaw !== "all" && catOpts.includes(catRaw as DealerCategory)) catV = catRaw;
+
+    const searchRaw = routeQs.get("search")?.trim();
+    if (searchRaw) searchV = searchRaw;
+
+    setRopTeam(rop);
+    setManager(mgr);
+    setQuick(qv);
+    setCity(cityV);
+    setCategory(catV);
+    setSearch(searchV);
+    setWorkView(vw);
+  }, [profile.personaUserId, profile.role, access, routeKey, routeQs]);
 
   const firstRopTeamId = useMemo(() => getRopOptions()[0]?.teamId ?? "", []);
 
@@ -897,7 +987,7 @@ export default function DealerBase() {
             <TeamSummaryCard
               variant="compact"
               summary={teamSummaryForCompactBanner}
-              ctaHref={`/dealer-base?team=${encodeURIComponent(teamSummaryForCompactBanner.teamId)}`}
+              ctaHref={buildHashPath("/dealer-base", { team: teamSummaryForCompactBanner.teamId })}
               ctaLabel="Открыть команду"
               showCta={false}
             />
