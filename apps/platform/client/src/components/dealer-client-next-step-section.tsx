@@ -16,12 +16,14 @@ import {
   canEditClientNextStep,
   CLIENT_NEXT_STEP_CHANGED_EVENT,
   type ClientNextStepActionType,
+  clientNextStepActionLabel,
   getClientNextStepForDealer,
   loadClientNextStepsStorage,
   saveClientNextStep,
 } from "@/lib/client-next-step-data";
 import { canViewShowcaseDistribution } from "@/lib/showcase-distribution-data";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
+import { cn } from "@/lib/utils";
 
 const ACTION_OPTIONS: { id: ClientNextStepActionType; label: string }[] = [
   { id: "call", label: "Звонок" },
@@ -29,6 +31,12 @@ const ACTION_OPTIONS: { id: ClientNextStepActionType; label: string }[] = [
   { id: "message", label: "Сообщение" },
   { id: "showcase_check", label: "Проверка витрины" },
 ];
+
+function formatIsoDayToRu(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso.trim());
+  if (!m) return iso.trim();
+  return `${m[3]}.${m[2]}.${m[1]}`;
+}
 
 type Props = {
   row: DealerRow;
@@ -47,6 +55,7 @@ export function DealerClientNextStepSection({ row, profile, actorUserId, actorLa
   const [actionType, setActionType] = useState<ClientNextStepActionType>("visit");
   const [contactDate, setContactDate] = useState("");
   const [comment, setComment] = useState("");
+  const [editing, setEditing] = useState(false);
 
   useEffect(() => {
     const fn = () => setTick((n) => n + 1);
@@ -68,6 +77,12 @@ export function DealerClientNextStepSection({ row, profile, actorUserId, actorLa
     }
   }, [row.id, tick]);
 
+  useEffect(() => {
+    const s = loadClientNextStepsStorage();
+    const cur = getClientNextStepForDealer(row.id, s);
+    setEditing(!cur);
+  }, [row.id]);
+
   const stored = getClientNextStepForDealer(row.id, loadClientNextStepsStorage());
 
   const onSave = useCallback(() => {
@@ -79,97 +94,127 @@ export function DealerClientNextStepSection({ row, profile, actorUserId, actorLa
       updatedByUserId: actorUserId,
       updatedByLabel: actorLabel,
     });
+    setEditing(false);
     onSaved();
   }, [canEdit, row.id, actionType, contactDate, comment, actorUserId, actorLabel, onSaved]);
+
+  const summaryText = stored
+    ? `${clientNextStepActionLabel(stored.actionType)} · ${formatIsoDayToRu(stored.contactDate)}${
+        stored.comment?.trim() ? ` · ${stored.comment.trim()}` : ""
+      } · обновил(а): ${stored.updatedByLabel}`
+    : canEdit
+      ? "Шаг не запланирован — укажите дату контакта и сохраните."
+      : "Шаг не запланирован.";
+
+  const showForm = !stored || editing;
 
   return (
     <section
       id="dealer-section-next-step"
       data-testid="section-dealer-next-step"
-      className="scroll-mt-28 space-y-4 sm:scroll-mt-32"
+      className="scroll-mt-28 space-y-2 sm:scroll-mt-32"
     >
-      <Card className="rounded-2xl border border-border/80 bg-card shadow-md">
-        <CardHeader className="space-y-1 pb-2">
-          <CardTitle className="text-base sm:text-lg">Следующий шаг</CardTitle>
-          <CardDescription>
-            Запланируйте контакт или проверку витрины. Сохраняется в браузере для этой вкладки.
+      <Card className="rounded-xl border border-border/70 bg-card shadow-xs">
+        <CardHeader className="space-y-1 p-3 pb-2 sm:p-4">
+          <CardTitle className="text-sm sm:text-base">Следующий шаг</CardTitle>
+          <CardDescription className="text-xs">
+            План контакта сохраняется в браузере до закрытия вкладки.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-3 p-3 pt-0 sm:p-4 sm:pt-0">
           {!canEdit ? (
-            <p className="text-sm text-muted-foreground" data-testid="text-dealer-next-step-readonly">
+            <p className="text-xs text-muted-foreground" data-testid="text-dealer-next-step-readonly">
               {stored
-                ? `Только просмотр. Последнее изменение: ${stored.updatedByLabel} · ${ACTION_OPTIONS.find((o) => o.id === stored.actionType)?.label ?? ""} на ${stored.contactDate}.`
+                ? `Только просмотр. Последнее изменение: ${stored.updatedByLabel}.`
                 : "Только просмотр: редактирование доступно менеджеру клиента, РОПу команды и руководителю продаж."}
             </p>
           ) : null}
-          {stored && canEdit ? (
-            <p className="text-xs text-muted-foreground">
-              Последнее сохранение: {stored.updatedByLabel} · {new Date(stored.updatedAt).toLocaleString("ru-RU")}
-            </p>
-          ) : null}
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label className="text-xs">Тип действия</Label>
-              <Select
-                value={actionType}
-                onValueChange={(v) => setActionType(v as ClientNextStepActionType)}
-                disabled={!canEdit}
-              >
-                <SelectTrigger className="min-h-11" data-testid="select-dealer-next-step-type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ACTION_OPTIONS.map((o) => (
-                    <SelectItem key={o.id} value={o.id}>
-                      {o.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs">Дата следующего контакта</Label>
-              <Input
-                type="date"
-                value={contactDate}
-                onChange={(e) => setContactDate(e.target.value)}
-                disabled={!canEdit}
-                className="min-h-11"
-                data-testid="input-dealer-next-step-date"
-              />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label className="text-xs">Комментарий</Label>
-            <Textarea
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              disabled={!canEdit}
-              rows={3}
-              className="min-h-[88px] resize-y"
-              data-testid="textarea-dealer-next-step-comment"
-              placeholder="Например: проверить выставление образцов на витрине"
-            />
-          </div>
-          {canEdit ? (
+          <p
+            className={cn("text-sm font-medium leading-snug text-foreground", !stored && "text-muted-foreground")}
+            data-testid="text-dealer-next-step-summary"
+          >
+            {summaryText}
+          </p>
+
+          {stored && canEdit && !showForm ? (
             <Button
               type="button"
-              className="min-h-11 w-full font-semibold sm:w-auto"
-              data-testid="button-dealer-next-step-save"
-              onClick={onSave}
-              disabled={!contactDate.trim()}
+              variant="outline"
+              size="sm"
+              className="min-h-9 font-semibold"
+              data-testid="button-dealer-next-step-edit"
+              onClick={() => setEditing(true)}
             >
-              Сохранить
+              Изменить
             </Button>
           ) : null}
-          {stored && !canEdit ? (
-            <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm text-foreground">
-              <p className="font-medium">{ACTION_OPTIONS.find((o) => o.id === stored.actionType)?.label}</p>
-              <p className="mt-1 text-muted-foreground">Дата контакта: {stored.contactDate}</p>
-              {stored.comment ? <p className="mt-2 whitespace-pre-line">{stored.comment}</p> : null}
-            </div>
+
+          {showForm ? (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Тип действия</Label>
+                  <Select
+                    value={actionType}
+                    onValueChange={(v) => setActionType(v as ClientNextStepActionType)}
+                    disabled={!canEdit}
+                  >
+                    <SelectTrigger className="min-h-10" data-testid="select-dealer-next-step-type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ACTION_OPTIONS.map((o) => (
+                        <SelectItem key={o.id} value={o.id}>
+                          {o.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Дата следующего контакта</Label>
+                  <Input
+                    type="date"
+                    value={contactDate}
+                    onChange={(e) => setContactDate(e.target.value)}
+                    disabled={!canEdit}
+                    className="min-h-10"
+                    data-testid="input-dealer-next-step-date"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Комментарий</Label>
+                <Textarea
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  disabled={!canEdit}
+                  rows={3}
+                  className="min-h-[72px] resize-y text-sm"
+                  data-testid="textarea-dealer-next-step-comment"
+                  placeholder="Например: проверить выставление образцов на витрине"
+                />
+              </div>
+              {canEdit ? (
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    className="min-h-9 font-semibold"
+                    data-testid="button-dealer-next-step-save"
+                    onClick={onSave}
+                    disabled={!contactDate.trim()}
+                  >
+                    Сохранить
+                  </Button>
+                  {stored ? (
+                    <Button type="button" variant="ghost" size="sm" className="min-h-9" onClick={() => setEditing(false)}>
+                      Отмена
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
+            </>
           ) : null}
         </CardContent>
       </Card>

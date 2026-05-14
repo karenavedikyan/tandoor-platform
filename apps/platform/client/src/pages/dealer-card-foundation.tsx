@@ -23,6 +23,7 @@ import { FloatingBackButton } from "@/components/navigation/floating-back-button
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { getDealerAnalyticsSignalCards } from "@/lib/dealer-analytics-signals";
+import { buildHashPath } from "@/lib/hash-route-utils";
 import {
   getShowcaseHistoryForDealer,
   getShowcaseKpis,
@@ -45,77 +46,44 @@ import { DealerClientNextStepSection } from "@/components/dealer-client-next-ste
 import { DealerStaticProfileSection } from "@/components/dealer-static-profile-section";
 
 const SECTION_IDS = [
-  "overview",
-  "action_focus",
+  "work",
   "showcase_distribution",
   "next_step",
   "history",
   "static_profile",
   "points",
-  "sales",
-  "distribution",
-  "showcases",
-  "training",
-  "tasks",
 ] as const;
 
 type SectionId = (typeof SECTION_IDS)[number];
 
 const SECTION_DOM_IDS: Record<SectionId, string> = {
-  overview: "dealer-section-overview",
-  action_focus: "dealer-section-action-focus",
+  work: "dealer-section-work",
   points: "dealer-section-points",
-  sales: "dealer-section-sales",
-  distribution: "dealer-section-distribution",
-  showcases: "dealer-section-showcases",
-  training: "section-dealer-training-attention",
   showcase_distribution: "dealer-section-showcase-distribution",
   next_step: "dealer-section-next-step",
   history: "section-dealer-activity-history",
   static_profile: "dealer-section-static-profile",
-  tasks: "dealer-section-tasks",
 };
 
 const SECTION_LABELS: Record<SectionId, string> = {
-  overview: "Шапка",
-  action_focus: "Сейчас",
+  work: "Работа",
   points: "Точки",
-  sales: "Продажи",
-  distribution: "Дистрибуция",
-  showcases: "Витрины",
-  training: "Обучение",
   showcase_distribution: "Витрина",
   next_step: "Шаг",
   history: "История",
   static_profile: "Паспорт",
-  tasks: "Задачи",
 };
 
 const SECTION_NAV_TEST_IDS: Record<SectionId, string> = {
-  overview: "dealer-section-nav-overview",
-  action_focus: "dealer-section-nav-action-focus",
+  work: "dealer-section-nav-work",
   points: "dealer-section-nav-points",
-  sales: "dealer-section-nav-sales",
-  distribution: "dealer-section-nav-distribution",
-  showcases: "dealer-section-nav-showcases",
-  training: "dealer-section-nav-training",
   showcase_distribution: "dealer-section-nav-showcase-distribution",
   next_step: "dealer-section-nav-next-step",
   history: "dealer-section-nav-history",
   static_profile: "dealer-section-nav-static-profile",
-  tasks: "dealer-section-nav-tasks",
 };
 
-type TaskPriority = "Высокий" | "Средний" | "Низкий";
-type TaskStatus = "Новая" | "В работе" | "Запланирована" | "Закрыта";
-
-type DealerTask = {
-  title: string;
-  priority: TaskPriority;
-  due: string;
-  assignee: string;
-  status: TaskStatus;
-};
+const NAV_SECTION_IDS = SECTION_IDS.filter((id): id is Exclude<SectionId, "points"> => id !== "points");
 
 function scrollToSection(id: SectionId) {
   const el = document.getElementById(SECTION_DOM_IDS[id]);
@@ -133,15 +101,15 @@ function SectionTitle({ children, subtitle, className }: { children: ReactNode; 
 
 function FieldRow({ label, value, icon: Icon }: { label: string; value: string; icon?: ComponentType<{ className?: string }> }) {
   return (
-    <div className="flex gap-3 border-b border-border py-3 last:border-0 sm:items-start sm:gap-4">
+    <div className="flex gap-2 border-b border-border py-2 last:border-0 sm:items-start sm:gap-3">
       {Icon ? (
-        <span className="mt-0.5 hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground sm:flex">
-          <Icon className="h-4 w-4" aria-hidden />
+        <span className="mt-0.5 hidden h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground sm:flex">
+          <Icon className="h-3.5 w-3.5" aria-hidden />
         </span>
       ) : null}
       <div className="min-w-0 flex-1">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
-        <p className="mt-0.5 break-words text-sm font-medium leading-snug text-foreground sm:text-[15px]">{value}</p>
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
+        <p className="mt-0.5 break-words text-sm font-medium leading-snug text-foreground">{value}</p>
       </div>
     </div>
   );
@@ -149,10 +117,10 @@ function FieldRow({ label, value, icon: Icon }: { label: string; value: string; 
 
 function KpiTile({ label, value }: { label: string; value: string }) {
   return (
-    <Card className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-md">
-      <CardHeader className="space-y-1 pb-2 pt-5">
-        <CardDescription className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</CardDescription>
-        <CardTitle className="text-2xl font-semibold tracking-tight text-foreground sm:text-[26px]">{value}</CardTitle>
+    <Card className="overflow-hidden rounded-lg border border-border/70 bg-card shadow-xs">
+      <CardHeader className="space-y-0.5 px-3 pb-2 pt-3">
+        <CardDescription className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</CardDescription>
+        <CardTitle className="text-lg font-semibold tracking-tight text-foreground sm:text-xl">{value}</CardTitle>
       </CardHeader>
     </Card>
   );
@@ -164,7 +132,7 @@ function SurfaceCard({
   ...rest
 }: { children: ReactNode; className?: string } & ComponentProps<typeof Card>) {
   return (
-    <Card className={cn("rounded-2xl border border-border/80 bg-card shadow-md", className)} {...rest}>
+    <Card className={cn("rounded-xl border border-border/70 bg-card shadow-xs", className)} {...rest}>
       {children}
     </Card>
   );
@@ -293,34 +261,34 @@ function buildHistoryEvents(row: DealerRow): DealerHistoryEvent[] {
   ];
 }
 
-function buildTasks(row: DealerRow): DealerTask[] {
-  const i = parseDealerIndex(row.id);
-  const pool: Omit<DealerTask, "status" | "priority">[] = [
-    { title: "Проверить актуальность контактов", due: `${12 + (i % 10)}.05.2026`, assignee: row.responsibles.salesManager },
-    { title: "Уточнить условия по витрине", due: `${15 + (i % 8)}.05.2026`, assignee: row.responsibles.regionalManager },
-    { title: "Запланировать визит", due: `${18 + (i % 7)}.05.2026`, assignee: row.responsibles.regionalManager },
-    { title: "Обновить данные по торговым точкам", due: `${22 + (i % 6)}.05.2026`, assignee: row.responsibles.assistant },
-  ];
-  const statuses: TaskStatus[] = ["Новая", "В работе", "Запланирована", "Закрыта"];
-  const priorities: TaskPriority[] = ["Высокий", "Средний", "Низкий"];
-  const count = row.status === "требует внимания" ? 4 : row.status === "потенциальный" ? 3 : 2;
-  return pool.slice(0, count).map((t, idx) => ({
-    ...t,
-    status: statuses[(i + idx) % statuses.length],
-    priority: priorities[(i + idx * 2) % priorities.length],
-  }));
+function isFilledDataCell(v: string | undefined | null): boolean {
+  const t = (v ?? "").trim();
+  return t !== "" && t !== "—" && t !== "-";
 }
 
-function DealerTrainingAttentionSection({ row }: { row: DealerRow }) {
-  const storageKey = dealerProductTrainingStorageKey(row.id);
-  const [completed, setCompleted] = useState(() => {
-    if (typeof window === "undefined") return row.productTrainingCompleted;
-    const s = sessionStorage.getItem(storageKey);
-    if (s === "1") return true;
-    if (s === "0") return false;
-    return row.productTrainingCompleted;
-  });
+function collapseAdjacentDuplicateHistoryBodies(events: DealerHistoryEvent[]): DealerHistoryEvent[] {
+  const out: DealerHistoryEvent[] = [];
+  for (const ev of events) {
+    const key = ev.body.trim();
+    const last = out[out.length - 1];
+    if (last && last.body.trim() === key && key !== "") {
+      out[out.length - 1] = ev;
+    } else {
+      out.push(ev);
+    }
+  }
+  return out;
+}
 
+function DealerTrainingAttentionSection({
+  row,
+  completed,
+  onCompletedChange,
+}: {
+  row: DealerRow;
+  completed: boolean;
+  onCompletedChange: (next: boolean) => void;
+}) {
   const signal = useMemo(() => getDealerTrainingAttentionSignal(row, completed), [row, completed]);
   const trainingHref =
     signal.suggestedTrainingProgramIds[0] != null
@@ -329,9 +297,9 @@ function DealerTrainingAttentionSection({ row }: { row: DealerRow }) {
 
   return (
     <section
-      id={SECTION_DOM_IDS.training}
+      id="section-dealer-training-attention"
       data-testid="section-dealer-training-attention"
-      className="scroll-mt-28 space-y-4 sm:space-y-6 lg:scroll-mt-32"
+      className="scroll-mt-28 space-y-2 sm:scroll-mt-32 lg:scroll-mt-32"
     >
       <SectionTitle subtitle="Продуктовое обучение и внимание к персоналу партнёра.">
         Обучение и внимание к персоналу
@@ -390,8 +358,7 @@ function DealerTrainingAttentionSection({ row }: { row: DealerRow }) {
                 checked={completed}
                 onCheckedChange={(v) => {
                   const next = v === true;
-                  setCompleted(next);
-                  sessionStorage.setItem(storageKey, next ? "1" : "0");
+                  onCompletedChange(next);
                 }}
                 data-testid="checkbox-dealer-product-training-completed"
               />
@@ -409,12 +376,6 @@ function DealerTrainingAttentionSection({ row }: { row: DealerRow }) {
       </SurfaceCard>
     </section>
   );
-}
-
-function priorityClass(p: TaskPriority) {
-  if (p === "Высокий") return "border-red-200 bg-red-50 text-red-900";
-  if (p === "Средний") return "border-amber-200 bg-amber-50 text-amber-950";
-  return "border-border bg-muted text-muted-foreground";
 }
 
 function DealerNotFound() {
@@ -436,7 +397,7 @@ function DealerNotFound() {
 }
 
 function useActiveSection(dealerId: string) {
-  const [active, setActive] = useState<SectionId>("overview");
+  const [active, setActive] = useState<SectionId>("work");
 
   useEffect(() => {
     const opts: IntersectionObserverInit = { root: null, rootMargin: "-20% 0px -55% 0px", threshold: 0 };
@@ -460,75 +421,35 @@ function useActiveSection(dealerId: string) {
   return active;
 }
 
-function DealerSectionNav({
-  active,
-  variant,
-}: {
-  active: SectionId;
-  variant: "sidebar" | "chips";
-}) {
+function DealerSectionNav({ active }: { active: SectionId }) {
   const onNav = useCallback((id: SectionId) => {
     scrollToSection(id);
   }, []);
 
-  if (variant === "sidebar") {
-    return (
-      <nav
-        className="sticky top-24 space-y-1 rounded-2xl border border-border/80 bg-card p-3 shadow-md"
-        aria-label="Разделы карточки"
-        data-testid="dealer-section-nav"
-      >
-        <p className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Разделы</p>
-        {SECTION_IDS.map((id) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => onNav(id)}
-            data-testid={SECTION_NAV_TEST_IDS[id]}
-            className={cn(
-              "flex w-full items-center rounded-xl px-3 py-2 text-left text-sm font-medium transition-colors",
-              active === id
-                ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground",
-            )}
-          >
-            {SECTION_LABELS[id]}
-          </button>
-        ))}
-      </nav>
-    );
-  }
-
   return (
-    <div
-      className="sticky top-[4.25rem] z-30 -mx-4 border-b border-border/60 bg-background/95 px-4 py-2 backdrop-blur-md supports-[backdrop-filter]:bg-background/90 sm:-mx-5 sm:px-5 lg:hidden"
+    <nav
+      className="sticky top-24 space-y-1 rounded-xl border border-border/70 bg-card p-2 shadow-xs"
+      aria-label="Разделы карточки"
       data-testid="dealer-section-nav"
     >
-      <div
-        className="flex max-w-full flex-wrap gap-2 pb-1 lg:hidden"
-        role="tablist"
-        aria-label="Разделы карточки"
-      >
-        {SECTION_IDS.map((id) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={active === id}
-            onClick={() => onNav(id)}
-            data-testid={SECTION_NAV_TEST_IDS[id]}
-            className={cn(
-              "min-h-10 rounded-full border px-3 py-2 text-left text-sm font-medium transition-colors",
-              active === id
-                ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground",
-            )}
-          >
-            {SECTION_LABELS[id]}
-          </button>
-        ))}
-      </div>
-    </div>
+      <p className="px-2 pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Разделы</p>
+      {NAV_SECTION_IDS.map((id) => (
+        <button
+          key={id}
+          type="button"
+          onClick={() => onNav(id)}
+          data-testid={SECTION_NAV_TEST_IDS[id]}
+          className={cn(
+            "flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-sm font-medium transition-colors",
+            active === id
+              ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20"
+              : "text-muted-foreground hover:bg-muted hover:text-foreground",
+          )}
+        >
+          {SECTION_LABELS[id]}
+        </button>
+      ))}
+    </nav>
   );
 }
 
@@ -538,6 +459,14 @@ function DealerCardContent({ row }: { row: DealerRow }) {
   const [showcaseBump, setShowcaseBump] = useState(0);
   const [nextStepBump, setNextStepBump] = useState(0);
   const [historyExpanded, setHistoryExpanded] = useState(false);
+  const [pointsExpanded, setPointsExpanded] = useState(false);
+  const [trainingCompleted, setTrainingCompleted] = useState(() => {
+    if (typeof window === "undefined") return row.productTrainingCompleted;
+    const s = sessionStorage.getItem(dealerProductTrainingStorageKey(row.id));
+    if (s === "1") return true;
+    if (s === "0") return false;
+    return row.productTrainingCompleted;
+  });
 
   useEffect(() => {
     const fn = () => setNextStepBump((n) => n + 1);
@@ -547,15 +476,21 @@ function DealerCardContent({ row }: { row: DealerRow }) {
 
   useEffect(() => {
     setHistoryExpanded(false);
-  }, [row.id]);
+    setPointsExpanded(false);
+    if (typeof window === "undefined") return;
+    const s = sessionStorage.getItem(dealerProductTrainingStorageKey(row.id));
+    if (s === "1") setTrainingCompleted(true);
+    else if (s === "0") setTrainingCompleted(false);
+    else setTrainingCompleted(row.productTrainingCompleted);
+  }, [row.id, row.productTrainingCompleted]);
 
   const businessCategoryLabel = getClientCategoryLabel(row.clientCategory);
   const activeSection = useActiveSection(row.id);
   const historyEvents = useMemo(() => buildHistoryEvents(row), [row, showcaseBump, nextStepBump]);
-  const sortedHistoryEvents = useMemo(
-    () => [...historyEvents].sort((a, b) => historySortKey(b) - historySortKey(a)),
-    [historyEvents],
-  );
+  const historyTimeline = useMemo(() => {
+    const sorted = [...historyEvents].sort((a, b) => historySortKey(b) - historySortKey(a));
+    return collapseAdjacentDuplicateHistoryBodies(sorted);
+  }, [historyEvents]);
   const lastHistoryLabel = useMemo(() => newestHistoryActivityLabel(historyEvents, row.lastActivity), [historyEvents, row.lastActivity]);
 
   const nextStepStored = useMemo(
@@ -591,9 +526,56 @@ function DealerCardContent({ row }: { row: DealerRow }) {
     return "Срочных сигналов нет — поддерживайте регулярный контакт и актуальность витрины.";
   }, [profile, row, nextStepOverdue, showcaseDailySignals, nextStepStored]);
 
-  const tasks = useMemo(() => buildTasks(row), [row]);
   const dealerProducts = useMemo(() => getDealerProductPreview(row.id, 5), [row.id]);
   const analyticsSignals = useMemo(() => getDealerAnalyticsSignalCards(row), [row]);
+
+  const trainingSignal = useMemo(
+    () => getDealerTrainingAttentionSignal(row, trainingCompleted),
+    [row, trainingCompleted],
+  );
+  const showTrainingSection = trainingSignal.level !== "none" || row.indigoTrainingCandidate;
+
+  const hasTermsBlock = useMemo(
+    () =>
+      isFilledDataCell(row.terms.tandoorClub) ||
+      isFilledDataCell(row.terms.special) ||
+      isFilledDataCell(row.terms.payment) ||
+      isFilledDataCell(row.terms.edo) ||
+      isFilledDataCell(row.terms.limit) ||
+      isFilledDataCell(row.terms.bonuses),
+    [row],
+  );
+
+  const hasCompetitorsBlock = useMemo(
+    () =>
+      isFilledDataCell(row.competitors.list) ||
+      isFilledDataCell(row.competitors.strengths) ||
+      isFilledDataCell(row.competitors.mgrComment) ||
+      isFilledDataCell(row.competitors.rmComment),
+    [row],
+  );
+
+  const showProblemsBlock = row.hasProblem || isFilledDataCell(row.issues.summary);
+
+  const hasSalesData = useMemo(
+    () =>
+      isFilledDataCell(row.salesKpis.quarterRub) ||
+      isFilledDataCell(row.salesKpis.mkUnits) ||
+      isFilledDataCell(row.salesKpis.vhUnits) ||
+      isFilledDataCell(row.salesKpis.furnitureRub),
+    [row],
+  );
+
+  const showDistributionBlock = row.distributionDetail.total > 0 || row.distributionDetail.mk > 0 || row.distributionDetail.vh > 0;
+
+  const hasShowcaseLegacyBlock = useMemo(
+    () =>
+      isFilledDataCell(row.showcase.equipment) ||
+      isFilledDataCell(row.showcase.todo) ||
+      isFilledDataCell(row.showcase.status) ||
+      isFilledDataCell(row.showcase.goalLink),
+    [row],
+  );
 
   const salesComment =
     row.hasProblem
@@ -621,66 +603,72 @@ function DealerCardContent({ row }: { row: DealerRow }) {
           <Link href="/dealer-base">Назад к клиентской базе</Link>
         </Button>
 
-        <div className="lg:grid lg:grid-cols-12 lg:items-start lg:gap-8">
-          <div className="min-w-0 space-y-4 sm:space-y-6 lg:col-span-8">
+        <div className="lg:grid lg:grid-cols-12 lg:items-start lg:gap-6">
+          <div className="min-w-0 space-y-3 sm:space-y-4 lg:col-span-8">
             <section
-              id={SECTION_DOM_IDS.overview}
-              data-testid="section-dealer-overview"
-              className="scroll-mt-28 space-y-4 sm:space-y-6 lg:scroll-mt-32"
+              id={SECTION_DOM_IDS.work}
+              className="scroll-mt-28 space-y-3 sm:scroll-mt-32 lg:scroll-mt-32"
             >
-              <div className="relative overflow-hidden rounded-2xl border border-border bg-card p-4 shadow-md sm:p-5">
-                <div className="pointer-events-none absolute left-0 top-0 h-full w-1 rounded-l-2xl bg-primary" aria-hidden />
-                <div className="relative min-w-0 pl-3 sm:pl-4">
-                  <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    <Badge variant="outline" className={cn("rounded-full px-2.5 py-0.5 text-xs font-medium", statusBadgeClass(row.status))}>
+              <div
+                id="dealer-section-overview"
+                data-testid="section-dealer-overview"
+                className="relative overflow-hidden rounded-xl border border-border bg-card p-3 shadow-xs sm:p-4"
+              >
+                <div className="pointer-events-none absolute left-0 top-0 h-full w-0.5 rounded-l-xl bg-primary" aria-hidden />
+                <div className="relative min-w-0 pl-2.5 sm:pl-3">
+                  <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                    <Badge variant="outline" className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", statusBadgeClass(row.status))}>
                       {row.status}
                     </Badge>
                     <Badge
                       variant="outline"
-                      className={cn("rounded-full px-2.5 py-0.5 text-xs font-medium", getClientCategoryBadgeClass(row.clientCategory))}
+                      className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", getClientCategoryBadgeClass(row.clientCategory))}
                       data-testid="text-dealer-card-client-category"
                     >
                       {businessCategoryLabel}
                     </Badge>
                     {canViewShowcaseCard && showcaseDailySignals.openCt > 0 ? (
-                      <Badge variant="outline" className="rounded-full border-amber-200 bg-amber-50 text-xs font-semibold text-amber-950">
-                        Есть задачи по витрине
+                      <Badge variant="outline" className="rounded-full border-amber-200 bg-amber-50 text-[11px] font-semibold text-amber-950">
+                        Задачи по витрине
                       </Badge>
                     ) : null}
                     {canViewShowcaseCard && showcaseDailySignals.hasDeficit ? (
-                      <Badge variant="outline" className="rounded-full border-rose-200 bg-rose-50 text-xs font-semibold text-rose-950">
-                        Есть дефицит
+                      <Badge variant="outline" className="rounded-full border-rose-200 bg-rose-50 text-[11px] font-semibold text-rose-950">
+                        Дефицит
                       </Badge>
                     ) : null}
                     {nextStepStored?.contactDate ? (
                       <Badge
                         variant="outline"
                         className={cn(
-                          "rounded-full px-2.5 py-0.5 text-xs font-semibold",
+                          "rounded-full px-2 py-0.5 text-[11px] font-semibold",
                           nextStepOverdue
                             ? "border-destructive/50 bg-destructive/10 text-destructive"
                             : "border-border bg-muted/60 text-foreground",
                         )}
                       >
-                        Следующий контакт: {formatIsoDayToRu(nextStepStored.contactDate)}
+                        Контакт: {formatIsoDayToRu(nextStepStored.contactDate)}
                       </Badge>
                     ) : null}
                   </div>
-                  <h1 className="mt-3 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">{row.name}</h1>
-                  <p className="mt-1 min-w-0 break-words text-sm text-muted-foreground">
+                  <h1 className="mt-2 text-lg font-semibold tracking-tight text-foreground sm:text-xl">{row.name}</h1>
+                  <p className="mt-0.5 min-w-0 break-words text-xs text-muted-foreground sm:text-sm">
                     {row.city} · {businessCategoryLabel}
                   </p>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <Button type="button" variant="secondary" size="sm" className="min-h-10" asChild>
-                      <Link href="/dealer-base">К клиентской базе</Link>
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    <Button type="button" variant="secondary" size="sm" className="min-h-9 h-9 text-xs" asChild>
+                      <Link href="/dealer-base">К базе</Link>
                     </Button>
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="min-h-10 border-border bg-card"
+                      className="min-h-9 h-9 border-border bg-card text-xs"
                       data-testid="button-quick-open-points"
-                      onClick={() => scrollToSection("points")}
+                      onClick={() => {
+                        setPointsExpanded(true);
+                        scrollToSection("points");
+                      }}
                     >
                       Точки
                     </Button>
@@ -688,7 +676,7 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="min-h-10 border-border bg-card"
+                      className="min-h-9 h-9 border-border bg-card text-xs"
                       data-testid="button-quick-open-showcase-distribution"
                       onClick={() => scrollToSection("showcase_distribution")}
                     >
@@ -697,21 +685,21 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                   </div>
                 </div>
               </div>
-            </section>
 
-            <DealerActionFocusSection
-              row={row}
-              profile={profile}
-              primaryLine={primaryLine}
-              openShowcaseTasks={showcaseDailySignals.openCt}
-              hasDeficit={showcaseDailySignals.hasDeficit}
-              deficitTotal={showcaseDailySignals.deficitTotal}
-              nextStep={nextStepStored}
-              nextStepOverdue={nextStepOverdue}
-              lastActivityLabel={lastHistoryLabel}
-              onScrollToNextStep={() => scrollToSection("next_step")}
-              onScrollToShowcase={() => scrollToSection("showcase_distribution")}
-            />
+              <DealerActionFocusSection
+                row={row}
+                profile={profile}
+                primaryLine={primaryLine}
+                openShowcaseTasks={showcaseDailySignals.openCt}
+                hasDeficit={showcaseDailySignals.hasDeficit}
+                deficitTotal={showcaseDailySignals.deficitTotal}
+                nextStep={nextStepStored}
+                nextStepOverdue={nextStepOverdue}
+                lastActivityLabel={lastHistoryLabel}
+                onScrollToNextStep={() => scrollToSection("next_step")}
+                onScrollToShowcase={() => scrollToSection("showcase_distribution")}
+              />
+            </section>
 
             <DealerShowcaseDistributionSection
               row={row}
@@ -730,14 +718,14 @@ function DealerCardContent({ row }: { row: DealerRow }) {
             <section
               id={SECTION_DOM_IDS.history}
               data-testid="section-dealer-activity-history"
-              className="scroll-mt-28 space-y-4 sm:scroll-mt-32"
+              className="scroll-mt-28 space-y-2 sm:scroll-mt-32"
             >
-              <SectionTitle subtitle="События по витрине, следующему шагу и сопровождению.">История активности</SectionTitle>
+              <SectionTitle subtitle="События по витрине, шагам и сопровождению.">История активности</SectionTitle>
               <SurfaceCard>
-                <CardContent className="divide-y divide-border pt-2">
-                  {(historyExpanded ? sortedHistoryEvents : sortedHistoryEvents.slice(0, 3)).map((ev) => (
-                    <div key={ev.id} className="flex min-w-0 flex-col gap-1.5 py-4 first:pt-4">
-                      <p className="text-xs font-semibold tabular-nums text-muted-foreground">{ev.meta}</p>
+                <CardContent className="divide-y divide-border px-3 py-0 pt-2 sm:px-4">
+                  {(historyExpanded ? historyTimeline : historyTimeline.slice(0, 3)).map((ev) => (
+                    <div key={ev.id} className="flex min-w-0 flex-col gap-1 py-3 first:pt-2">
+                      <p className="text-[11px] font-semibold tabular-nums text-muted-foreground">{ev.meta}</p>
                       <p className="whitespace-pre-line break-words text-sm leading-relaxed text-foreground">{ev.body}</p>
                     </div>
                   ))}
@@ -746,12 +734,12 @@ function DealerCardContent({ row }: { row: DealerRow }) {
               <Button
                 type="button"
                 variant="outline"
-                className="min-h-12 w-full font-semibold sm:min-h-11 sm:w-auto"
+                className="min-h-10 w-full text-sm font-semibold sm:w-auto"
                 data-testid="button-dealer-history-show-all"
-                disabled={sortedHistoryEvents.length <= 3}
-                title={sortedHistoryEvents.length <= 3 ? "Не более трёх событий в истории" : undefined}
+                disabled={historyTimeline.length <= 3}
+                title={historyTimeline.length <= 3 ? "Не более трёх событий в истории" : undefined}
                 onClick={() => {
-                  if (sortedHistoryEvents.length <= 3) return;
+                  if (historyTimeline.length <= 3) return;
                   setHistoryExpanded((v) => !v);
                 }}
               >
@@ -761,83 +749,67 @@ function DealerCardContent({ row }: { row: DealerRow }) {
 
             <DealerStaticProfileSection row={row} categoryLabel={businessCategoryLabel} />
 
-            <DealerSectionNav active={activeSection} variant="chips" />
-
-            <section
-              data-testid="section-dealer-analytics-signals"
-              className="scroll-mt-28 space-y-3 lg:scroll-mt-32"
-            >
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <SectionTitle subtitle="Сводка по тем же показателям, что в разделе аналитики.">
-                    Сигналы аналитики
-                  </SectionTitle>
-                  <Button
-                    asChild
-                    variant="secondary"
-                    size="sm"
-                    className="min-h-9 w-full shrink-0 font-semibold sm:w-auto"
-                    data-testid="button-dealer-signal-open-tasks"
-                  >
-                    <Link href="/tasks">К задачам по витрине</Link>
+            {analyticsSignals.length > 0 ? (
+              <section
+                data-testid="section-dealer-analytics-signals"
+                className="scroll-mt-28 space-y-2 sm:scroll-mt-32 lg:scroll-mt-32"
+              >
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <SectionTitle subtitle="Совпадает с разделом аналитики.">Сигналы аналитики</SectionTitle>
+                  <Button asChild variant="secondary" size="sm" className="min-h-9 w-full shrink-0 font-semibold sm:w-auto" data-testid="button-dealer-signal-open-tasks">
+                    <Link href={buildHashPath("/tasks", { dealerId: row.id })}>К задачам по витрине</Link>
                   </Button>
                 </div>
-                {analyticsSignals.length === 0 ? (
-                  <SurfaceCard>
-                    <CardContent className="py-4 text-sm text-muted-foreground">
-                      По текущему срезу активных сигналов нет.
-                    </CardContent>
-                  </SurfaceCard>
-                ) : (
-                  <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-                    {analyticsSignals.map((sig) => (
-                      <SurfaceCard
-                        key={sig.kind}
-                        data-testid={`card-dealer-analytics-signal-${sig.kind}`}
-                      >
-                        <CardHeader className="space-y-1 pb-2 pt-4">
-                          <CardDescription className="text-[11px] font-bold uppercase tracking-wide text-primary">
-                            {sig.title}
-                          </CardDescription>
-                          <p className="text-xs leading-relaxed text-muted-foreground">{sig.metric}</p>
-                        </CardHeader>
-                        <CardContent className="space-y-3 pb-4 text-sm text-muted-foreground">
-                          <p className="text-sm text-foreground">{sig.actionHint}</p>
-                          {sig.tradePointId ? (
-                            <Button
-                              asChild
-                              variant="outline"
-                              size="sm"
-                              className="min-h-9 w-full border-border bg-card font-semibold sm:w-auto"
-                              data-testid={`button-dealer-signal-open-trade-point-${sig.tradePointId}`}
-                            >
-                              <Link href={`/dealers/${row.id}/trade-points/${sig.tradePointId}`}>К точке</Link>
-                            </Button>
-                          ) : null}
-                        </CardContent>
-                      </SurfaceCard>
-                    ))}
-                  </div>
-                )}
-            </section>
+                <div className="grid min-w-0 gap-2 sm:grid-cols-2">
+                  {analyticsSignals.map((sig) => (
+                    <SurfaceCard key={sig.kind} data-testid={`card-dealer-analytics-signal-${sig.kind}`}>
+                      <CardHeader className="space-y-1 px-3 pb-1 pt-3 sm:px-4">
+                        <CardDescription className="text-[10px] font-bold uppercase tracking-wide text-primary">
+                          {sig.title}
+                        </CardDescription>
+                        <p className="text-xs leading-relaxed text-muted-foreground">{sig.metric}</p>
+                      </CardHeader>
+                      <CardContent className="space-y-2 px-3 pb-3 text-sm sm:px-4 sm:pb-4">
+                        <p className="text-sm text-foreground">{sig.actionHint}</p>
+                        {sig.tradePointId ? (
+                          <Button
+                            asChild
+                            variant="outline"
+                            size="sm"
+                            className="min-h-9 w-full border-border bg-card font-semibold sm:w-auto"
+                            data-testid={`button-dealer-signal-open-trade-point-${sig.tradePointId}`}
+                          >
+                            <Link href={`/dealers/${row.id}/trade-points/${sig.tradePointId}`}>К точке</Link>
+                          </Button>
+                        ) : null}
+                      </CardContent>
+                    </SurfaceCard>
+                  ))}
+                </div>
+              </section>
+            ) : null}
 
-            <div data-testid="section-dealer-terms">
-              <SectionTitle subtitle="Условия сотрудничества.">Условия работы</SectionTitle>
-              <SurfaceCard className="mt-3">
-                <CardContent className="pt-5">
-                  <FieldRow label="Тандор клуб" value={row.terms.tandoorClub} icon={Handshake} />
-                  <FieldRow label="Спец. условия" value={row.terms.special} />
-                  <FieldRow label="Тип оплаты" value={row.terms.payment} />
-                  <FieldRow label="ЭДО" value={row.terms.edo} />
-                  <FieldRow label="Лимит / индивидуальные условия" value={row.terms.limit} />
-                  <FieldRow label="Бонусы / мотивация продавцов" value={row.terms.bonuses} />
-                </CardContent>
-              </SurfaceCard>
-            </div>
+            {hasTermsBlock ? (
+              <div data-testid="section-dealer-terms">
+                <SectionTitle subtitle="Условия сотрудничества.">Условия работы</SectionTitle>
+                <SurfaceCard className="mt-2">
+                  <CardContent className="px-3 py-3 sm:px-4">
+                    <FieldRow label="Тандор клуб" value={row.terms.tandoorClub} icon={Handshake} />
+                    <FieldRow label="Спец. условия" value={row.terms.special} />
+                    <FieldRow label="Тип оплаты" value={row.terms.payment} />
+                    <FieldRow label="ЭДО" value={row.terms.edo} />
+                    <FieldRow label="Лимит / индивидуальные условия" value={row.terms.limit} />
+                    <FieldRow label="Бонусы / мотивация продавцов" value={row.terms.bonuses} />
+                  </CardContent>
+                </SurfaceCard>
+              </div>
+            ) : null}
 
-            <div data-testid="section-dealer-competitors">
+            {hasCompetitorsBlock ? (
+              <div data-testid="section-dealer-competitors">
                 <SectionTitle subtitle="Обзор конкурентной среды.">Конкуренты</SectionTitle>
-                <SurfaceCard className="mt-3">
-                  <CardContent className="space-y-1 pt-5">
+                <SurfaceCard className="mt-2">
+                  <CardContent className="space-y-0 px-3 py-3 sm:px-4">
                     <FieldRow label="Конкуренты в торговой точке" value={row.competitors.list} />
                     <FieldRow label="Сильные позиции конкурентов" value={row.competitors.strengths} />
                     <FieldRow label="Комментарий менеджера" value={row.competitors.mgrComment} />
@@ -845,16 +817,18 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                   </CardContent>
                 </SurfaceCard>
               </div>
+            ) : null}
 
+            {showProblemsBlock ? (
               <div data-testid="section-dealer-problems">
                 <SectionTitle subtitle="Текущие вопросы по клиенту.">Проблемы и внимание</SectionTitle>
                 <SurfaceCard
                   className={cn(
-                    "mt-3 border-amber-200/80 bg-gradient-to-b from-amber-50/50 to-card",
+                    "mt-2 border-amber-200/80 bg-gradient-to-b from-amber-50/50 to-card",
                     !row.hasProblem && "border-border from-muted/30",
                   )}
                 >
-                  <CardContent className="space-y-4 pt-5">
+                  <CardContent className="space-y-3 px-3 py-3 sm:px-4">
                     {row.hasProblem ? (
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge variant="outline" className="border-amber-300/80 bg-amber-100/60 font-medium text-amber-950">
@@ -867,219 +841,219 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                         Без критичных замечаний
                       </Badge>
                     )}
-                    <p className={cn("text-sm font-semibold leading-relaxed sm:text-base", row.hasProblem ? "text-red-700" : "text-foreground")}>
+                    <p className={cn("text-sm font-semibold leading-relaxed", row.hasProblem ? "text-red-700" : "text-foreground")}>
                       {row.issues.summary}
                     </p>
-                    <div className="grid gap-4 rounded-xl bg-card/80 p-4 sm:grid-cols-2">
+                    <div className="grid gap-3 rounded-lg bg-card/80 p-3 sm:grid-cols-2">
                       <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Кто зафиксировал</p>
-                        <p className="mt-1 text-sm font-medium text-foreground">{row.issues.who}</p>
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Кто зафиксировал</p>
+                        <p className="mt-0.5 text-sm font-medium text-foreground">{row.issues.who}</p>
                       </div>
                       <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Дата</p>
-                        <p className="mt-1 text-sm font-medium text-foreground">{row.issues.date}</p>
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Дата</p>
+                        <p className="mt-0.5 text-sm font-medium text-foreground">{row.issues.date}</p>
                       </div>
                       <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Следующий шаг</p>
-                        <p className="mt-1 text-sm font-medium text-foreground">{row.nextAction}</p>
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Следующий шаг</p>
+                        <p className="mt-0.5 text-sm font-medium text-foreground">{row.nextAction}</p>
                       </div>
                       <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Статус</p>
-                        <p className="mt-1 text-sm font-medium text-foreground">{row.issues.state}</p>
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Статус</p>
+                        <p className="mt-0.5 text-sm font-medium text-foreground">{row.issues.state}</p>
                       </div>
                     </div>
-                    <p className="text-xs text-muted-foreground">Комментарий: {row.comment}</p>
+                    {isFilledDataCell(row.comment) ? (
+                      <p className="text-xs text-muted-foreground">Комментарий: {row.comment}</p>
+                    ) : null}
                   </CardContent>
                 </SurfaceCard>
               </div>
+            ) : null}
 
             <section
               id={SECTION_DOM_IDS.points}
               data-testid="section-dealer-points"
-              className="scroll-mt-28 space-y-4 sm:space-y-6 lg:scroll-mt-32"
+              className="scroll-mt-28 space-y-2 sm:scroll-mt-32 lg:scroll-mt-32"
             >
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                <SectionTitle subtitle="Торговые точки клиента.">Торговые точки · {row.outlets}</SectionTitle>
-                <p className="text-sm font-medium text-muted-foreground">Всего точек: {row.outlets}</p>
+              <div className="flex flex-col gap-2 rounded-lg border border-border/70 bg-card p-3 shadow-xs sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm font-medium text-foreground">
+                  Торговые точки: <span className="tabular-nums">{row.outlets}</span>
+                </p>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="min-h-9 w-full shrink-0 font-semibold sm:w-auto"
+                  data-testid="button-dealer-expand-trade-points"
+                  onClick={() => setPointsExpanded((v) => !v)}
+                >
+                  {pointsExpanded ? "Свернуть точки" : "Открыть точки"}
+                </Button>
               </div>
-              <div className="space-y-4">
-                {row.tradePoints.map((tp, idx) => (
-                  <SurfaceCard key={`${row.id}-tp-${idx}`}>
-                    <CardHeader className="flex flex-col gap-3 pb-0 pt-5 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="flex flex-row items-center gap-2">
-                        <Store className="h-5 w-5 shrink-0 text-primary" aria-hidden />
-                        <CardTitle className="text-base font-semibold">{tp.name}</CardTitle>
-                      </div>
-                      <Button asChild variant="default" className="min-h-10 w-full shrink-0 sm:w-auto" data-testid={`button-open-trade-point-${tp.id}`}>
-                        <Link href={`/dealers/${row.id}/trade-points/${tp.id}`}>Открыть точку</Link>
-                      </Button>
-                    </CardHeader>
-                    <CardContent className="space-y-1 pt-2">
-                      <FieldRow label="Город" value={tp.city} />
-                      <FieldRow label="Адрес" value={tp.address} icon={MapPin} />
-                      <FieldRow label="Статус" value={tp.status} />
-                      <FieldRow label="Формат точки" value={tp.format} />
-                      <FieldRow label="Оборудование" value={tp.equipment} />
-                      <FieldRow label="Склад фурнитуры" value={tp.hardwareStockStatus} />
-                      <FieldRow label="Склад дверей" value={tp.doorsStockStatus} />
-                      <FieldRow label="Последний визит" value={tp.lastVisitDate} />
-                      <Separator className="my-4 bg-border" />
-                      <div className="rounded-xl border border-dashed border-border bg-muted/50 p-4">
-                        <div className="flex items-start gap-3">
-                          <Camera className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" aria-hidden />
-                          <div>
-                            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Фото ТТ снаружи и внутри</p>
-                            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">Фотографии не прикреплены</p>
+              {pointsExpanded ? (
+                <div className="space-y-2">
+                  {row.tradePoints.map((tp, idx) => (
+                    <SurfaceCard key={`${row.id}-tp-${idx}`}>
+                      <CardHeader className="flex flex-col gap-2 px-3 pb-0 pt-3 sm:flex-row sm:items-start sm:justify-between sm:px-4">
+                        <div className="flex min-w-0 flex-row items-center gap-2">
+                          <Store className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+                          <CardTitle className="text-sm font-semibold leading-snug">{tp.name}</CardTitle>
+                        </div>
+                        <Button
+                          asChild
+                          variant="default"
+                          size="sm"
+                          className="min-h-9 w-full shrink-0 sm:w-auto"
+                          data-testid={`button-open-trade-point-${tp.id}`}
+                        >
+                          <Link href={`/dealers/${row.id}/trade-points/${tp.id}`}>К точке</Link>
+                        </Button>
+                      </CardHeader>
+                      <CardContent className="space-y-0 px-3 pb-3 pt-1 sm:px-4">
+                        <FieldRow label="Город" value={tp.city} />
+                        <FieldRow label="Адрес" value={tp.address} icon={MapPin} />
+                        <FieldRow label="Статус" value={tp.status} />
+                        <FieldRow label="Формат точки" value={tp.format} />
+                        <FieldRow label="Оборудование" value={tp.equipment} />
+                        <FieldRow label="Склад фурнитуры" value={tp.hardwareStockStatus} />
+                        <FieldRow label="Склад дверей" value={tp.doorsStockStatus} />
+                        <FieldRow label="Последний визит" value={tp.lastVisitDate} />
+                        <Separator className="my-3 bg-border" />
+                        <div className="rounded-lg border border-dashed border-border bg-muted/40 p-3">
+                          <div className="flex items-start gap-2">
+                            <Camera className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                            <div>
+                              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Фото ТТ</p>
+                              <p className="mt-1 text-xs text-muted-foreground">Фотографии не прикреплены</p>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </CardContent>
-                  </SurfaceCard>
-                ))}
-              </div>
-            </section>
-
-            <section
-              id={SECTION_DOM_IDS.sales}
-              data-testid="section-dealer-sales"
-              className="scroll-mt-28 space-y-4 sm:scroll-mt-32"
-            >
-              <SectionTitle subtitle="Средние показатели за квартал.">Продажи</SectionTitle>
-              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                <KpiTile label="За квартал" value={row.salesKpis.quarterRub} />
-                <KpiTile label="МК, шт." value={row.salesKpis.mkUnits} />
-                <KpiTile label="ВХ, шт." value={row.salesKpis.vhUnits} />
-                <KpiTile label="Фурнитура" value={row.salesKpis.furnitureRub} />
-              </div>
-              <p className="flex items-center gap-2 text-xs text-muted-foreground">
-                <TrendingUp className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
-                Последняя активность: {row.lastActivity}
-              </p>
-              <SurfaceCard>
-                <CardContent className="pt-5">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Краткий комментарий</p>
-                  <p className="mt-2 text-sm leading-relaxed text-foreground">{salesComment}</p>
-                </CardContent>
-              </SurfaceCard>
-
-              <div className="mt-6" data-testid="section-dealer-products">
-                <SectionTitle subtitle="Позиции каталога в работе по клиенту.">Модели в работе</SectionTitle>
-                <div className="mt-3 space-y-3">
-                  {dealerProducts.map((p) => (
-                    <SurfaceCard key={p.id}>
-                      <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="min-w-0 flex-1 space-y-1">
-                          <p className="font-semibold leading-snug text-foreground">{p.name}</p>
-                          <p className="font-mono text-xs text-muted-foreground">{p.article}</p>
-                          <Badge variant="outline" className="w-fit border-border bg-muted/50 text-xs font-medium">
-                            {dealerRowStatusForProduct(p)}
-                          </Badge>
-                        </div>
-                        <Button asChild variant="outline" className="min-h-10 shrink-0 border-border bg-card" data-testid={`button-open-product-${p.id}`}>
-                          <Link href={`/catalog/${p.id}`}>Открыть модель</Link>
-                        </Button>
                       </CardContent>
                     </SurfaceCard>
                   ))}
                 </div>
-              </div>
+              ) : null}
             </section>
 
-            <section
-              id={SECTION_DOM_IDS.distribution}
-              data-testid="section-dealer-distribution"
-              className="scroll-mt-28 space-y-4 sm:scroll-mt-32"
-            >
-              <SectionTitle subtitle={`Последняя проверка: ${row.distributionDetail.checkDate}.`}>Дистрибуция</SectionTitle>
-              <div className="grid gap-4 sm:grid-cols-3">
-                {[
-                  { label: "МК", pct: row.distributionDetail.mk },
-                  { label: "ВХ", pct: row.distributionDetail.vh },
-                  { label: "Общая дистрибуция", pct: row.distributionDetail.total },
-                ].map((dist) => (
-                  <SurfaceCard key={dist.label}>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 pt-5">
-                      <div className="flex items-center gap-2">
-                        <PieChart className="h-4 w-4 text-primary" aria-hidden />
-                        <CardTitle className="text-sm font-semibold">{dist.label}</CardTitle>
-                      </div>
-                      <span className="text-lg font-bold tabular-nums text-foreground">{dist.pct}%</span>
-                    </CardHeader>
-                    <CardContent className="pb-5">
-                      <Progress value={dist.pct} className="h-2.5 bg-muted" />
-                    </CardContent>
-                  </SurfaceCard>
-                ))}
-              </div>
-              <SurfaceCard>
-                <CardContent className="pt-5">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Вывод</p>
-                  <p className="mt-2 text-sm leading-relaxed text-foreground">{distributionConclusion}</p>
-                </CardContent>
-              </SurfaceCard>
-            </section>
+            {hasSalesData ? (
+              <section data-testid="section-dealer-sales" className="scroll-mt-28 space-y-2 sm:scroll-mt-32">
+                <SectionTitle subtitle="Средние показатели за квартал.">Продажи</SectionTitle>
+                <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+                  <KpiTile label="За квартал" value={row.salesKpis.quarterRub} />
+                  <KpiTile label="МК, шт." value={row.salesKpis.mkUnits} />
+                  <KpiTile label="ВХ, шт." value={row.salesKpis.vhUnits} />
+                  <KpiTile label="Фурнитура" value={row.salesKpis.furnitureRub} />
+                </div>
+                <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <TrendingUp className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
+                  Последняя активность: {row.lastActivity}
+                </p>
+                <SurfaceCard>
+                  <CardContent className="px-3 py-3 sm:px-4">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Краткий комментарий</p>
+                    <p className="mt-1 text-sm leading-relaxed text-foreground">{salesComment}</p>
+                  </CardContent>
+                </SurfaceCard>
 
-            <section
-              id={SECTION_DOM_IDS.showcases}
-              data-testid="section-dealer-showcases"
-              className="scroll-mt-28 space-y-4 sm:scroll-mt-32"
-            >
-              <SectionTitle subtitle="Витрина и оборудование.">Витрины и оборудование</SectionTitle>
-              <SurfaceCard>
-                <CardContent className="space-y-1 pt-5">
-                  <div className="mb-3 flex items-center gap-2 text-sm font-medium text-foreground">
-                    <LayoutGrid className="h-4 w-4 text-primary" aria-hidden />
-                    Состояние витрины и оборудования
+                {dealerProducts.length > 0 ? (
+                  <div data-testid="section-dealer-products">
+                    <SectionTitle subtitle="Позиции каталога в работе по клиенту.">Модели в работе</SectionTitle>
+                    <div className="mt-2 space-y-2">
+                      {dealerProducts.map((p) => (
+                        <SurfaceCard key={p.id}>
+                          <CardContent className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
+                            <div className="min-w-0 flex-1 space-y-1">
+                              <p className="text-sm font-semibold leading-snug text-foreground">{p.name}</p>
+                              <p className="font-mono text-xs text-muted-foreground">{p.article}</p>
+                              <Badge variant="outline" className="w-fit border-border bg-muted/50 text-xs font-medium">
+                                {dealerRowStatusForProduct(p)}
+                              </Badge>
+                            </div>
+                            <Button
+                              asChild
+                              variant="outline"
+                              size="sm"
+                              className="min-h-9 shrink-0 border-border bg-card"
+                              data-testid={`button-open-product-${p.id}`}
+                            >
+                              <Link href={`/catalog/${p.id}`}>Открыть модель</Link>
+                            </Button>
+                          </CardContent>
+                        </SurfaceCard>
+                      ))}
+                    </div>
                   </div>
-                  <FieldRow label="Установленное оборудование" value={row.showcase.equipment} />
-                  <FieldRow label="Что нужно добавить" value={row.showcase.todo} />
-                  <FieldRow label="Статус витрины" value={row.showcase.status} />
-                  <FieldRow label="Связь с целями отдела продаж" value={row.showcase.goalLink} />
-                  <FieldRow label="Сводный показатель" value={`${row.distribution}% (обзор)`} />
-                  <Separator className="my-4" />
-                  <p className="text-sm font-medium text-foreground">{showcaseNext}</p>
-                </CardContent>
-              </SurfaceCard>
-            </section>
+                ) : null}
+              </section>
+            ) : null}
 
-            <DealerTrainingAttentionSection row={row} />
+            {showDistributionBlock ? (
+              <section data-testid="section-dealer-distribution" className="scroll-mt-28 space-y-2 sm:scroll-mt-32">
+                <SectionTitle subtitle={`Последняя проверка: ${row.distributionDetail.checkDate}.`}>Дистрибуция</SectionTitle>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  {[
+                    { label: "МК", pct: row.distributionDetail.mk },
+                    { label: "ВХ", pct: row.distributionDetail.vh },
+                    { label: "Общая дистрибуция", pct: row.distributionDetail.total },
+                  ].map((dist) => (
+                    <SurfaceCard key={dist.label}>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 px-3 pb-1 pt-3 sm:px-4">
+                        <div className="flex items-center gap-2">
+                          <PieChart className="h-3.5 w-3.5 text-primary" aria-hidden />
+                          <CardTitle className="text-xs font-semibold">{dist.label}</CardTitle>
+                        </div>
+                        <span className="text-base font-bold tabular-nums text-foreground">{dist.pct}%</span>
+                      </CardHeader>
+                      <CardContent className="px-3 pb-3 sm:px-4">
+                        <Progress value={dist.pct} className="h-2 bg-muted" />
+                      </CardContent>
+                    </SurfaceCard>
+                  ))}
+                </div>
+                <SurfaceCard>
+                  <CardContent className="px-3 py-3 sm:px-4">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Вывод</p>
+                    <p className="mt-1 text-sm leading-relaxed text-foreground">{distributionConclusion}</p>
+                  </CardContent>
+                </SurfaceCard>
+              </section>
+            ) : null}
 
-            <section
-              id={SECTION_DOM_IDS.tasks}
-              data-testid="section-dealer-tasks"
-              className="scroll-mt-28 space-y-4 pb-2 sm:scroll-mt-32"
-            >
-              <SectionTitle subtitle="Контрольные действия по клиенту (витрина и сопровождение).">Задачи по витрине</SectionTitle>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {tasks.map((task, idx) => (
-                  <SurfaceCard key={`${row.id}-task-${idx}`}>
-                    <CardHeader className="space-y-2 pb-2 pt-4">
-                      <CardTitle className="text-base font-semibold leading-snug">{task.title}</CardTitle>
-                      <div className="flex flex-wrap gap-2">
-                        <Badge variant="outline" className={cn("font-medium", priorityClass(task.priority))}>
-                          {task.priority}
-                        </Badge>
-                        <Badge variant="outline" className="border-border bg-muted/60 font-medium">
-                          {task.status}
-                        </Badge>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-2 pb-4 text-sm text-muted-foreground">
-                      <p>
-                        <span className="font-semibold text-foreground">Срок:</span> {task.due}
-                      </p>
-                      <p>
-                        <span className="font-semibold text-foreground">Ответственный:</span> {task.assignee}
-                      </p>
-                    </CardContent>
-                  </SurfaceCard>
-                ))}
-              </div>
-            </section>
+            {hasShowcaseLegacyBlock ? (
+              <section data-testid="section-dealer-showcases" className="scroll-mt-28 space-y-2 sm:scroll-mt-32">
+                <SectionTitle subtitle="Витрина и оборудование.">Витрины и оборудование</SectionTitle>
+                <SurfaceCard>
+                  <CardContent className="space-y-0 px-3 py-3 sm:px-4">
+                    <div className="mb-2 flex items-center gap-2 text-sm font-medium text-foreground">
+                      <LayoutGrid className="h-4 w-4 text-primary" aria-hidden />
+                      Состояние витрины и оборудования
+                    </div>
+                    <FieldRow label="Установленное оборудование" value={row.showcase.equipment} />
+                    <FieldRow label="Что нужно добавить" value={row.showcase.todo} />
+                    <FieldRow label="Статус витрины" value={row.showcase.status} />
+                    <FieldRow label="Связь с целями отдела продаж" value={row.showcase.goalLink} />
+                    <FieldRow label="Сводный показатель" value={`${row.distribution}% (обзор)`} />
+                    <Separator className="my-3" />
+                    <p className="text-sm font-medium text-foreground">{showcaseNext}</p>
+                  </CardContent>
+                </SurfaceCard>
+              </section>
+            ) : null}
+
+            {showTrainingSection ? (
+              <DealerTrainingAttentionSection
+                row={row}
+                completed={trainingCompleted}
+                onCompletedChange={(next) => {
+                  setTrainingCompleted(next);
+                  sessionStorage.setItem(dealerProductTrainingStorageKey(row.id), next ? "1" : "0");
+                }}
+              />
+            ) : null}
           </div>
 
           <aside className="mt-6 hidden lg:col-span-4 lg:mt-0 lg:block">
-            <DealerSectionNav active={activeSection} variant="sidebar" />
+            <DealerSectionNav active={activeSection} />
           </aside>
         </div>
       </div>

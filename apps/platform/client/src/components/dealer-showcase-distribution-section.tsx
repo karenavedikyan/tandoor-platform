@@ -128,102 +128,84 @@ export function DealerShowcaseDistributionSection({ row, profile, onApplied }: P
     bump();
   };
 
-  const tasksHref = useMemo(
-    () =>
-      buildHashPath("/tasks"),
-    [],
-  );
+  const tasksHref = useMemo(() => buildHashPath("/tasks", { dealerId: row.id }), [row.id]);
 
   return (
     <section
       id="dealer-section-showcase-distribution"
       data-testid="section-dealer-showcase-distribution"
-      className="scroll-mt-28 space-y-4 sm:scroll-mt-32"
+      className="scroll-mt-28 space-y-3 sm:scroll-mt-32"
     >
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0 space-y-1">
-          <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Витрина и дистрибуция</h2>
-          <p className="max-w-2xl text-sm text-muted-foreground">
-            План и факт по ключевым категориям выкладки и задачи на точке. Изменения в этом разделе сохраняются в браузере до закрытия вкладки.
+          <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Витрина и задачи</h2>
+          <p className="text-xs text-muted-foreground sm:text-sm">
+            План и факт по категориям и открытые задачи. Данные раздела сохраняются до закрытия вкладки.
           </p>
-          <p className="max-w-2xl text-sm text-muted-foreground">
+          <p className="text-xs text-muted-foreground sm:text-sm">
             {kpis.openTasks > 0
-              ? "Есть открытые задачи по витрине — завершите их после фактического выставления образцов."
-              : "По витрине нет открытых задач."}
+              ? "Есть открытые задачи — завершите их после фактической выкладки образцов."
+              : "Открытых задач по витрине нет."}
           </p>
         </div>
-        <Button asChild variant="outline" size="sm" className="min-h-10 shrink-0 self-start border-border bg-card">
-          <Link href={tasksHref} data-testid="link-dealer-showcase-open-tasks">
-            Все задачи по витрине
-          </Link>
-        </Button>
+        <Link
+          href={tasksHref}
+          className="shrink-0 text-sm font-semibold text-primary underline-offset-4 hover:underline"
+          data-testid="link-dealer-showcase-open-tasks"
+        >
+          Задачи клиента
+        </Link>
       </div>
 
       {readOnly ? (
-        <p className="text-sm text-muted-foreground">Режим просмотра: выполнение и смена статусов недоступны.</p>
+        <p className="text-xs text-muted-foreground">Режим просмотра: выполнение и смена статусов недоступны.</p>
       ) : null}
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Card
-          className="min-w-0 overflow-hidden rounded-2xl border border-border/80 bg-card shadow-md"
+        <div
+          className="min-w-0 rounded-lg border border-border/70 bg-card px-2.5 py-2 shadow-xs"
           data-testid="card-showcase-kpi-completion"
         >
-          <CardHeader className="space-y-1 pb-2 pt-4">
-            <CardDescription className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Выполнение витрины
-            </CardDescription>
-            <CardTitle className="text-xl font-semibold tabular-nums sm:text-2xl">{kpis.completionPct}%</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card
-          className="min-w-0 overflow-hidden rounded-2xl border border-border/80 bg-card shadow-md"
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Выполнение</p>
+          <p className="mt-0.5 text-lg font-semibold tabular-nums text-foreground sm:text-xl">{kpis.completionPct}%</p>
+        </div>
+        <div
+          className="min-w-0 rounded-lg border border-border/70 bg-card px-2.5 py-2 shadow-xs"
           data-testid="card-showcase-kpi-deficit"
         >
-          <CardHeader className="space-y-1 pb-2 pt-4">
-            <CardDescription className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Дефицит всего
-            </CardDescription>
-            <CardTitle className="text-xl font-semibold tabular-nums sm:text-2xl">{kpis.deficitTotal}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card
-          className="min-w-0 overflow-hidden rounded-2xl border border-border/80 bg-card shadow-md"
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Дефицит</p>
+          <p className="mt-0.5 text-lg font-semibold tabular-nums text-foreground sm:text-xl">{kpis.deficitTotal}</p>
+        </div>
+        <div
+          className="min-w-0 rounded-lg border border-border/70 bg-card px-2.5 py-2 shadow-xs"
           data-testid="card-showcase-kpi-open-tasks"
         >
-          <CardHeader className="space-y-1 pb-2 pt-4">
-            <CardDescription className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Открытые задачи
-            </CardDescription>
-            <CardTitle className="text-xl font-semibold tabular-nums sm:text-2xl">{kpis.openTasks}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card
-          className="min-w-0 overflow-hidden rounded-2xl border border-border/80 bg-card shadow-md"
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Открытые задачи</p>
+          <p className="mt-0.5 text-lg font-semibold tabular-nums text-foreground sm:text-xl">{kpis.openTasks}</p>
+        </div>
+        <div
+          className="min-w-0 rounded-lg border border-border/70 bg-card px-2.5 py-2 shadow-xs"
           data-testid="card-showcase-kpi-critical-zones"
         >
-          <CardHeader className="space-y-1 pb-2 pt-4">
-            <CardDescription className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Критичные зоны
-            </CardDescription>
-            <CardTitle className="text-xl font-semibold tabular-nums sm:text-2xl">{kpis.criticalZones}</CardTitle>
-          </CardHeader>
-        </Card>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Критичные зоны</p>
+          <p className="mt-0.5 text-lg font-semibold tabular-nums text-foreground sm:text-xl">{kpis.criticalZones}</p>
+        </div>
       </div>
 
-      <Card className="min-w-0 overflow-hidden rounded-2xl border border-border/80 bg-card shadow-md">
-        <CardHeader className="pb-2 pt-4">
-          <CardTitle className="text-base">Категории</CardTitle>
-          <CardDescription>План / факт / дефицит по витрине</CardDescription>
+      <Card className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-xs">
+        <CardHeader className="space-y-0.5 p-3 pb-2">
+          <CardTitle className="text-sm">Категории</CardTitle>
+          <CardDescription className="text-xs">План / факт / дефицит</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-2 pb-4 pt-0">
+        <CardContent className="space-y-1.5 p-3 pt-0">
           {rows.map((r) => (
             <div
               key={r.categoryId}
               data-testid={`row-showcase-category-${r.categoryId}`}
-              className="flex flex-col gap-2 rounded-xl border border-border/70 bg-muted/20 px-3 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"
+              className="flex flex-col gap-1.5 rounded-md border border-border/60 bg-muted/15 px-2.5 py-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"
             >
-              <div className="min-w-0 font-medium text-foreground">{SHOWCASE_CATEGORY_LABEL[r.categoryId]}</div>
-              <div className="flex flex-wrap gap-2 text-sm tabular-nums text-muted-foreground">
+              <div className="min-w-0 text-sm font-medium text-foreground">{SHOWCASE_CATEGORY_LABEL[r.categoryId]}</div>
+              <div className="flex flex-wrap items-center gap-2 text-xs tabular-nums text-muted-foreground sm:text-sm">
                 <span>
                   План <span className="font-semibold text-foreground">{r.targetCount}</span>
                 </span>
@@ -231,9 +213,9 @@ export function DealerShowcaseDistributionSection({ row, profile, onApplied }: P
                   Факт <span className="font-semibold text-foreground">{r.actualCount}</span>
                 </span>
                 <span>
-                  Дефицит <span className="font-semibold text-foreground">{r.deficitCount}</span>
+                  Деф. <span className="font-semibold text-foreground">{r.deficitCount}</span>
                 </span>
-                <Badge variant="outline" className={cn("font-medium", rowStatusTone(r.status))}>
+                <Badge variant="outline" className={cn("text-xs font-medium", rowStatusTone(r.status))}>
                   {rowStatusLabel(r.status)}
                 </Badge>
               </div>
@@ -242,91 +224,93 @@ export function DealerShowcaseDistributionSection({ row, profile, onApplied }: P
         </CardContent>
       </Card>
 
-      <div className="space-y-3">
-        <h3 className="text-sm font-semibold text-foreground">Задачи по витрине</h3>
+      <div className="space-y-2">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Открытые задачи</h3>
         {tasks.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Нет активных задач по дефициту — витрина закрыта по плану.</p>
+          <p className="text-sm text-muted-foreground">Нет активных задач по дефициту.</p>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-2">
             {tasks.map((t) => (
-              <Card
+              <div
                 key={t.taskId}
                 data-testid={`card-showcase-task-${t.taskId}`}
-                className="min-w-0 overflow-hidden rounded-2xl border border-border/80 bg-card shadow-md"
+                className="min-w-0 rounded-lg border border-border/70 bg-card p-3 shadow-xs"
               >
-                <CardHeader className="space-y-2 pb-2 pt-4">
-                  <CardTitle className="text-base leading-snug">{t.title}</CardTitle>
-                  <div className="flex flex-wrap gap-2">
-                    <Badge variant="outline" className="font-medium">
-                      {TASK_STATUS_LABEL[t.status]}
-                    </Badge>
-                    <Badge variant="outline" className="border-border bg-muted/50 font-medium">
-                      {PRIORITY_LABEL[t.priority]}
-                    </Badge>
-                    <Badge variant="outline" className="border-border bg-muted/50 font-medium tabular-nums">
-                      Срок {t.dueDate}
-                    </Badge>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <p className="text-sm font-semibold leading-snug text-foreground">{t.title}</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      <Badge variant="outline" className="text-xs font-medium">
+                        {TASK_STATUS_LABEL[t.status]}
+                      </Badge>
+                      <Badge variant="outline" className="border-border bg-muted/40 text-xs font-medium">
+                        {PRIORITY_LABEL[t.priority]}
+                      </Badge>
+                      <Badge variant="outline" className="border-border bg-muted/40 text-xs tabular-nums">
+                        Срок {t.dueDate}
+                      </Badge>
+                    </div>
+                    {t.description ? <p className="text-xs text-muted-foreground">{t.description}</p> : null}
+                    {t.status === "done" && t.completedAt ? (
+                      <p className="text-[11px] text-muted-foreground">Завершено {t.completedAt}</p>
+                    ) : null}
                   </div>
-                  <p className="text-sm text-muted-foreground">{t.description}</p>
-                  {t.status === "done" && t.completedAt ? (
-                    <p className="text-xs text-muted-foreground">Завершено {t.completedAt}</p>
-                  ) : null}
-                </CardHeader>
-                <CardContent className="flex flex-wrap gap-2 pb-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="min-h-9"
-                    disabled={!canWorkflow || t.status === "done" || t.status === "in_progress"}
-                    data-testid={`button-showcase-task-start-${t.taskId}`}
-                    onClick={() => {
-                      applyShowcaseTaskStatus(t.taskId, "in_progress", actorLabel);
-                      bump();
-                    }}
-                  >
-                    В работу
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="min-h-9"
-                    disabled={!canComplete || t.status === "done"}
-                    data-testid={`button-showcase-task-complete-${t.taskId}`}
-                    onClick={() => openComplete(t)}
-                  >
-                    Выполнить
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    className="min-h-9"
-                    disabled={!canWorkflow || t.status === "done"}
-                    data-testid={`button-showcase-task-needs-rop-${t.taskId}`}
-                    onClick={() => {
-                      applyShowcaseTaskStatus(t.taskId, "needs_rop", actorLabel);
-                      bump();
-                    }}
-                  >
-                    Нужна помощь РОПа
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="min-h-9"
-                    disabled={!canWorkflow || t.status === "done"}
-                    data-testid={`button-showcase-task-postpone-${t.taskId}`}
-                    onClick={() => {
-                      applyShowcaseTaskStatus(t.taskId, "postponed", actorLabel);
-                      bump();
-                    }}
-                  >
-                    Отложить
-                  </Button>
-                </CardContent>
-              </Card>
+                  <div className="flex shrink-0 flex-wrap gap-1.5 sm:max-w-[min(100%,14rem)] sm:flex-col sm:items-stretch">
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="min-h-9 flex-1 text-xs font-semibold sm:flex-none"
+                      disabled={!canComplete || t.status === "done"}
+                      data-testid={`button-showcase-task-complete-${t.taskId}`}
+                      onClick={() => openComplete(t)}
+                    >
+                      Выполнить
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="min-h-9 flex-1 text-xs font-semibold sm:flex-none"
+                      disabled={!canWorkflow || t.status === "done"}
+                      data-testid={`button-showcase-task-postpone-${t.taskId}`}
+                      onClick={() => {
+                        applyShowcaseTaskStatus(t.taskId, "postponed", actorLabel);
+                        bump();
+                      }}
+                    >
+                      Отложить
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="min-h-9 flex-1 text-xs font-semibold sm:flex-none"
+                      disabled={!canWorkflow || t.status === "done"}
+                      data-testid={`button-showcase-task-needs-rop-${t.taskId}`}
+                      onClick={() => {
+                        applyShowcaseTaskStatus(t.taskId, "needs_rop", actorLabel);
+                        bump();
+                      }}
+                    >
+                      Нужна помощь РОПа
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="min-h-8 flex-1 text-xs sm:flex-none"
+                      disabled={!canWorkflow || t.status === "done" || t.status === "in_progress"}
+                      data-testid={`button-showcase-task-start-${t.taskId}`}
+                      onClick={() => {
+                        applyShowcaseTaskStatus(t.taskId, "in_progress", actorLabel);
+                        bump();
+                      }}
+                    >
+                      В работу
+                    </Button>
+                  </div>
+                </div>
+              </div>
             ))}
           </div>
         )}

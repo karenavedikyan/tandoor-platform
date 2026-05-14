@@ -55,10 +55,10 @@ export function DealerActionFocusSection({
       data-testid="section-dealer-action-focus"
       className="scroll-mt-28 space-y-3 sm:scroll-mt-32"
     >
-      <Card className="rounded-2xl border border-primary/30 bg-gradient-to-b from-primary/8 to-card shadow-md">
-        <CardHeader className="space-y-2 pb-2">
+      <Card className="rounded-xl border border-primary/25 bg-gradient-to-b from-primary/6 to-card shadow-xs">
+        <CardHeader className="space-y-1.5 p-3 pb-2">
           <div className="flex flex-wrap items-center gap-2">
-            <CardTitle className="text-base sm:text-lg">Что сделать сейчас</CardTitle>
+            <CardTitle className="text-sm sm:text-base">Что сделать сейчас</CardTitle>
             {nextStepOverdue ? (
               <Badge variant="destructive" className="font-semibold">
                 Просрочено
@@ -74,16 +74,16 @@ export function DealerActionFocusSection({
             </p>
           ) : null}
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-3 p-3 pt-0">
           <p
-            className="text-sm font-semibold leading-snug text-foreground sm:text-base"
+            className="text-sm font-semibold leading-snug text-foreground"
             data-testid="text-dealer-action-focus-primary"
           >
             {primaryLine}
           </p>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="flex gap-2 rounded-xl border border-border/80 bg-card/80 p-3">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className="flex gap-2 rounded-lg border border-border/70 bg-card/80 p-2.5">
               <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
               <div className="min-w-0">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Следующий шаг</p>
@@ -98,7 +98,7 @@ export function DealerActionFocusSection({
                 </p>
               </div>
             </div>
-            <div className="flex gap-2 rounded-xl border border-border/80 bg-card/80 p-3">
+            <div className="flex gap-2 rounded-lg border border-border/70 bg-card/80 p-2.5">
               <ListTodo className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
               <div className="min-w-0">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Задачи по витрине</p>
@@ -111,7 +111,7 @@ export function DealerActionFocusSection({
                 </p>
               </div>
             </div>
-            <div className="flex gap-2 rounded-xl border border-border/80 bg-card/80 p-3 sm:col-span-2">
+            <div className="flex gap-2 rounded-lg border border-border/70 bg-card/80 p-2.5 sm:col-span-2">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden />
               <div className="min-w-0 flex-1">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Дефицит по витрине</p>
@@ -120,7 +120,7 @@ export function DealerActionFocusSection({
                 </p>
               </div>
             </div>
-            <div className="flex gap-2 rounded-xl border border-border/80 bg-card/80 p-3 sm:col-span-2">
+            <div className="flex gap-2 rounded-lg border border-border/70 bg-card/80 p-2.5 sm:col-span-2">
               <ClipboardList className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
               <div className="min-w-0">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Последнее событие</p>
@@ -134,7 +134,7 @@ export function DealerActionFocusSection({
               href={buildHashPath("/tasks", { dealerId: row.id })}
               className={cn(
                 buttonVariants({ variant: "default", size: "default" }),
-                "min-h-12 w-full shrink-0 justify-center font-semibold sm:min-h-11 sm:w-auto",
+                "min-h-10 w-full shrink-0 justify-center text-sm font-semibold sm:min-h-9 sm:w-auto",
               )}
               data-testid="link-dealer-action-open-tasks"
             >
@@ -143,7 +143,7 @@ export function DealerActionFocusSection({
             <Button
               type="button"
               variant="secondary"
-              className="min-h-12 w-full font-semibold sm:min-h-11 sm:w-auto"
+              className="min-h-10 w-full text-sm font-semibold sm:min-h-9 sm:w-auto"
               data-testid="button-dealer-action-scroll-next-step"
               onClick={onScrollToNextStep}
             >
@@ -152,7 +152,7 @@ export function DealerActionFocusSection({
             <Button
               type="button"
               variant="outline"
-              className="min-h-12 w-full border-border bg-card font-semibold sm:min-h-11 sm:w-auto"
+              className="min-h-10 w-full border-border bg-card text-sm font-semibold sm:min-h-9 sm:w-auto"
               data-testid="button-dealer-action-scroll-showcase"
               onClick={onScrollToShowcase}
             >
