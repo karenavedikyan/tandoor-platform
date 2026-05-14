@@ -151,13 +151,6 @@ export function DealerShowcaseDistributionSection({ row, profile, onApplied }: P
               ? "Есть открытые задачи по витрине — завершите их после фактического выставления образцов."
               : "По витрине нет открытых задач."}
           </p>
-          <Link
-            href={buildHashPath("/tasks", { dealerId: row.id })}
-            className="inline-flex text-sm font-semibold text-primary underline-offset-2 hover:underline"
-            data-testid="link-dealer-open-client-tasks"
-          >
-            Открыть задачи этого клиента
-          </Link>
         </div>
         <Button asChild variant="outline" size="sm" className="min-h-10 shrink-0 self-start border-border bg-card">
           <Link href={tasksHref} data-testid="link-dealer-showcase-open-tasks">

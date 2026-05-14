@@ -1,20 +1,7 @@
 import type { ComponentProps, ComponentType, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
-import {
-  AlertTriangle,
-  BookOpen,
-  Building2,
-  Camera,
-  Handshake,
-  LayoutGrid,
-  MapPin,
-  Phone,
-  PieChart,
-  Store,
-  TrendingUp,
-  Users,
-} from "lucide-react";
+import { AlertTriangle, BookOpen, Camera, Handshake, LayoutGrid, MapPin, PieChart, Store, TrendingUp } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -46,22 +33,28 @@ import {
 } from "@/lib/showcase-distribution-data";
 import {
   CLIENT_NEXT_STEP_CHANGED_EVENT,
+  clientNextStepActionLabel,
+  getClientNextStepForDealer,
   getClientNextStepHistoryForDealer,
   loadClientNextStepsStorage,
 } from "@/lib/client-next-step-data";
 import { dealerProductTrainingStorageKey, getDealerTrainingAttentionSignal, trainingAttentionLevelBadgeClass } from "@/lib/training-attention";
+import { DealerActionFocusSection } from "@/components/dealer-action-focus-section";
 import { DealerClientNextStepSection } from "@/components/dealer-client-next-step-section";
-import { DealerClientWorkStatusSection } from "@/components/dealer-client-work-status-section";
+import { DealerStaticProfileSection } from "@/components/dealer-static-profile-section";
 
 const SECTION_IDS = [
   "overview",
+  "action_focus",
+  "showcase_distribution",
+  "next_step",
+  "history",
+  "static_profile",
   "points",
   "sales",
   "distribution",
   "showcases",
   "training",
-  "showcase_distribution",
-  "history",
   "tasks",
 ] as const;
 
@@ -69,37 +62,46 @@ type SectionId = (typeof SECTION_IDS)[number];
 
 const SECTION_DOM_IDS: Record<SectionId, string> = {
   overview: "dealer-section-overview",
+  action_focus: "dealer-section-action-focus",
   points: "dealer-section-points",
   sales: "dealer-section-sales",
   distribution: "dealer-section-distribution",
   showcases: "dealer-section-showcases",
   training: "section-dealer-training-attention",
   showcase_distribution: "dealer-section-showcase-distribution",
-  history: "dealer-section-history",
+  next_step: "dealer-section-next-step",
+  history: "section-dealer-activity-history",
+  static_profile: "dealer-section-static-profile",
   tasks: "dealer-section-tasks",
 };
 
 const SECTION_LABELS: Record<SectionId, string> = {
-  overview: "Общее",
+  overview: "Шапка",
+  action_focus: "Сейчас",
   points: "Точки",
   sales: "Продажи",
   distribution: "Дистрибуция",
   showcases: "Витрины",
   training: "Обучение",
-  showcase_distribution: "Витрина и дистрибуция",
+  showcase_distribution: "Витрина",
+  next_step: "Шаг",
   history: "История",
-  tasks: "Задачи по витрине",
+  static_profile: "Паспорт",
+  tasks: "Задачи",
 };
 
 const SECTION_NAV_TEST_IDS: Record<SectionId, string> = {
   overview: "dealer-section-nav-overview",
+  action_focus: "dealer-section-nav-action-focus",
   points: "dealer-section-nav-points",
   sales: "dealer-section-nav-sales",
   distribution: "dealer-section-nav-distribution",
   showcases: "dealer-section-nav-showcases",
   training: "dealer-section-nav-training",
   showcase_distribution: "dealer-section-nav-showcase-distribution",
+  next_step: "dealer-section-nav-next-step",
   history: "dealer-section-nav-history",
+  static_profile: "dealer-section-nav-static-profile",
   tasks: "dealer-section-nav-tasks",
 };
 
@@ -203,6 +205,24 @@ function newestHistoryActivityLabel(events: DealerHistoryEvent[], fallback: stri
     }
   }
   return label;
+}
+
+function formatIsoDayToRu(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso.trim());
+  if (!m) return iso.trim();
+  return `${m[3]}.${m[2]}.${m[1]}`;
+}
+
+function isNextStepContactOverdue(contactDate: string): boolean {
+  const raw = contactDate.trim();
+  if (!raw) return false;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw);
+  if (!m) return false;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime() < today.getTime();
 }
 
 /** Реалистичная лента для клиентов менеджера Бойко (команда Купянского). */
@@ -484,7 +504,7 @@ function DealerSectionNav({
       data-testid="dealer-section-nav"
     >
       <div
-        className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="flex max-w-full flex-wrap gap-2 pb-1 lg:hidden"
         role="tablist"
         aria-label="Разделы карточки"
       >
@@ -497,7 +517,7 @@ function DealerSectionNav({
             onClick={() => onNav(id)}
             data-testid={SECTION_NAV_TEST_IDS[id]}
             className={cn(
-              "shrink-0 rounded-full border px-3.5 py-2 text-sm font-medium transition-colors min-h-10",
+              "min-h-10 rounded-full border px-3 py-2 text-left text-sm font-medium transition-colors",
               active === id
                 ? "border-primary bg-primary text-primary-foreground shadow-sm"
                 : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground",
@@ -516,6 +536,7 @@ function DealerCardContent({ row }: { row: DealerRow }) {
   const { user } = useCurrentUser();
   const [showcaseBump, setShowcaseBump] = useState(0);
   const [nextStepBump, setNextStepBump] = useState(0);
+  const [historyExpanded, setHistoryExpanded] = useState(false);
 
   useEffect(() => {
     const fn = () => setNextStepBump((n) => n + 1);
@@ -523,18 +544,46 @@ function DealerCardContent({ row }: { row: DealerRow }) {
     return () => window.removeEventListener(CLIENT_NEXT_STEP_CHANGED_EVENT, fn);
   }, []);
 
+  useEffect(() => {
+    setHistoryExpanded(false);
+  }, [row.id]);
+
   const businessCategoryLabel = getClientCategoryLabel(row.clientCategory);
   const activeSection = useActiveSection(row.id);
   const historyEvents = useMemo(() => buildHistoryEvents(row), [row, showcaseBump, nextStepBump]);
+  const sortedHistoryEvents = useMemo(
+    () => [...historyEvents].sort((a, b) => historySortKey(b) - historySortKey(a)),
+    [historyEvents],
+  );
   const lastHistoryLabel = useMemo(() => newestHistoryActivityLabel(historyEvents, row.lastActivity), [historyEvents, row.lastActivity]);
+
+  const nextStepStored = useMemo(
+    () => getClientNextStepForDealer(row.id, loadClientNextStepsStorage()),
+    [row.id, nextStepBump],
+  );
+  const nextStepOverdue = useMemo(
+    () => Boolean(nextStepStored && isNextStepContactOverdue(nextStepStored.contactDate)),
+    [nextStepStored],
+  );
+
   const showcaseDailySignals = useMemo(() => {
     const s = loadShowcaseStorage();
     const tasks = getShowcaseTasksForDealerDisplay(row, s);
     const rows = mergeDistributionWithOverrides(row, s);
     const kpis = getShowcaseKpis(rows, tasks);
-    const openCt = tasks.filter((t) => t.status !== "done" && t.status !== "postponed").length;
-    return { openCt, hasDeficit: kpis.deficitTotal > 0 };
+    return { openCt: kpis.openTasks, hasDeficit: kpis.deficitTotal > 0, deficitTotal: kpis.deficitTotal };
   }, [row, showcaseBump]);
+
+  const primaryLine = useMemo(() => {
+    if (nextStepOverdue) return "Просрочен следующий контакт — свяжитесь с клиентом.";
+    if (showcaseDailySignals.openCt > 0)
+      return `Открыты задачи по витрине (${showcaseDailySignals.openCt}). Завершите их после фактической выкладки образцов.`;
+    if (showcaseDailySignals.hasDeficit)
+      return `Есть дефицит по витрине (${showcaseDailySignals.deficitTotal} ед.). Доведите категории до плана.`;
+    if (nextStepStored)
+      return `Ближайший шаг: ${clientNextStepActionLabel(nextStepStored.actionType)} на ${formatIsoDayToRu(nextStepStored.contactDate)}.`;
+    return "Срочных сигналов нет — поддерживайте регулярный контакт и актуальность витрины.";
+  }, [nextStepOverdue, showcaseDailySignals, nextStepStored]);
 
   const tasks = useMemo(() => buildTasks(row), [row]);
   const dealerProducts = useMemo(() => getDealerProductPreview(row.id, 5), [row.id]);
@@ -573,10 +622,10 @@ function DealerCardContent({ row }: { row: DealerRow }) {
               data-testid="section-dealer-overview"
               className="scroll-mt-28 space-y-4 sm:space-y-6 lg:scroll-mt-32"
             >
-              <div className="relative overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-lg sm:p-8">
+              <div className="relative overflow-hidden rounded-2xl border border-border bg-card p-4 shadow-md sm:p-5">
                 <div className="pointer-events-none absolute left-0 top-0 h-full w-1 rounded-l-2xl bg-primary" aria-hidden />
-                <div className="relative pl-3 sm:pl-4">
-                  <div className="flex flex-wrap items-center gap-2">
+                <div className="relative min-w-0 pl-3 sm:pl-4">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <Badge variant="outline" className={cn("rounded-full px-2.5 py-0.5 text-xs font-medium", statusBadgeClass(row.status))}>
                       {row.status}
                     </Badge>
@@ -587,19 +636,37 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                     >
                       {businessCategoryLabel}
                     </Badge>
-                    <Badge variant="outline" className="rounded-full border-border bg-muted/50 px-2.5 py-0.5 font-medium text-muted-foreground">
-                      Активность: {row.lastActivity}
-                    </Badge>
+                    {showcaseDailySignals.openCt > 0 ? (
+                      <Badge variant="outline" className="rounded-full border-amber-200 bg-amber-50 text-xs font-semibold text-amber-950">
+                        Есть задачи по витрине
+                      </Badge>
+                    ) : null}
+                    {showcaseDailySignals.hasDeficit ? (
+                      <Badge variant="outline" className="rounded-full border-rose-200 bg-rose-50 text-xs font-semibold text-rose-950">
+                        Есть дефицит
+                      </Badge>
+                    ) : null}
+                    {nextStepStored?.contactDate ? (
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "rounded-full px-2.5 py-0.5 text-xs font-semibold",
+                          nextStepOverdue
+                            ? "border-destructive/50 bg-destructive/10 text-destructive"
+                            : "border-border bg-muted/60 text-foreground",
+                        )}
+                      >
+                        Следующий контакт: {formatIsoDayToRu(nextStepStored.contactDate)}
+                      </Badge>
+                    ) : null}
                   </div>
-                  <h1 className="mt-4 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">{row.name}</h1>
-                  <p className="mt-1 text-base font-medium text-muted-foreground sm:text-lg">
-                    Код {row.releaseCode ?? "—"} · {row.city} · РОП: {row.regionalManager}
+                  <h1 className="mt-3 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">{row.name}</h1>
+                  <p className="mt-1 min-w-0 break-words text-sm text-muted-foreground">
+                    {row.city} · {businessCategoryLabel}
                   </p>
-                  <p className="mt-2 text-sm text-muted-foreground sm:text-base">Сводная информация по клиенту и торговым точкам</p>
-
-                  <div className="mt-5 flex flex-wrap gap-2">
+                  <div className="mt-4 flex flex-wrap gap-2">
                     <Button type="button" variant="secondary" size="sm" className="min-h-10" asChild>
-                      <Link href="/dealer-base">Назад к базе</Link>
+                      <Link href="/dealer-base">К клиентской базе</Link>
                     </Button>
                     <Button
                       type="button"
@@ -616,123 +683,81 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                       variant="outline"
                       size="sm"
                       className="min-h-10 border-border bg-card"
-                      data-testid="button-quick-open-tasks"
-                      onClick={() => scrollToSection("tasks")}
-                    >
-                      Задачи по витрине
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="min-h-10 border-border bg-card"
-                      data-testid="button-quick-open-distribution"
-                      onClick={() => scrollToSection("distribution")}
-                    >
-                      Дистрибуция
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="min-h-10 border-border bg-card"
                       data-testid="button-quick-open-showcase-distribution"
                       onClick={() => scrollToSection("showcase_distribution")}
                     >
                       Витрина
                     </Button>
-                    <Button
-                      asChild
-                      variant="outline"
-                      size="sm"
-                      className="min-h-10 border-border bg-card"
-                      data-testid="button-open-all-tasks"
-                    >
-                      <Link href="/tasks">Все задачи по витрине</Link>
-                    </Button>
                   </div>
                 </div>
               </div>
+            </section>
 
-              <DealerClientWorkStatusSection
-                manager={row.manager}
-                rop={row.regionalManager}
-                city={row.city}
-                categoryLabel={businessCategoryLabel}
-                activityStatus={row.status}
-                hasOpenShowcaseTasks={showcaseDailySignals.openCt > 0}
-                hasShowcaseDeficit={showcaseDailySignals.hasDeficit}
-                lastActivityLabel={lastHistoryLabel}
-              />
+            <DealerActionFocusSection
+              row={row}
+              profile={profile}
+              primaryLine={primaryLine}
+              openShowcaseTasks={showcaseDailySignals.openCt}
+              hasDeficit={showcaseDailySignals.hasDeficit}
+              deficitTotal={showcaseDailySignals.deficitTotal}
+              nextStep={nextStepStored}
+              nextStepOverdue={nextStepOverdue}
+              lastActivityLabel={lastHistoryLabel}
+              onScrollToNextStep={() => scrollToSection("next_step")}
+              onScrollToShowcase={() => scrollToSection("showcase_distribution")}
+            />
 
-              <DealerClientNextStepSection
-                row={row}
-                profile={profile}
-                actorUserId={user?.id ?? profile.personaUserId}
-                actorLabel={user?.name ?? userLabelFromProfile(profile)}
-                onSaved={() => setNextStepBump((n) => n + 1)}
-              />
+            <DealerShowcaseDistributionSection
+              row={row}
+              profile={profile}
+              onApplied={() => setShowcaseBump((n) => n + 1)}
+            />
 
-              <DealerSectionNav active={activeSection} variant="chips" />
+            <DealerClientNextStepSection
+              row={row}
+              profile={profile}
+              actorUserId={user?.id ?? profile.personaUserId}
+              actorLabel={user?.name ?? userLabelFromProfile(profile)}
+              onSaved={() => setNextStepBump((n) => n + 1)}
+            />
 
-              <div className="grid gap-6 lg:grid-cols-2">
-                <div data-testid="section-dealer-summary">
-                  <SectionTitle subtitle="Ключевые реквизиты и классификация.">Сводка клиента</SectionTitle>
-                  <SurfaceCard className="mt-3">
-                    <CardContent className="pt-5">
-                      <FieldRow label="Код (Excel)" value={row.releaseCode ?? "—"} />
-                      <FieldRow label="Внутренний id" value={row.id} />
-                      <FieldRow label="Название клиента" value={row.name} icon={Building2} />
-                      <FieldRow label="Категория клиента" value={businessCategoryLabel} />
-                      {row.clientTypeLabel ? <FieldRow label="Тип в данных (Excel)" value={row.clientTypeLabel} /> : null}
-                      <FieldRow label="Статус" value={row.status.slice(0, 1).toUpperCase() + row.status.slice(1)} />
-                      <FieldRow label="Холдинг / сеть" value={row.holding} />
-                      <FieldRow label="Юрлицо / наименование" value={row.legalEntity} />
-                      <FieldRow label="Город" value={row.city} icon={MapPin} />
-                      <FieldRow label="РОП" value={row.regionalManager} />
-                      <FieldRow label="Менеджер" value={row.manager} />
-                      {row.releaseAddress ? <FieldRow label="Адрес" value={row.releaseAddress} /> : null}
-                      <FieldRow label="Формат" value={row.format} />
-                      <FieldRow label="Торговых точек" value={String(row.outlets)} />
-                    </CardContent>
-                  </SurfaceCard>
-                </div>
-
-                <div data-testid="section-dealer-responsibles">
-                  <SectionTitle subtitle="Кто ведёт клиента и к кому обращаться.">Ответственные</SectionTitle>
-                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                    {[
-                      { role: "Руководитель", name: row.responsibles.director, zone: "Стратегия и контроль команды" },
-                      { role: "Менеджер продаж", name: row.responsibles.salesManager, zone: "Сопровождение договорённостей и клиента" },
-                      { role: "Региональный менеджер", name: row.responsibles.regionalManager, zone: "Визиты, витрины, отчёты по региону" },
-                      { role: "Ассистент", name: row.responsibles.assistant, zone: "Подготовка материалов и координация" },
-                    ].map((p) => (
-                      <SurfaceCard key={p.role}>
-                        <CardHeader className="space-y-1 pb-2 pt-4">
-                          <div className="flex items-center gap-2">
-                            <Users className="h-4 w-4 text-primary" aria-hidden />
-                            <CardDescription className="text-[11px] font-bold uppercase tracking-wide text-primary">{p.role}</CardDescription>
-                          </div>
-                          <CardTitle className="text-base font-semibold text-foreground">{p.name}</CardTitle>
-                        </CardHeader>
-                        <CardContent className="pb-4 text-sm leading-relaxed text-muted-foreground">{p.zone}</CardContent>
-                      </SurfaceCard>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
+            <section
+              id={SECTION_DOM_IDS.history}
+              data-testid="section-dealer-activity-history"
+              className="scroll-mt-28 space-y-4 sm:scroll-mt-32"
+            >
+              <SectionTitle subtitle="События по витрине, следующему шагу и сопровождению.">История активности</SectionTitle>
               <SurfaceCard>
-                <CardContent className="space-y-3 pt-5">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Ближайшее действие</p>
-                  <p className="text-sm font-semibold text-foreground sm:text-base">{row.nextAction}</p>
+                <CardContent className="divide-y divide-border pt-2">
+                  {(historyExpanded ? sortedHistoryEvents : sortedHistoryEvents.slice(0, 3)).map((ev) => (
+                    <div key={ev.id} className="flex min-w-0 flex-col gap-1.5 py-4 first:pt-4">
+                      <p className="text-xs font-semibold tabular-nums text-muted-foreground">{ev.meta}</p>
+                      <p className="whitespace-pre-line break-words text-sm leading-relaxed text-foreground">{ev.body}</p>
+                    </div>
+                  ))}
                 </CardContent>
               </SurfaceCard>
+              {sortedHistoryEvents.length > 3 ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-h-12 w-full font-semibold sm:min-h-11 sm:w-auto"
+                  data-testid="button-dealer-history-show-all"
+                  onClick={() => setHistoryExpanded((v) => !v)}
+                >
+                  {historyExpanded ? "Свернуть историю" : "Показать всю историю"}
+                </Button>
+              ) : null}
+            </section>
 
-              <section
-                data-testid="section-dealer-analytics-signals"
-                className="scroll-mt-28 space-y-3 lg:scroll-mt-32"
-              >
+            <DealerStaticProfileSection row={row} categoryLabel={businessCategoryLabel} />
+
+            <DealerSectionNav active={activeSection} variant="chips" />
+
+            <section
+              data-testid="section-dealer-analytics-signals"
+              className="scroll-mt-28 space-y-3 lg:scroll-mt-32"
+            >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <SectionTitle subtitle="Сводка по тем же показателям, что в разделе аналитики.">
                     Сигналы аналитики
@@ -784,38 +809,23 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                     ))}
                   </div>
                 )}
-              </section>
+            </section>
 
-              <div className="grid gap-6 lg:grid-cols-2">
-                <div data-testid="section-dealer-terms">
-                  <SectionTitle subtitle="Условия сотрудничества.">Условия работы</SectionTitle>
-                  <SurfaceCard className="mt-3">
-                    <CardContent className="pt-5">
-                      <FieldRow label="Тандор клуб" value={row.terms.tandoorClub} icon={Handshake} />
-                      <FieldRow label="Спец. условия" value={row.terms.special} />
-                      <FieldRow label="Тип оплаты" value={row.terms.payment} />
-                      <FieldRow label="ЭДО" value={row.terms.edo} />
-                      <FieldRow label="Лимит / индивидуальные условия" value={row.terms.limit} />
-                      <FieldRow label="Бонусы / мотивация продавцов" value={row.terms.bonuses} />
-                    </CardContent>
-                  </SurfaceCard>
-                </div>
+            <div data-testid="section-dealer-terms">
+              <SectionTitle subtitle="Условия сотрудничества.">Условия работы</SectionTitle>
+              <SurfaceCard className="mt-3">
+                <CardContent className="pt-5">
+                  <FieldRow label="Тандор клуб" value={row.terms.tandoorClub} icon={Handshake} />
+                  <FieldRow label="Спец. условия" value={row.terms.special} />
+                  <FieldRow label="Тип оплаты" value={row.terms.payment} />
+                  <FieldRow label="ЭДО" value={row.terms.edo} />
+                  <FieldRow label="Лимит / индивидуальные условия" value={row.terms.limit} />
+                  <FieldRow label="Бонусы / мотивация продавцов" value={row.terms.bonuses} />
+                </CardContent>
+              </SurfaceCard>
+            </div>
 
-                <div data-testid="section-dealer-contacts">
-                  <SectionTitle subtitle="ЛПР и каналы связи.">Контакты и ЛПР</SectionTitle>
-                  <SurfaceCard className="mt-3">
-                    <CardContent className="space-y-1 pt-5">
-                      <FieldRow label="ЛПР" value={row.contacts.lpr} />
-                      <FieldRow label="Собственник / закупщик" value={row.contacts.buyer} />
-                      <FieldRow label="Телефон" value={row.contacts.phone} icon={Phone} />
-                      <FieldRow label="Email" value={row.contacts.email} />
-                      <FieldRow label="Предпочтительный канал связи" value={row.contacts.channel} />
-                    </CardContent>
-                  </SurfaceCard>
-                </div>
-              </div>
-
-              <div data-testid="section-dealer-competitors">
+            <div data-testid="section-dealer-competitors">
                 <SectionTitle subtitle="Обзор конкурентной среды.">Конкуренты</SectionTitle>
                 <SurfaceCard className="mt-3">
                   <CardContent className="space-y-1 pt-5">
@@ -873,7 +883,6 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                   </CardContent>
                 </SurfaceCard>
               </div>
-            </section>
 
             <section
               id={SECTION_DOM_IDS.points}
@@ -1025,30 +1034,6 @@ function DealerCardContent({ row }: { row: DealerRow }) {
             </section>
 
             <DealerTrainingAttentionSection row={row} />
-
-            <DealerShowcaseDistributionSection
-              row={row}
-              profile={profile}
-              onApplied={() => setShowcaseBump((n) => n + 1)}
-            />
-
-            <section
-              id={SECTION_DOM_IDS.history}
-              data-testid="section-dealer-history"
-              className="scroll-mt-28 space-y-4 sm:scroll-mt-32"
-            >
-              <SectionTitle subtitle="Недавние события по карточке.">История активности</SectionTitle>
-              <SurfaceCard>
-                <CardContent className="divide-y divide-border pt-2">
-                  {historyEvents.map((ev) => (
-                    <div key={ev.id} className="flex flex-col gap-1.5 py-4 first:pt-4">
-                      <p className="text-xs font-semibold tabular-nums text-muted-foreground">{ev.meta}</p>
-                      <p className="whitespace-pre-line text-sm leading-relaxed text-foreground">{ev.body}</p>
-                    </div>
-                  ))}
-                </CardContent>
-              </SurfaceCard>
-            </section>
 
             <section
               id={SECTION_DOM_IDS.tasks}
