@@ -4,7 +4,7 @@ import { CityConcentrationBlock } from "@/components/city-concentration-block";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
-import { buildHashPath } from "@/lib/hash-route-utils";
+import { buildBrowserHashAppHref, buildHashPath } from "@/lib/hash-route-utils";
 import { buildDealerBaseAllCitiesHref, buildDealerBaseCityDrillHref, getTopCityConcentrationRows } from "@/lib/city-concentration";
 import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
 import { dealerNeedsAttention, isDealerTop, roleScopedDealerRows } from "@/lib/dealer-base-role-views";
@@ -452,7 +452,7 @@ export function AnalyticsWorkspaceReleaseOverview() {
         cityHref={(c) => buildDealerBaseCityDrillHref(profile.role, profile, c)}
         activeHref={(c) => buildDealerBaseCityDrillHref(profile.role, profile, c, { quick: "active" })}
         attentionHref={(c) => buildDealerBaseCityDrillHref(profile.role, profile, c, { quick: "attention" })}
-        clientMapHref={buildHashPath("/client-map")}
+        clientMapHref={buildBrowserHashAppHref("/client-map")}
       />
     </div>
   );

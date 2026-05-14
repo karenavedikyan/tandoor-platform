@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { buildHashPath } from "@/lib/hash-route-utils";
+import { buildBrowserHashAppHref } from "@/lib/hash-route-utils";
 import { cn } from "@/lib/utils";
 import { getAttentionLevel, getLoadLevel, type TeamSummary } from "@/lib/team-summary";
 
@@ -82,42 +82,42 @@ export function TeamSummaryCard({
         {showTeamMetricLinks && !isCompact ? (
           <div className="flex min-w-0 flex-wrap gap-x-2 gap-y-1 border-t border-border/60 pt-2 text-xs">
             <a
-              href={buildHashPath("/dealer-base", { team: tid })}
+              href={buildBrowserHashAppHref("/dealer-base", { team: tid })}
               className={drillLinkClass}
               data-testid={`link-team-summary-clients-${tid}`}
             >
               Клиенты
             </a>
             <a
-              href={buildHashPath("/dealer-base", { team: tid, quick: "active", view: "table_team" })}
+              href={buildBrowserHashAppHref("/dealer-base", { team: tid, quick: "active", view: "table_team" })}
               className={drillLinkClass}
               data-testid={`link-team-summary-active-${tid}`}
             >
               Активные
             </a>
             <a
-              href={buildHashPath("/dealer-base", { team: tid, quick: "attention", view: "table_team" })}
+              href={buildBrowserHashAppHref("/dealer-base", { team: tid, quick: "attention", view: "table_team" })}
               className={drillLinkClass}
               data-testid={`link-team-summary-attention-${tid}`}
             >
               Внимание
             </a>
             <a
-              href={buildHashPath("/dealer-base", { team: tid, quick: "top", view: "table_team" })}
+              href={buildBrowserHashAppHref("/dealer-base", { team: tid, quick: "top", view: "table_team" })}
               className={drillLinkClass}
               data-testid={`link-team-summary-top-${tid}`}
             >
               ТОП-сегмент
             </a>
             <a
-              href={buildHashPath("/dealer-base", { team: tid, quick: "potential", view: "table_team" })}
+              href={buildBrowserHashAppHref("/dealer-base", { team: tid, quick: "potential", view: "table_team" })}
               className={drillLinkClass}
               data-testid={`link-team-summary-potential-${tid}`}
             >
               Потенциальные
             </a>
             <a
-              href={buildHashPath("/dealer-base", { team: tid, view: "by_manager" })}
+              href={buildBrowserHashAppHref("/dealer-base", { team: tid, view: "by_manager" })}
               className={drillLinkClass}
               data-testid={`link-team-summary-managers-${tid}`}
             >

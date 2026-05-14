@@ -1,6 +1,6 @@
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import { dealerNeedsAttention, isDealerTop } from "@/lib/dealer-base-role-views";
-import { buildHashPath } from "@/lib/hash-route-utils";
+import { buildBrowserHashAppHref } from "@/lib/hash-route-utils";
 import { isRopOrManagerAllFilter } from "@/lib/rop-manager-filters";
 import { getEffectiveTeamLeadTeamId, type ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { getSalesUserById, type SalesRole } from "@/lib/sales-control-data";
@@ -85,13 +85,13 @@ export function getTopCityConcentrationRows(rows: DealerRow[], limit: number): C
 /** Ссылка на режим «все города» в клиентской базе. */
 export function buildDealerBaseAllCitiesHref(role: SalesRole, profile: ReleaseDemoProfile): string {
   if (role === "team_lead") {
-    return buildHashPath("/dealer-base", { view: "team_cities", team: getEffectiveTeamLeadTeamId(profile) });
+    return buildBrowserHashAppHref("/dealer-base", { view: "team_cities", team: getEffectiveTeamLeadTeamId(profile) });
   }
   if (role === "sales_manager") {
     const id = getSalesUserById(profile.personaUserId)?.id ?? "";
-    return buildHashPath("/dealer-base", { view: "my_cities", manager: id });
+    return buildBrowserHashAppHref("/dealer-base", { view: "my_cities", manager: id });
   }
-  return buildHashPath("/dealer-base", { view: "cities_all" });
+  return buildBrowserHashAppHref("/dealer-base", { view: "cities_all" });
 }
 
 export function buildDealerBaseCityDrillHref(
@@ -104,14 +104,14 @@ export function buildDealerBaseCityDrillHref(
   const rop = extra?.ropTeamId;
   if (role === "team_lead") {
     const team = getEffectiveTeamLeadTeamId(profile);
-    return buildHashPath("/dealer-base", { view: "table_team", team, city, ...(q ? { quick: q } : {}) });
+    return buildBrowserHashAppHref("/dealer-base", { view: "table_team", team, city, ...(q ? { quick: q } : {}) });
   }
   if (role === "sales_manager") {
     const manager = getSalesUserById(profile.personaUserId)?.id ?? "";
-    return buildHashPath("/dealer-base", { view: "my_clients", manager, city, ...(q ? { quick: q } : {}) });
+    return buildBrowserHashAppHref("/dealer-base", { view: "my_clients", manager, city, ...(q ? { quick: q } : {}) });
   }
   if (rop && !isRopOrManagerAllFilter(rop)) {
-    return buildHashPath("/dealer-base", { view: "table_team", team: rop, city, ...(q ? { quick: q } : {}) });
+    return buildBrowserHashAppHref("/dealer-base", { view: "table_team", team: rop, city, ...(q ? { quick: q } : {}) });
   }
-  return buildHashPath("/dealer-base", { view: "table_all", city, ...(q ? { quick: q } : {}) });
+  return buildBrowserHashAppHref("/dealer-base", { view: "table_all", city, ...(q ? { quick: q } : {}) });
 }

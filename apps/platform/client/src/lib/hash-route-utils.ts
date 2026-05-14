@@ -1,16 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 
-/**
- * Сборка URL для hash-router (wouter useHashLocation): query до `#`, путь в hash.
- * Пример: buildHashPath("/dealer-base", { team: "team-x", quick: "attention" })
- * → "/?team=team-x&quick=attention#/dealer-base"
- */
-export function buildHashPath(
-  path: string,
-  params?: Record<string, string | number | boolean | null | undefined>,
-): string {
-  const cleanPath = path.startsWith("/") ? path : `/${path}`;
+type HashRouteParams = Record<string, string | number | boolean | null | undefined>;
+
+function hashRouteQueryString(params?: HashRouteParams): string {
   const sp = new URLSearchParams();
   if (params) {
     for (const [k, v] of Object.entries(params)) {
@@ -19,7 +12,30 @@ export function buildHashPath(
       else sp.set(k, String(v));
     }
   }
-  const q = sp.toString();
+  return sp.toString();
+}
+
+/**
+ * Путь для `<Link>` в hash-router (wouter + useHashLocation): сначала путь, затем query.
+ * Внутри wouter `navigate` превращает это в адрес вида `?query#/path` (query до `#`, маршрут в hash).
+ *
+ * Пример: buildHashPath("/dealer-base", { team: "team-x", quick: "attention" })
+ * → "/dealer-base?team=team-x&quick=attention"
+ */
+export function buildHashPath(path: string, params?: HashRouteParams): string {
+  const cleanPath = path.startsWith("/") ? path : `/${path}`;
+  const q = hashRouteQueryString(params);
+  return q ? `${cleanPath}?${q}` : cleanPath;
+}
+
+/**
+ * Полный относительный URL для обычного `<a href>` (в т.ч. «Открыть в новой вкладке»): query до `#`, маршрут в hash.
+ * Пример: buildBrowserHashAppHref("/dealer-base", { team: "team-x", quick: "attention" })
+ * → "/?team=team-x&quick=attention#/dealer-base"
+ */
+export function buildBrowserHashAppHref(path: string, params?: HashRouteParams): string {
+  const cleanPath = path.startsWith("/") ? path : `/${path}`;
+  const q = hashRouteQueryString(params);
   const prefix = q ? `/?${q}` : "/";
   return `${prefix}#${cleanPath}`;
 }

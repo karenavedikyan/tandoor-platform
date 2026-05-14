@@ -11,7 +11,7 @@ import {
   dealerNeedsAttention,
   roleScopedDealerRows,
 } from "@/lib/dealer-base-role-views";
-import { buildHashPath } from "@/lib/hash-route-utils";
+import { buildBrowserHashAppHref } from "@/lib/hash-route-utils";
 import { getEffectiveTeamLeadTeamId } from "@/lib/release-demo-profile";
 import { getAllMatrixTasks } from "@/lib/trade-point-task-data";
 import { getRopOptions } from "@/lib/rop-manager-filters";
@@ -103,30 +103,30 @@ export function MainRoleDashboard() {
     if (role === "sales_manager") {
       const mid = u?.id ?? "";
       return {
-        clients: buildHashPath("/dealer-base"),
-        active: buildHashPath("/dealer-base", { quick: "active", view: "my_clients", manager: mid }),
-        attention: buildHashPath("/dealer-base", { quick: "attention", view: "my_clients", manager: mid }),
-        tasks: buildHashPath("/tasks"),
+        clients: buildBrowserHashAppHref("/dealer-base"),
+        active: buildBrowserHashAppHref("/dealer-base", { quick: "active", view: "my_clients", manager: mid }),
+        attention: buildBrowserHashAppHref("/dealer-base", { quick: "attention", view: "my_clients", manager: mid }),
+        tasks: buildBrowserHashAppHref("/tasks"),
         extra: "",
       };
     }
     if (role === "team_lead") {
       const tid = getEffectiveTeamLeadTeamId(profile);
       return {
-        clients: buildHashPath("/dealer-base", { view: "table_team", team: tid }),
-        active: buildHashPath("/dealer-base", { quick: "active", view: "table_team", team: tid }),
-        attention: buildHashPath("/dealer-base", { quick: "attention", view: "table_team", team: tid }),
-        tasks: buildHashPath("/tasks"),
-        extra: buildHashPath("/dealer-base", { view: "by_manager", team: tid }),
+        clients: buildBrowserHashAppHref("/dealer-base", { view: "table_team", team: tid }),
+        active: buildBrowserHashAppHref("/dealer-base", { quick: "active", view: "table_team", team: tid }),
+        attention: buildBrowserHashAppHref("/dealer-base", { quick: "attention", view: "table_team", team: tid }),
+        tasks: buildBrowserHashAppHref("/tasks"),
+        extra: buildBrowserHashAppHref("/dealer-base", { view: "by_manager", team: tid }),
       };
     }
     if (role === "sales_director") {
       return {
-        clients: buildHashPath("/dealer-base"),
-        active: buildHashPath("/dealer-base", { quick: "active", view: "table_all" }),
-        attention: buildHashPath("/dealer-base", { quick: "attention", view: "table_all" }),
-        tasks: buildHashPath("/tasks"),
-        extra: buildHashPath("/dealer-base", { view: "teams" }),
+        clients: buildBrowserHashAppHref("/dealer-base"),
+        active: buildBrowserHashAppHref("/dealer-base", { quick: "active", view: "table_all" }),
+        attention: buildBrowserHashAppHref("/dealer-base", { quick: "attention", view: "table_all" }),
+        tasks: buildBrowserHashAppHref("/tasks"),
+        extra: buildBrowserHashAppHref("/dealer-base", { view: "teams" }),
       };
     }
     return { clients: "/", active: "/", attention: "/", tasks: "/", extra: "" };
@@ -322,8 +322,8 @@ export function MainRoleDashboard() {
                 showTeamMetricLinks={role === "sales_director" || role === "team_lead"}
                 ctaHref={
                   role === "sales_director"
-                    ? buildHashPath("/dealer-base", { team: s.teamId })
-                    : buildHashPath("/dealer-base", { team: s.teamId, view: "table_team" })
+                    ? buildBrowserHashAppHref("/dealer-base", { team: s.teamId })
+                    : buildBrowserHashAppHref("/dealer-base", { team: s.teamId, view: "table_team" })
                 }
                 ctaLabel={role === "sales_director" ? "Открыть команду" : "К клиентам команды"}
               />

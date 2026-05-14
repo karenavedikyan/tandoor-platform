@@ -57,7 +57,7 @@ import { CityConcentrationBlock } from "@/components/city-concentration-block";
 import { buildTeamSummary } from "@/lib/team-summary";
 import { TeamSummaryCard } from "@/components/team-summary-card";
 import { buildCityConcentrationRows, buildDealerBaseAllCitiesHref, buildDealerBaseCityDrillHref } from "@/lib/city-concentration";
-import { buildHashPath, useRouteSearchParams } from "@/lib/hash-route-utils";
+import { buildBrowserHashAppHref, buildHashPath, useRouteSearchParams } from "@/lib/hash-route-utils";
 
 const DEALER_BASE_DISPLAY_LIMIT = 300;
 const TODAY_LIMIT = 100;
@@ -1042,7 +1042,7 @@ export default function DealerBase() {
             <TeamSummaryCard
               variant="compact"
               summary={teamSummaryForCompactBanner}
-              ctaHref={buildHashPath("/dealer-base", { team: teamSummaryForCompactBanner.teamId })}
+              ctaHref={buildBrowserHashAppHref("/dealer-base", { team: teamSummaryForCompactBanner.teamId })}
               ctaLabel="Открыть команду"
               showCta={false}
             />

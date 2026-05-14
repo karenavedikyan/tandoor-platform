@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState } from "react";
 import { isDealerTop } from "@/lib/dealer-base-role-views";
 import { getClientCategoryLabel } from "@/lib/client-category";
-import { buildHashPath } from "@/lib/hash-route-utils";
+import { buildBrowserHashAppHref } from "@/lib/hash-route-utils";
 import type { ClientMapMarker } from "@/lib/client-map-data";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 
@@ -61,7 +61,7 @@ function dealerBaseHrefForDealer(d: DealerRow): string {
   const params: Record<string, string> = { search: d.name, city: d.city };
   if (d.releaseTeamId) params.team = d.releaseTeamId;
   if (d.releaseManagerId) params.manager = d.releaseManagerId;
-  return buildHashPath("/dealer-base", params);
+  return buildBrowserHashAppHref("/dealer-base", params);
 }
 
 function buildBalloonHtml(m: ClientMapMarker): string {
@@ -71,7 +71,7 @@ function buildBalloonHtml(m: ClientMapMarker): string {
   const addrBlock = d.releaseAddress
     ? `<p class="text-xs text-muted-foreground"><span class="font-medium text-foreground">Адрес: </span>${escapeHtml(d.releaseAddress)}</p>`
     : "";
-  const dealerHref = escapeHtml(buildHashPath(`/dealers/${d.id}`));
+  const dealerHref = escapeHtml(buildBrowserHashAppHref(`/dealers/${d.id}`));
   const baseHref = escapeHtml(dealerBaseHrefForDealer(d));
   return `
 <div class="ymaps-balloon-content text-sm space-y-1" style="min-width:200px" data-testid="popup-client-map-${escapeHtml(m.id)}">
