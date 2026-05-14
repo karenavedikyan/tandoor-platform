@@ -168,7 +168,30 @@ function parseDealerIndex(id: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-function buildHistoryEvents(row: DealerRow): { id: string; text: string; date: string }[] {
+type DealerHistoryEvent = { id: string; meta: string; body: string };
+
+/** Реалистичная лента для клиентов менеджера Бойко (команда Купянского). */
+function buildHistoryEvents(row: DealerRow): DealerHistoryEvent[] {
+  if (row.releaseManagerId === "mgr-boyko-em") {
+    return [
+      {
+        id: `${row.id}-hist-call`,
+        meta: "14.05.2026 · Бойко Екатерина",
+        body: "Звонок: обсудили обновление витрины, клиент готов поставить 3 новые модели.\nСледующее действие: визит 17.05.",
+      },
+      {
+        id: `${row.id}-hist-rop`,
+        meta: "13.05.2026 · РОП Купянский",
+        body: "Комментарий руководителя: взять клиента в фокус, высокий потенциал.",
+      },
+      {
+        id: `${row.id}-hist-sys`,
+        meta: "10.05.2026 · Система",
+        body: "Клиент попал в «требует внимания»: нет активности 30 дней.",
+      },
+    ];
+  }
+
   const i = parseDealerIndex(row.id);
   const templates = [
     "Обновлена информация по торговой точке",
@@ -184,8 +207,8 @@ function buildHistoryEvents(row: DealerRow): { id: string; text: string; date: s
   ];
   return templates.map((text, idx) => ({
     id: `${row.id}-hist-${idx}`,
-    text,
-    date: dates[idx % dates.length] ?? row.lastActivity,
+    meta: `${dates[idx % dates.length] ?? row.lastActivity} · Система`,
+    body: text,
   }));
 }
 
@@ -1024,9 +1047,9 @@ function DealerCardContent({ row }: { row: DealerRow }) {
               <SurfaceCard>
                 <CardContent className="divide-y divide-border pt-2">
                   {historyEvents.map((ev) => (
-                    <div key={ev.id} className="flex flex-col gap-1 py-4 first:pt-4 sm:flex-row sm:items-center sm:justify-between">
-                      <p className="text-sm font-medium text-foreground">{ev.text}</p>
-                      <time className="shrink-0 text-xs tabular-nums text-muted-foreground">{ev.date}</time>
+                    <div key={ev.id} className="flex flex-col gap-1.5 py-4 first:pt-4">
+                      <p className="text-xs font-semibold tabular-nums text-muted-foreground">{ev.meta}</p>
+                      <p className="whitespace-pre-line text-sm leading-relaxed text-foreground">{ev.body}</p>
                     </div>
                   ))}
                 </CardContent>
