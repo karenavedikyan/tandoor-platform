@@ -1,6 +1,6 @@
 import type { ComponentProps, ComponentType, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "wouter";
+import { Link, useLocation, useParams } from "wouter";
 import { AlertTriangle, BookOpen, Camera, Handshake, LayoutGrid, MapPin, PieChart, Store, TrendingUp } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -18,7 +18,7 @@ import {
   type DealerStatus,
 } from "@/lib/dealer-base-mock-data";
 import { dealerRowStatusForProduct, getDealerProductPreview } from "@/lib/catalog-data";
-import { DealerShowcaseDistributionSection } from "@/components/dealer-showcase-distribution-section";
+import { DealerShowcaseDistributionSection, type ShowcaseCategoryListMode } from "@/components/dealer-showcase-distribution-section";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -280,6 +280,26 @@ function collapseAdjacentDuplicateHistoryBodies(events: DealerHistoryEvent[]): D
   return out;
 }
 
+type DealerHistoryNavTarget = "next_step" | "showcase" | "tasks_page";
+
+function inferHistoryNavTarget(ev: DealerHistoryEvent): DealerHistoryNavTarget | null {
+  const id = ev.id.toLowerCase();
+  const b = ev.body.toLowerCase();
+  if (id.startsWith("ns-")) return "next_step";
+  if (id.startsWith("sh-")) return "showcase";
+  const trimmed = ev.body.trim();
+  if (/^запланирован/i.test(trimmed)) return "next_step";
+  if (b.includes("обновил витрину") || b.includes("обновлена витрина")) return "showcase";
+  if (b.includes("задач") && (b.includes("витрин") || b.includes("дефицит"))) return "tasks_page";
+  return null;
+}
+
+function scrollToDataTestId(testId: string) {
+  requestAnimationFrame(() => {
+    document.querySelector(`[data-testid="${testId}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+}
+
 function DealerTrainingAttentionSection({
   row,
   completed,
@@ -456,10 +476,12 @@ function DealerSectionNav({ active }: { active: SectionId }) {
 function DealerCardContent({ row }: { row: DealerRow }) {
   const { profile } = useReleaseDemoProfile();
   const { user } = useCurrentUser();
+  const [, setLocation] = useLocation();
   const [showcaseBump, setShowcaseBump] = useState(0);
   const [nextStepBump, setNextStepBump] = useState(0);
   const [historyExpanded, setHistoryExpanded] = useState(false);
   const [pointsExpanded, setPointsExpanded] = useState(false);
+  const [showcaseCategoryListMode, setShowcaseCategoryListMode] = useState<ShowcaseCategoryListMode>("all");
   const [trainingCompleted, setTrainingCompleted] = useState(() => {
     if (typeof window === "undefined") return row.productTrainingCompleted;
     const s = sessionStorage.getItem(dealerProductTrainingStorageKey(row.id));
@@ -477,6 +499,7 @@ function DealerCardContent({ row }: { row: DealerRow }) {
   useEffect(() => {
     setHistoryExpanded(false);
     setPointsExpanded(false);
+    setShowcaseCategoryListMode("all");
     if (typeof window === "undefined") return;
     const s = sessionStorage.getItem(dealerProductTrainingStorageKey(row.id));
     if (s === "1") setTrainingCompleted(true);
@@ -698,12 +721,19 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                 lastActivityLabel={lastHistoryLabel}
                 onScrollToNextStep={() => scrollToSection("next_step")}
                 onScrollToShowcase={() => scrollToSection("showcase_distribution")}
+                onScrollToHistory={() => scrollToSection("history")}
+                onOpenShowcaseDeficitFilter={() => {
+                  setShowcaseCategoryListMode("deficit");
+                  scrollToSection("showcase_distribution");
+                }}
               />
             </section>
 
             <DealerShowcaseDistributionSection
               row={row}
               profile={profile}
+              categoryListMode={showcaseCategoryListMode}
+              onCategoryListModeChange={setShowcaseCategoryListMode}
               onApplied={() => setShowcaseBump((n) => n + 1)}
             />
 
@@ -722,13 +752,39 @@ function DealerCardContent({ row }: { row: DealerRow }) {
             >
               <SectionTitle subtitle="События по витрине, шагам и сопровождению.">История активности</SectionTitle>
               <SurfaceCard>
-                <CardContent className="divide-y divide-border px-3 py-0 pt-2 sm:px-4">
-                  {(historyExpanded ? historyTimeline : historyTimeline.slice(0, 3)).map((ev) => (
-                    <div key={ev.id} className="flex min-w-0 flex-col gap-1 py-3 first:pt-2">
-                      <p className="text-[11px] font-semibold tabular-nums text-muted-foreground">{ev.meta}</p>
-                      <p className="whitespace-pre-line break-words text-sm leading-relaxed text-foreground">{ev.body}</p>
-                    </div>
-                  ))}
+                <CardContent className="px-3 py-0 pt-2 sm:px-4">
+                  {(historyExpanded ? historyTimeline : historyTimeline.slice(0, 3)).map((ev) => {
+                    const nav = inferHistoryNavTarget(ev);
+                    const openLinked = () => {
+                      if (nav === "next_step") scrollToDataTestId("section-dealer-next-step");
+                      else if (nav === "showcase") scrollToDataTestId("section-dealer-showcase-distribution");
+                      else if (nav === "tasks_page") setLocation(buildHashPath("/tasks", { dealerId: row.id }));
+                    };
+                    return (
+                      <div
+                        key={ev.id}
+                        data-testid={`row-dealer-history-event-${ev.id}`}
+                        className="flex min-w-0 items-start gap-2 border-b border-border py-3 last:border-b-0 first:pt-2"
+                      >
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <p className="text-[11px] font-semibold tabular-nums text-muted-foreground">{ev.meta}</p>
+                          <p className="whitespace-pre-line break-words text-sm leading-relaxed text-foreground">{ev.body}</p>
+                        </div>
+                        {nav ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 shrink-0 px-2 text-xs font-semibold"
+                            data-testid={`button-dealer-history-event-open-${ev.id}`}
+                            onClick={openLinked}
+                          >
+                            Открыть
+                          </Button>
+                        ) : null}
+                      </div>
+                    );
+                  })}
                 </CardContent>
               </SurfaceCard>
               <Button

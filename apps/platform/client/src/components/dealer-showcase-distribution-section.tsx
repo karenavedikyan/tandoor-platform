@@ -35,6 +35,7 @@ import {
   loadShowcaseStorage,
   mergeDistributionWithOverrides,
   SHOWCASE_CATEGORY_LABEL,
+  showcaseOverrideStorageKey,
   type ShowcaseCompleteResultKind,
   type ShowcaseDistributionRow,
   type ShowcaseTask,
@@ -42,7 +43,10 @@ import {
   showcaseCompleteResultLabel,
   userLabelFromProfile,
 } from "@/lib/showcase-distribution-data";
+import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+export type ShowcaseCategoryListMode = "all" | "deficit" | "critical";
 
 const TASK_STATUS_LABEL: Record<ShowcaseTaskStatus, string> = {
   new: "Новая",
@@ -70,15 +74,36 @@ type Props = {
   row: DealerRow;
   profile: ReleaseDemoProfile;
   onApplied: () => void;
+  categoryListMode?: ShowcaseCategoryListMode;
+  onCategoryListModeChange?: (mode: ShowcaseCategoryListMode) => void;
 };
 
-export function DealerShowcaseDistributionSection({ row, profile, onApplied }: Props) {
+function scrollToAnchor(id: string) {
+  requestAnimationFrame(() => {
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+}
+
+export function DealerShowcaseDistributionSection({
+  row,
+  profile,
+  onApplied,
+  categoryListMode: categoryListModeProp,
+  onCategoryListModeChange,
+}: Props) {
   const canView = canViewShowcaseDistribution(profile, row);
   if (!canView) return null;
 
   const readOnly = isShowcaseReadOnly(profile);
   const canWorkflow = canWorkflowShowcaseTask(profile, row);
   const canComplete = canCompleteShowcaseTask(profile, row);
+
+  const [internalListMode, setInternalListMode] = useState<ShowcaseCategoryListMode>("all");
+  const categoryListMode = categoryListModeProp ?? internalListMode;
+  const setCategoryListMode = onCategoryListModeChange ?? setInternalListMode;
+
+  const [categoryExpanded, setCategoryExpanded] = useState<Record<string, boolean>>({});
+  const [taskExpanded, setTaskExpanded] = useState<Record<string, boolean>>({});
 
   const [tick, setTick] = useState(0);
   const bump = useCallback(() => {
@@ -90,6 +115,12 @@ export function DealerShowcaseDistributionSection({ row, profile, onApplied }: P
   const rows = useMemo(() => mergeDistributionWithOverrides(row, storage), [row, storage]);
   const tasks = useMemo(() => getShowcaseTasksForDealerDisplay(row, storage), [row, storage]);
   const kpis = useMemo(() => getShowcaseKpis(rows, tasks), [rows, tasks]);
+
+  const displayedCategoryRows = useMemo(() => {
+    if (categoryListMode === "deficit") return rows.filter((r) => r.deficitCount > 0);
+    if (categoryListMode === "critical") return rows.filter((r) => r.status === "critical");
+    return rows;
+  }, [rows, categoryListMode]);
 
   const [completeTask, setCompleteTask] = useState<ShowcaseTask | null>(null);
   const [actualInput, setActualInput] = useState("");
@@ -161,157 +192,309 @@ export function DealerShowcaseDistributionSection({ row, profile, onApplied }: P
         <p className="text-xs text-muted-foreground">Режим просмотра: выполнение и смена статусов недоступны.</p>
       ) : null}
 
+      {categoryListMode !== "all" ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200/60 bg-amber-50/40 px-2.5 py-2 text-xs text-amber-950">
+          <span>
+            {categoryListMode === "deficit" ? "Показаны категории с дефицитом." : "Показаны критичные категории."}
+          </span>
+          <Button type="button" variant="ghost" size="sm" className="h-8 shrink-0 px-2 text-xs font-semibold" onClick={() => setCategoryListMode("all")}>
+            Показать все
+          </Button>
+        </div>
+      ) : null}
+
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <div
-          className="min-w-0 rounded-lg border border-border/70 bg-card px-2.5 py-2 shadow-xs"
-          data-testid="card-showcase-kpi-completion"
+        <button
+          type="button"
+          className="min-w-0 rounded-lg border border-border/70 bg-card px-2.5 py-2 text-left shadow-xs transition hover:border-primary/40 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          data-testid="button-showcase-kpi-completion"
+          onClick={() => {
+            setCategoryListMode("all");
+            scrollToAnchor("dealer-showcase-categories-anchor");
+          }}
         >
           <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Выполнение</p>
           <p className="mt-0.5 text-lg font-semibold tabular-nums text-foreground sm:text-xl">{kpis.completionPct}%</p>
-        </div>
-        <div
-          className="min-w-0 rounded-lg border border-border/70 bg-card px-2.5 py-2 shadow-xs"
-          data-testid="card-showcase-kpi-deficit"
+          <p className="mt-1 text-[10px] font-medium text-primary">К категориям →</p>
+        </button>
+        <button
+          type="button"
+          className="min-w-0 rounded-lg border border-border/70 bg-card px-2.5 py-2 text-left shadow-xs transition hover:border-primary/40 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          data-testid="button-showcase-kpi-deficit"
+          onClick={() => {
+            setCategoryListMode("deficit");
+            scrollToAnchor("dealer-showcase-categories-anchor");
+          }}
         >
           <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Дефицит</p>
           <p className="mt-0.5 text-lg font-semibold tabular-nums text-foreground sm:text-xl">{kpis.deficitTotal}</p>
-        </div>
-        <div
-          className="min-w-0 rounded-lg border border-border/70 bg-card px-2.5 py-2 shadow-xs"
-          data-testid="card-showcase-kpi-open-tasks"
+          <p className="mt-1 text-[10px] font-medium text-primary">Открыть →</p>
+        </button>
+        <button
+          type="button"
+          className="min-w-0 rounded-lg border border-border/70 bg-card px-2.5 py-2 text-left shadow-xs transition hover:border-primary/40 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          data-testid="button-showcase-kpi-open-tasks"
+          onClick={() => scrollToAnchor("dealer-showcase-tasks-anchor")}
         >
           <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Открытые задачи</p>
           <p className="mt-0.5 text-lg font-semibold tabular-nums text-foreground sm:text-xl">{kpis.openTasks}</p>
-        </div>
-        <div
-          className="min-w-0 rounded-lg border border-border/70 bg-card px-2.5 py-2 shadow-xs"
-          data-testid="card-showcase-kpi-critical-zones"
+          <p className="mt-1 text-[10px] font-medium text-primary">К списку →</p>
+        </button>
+        <button
+          type="button"
+          className="min-w-0 rounded-lg border border-border/70 bg-card px-2.5 py-2 text-left shadow-xs transition hover:border-primary/40 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          data-testid="button-showcase-kpi-critical"
+          onClick={() => {
+            setCategoryListMode("critical");
+            scrollToAnchor("dealer-showcase-categories-anchor");
+          }}
         >
           <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Критичные зоны</p>
           <p className="mt-0.5 text-lg font-semibold tabular-nums text-foreground sm:text-xl">{kpis.criticalZones}</p>
-        </div>
+          <p className="mt-1 text-[10px] font-medium text-primary">Открыть →</p>
+        </button>
       </div>
 
-      <Card className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-xs">
+      <Card id="dealer-showcase-categories-anchor" className="scroll-mt-28 overflow-hidden rounded-xl border border-border/70 bg-card shadow-xs sm:scroll-mt-32">
         <CardHeader className="space-y-0.5 p-3 pb-2">
           <CardTitle className="text-sm">Категории</CardTitle>
           <CardDescription className="text-xs">План / факт / дефицит</CardDescription>
         </CardHeader>
         <CardContent className="space-y-1.5 p-3 pt-0">
-          {rows.map((r) => (
-            <div
-              key={r.categoryId}
-              data-testid={`row-showcase-category-${r.categoryId}`}
-              className="flex flex-col gap-1.5 rounded-md border border-border/60 bg-muted/15 px-2.5 py-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"
-            >
-              <div className="min-w-0 text-sm font-medium text-foreground">{SHOWCASE_CATEGORY_LABEL[r.categoryId]}</div>
-              <div className="flex flex-wrap items-center gap-2 text-xs tabular-nums text-muted-foreground sm:text-sm">
-                <span>
-                  План <span className="font-semibold text-foreground">{r.targetCount}</span>
-                </span>
-                <span>
-                  Факт <span className="font-semibold text-foreground">{r.actualCount}</span>
-                </span>
-                <span>
-                  Деф. <span className="font-semibold text-foreground">{r.deficitCount}</span>
-                </span>
-                <Badge variant="outline" className={cn("text-xs font-medium", rowStatusTone(r.status))}>
-                  {rowStatusLabel(r.status)}
-                </Badge>
-              </div>
-            </div>
-          ))}
+          {displayedCategoryRows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Нет категорий в текущем фильтре.</p>
+          ) : (
+            displayedCategoryRows.map((r) => {
+              const catKey = r.categoryId;
+              const isCatOpen = categoryExpanded[catKey] ?? false;
+              const ov = storage.overrides[showcaseOverrideStorageKey(row.id, r.categoryId)];
+              const catTasks = tasks.filter((t) => t.categoryId === r.categoryId);
+              return (
+                <div
+                  key={r.categoryId}
+                  data-testid={`row-showcase-category-${r.categoryId}`}
+                  className={cn(
+                    "overflow-hidden rounded-md border border-border/60 bg-muted/15",
+                    categoryListMode === "deficit" && r.deficitCount > 0 && "ring-2 ring-amber-300/70",
+                    categoryListMode === "critical" && r.status === "critical" && "ring-2 ring-red-300/70",
+                  )}
+                >
+                  <button
+                    type="button"
+                    data-testid={`button-showcase-category-toggle-${r.categoryId}`}
+                    className="flex w-full items-start gap-2 px-2.5 py-2 text-left transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    onClick={() =>
+                      setCategoryExpanded((m) => ({
+                        ...m,
+                        [catKey]: !isCatOpen,
+                      }))
+                    }
+                  >
+                    <ChevronRight
+                      className={cn("mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition", isCatOpen && "rotate-90")}
+                      aria-hidden
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-sm font-medium text-foreground">{SHOWCASE_CATEGORY_LABEL[r.categoryId]}</span>
+                        <span className="text-[10px] font-medium text-primary">{isCatOpen ? "Свернуть" : "Открыть"}</span>
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs tabular-nums text-muted-foreground sm:text-sm">
+                        <span>
+                          План <span className="font-semibold text-foreground">{r.targetCount}</span>
+                        </span>
+                        <span>
+                          Факт <span className="font-semibold text-foreground">{r.actualCount}</span>
+                        </span>
+                        <span>
+                          Деф. <span className="font-semibold text-foreground">{r.deficitCount}</span>
+                        </span>
+                        <Badge variant="outline" className={cn("text-xs font-medium", rowStatusTone(r.status))}>
+                          {rowStatusLabel(r.status)}
+                        </Badge>
+                      </div>
+                    </div>
+                  </button>
+                  {isCatOpen ? (
+                    <div
+                      data-testid={`section-showcase-category-details-${r.categoryId}`}
+                      className="space-y-2 border-t border-border/60 bg-card/60 px-3 py-2 text-sm"
+                    >
+                      <div className="grid gap-1 text-xs sm:grid-cols-2 sm:text-sm">
+                        <p>
+                          <span className="text-muted-foreground">План:</span>{" "}
+                          <span className="font-semibold tabular-nums text-foreground">{r.targetCount}</span>
+                        </p>
+                        <p>
+                          <span className="text-muted-foreground">Факт:</span>{" "}
+                          <span className="font-semibold tabular-nums text-foreground">{r.actualCount}</span>
+                        </p>
+                        <p>
+                          <span className="text-muted-foreground">Дефицит:</span>{" "}
+                          <span className="font-semibold tabular-nums text-foreground">{r.deficitCount}</span>
+                        </p>
+                        <p>
+                          <span className="text-muted-foreground">Статус:</span>{" "}
+                          <span className="font-medium text-foreground">{rowStatusLabel(r.status)}</span>
+                        </p>
+                      </div>
+                      {ov ? (
+                        <p className="text-xs text-muted-foreground">
+                          Последнее изменение: {new Date(ov.updatedAt).toLocaleString("ru-RU")} · {ov.updatedBy}
+                          {ov.comment ? ` · ${ov.comment}` : ""}
+                        </p>
+                      ) : null}
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Связанные задачи</p>
+                        {catTasks.length === 0 ? (
+                          <p className="mt-1 text-xs text-muted-foreground">Нет задач по этой категории.</p>
+                        ) : (
+                          <ul className="mt-1 list-inside list-disc space-y-0.5 text-xs text-foreground">
+                            {catTasks.map((t) => (
+                              <li key={t.taskId}>
+                                {t.title} · {TASK_STATUS_LABEL[t.status]}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })
+          )}
         </CardContent>
       </Card>
 
-      <div className="space-y-2">
+      <div id="dealer-showcase-tasks-anchor" className="scroll-mt-28 space-y-2 sm:scroll-mt-32">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Открытые задачи</h3>
         {tasks.length === 0 ? (
           <p className="text-sm text-muted-foreground">Нет активных задач по дефициту.</p>
         ) : (
           <div className="space-y-2">
-            {tasks.map((t) => (
-              <div
-                key={t.taskId}
-                data-testid={`card-showcase-task-${t.taskId}`}
-                className="min-w-0 rounded-lg border border-border/70 bg-card p-3 shadow-xs"
-              >
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <p className="text-sm font-semibold leading-snug text-foreground">{t.title}</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      <Badge variant="outline" className="text-xs font-medium">
-                        {TASK_STATUS_LABEL[t.status]}
-                      </Badge>
-                      <Badge variant="outline" className="border-border bg-muted/40 text-xs font-medium">
-                        {PRIORITY_LABEL[t.priority]}
-                      </Badge>
-                      <Badge variant="outline" className="border-border bg-muted/40 text-xs tabular-nums">
-                        Срок {t.dueDate}
-                      </Badge>
+            {tasks.map((t) => {
+              const isTaskOpen = taskExpanded[t.taskId] ?? false;
+              return (
+                <div
+                  key={t.taskId}
+                  data-testid={`card-showcase-task-${t.taskId}`}
+                  className="min-w-0 overflow-hidden rounded-lg border border-border/70 bg-card shadow-xs"
+                >
+                  <button
+                    type="button"
+                    data-testid={`button-showcase-task-toggle-${t.taskId}`}
+                    className="flex w-full items-start justify-between gap-2 p-3 text-left transition hover:bg-muted/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    onClick={() =>
+                      setTaskExpanded((m) => ({
+                        ...m,
+                        [t.taskId]: !isTaskOpen,
+                      }))
+                    }
+                  >
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <p className="text-sm font-semibold leading-snug text-foreground">{t.title}</p>
+                      {!isTaskOpen ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          <Badge variant="outline" className="text-xs font-medium">
+                            {TASK_STATUS_LABEL[t.status]}
+                          </Badge>
+                          <Badge variant="outline" className="border-border bg-muted/40 text-xs tabular-nums">
+                            Срок {t.dueDate}
+                          </Badge>
+                        </div>
+                      ) : null}
                     </div>
-                    {t.description ? <p className="text-xs text-muted-foreground">{t.description}</p> : null}
-                    {t.status === "done" && t.completedAt ? (
-                      <p className="text-[11px] text-muted-foreground">Завершено {t.completedAt}</p>
-                    ) : null}
-                  </div>
-                  <div className="flex shrink-0 flex-wrap gap-1.5 sm:max-w-[min(100%,14rem)] sm:flex-col sm:items-stretch">
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="min-h-9 flex-1 text-xs font-semibold sm:flex-none"
-                      disabled={!canComplete || t.status === "done"}
-                      data-testid={`button-showcase-task-complete-${t.taskId}`}
-                      onClick={() => openComplete(t)}
+                    <span className="shrink-0 pt-0.5 text-[10px] font-medium text-primary">{isTaskOpen ? "Свернуть" : "Открыть"}</span>
+                  </button>
+                  {isTaskOpen ? (
+                    <div
+                      data-testid={`section-showcase-task-details-${t.taskId}`}
+                      className="space-y-3 border-t border-border/60 px-3 pb-3 pt-2"
                     >
-                      Выполнить
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="min-h-9 flex-1 text-xs font-semibold sm:flex-none"
-                      disabled={!canWorkflow || t.status === "done"}
-                      data-testid={`button-showcase-task-postpone-${t.taskId}`}
-                      onClick={() => {
-                        applyShowcaseTaskStatus(t.taskId, "postponed", actorLabel);
-                        bump();
-                      }}
-                    >
-                      Отложить
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      className="min-h-9 flex-1 text-xs font-semibold sm:flex-none"
-                      disabled={!canWorkflow || t.status === "done"}
-                      data-testid={`button-showcase-task-needs-rop-${t.taskId}`}
-                      onClick={() => {
-                        applyShowcaseTaskStatus(t.taskId, "needs_rop", actorLabel);
-                        bump();
-                      }}
-                    >
-                      Нужна помощь РОПа
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="min-h-8 flex-1 text-xs sm:flex-none"
-                      disabled={!canWorkflow || t.status === "done" || t.status === "in_progress"}
-                      data-testid={`button-showcase-task-start-${t.taskId}`}
-                      onClick={() => {
-                        applyShowcaseTaskStatus(t.taskId, "in_progress", actorLabel);
-                        bump();
-                      }}
-                    >
-                      В работу
-                    </Button>
-                  </div>
+                      {t.description ? <p className="text-xs leading-relaxed text-muted-foreground">{t.description}</p> : null}
+                      <div className="grid gap-1 text-xs text-muted-foreground sm:grid-cols-2">
+                        <p>
+                          <span className="font-medium text-foreground">Срок:</span> {t.dueDate}
+                        </p>
+                        <p>
+                          <span className="font-medium text-foreground">Ответственный:</span> {row.manager}
+                        </p>
+                        <p>
+                          <span className="font-medium text-foreground">Статус:</span> {TASK_STATUS_LABEL[t.status]}
+                        </p>
+                        <p>
+                          <span className="font-medium text-foreground">Приоритет:</span> {PRIORITY_LABEL[t.priority]}
+                        </p>
+                      </div>
+                      {t.status === "done" && t.completedAt ? (
+                        <p className="text-[11px] text-muted-foreground">Завершено {t.completedAt}</p>
+                      ) : null}
+                      <div className="flex flex-wrap gap-1.5">
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="min-h-9 flex-1 text-xs font-semibold sm:flex-none"
+                          disabled={!canComplete || t.status === "done"}
+                          data-testid={`button-showcase-task-complete-${t.taskId}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openComplete(t);
+                          }}
+                        >
+                          Выполнить
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="min-h-9 flex-1 text-xs font-semibold sm:flex-none"
+                          disabled={!canWorkflow || t.status === "done"}
+                          data-testid={`button-showcase-task-postpone-${t.taskId}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            applyShowcaseTaskStatus(t.taskId, "postponed", actorLabel);
+                            bump();
+                          }}
+                        >
+                          Отложить
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          className="min-h-9 flex-1 text-xs font-semibold sm:flex-none"
+                          disabled={!canWorkflow || t.status === "done"}
+                          data-testid={`button-showcase-task-needs-rop-${t.taskId}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            applyShowcaseTaskStatus(t.taskId, "needs_rop", actorLabel);
+                            bump();
+                          }}
+                        >
+                          Нужна помощь РОПа
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="min-h-8 flex-1 text-xs sm:flex-none"
+                          disabled={!canWorkflow || t.status === "done" || t.status === "in_progress"}
+                          data-testid={`button-showcase-task-start-${t.taskId}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            applyShowcaseTaskStatus(t.taskId, "in_progress", actorLabel);
+                            bump();
+                          }}
+                        >
+                          В работу
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

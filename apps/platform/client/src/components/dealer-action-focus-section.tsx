@@ -16,6 +16,9 @@ function formatIsoDayToRu(iso: string): string {
   return `${m[3]}.${m[2]}.${m[1]}`;
 }
 
+const focusCardClass =
+  "group flex w-full min-w-0 gap-2 rounded-lg border border-border/70 bg-card/80 p-2.5 text-left transition hover:border-primary/40 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
 type Props = {
   row: DealerRow;
   profile: ReleaseDemoProfile;
@@ -28,6 +31,8 @@ type Props = {
   lastActivityLabel: string;
   onScrollToNextStep: () => void;
   onScrollToShowcase: () => void;
+  onScrollToHistory: () => void;
+  onOpenShowcaseDeficitFilter: () => void;
 };
 
 export function DealerActionFocusSection({
@@ -42,6 +47,8 @@ export function DealerActionFocusSection({
   lastActivityLabel,
   onScrollToNextStep,
   onScrollToShowcase,
+  onScrollToHistory,
+  onOpenShowcaseDeficitFilter,
 }: Props) {
   const canShowcase = canViewShowcaseDistribution(profile, row);
 
@@ -83,10 +90,18 @@ export function DealerActionFocusSection({
           </p>
 
           <div className="grid gap-2 sm:grid-cols-2">
-            <div className="flex gap-2 rounded-lg border border-border/70 bg-card/80 p-2.5">
+            <button
+              type="button"
+              data-testid="link-dealer-focus-next-step"
+              className={cn(focusCardClass, "cursor-pointer")}
+              onClick={onScrollToNextStep}
+            >
               <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
-              <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Следующий шаг</p>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center justify-between gap-1">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Следующий шаг</p>
+                  <span className="text-[10px] font-medium text-primary opacity-90 group-hover:opacity-100">Открыть →</span>
+                </div>
                 <p
                   className={cn(
                     "mt-1 text-sm font-medium leading-snug",
@@ -97,11 +112,19 @@ export function DealerActionFocusSection({
                   {nextStepLine}
                 </p>
               </div>
-            </div>
-            <div className="flex gap-2 rounded-lg border border-border/70 bg-card/80 p-2.5">
+            </button>
+
+            <Link
+              href={buildHashPath("/tasks", { dealerId: row.id })}
+              data-testid="link-dealer-focus-showcase-tasks"
+              className={cn(focusCardClass, "cursor-pointer")}
+            >
               <ListTodo className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
-              <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Задачи по витрине</p>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center justify-between gap-1">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Задачи по витрине</p>
+                  <span className="text-[10px] font-medium text-primary opacity-90 group-hover:opacity-100">Открыть →</span>
+                </div>
                 <p className="mt-1 text-sm font-medium text-foreground" data-testid="text-dealer-action-focus-showcase-tasks">
                   {canShowcase
                     ? openShowcaseTasks > 0
@@ -110,23 +133,47 @@ export function DealerActionFocusSection({
                     : "Нет доступа к витрине в этом профиле"}
                 </p>
               </div>
-            </div>
-            <div className="flex gap-2 rounded-lg border border-border/70 bg-card/80 p-2.5 sm:col-span-2">
+            </Link>
+
+            <button
+              type="button"
+              data-testid="button-dealer-focus-deficit"
+              disabled={!canShowcase}
+              className={cn(focusCardClass, "sm:col-span-2", canShowcase ? "cursor-pointer" : "cursor-not-allowed opacity-60")}
+              onClick={() => {
+                if (!canShowcase) return;
+                onOpenShowcaseDeficitFilter();
+              }}
+            >
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden />
               <div className="min-w-0 flex-1">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Дефицит по витрине</p>
+                <div className="flex flex-wrap items-center justify-between gap-1">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Дефицит по витрине</p>
+                  {canShowcase ? (
+                    <span className="text-[10px] font-medium text-primary opacity-90 group-hover:opacity-100">Открыть →</span>
+                  ) : null}
+                </div>
                 <p className="mt-1 text-sm font-medium text-foreground" data-testid="text-dealer-action-focus-deficit">
                   {canShowcase ? (hasDeficit ? `Да · всего единиц: ${deficitTotal}` : "Нет") : "—"}
                 </p>
               </div>
-            </div>
-            <div className="flex gap-2 rounded-lg border border-border/70 bg-card/80 p-2.5 sm:col-span-2">
+            </button>
+
+            <button
+              type="button"
+              data-testid="button-dealer-focus-last-event"
+              className={cn(focusCardClass, "cursor-pointer sm:col-span-2")}
+              onClick={onScrollToHistory}
+            >
               <ClipboardList className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-              <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Последнее событие</p>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center justify-between gap-1">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Последнее событие</p>
+                  <span className="text-[10px] font-medium text-primary opacity-90 group-hover:opacity-100">Открыть →</span>
+                </div>
                 <p className="mt-1 text-sm font-medium text-foreground">{lastActivityLabel}</p>
               </div>
-            </div>
+            </button>
           </div>
 
           <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">

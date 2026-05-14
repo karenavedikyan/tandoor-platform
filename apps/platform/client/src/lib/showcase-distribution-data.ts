@@ -152,7 +152,7 @@ export function saveShowcaseStorage(data: ShowcaseStorageV1): void {
   window.dispatchEvent(new CustomEvent(SHOWCASE_STORAGE_EVENT));
 }
 
-function overrideKey(dealerId: string, categoryId: ShowcaseCategoryId): string {
+export function showcaseOverrideStorageKey(dealerId: string, categoryId: ShowcaseCategoryId): string {
   return `${dealerId}|${categoryId}`;
 }
 
@@ -225,7 +225,7 @@ export function buildBaseDistributionRows(dealer: DealerRow): ShowcaseDistributi
 export function mergeDistributionWithOverrides(dealer: DealerRow, storage: ShowcaseStorageV1): ShowcaseDistributionRow[] {
   const base = buildBaseDistributionRows(dealer);
   return base.map((row) => {
-    const o = storage.overrides[overrideKey(dealer.id, row.categoryId)];
+    const o = storage.overrides[showcaseOverrideStorageKey(dealer.id, row.categoryId)];
     if (!o) return row;
     const actualCount = Math.max(0, o.actualCount);
     const deficitCount = Math.max(0, row.targetCount - actualCount);
@@ -386,7 +386,7 @@ export function applyShowcaseTaskCompleteSafe(
     resolvedActualCount: payload.newActualCount,
   };
 
-  storage.overrides[overrideKey(dealer.id, payload.categoryId)] = {
+  storage.overrides[showcaseOverrideStorageKey(dealer.id, payload.categoryId)] = {
     actualCount: payload.newActualCount,
     status: recomputeOverrideStatus(target, payload.newActualCount),
     comment: payload.comment,
