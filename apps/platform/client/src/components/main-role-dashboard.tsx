@@ -15,11 +15,13 @@ import { buildHashPath } from "@/lib/hash-route-utils";
 import { getEffectiveTeamLeadTeamId } from "@/lib/release-demo-profile";
 import { getAllMatrixTasks } from "@/lib/trade-point-task-data";
 import { getRopOptions } from "@/lib/rop-manager-filters";
+import { getShowcaseOnlyTasks } from "@/lib/task-classification";
 import { getSalesUserById, getTeamManagers, type SalesRole } from "@/lib/sales-control-data";
 import { buildTeamSummaries } from "@/lib/team-summary";
 
 function countOpenTasksForDealers(dealerIds: Set<string>): number {
-  return getAllMatrixTasks().filter((t) => dealerIds.has(t.dealerId) && t.status !== "done").length;
+  return getShowcaseOnlyTasks(getAllMatrixTasks()).filter((t) => dealerIds.has(t.dealerId) && t.status !== "done")
+    .length;
 }
 
 type MainLink = { href: string; label: string; testId: string };
@@ -104,7 +106,7 @@ export function MainRoleDashboard() {
         clients: buildHashPath("/dealer-base"),
         active: buildHashPath("/dealer-base", { quick: "active", view: "my_clients", manager: mid }),
         attention: buildHashPath("/dealer-base", { quick: "attention", view: "my_clients", manager: mid }),
-        tasks: buildHashPath("/tasks", { preset: "all" }),
+        tasks: buildHashPath("/tasks"),
         extra: "",
       };
     }
@@ -114,7 +116,7 @@ export function MainRoleDashboard() {
         clients: buildHashPath("/dealer-base", { view: "table_team", team: tid }),
         active: buildHashPath("/dealer-base", { quick: "active", view: "table_team", team: tid }),
         attention: buildHashPath("/dealer-base", { quick: "attention", view: "table_team", team: tid }),
-        tasks: buildHashPath("/tasks", { preset: "all" }),
+        tasks: buildHashPath("/tasks"),
         extra: buildHashPath("/dealer-base", { view: "by_manager", team: tid }),
       };
     }
@@ -123,7 +125,7 @@ export function MainRoleDashboard() {
         clients: buildHashPath("/dealer-base"),
         active: buildHashPath("/dealer-base", { quick: "active", view: "table_all" }),
         attention: buildHashPath("/dealer-base", { quick: "attention", view: "table_all" }),
-        tasks: buildHashPath("/tasks", { preset: "all" }),
+        tasks: buildHashPath("/tasks"),
         extra: buildHashPath("/dealer-base", { view: "teams" }),
       };
     }
@@ -138,7 +140,7 @@ export function MainRoleDashboard() {
 
     if (role === "sales_manager") {
       push("/dealer-base", "Мои клиенты", "button-main-open-clients");
-      push("/tasks", "Мои задачи", "button-main-open-tasks");
+      push("/tasks", "Задачи по витрине", "button-main-open-tasks");
       push("/catalog", "Каталог", "button-main-open-catalog");
       push("/training", "Обучение", "button-main-open-training");
       push(planHref, "План-факт", "button-main-open-sales-control");
@@ -148,7 +150,7 @@ export function MainRoleDashboard() {
 
     if (role === "team_lead") {
       push("/dealer-base", "Клиенты команды", "button-main-open-clients");
-      push("/tasks", "Задачи команды", "button-main-open-tasks");
+      push("/tasks", "Витрины команды", "button-main-open-tasks");
       push(planHref, "План-факт команды", "button-main-open-sales-control");
       push("/sales-control/performance", "Выполнение", "button-main-open-sales-performance");
       push("/catalog", "Каталог", "button-main-open-catalog");
@@ -160,7 +162,7 @@ export function MainRoleDashboard() {
     if (role === "sales_director") {
       push("/territory-card", "Территория", "button-main-open-territory");
       push("/dealer-base", "Клиентская база", "button-main-open-clients");
-      push("/tasks", "Задачи", "button-main-open-tasks");
+      push("/tasks", "Задачи по витрине", "button-main-open-tasks");
       push("/sales-control/director", "План-факт продаж", "button-main-open-sales-control");
       push("/sales-control/performance", "Выполнение", "button-main-open-sales-performance");
       push("/catalog", "Каталог", "button-main-open-catalog");
@@ -205,10 +207,10 @@ export function MainRoleDashboard() {
 
   const kpiTasksLabel =
     role === "sales_manager"
-      ? "Мои открытые задачи"
+      ? "Открытые задачи по витрине"
       : role === "team_lead"
-        ? "Открытые задачи команды"
-        : "Открытые задачи";
+        ? "Витрины команды (открытые)"
+        : "Витрины (открытые)";
 
   if (role !== "sales_manager" && role !== "team_lead" && role !== "sales_director") {
     return (

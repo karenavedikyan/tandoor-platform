@@ -590,7 +590,7 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                       className="min-h-10 border-border bg-card"
                       data-testid="button-open-all-tasks"
                     >
-                      <Link href="/tasks">Все задачи</Link>
+                      <Link href="/tasks">Все задачи по витрине</Link>
                     </Button>
                   </div>
                 </div>
@@ -667,7 +667,7 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                     className="min-h-9 w-full shrink-0 font-semibold sm:w-auto"
                     data-testid="button-dealer-signal-open-tasks"
                   >
-                    <Link href="/tasks">К задачам</Link>
+                    <Link href="/tasks">К задачам по витрине</Link>
                   </Button>
                 </div>
                 {analyticsSignals.length === 0 ? (

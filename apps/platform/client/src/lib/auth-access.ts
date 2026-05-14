@@ -150,7 +150,7 @@ export function getPilotNavItems(role: SalesRole): PilotNavItem[] {
     push({ href: "/main", label: "Главная", testId: "nav-main" });
     push({ href: "/dealer-base", label: "Клиенты", testId: "nav-dealer-base", badge: NAV_BADGE_CLIENTS });
     push({ href: "/client-map", label: "Карта клиентов", testId: "nav-client-map" });
-    push({ href: "/tasks", label: "Задачи", testId: "nav-tasks" });
+    push({ href: "/tasks", label: "Задачи по витрине", testId: "nav-tasks" });
     push({ href: "/catalog", label: "Каталог", testId: "nav-catalog" });
     push({ href: "/training", label: "Обучение", testId: "nav-training" });
     push({ href: sch, label: "План-факт продаж", testId: "nav-sales-control" });
@@ -162,7 +162,7 @@ export function getPilotNavItems(role: SalesRole): PilotNavItem[] {
     push({ href: "/main", label: "Главная", testId: "nav-main" });
     push({ href: "/dealer-base", label: "Клиенты команды", testId: "nav-dealer-base", badge: NAV_BADGE_CLIENTS });
     push({ href: "/client-map", label: "Карта клиентов", testId: "nav-client-map" });
-    push({ href: "/tasks", label: "Задачи команды", testId: "nav-tasks" });
+    push({ href: "/tasks", label: "Витрины / задачи", testId: "nav-tasks" });
     push({ href: "/analytics-workspace", label: "Аналитика команды", testId: "nav-analytics-workspace" });
     push({ href: sch, label: "План-факт продаж", testId: "nav-sales-control" });
     push({ href: "/catalog", label: "Каталог", testId: "nav-catalog" });
@@ -176,7 +176,7 @@ export function getPilotNavItems(role: SalesRole): PilotNavItem[] {
     push({ href: "/territory-card", label: "Карточка территории", testId: "nav-territory-card" });
     push({ href: "/dealer-base", label: "Клиенты", testId: "nav-dealer-base", badge: NAV_BADGE_CLIENTS });
     push({ href: "/client-map", label: "Карта клиентов", testId: "nav-client-map" });
-    push({ href: "/tasks", label: "Задачи", testId: "nav-tasks" });
+    push({ href: "/tasks", label: "Задачи по витрине", testId: "nav-tasks" });
     push({ href: "/analytics-workspace", label: "Аналитика команды", testId: "nav-analytics-workspace" });
     push({ href: sch, label: "План-факт продаж", testId: "nav-sales-control" });
     push({ href: "/catalog", label: "Каталог", testId: "nav-catalog" });
@@ -205,7 +205,7 @@ export function getPilotNavItems(role: SalesRole): PilotNavItem[] {
     push({ href: "/analytics-workspace", label: "Аналитика команды", testId: "nav-analytics-workspace" });
     push({ href: "/dealer-base", label: "Клиенты", testId: "nav-dealer-base", badge: NAV_BADGE_CLIENTS });
     push({ href: "/client-map", label: "Карта клиентов", testId: "nav-client-map" });
-    push({ href: "/tasks", label: "Задачи", testId: "nav-tasks" });
+    push({ href: "/tasks", label: "Задачи по витрине", testId: "nav-tasks" });
     push({ href: "/catalog", label: "Каталог", testId: "nav-catalog" });
     push({ href: "/marketing-briefs", label: "Маркетинговые брифы", testId: "nav-marketing-briefs" });
     return items;

@@ -271,3 +271,8 @@ export function filterTasksByCategory(
   if (category === "all") return tasks;
   return tasks.filter((t) => classifyTask(t).categoryId === category);
 }
+
+/** Для Release 1: только задачи, отнесённые к категории «Витрина» (включая `showcase_distribution`). */
+export function getShowcaseOnlyTasks(tasks: MatrixTaskWithContext[]): MatrixTaskWithContext[] {
+  return tasks.filter((t) => classifyTask(t).categoryId === "showcase");
+}

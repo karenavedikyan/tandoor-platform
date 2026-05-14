@@ -130,10 +130,7 @@ export function DealerShowcaseDistributionSection({ row, profile, onApplied }: P
 
   const tasksHref = useMemo(
     () =>
-      buildHashPath("/tasks", {
-        category: "showcase",
-        preset: "showcase",
-      }),
+      buildHashPath("/tasks"),
     [],
   );
 
@@ -153,7 +150,7 @@ export function DealerShowcaseDistributionSection({ row, profile, onApplied }: P
         </div>
         <Button asChild variant="outline" size="sm" className="min-h-10 shrink-0 self-start border-border bg-card">
           <Link href={tasksHref} data-testid="link-dealer-showcase-open-tasks">
-            Все задачи «Витрина»
+            Все задачи по витрине
           </Link>
         </Button>
       </div>

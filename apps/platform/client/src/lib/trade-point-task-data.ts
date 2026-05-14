@@ -52,6 +52,8 @@ export type MatrixTask = {
   actualSamples: number;
   insightDomain?: TaskInsightDomain;
   insightLabel?: string;
+  /** Только `showcase_distribution`: отложено или запрос помощи РОПа (при этом `status` как в матрице). */
+  showcaseExtraStatus?: "needs_rop" | "postponed";
 };
 
 export type MatrixTaskRecommendation = MatrixTask & {
@@ -273,8 +275,19 @@ export type MatrixTaskWithContext = MatrixTask & {
 };
 
 function mapShowcaseGlobalToMatrixTask(g: ShowcaseGlobalTaskRow): MatrixTaskWithContext {
-  const matrixStatus: MatrixTaskStatus =
-    g.showcaseStatus === "in_progress" || g.showcaseStatus === "needs_rop" ? "in_progress" : "new";
+  let matrixStatus: MatrixTaskStatus = "new";
+  let showcaseExtraStatus: "needs_rop" | "postponed" | undefined;
+  if (g.showcaseStatus === "needs_rop") {
+    matrixStatus = "in_progress";
+    showcaseExtraStatus = "needs_rop";
+  } else if (g.showcaseStatus === "in_progress") {
+    matrixStatus = "in_progress";
+  } else if (g.showcaseStatus === "postponed") {
+    matrixStatus = "new";
+    showcaseExtraStatus = "postponed";
+  } else {
+    matrixStatus = "new";
+  }
   return {
     taskId: g.taskId,
     productId: g.categoryId,
@@ -298,6 +311,7 @@ function mapShowcaseGlobalToMatrixTask(g: ShowcaseGlobalTaskRow): MatrixTaskWith
     insightDomain: "showcase",
     insightLabel: "Витрина (план)",
     dealerName: g.dealerName,
+    showcaseExtraStatus,
   };
 }
 

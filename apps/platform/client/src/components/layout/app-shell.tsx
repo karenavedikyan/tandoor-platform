@@ -172,7 +172,7 @@ function headerContextLabel(location: string) {
   if (isDealerBasePath(location)) return "Клиенты";
   if (isClientMapPath(location)) return "Карта клиентов";
   if (isOrdersSectionPath(location)) return "Заказы";
-  if (isTasksPath(location)) return "Задачи";
+  if (isTasksPath(location)) return "Задачи по витрине";
   if (isCatalogPath(location)) return "Каталог";
   if (isTerritoryCardPath(location)) return "Карточка территории";
   if (isAnalyticsPath(location)) return "Аналитика";
