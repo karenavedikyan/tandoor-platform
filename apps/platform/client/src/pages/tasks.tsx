@@ -39,7 +39,7 @@ import {
 import { SHOWCASE_STORAGE_EVENT } from "@/lib/showcase-distribution-data";
 import { getShowcaseOnlyTasks, getTaskCategoryMeta } from "@/lib/task-classification";
 import { taskMatchesUrgentPresetForBadge } from "@/lib/task-presets";
-import { useRouteSearchParams } from "@/lib/hash-route-utils";
+import { useRouteSearchParams, buildHashPath } from "@/lib/hash-route-utils";
 import { getEffectiveTeamLeadTeamId, type ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { getAllSalesManagers, getSalesUserById } from "@/lib/sales-control-data";
 
@@ -527,9 +527,28 @@ export default function TasksPage() {
 
   const searched = useMemo(() => applySearch(filteredByScope, query), [filteredByScope, query]);
 
+  const dealerIdFilterRaw = (routeQs.get("dealerId") ?? "").trim();
+  const dealerFilterActive = dealerIdFilterRaw.length > 0 && allowedDealerIds.has(dealerIdFilterRaw);
+  const dealerFilterDenied = dealerIdFilterRaw.length > 0 && !allowedDealerIds.has(dealerIdFilterRaw);
+
+  const dealerScoped = useMemo(() => {
+    if (dealerFilterDenied) return [];
+    if (dealerFilterActive) return searched.filter((t) => t.dealerId === dealerIdFilterRaw);
+    return searched;
+  }, [searched, dealerFilterActive, dealerFilterDenied, dealerIdFilterRaw]);
+
+  const resetClientFilterHref = useMemo(() => {
+    const entries: Record<string, string> = {};
+    routeQs.forEach((v, k) => {
+      if (k === "dealerId" || !v) return;
+      entries[k] = v;
+    });
+    return buildHashPath("/tasks", Object.keys(entries).length > 0 ? entries : undefined);
+  }, [routeQs]);
+
   const filtered = useMemo(
-    () => applyShowcaseView(searched, showcaseViewId, presetClock),
-    [searched, showcaseViewId, presetClock],
+    () => applyShowcaseView(dealerScoped, showcaseViewId, presetClock),
+    [dealerScoped, showcaseViewId, presetClock],
   );
 
   const visibleTasks = useMemo(() => filtered.slice(0, TASKS_DISPLAY_LIMIT), [filtered]);
@@ -564,7 +583,27 @@ export default function TasksPage() {
           </div>
         </header>
 
-        <ShowcaseTasksKpis tasks={searched} />
+        <ShowcaseTasksKpis tasks={dealerScoped} />
+
+        {dealerFilterActive ? (
+          <div
+            className="flex flex-col gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+            data-testid="text-tasks-client-filter"
+          >
+            <p className="text-sm font-medium text-foreground">
+              Показаны задачи клиента:{" "}
+              <span className="text-foreground">{dealerById.get(dealerIdFilterRaw)?.name ?? dealerIdFilterRaw}</span>
+            </p>
+            <Button asChild variant="outline" size="sm" className="min-h-10 w-full shrink-0 sm:w-auto" data-testid="button-tasks-client-filter-reset">
+              <Link href={resetClientFilterHref}>Сбросить фильтр клиента</Link>
+            </Button>
+          </div>
+        ) : null}
+        {dealerFilterDenied ? (
+          <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+            Запрошенный клиент недоступен для вашей роли.
+          </p>
+        ) : null}
 
         <div className="min-w-0 space-y-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Быстрый фильтр</p>
@@ -583,7 +622,7 @@ export default function TasksPage() {
                 )}
               >
                 {c.label}{" "}
-                <span className="tabular-nums">({countShowcaseView(searched, c.id, presetClock)})</span>
+                <span className="tabular-nums">({countShowcaseView(dealerScoped, c.id, presetClock)})</span>
               </button>
             ))}
           </div>
@@ -672,8 +711,8 @@ export default function TasksPage() {
         <p className="text-sm text-muted-foreground" data-testid="text-tasks-count">
           Показано{" "}
           <span className="font-semibold tabular-nums text-foreground">{visibleTasks.length}</span> из{" "}
-          <span className="font-semibold tabular-nums text-foreground">{filtered.length}</span> по фильтру витрины,
-          команде и поиску
+          <span className="font-semibold tabular-nums text-foreground">{filtered.length}</span>
+          {dealerFilterActive ? " по выбранному клиенту и фильтрам" : " по фильтру витрины, команде и поиску"}
         </p>
         {filtered.length > TASKS_DISPLAY_LIMIT ? (
           <p className="text-sm text-muted-foreground" data-testid="text-tasks-display-cap">

@@ -34,9 +34,24 @@ import { dealerRowStatusForProduct, getDealerProductPreview } from "@/lib/catalo
 import { DealerShowcaseDistributionSection } from "@/components/dealer-showcase-distribution-section";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import { getDealerAnalyticsSignalCards } from "@/lib/dealer-analytics-signals";
-import { getShowcaseHistoryForDealer, loadShowcaseStorage } from "@/lib/showcase-distribution-data";
+import {
+  getShowcaseHistoryForDealer,
+  getShowcaseKpis,
+  getShowcaseTasksForDealerDisplay,
+  loadShowcaseStorage,
+  mergeDistributionWithOverrides,
+  userLabelFromProfile,
+} from "@/lib/showcase-distribution-data";
+import {
+  CLIENT_NEXT_STEP_CHANGED_EVENT,
+  getClientNextStepHistoryForDealer,
+  loadClientNextStepsStorage,
+} from "@/lib/client-next-step-data";
 import { dealerProductTrainingStorageKey, getDealerTrainingAttentionSignal, trainingAttentionLevelBadgeClass } from "@/lib/training-attention";
+import { DealerClientNextStepSection } from "@/components/dealer-client-next-step-section";
+import { DealerClientWorkStatusSection } from "@/components/dealer-client-work-status-section";
 
 const SECTION_IDS = [
   "overview",
@@ -164,7 +179,31 @@ function parseDealerIndex(id: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-type DealerHistoryEvent = { id: string; meta: string; body: string };
+type DealerHistoryEvent = { id: string; meta: string; body: string; at?: string };
+
+function historySortKey(e: DealerHistoryEvent): number {
+  if (e.at) {
+    const t = new Date(e.at).getTime();
+    if (!Number.isNaN(t)) return t;
+  }
+  const m = e.meta.match(/^(\d{2})\.(\d{2})\.(\d{4})/);
+  if (m) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1])).getTime();
+  return 0;
+}
+
+function newestHistoryActivityLabel(events: DealerHistoryEvent[], fallback: string): string {
+  let best = -Infinity;
+  let label = fallback;
+  for (const e of events) {
+    const k = historySortKey(e);
+    if (k >= best) {
+      best = k;
+      const head = e.meta.split("·")[0]?.trim();
+      if (head) label = head;
+    }
+  }
+  return label;
+}
 
 /** Реалистичная лента для клиентов менеджера Бойко (команда Купянского). */
 function buildHistoryEvents(row: DealerRow): DealerHistoryEvent[] {
@@ -173,25 +212,38 @@ function buildHistoryEvents(row: DealerRow): DealerHistoryEvent[] {
     id: e.id,
     meta: e.meta,
     body: e.body,
+    at: e.at,
+  }));
+
+  const nsStorage = loadClientNextStepsStorage();
+  const nsHist: DealerHistoryEvent[] = getClientNextStepHistoryForDealer(row.id, nsStorage).map((e) => ({
+    id: e.id,
+    meta: e.meta,
+    body: e.body,
+    at: e.at,
   }));
 
   if (row.releaseManagerId === "mgr-boyko-em") {
     return [
       ...showcaseHist,
+      ...nsHist,
       {
         id: `${row.id}-hist-call`,
         meta: "14.05.2026 · Бойко Екатерина",
         body: "Звонок: обсудили обновление витрины, клиент готов поставить 3 новые модели.\nСледующее действие: визит 17.05.",
+        at: "2026-05-14T12:00:00.000Z",
       },
       {
         id: `${row.id}-hist-rop`,
         meta: "13.05.2026 · РОП Купянский",
         body: "Комментарий руководителя: взять клиента в фокус, высокий потенциал.",
+        at: "2026-05-13T12:00:00.000Z",
       },
       {
         id: `${row.id}-hist-sys`,
         meta: "10.05.2026 · Система",
         body: "Клиент попал в «требует внимания»: нет активности 30 дней.",
+        at: "2026-05-10T12:00:00.000Z",
       },
     ];
   }
@@ -211,6 +263,7 @@ function buildHistoryEvents(row: DealerRow): DealerHistoryEvent[] {
   ];
   return [
     ...showcaseHist,
+    ...nsHist,
     ...templates.map((text, idx) => ({
       id: `${row.id}-hist-${idx}`,
       meta: `${dates[idx % dates.length] ?? row.lastActivity} · Система`,
@@ -460,10 +513,29 @@ function DealerSectionNav({
 
 function DealerCardContent({ row }: { row: DealerRow }) {
   const { profile } = useReleaseDemoProfile();
+  const { user } = useCurrentUser();
   const [showcaseBump, setShowcaseBump] = useState(0);
+  const [nextStepBump, setNextStepBump] = useState(0);
+
+  useEffect(() => {
+    const fn = () => setNextStepBump((n) => n + 1);
+    window.addEventListener(CLIENT_NEXT_STEP_CHANGED_EVENT, fn);
+    return () => window.removeEventListener(CLIENT_NEXT_STEP_CHANGED_EVENT, fn);
+  }, []);
+
   const businessCategoryLabel = getClientCategoryLabel(row.clientCategory);
   const activeSection = useActiveSection(row.id);
-  const historyEvents = useMemo(() => buildHistoryEvents(row), [row, showcaseBump]);
+  const historyEvents = useMemo(() => buildHistoryEvents(row), [row, showcaseBump, nextStepBump]);
+  const lastHistoryLabel = useMemo(() => newestHistoryActivityLabel(historyEvents, row.lastActivity), [historyEvents, row.lastActivity]);
+  const showcaseDailySignals = useMemo(() => {
+    const s = loadShowcaseStorage();
+    const tasks = getShowcaseTasksForDealerDisplay(row, s);
+    const rows = mergeDistributionWithOverrides(row, s);
+    const kpis = getShowcaseKpis(rows, tasks);
+    const openCt = tasks.filter((t) => t.status !== "done" && t.status !== "postponed").length;
+    return { openCt, hasDeficit: kpis.deficitTotal > 0 };
+  }, [row, showcaseBump]);
+
   const tasks = useMemo(() => buildTasks(row), [row]);
   const dealerProducts = useMemo(() => getDealerProductPreview(row.id, 5), [row.id]);
   const analyticsSignals = useMemo(() => getDealerAnalyticsSignalCards(row), [row]);
@@ -581,6 +653,25 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                   </div>
                 </div>
               </div>
+
+              <DealerClientWorkStatusSection
+                manager={row.manager}
+                rop={row.regionalManager}
+                city={row.city}
+                categoryLabel={businessCategoryLabel}
+                activityStatus={row.status}
+                hasOpenShowcaseTasks={showcaseDailySignals.openCt > 0}
+                hasShowcaseDeficit={showcaseDailySignals.hasDeficit}
+                lastActivityLabel={lastHistoryLabel}
+              />
+
+              <DealerClientNextStepSection
+                row={row}
+                profile={profile}
+                actorUserId={user?.id ?? profile.personaUserId}
+                actorLabel={user?.name ?? userLabelFromProfile(profile)}
+                onSaved={() => setNextStepBump((n) => n + 1)}
+              />
 
               <DealerSectionNav active={activeSection} variant="chips" />
 
