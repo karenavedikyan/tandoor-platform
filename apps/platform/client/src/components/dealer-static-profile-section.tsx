@@ -3,6 +3,7 @@ import { Building2, ChevronDown, ChevronUp, MapPin, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
+import { getPassportLegalEntities } from "@/lib/dealer-card-release-signals";
 import { cn } from "@/lib/utils";
 
 function isFilled(v: string | undefined | null): boolean {
@@ -42,6 +43,8 @@ type Props = {
 
 export function DealerStaticProfileSection({ row, categoryLabel }: Props) {
   const [open, setOpen] = useState(false);
+
+  const legalEntities = useMemo(() => getPassportLegalEntities(row), [row]);
 
   const address = row.releaseAddress?.trim() || "";
   const statusLabel = row.status.slice(0, 1).toUpperCase() + row.status.slice(1);
@@ -124,6 +127,22 @@ export function DealerStaticProfileSection({ row, categoryLabel }: Props) {
         <div className="min-w-0 flex-1 space-y-1">
           <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Паспорт клиента</h2>
           {!open ? collapsedSummary : <p className="text-sm text-muted-foreground">Справочные реквизиты и контакты.</p>}
+          {!open && legalEntities.length > 0 ? (
+            <div data-testid="section-dealer-legal-entities" className="mt-2 rounded-lg border border-border/60 bg-muted/15 px-2.5 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Юрлица</p>
+              <ul className="mt-1 space-y-1">
+                {legalEntities.map((le) => (
+                  <li
+                    key={le.legalEntityId}
+                    data-testid={`row-dealer-legal-entity-${le.legalEntityId}`}
+                    className="text-sm font-medium leading-snug text-foreground"
+                  >
+                    {le.name}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </div>
         <Button
           type="button"

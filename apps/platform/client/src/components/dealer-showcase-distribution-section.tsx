@@ -26,6 +26,7 @@ import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import {
   applyShowcaseTaskCompleteSafe,
   applyShowcaseTaskStatus,
+  addRecommendationShowcaseTaskToStorage,
   canCompleteShowcaseTask,
   canViewShowcaseDistribution,
   canWorkflowShowcaseTask,
@@ -43,7 +44,12 @@ import {
   showcaseCompleteResultLabel,
   userLabelFromProfile,
 } from "@/lib/showcase-distribution-data";
-import { ChevronRight } from "lucide-react";
+import {
+  getDistributionSnapshotForCard,
+  getOutdatedShowcaseBundle,
+  getShowcaseRecommendationItems,
+} from "@/lib/dealer-card-release-signals";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type ShowcaseCategoryListMode = "all" | "deficit" | "critical";
@@ -76,6 +82,9 @@ type Props = {
   onApplied: () => void;
   categoryListMode?: ShowcaseCategoryListMode;
   onCategoryListModeChange?: (mode: ShowcaseCategoryListMode) => void;
+  distributionSnapshotStale?: boolean;
+  distributionSnapshotLabel?: string;
+  onPlanShowcaseCheck?: () => void;
 };
 
 function scrollToAnchor(id: string) {
@@ -90,6 +99,9 @@ export function DealerShowcaseDistributionSection({
   onApplied,
   categoryListMode: categoryListModeProp,
   onCategoryListModeChange,
+  distributionSnapshotStale,
+  distributionSnapshotLabel,
+  onPlanShowcaseCheck,
 }: Props) {
   const canView = canViewShowcaseDistribution(profile, row);
   if (!canView) return null;
@@ -104,6 +116,7 @@ export function DealerShowcaseDistributionSection({
 
   const [categoryExpanded, setCategoryExpanded] = useState<Record<string, boolean>>({});
   const [taskExpanded, setTaskExpanded] = useState<Record<string, boolean>>({});
+  const [outdatedOpen, setOutdatedOpen] = useState(false);
 
   const [tick, setTick] = useState(0);
   const bump = useCallback(() => {
@@ -191,6 +204,137 @@ export function DealerShowcaseDistributionSection({
       {readOnly ? (
         <p className="text-xs text-muted-foreground">Режим просмотра: выполнение и смена статусов недоступны.</p>
       ) : null}
+
+      {distributionSnapshotLabel && distributionSnapshotLabel !== "—" ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/70 bg-muted/20 px-2.5 py-2 text-xs sm:text-sm">
+          <span className="text-muted-foreground">Дата среза дистрибуции:</span>
+          <span data-testid="text-dealer-distribution-snapshot-date" className="font-semibold tabular-nums text-foreground">
+            {distributionSnapshotLabel}
+          </span>
+          {distributionSnapshotStale ? (
+            <Badge data-testid="badge-dealer-distribution-snapshot-stale" variant="destructive" className="text-[10px] font-semibold">
+              Старше 2 мес.
+            </Badge>
+          ) : null}
+          {distributionSnapshotStale && onPlanShowcaseCheck ? (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="h-8 text-xs font-semibold"
+              data-testid="button-dealer-plan-showcase-check"
+              onClick={onPlanShowcaseCheck}
+            >
+              Запланировать проверку витрины
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {(() => {
+        const outdated = getOutdatedShowcaseBundle(row);
+        if (!outdated) return null;
+        return (
+          <section
+            data-testid="section-dealer-outdated-showcase"
+            className="overflow-hidden rounded-lg border border-amber-200/70 bg-amber-50/30"
+          >
+            <button
+              type="button"
+              data-testid="button-dealer-outdated-showcase-toggle"
+              className="flex w-full items-center justify-between gap-2 px-2.5 py-2 text-left text-sm font-semibold text-foreground transition hover:bg-amber-50/60"
+              onClick={() => setOutdatedOpen((v) => !v)}
+            >
+              Неактуальная витрина
+              <ChevronDown className={cn("h-4 w-4 shrink-0 text-muted-foreground transition", outdatedOpen && "rotate-180")} aria-hidden />
+            </button>
+            {outdatedOpen ? (
+              <div className="space-y-2 border-t border-amber-200/50 px-2.5 py-2 text-xs sm:text-sm">
+                <p className="text-muted-foreground">{outdated.summaryReason}</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Выведенные модели</p>
+                <ul className="space-y-1.5">
+                  {outdated.withdrawn.map((m) => (
+                    <li
+                      key={m.modelId}
+                      data-testid={`row-dealer-outdated-model-${m.modelId}`}
+                      className="rounded-md border border-border/60 bg-card/80 px-2 py-1.5"
+                    >
+                      <span className="font-medium text-foreground">{m.name}</span>
+                      <span className="text-muted-foreground"> · {SHOWCASE_CATEGORY_LABEL[m.categoryId]}</span>
+                      <span className="block text-muted-foreground">{m.reason}</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">К ротации</p>
+                <ul className="space-y-1.5">
+                  {outdated.rotation.map((m) => (
+                    <li
+                      key={m.modelId}
+                      data-testid={`row-dealer-rotation-model-${m.modelId}`}
+                      className="rounded-md border border-border/60 bg-card/80 px-2 py-1.5"
+                    >
+                      <span className="font-medium text-foreground">{m.name}</span>
+                      <span className="text-muted-foreground"> · {SHOWCASE_CATEGORY_LABEL[m.categoryId]}</span>
+                      <span className="block text-muted-foreground">{m.reason}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </section>
+        );
+      })()}
+
+      {(() => {
+        const recommendations = getShowcaseRecommendationItems(row);
+        if (recommendations.length === 0) return null;
+        const addedRec = new Set((storage.recommendationTaskEntries?.[row.id] ?? []).map((x) => x.modelId));
+        return (
+          <section data-testid="section-dealer-showcase-recommendations" className="rounded-lg border border-primary/25 bg-primary/5 px-2.5 py-2">
+            <h3 className="text-sm font-semibold text-foreground">Рекомендуем выставить</h3>
+            <ul className="mt-2 space-y-2">
+              {recommendations.map((item) => (
+                <li
+                  key={item.modelId}
+                  data-testid={`row-dealer-recommended-model-${item.modelId}`}
+                  className="rounded-md border border-border/60 bg-card/90 p-2 text-xs sm:text-sm"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-foreground">{item.name}</p>
+                      <p className="text-muted-foreground">
+                        {item.bucket === "top20" ? "ТОП 20" : "Новинка"} · {SHOWCASE_CATEGORY_LABEL[item.categoryId]}
+                      </p>
+                      <p className="mt-1 text-muted-foreground">{item.reason}</p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      className="h-8 shrink-0 text-xs font-semibold"
+                      disabled={readOnly || addedRec.has(item.modelId)}
+                      data-testid={`button-dealer-add-recommendation-task-${item.modelId}`}
+                      onClick={() => {
+                        addRecommendationShowcaseTaskToStorage(row, {
+                          modelId: item.modelId,
+                          modelLabel: item.name,
+                          categoryId: item.categoryId,
+                          bucket: item.bucket,
+                          reason: item.reason,
+                          actorLabel: userLabelFromProfile(profile),
+                        });
+                        bump();
+                      }}
+                    >
+                      {addedRec.has(item.modelId) ? "В задачах" : "Добавить в задачи по витрине"}
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        );
+      })()}
 
       {categoryListMode !== "all" ? (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200/60 bg-amber-50/40 px-2.5 py-2 text-xs text-amber-950">
