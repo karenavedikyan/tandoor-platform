@@ -3,8 +3,8 @@ import { isClientTopTier } from "@/lib/client-category";
 import { dealerNeedsAttention, isDealerTop } from "@/lib/dealer-base-role-views";
 import type { getManagersForRopTeam } from "@/lib/rop-manager-filters";
 import { isRopOrManagerAllFilter, managerDisplayMatchesCatalogName } from "@/lib/rop-manager-filters";
+import { isCoordinateConsistentWithAddress, tryResolveFallbackCoordinate } from "@/lib/client-map-location";
 import { RELEASE_CLIENT_ADDRESS_COORDINATES } from "@/lib/release-client-address-coordinates.generated";
-import { getCityLatLng } from "@/lib/russian-city-coordinates";
 
 export const CLIENT_MAP_MAX_MARKERS = 1000;
 export const CLIENT_MAP_LIST_LIMIT = 20;
@@ -103,6 +103,8 @@ export type ClientMapMarker = {
   dealer: DealerRow;
   style: ClientMapMarkerStyle;
   coordinateSource: "address" | "city";
+  /** Для группировки джиттера при fallback не по одному полю city. */
+  cityJitterGroupKey?: string;
 };
 
 export type ClientMapCoordinateBreakdown = {
@@ -111,18 +113,27 @@ export type ClientMapCoordinateBreakdown = {
   missing: number;
 };
 
-/** 1) координаты адреса из generated; 2) проверенный центр города; иначе missing. */
-export function resolveDealerMapCoordinate(
-  dealer: DealerRow,
-): { lat: number; lng: number; source: "address" | "city" } | { source: "missing" } {
+export type ResolveDealerMapCoordinateResult =
+  | { lat: number; lng: number; source: "address" }
+  | { lat: number; lng: number; source: "city"; lookupKey: string }
+  | { source: "missing" };
+
+/** 1) координаты адреса из generated (с проверкой региона); 2) безопасный fallback по контексту адреса/города; иначе missing. */
+export function resolveDealerMapCoordinate(dealer: DealerRow): ResolveDealerMapCoordinateResult {
   const addr = RELEASE_CLIENT_ADDRESS_COORDINATES[dealer.id];
   if (addr && Number.isFinite(addr.lat) && Number.isFinite(addr.lng)) {
+    if (!isCoordinateConsistentWithAddress(addr.lat, addr.lng, dealer)) {
+      return { source: "missing" };
+    }
     return { lat: addr.lat, lng: addr.lng, source: "address" };
   }
-  const cg = getCityLatLng(dealer.city);
-  if (cg) return { lat: cg.lat, lng: cg.lng, source: "city" };
+  const fb = tryResolveFallbackCoordinate(dealer);
+  if (fb) return { lat: fb.lat, lng: fb.lng, source: "city", lookupKey: fb.lookupKey };
   return { source: "missing" };
 }
+
+export { buildLocationFallbackKey, buildLocationFallbackKeys, normalizeSettlementName } from "@/lib/client-map-location";
+export { isCoordinateConsistentWithAddress } from "@/lib/client-map-location";
 
 export function coordinateSourceLabel(source: ClientMapCoordinateSource): string {
   if (source === "address") return "адрес";
@@ -130,11 +141,15 @@ export function coordinateSourceLabel(source: ClientMapCoordinateSource): string
   return "нет координат";
 }
 
-function jitterGroupKey(resolved: { lat: number; lng: number; source: "address" | "city" }, dealer: DealerRow): string {
+function jitterGroupKey(
+  resolved: { lat: number; lng: number; source: "address" | "city"; lookupKey?: string },
+  dealer: DealerRow,
+): string {
   if (resolved.source === "address") {
     return `a:${resolved.lat.toFixed(5)},${resolved.lng.toFixed(5)}`;
   }
-  return `c:${dealer.city.trim() || "—"}`;
+  const gk = (resolved.lookupKey ?? dealer.city.trim()) || "—";
+  return `c:${gk}`;
 }
 
 export function buildClientMapMarkers(rows: DealerRow[], maxMarkers: number): {
@@ -143,7 +158,13 @@ export function buildClientMapMarkers(rows: DealerRow[], maxMarkers: number): {
   truncated: boolean;
 } {
   const breakdown: ClientMapCoordinateBreakdown = { byAddress: 0, byCity: 0, missing: 0 };
-  const withBase: { dealer: DealerRow; baseLat: number; baseLng: number; coordinateSource: "address" | "city" }[] = [];
+  const withBase: {
+    dealer: DealerRow;
+    baseLat: number;
+    baseLng: number;
+    coordinateSource: "address" | "city";
+    cityJitterGroupKey?: string;
+  }[] = [];
 
   for (const dealer of rows) {
     const r = resolveDealerMapCoordinate(dealer);
@@ -153,12 +174,23 @@ export function buildClientMapMarkers(rows: DealerRow[], maxMarkers: number): {
     }
     if (r.source === "address") breakdown.byAddress += 1;
     else breakdown.byCity += 1;
-    withBase.push({ dealer, baseLat: r.lat, baseLng: r.lng, coordinateSource: r.source });
+    withBase.push({
+      dealer,
+      baseLat: r.lat,
+      baseLng: r.lng,
+      coordinateSource: r.source,
+      cityJitterGroupKey: r.source === "city" ? r.lookupKey : undefined,
+    });
   }
 
   const byKey = new Map<string, typeof withBase>();
   for (const item of withBase) {
-    const r = { lat: item.baseLat, lng: item.baseLng, source: item.coordinateSource };
+    const r = {
+      lat: item.baseLat,
+      lng: item.baseLng,
+      source: item.coordinateSource,
+      lookupKey: item.cityJitterGroupKey,
+    };
     const k = jitterGroupKey(r, item.dealer);
     const arr = byKey.get(k) ?? [];
     arr.push(item);
@@ -183,6 +215,7 @@ export function buildClientMapMarkers(rows: DealerRow[], maxMarkers: number): {
         dealer: item.dealer,
         style: markerStyleForDealer(item.dealer),
         coordinateSource: item.coordinateSource,
+        cityJitterGroupKey: item.cityJitterGroupKey,
       });
     });
   }

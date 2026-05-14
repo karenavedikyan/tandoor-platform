@@ -111,8 +111,27 @@ function haversineKm(aLat, aLng, bLat, bLng) {
 function normalizeAddressForPhoton(row) {
   const city = String(row.city || "").trim();
   const raw = String(row.address || "").trim();
-  if (!city || !raw) return "";
-  const cleaned = raw
+  if (!raw) return "";
+  /* Для РФ сохраняем край/район/тип НП в запросе — не «съедаем» их в пользу city-only. */
+  const stripHouseOnly = (s) =>
+    s
+      .replace(/\b\d{6}\b,?\s*/g, "")
+      .replace(/\b(Россия|РФ|Российская Федерация)\b,?\s*/gi, "")
+      .replace(/\bдом\s*№?\s*/gi, " ")
+      .replace(/\bд\.?\s*/gi, " ")
+      .replace(/\bквартира\s*\d+\b/gi, " ")
+      .replace(/\bкв\.?\s*\d+\b/gi, " ")
+      .replace(/\bкорпус\b/gi, "к")
+      .replace(/\bстроение\b/gi, "стр")
+      .replace(/\s+/g, " ")
+      .replace(/\s+,/g, ",")
+      .trim();
+  const rich = stripHouseOnly(raw);
+  if (rich.length >= 12 && /(край|область|обл\.|Респ|р-н|район|ст-ца|станица|село|посёлок)/i.test(rich)) {
+    return `${rich}, Россия`;
+  }
+  if (!city) return "";
+  const compact = raw
     .replace(/\b\d{6}\b,?\s*/g, "")
     .replace(/\b(Россия|РФ|Российская Федерация)\b,?\s*/gi, "")
     .replace(/\b(Респ|Республика|край|обл|область|р-н|район)\b\.?,?\s*/gi, " ")
@@ -126,12 +145,45 @@ function normalizeAddressForPhoton(row) {
     .replace(/\s+/g, " ")
     .replace(/\s+,/g, ",")
     .trim();
-  return `${city}, ${cleaned}`;
+  return `${city}, ${compact}`;
 }
 
-async function photonCityCenter(city, cache) {
-  if (cache[city]) return cache[city];
-  const q = encodeURIComponent(`${city}, Россия`);
+/** Короткие неоднозначные названия: не геокодировать только «city, Россия». */
+const AMBIGUOUS_CITY_ONLY = new Set(
+  [
+    "ленинградская",
+    "павловская",
+    "кировская",
+    "советская",
+    "октябрьская",
+    "калининская",
+    "новомихайловский",
+    "александровское",
+    "алексеевка",
+    "весёлое",
+    "красное",
+    "михайловка",
+    "николаевка",
+  ].map((s) => s.toLowerCase()),
+);
+
+async function photonCityCenter(city, cache, seedRows) {
+  if (Object.prototype.hasOwnProperty.call(cache, city)) return cache[city];
+  let queryText = `${city}, Россия`;
+  if (AMBIGUOUS_CITY_ONLY.has(String(city).trim().toLowerCase())) {
+    const sample = (seedRows || []).find(
+      (r) =>
+        String(r.city || "").trim() === city &&
+        String(r.address || "").trim().length > 12 &&
+        /(край|область|обл\.|Респ|р-н|район|ст-ца|станица)/i.test(String(r.address)),
+    );
+    if (sample) queryText = `${String(sample.address).trim()}, Россия`;
+    else {
+      cache[city] = null;
+      return null;
+    }
+  }
+  const q = encodeURIComponent(queryText);
   const url = `https://photon.komoot.io/api/?q=${q}&limit=1`;
   const j = await httpGetJson(url);
   const f = j?.features?.[0];
@@ -171,13 +223,14 @@ function sleep(ms) {
 
 async function cmdCitiesPhoton() {
   const cities = extractUniqueCitiesFromSeed();
+  const seedRows = extractClientRowsFromSeed();
   const cache = readJsonSafe(CITY_CACHE, {});
   let ok = 0;
   let fail = 0;
   for (const city of cities) {
     try {
       if (cache[city] === undefined) {
-        const r = await photonCityCenter(city, cache);
+        const r = await photonCityCenter(city, cache, seedRows);
         if (r) ok += 1;
         else fail += 1;
         writeJson(CITY_CACHE, cache);
