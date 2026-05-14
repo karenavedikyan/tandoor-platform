@@ -19,13 +19,11 @@ function StaticField({
   className?: string;
 }) {
   return (
-    <div className={cn("min-w-0 space-y-1 rounded-lg border border-border/70 bg-muted/20 p-3", className)}>
+    <div className={cn("min-w-0 space-y-1 rounded-lg border border-border/70 bg-muted/20 p-3", className)} data-testid={testId}>
       <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
       <div className="flex gap-2">
         {Icon ? <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden /> : null}
-        <p className={cn("break-words text-sm font-medium leading-snug text-foreground")} data-testid={testId}>
-          {value}
-        </p>
+        <p className={cn("break-words text-sm font-medium leading-snug text-foreground")}>{value}</p>
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 import { Link } from "wouter";
 import { AlertCircle, CalendarClock, ClipboardList, LayoutGrid, ListTodo } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { buildHashPath } from "@/lib/hash-route-utils";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
@@ -44,7 +44,6 @@ export function DealerActionFocusSection({
   onScrollToShowcase,
 }: Props) {
   const canShowcase = canViewShowcaseDistribution(profile, row);
-  if (!canShowcase) return null;
 
   const nextStepLine = nextStep
     ? `${clientNextStepActionLabel(nextStep.actionType)} · ${formatIsoDayToRu(nextStep.contactDate)}${nextStepOverdue ? " · просрочено" : ""}`
@@ -69,6 +68,11 @@ export function DealerActionFocusSection({
           <CardDescription className="text-sm text-muted-foreground">
             Сводка по витрине и запланированному контакту — начните отсюда.
           </CardDescription>
+          {!canShowcase ? (
+            <p className="text-sm font-medium text-muted-foreground">
+              Витрина и задачи по этому клиенту в кабинете недоступны для текущего доступа — блок ниже остаётся для навигации.
+            </p>
+          ) : null}
         </CardHeader>
         <CardContent className="space-y-4">
           <p
@@ -99,7 +103,11 @@ export function DealerActionFocusSection({
               <div className="min-w-0">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Задачи по витрине</p>
                 <p className="mt-1 text-sm font-medium text-foreground" data-testid="text-dealer-action-focus-showcase-tasks">
-                  {openShowcaseTasks > 0 ? `Открыто: ${openShowcaseTasks}` : "Открытых нет"}
+                  {canShowcase
+                    ? openShowcaseTasks > 0
+                      ? `Открыто: ${openShowcaseTasks}`
+                      : "Открытых нет"
+                    : "Нет доступа к витрине в этом профиле"}
                 </p>
               </div>
             </div>
@@ -108,7 +116,7 @@ export function DealerActionFocusSection({
               <div className="min-w-0 flex-1">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Дефицит по витрине</p>
                 <p className="mt-1 text-sm font-medium text-foreground" data-testid="text-dealer-action-focus-deficit">
-                  {hasDeficit ? `Да · всего единиц: ${deficitTotal}` : "Нет"}
+                  {canShowcase ? (hasDeficit ? `Да · всего единиц: ${deficitTotal}` : "Нет") : "—"}
                 </p>
               </div>
             </div>
@@ -122,11 +130,16 @@ export function DealerActionFocusSection({
           </div>
 
           <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
-            <Button asChild className="min-h-12 w-full shrink-0 font-semibold sm:min-h-11 sm:w-auto">
-              <Link href={buildHashPath("/tasks", { dealerId: row.id })} data-testid="link-dealer-action-open-tasks">
-                Открыть задачи клиента
-              </Link>
-            </Button>
+            <Link
+              href={buildHashPath("/tasks", { dealerId: row.id })}
+              className={cn(
+                buttonVariants({ variant: "default", size: "default" }),
+                "min-h-12 w-full shrink-0 justify-center font-semibold sm:min-h-11 sm:w-auto",
+              )}
+              data-testid="link-dealer-action-open-tasks"
+            >
+              Открыть задачи клиента
+            </Link>
             <Button
               type="button"
               variant="secondary"

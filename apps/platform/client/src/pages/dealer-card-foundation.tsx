@@ -29,6 +29,7 @@ import {
   getShowcaseTasksForDealerDisplay,
   loadShowcaseStorage,
   mergeDistributionWithOverrides,
+  canViewShowcaseDistribution,
   userLabelFromProfile,
 } from "@/lib/showcase-distribution-data";
 import {
@@ -574,7 +575,12 @@ function DealerCardContent({ row }: { row: DealerRow }) {
     return { openCt: kpis.openTasks, hasDeficit: kpis.deficitTotal > 0, deficitTotal: kpis.deficitTotal };
   }, [row, showcaseBump]);
 
+  const canViewShowcaseCard = useMemo(() => canViewShowcaseDistribution(profile, row), [profile, row]);
+
   const primaryLine = useMemo(() => {
+    if (!canViewShowcaseDistribution(profile, row)) {
+      return "Витрина по этому клиенту недоступна в вашем профиле — откройте клиента из своей базы или свяжитесь с ответственным менеджером.";
+    }
     if (nextStepOverdue) return "Просрочен следующий контакт — свяжитесь с клиентом.";
     if (showcaseDailySignals.openCt > 0)
       return `Открыты задачи по витрине (${showcaseDailySignals.openCt}). Завершите их после фактической выкладки образцов.`;
@@ -583,7 +589,7 @@ function DealerCardContent({ row }: { row: DealerRow }) {
     if (nextStepStored)
       return `Ближайший шаг: ${clientNextStepActionLabel(nextStepStored.actionType)} на ${formatIsoDayToRu(nextStepStored.contactDate)}.`;
     return "Срочных сигналов нет — поддерживайте регулярный контакт и актуальность витрины.";
-  }, [nextStepOverdue, showcaseDailySignals, nextStepStored]);
+  }, [profile, row, nextStepOverdue, showcaseDailySignals, nextStepStored]);
 
   const tasks = useMemo(() => buildTasks(row), [row]);
   const dealerProducts = useMemo(() => getDealerProductPreview(row.id, 5), [row.id]);
@@ -636,12 +642,12 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                     >
                       {businessCategoryLabel}
                     </Badge>
-                    {showcaseDailySignals.openCt > 0 ? (
+                    {canViewShowcaseCard && showcaseDailySignals.openCt > 0 ? (
                       <Badge variant="outline" className="rounded-full border-amber-200 bg-amber-50 text-xs font-semibold text-amber-950">
                         Есть задачи по витрине
                       </Badge>
                     ) : null}
-                    {showcaseDailySignals.hasDeficit ? (
+                    {canViewShowcaseCard && showcaseDailySignals.hasDeficit ? (
                       <Badge variant="outline" className="rounded-full border-rose-200 bg-rose-50 text-xs font-semibold text-rose-950">
                         Есть дефицит
                       </Badge>
@@ -737,17 +743,20 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                   ))}
                 </CardContent>
               </SurfaceCard>
-              {sortedHistoryEvents.length > 3 ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="min-h-12 w-full font-semibold sm:min-h-11 sm:w-auto"
-                  data-testid="button-dealer-history-show-all"
-                  onClick={() => setHistoryExpanded((v) => !v)}
-                >
-                  {historyExpanded ? "Свернуть историю" : "Показать всю историю"}
-                </Button>
-              ) : null}
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-12 w-full font-semibold sm:min-h-11 sm:w-auto"
+                data-testid="button-dealer-history-show-all"
+                disabled={sortedHistoryEvents.length <= 3}
+                title={sortedHistoryEvents.length <= 3 ? "Не более трёх событий в истории" : undefined}
+                onClick={() => {
+                  if (sortedHistoryEvents.length <= 3) return;
+                  setHistoryExpanded((v) => !v);
+                }}
+              >
+                {historyExpanded ? "Свернуть историю" : "Показать всю историю"}
+              </Button>
             </section>
 
             <DealerStaticProfileSection row={row} categoryLabel={businessCategoryLabel} />
