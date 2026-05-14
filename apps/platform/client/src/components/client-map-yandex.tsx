@@ -7,7 +7,6 @@ import { isDealerTop } from "@/lib/dealer-base-role-views";
 import { getClientCategoryLabel } from "@/lib/client-category";
 import { buildHashPath } from "@/lib/hash-route-utils";
 import type { ClientMapMarker } from "@/lib/client-map-data";
-import { coordinateSourceLabel } from "@/lib/client-map-data";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 
 const DEFAULT_CENTER: [number, number] = [45.0355, 38.9753];
@@ -67,7 +66,7 @@ function dealerBaseHrefForDealer(d: DealerRow): string {
 
 function buildBalloonHtml(m: ClientMapMarker): string {
   const d = m.dealer;
-  const srcLabel = coordinateSourceLabel(m.coordinateSource);
+  const srcLabel = "точный адрес";
   const cat = getClientCategoryLabel(d.clientCategory);
   const addrBlock = d.releaseAddress
     ? `<p class="text-xs text-muted-foreground"><span class="font-medium text-foreground">Адрес: </span>${escapeHtml(d.releaseAddress)}</p>`

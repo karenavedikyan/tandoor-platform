@@ -96,20 +96,22 @@ export function markerStyleForDealer(row: DealerRow): ClientMapMarkerStyle {
   return { fill: "#94a3b8", stroke: "#475569", radius: r };
 }
 
+/** Маркер карты: только точные адресные координаты (релиз 1). */
 export type ClientMapMarker = {
   id: string;
   lat: number;
   lng: number;
   dealer: DealerRow;
   style: ClientMapMarkerStyle;
-  coordinateSource: "address" | "city";
-  /** Для группировки джиттера при fallback не по одному полю city. */
-  cityJitterGroupKey?: string;
+  coordinateSource: "address";
 };
 
 export type ClientMapCoordinateBreakdown = {
-  byAddress: number;
-  byCity: number;
+  /** Клиенты в текущей выборке с валидной точкой по адресу из generated. */
+  exactAddressInScope: number;
+  /** Есть city-fallback, но нет точного адреса в данных — на карте не показываем. */
+  byCityFallback: number;
+  /** Нет ни адреса в данных, ни fallback. */
   missing: number;
 };
 
@@ -118,7 +120,7 @@ export type ResolveDealerMapCoordinateResult =
   | { lat: number; lng: number; source: "city"; lookupKey: string }
   | { source: "missing" };
 
-/** 1) координаты адреса из generated (с проверкой региона); 2) безопасный fallback по контексту адреса/города; иначе missing. */
+/** 1) координаты адреса из generated (с проверкой региона); 2) безопасный fallback по контексту (для списка/аналитики, не для карты). */
 export function resolveDealerMapCoordinate(dealer: DealerRow): ResolveDealerMapCoordinateResult {
   const addr = RELEASE_CLIENT_ADDRESS_COORDINATES[dealer.id];
   if (addr && Number.isFinite(addr.lat) && Number.isFinite(addr.lng)) {
@@ -135,63 +137,60 @@ export function resolveDealerMapCoordinate(dealer: DealerRow): ResolveDealerMapC
 export { buildLocationFallbackKey, buildLocationFallbackKeys, normalizeSettlementName } from "@/lib/client-map-location";
 export { isCoordinateConsistentWithAddress } from "@/lib/client-map-location";
 
+/** Подпись внутреннего источника (для отладки / не для карты релиза 1). */
 export function coordinateSourceLabel(source: ClientMapCoordinateSource): string {
   if (source === "address") return "адрес";
   if (source === "city") return "город";
   return "нет координат";
 }
 
-function jitterGroupKey(
-  resolved: { lat: number; lng: number; source: "address" | "city"; lookupKey?: string },
-  dealer: DealerRow,
-): string {
-  if (resolved.source === "address") {
-    return `a:${resolved.lat.toFixed(5)},${resolved.lng.toFixed(5)}`;
-  }
-  const gk = (resolved.lookupKey ?? dealer.city.trim()) || "—";
-  return `c:${gk}`;
+/** Бейдж в списке клиентов: на карте только при точном адресе. */
+export function clientMapListCoordinateBadgeText(source: ClientMapCoordinateSource): string {
+  if (source === "address") return "на карте";
+  return "нет точной координаты";
 }
 
-export function buildClientMapMarkers(rows: DealerRow[], maxMarkers: number): {
-  markers: ClientMapMarker[];
+function jitterAddressGroupKey(lat: number, lng: number): string {
+  return `a:${lat.toFixed(5)},${lng.toFixed(5)}`;
+}
+
+export type ClientMapMarkerBundle = {
+  /** Все клиенты текущей фильтрации (как передано). */
+  allVisibleClients: DealerRow[];
+  /** Только маркеры с точным адресом (с лимитом). */
+  exactAddressMarkers: ClientMapMarker[];
+  /** Клиенты без точной адресной координаты в данных (city fallback или missing). */
+  clientsWithoutExactCoordinates: DealerRow[];
   breakdown: ClientMapCoordinateBreakdown;
   truncated: boolean;
-} {
-  const breakdown: ClientMapCoordinateBreakdown = { byAddress: 0, byCity: 0, missing: 0 };
-  const withBase: {
-    dealer: DealerRow;
-    baseLat: number;
-    baseLng: number;
-    coordinateSource: "address" | "city";
-    cityJitterGroupKey?: string;
-  }[] = [];
+};
+
+/**
+ * Разделение для /#/client-map: список — все отфильтрованные; маркеры — только exact address.
+ * Лимит CLIENT_MAP_MAX_MARKERS применяется только к exactAddressMarkers.
+ */
+export function buildClientMapMarkerBundle(rows: DealerRow[], maxMarkers: number): ClientMapMarkerBundle {
+  let exactAddressInScope = 0;
+  let byCityFallback = 0;
+  let missing = 0;
+  const addressItems: { dealer: DealerRow; baseLat: number; baseLng: number }[] = [];
+  const withoutExact: DealerRow[] = [];
 
   for (const dealer of rows) {
     const r = resolveDealerMapCoordinate(dealer);
-    if (r.source === "missing") {
-      breakdown.missing += 1;
-      continue;
+    if (r.source === "address") {
+      exactAddressInScope += 1;
+      addressItems.push({ dealer, baseLat: r.lat, baseLng: r.lng });
+    } else {
+      if (r.source === "city") byCityFallback += 1;
+      else missing += 1;
+      withoutExact.push(dealer);
     }
-    if (r.source === "address") breakdown.byAddress += 1;
-    else breakdown.byCity += 1;
-    withBase.push({
-      dealer,
-      baseLat: r.lat,
-      baseLng: r.lng,
-      coordinateSource: r.source,
-      cityJitterGroupKey: r.source === "city" ? r.lookupKey : undefined,
-    });
   }
 
-  const byKey = new Map<string, typeof withBase>();
-  for (const item of withBase) {
-    const r = {
-      lat: item.baseLat,
-      lng: item.baseLng,
-      source: item.coordinateSource,
-      lookupKey: item.cityJitterGroupKey,
-    };
-    const k = jitterGroupKey(r, item.dealer);
+  const byKey = new Map<string, typeof addressItems>();
+  for (const item of addressItems) {
+    const k = jitterAddressGroupKey(item.baseLat, item.baseLng);
     const arr = byKey.get(k) ?? [];
     arr.push(item);
     byKey.set(k, arr);
@@ -201,8 +200,7 @@ export function buildClientMapMarkers(rows: DealerRow[], maxMarkers: number): {
   for (const [, arr] of Array.from(byKey.entries())) {
     const n = arr.length;
     arr.forEach((item, i) => {
-      const isAddr = item.coordinateSource === "address";
-      const radiusDeg = isAddr ? 0.00022 * (1 + Math.floor(i / 10)) : 0.0016 * (1 + Math.floor(i / 12));
+      const radiusDeg = 0.00022 * (1 + Math.floor(i / 10));
       const angle = (2 * Math.PI * i) / Math.max(n, 1);
       const lat = item.baseLat + radiusDeg * Math.cos(angle);
       const lng =
@@ -214,34 +212,50 @@ export function buildClientMapMarkers(rows: DealerRow[], maxMarkers: number): {
         lng,
         dealer: item.dealer,
         style: markerStyleForDealer(item.dealer),
-        coordinateSource: item.coordinateSource,
-        cityJitterGroupKey: item.cityJitterGroupKey,
+        coordinateSource: "address",
       });
     });
   }
 
   const truncated = markers.length > maxMarkers;
-  const sliced = truncated ? markers.slice(0, maxMarkers) : markers;
-  return { markers: sliced, breakdown, truncated };
+  const exactAddressMarkers = truncated ? markers.slice(0, maxMarkers) : markers;
+  const truncatedExactCount = truncated ? Math.max(0, markers.length - maxMarkers) : 0;
+
+  const breakdown: ClientMapCoordinateBreakdown = {
+    exactAddressInScope,
+    byCityFallback,
+    missing,
+  };
+
+  return {
+    allVisibleClients: rows,
+    exactAddressMarkers,
+    clientsWithoutExactCoordinates: withoutExact,
+    breakdown,
+    truncated,
+  };
 }
 
 export type ClientMapKpis = {
   total: number;
+  /** Фактически отрисовано маркеров (после лимита). */
   onMap: number;
-  byAddress: number;
-  byCity: number;
-  missingCoords: number;
+  withoutExactAddress: number;
+  exactAddressInScope: number;
   active: number;
   attention: number;
 };
 
-export function computeClientMapKpis(filteredRows: DealerRow[], breakdown: ClientMapCoordinateBreakdown): ClientMapKpis {
+export function computeClientMapKpis(
+  filteredRows: DealerRow[],
+  breakdown: ClientMapCoordinateBreakdown,
+  visibleMarkerCount: number,
+): ClientMapKpis {
   return {
     total: filteredRows.length,
-    onMap: breakdown.byAddress + breakdown.byCity,
-    byAddress: breakdown.byAddress,
-    byCity: breakdown.byCity,
-    missingCoords: breakdown.missing,
+    onMap: visibleMarkerCount,
+    withoutExactAddress: breakdown.byCityFallback + breakdown.missing,
+    exactAddressInScope: breakdown.exactAddressInScope,
     active: filteredRows.filter((r) => r.status === "активный").length,
     attention: filteredRows.filter(dealerNeedsAttention).length,
   };

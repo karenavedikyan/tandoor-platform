@@ -27,9 +27,9 @@ import {
 import {
   CLIENT_MAP_LIST_LIMIT,
   CLIENT_MAP_MAX_MARKERS,
-  buildClientMapMarkers,
+  buildClientMapMarkerBundle,
+  clientMapListCoordinateBadgeText,
   computeClientMapKpis,
-  coordinateSourceLabel,
   filterClientMapRows,
   listCoordinateSourceForDealer,
   type ClientMapQuickFilter,
@@ -168,9 +168,15 @@ export default function ClientMapPage() {
 
   const filtered = useMemo(() => filterClientMapRows(scopedRows, pickerArgs), [scopedRows, pickerArgs]);
 
-  const { markers, breakdown, truncated } = useMemo(() => buildClientMapMarkers(filtered, CLIENT_MAP_MAX_MARKERS), [filtered]);
+  const { exactAddressMarkers: markers, breakdown, truncated } = useMemo(
+    () => buildClientMapMarkerBundle(filtered, CLIENT_MAP_MAX_MARKERS),
+    [filtered],
+  );
 
-  const kpis = useMemo(() => computeClientMapKpis(filtered, breakdown), [filtered, breakdown]);
+  const kpis = useMemo(
+    () => computeClientMapKpis(filtered, breakdown, markers.length),
+    [filtered, breakdown, markers.length],
+  );
 
   const markerById = useMemo(() => new Map(markers.map((m) => [m.id, m])), [markers]);
 
@@ -228,9 +234,9 @@ export default function ClientMapPage() {
         </Card>
         <Card className="rounded-xl border border-border/80" data-testid="card-client-map-missing">
           <CardHeader className="p-4 pb-1">
-            <CardTitle className="text-xs font-semibold uppercase text-muted-foreground">Без координат</CardTitle>
+            <CardTitle className="text-xs font-semibold uppercase text-muted-foreground">Без точной координаты</CardTitle>
           </CardHeader>
-          <CardContent className="p-4 pt-0 text-2xl font-semibold tabular-nums">{kpis.missingCoords}</CardContent>
+          <CardContent className="p-4 pt-0 text-2xl font-semibold tabular-nums">{kpis.withoutExactAddress}</CardContent>
         </Card>
         <Card className="rounded-xl border border-border/80" data-testid="card-client-map-active">
           <CardHeader className="p-4 pb-1">
@@ -252,21 +258,15 @@ export default function ClientMapPage() {
         </CardHeader>
         <CardContent className="flex flex-wrap gap-x-6 gap-y-2 p-4 pt-0 text-sm text-muted-foreground">
           <span>
-            По адресу:{" "}
+            Точные адреса:{" "}
             <strong className="tabular-nums text-foreground" data-testid="text-client-map-address-count">
-              {kpis.byAddress}
+              {kpis.exactAddressInScope}
             </strong>
           </span>
           <span>
-            По городу:{" "}
-            <strong className="tabular-nums text-foreground" data-testid="text-client-map-city-fallback-count">
-              {kpis.byCity}
-            </strong>
-          </span>
-          <span>
-            Без координат:{" "}
-            <strong className="tabular-nums text-foreground" data-testid="text-client-map-missing-count">
-              {kpis.missingCoords}
+            Не показаны без точного адреса:{" "}
+            <strong className="tabular-nums text-foreground" data-testid="text-client-map-without-exact-count">
+              {kpis.withoutExactAddress}
             </strong>
           </span>
         </CardContent>
@@ -384,15 +384,20 @@ export default function ClientMapPage() {
           <p className="text-xs text-muted-foreground" data-testid="text-client-map-visible-count">
             На карте отображается маркеров: {markers.length}
           </p>
-          {truncated ? (
-            <p className="text-xs text-muted-foreground">
-              Показано на карте {CLIENT_MAP_MAX_MARKERS} из {breakdown.byAddress + breakdown.byCity}; уточните фильтр, чтобы
-              увидеть остальные.
+          <p className="text-xs text-muted-foreground" data-testid="text-client-map-map-policy-note">
+            На карте отображаются только клиенты с точной координатой по адресу.
+          </p>
+          {kpis.withoutExactAddress > 0 ? (
+            <p className="text-xs text-muted-foreground" data-testid="text-client-map-geocoding-hint">
+              Не показано без точной координаты: {kpis.withoutExactAddress}. Эти клиенты требуют геокодинга адреса.
             </p>
           ) : null}
-          <p className="text-xs text-muted-foreground">
-            Точные адреса: {breakdown.byAddress} · По городу: {breakdown.byCity} · Без координат: {breakdown.missing}
-          </p>
+          {truncated ? (
+            <p className="text-xs text-muted-foreground" data-testid="text-client-map-truncated-hint">
+              Показано на карте {markers.length} из {breakdown.exactAddressInScope} с точным адресом; уточните фильтр, чтобы увидеть
+              остальные.
+            </p>
+          ) : null}
         </div>
 
         <Card className="min-w-0 shrink-0 lg:w-[320px]" data-testid="section-client-map-list">
@@ -427,8 +432,17 @@ export default function ClientMapPage() {
                         className="shrink-0 px-1.5 py-0 text-[10px] font-normal"
                         data-testid={`badge-client-map-coordinate-source-${d.id}`}
                       >
-                        {coordinateSourceLabel(coordSrc)}
+                        {clientMapListCoordinateBadgeText(coordSrc)}
                       </Badge>
+                      {coordSrc !== "address" ? (
+                        <Badge
+                          variant="outline"
+                          className="shrink-0 px-1.5 py-0 text-[10px] font-normal text-amber-800 dark:text-amber-200"
+                          data-testid={`badge-client-map-needs-geocoding-${d.id}`}
+                        >
+                          требуется геокодинг
+                        </Badge>
+                      ) : null}
                     </div>
                   </div>
                   <span className="truncate text-xs text-muted-foreground">
