@@ -120,10 +120,16 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
       (x) => isUnder(x, "/dealer-base") || isUnder(x, "/dealers") || isUnder(x, "/client-map"),
       (x) => isUnder(x, "/tasks"),
       (x) => isUnder(x, "/catalog"),
+      (x) => isUnder(x, "/marketing-briefs"),
     ]);
   }
 
   return false;
+}
+
+/** Создание, редактирование, публикация и выгрузка маркетинговых брифов (без backend). */
+export function canManageMarketingBriefs(role: SalesRole): boolean {
+  return role === "sales_director" || role === "team_lead" || role === "marketer";
 }
 
 export function userHasRole(role: SalesRole, allowed: SalesRole[]): boolean {
@@ -201,6 +207,7 @@ export function getPilotNavItems(role: SalesRole): PilotNavItem[] {
     push({ href: "/client-map", label: "Карта клиентов", testId: "nav-client-map" });
     push({ href: "/tasks", label: "Задачи", testId: "nav-tasks" });
     push({ href: "/catalog", label: "Каталог", testId: "nav-catalog" });
+    push({ href: "/marketing-briefs", label: "Маркетинговые брифы", testId: "nav-marketing-briefs" });
     return items;
   }
 
