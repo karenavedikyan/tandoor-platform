@@ -140,6 +140,7 @@ export function MainRoleDashboard() {
 
     if (role === "sales_manager") {
       push("/dealer-base", "Мои клиенты", "button-main-open-clients");
+      push("/client-map", "Карта клиентов", "button-main-open-client-map");
       push("/tasks", "Задачи по витрине", "button-main-open-tasks");
       push("/catalog", "Каталог", "button-main-open-catalog");
       push("/training", "Обучение", "button-main-open-training");
@@ -150,25 +151,32 @@ export function MainRoleDashboard() {
 
     if (role === "team_lead") {
       push("/dealer-base", "Клиенты команды", "button-main-open-clients");
-      push("/tasks", "Витрины команды", "button-main-open-tasks");
+      push("/client-map", "Карта клиентов", "button-main-open-client-map");
+      push("/tasks", "Задачи по витрине", "button-main-open-tasks");
       push(planHref, "План-факт команды", "button-main-open-sales-control");
       push("/sales-control/performance", "Выполнение", "button-main-open-sales-performance");
       push("/catalog", "Каталог", "button-main-open-catalog");
       push("/training", "Обучение", "button-main-open-training");
       push("/marketing-briefs", "Брифы", "button-main-open-marketing-briefs");
+      if (can("/analytics-workspace")) {
+        push("/analytics-workspace", "Аналитика команды", "button-main-open-analytics-workspace");
+      }
       return out;
     }
 
     if (role === "sales_director") {
       push("/territory-card", "Территория", "button-main-open-territory");
       push("/dealer-base", "Клиентская база", "button-main-open-clients");
+      push("/client-map", "Карта клиентов", "button-main-open-client-map");
       push("/tasks", "Задачи по витрине", "button-main-open-tasks");
       push("/sales-control/director", "План-факт продаж", "button-main-open-sales-control");
       push("/sales-control/performance", "Выполнение", "button-main-open-sales-performance");
       push("/catalog", "Каталог", "button-main-open-catalog");
       push("/training", "Обучение", "button-main-open-training");
       push("/marketing-briefs", "Брифы", "button-main-open-marketing-briefs");
-      push("/release-one", "Первый релиз", "button-main-open-release-one");
+      if (can("/analytics-workspace")) {
+        push("/analytics-workspace", "Аналитика команды", "button-main-open-analytics-workspace");
+      }
       return out;
     }
 
@@ -195,7 +203,7 @@ export function MainRoleDashboard() {
       : role === "team_lead"
         ? `Показатели по команде РОП (${user?.name ?? "РОП"}) — те же данные, что в «Клиентской базе» и «Задачах» с фильтром команды.`
         : role === "sales_director"
-          ? "Показатели по всем клиентам импорта Release 1 и задачам отдела продаж."
+          ? "Показатели по всей клиентской базе и задачам по витрине отдела продаж."
           : "";
 
   const kpiClientsLabel =
@@ -209,7 +217,7 @@ export function MainRoleDashboard() {
     role === "sales_manager"
       ? "Открытые задачи по витрине"
       : role === "team_lead"
-        ? "Витрины команды (открытые)"
+        ? "Открытые задачи по витрине (команда)"
         : "Витрины (открытые)";
 
   if (role !== "sales_manager" && role !== "team_lead" && role !== "sales_director") {

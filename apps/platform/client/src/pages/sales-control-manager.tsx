@@ -95,7 +95,7 @@ export default function SalesControlManagerPage() {
     return (
       <div className="mx-auto max-w-lg space-y-4 pb-24" data-testid="page-sales-manager-dashboard">
         <FloatingBackButton href="/sales-control" label="К контуру план-факт" testId="button-floating-back-sales-control-manager-missing" />
-        <p className="text-sm text-muted-foreground">Менеджер не найден в mock-структуре.</p>
+        <p className="text-sm text-muted-foreground">Менеджер не найден в справочнике команды.</p>
       </div>
     );
   }

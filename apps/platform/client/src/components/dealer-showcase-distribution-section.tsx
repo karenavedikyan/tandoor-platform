@@ -144,8 +144,7 @@ export function DealerShowcaseDistributionSection({ row, profile, onApplied }: P
         <div className="min-w-0 space-y-1">
           <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Витрина и дистрибуция</h2>
           <p className="max-w-2xl text-sm text-muted-foreground">
-            План и факт по ключевым категориям выкладки и задачи на точке. Данные локальные (демо), изменения сохраняются в
-            сессии браузера.
+            План и факт по ключевым категориям выкладки и задачи на точке. Изменения в этом разделе сохраняются в браузере до закрытия вкладки.
           </p>
         </div>
         <Button asChild variant="outline" size="sm" className="min-h-10 shrink-0 self-start border-border bg-card">

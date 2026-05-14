@@ -7,7 +7,6 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
 import { cn } from "@/lib/utils";
-import { ORDER_STATUS_TONE, type OrderRow } from "@/lib/order-data";
 import {
   MATRIX_TASK_PRIORITY_LABEL,
   MATRIX_TASK_STATUS_LABEL,
@@ -19,7 +18,6 @@ import {
   getTerritoryCities,
   getTerritoryFocusItems,
   getTerritoryPlanLines,
-  getTerritoryRecentOrders,
   getTerritoryRisks,
   getTerritoryShowcases,
   getTerritorySummary,
@@ -68,7 +66,6 @@ export default function TerritoryCardPage() {
     planLines,
     cities,
     focus,
-    orders,
     tasks,
     tradePoints,
     showcases,
@@ -80,7 +77,6 @@ export default function TerritoryCardPage() {
       planLines: getTerritoryPlanLines(),
       cities: getTerritoryCities(),
       focus: getTerritoryFocusItems(),
-      orders: getTerritoryRecentOrders(8),
       tasks: getTerritoryTasks(10),
       tradePoints: getTerritoryTradePoints(12),
       showcases: getTerritoryShowcases(),
@@ -107,7 +103,7 @@ export default function TerritoryCardPage() {
             </div>
             <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Карточка территории</h1>
             <p className="max-w-2xl text-sm text-muted-foreground sm:text-base">
-              Операционная сводка по клиентам, заказам, задачам и торговым точкам территории.
+              Операционная сводка по клиентам, задачам по витрине и торговым точкам территории.
             </p>
           </div>
           <div className="grid w-full gap-2 sm:w-auto sm:min-w-[220px]">
@@ -117,8 +113,8 @@ export default function TerritoryCardPage() {
             <Button asChild variant="outline" className="min-h-11 w-full border-border bg-card font-semibold" data-testid="button-territory-open-dealers">
               <Link href="/dealer-base">К клиентам</Link>
             </Button>
-            <Button asChild variant="outline" className="min-h-11 w-full border-border bg-card font-semibold" data-testid="button-territory-open-orders">
-              <Link href="/orders">К заказам</Link>
+            <Button asChild variant="outline" className="min-h-11 w-full border-border bg-card font-semibold" data-testid="button-territory-open-client-map">
+              <Link href="/client-map">Карта клиентов</Link>
             </Button>
             <Button asChild variant="outline" className="min-h-11 w-full border-border bg-card font-semibold" data-testid="button-territory-open-analytics">
               <Link href="/analytics">К аналитике</Link>
@@ -129,7 +125,7 @@ export default function TerritoryCardPage() {
 
       <section className="space-y-4" data-testid="section-territory-summary">
         <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Сводка территории</h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           <Card className="border-border/70 shadow-xs" data-testid="card-territory-dealers">
             <CardHeader className="pb-2 pt-4">
               <CardTitle className="text-sm font-medium text-muted-foreground">Клиенты</CardTitle>
@@ -147,21 +143,13 @@ export default function TerritoryCardPage() {
               <p className="text-2xl font-semibold tabular-nums text-foreground">{summary.tradePointsTotal}</p>
             </CardContent>
           </Card>
-          <Card className="border-border/70 shadow-xs" data-testid="card-territory-orders">
-            <CardHeader className="pb-2 pt-4">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Заказы в работе</CardTitle>
-            </CardHeader>
-            <CardContent className="pb-4 pt-0">
-              <p className="text-2xl font-semibold tabular-nums text-foreground">{summary.ordersInProgress}</p>
-            </CardContent>
-          </Card>
           <Card className="border-border/70 shadow-xs" data-testid="card-territory-tasks">
             <CardHeader className="pb-2 pt-4">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Задачи</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Задачи по витрине</CardTitle>
             </CardHeader>
             <CardContent className="pb-4 pt-0">
               <p className="text-2xl font-semibold tabular-nums text-foreground">{summary.tasksOpen}</p>
-              <p className="text-xs text-muted-foreground">открыто по матрице</p>
+              <p className="text-xs text-muted-foreground">открыто по витрине и матрице</p>
             </CardContent>
           </Card>
           <Card className="border-border/70 shadow-xs" data-testid="card-territory-showcases">
@@ -179,7 +167,7 @@ export default function TerritoryCardPage() {
             </CardHeader>
             <CardContent className="pb-4 pt-0">
               <p className="text-2xl font-semibold tabular-nums text-foreground">{summary.attentionSignals}</p>
-              <p className="text-xs text-muted-foreground">сигналов по клиентам и заказам</p>
+              <p className="text-xs text-muted-foreground">сигналов по клиентам</p>
             </CardContent>
           </Card>
         </div>
@@ -287,8 +275,6 @@ export default function TerritoryCardPage() {
                 <p>
                   Торговые точки: <span className="font-medium text-foreground">{c.tradePointsCount}</span>
                   {" · "}
-                  Заказы: <span className="font-medium text-foreground">{c.ordersCount}</span>
-                  {" · "}
                   Задачи: <span className="font-medium text-foreground">{c.tasksCount}</span>
                 </p>
                 <div className="rounded-lg border border-border/60 bg-muted/20 p-3 text-xs leading-relaxed">
@@ -336,36 +322,9 @@ export default function TerritoryCardPage() {
         </div>
       </section>
 
-      <section className="space-y-4" data-testid="section-territory-orders">
-        <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Заказы территории</h2>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {orders.map((o: OrderRow) => (
-            <Card key={o.id} className="border-border/70 shadow-xs" data-testid={`card-territory-order-${o.id}`}>
-              <CardHeader className="space-y-2 pb-2 pt-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <CardTitle className="text-base">Заказ {o.number}</CardTitle>
-                  <Badge variant="outline" className={cn("text-xs font-medium", ORDER_STATUS_TONE[o.status])}>
-                    {o.status}
-                  </Badge>
-                </div>
-                <p className="text-sm text-muted-foreground">{o.dealerName}</p>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-3 pb-4 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-sm text-muted-foreground">
-                  Сумма: <span className="font-medium text-foreground">{o.totalAmountLabel}</span>
-                </p>
-                <Button asChild variant="outline" size="sm" className="w-full shrink-0 font-semibold sm:w-auto" data-testid={`button-open-territory-order-${o.id}`}>
-                  <Link href={`/orders/${o.id}`}>Открыть</Link>
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </section>
-
       <section className="space-y-4" data-testid="section-territory-tasks">
         <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Задачи территории</h2>
-        <p className="text-sm text-muted-foreground">Продажи, витрины, матрица; связь с обучением — через общий список задач.</p>
+        <p className="text-sm text-muted-foreground">Витрины, матрица и сопровождение — через общий список задач по витрине.</p>
         <div className="grid gap-3 sm:grid-cols-2">
           {tasks.map((t: MatrixTaskWithContext) => (
             <Card key={`${t.dealerId}-${t.taskId}`} className="border-border/70 shadow-xs" data-testid={`card-territory-task-${t.taskId}`}>
@@ -387,7 +346,7 @@ export default function TerritoryCardPage() {
                 <p>{t.dealerName}</p>
                 <p>Срок: {t.dueDate}</p>
                 <Button asChild variant="outline" className="mt-2 w-full min-h-11 font-semibold sm:w-auto" data-testid={`button-open-territory-task-${t.taskId}`}>
-                  <Link href="/tasks">К задачам</Link>
+                  <Link href="/tasks">К задачам по витрине</Link>
                 </Button>
               </CardContent>
             </Card>
@@ -476,11 +435,11 @@ export default function TerritoryCardPage() {
           <Button asChild variant="outline" className="min-h-11 w-full border-border font-semibold sm:w-auto" data-testid="button-territory-quick-dealers">
             <Link href="/dealer-base">К клиентской базе</Link>
           </Button>
-          <Button asChild variant="outline" className="min-h-11 w-full border-border font-semibold sm:w-auto" data-testid="button-territory-quick-orders">
-            <Link href="/orders">К заказам</Link>
+          <Button asChild variant="outline" className="min-h-11 w-full border-border font-semibold sm:w-auto" data-testid="button-territory-quick-client-map">
+            <Link href="/client-map">Карта клиентов</Link>
           </Button>
           <Button asChild variant="outline" className="min-h-11 w-full border-border font-semibold sm:w-auto" data-testid="button-territory-quick-tasks">
-            <Link href="/tasks">К задачам</Link>
+            <Link href="/tasks">К задачам по витрине</Link>
           </Button>
           <Button asChild variant="outline" className="min-h-11 w-full border-border font-semibold sm:w-auto" data-testid="button-territory-quick-analytics">
             <Link href="/analytics">К аналитике</Link>

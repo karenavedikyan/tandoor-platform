@@ -81,7 +81,7 @@ function MetricRow({
 }
 
 function roleSummaryLine(role: SalesRole): string {
-  if (role === "sales_director") return "Данные по всему отделу продаж: все команды и клиенты в контуре Release 1.";
+  if (role === "sales_director") return "Данные по всему отделу продаж: все команды и клиенты в рабочем контуре.";
   if (role === "analyst") return "Полный аналитический контур: все команды и клиенты (роль аналитика).";
   if (role === "team_lead") return "Данные только вашей команды: клиенты и задачи в границах РОП.";
   return "Данные в вашем персональном контуре.";

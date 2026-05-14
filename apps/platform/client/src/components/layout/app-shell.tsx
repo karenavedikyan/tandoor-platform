@@ -12,9 +12,7 @@ import {
   MapPinned,
   Megaphone,
   Menu,
-  Package,
   PieChart,
-  Rocket,
   Search,
   Users,
 } from "lucide-react";
@@ -24,16 +22,13 @@ import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { TandoorLogo } from "@/components/tandoor-logo";
-import { AppTopbarDemoStrip } from "@/components/app-topbar-demo-strip";
 import { cn } from "@/lib/utils";
 import type { PilotNavItem } from "@/lib/auth-access";
-import { isDemoAuthBypassEnabled, loadMockAuthSession } from "@/lib/mock-auth";
 
 const MAIN_HREF = "/main";
 const TERRITORY_CARD_HREF = "/territory-card";
 const DEALER_BASE_HREF = "/dealer-base";
 const CLIENT_MAP_HREF = "/client-map";
-const ORDERS_HREF = "/orders";
 const CATALOG_HREF = "/catalog";
 const TASKS_HREF = "/tasks";
 const ANALYTICS_HREF = "/analytics";
@@ -41,8 +36,6 @@ const TRAINING_HREF = "/training";
 const SALES_CONTROL_HREF = "/sales-control";
 const ANALYTICS_WORKSPACE_HREF = "/analytics-workspace";
 const MARKETING_BRIEFS_HREF = "/marketing-briefs";
-const RELEASE_ONE_HREF = "/release-one";
-const RELEASE_ONE_CLIENTS_HREF = "/release-one/clients";
 const SALES_MANAGER_HREF = "/sales-manager";
 
 const ICON_BY_TESTID: Partial<Record<string, LucideIcon>> = {
@@ -50,15 +43,12 @@ const ICON_BY_TESTID: Partial<Record<string, LucideIcon>> = {
   "nav-client-map": Map,
   "nav-territory-card": MapPinned,
   "nav-dealer-base": Users,
-  "nav-orders": Package,
   "nav-catalog": LayoutGrid,
   "nav-tasks": ListTodo,
   "nav-training": BookOpen,
   "nav-sales-control": ClipboardList,
   "nav-analytics-workspace": PieChart,
   "nav-marketing-briefs": Megaphone,
-  "nav-release-one": Rocket,
-  "nav-release-clients": Rocket,
 };
 
 function pathMatchesNavHref(location: string, href: string): boolean {
@@ -81,10 +71,6 @@ function isClientMapPath(path: string) {
 
 function isClientsSectionPath(path: string) {
   return isDealerBasePath(path) || path.startsWith("/dealers/");
-}
-
-function isOrdersSectionPath(path: string) {
-  return path === ORDERS_HREF || path.startsWith(`${ORDERS_HREF}/`);
 }
 
 function isCatalogPath(path: string) {
@@ -119,19 +105,10 @@ function isMarketingBriefsPath(path: string) {
   return path === MARKETING_BRIEFS_HREF || path.startsWith(`${MARKETING_BRIEFS_HREF}/`);
 }
 
-function isReleaseOnePath(path: string) {
-  return path === RELEASE_ONE_HREF;
-}
-
-function isReleaseOneClientsPath(path: string) {
-  return path === RELEASE_ONE_CLIENTS_HREF || path.startsWith(`${RELEASE_ONE_CLIENTS_HREF}/`);
-}
-
 function isNavItemActive(item: PilotNavItem, location: string, isActiveFromLink?: boolean): boolean {
   if (isActiveFromLink !== undefined) return isActiveFromLink;
   if (item.testId === "nav-main") return isMainPath(location);
   if (item.testId === "nav-dealer-base") return isClientsSectionPath(location);
-  if (item.testId === "nav-orders") return isOrdersSectionPath(location);
   if (item.testId === "nav-catalog") return isCatalogPath(location);
   if (item.testId === "nav-tasks") return isTasksPath(location);
   if (item.testId === "nav-territory-card") return isTerritoryCardPath(location);
@@ -141,14 +118,11 @@ function isNavItemActive(item: PilotNavItem, location: string, isActiveFromLink?
   if (item.testId === "nav-analytics-workspace") return isAnalyticsWorkspacePath(location);
   if (item.testId === "nav-client-map") return isClientMapPath(location);
   if (item.testId === "nav-marketing-briefs") return isMarketingBriefsPath(location);
-  if (item.testId === "nav-release-one") return isReleaseOnePath(location);
-  if (item.testId === "nav-release-clients") return isReleaseOneClientsPath(location);
   return pathMatchesNavHref(location, item.href);
 }
 
 function isIconRailActive(href: string, location: string) {
   if (href === MAIN_HREF) return isMainPath(location);
-  if (href === RELEASE_ONE_HREF) return isReleaseOnePath(location) || isReleaseOneClientsPath(location);
   return pathMatchesNavHref(location, href);
 }
 
@@ -171,7 +145,6 @@ function headerContextLabel(location: string) {
   if (location.startsWith("/dealers/")) return "Карточка клиента";
   if (isDealerBasePath(location)) return "Клиенты";
   if (isClientMapPath(location)) return "Карта клиентов";
-  if (isOrdersSectionPath(location)) return "Заказы";
   if (isTasksPath(location)) return "Задачи по витрине";
   if (isCatalogPath(location)) return "Каталог";
   if (isTerritoryCardPath(location)) return "Карточка территории";
@@ -180,8 +153,6 @@ function headerContextLabel(location: string) {
   if (isSalesControlPath(location)) return "План-факт продаж";
   if (isAnalyticsWorkspacePath(location)) return "Аналитика команды";
   if (isMarketingBriefsPath(location)) return "Маркетинговые брифы";
-  if (isReleaseOneClientsPath(location)) return "Клиенты пилота";
-  if (isReleaseOnePath(location)) return "Первый релиз";
   return "";
 }
 
@@ -299,7 +270,7 @@ export function AppShell({ children, navItems, homeHref, userName, cityLabel = "
           <NavLinksList items={navItems} location={location} variant="sidebar" data-testid="nav-preview-desktop" />
         </div>
         <div className="mt-auto border-t border-border/60 px-4 py-4">
-          <p className="text-[10px] text-muted-foreground">Пилот: интеграции с 1С и Bitrix отключены.</p>
+          <p className="text-[10px] text-muted-foreground">Рабочий кабинет Tandoor</p>
         </div>
       </aside>
 
@@ -327,9 +298,6 @@ export function AppShell({ children, navItems, homeHref, userName, cityLabel = "
             </Button>
           </form>
           <div className="ml-auto flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-2 sm:gap-3">
-            <div className="hidden max-w-[min(100%,28rem)] flex-1 basis-full lg:block lg:basis-auto">
-              <AppTopbarDemoStrip />
-            </div>
             <Button type="button" variant="outline" size="sm" className="max-w-[10rem] truncate border-border/80" data-testid="button-current-city">
               <span data-testid="text-current-city">{cityLabel}</span>
             </Button>
@@ -385,12 +353,6 @@ export function AppShell({ children, navItems, homeHref, userName, cityLabel = "
                       data-testid="nav-preview-mobile"
                     />
                   </div>
-                  {isDemoAuthBypassEnabled() && !loadMockAuthSession() ? (
-                    <div className="border-t border-border/60 px-5 pb-3 pt-3">
-                      <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Демо-роль</p>
-                      <AppTopbarDemoStrip />
-                    </div>
-                  ) : null}
                   <div className="border-t border-border/60 px-5 pb-4 pt-3">
                     <p className="mb-2 text-xs text-muted-foreground">{userName}</p>
                     <Button type="button" variant="outline" className="w-full gap-2" onClick={onLogout}>

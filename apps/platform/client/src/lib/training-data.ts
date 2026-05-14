@@ -2176,7 +2176,7 @@ export function searchTrainingMaterials(query: string, filters: TrainingMaterial
 export const RELATED_TASK_CONTEXT_LABEL: Record<RelatedTaskContext, string> = {
   showcase: "Витрина",
   hardware: "Фурнитура",
-  orders: "Заказы",
+  orders: "Сопровождение отгрузок",
   dealer_card: "Карточка клиента",
   territory: "Карточка территории",
   analytics: "Аналитика",

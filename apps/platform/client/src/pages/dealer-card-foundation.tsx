@@ -34,13 +34,6 @@ import { dealerRowStatusForProduct, getDealerProductPreview } from "@/lib/catalo
 import { DealerShowcaseDistributionSection } from "@/components/dealer-showcase-distribution-section";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
-import {
-  getDealerWarehouses,
-  getOrdersForDealer,
-  ORDER_PAYMENT_TONE,
-  ORDER_SHIPMENT_TONE,
-  ORDER_STATUS_TONE,
-} from "@/lib/order-data";
 import { getDealerAnalyticsSignalCards } from "@/lib/dealer-analytics-signals";
 import { getShowcaseHistoryForDealer, loadShowcaseStorage } from "@/lib/showcase-distribution-data";
 import { dealerProductTrainingStorageKey, getDealerTrainingAttentionSignal, trainingAttentionLevelBadgeClass } from "@/lib/training-attention";
@@ -52,7 +45,6 @@ const SECTION_IDS = [
   "distribution",
   "showcases",
   "training",
-  "orders",
   "showcase_distribution",
   "history",
   "tasks",
@@ -67,7 +59,6 @@ const SECTION_DOM_IDS: Record<SectionId, string> = {
   distribution: "dealer-section-distribution",
   showcases: "dealer-section-showcases",
   training: "section-dealer-training-attention",
-  orders: "section-dealer-orders",
   showcase_distribution: "dealer-section-showcase-distribution",
   history: "dealer-section-history",
   tasks: "dealer-section-tasks",
@@ -80,10 +71,9 @@ const SECTION_LABELS: Record<SectionId, string> = {
   distribution: "Дистрибуция",
   showcases: "Витрины",
   training: "Обучение",
-  orders: "Заказы",
   showcase_distribution: "Витрина и дистрибуция",
   history: "История",
-  tasks: "Задачи",
+  tasks: "Задачи по витрине",
 };
 
 const SECTION_NAV_TEST_IDS: Record<SectionId, string> = {
@@ -93,7 +83,6 @@ const SECTION_NAV_TEST_IDS: Record<SectionId, string> = {
   distribution: "dealer-section-nav-distribution",
   showcases: "dealer-section-nav-showcases",
   training: "dealer-section-nav-training",
-  orders: "dealer-section-nav-orders",
   showcase_distribution: "dealer-section-nav-showcase-distribution",
   history: "dealer-section-nav-history",
   tasks: "dealer-section-nav-tasks",
@@ -477,9 +466,6 @@ function DealerCardContent({ row }: { row: DealerRow }) {
   const historyEvents = useMemo(() => buildHistoryEvents(row), [row, showcaseBump]);
   const tasks = useMemo(() => buildTasks(row), [row]);
   const dealerProducts = useMemo(() => getDealerProductPreview(row.id, 5), [row.id]);
-  const dealerOrders = useMemo(() => getOrdersForDealer(row.id), [row.id]);
-  const dealerOrdersPreview = useMemo(() => dealerOrders.slice(0, 4), [dealerOrders]);
-  const dealerWarehouses = useMemo(() => getDealerWarehouses(row.id), [row.id]);
   const analyticsSignals = useMemo(() => getDealerAnalyticsSignalCards(row), [row]);
 
   const salesComment =
@@ -561,7 +547,7 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                       data-testid="button-quick-open-tasks"
                       onClick={() => scrollToSection("tasks")}
                     >
-                      Задачи
+                      Задачи по витрине
                     </Button>
                     <Button
                       type="button"
@@ -578,10 +564,10 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                       variant="outline"
                       size="sm"
                       className="min-h-10 border-border bg-card"
-                      data-testid="button-quick-open-orders"
-                      onClick={() => scrollToSection("orders")}
+                      data-testid="button-quick-open-showcase-distribution"
+                      onClick={() => scrollToSection("showcase_distribution")}
                     >
-                      Заказы
+                      Витрина
                     </Button>
                     <Button
                       asChild
@@ -626,7 +612,7 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                   <div className="mt-3 grid gap-3 sm:grid-cols-2">
                     {[
                       { role: "Руководитель", name: row.responsibles.director, zone: "Стратегия и контроль команды" },
-                      { role: "Менеджер продаж", name: row.responsibles.salesManager, zone: "Сопровождение договорённостей и заказов" },
+                      { role: "Менеджер продаж", name: row.responsibles.salesManager, zone: "Сопровождение договорённостей и клиента" },
                       { role: "Региональный менеджер", name: row.responsibles.regionalManager, zone: "Визиты, витрины, отчёты по региону" },
                       { role: "Ассистент", name: row.responsibles.assistant, zone: "Подготовка материалов и координация" },
                     ].map((p) => (
@@ -949,115 +935,6 @@ function DealerCardContent({ row }: { row: DealerRow }) {
 
             <DealerTrainingAttentionSection row={row} />
 
-            <section
-              id={SECTION_DOM_IDS.orders}
-              data-testid="section-dealer-orders"
-              className="scroll-mt-28 space-y-4 sm:scroll-mt-32"
-            >
-              <SectionTitle subtitle="Последние заказы клиента из синхронизированного контура. Менеджер видит их через тот же контур.">
-                Заказы
-              </SectionTitle>
-              {dealerWarehouses.length > 0 ? (
-                <SurfaceCard>
-                  <CardContent className="space-y-2 pt-5">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      Склады · {dealerWarehouses.length}
-                    </p>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      {dealerWarehouses.map((w) => (
-                        <div
-                          key={w.warehouseId}
-                          className="rounded-xl border border-border bg-card px-3 py-2"
-                          data-testid={`card-dealer-warehouse-${w.warehouseId}`}
-                        >
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="font-semibold text-foreground">{w.name}</p>
-                            {w.isPrimary ? (
-                              <Badge variant="outline" className="border-primary/40 bg-primary/10 text-[11px] font-medium text-primary">
-                                Основной
-                              </Badge>
-                            ) : null}
-                            <Badge variant="outline" className="border-border bg-muted/60 text-[11px] font-medium text-foreground">
-                              {w.type}
-                            </Badge>
-                          </div>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {w.city} · зона {w.deliveryZone} · {w.status}
-                          </p>
-                          {w.tradePointIds.length > 0 ? (
-                            <p className="mt-0.5 text-xs text-muted-foreground">
-                              Точек на обслуживании: {w.tradePointIds.length}
-                            </p>
-                          ) : null}
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </SurfaceCard>
-              ) : null}
-
-              {dealerOrders.length === 0 ? (
-                <SurfaceCard>
-                  <CardContent className="pt-5 text-sm text-muted-foreground">
-                    По клиенту пока нет заказов в синхронизированном контуре.
-                  </CardContent>
-                </SurfaceCard>
-              ) : (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {dealerOrdersPreview.map((order) => (
-                    <SurfaceCard
-                      key={order.id}
-                      data-testid={`card-dealer-order-${order.id}`}
-                    >
-                      <CardHeader className="space-y-2 pb-2 pt-4">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge variant="outline" className={cn("text-xs font-medium", ORDER_STATUS_TONE[order.status])}>
-                            {order.status}
-                          </Badge>
-                          <Badge variant="outline" className={cn("text-xs font-medium", ORDER_PAYMENT_TONE[order.paymentStatus])}>
-                            Оплата: {order.paymentStatus}
-                          </Badge>
-                          <Badge variant="outline" className={cn("text-xs font-medium", ORDER_SHIPMENT_TONE[order.shipmentStatus])}>
-                            Отгрузка: {order.shipmentStatus}
-                          </Badge>
-                        </div>
-                        <CardTitle className="text-base font-semibold leading-snug">
-                          Заказ {order.number}
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-2 pb-4 text-sm text-muted-foreground">
-                        <p>
-                          <span className="font-medium text-foreground">Дата:</span> {order.date}
-                        </p>
-                        <p>
-                          <span className="font-medium text-foreground">Склад:</span> {order.warehouseName}
-                        </p>
-                        {order.tradePointName ? (
-                          <p>
-                            <span className="font-medium text-foreground">Точка:</span> {order.tradePointName}
-                          </p>
-                        ) : null}
-                        <p>
-                          <span className="font-medium text-foreground">Позиций:</span>{" "}
-                          <span className="tabular-nums">{order.items.length}</span> · {order.totalAmountLabel}
-                        </p>
-                        <p>
-                          <span className="font-medium text-foreground">Дальше:</span> {order.nextAction}
-                        </p>
-                        <Button
-                          asChild
-                          className="mt-2 w-full min-h-10 font-semibold"
-                          data-testid={`button-dealer-open-order-${order.id}`}
-                        >
-                          <Link href={`/orders/${order.id}`}>Открыть заказ</Link>
-                        </Button>
-                      </CardContent>
-                    </SurfaceCard>
-                  ))}
-                </div>
-              )}
-            </section>
-
             <DealerShowcaseDistributionSection
               row={row}
               profile={profile}
@@ -1087,7 +964,7 @@ function DealerCardContent({ row }: { row: DealerRow }) {
               data-testid="section-dealer-tasks"
               className="scroll-mt-28 space-y-4 pb-2 sm:scroll-mt-32"
             >
-              <SectionTitle subtitle="Запланированные действия по клиенту.">Задачи</SectionTitle>
+              <SectionTitle subtitle="Контрольные действия по клиенту (витрина и сопровождение).">Задачи по витрине</SectionTitle>
               <div className="grid gap-3 sm:grid-cols-2">
                 {tasks.map((task, idx) => (
                   <SurfaceCard key={`${row.id}-task-${idx}`}>
@@ -1142,7 +1019,7 @@ export function DealerCardPage() {
   return <DealerCardContent row={row} />;
 }
 
-/** Маршрут `/dealer-card-foundation` — карточка первого клиента из базы Release 1. */
+/** Маршрут `/dealer-card-foundation` — превью карточки первого клиента из базы. */
 export default function DealerCardFoundation() {
   const first = DEALER_BASE_ROWS[0];
   if (!first) return <DealerNotFound />;

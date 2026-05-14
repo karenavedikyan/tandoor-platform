@@ -801,7 +801,7 @@ export default function DealerBase() {
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Клиентская база</h1>
           <p className="mt-1 text-sm text-muted-foreground sm:text-base">
-            Клиенты пилота Release 1 (импорт Excel): поиск, фильтры и переход в карточку клиента.
+            Клиентская база: поиск, фильтры и переход в карточку клиента.
           </p>
         </div>
         <Button variant="outline" size="sm" className="shrink-0 self-start" asChild>

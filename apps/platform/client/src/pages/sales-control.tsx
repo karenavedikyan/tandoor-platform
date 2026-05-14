@@ -3,8 +3,6 @@ import { BarChart3, BookOpen, LayoutGrid, LineChart, Megaphone, UserCog, Users }
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
-import { ReleaseDemoRoleSwitcher } from "@/components/release-demo-role-switcher";
-import { isDemoAuthBypassEnabled, loadMockAuthSession } from "@/lib/mock-auth";
 import { cn } from "@/lib/utils";
 
 const DEFAULT_MANAGER = "mgr-boyko-em";
@@ -30,14 +28,9 @@ export default function SalesControlHub() {
             <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">План-факт продаж</h1>
             <p className="mt-2 max-w-2xl text-sm text-muted-foreground sm:text-base">
               Контур планирования и контроля выполнения: планы по KPI и валовой прибыли, факт менеджеров и сводка для руководства.
-              На этом этапе данные и сохранения локальные (без сервера). Роль и персона для демо задаются в шапке приложения или ниже.
+              Показатели и комментарии сохраняются в браузере для этой вкладки.
             </p>
           </div>
-          {isDemoAuthBypassEnabled() && !loadMockAuthSession() ? (
-            <div className="max-w-lg rounded-xl border border-dashed border-border/80 bg-muted/15 p-3">
-              <ReleaseDemoRoleSwitcher variant="stacked" />
-            </div>
-          ) : null}
           <div className="flex flex-wrap gap-2">
             <Button asChild className="min-h-10 font-semibold" data-testid="button-sales-control-open-director">
               <Link href="/sales-control/director">Панель руководителя продаж</Link>
@@ -99,7 +92,7 @@ export default function SalesControlHub() {
               <LineChart className="h-4 w-4 text-primary" aria-hidden />
               Менеджер
             </CardTitle>
-            <CardDescription>Просмотр плана, ввод факта, комментарий руководителя (персона менеджера в демо-профиле).</CardDescription>
+            <CardDescription>Просмотр плана, ввод факта и комментарий руководителя для выбранного менеджера.</CardDescription>
           </CardHeader>
           <CardContent>
             <Button asChild variant="default" size="sm" className="w-full sm:w-auto" onClick={() => setDemoManager(DEFAULT_MANAGER)}>
@@ -113,7 +106,7 @@ export default function SalesControlHub() {
               <BarChart3 className="h-4 w-4 text-primary" aria-hidden />
               Аналитик и маркетолог
             </CardTitle>
-            <CardDescription>Сводные планы, аналитика команды и маркетинговые брифы (Release 1, без 1С).</CardDescription>
+            <CardDescription>Сводные планы, аналитика команды и маркетинговые брифы.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
             <Button asChild variant="outline" size="sm">

@@ -156,7 +156,7 @@ export default function MarketingBriefsPage() {
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Маркетинговые брифы</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
             {canManage ? (
-              <>Ежемесячные материалы для команды продаж. Создание и публикация локально (Release 1, без 1С).</>
+              <>Ежемесячные материалы для команды продаж. Создание и публикация ведутся в этом кабинете.</>
             ) : (
               <span data-testid="text-marketing-briefs-readonly">
                 Опубликованные брифы для команды продаж. Редактирование и публикация доступны руководителям и маркетологам.

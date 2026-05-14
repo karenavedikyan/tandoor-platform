@@ -27,7 +27,7 @@ export function ReleaseDemoRoleSwitcher({ variant = "bar" }: { variant?: "bar" |
   const inner = (
     <>
       <div className={variant === "bar" ? "flex min-w-0 flex-col gap-1 sm:max-w-[140px]" : "flex flex-col gap-1"}>
-        <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Роль (демо)</Label>
+        <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Роль</Label>
         <Select value={profile.role} onValueChange={(v) => setRole(v as SalesRole)}>
           <SelectTrigger className="h-9 min-h-9 text-xs" data-testid="select-release-demo-role">
             <SelectValue />

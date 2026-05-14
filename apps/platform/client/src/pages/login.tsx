@@ -131,7 +131,7 @@ export default function LoginPage() {
       <Card className="w-full max-w-md rounded-2xl border border-border/80 shadow-lg">
         <CardHeader>
           <CardTitle className="text-xl">Вход в платформу</CardTitle>
-          <p className="text-sm text-muted-foreground">Пилотная авторизация по роли (mock, без 1С).</p>
+          <p className="text-sm text-muted-foreground">Вход по учётной записи и роли в команде продаж.</p>
         </CardHeader>
         <CardContent className="space-y-6">
           <form className="space-y-4" onSubmit={onSubmit}>

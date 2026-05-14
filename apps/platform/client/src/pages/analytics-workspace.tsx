@@ -216,7 +216,7 @@ function TabTable({
           </TableBody>
         </Table>
       </div>
-      <p className="text-xs text-muted-foreground">Изменения сохраняются в sessionStorage для этой вкладки.</p>
+      <p className="text-xs text-muted-foreground">Изменения в таблицах сохраняются в браузере для этой вкладки.</p>
     </div>
   );
 }
@@ -261,7 +261,7 @@ export default function AnalyticsWorkspacePage() {
       <div className="space-y-2">
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Аналитика команды</h1>
         <p className="max-w-3xl text-sm text-muted-foreground">
-          Ручной ввод и mock-данные (Release 1, без 1С). Таблицы редактируются локально; фильтры не меняют сохранённые значения.
+          Ручной ввод и справочные показатели. Таблицы редактируются локально; фильтры не меняют сохранённые значения.
         </p>
         <p className="text-xs text-muted-foreground">
           Классическая аналитика отдела остаётся в разделе{" "}
@@ -272,14 +272,14 @@ export default function AnalyticsWorkspacePage() {
         </p>
         <Card className="rounded-2xl border border-primary/20 bg-primary/5 shadow-sm">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Клиентская база Release 1</CardTitle>
+            <CardTitle className="text-base">Клиентская база</CardTitle>
             <CardDescription>
-              Отдельный справочник клиентов пилота (Excel): фильтры по команде, менеджеру, городу и типу; видимость по демо-ролям.
+              Справочник клиентов: фильтры по команде, менеджеру, городу и типу; видимость по роли.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <Button asChild variant="secondary" className="min-h-10 font-semibold">
-              <Link href="/release-one/clients">Открыть клиентов пилота</Link>
+              <Link href="/dealer-base">Открыть клиентов</Link>
             </Button>
           </CardContent>
         </Card>

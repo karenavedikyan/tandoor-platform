@@ -5,7 +5,6 @@
 import type { SalesRole } from "@/lib/sales-control-data";
 
 const NAV_BADGE_CLIENTS = 28;
-const NAV_BADGE_ORDERS = 14;
 
 export type PilotNavItem = {
   href: string;
@@ -99,9 +98,7 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
       (x) => isUnder(x, "/catalog"),
       (x) => isUnder(x, "/training"),
       (x) => isUnder(x, "/marketing-briefs"),
-      (x) => isUnder(x, "/release-one"),
       (x) => isUnder(x, "/sales-control"),
-      (x) => isUnder(x, "/orders"),
     ]);
   }
 
@@ -162,7 +159,7 @@ export function getPilotNavItems(role: SalesRole): PilotNavItem[] {
     push({ href: "/main", label: "Главная", testId: "nav-main" });
     push({ href: "/dealer-base", label: "Клиенты команды", testId: "nav-dealer-base", badge: NAV_BADGE_CLIENTS });
     push({ href: "/client-map", label: "Карта клиентов", testId: "nav-client-map" });
-    push({ href: "/tasks", label: "Витрины / задачи", testId: "nav-tasks" });
+    push({ href: "/tasks", label: "Задачи по витрине", testId: "nav-tasks" });
     push({ href: "/analytics-workspace", label: "Аналитика команды", testId: "nav-analytics-workspace" });
     push({ href: sch, label: "План-факт продаж", testId: "nav-sales-control" });
     push({ href: "/catalog", label: "Каталог", testId: "nav-catalog" });
@@ -182,13 +179,6 @@ export function getPilotNavItems(role: SalesRole): PilotNavItem[] {
     push({ href: "/catalog", label: "Каталог", testId: "nav-catalog" });
     push({ href: "/training", label: "Обучение", testId: "nav-training" });
     push({ href: "/marketing-briefs", label: "Маркетинговые брифы", testId: "nav-marketing-briefs" });
-    push({ href: "/release-one", label: "Первый релиз", testId: "nav-release-one" });
-    push({
-      href: "/release-one/clients",
-      label: "Клиенты пилота",
-      testId: "nav-release-clients",
-    });
-    push({ href: "/orders", label: "Заказы", testId: "nav-orders", badge: NAV_BADGE_ORDERS });
     return items;
   }
 

@@ -86,8 +86,8 @@ export default function AnalyticsPage() {
             <Button asChild className="min-h-10 font-semibold" data-testid="button-analytics-open-main">
               <Link href="/main">К главному</Link>
             </Button>
-            <Button asChild variant="secondary" className="min-h-10 font-semibold" data-testid="button-analytics-open-orders">
-              <Link href="/orders">К заказам</Link>
+            <Button asChild variant="secondary" className="min-h-10 font-semibold" data-testid="button-analytics-open-tasks">
+              <Link href="/tasks">К задачам по витрине</Link>
             </Button>
             <Button asChild variant="outline" className="min-h-10 border-border bg-card font-semibold" data-testid="button-analytics-open-dealers">
               <Link href="/dealer-base">К клиентской базе</Link>
@@ -279,7 +279,7 @@ export default function AnalyticsPage() {
           </Card>
           <Card className="rounded-2xl border border-border/80 bg-card shadow-md">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Заказы</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Отгрузки (период)</CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-2xl font-semibold tabular-nums text-foreground">{territory.ordersCount}</p>
@@ -434,7 +434,7 @@ export default function AnalyticsPage() {
       <section className="space-y-4" data-testid="section-analytics-sales-tops">
         <h2 className="text-lg font-semibold text-foreground sm:text-xl">Топы продаж</h2>
         <p className="text-sm text-muted-foreground">
-          Топы по территории и по выбранному городу; вклад в общий результат и конверсия по связанным заказам.
+          Топы по территории и по выбранному городу; вклад в общий результат и конверсия по связанным отгрузкам.
         </p>
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="space-y-3">
@@ -495,7 +495,7 @@ export default function AnalyticsPage() {
         <Card className="rounded-2xl border border-border/80 bg-card shadow-md">
           <CardContent className="p-4 text-sm text-muted-foreground">
             Конверсия по топам: суммарный вклад топ-3 товаров и топ-3 клиентов в отгрузки региона оценивается примерно в{" "}
-            <span className="font-semibold text-foreground">19%</span> при стабильной доле фурнитуры в заказах топ-клиентов.
+            <span className="font-semibold text-foreground">19%</span> при стабильной доле фурнитуры в отгрузках топ-клиентов.
           </CardContent>
         </Card>
       </section>
@@ -504,7 +504,7 @@ export default function AnalyticsPage() {
         <h2 className="text-lg font-semibold text-foreground sm:text-xl">Быстрые переходы</h2>
         <div className="flex flex-wrap gap-2">
           <Button asChild className="min-h-10 font-semibold">
-            <Link href="/orders">Заказы</Link>
+            <Link href="/tasks">Задачи по витрине</Link>
           </Button>
           <Button asChild variant="secondary" className="min-h-10 font-semibold">
             <Link href="/dealer-base">Клиенты</Link>
@@ -513,7 +513,7 @@ export default function AnalyticsPage() {
             <Link href="/catalog">Каталог</Link>
           </Button>
           <Button asChild variant="outline" className="min-h-10 border-border bg-card font-semibold">
-            <Link href="/tasks">Задачи</Link>
+            <Link href="/tasks">Задачи по витрине</Link>
           </Button>
         </div>
       </section>

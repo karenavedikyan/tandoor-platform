@@ -19,7 +19,6 @@ import {
   isMatrixTaskDueToday,
   isMatrixTaskOverdue,
   matrixTaskContextHref,
-  SALES_MANAGER_PUBLIC_NAME,
 } from "@/lib/sales-manager-workspace-data";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import {
@@ -27,13 +26,6 @@ import {
   MATRIX_TASK_STATUS_LABEL,
   type MatrixTaskWithContext,
 } from "@/lib/trade-point-task-data";
-import {
-  getOrdersForSalesManager,
-  ORDER_FLAG_TONE,
-  ORDER_PAYMENT_TONE,
-  ORDER_SHIPMENT_TONE,
-  ORDER_STATUS_TONE,
-} from "@/lib/order-data";
 import {
   currentMonthPeriodLabel,
   formatMoney,
@@ -248,7 +240,6 @@ export default function SalesManagerWorkspace() {
   const tasks = useMemo(() => getSalesManagerMatrixTasks().slice(0, 12), []);
   const focusProducts = useMemo(() => getFocusProducts(8), []);
   const attentionPoints = useMemo(() => getTradePointsNeedingAttention(8), []);
-  const managerOrders = useMemo(() => getOrdersForSalesManager(SALES_MANAGER_PUBLIC_NAME, 8), []);
 
   return (
     <div className="space-y-8 pb-24 sm:space-y-10" data-testid="page-sales-manager-workspace">
@@ -283,11 +274,8 @@ export default function SalesManagerWorkspace() {
             <Button asChild className="min-h-10 font-semibold" data-testid="button-sales-manager-open-dealers">
               <Link href="/dealer-base">К клиентской базе</Link>
             </Button>
-            <Button asChild variant="secondary" className="min-h-10 font-semibold" data-testid="button-sales-manager-open-orders">
-              <Link href="/orders">К заказам</Link>
-            </Button>
             <Button asChild variant="secondary" className="min-h-10 font-semibold" data-testid="button-sales-manager-open-tasks">
-              <Link href="/tasks">К задачам</Link>
+              <Link href="/tasks">К задачам по витрине</Link>
             </Button>
             <Button asChild variant="default" className="min-h-10 font-semibold" data-testid="button-sales-manager-open-analytics">
               <Link href="/analytics">Аналитика</Link>
@@ -305,9 +293,6 @@ export default function SalesManagerWorkspace() {
             ) : null}
             <Button asChild variant="outline" className="min-h-10 border-border bg-card font-semibold" data-testid="button-sales-manager-open-marketing-briefs">
               <Link href="/marketing-briefs">Брифы</Link>
-            </Button>
-            <Button asChild variant="outline" className="min-h-10 border-border bg-card font-semibold" data-testid="button-sales-manager-open-release-one">
-              <Link href="/release-one">Первый релиз</Link>
             </Button>
           </div>
         </div>
@@ -448,7 +433,7 @@ export default function SalesManagerWorkspace() {
           <h2 className="text-lg font-semibold text-foreground sm:text-xl">Партнёры в фокусе</h2>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
             Клиенты зоны, влияющие на выполнение плана: сегмент ТОП 150–500+, без активности, значимая валовка, просадки по линейкам, потенциал по
-            фурнитуре и внимание по заказам.
+            фурнитуре и внимание по сопровождению клиентов.
           </p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
@@ -483,93 +468,6 @@ export default function SalesManagerWorkspace() {
             </Card>
           ))}
         </div>
-      </section>
-
-      <section className="space-y-4" data-testid="section-sales-manager-orders">
-        <div className="flex flex-wrap items-end justify-between gap-2">
-          <div>
-            <h2 className="text-lg font-semibold text-foreground sm:text-xl">Заказы клиентов</h2>
-            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-              Заказы приходят менеджеру через тот же синхронизированный контур ЛК дилера: новые,
-              на подтверждении, проблемы оплаты или отгрузки, изменения и связь с матрицей.
-            </p>
-          </div>
-        </div>
-        {managerOrders.length === 0 ? (
-          <Card className="rounded-2xl border border-border/80 bg-card shadow-md">
-            <CardContent className="p-5 text-sm text-muted-foreground">
-              Сейчас по вашим клиентам нет заказов, требующих внимания менеджера.
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2">
-            {managerOrders.map((order) => (
-              <Card
-                key={order.id}
-                className="rounded-2xl border border-border/80 bg-card shadow-md"
-                data-testid={`card-sales-manager-order-${order.id}`}
-              >
-                <CardHeader className="space-y-2 pb-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="outline" className={cn("text-xs font-medium", ORDER_STATUS_TONE[order.status])}>
-                      {order.status}
-                    </Badge>
-                    <Badge variant="outline" className={cn("text-xs font-medium", ORDER_PAYMENT_TONE[order.paymentStatus])}>
-                      Оплата: {order.paymentStatus}
-                    </Badge>
-                    <Badge variant="outline" className={cn("text-xs font-medium", ORDER_SHIPMENT_TONE[order.shipmentStatus])}>
-                      Отгрузка: {order.shipmentStatus}
-                    </Badge>
-                  </div>
-                  <CardTitle className="text-base leading-snug sm:text-lg">
-                    Заказ {order.number}
-                  </CardTitle>
-                  <p className="text-sm text-muted-foreground">{order.dealerName}</p>
-                </CardHeader>
-                <CardContent className="space-y-2 text-sm text-muted-foreground">
-                  <p>
-                    <span className="font-medium text-foreground">Склад:</span> {order.warehouseName}
-                  </p>
-                  {order.tradePointName ? (
-                    <p>
-                      <span className="font-medium text-foreground">Точка:</span> {order.tradePointName}
-                    </p>
-                  ) : null}
-                  <p>
-                    <span className="font-medium text-foreground">Объём:</span> {order.totalAmountLabel}
-                  </p>
-                  <p>
-                    <span className="font-medium text-foreground">Позиций:</span>{" "}
-                    <span className="tabular-nums">{order.items.length}</span>
-                  </p>
-                  <p>
-                    <span className="font-medium text-foreground">Дальше:</span> {order.nextAction}
-                  </p>
-                  {order.attentionFlags.length > 0 ? (
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      {order.attentionFlags.slice(0, 4).map((flag) => (
-                        <Badge
-                          key={`${order.id}-${flag}`}
-                          variant="outline"
-                          className={cn("text-[11px] font-medium", ORDER_FLAG_TONE[flag])}
-                        >
-                          {flag}
-                        </Badge>
-                      ))}
-                    </div>
-                  ) : null}
-                  <Button
-                    asChild
-                    className="mt-2 w-full min-h-10 font-semibold"
-                    data-testid={`button-sales-manager-open-order-${order.id}`}
-                  >
-                    <Link href={`/orders/${order.id}`}>Открыть заказ</Link>
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
       </section>
 
       <section className="space-y-4" data-testid="section-sales-manager-tasks">
@@ -732,16 +630,13 @@ export default function SalesManagerWorkspace() {
             <Link href="/dealer-base">Клиентская база</Link>
           </Button>
           <Button asChild variant="outline" className="min-h-10 border-border bg-card">
-            <Link href="/orders">Заказы</Link>
-          </Button>
-          <Button asChild variant="outline" className="min-h-10 border-border bg-card">
             <Link href="/analytics">Аналитика</Link>
           </Button>
           <Button asChild variant="outline" className="min-h-10 border-border bg-card">
             <Link href="/catalog">Каталог</Link>
           </Button>
           <Button asChild variant="outline" className="min-h-10 border-border bg-card">
-            <Link href="/tasks">Задачи</Link>
+            <Link href="/tasks">Задачи по витрине</Link>
           </Button>
           <Button asChild variant="outline" className="min-h-10 border-border bg-card">
             <Link href="/dealer-base">Клиенты без активности</Link>
