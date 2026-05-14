@@ -84,10 +84,22 @@ export type ShowcaseHistoryEntry = {
   body: string;
 };
 
+export type ShowcaseRecommendationTaskStored = {
+  modelId: string;
+  modelLabel: string;
+  categoryId: ShowcaseCategoryId;
+  bucket: "top20" | "novelty";
+  reason: string;
+  createdAt: string;
+  createdBy: string;
+};
+
 type ShowcaseStorageV1 = {
   overrides: Record<string, ShowcaseRowOverride>;
   taskUpdates: Record<string, ShowcaseTaskUpdate>;
   historyByDealer: Record<string, ShowcaseHistoryEntry[]>;
+  /** Задачи, добавленные из блока «Рекомендуем выставить». */
+  recommendationTaskEntries?: Record<string, ShowcaseRecommendationTaskStored[]>;
 };
 
 const STORAGE_KEY = "tandoor-showcase-distribution-v1";
@@ -127,7 +139,7 @@ function hash01(dealerId: string, categoryId: string): number {
 }
 
 function emptyStorage(): ShowcaseStorageV1 {
-  return { overrides: {}, taskUpdates: {}, historyByDealer: {} };
+  return { overrides: {}, taskUpdates: {}, historyByDealer: {}, recommendationTaskEntries: {} };
 }
 
 export function loadShowcaseStorage(): ShowcaseStorageV1 {
@@ -140,6 +152,10 @@ export function loadShowcaseStorage(): ShowcaseStorageV1 {
       overrides: p.overrides && typeof p.overrides === "object" ? p.overrides : {},
       taskUpdates: p.taskUpdates && typeof p.taskUpdates === "object" ? p.taskUpdates : {},
       historyByDealer: p.historyByDealer && typeof p.historyByDealer === "object" ? p.historyByDealer : {},
+      recommendationTaskEntries:
+        p.recommendationTaskEntries && typeof p.recommendationTaskEntries === "object"
+          ? (p.recommendationTaskEntries as Record<string, ShowcaseRecommendationTaskStored[]>)
+          : {},
     };
   } catch {
     return emptyStorage();
@@ -321,7 +337,22 @@ export function getShowcaseTasksForDealerDisplay(dealer: DealerRow, storage: Sho
     });
     seen.add(taskId);
   }
-  const all = [...fromDeficit, ...extra];
+  const recSource = storage.recommendationTaskEntries?.[dealer.id] ?? [];
+  const recBuilt: ShowcaseTask[] = recSource.map((rec) => ({
+    taskId: `rec-${dealer.id}-${rec.modelId}`,
+    dealerId: dealer.id,
+    categoryId: rec.categoryId,
+    title: `Рекомендация: ${rec.modelLabel}`,
+    description: `${rec.reason}${rec.bucket === "top20" ? " · ТОП 20" : " · Новинка"}`,
+    targetCount: 1,
+    actualCount: 0,
+    deficitCount: 1,
+    status: "new" as const,
+    priority: (rec.bucket === "top20" ? "high" : "medium") as ShowcaseTaskPriority,
+    dueDate: dueDateFor(dealer.id, rec.categoryId),
+  }));
+  const fromRec = mergeTasksWithStorage(recBuilt, storage);
+  const all = [...fromDeficit, ...extra, ...fromRec];
   return all.sort((a, b) => {
     const ad = a.status === "done" ? 1 : 0;
     const bd = b.status === "done" ? 1 : 0;
@@ -408,6 +439,48 @@ export function applyShowcaseTaskCompleteSafe(
   return storage;
 }
 
+export function addRecommendationShowcaseTaskToStorage(
+  dealer: DealerRow,
+  payload: {
+    modelId: string;
+    modelLabel: string;
+    categoryId: ShowcaseCategoryId;
+    bucket: "top20" | "novelty";
+    reason: string;
+    actorLabel: string;
+  },
+): boolean {
+  const storage = loadShowcaseStorage();
+  const dealerId = dealer.id;
+  const prevList = storage.recommendationTaskEntries?.[dealerId] ?? [];
+  if (prevList.some((x) => x.modelId === payload.modelId)) return false;
+  const now = new Date().toISOString();
+  const day = now.slice(0, 10);
+  const entry: ShowcaseRecommendationTaskStored = {
+    modelId: payload.modelId,
+    modelLabel: payload.modelLabel,
+    categoryId: payload.categoryId,
+    bucket: payload.bucket,
+    reason: payload.reason,
+    createdAt: now,
+    createdBy: payload.actorLabel,
+  };
+  const entries = { ...(storage.recommendationTaskEntries ?? {}), [dealerId]: [...prevList, entry] };
+  storage.recommendationTaskEntries = entries;
+
+  const bucketRu = payload.bucket === "top20" ? "ТОП 20" : "Новинка";
+  const hist: ShowcaseHistoryEntry = {
+    id: `sh-rec-${dealerId}-${payload.modelId}-${Date.now()}`,
+    at: now,
+    meta: `${day} · ${payload.actorLabel}`,
+    body: `Добавлена задача по витрине из рекомендации: ${payload.modelLabel} (${bucketRu}). ${payload.reason}`,
+  };
+  const prevH = storage.historyByDealer[dealerId] ?? [];
+  storage.historyByDealer[dealerId] = [hist, ...prevH].slice(0, 40);
+  saveShowcaseStorage(storage);
+  return true;
+}
+
 export function applyShowcaseTaskStatus(
   taskId: string,
   status: ShowcaseTaskStatus,
@@ -446,8 +519,7 @@ export function getAllShowcaseGlobalTaskRows(dealers: DealerRow[]): ShowcaseGlob
   const storage = loadShowcaseStorage();
   const out: ShowcaseGlobalTaskRow[] = [];
   for (const dealer of dealers) {
-    const rows = mergeDistributionWithOverrides(dealer, storage);
-    const tasks = mergeTasksWithStorage(buildShowcaseTasksFromRows(rows), storage);
+    const tasks = getShowcaseTasksForDealerDisplay(dealer, storage);
     const tp = dealer.tradePoints[0];
     const tpId = tp?.id ?? `${dealer.id}-tp`;
     const tpName = tp?.name ?? "Торговая точка";

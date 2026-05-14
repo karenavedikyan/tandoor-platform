@@ -36,11 +36,21 @@ import {
 import {
   CLIENT_NEXT_STEP_CHANGED_EVENT,
   clientNextStepActionLabel,
+  canEditClientNextStep,
   getClientNextStepForDealer,
   getClientNextStepHistoryForDealer,
   loadClientNextStepsStorage,
+  saveClientNextStep,
 } from "@/lib/client-next-step-data";
 import { dealerProductTrainingStorageKey, getDealerTrainingAttentionSignal, trainingAttentionLevelBadgeClass } from "@/lib/training-attention";
+import {
+  DEALER_TRAINING_FLAGS_EVENT,
+  getCompetitorActivityRows,
+  getDistributionSnapshotForCard,
+  getNewStaffTrainingNeeded,
+  getTrainingFlagsHistoryEvents,
+  setNewStaffTrainingNeeded,
+} from "@/lib/dealer-card-release-signals";
 import { DealerActionFocusSection } from "@/components/dealer-action-focus-section";
 import { DealerClientNextStepSection } from "@/components/dealer-client-next-step-section";
 import { DealerStaticProfileSection } from "@/components/dealer-static-profile-section";
@@ -194,6 +204,12 @@ function isNextStepContactOverdue(contactDate: string): boolean {
   return d.getTime() < today.getTime();
 }
 
+function addCalendarDaysIso(base: Date, days: number): string {
+  const d = new Date(base);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 /** Реалистичная лента для клиентов менеджера Бойко (команда Купянского). */
 function buildHistoryEvents(row: DealerRow): DealerHistoryEvent[] {
   const storage = loadShowcaseStorage();
@@ -212,10 +228,18 @@ function buildHistoryEvents(row: DealerRow): DealerHistoryEvent[] {
     at: e.at,
   }));
 
+  const trainHist: DealerHistoryEvent[] = getTrainingFlagsHistoryEvents(row.id).map((e) => ({
+    id: e.id,
+    meta: e.meta,
+    body: e.body,
+    at: e.at,
+  }));
+
   if (row.releaseManagerId === "mgr-boyko-em") {
     return [
       ...showcaseHist,
       ...nsHist,
+      ...trainHist,
       {
         id: `${row.id}-hist-call`,
         meta: "14.05.2026 · Бойко Екатерина",
@@ -253,6 +277,7 @@ function buildHistoryEvents(row: DealerRow): DealerHistoryEvent[] {
   return [
     ...showcaseHist,
     ...nsHist,
+    ...trainHist,
     ...templates.map((text, idx) => ({
       id: `${row.id}-hist-${idx}`,
       meta: `${dates[idx % dates.length] ?? row.lastActivity} · Система`,
@@ -291,6 +316,7 @@ function inferHistoryNavTarget(ev: DealerHistoryEvent): DealerHistoryNavTarget |
   if (/^запланирован/i.test(trimmed)) return "next_step";
   if (b.includes("обновил витрину") || b.includes("обновлена витрина")) return "showcase";
   if (b.includes("задач") && (b.includes("витрин") || b.includes("дефицит"))) return "tasks_page";
+  if (b.includes("рекомендации") && b.includes("задача")) return "tasks_page";
   return null;
 }
 
@@ -304,10 +330,14 @@ function DealerTrainingAttentionSection({
   row,
   completed,
   onCompletedChange,
+  newStaffTrainingNeeded,
+  onNewStaffTrainingChange,
 }: {
   row: DealerRow;
   completed: boolean;
   onCompletedChange: (next: boolean) => void;
+  newStaffTrainingNeeded: boolean;
+  onNewStaffTrainingChange: (next: boolean) => void;
 }) {
   const signal = useMemo(() => getDealerTrainingAttentionSignal(row, completed), [row, completed]);
   const trainingHref =
@@ -385,6 +415,26 @@ function DealerTrainingAttentionSection({
               <Label htmlFor={`dealer-training-done-${row.id}`} className="cursor-pointer text-sm font-medium leading-snug">
                 Проведено продуктовое обучение от Tandoor
               </Label>
+            </div>
+          </div>
+          <div className="rounded-xl border border-border bg-muted/15 px-3 py-2">
+            <div className="flex items-start gap-3">
+              <Checkbox
+                id={`dealer-new-staff-training-${row.id}`}
+                checked={newStaffTrainingNeeded}
+                onCheckedChange={(v) => onNewStaffTrainingChange(v === true)}
+                data-testid="checkbox-dealer-new-staff-training-needed"
+              />
+              <div className="min-w-0 flex-1 space-y-1">
+                <Label htmlFor={`dealer-new-staff-training-${row.id}`} className="cursor-pointer text-sm font-medium leading-snug">
+                  Нужно обучение новых сотрудников ТТ
+                </Label>
+                <p className="text-xs text-muted-foreground" data-testid="text-dealer-new-staff-training-status">
+                  {newStaffTrainingNeeded
+                    ? "Отмечено: запланируйте визит или передачу материалов новым сотрудникам точки."
+                    : "Не отмечено — включите, если на точке появились новые сотрудники без обучения."}
+                </p>
+              </div>
             </div>
           </div>
           {row.indigoTrainingCandidate ? (
@@ -482,6 +532,7 @@ function DealerCardContent({ row }: { row: DealerRow }) {
   const [historyExpanded, setHistoryExpanded] = useState(false);
   const [pointsExpanded, setPointsExpanded] = useState(false);
   const [showcaseCategoryListMode, setShowcaseCategoryListMode] = useState<ShowcaseCategoryListMode>("all");
+  const [trainingFlagsBump, setTrainingFlagsBump] = useState(0);
   const [trainingCompleted, setTrainingCompleted] = useState(() => {
     if (typeof window === "undefined") return row.productTrainingCompleted;
     const s = sessionStorage.getItem(dealerProductTrainingStorageKey(row.id));
@@ -497,6 +548,12 @@ function DealerCardContent({ row }: { row: DealerRow }) {
   }, []);
 
   useEffect(() => {
+    const fn = () => setTrainingFlagsBump((n) => n + 1);
+    window.addEventListener(DEALER_TRAINING_FLAGS_EVENT, fn);
+    return () => window.removeEventListener(DEALER_TRAINING_FLAGS_EVENT, fn);
+  }, []);
+
+  useEffect(() => {
     setHistoryExpanded(false);
     setPointsExpanded(false);
     setShowcaseCategoryListMode("all");
@@ -509,7 +566,7 @@ function DealerCardContent({ row }: { row: DealerRow }) {
 
   const businessCategoryLabel = getClientCategoryLabel(row.clientCategory);
   const activeSection = useActiveSection(row.id);
-  const historyEvents = useMemo(() => buildHistoryEvents(row), [row, showcaseBump, nextStepBump]);
+  const historyEvents = useMemo(() => buildHistoryEvents(row), [row, showcaseBump, nextStepBump, trainingFlagsBump]);
   const historyTimeline = useMemo(() => {
     const sorted = [...historyEvents].sort((a, b) => historySortKey(b) - historySortKey(a));
     return collapseAdjacentDuplicateHistoryBodies(sorted);
@@ -534,6 +591,29 @@ function DealerCardContent({ row }: { row: DealerRow }) {
   }, [row, showcaseBump]);
 
   const canViewShowcaseCard = useMemo(() => canViewShowcaseDistribution(profile, row), [profile, row]);
+
+  const distributionSnap = useMemo(() => getDistributionSnapshotForCard(row), [row]);
+
+  const newStaffTrainingNeeded = useMemo(() => getNewStaffTrainingNeeded(row.id), [row.id, trainingFlagsBump]);
+
+  const competitorActivityRows = useMemo(() => getCompetitorActivityRows(row), [row]);
+
+  const onPlanShowcaseCheck = useCallback(() => {
+    const label = user?.name ?? userLabelFromProfile(profile);
+    const uid = user?.id ?? profile.personaUserId;
+    const iso = addCalendarDaysIso(new Date(), 5);
+    if (canEditClientNextStep(profile, row)) {
+      saveClientNextStep(row.id, {
+        actionType: "showcase_check",
+        contactDate: iso,
+        comment: "Плановая проверка витрины (срез дистрибуции старше 2 месяцев).",
+        updatedByUserId: uid,
+        updatedByLabel: label,
+      });
+      setNextStepBump((n) => n + 1);
+    }
+    scrollToSection("next_step");
+  }, [profile, row, user]);
 
   const primaryLine = useMemo(() => {
     if (!canViewShowcaseDistribution(profile, row)) {
@@ -726,6 +806,8 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                   setShowcaseCategoryListMode("deficit");
                   scrollToSection("showcase_distribution");
                 }}
+                distributionSnapshotStale={distributionSnap.isStale}
+                distributionSnapshotLabel={distributionSnap.displayLabel}
               />
             </section>
 
@@ -734,8 +816,36 @@ function DealerCardContent({ row }: { row: DealerRow }) {
               profile={profile}
               categoryListMode={showcaseCategoryListMode}
               onCategoryListModeChange={setShowcaseCategoryListMode}
+              distributionSnapshotStale={distributionSnap.isStale}
+              distributionSnapshotLabel={distributionSnap.displayLabel}
+              onPlanShowcaseCheck={onPlanShowcaseCheck}
               onApplied={() => setShowcaseBump((n) => n + 1)}
             />
+
+            {competitorActivityRows.length > 0 ? (
+              <section
+                data-testid="section-dealer-competitor-activity"
+                className="scroll-mt-28 space-y-2 sm:scroll-mt-32"
+              >
+                <SectionTitle subtitle="Кратко по рынку точки (без финансовых данных).">Активность конкурентов</SectionTitle>
+                <SurfaceCard>
+                  <CardContent className="space-y-2 px-3 py-3 sm:px-4">
+                    {competitorActivityRows.map((a) => (
+                      <div
+                        key={a.activityId}
+                        data-testid={`row-dealer-competitor-activity-${a.activityId}`}
+                        className="rounded-lg border border-border/60 bg-muted/10 px-2.5 py-2 text-sm"
+                      >
+                        <p className="font-semibold text-foreground">{a.competitorName}</p>
+                        <p className="text-xs text-muted-foreground">Акция / условия: {a.promo}</p>
+                        <p className="mt-1 text-xs leading-relaxed text-foreground">Комментарий РМ: {a.rmComment}</p>
+                        <p className="mt-1 text-[11px] text-muted-foreground">Обновлено: {a.updatedAtLabel}</p>
+                      </div>
+                    ))}
+                  </CardContent>
+                </SurfaceCard>
+              </section>
+            ) : null}
 
             <DealerClientNextStepSection
               row={row}
@@ -1100,6 +1210,10 @@ function DealerCardContent({ row }: { row: DealerRow }) {
               <DealerTrainingAttentionSection
                 row={row}
                 completed={trainingCompleted}
+                newStaffTrainingNeeded={newStaffTrainingNeeded}
+                onNewStaffTrainingChange={(next) => {
+                  setNewStaffTrainingNeeded(row.id, next, user?.name ?? userLabelFromProfile(profile));
+                }}
                 onCompletedChange={(next) => {
                   setTrainingCompleted(next);
                   sessionStorage.setItem(dealerProductTrainingStorageKey(row.id), next ? "1" : "0");

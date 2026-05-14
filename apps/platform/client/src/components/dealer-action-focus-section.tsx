@@ -33,6 +33,8 @@ type Props = {
   onScrollToShowcase: () => void;
   onScrollToHistory: () => void;
   onOpenShowcaseDeficitFilter: () => void;
+  distributionSnapshotStale?: boolean;
+  distributionSnapshotLabel?: string;
 };
 
 export function DealerActionFocusSection({
@@ -49,6 +51,8 @@ export function DealerActionFocusSection({
   onScrollToShowcase,
   onScrollToHistory,
   onOpenShowcaseDeficitFilter,
+  distributionSnapshotStale,
+  distributionSnapshotLabel,
 }: Props) {
   const canShowcase = canViewShowcaseDistribution(profile, row);
 
@@ -88,6 +92,15 @@ export function DealerActionFocusSection({
           >
             {primaryLine}
           </p>
+
+          {distributionSnapshotStale && distributionSnapshotLabel && distributionSnapshotLabel !== "—" ? (
+            <div className="rounded-lg border border-amber-300/80 bg-amber-50/50 px-2.5 py-2 text-xs text-amber-950">
+              <p className="font-medium">Срез дистрибуции устарел (дата {distributionSnapshotLabel}).</p>
+              <p className="mt-1 text-muted-foreground">
+                Запланируйте проверку витрины — действие доступно в блоке «Витрина и задачи» ниже.
+              </p>
+            </div>
+          ) : null}
 
           <div className="grid gap-2 sm:grid-cols-2">
             <button

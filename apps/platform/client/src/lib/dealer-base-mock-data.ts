@@ -291,7 +291,10 @@ function mapReleaseClientToDealerRow(c: ReleaseClient): DealerRow {
       mk: mkPct,
       vh: vhPct,
       total: totalPct,
-      checkDate: "—",
+      checkDate: (() => {
+        const idSum = c.id.split("").reduce((a, ch) => a + ch.charCodeAt(0), 0);
+        return idSum % 3 === 0 ? `${12 + (idSum % 8)}.02.2026` : `${3 + (idSum % 18)}.04.2026`;
+      })(),
     },
     showcase: {
       equipment: "—",
