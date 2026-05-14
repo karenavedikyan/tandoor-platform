@@ -1,6 +1,11 @@
 import { DEALER_BASE_ROWS } from "./dealer-base-mock-data";
 import { getDealerTrainingAttentionSignal, TRAINING_PROGRAM_PRODUCT_BASE } from "./training-attention";
 import {
+  getAllShowcaseGlobalTaskRows,
+  SHOWCASE_CATEGORY_LABEL,
+  type ShowcaseGlobalTaskRow,
+} from "./showcase-distribution-data";
+import {
   getTradePointMatrix,
   type MatrixActionKind,
   type ShowcasePortal,
@@ -38,7 +43,7 @@ export type MatrixTask = {
   status: MatrixTaskStatus;
   assigneeRole: MatrixTaskAssigneeRole;
   dueDate: string;
-  source: "product_matrix" | "product_training";
+  source: "product_matrix" | "product_training" | "showcase_distribution";
   /** Для задач из сигнала обучения — ссылка на программу в разделе «Обучение». */
   trainingProgramId?: string;
   zone: ShowcaseZone;
@@ -267,8 +272,45 @@ export type MatrixTaskWithContext = MatrixTask & {
   dealerName: string;
 };
 
-/** Ленивый кэш полного списка матричных задач (дорого пересчитывать при ~27k строках). */
-let allMatrixTasksCache: MatrixTaskWithContext[] | null = null;
+function mapShowcaseGlobalToMatrixTask(g: ShowcaseGlobalTaskRow): MatrixTaskWithContext {
+  const matrixStatus: MatrixTaskStatus =
+    g.showcaseStatus === "in_progress" || g.showcaseStatus === "needs_rop" ? "in_progress" : "new";
+  return {
+    taskId: g.taskId,
+    productId: g.categoryId,
+    productName: SHOWCASE_CATEGORY_LABEL[g.categoryId],
+    productArticle: "SHOWCASE",
+    dealerId: g.dealerId,
+    tradePointId: g.tradePointId,
+    tradePointName: g.tradePointName,
+    type: "maintain_showcase",
+    title: g.title,
+    description: g.description,
+    priority: g.priority,
+    status: matrixStatus,
+    assigneeRole: "manager",
+    dueDate: g.dueDate,
+    source: "showcase_distribution",
+    zone: "A",
+    portal: "Стенд / зона",
+    targetSamples: g.targetCount,
+    actualSamples: g.actualCount,
+    insightDomain: "showcase",
+    insightLabel: "Витрина (план)",
+    dealerName: g.dealerName,
+  };
+}
+
+function computeShowcaseMatrixTasks(): MatrixTaskWithContext[] {
+  return getAllShowcaseGlobalTaskRows(DEALER_BASE_ROWS).map(mapShowcaseGlobalToMatrixTask);
+}
+
+/** Ленивый кэш только матрицы товаров (без задач витрины из sessionStorage). */
+let matrixBaseTasksCache: MatrixTaskWithContext[] | null = null;
+
+export function invalidateMatrixTasksCache(): void {
+  matrixBaseTasksCache = null;
+}
 
 function computeAllMatrixTasks(): MatrixTaskWithContext[] {
   const result: MatrixTaskWithContext[] = [];
@@ -310,11 +352,11 @@ function computeAllMatrixTasks(): MatrixTaskWithContext[] {
 
 /**
  * Сводный список задач по всем дилерам и их торговым точкам.
- * Источник — матрицы товаров каждой ТТ. Используется на общей странице задач.
+ * Матрица товаров кэшируется; задачи витрины (план/факт) подмешиваются из sessionStorage без кэша.
  */
 export function getAllMatrixTasks(): MatrixTaskWithContext[] {
-  if (!allMatrixTasksCache) allMatrixTasksCache = computeAllMatrixTasks();
-  return allMatrixTasksCache;
+  if (!matrixBaseTasksCache) matrixBaseTasksCache = computeAllMatrixTasks();
+  return [...matrixBaseTasksCache, ...computeShowcaseMatrixTasks()];
 }
 
 function buildProductTrainingTasks(): MatrixTaskWithContext[] {

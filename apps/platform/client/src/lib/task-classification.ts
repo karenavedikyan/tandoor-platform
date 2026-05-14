@@ -207,6 +207,9 @@ function containsAny(h: string, words: string[]): boolean {
 
 /** Rule-based категория задачи для фильтров и чипов. */
 export function classifyTask(task: MatrixTaskWithContext): TaskClassification {
+  if (task.source === "showcase_distribution") {
+    return { categoryId: "showcase" };
+  }
   if (task.source === "product_training" || task.type === "product_training") {
     return { categoryId: "training" };
   }

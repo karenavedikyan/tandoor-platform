@@ -65,6 +65,7 @@ import {
 import { useRouteSearchParams } from "@/lib/hash-route-utils";
 import { getEffectiveTeamLeadTeamId, type ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { getAllSalesManagers, getSalesUserById } from "@/lib/sales-control-data";
+import { SHOWCASE_STORAGE_EVENT } from "@/lib/showcase-distribution-data";
 
 type TasksFilterId =
   | "all"
@@ -676,10 +677,17 @@ export default function TasksPage() {
     return new Set(scoped.map((d) => d.id));
   }, [profile]);
 
+  const [showcaseTick, setShowcaseTick] = useState(0);
+  useEffect(() => {
+    const onBump = () => setShowcaseTick((n) => n + 1);
+    window.addEventListener(SHOWCASE_STORAGE_EVENT, onBump);
+    return () => window.removeEventListener(SHOWCASE_STORAGE_EVENT, onBump);
+  }, []);
+
   const allTasks = useMemo(() => {
     const tasks = sortTasks(getAllMatrixTasks());
     return tasks.filter((t) => allowedDealerIds.has(t.dealerId));
-  }, [allowedDealerIds]);
+  }, [allowedDealerIds, showcaseTick]);
 
   const [role, setRole] = useState<RoleViewId>("all");
   const [filter, setFilter] = useState<TasksFilterId>("all");

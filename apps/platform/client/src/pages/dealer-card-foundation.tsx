@@ -31,7 +31,9 @@ import {
   type DealerStatus,
 } from "@/lib/dealer-base-mock-data";
 import { dealerRowStatusForProduct, getDealerProductPreview } from "@/lib/catalog-data";
+import { DealerShowcaseDistributionSection } from "@/components/dealer-showcase-distribution-section";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
+import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import {
   getDealerWarehouses,
   getOrdersForDealer,
@@ -40,6 +42,7 @@ import {
   ORDER_STATUS_TONE,
 } from "@/lib/order-data";
 import { getDealerAnalyticsSignalCards } from "@/lib/dealer-analytics-signals";
+import { getShowcaseHistoryForDealer, loadShowcaseStorage } from "@/lib/showcase-distribution-data";
 import { dealerProductTrainingStorageKey, getDealerTrainingAttentionSignal, trainingAttentionLevelBadgeClass } from "@/lib/training-attention";
 
 const SECTION_IDS = [
@@ -50,6 +53,7 @@ const SECTION_IDS = [
   "showcases",
   "training",
   "orders",
+  "showcase_distribution",
   "history",
   "tasks",
 ] as const;
@@ -64,6 +68,7 @@ const SECTION_DOM_IDS: Record<SectionId, string> = {
   showcases: "dealer-section-showcases",
   training: "section-dealer-training-attention",
   orders: "section-dealer-orders",
+  showcase_distribution: "dealer-section-showcase-distribution",
   history: "dealer-section-history",
   tasks: "dealer-section-tasks",
 };
@@ -76,6 +81,7 @@ const SECTION_LABELS: Record<SectionId, string> = {
   showcases: "Витрины",
   training: "Обучение",
   orders: "Заказы",
+  showcase_distribution: "Витрина и дистрибуция",
   history: "История",
   tasks: "Задачи",
 };
@@ -88,6 +94,7 @@ const SECTION_NAV_TEST_IDS: Record<SectionId, string> = {
   showcases: "dealer-section-nav-showcases",
   training: "dealer-section-nav-training",
   orders: "dealer-section-nav-orders",
+  showcase_distribution: "dealer-section-nav-showcase-distribution",
   history: "dealer-section-nav-history",
   tasks: "dealer-section-nav-tasks",
 };
@@ -172,8 +179,16 @@ type DealerHistoryEvent = { id: string; meta: string; body: string };
 
 /** Реалистичная лента для клиентов менеджера Бойко (команда Купянского). */
 function buildHistoryEvents(row: DealerRow): DealerHistoryEvent[] {
+  const storage = loadShowcaseStorage();
+  const showcaseHist: DealerHistoryEvent[] = getShowcaseHistoryForDealer(row.id, storage).map((e) => ({
+    id: e.id,
+    meta: e.meta,
+    body: e.body,
+  }));
+
   if (row.releaseManagerId === "mgr-boyko-em") {
     return [
+      ...showcaseHist,
       {
         id: `${row.id}-hist-call`,
         meta: "14.05.2026 · Бойко Екатерина",
@@ -205,11 +220,14 @@ function buildHistoryEvents(row: DealerRow): DealerHistoryEvent[] {
     row.distributionDetail.checkDate,
     `${5 + (i % 20)}.${String((i % 8) + 1).padStart(2, "0")}.2026`,
   ];
-  return templates.map((text, idx) => ({
-    id: `${row.id}-hist-${idx}`,
-    meta: `${dates[idx % dates.length] ?? row.lastActivity} · Система`,
-    body: text,
-  }));
+  return [
+    ...showcaseHist,
+    ...templates.map((text, idx) => ({
+      id: `${row.id}-hist-${idx}`,
+      meta: `${dates[idx % dates.length] ?? row.lastActivity} · Система`,
+      body: text,
+    })),
+  ];
 }
 
 function buildTasks(row: DealerRow): DealerTask[] {
@@ -354,7 +372,7 @@ function DealerNotFound() {
   );
 }
 
-function useActiveSection() {
+function useActiveSection(dealerId: string) {
   const [active, setActive] = useState<SectionId>("overview");
 
   useEffect(() => {
@@ -374,7 +392,7 @@ function useActiveSection() {
     return () => {
       obs.disconnect();
     };
-  }, []);
+  }, [dealerId]);
 
   return active;
 }
@@ -452,9 +470,11 @@ function DealerSectionNav({
 }
 
 function DealerCardContent({ row }: { row: DealerRow }) {
+  const { profile } = useReleaseDemoProfile();
+  const [showcaseBump, setShowcaseBump] = useState(0);
   const businessCategoryLabel = getClientCategoryLabel(row.clientCategory);
-  const activeSection = useActiveSection();
-  const historyEvents = useMemo(() => buildHistoryEvents(row), [row]);
+  const activeSection = useActiveSection(row.id);
+  const historyEvents = useMemo(() => buildHistoryEvents(row), [row, showcaseBump]);
   const tasks = useMemo(() => buildTasks(row), [row]);
   const dealerProducts = useMemo(() => getDealerProductPreview(row.id, 5), [row.id]);
   const dealerOrders = useMemo(() => getOrdersForDealer(row.id), [row.id]);
@@ -1037,6 +1057,12 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                 </div>
               )}
             </section>
+
+            <DealerShowcaseDistributionSection
+              row={row}
+              profile={profile}
+              onApplied={() => setShowcaseBump((n) => n + 1)}
+            />
 
             <section
               id={SECTION_DOM_IDS.history}
