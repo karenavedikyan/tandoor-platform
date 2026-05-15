@@ -11,7 +11,7 @@ import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
-import { getDealerById, getTradePointByIds, type DealerRow, type DealerTradePoint } from "@/lib/dealer-base-mock-data";
+import { getDealerById, type DealerRow, type DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import { getTradePointProductPreview, tradePointShowcaseStatusForProduct } from "@/lib/catalog-data";
 import {
   filterMatrix,
@@ -40,6 +40,21 @@ import {
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { buildHashPath } from "@/lib/hash-route-utils";
 import {
   addTradePointComment,
@@ -47,6 +62,17 @@ import {
   getTradePointComments,
   TRADE_POINT_COMMENTS_EVENT,
 } from "@/lib/trade-point-comments";
+import {
+  archiveTradePoint,
+  canEditDealerTradePoints,
+  DEALER_TRADE_POINTS_EVENT,
+  getMergedDealerTradePoints,
+  getResolvedTradePointByIds,
+  updateTradePoint,
+  type MergedTradePointEntry,
+} from "@/lib/dealer-trade-points-overrides";
+import { getDealerRowWithProfileOverrides, DEALER_PROFILE_OVERRIDES_EVENT } from "@/lib/dealer-profile-overrides";
+import { DEALER_SHIPMENT_DAY_LABELS, DEALER_SHIPMENT_DAY_ORDER, type DealerShipmentDayId } from "@/lib/dealer-shipment-days";
 import {
   getShowcaseTasksForDealerDisplay,
   loadShowcaseStorage,
@@ -587,9 +613,13 @@ function MatrixTaskCard({
 }
 
 function tradePointContactDisplay(dealer: DealerRow, point: DealerTradePoint): string {
-  const phone = (point as DealerTradePoint & { contactPhone?: string }).contactPhone?.trim();
+  const name = point.contactName?.trim();
+  const phone = point.contactPhone?.trim();
+  if (name && phone && name !== "—" && phone !== "—") return `${name} · ${phone}`;
   if (phone && phone !== "—" && phone !== "-") return phone;
-  if (dealer.tradePoints.length === 1) {
+  if (name && name !== "—" && name !== "-") return name;
+  const activeCount = getMergedDealerTradePoints(dealer, { includeArchived: false }).length;
+  if (activeCount === 1) {
     const p = dealer.contacts.phone?.trim();
     if (p && p !== "—" && p !== "-") return p;
   }
@@ -603,13 +633,57 @@ function mapSearchTextForPoint(point: DealerTradePoint): string {
     .join(", ");
 }
 
-function TradePointDetailContent({ dealer, point }: { dealer: DealerRow; point: DealerTradePoint }) {
+function TradePointDetailContent({
+  dealer,
+  point,
+  tpMeta,
+}: {
+  dealer: DealerRow;
+  point: DealerTradePoint;
+  tpMeta: MergedTradePointEntry;
+}) {
   const { profile } = useReleaseDemoProfile();
   const { user } = useCurrentUser();
   const activeSection = useActiveSection();
   const [commentsBump, setCommentsBump] = useState(0);
   const [showcaseBump, setShowcaseBump] = useState(0);
   const [commentDraft, setCommentDraft] = useState("");
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editErr, setEditErr] = useState("");
+  const [eName, setEName] = useState(point.name);
+  const [eCity, setECity] = useState(point.city);
+  const [eAddress, setEAddress] = useState(point.address);
+  const [eContactName, setEContactName] = useState(point.contactName ?? "");
+  const [eContactPhone, setEContactPhone] = useState(point.contactPhone ?? "");
+  const [eComment, setEComment] = useState(point.tpComment ?? point.issues ?? "");
+  const [eShowcase, setEShowcase] = useState(point.showcaseStatus);
+  const [eShipmentDays, setEShipmentDays] = useState<DealerShipmentDayId[]>(() =>
+    (point.shipmentDayIds ?? []).filter((d): d is DealerShipmentDayId =>
+      (DEALER_SHIPMENT_DAY_ORDER as readonly string[]).includes(d),
+    ),
+  );
+  const [eMainWh, setEMainWh] = useState(Boolean(point.tpHasMainWarehouse));
+  const [eHwWh, setEHwWh] = useState(Boolean(point.tpHasHardwareWarehouse));
+
+  useEffect(() => {
+    setEName(point.name);
+    setECity(point.city);
+    setEAddress(point.address);
+    setEContactName(point.contactName ?? "");
+    setEContactPhone(point.contactPhone ?? "");
+    setEComment(point.tpComment ?? (point.issues && point.issues !== "—" ? point.issues : ""));
+    setEShowcase(point.showcaseStatus);
+    setEShipmentDays(
+      (point.shipmentDayIds ?? []).filter((d): d is DealerShipmentDayId =>
+        (DEALER_SHIPMENT_DAY_ORDER as readonly string[]).includes(d),
+      ),
+    );
+    setEMainWh(Boolean(point.tpHasMainWarehouse));
+    setEHwWh(Boolean(point.tpHasHardwareWarehouse));
+    setEditing(false);
+    setEditErr("");
+  }, [point]);
 
   useEffect(() => {
     const fn = () => setCommentsBump((n) => n + 1);
@@ -623,6 +697,8 @@ function TradePointDetailContent({ dealer, point }: { dealer: DealerRow; point: 
     return () => window.removeEventListener(SHOWCASE_STORAGE_EVENT, fn);
   }, []);
 
+  const dealerForRbac = useMemo(() => getDealerById(dealer.id) ?? dealer, [dealer]);
+  const canEditTp = useMemo(() => canEditDealerTradePoints(profile, dealerForRbac), [profile, dealerForRbac]);
   const canEditTpComments = useMemo(() => canEditTradePointComments(profile, dealer), [profile, dealer]);
   const tpComments = useMemo(() => getTradePointComments(dealer.id, point.id), [dealer.id, point.id, commentsBump]);
   const showcaseTasksOpen = useMemo(() => {
@@ -742,6 +818,81 @@ function TradePointDetailContent({ dealer, point }: { dealer: DealerRow; point: 
     return createdTasks.filter((t) => t.status === matrixTaskFilter);
   }, [createdTasks, matrixTaskFilter]);
 
+  const showcaseStatusOptions = useMemo(() => {
+    const b = ["Хорошо", "Норма", "Требует внимания", "Плохо", "На контроле", "—"];
+    const c = point.showcaseStatus?.trim();
+    if (c && !b.includes(c)) return [c, ...b];
+    return b;
+  }, [point.showcaseStatus]);
+
+  const toggleShipmentDay = useCallback((day: DealerShipmentDayId) => {
+    setEShipmentDays((prev) => (prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]));
+  }, []);
+
+  const handleSaveEdit = useCallback(() => {
+    setEditErr("");
+    if (!eName.trim() || !eCity.trim() || !eAddress.trim()) {
+      setEditErr("Укажите название, город и адрес.");
+      return;
+    }
+    updateTradePoint(
+      dealer.id,
+      point.id,
+      {
+        name: eName.trim(),
+        city: eCity.trim(),
+        address: eAddress.trim(),
+        contactName: eContactName.trim() || undefined,
+        contactPhone: eContactPhone.trim() || undefined,
+        comment: eComment.trim() || undefined,
+        showcaseStatus: eShowcase.trim(),
+        shipmentDayIds: eShipmentDays,
+        hasMainWarehouse: eMainWh,
+        hasHardwareWarehouse: eHwWh,
+      },
+      profile,
+    );
+    setEditing(false);
+  }, [
+    eName,
+    eCity,
+    eAddress,
+    eContactName,
+    eContactPhone,
+    eComment,
+    eShowcase,
+    eShipmentDays,
+    eMainWh,
+    eHwWh,
+    dealer.id,
+    point.id,
+    profile,
+  ]);
+
+  const handleCancelEdit = useCallback(() => {
+    setEditErr("");
+    setEName(point.name);
+    setECity(point.city);
+    setEAddress(point.address);
+    setEContactName(point.contactName ?? "");
+    setEContactPhone(point.contactPhone ?? "");
+    setEComment(point.tpComment ?? (point.issues && point.issues !== "—" ? point.issues : ""));
+    setEShowcase(point.showcaseStatus);
+    setEShipmentDays(
+      (point.shipmentDayIds ?? []).filter((d): d is DealerShipmentDayId =>
+        (DEALER_SHIPMENT_DAY_ORDER as readonly string[]).includes(d),
+      ),
+    );
+    setEMainWh(Boolean(point.tpHasMainWarehouse));
+    setEHwWh(Boolean(point.tpHasHardwareWarehouse));
+    setEditing(false);
+  }, [point]);
+
+  const handleConfirmArchive = useCallback(() => {
+    archiveTradePoint(dealer.id, point.id, profile);
+    setArchiveOpen(false);
+  }, [dealer.id, point.id, profile]);
+
   const breadcrumbDealerLabel = dealer.name;
 
   return (
@@ -773,7 +924,41 @@ function TradePointDetailContent({ dealer, point }: { dealer: DealerRow; point: 
           <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-[10px] font-medium text-emerald-950">
             {point.status}
           </Badge>
+          {tpMeta.isArchived ? (
+            <Badge variant="secondary" className="text-[10px] font-medium" data-testid="badge-trade-point-archived">
+              Архивная
+            </Badge>
+          ) : null}
         </div>
+        {canEditTp ? (
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="min-h-9 w-full font-semibold sm:w-auto"
+              data-testid="button-trade-point-edit"
+              onClick={() => {
+                setEditErr("");
+                setEditing(true);
+              }}
+            >
+              Редактировать точку
+            </Button>
+            {!tpMeta.isArchived ? (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="min-h-9 w-full font-semibold sm:w-auto"
+                data-testid="button-trade-point-archive"
+                onClick={() => setArchiveOpen(true)}
+              >
+                Архивировать точку
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
         <p className="mt-2 text-sm text-muted-foreground">
           <span data-testid="text-trade-point-address">{point.address}</span>
         </p>
@@ -815,6 +1000,139 @@ function TradePointDetailContent({ dealer, point }: { dealer: DealerRow; point: 
           </div>
         ) : null}
       </div>
+
+      {editing ? (
+        <SurfaceCard className="border-primary/30">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Редактирование точки</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 pt-0">
+            {editErr ? <p className="text-xs font-medium text-destructive">{editErr}</p> : null}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label className="text-xs">Название</Label>
+                <Input className="min-h-10" value={eName} onChange={(e) => setEName(e.target.value)} data-testid="input-trade-point-edit-name" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Город</Label>
+                <Input className="min-h-10" value={eCity} onChange={(e) => setECity(e.target.value)} data-testid="input-trade-point-edit-city" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Статус витрины</Label>
+                <Select value={eShowcase} onValueChange={setEShowcase}>
+                  <SelectTrigger className="min-h-10" data-testid="select-trade-point-edit-showcase-status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {showcaseStatusOptions.map((opt) => (
+                      <SelectItem key={opt} value={opt}>
+                        {opt}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label className="text-xs">Адрес</Label>
+                <Textarea
+                  rows={2}
+                  className="min-h-[52px] resize-y text-sm"
+                  value={eAddress}
+                  onChange={(e) => setEAddress(e.target.value)}
+                  data-testid="textarea-trade-point-edit-address"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Контактное лицо</Label>
+                <Input
+                  className="min-h-10"
+                  value={eContactName}
+                  onChange={(e) => setEContactName(e.target.value)}
+                  data-testid="input-trade-point-edit-contact-name"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Телефон</Label>
+                <Input
+                  className="min-h-10"
+                  value={eContactPhone}
+                  onChange={(e) => setEContactPhone(e.target.value)}
+                  data-testid="input-trade-point-edit-contact-phone"
+                />
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label className="text-xs">Комментарий</Label>
+                <Textarea
+                  rows={2}
+                  className="min-h-[52px] resize-y text-sm"
+                  value={eComment}
+                  onChange={(e) => setEComment(e.target.value)}
+                  data-testid="textarea-trade-point-edit-comment"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground">Дни отгрузки</p>
+              <div className="flex flex-wrap gap-2">
+                {DEALER_SHIPMENT_DAY_ORDER.map((day) => {
+                  const on = eShipmentDays.includes(day);
+                  return (
+                    <Button
+                      key={day}
+                      type="button"
+                      size="sm"
+                      variant={on ? "default" : "outline"}
+                      className="min-h-9 text-xs"
+                      onClick={() => toggleShipmentDay(day)}
+                    >
+                      {DEALER_SHIPMENT_DAY_LABELS[day]}
+                    </Button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <Checkbox checked={eMainWh} onCheckedChange={(v) => setEMainWh(v === true)} data-testid="checkbox-trade-point-edit-main-warehouse" />
+                <span>Склад дверей</span>
+              </label>
+              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <Checkbox
+                  checked={eHwWh}
+                  onCheckedChange={(v) => setEHwWh(v === true)}
+                  data-testid="checkbox-trade-point-edit-hardware-warehouse"
+                />
+                <span>Склад фурнитуры</span>
+              </label>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" className="min-h-9 font-semibold" data-testid="button-trade-point-edit-save" onClick={handleSaveEdit}>
+                Сохранить
+              </Button>
+              <Button type="button" variant="ghost" size="sm" className="min-h-9" data-testid="button-trade-point-edit-cancel" onClick={handleCancelEdit}>
+                Отмена
+              </Button>
+            </div>
+          </CardContent>
+        </SurfaceCard>
+      ) : null}
+
+      <Dialog open={archiveOpen} onOpenChange={setArchiveOpen}>
+        <DialogContent className="sm:max-w-md" data-testid="dialog-trade-point-archive-confirm">
+          <DialogHeader>
+            <DialogTitle className="text-base">Архивировать точку?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">Точка будет скрыта из списка активных. Удаление не выполняется.</p>
+          <DialogFooter className="gap-2 sm:justify-end">
+            <Button type="button" variant="outline" className="min-h-9" onClick={() => setArchiveOpen(false)}>
+              Отмена
+            </Button>
+            <Button type="button" variant="destructive" className="min-h-9 font-semibold" data-testid="button-trade-point-archive-confirm" onClick={handleConfirmArchive}>
+              В архив
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <nav className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground sm:text-sm" aria-label="Навигация">
         <Link href="/dealer-base" className="font-medium text-foreground underline-offset-4 hover:underline">
@@ -1381,11 +1699,27 @@ export function TradePointDetailPage() {
   const params = useParams<{ dealerId: string; pointId: string }>();
   const rawDealer = params.dealerId ?? "";
   const rawPoint = params.pointId ?? "";
-  const result = getTradePointByIds(rawDealer, rawPoint);
+  const [dataBump, setDataBump] = useState(0);
+
+  useEffect(() => {
+    const fn = () => setDataBump((n) => n + 1);
+    window.addEventListener(DEALER_TRADE_POINTS_EVENT, fn);
+    window.addEventListener(DEALER_PROFILE_OVERRIDES_EVENT, fn);
+    return () => {
+      window.removeEventListener(DEALER_TRADE_POINTS_EVENT, fn);
+      window.removeEventListener(DEALER_PROFILE_OVERRIDES_EVENT, fn);
+    };
+  }, []);
+
+  const result = useMemo(() => {
+    void dataBump;
+    return getResolvedTradePointByIds(rawDealer, rawPoint);
+  }, [rawDealer, rawPoint, dataBump]);
 
   if (!result) {
     return <TradePointNotFound dealerId={rawDealer} />;
   }
 
-  return <TradePointDetailContent dealer={result.dealer} point={result.point} />;
+  const dealerView = getDealerRowWithProfileOverrides(result.dealer);
+  return <TradePointDetailContent dealer={dealerView} point={result.point} tpMeta={result.entry} />;
 }

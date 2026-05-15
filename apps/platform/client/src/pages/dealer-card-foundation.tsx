@@ -5,6 +5,14 @@ import { AlertTriangle, BookOpen, Handshake, MapPin, PieChart, TrendingUp } from
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -68,6 +76,18 @@ import {
   getDealerCommentsHistoryEvents,
 } from "@/lib/dealer-card-comments";
 import { getDealerLegalEntityHistoryEvents, DEALER_LEGAL_ENTITIES_EVENT } from "@/lib/dealer-legal-entities";
+import {
+  DEALER_TRADE_POINTS_EVENT,
+  getDealerTradePointHistoryEvents,
+} from "@/lib/dealer-trade-points-overrides";
+import {
+  canEditDealerProfile,
+  DEALER_PROFILE_OVERRIDES_EVENT,
+  getDealerProfileHistoryEvents,
+  getDealerRowWithProfileOverrides,
+  getMergedDealerProfile,
+  updateDealerProfile,
+} from "@/lib/dealer-profile-overrides";
 import { DealerLegalEntitiesSection } from "@/components/dealer-legal-entities-section";
 import { DealerTradePointsSection } from "@/components/dealer-trade-points-section";
 import { DealerActionFocusSection } from "@/components/dealer-action-focus-section";
@@ -268,6 +288,20 @@ function buildHistoryEvents(row: DealerRow): DealerHistoryEvent[] {
     at: e.at,
   }));
 
+  const tpHist: DealerHistoryEvent[] = getDealerTradePointHistoryEvents(row.id).map((e) => ({
+    id: e.id,
+    meta: e.meta,
+    body: e.body,
+    at: e.at,
+  }));
+
+  const profHist: DealerHistoryEvent[] = getDealerProfileHistoryEvents(row.id).map((e) => ({
+    id: e.id,
+    meta: e.meta,
+    body: e.body,
+    at: e.at,
+  }));
+
   const boykoExtras: DealerHistoryEvent[] =
     row.releaseManagerId === "mgr-boyko-em"
       ? [
@@ -314,7 +348,17 @@ function buildHistoryEvents(row: DealerRow): DealerHistoryEvent[] {
           body: text,
         }));
 
-  const merged = [...showcaseHist, ...nsHist, ...trainHist, ...commentHist, ...legalHist, ...boykoExtras, ...templateEvents];
+  const merged = [
+    ...showcaseHist,
+    ...nsHist,
+    ...trainHist,
+    ...commentHist,
+    ...legalHist,
+    ...tpHist,
+    ...profHist,
+    ...boykoExtras,
+    ...templateEvents,
+  ];
   merged.sort((a, b) => historySortKey(b) - historySortKey(a));
   return merged;
 }
@@ -568,6 +612,7 @@ function DealerCardContent({ row }: { row: DealerRow }) {
   const [workPlanBump, setWorkPlanBump] = useState(0);
   const [commentsBump, setCommentsBump] = useState(0);
   const [legalBump, setLegalBump] = useState(0);
+  const [dealerDataBump, setDealerDataBump] = useState(0);
   const [historyCommentDraft, setHistoryCommentDraft] = useState("");
   const [problemCommentDraft, setProblemCommentDraft] = useState("");
   const [competitorCommentDraft, setCompetitorCommentDraft] = useState("");
@@ -610,6 +655,16 @@ function DealerCardContent({ row }: { row: DealerRow }) {
   }, []);
 
   useEffect(() => {
+    const fn = () => setDealerDataBump((n) => n + 1);
+    window.addEventListener(DEALER_TRADE_POINTS_EVENT, fn);
+    window.addEventListener(DEALER_PROFILE_OVERRIDES_EVENT, fn);
+    return () => {
+      window.removeEventListener(DEALER_TRADE_POINTS_EVENT, fn);
+      window.removeEventListener(DEALER_PROFILE_OVERRIDES_EVENT, fn);
+    };
+  }, []);
+
+  useEffect(() => {
     setHistoryExpanded(false);
     setShowcaseCategoryListMode("all");
     setHistoryCommentDraft("");
@@ -623,10 +678,11 @@ function DealerCardContent({ row }: { row: DealerRow }) {
   }, [row.id, row.productTrainingCompleted]);
 
   const businessCategoryLabel = getClientCategoryLabel(row.clientCategory);
+  const rowView = useMemo(() => getDealerRowWithProfileOverrides(row), [row, dealerDataBump]);
   const activeSection = useActiveSection(row.id);
   const historyEvents = useMemo(
     () => buildHistoryEvents(row),
-    [row, showcaseBump, nextStepBump, trainingFlagsBump, commentsBump, legalBump],
+    [row, showcaseBump, nextStepBump, trainingFlagsBump, commentsBump, legalBump, dealerDataBump],
   );
   const historyTimeline = useMemo(() => {
     const sorted = [...historyEvents].sort((a, b) => historySortKey(b) - historySortKey(a));
@@ -654,6 +710,50 @@ function DealerCardContent({ row }: { row: DealerRow }) {
   const canViewShowcaseCard = useMemo(() => canViewShowcaseDistribution(profile, row), [profile, row]);
 
   const canEditCardComments = useMemo(() => canEditDealerCardComments(profile, row), [profile, row]);
+
+  const canEditProfile = useMemo(() => canEditDealerProfile(profile, row), [profile, row]);
+  const mergedProfView = useMemo(() => getMergedDealerProfile(row), [row, dealerDataBump]);
+  const [profileEditOpen, setProfileEditOpen] = useState(false);
+  const [peName, setPeName] = useState(row.name);
+  const [peCity, setPeCity] = useState(row.city);
+  const [peContactName, setPeContactName] = useState(row.contacts.lpr);
+  const [pePhone, setPePhone] = useState(row.contacts.phone);
+  const [peEmail, setPeEmail] = useState(row.contacts.email);
+  const [peComment, setPeComment] = useState("");
+  const [profileSaveErr, setProfileSaveErr] = useState("");
+
+  const openProfileDialog = useCallback(() => {
+    const m = getMergedDealerProfile(row);
+    setPeName(m.displayName);
+    setPeCity(m.city);
+    setPeContactName(m.mainContactName);
+    setPePhone(m.mainContactPhone);
+    setPeEmail(m.mainContactEmail);
+    setPeComment(m.comment ?? "");
+    setProfileSaveErr("");
+    setProfileEditOpen(true);
+  }, [row]);
+
+  const saveProfileDialog = useCallback(() => {
+    setProfileSaveErr("");
+    if (!peName.trim() || !peCity.trim()) {
+      setProfileSaveErr("Укажите название и город.");
+      return;
+    }
+    updateDealerProfile(
+      row.id,
+      {
+        displayName: peName.trim(),
+        city: peCity.trim(),
+        mainContactName: peContactName.trim() || undefined,
+        mainContactPhone: pePhone.trim() || undefined,
+        mainContactEmail: peEmail.trim() || undefined,
+        comment: peComment.trim() || undefined,
+      },
+      profile,
+    );
+    setProfileEditOpen(false);
+  }, [row.id, profile, peName, peCity, peContactName, pePhone, peEmail, peComment]);
 
   const competitorCommentPreview = useMemo(
     () => getDealerComments(row.id).filter((c) => c.type === "competitor").slice(0, 2),
@@ -848,7 +948,7 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                       </Badge>
                     ) : null}
                   </div>
-                  <h1 className="mt-2 text-lg font-semibold tracking-tight text-foreground sm:text-xl">{row.name}</h1>
+                  <h1 className="mt-2 text-lg font-semibold tracking-tight text-foreground sm:text-xl">{rowView.name}</h1>
                   <p className="mt-0.5 min-w-0 break-words text-xs text-muted-foreground sm:text-sm">
                     {row.city} · {businessCategoryLabel}
                   </p>
@@ -954,7 +1054,7 @@ function DealerCardContent({ row }: { row: DealerRow }) {
               onApplied={() => setShowcaseBump((n) => n + 1)}
             />
 
-            <DealerTradePointsSection row={row} sectionDomId={SECTION_DOM_IDS.points} />
+            <DealerTradePointsSection row={row} sectionDomId={SECTION_DOM_IDS.points} profile={profile} />
 
             {competitorActivityRows.length > 0 || canEditCardComments ? (
               <section
@@ -1153,7 +1253,24 @@ function DealerCardContent({ row }: { row: DealerRow }) {
               </Button>
             </section>
 
-            <DealerStaticProfileSection row={row} categoryLabel={businessCategoryLabel} />
+            {mergedProfView.comment ? (
+              <p className="scroll-mt-28 text-sm leading-relaxed text-muted-foreground sm:scroll-mt-32">{mergedProfView.comment}</p>
+            ) : null}
+            <div className="flex justify-end">
+              {canEditProfile ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-h-9 w-full font-semibold sm:w-auto"
+                  data-testid="button-dealer-profile-edit"
+                  onClick={openProfileDialog}
+                >
+                  Редактировать данные
+                </Button>
+              ) : null}
+            </div>
+            <DealerStaticProfileSection row={rowView} categoryLabel={businessCategoryLabel} />
 
             <DealerLegalEntitiesSection
               row={row}
@@ -1440,6 +1557,57 @@ function DealerCardContent({ row }: { row: DealerRow }) {
           </aside>
         </div>
       </div>
+
+      <Dialog open={profileEditOpen} onOpenChange={setProfileEditOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md" data-testid="dialog-dealer-profile-edit">
+          <DialogHeader>
+            <DialogTitle className="text-base">Редактирование данных клиента</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            {profileSaveErr ? <p className="text-xs font-medium text-destructive">{profileSaveErr}</p> : null}
+            <div className="space-y-1.5">
+              <Label className="text-xs">Название</Label>
+              <Input className="min-h-10" value={peName} onChange={(e) => setPeName(e.target.value)} data-testid="input-dealer-profile-name" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Город</Label>
+              <Input className="min-h-10" value={peCity} onChange={(e) => setPeCity(e.target.value)} data-testid="input-dealer-profile-city" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Основной контакт</Label>
+              <Input
+                className="min-h-10"
+                value={peContactName}
+                onChange={(e) => setPeContactName(e.target.value)}
+                data-testid="input-dealer-profile-contact-name"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Телефон</Label>
+              <Input className="min-h-10" value={pePhone} onChange={(e) => setPePhone(e.target.value)} data-testid="input-dealer-profile-contact-phone" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Email</Label>
+              <Input className="min-h-10" value={peEmail} onChange={(e) => setPeEmail(e.target.value)} data-testid="input-dealer-profile-contact-email" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Комментарий</Label>
+              <Textarea
+                rows={3}
+                className="min-h-[72px] resize-y text-sm"
+                value={peComment}
+                onChange={(e) => setPeComment(e.target.value)}
+                data-testid="textarea-dealer-profile-comment"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" className="min-h-10 w-full font-semibold sm:w-auto" data-testid="button-dealer-profile-save" onClick={saveProfileDialog}>
+              Сохранить
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <FloatingBackButton
         href="/dealer-base"

@@ -130,6 +130,13 @@ export type DealerTradePoint = {
   responsibleRegionalManager: string;
   /** Телефон точки (если известен). */
   contactPhone?: string;
+  /** Контактное лицо на точке. */
+  contactName?: string;
+  /** Заметка менеджера по точке (ручной ввод). */
+  tpComment?: string;
+  shipmentDayIds?: string[];
+  tpHasMainWarehouse?: boolean;
+  tpHasHardwareWarehouse?: boolean;
   issues: string;
   tasks: TradePointTask[];
   activityHistory: TradePointActivity[];
