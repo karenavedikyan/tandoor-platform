@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Building2, ChevronDown, ChevronUp, MapPin, Phone } from "lucide-react";
+import { ChevronDown, ChevronUp, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,6 +8,7 @@ import {
   DEALER_LEGAL_ENTITIES_EVENT,
   getMergedDealerLegalEntities,
 } from "@/lib/dealer-legal-entities";
+import { getMergedDealerTradePoints } from "@/lib/dealer-trade-points-overrides";
 import { getDealerEquipmentSignal, type DealerEquipmentStatus } from "@/lib/dealer-equipment-signals";
 import { cn } from "@/lib/utils";
 
@@ -53,7 +54,7 @@ function equipmentStatusBadgeClass(s: DealerEquipmentStatus): string {
   return "border-slate-300 bg-slate-50 text-slate-900";
 }
 
-export function DealerStaticProfileSection({ row, categoryLabel }: Props) {
+export function DealerStaticProfileSection({ row, categoryLabel: _categoryLabel }: Props) {
   const [open, setOpen] = useState(false);
   const [legalTick, setLegalTick] = useState(0);
 
@@ -65,6 +66,7 @@ export function DealerStaticProfileSection({ row, categoryLabel }: Props) {
 
   const mergedLegal = useMemo(() => getMergedDealerLegalEntities(row), [row, legalTick]);
   const legalEntitiesCount = mergedLegal.length;
+  const tradePointsCount = useMemo(() => getMergedDealerTradePoints(row, { includeArchived: false }).length, [row]);
   const equipmentSignal = useMemo(() => getDealerEquipmentSignal(row), [row]);
 
   const address = row.releaseAddress?.trim() || "";
@@ -77,7 +79,7 @@ export function DealerStaticProfileSection({ row, categoryLabel }: Props) {
         { label: "Внутренний id", value: row.id },
         { label: "Тип в данных", value: row.clientTypeLabel ?? "" },
         { label: "Формат", value: row.format },
-        { label: "Торговых точек", value: String(row.outlets) },
+        { label: "Торговых точек", value: String(tradePointsCount) },
         { label: "Руководитель", value: row.responsibles.director },
         { label: "Ассистент", value: row.responsibles.assistant },
         { label: "Тандор клуб", value: row.terms.tandoorClub },
@@ -87,65 +89,30 @@ export function DealerStaticProfileSection({ row, categoryLabel }: Props) {
         { label: "Лимит / условия", value: row.terms.limit },
         { label: "Бонусы", value: row.terms.bonuses },
       ].filter((f) => isFilled(f.value)),
-    [row],
+    [row, tradePointsCount],
   );
 
-  const mainGrid = (
+  const secondaryContactGrid = (
     <>
-      <StaticField label="Адрес" value={address} icon={MapPin} testId="text-dealer-static-profile-address" />
-      <StaticField label="Город" value={row.city} />
-      <StaticField label="Категория" value={categoryLabel} />
-      <StaticField label="Статус" value={statusLabel} />
-      <StaticField label="Менеджер" value={row.manager} testId="text-dealer-static-profile-manager" />
-      <StaticField label="РОП" value={row.regionalManager} testId="text-dealer-static-profile-rop" />
-    </>
-  );
-
-  const contactGrid = (
-    <>
-      <StaticField label="ЛПР" value={row.contacts.lpr} icon={Building2} />
       <StaticField label="Собственник / закупщик" value={row.contacts.buyer} />
-      <StaticField label="Телефон" value={row.contacts.phone} icon={Phone} />
-      <StaticField label="Email" value={row.contacts.email} />
       <StaticField label="Предпочтительный канал" value={row.contacts.channel} className="sm:col-span-2" />
     </>
   );
 
-  const hasMain = address || isFilled(row.city) || isFilled(categoryLabel) || isFilled(row.manager) || isFilled(row.regionalManager);
-  const hasContacts =
-    isFilled(row.contacts.lpr) ||
-    isFilled(row.contacts.buyer) ||
-    isFilled(row.contacts.phone) ||
-    isFilled(row.contacts.email) ||
-    isFilled(row.contacts.channel);
+  const hasSecondaryContacts =
+    isFilled(row.contacts.buyer) || isFilled(row.contacts.channel);
 
   const collapsedSummary = (
     <p className="text-sm leading-snug text-muted-foreground">
-      <span className="font-medium text-foreground">Паспорт клиента:</span> адрес, контакты, реквизиты.{" "}
-      <span data-testid="text-dealer-static-profile-address" className="text-foreground">
-        {isFilled(address) ? address : "—"}
+      <span className="font-medium text-foreground">Кратко:</span> юрлица, оборудование, внутренние поля — ниже по странице основные реквизиты уже вынесены.{" "}
+      <span className="text-muted-foreground">Юрлица:</span>{" "}
+      <span data-testid="text-dealer-static-profile-legal-entities-count" className="tabular-nums text-foreground">
+        {legalEntitiesCount}
       </span>
       {" · "}
-      <span data-testid="text-dealer-static-profile-manager" className="text-foreground">
-        {isFilled(row.manager) ? row.manager : "—"}
-      </span>
-      {" · "}
-      <span data-testid="text-dealer-static-profile-rop" className="text-foreground">
-        {isFilled(row.regionalManager) ? row.regionalManager : "—"}
-      </span>
-      <span className="mt-1 block w-full min-w-0 sm:mt-0 sm:inline">
-        {" "}
-        <span className="text-muted-foreground">Юрлица:</span>{" "}
-        <span data-testid="text-dealer-static-profile-legal-entities-count" className="tabular-nums text-foreground">
-          {legalEntitiesCount}
-        </span>
-      </span>
-      <span className="mt-1 block w-full min-w-0 sm:mt-0 sm:inline">
-        {" "}
-        <span className="text-muted-foreground">Оборудование:</span>{" "}
-        <span data-testid="text-dealer-static-profile-equipment" className="break-words text-foreground">
-          {equipmentSignal.summary}
-        </span>
+      <span className="text-muted-foreground">Оборудование:</span>{" "}
+      <span data-testid="text-dealer-static-profile-equipment" className="break-words text-foreground">
+        {equipmentSignal.summary}
       </span>
     </p>
   );
@@ -158,8 +125,8 @@ export function DealerStaticProfileSection({ row, categoryLabel }: Props) {
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1 space-y-1">
-          <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Паспорт клиента</h2>
-          {!open ? collapsedSummary : <p className="text-sm text-muted-foreground">Справочные реквизиты и контакты.</p>}
+          <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Дополнительные данные</h2>
+          {!open ? collapsedSummary : <p className="text-sm text-muted-foreground">Условия, коды, оборудование и внутренняя справка.</p>}
         </div>
         <Button
           type="button"
@@ -184,19 +151,20 @@ export function DealerStaticProfileSection({ row, categoryLabel }: Props) {
       </div>
 
       {open ? (
-        <Card className="rounded-xl border border-border/70 bg-card shadow-xs">
+        <Card className="rounded-xl border border-border bg-card shadow-xs">
           <CardHeader className="hidden pb-0 pt-4 sm:block">
-            <CardDescription className="text-xs">Реквизиты и контакты</CardDescription>
-            <CardTitle className="text-sm">Детали</CardTitle>
+            <CardDescription className="text-xs">Внутренние поля и оборудование</CardDescription>
+            <CardTitle className="text-sm">Справка</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 p-3 sm:p-4">
-            {hasMain ? (
-              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">{mainGrid}</div>
-            ) : null}
-            {hasContacts ? <div className="grid gap-2 sm:grid-cols-2">{contactGrid}</div> : null}
+            <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
+              <StaticField label="Статус" value={statusLabel} />
+              {isFilled(address) ? <StaticField label="Адрес (справка)" value={address} icon={MapPin} /> : null}
+            </div>
+            {hasSecondaryContacts ? <div className="grid gap-2 sm:grid-cols-2">{secondaryContactGrid}</div> : null}
             {extraFields.length > 0 ? (
               <div className="border-t border-border pt-3">
-                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Дополнительно</p>
+                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Реквизиты и условия</p>
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                   {extraFields.map((f) => (
                     <StaticField key={f.label} label={f.label} value={f.value} />

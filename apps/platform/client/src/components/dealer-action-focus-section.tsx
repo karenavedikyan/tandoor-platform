@@ -76,7 +76,7 @@ export function DealerActionFocusSection({
       data-testid="section-dealer-action-focus"
       className="scroll-mt-28 space-y-3 sm:scroll-mt-32"
     >
-      <Card className="rounded-xl border border-primary/25 bg-gradient-to-b from-primary/6 to-card shadow-xs">
+      <Card className="rounded-xl border border-border bg-card shadow-xs">
         <CardHeader className="space-y-1.5 p-3 pb-2">
           <div className="flex flex-wrap items-center gap-2">
             <CardTitle className="text-sm sm:text-base">Что сделать сейчас</CardTitle>
