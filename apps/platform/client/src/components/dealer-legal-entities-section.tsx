@@ -17,6 +17,7 @@ import {
   updateDealerLegalEntity,
 } from "@/lib/dealer-legal-entities";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
+import { LegalEntityContactsSubsection } from "@/components/legal-entity-contacts-subsection";
 
 type Props = {
   row: DealerRow;
@@ -294,6 +295,14 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
                     <p className="text-xs leading-relaxed text-muted-foreground">{e.legalAddress}</p>
                   ) : null}
                   {isFilled(e.comment) ? <p className="text-xs text-foreground">{e.comment}</p> : null}
+                  <LegalEntityContactsSubsection
+                    row={row}
+                    legalEntityId={e.id}
+                    legalEntityName={e.name}
+                    profile={profile}
+                    canEdit={canEdit}
+                    entityArchived={false}
+                  />
                 </div>
                 {canEdit && !e.isPassportSeed ? (
                   <div className="flex shrink-0 flex-col gap-1.5 sm:flex-row">
@@ -365,6 +374,14 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
                           Изменить
                         </Button>
                       ) : null}
+                      <LegalEntityContactsSubsection
+                        row={row}
+                        legalEntityId={e.id}
+                        legalEntityName={e.name}
+                        profile={profile}
+                        canEdit={canEdit}
+                        entityArchived={true}
+                      />
                     </div>
                   ))}
                 </div>
