@@ -77,6 +77,10 @@ import {
 } from "@/lib/dealer-card-comments";
 import { getDealerLegalEntityHistoryEvents, DEALER_LEGAL_ENTITIES_EVENT } from "@/lib/dealer-legal-entities";
 import {
+  CLIENT_CONTACTS_EVENT,
+  getClientContactDealerHistoryEvents,
+} from "@/lib/client-contacts";
+import {
   DEALER_TRADE_POINTS_EVENT,
   getDealerTradePointHistoryEvents,
 } from "@/lib/dealer-trade-points-overrides";
@@ -302,6 +306,13 @@ function buildHistoryEvents(row: DealerRow): DealerHistoryEvent[] {
     at: e.at,
   }));
 
+  const contactHist: DealerHistoryEvent[] = getClientContactDealerHistoryEvents(row.id).map((e) => ({
+    id: e.id,
+    meta: e.meta,
+    body: e.body,
+    at: e.at,
+  }));
+
   const boykoExtras: DealerHistoryEvent[] =
     row.releaseManagerId === "mgr-boyko-em"
       ? [
@@ -356,6 +367,7 @@ function buildHistoryEvents(row: DealerRow): DealerHistoryEvent[] {
     ...legalHist,
     ...tpHist,
     ...profHist,
+    ...contactHist,
     ...boykoExtras,
     ...templateEvents,
   ];
@@ -658,9 +670,11 @@ function DealerCardContent({ row }: { row: DealerRow }) {
     const fn = () => setDealerDataBump((n) => n + 1);
     window.addEventListener(DEALER_TRADE_POINTS_EVENT, fn);
     window.addEventListener(DEALER_PROFILE_OVERRIDES_EVENT, fn);
+    window.addEventListener(CLIENT_CONTACTS_EVENT, fn);
     return () => {
       window.removeEventListener(DEALER_TRADE_POINTS_EVENT, fn);
       window.removeEventListener(DEALER_PROFILE_OVERRIDES_EVENT, fn);
+      window.removeEventListener(CLIENT_CONTACTS_EVENT, fn);
     };
   }, []);
 
