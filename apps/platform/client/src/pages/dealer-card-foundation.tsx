@@ -58,6 +58,7 @@ import {
   isDealerHiddenForUser,
   loadDealerWorkPlanState,
 } from "@/lib/dealer-work-plan";
+import { getDealerStockSignal } from "@/lib/dealer-stock-signals";
 import { DealerActionFocusSection } from "@/components/dealer-action-focus-section";
 import { DealerClientNextStepSection } from "@/components/dealer-client-next-step-section";
 import { DealerStaticProfileSection } from "@/components/dealer-static-profile-section";
@@ -622,6 +623,8 @@ function DealerCardContent({ row }: { row: DealerRow }) {
     return isDealerHiddenForUser(profile.personaUserId, row.id, st);
   }, [profile.personaUserId, row.id, workPlanBump]);
 
+  const dealerStockSignal = useMemo(() => getDealerStockSignal(row), [row]);
+
   const onPlanShowcaseCheck = useCallback(() => {
     const label = user?.name ?? userLabelFromProfile(profile);
     const uid = user?.id ?? profile.personaUserId;
@@ -831,6 +834,21 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                         Скрыт из рабочего списка
                       </Badge>
                     </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {dealerStockSignal.hasMainWarehouse || dealerStockSignal.hasHardwareWarehouse ? (
+                <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 rounded-lg border border-border/60 bg-muted/15 px-3 py-2 text-[11px] text-foreground">
+                  {dealerStockSignal.hasMainWarehouse ? (
+                    <span className="font-medium" data-testid="text-dealer-card-main-warehouse">
+                      Склад: есть
+                    </span>
+                  ) : null}
+                  {dealerStockSignal.hasHardwareWarehouse ? (
+                    <span className="font-medium" data-testid="text-dealer-card-hardware-warehouse">
+                      Склад фурнитуры: есть
+                    </span>
                   ) : null}
                 </div>
               ) : null}

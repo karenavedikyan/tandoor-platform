@@ -106,6 +106,12 @@ import {
   removeDealerFromRoute,
   reorderRouteDealer,
 } from "@/lib/dealer-route-plan";
+import {
+  DEALER_STOCK_FILTER_LABELS,
+  dealerRowMatchesStockFilter,
+  getDealerStockSignal,
+  type DealerStockListFilterId,
+} from "@/lib/dealer-stock-signals";
 import { SHOWCASE_STORAGE_EVENT } from "@/lib/showcase-distribution-data";
 import { Checkbox } from "@/components/ui/checkbox";
 
@@ -327,6 +333,7 @@ function ClientListBlock({
           shipmentActiveDayId && shipmentUserId
             ? getDealerShipmentStatus(row, shipmentActiveDayId, shipmentUserId, workPlanState)
             : null;
+        const stockSig = getDealerStockSignal(row);
         return (
           <Card
             key={row.id}
@@ -374,6 +381,24 @@ function ClientListBlock({
                   {hidden ? (
                     <Badge variant="secondary" className="text-xs font-medium" data-testid={`badge-dealer-hidden-${row.id}`}>
                       Скрыт из рабочего списка
+                    </Badge>
+                  ) : null}
+                  {stockSig.hasMainWarehouse ? (
+                    <Badge
+                      variant="outline"
+                      className="shrink-0 border-slate-300 bg-slate-50 text-[10px] font-medium text-slate-900"
+                      data-testid={`badge-dealer-main-warehouse-${row.id}`}
+                    >
+                      Есть склад
+                    </Badge>
+                  ) : null}
+                  {stockSig.hasHardwareWarehouse ? (
+                    <Badge
+                      variant="outline"
+                      className="shrink-0 border-violet-300 bg-violet-50 text-[10px] font-medium text-violet-950"
+                      data-testid={`badge-dealer-hardware-warehouse-${row.id}`}
+                    >
+                      Фурнитура
                     </Badge>
                   ) : null}
                   {ship ? (
@@ -450,6 +475,7 @@ function ClientTableBlock({
             shipmentActiveDayId && shipmentUserId
               ? getDealerShipmentStatus(row, shipmentActiveDayId, shipmentUserId, workPlanState)
               : null;
+          const stockSig = getDealerStockSignal(row);
           return (
             <Card key={row.id} className="rounded-2xl border border-border/80 bg-card shadow-sm" data-testid={`row-dealer-${row.id}`}>
               <CardContent className="space-y-2 p-4 text-sm">
@@ -484,6 +510,26 @@ function ClientTableBlock({
                     Скрыт из рабочего списка
                   </Badge>
                 ) : null}
+                <div className="flex flex-wrap gap-1.5">
+                  {stockSig.hasMainWarehouse ? (
+                    <Badge
+                      variant="outline"
+                      className="border-slate-300 bg-slate-50 text-[10px] font-medium text-slate-900"
+                      data-testid={`badge-dealer-main-warehouse-${row.id}`}
+                    >
+                      Есть склад
+                    </Badge>
+                  ) : null}
+                  {stockSig.hasHardwareWarehouse ? (
+                    <Badge
+                      variant="outline"
+                      className="border-violet-300 bg-violet-50 text-[10px] font-medium text-violet-950"
+                      data-testid={`badge-dealer-hardware-warehouse-${row.id}`}
+                    >
+                      Фурнитура
+                    </Badge>
+                  ) : null}
+                </div>
                 {ship ? (
                   <div className="space-y-1">
                     <Badge
@@ -534,6 +580,7 @@ function ClientTableBlock({
                 shipmentActiveDayId && shipmentUserId
                   ? getDealerShipmentStatus(row, shipmentActiveDayId, shipmentUserId, workPlanState)
                   : null;
+              const stockSig = getDealerStockSignal(row);
               return (
                 <tr key={row.id} className="border-b border-border last:border-0" data-testid={`row-dealer-${row.id}`}>
                   {showWorkPlanSelect && wp && onToggleWorkPlanSelect ? (
@@ -561,6 +608,26 @@ function ClientTableBlock({
                           Скрыт из рабочего списка
                         </Badge>
                       ) : null}
+                      <div className="flex flex-wrap gap-1">
+                        {stockSig.hasMainWarehouse ? (
+                          <Badge
+                            variant="outline"
+                            className="border-slate-300 bg-slate-50 text-[10px] font-medium text-slate-900"
+                            data-testid={`badge-dealer-main-warehouse-${row.id}`}
+                          >
+                            Есть склад
+                          </Badge>
+                        ) : null}
+                        {stockSig.hasHardwareWarehouse ? (
+                          <Badge
+                            variant="outline"
+                            className="border-violet-300 bg-violet-50 text-[10px] font-medium text-violet-950"
+                            data-testid={`badge-dealer-hardware-warehouse-${row.id}`}
+                          >
+                            Фурнитура
+                          </Badge>
+                        ) : null}
+                      </div>
                       {ship ? (
                         <>
                           <Badge
@@ -1164,6 +1231,7 @@ export default function DealerBase() {
   const [wpScheduleDate, setWpScheduleDate] = useState("");
   const [wpNote, setWpNote] = useState("");
   const [segmentListFilter, setSegmentListFilter] = useState<DealerBaseSegmentFilterId>("all");
+  const [stockListFilter, setStockListFilter] = useState<DealerStockListFilterId>("all");
   const [segmentCollapse, setSegmentCollapse] = useState<DealerBaseSegmentCollapseState>(() => {
     const narrow = typeof window !== "undefined" && window.innerWidth < 768;
     return { ...defaultDealerBaseSegmentCollapse(narrow), ...loadDealerBaseSegmentCollapseOverrides() };
@@ -1214,10 +1282,26 @@ export default function DealerBase() {
     return rowsForWorkPlan.filter((r) => getDealerBaseSegment(r) === segmentListFilter);
   }, [rowsForWorkPlan, segmentListFilter]);
 
-  const rowsFinalForList = useMemo(() => {
+  const rowsAfterShipmentDay = useMemo(() => {
     if (!activeShipmentDayId) return rowsAfterSegmentFilter;
     return rowsAfterSegmentFilter.filter((r) => getDealerShipmentDays(r).includes(activeShipmentDayId));
   }, [rowsAfterSegmentFilter, activeShipmentDayId]);
+
+  const rowsFinalForList = useMemo(() => {
+    if (stockListFilter === "all") return rowsAfterShipmentDay;
+    return rowsAfterShipmentDay.filter((r) => dealerRowMatchesStockFilter(r, stockListFilter));
+  }, [rowsAfterShipmentDay, stockListFilter]);
+
+  const stockFilterSummary = useMemo(() => {
+    let main = 0;
+    let hw = 0;
+    for (const r of rowsAfterShipmentDay) {
+      const s = getDealerStockSignal(r);
+      if (s.hasMainWarehouse) main += 1;
+      if (s.hasHardwareWarehouse) hw += 1;
+    }
+    return { main, hardware: hw };
+  }, [rowsAfterShipmentDay]);
 
   useEffect(() => {
     const allowed = new Set(rowsFinalForList.map((r) => r.id));
@@ -1368,6 +1452,10 @@ export default function DealerBase() {
             </Card>
           ))}
         </div>
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          <span data-testid="text-dealer-stock-main-count">Со складом: {stockFilterSummary.main}</span>
+          <span data-testid="text-dealer-stock-hardware-count">Склад фурнитуры: {stockFilterSummary.hardware}</span>
+        </div>
       </section>
 
       <Card className="rounded-2xl border border-border/80 bg-card shadow-md">
@@ -1430,8 +1518,22 @@ export default function DealerBase() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="min-w-0 space-y-1">
+              <Label className="text-xs font-medium text-muted-foreground">Склад</Label>
+              <Select value={stockListFilter} onValueChange={(v) => setStockListFilter(v as DealerStockListFilterId)}>
+                <SelectTrigger className="min-h-10 w-full min-w-0 max-w-[16rem] rounded-xl" data-testid="select-dealer-stock-filter">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(DEALER_STOCK_FILTER_LABELS) as DealerStockListFilterId[]).map((k) => (
+                    <SelectItem key={k} value={k}>
+                      {DEALER_STOCK_FILTER_LABELS[k]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-
           <div
             className={cn(
               "grid min-w-0 gap-4 sm:grid-cols-2",
