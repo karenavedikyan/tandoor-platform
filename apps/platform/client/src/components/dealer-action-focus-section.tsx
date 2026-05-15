@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { AlertCircle, CalendarClock, ClipboardList, LayoutGrid, ListTodo } from "lucide-react";
+import { AlertCircle, CalendarClock, ClipboardList, LayoutGrid, ListTodo, Wrench } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,6 +8,7 @@ import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import { clientNextStepActionLabel, type ClientNextStepRecord } from "@/lib/client-next-step-data";
 import { canViewShowcaseDistribution } from "@/lib/showcase-distribution-data";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
+import type { DealerEquipmentSignal } from "@/lib/dealer-equipment-signals";
 import { cn } from "@/lib/utils";
 
 function formatIsoDayToRu(iso: string): string {
@@ -35,6 +36,8 @@ type Props = {
   onOpenShowcaseDeficitFilter: () => void;
   distributionSnapshotStale?: boolean;
   distributionSnapshotLabel?: string;
+  equipmentSignal: DealerEquipmentSignal;
+  onScrollToStaticProfile: () => void;
 };
 
 export function DealerActionFocusSection({
@@ -53,8 +56,15 @@ export function DealerActionFocusSection({
   onOpenShowcaseDeficitFilter,
   distributionSnapshotStale,
   distributionSnapshotLabel,
+  equipmentSignal,
+  onScrollToStaticProfile,
 }: Props) {
   const canShowcase = canViewShowcaseDistribution(profile, row);
+
+  const equipmentProblem =
+    equipmentSignal.status === "needs_check" ||
+    equipmentSignal.status === "missing" ||
+    equipmentSignal.status === "outdated";
 
   const nextStepLine = nextStep
     ? `${clientNextStepActionLabel(nextStep.actionType)} · ${formatIsoDayToRu(nextStep.contactDate)}${nextStepOverdue ? " · просрочено" : ""}`
@@ -187,6 +197,26 @@ export function DealerActionFocusSection({
                 <p className="mt-1 text-sm font-medium text-foreground">{lastActivityLabel}</p>
               </div>
             </button>
+
+            {equipmentProblem ? (
+              <button
+                type="button"
+                data-testid="button-dealer-action-equipment-signal"
+                className={cn(focusCardClass, "cursor-pointer sm:col-span-2")}
+                onClick={onScrollToStaticProfile}
+              >
+                <Wrench className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" aria-hidden />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center justify-between gap-1">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Проверить оборудование</p>
+                    <span className="text-[10px] font-medium text-primary opacity-90 group-hover:opacity-100">Открыть паспорт →</span>
+                  </div>
+                  <p className="mt-1 text-sm font-medium leading-snug text-foreground" data-testid="text-dealer-action-equipment-signal">
+                    {equipmentSignal.reason ?? equipmentSignal.statusLabel}
+                  </p>
+                </div>
+              </button>
+            ) : null}
           </div>
 
           <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">

@@ -1,7 +1,7 @@
 import type { ComponentProps, ComponentType, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useParams } from "wouter";
-import { AlertTriangle, BookOpen, Camera, Handshake, LayoutGrid, MapPin, PieChart, Store, TrendingUp } from "lucide-react";
+import { AlertTriangle, BookOpen, Camera, Handshake, MapPin, PieChart, Store, TrendingUp } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -59,6 +59,7 @@ import {
   loadDealerWorkPlanState,
 } from "@/lib/dealer-work-plan";
 import { getDealerStockSignal } from "@/lib/dealer-stock-signals";
+import { getDealerEquipmentSignal } from "@/lib/dealer-equipment-signals";
 import { DealerActionFocusSection } from "@/components/dealer-action-focus-section";
 import { DealerClientNextStepSection } from "@/components/dealer-client-next-step-section";
 import { DealerStaticProfileSection } from "@/components/dealer-static-profile-section";
@@ -625,6 +626,8 @@ function DealerCardContent({ row }: { row: DealerRow }) {
 
   const dealerStockSignal = useMemo(() => getDealerStockSignal(row), [row]);
 
+  const equipmentSignal = useMemo(() => getDealerEquipmentSignal(row), [row]);
+
   const onPlanShowcaseCheck = useCallback(() => {
     const label = user?.name ?? userLabelFromProfile(profile);
     const uid = user?.id ?? profile.personaUserId;
@@ -698,15 +701,6 @@ function DealerCardContent({ row }: { row: DealerRow }) {
 
   const showDistributionBlock = row.distributionDetail.total > 0 || row.distributionDetail.mk > 0 || row.distributionDetail.vh > 0;
 
-  const hasShowcaseLegacyBlock = useMemo(
-    () =>
-      isFilledDataCell(row.showcase.equipment) ||
-      isFilledDataCell(row.showcase.todo) ||
-      isFilledDataCell(row.showcase.status) ||
-      isFilledDataCell(row.showcase.goalLink),
-    [row],
-  );
-
   const salesComment =
     row.hasProblem
       ? "Есть вопросы по витрине и сопровождению — держим в фокусе команды."
@@ -718,8 +712,6 @@ function DealerCardContent({ row }: { row: DealerRow }) {
       : row.distributionDetail.total >= 50
         ? "Есть резерв по выкладке и полноте линейки."
         : "Нужны действия по усилению дистрибуции и контролю на точке.";
-
-  const showcaseNext = `Связано с ближайшим шагом: ${row.nextAction}`;
 
   return (
     <div className="min-w-0 max-w-full space-y-4 overflow-x-hidden sm:space-y-6" data-testid="page-dealer-card-foundation">
@@ -872,6 +864,8 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                 }}
                 distributionSnapshotStale={distributionSnap.isStale}
                 distributionSnapshotLabel={distributionSnap.displayLabel}
+                equipmentSignal={equipmentSignal}
+                onScrollToStaticProfile={() => scrollToSection("static_profile")}
               />
             </section>
 
@@ -1244,27 +1238,6 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                   <CardContent className="px-3 py-3 sm:px-4">
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Вывод</p>
                     <p className="mt-1 text-sm leading-relaxed text-foreground">{distributionConclusion}</p>
-                  </CardContent>
-                </SurfaceCard>
-              </section>
-            ) : null}
-
-            {hasShowcaseLegacyBlock ? (
-              <section data-testid="section-dealer-showcases" className="scroll-mt-28 space-y-2 sm:scroll-mt-32">
-                <SectionTitle subtitle="Витрина и оборудование.">Витрины и оборудование</SectionTitle>
-                <SurfaceCard>
-                  <CardContent className="space-y-0 px-3 py-3 sm:px-4">
-                    <div className="mb-2 flex items-center gap-2 text-sm font-medium text-foreground">
-                      <LayoutGrid className="h-4 w-4 text-primary" aria-hidden />
-                      Состояние витрины и оборудования
-                    </div>
-                    <FieldRow label="Установленное оборудование" value={row.showcase.equipment} />
-                    <FieldRow label="Что нужно добавить" value={row.showcase.todo} />
-                    <FieldRow label="Статус витрины" value={row.showcase.status} />
-                    <FieldRow label="Связь с целями отдела продаж" value={row.showcase.goalLink} />
-                    <FieldRow label="Сводный показатель" value={`${row.distribution}% (обзор)`} />
-                    <Separator className="my-3" />
-                    <p className="text-sm font-medium text-foreground">{showcaseNext}</p>
                   </CardContent>
                 </SurfaceCard>
               </section>
