@@ -58,6 +58,8 @@ function tgHref(telegram: string): string {
 type Props = {
   row: DealerRow;
   profile: ReleaseDemoProfile;
+  /** Карточка без внешней секции и заголовка — обёртка с заголовком на странице. */
+  variant?: "full" | "embedded";
 };
 
 const emptyDraft = (): Omit<ClientContact, "id" | "createdAt" | "updatedAt" | "createdBy" | "source"> => ({
@@ -72,7 +74,7 @@ const emptyDraft = (): Omit<ClientContact, "id" | "createdAt" | "updatedAt" | "c
   isActual: true,
 });
 
-export function DealerContactsSection({ row, profile }: Props) {
+export function DealerContactsSection({ row, profile, variant = "full" }: Props) {
   const [tick, setTick] = useState(0);
   const [showAll, setShowAll] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -293,13 +295,8 @@ export function DealerContactsSection({ row, profile }: Props) {
     </div>
   );
 
-  return (
-    <section data-testid="section-dealer-contacts" className="scroll-mt-28 space-y-3 sm:scroll-mt-32">
-      <div className="space-y-1">
-        <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Контакты клиента</h2>
-        <p className="max-w-2xl text-sm text-muted-foreground">Телефон, мессенджеры и почта — с быстрыми ссылками для связи.</p>
-      </div>
-      <Card className="rounded-2xl border border-border/80 bg-card shadow-md">
+  const card = (
+    <Card className="rounded-xl border border-border bg-card shadow-xs">
         <CardContent className="space-y-3 px-3 py-3 sm:px-4 sm:py-4">
           {active.length > 0 || pending.length > 0 ? (
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -364,6 +361,164 @@ export function DealerContactsSection({ row, profile }: Props) {
           ) : null}
         </CardContent>
       </Card>
+  );
+
+  if (variant === "embedded") {
+    return (
+      <>
+        {card}
+        <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md" data-testid="dialog-dealer-contact-edit">
+          <DialogHeader>
+            <DialogTitle className="text-base">{editingId ? "Контакт" : "Новый контакт"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            {formErr ? <p className="text-xs font-medium text-destructive">{formErr}</p> : null}
+            <div className="space-y-1.5">
+              <Label className="text-xs">ФИО</Label>
+              <Input
+                className="min-h-10"
+                value={draft.fullName}
+                onChange={(e) => setDraft((d) => ({ ...d, fullName: e.target.value }))}
+                data-testid="input-dealer-contact-name"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Роль / должность</Label>
+              <Input
+                className="min-h-10"
+                value={draft.role}
+                onChange={(e) => setDraft((d) => ({ ...d, role: e.target.value }))}
+                data-testid="input-dealer-contact-role"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Телефон</Label>
+              <Input
+                className="min-h-10"
+                value={draft.phone}
+                onChange={(e) => setDraft((d) => ({ ...d, phone: e.target.value }))}
+                data-testid="input-dealer-contact-phone"
+              />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label className="text-xs">WhatsApp</Label>
+                <Input
+                  className="min-h-10"
+                  value={draft.whatsapp}
+                  onChange={(e) => setDraft((d) => ({ ...d, whatsapp: e.target.value }))}
+                  data-testid="input-dealer-contact-whatsapp"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Telegram</Label>
+                <Input
+                  className="min-h-10"
+                  value={draft.telegram}
+                  onChange={(e) => setDraft((d) => ({ ...d, telegram: e.target.value }))}
+                  data-testid="input-dealer-contact-telegram"
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Email</Label>
+              <Input
+                className="min-h-10"
+                value={draft.email}
+                onChange={(e) => setDraft((d) => ({ ...d, email: e.target.value }))}
+                data-testid="input-dealer-contact-email"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Комментарий</Label>
+              <Textarea
+                rows={2}
+                className="min-h-[52px] resize-y text-sm"
+                value={draft.comment}
+                onChange={(e) => setDraft((d) => ({ ...d, comment: e.target.value }))}
+                data-testid="textarea-dealer-contact-comment"
+              />
+            </div>
+            <label className="flex cursor-pointer items-center gap-2 text-xs">
+              <Checkbox
+                checked={draft.isPrimary}
+                onCheckedChange={(v) => setDraft((d) => ({ ...d, isPrimary: v === true }))}
+                data-testid="checkbox-dealer-contact-primary"
+              />
+              <span>Основной контакт</span>
+            </label>
+            <label className="flex cursor-pointer items-center gap-2 text-xs">
+              <Checkbox
+                checked={draft.isActual}
+                onCheckedChange={(v) => setDraft((d) => ({ ...d, isActual: v === true }))}
+                data-testid="checkbox-dealer-contact-actual"
+              />
+              <span>Актуален</span>
+            </label>
+          </div>
+          <DialogFooter>
+            <Button type="button" className="min-h-10 w-full font-semibold sm:w-auto" data-testid="button-dealer-contact-save" onClick={onSaveForm}>
+              Сохранить
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-base">Запрос на снятие контакта</DialogTitle>
+          </DialogHeader>
+          <Textarea
+            placeholder="Причина (необязательно)"
+            rows={2}
+            className="min-h-[52px] text-sm"
+            value={deleteReason}
+            onChange={(e) => setDeleteReason(e.target.value)}
+            data-testid="textarea-dealer-contact-delete-reason"
+          />
+          <DialogFooter>
+            <Button
+              type="button"
+              className="min-h-10 font-semibold"
+              data-testid="button-dealer-contact-delete-confirm"
+              onClick={() => {
+                if (deleteContactId) {
+                  requestDeleteDealerContact(row.id, deleteContactId, deleteReason, profile);
+                  setTick((n) => n + 1);
+                }
+                setDeleteOpen(false);
+              }}
+            >
+              Отправить запрос
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+        {copyContact ? (
+          <ContactCopyToScopesDialog
+            open={copyOpen}
+            onOpenChange={setCopyOpen}
+            row={row}
+            profile={profile}
+            source={{ type: "dealer", contactId: copyContact.id }}
+            sourceContact={copyContact}
+            onCopied={() => setTick((n) => n + 1)}
+          />
+        ) : null}
+      </>
+    );
+  }
+
+  return (
+    <section data-testid="section-dealer-contacts" className="scroll-mt-28 space-y-3 sm:scroll-mt-32">
+      <div className="space-y-1">
+        <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Контакты клиента</h2>
+        <p className="max-w-2xl text-sm text-muted-foreground">Телефон, мессенджеры и почта — с быстрыми ссылками для связи.</p>
+      </div>
+      {card}
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md" data-testid="dialog-dealer-contact-edit">

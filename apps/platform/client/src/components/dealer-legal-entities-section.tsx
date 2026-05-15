@@ -142,7 +142,7 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
   }, [resetDraft]);
 
   return (
-    <section data-testid="section-dealer-legal-entities" className="scroll-mt-28 space-y-2 sm:scroll-mt-32">
+    <section id="dealer-section-legal-entities" data-testid="section-dealer-legal-entities" className="scroll-mt-28 space-y-2 sm:scroll-mt-32">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <h3 className="text-sm font-semibold text-foreground sm:text-base">Юридические лица</h3>
         {canEdit ? (

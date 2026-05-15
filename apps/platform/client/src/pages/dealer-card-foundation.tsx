@@ -79,7 +79,11 @@ import { getDealerLegalEntityHistoryEvents, DEALER_LEGAL_ENTITIES_EVENT } from "
 import {
   CLIENT_CONTACTS_EVENT,
   getClientContactDealerHistoryEvents,
+  getDealerContacts,
+  isClientContactActive,
 } from "@/lib/client-contacts";
+import { getMergedDealerLegalEntities } from "@/lib/dealer-legal-entities";
+import { getMergedDealerTradePoints } from "@/lib/dealer-trade-points-overrides";
 import {
   DEALER_TRADE_POINTS_EVENT,
   getDealerTradePointHistoryEvents,
@@ -100,44 +104,71 @@ import { DealerStaticProfileSection } from "@/components/dealer-static-profile-s
 import { DealerContactsSection } from "@/components/dealer-contacts-section";
 
 const SECTION_IDS = [
+  "overview",
+  "contacts",
   "work",
   "showcase_distribution",
+  "points",
+  "legal_entities",
   "next_step",
+  "terms_distribution",
   "history",
   "static_profile",
-  "points",
 ] as const;
 
 type SectionId = (typeof SECTION_IDS)[number];
 
 const SECTION_DOM_IDS: Record<SectionId, string> = {
+  overview: "dealer-section-overview",
+  contacts: "dealer-section-contacts",
   work: "dealer-section-work",
   points: "dealer-section-points",
   showcase_distribution: "dealer-section-showcase-distribution",
+  legal_entities: "dealer-section-legal-entities",
   next_step: "dealer-section-next-step",
+  terms_distribution: "dealer-section-terms-distribution",
   history: "section-dealer-activity-history",
   static_profile: "dealer-section-static-profile",
 };
 
 const SECTION_LABELS: Record<SectionId, string> = {
+  overview: "Обзор",
+  contacts: "Контакты",
   work: "Работа",
   points: "Точки",
   showcase_distribution: "Витрина",
+  legal_entities: "Юрлица",
   next_step: "Шаг",
+  terms_distribution: "Условия",
   history: "История",
   static_profile: "Паспорт",
 };
 
 const SECTION_NAV_TEST_IDS: Record<SectionId, string> = {
+  overview: "dealer-section-nav-overview",
+  contacts: "dealer-section-nav-contacts",
   work: "dealer-section-nav-work",
   points: "dealer-section-nav-points",
   showcase_distribution: "dealer-section-nav-showcase-distribution",
+  legal_entities: "dealer-section-nav-legal-entities",
   next_step: "dealer-section-nav-next-step",
+  terms_distribution: "dealer-section-nav-terms-distribution",
   history: "dealer-section-nav-history",
   static_profile: "dealer-section-nav-static-profile",
 };
 
-const NAV_SECTION_IDS = SECTION_IDS.filter((id): id is Exclude<SectionId, "points"> => id !== "points");
+/** Правая навигация без «Условия», чтобы не перегружать панель (блок есть на странице). */
+const NAV_SECTION_IDS: SectionId[] = [
+  "overview",
+  "contacts",
+  "work",
+  "showcase_distribution",
+  "points",
+  "legal_entities",
+  "next_step",
+  "history",
+  "static_profile",
+];
 
 function scrollToSection(id: SectionId) {
   const el = document.getElementById(SECTION_DOM_IDS[id]);
@@ -186,7 +217,7 @@ function SurfaceCard({
   ...rest
 }: { children: ReactNode; className?: string } & ComponentProps<typeof Card>) {
   return (
-    <Card className={cn("rounded-xl border border-border/70 bg-card shadow-xs", className)} {...rest}>
+    <Card className={cn("rounded-xl border border-border bg-card shadow-xs", className)} {...rest}>
       {children}
     </Card>
   );
@@ -557,7 +588,7 @@ function DealerNotFound() {
 }
 
 function useActiveSection(dealerId: string) {
-  const [active, setActive] = useState<SectionId>("work");
+  const [active, setActive] = useState<SectionId>("overview");
 
   useEffect(() => {
     const opts: IntersectionObserverInit = { root: null, rootMargin: "-20% 0px -55% 0px", threshold: 0 };
@@ -728,6 +759,66 @@ function DealerCardContent({ row }: { row: DealerRow }) {
 
   const canEditProfile = useMemo(() => canEditDealerProfile(profile, row), [profile, row]);
   const mergedProfView = useMemo(() => getMergedDealerProfile(row), [row, dealerDataBump]);
+  const tradePointsCount = useMemo(
+    () => getMergedDealerTradePoints(row, { includeArchived: false }).length,
+    [row, dealerDataBump],
+  );
+  const legalEntitiesCount = useMemo(
+    () => getMergedDealerLegalEntities(row).filter((e) => e.status !== "archived").length,
+    [row, legalBump],
+  );
+  const storedDealerContacts = useMemo(() => getDealerContacts(row), [row, dealerDataBump]);
+  const primaryStoredContact = useMemo(() => {
+    const active = storedDealerContacts.filter(isClientContactActive);
+    return active.find((c) => c.isPrimary) ?? active[0];
+  }, [storedDealerContacts]);
+  const quickMainContactLabel = useMemo(() => {
+    const n = primaryStoredContact?.fullName?.trim();
+    if (n) return n;
+    const m = mergedProfView.mainContactName?.trim();
+    if (m) return m;
+    const l = row.contacts.lpr?.trim();
+    if (l && l !== "—" && l !== "-") return l;
+    return "";
+  }, [primaryStoredContact, mergedProfView.mainContactName, row.contacts.lpr]);
+  const quickPhoneLabel = useMemo(() => {
+    const p = primaryStoredContact?.phone?.trim();
+    if (p && p !== "—" && p !== "-") return p;
+    const m = mergedProfView.mainContactPhone?.trim();
+    if (m && m !== "—" && m !== "-") return m;
+    const r = row.contacts.phone?.trim();
+    if (r && r !== "—" && r !== "-") return r;
+    return "";
+  }, [primaryStoredContact, mergedProfView.mainContactPhone, row.contacts.phone]);
+  const quickEmailLabel = useMemo(() => {
+    const e = primaryStoredContact?.email?.trim();
+    if (e && e !== "—" && e !== "-") return e;
+    const m = mergedProfView.mainContactEmail?.trim();
+    if (m && m !== "—" && m !== "-") return m;
+    const r = row.contacts.email?.trim();
+    if (r && r !== "—" && r !== "-") return r;
+    return "";
+  }, [primaryStoredContact, mergedProfView.mainContactEmail, row.contacts.email]);
+  const quickTelegramLabel = useMemo(() => {
+    const t = primaryStoredContact?.telegram?.trim();
+    if (t && t !== "—" && t !== "-") return t;
+    return "";
+  }, [primaryStoredContact]);
+  const quickWhatsappLabel = useMemo(() => {
+    const w = primaryStoredContact?.whatsapp?.trim();
+    if (w && w !== "—" && w !== "-") return w;
+    return "";
+  }, [primaryStoredContact]);
+  const quickAddress = useMemo(() => {
+    const a = row.releaseAddress?.trim();
+    if (a && a !== "—" && a !== "-") return a;
+    return "";
+  }, [row.releaseAddress]);
+  const quickCity = useMemo(() => {
+    const c = mergedProfView.city?.trim() || row.city?.trim();
+    if (c && c !== "—" && c !== "-") return c;
+    return "";
+  }, [mergedProfView.city, row.city]);
   const [profileEditOpen, setProfileEditOpen] = useState(false);
   const [peName, setPeName] = useState(row.name);
   const [peCity, setPeCity] = useState(row.city);
@@ -916,18 +1007,14 @@ function DealerCardContent({ row }: { row: DealerRow }) {
         </Button>
 
         <div className="lg:grid lg:grid-cols-12 lg:items-start lg:gap-6">
-          <div className="min-w-0 space-y-3 sm:space-y-4 lg:col-span-8">
+          <div className="min-w-0 space-y-5 sm:space-y-6 lg:col-span-8">
             <section
-              id={SECTION_DOM_IDS.work}
+              id={SECTION_DOM_IDS.overview}
+              data-testid="section-dealer-overview"
               className="scroll-mt-28 space-y-3 sm:scroll-mt-32 lg:scroll-mt-32"
             >
-              <div
-                id="dealer-section-overview"
-                data-testid="section-dealer-overview"
-                className="relative overflow-hidden rounded-xl border border-border bg-card p-3 shadow-xs sm:p-4"
-              >
-                <div className="pointer-events-none absolute left-0 top-0 h-full w-0.5 rounded-l-xl bg-primary" aria-hidden />
-                <div className="relative min-w-0 pl-2.5 sm:pl-3">
+              <SurfaceCard className="p-3 sm:p-4">
+                <CardContent className="space-y-3 p-0 sm:space-y-4">
                   <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                     <Badge variant="outline" className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", statusBadgeClass(row.status))}>
                       {row.status}
@@ -963,11 +1050,108 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                       </Badge>
                     ) : null}
                   </div>
-                  <h1 className="mt-2 text-lg font-semibold tracking-tight text-foreground sm:text-xl">{rowView.name}</h1>
-                  <p className="mt-0.5 min-w-0 break-words text-xs text-muted-foreground sm:text-sm">
-                    {row.city} · {businessCategoryLabel}
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-1.5">
+                  <h1 className="text-lg font-semibold tracking-tight text-foreground sm:text-xl">{rowView.name}</h1>
+
+                  <div
+                    data-testid="section-dealer-quick-info"
+                    className="grid gap-x-4 gap-y-2.5 rounded-lg border border-border/80 bg-muted/10 px-3 py-3 sm:grid-cols-2 xl:grid-cols-3"
+                  >
+                    {quickCity ? (
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Город</p>
+                        <p className="mt-0.5 break-words text-sm font-medium text-foreground" data-testid="text-dealer-quick-info-city">
+                          {quickCity}
+                        </p>
+                      </div>
+                    ) : null}
+                    {quickAddress ? (
+                      <div className="min-w-0 sm:col-span-2 xl:col-span-2">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Адрес</p>
+                        <p className="mt-0.5 break-words text-sm font-medium text-foreground" data-testid="text-dealer-quick-info-address">
+                          {quickAddress}
+                        </p>
+                      </div>
+                    ) : null}
+                    {isFilledDataCell(row.manager) ? (
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Менеджер</p>
+                        <p className="mt-0.5 break-words text-sm font-medium text-foreground" data-testid="text-dealer-quick-info-manager">
+                          {row.manager.trim()}
+                        </p>
+                      </div>
+                    ) : null}
+                    {isFilledDataCell(row.regionalManager) ? (
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">РОП</p>
+                        <p className="mt-0.5 break-words text-sm font-medium text-foreground" data-testid="text-dealer-quick-info-rop">
+                          {row.regionalManager.trim()}
+                        </p>
+                      </div>
+                    ) : null}
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Категория</p>
+                      <p className="mt-0.5 break-words text-sm font-medium text-foreground">{businessCategoryLabel}</p>
+                    </div>
+                    {quickMainContactLabel ? (
+                      <div className="min-w-0 sm:col-span-2 xl:col-span-2">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Основной контакт</p>
+                        <p className="mt-0.5 break-words text-sm font-medium text-foreground" data-testid="text-dealer-quick-info-main-contact">
+                          {quickMainContactLabel}
+                        </p>
+                      </div>
+                    ) : null}
+                    {quickPhoneLabel ? (
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Телефон</p>
+                        <p className="mt-0.5 break-words text-sm font-medium text-foreground" data-testid="text-dealer-quick-info-phone">
+                          {quickPhoneLabel}
+                        </p>
+                      </div>
+                    ) : null}
+                    {quickEmailLabel ? (
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Email</p>
+                        <p className="mt-0.5 break-words text-sm font-medium text-foreground">{quickEmailLabel}</p>
+                      </div>
+                    ) : null}
+                    {quickWhatsappLabel || quickTelegramLabel ? (
+                      <div className="min-w-0 sm:col-span-2 xl:col-span-2">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Мессенджеры</p>
+                        <p className="mt-0.5 break-words text-sm font-medium text-foreground">
+                          {quickWhatsappLabel ? `WhatsApp: ${quickWhatsappLabel}` : null}
+                          {quickWhatsappLabel && quickTelegramLabel ? " · " : null}
+                          {quickTelegramLabel ? `Telegram: ${quickTelegramLabel}` : null}
+                        </p>
+                      </div>
+                    ) : null}
+                    {dealerStockSignal.hasMainWarehouse || dealerStockSignal.hasHardwareWarehouse ? (
+                      <div className="min-w-0 sm:col-span-2 xl:col-span-3">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Склад</p>
+                        <p className="mt-0.5 flex flex-wrap gap-x-3 gap-y-1 text-sm font-medium text-foreground">
+                          {dealerStockSignal.hasMainWarehouse ? (
+                            <span data-testid="text-dealer-card-main-warehouse">Склад дверей: есть</span>
+                          ) : null}
+                          {dealerStockSignal.hasHardwareWarehouse ? (
+                            <span data-testid="text-dealer-card-hardware-warehouse">Склад фурнитуры: есть</span>
+                          ) : null}
+                        </p>
+                      </div>
+                    ) : null}
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Торговые точки</p>
+                      <p className="mt-0.5 text-sm font-medium tabular-nums text-foreground" data-testid="text-dealer-quick-info-trade-points-count">
+                        {tradePointsCount}
+                      </p>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Юрлица</p>
+                      <p className="mt-0.5 text-sm font-medium tabular-nums text-foreground" data-testid="text-dealer-quick-info-legal-entities-count">
+                        {legalEntitiesCount}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5 pt-1">
                     <Button type="button" variant="secondary" size="sm" className="min-h-9 h-9 text-xs" asChild>
                       <Link href="/dealer-base">К базе</Link>
                     </Button>
@@ -994,44 +1178,43 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                       Витрина
                     </Button>
                   </div>
-                </div>
-              </div>
+                </CardContent>
+              </SurfaceCard>
+            </section>
 
+            <section
+              id={SECTION_DOM_IDS.contacts}
+              data-testid="section-dealer-contacts"
+              className="scroll-mt-28 space-y-3 sm:scroll-mt-32 lg:scroll-mt-32"
+            >
+              <SectionTitle subtitle="Полный список контактов и быстрые действия.">Контакты клиента</SectionTitle>
+              <DealerContactsSection row={row} profile={profile} variant="embedded" />
+            </section>
+
+            <section
+              id={SECTION_DOM_IDS.work}
+              className="scroll-mt-28 space-y-3 sm:scroll-mt-32 lg:scroll-mt-32"
+            >
               {dealerWorkPlanEntry?.date || dealerWorkPlanEntry?.note?.trim() || dealerWorkPlanHidden ? (
-                <div className="rounded-lg border border-border/80 bg-muted/25 px-3 py-2 text-xs text-foreground">
-                  {dealerWorkPlanEntry?.date ? (
-                    <p data-testid="text-dealer-card-work-plan-date">
-                      Запланирован в работу: {formatWorkPlanDateRu(dealerWorkPlanEntry.date)}
-                    </p>
-                  ) : null}
-                  {dealerWorkPlanEntry?.note?.trim() ? (
-                    <p className="mt-1 text-muted-foreground" data-testid="text-dealer-card-work-plan-note">
-                      Комментарий к плану: {dealerWorkPlanEntry.note.trim()}
-                    </p>
-                  ) : null}
-                  {dealerWorkPlanHidden ? (
-                    <div className="mt-1.5">
-                      <Badge variant="secondary" className="text-[11px] font-medium" data-testid="badge-dealer-card-hidden-from-work-plan">
-                        Скрыт из рабочего списка
-                      </Badge>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {dealerStockSignal.hasMainWarehouse || dealerStockSignal.hasHardwareWarehouse ? (
-                <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 rounded-lg border border-border/60 bg-muted/15 px-3 py-2 text-[11px] text-foreground">
-                  {dealerStockSignal.hasMainWarehouse ? (
-                    <span className="font-medium" data-testid="text-dealer-card-main-warehouse">
-                      Склад: есть
-                    </span>
-                  ) : null}
-                  {dealerStockSignal.hasHardwareWarehouse ? (
-                    <span className="font-medium" data-testid="text-dealer-card-hardware-warehouse">
-                      Склад фурнитуры: есть
-                    </span>
-                  ) : null}
-                </div>
+                <SurfaceCard>
+                  <CardContent className="space-y-1.5 px-3 py-2.5 text-xs sm:px-4">
+                    {dealerWorkPlanEntry?.date ? (
+                      <p data-testid="text-dealer-card-work-plan-date">Запланирован в работу: {formatWorkPlanDateRu(dealerWorkPlanEntry.date)}</p>
+                    ) : null}
+                    {dealerWorkPlanEntry?.note?.trim() ? (
+                      <p className="text-muted-foreground" data-testid="text-dealer-card-work-plan-note">
+                        Комментарий к плану: {dealerWorkPlanEntry.note.trim()}
+                      </p>
+                    ) : null}
+                    {dealerWorkPlanHidden ? (
+                      <div className="pt-0.5">
+                        <Badge variant="secondary" className="text-[11px] font-medium" data-testid="badge-dealer-card-hidden-from-work-plan">
+                          Скрыт из рабочего списка
+                        </Badge>
+                      </div>
+                    ) : null}
+                  </CardContent>
+                </SurfaceCard>
               ) : null}
 
               <DealerActionFocusSection
@@ -1057,8 +1240,6 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                 onScrollToStaticProfile={() => scrollToSection("static_profile")}
               />
             </section>
-
-            <DealerContactsSection row={row} profile={profile} />
 
             <DealerShowcaseDistributionSection
               row={row}
@@ -1165,6 +1346,13 @@ function DealerCardContent({ row }: { row: DealerRow }) {
               </section>
             ) : null}
 
+            <DealerLegalEntitiesSection
+              row={row}
+              profile={profile}
+              actorUserId={user?.id ?? profile.personaUserId}
+              actorLabel={user?.name ?? userLabelFromProfile(profile)}
+            />
+
             <DealerClientNextStepSection
               row={row}
               profile={profile}
@@ -1172,6 +1360,68 @@ function DealerCardContent({ row }: { row: DealerRow }) {
               actorLabel={user?.name ?? userLabelFromProfile(profile)}
               onSaved={() => setNextStepBump((n) => n + 1)}
             />
+
+            {showTermsDistributionBlock ? (
+              <section
+                id={SECTION_DOM_IDS.terms_distribution}
+                data-testid="section-dealer-terms-distribution"
+                className="scroll-mt-28 space-y-3 sm:scroll-mt-32 lg:scroll-mt-32"
+              >
+                <SectionTitle subtitle="Условия сотрудничества и показатели дистрибуции в одном месте.">
+                  Условия и дистрибуция
+                </SectionTitle>
+                <SurfaceCard>
+                  <CardContent className="space-y-3 px-3 py-3 sm:px-4">
+                    {termsDistributionSummary.trim() ? (
+                      <p
+                        data-testid="text-dealer-terms-distribution-summary"
+                        className="text-sm leading-snug text-muted-foreground"
+                      >
+                        {termsDistributionSummary}
+                      </p>
+                    ) : null}
+                    {showDistributionBlock ? (
+                      <div className="grid gap-2 sm:grid-cols-3">
+                        {[
+                          { label: "МК", pct: row.distributionDetail.mk },
+                          { label: "ВХ", pct: row.distributionDetail.vh },
+                          { label: "Общая дистрибуция", pct: row.distributionDetail.total },
+                        ].map((dist) => (
+                          <SurfaceCard key={dist.label}>
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 px-3 pb-1 pt-3 sm:px-4">
+                              <div className="flex items-center gap-2">
+                                <PieChart className="h-3.5 w-3.5 text-primary" aria-hidden />
+                                <CardTitle className="text-xs font-semibold">{dist.label}</CardTitle>
+                              </div>
+                              <span className="text-base font-bold tabular-nums text-foreground">{dist.pct}%</span>
+                            </CardHeader>
+                            <CardContent className="px-3 pb-3 sm:px-4">
+                              <Progress value={dist.pct} className="h-2 bg-muted" />
+                            </CardContent>
+                          </SurfaceCard>
+                        ))}
+                      </div>
+                    ) : null}
+                    {hasTermsBlock ? (
+                      <div className="space-y-0 border-t border-border pt-3">
+                        {isFilledDataCell(row.terms.tandoorClub) ? (
+                          <FieldRow label="Тандор клуб" value={row.terms.tandoorClub} icon={Handshake} />
+                        ) : null}
+                        {isFilledDataCell(row.terms.special) ? <FieldRow label="Спец. условия" value={row.terms.special} /> : null}
+                        {isFilledDataCell(row.terms.payment) ? <FieldRow label="Тип оплаты" value={row.terms.payment} /> : null}
+                        {isFilledDataCell(row.terms.edo) ? <FieldRow label="ЭДО" value={row.terms.edo} /> : null}
+                        {isFilledDataCell(row.terms.limit) ? (
+                          <FieldRow label="Лимит / индивидуальные условия" value={row.terms.limit} />
+                        ) : null}
+                        {isFilledDataCell(row.terms.bonuses) ? (
+                          <FieldRow label="Бонусы / мотивация продавцов" value={row.terms.bonuses} />
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </CardContent>
+                </SurfaceCard>
+              </section>
+            ) : null}
 
             <section
               id={SECTION_DOM_IDS.history}
@@ -1289,13 +1539,6 @@ function DealerCardContent({ row }: { row: DealerRow }) {
             </div>
             <DealerStaticProfileSection row={rowView} categoryLabel={businessCategoryLabel} />
 
-            <DealerLegalEntitiesSection
-              row={row}
-              profile={profile}
-              actorUserId={user?.id ?? profile.personaUserId}
-              actorLabel={user?.name ?? userLabelFromProfile(profile)}
-            />
-
             {analyticsSignals.length > 0 ? (
               <section
                 data-testid="section-dealer-analytics-signals"
@@ -1333,67 +1576,6 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                     </SurfaceCard>
                   ))}
                 </div>
-              </section>
-            ) : null}
-
-            {showTermsDistributionBlock ? (
-              <section
-                data-testid="section-dealer-terms-distribution"
-                className="scroll-mt-28 space-y-2 sm:scroll-mt-32 lg:scroll-mt-32"
-              >
-                <SectionTitle subtitle="Условия сотрудничества и показатели дистрибуции в одном месте.">
-                  Условия и дистрибуция
-                </SectionTitle>
-                <SurfaceCard className="mt-2">
-                  <CardContent className="space-y-3 px-3 py-3 sm:px-4">
-                    {termsDistributionSummary.trim() ? (
-                      <p
-                        data-testid="text-dealer-terms-distribution-summary"
-                        className="text-sm leading-snug text-muted-foreground"
-                      >
-                        {termsDistributionSummary}
-                      </p>
-                    ) : null}
-                    {showDistributionBlock ? (
-                      <div className="grid gap-2 sm:grid-cols-3">
-                        {[
-                          { label: "МК", pct: row.distributionDetail.mk },
-                          { label: "ВХ", pct: row.distributionDetail.vh },
-                          { label: "Общая дистрибуция", pct: row.distributionDetail.total },
-                        ].map((dist) => (
-                          <SurfaceCard key={dist.label}>
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 px-3 pb-1 pt-3 sm:px-4">
-                              <div className="flex items-center gap-2">
-                                <PieChart className="h-3.5 w-3.5 text-primary" aria-hidden />
-                                <CardTitle className="text-xs font-semibold">{dist.label}</CardTitle>
-                              </div>
-                              <span className="text-base font-bold tabular-nums text-foreground">{dist.pct}%</span>
-                            </CardHeader>
-                            <CardContent className="px-3 pb-3 sm:px-4">
-                              <Progress value={dist.pct} className="h-2 bg-muted" />
-                            </CardContent>
-                          </SurfaceCard>
-                        ))}
-                      </div>
-                    ) : null}
-                    {hasTermsBlock ? (
-                      <div className="space-y-0 border-t border-border pt-3">
-                        {isFilledDataCell(row.terms.tandoorClub) ? (
-                          <FieldRow label="Тандор клуб" value={row.terms.tandoorClub} icon={Handshake} />
-                        ) : null}
-                        {isFilledDataCell(row.terms.special) ? <FieldRow label="Спец. условия" value={row.terms.special} /> : null}
-                        {isFilledDataCell(row.terms.payment) ? <FieldRow label="Тип оплаты" value={row.terms.payment} /> : null}
-                        {isFilledDataCell(row.terms.edo) ? <FieldRow label="ЭДО" value={row.terms.edo} /> : null}
-                        {isFilledDataCell(row.terms.limit) ? (
-                          <FieldRow label="Лимит / индивидуальные условия" value={row.terms.limit} />
-                        ) : null}
-                        {isFilledDataCell(row.terms.bonuses) ? (
-                          <FieldRow label="Бонусы / мотивация продавцов" value={row.terms.bonuses} />
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </CardContent>
-                </SurfaceCard>
               </section>
             ) : null}
 
