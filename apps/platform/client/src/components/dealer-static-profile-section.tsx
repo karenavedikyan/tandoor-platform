@@ -1,10 +1,13 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Building2, ChevronDown, ChevronUp, MapPin, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import { getPassportLegalEntities } from "@/lib/dealer-card-release-signals";
+import {
+  DEALER_LEGAL_ENTITIES_EVENT,
+  getMergedDealerLegalEntities,
+} from "@/lib/dealer-legal-entities";
 import { getDealerEquipmentSignal, type DealerEquipmentStatus } from "@/lib/dealer-equipment-signals";
 import { cn } from "@/lib/utils";
 
@@ -52,8 +55,16 @@ function equipmentStatusBadgeClass(s: DealerEquipmentStatus): string {
 
 export function DealerStaticProfileSection({ row, categoryLabel }: Props) {
   const [open, setOpen] = useState(false);
+  const [legalTick, setLegalTick] = useState(0);
 
-  const legalEntities = useMemo(() => getPassportLegalEntities(row), [row]);
+  useEffect(() => {
+    const fn = () => setLegalTick((n) => n + 1);
+    window.addEventListener(DEALER_LEGAL_ENTITIES_EVENT, fn);
+    return () => window.removeEventListener(DEALER_LEGAL_ENTITIES_EVENT, fn);
+  }, []);
+
+  const mergedLegal = useMemo(() => getMergedDealerLegalEntities(row), [row, legalTick]);
+  const legalEntitiesCount = mergedLegal.length;
   const equipmentSignal = useMemo(() => getDealerEquipmentSignal(row), [row]);
 
   const address = row.releaseAddress?.trim() || "";
@@ -65,8 +76,6 @@ export function DealerStaticProfileSection({ row, categoryLabel }: Props) {
         { label: "Код", value: row.releaseCode ?? "" },
         { label: "Внутренний id", value: row.id },
         { label: "Тип в данных", value: row.clientTypeLabel ?? "" },
-        { label: "Холдинг / сеть", value: row.holding },
-        { label: "Юрлицо / наименование", value: row.legalEntity },
         { label: "Формат", value: row.format },
         { label: "Торговых точек", value: String(row.outlets) },
         { label: "Руководитель", value: row.responsibles.director },
@@ -126,6 +135,13 @@ export function DealerStaticProfileSection({ row, categoryLabel }: Props) {
       </span>
       <span className="mt-1 block w-full min-w-0 sm:mt-0 sm:inline">
         {" "}
+        <span className="text-muted-foreground">Юрлица:</span>{" "}
+        <span data-testid="text-dealer-static-profile-legal-entities-count" className="tabular-nums text-foreground">
+          {legalEntitiesCount}
+        </span>
+      </span>
+      <span className="mt-1 block w-full min-w-0 sm:mt-0 sm:inline">
+        {" "}
         <span className="text-muted-foreground">Оборудование:</span>{" "}
         <span data-testid="text-dealer-static-profile-equipment" className="break-words text-foreground">
           {equipmentSignal.summary}
@@ -144,22 +160,6 @@ export function DealerStaticProfileSection({ row, categoryLabel }: Props) {
         <div className="min-w-0 flex-1 space-y-1">
           <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Паспорт клиента</h2>
           {!open ? collapsedSummary : <p className="text-sm text-muted-foreground">Справочные реквизиты и контакты.</p>}
-          {!open && legalEntities.length > 0 ? (
-            <div data-testid="section-dealer-legal-entities" className="mt-2 rounded-lg border border-border/60 bg-muted/15 px-2.5 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Юрлица</p>
-              <ul className="mt-1 space-y-1">
-                {legalEntities.map((le) => (
-                  <li
-                    key={le.legalEntityId}
-                    data-testid={`row-dealer-legal-entity-${le.legalEntityId}`}
-                    className="text-sm font-medium leading-snug text-foreground"
-                  >
-                    {le.name}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
         </div>
         <Button
           type="button"

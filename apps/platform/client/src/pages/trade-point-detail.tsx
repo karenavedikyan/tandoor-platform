@@ -37,6 +37,22 @@ import {
   tradePointProductTrainingStorageKey,
   trainingAttentionLevelBadgeClass,
 } from "@/lib/training-attention";
+import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
+import { useCurrentUser } from "@/hooks/use-current-user";
+import { Textarea } from "@/components/ui/textarea";
+import { buildHashPath } from "@/lib/hash-route-utils";
+import {
+  addTradePointComment,
+  canEditTradePointComments,
+  getTradePointComments,
+  TRADE_POINT_COMMENTS_EVENT,
+} from "@/lib/trade-point-comments";
+import {
+  getShowcaseTasksForDealerDisplay,
+  loadShowcaseStorage,
+  SHOWCASE_STORAGE_EVENT,
+  userLabelFromProfile,
+} from "@/lib/showcase-distribution-data";
 
 const SECTION_IDS = ["overview", "training", "matrix", "showcase", "distribution", "tasks", "history", "photos"] as const;
 type SectionId = (typeof SECTION_IDS)[number];
@@ -570,8 +586,59 @@ function MatrixTaskCard({
   );
 }
 
+function tradePointContactDisplay(dealer: DealerRow, point: DealerTradePoint): string {
+  const phone = (point as DealerTradePoint & { contactPhone?: string }).contactPhone?.trim();
+  if (phone && phone !== "—" && phone !== "-") return phone;
+  if (dealer.tradePoints.length === 1) {
+    const p = dealer.contacts.phone?.trim();
+    if (p && p !== "—" && p !== "-") return p;
+  }
+  return "";
+}
+
+function mapSearchTextForPoint(point: DealerTradePoint): string {
+  return [point.city, point.address]
+    .map((x) => x.trim())
+    .filter((x) => x && x !== "—" && x !== "-")
+    .join(", ");
+}
+
 function TradePointDetailContent({ dealer, point }: { dealer: DealerRow; point: DealerTradePoint }) {
+  const { profile } = useReleaseDemoProfile();
+  const { user } = useCurrentUser();
   const activeSection = useActiveSection();
+  const [commentsBump, setCommentsBump] = useState(0);
+  const [showcaseBump, setShowcaseBump] = useState(0);
+  const [commentDraft, setCommentDraft] = useState("");
+
+  useEffect(() => {
+    const fn = () => setCommentsBump((n) => n + 1);
+    window.addEventListener(TRADE_POINT_COMMENTS_EVENT, fn);
+    return () => window.removeEventListener(TRADE_POINT_COMMENTS_EVENT, fn);
+  }, []);
+
+  useEffect(() => {
+    const fn = () => setShowcaseBump((n) => n + 1);
+    window.addEventListener(SHOWCASE_STORAGE_EVENT, fn);
+    return () => window.removeEventListener(SHOWCASE_STORAGE_EVENT, fn);
+  }, []);
+
+  const canEditTpComments = useMemo(() => canEditTradePointComments(profile, dealer), [profile, dealer]);
+  const tpComments = useMemo(() => getTradePointComments(dealer.id, point.id), [dealer.id, point.id, commentsBump]);
+  const showcaseTasksOpen = useMemo(() => {
+    const storage = loadShowcaseStorage();
+    const tasks = getShowcaseTasksForDealerDisplay(dealer, storage);
+    return tasks.filter((t) => t.status !== "done").slice(0, 8);
+  }, [dealer, showcaseBump]);
+
+  const contactLine = useMemo(() => tradePointContactDisplay(dealer, point), [dealer, point]);
+  const mapSearch = useMemo(() => mapSearchTextForPoint(point), [point]);
+  const yandexMapHref = useMemo(() => `https://yandex.ru/maps/?text=${encodeURIComponent(mapSearch || "Россия")}`, [mapSearch]);
+  const clientMapHref = useMemo(() => {
+    const c = point.city.trim();
+    if (!c || c === "—") return null;
+    return buildHashPath("/client-map", { city: c });
+  }, [point.city]);
   const dist = point.distribution;
   const conclusion = useMemo(() => distributionConclusion(dist), [dist]);
   const showcaseComment = useMemo(
@@ -680,12 +747,73 @@ function TradePointDetailContent({ dealer, point }: { dealer: DealerRow; point: 
   return (
     <div className="space-y-4 sm:space-y-6" data-testid="page-trade-point-detail">
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
-        <Button asChild variant="outline" className="min-h-11 w-full border-border bg-card sm:w-auto" data-testid="button-back-to-dealer-card">
-          <Link href={`/dealers/${dealer.id}`}>Назад к клиенту</Link>
+        <Button asChild variant="outline" className="min-h-11 w-full border-border bg-card sm:w-auto">
+          <Link href={`/dealers/${dealer.id}`} data-testid="link-trade-point-back-to-dealer">
+            Назад к клиенту
+          </Link>
         </Button>
         <Button asChild variant="secondary" className="min-h-11 w-full border-border sm:w-auto" data-testid="button-back-to-dealer-base">
           <Link href="/dealer-base">К клиентской базе</Link>
         </Button>
+      </div>
+
+      <div className="rounded-2xl border border-border/80 bg-muted/20 p-4 sm:p-5">
+        <p className="text-xs text-muted-foreground">Клиент</p>
+        <p className="text-sm font-semibold text-foreground" data-testid="text-trade-point-dealer-name">
+          {dealer.name}
+        </p>
+        <p className="mt-3 text-xs text-muted-foreground">Торговая точка</p>
+        <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl" data-testid="text-trade-point-name">
+          {point.name}
+        </h1>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <Badge variant="outline" className="text-[10px] font-medium">
+            № {point.id}
+          </Badge>
+          <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-[10px] font-medium text-emerald-950">
+            {point.status}
+          </Badge>
+        </div>
+        <p className="mt-2 text-sm text-muted-foreground">
+          <span data-testid="text-trade-point-address">{point.address}</span>
+        </p>
+        {contactLine ? (
+          <p className="mt-2 text-sm font-medium text-foreground" data-testid="text-trade-point-contact">
+            {contactLine}
+          </p>
+        ) : (
+          <p className="sr-only" data-testid="text-trade-point-contact">
+            —
+          </p>
+        )}
+        <div className="mt-3">
+          <Button asChild variant="outline" size="sm" className="min-h-9 w-full font-semibold sm:w-auto">
+            {clientMapHref ? (
+              <Link href={clientMapHref} data-testid="link-trade-point-open-map">
+                Открыть на карте
+              </Link>
+            ) : (
+              <a href={yandexMapHref} target="_blank" rel="noreferrer" data-testid="link-trade-point-open-map">
+                Открыть на карте
+              </a>
+            )}
+          </Button>
+        </div>
+        {showcaseTasksOpen.length > 0 ? (
+          <div className="mt-4 border-t border-border pt-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Открытые задачи по витрине</p>
+            <ul className="mt-2 space-y-1 text-sm">
+              {showcaseTasksOpen.map((t) => (
+                <li key={t.taskId} className="leading-snug text-foreground">
+                  {t.title}
+                </li>
+              ))}
+            </ul>
+            <Button asChild variant="secondary" size="sm" className="mt-3 min-h-9 w-full font-semibold sm:w-auto">
+              <Link href={buildHashPath("/tasks", { dealerId: dealer.id })}>К задачам по витрине</Link>
+            </Button>
+          </div>
+        ) : null}
       </div>
 
       <nav className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground sm:text-sm" aria-label="Навигация">
@@ -699,43 +827,6 @@ function TradePointDetailContent({ dealer, point }: { dealer: DealerRow; point: 
         <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-60" aria-hidden />
         <span className="font-medium text-foreground">Торговая точка</span>
       </nav>
-
-      <div className="relative overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-lg sm:p-8">
-        <div className="pointer-events-none absolute left-0 top-0 h-full w-1 rounded-l-2xl bg-primary" aria-hidden />
-        <div className="relative pl-3 sm:pl-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline" className="rounded-full border-border bg-muted/50 px-2.5 py-0.5 font-medium">
-              № {point.id}
-            </Badge>
-            <Badge variant="outline" className="rounded-full border-emerald-200 bg-emerald-50 px-2.5 py-0.5 font-medium text-emerald-950">
-              {point.status}
-            </Badge>
-          </div>
-          <div className="mt-4 flex items-start gap-3">
-            <Store className="mt-1 h-6 w-6 shrink-0 text-primary sm:h-7 sm:w-7" aria-hidden />
-            <div className="min-w-0">
-              <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">{point.name}</h1>
-              <p className="mt-1 break-words text-base text-muted-foreground sm:text-lg">
-                {point.city} · {point.address}
-              </p>
-            </div>
-          </div>
-          <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-            <p>
-              <span className="text-muted-foreground">Формат: </span>
-              <span className="font-medium text-foreground">{point.format}</span>
-            </p>
-            <p>
-              <span className="text-muted-foreground">Ответственный РМ: </span>
-              <span className="font-medium text-foreground">{point.responsibleRegionalManager}</span>
-            </p>
-            <p>
-              <span className="text-muted-foreground">Ближайший визит: </span>
-              <span className="font-medium text-foreground">{point.nextVisitDate}</span>
-            </p>
-          </div>
-        </div>
-      </div>
 
       <TradePointSectionNav active={activeSection} variant="chips" />
 
@@ -1077,7 +1168,7 @@ function TradePointDetailContent({ dealer, point }: { dealer: DealerRow; point: 
                 className="min-h-10 border-border bg-card"
                 data-testid="button-open-all-tasks"
               >
-                <Link href="/tasks">Все задачи</Link>
+                <Link href={buildHashPath("/tasks", { dealerId: dealer.id })}>Все задачи</Link>
               </Button>
             </div>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -1188,6 +1279,67 @@ function TradePointDetailContent({ dealer, point }: { dealer: DealerRow; point: 
               <CardContent className="pt-5">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Комментарии и внимание</p>
                 <p className="mt-2 text-sm leading-relaxed text-foreground">{point.issues}</p>
+              </CardContent>
+            </SurfaceCard>
+          </section>
+
+          <section data-testid="section-trade-point-comments" className="scroll-mt-28 space-y-3 sm:scroll-mt-32">
+            <SectionTitle subtitle="Сохраняются в браузере.">Комментарии по точке</SectionTitle>
+            <SurfaceCard className="mt-3">
+              <CardContent className="space-y-3 p-4">
+                {canEditTpComments ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="trade-point-comment-input" className="text-xs text-muted-foreground">
+                      Комментарий по торговой точке
+                    </Label>
+                    <Textarea
+                      id="trade-point-comment-input"
+                      value={commentDraft}
+                      onChange={(e) => setCommentDraft(e.target.value)}
+                      rows={2}
+                      className="min-h-[52px] resize-y text-sm"
+                      data-testid="textarea-trade-point-comment"
+                      placeholder="Комментарий по торговой точке"
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="min-h-9 font-semibold"
+                      data-testid="button-trade-point-comment-add"
+                      disabled={!commentDraft.trim()}
+                      onClick={() => {
+                        addTradePointComment(dealer.id, point.id, {
+                          body: commentDraft,
+                          createdBy: user?.id ?? profile.personaUserId,
+                          createdByName: user?.name ?? userLabelFromProfile(profile),
+                        });
+                        setCommentDraft("");
+                      }}
+                    >
+                      Добавить
+                    </Button>
+                  </div>
+                ) : null}
+                <div className="space-y-2">
+                  {tpComments.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Комментариев пока нет.</p>
+                  ) : (
+                    tpComments.map((c) => {
+                      const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(c.createdAt.trim());
+                      const head = m ? `${m[3]}.${m[2]}.${m[1]} · ${c.createdByName}` : c.createdByName;
+                      return (
+                        <div
+                          key={c.id}
+                          data-testid={`row-trade-point-comment-${c.id}`}
+                          className="rounded-lg border border-border/60 bg-muted/15 px-3 py-2 text-sm"
+                        >
+                          <p className="text-[11px] font-semibold text-muted-foreground">{head}</p>
+                          <p className="mt-1 leading-relaxed text-foreground">{c.body}</p>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
               </CardContent>
             </SurfaceCard>
           </section>
