@@ -97,6 +97,7 @@ import { DealerTradePointsSection } from "@/components/dealer-trade-points-secti
 import { DealerActionFocusSection } from "@/components/dealer-action-focus-section";
 import { DealerClientNextStepSection } from "@/components/dealer-client-next-step-section";
 import { DealerStaticProfileSection } from "@/components/dealer-static-profile-section";
+import { DealerContactsSection } from "@/components/dealer-contacts-section";
 
 const SECTION_IDS = [
   "work",
@@ -1056,6 +1057,8 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                 onScrollToStaticProfile={() => scrollToSection("static_profile")}
               />
             </section>
+
+            <DealerContactsSection row={row} profile={profile} />
 
             <DealerShowcaseDistributionSection
               row={row}

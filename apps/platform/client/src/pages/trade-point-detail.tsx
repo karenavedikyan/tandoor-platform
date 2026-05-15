@@ -11,6 +11,7 @@ import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
+import { TradePointContactsSection } from "@/components/trade-point-contacts-section";
 import { getDealerById, type DealerRow, type DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import { getTradePointProductPreview, tradePointShowcaseStatusForProduct } from "@/lib/catalog-data";
 import {
@@ -62,6 +63,11 @@ import {
   getTradePointComments,
   TRADE_POINT_COMMENTS_EVENT,
 } from "@/lib/trade-point-comments";
+import {
+  CLIENT_CONTACTS_EVENT,
+  clientContactScopeKeyTradePoint,
+  getClientContactScopeHistoryEvents,
+} from "@/lib/client-contacts";
 import {
   archiveTradePoint,
   canEditDealerTradePoints,
@@ -646,6 +652,7 @@ function TradePointDetailContent({
   const { user } = useCurrentUser();
   const activeSection = useActiveSection();
   const [commentsBump, setCommentsBump] = useState(0);
+  const [contactsBump, setContactsBump] = useState(0);
   const [showcaseBump, setShowcaseBump] = useState(0);
   const [commentDraft, setCommentDraft] = useState("");
   const [archiveOpen, setArchiveOpen] = useState(false);
@@ -692,6 +699,12 @@ function TradePointDetailContent({
   }, []);
 
   useEffect(() => {
+    const fn = () => setContactsBump((n) => n + 1);
+    window.addEventListener(CLIENT_CONTACTS_EVENT, fn);
+    return () => window.removeEventListener(CLIENT_CONTACTS_EVENT, fn);
+  }, []);
+
+  useEffect(() => {
     const fn = () => setShowcaseBump((n) => n + 1);
     window.addEventListener(SHOWCASE_STORAGE_EVENT, fn);
     return () => window.removeEventListener(SHOWCASE_STORAGE_EVENT, fn);
@@ -708,6 +721,11 @@ function TradePointDetailContent({
   }, [dealer, showcaseBump]);
 
   const contactLine = useMemo(() => tradePointContactDisplay(dealer, point), [dealer, point]);
+  const tpContactScopeKey = useMemo(() => clientContactScopeKeyTradePoint(dealer.id, point.id), [dealer.id, point.id]);
+  const tpContactHistory = useMemo(
+    () => getClientContactScopeHistoryEvents(tpContactScopeKey),
+    [tpContactScopeKey, contactsBump],
+  );
   const mapSearch = useMemo(() => mapSearchTextForPoint(point), [point]);
   const yandexMapHref = useMemo(() => `https://yandex.ru/maps/?text=${encodeURIComponent(mapSearch || "Россия")}`, [mapSearch]);
   const clientMapHref = useMemo(() => {
@@ -1156,20 +1174,23 @@ function TradePointDetailContent({
             className="scroll-mt-28 space-y-4 sm:scroll-mt-32"
           >
             <SectionTitle subtitle="Основные сведения по точке.">Общее</SectionTitle>
-            <SurfaceCard className="mt-3">
-              <CardContent className="space-y-0 pt-5">
-                <FieldRow label="Адрес" value={point.address} icon={MapPin} />
-                <FieldRow label="Город" value={point.city} />
-                <FieldRow label="Формат" value={point.format} />
-                <FieldRow label="Статус" value={point.status} />
-                <FieldRow label="Склад фурнитуры" value={point.hardwareStockStatus} />
-                <FieldRow label="Склад дверей" value={point.doorsStockStatus} />
-                <FieldRow label="Оборудование" value={point.equipment} />
-                <FieldRow label="Ответственный РМ" value={point.responsibleRegionalManager} />
-                <FieldRow label="Последний визит" value={point.lastVisitDate} />
-                <FieldRow label="Следующий визит" value={point.nextVisitDate} />
-              </CardContent>
-            </SurfaceCard>
+            <div className="mt-3 grid gap-4 lg:grid-cols-2 lg:items-start">
+              <SurfaceCard>
+                <CardContent className="space-y-0 pt-5">
+                  <FieldRow label="Адрес" value={point.address} icon={MapPin} />
+                  <FieldRow label="Город" value={point.city} />
+                  <FieldRow label="Формат" value={point.format} />
+                  <FieldRow label="Статус" value={point.status} />
+                  <FieldRow label="Склад фурнитуры" value={point.hardwareStockStatus} />
+                  <FieldRow label="Склад дверей" value={point.doorsStockStatus} />
+                  <FieldRow label="Оборудование" value={point.equipment} />
+                  <FieldRow label="Ответственный РМ" value={point.responsibleRegionalManager} />
+                  <FieldRow label="Последний визит" value={point.lastVisitDate} />
+                  <FieldRow label="Следующий визит" value={point.nextVisitDate} />
+                </CardContent>
+              </SurfaceCard>
+              <TradePointContactsSection row={dealer} tradePoint={point} profile={profile} />
+            </div>
           </section>
 
           <section
@@ -1589,6 +1610,16 @@ function TradePointDetailContent({
                   >
                     <p className="text-sm font-medium text-foreground">{ev.text}</p>
                     <time className="shrink-0 text-xs tabular-nums text-muted-foreground">{ev.date}</time>
+                  </div>
+                ))}
+                {tpContactHistory.map((ev) => (
+                  <div
+                    key={ev.id}
+                    data-testid={`row-trade-point-contact-history-${ev.id}`}
+                    className="flex flex-col gap-1 py-4 sm:flex-row sm:items-start sm:justify-between"
+                  >
+                    <p className="min-w-0 text-sm font-medium text-foreground">{ev.body}</p>
+                    <p className="shrink-0 text-xs tabular-nums text-muted-foreground sm:text-right">{ev.meta}</p>
                   </div>
                 ))}
               </CardContent>

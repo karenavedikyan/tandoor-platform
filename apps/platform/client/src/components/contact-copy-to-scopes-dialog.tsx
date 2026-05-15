@@ -86,10 +86,12 @@ export function ContactCopyToScopesDialog({ open, onOpenChange, row, profile, so
           </p>
           {err ? <p className="text-xs font-medium text-destructive">{err}</p> : null}
           <div className="space-y-2 rounded-lg border border-border/70 bg-muted/10 p-3">
-            <label className="flex cursor-pointer items-start gap-2">
-              <Checkbox checked={toDealer} onCheckedChange={(v) => setToDealer(v === true)} data-testid="checkbox-contact-copy-to-dealer" />
-              <span>На карточку дилера</span>
-            </label>
+            {source.type !== "dealer" ? (
+              <label className="flex cursor-pointer items-start gap-2">
+                <Checkbox checked={toDealer} onCheckedChange={(v) => setToDealer(v === true)} data-testid="checkbox-contact-copy-to-dealer" />
+                <span>На карточку дилера</span>
+              </label>
+            ) : null}
             <label className="flex cursor-pointer items-start gap-2">
               <Checkbox
                 checked={toAllLe}

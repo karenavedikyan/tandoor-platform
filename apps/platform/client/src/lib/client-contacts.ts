@@ -2,7 +2,7 @@
  * Контакты клиента по scope: дилер, торговая точка, юрлицо (localStorage, без backend).
  */
 
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
+import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import { getMergedDealerTradePoints } from "@/lib/dealer-trade-points-overrides";
 import { getMergedDealerLegalEntities } from "@/lib/dealer-legal-entities";
 import { canEditDealerLegalEntities } from "@/lib/dealer-legal-entities";
@@ -191,6 +191,20 @@ export function getTradePointClientContacts(
   return sortContactsPrimaryFirst([...(state.tradePointContactsByKey[key] ?? [])]);
 }
 
+/** Контакты карточки дилера (сортировка: основной активный сверху). */
+export function getDealerContacts(row: DealerRow, state: ClientContactsState = loadClientContactsState()): ClientContact[] {
+  return getDealerClientContacts(row.id, state);
+}
+
+/** Контакты торговой точки. */
+export function getTradePointContacts(
+  row: DealerRow,
+  tradePoint: Pick<DealerTradePoint, "id">,
+  state: ClientContactsState = loadClientContactsState(),
+): ClientContact[] {
+  return getTradePointClientContacts(row.id, tradePoint.id, state);
+}
+
 export function getClientContactDealerHistoryEvents(
   dealerId: string,
   state: ClientContactsState = loadClientContactsState(),
@@ -377,6 +391,301 @@ export function requestDeleteLegalEntityContact(
   saveClientContactsState(state);
 }
 
+export function addDealerContact(
+  dealerId: string,
+  payload: Omit<ClientContact, "id" | "createdAt" | "updatedAt" | "createdBy" | "source"> & { source?: string },
+  profile: ReleaseDemoProfile,
+): void {
+  const state = loadClientContactsState();
+  const act = actor(profile);
+  const list = [...(state.dealerContactsByDealer[dealerId] ?? [])];
+  const now = isoNow();
+  let c: ClientContact = {
+    id: newContactId(`dc-${dealerId}`),
+    fullName: payload.fullName.trim(),
+    role: payload.role?.trim() || undefined,
+    phone: payload.phone?.trim() || undefined,
+    whatsapp: payload.whatsapp?.trim() || undefined,
+    telegram: payload.telegram?.trim() || undefined,
+    email: payload.email?.trim() || undefined,
+    comment: payload.comment?.trim() || undefined,
+    isPrimary: Boolean(payload.isPrimary),
+    isActual: payload.isActual !== false,
+    source: payload.source ?? "manual",
+    createdAt: now,
+    updatedAt: now,
+    createdBy: act.id,
+    createdByName: act.name,
+  };
+  c = ensurePrimaryWhenFirstInScope(list, c);
+  if (c.isPrimary) {
+    for (let i = 0; i < list.length; i++) {
+      if (isClientContactActive(list[i]!)) list[i] = { ...list[i]!, isPrimary: false };
+    }
+  }
+  state.dealerContactsByDealer[dealerId] = [c, ...list];
+  pushDealerTimeline(state, dealerId, `Добавлен контакт на карточку дилера: ${c.fullName}`, act.name);
+  pushScopeTimeline(
+    state,
+    clientContactScopeKeyDealer(dealerId),
+    `Добавлен контакт: ${c.fullName}${payload.role?.trim() ? ` (${payload.role.trim()})` : ""}`,
+    act.name,
+  );
+  saveClientContactsState(state);
+}
+
+export function updateDealerContact(
+  dealerId: string,
+  contactId: string,
+  patch: Partial<
+    Pick<
+      ClientContact,
+      | "fullName"
+      | "role"
+      | "phone"
+      | "whatsapp"
+      | "telegram"
+      | "email"
+      | "comment"
+      | "isPrimary"
+      | "isActual"
+    >
+  >,
+  profile: ReleaseDemoProfile,
+): void {
+  const state = loadClientContactsState();
+  const list = [...(state.dealerContactsByDealer[dealerId] ?? [])];
+  const idx = list.findIndex((c) => c.id === contactId);
+  if (idx < 0) return;
+  const cur = list[idx]!;
+  const act = actor(profile);
+  const now = isoNow();
+  let next: ClientContact = {
+    ...cur,
+    fullName: patch.fullName != null ? patch.fullName.trim() : cur.fullName,
+    role: patch.role !== undefined ? patch.role.trim() || undefined : cur.role,
+    phone: patch.phone !== undefined ? patch.phone.trim() || undefined : cur.phone,
+    whatsapp: patch.whatsapp !== undefined ? patch.whatsapp.trim() || undefined : cur.whatsapp,
+    telegram: patch.telegram !== undefined ? patch.telegram.trim() || undefined : cur.telegram,
+    email: patch.email !== undefined ? patch.email.trim() || undefined : cur.email,
+    comment: patch.comment !== undefined ? patch.comment.trim() || undefined : cur.comment,
+    isPrimary: patch.isPrimary ?? cur.isPrimary,
+    isActual: patch.isActual ?? cur.isActual,
+    updatedAt: now,
+  };
+  if (next.isPrimary) {
+    for (let i = 0; i < list.length; i++) {
+      if (i !== idx && isClientContactActive(list[i]!)) list[i] = { ...list[i]!, isPrimary: false };
+    }
+  }
+  list[idx] = next;
+  state.dealerContactsByDealer[dealerId] = list;
+  pushDealerTimeline(state, dealerId, `Обновлён контакт на карточке дилера: ${next.fullName}`, act.name);
+  pushScopeTimeline(state, clientContactScopeKeyDealer(dealerId), `Обновлён контакт: ${next.fullName}`, act.name);
+  saveClientContactsState(state);
+}
+
+export function setPrimaryDealerContact(dealerId: string, contactId: string, profile: ReleaseDemoProfile): void {
+  const state = loadClientContactsState();
+  const list = [...(state.dealerContactsByDealer[dealerId] ?? [])];
+  const act = actor(profile);
+  const now = isoNow();
+  const nextList = list.map((c) => {
+    if (!isClientContactActive(c)) return c;
+    if (c.id === contactId) return { ...c, isPrimary: true, updatedAt: now };
+    return { ...c, isPrimary: false, updatedAt: now };
+  });
+  state.dealerContactsByDealer[dealerId] = nextList;
+  const hit = nextList.find((c) => c.id === contactId);
+  if (hit) {
+    pushDealerTimeline(state, dealerId, `Основной контакт дилера: ${hit.fullName}`, act.name);
+    pushScopeTimeline(state, clientContactScopeKeyDealer(dealerId), `Назначен основной контакт: ${hit.fullName}`, act.name);
+  }
+  saveClientContactsState(state);
+}
+
+export function requestDeleteDealerContact(dealerId: string, contactId: string, reason: string, profile: ReleaseDemoProfile): void {
+  const state = loadClientContactsState();
+  const list = [...(state.dealerContactsByDealer[dealerId] ?? [])];
+  const idx = list.findIndex((c) => c.id === contactId);
+  if (idx < 0) return;
+  const act = actor(profile);
+  const now = isoNow();
+  const cur = list[idx]!;
+  list[idx] = {
+    ...cur,
+    deleteRequestedAt: now,
+    deleteRequestReason: reason.trim() || undefined,
+    updatedAt: now,
+  };
+  state.dealerContactsByDealer[dealerId] = list;
+  pushDealerTimeline(
+    state,
+    dealerId,
+    `Запрошено снятие контакта дилера «${cur.fullName}»${reason.trim() ? `: ${reason.trim()}` : ""}`,
+    act.name,
+  );
+  pushScopeTimeline(state, clientContactScopeKeyDealer(dealerId), `Запрошено снятие контакта: ${cur.fullName}`, act.name);
+  saveClientContactsState(state);
+}
+
+export function addTradePointContact(
+  dealerId: string,
+  tradePointId: string,
+  payload: Omit<ClientContact, "id" | "createdAt" | "updatedAt" | "createdBy" | "source"> & { source?: string },
+  profile: ReleaseDemoProfile,
+  options?: { tradePointDisplayName?: string },
+): void {
+  const state = loadClientContactsState();
+  const act = actor(profile);
+  const key = tradePointContactsStorageKey(dealerId, tradePointId);
+  const list = [...(state.tradePointContactsByKey[key] ?? [])];
+  const now = isoNow();
+  let c: ClientContact = {
+    id: newContactId(`tpc-${dealerId}`),
+    fullName: payload.fullName.trim(),
+    role: payload.role?.trim() || undefined,
+    phone: payload.phone?.trim() || undefined,
+    whatsapp: payload.whatsapp?.trim() || undefined,
+    telegram: payload.telegram?.trim() || undefined,
+    email: payload.email?.trim() || undefined,
+    comment: payload.comment?.trim() || undefined,
+    isPrimary: Boolean(payload.isPrimary),
+    isActual: payload.isActual !== false,
+    source: payload.source ?? "manual",
+    createdAt: now,
+    updatedAt: now,
+    createdBy: act.id,
+    createdByName: act.name,
+  };
+  c = ensurePrimaryWhenFirstInScope(list, c);
+  if (c.isPrimary) {
+    for (let i = 0; i < list.length; i++) {
+      if (isClientContactActive(list[i]!)) list[i] = { ...list[i]!, isPrimary: false };
+    }
+  }
+  state.tradePointContactsByKey[key] = [c, ...list];
+  const tpLabel = options?.tradePointDisplayName?.trim() || tradePointId;
+  pushDealerTimeline(state, dealerId, `Добавлен контакт в торговую точку «${tpLabel}»: ${c.fullName}`, act.name);
+  pushScopeTimeline(
+    state,
+    clientContactScopeKeyTradePoint(dealerId, tradePointId),
+    `Добавлен контакт: ${c.fullName}${payload.role?.trim() ? ` (${payload.role.trim()})` : ""}`,
+    act.name,
+  );
+  saveClientContactsState(state);
+}
+
+export function updateTradePointContact(
+  dealerId: string,
+  tradePointId: string,
+  contactId: string,
+  patch: Partial<
+    Pick<
+      ClientContact,
+      | "fullName"
+      | "role"
+      | "phone"
+      | "whatsapp"
+      | "telegram"
+      | "email"
+      | "comment"
+      | "isPrimary"
+      | "isActual"
+    >
+  >,
+  profile: ReleaseDemoProfile,
+): void {
+  const state = loadClientContactsState();
+  const key = tradePointContactsStorageKey(dealerId, tradePointId);
+  const list = [...(state.tradePointContactsByKey[key] ?? [])];
+  const idx = list.findIndex((c) => c.id === contactId);
+  if (idx < 0) return;
+  const cur = list[idx]!;
+  const act = actor(profile);
+  const now = isoNow();
+  let next: ClientContact = {
+    ...cur,
+    fullName: patch.fullName != null ? patch.fullName.trim() : cur.fullName,
+    role: patch.role !== undefined ? patch.role.trim() || undefined : cur.role,
+    phone: patch.phone !== undefined ? patch.phone.trim() || undefined : cur.phone,
+    whatsapp: patch.whatsapp !== undefined ? patch.whatsapp.trim() || undefined : cur.whatsapp,
+    telegram: patch.telegram !== undefined ? patch.telegram.trim() || undefined : cur.telegram,
+    email: patch.email !== undefined ? patch.email.trim() || undefined : cur.email,
+    comment: patch.comment !== undefined ? patch.comment.trim() || undefined : cur.comment,
+    isPrimary: patch.isPrimary ?? cur.isPrimary,
+    isActual: patch.isActual ?? cur.isActual,
+    updatedAt: now,
+  };
+  if (next.isPrimary) {
+    for (let i = 0; i < list.length; i++) {
+      if (i !== idx && isClientContactActive(list[i]!)) list[i] = { ...list[i]!, isPrimary: false };
+    }
+  }
+  list[idx] = next;
+  state.tradePointContactsByKey[key] = list;
+  pushDealerTimeline(state, dealerId, `Обновлён контакт торговой точки: ${next.fullName}`, act.name);
+  pushScopeTimeline(state, clientContactScopeKeyTradePoint(dealerId, tradePointId), `Обновлён контакт: ${next.fullName}`, act.name);
+  saveClientContactsState(state);
+}
+
+export function setPrimaryTradePointContact(
+  dealerId: string,
+  tradePointId: string,
+  contactId: string,
+  profile: ReleaseDemoProfile,
+): void {
+  const state = loadClientContactsState();
+  const key = tradePointContactsStorageKey(dealerId, tradePointId);
+  const list = [...(state.tradePointContactsByKey[key] ?? [])];
+  const act = actor(profile);
+  const now = isoNow();
+  const nextList = list.map((c) => {
+    if (!isClientContactActive(c)) return c;
+    if (c.id === contactId) return { ...c, isPrimary: true, updatedAt: now };
+    return { ...c, isPrimary: false, updatedAt: now };
+  });
+  state.tradePointContactsByKey[key] = nextList;
+  const hit = nextList.find((c) => c.id === contactId);
+  if (hit) {
+    pushDealerTimeline(state, dealerId, `Основной контакт торговой точки: ${hit.fullName}`, act.name);
+    pushScopeTimeline(state, clientContactScopeKeyTradePoint(dealerId, tradePointId), `Назначен основной контакт: ${hit.fullName}`, act.name);
+  }
+  saveClientContactsState(state);
+}
+
+export function requestDeleteTradePointContact(
+  dealerId: string,
+  tradePointId: string,
+  contactId: string,
+  reason: string,
+  profile: ReleaseDemoProfile,
+): void {
+  const state = loadClientContactsState();
+  const key = tradePointContactsStorageKey(dealerId, tradePointId);
+  const list = [...(state.tradePointContactsByKey[key] ?? [])];
+  const idx = list.findIndex((c) => c.id === contactId);
+  if (idx < 0) return;
+  const act = actor(profile);
+  const now = isoNow();
+  const cur = list[idx]!;
+  list[idx] = {
+    ...cur,
+    deleteRequestedAt: now,
+    deleteRequestReason: reason.trim() || undefined,
+    updatedAt: now,
+  };
+  state.tradePointContactsByKey[key] = list;
+  pushDealerTimeline(
+    state,
+    dealerId,
+    `Запрошено снятие контакта торговой точки «${cur.fullName}»${reason.trim() ? `: ${reason.trim()}` : ""}`,
+    act.name,
+  );
+  pushScopeTimeline(state, clientContactScopeKeyTradePoint(dealerId, tradePointId), `Запрошено снятие контакта: ${cur.fullName}`, act.name);
+  saveClientContactsState(state);
+}
+
 function cloneContactFields(c: ClientContact): Omit<ClientContact, "id" | "createdAt" | "updatedAt" | "createdBy" | "createdByName" | "deleteRequestedAt" | "deleteRequestReason"> {
   return {
     fullName: c.fullName,
@@ -538,7 +847,7 @@ export function copyContactToScopes(
 
   const targets: { kind: string; label: string; fn: () => void; scopeKey: string; scopeLine: string }[] = [];
 
-  if (destinations.toDealer) {
+  if (destinations.toDealer && source.type !== "dealer") {
     targets.push({
       kind: "dealer",
       label: "карточку дилера",
