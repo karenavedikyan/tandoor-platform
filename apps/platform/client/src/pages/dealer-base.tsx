@@ -88,7 +88,25 @@ import {
   type WorkPlanListFilter,
   WORK_PLAN_FILTER_LABELS,
 } from "@/lib/dealer-work-plan";
+import { DealerShipmentDayPlanner, type ShipmentDayCounts } from "@/components/dealer-shipment-day-planner";
 import { DealerWorkPlanBulkBar } from "@/components/dealer-work-plan-bulk-bar";
+import { CLIENT_NEXT_STEP_CHANGED_EVENT } from "@/lib/client-next-step-data";
+import {
+  DEALER_SHIPMENT_DAY_LABELS,
+  DEALER_SHIPMENT_DAY_ORDER,
+  getDealerShipmentDays,
+  getDealerShipmentStatus,
+  type DealerShipmentDayId,
+} from "@/lib/dealer-shipment-days";
+import {
+  addDealersToRoute,
+  DEALER_ROUTE_PLAN_EVENT,
+  getRouteForUserDay,
+  loadDealerRoutePlanState,
+  removeDealerFromRoute,
+  reorderRouteDealer,
+} from "@/lib/dealer-route-plan";
+import { SHOWCASE_STORAGE_EVENT } from "@/lib/showcase-distribution-data";
 import { Checkbox } from "@/components/ui/checkbox";
 
 const DEALER_BASE_DISPLAY_LIMIT = 300;
@@ -261,6 +279,12 @@ function OpenDealerButton({ id }: { id: string }) {
   );
 }
 
+function shipmentTrafficBadgeClass(level: "green" | "yellow" | "red"): string {
+  if (level === "green") return "border-emerald-300 bg-emerald-50 text-emerald-950";
+  if (level === "yellow") return "border-amber-300 bg-amber-50 text-amber-950";
+  return "border-rose-300 bg-rose-50 text-rose-950";
+}
+
 function ClientListBlock({
   rows,
   empty,
@@ -270,6 +294,8 @@ function ClientListBlock({
   showWorkPlanSelect,
   selectedIds,
   onToggleWorkPlanSelect,
+  shipmentActiveDayId,
+  shipmentUserId,
 }: {
   rows: DealerRow[];
   empty: string;
@@ -279,6 +305,8 @@ function ClientListBlock({
   showWorkPlanSelect?: boolean;
   selectedIds?: Set<string>;
   onToggleWorkPlanSelect?: (dealerId: string, checked: boolean) => void;
+  shipmentActiveDayId?: DealerShipmentDayId | null;
+  shipmentUserId?: string;
 }) {
   const wp = workPlanUserId && workPlanState;
   if (rows.length === 0) {
@@ -295,6 +323,10 @@ function ClientListBlock({
         const hidden = wp ? isDealerHiddenForUser(workPlanUserId, row.id, workPlanState) : false;
         const sched = wp ? getDealerScheduledDateForUser(workPlanUserId, row.id, workPlanState) : null;
         const checked = Boolean(selectedIds?.has(row.id));
+        const ship =
+          shipmentActiveDayId && shipmentUserId
+            ? getDealerShipmentStatus(row, shipmentActiveDayId, shipmentUserId, workPlanState)
+            : null;
         return (
           <Card
             key={row.id}
@@ -344,6 +376,23 @@ function ClientListBlock({
                       Скрыт из рабочего списка
                     </Badge>
                   ) : null}
+                  {ship ? (
+                    <>
+                      <Badge
+                        variant="outline"
+                        className={cn("text-[10px] font-semibold", shipmentTrafficBadgeClass(ship.level))}
+                        data-testid={`badge-dealer-shipment-status-${row.id}`}
+                      >
+                        {ship.label}
+                      </Badge>
+                      <p
+                        className="w-full basis-full text-[10px] leading-snug text-muted-foreground"
+                        data-testid={`text-dealer-shipment-status-reason-${row.id}`}
+                      >
+                        {ship.reason}
+                      </p>
+                    </>
+                  ) : null}
                 </div>
                 <p className={cn("text-muted-foreground", compact ? "text-xs" : "text-sm")}>
                   Код: {row.releaseCode ?? "—"} · {row.city} · {row.manager}
@@ -377,6 +426,8 @@ function ClientTableBlock({
   showWorkPlanSelect,
   selectedIds,
   onToggleWorkPlanSelect,
+  shipmentActiveDayId,
+  shipmentUserId,
 }: {
   rows: DealerRow[];
   workPlanUserId?: string;
@@ -384,6 +435,8 @@ function ClientTableBlock({
   showWorkPlanSelect?: boolean;
   selectedIds?: Set<string>;
   onToggleWorkPlanSelect?: (dealerId: string, checked: boolean) => void;
+  shipmentActiveDayId?: DealerShipmentDayId | null;
+  shipmentUserId?: string;
 }) {
   const wp = workPlanUserId && workPlanState;
   return (
@@ -393,6 +446,10 @@ function ClientTableBlock({
           const hidden = wp ? isDealerHiddenForUser(workPlanUserId, row.id, workPlanState) : false;
           const sched = wp ? getDealerScheduledDateForUser(workPlanUserId, row.id, workPlanState) : null;
           const checked = Boolean(selectedIds?.has(row.id));
+          const ship =
+            shipmentActiveDayId && shipmentUserId
+              ? getDealerShipmentStatus(row, shipmentActiveDayId, shipmentUserId, workPlanState)
+              : null;
           return (
             <Card key={row.id} className="rounded-2xl border border-border/80 bg-card shadow-sm" data-testid={`row-dealer-${row.id}`}>
               <CardContent className="space-y-2 p-4 text-sm">
@@ -427,6 +484,20 @@ function ClientTableBlock({
                     Скрыт из рабочего списка
                   </Badge>
                 ) : null}
+                {ship ? (
+                  <div className="space-y-1">
+                    <Badge
+                      variant="outline"
+                      className={cn("w-fit text-[10px] font-semibold", shipmentTrafficBadgeClass(ship.level))}
+                      data-testid={`badge-dealer-shipment-status-${row.id}`}
+                    >
+                      {ship.label}
+                    </Badge>
+                    <p className="text-[10px] leading-snug text-muted-foreground" data-testid={`text-dealer-shipment-status-reason-${row.id}`}>
+                      {ship.reason}
+                    </p>
+                  </div>
+                ) : null}
                 <p className="text-muted-foreground">
                   {row.city} · {row.status}
                 </p>
@@ -459,6 +530,10 @@ function ClientTableBlock({
               const hidden = wp ? isDealerHiddenForUser(workPlanUserId, row.id, workPlanState) : false;
               const sched = wp ? getDealerScheduledDateForUser(workPlanUserId, row.id, workPlanState) : null;
               const checked = Boolean(selectedIds?.has(row.id));
+              const ship =
+                shipmentActiveDayId && shipmentUserId
+                  ? getDealerShipmentStatus(row, shipmentActiveDayId, shipmentUserId, workPlanState)
+                  : null;
               return (
                 <tr key={row.id} className="border-b border-border last:border-0" data-testid={`row-dealer-${row.id}`}>
                   {showWorkPlanSelect && wp && onToggleWorkPlanSelect ? (
@@ -485,6 +560,20 @@ function ClientTableBlock({
                         <Badge variant="secondary" className="w-fit text-[10px]" data-testid={`badge-dealer-hidden-${row.id}`}>
                           Скрыт из рабочего списка
                         </Badge>
+                      ) : null}
+                      {ship ? (
+                        <>
+                          <Badge
+                            variant="outline"
+                            className={cn("w-fit text-[10px] font-semibold", shipmentTrafficBadgeClass(ship.level))}
+                            data-testid={`badge-dealer-shipment-status-${row.id}`}
+                          >
+                            {ship.label}
+                          </Badge>
+                          <p className="text-[10px] leading-snug text-muted-foreground" data-testid={`text-dealer-shipment-status-reason-${row.id}`}>
+                            {ship.reason}
+                          </p>
+                        </>
                       ) : null}
                     </div>
                   </td>
@@ -537,6 +626,8 @@ function DealerBaseSegmentGroups({
   selectedIds,
   onToggleWorkPlanSelect,
   emptyMessage,
+  shipmentActiveDayId,
+  shipmentUserId,
 }: {
   rows: DealerRow[];
   compact?: boolean;
@@ -549,6 +640,8 @@ function DealerBaseSegmentGroups({
   selectedIds?: Set<string>;
   onToggleWorkPlanSelect?: (dealerId: string, checked: boolean) => void;
   emptyMessage: string;
+  shipmentActiveDayId?: DealerShipmentDayId | null;
+  shipmentUserId?: string;
 }) {
   const buckets = useMemo(() => partitionDealersBySegment(rows), [rows]);
 
@@ -611,6 +704,8 @@ function DealerBaseSegmentGroups({
                     showWorkPlanSelect={showWorkPlanSelect}
                     selectedIds={selectedIds}
                     onToggleWorkPlanSelect={onToggleWorkPlanSelect}
+                    shipmentActiveDayId={shipmentActiveDayId}
+                    shipmentUserId={shipmentUserId}
                   />
                 ) : (
                   <ClientTableBlock
@@ -620,6 +715,8 @@ function DealerBaseSegmentGroups({
                     showWorkPlanSelect={showWorkPlanSelect}
                     selectedIds={selectedIds}
                     onToggleWorkPlanSelect={onToggleWorkPlanSelect}
+                    shipmentActiveDayId={shipmentActiveDayId}
+                    shipmentUserId={shipmentUserId}
                   />
                 )}
               </div>
@@ -629,6 +726,14 @@ function DealerBaseSegmentGroups({
       })}
     </div>
   );
+}
+
+function ruClientsCountLabel(n: number): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return `${n} клиент`;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return `${n} клиента`;
+  return `${n} клиентов`;
 }
 
 export default function DealerBase() {
@@ -1063,6 +1168,9 @@ export default function DealerBase() {
     const narrow = typeof window !== "undefined" && window.innerWidth < 768;
     return { ...defaultDealerBaseSegmentCollapse(narrow), ...loadDealerBaseSegmentCollapseOverrides() };
   });
+  const [activeShipmentDayId, setActiveShipmentDayId] = useState<DealerShipmentDayId | null>(null);
+  const [routeBump, setRouteBump] = useState(0);
+  const [trafficBump, setTrafficBump] = useState(0);
 
   const toggleSegmentCollapse = useCallback((id: DealerBaseSegmentId) => {
     setSegmentCollapse((prev) => {
@@ -1078,6 +1186,22 @@ export default function DealerBase() {
     return () => window.removeEventListener(DEALER_WORK_PLAN_EVENT, h);
   }, []);
 
+  useEffect(() => {
+    const h = () => setRouteBump((n) => n + 1);
+    window.addEventListener(DEALER_ROUTE_PLAN_EVENT, h);
+    return () => window.removeEventListener(DEALER_ROUTE_PLAN_EVENT, h);
+  }, []);
+
+  useEffect(() => {
+    const h = () => setTrafficBump((n) => n + 1);
+    window.addEventListener(CLIENT_NEXT_STEP_CHANGED_EVENT, h);
+    window.addEventListener(SHOWCASE_STORAGE_EVENT, h);
+    return () => {
+      window.removeEventListener(CLIENT_NEXT_STEP_CHANGED_EVENT, h);
+      window.removeEventListener(SHOWCASE_STORAGE_EVENT, h);
+    };
+  }, []);
+
   const workPlanState = useMemo(() => loadDealerWorkPlanState(), [workPlanBump]);
 
   const rowsForWorkPlan = useMemo(
@@ -1085,13 +1209,18 @@ export default function DealerBase() {
     [displayRows, profile.personaUserId, workPlanFilter, workPlanState],
   );
 
-  const rowsVisibleInList = useMemo(() => {
+  const rowsAfterSegmentFilter = useMemo(() => {
     if (segmentListFilter === "all") return rowsForWorkPlan;
     return rowsForWorkPlan.filter((r) => getDealerBaseSegment(r) === segmentListFilter);
   }, [rowsForWorkPlan, segmentListFilter]);
 
+  const rowsFinalForList = useMemo(() => {
+    if (!activeShipmentDayId) return rowsAfterSegmentFilter;
+    return rowsAfterSegmentFilter.filter((r) => getDealerShipmentDays(r).includes(activeShipmentDayId));
+  }, [rowsAfterSegmentFilter, activeShipmentDayId]);
+
   useEffect(() => {
-    const allowed = new Set(rowsVisibleInList.map((r) => r.id));
+    const allowed = new Set(rowsFinalForList.map((r) => r.id));
     setSelectedWpIds((prev) => {
       let changed = false;
       const n = new Set<string>();
@@ -1102,11 +1231,69 @@ export default function DealerBase() {
       if (!changed && n.size === prev.size) return prev;
       return n;
     });
-  }, [rowsVisibleInList]);
+  }, [rowsFinalForList]);
 
   const selectedWpRows = useMemo(
-    () => rowsVisibleInList.filter((r) => selectedWpIds.has(r.id)),
-    [rowsVisibleInList, selectedWpIds],
+    () => rowsFinalForList.filter((r) => selectedWpIds.has(r.id)),
+    [rowsFinalForList, selectedWpIds],
+  );
+
+  const shipmentDayCounts = useMemo((): ShipmentDayCounts => {
+    const init = {} as ShipmentDayCounts;
+    for (const d of DEALER_SHIPMENT_DAY_ORDER) {
+      init[d] = { total: 0, green: 0, yellow: 0, red: 0 };
+    }
+    for (const row of rowsAfterSegmentFilter) {
+      for (const d of getDealerShipmentDays(row)) {
+        init[d].total += 1;
+        const st = getDealerShipmentStatus(row, d, profile.personaUserId, workPlanState);
+        if (st.level === "green") init[d].green += 1;
+        else if (st.level === "yellow") init[d].yellow += 1;
+        else init[d].red += 1;
+      }
+    }
+    return init;
+  }, [rowsAfterSegmentFilter, profile.personaUserId, workPlanState, trafficBump]);
+
+  const routePlanState = useMemo(() => loadDealerRoutePlanState(), [routeBump]);
+  const routeIds = useMemo(
+    () => (activeShipmentDayId ? getRouteForUserDay(profile.personaUserId, activeShipmentDayId, routePlanState) : []),
+    [profile.personaUserId, activeShipmentDayId, routePlanState],
+  );
+  const routeRowsOrdered = useMemo(() => {
+    const byId = new Map(DEALER_BASE_ROWS.map((r) => [r.id, r]));
+    return routeIds.map((id) => byId.get(id)).filter((r): r is DealerRow => Boolean(r));
+  }, [routeIds]);
+
+  const shipmentDaySummary = useMemo(() => {
+    if (!activeShipmentDayId) return null;
+    const n = rowsFinalForList.length;
+    const label = DEALER_SHIPMENT_DAY_LABELS[activeShipmentDayId];
+    return `День отгрузки: ${label} · ${ruClientsCountLabel(n)}`;
+  }, [activeShipmentDayId, rowsFinalForList.length]);
+
+  const canMutateRoute = canMutateWorkPlan;
+
+  const showClientShipmentAndSegments = useMemo(
+    () =>
+      !needsManagerSelection &&
+      (workView === "risks_all" ||
+        workView === "top_all" ||
+        workView === "team_attention" ||
+        workView === "day_plan_team" ||
+        workView === "today" ||
+        workView === "my_attention" ||
+        workView === "my_top" ||
+        workView === "my_clients" ||
+        workView === "table_all" ||
+        workView === "table_team"),
+    [needsManagerSelection, workView],
+  );
+
+  const getShipmentStatusForRow = useCallback(
+    (row: DealerRow) =>
+      getDealerShipmentStatus(row, activeShipmentDayId ?? "monday", profile.personaUserId, workPlanState),
+    [activeShipmentDayId, profile.personaUserId, workPlanState, trafficBump],
   );
 
   const toggleWpSelect = useCallback((dealerId: string, checked: boolean) => {
@@ -1399,7 +1586,7 @@ export default function DealerBase() {
 
       {resultsCapTotal !== null && !hideResultsCap ? (
         <p className="text-sm text-muted-foreground" data-testid="text-dealer-base-display-cap">
-          Показано {rowsVisibleInList.length} из {resultsCapTotal}
+          Показано {rowsFinalForList.length} из {resultsCapTotal}
           {workView === "today" ? ` (лимит режима «Сегодня» ${TODAY_LIMIT})` : ""}
           {workView !== "today" && resultsCapTotal > cap ? ` (лимит отображения ${cap})` : ""}.
           {resultsCapTotal > displayRows.length && workView !== "today"
@@ -1409,6 +1596,33 @@ export default function DealerBase() {
       ) : null}
 
       <section className="min-w-0" data-testid="section-dealer-base-results">
+        {showClientShipmentAndSegments ? (
+          <div className="mb-3 min-w-0 space-y-3">
+            <DealerShipmentDayPlanner
+              dayCounts={shipmentDayCounts}
+              activeShipmentDayId={activeShipmentDayId}
+              onSelectDay={(d) => setActiveShipmentDayId(d)}
+              onResetDay={() => setActiveShipmentDayId(null)}
+              activeDaySummary={shipmentDaySummary}
+              canEditRoute={canMutateRoute}
+              routeRows={routeRowsOrdered}
+              onRouteUp={(id) => {
+                if (!activeShipmentDayId || !canMutateRoute) return;
+                reorderRouteDealer(profile.personaUserId, activeShipmentDayId, id, "up");
+              }}
+              onRouteDown={(id) => {
+                if (!activeShipmentDayId || !canMutateRoute) return;
+                reorderRouteDealer(profile.personaUserId, activeShipmentDayId, id, "down");
+              }}
+              onRouteRemove={(id) => {
+                if (!activeShipmentDayId || !canMutateRoute) return;
+                removeDealerFromRoute(profile.personaUserId, activeShipmentDayId, id);
+              }}
+              getShipmentStatus={getShipmentStatusForRow}
+              buildDealerHref={buildDealerAbsHref}
+            />
+          </div>
+        ) : null}
         {canMutateWorkPlan && selectedWpIds.size > 0 ? (
           <div className="mb-3 min-w-0">
             <DealerWorkPlanBulkBar
@@ -1433,6 +1647,13 @@ export default function DealerBase() {
               onCopy={() => {}}
               onClearSelection={() => setSelectedWpIds(new Set())}
               buildDealerHref={buildDealerAbsHref}
+              showAddToRoute={Boolean(activeShipmentDayId && canMutateRoute)}
+              onAddToRoute={() => {
+                if (!activeShipmentDayId || !canMutateRoute) return;
+                addDealersToRoute(profile.personaUserId, activeShipmentDayId, Array.from(selectedWpIds));
+                setSelectedWpIds(new Set());
+              }}
+              addToRouteDisabled={selectedWpIds.size === 0}
             />
           </div>
         ) : null}
@@ -1616,21 +1837,25 @@ export default function DealerBase() {
           >
             {workView === "my_clients" ? (
               <DealerBaseSegmentGroups
-                rows={rowsVisibleInList}
+                rows={rowsFinalForList}
                 compact
                 variant="cards"
                 segmentCollapse={segmentCollapse}
                 onToggleSegmentCollapse={toggleSegmentCollapse}
                 emptyMessage="Нет клиентов по выбранным фильтрам."
+                shipmentActiveDayId={activeShipmentDayId}
+                shipmentUserId={profile.personaUserId}
                 {...workPlanListProps}
               />
             ) : (
               <DealerBaseSegmentGroups
-                rows={rowsVisibleInList}
+                rows={rowsFinalForList}
                 variant="cards"
                 segmentCollapse={segmentCollapse}
                 onToggleSegmentCollapse={toggleSegmentCollapse}
                 emptyMessage="Нет записей."
+                shipmentActiveDayId={activeShipmentDayId}
+                shipmentUserId={profile.personaUserId}
                 {...workPlanListProps}
               />
             )}
@@ -1639,17 +1864,19 @@ export default function DealerBase() {
 
         {workView === "table_all" ? (
           <div data-testid={viewSectionDataTestId("table_all")}>
-            {rowsVisibleInList.length === 0 ? (
+            {rowsFinalForList.length === 0 ? (
               <Card className="rounded-2xl border border-dashed border-border bg-muted/30 p-8 text-center text-sm text-muted-foreground">
                 Ничего не найдено.
               </Card>
             ) : (
               <DealerBaseSegmentGroups
-                rows={rowsVisibleInList}
+                rows={rowsFinalForList}
                 variant="table"
                 segmentCollapse={segmentCollapse}
                 onToggleSegmentCollapse={toggleSegmentCollapse}
                 emptyMessage="Ничего не найдено."
+                shipmentActiveDayId={activeShipmentDayId}
+                shipmentUserId={profile.personaUserId}
                 {...workPlanListProps}
               />
             )}
@@ -1658,17 +1885,19 @@ export default function DealerBase() {
 
         {workView === "table_team" ? (
           <div data-testid={viewSectionDataTestId("table_team")}>
-            {rowsVisibleInList.length === 0 ? (
+            {rowsFinalForList.length === 0 ? (
               <Card className="rounded-2xl border border-dashed border-border bg-muted/30 p-8 text-center text-sm text-muted-foreground">
                 Нет клиентов команды по фильтрам.
               </Card>
             ) : (
               <DealerBaseSegmentGroups
-                rows={rowsVisibleInList}
+                rows={rowsFinalForList}
                 variant="table"
                 segmentCollapse={segmentCollapse}
                 onToggleSegmentCollapse={toggleSegmentCollapse}
                 emptyMessage="Нет клиентов команды по фильтрам."
+                shipmentActiveDayId={activeShipmentDayId}
+                shipmentUserId={profile.personaUserId}
                 {...workPlanListProps}
               />
             )}

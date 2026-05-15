@@ -26,6 +26,9 @@ type Props = {
   onCopy: (text: string) => void;
   onClearSelection: () => void;
   buildDealerHref: (dealerId: string) => string;
+  showAddToRoute?: boolean;
+  onAddToRoute?: () => void;
+  addToRouteDisabled?: boolean;
 };
 
 export function DealerWorkPlanBulkBar({
@@ -40,6 +43,9 @@ export function DealerWorkPlanBulkBar({
   onCopy,
   onClearSelection,
   buildDealerHref,
+  showAddToRoute,
+  onAddToRoute,
+  addToRouteDisabled,
 }: Props) {
   const [fallbackOpen, setFallbackOpen] = useState(false);
   const [fallbackText, setFallbackText] = useState("");
@@ -158,6 +164,21 @@ export function DealerWorkPlanBulkBar({
             Снять выбор
           </Button>
         </div>
+        {showAddToRoute && onAddToRoute ? (
+          <div className="mt-2 border-t border-primary/20 pt-2">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="min-h-10 w-full text-xs font-semibold sm:w-auto"
+              data-testid="button-dealer-route-add-selected"
+              disabled={Boolean(addToRouteDisabled)}
+              onClick={onAddToRoute}
+            >
+              Добавить в маршрут
+            </Button>
+          </div>
+        ) : null}
       </section>
 
       <Dialog open={fallbackOpen} onOpenChange={setFallbackOpen}>
