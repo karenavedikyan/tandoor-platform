@@ -1,7 +1,7 @@
 import type { ComponentProps, ComponentType, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useParams } from "wouter";
-import { AlertTriangle, BookOpen, Camera, Handshake, MapPin, PieChart, Store, TrendingUp } from "lucide-react";
+import { AlertTriangle, BookOpen, Handshake, MapPin, PieChart, TrendingUp } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -9,7 +9,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { getClientCategoryBadgeClass, getClientCategoryLabel } from "@/lib/client-category";
 import {
@@ -68,6 +67,9 @@ import {
   getDealerComments,
   getDealerCommentsHistoryEvents,
 } from "@/lib/dealer-card-comments";
+import { getDealerLegalEntityHistoryEvents, DEALER_LEGAL_ENTITIES_EVENT } from "@/lib/dealer-legal-entities";
+import { DealerLegalEntitiesSection } from "@/components/dealer-legal-entities-section";
+import { DealerTradePointsSection } from "@/components/dealer-trade-points-section";
 import { DealerActionFocusSection } from "@/components/dealer-action-focus-section";
 import { DealerClientNextStepSection } from "@/components/dealer-client-next-step-section";
 import { DealerStaticProfileSection } from "@/components/dealer-static-profile-section";
@@ -259,6 +261,13 @@ function buildHistoryEvents(row: DealerRow): DealerHistoryEvent[] {
     at: e.at,
   }));
 
+  const legalHist: DealerHistoryEvent[] = getDealerLegalEntityHistoryEvents(row.id).map((e) => ({
+    id: e.id,
+    meta: e.meta,
+    body: e.body,
+    at: e.at,
+  }));
+
   const boykoExtras: DealerHistoryEvent[] =
     row.releaseManagerId === "mgr-boyko-em"
       ? [
@@ -305,7 +314,7 @@ function buildHistoryEvents(row: DealerRow): DealerHistoryEvent[] {
           body: text,
         }));
 
-  const merged = [...showcaseHist, ...nsHist, ...trainHist, ...commentHist, ...boykoExtras, ...templateEvents];
+  const merged = [...showcaseHist, ...nsHist, ...trainHist, ...commentHist, ...legalHist, ...boykoExtras, ...templateEvents];
   merged.sort((a, b) => historySortKey(b) - historySortKey(a));
   return merged;
 }
@@ -554,11 +563,11 @@ function DealerCardContent({ row }: { row: DealerRow }) {
   const [showcaseBump, setShowcaseBump] = useState(0);
   const [nextStepBump, setNextStepBump] = useState(0);
   const [historyExpanded, setHistoryExpanded] = useState(false);
-  const [pointsExpanded, setPointsExpanded] = useState(false);
   const [showcaseCategoryListMode, setShowcaseCategoryListMode] = useState<ShowcaseCategoryListMode>("all");
   const [trainingFlagsBump, setTrainingFlagsBump] = useState(0);
   const [workPlanBump, setWorkPlanBump] = useState(0);
   const [commentsBump, setCommentsBump] = useState(0);
+  const [legalBump, setLegalBump] = useState(0);
   const [historyCommentDraft, setHistoryCommentDraft] = useState("");
   const [problemCommentDraft, setProblemCommentDraft] = useState("");
   const [competitorCommentDraft, setCompetitorCommentDraft] = useState("");
@@ -595,8 +604,13 @@ function DealerCardContent({ row }: { row: DealerRow }) {
   }, []);
 
   useEffect(() => {
+    const fn = () => setLegalBump((n) => n + 1);
+    window.addEventListener(DEALER_LEGAL_ENTITIES_EVENT, fn);
+    return () => window.removeEventListener(DEALER_LEGAL_ENTITIES_EVENT, fn);
+  }, []);
+
+  useEffect(() => {
     setHistoryExpanded(false);
-    setPointsExpanded(false);
     setShowcaseCategoryListMode("all");
     setHistoryCommentDraft("");
     setProblemCommentDraft("");
@@ -612,7 +626,7 @@ function DealerCardContent({ row }: { row: DealerRow }) {
   const activeSection = useActiveSection(row.id);
   const historyEvents = useMemo(
     () => buildHistoryEvents(row),
-    [row, showcaseBump, nextStepBump, trainingFlagsBump, commentsBump],
+    [row, showcaseBump, nextStepBump, trainingFlagsBump, commentsBump, legalBump],
   );
   const historyTimeline = useMemo(() => {
     const sorted = [...historyEvents].sort((a, b) => historySortKey(b) - historySortKey(a));
@@ -849,7 +863,6 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                       className="min-h-9 h-9 border-border bg-card text-xs"
                       data-testid="button-quick-open-points"
                       onClick={() => {
-                        setPointsExpanded(true);
                         scrollToSection("points");
                       }}
                     >
@@ -940,6 +953,8 @@ function DealerCardContent({ row }: { row: DealerRow }) {
               onPlanShowcaseCheck={onPlanShowcaseCheck}
               onApplied={() => setShowcaseBump((n) => n + 1)}
             />
+
+            <DealerTradePointsSection row={row} sectionDomId={SECTION_DOM_IDS.points} />
 
             {competitorActivityRows.length > 0 || canEditCardComments ? (
               <section
@@ -1139,6 +1154,13 @@ function DealerCardContent({ row }: { row: DealerRow }) {
             </section>
 
             <DealerStaticProfileSection row={row} categoryLabel={businessCategoryLabel} />
+
+            <DealerLegalEntitiesSection
+              row={row}
+              profile={profile}
+              actorUserId={user?.id ?? profile.personaUserId}
+              actorLabel={user?.name ?? userLabelFromProfile(profile)}
+            />
 
             {analyticsSignals.length > 0 ? (
               <section
@@ -1344,71 +1366,6 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                 </SurfaceCard>
               </div>
             ) : null}
-
-            <section
-              id={SECTION_DOM_IDS.points}
-              data-testid="section-dealer-points"
-              className="scroll-mt-28 space-y-2 sm:scroll-mt-32 lg:scroll-mt-32"
-            >
-              <div className="flex flex-col gap-2 rounded-lg border border-border/70 bg-card p-3 shadow-xs sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-sm font-medium text-foreground">
-                  Торговые точки: <span className="tabular-nums">{row.outlets}</span>
-                </p>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  className="min-h-9 w-full shrink-0 font-semibold sm:w-auto"
-                  data-testid="button-dealer-expand-trade-points"
-                  onClick={() => setPointsExpanded((v) => !v)}
-                >
-                  {pointsExpanded ? "Свернуть точки" : "Открыть точки"}
-                </Button>
-              </div>
-              {pointsExpanded ? (
-                <div className="space-y-2">
-                  {row.tradePoints.map((tp, idx) => (
-                    <SurfaceCard key={`${row.id}-tp-${idx}`}>
-                      <CardHeader className="flex flex-col gap-2 px-3 pb-0 pt-3 sm:flex-row sm:items-start sm:justify-between sm:px-4">
-                        <div className="flex min-w-0 flex-row items-center gap-2">
-                          <Store className="h-4 w-4 shrink-0 text-primary" aria-hidden />
-                          <CardTitle className="text-sm font-semibold leading-snug">{tp.name}</CardTitle>
-                        </div>
-                        <Button
-                          asChild
-                          variant="default"
-                          size="sm"
-                          className="min-h-9 w-full shrink-0 sm:w-auto"
-                          data-testid={`button-open-trade-point-${tp.id}`}
-                        >
-                          <Link href={`/dealers/${row.id}/trade-points/${tp.id}`}>К точке</Link>
-                        </Button>
-                      </CardHeader>
-                      <CardContent className="space-y-0 px-3 pb-3 pt-1 sm:px-4">
-                        <FieldRow label="Город" value={tp.city} />
-                        <FieldRow label="Адрес" value={tp.address} icon={MapPin} />
-                        <FieldRow label="Статус" value={tp.status} />
-                        <FieldRow label="Формат точки" value={tp.format} />
-                        <FieldRow label="Оборудование" value={tp.equipment} />
-                        <FieldRow label="Склад фурнитуры" value={tp.hardwareStockStatus} />
-                        <FieldRow label="Склад дверей" value={tp.doorsStockStatus} />
-                        <FieldRow label="Последний визит" value={tp.lastVisitDate} />
-                        <Separator className="my-3 bg-border" />
-                        <div className="rounded-lg border border-dashed border-border bg-muted/40 p-3">
-                          <div className="flex items-start gap-2">
-                            <Camera className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                            <div>
-                              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Фото ТТ</p>
-                              <p className="mt-1 text-xs text-muted-foreground">Фотографии не прикреплены</p>
-                            </div>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </SurfaceCard>
-                  ))}
-                </div>
-              ) : null}
-            </section>
 
             {hasSalesData ? (
               <section data-testid="section-dealer-sales" className="scroll-mt-28 space-y-2 sm:scroll-mt-32">

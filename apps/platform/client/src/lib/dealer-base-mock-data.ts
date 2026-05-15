@@ -128,6 +128,8 @@ export type DealerTradePoint = {
   lastVisitDate: string;
   nextVisitDate: string;
   responsibleRegionalManager: string;
+  /** Телефон точки (если известен). */
+  contactPhone?: string;
   issues: string;
   tasks: TradePointTask[];
   activityHistory: TradePointActivity[];
