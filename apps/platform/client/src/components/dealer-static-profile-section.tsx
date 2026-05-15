@@ -1,9 +1,11 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Building2, ChevronDown, ChevronUp, MapPin, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import { getPassportLegalEntities } from "@/lib/dealer-card-release-signals";
+import { getDealerEquipmentSignal, type DealerEquipmentStatus } from "@/lib/dealer-equipment-signals";
 import { cn } from "@/lib/utils";
 
 function isFilled(v: string | undefined | null): boolean {
@@ -41,10 +43,18 @@ type Props = {
   categoryLabel: string;
 };
 
+function equipmentStatusBadgeClass(s: DealerEquipmentStatus): string {
+  if (s === "ok") return "border-emerald-300 bg-emerald-50 text-emerald-950";
+  if (s === "needs_check") return "border-amber-300 bg-amber-50 text-amber-950";
+  if (s === "outdated") return "border-rose-300 bg-rose-50 text-rose-950";
+  return "border-slate-300 bg-slate-50 text-slate-900";
+}
+
 export function DealerStaticProfileSection({ row, categoryLabel }: Props) {
   const [open, setOpen] = useState(false);
 
   const legalEntities = useMemo(() => getPassportLegalEntities(row), [row]);
+  const equipmentSignal = useMemo(() => getDealerEquipmentSignal(row), [row]);
 
   const address = row.releaseAddress?.trim() || "";
   const statusLabel = row.status.slice(0, 1).toUpperCase() + row.status.slice(1);
@@ -113,6 +123,13 @@ export function DealerStaticProfileSection({ row, categoryLabel }: Props) {
       {" · "}
       <span data-testid="text-dealer-static-profile-rop" className="text-foreground">
         {isFilled(row.regionalManager) ? row.regionalManager : "—"}
+      </span>
+      <span className="mt-1 block w-full min-w-0 sm:mt-0 sm:inline">
+        {" "}
+        <span className="text-muted-foreground">Оборудование:</span>{" "}
+        <span data-testid="text-dealer-static-profile-equipment" className="break-words text-foreground">
+          {equipmentSignal.summary}
+        </span>
       </span>
     </p>
   );
@@ -187,6 +204,51 @@ export function DealerStaticProfileSection({ row, categoryLabel }: Props) {
                 </div>
               </div>
             ) : null}
+            <div className="border-t border-border pt-3" data-testid="section-dealer-static-profile-equipment">
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Оборудование</p>
+              {equipmentSignal.items.length === 0 ? (
+                <p className="text-xs leading-snug text-muted-foreground">{equipmentSignal.summary}</p>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium leading-snug text-foreground">{equipmentSignal.summary}</p>
+                  <Badge variant="outline" className={cn("text-[10px] font-semibold", equipmentStatusBadgeClass(equipmentSignal.status))} data-testid="text-dealer-static-equipment-status">
+                    {equipmentSignal.statusLabel}
+                  </Badge>
+                  {equipmentSignal.lastCheckDate ? (
+                    <p className="text-[11px] text-muted-foreground" data-testid="text-dealer-static-equipment-last-check">
+                      Последняя отметка в данных: {equipmentSignal.lastCheckDate}
+                    </p>
+                  ) : null}
+                  {equipmentSignal.reason ? <p className="text-[11px] leading-snug text-muted-foreground">{equipmentSignal.reason}</p> : null}
+                  <ul className="space-y-1.5">
+                    {equipmentSignal.items.map((it) => (
+                      <li
+                        key={it.id}
+                        data-testid={`row-dealer-static-equipment-${it.id}`}
+                        className="rounded-md border border-border/60 bg-muted/10 px-2 py-1.5 text-xs"
+                      >
+                        <div className="flex flex-wrap items-baseline justify-between gap-1">
+                          <span className="font-medium text-foreground">{it.label}</span>
+                          {typeof it.count === "number" ? (
+                            <span className="tabular-nums text-muted-foreground">×{it.count}</span>
+                          ) : null}
+                        </div>
+                        {it.comment ? <p className="mt-0.5 break-words text-[11px] text-muted-foreground">{it.comment}</p> : null}
+                        {it.status && it.status !== "ok" ? (
+                          <Badge variant="outline" className={cn("mt-1 text-[10px]", equipmentStatusBadgeClass(it.status))}>
+                            {it.status === "needs_check"
+                              ? "Проверка"
+                              : it.status === "outdated"
+                                ? "Устарело"
+                                : "Нет данных"}
+                          </Badge>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
       ) : null}
