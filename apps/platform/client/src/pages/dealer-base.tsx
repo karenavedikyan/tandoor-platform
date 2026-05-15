@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
-import { Search } from "lucide-react";
+import { ChevronDown, ChevronRight, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -59,8 +59,23 @@ import { TeamSummaryCard } from "@/components/team-summary-card";
 import { buildCityConcentrationRows, buildDealerBaseAllCitiesHref, buildDealerBaseCityDrillHref } from "@/lib/city-concentration";
 import { buildBrowserHashAppHref, buildHashPath, useRouteSearchParams } from "@/lib/hash-route-utils";
 import {
+  DEALER_BASE_SEGMENT_DESCRIPTIONS,
+  DEALER_BASE_SEGMENT_FILTER_LABELS,
+  DEALER_BASE_SEGMENT_LABELS,
+  DEALER_BASE_SEGMENT_ORDER,
+  defaultDealerBaseSegmentCollapse,
+  dealerBaseSegmentSectionTestId,
+  dealerBaseSegmentTestSlug,
+  getDealerBaseSegment,
+  loadDealerBaseSegmentCollapseOverrides,
+  partitionDealersBySegment,
+  saveDealerBaseSegmentCollapseState,
+  type DealerBaseSegmentCollapseState,
+  type DealerBaseSegmentFilterId,
+  type DealerBaseSegmentId,
+} from "@/lib/dealer-base-segments";
+import {
   DEALER_WORK_PLAN_EVENT,
-  clearDealerScheduleForUser,
   filterDealersByWorkPlan,
   formatWorkPlanDateRu,
   getDealerScheduledDateForUser,
@@ -267,6 +282,7 @@ function ClientListBlock({
 }) {
   const wp = workPlanUserId && workPlanState;
   if (rows.length === 0) {
+    if (!empty.trim()) return null;
     return (
       <Card className="rounded-2xl border border-dashed border-border bg-muted/30 p-8 text-center text-sm text-muted-foreground">
         {empty}
@@ -297,7 +313,7 @@ function ClientListBlock({
                     <Checkbox
                       checked={checked}
                       onCheckedChange={(v) => onToggleWorkPlanSelect(row.id, v === true)}
-                      className="shrink-0"
+                      className="h-5 w-5 shrink-0 touch-manipulation sm:h-4 sm:w-4"
                       data-testid={`checkbox-dealer-select-${row.id}`}
                       aria-label={`Выбрать клиента ${row.name}`}
                     />
@@ -386,6 +402,7 @@ function ClientTableBlock({
                       <Checkbox
                         checked={checked}
                         onCheckedChange={(v) => onToggleWorkPlanSelect(row.id, v === true)}
+                        className="h-5 w-5 shrink-0 touch-manipulation sm:h-4 sm:w-4"
                         data-testid={`checkbox-dealer-select-${row.id}`}
                         aria-label={`Выбрать клиента ${row.name}`}
                       />
@@ -449,6 +466,7 @@ function ClientTableBlock({
                       <Checkbox
                         checked={checked}
                         onCheckedChange={(v) => onToggleWorkPlanSelect(row.id, v === true)}
+                        className="h-5 w-5 shrink-0 touch-manipulation sm:h-4 sm:w-4"
                         data-testid={`checkbox-dealer-select-${row.id}`}
                         aria-label={`Выбрать клиента ${row.name}`}
                       />
@@ -504,6 +522,112 @@ function ClientTableBlock({
         </table>
       </div>
     </>
+  );
+}
+
+function DealerBaseSegmentGroups({
+  rows,
+  compact,
+  variant,
+  segmentCollapse,
+  onToggleSegmentCollapse,
+  workPlanUserId,
+  workPlanState,
+  showWorkPlanSelect,
+  selectedIds,
+  onToggleWorkPlanSelect,
+  emptyMessage,
+}: {
+  rows: DealerRow[];
+  compact?: boolean;
+  variant: "cards" | "table";
+  segmentCollapse: DealerBaseSegmentCollapseState;
+  onToggleSegmentCollapse: (id: DealerBaseSegmentId) => void;
+  workPlanUserId?: string;
+  workPlanState?: DealerWorkPlanState;
+  showWorkPlanSelect?: boolean;
+  selectedIds?: Set<string>;
+  onToggleWorkPlanSelect?: (dealerId: string, checked: boolean) => void;
+  emptyMessage: string;
+}) {
+  const buckets = useMemo(() => partitionDealersBySegment(rows), [rows]);
+
+  if (rows.length === 0) {
+    return (
+      <Card className="rounded-2xl border border-dashed border-border bg-muted/30 p-8 text-center text-sm text-muted-foreground">
+        {emptyMessage}
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-3 sm:space-y-4">
+      {DEALER_BASE_SEGMENT_ORDER.map((seg) => {
+        const segRows = buckets[seg];
+        if (!segRows.length) return null;
+        const slug = dealerBaseSegmentTestSlug(seg);
+        const collapsed = segmentCollapse[seg];
+        return (
+          <section
+            key={seg}
+            data-testid={dealerBaseSegmentSectionTestId(seg)}
+            className="min-w-0 overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm"
+          >
+            <div className="flex min-w-0 gap-2 border-b border-border/70 bg-muted/15 p-2.5 sm:gap-3 sm:p-3">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-10 w-10 shrink-0 touch-manipulation sm:h-9 sm:w-9"
+                aria-expanded={!collapsed}
+                aria-label={collapsed ? `Развернуть: ${DEALER_BASE_SEGMENT_LABELS[seg]}` : `Свернуть: ${DEALER_BASE_SEGMENT_LABELS[seg]}`}
+                data-testid={`button-dealer-segment-toggle-${slug}`}
+                onClick={() => onToggleSegmentCollapse(seg)}
+              >
+                {collapsed ? <ChevronRight className="h-4 w-4" aria-hidden /> : <ChevronDown className="h-4 w-4" aria-hidden />}
+              </Button>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <h3 className="text-sm font-semibold leading-tight text-foreground sm:text-base">{DEALER_BASE_SEGMENT_LABELS[seg]}</h3>
+                  <span
+                    className="text-xs font-medium tabular-nums text-muted-foreground sm:text-sm"
+                    data-testid={`text-dealer-segment-count-${slug}`}
+                  >
+                    {segRows.length}
+                  </span>
+                </div>
+                <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground sm:text-xs">{DEALER_BASE_SEGMENT_DESCRIPTIONS[seg]}</p>
+              </div>
+            </div>
+            {!collapsed ? (
+              <div className="min-w-0 border-t border-border/40 p-2 sm:p-3">
+                {variant === "cards" ? (
+                  <ClientListBlock
+                    rows={segRows}
+                    empty=""
+                    compact={compact}
+                    workPlanUserId={workPlanUserId}
+                    workPlanState={workPlanState}
+                    showWorkPlanSelect={showWorkPlanSelect}
+                    selectedIds={selectedIds}
+                    onToggleWorkPlanSelect={onToggleWorkPlanSelect}
+                  />
+                ) : (
+                  <ClientTableBlock
+                    rows={segRows}
+                    workPlanUserId={workPlanUserId}
+                    workPlanState={workPlanState}
+                    showWorkPlanSelect={showWorkPlanSelect}
+                    selectedIds={selectedIds}
+                    onToggleWorkPlanSelect={onToggleWorkPlanSelect}
+                  />
+                )}
+              </div>
+            ) : null}
+          </section>
+        );
+      })}
+    </div>
   );
 }
 
@@ -934,6 +1058,19 @@ export default function DealerBase() {
   const [selectedWpIds, setSelectedWpIds] = useState<Set<string>>(() => new Set());
   const [wpScheduleDate, setWpScheduleDate] = useState("");
   const [wpNote, setWpNote] = useState("");
+  const [segmentListFilter, setSegmentListFilter] = useState<DealerBaseSegmentFilterId>("all");
+  const [segmentCollapse, setSegmentCollapse] = useState<DealerBaseSegmentCollapseState>(() => {
+    const narrow = typeof window !== "undefined" && window.innerWidth < 768;
+    return { ...defaultDealerBaseSegmentCollapse(narrow), ...loadDealerBaseSegmentCollapseOverrides() };
+  });
+
+  const toggleSegmentCollapse = useCallback((id: DealerBaseSegmentId) => {
+    setSegmentCollapse((prev) => {
+      const n = { ...prev, [id]: !prev[id] };
+      saveDealerBaseSegmentCollapseState(n);
+      return n;
+    });
+  }, []);
 
   useEffect(() => {
     const h = () => setWorkPlanBump((n) => n + 1);
@@ -948,8 +1085,13 @@ export default function DealerBase() {
     [displayRows, profile.personaUserId, workPlanFilter, workPlanState],
   );
 
+  const rowsVisibleInList = useMemo(() => {
+    if (segmentListFilter === "all") return rowsForWorkPlan;
+    return rowsForWorkPlan.filter((r) => getDealerBaseSegment(r) === segmentListFilter);
+  }, [rowsForWorkPlan, segmentListFilter]);
+
   useEffect(() => {
-    const allowed = new Set(rowsForWorkPlan.map((r) => r.id));
+    const allowed = new Set(rowsVisibleInList.map((r) => r.id));
     setSelectedWpIds((prev) => {
       let changed = false;
       const n = new Set<string>();
@@ -960,9 +1102,12 @@ export default function DealerBase() {
       if (!changed && n.size === prev.size) return prev;
       return n;
     });
-  }, [rowsForWorkPlan]);
+  }, [rowsVisibleInList]);
 
-  const selectedWpRows = useMemo(() => rowsForWorkPlan.filter((r) => selectedWpIds.has(r.id)), [rowsForWorkPlan, selectedWpIds]);
+  const selectedWpRows = useMemo(
+    () => rowsVisibleInList.filter((r) => selectedWpIds.has(r.id)),
+    [rowsVisibleInList, selectedWpIds],
+  );
 
   const toggleWpSelect = useCallback((dealerId: string, checked: boolean) => {
     setSelectedWpIds((prev) => {
@@ -1078,6 +1223,21 @@ export default function DealerBase() {
                   {(Object.keys(WORK_PLAN_FILTER_LABELS) as WorkPlanListFilter[]).map((k) => (
                     <SelectItem key={k} value={k}>
                       {WORK_PLAN_FILTER_LABELS[k]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="min-w-0 space-y-1">
+              <Label className="text-xs font-medium text-muted-foreground">Сегмент списка</Label>
+              <Select value={segmentListFilter} onValueChange={(v) => setSegmentListFilter(v as DealerBaseSegmentFilterId)}>
+                <SelectTrigger className="min-h-10 w-full min-w-0 max-w-[16rem] rounded-xl" data-testid="select-dealer-segment-filter">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(DEALER_BASE_SEGMENT_FILTER_LABELS) as DealerBaseSegmentFilterId[]).map((k) => (
+                    <SelectItem key={k} value={k}>
+                      {DEALER_BASE_SEGMENT_FILTER_LABELS[k]}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -1239,7 +1399,7 @@ export default function DealerBase() {
 
       {resultsCapTotal !== null && !hideResultsCap ? (
         <p className="text-sm text-muted-foreground" data-testid="text-dealer-base-display-cap">
-          Показано {rowsForWorkPlan.length} из {resultsCapTotal}
+          Показано {rowsVisibleInList.length} из {resultsCapTotal}
           {workView === "today" ? ` (лимит режима «Сегодня» ${TODAY_LIMIT})` : ""}
           {workView !== "today" && resultsCapTotal > cap ? ` (лимит отображения ${cap})` : ""}.
           {resultsCapTotal > displayRows.length && workView !== "today"
@@ -1455,38 +1615,62 @@ export default function DealerBase() {
             className={workView === "my_clients" ? "space-y-2" : "space-y-3"}
           >
             {workView === "my_clients" ? (
-              <ClientListBlock
-                rows={rowsForWorkPlan}
-                empty="Нет клиентов по выбранным фильтрам."
+              <DealerBaseSegmentGroups
+                rows={rowsVisibleInList}
                 compact
+                variant="cards"
+                segmentCollapse={segmentCollapse}
+                onToggleSegmentCollapse={toggleSegmentCollapse}
+                emptyMessage="Нет клиентов по выбранным фильтрам."
                 {...workPlanListProps}
               />
             ) : (
-              <ClientListBlock rows={rowsForWorkPlan} empty="Нет записей." {...workPlanListProps} />
+              <DealerBaseSegmentGroups
+                rows={rowsVisibleInList}
+                variant="cards"
+                segmentCollapse={segmentCollapse}
+                onToggleSegmentCollapse={toggleSegmentCollapse}
+                emptyMessage="Нет записей."
+                {...workPlanListProps}
+              />
             )}
           </div>
         ) : null}
 
         {workView === "table_all" ? (
           <div data-testid={viewSectionDataTestId("table_all")}>
-            {displayRows.length === 0 ? (
+            {rowsVisibleInList.length === 0 ? (
               <Card className="rounded-2xl border border-dashed border-border bg-muted/30 p-8 text-center text-sm text-muted-foreground">
                 Ничего не найдено.
               </Card>
             ) : (
-              <ClientTableBlock rows={rowsForWorkPlan} {...workPlanListProps} />
+              <DealerBaseSegmentGroups
+                rows={rowsVisibleInList}
+                variant="table"
+                segmentCollapse={segmentCollapse}
+                onToggleSegmentCollapse={toggleSegmentCollapse}
+                emptyMessage="Ничего не найдено."
+                {...workPlanListProps}
+              />
             )}
           </div>
         ) : null}
 
         {workView === "table_team" ? (
           <div data-testid={viewSectionDataTestId("table_team")}>
-            {displayRows.length === 0 ? (
+            {rowsVisibleInList.length === 0 ? (
               <Card className="rounded-2xl border border-dashed border-border bg-muted/30 p-8 text-center text-sm text-muted-foreground">
                 Нет клиентов команды по фильтрам.
               </Card>
             ) : (
-              <ClientTableBlock rows={rowsForWorkPlan} {...workPlanListProps} />
+              <DealerBaseSegmentGroups
+                rows={rowsVisibleInList}
+                variant="table"
+                segmentCollapse={segmentCollapse}
+                onToggleSegmentCollapse={toggleSegmentCollapse}
+                emptyMessage="Нет клиентов команды по фильтрам."
+                {...workPlanListProps}
+              />
             )}
           </div>
         ) : null}
