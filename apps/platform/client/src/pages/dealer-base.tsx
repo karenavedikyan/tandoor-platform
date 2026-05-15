@@ -58,6 +58,23 @@ import { buildTeamSummary } from "@/lib/team-summary";
 import { TeamSummaryCard } from "@/components/team-summary-card";
 import { buildCityConcentrationRows, buildDealerBaseAllCitiesHref, buildDealerBaseCityDrillHref } from "@/lib/city-concentration";
 import { buildBrowserHashAppHref, buildHashPath, useRouteSearchParams } from "@/lib/hash-route-utils";
+import {
+  DEALER_WORK_PLAN_EVENT,
+  clearDealerScheduleForUser,
+  filterDealersByWorkPlan,
+  formatWorkPlanDateRu,
+  getDealerScheduledDateForUser,
+  hideDealersForUser,
+  isDealerHiddenForUser,
+  loadDealerWorkPlanState,
+  restoreDealersForUser,
+  scheduleDealersForUser,
+  type DealerWorkPlanState,
+  type WorkPlanListFilter,
+  WORK_PLAN_FILTER_LABELS,
+} from "@/lib/dealer-work-plan";
+import { DealerWorkPlanBulkBar } from "@/components/dealer-work-plan-bulk-bar";
+import { Checkbox } from "@/components/ui/checkbox";
 
 const DEALER_BASE_DISPLAY_LIMIT = 300;
 const TODAY_LIMIT = 100;
@@ -229,7 +246,26 @@ function OpenDealerButton({ id }: { id: string }) {
   );
 }
 
-function ClientListBlock({ rows, empty, compact }: { rows: DealerRow[]; empty: string; compact?: boolean }) {
+function ClientListBlock({
+  rows,
+  empty,
+  compact,
+  workPlanUserId,
+  workPlanState,
+  showWorkPlanSelect,
+  selectedIds,
+  onToggleWorkPlanSelect,
+}: {
+  rows: DealerRow[];
+  empty: string;
+  compact?: boolean;
+  workPlanUserId?: string;
+  workPlanState?: DealerWorkPlanState;
+  showWorkPlanSelect?: boolean;
+  selectedIds?: Set<string>;
+  onToggleWorkPlanSelect?: (dealerId: string, checked: boolean) => void;
+}) {
+  const wp = workPlanUserId && workPlanState;
   if (rows.length === 0) {
     return (
       <Card className="rounded-2xl border border-dashed border-border bg-muted/30 p-8 text-center text-sm text-muted-foreground">
@@ -239,94 +275,161 @@ function ClientListBlock({ rows, empty, compact }: { rows: DealerRow[]; empty: s
   }
   return (
     <div className={cn("space-y-3", compact && "space-y-2")}>
-      {rows.map((row) => (
-        <Card
-          key={row.id}
-          className="rounded-2xl border border-border/80 bg-card shadow-sm"
-          data-testid={`row-dealer-${row.id}`}
-        >
-          <CardContent
-            className={cn(
-              "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4",
-              compact ? "p-3 sm:gap-3" : "p-4 sm:gap-4",
-            )}
+      {rows.map((row) => {
+        const hidden = wp ? isDealerHiddenForUser(workPlanUserId, row.id, workPlanState) : false;
+        const sched = wp ? getDealerScheduledDateForUser(workPlanUserId, row.id, workPlanState) : null;
+        const checked = Boolean(selectedIds?.has(row.id));
+        return (
+          <Card
+            key={row.id}
+            className="rounded-2xl border border-border/80 bg-card shadow-sm"
+            data-testid={`row-dealer-${row.id}`}
           >
-            <div className={cn("min-w-0 flex-1", compact ? "space-y-1" : "space-y-2")}>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className={cn("font-semibold text-foreground", compact && "text-sm")}>{row.name}</span>
-                <Badge
-                  variant="outline"
-                  className={cn("text-xs", getClientCategoryBadgeClass(row.clientCategory))}
-                  data-testid={`badge-dealer-client-category-${row.id}`}
-                >
-                  {getClientCategoryLabel(row.clientCategory)}
-                </Badge>
-                <Badge variant="outline" className={cn("text-xs", statusBadgeClass(row.status))}>
-                  {row.status}
-                </Badge>
-                {row.hasProblem ? (
-                  <Badge variant="outline" className="border-red-200 bg-red-50 text-xs text-red-800">
-                    Есть вопрос
+            <CardContent
+              className={cn(
+                "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4",
+                compact ? "p-3 sm:gap-3" : "p-4 sm:gap-4",
+              )}
+            >
+              <div className={cn("min-w-0 flex-1", compact ? "space-y-1" : "space-y-2")}>
+                <div className="flex flex-wrap items-center gap-2">
+                  {showWorkPlanSelect && wp && onToggleWorkPlanSelect ? (
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={(v) => onToggleWorkPlanSelect(row.id, v === true)}
+                      className="shrink-0"
+                      data-testid={`checkbox-dealer-select-${row.id}`}
+                      aria-label={`Выбрать клиента ${row.name}`}
+                    />
+                  ) : null}
+                  <span className={cn("font-semibold text-foreground", compact && "text-sm")}>{row.name}</span>
+                  <Badge
+                    variant="outline"
+                    className={cn("text-xs", getClientCategoryBadgeClass(row.clientCategory))}
+                    data-testid={`badge-dealer-client-category-${row.id}`}
+                  >
+                    {getClientCategoryLabel(row.clientCategory)}
                   </Badge>
+                  <Badge variant="outline" className={cn("text-xs", statusBadgeClass(row.status))}>
+                    {row.status}
+                  </Badge>
+                  {row.hasProblem ? (
+                    <Badge variant="outline" className="border-red-200 bg-red-50 text-xs text-red-800">
+                      Есть вопрос
+                    </Badge>
+                  ) : null}
+                  {sched?.date ? (
+                    <Badge variant="outline" className="border-primary/40 bg-primary/10 text-xs font-medium" data-testid={`badge-dealer-scheduled-${row.id}`}>
+                      В работе: {formatWorkPlanDateRu(sched.date)}
+                    </Badge>
+                  ) : null}
+                  {hidden ? (
+                    <Badge variant="secondary" className="text-xs font-medium" data-testid={`badge-dealer-hidden-${row.id}`}>
+                      Скрыт из рабочего списка
+                    </Badge>
+                  ) : null}
+                </div>
+                <p className={cn("text-muted-foreground", compact ? "text-xs" : "text-sm")}>
+                  Код: {row.releaseCode ?? "—"} · {row.city} · {row.manager}
+                </p>
+                {!compact ? (
+                  <>
+                    <p className="text-xs text-muted-foreground">РОП: {row.regionalManager}</p>
+                    <p className="text-xs text-muted-foreground" data-testid={`text-dealer-client-category-${row.id}`}>
+                      Категория клиента: {getClientCategoryLabel(row.clientCategory)}
+                      {row.clientTypeLabel ? ` · тип в данных: ${row.clientTypeLabel}` : ""} · ТТ: {row.outlets}
+                    </p>
+                    {row.releaseAddress ? (
+                      <p className="text-xs text-muted-foreground">Адрес: {row.releaseAddress}</p>
+                    ) : null}
+                  </>
                 ) : null}
               </div>
-              <p className={cn("text-muted-foreground", compact ? "text-xs" : "text-sm")}>
-                Код: {row.releaseCode ?? "—"} · {row.city} · {row.manager}
-              </p>
-              {!compact ? (
-                <>
-                  <p className="text-xs text-muted-foreground">РОП: {row.regionalManager}</p>
-                  <p className="text-xs text-muted-foreground" data-testid={`text-dealer-client-category-${row.id}`}>
-                    Категория клиента: {getClientCategoryLabel(row.clientCategory)}
-                    {row.clientTypeLabel ? ` · тип в данных: ${row.clientTypeLabel}` : ""} · ТТ: {row.outlets}
-                  </p>
-                  {row.releaseAddress ? (
-                    <p className="text-xs text-muted-foreground">Адрес: {row.releaseAddress}</p>
-                  ) : null}
-                </>
-              ) : null}
-            </div>
-            <OpenDealerButton id={row.id} />
-          </CardContent>
-        </Card>
-      ))}
+              <OpenDealerButton id={row.id} />
+            </CardContent>
+          </Card>
+        );
+      })}
     </div>
   );
 }
 
-function ClientTableBlock({ rows }: { rows: DealerRow[] }) {
+function ClientTableBlock({
+  rows,
+  workPlanUserId,
+  workPlanState,
+  showWorkPlanSelect,
+  selectedIds,
+  onToggleWorkPlanSelect,
+}: {
+  rows: DealerRow[];
+  workPlanUserId?: string;
+  workPlanState?: DealerWorkPlanState;
+  showWorkPlanSelect?: boolean;
+  selectedIds?: Set<string>;
+  onToggleWorkPlanSelect?: (dealerId: string, checked: boolean) => void;
+}) {
+  const wp = workPlanUserId && workPlanState;
   return (
     <>
       <div className="space-y-3 sm:hidden">
-        {rows.map((row) => (
-          <Card key={row.id} className="rounded-2xl border border-border/80 bg-card shadow-sm" data-testid={`row-dealer-${row.id}`}>
-            <CardContent className="space-y-2 p-4 text-sm">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="font-semibold">{row.name}</span>
-                <Badge
-                  variant="outline"
-                  className={cn("text-xs", getClientCategoryBadgeClass(row.clientCategory))}
-                  data-testid={`badge-dealer-client-category-${row.id}`}
-                >
-                  {getClientCategoryLabel(row.clientCategory)}
-                </Badge>
-              </div>
-              <p className="text-muted-foreground">
-                {row.city} · {row.status}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {row.manager} · РОП: {row.regionalManager}
-              </p>
-              {row.releaseAddress ? <p className="text-xs text-muted-foreground line-clamp-2">{row.releaseAddress}</p> : null}
-              <OpenDealerButton id={row.id} />
-            </CardContent>
-          </Card>
-        ))}
+        {rows.map((row) => {
+          const hidden = wp ? isDealerHiddenForUser(workPlanUserId, row.id, workPlanState) : false;
+          const sched = wp ? getDealerScheduledDateForUser(workPlanUserId, row.id, workPlanState) : null;
+          const checked = Boolean(selectedIds?.has(row.id));
+          return (
+            <Card key={row.id} className="rounded-2xl border border-border/80 bg-card shadow-sm" data-testid={`row-dealer-${row.id}`}>
+              <CardContent className="space-y-2 p-4 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {showWorkPlanSelect && wp && onToggleWorkPlanSelect ? (
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(v) => onToggleWorkPlanSelect(row.id, v === true)}
+                        data-testid={`checkbox-dealer-select-${row.id}`}
+                        aria-label={`Выбрать клиента ${row.name}`}
+                      />
+                    ) : null}
+                    <span className="font-semibold">{row.name}</span>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className={cn("text-xs", getClientCategoryBadgeClass(row.clientCategory))}
+                    data-testid={`badge-dealer-client-category-${row.id}`}
+                  >
+                    {getClientCategoryLabel(row.clientCategory)}
+                  </Badge>
+                </div>
+                {sched?.date ? (
+                  <Badge variant="outline" className="w-fit border-primary/40 bg-primary/10 text-xs" data-testid={`badge-dealer-scheduled-${row.id}`}>
+                    В работе: {formatWorkPlanDateRu(sched.date)}
+                  </Badge>
+                ) : null}
+                {hidden ? (
+                  <Badge variant="secondary" className="w-fit text-xs" data-testid={`badge-dealer-hidden-${row.id}`}>
+                    Скрыт из рабочего списка
+                  </Badge>
+                ) : null}
+                <p className="text-muted-foreground">
+                  {row.city} · {row.status}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {row.manager} · РОП: {row.regionalManager}
+                </p>
+                {row.releaseAddress ? <p className="text-xs text-muted-foreground line-clamp-2">{row.releaseAddress}</p> : null}
+                <OpenDealerButton id={row.id} />
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
       <div className="hidden min-w-0 sm:block sm:max-w-full sm:overflow-x-auto sm:rounded-2xl sm:border sm:border-border/80 sm:bg-card sm:shadow-sm">
         <table className="w-full min-w-[720px] text-left text-sm">
           <thead className="border-b border-border bg-muted/40">
             <tr>
+              {showWorkPlanSelect ? (
+                <th className="w-10 px-2 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground" aria-label="Выбор" />
+              ) : null}
               {["Код", "Клиент", "Город", "РОП", "Менеджер", "Категория клиента", "Адрес", "Статус", ""].map((h) => (
                 <th key={h} className="whitespace-nowrap px-3 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   {h}
@@ -335,41 +438,68 @@ function ClientTableBlock({ rows }: { rows: DealerRow[] }) {
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
-              <tr key={row.id} className="border-b border-border last:border-0" data-testid={`row-dealer-${row.id}`}>
-                <td className="px-3 py-3 font-mono text-xs text-muted-foreground">{row.releaseCode ?? "—"}</td>
-                <td className="max-w-[160px] truncate px-3 py-3 font-medium" title={row.name}>
-                  {row.name}
-                </td>
-                <td className="whitespace-nowrap px-3 py-3">{row.city}</td>
-                <td className="max-w-[120px] truncate px-3 py-3 text-xs" title={row.regionalManager}>
-                  {row.regionalManager}
-                </td>
-                <td className="max-w-[120px] truncate px-3 py-3 text-xs" title={row.manager}>
-                  {row.manager}
-                </td>
-                <td
-                  className="max-w-[140px] truncate px-3 py-3 text-xs"
-                  title={getClientCategoryLabel(row.clientCategory)}
-                  data-testid={`text-dealer-client-category-${row.id}`}
-                >
-                  {getClientCategoryLabel(row.clientCategory)}
-                </td>
-                <td className="max-w-[180px] truncate px-3 py-3 text-xs text-muted-foreground" title={row.releaseAddress}>
-                  {row.releaseAddress ?? "—"}
-                </td>
-                <td className="px-3 py-3">
-                  <Badge variant="outline" className={cn("text-xs", statusBadgeClass(row.status))}>
-                    {row.status}
-                  </Badge>
-                </td>
-                <td className="px-3 py-3">
-                  <Button asChild size="sm" className="font-semibold" data-testid={`button-open-dealer-${row.id}`}>
-                    <Link href={`/dealers/${row.id}`}>Открыть</Link>
-                  </Button>
-                </td>
-              </tr>
-            ))}
+            {rows.map((row) => {
+              const hidden = wp ? isDealerHiddenForUser(workPlanUserId, row.id, workPlanState) : false;
+              const sched = wp ? getDealerScheduledDateForUser(workPlanUserId, row.id, workPlanState) : null;
+              const checked = Boolean(selectedIds?.has(row.id));
+              return (
+                <tr key={row.id} className="border-b border-border last:border-0" data-testid={`row-dealer-${row.id}`}>
+                  {showWorkPlanSelect && wp && onToggleWorkPlanSelect ? (
+                    <td className="px-2 py-3 align-middle">
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(v) => onToggleWorkPlanSelect(row.id, v === true)}
+                        data-testid={`checkbox-dealer-select-${row.id}`}
+                        aria-label={`Выбрать клиента ${row.name}`}
+                      />
+                    </td>
+                  ) : null}
+                  <td className="px-3 py-3 font-mono text-xs text-muted-foreground">{row.releaseCode ?? "—"}</td>
+                  <td className="max-w-[160px] px-3 py-3 align-top" title={row.name}>
+                    <div className="flex min-w-0 flex-col gap-1">
+                      <span className="truncate font-medium">{row.name}</span>
+                      {sched?.date ? (
+                        <Badge variant="outline" className="w-fit border-primary/40 bg-primary/10 text-[10px]" data-testid={`badge-dealer-scheduled-${row.id}`}>
+                          В работе: {formatWorkPlanDateRu(sched.date)}
+                        </Badge>
+                      ) : null}
+                      {hidden ? (
+                        <Badge variant="secondary" className="w-fit text-[10px]" data-testid={`badge-dealer-hidden-${row.id}`}>
+                          Скрыт из рабочего списка
+                        </Badge>
+                      ) : null}
+                    </div>
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-3">{row.city}</td>
+                  <td className="max-w-[120px] truncate px-3 py-3 text-xs" title={row.regionalManager}>
+                    {row.regionalManager}
+                  </td>
+                  <td className="max-w-[120px] truncate px-3 py-3 text-xs" title={row.manager}>
+                    {row.manager}
+                  </td>
+                  <td
+                    className="max-w-[140px] truncate px-3 py-3 text-xs"
+                    title={getClientCategoryLabel(row.clientCategory)}
+                    data-testid={`text-dealer-client-category-${row.id}`}
+                  >
+                    {getClientCategoryLabel(row.clientCategory)}
+                  </td>
+                  <td className="max-w-[180px] truncate px-3 py-3 text-xs text-muted-foreground" title={row.releaseAddress}>
+                    {row.releaseAddress ?? "—"}
+                  </td>
+                  <td className="px-3 py-3">
+                    <Badge variant="outline" className={cn("text-xs", statusBadgeClass(row.status))}>
+                      {row.status}
+                    </Badge>
+                  </td>
+                  <td className="px-3 py-3">
+                    <Button asChild size="sm" className="font-semibold" data-testid={`button-open-dealer-${row.id}`}>
+                      <Link href={`/dealers/${row.id}`}>Открыть</Link>
+                    </Button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -795,6 +925,75 @@ export default function DealerBase() {
     needsManagerSelection &&
     (workView === "my_clients" || workView === "today" || workView === "my_attention" || workView === "my_top");
 
+  const canMutateWorkPlan = profile.role !== "marketer" && profile.role !== "analyst";
+
+  const [workPlanBump, setWorkPlanBump] = useState(0);
+  const [workPlanFilter, setWorkPlanFilter] = useState<WorkPlanListFilter>(() =>
+    profile.role === "marketer" || profile.role === "analyst" ? "all" : "active",
+  );
+  const [selectedWpIds, setSelectedWpIds] = useState<Set<string>>(() => new Set());
+  const [wpScheduleDate, setWpScheduleDate] = useState("");
+  const [wpNote, setWpNote] = useState("");
+
+  useEffect(() => {
+    const h = () => setWorkPlanBump((n) => n + 1);
+    window.addEventListener(DEALER_WORK_PLAN_EVENT, h);
+    return () => window.removeEventListener(DEALER_WORK_PLAN_EVENT, h);
+  }, []);
+
+  const workPlanState = useMemo(() => loadDealerWorkPlanState(), [workPlanBump]);
+
+  const rowsForWorkPlan = useMemo(
+    () => filterDealersByWorkPlan(displayRows, profile.personaUserId, workPlanFilter, workPlanState),
+    [displayRows, profile.personaUserId, workPlanFilter, workPlanState],
+  );
+
+  useEffect(() => {
+    const allowed = new Set(rowsForWorkPlan.map((r) => r.id));
+    setSelectedWpIds((prev) => {
+      let changed = false;
+      const n = new Set<string>();
+      prev.forEach((id) => {
+        if (allowed.has(id)) n.add(id);
+        else changed = true;
+      });
+      if (!changed && n.size === prev.size) return prev;
+      return n;
+    });
+  }, [rowsForWorkPlan]);
+
+  const selectedWpRows = useMemo(() => rowsForWorkPlan.filter((r) => selectedWpIds.has(r.id)), [rowsForWorkPlan, selectedWpIds]);
+
+  const toggleWpSelect = useCallback((dealerId: string, checked: boolean) => {
+    setSelectedWpIds((prev) => {
+      const n = new Set(prev);
+      if (checked) n.add(dealerId);
+      else n.delete(dealerId);
+      return n;
+    });
+  }, []);
+
+  const buildDealerAbsHref = useCallback((dealerId: string) => {
+    const rel = buildBrowserHashAppHref(`/dealers/${dealerId}`);
+    if (typeof window === "undefined") return rel;
+    try {
+      return new URL(rel, window.location.origin).href;
+    } catch {
+      return rel;
+    }
+  }, []);
+
+  const workPlanListProps = useMemo(
+    () => ({
+      workPlanUserId: profile.personaUserId,
+      workPlanState,
+      showWorkPlanSelect: canMutateWorkPlan,
+      selectedIds: selectedWpIds,
+      onToggleWorkPlanSelect: toggleWpSelect,
+    }),
+    [profile.personaUserId, workPlanState, canMutateWorkPlan, selectedWpIds, toggleWpSelect],
+  );
+
   return (
     <div className="min-w-0 max-w-full overflow-x-hidden space-y-6 sm:space-y-8" data-testid="page-dealer-base">
       <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -866,6 +1065,24 @@ export default function DealerBase() {
                 {f.label}
               </Button>
             ))}
+          </div>
+
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="min-w-0 space-y-1">
+              <Label className="text-xs font-medium text-muted-foreground">Рабочий план</Label>
+              <Select value={workPlanFilter} onValueChange={(v) => setWorkPlanFilter(v as WorkPlanListFilter)}>
+                <SelectTrigger className="min-h-10 w-full min-w-0 max-w-[16rem] rounded-xl" data-testid="select-dealer-work-plan-filter">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(WORK_PLAN_FILTER_LABELS) as WorkPlanListFilter[]).map((k) => (
+                    <SelectItem key={k} value={k}>
+                      {WORK_PLAN_FILTER_LABELS[k]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <div
@@ -1022,7 +1239,7 @@ export default function DealerBase() {
 
       {resultsCapTotal !== null && !hideResultsCap ? (
         <p className="text-sm text-muted-foreground" data-testid="text-dealer-base-display-cap">
-          Показано {displayRows.length} из {resultsCapTotal}
+          Показано {rowsForWorkPlan.length} из {resultsCapTotal}
           {workView === "today" ? ` (лимит режима «Сегодня» ${TODAY_LIMIT})` : ""}
           {workView !== "today" && resultsCapTotal > cap ? ` (лимит отображения ${cap})` : ""}.
           {resultsCapTotal > displayRows.length && workView !== "today"
@@ -1032,6 +1249,33 @@ export default function DealerBase() {
       ) : null}
 
       <section className="min-w-0" data-testid="section-dealer-base-results">
+        {canMutateWorkPlan && selectedWpIds.size > 0 ? (
+          <div className="mb-3 min-w-0">
+            <DealerWorkPlanBulkBar
+              selectedRows={selectedWpRows}
+              scheduleDate={wpScheduleDate}
+              onScheduleDateChange={setWpScheduleDate}
+              note={wpNote}
+              onNoteChange={setWpNote}
+              onSchedule={() => {
+                if (!wpScheduleDate.trim()) return;
+                scheduleDealersForUser(profile.personaUserId, Array.from(selectedWpIds), wpScheduleDate, wpNote);
+                setSelectedWpIds(new Set());
+              }}
+              onHide={() => {
+                hideDealersForUser(profile.personaUserId, Array.from(selectedWpIds));
+                setSelectedWpIds(new Set());
+              }}
+              onRestore={() => {
+                restoreDealersForUser(profile.personaUserId, Array.from(selectedWpIds));
+                setSelectedWpIds(new Set());
+              }}
+              onCopy={() => {}}
+              onClearSelection={() => setSelectedWpIds(new Set())}
+              buildDealerHref={buildDealerAbsHref}
+            />
+          </div>
+        ) : null}
         {resultsContextLine ? (
           <p className="mb-3 text-sm font-medium text-foreground" data-testid="text-dealer-base-results-context">
             {resultsContextLine}
@@ -1211,9 +1455,14 @@ export default function DealerBase() {
             className={workView === "my_clients" ? "space-y-2" : "space-y-3"}
           >
             {workView === "my_clients" ? (
-              <ClientListBlock rows={displayRows} empty="Нет клиентов по выбранным фильтрам." compact />
+              <ClientListBlock
+                rows={rowsForWorkPlan}
+                empty="Нет клиентов по выбранным фильтрам."
+                compact
+                {...workPlanListProps}
+              />
             ) : (
-              <ClientListBlock rows={displayRows} empty="Нет записей." />
+              <ClientListBlock rows={rowsForWorkPlan} empty="Нет записей." {...workPlanListProps} />
             )}
           </div>
         ) : null}
@@ -1225,7 +1474,7 @@ export default function DealerBase() {
                 Ничего не найдено.
               </Card>
             ) : (
-              <ClientTableBlock rows={displayRows} />
+              <ClientTableBlock rows={rowsForWorkPlan} {...workPlanListProps} />
             )}
           </div>
         ) : null}
@@ -1237,7 +1486,7 @@ export default function DealerBase() {
                 Нет клиентов команды по фильтрам.
               </Card>
             ) : (
-              <ClientTableBlock rows={displayRows} />
+              <ClientTableBlock rows={rowsForWorkPlan} {...workPlanListProps} />
             )}
           </div>
         ) : null}

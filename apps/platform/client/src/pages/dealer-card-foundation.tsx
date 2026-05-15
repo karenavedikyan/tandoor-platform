@@ -51,6 +51,13 @@ import {
   getTrainingFlagsHistoryEvents,
   setNewStaffTrainingNeeded,
 } from "@/lib/dealer-card-release-signals";
+import {
+  DEALER_WORK_PLAN_EVENT,
+  formatWorkPlanDateRu,
+  getDealerScheduledDateForUser,
+  isDealerHiddenForUser,
+  loadDealerWorkPlanState,
+} from "@/lib/dealer-work-plan";
 import { DealerActionFocusSection } from "@/components/dealer-action-focus-section";
 import { DealerClientNextStepSection } from "@/components/dealer-client-next-step-section";
 import { DealerStaticProfileSection } from "@/components/dealer-static-profile-section";
@@ -533,6 +540,7 @@ function DealerCardContent({ row }: { row: DealerRow }) {
   const [pointsExpanded, setPointsExpanded] = useState(false);
   const [showcaseCategoryListMode, setShowcaseCategoryListMode] = useState<ShowcaseCategoryListMode>("all");
   const [trainingFlagsBump, setTrainingFlagsBump] = useState(0);
+  const [workPlanBump, setWorkPlanBump] = useState(0);
   const [trainingCompleted, setTrainingCompleted] = useState(() => {
     if (typeof window === "undefined") return row.productTrainingCompleted;
     const s = sessionStorage.getItem(dealerProductTrainingStorageKey(row.id));
@@ -551,6 +559,12 @@ function DealerCardContent({ row }: { row: DealerRow }) {
     const fn = () => setTrainingFlagsBump((n) => n + 1);
     window.addEventListener(DEALER_TRAINING_FLAGS_EVENT, fn);
     return () => window.removeEventListener(DEALER_TRAINING_FLAGS_EVENT, fn);
+  }, []);
+
+  useEffect(() => {
+    const fn = () => setWorkPlanBump((n) => n + 1);
+    window.addEventListener(DEALER_WORK_PLAN_EVENT, fn);
+    return () => window.removeEventListener(DEALER_WORK_PLAN_EVENT, fn);
   }, []);
 
   useEffect(() => {
@@ -597,6 +611,16 @@ function DealerCardContent({ row }: { row: DealerRow }) {
   const newStaffTrainingNeeded = useMemo(() => getNewStaffTrainingNeeded(row.id), [row.id, trainingFlagsBump]);
 
   const competitorActivityRows = useMemo(() => getCompetitorActivityRows(row), [row]);
+
+  const dealerWorkPlanEntry = useMemo(() => {
+    const st = loadDealerWorkPlanState();
+    return getDealerScheduledDateForUser(profile.personaUserId, row.id, st);
+  }, [profile.personaUserId, row.id, workPlanBump]);
+
+  const dealerWorkPlanHidden = useMemo(() => {
+    const st = loadDealerWorkPlanState();
+    return isDealerHiddenForUser(profile.personaUserId, row.id, st);
+  }, [profile.personaUserId, row.id, workPlanBump]);
 
   const onPlanShowcaseCheck = useCallback(() => {
     const label = user?.name ?? userLabelFromProfile(profile);
@@ -788,6 +812,28 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                   </div>
                 </div>
               </div>
+
+              {dealerWorkPlanEntry?.date || dealerWorkPlanEntry?.note?.trim() || dealerWorkPlanHidden ? (
+                <div className="rounded-lg border border-border/80 bg-muted/25 px-3 py-2 text-xs text-foreground">
+                  {dealerWorkPlanEntry?.date ? (
+                    <p data-testid="text-dealer-card-work-plan-date">
+                      Запланирован в работу: {formatWorkPlanDateRu(dealerWorkPlanEntry.date)}
+                    </p>
+                  ) : null}
+                  {dealerWorkPlanEntry?.note?.trim() ? (
+                    <p className="mt-1 text-muted-foreground" data-testid="text-dealer-card-work-plan-note">
+                      Комментарий к плану: {dealerWorkPlanEntry.note.trim()}
+                    </p>
+                  ) : null}
+                  {dealerWorkPlanHidden ? (
+                    <div className="mt-1.5">
+                      <Badge variant="secondary" className="text-[11px] font-medium" data-testid="badge-dealer-card-hidden-from-work-plan">
+                        Скрыт из рабочего списка
+                      </Badge>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
 
               <DealerActionFocusSection
                 row={row}
