@@ -4,6 +4,7 @@ import { Link, useLocation, useParams } from "wouter";
 import { AlertTriangle, BookOpen, Camera, Handshake, MapPin, PieChart, Store, TrendingUp } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -60,6 +61,13 @@ import {
 } from "@/lib/dealer-work-plan";
 import { getDealerStockSignal } from "@/lib/dealer-stock-signals";
 import { getDealerEquipmentSignal } from "@/lib/dealer-equipment-signals";
+import {
+  addDealerComment,
+  canEditDealerCardComments,
+  DEALER_CARD_COMMENTS_EVENT,
+  getDealerComments,
+  getDealerCommentsHistoryEvents,
+} from "@/lib/dealer-card-comments";
 import { DealerActionFocusSection } from "@/components/dealer-action-focus-section";
 import { DealerClientNextStepSection } from "@/components/dealer-client-next-step-section";
 import { DealerStaticProfileSection } from "@/components/dealer-static-profile-section";
@@ -219,7 +227,7 @@ function addCalendarDaysIso(base: Date, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** Реалистичная лента для клиентов менеджера Бойко (команда Купянского). */
+/** Лента: витрина, шаги, обучение, комментарии, системные шаблоны; сортировка по дате по убыванию. */
 function buildHistoryEvents(row: DealerRow): DealerHistoryEvent[] {
   const storage = loadShowcaseStorage();
   const showcaseHist: DealerHistoryEvent[] = getShowcaseHistoryForDealer(row.id, storage).map((e) => ({
@@ -244,34 +252,39 @@ function buildHistoryEvents(row: DealerRow): DealerHistoryEvent[] {
     at: e.at,
   }));
 
-  if (row.releaseManagerId === "mgr-boyko-em") {
-    return [
-      ...showcaseHist,
-      ...nsHist,
-      ...trainHist,
-      {
-        id: `${row.id}-hist-call`,
-        meta: "14.05.2026 · Бойко Екатерина",
-        body: "Звонок: обсудили обновление витрины, клиент готов поставить 3 новые модели.\nСледующее действие: визит 17.05.",
-        at: "2026-05-14T12:00:00.000Z",
-      },
-      {
-        id: `${row.id}-hist-rop`,
-        meta: "13.05.2026 · РОП Купянский",
-        body: "Комментарий руководителя: взять клиента в фокус, высокий потенциал.",
-        at: "2026-05-13T12:00:00.000Z",
-      },
-      {
-        id: `${row.id}-hist-sys`,
-        meta: "10.05.2026 · Система",
-        body: "Клиент попал в «требует внимания»: нет активности 30 дней.",
-        at: "2026-05-10T12:00:00.000Z",
-      },
-    ];
-  }
+  const commentHist: DealerHistoryEvent[] = getDealerCommentsHistoryEvents(row.id).map((e) => ({
+    id: e.id,
+    meta: e.meta,
+    body: e.body,
+    at: e.at,
+  }));
+
+  const boykoExtras: DealerHistoryEvent[] =
+    row.releaseManagerId === "mgr-boyko-em"
+      ? [
+          {
+            id: `${row.id}-hist-call`,
+            meta: "14.05.2026 · Бойко Екатерина",
+            body: "Звонок: обсудили обновление витрины, клиент готов поставить 3 новые модели.\nСледующее действие: визит 17.05.",
+            at: "2026-05-14T12:00:00.000Z",
+          },
+          {
+            id: `${row.id}-hist-rop`,
+            meta: "13.05.2026 · РОП Купянский",
+            body: "Комментарий руководителя: взять клиента в фокус, высокий потенциал.",
+            at: "2026-05-13T12:00:00.000Z",
+          },
+          {
+            id: `${row.id}-hist-sys`,
+            meta: "10.05.2026 · Система",
+            body: "Клиент попал в «требует внимания»: нет активности 30 дней.",
+            at: "2026-05-10T12:00:00.000Z",
+          },
+        ]
+      : [];
 
   const i = parseDealerIndex(row.id);
-  const templates = [
+  const templateBodies = [
     "Обновлена информация по торговой точке",
     "Зафиксирован комментарий менеджера",
     "Проверена дистрибуция",
@@ -283,16 +296,18 @@ function buildHistoryEvents(row: DealerRow): DealerHistoryEvent[] {
     row.distributionDetail.checkDate,
     `${5 + (i % 20)}.${String((i % 8) + 1).padStart(2, "0")}.2026`,
   ];
-  return [
-    ...showcaseHist,
-    ...nsHist,
-    ...trainHist,
-    ...templates.map((text, idx) => ({
-      id: `${row.id}-hist-${idx}`,
-      meta: `${dates[idx % dates.length] ?? row.lastActivity} · Система`,
-      body: text,
-    })),
-  ];
+  const templateEvents: DealerHistoryEvent[] =
+    row.releaseManagerId === "mgr-boyko-em"
+      ? []
+      : templateBodies.map((text, idx) => ({
+          id: `${row.id}-hist-${idx}`,
+          meta: `${dates[idx % dates.length] ?? row.lastActivity} · Система`,
+          body: text,
+        }));
+
+  const merged = [...showcaseHist, ...nsHist, ...trainHist, ...commentHist, ...boykoExtras, ...templateEvents];
+  merged.sort((a, b) => historySortKey(b) - historySortKey(a));
+  return merged;
 }
 
 function isFilledDataCell(v: string | undefined | null): boolean {
@@ -543,6 +558,10 @@ function DealerCardContent({ row }: { row: DealerRow }) {
   const [showcaseCategoryListMode, setShowcaseCategoryListMode] = useState<ShowcaseCategoryListMode>("all");
   const [trainingFlagsBump, setTrainingFlagsBump] = useState(0);
   const [workPlanBump, setWorkPlanBump] = useState(0);
+  const [commentsBump, setCommentsBump] = useState(0);
+  const [historyCommentDraft, setHistoryCommentDraft] = useState("");
+  const [problemCommentDraft, setProblemCommentDraft] = useState("");
+  const [competitorCommentDraft, setCompetitorCommentDraft] = useState("");
   const [trainingCompleted, setTrainingCompleted] = useState(() => {
     if (typeof window === "undefined") return row.productTrainingCompleted;
     const s = sessionStorage.getItem(dealerProductTrainingStorageKey(row.id));
@@ -570,9 +589,18 @@ function DealerCardContent({ row }: { row: DealerRow }) {
   }, []);
 
   useEffect(() => {
+    const fn = () => setCommentsBump((n) => n + 1);
+    window.addEventListener(DEALER_CARD_COMMENTS_EVENT, fn);
+    return () => window.removeEventListener(DEALER_CARD_COMMENTS_EVENT, fn);
+  }, []);
+
+  useEffect(() => {
     setHistoryExpanded(false);
     setPointsExpanded(false);
     setShowcaseCategoryListMode("all");
+    setHistoryCommentDraft("");
+    setProblemCommentDraft("");
+    setCompetitorCommentDraft("");
     if (typeof window === "undefined") return;
     const s = sessionStorage.getItem(dealerProductTrainingStorageKey(row.id));
     if (s === "1") setTrainingCompleted(true);
@@ -582,7 +610,10 @@ function DealerCardContent({ row }: { row: DealerRow }) {
 
   const businessCategoryLabel = getClientCategoryLabel(row.clientCategory);
   const activeSection = useActiveSection(row.id);
-  const historyEvents = useMemo(() => buildHistoryEvents(row), [row, showcaseBump, nextStepBump, trainingFlagsBump]);
+  const historyEvents = useMemo(
+    () => buildHistoryEvents(row),
+    [row, showcaseBump, nextStepBump, trainingFlagsBump, commentsBump],
+  );
   const historyTimeline = useMemo(() => {
     const sorted = [...historyEvents].sort((a, b) => historySortKey(b) - historySortKey(a));
     return collapseAdjacentDuplicateHistoryBodies(sorted);
@@ -607,6 +638,13 @@ function DealerCardContent({ row }: { row: DealerRow }) {
   }, [row, showcaseBump]);
 
   const canViewShowcaseCard = useMemo(() => canViewShowcaseDistribution(profile, row), [profile, row]);
+
+  const canEditCardComments = useMemo(() => canEditDealerCardComments(profile, row), [profile, row]);
+
+  const competitorCommentPreview = useMemo(
+    () => getDealerComments(row.id).filter((c) => c.type === "competitor").slice(0, 2),
+    [row.id, commentsBump],
+  );
 
   const distributionSnap = useMemo(() => getDistributionSnapshotForCard(row), [row]);
 
@@ -712,6 +750,29 @@ function DealerCardContent({ row }: { row: DealerRow }) {
       : row.distributionDetail.total >= 50
         ? "Есть резерв по выкладке и полноте линейки."
         : "Нужны действия по усилению дистрибуции и контролю на точке.";
+
+  const showTermsDistributionBlock = showDistributionBlock || hasTermsBlock;
+
+  const termsDistributionSummary = useMemo(() => {
+    const parts: string[] = [];
+    if (showDistributionBlock) parts.push(distributionConclusion);
+    if (isFilledDataCell(row.terms.payment)) parts.push(`Оплата: ${row.terms.payment.trim()}`);
+    if (isFilledDataCell(row.terms.edo)) parts.push(`ЭДО: ${row.terms.edo.trim()}`);
+    if (isFilledDataCell(row.terms.tandoorClub)) parts.push(`Тандор клуб: ${row.terms.tandoorClub.trim()}`);
+    if (isFilledDataCell(row.terms.special)) parts.push(`Спец. условия: ${row.terms.special.trim()}`);
+    if (isFilledDataCell(row.terms.limit)) parts.push(`Лимит: ${row.terms.limit.trim()}`);
+    if (isFilledDataCell(row.terms.bonuses)) parts.push(`Бонусы: ${row.terms.bonuses.trim()}`);
+    return parts.join(" · ");
+  }, [
+    showDistributionBlock,
+    distributionConclusion,
+    row.terms.payment,
+    row.terms.edo,
+    row.terms.tandoorClub,
+    row.terms.special,
+    row.terms.limit,
+    row.terms.bonuses,
+  ]);
 
   return (
     <div className="min-w-0 max-w-full space-y-4 overflow-x-hidden sm:space-y-6" data-testid="page-dealer-card-foundation">
@@ -880,26 +941,93 @@ function DealerCardContent({ row }: { row: DealerRow }) {
               onApplied={() => setShowcaseBump((n) => n + 1)}
             />
 
-            {competitorActivityRows.length > 0 ? (
+            {competitorActivityRows.length > 0 || canEditCardComments ? (
               <section
                 data-testid="section-dealer-competitor-activity"
                 className="scroll-mt-28 space-y-2 sm:scroll-mt-32"
               >
-                <SectionTitle subtitle="Кратко по рынку точки (без финансовых данных).">Активность конкурентов</SectionTitle>
+                <SectionTitle
+                  subtitle={
+                    competitorActivityRows.length > 0
+                      ? "Кратко по рынку точки (без финансовых данных)."
+                      : "Зафиксируйте наблюдения — текст попадёт в историю активности."
+                  }
+                >
+                  Активность конкурентов
+                </SectionTitle>
                 <SurfaceCard>
-                  <CardContent className="space-y-2 px-3 py-3 sm:px-4">
-                    {competitorActivityRows.map((a) => (
-                      <div
-                        key={a.activityId}
-                        data-testid={`row-dealer-competitor-activity-${a.activityId}`}
-                        className="rounded-lg border border-border/60 bg-muted/10 px-2.5 py-2 text-sm"
-                      >
-                        <p className="font-semibold text-foreground">{a.competitorName}</p>
-                        <p className="text-xs text-muted-foreground">Акция / условия: {a.promo}</p>
-                        <p className="mt-1 text-xs leading-relaxed text-foreground">Комментарий РМ: {a.rmComment}</p>
-                        <p className="mt-1 text-[11px] text-muted-foreground">Обновлено: {a.updatedAtLabel}</p>
+                  <CardContent className="space-y-3 px-3 py-3 sm:px-4">
+                    {competitorActivityRows.length > 0 ? (
+                      <div className="space-y-2">
+                        {competitorActivityRows.map((a) => (
+                          <div
+                            key={a.activityId}
+                            data-testid={`row-dealer-competitor-activity-${a.activityId}`}
+                            className="rounded-lg border border-border/60 bg-muted/10 px-2.5 py-2 text-sm"
+                          >
+                            <p className="font-semibold text-foreground">{a.competitorName}</p>
+                            <p className="text-xs text-muted-foreground">Акция / условия: {a.promo}</p>
+                            <p className="mt-1 text-xs leading-relaxed text-foreground">Комментарий РМ: {a.rmComment}</p>
+                            <p className="mt-1 text-[11px] text-muted-foreground">Обновлено: {a.updatedAtLabel}</p>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    ) : null}
+                    {competitorCommentPreview.length > 0 ? (
+                      <div className="space-y-2">
+                        {competitorCommentPreview.map((c) => {
+                          const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(c.createdAt.trim());
+                          const head = m ? `${m[3]}.${m[2]}.${m[1]} · ${c.createdByName}` : `${c.createdByName}`;
+                          return (
+                            <div
+                              key={c.id}
+                              data-testid={`row-dealer-competitor-comment-${c.id}`}
+                              className="rounded-md border border-border/50 bg-muted/20 px-2.5 py-1.5 text-xs leading-relaxed"
+                            >
+                              <p className="text-[11px] font-semibold text-muted-foreground">{head}</p>
+                              <p className="mt-0.5 text-sm text-foreground">{c.body}</p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                    {canEditCardComments ? (
+                      <div
+                        data-testid="section-dealer-competitor-comment-form"
+                        className="space-y-2 rounded-lg border border-dashed border-border/80 bg-muted/10 p-2.5 sm:p-3"
+                      >
+                        <Label htmlFor="dealer-competitor-comment" className="text-xs text-muted-foreground">
+                          Комментарий по конкурентам
+                        </Label>
+                        <Textarea
+                          id="dealer-competitor-comment"
+                          value={competitorCommentDraft}
+                          onChange={(e) => setCompetitorCommentDraft(e.target.value)}
+                          placeholder="Комментарий по конкурентам"
+                          rows={2}
+                          className="min-h-[52px] resize-y text-sm"
+                          data-testid="textarea-dealer-competitor-comment"
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="min-h-9 w-full font-semibold sm:w-auto"
+                          data-testid="button-dealer-competitor-comment-add"
+                          disabled={!competitorCommentDraft.trim()}
+                          onClick={() => {
+                            addDealerComment(row.id, {
+                              type: "competitor",
+                              body: competitorCommentDraft,
+                              createdBy: user?.id ?? profile.personaUserId,
+                              createdByName: user?.name ?? userLabelFromProfile(profile),
+                            });
+                            setCompetitorCommentDraft("");
+                          }}
+                        >
+                          Добавить комментарий
+                        </Button>
+                      </div>
+                    ) : null}
                   </CardContent>
                 </SurfaceCard>
               </section>
@@ -918,9 +1046,48 @@ function DealerCardContent({ row }: { row: DealerRow }) {
               data-testid="section-dealer-activity-history"
               className="scroll-mt-28 space-y-2 sm:scroll-mt-32"
             >
-              <SectionTitle subtitle="События по витрине, шагам и сопровождению.">История активности</SectionTitle>
+              <SectionTitle subtitle="События по витрине, шагам, комментариям и сопровождению.">
+                История активности
+              </SectionTitle>
               <SurfaceCard>
                 <CardContent className="px-3 py-0 pt-2 sm:px-4">
+                  {canEditCardComments ? (
+                    <div
+                      data-testid="section-dealer-history-comment-form"
+                      className="border-b border-border py-3 first:pt-2"
+                    >
+                      <Label htmlFor="dealer-history-comment" className="text-xs text-muted-foreground">
+                        Комментарий в ленту
+                      </Label>
+                      <Textarea
+                        id="dealer-history-comment"
+                        value={historyCommentDraft}
+                        onChange={(e) => setHistoryCommentDraft(e.target.value)}
+                        placeholder="Добавить комментарий по клиенту"
+                        rows={2}
+                        className="mt-1.5 min-h-[52px] resize-y text-sm"
+                        data-testid="textarea-dealer-history-comment"
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="mt-2 min-h-9 w-full font-semibold sm:w-auto"
+                        data-testid="button-dealer-history-comment-add"
+                        disabled={!historyCommentDraft.trim()}
+                        onClick={() => {
+                          addDealerComment(row.id, {
+                            type: "general",
+                            body: historyCommentDraft,
+                            createdBy: user?.id ?? profile.personaUserId,
+                            createdByName: user?.name ?? userLabelFromProfile(profile),
+                          });
+                          setHistoryCommentDraft("");
+                        }}
+                      >
+                        Добавить
+                      </Button>
+                    </div>
+                  ) : null}
                   {(historyExpanded ? historyTimeline : historyTimeline.slice(0, 3)).map((ev) => {
                     const nav = inferHistoryNavTarget(ev);
                     const openLinked = () => {
@@ -1013,20 +1180,65 @@ function DealerCardContent({ row }: { row: DealerRow }) {
               </section>
             ) : null}
 
-            {hasTermsBlock ? (
-              <div data-testid="section-dealer-terms">
-                <SectionTitle subtitle="Условия сотрудничества.">Условия работы</SectionTitle>
+            {showTermsDistributionBlock ? (
+              <section
+                data-testid="section-dealer-terms-distribution"
+                className="scroll-mt-28 space-y-2 sm:scroll-mt-32 lg:scroll-mt-32"
+              >
+                <SectionTitle subtitle="Условия сотрудничества и показатели дистрибуции в одном месте.">
+                  Условия и дистрибуция
+                </SectionTitle>
                 <SurfaceCard className="mt-2">
-                  <CardContent className="px-3 py-3 sm:px-4">
-                    <FieldRow label="Тандор клуб" value={row.terms.tandoorClub} icon={Handshake} />
-                    <FieldRow label="Спец. условия" value={row.terms.special} />
-                    <FieldRow label="Тип оплаты" value={row.terms.payment} />
-                    <FieldRow label="ЭДО" value={row.terms.edo} />
-                    <FieldRow label="Лимит / индивидуальные условия" value={row.terms.limit} />
-                    <FieldRow label="Бонусы / мотивация продавцов" value={row.terms.bonuses} />
+                  <CardContent className="space-y-3 px-3 py-3 sm:px-4">
+                    {termsDistributionSummary.trim() ? (
+                      <p
+                        data-testid="text-dealer-terms-distribution-summary"
+                        className="text-sm leading-snug text-muted-foreground"
+                      >
+                        {termsDistributionSummary}
+                      </p>
+                    ) : null}
+                    {showDistributionBlock ? (
+                      <div className="grid gap-2 sm:grid-cols-3">
+                        {[
+                          { label: "МК", pct: row.distributionDetail.mk },
+                          { label: "ВХ", pct: row.distributionDetail.vh },
+                          { label: "Общая дистрибуция", pct: row.distributionDetail.total },
+                        ].map((dist) => (
+                          <SurfaceCard key={dist.label}>
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 px-3 pb-1 pt-3 sm:px-4">
+                              <div className="flex items-center gap-2">
+                                <PieChart className="h-3.5 w-3.5 text-primary" aria-hidden />
+                                <CardTitle className="text-xs font-semibold">{dist.label}</CardTitle>
+                              </div>
+                              <span className="text-base font-bold tabular-nums text-foreground">{dist.pct}%</span>
+                            </CardHeader>
+                            <CardContent className="px-3 pb-3 sm:px-4">
+                              <Progress value={dist.pct} className="h-2 bg-muted" />
+                            </CardContent>
+                          </SurfaceCard>
+                        ))}
+                      </div>
+                    ) : null}
+                    {hasTermsBlock ? (
+                      <div className="space-y-0 border-t border-border pt-3">
+                        {isFilledDataCell(row.terms.tandoorClub) ? (
+                          <FieldRow label="Тандор клуб" value={row.terms.tandoorClub} icon={Handshake} />
+                        ) : null}
+                        {isFilledDataCell(row.terms.special) ? <FieldRow label="Спец. условия" value={row.terms.special} /> : null}
+                        {isFilledDataCell(row.terms.payment) ? <FieldRow label="Тип оплаты" value={row.terms.payment} /> : null}
+                        {isFilledDataCell(row.terms.edo) ? <FieldRow label="ЭДО" value={row.terms.edo} /> : null}
+                        {isFilledDataCell(row.terms.limit) ? (
+                          <FieldRow label="Лимит / индивидуальные условия" value={row.terms.limit} />
+                        ) : null}
+                        {isFilledDataCell(row.terms.bonuses) ? (
+                          <FieldRow label="Бонусы / мотивация продавцов" value={row.terms.bonuses} />
+                        ) : null}
+                      </div>
+                    ) : null}
                   </CardContent>
                 </SurfaceCard>
-              </div>
+              </section>
             ) : null}
 
             {hasCompetitorsBlock ? (
@@ -1045,14 +1257,14 @@ function DealerCardContent({ row }: { row: DealerRow }) {
 
             {showProblemsBlock ? (
               <div data-testid="section-dealer-problems">
-                <SectionTitle subtitle="Текущие вопросы по клиенту.">Проблемы и внимание</SectionTitle>
+                <SectionTitle subtitle="Только если есть зафиксированные вопросы по клиенту.">Проблемы и внимание</SectionTitle>
                 <SurfaceCard
                   className={cn(
                     "mt-2 border-amber-200/80 bg-gradient-to-b from-amber-50/50 to-card",
                     !row.hasProblem && "border-border from-muted/30",
                   )}
                 >
-                  <CardContent className="space-y-3 px-3 py-3 sm:px-4">
+                  <CardContent className="space-y-2.5 px-3 py-3 sm:space-y-3 sm:px-4">
                     {row.hasProblem ? (
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge variant="outline" className="border-amber-300/80 bg-amber-100/60 font-medium text-amber-950">
@@ -1065,10 +1277,10 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                         Без критичных замечаний
                       </Badge>
                     )}
-                    <p className={cn("text-sm font-semibold leading-relaxed", row.hasProblem ? "text-red-700" : "text-foreground")}>
+                    <p className={cn("text-sm font-semibold leading-snug", row.hasProblem ? "text-red-700" : "text-foreground")}>
                       {row.issues.summary}
                     </p>
-                    <div className="grid gap-3 rounded-lg bg-card/80 p-3 sm:grid-cols-2">
+                    <div className="grid gap-2 rounded-lg bg-card/80 p-2.5 sm:grid-cols-2 sm:gap-3 sm:p-3">
                       <div>
                         <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Кто зафиксировал</p>
                         <p className="mt-0.5 text-sm font-medium text-foreground">{row.issues.who}</p>
@@ -1078,7 +1290,9 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                         <p className="mt-0.5 text-sm font-medium text-foreground">{row.issues.date}</p>
                       </div>
                       <div>
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Следующий шаг</p>
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          Действие в карточке внимания
+                        </p>
                         <p className="mt-0.5 text-sm font-medium text-foreground">{row.nextAction}</p>
                       </div>
                       <div>
@@ -1088,6 +1302,43 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                     </div>
                     {isFilledDataCell(row.comment) ? (
                       <p className="text-xs text-muted-foreground">Комментарий: {row.comment}</p>
+                    ) : null}
+                    {canEditCardComments ? (
+                      <div
+                        data-testid="section-dealer-problem-comment-form"
+                        className="space-y-2 border-t border-border/80 pt-2.5"
+                      >
+                        <Label htmlFor="dealer-problem-comment" className="text-xs text-muted-foreground">
+                          Комментарий по проблеме
+                        </Label>
+                        <Textarea
+                          id="dealer-problem-comment"
+                          value={problemCommentDraft}
+                          onChange={(e) => setProblemCommentDraft(e.target.value)}
+                          placeholder="Комментарий по проблеме"
+                          rows={2}
+                          className="min-h-[52px] resize-y text-sm"
+                          data-testid="textarea-dealer-problem-comment"
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="min-h-9 w-full font-semibold sm:w-auto"
+                          data-testid="button-dealer-problem-comment-add"
+                          disabled={!problemCommentDraft.trim()}
+                          onClick={() => {
+                            addDealerComment(row.id, {
+                              type: "problem",
+                              body: problemCommentDraft,
+                              createdBy: user?.id ?? profile.personaUserId,
+                              createdByName: user?.name ?? userLabelFromProfile(profile),
+                            });
+                            setProblemCommentDraft("");
+                          }}
+                        >
+                          Сохранить комментарий
+                        </Button>
+                      </div>
                     ) : null}
                   </CardContent>
                 </SurfaceCard>
@@ -1208,38 +1459,6 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                     </div>
                   </div>
                 ) : null}
-              </section>
-            ) : null}
-
-            {showDistributionBlock ? (
-              <section data-testid="section-dealer-distribution" className="scroll-mt-28 space-y-2 sm:scroll-mt-32">
-                <SectionTitle subtitle={`Последняя проверка: ${row.distributionDetail.checkDate}.`}>Дистрибуция</SectionTitle>
-                <div className="grid gap-2 sm:grid-cols-3">
-                  {[
-                    { label: "МК", pct: row.distributionDetail.mk },
-                    { label: "ВХ", pct: row.distributionDetail.vh },
-                    { label: "Общая дистрибуция", pct: row.distributionDetail.total },
-                  ].map((dist) => (
-                    <SurfaceCard key={dist.label}>
-                      <CardHeader className="flex flex-row items-center justify-between space-y-0 px-3 pb-1 pt-3 sm:px-4">
-                        <div className="flex items-center gap-2">
-                          <PieChart className="h-3.5 w-3.5 text-primary" aria-hidden />
-                          <CardTitle className="text-xs font-semibold">{dist.label}</CardTitle>
-                        </div>
-                        <span className="text-base font-bold tabular-nums text-foreground">{dist.pct}%</span>
-                      </CardHeader>
-                      <CardContent className="px-3 pb-3 sm:px-4">
-                        <Progress value={dist.pct} className="h-2 bg-muted" />
-                      </CardContent>
-                    </SurfaceCard>
-                  ))}
-                </div>
-                <SurfaceCard>
-                  <CardContent className="px-3 py-3 sm:px-4">
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Вывод</p>
-                    <p className="mt-1 text-sm leading-relaxed text-foreground">{distributionConclusion}</p>
-                  </CardContent>
-                </SurfaceCard>
               </section>
             ) : null}
 

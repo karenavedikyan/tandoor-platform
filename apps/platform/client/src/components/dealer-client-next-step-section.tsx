@@ -117,9 +117,11 @@ export function DealerClientNextStepSection({ row, profile, actorUserId, actorLa
       <Card className="rounded-xl border border-border/70 bg-card shadow-xs">
         <CardHeader className="space-y-1 p-3 pb-2 sm:p-4">
           <CardTitle className="text-sm sm:text-base">Следующий шаг</CardTitle>
-          <CardDescription className="text-xs">
-            План контакта сохраняется в браузере до закрытия вкладки.
-          </CardDescription>
+          {stored && canEdit && !showForm ? null : (
+            <CardDescription className="text-xs">
+              План контакта сохраняется в браузере до закрытия вкладки.
+            </CardDescription>
+          )}
         </CardHeader>
         <CardContent className="space-y-3 p-3 pt-0 sm:p-4 sm:pt-0">
           {!canEdit ? (
@@ -130,25 +132,30 @@ export function DealerClientNextStepSection({ row, profile, actorUserId, actorLa
             </p>
           ) : null}
 
-          <p
-            className={cn("text-sm font-medium leading-snug text-foreground", !stored && "text-muted-foreground")}
-            data-testid="text-dealer-next-step-summary"
-          >
-            {summaryText}
-          </p>
-
           {stored && canEdit && !showForm ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="min-h-9 font-semibold"
-              data-testid="button-dealer-next-step-edit"
-              onClick={() => setEditing(true)}
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+              <p className="text-sm font-medium leading-snug text-foreground" data-testid="text-dealer-next-step-summary">
+                {summaryText}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="min-h-9 w-full shrink-0 font-semibold sm:w-auto"
+                data-testid="button-dealer-next-step-edit"
+                onClick={() => setEditing(true)}
+              >
+                Изменить
+              </Button>
+            </div>
+          ) : (
+            <p
+              className={cn("text-sm font-medium leading-snug text-foreground", !stored && "text-muted-foreground")}
+              data-testid="text-dealer-next-step-summary"
             >
-              Изменить
-            </Button>
-          ) : null}
+              {summaryText}
+            </p>
+          )}
 
           {showForm ? (
             <>
