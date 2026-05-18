@@ -1,5 +1,6 @@
 import { useMemo, type ReactNode } from "react";
 import { Link } from "wouter";
+import { MainPlanExecutionChart } from "@/components/main-plan-execution-chart";
 import { TeamSummaryCard } from "@/components/team-summary-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,7 +17,13 @@ import { getEffectiveTeamLeadTeamId } from "@/lib/release-demo-profile";
 import { getAllMatrixTasks } from "@/lib/trade-point-task-data";
 import { getRopOptions } from "@/lib/rop-manager-filters";
 import { getShowcaseOnlyTasks } from "@/lib/task-classification";
-import { getSalesUserById, getTeamManagers, type SalesRole } from "@/lib/sales-control-data";
+import {
+  getAllSalesManagers,
+  getSalesUserById,
+  getTeamManagers,
+  type SalesRole,
+} from "@/lib/sales-control-data";
+import { currentMonthPeriodLabel, type PlanExecutionScope } from "@/lib/sales-manager-kpi-data";
 import { buildTeamSummaries } from "@/lib/team-summary";
 
 function countOpenTasksForDealers(dealerIds: Set<string>): number {
@@ -95,6 +102,17 @@ export function MainRoleDashboard() {
   const can = (path: string) => Boolean(user && canAccessPath(user.role, path));
 
   const planHref = salesControlHomeHref(role);
+
+  const planExecutionScope: PlanExecutionScope =
+    role === "sales_manager" ? "manager" : role === "team_lead" ? "team" : "all";
+
+  const planExecutionManagerCount = useMemo(() => {
+    if (role === "sales_manager") return 1;
+    if (role === "team_lead") return getTeamManagers(getEffectiveTeamLeadTeamId(profile)).length || 1;
+    return getAllSalesManagers().length || 1;
+  }, [role, profile]);
+
+  const planExecutionPeriodLabel = useMemo(() => currentMonthPeriodLabel(), []);
 
   const teamSummaries = useMemo(() => buildTeamSummaries(profile), [profile]);
 
@@ -294,6 +312,12 @@ export function MainRoleDashboard() {
             </MainKpiLink>
           ) : null}
         </div>
+
+        <MainPlanExecutionChart
+          scope={planExecutionScope}
+          managerCount={planExecutionManagerCount}
+          periodLabel={planExecutionPeriodLabel}
+        />
 
         <div className="flex min-w-0 flex-wrap gap-2">
           {links.map((l) => (

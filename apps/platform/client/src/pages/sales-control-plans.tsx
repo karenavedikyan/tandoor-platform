@@ -7,6 +7,7 @@ import { FloatingBackButton } from "@/components/navigation/floating-back-button
 import { useSalesControlStoredState } from "@/hooks/use-sales-control-stored-state";
 import { getManagersForRopTeam, getRopOptions, isRopOrManagerAllFilter } from "@/lib/rop-manager-filters";
 import {
+  aggregateDirectorKpis,
   formatRub,
   formatSalesMetricValue,
   getAllSalesManagers,
@@ -19,9 +20,78 @@ import {
   getTeamById,
   SALES_KPI_METRICS_SORTED,
   SALES_PLAN_PERIODS,
+  type SalesDirectorAggregate,
+  type SalesKpiMetric,
 } from "@/lib/sales-control-data";
 
 const ALL = "__all__";
+
+function kpiRowTone(pct: number): string {
+  if (pct >= 95) return "bg-emerald-500";
+  if (pct >= 80) return "bg-primary";
+  if (pct >= 60) return "bg-amber-500";
+  return "bg-red-500";
+}
+
+function formatKpiValue(metric: SalesKpiMetric | undefined, value: number): string {
+  if (!metric) return String(Math.round(value));
+  return formatSalesMetricValue(metric, value);
+}
+
+type KpiSummaryRowProps = {
+  row: SalesDirectorAggregate;
+  metric: SalesKpiMetric | undefined;
+};
+
+function KpiPlanSummaryRow({ row, metric }: KpiSummaryRowProps) {
+  const pct = Math.max(0, Math.min(100, Math.round(row.pct)));
+  const remaining = Math.max(0, row.targetSum - row.actualSum);
+  return (
+    <div
+      className="space-y-2 rounded-xl border border-border/80 bg-card p-3"
+      data-testid={`row-sales-plan-kpi-${row.metricId}`}
+    >
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="text-sm font-semibold text-foreground">{row.label}</p>
+        <p className="text-xs tabular-nums text-muted-foreground" data-testid={`text-sales-plan-kpi-pct-${row.metricId}`}>
+          {Math.round(row.pct)}%
+        </p>
+      </div>
+      <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+        <div className={`h-full rounded-full ${kpiRowTone(pct)}`} style={{ width: `${pct}%` }} />
+      </div>
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs sm:grid-cols-3">
+        <div>
+          <p className="text-muted-foreground">План</p>
+          <p
+            className="font-semibold tabular-nums text-foreground"
+            data-testid={`text-sales-plan-kpi-plan-${row.metricId}`}
+          >
+            {formatKpiValue(metric, row.targetSum)}
+          </p>
+        </div>
+        <div>
+          <p className="text-muted-foreground">Факт</p>
+          <p
+            className="font-semibold tabular-nums text-foreground"
+            data-testid={`text-sales-plan-kpi-fact-${row.metricId}`}
+          >
+            {formatKpiValue(metric, row.actualSum)}
+          </p>
+        </div>
+        <div>
+          <p className="text-muted-foreground">До плана</p>
+          <p
+            className="font-semibold tabular-nums text-foreground"
+            data-testid={`text-sales-plan-kpi-remaining-${row.metricId}`}
+          >
+            {formatKpiValue(metric, remaining)}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function SalesControlPlansPage() {
   const [stored] = useSalesControlStoredState();
@@ -38,6 +108,31 @@ export default function SalesControlPlansPage() {
     if (!isRopOrManagerAllFilter(managerFilter)) list = list.filter((m) => m.id === managerFilter);
     return list;
   }, [rowsAll, ropTeam, managerFilter]);
+
+  const scopedManagerIds = useMemo(() => rows.map((r) => r.id), [rows]);
+
+  const kpiSummary = useMemo(
+    () => aggregateDirectorKpis(periodId, scopedManagerIds, stored),
+    [periodId, scopedManagerIds, stored],
+  );
+
+  const kpiMetricById = useMemo(() => {
+    const map: Record<string, SalesKpiMetric> = {};
+    for (const m of SALES_KPI_METRICS_SORTED) map[m.id] = m;
+    return map;
+  }, []);
+
+  const kpiScopeLabel = useMemo(() => {
+    if (!isRopOrManagerAllFilter(managerFilter)) {
+      const mgr = rowsAll.find((m) => m.id === managerFilter);
+      return mgr ? `по менеджеру: ${mgr.name}` : "по выбранному менеджеру";
+    }
+    if (!isRopOrManagerAllFilter(ropTeam)) {
+      const team = getTeamById(ropTeam);
+      return team ? `по команде: ${team.name}` : "по выбранной команде";
+    }
+    return "по отделу продаж";
+  }, [managerFilter, ropTeam, rowsAll]);
 
   useEffect(() => {
     if (managerFilter === ALL) return;
@@ -154,6 +249,20 @@ export default function SalesControlPlansPage() {
           </TableBody>
         </Table>
       </div>
+
+      <section className="space-y-3" data-testid="section-sales-plans-kpi">
+        <div>
+          <h2 className="text-lg font-semibold text-foreground">Выполнение и план по KPI</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Сводка плана и факта по KPI {kpiScopeLabel}. Учитываются продажи ВХ, МК, фурнитура и активность по клиентам.
+          </p>
+        </div>
+        <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {kpiSummary.map((row) => (
+            <KpiPlanSummaryRow key={row.metricId} row={row} metric={kpiMetricById[row.metricId]} />
+          ))}
+        </div>
+      </section>
 
       <Link href="/sales-control/director" className="text-sm font-medium text-primary underline-offset-4 hover:underline">
         К панели руководителя продаж
