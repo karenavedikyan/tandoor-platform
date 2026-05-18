@@ -96,6 +96,11 @@ import {
   getMergedDealerProfile,
   updateDealerProfile,
 } from "@/lib/dealer-profile-overrides";
+import {
+  DEALER_CHARACTERISTICS_EVENT,
+  getDealerCharacteristicsHistoryEvents,
+} from "@/lib/dealer-characteristics";
+import { DealerCharacteristicsSection } from "@/components/dealer-characteristics-section";
 import { DealerLegalEntitiesSection } from "@/components/dealer-legal-entities-section";
 import { DealerTradePointsSection } from "@/components/dealer-trade-points-section";
 import { DealerActionFocusSection } from "@/components/dealer-action-focus-section";
@@ -345,6 +350,13 @@ function buildHistoryEvents(row: DealerRow): DealerHistoryEvent[] {
     at: e.at,
   }));
 
+  const charHist: DealerHistoryEvent[] = getDealerCharacteristicsHistoryEvents(row.id).map((e) => ({
+    id: e.id,
+    meta: e.meta,
+    body: e.body,
+    at: e.at,
+  }));
+
   const boykoExtras: DealerHistoryEvent[] =
     row.releaseManagerId === "mgr-boyko-em"
       ? [
@@ -400,6 +412,7 @@ function buildHistoryEvents(row: DealerRow): DealerHistoryEvent[] {
     ...tpHist,
     ...profHist,
     ...contactHist,
+    ...charHist,
     ...boykoExtras,
     ...templateEvents,
   ];
@@ -703,10 +716,12 @@ function DealerCardContent({ row }: { row: DealerRow }) {
     window.addEventListener(DEALER_TRADE_POINTS_EVENT, fn);
     window.addEventListener(DEALER_PROFILE_OVERRIDES_EVENT, fn);
     window.addEventListener(CLIENT_CONTACTS_EVENT, fn);
+    window.addEventListener(DEALER_CHARACTERISTICS_EVENT, fn);
     return () => {
       window.removeEventListener(DEALER_TRADE_POINTS_EVENT, fn);
       window.removeEventListener(DEALER_PROFILE_OVERRIDES_EVENT, fn);
       window.removeEventListener(CLIENT_CONTACTS_EVENT, fn);
+      window.removeEventListener(DEALER_CHARACTERISTICS_EVENT, fn);
     };
   }, []);
 
@@ -1197,6 +1212,8 @@ function DealerCardContent({ row }: { row: DealerRow }) {
               <SectionTitle subtitle="Полный список контактов и быстрые действия.">Контакты клиента</SectionTitle>
               <DealerContactsSection row={row} profile={profile} variant="embedded" />
             </section>
+
+            <DealerCharacteristicsSection row={row} profile={profile} />
 
             <section
               id={SECTION_DOM_IDS.work}
