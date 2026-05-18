@@ -27,6 +27,7 @@ import {
 } from "@/lib/dealer-base-mock-data";
 import { dealerRowStatusForProduct, getDealerProductPreview } from "@/lib/catalog-data";
 import { DealerShowcaseDistributionSection, type ShowcaseCategoryListMode } from "@/components/dealer-showcase-distribution-section";
+import { DealerShowcaseMatrixSummarySection } from "@/components/dealer-showcase-matrix-summary-section";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -106,6 +107,11 @@ import { DealerTradePointsSection } from "@/components/dealer-trade-points-secti
 import { DealerActionFocusSection } from "@/components/dealer-action-focus-section";
 import { DealerClientNextStepSection } from "@/components/dealer-client-next-step-section";
 import { DealerStaticProfileSection } from "@/components/dealer-static-profile-section";
+import {
+  getShowcaseMatrixDealerHistoryEvents,
+  loadShowcaseMatrixStorage,
+  SHOWCASE_MATRIX_CHANGED_EVENT,
+} from "@/lib/trade-point-showcase-matrix-storage";
 import { DealerContactsSection } from "@/components/dealer-contacts-section";
 
 const SECTION_IDS = [
@@ -300,6 +306,14 @@ function buildHistoryEvents(row: DealerRow): DealerHistoryEvent[] {
     at: e.at,
   }));
 
+  const mxStorage = loadShowcaseMatrixStorage();
+  const matrixShowcaseHist: DealerHistoryEvent[] = getShowcaseMatrixDealerHistoryEvents(row.id, mxStorage).map((e) => ({
+    id: e.id,
+    meta: e.meta,
+    body: e.body,
+    at: e.at,
+  }));
+
   const nsStorage = loadClientNextStepsStorage();
   const nsHist: DealerHistoryEvent[] = getClientNextStepHistoryForDealer(row.id, nsStorage).map((e) => ({
     id: e.id,
@@ -405,6 +419,7 @@ function buildHistoryEvents(row: DealerRow): DealerHistoryEvent[] {
 
   const merged = [
     ...showcaseHist,
+    ...matrixShowcaseHist,
     ...nsHist,
     ...trainHist,
     ...commentHist,
@@ -662,6 +677,7 @@ function DealerCardContent({ row }: { row: DealerRow }) {
   const { user } = useCurrentUser();
   const [, setLocation] = useLocation();
   const [showcaseBump, setShowcaseBump] = useState(0);
+  const [showcaseMatrixBump, setShowcaseMatrixBump] = useState(0);
   const [nextStepBump, setNextStepBump] = useState(0);
   const [historyExpanded, setHistoryExpanded] = useState(false);
   const [showcaseCategoryListMode, setShowcaseCategoryListMode] = useState<ShowcaseCategoryListMode>("all");
@@ -697,6 +713,12 @@ function DealerCardContent({ row }: { row: DealerRow }) {
     const fn = () => setWorkPlanBump((n) => n + 1);
     window.addEventListener(DEALER_WORK_PLAN_EVENT, fn);
     return () => window.removeEventListener(DEALER_WORK_PLAN_EVENT, fn);
+  }, []);
+
+  useEffect(() => {
+    const fn = () => setShowcaseMatrixBump((n) => n + 1);
+    window.addEventListener(SHOWCASE_MATRIX_CHANGED_EVENT, fn);
+    return () => window.removeEventListener(SHOWCASE_MATRIX_CHANGED_EVENT, fn);
   }, []);
 
   useEffect(() => {
@@ -743,7 +765,7 @@ function DealerCardContent({ row }: { row: DealerRow }) {
   const activeSection = useActiveSection(row.id);
   const historyEvents = useMemo(
     () => buildHistoryEvents(row),
-    [row, showcaseBump, nextStepBump, trainingFlagsBump, commentsBump, legalBump, dealerDataBump],
+    [row, showcaseBump, showcaseMatrixBump, nextStepBump, trainingFlagsBump, commentsBump, legalBump, dealerDataBump],
   );
   const historyTimeline = useMemo(() => {
     const sorted = [...historyEvents].sort((a, b) => historySortKey(b) - historySortKey(a));
@@ -1275,6 +1297,8 @@ function DealerCardContent({ row }: { row: DealerRow }) {
               onPlanShowcaseCheck={onPlanShowcaseCheck}
               onApplied={() => setShowcaseBump((n) => n + 1)}
             />
+
+            <DealerShowcaseMatrixSummarySection row={row} profile={profile} />
 
             <DealerTradePointsSection row={row} sectionDomId={SECTION_DOM_IDS.points} profile={profile} />
 

@@ -29,6 +29,7 @@ import {
   MATRIX_TASK_ROLE_LABEL,
   MATRIX_TASK_STATUS_LABEL,
   MATRIX_TASK_TYPE_LABEL,
+  invalidateMatrixTasksCache,
   type MatrixTask,
   type MatrixTaskRecommendation,
   type MatrixTaskStatus,
@@ -56,7 +57,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { buildHashPath } from "@/lib/hash-route-utils";
+import { buildHashPath, useRouteSearchParams } from "@/lib/hash-route-utils";
 import {
   addTradePointComment,
   canEditTradePointComments,
@@ -85,6 +86,12 @@ import {
   SHOWCASE_STORAGE_EVENT,
   userLabelFromProfile,
 } from "@/lib/showcase-distribution-data";
+import { TradePointShowcaseMatrixSection } from "@/components/trade-point-showcase-matrix-section";
+import {
+  getShowcaseMatrixTpHistoryEvents,
+  loadShowcaseMatrixStorage,
+  SHOWCASE_MATRIX_CHANGED_EVENT,
+} from "@/lib/trade-point-showcase-matrix-storage";
 
 const SECTION_IDS = ["overview", "training", "matrix", "showcase", "distribution", "tasks", "history", "photos"] as const;
 type SectionId = (typeof SECTION_IDS)[number];
@@ -654,6 +661,8 @@ function TradePointDetailContent({
   const [commentsBump, setCommentsBump] = useState(0);
   const [contactsBump, setContactsBump] = useState(0);
   const [showcaseBump, setShowcaseBump] = useState(0);
+  const [matrixBump, setMatrixBump] = useState(0);
+  const routeQs = useRouteSearchParams();
   const [commentDraft, setCommentDraft] = useState("");
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -710,6 +719,15 @@ function TradePointDetailContent({
     return () => window.removeEventListener(SHOWCASE_STORAGE_EVENT, fn);
   }, []);
 
+  useEffect(() => {
+    const fn = () => {
+      setMatrixBump((n) => n + 1);
+      invalidateMatrixTasksCache();
+    };
+    window.addEventListener(SHOWCASE_MATRIX_CHANGED_EVENT, fn);
+    return () => window.removeEventListener(SHOWCASE_MATRIX_CHANGED_EVENT, fn);
+  }, []);
+
   const dealerForRbac = useMemo(() => getDealerById(dealer.id) ?? dealer, [dealer]);
   const canEditTp = useMemo(() => canEditDealerTradePoints(profile, dealerForRbac), [profile, dealerForRbac]);
   const canEditTpComments = useMemo(() => canEditTradePointComments(profile, dealer), [profile, dealer]);
@@ -726,6 +744,20 @@ function TradePointDetailContent({
     () => getClientContactScopeHistoryEvents(tpContactScopeKey),
     [tpContactScopeKey, contactsBump],
   );
+  const tpMatrixHistory = useMemo(
+    () => getShowcaseMatrixTpHistoryEvents(dealer.id, point.id, loadShowcaseMatrixStorage()),
+    [dealer.id, point.id, matrixBump],
+  );
+
+  useEffect(() => {
+    if (routeQs.get("tradePointShowcase") !== "1") return;
+    requestAnimationFrame(() => {
+      document.getElementById("section-trade-point-showcase-matrix")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }, [routeQs, dealer.id, point.id]);
   const mapSearch = useMemo(() => mapSearchTextForPoint(point), [point]);
   const yandexMapHref = useMemo(() => `https://yandex.ru/maps/?text=${encodeURIComponent(mapSearch || "Россия")}`, [mapSearch]);
   const clientMapHref = useMemo(() => {
@@ -1390,6 +1422,14 @@ function TradePointDetailContent({
             </div>
           </section>
 
+          <TradePointShowcaseMatrixSection
+            dealer={dealer}
+            point={point}
+            profile={profile}
+            actorUserId={user?.id ?? profile.personaUserId}
+            actorName={user?.name ?? userLabelFromProfile(profile)}
+          />
+
           <section
             id={SECTION_DOM_IDS.showcase}
             data-testid="section-trade-point-showcase"
@@ -1610,6 +1650,16 @@ function TradePointDetailContent({
                   >
                     <p className="text-sm font-medium text-foreground">{ev.text}</p>
                     <time className="shrink-0 text-xs tabular-nums text-muted-foreground">{ev.date}</time>
+                  </div>
+                ))}
+                {tpMatrixHistory.map((ev) => (
+                  <div
+                    key={ev.id}
+                    data-testid={`row-trade-point-showcase-matrix-history-${ev.id}`}
+                    className="flex flex-col gap-1 py-4 sm:flex-row sm:items-start sm:justify-between"
+                  >
+                    <p className="min-w-0 text-sm font-medium text-foreground">{ev.body}</p>
+                    <p className="shrink-0 text-xs tabular-nums text-muted-foreground sm:text-right">{ev.meta}</p>
                   </div>
                 ))}
                 {tpContactHistory.map((ev) => (
