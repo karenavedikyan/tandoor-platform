@@ -788,3 +788,68 @@ export function analyticsPeriodSuffix(periodKey: AnalyticsFilterState["periodKey
   if (periodKey === "year") return "за год";
   return "за месяц";
 }
+
+export type PlanExecutionScope = "manager" | "team" | "all";
+
+export type PlanExecutionRow = {
+  category: SalesPlanCategory;
+  label: string;
+  unit: "units" | "money";
+  plan: number;
+  fact: number;
+  forecast: number;
+  previousMonthMtdFact: number;
+  completionPercent: number;
+  forecastPercent: number;
+  factVsPrevMtdPercent: number;
+};
+
+function previousMonthMtdRatio(): number {
+  const d = new Date();
+  const day = d.getDate();
+  const daysInPrevMonth = new Date(d.getFullYear(), d.getMonth(), 0).getDate();
+  const denom = daysInPrevMonth > 0 ? daysInPrevMonth : 30;
+  const ratio = day / denom;
+  if (!Number.isFinite(ratio) || ratio <= 0) return 0.5;
+  return Math.min(1, ratio);
+}
+
+function planRowSafePercent(numerator: number, denominator: number): number {
+  if (denominator <= 0) return 0;
+  return Math.round((numerator / denominator) * 1000) / 10;
+}
+
+/**
+ * Plan execution rows scaled to the role scope. Uses canonical mock monthly metrics
+ * (MK/ВХ/Фурнитура) and scales each by the number of managers in the scope.
+ */
+export function getPlanExecutionRows(scope: PlanExecutionScope, managerCount: number): PlanExecutionRow[] {
+  const factor = scope === "manager" ? 1 : Math.max(1, managerCount);
+  return SALES_PLAN_METRICS.map((m) => {
+    const plan = Math.round(m.monthPlan * factor);
+    const fact = Math.round(m.monthFact * factor);
+    const forecast = Math.round(m.monthForecast * factor);
+    const previousMonthMtdFact = Math.round(m.previousMonthFact * previousMonthMtdRatio() * factor);
+    return {
+      category: m.category,
+      label: m.label,
+      unit: m.unit,
+      plan,
+      fact,
+      forecast,
+      previousMonthMtdFact,
+      completionPercent: planRowSafePercent(fact, plan),
+      forecastPercent: planRowSafePercent(forecast, plan),
+      factVsPrevMtdPercent:
+        previousMonthMtdFact === 0
+          ? fact > 0
+            ? 100
+            : 0
+          : Math.round(((fact - previousMonthMtdFact) / previousMonthMtdFact) * 1000) / 10,
+    };
+  });
+}
+
+export function planExecutionRowFormat(row: PlanExecutionRow, value: number): string {
+  return row.unit === "units" ? formatUnits(value) : formatMoney(value);
+}
