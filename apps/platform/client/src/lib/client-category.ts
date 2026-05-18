@@ -122,6 +122,8 @@ export function normalizeClientCategory(input: string | undefined | null): Clien
     return "top500plus";
   if (s.includes("топ500") || s === "top500" || s.includes("топ 500")) return "top500";
 
+  if (s.includes("объемообраз") || s.includes("объемо образ")) return "top500plus";
+
   if (s.includes("потенциал") || s === "potential") return "potential";
   if (s.includes("лид") || s === "lead") return "lead";
   if (s.includes("б/п") || s.includes("б п") || s.includes("безпродаж") || s.includes("без продаж") || s === "bp" || s === "nosales")
@@ -140,11 +142,14 @@ export function clientCategoryFromNormalizedType(nt: ReleaseClientNormalizedType
       return "top350";
     case "top500":
       return "top500";
+    case "volume":
+      return "top500plus";
     case "potential":
       return "potential";
-    case "volume":
     case "active":
+      return "uncategorized";
     case "closed":
+      return "uncategorized";
     case "nonTarget":
     case "unknown":
       return "uncategorized";

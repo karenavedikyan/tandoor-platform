@@ -149,7 +149,7 @@ const MANAGERS_S: SalesUser[] = [
 ];
 
 const MANAGERS_SA: SalesUser[] = [
-  { id: "mgr-koteneva-a", name: "Котенева Анастасия", role: "sales_manager", teamId: "team-sapozhkov" },
+  { id: "mgr-koteneva-av", name: "Котенева Анастасия Валерьевна", role: "sales_manager", teamId: "team-sapozhkov" },
   { id: "mgr-netkacheva-ia", name: "Неткачева Инна Алексеевна", role: "sales_manager", teamId: "team-sapozhkov" },
   { id: "mgr-petrichenko-ev", name: "Петриченко Елена Викторовна", role: "sales_manager", teamId: "team-sapozhkov" },
   { id: "mgr-arutyunyan-oa", name: "Арутюнян Оганес Ашотович", role: "sales_manager", teamId: "team-sapozhkov" },

@@ -46,7 +46,7 @@ const MANAGER_RULES = [
   { id: "mgr-lysenko-eg", teamId: "team-skalaban", needles: ["лысенко", "екатерина"] },
   { id: "mgr-kulakova-os", teamId: "team-skalaban", needles: ["кулакова", "олеся"] },
   { id: "mgr-yakubova-voronezh", teamId: "team-skalaban", needles: ["якубова", "воронеж"] },
-  { id: "mgr-koteneva-a", teamId: "team-sapozhkov", needles: ["котенева", "анастасия"] },
+  { id: "mgr-koteneva-av", teamId: "team-sapozhkov", needles: ["котенева", "анастасия"] },
   { id: "mgr-netkacheva-ia", teamId: "team-sapozhkov", needles: ["неткачева", "инна"] },
   { id: "mgr-petrichenko-ev", teamId: "team-sapozhkov", needles: ["петриченко", "елена"] },
   { id: "mgr-arutyunyan-oa", teamId: "team-sapozhkov", needles: ["арутюнян", "оганес"] },
@@ -70,7 +70,7 @@ const MANAGER_DISPLAY_NAME = {
   "mgr-lysenko-eg": "Лысенко Екатерина Геннадьевна",
   "mgr-kulakova-os": "Кулакова Олеся Сергеевна",
   "mgr-yakubova-voronezh": "Якубова Юлия (Воронеж)",
-  "mgr-koteneva-a": "Котенева Анастасия",
+  "mgr-koteneva-av": "Котенева Анастасия Валерьевна",
   "mgr-netkacheva-ia": "Неткачева Инна Алексеевна",
   "mgr-petrichenko-ev": "Петриченко Елена Викторовна",
   "mgr-arutyunyan-oa": "Арутюнян Оганес Ашотович",
@@ -99,6 +99,7 @@ const MANAGERS_WITH_CLIENT_BASE = new Set([
   "mgr-osmanov-fm",
   "mgr-chernousova-in",
   "mgr-yarysh-si",
+  "mgr-koteneva-av",
 ]);
 
 const SYNTH_TEAM_ORDER = ["team-kupiansky", "team-skalaban", "team-sapozhkov"];

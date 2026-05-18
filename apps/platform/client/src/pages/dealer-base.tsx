@@ -118,7 +118,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 const DEALER_BASE_DISPLAY_LIMIT = 300;
 const TODAY_LIMIT = 100;
 
-type QuickFilter = "all" | "active" | "potential" | "attention" | "top" | "no_activity";
+type QuickFilter = "all" | "active" | "potential" | "attention" | "top" | "no_activity" | "closed";
 
 const QUICK_FROM_URL: Record<string, QuickFilter> = {
   all: "all",
@@ -128,6 +128,7 @@ const QUICK_FROM_URL: Record<string, QuickFilter> = {
   top: "top",
   inactive: "no_activity",
   no_activity: "no_activity",
+  closed: "closed",
 };
 
 function parseWorkViewFromQuery(raw: string | null, access: DealerBaseAccessRole): DealerBaseWorkView | null {
@@ -170,7 +171,7 @@ const QUICK_FILTERS: { id: QuickFilter; label: string; testId: string }[] = [
   { id: "potential", label: "Потенциальные", testId: "filter-dealers-potential" },
   { id: "attention", label: "Требуют внимания", testId: "filter-dealers-attention" },
   { id: "top", label: "ТОП-сегмент", testId: "filter-dealers-top" },
-  { id: "no_activity", label: "Без активности", testId: "filter-dealers-no-activity" },
+  { id: "closed", label: "Закрытые", testId: "filter-dealers-closed" },
 ];
 
 function statusBadgeClass(status: DealerStatus) {
@@ -184,7 +185,7 @@ type ClientCategoryRouteFilter = ClientCategoryId | "all" | "__top_tier__";
 function applyQuickFilter(row: DealerRow, q: QuickFilter): boolean {
   switch (q) {
     case "all":
-      return true;
+      return row.status !== "приостановлен";
     case "active":
       return row.status === "активный";
     case "potential":
@@ -195,6 +196,8 @@ function applyQuickFilter(row: DealerRow, q: QuickFilter): boolean {
       return isClientTopTier(row.clientCategory);
     case "no_activity":
       return !row.hasRecentActivity;
+    case "closed":
+      return row.status === "приостановлен";
     default:
       return true;
   }
@@ -431,7 +434,9 @@ function ClientListBlock({
                     </p>
                     {row.releaseAddress ? (
                       <p className="text-xs text-muted-foreground">Адрес: {row.releaseAddress}</p>
-                    ) : null}
+                    ) : (
+                      <p className="text-xs text-muted-foreground">Адрес не указан</p>
+                    )}
                   </>
                 ) : null}
               </div>
@@ -550,7 +555,11 @@ function ClientTableBlock({
                 <p className="text-xs text-muted-foreground">
                   {row.manager} · РОП: {row.regionalManager}
                 </p>
-                {row.releaseAddress ? <p className="text-xs text-muted-foreground line-clamp-2">{row.releaseAddress}</p> : null}
+                {row.releaseAddress ? (
+                  <p className="text-xs text-muted-foreground line-clamp-2">{row.releaseAddress}</p>
+                ) : (
+                  <p className="text-xs text-muted-foreground line-clamp-2">Адрес не указан</p>
+                )}
                 <OpenDealerButton id={row.id} />
               </CardContent>
             </Card>
@@ -659,7 +668,7 @@ function ClientTableBlock({
                     {getClientCategoryLabel(row.clientCategory)}
                   </td>
                   <td className="max-w-[180px] truncate px-3 py-3 text-xs text-muted-foreground" title={row.releaseAddress}>
-                    {row.releaseAddress ?? "—"}
+                    {row.releaseAddress ?? "Адрес не указан"}
                   </td>
                   <td className="px-3 py-3">
                     <Badge variant="outline" className={cn("text-xs", statusBadgeClass(row.status))}>
