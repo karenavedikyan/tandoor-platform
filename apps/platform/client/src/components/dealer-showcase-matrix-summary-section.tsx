@@ -13,6 +13,11 @@ import {
   loadShowcaseMatrixStorage,
   SHOWCASE_MATRIX_CHANGED_EVENT,
 } from "@/lib/trade-point-showcase-matrix-storage";
+import {
+  DEALER_TRADE_POINTS_EVENT,
+  getEffectiveDealerTradePoints,
+  isVirtualDefaultTradePointId,
+} from "@/lib/dealer-trade-points-overrides";
 import { buildHashPath } from "@/lib/hash-route-utils";
 
 type Props = {
@@ -26,7 +31,11 @@ export function DealerShowcaseMatrixSummarySection({ row, profile }: Props) {
   useEffect(() => {
     const fn = () => setBump((n) => n + 1);
     window.addEventListener(SHOWCASE_MATRIX_CHANGED_EVENT, fn);
-    return () => window.removeEventListener(SHOWCASE_MATRIX_CHANGED_EVENT, fn);
+    window.addEventListener(DEALER_TRADE_POINTS_EVENT, fn);
+    return () => {
+      window.removeEventListener(SHOWCASE_MATRIX_CHANGED_EVENT, fn);
+      window.removeEventListener(DEALER_TRADE_POINTS_EVENT, fn);
+    };
   }, []);
 
   const storage = useMemo(() => {
@@ -34,8 +43,13 @@ export function DealerShowcaseMatrixSummarySection({ row, profile }: Props) {
     return loadShowcaseMatrixStorage();
   }, [bump]);
 
-  const summary = useMemo(() => computeDealerShowcaseMatrixSummary(row, storage), [row, storage]);
-  const singleTp = row.tradePoints.length === 1 ? row.tradePoints[0] : null;
+  const effectivePoints = useMemo(() => {
+    void bump;
+    return getEffectiveDealerTradePoints(row, { includeArchived: false }).map((m) => m.point);
+  }, [row, bump]);
+  const summary = useMemo(() => computeDealerShowcaseMatrixSummary(row, storage), [row, storage, bump]);
+  const singleTp = effectivePoints.length === 1 ? effectivePoints[0] : null;
+  const singleIsVirtual = singleTp ? isVirtualDefaultTradePointId(row.id, singleTp.id) : false;
   const singleStats = useMemo(() => {
     if (!singleTp) return null;
     return computeTradePointShowcaseMatrixStats(row, singleTp, storage);
@@ -92,12 +106,28 @@ export function DealerShowcaseMatrixSummarySection({ row, profile }: Props) {
       {singleTp && singleStats ? (
         <Card className="rounded-2xl border border-border/80 shadow-md">
           <CardContent className="space-y-3 p-4">
-            <p className="text-sm font-semibold text-foreground">Одна торговая точка</p>
+            <p className="text-sm font-semibold text-foreground">
+              {singleIsVirtual ? "Основная торговая точка" : "Одна торговая точка"}
+            </p>
             <p className="text-sm text-muted-foreground">
               {singleTp.name} · выполнение {singleStats.completionPct}% · не на витрине: {singleStats.missing}
             </p>
+            {singleIsVirtual ? (
+              <p className="text-xs text-muted-foreground">
+                Точки не заведены отдельно — работаем как с одной основной торговой точкой.
+              </p>
+            ) : null}
             <Progress value={singleStats.completionPct} className="h-2 bg-muted" />
-            <Button asChild variant="default" className="min-h-10 w-full font-semibold sm:w-auto">
+            <Button
+              asChild
+              variant="default"
+              className="min-h-10 w-full font-semibold sm:w-auto"
+              data-testid={
+                singleIsVirtual
+                  ? "button-dealer-open-default-trade-point-showcase"
+                  : "button-dealer-open-single-trade-point-showcase"
+              }
+            >
               <Link
                 href={buildHashPath(`/dealers/${row.id}/trade-points/${singleTp.id}`, { tradePointShowcase: "1" })}
               >

@@ -2,6 +2,7 @@ import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { canEditClientNextStep } from "@/lib/client-next-step-data";
 import { canViewShowcaseDistribution } from "@/lib/showcase-distribution-data";
+import { getEffectiveDealerTradePoints } from "@/lib/dealer-trade-points-overrides";
 import {
   getShowcaseMatrixModelsForTradePoint,
   type ShowcaseMatrixModelDefinition,
@@ -158,7 +159,8 @@ export function computeTradePointShowcaseMatrixStats(
 }
 
 export function computeDealerShowcaseMatrixSummary(dealer: DealerRow, storage: ShowcaseMatrixStorageV1): DealerShowcaseMatrixSummary {
-  const tradePoints = dealer.tradePoints.filter((p) => p.status?.trim() !== "Архив");
+  const effective = getEffectiveDealerTradePoints(dealer, { includeArchived: false }).map((m) => m.point);
+  const tradePoints = effective.filter((p) => p.status?.trim() !== "Архив");
   const totalTradePoints = tradePoints.length;
   const modelMissingById = new Map<string, { name: string; n: number }>();
   const deficitPoints: TradePointShowcaseMatrixPointStats[] = [];

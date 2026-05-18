@@ -20,8 +20,10 @@ import {
   addManualTradePoint,
   canEditDealerTradePoints,
   DEALER_TRADE_POINTS_EVENT,
+  getEffectiveDealerTradePoints,
   getManualTradePoints,
   getMergedDealerTradePoints,
+  isVirtualDefaultTradePointId,
 } from "@/lib/dealer-trade-points-overrides";
 import { getShowcaseTasksForDealerDisplay, loadShowcaseStorage } from "@/lib/showcase-distribution-data";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
@@ -75,13 +77,15 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
     return () => window.removeEventListener(DEALER_TRADE_POINTS_EVENT, fn);
   }, []);
 
-  const mergedActive = useMemo(() => getMergedDealerTradePoints(row, { includeArchived: false }), [row, tpBump]);
+  const rawMergedActive = useMemo(() => getMergedDealerTradePoints(row, { includeArchived: false }), [row, tpBump]);
+  const mergedActive = useMemo(() => getEffectiveDealerTradePoints(row, { includeArchived: false }), [row, tpBump]);
   const mergedArchived = useMemo(() => getMergedDealerTradePoints(row, { includeArchived: true }), [row, tpBump]);
   const archivedCount = useMemo(() => mergedArchived.filter((m) => m.isArchived).length, [mergedArchived]);
   const archivedList = useMemo(() => mergedArchived.filter((m) => m.isArchived), [mergedArchived]);
   const hasSeeds = row.tradePoints.length > 0;
   const hasManualStored = getManualTradePoints(row.id).length > 0;
   const hasAnyTradePointEver = hasSeeds || hasManualStored;
+  const isUsingVirtualDefault = rawMergedActive.length === 0;
 
   const showcaseOpen = useMemo(() => openShowcaseTasksCount(row, mergedActive.length), [row, mergedActive.length, tpBump]);
 
@@ -120,6 +124,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
 
   const listToShow = showArchived ? archivedList : mergedActive;
   const hasArchived = archivedCount > 0;
+  void hasAnyTradePointEver;
 
   if (mergedActive.length === 0 && !showArchived && !hasAnyTradePointEver) {
     return (
@@ -371,14 +376,28 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
         </div>
       </div>
 
+      {isUsingVirtualDefault ? (
+        <p
+          className="text-xs text-muted-foreground"
+          data-testid="text-dealer-trade-points-virtual-default-hint"
+        >
+          Точки не заведены отдельно — работаем как с одной основной торговой точкой.
+        </p>
+      ) : null}
+
       <div className="space-y-2">
         {slice.map(({ point: tp, isManual, isEdited }) => {
           const contact = tradePointContact(tp, row, mergedActive.length);
           const showBadge = isFilled(tp.showcaseStatus);
+          const isVirtual = isVirtualDefaultTradePointId(row.id, tp.id);
+          const rowTestId = isVirtual ? "row-dealer-trade-point-default" : `row-dealer-trade-point-${tp.id}`;
+          const openButtonTestId = isVirtual
+            ? "button-dealer-open-default-trade-point"
+            : `button-dealer-trade-point-open-${tp.id}`;
           return (
             <Card
               key={tp.id}
-              data-testid={`row-dealer-trade-point-${tp.id}`}
+              data-testid={rowTestId}
               className="rounded-xl border border-border/70 bg-card shadow-xs"
             >
               <CardContent className="space-y-2 p-3 sm:p-4">
@@ -386,6 +405,15 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                   <div className="min-w-0 flex-1 space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="text-sm font-semibold leading-snug text-foreground">{tp.name}</p>
+                      {isVirtual ? (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px]"
+                          data-testid="badge-dealer-trade-point-virtual-default"
+                        >
+                          Основная (по дилеру)
+                        </Badge>
+                      ) : null}
                       {isManual ? (
                         <Badge variant="outline" className="text-[10px]" data-testid={`badge-dealer-trade-point-manual-${tp.id}`}>
                           Добавлена вручную
@@ -432,9 +460,11 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                       variant="default"
                       size="sm"
                       className="min-h-10 w-full font-semibold sm:w-auto"
-                      data-testid={`button-dealer-trade-point-open-${tp.id}`}
+                      data-testid={openButtonTestId}
                     >
-                      <Link href={`/dealers/${row.id}/trade-points/${tp.id}`}>Открыть точку</Link>
+                      <Link href={`/dealers/${row.id}/trade-points/${tp.id}`}>
+                        {isVirtual ? "Открыть основную точку" : "Открыть точку"}
+                      </Link>
                     </Button>
                   </div>
                 </div>
