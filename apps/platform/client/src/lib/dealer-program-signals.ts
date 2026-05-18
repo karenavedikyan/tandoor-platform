@@ -13,6 +13,7 @@
 import type { ClientCategoryId } from "@/lib/client-category";
 import { isClientTopTier } from "@/lib/client-category";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
+import { getDealerCharacteristicValue } from "@/lib/dealer-characteristics";
 
 export type DealerProgramSignal = {
   hasSpecialConditions: boolean;
@@ -131,9 +132,25 @@ export function getDealerProgramSignal(row: DealerRow): DealerProgramSignal {
   const explicitSpecial = looksAffirmative(t.special);
   const explicitCashback = looksAffirmative(t.bonuses);
 
+  const ovSpecial = getDealerCharacteristicValue(row.id, "has_special_conditions");
+  const ovClub = getDealerCharacteristicValue(row.id, "has_tandoor_club");
+
+  const hasSpecial =
+    ovSpecial === "yes"
+      ? true
+      : ovSpecial === "no"
+        ? false
+        : explicitSpecial || fallbackSpecialConditions(row);
+  const hasClub =
+    ovClub === "yes"
+      ? true
+      : ovClub === "no"
+        ? false
+        : explicitClub || fallbackTandoorClub(row);
+
   return {
-    hasSpecialConditions: explicitSpecial || fallbackSpecialConditions(row),
-    hasTandoorClub: explicitClub || fallbackTandoorClub(row),
+    hasSpecialConditions: hasSpecial,
+    hasTandoorClub: hasClub,
     hasCashbackAgent: explicitCashback || fallbackCashbackAgent(row),
   };
 }

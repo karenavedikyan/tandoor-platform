@@ -4,6 +4,7 @@
 
 import type { ClientCategoryId } from "@/lib/client-category";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
+import { getDealerCharacteristicValue } from "@/lib/dealer-characteristics";
 
 export type DealerStockSignal = {
   hasMainWarehouse: boolean;
@@ -103,27 +104,32 @@ function deterministicFallback(row: DealerRow): { main: boolean; hw: boolean } {
 }
 
 export function getDealerStockSignal(row: DealerRow): DealerStockSignal {
+  const ovMain = getDealerCharacteristicValue(row.id, "has_warehouse");
+  const ovHw = getDealerCharacteristicValue(row.id, "has_hardware_warehouse");
+
   const ext = row as DealerRow & { releaseHasMainWarehouse?: boolean; releaseHasHardwareWarehouse?: boolean };
+  let baseMain: boolean;
+  let baseHw: boolean;
+  let baseReason: string;
   if (typeof ext.releaseHasMainWarehouse === "boolean" || typeof ext.releaseHasHardwareWarehouse === "boolean") {
-    const hasMain = Boolean(ext.releaseHasMainWarehouse);
-    const hasHw = Boolean(ext.releaseHasHardwareWarehouse);
-    return {
-      hasMainWarehouse: hasMain,
-      hasHardwareWarehouse: hasHw,
-      mainWarehouseLabel: hasMain ? "Есть склад" : "Склад не указан",
-      hardwareWarehouseLabel: hasHw ? "Есть склад по фурнитуре" : "Склад не указан",
-      reason: "Признак из полей данных клиента (пилот).",
-    };
+    baseMain = Boolean(ext.releaseHasMainWarehouse);
+    baseHw = Boolean(ext.releaseHasHardwareWarehouse);
+    baseReason = "Признак из полей данных клиента (пилот).";
+  } else {
+    const fromTp = deriveFromTradePoints(row);
+    const fb = deterministicFallback(row);
+    baseMain = fromTp.main ?? fb.main;
+    baseHw = fromTp.hw ?? fb.hw;
+    const fromFields = fromTp.main !== undefined || fromTp.hw !== undefined;
+    baseReason = fromFields
+      ? "Частично из полей точки, дальше — рабочая эвристика для пилота."
+      : "Рабочий признак для фильтрации в пилоте, без подтверждения фактических остатков.";
   }
 
-  const fromTp = deriveFromTradePoints(row);
-  const fb = deterministicFallback(row);
-  const hasMain = fromTp.main ?? fb.main;
-  const hasHw = fromTp.hw ?? fb.hw;
-  const fromFields = fromTp.main !== undefined || fromTp.hw !== undefined;
-  const reason = fromFields
-    ? "Частично из полей точки, дальше — рабочая эвристика для пилота."
-    : "Рабочий признак для фильтрации в пилоте, без подтверждения фактических остатков.";
+  const hasMain = ovMain === "yes" ? true : ovMain === "no" ? false : baseMain;
+  const hasHw = ovHw === "yes" ? true : ovHw === "no" ? false : baseHw;
+  const overridden = ovMain !== "unset" || ovHw !== "unset";
+  const reason = overridden ? "Отмечено вручную в карточке клиента." : baseReason;
   return {
     hasMainWarehouse: hasMain,
     hasHardwareWarehouse: hasHw,

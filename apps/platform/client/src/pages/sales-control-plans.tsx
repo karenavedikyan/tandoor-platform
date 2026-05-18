@@ -5,6 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
 import { useSalesControlStoredState } from "@/hooks/use-sales-control-stored-state";
+import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { getManagersForRopTeam, getRopOptions, isRopOrManagerAllFilter } from "@/lib/rop-manager-filters";
 import {
   aggregateDirectorKpis,
@@ -13,6 +14,7 @@ import {
   getAllSalesManagers,
   getDefaultSalesPeriodId,
   getPlanComment,
+  getSalesUserById,
   getTargetValue,
   getActualValue,
   getGrossProfitTarget,
@@ -95,19 +97,37 @@ function KpiPlanSummaryRow({ row, metric }: KpiSummaryRowProps) {
 
 export default function SalesControlPlansPage() {
   const [stored] = useSalesControlStoredState();
+  const { profile } = useReleaseDemoProfile();
+  const currentUser = useMemo(() => getSalesUserById(profile.personaUserId), [profile.personaUserId]);
+  const isManagerScope = currentUser?.role === "sales_manager";
+
   const [periodId, setPeriodId] = useState(getDefaultSalesPeriodId());
-  const [ropTeam, setRopTeam] = useState<string>(ALL);
-  const [managerFilter, setManagerFilter] = useState<string>(ALL);
+  const [ropTeam, setRopTeam] = useState<string>(() =>
+    currentUser?.role === "sales_manager" && currentUser.teamId ? currentUser.teamId : ALL,
+  );
+  const [managerFilter, setManagerFilter] = useState<string>(() =>
+    currentUser?.role === "sales_manager" && currentUser.id ? currentUser.id : ALL,
+  );
+
+  useEffect(() => {
+    if (currentUser?.role === "sales_manager") {
+      if (currentUser.teamId && ropTeam !== currentUser.teamId) setRopTeam(currentUser.teamId);
+      if (currentUser.id && managerFilter !== currentUser.id) setManagerFilter(currentUser.id);
+    }
+  }, [currentUser?.role, currentUser?.teamId, currentUser?.id, ropTeam, managerFilter]);
 
   const rowsAll = useMemo(() => getAllSalesManagers(), []);
   const mgrOptions = useMemo(() => getManagersForRopTeam(ropTeam), [ropTeam]);
 
   const rows = useMemo(() => {
     let list = rowsAll;
+    if (isManagerScope && currentUser?.id) {
+      return list.filter((m) => m.id === currentUser.id);
+    }
     if (!isRopOrManagerAllFilter(ropTeam)) list = list.filter((m) => m.teamId === ropTeam);
     if (!isRopOrManagerAllFilter(managerFilter)) list = list.filter((m) => m.id === managerFilter);
     return list;
-  }, [rowsAll, ropTeam, managerFilter]);
+  }, [rowsAll, ropTeam, managerFilter, isManagerScope, currentUser?.id]);
 
   const scopedManagerIds = useMemo(() => rows.map((r) => r.id), [rows]);
 
@@ -147,7 +167,9 @@ export default function SalesControlPlansPage() {
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Сводная таблица планов</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">План, факт и валовая прибыль по каждому менеджеру за период.</p>
         </div>
-        <div className="grid w-full gap-3 sm:max-w-md sm:grid-cols-3">
+        <div
+          className={`grid w-full gap-3 sm:max-w-md ${isManagerScope ? "sm:grid-cols-1" : "sm:grid-cols-3"}`}
+        >
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Период</Label>
             <Select value={periodId} onValueChange={setPeriodId}>
@@ -163,38 +185,42 @@ export default function SalesControlPlansPage() {
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">РОП</Label>
-            <Select value={ropTeam} onValueChange={setRopTeam}>
-              <SelectTrigger className="min-w-0" data-testid="select-sales-plans-rop">
-                <SelectValue placeholder="РОП" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL}>Все РОПы</SelectItem>
-                {getRopOptions().map((r) => (
-                  <SelectItem key={r.teamId} value={r.teamId}>
-                    {r.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Менеджер</Label>
-            <Select value={managerFilter} onValueChange={setManagerFilter}>
-              <SelectTrigger className="min-w-0" data-testid="select-sales-plans-manager">
-                <SelectValue placeholder="Менеджер" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL}>Все менеджеры</SelectItem>
-                {mgrOptions.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>
-                    {m.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {isManagerScope ? null : (
+            <>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">РОП</Label>
+                <Select value={ropTeam} onValueChange={setRopTeam}>
+                  <SelectTrigger className="min-w-0" data-testid="select-sales-plans-rop">
+                    <SelectValue placeholder="РОП" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ALL}>Все РОПы</SelectItem>
+                    {getRopOptions().map((r) => (
+                      <SelectItem key={r.teamId} value={r.teamId}>
+                        {r.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Менеджер</Label>
+                <Select value={managerFilter} onValueChange={setManagerFilter}>
+                  <SelectTrigger className="min-w-0" data-testid="select-sales-plans-manager">
+                    <SelectValue placeholder="Менеджер" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ALL}>Все менеджеры</SelectItem>
+                    {mgrOptions.map((m) => (
+                      <SelectItem key={m.id} value={m.id}>
+                        {m.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
