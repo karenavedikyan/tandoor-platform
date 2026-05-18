@@ -110,6 +110,14 @@ import {
   getDealerStockSignal,
   type DealerStockListFilterId,
 } from "@/lib/dealer-stock-signals";
+import {
+  DEALER_PROGRAM_FILTER_BADGE_TESTID,
+  DEALER_PROGRAM_FILTER_BUTTON_TESTID,
+  DEALER_PROGRAM_FILTER_LABELS,
+  dealerRowMatchesProgramFilters,
+  getDealerProgramSignal,
+  type DealerProgramFilterId,
+} from "@/lib/dealer-program-signals";
 import { SHOWCASE_STORAGE_EVENT } from "@/lib/showcase-distribution-data";
 import { Checkbox } from "@/components/ui/checkbox";
 import { MultiSelect } from "@/components/ui/multi-select";
@@ -342,6 +350,7 @@ function ClientListBlock({
             ? getDealerShipmentStatus(row, shipmentActiveDayId, shipmentUserId, workPlanState)
             : null;
         const stockSig = getDealerStockSignal(row);
+        const programSig = getDealerProgramSignal(row);
         return (
           <Card
             key={row.id}
@@ -407,6 +416,33 @@ function ClientListBlock({
                       data-testid={`badge-dealer-hardware-warehouse-${row.id}`}
                     >
                       Фурнитура
+                    </Badge>
+                  ) : null}
+                  {programSig.hasSpecialConditions ? (
+                    <Badge
+                      variant="outline"
+                      className="shrink-0 border-amber-300 bg-amber-50 text-[10px] font-medium text-amber-950"
+                      data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.special_conditions}-${row.id}`}
+                    >
+                      Спецусловия
+                    </Badge>
+                  ) : null}
+                  {programSig.hasTandoorClub ? (
+                    <Badge
+                      variant="outline"
+                      className="shrink-0 border-indigo-300 bg-indigo-50 text-[10px] font-medium text-indigo-950"
+                      data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.tandoor_club}-${row.id}`}
+                    >
+                      Tandoor Club
+                    </Badge>
+                  ) : null}
+                  {programSig.hasCashbackAgent ? (
+                    <Badge
+                      variant="outline"
+                      className="shrink-0 border-emerald-300 bg-emerald-50 text-[10px] font-medium text-emerald-950"
+                      data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.cashback_agent}-${row.id}`}
+                    >
+                      Кешбек агент
                     </Badge>
                   ) : null}
                   {ship ? (
@@ -486,6 +522,7 @@ function ClientTableBlock({
               ? getDealerShipmentStatus(row, shipmentActiveDayId, shipmentUserId, workPlanState)
               : null;
           const stockSig = getDealerStockSignal(row);
+          const programSig = getDealerProgramSignal(row);
           return (
             <Card key={row.id} className="rounded-2xl border border-border/80 bg-card shadow-sm" data-testid={`row-dealer-${row.id}`}>
               <CardContent className="space-y-2 p-4 text-sm">
@@ -537,6 +574,33 @@ function ClientTableBlock({
                       data-testid={`badge-dealer-hardware-warehouse-${row.id}`}
                     >
                       Фурнитура
+                    </Badge>
+                  ) : null}
+                  {programSig.hasSpecialConditions ? (
+                    <Badge
+                      variant="outline"
+                      className="border-amber-300 bg-amber-50 text-[10px] font-medium text-amber-950"
+                      data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.special_conditions}-${row.id}`}
+                    >
+                      Спецусловия
+                    </Badge>
+                  ) : null}
+                  {programSig.hasTandoorClub ? (
+                    <Badge
+                      variant="outline"
+                      className="border-indigo-300 bg-indigo-50 text-[10px] font-medium text-indigo-950"
+                      data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.tandoor_club}-${row.id}`}
+                    >
+                      Tandoor Club
+                    </Badge>
+                  ) : null}
+                  {programSig.hasCashbackAgent ? (
+                    <Badge
+                      variant="outline"
+                      className="border-emerald-300 bg-emerald-50 text-[10px] font-medium text-emerald-950"
+                      data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.cashback_agent}-${row.id}`}
+                    >
+                      Кешбек агент
                     </Badge>
                   ) : null}
                 </div>
@@ -595,6 +659,7 @@ function ClientTableBlock({
                   ? getDealerShipmentStatus(row, shipmentActiveDayId, shipmentUserId, workPlanState)
                   : null;
               const stockSig = getDealerStockSignal(row);
+              const programSig = getDealerProgramSignal(row);
               return (
                 <tr key={row.id} className="border-b border-border last:border-0" data-testid={`row-dealer-${row.id}`}>
                   {showWorkPlanSelect && wp && onToggleWorkPlanSelect ? (
@@ -639,6 +704,33 @@ function ClientTableBlock({
                             data-testid={`badge-dealer-hardware-warehouse-${row.id}`}
                           >
                             Фурнитура
+                          </Badge>
+                        ) : null}
+                        {programSig.hasSpecialConditions ? (
+                          <Badge
+                            variant="outline"
+                            className="border-amber-300 bg-amber-50 text-[10px] font-medium text-amber-950"
+                            data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.special_conditions}-${row.id}`}
+                          >
+                            Спецусловия
+                          </Badge>
+                        ) : null}
+                        {programSig.hasTandoorClub ? (
+                          <Badge
+                            variant="outline"
+                            className="border-indigo-300 bg-indigo-50 text-[10px] font-medium text-indigo-950"
+                            data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.tandoor_club}-${row.id}`}
+                          >
+                            Tandoor Club
+                          </Badge>
+                        ) : null}
+                        {programSig.hasCashbackAgent ? (
+                          <Badge
+                            variant="outline"
+                            className="border-emerald-300 bg-emerald-50 text-[10px] font-medium text-emerald-950"
+                            data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.cashback_agent}-${row.id}`}
+                          >
+                            Кешбек агент
                           </Badge>
                         ) : null}
                       </div>
@@ -895,6 +987,7 @@ export default function DealerBase() {
       setCategories([]);
       setSearch("");
       setWorkView(defaultWorkViewForAccess(access));
+      setProgramFilters([]);
       return;
     }
 
@@ -978,6 +1071,19 @@ export default function DealerBase() {
     const searchRaw = routeQs.get("search")?.trim();
     if (searchRaw) searchV = searchRaw;
 
+    const programRaws = routeQs.getAll("program");
+    const programParsed: DealerProgramFilterId[] = [];
+    const programAllowed: DealerProgramFilterId[] = ["special_conditions", "tandoor_club", "cashback_agent"];
+    for (const raw of programRaws) {
+      for (const part of raw.split(",")) {
+        const trimmed = part.trim();
+        if (!trimmed || trimmed === "all") continue;
+        if ((programAllowed as string[]).includes(trimmed) && !programParsed.includes(trimmed as DealerProgramFilterId)) {
+          programParsed.push(trimmed as DealerProgramFilterId);
+        }
+      }
+    }
+
     setRopTeam(rop);
     setManager(mgr);
     setQuick(qv);
@@ -985,6 +1091,7 @@ export default function DealerBase() {
     setCategories(catV);
     setSearch(searchV);
     setWorkView(vw);
+    setProgramFilters(programParsed);
   }, [profile.personaUserId, profile.role, access, routeKey, routeQs]);
 
   const firstRopTeamId = useMemo(() => getRopOptions()[0]?.teamId ?? "", []);
@@ -1266,6 +1373,7 @@ export default function DealerBase() {
   const [wpNote, setWpNote] = useState("");
   const [segmentList, setSegmentList] = useState<DealerBaseSegmentId[]>([]);
   const [stockListFilter, setStockListFilter] = useState<DealerStockListFilterId>("all");
+  const [programFilters, setProgramFilters] = useState<DealerProgramFilterId[]>([]);
   const [segmentCollapse, setSegmentCollapse] = useState<DealerBaseSegmentCollapseState>(() => {
     const narrow = typeof window !== "undefined" && window.innerWidth < 768;
     return { ...defaultDealerBaseSegmentCollapse(narrow), ...loadDealerBaseSegmentCollapseOverrides() };
@@ -1322,10 +1430,34 @@ export default function DealerBase() {
     return rowsAfterSegmentFilter.filter((r) => getDealerShipmentDays(r).includes(activeShipmentDayId));
   }, [rowsAfterSegmentFilter, activeShipmentDayId]);
 
+  const rowsAfterPrograms = useMemo(() => {
+    if (programFilters.length === 0) return rowsAfterShipmentDay;
+    return rowsAfterShipmentDay.filter((r) => dealerRowMatchesProgramFilters(r, programFilters));
+  }, [rowsAfterShipmentDay, programFilters]);
+
+  const programCounts = useMemo(() => {
+    let special = 0;
+    let club = 0;
+    let cashback = 0;
+    for (const r of rowsAfterShipmentDay) {
+      const s = getDealerProgramSignal(r);
+      if (s.hasSpecialConditions) special += 1;
+      if (s.hasTandoorClub) club += 1;
+      if (s.hasCashbackAgent) cashback += 1;
+    }
+    return { special_conditions: special, tandoor_club: club, cashback_agent: cashback };
+  }, [rowsAfterShipmentDay]);
+
+  const toggleProgramFilter = useCallback((id: DealerProgramFilterId) => {
+    setProgramFilters((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }, []);
+
   const rowsFinalForList = useMemo(() => {
-    if (stockListFilter === "all") return rowsAfterShipmentDay;
-    return rowsAfterShipmentDay.filter((r) => dealerRowMatchesStockFilter(r, stockListFilter));
-  }, [rowsAfterShipmentDay, stockListFilter]);
+    if (stockListFilter === "all") return rowsAfterPrograms;
+    return rowsAfterPrograms.filter((r) => dealerRowMatchesStockFilter(r, stockListFilter));
+  }, [rowsAfterPrograms, stockListFilter]);
 
   const stockFilterSummary = useMemo(() => {
     let main = 0;
@@ -1520,6 +1652,41 @@ export default function DealerBase() {
                 {f.label}
               </Button>
             ))}
+          </div>
+
+          <div className="space-y-1.5" data-testid="section-dealer-base-program-filters">
+            <p className="text-xs font-medium text-muted-foreground">Признаки</p>
+            <div className="flex flex-wrap gap-2">
+              {(["special_conditions", "tandoor_club", "cashback_agent"] as DealerProgramFilterId[]).map((id) => {
+                const active = programFilters.includes(id);
+                return (
+                  <Button
+                    key={id}
+                    type="button"
+                    size="sm"
+                    variant={active ? "default" : "outline"}
+                    className={cn("rounded-full", active ? "" : "border-border bg-card")}
+                    onClick={() => toggleProgramFilter(id)}
+                    aria-pressed={active}
+                    data-testid={DEALER_PROGRAM_FILTER_BUTTON_TESTID[id]}
+                  >
+                    {DEALER_PROGRAM_FILTER_LABELS[id]} · {programCounts[id]}
+                  </Button>
+                );
+              })}
+              {programFilters.length > 0 ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="rounded-full text-xs"
+                  onClick={() => setProgramFilters([])}
+                  data-testid="filter-programs-reset"
+                >
+                  Сбросить
+                </Button>
+              ) : null}
+            </div>
           </div>
 
           <div className="flex flex-wrap items-end gap-3">
