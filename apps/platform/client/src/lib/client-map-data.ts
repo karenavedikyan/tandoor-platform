@@ -17,7 +17,10 @@ export type ClientMapCoordinateSource = "address" | "city" | "missing";
 export type ClientMapPickerArgs = {
   search: string;
   quick: ClientMapQuickFilter;
-  city: string;
+  /** Одиночный город (обратная совместимость). Если задан `cities` — игнорируется. */
+  city?: string;
+  /** Мульти-выбор городов; пустой массив = все города. */
+  cities?: string[];
   ropTeam: string;
   manager: string;
   managerCatalogForRop: ReturnType<typeof getManagersForRopTeam>;
@@ -44,9 +47,15 @@ function applyQuickFilter(row: DealerRow, q: ClientMapQuickFilter): boolean {
 
 export function filterClientMapRows(rows: DealerRow[], args: ClientMapPickerArgs): DealerRow[] {
   const q = args.search.trim().toLowerCase();
+  const citySet =
+    args.cities && args.cities.length > 0
+      ? new Set(args.cities)
+      : args.city && args.city !== "all"
+        ? new Set([args.city])
+        : null;
   return rows.filter((row) => {
     if (!applyQuickFilter(row, args.quick)) return false;
-    if (args.city !== "all" && row.city !== args.city) return false;
+    if (citySet && !citySet.has(row.city)) return false;
     if (!isRopOrManagerAllFilter(args.ropTeam)) {
       if (row.releaseTeamId !== args.ropTeam) return false;
     }

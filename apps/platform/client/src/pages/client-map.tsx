@@ -14,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { MultiSelect } from "@/components/ui/multi-select";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { DEALER_BASE_ROWS, type DealerRow } from "@/lib/dealer-base-mock-data";
 import {
@@ -103,7 +104,7 @@ export default function ClientMapPage() {
 
   const [search, setSearch] = useState("");
   const [quick, setQuick] = useState<ClientMapQuickFilter>("all");
-  const [city, setCity] = useState<string>("all");
+  const [selectedCities, setSelectedCities] = useState<string[]>([]);
   const [ropTeam, setRopTeam] = useState(() => {
     const p = loadReleaseDemoProfile();
     return initialRopManagerForProfile(p, mapSalesRoleToDealerBaseAccess(p.role)).ropTeam;
@@ -123,14 +124,14 @@ export default function ClientMapPage() {
       setRopTeam(d.ropTeam);
       setManager(d.manager);
       setQuick("all");
-      setCity("all");
+      setSelectedCities([]);
       setSearch("");
       return;
     }
     let rop = d.ropTeam;
     let mgr = d.manager;
     let qv: ClientMapQuickFilter = "all";
-    let cityV = "all";
+    let cityV: string[] = [];
     let searchV = "";
     const scoped = roleScopedDealerRows(DEALER_BASE_ROWS, profile);
     const teamRaw = (routeQs.get("team") ?? routeQs.get("rop"))?.trim() ?? "";
@@ -144,14 +145,24 @@ export default function ClientMapPage() {
     if (managerRaw && managerAllowedForRop(managerRaw, rop, profile, access)) {
       mgr = managerRaw;
     }
-    const cityRaw = routeQs.get("city")?.trim();
-    if (cityRaw && cityRaw !== "all" && scoped.some((r) => r.city === cityRaw)) cityV = cityRaw;
+    const cityRaws = routeQs.getAll("city");
+    const cityParsed: string[] = [];
+    for (const raw of cityRaws) {
+      for (const part of raw.split(",")) {
+        const trimmed = part.trim();
+        if (!trimmed || trimmed === "all") continue;
+        if (scoped.some((r) => r.city === trimmed) && !cityParsed.includes(trimmed)) {
+          cityParsed.push(trimmed);
+        }
+      }
+    }
+    cityV = cityParsed;
     const searchRaw = routeQs.get("search")?.trim();
     if (searchRaw) searchV = searchRaw;
     setRopTeam(rop);
     setManager(mgr);
     setQuick(qv);
-    setCity(cityV);
+    setSelectedCities(cityV);
     setSearch(searchV);
   }, [profile.personaUserId, profile.role, access, routeKey, routeQs]);
 
@@ -162,8 +173,8 @@ export default function ClientMapPage() {
   const scopedRows = useMemo(() => roleScopedDealerRows(DEALER_BASE_ROWS, profile), [profile]);
 
   const pickerArgs = useMemo(
-    () => ({ search, quick, city, ropTeam, manager, managerCatalogForRop }),
-    [search, quick, city, ropTeam, manager, managerCatalogForRop],
+    () => ({ search, quick, cities: selectedCities, ropTeam, manager, managerCatalogForRop }),
+    [search, quick, selectedCities, ropTeam, manager, managerCatalogForRop],
   );
 
   const filtered = useMemo(() => filterClientMapRows(scopedRows, pickerArgs), [scopedRows, pickerArgs]);
@@ -182,7 +193,7 @@ export default function ClientMapPage() {
 
   const listRows = useMemo(() => filtered.slice(0, CLIENT_MAP_LIST_LIMIT), [filtered]);
 
-  const cities = useMemo(() => {
+  const cityOptions = useMemo(() => {
     const s = new Set(scopedRows.map((r) => r.city));
     return Array.from(s).sort((a, b) => a.localeCompare(b, "ru"));
   }, [scopedRows]);
@@ -200,7 +211,7 @@ export default function ClientMapPage() {
 
   useEffect(() => {
     setFlyTo(null);
-  }, [search, quick, city, ropTeam, manager]);
+  }, [search, quick, selectedCities, ropTeam, manager]);
 
   const handleRowClick = useCallback(
     (d: DealerRow) => {
@@ -293,19 +304,16 @@ export default function ClientMapPage() {
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Город</Label>
-              <Select value={city} onValueChange={setCity}>
-                <SelectTrigger className="min-h-10 min-w-0" data-testid="select-client-map-city">
-                  <SelectValue placeholder="Все" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Все города</SelectItem>
-                  {cities.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <MultiSelect
+                options={cityOptions.map((c) => ({ value: c, label: c }))}
+                value={selectedCities}
+                onChange={setSelectedCities}
+                placeholder="Все города"
+                allLabel="Все города"
+                triggerClassName="min-h-10"
+                testId="select-client-map-city"
+                ariaLabel="Город"
+              />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Быстрый фильтр</Label>
