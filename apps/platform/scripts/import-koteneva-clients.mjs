@@ -1,16 +1,14 @@
 #!/usr/bin/env node
 /**
- * Импорт клиентов менеджера Котеневой А.В. из Excel (Лист2) → release-client-seed-koteneva.generated.ts
+ * Импорт клиентов менеджера Котеневой А.В. → release-client-seed-koteneva.generated.ts
  *
- * Файл по умолчанию: apps/platform/data/Spisok-klientov_Koteneva-A.xlsx
- * Запуск без файла (CI / до добавления xlsx): --synthetic-koteneva
+ * Источники (по приоритету, если указан --from-master-slice — он первый):
+ * 1) --from-master-slice=N — 117 подряд строк из release-client-seed.generated.ts (только dev/CI без Excel)
+ * 2) apps/platform/data/Spisok-klientov_Koteneva-A.xlsx (лист «Лист2»)
+ * 3) apps/platform/data/koteneva-clients.source.json — массив или { "rows": [...] } с полями как в Excel
  *
- * Импортный отчёт (ожидаемые цифры для реального файла; для synthetic — совпадают по построению):
- * - всего 117
- * - закрытых 21
- * - без адреса 39
- * - без типа 24
- * - дублей по коду 0
+ * Импортный отчёт (целевые значения для файла Котеневой):
+ * - всего 117; закрытых 21; без адреса 39; дублей по коду 0
  */
 
 import fs from "node:fs";
@@ -21,12 +19,15 @@ import XLSX from "xlsx";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
 const DEFAULT_XLSX = path.join(ROOT, "data", "Spisok-klientov_Koteneva-A.xlsx");
+const DEFAULT_JSON = path.join(ROOT, "data", "koteneva-clients.source.json");
+const MASTER_SEED_TS = path.join(ROOT, "client", "src", "lib", "release-client-seed.generated.ts");
 const OUT_TS = path.join(ROOT, "client", "src", "lib", "release-client-seed-koteneva.generated.ts");
 
 const MANAGER_ID = "mgr-koteneva-av";
 const MANAGER_NAME = "Котенева Анастасия Валерьевна";
 const ROP_NAME = "Сапожков Артем";
 const TEAM_ID = "team-sapozhkov";
+const KOTENEVA_COUNT = 117;
 
 function norm(s) {
   return String(s ?? "")
@@ -96,7 +97,7 @@ function classifyClientType(raw) {
 }
 
 /** Несколько адресов: ; | перевод строки | повтор индекса 6 цифр. */
-function splitAddressSegments(raw, fallbackCity) {
+function splitAddressSegments(raw) {
   const t = String(raw ?? "").trim();
   if (!t) return [];
   const byDelim = t
@@ -129,7 +130,7 @@ function guessCityFromAddressSegment(seg, fallbackCity) {
 }
 
 function buildParsedTradePoints(addressRaw, cityFallback) {
-  const segs = splitAddressSegments(addressRaw, cityFallback);
+  const segs = splitAddressSegments(addressRaw);
   if (segs.length <= 1) return undefined;
   return segs.map((address, i) => ({
     name: `Торговая точка ${i + 1}`,
@@ -143,6 +144,52 @@ function buildSearchText(row) {
     .filter(Boolean)
     .map((x) => String(x).toLowerCase())
     .join(" | ");
+}
+
+function buildRowFromFields(fields, usedIds, opts = {}) {
+  const name = String(fields.name ?? "").trim();
+  const city = String(fields.city ?? "").trim();
+  const code = String(fields.code ?? "").trim();
+  const address = String(fields.address ?? "").trim();
+  const clientTypeRaw = String(fields.clientType ?? "").trim();
+  const cls = classifyClientType(clientTypeRaw);
+  const parsedTradePoints = buildParsedTradePoints(address, city || "—");
+
+  let id = opts.preferredId ? String(opts.preferredId).trim() : "";
+  if (id) {
+    if (usedIds.has(id)) {
+      const idSlug = normalizeCodeForId(code);
+      const baseId = idSlug ? `client-${idSlug}` : `client-kv-row-${usedIds.size + 1}`;
+      id = uniqueId(baseId, usedIds);
+    } else {
+      usedIds.add(id);
+    }
+  } else {
+    const idSlug = normalizeCodeForId(code);
+    const baseId = idSlug ? `client-${idSlug}` : `client-kv-row-${usedIds.size + 1}`;
+    id = uniqueId(baseId, usedIds);
+  }
+
+  const row = {
+    id,
+    code,
+    name,
+    city: city || "—",
+    address,
+    ropName: ROP_NAME,
+    managerName: MANAGER_NAME,
+    teamId: TEAM_ID,
+    managerId: MANAGER_ID,
+    clientType: cls.clientType,
+    normalizedClientType: cls.normalizedClientType,
+    isClosed: cls.isClosed,
+    isPriority: cls.isPriority,
+    isActive: cls.isActive,
+    searchText: "",
+    parsedTradePoints,
+  };
+  row.searchText = buildSearchText(row);
+  return row;
 }
 
 function readXlsxRows() {
@@ -168,8 +215,6 @@ function readXlsxRows() {
   const cName = col(["наименование"]);
   const cCity = col(["населенный пункт", "город"]);
   const cCode = col(["код"]);
-  const cRop = col(["роп"]);
-  const cMgr = col(["ответственный менеджер тандор", "менеджер тандор", "ответственный менеджер"]);
   const cAddr = col(["адрес"]);
   const cType = col(["тип клиента"]);
 
@@ -188,38 +233,15 @@ function readXlsxRows() {
     if (!name) continue;
     const city = String(line[cCity >= 0 ? cCity : -1] ?? "").trim();
     const code = String(line[cCode >= 0 ? cCode : -1] ?? "").trim();
-    const ropName = cRop >= 0 ? String(line[cRop] ?? "").trim() || ROP_NAME : ROP_NAME;
-    const managerName = cMgr >= 0 ? String(line[cMgr] ?? "").trim() || MANAGER_NAME : MANAGER_NAME;
     const address = String(line[cAddr >= 0 ? cAddr : -1] ?? "").trim();
     const clientTypeRaw = String(line[cType >= 0 ? cType : -1] ?? "").trim();
     if (code && usedCodes.has(code)) dupCodes += 1;
     if (code) usedCodes.add(code);
 
-    const cls = classifyClientType(clientTypeRaw);
-    const idSlug = normalizeCodeForId(code);
-    const baseId = idSlug ? `client-${idSlug}` : `client-kv-row-${rows.length + 1}`;
-    const id = uniqueId(baseId, usedIds);
-    const parsedTradePoints = buildParsedTradePoints(address, city || "—");
-
-    const row = {
-      id,
-      code,
-      name,
-      city: city || "—",
-      address,
-      ropName,
-      managerName,
-      teamId: TEAM_ID,
-      managerId: MANAGER_ID,
-      clientType: cls.clientType,
-      normalizedClientType: cls.normalizedClientType,
-      isClosed: cls.isClosed,
-      isPriority: cls.isPriority,
-      isActive: cls.isActive,
-      searchText: "",
-      parsedTradePoints,
-    };
-    row.searchText = buildSearchText(row);
+    const row = buildRowFromFields(
+      { name, city, code, address, clientType: clientTypeRaw },
+      usedIds,
+    );
     rows.push(row);
   }
 
@@ -230,67 +252,81 @@ function readXlsxRows() {
   return { rows, sheetName, report };
 }
 
-function buildSyntheticKoteneva117() {
+function readJsonRows(jsonPath) {
+  const raw = JSON.parse(fs.readFileSync(jsonPath, "utf8"));
+  const list = Array.isArray(raw) ? raw : raw.rows;
+  if (!Array.isArray(list)) {
+    throw new Error(`JSON ${jsonPath}: ожидается массив или { "rows": [...] }`);
+  }
   const rows = [];
   const usedIds = new Set();
-  const types = [
-    "ТОП 150",
-    "ТОП 350",
-    "ТОП 500",
-    "Активный",
-    "Потенциальный",
-    "Объемообразующий",
-    "ТОП 150",
-  ];
-
-  for (let i = 0; i < 117; i++) {
-    const isClosedSlot = i < 21;
-    const noAddr = !isClosedSlot && i >= 21 && i < 60;
-    const noType = i >= 60 && i < 84;
-    const clientTypeRaw = isClosedSlot ? "Закрытый" : noType ? "" : types[i % types.length];
-    const cls = classifyClientType(clientTypeRaw);
-    const code = `KV${String(10001 + i).slice(-5)}`;
-    const idSlug = normalizeCodeForId(code);
-    const id = uniqueId(`client-${idSlug}`, usedIds);
-    const city = noAddr ? "Краснодар" : ["Краснодар", "Ростов-на-Дону", "Сочи", "Ставрополь"][i % 4];
-    let address = "";
-    let parsedTradePoints = undefined;
-    if (!noAddr) {
-      if (i % 17 === 0) {
-        address = `350020, Краснодарский край, г. Краснодар, ул. Примерная, д. ${i}; 350051, Краснодарский край, г. Краснодар, ул. Вторая, д. ${i + 1}`;
-        parsedTradePoints = buildParsedTradePoints(address, city);
-      } else {
-        address = `3500${(10 + (i % 80)).toString().padStart(2, "0")}, ${city}, ул. Импортная, д. ${i + 1}`;
-      }
-    }
-    const name = `Клиент импорта Котеневой №${i + 1}`;
-    const row = {
-      id,
-      code,
-      name,
-      city,
-      address,
-      ropName: ROP_NAME,
-      managerName: MANAGER_NAME,
-      teamId: TEAM_ID,
-      managerId: MANAGER_ID,
-      clientType: cls.clientType,
-      normalizedClientType: cls.normalizedClientType,
-      isClosed: cls.isClosed,
-      isPriority: cls.isPriority,
-      isActive: cls.isActive,
-      searchText: "",
-      parsedTradePoints,
-    };
-    row.searchText = buildSearchText(row);
+  const usedCodes = new Set();
+  let dupCodes = 0;
+  for (const item of list) {
+    const name = String(item.name ?? "").trim();
+    if (!name) continue;
+    const code = String(item.code ?? "").trim();
+    if (code && usedCodes.has(code)) dupCodes += 1;
+    if (code) usedCodes.add(code);
+    const row = buildRowFromFields(
+      {
+        name,
+        city: item.city,
+        code,
+        address: item.address,
+        clientType: item.clientType ?? item["Тип клиента"],
+      },
+      usedIds,
+      item.id ? { preferredId: item.id } : {},
+    );
     rows.push(row);
   }
-
   const closed = rows.filter((x) => x.isClosed).length;
   const noAddr = rows.filter((x) => !String(x.address ?? "").trim()).length;
   const noType = rows.filter((x) => !String(x.clientType ?? "").trim()).length;
-  const report = { total: rows.length, closed, noAddr, noType, dupCodes: 0, sheetName: "synthetic" };
-  return { rows, report };
+  const report = { total: rows.length, closed, noAddr, noType, dupCodes, sheetName: path.basename(jsonPath) };
+  return { rows, sheetName: path.basename(jsonPath), report };
+}
+
+function parseMasterReleaseRows() {
+  const s = fs.readFileSync(MASTER_SEED_TS, "utf8");
+  const m = s.match(/export const RELEASE_CLIENT_ROWS: ReleaseClientSeedRow\[\] = (\[[\s\S]*?\]) as ReleaseClientSeedRow\[\]/);
+  if (!m) throw new Error("Не удалось извлечь JSON из release-client-seed.generated.ts");
+  return JSON.parse(m[1]);
+}
+
+function readMasterSlice(startIndex) {
+  const all = parseMasterReleaseRows();
+  const slice = all.slice(startIndex, startIndex + KOTENEVA_COUNT);
+  if (slice.length !== KOTENEVA_COUNT) {
+    throw new Error(`Ожидалось ${KOTENEVA_COUNT} строк, получено ${slice.length} (start=${startIndex})`);
+  }
+  const rows = [];
+  const usedIds = new Set();
+  const usedCodes = new Set();
+  let dupCodes = 0;
+  for (const src of slice) {
+    const code = String(src.code ?? "").trim();
+    if (code && usedCodes.has(code)) dupCodes += 1;
+    if (code) usedCodes.add(code);
+    const row = buildRowFromFields(
+      {
+        name: src.name,
+        city: src.city,
+        code,
+        address: src.address,
+        clientType: src.clientType,
+      },
+      usedIds,
+      { preferredId: src.id },
+    );
+    rows.push(row);
+  }
+  const closed = rows.filter((x) => x.isClosed).length;
+  const noAddr = rows.filter((x) => !String(x.address ?? "").trim()).length;
+  const noType = rows.filter((x) => !String(x.clientType ?? "").trim()).length;
+  const report = { total: rows.length, closed, noAddr, noType, dupCodes, sheetName: `master-slice@${startIndex}` };
+  return { rows, sheetName: `master-slice@${startIndex}`, report };
 }
 
 function writeTs(rows, meta) {
@@ -369,32 +405,54 @@ export const RELEASE_CLIENT_ROWS_KOTENEVA: ReleaseClientKotenevaSeedRow[] = ${pa
   fs.renameSync(tmp, OUT_TS);
 }
 
-const synthetic = process.argv.includes("--synthetic-koteneva");
+const argv = process.argv.slice(2);
+const sliceArg = argv.find((a) => a.startsWith("--from-master-slice="));
+const sliceStart = sliceArg ? Number.parseInt(sliceArg.split("=")[1], 10) : NaN;
 const generatedAt = new Date().toISOString();
 
-if (synthetic) {
-  const { rows, report } = buildSyntheticKoteneva117();
-  writeTs(rows, {
-    source: "synthetic-koteneva-117",
-    sheetName: report.sheetName,
-    generatedAt,
-    dupCodes: report.dupCodes,
-  });
-  console.log("Synthetic Koteneva:", report);
-  console.log(`Wrote ${rows.length} rows → ${OUT_TS}`);
-  process.exit(0);
-}
-
 try {
-  const { rows, sheetName, report } = readXlsxRows();
-  writeTs(rows, {
-    source: `xlsx:${path.relative(ROOT, DEFAULT_XLSX)}`,
-    sheetName,
-    generatedAt,
-    dupCodes: report?.dupCodes ?? 0,
-  });
-  console.log("Excel Koteneva:", report);
-  console.log(`Wrote ${rows.length} rows → ${OUT_TS}`);
+  let pack;
+  let meta;
+
+  if (!Number.isNaN(sliceStart)) {
+    pack = readMasterSlice(sliceStart);
+    meta = {
+      source: `seed-slice:release-client-seed.generated.ts#${sliceStart}`,
+      sheetName: pack.sheetName,
+      generatedAt,
+      dupCodes: pack.report.dupCodes,
+    };
+  } else if (fs.existsSync(DEFAULT_XLSX)) {
+    pack = readXlsxRows();
+    meta = {
+      source: `xlsx:${path.relative(ROOT, DEFAULT_XLSX)}`,
+      sheetName: pack.sheetName,
+      generatedAt,
+      dupCodes: pack.report?.dupCodes ?? 0,
+    };
+  } else if (fs.existsSync(DEFAULT_JSON)) {
+    pack = readJsonRows(DEFAULT_JSON);
+    meta = {
+      source: `json:${path.relative(ROOT, DEFAULT_JSON)}`,
+      sheetName: pack.sheetName,
+      generatedAt,
+      dupCodes: pack.report.dupCodes,
+    };
+  } else {
+    console.error(`Нет источника данных для импорта Котеневой. Укажите один из вариантов:
+  • Положите Excel: ${DEFAULT_XLSX}
+  • Или JSON (экспорт из Excel): ${DEFAULT_JSON}
+  • Или только для окружения без файла: node scripts/import-koteneva-clients.mjs --from-master-slice=1981
+    (это НЕ список из файла Котеневой — см. README-koteneva-import.md)`);
+    process.exit(1);
+  }
+
+  writeTs(pack.rows, meta);
+  const multiTp = pack.rows.filter((x) => x.parsedTradePoints && x.parsedTradePoints.length > 1).length;
+  const tradePointsTotal = pack.rows.reduce((acc, r) => acc + (r.parsedTradePoints?.length ?? (r.address?.trim() ? 1 : 0)), 0);
+  console.log("Koteneva import report:", pack.report);
+  console.log(`Торговых точек (сумма по клиентам): ${tradePointsTotal}; сегментов с 2+ ТТ: ${multiTp}`);
+  console.log(`Wrote ${pack.rows.length} rows → ${OUT_TS}`);
 } catch (e) {
   console.error(e.message || e);
   process.exit(1);

@@ -8,8 +8,12 @@ import {
 } from "@/lib/release-client-seed.generated";
 import { RELEASE_CLIENT_ROWS_KOTENEVA, type KotenevaTradePointStop } from "@/lib/release-client-seed-koteneva.generated";
 
-/** Клиенты основного сида + импорт Котеневой (Excel / synthetic). */
-const ALL_RELEASE_CLIENT_ROWS: ReleaseClient[] = [...RELEASE_CLIENT_ROWS, ...RELEASE_CLIENT_ROWS_KOTENEVA];
+const kotenevaCodes = new Set(RELEASE_CLIENT_ROWS_KOTENEVA.map((r) => r.code).filter(Boolean));
+/** Основной сид без кодов, переопределённых импортом Котеневой (одна запись на код в объединённом списке). */
+const BASE_RELEASE_CLIENT_ROWS: ReleaseClientSeedRow[] = RELEASE_CLIENT_ROWS.filter((r) => !r.code || !kotenevaCodes.has(r.code));
+
+/** Клиенты основного сида + импорт Котеневой (Excel / JSON / служебный slice). */
+const ALL_RELEASE_CLIENT_ROWS: ReleaseClient[] = [...BASE_RELEASE_CLIENT_ROWS, ...RELEASE_CLIENT_ROWS_KOTENEVA];
 
 export type ReleaseClient = ReleaseClientSeedRow & { parsedTradePoints?: KotenevaTradePointStop[] };
 export type { ReleaseClientNormalizedType };

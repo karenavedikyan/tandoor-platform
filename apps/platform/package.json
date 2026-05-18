@@ -11,6 +11,7 @@
     "catalog:import": "node scripts/import-tandoor-public-catalog.mjs",
     "release:import-clients": "node scripts/import-release-clients.mjs",
     "release:import-koteneva": "node scripts/import-koteneva-clients.mjs",
+    "release:import-koteneva:slice1981": "node scripts/import-koteneva-clients.mjs --from-master-slice=1981",
     "release:geocode": "node scripts/geocode-release-client-addresses.mjs",
     "db:push": "drizzle-kit push"
   },

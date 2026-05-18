@@ -17,6 +17,7 @@ logs/
 # Выгрузки с потенциально чувствительными данными (рабочие копии)
 *.csv
 *.xlsx
+!apps/platform/data/Spisok-klientov_Koteneva-A.xlsx
 imports/
 exports/
 data-exports/
