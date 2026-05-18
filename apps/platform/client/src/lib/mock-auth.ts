@@ -35,6 +35,7 @@ const EXPLICIT_USERNAMES: Record<string, string> = {
   "user-tl-skalaban": "skalaban",
   "user-tl-sapozhkov": "sapozhkov",
   "mgr-boyko-em": "boyko",
+  "mgr-koteneva-av": "koteneva",
   "user-mkt-morozova": "marketolog",
   "user-mkt-kotlyarov": "kotlyarov",
   "user-anl-ivanets": "analitik",

@@ -1071,7 +1071,14 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                           {quickAddress}
                         </p>
                       </div>
-                    ) : null}
+                    ) : (
+                      <div className="min-w-0 sm:col-span-2 xl:col-span-2">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Адрес</p>
+                        <p className="mt-0.5 text-sm text-muted-foreground" data-testid="text-dealer-quick-info-address">
+                          Адрес не указан
+                        </p>
+                      </div>
+                    )}
                     {isFilledDataCell(row.manager) ? (
                       <div className="min-w-0">
                         <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Менеджер</p>

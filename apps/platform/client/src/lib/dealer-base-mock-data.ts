@@ -200,6 +200,53 @@ function mapReleaseStatus(c: ReleaseClient): DealerStatus {
   return "активный";
 }
 
+function buildTradePointsFromReleaseClient(
+  c: ReleaseClient,
+  rop: string,
+  city: string,
+  addr: string,
+  clientCategory: ClientCategoryId,
+  mkPct: number,
+  vhPct: number,
+  totalPct: number,
+): DealerTradePoint[] {
+  const mkTp = (suffix: string, name: string, tpCity: string, tpAddress: string): DealerTradePoint => ({
+    id: `${c.id}-${suffix}`,
+    name,
+    city: tpCity,
+    address: tpAddress,
+    format: "Розница / салон",
+    status: c.isActive ? "Активна" : "На контроле",
+    equipment: "Данные планируются",
+    hardwareStockStatus: "—",
+    doorsStockStatus: "—",
+    distribution: { mk: mkPct, vh: vhPct, total: totalPct },
+    showcaseStatus: "—",
+    showcaseNeeds: "",
+    lastVisitDate: "—",
+    nextVisitDate: "—",
+    responsibleRegionalManager: rop,
+    issues: "Детальная аналитика точки — в следующих релизах.",
+    tasks: [],
+    activityHistory: [],
+    photos: { attached: false },
+    productTrainingCompleted: false,
+    productTrainingStatus: isClientTopTier(clientCategory) || clientCategory === "lead" ? "recommended" : "not_required",
+  });
+
+  const parsed = c.parsedTradePoints;
+  if (parsed && parsed.length > 0) {
+    return parsed.map((tp, idx) => {
+      const suf = String(idx + 1).padStart(2, "0");
+      const tpCity = (tp.city ?? "").trim() || city;
+      const tpAddr = (tp.address ?? "").trim() || `г. ${tpCity}, адрес уточняется`;
+      return mkTp(suf, tp.name.trim() || `Торговая точка ${idx + 1}`, tpCity, tpAddr);
+    });
+  }
+  if (!addr) return [];
+  return [mkTp("01", `Торговая точка · ${city}`, city, addr)];
+}
+
 function mapReleaseClientToDealerRow(c: ReleaseClient): DealerRow {
   const rop = c.ropName?.trim() || "—";
   const mgr = c.managerName?.trim() || "—";
@@ -215,33 +262,10 @@ function mapReleaseClientToDealerRow(c: ReleaseClient): DealerRow {
   const mkPct = 55;
   const vhPct = 52;
   const totalPct = 54;
-  const pointId = `${c.id}-01`;
-  const tradePoints: DealerTradePoint[] = [
-    {
-      id: pointId,
-      name: addr ? `Торговая точка · ${city}` : `Основная точка · ${c.name}`,
-      city,
-      address: addr || `г. ${city}, адрес уточняется`,
-      format: "Розница / салон",
-      status: c.isActive ? "Активна" : "На контроле",
-      equipment: "Данные планируются",
-      hardwareStockStatus: "—",
-      doorsStockStatus: "—",
-      distribution: { mk: mkPct, vh: vhPct, total: totalPct },
-      showcaseStatus: "—",
-      showcaseNeeds: "",
-      lastVisitDate: "—",
-      nextVisitDate: "—",
-      responsibleRegionalManager: rop,
-      issues: "Детальная аналитика точки — в следующих релизах.",
-      tasks: [],
-      activityHistory: [],
-      photos: { attached: false },
-      productTrainingCompleted: false,
-      productTrainingStatus: isClientTopTier(clientCategory) || clientCategory === "lead" ? "recommended" : "not_required",
-    },
-  ];
+  const tradePoints = buildTradePointsFromReleaseClient(c, rop, city, addr, clientCategory, mkPct, vhPct, totalPct);
   const hasProblem = c.normalizedClientType === "nonTarget" || c.isClosed;
+  const outlets = tradePoints.length;
+  const format: DealerFormat = outlets > 1 ? "сетевой" : "одиночный";
   return {
     id: c.id,
     clientTypeLabel: typeLabel,
@@ -253,8 +277,8 @@ function mapReleaseClientToDealerRow(c: ReleaseClient): DealerRow {
     clientCategory,
     importanceTier,
     status,
-    format: "одиночный",
-    outlets: 1,
+    format,
+    outlets,
     manager: mgr,
     regionalManager: rop,
     releaseTeamId: c.teamId,
@@ -341,9 +365,10 @@ function dedupeDealerIds(rows: DealerRow[]): DealerRow[] {
       while (used.has(`${row.id}-dup-${n}`)) n += 1;
       id = `${row.id}-dup-${n}`;
       row.id = id;
-      const pointSuffix = "-01";
-      const newPointId = `${id}${pointSuffix}`;
-      if (row.tradePoints[0]) row.tradePoints[0].id = newPointId;
+      row.tradePoints = row.tradePoints.map((tp, idx) => ({
+        ...tp,
+        id: `${id}-${String(idx + 1).padStart(2, "0")}`,
+      }));
     }
     used.add(id);
   }

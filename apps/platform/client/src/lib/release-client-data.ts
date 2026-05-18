@@ -6,8 +6,12 @@ import {
   type ReleaseClientNormalizedType,
   type ReleaseClientSeedRow,
 } from "@/lib/release-client-seed.generated";
+import { RELEASE_CLIENT_ROWS_KOTENEVA, type KotenevaTradePointStop } from "@/lib/release-client-seed-koteneva.generated";
 
-export type ReleaseClient = ReleaseClientSeedRow;
+/** Клиенты основного сида + импорт Котеневой (Excel / synthetic). */
+const ALL_RELEASE_CLIENT_ROWS: ReleaseClient[] = [...RELEASE_CLIENT_ROWS, ...RELEASE_CLIENT_ROWS_KOTENEVA];
+
+export type ReleaseClient = ReleaseClientSeedRow & { parsedTradePoints?: KotenevaTradePointStop[] };
 export type { ReleaseClientNormalizedType };
 
 export type ReleaseClientSearchFilters = {
@@ -33,11 +37,11 @@ export type ReleaseClientSummary = {
 };
 
 export function getReleaseClients(): ReleaseClient[] {
-  return RELEASE_CLIENT_ROWS;
+  return ALL_RELEASE_CLIENT_ROWS;
 }
 
 export function getReleaseClientSummary(rows?: ReleaseClient[]): ReleaseClientSummary {
-  const list = rows ?? RELEASE_CLIENT_ROWS;
+  const list = rows ?? ALL_RELEASE_CLIENT_ROWS;
   let active = 0;
   let priority = 0;
   let closed = 0;
@@ -62,7 +66,7 @@ function matchesQuery(c: ReleaseClient, q: string): boolean {
 }
 
 export function searchReleaseClients(filters: ReleaseClientSearchFilters, source?: ReleaseClient[]): ReleaseClient[] {
-  const list = source ?? RELEASE_CLIENT_ROWS;
+  const list = source ?? ALL_RELEASE_CLIENT_ROWS;
   const q = normQ(filters.query ?? "");
   const teamId = filters.teamId && filters.teamId !== "all" ? filters.teamId : undefined;
   const managerId = filters.managerId && filters.managerId !== "all" ? filters.managerId : undefined;
@@ -88,11 +92,11 @@ export function searchReleaseClients(filters: ReleaseClientSearchFilters, source
 }
 
 export function getReleaseClientsByManager(managerId: string): ReleaseClient[] {
-  return RELEASE_CLIENT_ROWS.filter((c) => c.managerId === managerId);
+  return ALL_RELEASE_CLIENT_ROWS.filter((c) => c.managerId === managerId);
 }
 
 export function getReleaseClientsByTeam(teamId: string): ReleaseClient[] {
-  return RELEASE_CLIENT_ROWS.filter((c) => c.teamId === teamId);
+  return ALL_RELEASE_CLIENT_ROWS.filter((c) => c.teamId === teamId);
 }
 
 export function getReleaseClientTypeLabel(type: ReleaseClientNormalizedType): string {
