@@ -22,11 +22,16 @@ export type ReleaseClientSearchFilters = {
   query?: string;
   teamId?: string;
   managerId?: string;
+  /** Одиночный город (обратная совместимость). */
   city?: string;
+  /** Мульти-выбор городов. Имеет приоритет над `city`. */
+  cities?: string[];
   /** @deprecated предпочтительно clientCategory */
   clientType?: ReleaseClientNormalizedType | "all";
-  /** Фильтр по бизнес-категории клиента */
+  /** Фильтр по бизнес-категории клиента (одиночный, обратная совместимость). */
   clientCategory?: ClientCategoryId | "all";
+  /** Мульти-выбор бизнес-категорий. Имеет приоритет над `clientCategory`. */
+  clientCategories?: ClientCategoryId[];
   priorityOnly?: boolean;
   activeOnly?: boolean;
   includeClosed?: boolean;
@@ -74,9 +79,13 @@ export function searchReleaseClients(filters: ReleaseClientSearchFilters, source
   const q = normQ(filters.query ?? "");
   const teamId = filters.teamId && filters.teamId !== "all" ? filters.teamId : undefined;
   const managerId = filters.managerId && filters.managerId !== "all" ? filters.managerId : undefined;
-  const city = filters.city && filters.city !== "all" ? filters.city : undefined;
+  const cities = filters.cities && filters.cities.length > 0 ? new Set(filters.cities) : null;
+  const city = !cities && filters.city && filters.city !== "all" ? filters.city : undefined;
   const clientType = filters.clientType && filters.clientType !== "all" ? filters.clientType : undefined;
-  const clientCategory = filters.clientCategory && filters.clientCategory !== "all" ? filters.clientCategory : undefined;
+  const clientCategories =
+    filters.clientCategories && filters.clientCategories.length > 0 ? new Set(filters.clientCategories) : null;
+  const clientCategory =
+    !clientCategories && filters.clientCategory && filters.clientCategory !== "all" ? filters.clientCategory : undefined;
   const priorityOnly = filters.priorityOnly === true;
   const activeOnly = filters.activeOnly === true;
   const includeClosed = filters.includeClosed === true;
@@ -85,9 +94,14 @@ export function searchReleaseClients(filters: ReleaseClientSearchFilters, source
     if (!matchesQuery(c, q)) return false;
     if (teamId && c.teamId !== teamId) return false;
     if (managerId && c.managerId !== managerId) return false;
+    if (cities && !cities.has(c.city ?? "")) return false;
     if (city && c.city !== city) return false;
-    if (clientCategory && deriveReleaseClientCategory(c) !== clientCategory) return false;
-    if (!clientCategory && clientType && c.normalizedClientType !== clientType) return false;
+    if (clientCategories) {
+      if (!clientCategories.has(deriveReleaseClientCategory(c))) return false;
+    } else if (clientCategory && deriveReleaseClientCategory(c) !== clientCategory) {
+      return false;
+    }
+    if (!clientCategory && !clientCategories && clientType && c.normalizedClientType !== clientType) return false;
     if (priorityOnly && !c.isPriority) return false;
     if (activeOnly && !c.isActive) return false;
     if (!includeClosed && c.isClosed) return false;

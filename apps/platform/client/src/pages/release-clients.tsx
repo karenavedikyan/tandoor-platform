@@ -6,6 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { MultiSelect } from "@/components/ui/multi-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
@@ -42,8 +43,8 @@ export default function ReleaseClientsPage() {
   const [query, setQuery] = useState("");
   const [teamId, setTeamId] = useState<string>(ALL);
   const [managerId, setManagerId] = useState<string>(ALL);
-  const [city, setCity] = useState<string>(ALL);
-  const [clientCategory, setClientCategory] = useState<ClientCategoryId | "all">("all");
+  const [selectedCities, setSelectedCities] = useState<string[]>([]);
+  const [selectedCategories, setSelectedCategories] = useState<ClientCategoryId[]>([]);
   const [activeOnly, setActiveOnly] = useState(true);
   const [priorityOnly, setPriorityOnly] = useState(false);
   const [includeClosed, setIncludeClosed] = useState(false);
@@ -76,15 +77,15 @@ export default function ReleaseClientsPage() {
           query,
           teamId: teamId === ALL ? "all" : teamId,
           managerId: managerId === ALL ? "all" : managerId,
-          city: city === ALL ? "all" : city,
-          clientCategory,
+          cities: selectedCities,
+          clientCategories: selectedCategories,
           priorityOnly,
           activeOnly,
           includeClosed,
         },
         baseRows,
       ),
-    [baseRows, query, teamId, managerId, city, clientCategory, priorityOnly, activeOnly, includeClosed],
+    [baseRows, query, teamId, managerId, selectedCities, selectedCategories, priorityOnly, activeOnly, includeClosed],
   );
 
   const displayRows = useMemo(() => filtered.slice(0, MAX_ROWS), [filtered]);
@@ -166,34 +167,29 @@ export default function ReleaseClientsPage() {
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Город</Label>
-            <Select value={city} onValueChange={setCity}>
-              <SelectTrigger className="h-10 min-w-0" data-testid="select-release-clients-city">
-                <SelectValue placeholder="Город" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL}>Все города</SelectItem>
-                {cities.map((c) => (
-                  <SelectItem key={c} value={c}>
-                    {c}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <MultiSelect
+              options={cities.map((c) => ({ value: c, label: c }))}
+              value={selectedCities}
+              onChange={setSelectedCities}
+              placeholder="Все города"
+              allLabel="Все города"
+              triggerClassName="min-h-10"
+              testId="select-release-clients-city"
+              ariaLabel="Город"
+            />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Категория клиента</Label>
-            <Select value={clientCategory} onValueChange={(v) => setClientCategory(v as ClientCategoryId | "all")}>
-              <SelectTrigger className="h-10 min-w-0" data-testid="select-release-clients-category">
-                <SelectValue placeholder="Категория" />
-              </SelectTrigger>
-              <SelectContent>
-                {CATEGORY_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <MultiSelect
+              options={CATEGORY_OPTIONS.filter((o) => o.value !== "all").map((o) => ({ value: o.value, label: o.label }))}
+              value={selectedCategories}
+              onChange={(next) => setSelectedCategories(next as ClientCategoryId[])}
+              placeholder="Все категории"
+              allLabel="Все категории"
+              triggerClassName="min-h-10"
+              testId="select-release-clients-category"
+              ariaLabel="Категория клиента"
+            />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">РОП</Label>

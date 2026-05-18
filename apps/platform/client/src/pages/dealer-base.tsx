@@ -60,7 +60,6 @@ import { buildCityConcentrationRows, buildDealerBaseAllCitiesHref, buildDealerBa
 import { buildBrowserHashAppHref, buildHashPath, useRouteSearchParams } from "@/lib/hash-route-utils";
 import {
   DEALER_BASE_SEGMENT_DESCRIPTIONS,
-  DEALER_BASE_SEGMENT_FILTER_LABELS,
   DEALER_BASE_SEGMENT_LABELS,
   DEALER_BASE_SEGMENT_ORDER,
   defaultDealerBaseSegmentCollapse,
@@ -71,7 +70,6 @@ import {
   partitionDealersBySegment,
   saveDealerBaseSegmentCollapseState,
   type DealerBaseSegmentCollapseState,
-  type DealerBaseSegmentFilterId,
   type DealerBaseSegmentId,
 } from "@/lib/dealer-base-segments";
 import {
@@ -114,6 +112,7 @@ import {
 } from "@/lib/dealer-stock-signals";
 import { SHOWCASE_STORAGE_EVENT } from "@/lib/showcase-distribution-data";
 import { Checkbox } from "@/components/ui/checkbox";
+import { MultiSelect } from "@/components/ui/multi-select";
 
 const DEALER_BASE_DISPLAY_LIMIT = 300;
 const TODAY_LIMIT = 100;
@@ -182,6 +181,7 @@ function statusBadgeClass(status: DealerStatus) {
 }
 
 type ClientCategoryRouteFilter = ClientCategoryId | "all" | "__top_tier__";
+type ClientCategorySelection = Exclude<ClientCategoryRouteFilter, "all">;
 function applyQuickFilter(row: DealerRow, q: QuickFilter): boolean {
   switch (q) {
     case "all":
@@ -206,8 +206,8 @@ function applyQuickFilter(row: DealerRow, q: QuickFilter): boolean {
 type PickerArgs = {
   search: string;
   quick: QuickFilter;
-  city: string;
-  category: ClientCategoryRouteFilter;
+  cities: string[];
+  categories: ClientCategorySelection[];
   ropTeam: string;
   manager: string;
   managerCatalogForRop: ReturnType<typeof getManagersForRopTeam>;
@@ -215,10 +215,15 @@ type PickerArgs = {
 
 function applyPickerFilters(rows: DealerRow[], args: PickerArgs): DealerRow[] {
   const q = args.search.trim().toLowerCase();
+  const citySet = args.cities.length > 0 ? new Set(args.cities) : null;
+  const categorySelections = args.categories;
   return rows.filter((row) => {
     if (!applyQuickFilter(row, args.quick)) return false;
-    if (args.city !== "all" && row.city !== args.city) return false;
-    if (!clientCategoryMatchesFilter(row.clientCategory, args.category)) return false;
+    if (citySet && !citySet.has(row.city)) return false;
+    if (categorySelections.length > 0) {
+      const ok = categorySelections.some((c) => clientCategoryMatchesFilter(row.clientCategory, c));
+      if (!ok) return false;
+    }
     if (!isRopOrManagerAllFilter(args.ropTeam)) {
       if (row.releaseTeamId !== args.ropTeam) return false;
     }
@@ -822,8 +827,8 @@ export default function DealerBase() {
   });
   const [search, setSearch] = useState("");
   const [quick, setQuick] = useState<QuickFilter>("all");
-  const [city, setCity] = useState<string>("all");
-  const [category, setCategory] = useState<ClientCategoryRouteFilter>("all");
+  const [cities, setCities] = useState<string[]>([]);
+  const [categories, setCategories] = useState<ClientCategorySelection[]>([]);
   const [ropTeam, setRopTeam] = useState<string>(() => {
     const p = loadReleaseDemoProfile();
     return initialRopManagerForProfile(p, mapSalesRoleToDealerBaseAccess(p.role)).ropTeam;
@@ -851,8 +856,8 @@ export default function DealerBase() {
   const scopedRows = useMemo(() => roleScopedDealerRows(DEALER_BASE_ROWS, profile), [profile]);
 
   const pickerArgs = useMemo(
-    () => ({ search, quick, city, category, ropTeam, manager, managerCatalogForRop }),
-    [search, quick, city, category, ropTeam, manager, managerCatalogForRop],
+    () => ({ search, quick, cities, categories, ropTeam, manager, managerCatalogForRop }),
+    [search, quick, cities, categories, ropTeam, manager, managerCatalogForRop],
   );
 
   const pickerFiltered = useMemo(() => applyPickerFilters(scopedRows, pickerArgs), [scopedRows, pickerArgs]);
@@ -875,9 +880,9 @@ export default function DealerBase() {
     return Array.from(s).sort((a, b) => (order.get(a) ?? 999) - (order.get(b) ?? 999));
   }, [scopedRows]);
 
-  const cities = useMemo(() => {
+  const cityOptions = useMemo(() => {
     const s = new Set(scopedRows.map((r) => r.city));
-    return Array.from(s).sort();
+    return Array.from(s).sort((a, b) => a.localeCompare(b, "ru"));
   }, [scopedRows]);
 
   useEffect(() => {
@@ -886,8 +891,8 @@ export default function DealerBase() {
       setRopTeam(d.ropTeam);
       setManager(d.manager);
       setQuick("all");
-      setCity("all");
-      setCategory("all");
+      setCities([]);
+      setCategories([]);
       setSearch("");
       setWorkView(defaultWorkViewForAccess(access));
       return;
@@ -896,8 +901,8 @@ export default function DealerBase() {
     let rop = d.ropTeam;
     let mgr = d.manager;
     let qv: QuickFilter = "all";
-    let cityV = "all";
-    let catV: ClientCategoryRouteFilter = "all";
+    let cityV: string[] = [];
+    let catV: ClientCategorySelection[] = [];
     let searchV = "";
     let vw: DealerBaseWorkView = defaultWorkViewForAccess(access);
 
@@ -941,14 +946,34 @@ export default function DealerBase() {
       vw = "my_team";
     }
 
-    const cityRaw = routeQs.get("city")?.trim();
-    if (cityRaw && cityRaw !== "all" && scoped.some((r) => r.city === cityRaw)) cityV = cityRaw;
-
-    const catRaw = routeQs.get("category")?.trim();
-    if (catRaw && catRaw !== "all") {
-      if (catRaw === "TOP" || catRaw === "top") catV = "__top_tier__";
-      else if (catOpts.includes(catRaw as ClientCategoryId)) catV = catRaw as ClientCategoryId;
+    const cityRaws = routeQs.getAll("city");
+    const cityParsed: string[] = [];
+    for (const raw of cityRaws) {
+      for (const part of raw.split(",")) {
+        const trimmed = part.trim();
+        if (!trimmed || trimmed === "all") continue;
+        if (scoped.some((r) => r.city === trimmed) && !cityParsed.includes(trimmed)) {
+          cityParsed.push(trimmed);
+        }
+      }
     }
+    cityV = cityParsed;
+
+    const catRaws = routeQs.getAll("category");
+    const catParsed: ClientCategorySelection[] = [];
+    for (const raw of catRaws) {
+      for (const part of raw.split(",")) {
+        const trimmed = part.trim();
+        if (!trimmed || trimmed === "all") continue;
+        if (trimmed === "TOP" || trimmed === "top") {
+          if (!catParsed.includes("__top_tier__")) catParsed.push("__top_tier__");
+        } else if (catOpts.includes(trimmed as ClientCategoryId)) {
+          const id = trimmed as ClientCategoryId;
+          if (!catParsed.includes(id)) catParsed.push(id);
+        }
+      }
+    }
+    catV = catParsed;
 
     const searchRaw = routeQs.get("search")?.trim();
     if (searchRaw) searchV = searchRaw;
@@ -956,8 +981,8 @@ export default function DealerBase() {
     setRopTeam(rop);
     setManager(mgr);
     setQuick(qv);
-    setCity(cityV);
-    setCategory(catV);
+    setCities(cityV);
+    setCategories(catV);
     setSearch(searchV);
     setWorkView(vw);
   }, [profile.personaUserId, profile.role, access, routeKey, routeQs]);
@@ -1239,7 +1264,7 @@ export default function DealerBase() {
   const [selectedWpIds, setSelectedWpIds] = useState<Set<string>>(() => new Set());
   const [wpScheduleDate, setWpScheduleDate] = useState("");
   const [wpNote, setWpNote] = useState("");
-  const [segmentListFilter, setSegmentListFilter] = useState<DealerBaseSegmentFilterId>("all");
+  const [segmentList, setSegmentList] = useState<DealerBaseSegmentId[]>([]);
   const [stockListFilter, setStockListFilter] = useState<DealerStockListFilterId>("all");
   const [segmentCollapse, setSegmentCollapse] = useState<DealerBaseSegmentCollapseState>(() => {
     const narrow = typeof window !== "undefined" && window.innerWidth < 768;
@@ -1287,9 +1312,10 @@ export default function DealerBase() {
   );
 
   const rowsAfterSegmentFilter = useMemo(() => {
-    if (segmentListFilter === "all") return rowsForWorkPlan;
-    return rowsForWorkPlan.filter((r) => getDealerBaseSegment(r) === segmentListFilter);
-  }, [rowsForWorkPlan, segmentListFilter]);
+    if (segmentList.length === 0) return rowsForWorkPlan;
+    const set = new Set(segmentList);
+    return rowsForWorkPlan.filter((r) => set.has(getDealerBaseSegment(r)));
+  }, [rowsForWorkPlan, segmentList]);
 
   const rowsAfterShipmentDay = useMemo(() => {
     if (!activeShipmentDayId) return rowsAfterSegmentFilter;
@@ -1431,7 +1457,7 @@ export default function DealerBase() {
         <Button variant="outline" size="sm" className="shrink-0 self-start" asChild>
           <Link
             href={buildHashPath("/client-map", {
-              ...(city !== "all" ? { city } : {}),
+              ...(cities.length > 0 ? { city: cities.join(",") } : {}),
               ...(isRopOrManagerAllFilter(ropTeam) ? {} : { team: ropTeam }),
               ...(isRopOrManagerAllFilter(manager) ? {} : { manager }),
               ...(quick !== "all" ? { quick } : {}),
@@ -1514,18 +1540,16 @@ export default function DealerBase() {
             </div>
             <div className="min-w-0 space-y-1">
               <Label className="text-xs font-medium text-muted-foreground">Сегмент списка</Label>
-              <Select value={segmentListFilter} onValueChange={(v) => setSegmentListFilter(v as DealerBaseSegmentFilterId)}>
-                <SelectTrigger className="min-h-10 w-full min-w-0 max-w-[16rem] rounded-xl" data-testid="select-dealer-segment-filter">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {(Object.keys(DEALER_BASE_SEGMENT_FILTER_LABELS) as DealerBaseSegmentFilterId[]).map((k) => (
-                    <SelectItem key={k} value={k}>
-                      {DEALER_BASE_SEGMENT_FILTER_LABELS[k]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <MultiSelect
+                options={DEALER_BASE_SEGMENT_ORDER.map((s) => ({ value: s, label: DEALER_BASE_SEGMENT_LABELS[s] }))}
+                value={segmentList}
+                onChange={(next) => setSegmentList(next as DealerBaseSegmentId[])}
+                placeholder="Все сегменты"
+                allLabel="Все сегменты"
+                triggerClassName="min-h-10 max-w-[16rem]"
+                testId="select-dealer-segment-filter"
+                ariaLabel="Сегмент списка"
+              />
             </div>
             <div className="min-w-0 space-y-1">
               <Label className="text-xs font-medium text-muted-foreground">Склад</Label>
@@ -1551,35 +1575,27 @@ export default function DealerBase() {
           >
             <div className="min-w-0 space-y-2">
               <Label className="text-xs font-medium text-muted-foreground">Город</Label>
-              <Select value={city} onValueChange={setCity}>
-                <SelectTrigger className="min-h-11 min-w-0 rounded-xl">
-                  <SelectValue placeholder="Город" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Все города</SelectItem>
-                  {cities.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <MultiSelect
+                options={cityOptions.map((c) => ({ value: c, label: c }))}
+                value={cities}
+                onChange={setCities}
+                placeholder="Все города"
+                allLabel="Все города"
+                testId="select-dealer-base-city"
+                ariaLabel="Город"
+              />
             </div>
             <div className="min-w-0 space-y-2">
               <Label className="text-xs font-medium text-muted-foreground">Категория клиента</Label>
-              <Select value={category} onValueChange={(v) => setCategory(v as ClientCategoryRouteFilter)}>
-                <SelectTrigger className="min-h-11 min-w-0 rounded-xl" data-testid="select-dealer-base-category">
-                  <SelectValue placeholder="Категория" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Все категории</SelectItem>
-                  {categoryOptions.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {getClientCategoryLabel(c)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <MultiSelect
+                options={categoryOptions.map((c) => ({ value: c, label: getClientCategoryLabel(c) }))}
+                value={categories as string[]}
+                onChange={(next) => setCategories(next as ClientCategorySelection[])}
+                placeholder="Все категории"
+                allLabel="Все категории"
+                testId="select-dealer-base-category"
+                ariaLabel="Категория клиента"
+              />
             </div>
             <div className="min-w-0 space-y-2">
               <Label className="text-xs font-medium text-muted-foreground">РОП</Label>
