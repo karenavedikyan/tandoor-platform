@@ -37,7 +37,7 @@ function parseWebhookBase(raw: string | undefined): { ok: true; base: string } |
     };
   }
   // пользователь мог вставить полный URL метода
-  t = t.replace(/\/tasks\.task\.add\/?$/i, "");
+  t = t.replace(/\/tasks\.task\.(add|list)\/?$/i, "");
   t = t.replace(/\/+$/, "");
   if (!/^https?:\/\//i.test(t)) {
     return { ok: false, message: "BITRIX24_WEBHOOK_URL должен начинаться с http:// или https://." };

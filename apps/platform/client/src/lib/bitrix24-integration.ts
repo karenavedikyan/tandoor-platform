@@ -173,3 +173,79 @@ export async function createBitrix24LkTask(payload: Bitrix24LkCreateTaskPayload)
       : "Не удалось создать задачу в Bitrix24. Обратитесь к администратору.";
   return { ok: false, message, code: typeof err.code === "string" ? err.code : undefined };
 }
+
+export type Bitrix24ListedTaskDto = {
+  bitrixTaskId: string;
+  title: string;
+  description: string;
+  status: string;
+  responsibleId: string;
+  createdBy: string;
+  createdDate: string;
+  deadline: string | null;
+  changedDate: string | null;
+};
+
+type ListTasksApiOk = { success: true; tasks?: Bitrix24ListedTaskDto[] };
+type ListTasksApiErr = { success: false; message?: string; code?: string; bitrixCode?: string };
+
+/**
+ * Список задач из Bitrix24 по ответственному webhook: POST /api/bitrix24/tasks/list.
+ */
+export async function listBitrix24Tasks(options?: {
+  limit?: number;
+  onlyOpen?: boolean;
+}): Promise<{ ok: true; tasks: Bitrix24ListedTaskDto[] } | { ok: false; message: string; code?: string }> {
+  const payload: Record<string, unknown> = {};
+  if (options?.limit != null) payload.limit = options.limit;
+  if (options?.onlyOpen != null) payload.onlyOpen = options.onlyOpen;
+
+  let res: Response;
+  try {
+    res = await fetch("/api/bitrix24/tasks/list", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    return { ok: false, message: "Не удалось связаться с сервером. Проверьте подключение и попробуйте снова." };
+  }
+
+  let data: unknown;
+  try {
+    data = await res.json();
+  } catch {
+    return { ok: false, message: "Сервер вернул неожиданный ответ при загрузке задач." };
+  }
+
+  const body = data as ListTasksApiOk | ListTasksApiErr | Record<string, unknown>;
+  if (typeof body === "object" && body && "success" in body && body.success === true) {
+    const ok = body as ListTasksApiOk;
+    const raw = Array.isArray(ok.tasks) ? ok.tasks : [];
+    const tasks: Bitrix24ListedTaskDto[] = raw.map((row: unknown) => {
+      const t = row as Record<string, unknown>;
+      const deadline = t.deadline;
+      const changedDate = t.changedDate;
+      return {
+        bitrixTaskId: String(t.bitrixTaskId ?? ""),
+        title: String(t.title ?? ""),
+        description: String(t.description ?? ""),
+        status: String(t.status ?? ""),
+        responsibleId: String(t.responsibleId ?? ""),
+        createdBy: String(t.createdBy ?? ""),
+        createdDate: String(t.createdDate ?? ""),
+        deadline: deadline == null || deadline === "" ? null : String(deadline),
+        changedDate: changedDate == null || changedDate === "" ? null : String(changedDate),
+      };
+    });
+    return { ok: true, tasks };
+  }
+
+  const err = body as ListTasksApiErr;
+  const message =
+    typeof err.message === "string" && err.message.trim()
+      ? err.message.trim()
+      : "Не удалось загрузить задачи из Bitrix24.";
+  return { ok: false, message, code: typeof err.code === "string" ? err.code : undefined };
+}

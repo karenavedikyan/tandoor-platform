@@ -6,12 +6,13 @@
 - Удобство **облегчённого chrome** (`?embedded=bitrix24`): без боковой навигации и тяжёлой шапки.
 - **Реальное создание тестовой задачи** в Bitrix24 через сервер Тандор: вызывается только метод REST **`tasks.task.add`** (входящий webhook URL хранится в `process.env.BITRIX24_WEBHOOK_URL` на сервере, не в клиенте).
 - **MVP «задачи из ЛК»:** менеджер с правами записи по клиенту может создать задачу в Bitrix24 из **карточки дилера** или **карточки торговой точки** (`POST /api/bitrix24/tasks/create`). Связь «что создано» хранится **только в браузере** (`localStorage`), без обратной синхронизации статусов из Bitrix24 и без входящих webhook от Bitrix24.
+- **MVP «список из Bitrix24»:** по кнопке «Загрузить из Bitrix24» вызывается **`POST /api/bitrix24/tasks/list`** (метод Bitrix24 **`tasks.task.list`** по тому же webhook). Результат кэшируется в **`localStorage`** (`tandoor-bitrix24-imported-tasks-v1`). Это **ручной** импорт, без realtime и без сопоставления задач с дилером/ТТ по сложным правилам (автолинковка по описанию не делается).
 
 ## Переменные окружения (только сервер)
 
 | Переменная | Обязательность | Назначение |
 |------------|----------------|------------|
-| `BITRIX24_WEBHOOK_URL` | **Обязательна** для серверного создания задач (POC и MVP) | Полный базовый URL входящего webhook (как в Bitrix24, сегмент **`/rest/<userId>/<token>/`**). Из **`userId`** в URL автоматически выставляются **ответственный** и **постановщик** задачи (`RESPONSIBLE_ID` / `CREATED_BY`), если не задан override ниже. |
+| `BITRIX24_WEBHOOK_URL` | **Обязательна** для серверных операций с задачами Bitrix24 (POC и MVP) | Полный базовый URL входящего webhook (как в Bitrix24, сегмент **`/rest/<userId>/<token>/`**). Из **`userId`** в URL автоматически выставляются **ответственный** и **постановщик** задачи (`RESPONSIBLE_ID` / `CREATED_BY`), если не задан override ниже. Для **`tasks.task.list`** фильтр **RESPONSIBLE_ID** берётся из того же правила (override или userId из URL). |
 | `BITRIX24_TASK_RESPONSIBLE_ID` | **Опционально** (override) | Числовой ID пользователя Bitrix24 — если задан и это положительное целое число, используется **вместо** userId из webhook для `RESPONSIBLE_ID` и `CREATED_BY`. |
 
 **Важно:** webhook URL, токен и секрет **нельзя** класть в клиентский бандл или в git. На Vercel задайте значения в **Environment Variables** для production / preview. Сервер **не** возвращает и **не** логирует полный webhook URL.
@@ -62,13 +63,22 @@ https://<ваш-хост-платформы>/?embedded=bitrix24#/bitrix24
 - **Успех (200):** `{ "success": true, "taskId": "<строка>", "message": "Задача создана в Bitrix24" }`.
 - **Ошибки:** **503** `BITRIX24_NOT_CONFIGURED`; **400** `BITRIX24_WEBHOOK_URL_INVALID` или `BITRIX24_CREATE_VALIDATION_ERROR`; **502** `BITRIX24_API_ERROR` (+ `bitrixCode`), `BITRIX24_BAD_RESPONSE`, `BITRIX24_NETWORK`, `BITRIX24_UNEXPECTED_RESULT`; **500** `INTERNAL_ERROR`.
 
-Каждая Vercel-функция (`api/bitrix24/tasks/test.ts`, `api/bitrix24/tasks/create.ts`) **самодостаточна**: вся логика валидации и вызова Bitrix24 продублирована внутри файла. В директории `api/` намеренно нет ни одного не-handler .ts-файла — на этом проекте любые межфайловые импорты внутри `api/` (включая `api/_lib/*` с префиксом подчёркивания) приводили к `FUNCTION_INVOCATION_FAILED` в Vercel runtime. Express-маршруты в `server/bitrix24-tasks-*-execute.ts` тоже самодостаточны и не зависят от `api/`. Дублирование намеренное — это цена надёжной работы serverless-функций в текущей конфигурации Vercel.
+Каждая Vercel-функция (`api/bitrix24/tasks/test.ts`, `api/bitrix24/tasks/create.ts`, `api/bitrix24/tasks/list.ts`) **самодостаточна**: вся логика валидации и вызова Bitrix24 продублирована внутри файла. В директории `api/` намеренно нет ни одного не-handler .ts-файла — на этом проекте любые межфайловые импорты внутри `api/` (включая `api/_lib/*` с префиксом подчёркивания) приводили к `FUNCTION_INVOCATION_FAILED` в Vercel runtime. Express-маршруты в `server/bitrix24-tasks-*-execute.ts` тоже самодостаточны и не зависят от `api/`. Дублирование намеренное — это цена надёжной работы serverless-функций в текущей конфигурации Vercel.
+
+## Backend: список задач из Bitrix24 (MVP)
+
+- **Маршрут:** `POST /api/bitrix24/tasks/list`
+- **Тело JSON (опционально):** `limit` (по умолчанию 20, 1–50), `onlyOpen` (по умолчанию `true`; при `true` в фильтр Bitrix добавляется **`!REAL_STATUS`: 5**, чтобы исключить завершённые задачи).
+- **Bitrix24:** `tasks.task.list` с `filter.RESPONSIBLE_ID`, `select` по полям ID, TITLE, DESCRIPTION, STATUS, RESPONSIBLE_ID, CREATED_BY, CREATED_DATE, DEADLINE, CHANGED_DATE, сортировка **`CHANGED_DATE` desc**, пагинация **`start`: 0** (до 50 записей за ответ Bitrix; итог дополнительно обрезается до `limit` на сервере).
+- **Успех (200):** `{ "success": true, "tasks": [ { "bitrixTaskId", "title", "description", "status", ... } ] }`.
+- **Ошибки:** **503** `BITRIX24_NOT_CONFIGURED`; **400** `BITRIX24_WEBHOOK_URL_INVALID` или `BITRIX24_LIST_VALIDATION_ERROR`; **502** `BITRIX24_API_ERROR` (+ `bitrixCode`), `BITRIX24_BAD_RESPONSE`, `BITRIX24_NETWORK`; **500** `INTERNAL_ERROR`; **405** `METHOD_NOT_ALLOWED`.
 
 ## ЛК: где создавать задачу и где видна связь
 
-- **Карточка дилера** (`#/dealers/...`): блок «Задачи Bitrix24» после секции «Следующий шаг»; кнопка открывает диалог с заголовком и описанием. Права на кнопку совпадают с **`canEditClientNextStep`** (менеджер своего клиента, РОП команды, директор продаж; маркетолог и аналитик — без создания).
-- **Карточка торговой точки** (`#/dealers/.../trade-points/...`): такой же блок после витринной матрицы точки.
-- **Хранение связи:** ключ `localStorage` **`tandoor-bitrix24-task-links-v1`**, структура `linksByDealer` и `linksByTradePoint` (ключ точки: `` `${dealerId}|${tradePointId}` ``). Событие обновления списка: **`tandoor-bitrix24-task-links-changed`**. Код: `apps/platform/client/src/lib/bitrix24-task-links.ts`.
+- **Карточка дилера** (`#/dealers/...`): блок «Задачи Bitrix24» после секции «Следующий шаг»; кнопки «Создать…» и «Загрузить из Bitrix24» (и чекбокс «Только открытые») — при **`canEditClientNextStep`**. Список импортированных задач виден всем, кто видит карточку, если в браузере уже есть данные импорта. Задачи с тем же `bitrixTaskId`, что в списке «Поставленные из ЛК», в блоке импорта не дублируются.
+- **Карточка торговой точки** (`#/dealers/.../trade-points/...`): такой же блок после витринной матрицы точки; импорт и создание — по тем же правилам, что и на карточке дилера.
+- **Хранение связи (созданные из ЛК):** ключ `localStorage` **`tandoor-bitrix24-task-links-v1`**, структура `linksByDealer` и `linksByTradePoint` (ключ точки: `` `${dealerId}|${tradePointId}` ``). Событие обновления списка: **`tandoor-bitrix24-task-links-changed`**. Код: `apps/platform/client/src/lib/bitrix24-task-links.ts`.
+- **Хранение импорта из Bitrix24:** ключ **`tandoor-bitrix24-imported-tasks-v1`**, событие **`tandoor-bitrix24-imported-tasks-changed`**. Код: `apps/platform/client/src/lib/bitrix24-imported-tasks.ts`. Клиентский вызов списка: **`listBitrix24Tasks`** в `bitrix24-integration.ts`.
 
 Это **MVP:** статусы задач в Bitrix24 в ЛК не подтягиваются, входящие события Bitrix24 не обрабатываются.
 
@@ -80,10 +90,10 @@ https://<ваш-хост-платформы>/?embedded=bitrix24#/bitrix24
 
 - **`buildCommand`:** `npm run build` — собираются и клиент (`vite`), и серверный бандл для Node.
 - **Rewrite на все пути удалён** — приложение на **hash-router** (`#/…`), для основного сценария отдельный SPA-fallback не нужен.
-- **`POST /api/bitrix24/tasks/test`** и **`POST /api/bitrix24/tasks/create`** обрабатываются **Serverless Functions** Vercel: `api/bitrix24/tasks/test.ts` и `api/bitrix24/tasks/create.ts`. Оба файла **полностью самодостаточны** — вообще никаких импортов из `server/*`, `client/*`, `api/_lib/*` или path-алиасов `@/`. В `api/` нет ни одного вспомогательного модуля. Ответ всегда JSON и `Content-Type: application/json`. Так гарантировано не повторится `FUNCTION_INVOCATION_FAILED`, наблюдавшийся после PR #106 и PR #107, когда handler'ы импортировали соседние ts-файлы внутри `api/`.
+- **`POST /api/bitrix24/tasks/test`**, **`POST /api/bitrix24/tasks/create`** и **`POST /api/bitrix24/tasks/list`** обрабатываются **Serverless Functions** Vercel: `api/bitrix24/tasks/test.ts`, `create.ts`, `list.ts`. Каждый файл **полностью самодостаточен** — вообще никаких импортов из `server/*`, `client/*`, `api/_lib/*` или path-алиасов `@/`. В `api/` нет ни одного вспомогательного модуля. Ответ всегда JSON и `Content-Type: application/json`. Так гарантировано не повторится `FUNCTION_INVOCATION_FAILED`, наблюдавшийся после PR #106 и PR #107, когда handler'ы импортировали соседние ts-файлы внутри `api/`.
 - В **`package.json`** задано **`"engines": { "node": "20.x" }`**, чтобы на Vercel использовался **Node 20** вместо «плавающего» runtime по умолчанию.
 
-Локально по-прежнему работает Express: `server/bitrix24-routes.ts` регистрирует оба маршрута; вся логика лежит в `server/bitrix24-tasks-test-execute.ts` и `server/bitrix24-tasks-create-execute.ts` (самодостаточные модули, без импортов из `api/`).
+Локально по-прежнему работает Express: `server/bitrix24-routes.ts` регистрирует маршруты; логика в `server/bitrix24-tasks-test-execute.ts`, `server/bitrix24-tasks-create-execute.ts` и `server/bitrix24-tasks-list-execute.ts` (самодостаточные модули, без импортов из `api/`).
 
 Проверка с production (ожидается JSON, не HTML):
 
@@ -107,10 +117,11 @@ curl -i -X POST "https://tandoor-platform.vercel.app/api/bitrix24/tasks/test" \
 1. Войдите ролью с правом записи по клиенту (менеджер «своего» клиента, РОП команды или директор продаж).
 2. Откройте карточку дилера или торговой точки, найдите блок **«Задачи Bitrix24»**, нажмите **«Создать задачу в Bitrix24»**, заполните заголовок и при необходимости описание.
 3. После успеха задача появится в списке в ЛК (данные в `localStorage` этого браузера) и в Bitrix24 на портале.
+4. Нажмите **«Загрузить из Bitrix24»** (при необходимости снимите «Только открытые»). После успеха задачи появятся во втором блоке «Задачи из Bitrix24»; список общий для браузера (не привязан к конкретному дилеру на сервере). Задачи с тем же ID, что уже в «Поставленные из ЛК», во втором блоке скрываются.
 
 ## Права API на следующем шаге (ориентир)
 
-Сейчас используется только **`tasks.task.add`**. Дальше по продукту могут понадобиться отдельные scope под CRM, пользователей и т.д. — подключать по мере сценариев, не расширяя webhook «на всякий случай».
+Сейчас используются **`tasks.task.add`** и **`tasks.task.list`**. Дальше по продукту могут понадобиться отдельные scope под CRM, пользователей и т.д. — подключать по мере сценариев, не расширяя webhook «на всякий случай».
 
 ## Рекомендации по безопасности после теста
 
