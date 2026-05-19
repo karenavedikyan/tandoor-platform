@@ -42,6 +42,16 @@ export const DEALER_SHIPMENT_DAY_LABELS: Record<DealerShipmentDayId, string> = {
   saturday: "Суббота",
 };
 
+/** Короткие подписи для узких экранов (карточки дней в планировщике). */
+export const DEALER_SHIPMENT_DAY_SHORT_LABELS: Record<DealerShipmentDayId, string> = {
+  monday: "Пн",
+  tuesday: "Вт",
+  wednesday: "Ср",
+  thursday: "Чт",
+  friday: "Пт",
+  saturday: "Сб",
+};
+
 const DAY_INDEX: Record<DealerShipmentDayId, number> = {
   monday: 0,
   tuesday: 1,
