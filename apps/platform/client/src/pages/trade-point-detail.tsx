@@ -1,19 +1,18 @@
 import type { ComponentProps, ComponentType, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
-import { Camera, ChevronDown, ChevronRight, ChevronUp, MapPin, PieChart, Plus, Store, BookOpen } from "lucide-react";
+import { Camera, ChevronDown, ChevronRight, ChevronUp, MapPin, Plus, Store, BookOpen } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
 import { TradePointContactsSection } from "@/components/trade-point-contacts-section";
 import { getDealerById, type DealerRow, type DealerTradePoint } from "@/lib/dealer-base-mock-data";
-import { getTradePointProductPreview, tradePointShowcaseStatusForProduct } from "@/lib/catalog-data";
+import { getTradePointProductPreview } from "@/lib/catalog-data";
 import {
   filterMatrix,
   getTradePointMatrix,
@@ -101,9 +100,9 @@ const SECTION_DOM_IDS: Record<SectionId, string> = {
   overview: "trade-point-section-overview",
   training: "section-trade-point-training-attention",
   matrix: "section-trade-point-matrix",
-  showcase: "trade-point-section-showcase",
-  distribution: "trade-point-section-distribution",
-  tasks: "trade-point-section-tasks",
+  showcase: "section-trade-point-showcase-matrix",
+  distribution: "section-trade-point-showcase-distribution",
+  tasks: "section-trade-point-showcase-open-tasks",
   history: "trade-point-section-history",
   photos: "trade-point-section-photos",
 };
@@ -876,6 +875,13 @@ function TradePointDetailContent({
     return createdTasks.filter((t) => t.status === matrixTaskFilter);
   }, [createdTasks, matrixTaskFilter]);
 
+  const openShowcaseTasksCount = useMemo(() => {
+    const pointOpen = point.tasks.filter((t) => t.status !== "Закрыта").length;
+    return pointOpen + showcaseTasksOpen.length;
+  }, [point.tasks, showcaseTasksOpen]);
+
+  const showcaseTasksLinkHref = useMemo(() => buildHashPath("/tasks", { dealerId: dealer.id }), [dealer.id]);
+
   const showcaseStatusOptions = useMemo(() => {
     const b = ["Хорошо", "Норма", "Требует внимания", "Плохо", "На контроле", "—"];
     const c = point.showcaseStatus?.trim();
@@ -1059,21 +1065,6 @@ function TradePointDetailContent({
             )}
           </Button>
         </div>
-        {showcaseTasksOpen.length > 0 ? (
-          <div className="mt-4 border-t border-border pt-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Открытые задачи по витрине</p>
-            <ul className="mt-2 space-y-1 text-sm">
-              {showcaseTasksOpen.map((t) => (
-                <li key={t.taskId} className="leading-snug text-foreground">
-                  {t.title}
-                </li>
-              ))}
-            </ul>
-            <Button asChild variant="secondary" size="sm" className="mt-3 min-h-9 w-full font-semibold sm:w-auto">
-              <Link href={buildHashPath("/tasks", { dealerId: dealer.id })}>К задачам по витрине</Link>
-            </Button>
-          </div>
-        ) : null}
       </div>
 
       {editing ? (
@@ -1386,65 +1377,6 @@ function TradePointDetailContent({
               </div>
             )}
 
-            <MatrixTaskSummaryCard
-              tasks={createdTasks}
-              testId="card-trade-point-matrix-recommendation-summary"
-            />
-
-            <div data-testid="section-trade-point-matrix-recommended-tasks" className="space-y-3">
-              <SectionTitle subtitle="Задачи, сформированные на основе матрицы. Создайте задачу, чтобы взять её в работу.">
-                Рекомендованные задачи
-              </SectionTitle>
-              {recommendations.length === 0 ? (
-                <SurfaceCard>
-                  <CardContent className="pt-5 text-sm text-muted-foreground">
-                    По матрице сейчас нет действий — выкладка соответствует целевой.
-                  </CardContent>
-                </SurfaceCard>
-              ) : (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {recommendations.slice(0, 6).map((rec) => {
-                    const created = createdTaskByProductId.get(rec.productId);
-                    return (
-                      <SurfaceCard key={rec.taskId}>
-                        <CardContent className="space-y-2 p-4">
-                          <div className="flex flex-wrap items-start justify-between gap-2">
-                            <p className="font-semibold leading-snug text-foreground">{rec.title}</p>
-                            <Badge variant="outline" className={cn("font-medium", taskPriorityTone(rec.priority))}>
-                              {MATRIX_TASK_PRIORITY_LABEL[rec.priority]}
-                            </Badge>
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            {MATRIX_TASK_TYPE_LABEL[rec.type]} · Зона {rec.zone} · Срок {rec.dueDate}
-                          </p>
-                          {created ? (
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              className="min-h-10 w-full border border-border"
-                              data-testid={`button-focus-recommended-matrix-task-${rec.taskId}`}
-                              onClick={() => handleScrollToTask(created.taskId)}
-                            >
-                              {MATRIX_TASK_STATUS_LABEL[created.status]} · открыть
-                            </Button>
-                          ) : (
-                            <Button
-                              type="button"
-                              variant="default"
-                              className="min-h-10 w-full font-semibold"
-                              data-testid={`button-create-matrix-task-recommended-${rec.taskId}`}
-                              onClick={() => handleCreateTask(rec)}
-                            >
-                              Создать задачу
-                            </Button>
-                          )}
-                        </CardContent>
-                      </SurfaceCard>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
           </section>
 
           <TradePointShowcaseMatrixSection
@@ -1453,216 +1385,74 @@ function TradePointDetailContent({
             profile={profile}
             actorUserId={user?.id ?? profile.personaUserId}
             actorName={user?.name ?? userLabelFromProfile(profile)}
-          />
-
-          <section
-            id={SECTION_DOM_IDS.showcase}
-            data-testid="section-trade-point-showcase"
-            className="scroll-mt-28 space-y-4 sm:scroll-mt-32"
-          >
-            <SectionTitle subtitle="Состояние витрины и план по точке.">Витрина</SectionTitle>
-            <SurfaceCard className="mt-3">
-              <CardContent className="space-y-0 pt-5">
-                <FieldRow label="Статус витрины" value={point.showcaseStatus} />
-                <FieldRow label="Что нужно добавить" value={point.showcaseNeeds} />
-                <FieldRow label="Оборудование" value={point.equipment} />
-                <FieldRow label="Комментарий" value={showcaseComment} />
-                <Separator className="my-4" />
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  <div className="rounded-xl border border-border bg-muted/40 px-3 py-2">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      Должно быть
-                    </p>
-                    <p className="mt-0.5 text-lg font-semibold tabular-nums text-foreground">
-                      {matrixSummary.totalRequired}
-                    </p>
-                  </div>
-                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-900/80">
-                      На витрине
-                    </p>
-                    <p className="mt-0.5 text-lg font-semibold tabular-nums text-emerald-900">
-                      {matrixSummary.totalPresent}
-                    </p>
-                  </div>
-                  <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-red-900/80">
-                      Отсутствует
-                    </p>
-                    <p className="mt-0.5 text-lg font-semibold tabular-nums text-red-900">
-                      {matrixSummary.totalMissing}
-                    </p>
-                  </div>
-                  <div className="rounded-xl border border-primary/40 bg-primary/10 px-3 py-2">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-primary/80">Зона A</p>
-                    <p className="mt-0.5 text-lg font-semibold tabular-nums text-primary">{matrixSummary.zoneA}</p>
-                  </div>
-                </div>
-                <Separator className="my-4" />
-                <p className="text-sm font-medium text-foreground">
-                  <span className="text-muted-foreground">Ближайшее действие: </span>
-                  {dealer.nextAction}
-                </p>
-              </CardContent>
-            </SurfaceCard>
-
-            <div className="mt-6" data-testid="section-trade-point-products">
-              <SectionTitle subtitle="Позиции каталога на витрине точки.">Модели на витрине</SectionTitle>
-              <div className="mt-3 space-y-3">
-                {tpProducts.map((p) => (
-                  <SurfaceCard key={p.id}>
-                    <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="min-w-0 flex-1 space-y-1">
-                        <p className="font-semibold leading-snug text-foreground">{p.name}</p>
-                        <p className="font-mono text-xs text-muted-foreground">{p.article}</p>
-                        <Badge variant="outline" className="w-fit border-border bg-muted/50 text-xs font-medium">
-                          {tradePointShowcaseStatusForProduct(p)}
-                        </Badge>
+            page={{
+              matrixSummary,
+              showcaseComment,
+              distribution: dist,
+              distributionConclusion: conclusion,
+              tpProducts,
+              showcaseTasksOpen,
+              openTasksCount: openShowcaseTasksCount,
+              recommendations,
+              createdTaskByProductId,
+              onCreateMatrixTask: handleCreateTask,
+              onScrollToMatrixTask: handleScrollToTask,
+              tasksLinkHref: showcaseTasksLinkHref,
+              matrixTasksSlot: (
+                <div className="space-y-2" data-testid="section-trade-point-matrix-created-tasks-embedded">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Созданные задачи по матрице товаров
+                  </p>
+                  <MatrixTaskSummaryCard tasks={createdTasks} testId="card-trade-point-matrix-task-summary" />
+                  {createdTasks.length > 0 ? (
+                    <div
+                      className="-mx-1 overflow-x-auto px-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:px-0"
+                      role="tablist"
+                      aria-label="Фильтры задач по матрице"
+                      data-testid="filter-trade-point-tasks-matrix"
+                    >
+                      <div className="flex flex-wrap gap-2 pb-1">
+                        {MATRIX_TASK_FILTERS.map((f) => (
+                          <button
+                            key={f.id}
+                            type="button"
+                            role="tab"
+                            aria-selected={matrixTaskFilter === f.id}
+                            onClick={() => setMatrixTaskFilter(f.id)}
+                            data-testid={f.testId}
+                            className={cn(
+                              "min-h-9 shrink-0 rounded-full border px-3 py-2 text-xs font-medium transition-colors",
+                              matrixTaskFilter === f.id
+                                ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                                : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground",
+                            )}
+                          >
+                            {f.label}
+                          </button>
+                        ))}
                       </div>
-                      <Button asChild variant="outline" className="min-h-10 shrink-0 border-border bg-card" data-testid={`button-open-product-${p.id}`}>
-                        <Link href={`/catalog/${p.id}`}>Открыть модель</Link>
-                      </Button>
-                    </CardContent>
-                  </SurfaceCard>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          <section
-            id={SECTION_DOM_IDS.distribution}
-            data-testid="section-trade-point-distribution"
-            className="scroll-mt-28 space-y-4 sm:scroll-mt-32"
-          >
-            <SectionTitle subtitle="Показатели по линейке на точке.">Дистрибуция</SectionTitle>
-            <div className="mt-3 grid gap-4 sm:grid-cols-3">
-              {[
-                { label: "МК", pct: dist.mk },
-                { label: "ВХ", pct: dist.vh },
-                { label: "Общее", pct: dist.total },
-              ].map((item) => (
-                <SurfaceCard key={item.label}>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 pt-5">
-                    <div className="flex items-center gap-2">
-                      <PieChart className="h-4 w-4 text-primary" aria-hidden />
-                      <CardTitle className="text-sm font-semibold">{item.label}</CardTitle>
                     </div>
-                    <span className="text-lg font-bold tabular-nums text-foreground">{item.pct}%</span>
-                  </CardHeader>
-                  <CardContent className="pb-5">
-                    <Progress value={item.pct} className="h-2.5 bg-muted" />
-                  </CardContent>
-                </SurfaceCard>
-              ))}
-            </div>
-            <SurfaceCard>
-              <CardContent className="pt-5">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Вывод</p>
-                <p className="mt-2 text-sm leading-relaxed text-foreground">{conclusion}</p>
-              </CardContent>
-            </SurfaceCard>
-          </section>
-
-          <section id={SECTION_DOM_IDS.tasks} data-testid="section-trade-point-tasks" className="scroll-mt-28 space-y-4 sm:scroll-mt-32">
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <SectionTitle subtitle="Задачи по этой торговой точке.">Задачи</SectionTitle>
-              <Button
-                asChild
-                variant="outline"
-                className="min-h-10 border-border bg-card"
-                data-testid="button-open-all-tasks"
-              >
-                <Link href={buildHashPath("/tasks", { dealerId: dealer.id })}>Все задачи</Link>
-              </Button>
-            </div>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              {point.tasks.map((task, idx) => (
-                <SurfaceCard key={`${point.id}-task-${idx}`}>
-                  <CardHeader className="space-y-2 pb-2 pt-4">
-                    <CardTitle className="text-base font-semibold leading-snug">{task.title}</CardTitle>
-                    <div className="flex flex-wrap gap-2">
-                      <Badge variant="outline" className={cn("font-medium", priorityClass(task.priority))}>
-                        {task.priority}
-                      </Badge>
-                      <Badge variant="outline" className="border-border bg-muted/60 font-medium">
-                        {task.status}
-                      </Badge>
+                  ) : null}
+                  {createdTasks.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">Пока нет созданных задач по матрице — создайте из раздела «Матрица товаров».</p>
+                  ) : filteredCreatedTasks.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">По выбранному фильтру задач нет.</p>
+                  ) : (
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {filteredCreatedTasks.map((task) => (
+                        <MatrixTaskCard
+                          key={task.taskId}
+                          task={task}
+                          expanded={expandedTaskIds.has(task.taskId)}
+                          onToggle={handleToggleTask}
+                        />
+                      ))}
                     </div>
-                  </CardHeader>
-                  <CardContent className="space-y-2 pb-4 text-sm text-muted-foreground">
-                    <p>
-                      <span className="font-semibold text-foreground">Срок:</span> {task.due}
-                    </p>
-                    <p>
-                      <span className="font-semibold text-foreground">Ответственный:</span> {task.assignee}
-                    </p>
-                  </CardContent>
-                </SurfaceCard>
-              ))}
-            </div>
-
-            <div className="space-y-3 pt-2">
-              <SectionTitle subtitle="Задачи, созданные из матрицы товаров торговой точки.">
-                Задачи по матрице
-              </SectionTitle>
-              <MatrixTaskSummaryCard tasks={createdTasks} />
-
-              {createdTasks.length > 0 ? (
-                <div
-                  className="-mx-4 overflow-x-auto px-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:px-0"
-                  role="tablist"
-                  aria-label="Фильтры задач по матрице"
-                  data-testid="filter-trade-point-tasks-matrix"
-                >
-                  <div className="flex gap-2 pb-1">
-                    {MATRIX_TASK_FILTERS.map((f) => (
-                      <button
-                        key={f.id}
-                        type="button"
-                        role="tab"
-                        aria-selected={matrixTaskFilter === f.id}
-                        onClick={() => setMatrixTaskFilter(f.id)}
-                        data-testid={f.testId}
-                        className={cn(
-                          "min-h-10 shrink-0 rounded-full border px-3.5 py-2 text-sm font-medium transition-colors",
-                          matrixTaskFilter === f.id
-                            ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                            : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground",
-                        )}
-                      >
-                        {f.label}
-                      </button>
-                    ))}
-                  </div>
+                  )}
                 </div>
-              ) : null}
-
-              {createdTasks.length === 0 ? (
-                <SurfaceCard>
-                  <CardContent className="pt-5 text-sm text-muted-foreground">
-                    Пока нет созданных задач по матрице. Создайте задачу из раздела «Матрица товаров».
-                  </CardContent>
-                </SurfaceCard>
-              ) : filteredCreatedTasks.length === 0 ? (
-                <SurfaceCard>
-                  <CardContent className="pt-5 text-sm text-muted-foreground">
-                    По выбранному фильтру задач нет.
-                  </CardContent>
-                </SurfaceCard>
-              ) : (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {filteredCreatedTasks.map((task) => (
-                    <MatrixTaskCard
-                      key={task.taskId}
-                      task={task}
-                      expanded={expandedTaskIds.has(task.taskId)}
-                      onToggle={handleToggleTask}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          </section>
+              ),
+            }}
+          />
 
           <section id={SECTION_DOM_IDS.history} data-testid="section-trade-point-history" className="scroll-mt-28 space-y-4 sm:scroll-mt-32">
             <SectionTitle subtitle="Визиты и изменения по точке.">История</SectionTitle>
