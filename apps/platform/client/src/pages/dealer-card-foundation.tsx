@@ -105,6 +105,7 @@ import { DealerCharacteristicsSection } from "@/components/dealer-characteristic
 import { DealerLegalEntitiesSection } from "@/components/dealer-legal-entities-section";
 import { DealerTradePointsSection } from "@/components/dealer-trade-points-section";
 import { DealerActionFocusSection } from "@/components/dealer-action-focus-section";
+import { Bitrix24TasksPanel } from "@/components/bitrix24-tasks-panel";
 import { DealerClientNextStepSection } from "@/components/dealer-client-next-step-section";
 import { DealerStaticProfileSection } from "@/components/dealer-static-profile-section";
 import {
@@ -1407,6 +1408,15 @@ function DealerCardContent({ row }: { row: DealerRow }) {
               actorUserId={user?.id ?? profile.personaUserId}
               actorLabel={user?.name ?? userLabelFromProfile(profile)}
               onSaved={() => setNextStepBump((n) => n + 1)}
+            />
+
+            <Bitrix24TasksPanel
+              scope="dealer"
+              dealerId={row.id}
+              dealerName={rowView.name}
+              canCreate={canEditClientNextStep(profile, row)}
+              actorUserId={user?.id ?? profile.personaUserId}
+              actorLabel={user?.name ?? userLabelFromProfile(profile)}
             />
 
             {showTermsDistributionBlock ? (
