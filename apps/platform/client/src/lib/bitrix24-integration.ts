@@ -330,3 +330,73 @@ export async function listBitrix24Users(options?: {
       : "Не удалось загрузить пользователей из Bitrix24.";
   return { ok: false, message, code: typeof err.code === "string" ? err.code : undefined };
 }
+
+export type Bitrix24ChatDiagnosticRowDto = {
+  method: string;
+  success: boolean;
+  bitrixCode?: string;
+  message: string;
+  sample?: unknown;
+};
+
+type ChatDiagApiOk = { success: true; diagnostics?: Bitrix24ChatDiagnosticRowDto[] };
+type ChatDiagApiErr = { success: false; message?: string; code?: string };
+
+/**
+ * Диагностика REST im.* (чаты/уведомления): POST /api/bitrix24/chat/diagnostics.
+ */
+export async function runBitrix24ChatDiagnostics(input: {
+  dialogId?: string;
+  message?: string;
+  testNotify?: boolean;
+}): Promise<
+  { ok: true; diagnostics: Bitrix24ChatDiagnosticRowDto[] } | { ok: false; message: string; code?: string }
+> {
+  const payload: Record<string, unknown> = {};
+  if (input.dialogId != null && String(input.dialogId).trim()) payload.dialogId = String(input.dialogId).trim();
+  if (input.message != null && input.message.trim()) payload.message = input.message.trim();
+  if (input.testNotify === true) payload.testNotify = true;
+
+  let res: Response;
+  try {
+    res = await fetch("/api/bitrix24/chat/diagnostics", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    return { ok: false, message: "Не удалось связаться с сервером. Проверьте подключение и попробуйте снова." };
+  }
+
+  let data: unknown;
+  try {
+    data = await res.json();
+  } catch {
+    return { ok: false, message: "Сервер вернул неожиданный ответ при диагностике чатов Bitrix24." };
+  }
+
+  const body = data as ChatDiagApiOk | ChatDiagApiErr | Record<string, unknown>;
+  if (typeof body === "object" && body && "success" in body && body.success === true) {
+    const ok = body as ChatDiagApiOk;
+    const raw = Array.isArray(ok.diagnostics) ? ok.diagnostics : [];
+    const diagnostics: Bitrix24ChatDiagnosticRowDto[] = raw.map((row: unknown) => {
+      const r = row as Record<string, unknown>;
+      return {
+        method: String(r.method ?? ""),
+        success: r.success === true,
+        bitrixCode: typeof r.bitrixCode === "string" ? r.bitrixCode : undefined,
+        message: typeof r.message === "string" ? r.message : "",
+        sample: "sample" in r ? r.sample : undefined,
+      };
+    });
+    return { ok: true, diagnostics };
+  }
+
+  const err = body as ChatDiagApiErr;
+  const message =
+    typeof err.message === "string" && err.message.trim()
+      ? err.message.trim()
+      : "Диагностика чатов Bitrix24 недоступна.";
+  return { ok: false, message, code: typeof err.code === "string" ? err.code : undefined };
+}

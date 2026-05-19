@@ -3,7 +3,10 @@ import { Link } from "wouter";
 import { ExternalLink, ListChecks, Map, Target, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
 import { buildHashPath } from "@/lib/hash-route-utils";
@@ -12,12 +15,18 @@ import {
   createBitrix24TaskDraft,
   getBitrix24ContextFromUrl,
   listBitrix24Users,
+  type Bitrix24ChatDiagnosticRowDto,
   type Bitrix24ListedUserDto,
+  runBitrix24ChatDiagnostics,
   useBitrix24EmbeddedFlag,
 } from "@/lib/bitrix24-integration";
 
 function withEmbedded(path: string): string {
   return buildHashPath(path, { embedded: "bitrix24" });
+}
+
+function bitrixChatMethodSlug(method: string): string {
+  return method.replace(/\./g, "-");
 }
 
 export default function Bitrix24PocPage() {
@@ -29,6 +38,12 @@ export default function Bitrix24PocPage() {
   const [usersRows, setUsersRows] = useState<Bitrix24ListedUserDto[]>([]);
   const [usersBusy, setUsersBusy] = useState(false);
   const [usersHint, setUsersHint] = useState<string | null>(null);
+  const [chatDialogId, setChatDialogId] = useState("");
+  const [chatMessage, setChatMessage] = useState("");
+  const [chatTestNotify, setChatTestNotify] = useState(false);
+  const [chatBusy, setChatBusy] = useState(false);
+  const [chatHint, setChatHint] = useState<string | null>(null);
+  const [chatDiagnostics, setChatDiagnostics] = useState<Bitrix24ChatDiagnosticRowDto[]>([]);
 
   const sampleDealerId = DEALER_BASE_ROWS[0]?.id ?? "001";
 
@@ -73,6 +88,27 @@ export default function Bitrix24PocPage() {
       setUsersBusy(false);
     }
   }, [usersSearch]);
+
+  const onRunChatDiagnostics = useCallback(async () => {
+    setChatBusy(true);
+    setChatHint(null);
+    setChatDiagnostics([]);
+    try {
+      const res = await runBitrix24ChatDiagnostics({
+        dialogId: chatDialogId.trim() || undefined,
+        message: chatMessage.trim() || undefined,
+        testNotify: chatTestNotify,
+      });
+      if (res.ok) {
+        setChatDiagnostics(res.diagnostics);
+        setChatHint(null);
+      } else {
+        setChatHint(res.message);
+      }
+    } finally {
+      setChatBusy(false);
+    }
+  }, [chatDialogId, chatMessage, chatTestNotify]);
 
   const openFullAppUrl = useMemo(() => buildBitrix24OpenTandoorUrl("/dealer-base"), []);
 
@@ -246,6 +282,100 @@ export default function Bitrix24PocPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      <Card className="border-border/80 shadow-sm" data-testid="section-bitrix24-chat-diagnostics">
+        <CardHeader className="space-y-1 pb-2">
+          <CardTitle className="text-base">Диагностика чатов Bitrix24</CardTitle>
+          <CardDescription className="text-xs">
+            Проверка REST im.* через сервер (webhook не отображается). Не production-чат: только снимок доступности методов для текущего webhook.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="space-y-1">
+            <Label htmlFor="bitrix24-chat-dialog-id" className="text-xs font-medium text-muted-foreground">
+              DIALOG_ID (опционально)
+            </Label>
+            <Input
+              id="bitrix24-chat-dialog-id"
+              value={chatDialogId}
+              onChange={(e) => setChatDialogId(e.target.value)}
+              placeholder="Например chat123 или user2"
+              className="min-h-10 font-mono text-sm"
+              data-testid="input-bitrix24-chat-dialog-id"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="bitrix24-chat-message" className="text-xs font-medium text-muted-foreground">
+              Текст сообщения (опционально; вместе с DIALOG_ID вызывает im.message.add)
+            </Label>
+            <Textarea
+              id="bitrix24-chat-message"
+              value={chatMessage}
+              onChange={(e) => setChatMessage(e.target.value)}
+              placeholder="Короткий тестовый текст"
+              className="min-h-[88px] text-sm"
+              data-testid="textarea-bitrix24-chat-message"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="bitrix24-chat-test-notify"
+              checked={chatTestNotify}
+              onCheckedChange={(v) => setChatTestNotify(v === true)}
+              data-testid="checkbox-bitrix24-chat-test-notify"
+            />
+            <Label htmlFor="bitrix24-chat-test-notify" className="cursor-pointer text-sm font-normal">
+              Отправить тестовое уведомление себе (im.notify.personal.add)
+            </Label>
+          </div>
+          <Button
+            type="button"
+            variant="secondary"
+            className="min-h-10 w-full font-semibold sm:w-auto"
+            disabled={chatBusy}
+            data-testid="button-bitrix24-chat-diagnostics-run"
+            onClick={() => void onRunChatDiagnostics()}
+          >
+            {chatBusy ? "Проверка…" : "Проверить чаты Bitrix24"}
+          </Button>
+          {chatHint ? (
+            <p className="rounded-lg border border-border/70 bg-muted/40 px-3 py-2 text-sm text-foreground" role="status">
+              {chatHint}
+            </p>
+          ) : null}
+          {chatDiagnostics.length > 0 ? (
+            <div className="space-y-3">
+              {chatDiagnostics.map((row) => {
+                const slug = bitrixChatMethodSlug(row.method);
+                return (
+                  <div
+                    key={row.method}
+                    className="rounded-lg border border-border/70 bg-muted/20 p-3"
+                    data-testid={`row-bitrix24-chat-diagnostic-${slug}`}
+                  >
+                    <p className="text-sm font-semibold text-foreground">{row.method}</p>
+                    <p
+                      className="mt-1 text-xs text-muted-foreground"
+                      data-testid={`text-bitrix24-chat-diagnostic-status-${slug}`}
+                    >
+                      {row.success ? "Успех" : "Ошибка"}
+                    </p>
+                    <p className="mt-0.5 font-mono text-[11px] text-muted-foreground" data-testid={`text-bitrix24-chat-diagnostic-code-${slug}`}>
+                      {row.bitrixCode ?? "—"}
+                    </p>
+                    <p className="mt-1 text-xs text-foreground">{row.message}</p>
+                    {row.sample !== undefined ? (
+                      <pre className="mt-2 max-h-48 overflow-auto rounded border border-border/60 bg-card p-2 text-[11px] leading-snug">
+                        {JSON.stringify(row.sample, null, 2)}
+                      </pre>
+                    ) : null}
+                  </div>
+                );
+              })}
             </div>
           ) : null}
         </CardContent>
