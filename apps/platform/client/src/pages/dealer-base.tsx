@@ -98,11 +98,13 @@ import {
 } from "@/lib/dealer-shipment-days";
 import {
   addDealersToRoute,
+  countDealersOnRouteSettlements,
   DEALER_ROUTE_PLAN_EVENT,
-  getRouteForUserDay,
+  getRouteDealerIds,
+  listRouteDefinitions,
   loadDealerRoutePlanState,
-  removeDealerFromRoute,
-  reorderRouteDealer,
+  type ShipmentRouteDefinition,
+  type ShipmentRouteSlotId,
 } from "@/lib/dealer-route-plan";
 import {
   DEALER_STOCK_FILTER_LABELS,
@@ -909,6 +911,14 @@ function ruClientsCountLabel(n: number): string {
   return `${n} клиентов`;
 }
 
+function ruClientNoun(n: number): "клиент" | "клиента" | "клиентов" {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return "клиент";
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return "клиента";
+  return "клиентов";
+}
+
 export default function DealerBase() {
   const { profile } = useReleaseDemoProfile();
   const access = useMemo(() => mapSalesRoleToDealerBaseAccess(profile.role), [profile.role]);
@@ -1381,6 +1391,13 @@ export default function DealerBase() {
   const [activeShipmentDayId, setActiveShipmentDayId] = useState<DealerShipmentDayId | null>(null);
   const [routeBump, setRouteBump] = useState(0);
   const [trafficBump, setTrafficBump] = useState(0);
+  const [activeRouteSlotForBulk, setActiveRouteSlotForBulk] = useState<ShipmentRouteSlotId>("slot1");
+  const [shipmentRouteCityFilter, setShipmentRouteCityFilter] = useState<null | {
+    slotId: ShipmentRouteSlotId;
+    routeName: string;
+    settlements: string[];
+    previousCities: string[];
+  }>(null);
 
   const toggleSegmentCollapse = useCallback((id: DealerBaseSegmentId) => {
     setSegmentCollapse((prev) => {
@@ -1507,21 +1524,123 @@ export default function DealerBase() {
   }, [rowsAfterSegmentFilter, profile.personaUserId, workPlanState, trafficBump]);
 
   const routePlanState = useMemo(() => loadDealerRoutePlanState(), [routeBump]);
-  const routeIds = useMemo(
-    () => (activeShipmentDayId ? getRouteForUserDay(profile.personaUserId, activeShipmentDayId, routePlanState) : []),
-    [profile.personaUserId, activeShipmentDayId, routePlanState],
-  );
-  const routeRowsOrdered = useMemo(() => {
-    const byId = new Map(DEALER_BASE_ROWS.map((r) => [r.id, r]));
-    return routeIds.map((id) => byId.get(id)).filter((r): r is DealerRow => Boolean(r));
-  }, [routeIds]);
+  const routeDefsByDay = useMemo(() => {
+    const uid = profile.personaUserId;
+    const out: Record<DealerShipmentDayId, ShipmentRouteDefinition[]> = {
+      monday: [],
+      tuesday: [],
+      wednesday: [],
+      thursday: [],
+      friday: [],
+      saturday: [],
+    };
+    for (const d of DEALER_SHIPMENT_DAY_ORDER) {
+      out[d] = listRouteDefinitions(uid, d, routePlanState);
+    }
+    return out;
+  }, [profile.personaUserId, routePlanState]);
+
+  const dealerById = useMemo(() => new Map(DEALER_BASE_ROWS.map((r) => [r.id, r])), []);
+
+  const routeRowsBySlot = useMemo((): Record<ShipmentRouteSlotId, DealerRow[]> => {
+    if (!activeShipmentDayId) return { slot1: [], slot2: [] };
+    const uid = profile.personaUserId;
+    const s1 = getRouteDealerIds(uid, activeShipmentDayId, "slot1", routePlanState)
+      .map((id) => dealerById.get(id))
+      .filter((r): r is DealerRow => Boolean(r));
+    const s2 = getRouteDealerIds(uid, activeShipmentDayId, "slot2", routePlanState)
+      .map((id) => dealerById.get(id))
+      .filter((r): r is DealerRow => Boolean(r));
+    return { slot1: s1, slot2: s2 };
+  }, [activeShipmentDayId, profile.personaUserId, routePlanState, dealerById]);
+
+  const settlementRowsBySlot = useMemo((): Record<ShipmentRouteSlotId, DealerRow[]> => {
+    if (!activeShipmentDayId) return { slot1: [], slot2: [] };
+    const defs = listRouteDefinitions(profile.personaUserId, activeShipmentDayId, routePlanState);
+    const out: Record<ShipmentRouteSlotId, DealerRow[]> = { slot1: [], slot2: [] };
+    for (const def of defs) {
+      const lc = def.settlements.map((x) => x.trim().toLowerCase()).filter(Boolean);
+      const set = new Set(lc);
+      if (set.size === 0) {
+        out[def.slotId] = [];
+        continue;
+      }
+      out[def.slotId] = rowsAfterSegmentFilter.filter(
+        (r) =>
+          getDealerShipmentDays(r).includes(activeShipmentDayId) && set.has(r.city.trim().toLowerCase()),
+      );
+    }
+    return out;
+  }, [activeShipmentDayId, profile.personaUserId, routePlanState, rowsAfterSegmentFilter]);
 
   const shipmentDaySummary = useMemo(() => {
     if (!activeShipmentDayId) return null;
     const n = rowsFinalForList.length;
     const label = DEALER_SHIPMENT_DAY_LABELS[activeShipmentDayId];
-    return `День отгрузки: ${label} · ${ruClientsCountLabel(n)}`;
-  }, [activeShipmentDayId, rowsFinalForList.length]);
+    let line = `День отгрузки: ${label} · ${ruClientsCountLabel(n)}`;
+    const defs = listRouteDefinitions(profile.personaUserId, activeShipmentDayId, routePlanState);
+    if (defs.length === 1 && defs[0]) {
+      const d0 = defs[0];
+      const cnt = countDealersOnRouteSettlements(activeShipmentDayId, d0, rowsAfterSegmentFilter);
+      line += ` · ${d0.name}: ${cnt} ${ruClientNoun(cnt)}`;
+    } else if (defs.length === 2 && defs[0] && defs[1]) {
+      const c0 = countDealersOnRouteSettlements(activeShipmentDayId, defs[0], rowsAfterSegmentFilter);
+      const c1 = countDealersOnRouteSettlements(activeShipmentDayId, defs[1], rowsAfterSegmentFilter);
+      line += ` · ${defs[0].name}: ${c0} · ${defs[1].name}: ${c1}`;
+    }
+    return line;
+  }, [activeShipmentDayId, rowsFinalForList.length, profile.personaUserId, routePlanState, rowsAfterSegmentFilter]);
+
+  const shipmentRouteFilterBanner = useMemo(() => {
+    if (!shipmentRouteCityFilter) return null;
+    const settlementsText = shipmentRouteCityFilter.settlements.filter(Boolean).join(", ");
+    return `Показаны клиенты маршрута: ${shipmentRouteCityFilter.routeName} · ${settlementsText}`;
+  }, [shipmentRouteCityFilter]);
+
+  const clearShipmentRouteCityFilter = useCallback(() => {
+    setShipmentRouteCityFilter((prev) => {
+      if (prev) setCities(prev.previousCities);
+      return null;
+    });
+  }, []);
+
+  const handleSelectShipmentDay = useCallback((d: DealerShipmentDayId) => {
+    setShipmentRouteCityFilter((prev) => {
+      if (prev) setCities(prev.previousCities);
+      return null;
+    });
+    setActiveShipmentDayId(d);
+    setActiveRouteSlotForBulk("slot1");
+  }, []);
+
+  const handleResetShipmentDay = useCallback(() => {
+    setShipmentRouteCityFilter((prev) => {
+      if (prev) setCities(prev.previousCities);
+      return null;
+    });
+    setActiveShipmentDayId(null);
+    setActiveRouteSlotForBulk("slot1");
+  }, []);
+
+  const handleShowRouteClients = useCallback(
+    (slotId: ShipmentRouteSlotId, settlements: string[]) => {
+      if (!activeShipmentDayId) return;
+      const trimmed = settlements.map((s) => s.trim()).filter(Boolean);
+      const valid = trimmed.filter((c) => scopedRows.some((r) => r.city === c));
+      if (valid.length === 0) return;
+      const defs = listRouteDefinitions(profile.personaUserId, activeShipmentDayId, routePlanState);
+      const defMeta = defs.find((x) => x.slotId === slotId);
+      setShipmentRouteCityFilter((prev) => ({
+        slotId,
+        routeName: defMeta?.name ?? "Маршрут",
+        settlements: valid,
+        previousCities: prev ? prev.previousCities : [...cities],
+      }));
+      setCities(valid);
+      setActiveRouteSlotForBulk(slotId);
+    },
+    [activeShipmentDayId, profile.personaUserId, routePlanState, scopedRows, cities],
+  );
 
   const canMutateRoute = canMutateWorkPlan;
 
@@ -1893,25 +2012,21 @@ export default function DealerBase() {
         {showClientShipmentAndSegments ? (
           <div className="mb-3 min-w-0 space-y-3">
             <DealerShipmentDayPlanner
+              userId={profile.personaUserId}
               dayCounts={shipmentDayCounts}
+              rowsForRouteSettlementCounts={rowsAfterSegmentFilter}
+              routeDefsByDay={routeDefsByDay}
+              settlementOptions={cityOptions}
               activeShipmentDayId={activeShipmentDayId}
-              onSelectDay={(d) => setActiveShipmentDayId(d)}
-              onResetDay={() => setActiveShipmentDayId(null)}
-              activeDaySummary={shipmentDaySummary}
+              onSelectDay={handleSelectShipmentDay}
+              onResetDay={handleResetShipmentDay}
+              activeDaySummaryLine={shipmentDaySummary}
+              routeFilterBanner={shipmentRouteFilterBanner}
+              onClearRouteFilter={clearShipmentRouteCityFilter}
               canEditRoute={canMutateRoute}
-              routeRows={routeRowsOrdered}
-              onRouteUp={(id) => {
-                if (!activeShipmentDayId || !canMutateRoute) return;
-                reorderRouteDealer(profile.personaUserId, activeShipmentDayId, id, "up");
-              }}
-              onRouteDown={(id) => {
-                if (!activeShipmentDayId || !canMutateRoute) return;
-                reorderRouteDealer(profile.personaUserId, activeShipmentDayId, id, "down");
-              }}
-              onRouteRemove={(id) => {
-                if (!activeShipmentDayId || !canMutateRoute) return;
-                removeDealerFromRoute(profile.personaUserId, activeShipmentDayId, id);
-              }}
+              routeRowsBySlot={routeRowsBySlot}
+              settlementRowsBySlot={settlementRowsBySlot}
+              onShowRouteClients={handleShowRouteClients}
               getShipmentStatus={getShipmentStatusForRow}
               buildDealerHref={buildDealerAbsHref}
             />
@@ -1944,7 +2059,7 @@ export default function DealerBase() {
               showAddToRoute={Boolean(activeShipmentDayId && canMutateRoute)}
               onAddToRoute={() => {
                 if (!activeShipmentDayId || !canMutateRoute) return;
-                addDealersToRoute(profile.personaUserId, activeShipmentDayId, Array.from(selectedWpIds));
+                addDealersToRoute(profile.personaUserId, activeShipmentDayId, Array.from(selectedWpIds), activeRouteSlotForBulk);
                 setSelectedWpIds(new Set());
               }}
               addToRouteDisabled={selectedWpIds.size === 0}
