@@ -29,6 +29,8 @@ type Props = {
   showAddToRoute?: boolean;
   onAddToRoute?: () => void;
   addToRouteDisabled?: boolean;
+  showMergeClientGroup?: boolean;
+  onOpenMergeClientGroup?: () => void;
 };
 
 export function DealerWorkPlanBulkBar({
@@ -46,6 +48,8 @@ export function DealerWorkPlanBulkBar({
   showAddToRoute,
   onAddToRoute,
   addToRouteDisabled,
+  showMergeClientGroup,
+  onOpenMergeClientGroup,
 }: Props) {
   const [fallbackOpen, setFallbackOpen] = useState(false);
   const [fallbackText, setFallbackText] = useState("");
@@ -163,6 +167,18 @@ export function DealerWorkPlanBulkBar({
           >
             Снять выбор
           </Button>
+          {showMergeClientGroup && onOpenMergeClientGroup ? (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="min-h-9 flex-1 text-xs font-semibold sm:flex-none"
+              data-testid="button-dealer-client-group-create"
+              onClick={onOpenMergeClientGroup}
+            >
+              Объединить в клиента
+            </Button>
+          ) : null}
         </div>
         {showAddToRoute && onAddToRoute ? (
           <div className="mt-2 border-t border-primary/20 pt-2">

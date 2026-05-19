@@ -113,6 +113,7 @@ import {
   SHOWCASE_MATRIX_CHANGED_EVENT,
 } from "@/lib/trade-point-showcase-matrix-storage";
 import { DealerContactsSection } from "@/components/dealer-contacts-section";
+import { DealerClientGroupCardSection } from "@/components/dealer-client-group-card-section";
 
 const SECTION_IDS = [
   "overview",
@@ -1225,6 +1226,8 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                 </CardContent>
               </SurfaceCard>
             </section>
+
+            <DealerClientGroupCardSection row={row} profile={profile} />
 
             <section
               id={SECTION_DOM_IDS.contacts}
