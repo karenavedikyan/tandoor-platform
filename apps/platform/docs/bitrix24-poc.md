@@ -7,12 +7,13 @@
 - **Реальное создание тестовой задачи** в Bitrix24 через сервер Тандор: вызывается только метод REST **`tasks.task.add`** (входящий webhook URL хранится в `process.env.BITRIX24_WEBHOOK_URL` на сервере, не в клиенте).
 - **MVP «задачи из ЛК»:** менеджер с правами записи по клиенту может создать задачу в Bitrix24 из **карточки дилера** или **карточки торговой точки** (`POST /api/bitrix24/tasks/create`). Связь «что создано» хранится **только в браузере** (`localStorage`), без обратной синхронизации статусов из Bitrix24 и без входящих webhook от Bitrix24.
 - **MVP «список из Bitrix24»:** по кнопке «Загрузить из Bitrix24» вызывается **`POST /api/bitrix24/tasks/list`** (метод Bitrix24 **`tasks.task.list`** по тому же webhook). Результат кэшируется в **`localStorage`** (`tandoor-bitrix24-imported-tasks-v1`). Это **ручной** импорт, без realtime и без сопоставления задач с дилером/ТТ по сложным правилам (автолинковка по описанию не делается).
+- **MVP «пользователи Bitrix24» (диагностика):** на странице **`#/bitrix24`** блок **«Пользователи Bitrix24»** вызывает **`POST /api/bitrix24/users/list`** (метод **`user.get`**). Нужен только для **сопоставления** `userId` Тандор ↔ `bitrixUserId` в Bitrix24; не хранит маппинг на сервере и не подменяет авторизацию.
 
 ## Переменные окружения (только сервер)
 
 | Переменная | Обязательность | Назначение |
 |------------|----------------|------------|
-| `BITRIX24_WEBHOOK_URL` | **Обязательна** для серверных операций с задачами Bitrix24 (POC и MVP) | Полный базовый URL входящего webhook (как в Bitrix24, сегмент **`/rest/<userId>/<token>/`**). Из **`userId`** в URL автоматически выставляются **ответственный** и **постановщик** задачи (`RESPONSIBLE_ID` / `CREATED_BY`), если не задан override ниже. Для **`tasks.task.list`** фильтр **RESPONSIBLE_ID** берётся из того же правила (override или userId из URL). |
+| `BITRIX24_WEBHOOK_URL` | **Обязательна** для серверных операций с задачами и списком пользователей Bitrix24 (POC и MVP) | Полный базовый URL входящего webhook (как в Bitrix24, сегмент **`/rest/<userId>/<token>/`**). Из **`userId`** в URL автоматически выставляются **ответственный** и **постановщик** задачи (`RESPONSIBLE_ID` / `CREATED_BY`), если не задан override ниже. Для **`tasks.task.list`** фильтр **RESPONSIBLE_ID** берётся из того же правила (override или userId из URL). Для **`user.get`** webhook должен иметь **право на пользователей** (см. настройки входящего webhook в Bitrix24). |
 | `BITRIX24_TASK_RESPONSIBLE_ID` | **Опционально** (override) | Числовой ID пользователя Bitrix24 — если задан и это положительное целое число, используется **вместо** userId из webhook для `RESPONSIBLE_ID` и `CREATED_BY`. |
 
 **Важно:** webhook URL, токен и секрет **нельзя** класть в клиентский бандл или в git. На Vercel задайте значения в **Environment Variables** для production / preview. Сервер **не** возвращает и **не** логирует полный webhook URL.
@@ -63,7 +64,7 @@ https://<ваш-хост-платформы>/?embedded=bitrix24#/bitrix24
 - **Успех (200):** `{ "success": true, "taskId": "<строка>", "message": "Задача создана в Bitrix24" }`.
 - **Ошибки:** **503** `BITRIX24_NOT_CONFIGURED`; **400** `BITRIX24_WEBHOOK_URL_INVALID` или `BITRIX24_CREATE_VALIDATION_ERROR`; **502** `BITRIX24_API_ERROR` (+ `bitrixCode`), `BITRIX24_BAD_RESPONSE`, `BITRIX24_NETWORK`, `BITRIX24_UNEXPECTED_RESULT`; **500** `INTERNAL_ERROR`.
 
-Каждая Vercel-функция (`api/bitrix24/tasks/test.ts`, `api/bitrix24/tasks/create.ts`, `api/bitrix24/tasks/list.ts`) **самодостаточна**: вся логика валидации и вызова Bitrix24 продублирована внутри файла. В директории `api/` намеренно нет ни одного не-handler .ts-файла — на этом проекте любые межфайловые импорты внутри `api/` (включая `api/_lib/*` с префиксом подчёркивания) приводили к `FUNCTION_INVOCATION_FAILED` в Vercel runtime. Express-маршруты в `server/bitrix24-tasks-*-execute.ts` тоже самодостаточны и не зависят от `api/`. Дублирование намеренное — это цена надёжной работы serverless-функций в текущей конфигурации Vercel.
+Каждая Vercel-функция (`api/bitrix24/tasks/test.ts`, `api/bitrix24/tasks/create.ts`, `api/bitrix24/tasks/list.ts`, `api/bitrix24/users/list.ts`) **самодостаточна**: вся логика валидации и вызова Bitrix24 продублирована внутри файла. В директории `api/` намеренно нет ни одного не-handler .ts-файла — на этом проекте любые межфайловые импорты внутри `api/` (включая `api/_lib/*` с префиксом подчёркивания) приводили к `FUNCTION_INVOCATION_FAILED` в Vercel runtime. Express-маршруты в `server/bitrix24-*-execute.ts` тоже самодостаточны и не зависят от `api/`. Дублирование намеренное — это цена надёжной работы serverless-функций в текущей конфигурации Vercel.
 
 ## Backend: список задач из Bitrix24 (MVP)
 
@@ -72,6 +73,18 @@ https://<ваш-хост-платформы>/?embedded=bitrix24#/bitrix24
 - **Bitrix24:** `tasks.task.list` с `filter.RESPONSIBLE_ID`, `select` по полям ID, TITLE, DESCRIPTION, STATUS, RESPONSIBLE_ID, CREATED_BY, CREATED_DATE, DEADLINE, CHANGED_DATE, сортировка **`CHANGED_DATE` desc**, пагинация **`start`: 0** (до 50 записей за ответ Bitrix; итог дополнительно обрезается до `limit` на сервере).
 - **Успех (200):** `{ "success": true, "tasks": [ { "bitrixTaskId", "title", "description", "status", ... } ] }`.
 - **Ошибки:** **503** `BITRIX24_NOT_CONFIGURED`; **400** `BITRIX24_WEBHOOK_URL_INVALID` или `BITRIX24_LIST_VALIDATION_ERROR`; **502** `BITRIX24_API_ERROR` (+ `bitrixCode`), `BITRIX24_BAD_RESPONSE`, `BITRIX24_NETWORK`; **500** `INTERNAL_ERROR`; **405** `METHOD_NOT_ALLOWED`.
+
+## Backend: список пользователей Bitrix24 (MVP, диагностика)
+
+- **Назначение:** быстро увидеть **числовые ID сотрудников** в Bitrix24 для ручного маппинга с пользователями Тандор. Это **диагностический** endpoint, не замена каталога пользователей продукта.
+- **Маршрут:** `POST /api/bitrix24/users/list`
+- **Тело JSON (опционально):** `search` (строка; подстрока по имени, фамилии, полному имени или email — фильтрация на сервере после **`user.get`**), `limit` (по умолчанию **50**, диапазон **1–100**; при необходимости делается несколько запросов **`user.get`** с шагом **`start`** по 50 записей).
+- **Bitrix24:** **`user.get`** (`POST` к `{BITRIX24_WEBHOOK_URL}`**`user.get`**), поля **`select`:** ID, NAME, LAST_NAME, EMAIL, WORK_POSITION, ACTIVE; **`filter`** пустой (весь доступный webhook’у список постранично).
+- **Успех (200):** `{ "success": true, "users": [ { "bitrixUserId", "name", "lastName", "fullName", "email", "workPosition", "active" } ] }`.
+- **Ошибки:** **405** `METHOD_NOT_ALLOWED`; **503** `BITRIX24_NOT_CONFIGURED`; **400** `BITRIX24_WEBHOOK_URL_INVALID` или `BITRIX24_USERS_VALIDATION_ERROR`; **502** `BITRIX24_API_ERROR` (+ `bitrixCode`, без `error_description` из Bitrix), `BITRIX24_BAD_RESPONSE`, `BITRIX24_NETWORK`; **500** `INTERNAL_ERROR`.
+- **Права webhook:** кроме задач, для этого MVP входящий webhook должен включать доступ к **пользователям** и методу **`user.get`** (в интерфейсе создания webhook Bitrix24 отметьте соответствующие права).
+
+Клиентский вызов: **`listBitrix24Users`** в `apps/platform/client/src/lib/bitrix24-integration.ts`. UI: страница **`#/bitrix24`**, блок **«Пользователи Bitrix24»**.
 
 ## ЛК: где создавать задачу и где видна связь
 
@@ -90,10 +103,10 @@ https://<ваш-хост-платформы>/?embedded=bitrix24#/bitrix24
 
 - **`buildCommand`:** `npm run build` — собираются и клиент (`vite`), и серверный бандл для Node.
 - **Rewrite на все пути удалён** — приложение на **hash-router** (`#/…`), для основного сценария отдельный SPA-fallback не нужен.
-- **`POST /api/bitrix24/tasks/test`**, **`POST /api/bitrix24/tasks/create`** и **`POST /api/bitrix24/tasks/list`** обрабатываются **Serverless Functions** Vercel: `api/bitrix24/tasks/test.ts`, `create.ts`, `list.ts`. Каждый файл **полностью самодостаточен** — вообще никаких импортов из `server/*`, `client/*`, `api/_lib/*` или path-алиасов `@/`. В `api/` нет ни одного вспомогательного модуля. Ответ всегда JSON и `Content-Type: application/json`. Так гарантировано не повторится `FUNCTION_INVOCATION_FAILED`, наблюдавшийся после PR #106 и PR #107, когда handler'ы импортировали соседние ts-файлы внутри `api/`.
+- **`POST /api/bitrix24/tasks/test`**, **`POST /api/bitrix24/tasks/create`**, **`POST /api/bitrix24/tasks/list`** и **`POST /api/bitrix24/users/list`** обрабатываются **Serverless Functions** Vercel: `api/bitrix24/tasks/test.ts`, `create.ts`, `list.ts`, `api/bitrix24/users/list.ts`. Каждый файл **полностью самодостаточен** — вообще никаких импортов из `server/*`, `client/*`, `api/_lib/*` или path-алиасов `@/`. В `api/` нет ни одного вспомогательного модуля. Ответ всегда JSON и `Content-Type: application/json; charset=utf-8`. Так гарантировано не повторится `FUNCTION_INVOCATION_FAILED`, наблюдавшийся после PR #106 и PR #107, когда handler'ы импортировали соседние ts-файлы внутри `api/`.
 - В **`package.json`** задано **`"engines": { "node": "20.x" }`**, чтобы на Vercel использовался **Node 20** вместо «плавающего» runtime по умолчанию.
 
-Локально по-прежнему работает Express: `server/bitrix24-routes.ts` регистрирует маршруты; логика в `server/bitrix24-tasks-test-execute.ts`, `server/bitrix24-tasks-create-execute.ts` и `server/bitrix24-tasks-list-execute.ts` (самодостаточные модули, без импортов из `api/`).
+Локально по-прежнему работает Express: `server/bitrix24-routes.ts` регистрирует маршруты; логика в `server/bitrix24-tasks-test-execute.ts`, `server/bitrix24-tasks-create-execute.ts`, `server/bitrix24-tasks-list-execute.ts` и `server/bitrix24-users-list-execute.ts` (самодостаточные модули, без импортов из `api/`).
 
 Проверка с production (ожидается JSON, не HTML):
 
@@ -121,7 +134,7 @@ curl -i -X POST "https://tandoor-platform.vercel.app/api/bitrix24/tasks/test" \
 
 ## Права API на следующем шаге (ориентир)
 
-Сейчас используются **`tasks.task.add`** и **`tasks.task.list`**. Дальше по продукту могут понадобиться отдельные scope под CRM, пользователей и т.д. — подключать по мере сценариев, не расширяя webhook «на всякий случай».
+Сейчас используются **`tasks.task.add`**, **`tasks.task.list`** и диагностический **`user.get`**. Дальше по продукту могут понадобиться отдельные scope под CRM и т.д. — подключать по мере сценариев, не расширяя webhook «на всякий случай».
 
 ## Рекомендации по безопасности после теста
 

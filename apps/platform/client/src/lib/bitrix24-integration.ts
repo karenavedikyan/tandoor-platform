@@ -249,3 +249,84 @@ export async function listBitrix24Tasks(options?: {
       : "Не удалось загрузить задачи из Bitrix24.";
   return { ok: false, message, code: typeof err.code === "string" ? err.code : undefined };
 }
+
+export type Bitrix24ListedUserDto = {
+  bitrixUserId: string;
+  name: string;
+  lastName: string;
+  fullName: string;
+  email: string | null;
+  workPosition: string | null;
+  active: boolean | null;
+};
+
+type ListUsersApiOk = { success: true; users?: Bitrix24ListedUserDto[] };
+type ListUsersApiErr = { success: false; message?: string; code?: string; bitrixCode?: string };
+
+/**
+ * Список пользователей Bitrix24 (диагностика, user.get): POST /api/bitrix24/users/list.
+ */
+export async function listBitrix24Users(options?: {
+  search?: string;
+  limit?: number;
+}): Promise<{ ok: true; users: Bitrix24ListedUserDto[] } | { ok: false; message: string; code?: string }> {
+  const payload: Record<string, unknown> = {};
+  if (options?.search != null && options.search.trim()) payload.search = options.search.trim();
+  if (options?.limit != null) payload.limit = options.limit;
+
+  let res: Response;
+  try {
+    res = await fetch("/api/bitrix24/users/list", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    return { ok: false, message: "Не удалось связаться с сервером. Проверьте подключение и попробуйте снова." };
+  }
+
+  let data: unknown;
+  try {
+    data = await res.json();
+  } catch {
+    return { ok: false, message: "Сервер вернул неожиданный ответ при загрузке пользователей Bitrix24." };
+  }
+
+  const body = data as ListUsersApiOk | ListUsersApiErr | Record<string, unknown>;
+  if (typeof body === "object" && body && "success" in body && body.success === true) {
+    const ok = body as ListUsersApiOk;
+    const raw = Array.isArray(ok.users) ? ok.users : [];
+    const users: Bitrix24ListedUserDto[] = raw.map((row: unknown) => {
+      const u = row as Record<string, unknown>;
+      const email = u.email;
+      const workPosition = u.workPosition;
+      const activeRaw = u.active;
+      const activeParsed: boolean | null =
+        activeRaw === true || activeRaw === false
+          ? activeRaw
+          : activeRaw === "Y" || activeRaw === "y"
+            ? true
+            : activeRaw === "N" || activeRaw === "n"
+              ? false
+              : null;
+      return {
+        bitrixUserId: String(u.bitrixUserId ?? ""),
+        name: String(u.name ?? ""),
+        lastName: String(u.lastName ?? ""),
+        fullName: String(u.fullName ?? ""),
+        email: email == null || email === "" ? null : String(email),
+        workPosition: workPosition == null || workPosition === "" ? null : String(workPosition),
+        active: activeParsed,
+      };
+    });
+    return { ok: true, users };
+  }
+
+  const err = body as ListUsersApiErr;
+  const message =
+    typeof err.message === "string" && err.message.trim()
+      ? err.message.trim()
+      : "Не удалось загрузить пользователей из Bitrix24.";
+  return { ok: false, message, code: typeof err.code === "string" ? err.code : undefined };
+}
