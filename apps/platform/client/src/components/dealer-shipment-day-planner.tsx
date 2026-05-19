@@ -440,17 +440,19 @@ export function DealerShipmentDayPlanner({
                             })}
                           </div>
                         )}
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="w-full min-h-10 text-xs sm:w-auto"
-                          data-testid={`button-dealer-shipment-route-copy-${def.slotId}`}
-                          onClick={() => runCopyRoute(def.slotId, def.name)}
-                          disabled={routeRowsForCopy(ordered, settlementFallback).length === 0}
-                        >
-                          Скопировать маршрут
-                        </Button>
+                        <div data-testid={`button-dealer-shipment-route-copy-${def.slotId}`}>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="w-full min-h-10 text-xs sm:w-auto"
+                            data-testid="button-dealer-route-copy"
+                            onClick={() => runCopyRoute(def.slotId, def.name)}
+                            disabled={routeRowsForCopy(ordered, settlementFallback).length === 0}
+                          >
+                            Скопировать маршрут
+                          </Button>
+                        </div>
                       </div>
                     ) : null}
                   </div>
