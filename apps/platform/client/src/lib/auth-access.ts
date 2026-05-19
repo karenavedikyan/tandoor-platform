@@ -52,6 +52,7 @@ export function salesControlHomeHref(role: SalesRole): string {
 export function canAccessPath(role: SalesRole, path: string): boolean {
   const p = normPath(path);
   if (p === "/login") return true;
+  if (p === "/bitrix24" || p === "/embedded/bitrix24") return true;
 
   const any = (preds: ((x: string) => boolean)[]) => preds.some((f) => f(p));
 
