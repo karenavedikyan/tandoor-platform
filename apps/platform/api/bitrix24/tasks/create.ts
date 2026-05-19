@@ -2,7 +2,7 @@
  * Vercel Serverless: POST /api/bitrix24/tasks/create
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { runBitrix24TasksCreate } from "../bitrix24-tasks-create-execute";
+import { runBitrix24TasksCreate } from "../../_lib/bitrix24-tasks-create-execute";
 
 const JSON_CT = "application/json; charset=utf-8";
 

@@ -1,10 +1,12 @@
 /**
  * Vercel Serverless: POST /api/bitrix24/tasks/test
  *
- * Полностью автономный handler: только импорты из api/bitrix24/* (без server/*, без @/).
+ * Полностью автономный handler: только импорты из api/_lib/* (без server/*, без @/).
+ * Папка api/_lib/ начинается с подчёркивания — Vercel не регистрирует её как Serverless Functions,
+ * поэтому шарить хелперы между функциями безопасно (см. docs/bitrix24-poc.md).
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { executeBitrix24TaskAdd } from "../webhook-task-core";
+import { executeBitrix24TaskAdd } from "../../_lib/webhook-task-core";
 
 const JSON_CT = "application/json; charset=utf-8";
 
