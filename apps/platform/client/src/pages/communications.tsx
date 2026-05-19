@@ -135,10 +135,7 @@ export default function CommunicationsPage() {
     <div className="mx-auto w-full max-w-6xl space-y-6" data-testid="page-communications">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Коммуникации</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Чаты и сообщения Bitrix24 внутри ЛК Тандор. Данные приходят напрямую из портала Bitrix24 через серверную
-          интеграцию (без отдельной базы сообщений в браузере).
-        </p>
+        <p className="mt-1 text-sm text-muted-foreground">Чаты и сообщения Bitrix24 внутри ЛК Тандор.</p>
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:items-start">
