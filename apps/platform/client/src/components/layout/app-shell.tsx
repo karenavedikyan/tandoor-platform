@@ -141,6 +141,8 @@ function navLinkClass(item: PilotNavItem, location: string, variant: "sidebar" |
 }
 
 function headerContextLabel(location: string) {
+  const pathOnly = location.split("?")[0] ?? location;
+  if (pathOnly === "/bitrix24" || pathOnly === "/embedded/bitrix24") return "Bitrix24";
   if (isMainPath(location)) return "Главная";
   if (location.startsWith("/dealers/")) return "Карточка клиента";
   if (isDealerBasePath(location)) return "Клиенты";
@@ -219,13 +221,50 @@ export type AppShellProps = {
   userName: string;
   cityLabel?: string;
   onLogout: () => void;
+  /** POC Bitrix24: без боковых панелей и с компактной шапкой. */
+  embeddedBitrix24?: boolean;
 };
 
-export function AppShell({ children, navItems, homeHref, userName, cityLabel = "—", onLogout }: AppShellProps) {
+export function AppShell({
+  children,
+  navItems,
+  homeHref,
+  userName,
+  cityLabel = "—",
+  onLogout,
+  embeddedBitrix24 = false,
+}: AppShellProps) {
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const ctx = headerContextLabel(location);
   const iconRail = useMemo(() => buildIconRail(navItems), [navItems]);
+
+  if (embeddedBitrix24) {
+    return (
+      <div
+        className="flex min-h-screen flex-col overflow-x-hidden bg-background text-foreground"
+        data-testid="app-shell-embedded-bitrix24"
+      >
+        <header className="sticky top-0 z-40 border-b border-border/70 bg-card/95 px-3 py-2 shadow-xs backdrop-blur supports-[backdrop-filter]:bg-card/90">
+          <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3">
+            <BrandBlock homeHref={homeHref} className="max-w-[132px]" />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9 shrink-0 gap-1 border-border/80 px-2.5 text-xs"
+              data-testid="button-auth-logout"
+              onClick={onLogout}
+            >
+              <LogOut className="h-3.5 w-3.5" aria-hidden />
+              <span className="hidden sm:inline">Выход</span>
+            </Button>
+          </div>
+        </header>
+        <main className="mx-auto w-full max-w-3xl flex-1 px-3 py-4 sm:px-4 sm:py-5">{children}</main>
+      </div>
+    );
+  }
 
   return (
     <div

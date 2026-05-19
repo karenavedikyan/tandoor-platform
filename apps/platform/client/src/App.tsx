@@ -9,6 +9,8 @@ import { AppShell } from "@/components/layout/app-shell";
 import { PageLoadingFallback } from "@/components/navigation/page-loading";
 import { useMockAuth } from "@/hooks/use-mock-auth";
 import { canAccessPath, defaultHomePathForRole, getPilotNavItems } from "@/lib/auth-access";
+import { buildHashPath } from "@/lib/hash-route-utils";
+import { useBitrix24EmbeddedFlag } from "@/lib/bitrix24-integration";
 import NotFound from "@/pages/not-found";
 import PreviewUnavailable from "@/pages/preview-unavailable";
 import InternalPrototypePlaceholder from "@/pages/internal-prototype-placeholder";
@@ -43,6 +45,7 @@ const LazyMarketingBriefPublished = lazy(() =>
 );
 const LazyReleaseOne = lazy(() => import("@/pages/release-one"));
 const LazyReleaseClients = lazy(() => import("@/pages/release-clients"));
+const LazyBitrix24Poc = lazy(() => import("@/pages/bitrix24-poc"));
 const LazyLogin = lazy(() => import("@/pages/login"));
 
 function suspensePage(Lazy: LazyExoticComponent<ComponentType<any>>): ComponentType<any> {
@@ -81,6 +84,7 @@ const MarketingBriefsRoute = suspensePage(LazyMarketingBriefs);
 const MarketingBriefPublishedRoute = suspensePage(LazyMarketingBriefPublished);
 const ReleaseOneRoute = suspensePage(LazyReleaseOne);
 const ReleaseClientsRoute = suspensePage(LazyReleaseClients);
+const Bitrix24PocRoute = suspensePage(LazyBitrix24Poc);
 
 function HashRedirect({ to }: { to: string }) {
   const [, setLoc] = useHashLocation();
@@ -94,6 +98,7 @@ function AuthenticatedApp() {
   const [loc] = useLocation();
   const [, setLoc] = useHashLocation();
   const { isAuthenticated, user, logout } = useMockAuth();
+  const embeddedBitrix24 = useBitrix24EmbeddedFlag();
 
   const path = loc && loc.length > 0 ? loc : "/";
 
@@ -107,21 +112,25 @@ function AuthenticatedApp() {
 
   const navItems = getPilotNavItems(user.role);
   const homeHref = defaultHomePathForRole(user.role);
+  const shellHomeHref = embeddedBitrix24 ? buildHashPath(homeHref.split("?")[0] ?? homeHref, { embedded: "bitrix24" }) : homeHref;
 
   return (
     <AppShell
       navItems={navItems}
-      homeHref={homeHref}
+      homeHref={shellHomeHref}
       userName={user.name}
       onLogout={() => {
         logout();
         setLoc("/login");
       }}
+      embeddedBitrix24={embeddedBitrix24}
     >
       <Switch>
         <Route path="/" component={SalesManagerWorkspaceRoute} />
         <Route path="/main" component={SalesManagerWorkspaceRoute} />
         <Route path="/sales-manager" component={SalesManagerWorkspaceRoute} />
+        <Route path="/bitrix24" component={Bitrix24PocRoute} />
+        <Route path="/embedded/bitrix24" component={Bitrix24PocRoute} />
         <Route path="/dealer-base" component={DealerBaseRoute} />
         <Route path="/client-map" component={ClientMapRoute} />
         <Route path="/catalog/:productId" component={ProductDetailPageRoute} />
