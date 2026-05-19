@@ -10,6 +10,9 @@ import {
 
 export const SHOWCASE_MATRIX_STORAGE_KEY = "tandoor-trade-point-showcase-matrix-v1";
 
+/** Режим отображения матрицы витрины на карточке торговой точки (клиент). */
+export const SHOWCASE_MATRIX_VIEW_MODE_STORAGE_KEY = "tandoor-trade-point-showcase-matrix-view-v1";
+
 export const SHOWCASE_MATRIX_CHANGED_EVENT = "tandoor-trade-point-showcase-matrix-changed";
 
 export type ShowcaseMatrixStatusId = "need_install" | "installed" | "postponed" | "not_relevant";
