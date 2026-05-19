@@ -55,6 +55,34 @@ function buildTasksTaskAddUrl(webhookBase: string): string {
   return `${webhookBase}/tasks.task.add`;
 }
 
+/** ID пользователя из входящего webhook Bitrix24: `.../rest/{userId}/{token}` (слэш в конце опционален). */
+function extractWebhookUserIdFromBase(webhookBase: string): number | null {
+  const m = webhookBase.match(/\/rest\/(\d+)\/[^/?#]+/i);
+  if (!m?.[1]) return null;
+  const n = Number.parseInt(m[1], 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function resolveResponsibleIdForTask(webhookBase: string): { ok: true; id: number } | { ok: false; message: string } {
+  const overrideRaw = process.env.BITRIX24_TASK_RESPONSIBLE_ID?.trim();
+  if (overrideRaw) {
+    const n = Number.parseInt(overrideRaw, 10);
+    if (Number.isFinite(n) && n > 0) return { ok: true, id: n };
+    return {
+      ok: false,
+      message:
+        "BITRIX24_TASK_RESPONSIBLE_ID задан, но должен быть положительным целым числом (ID пользователя Bitrix24).",
+    };
+  }
+  const fromUrl = extractWebhookUserIdFromBase(webhookBase);
+  if (fromUrl != null) return { ok: true, id: fromUrl };
+  return {
+    ok: false,
+    message:
+      "Не удалось извлечь ID пользователя из BITRIX24_WEBHOOK_URL (ожидается шаблон .../rest/<число>/.../). Укажите BITRIX24_TASK_RESPONSIBLE_ID вручную.",
+  };
+}
+
 function extractTaskId(result: unknown): string | number | null {
   if (result == null) return null;
   if (typeof result === "number" || typeof result === "string") return result;
@@ -64,10 +92,6 @@ function extractTaskId(result: unknown): string | number | null {
     if (typeof id === "number" || typeof id === "string") return id;
   }
   return null;
-}
-
-function safeBitrixLogPayload(json: BitrixErrorBody): { error?: string } {
-  return { error: typeof json.error === "string" ? json.error : undefined };
 }
 
 async function runBitrix24TasksTestCore(): Promise<{ status: number; body: Record<string, unknown> }> {
@@ -97,17 +121,24 @@ async function runBitrix24TasksTestCore(): Promise<{ status: number; body: Recor
 
   const url = buildTasksTaskAddUrl(parsed.base);
 
-  const responsibleRaw = process.env.BITRIX24_TASK_RESPONSIBLE_ID?.trim();
-  const responsibleId = responsibleRaw ? Number.parseInt(responsibleRaw, 10) : NaN;
+  const rid = resolveResponsibleIdForTask(parsed.base);
+  if (!rid.ok) {
+    return {
+      status: 400,
+      body: {
+        success: false,
+        code: "BITRIX24_WEBHOOK_URL_INVALID",
+        message: rid.message,
+      },
+    };
+  }
 
   const fields: Record<string, string | number> = {
     TITLE: TEST_TASK_TITLE,
     DESCRIPTION: TEST_TASK_DESCRIPTION,
+    RESPONSIBLE_ID: rid.id,
+    CREATED_BY: rid.id,
   };
-  if (Number.isFinite(responsibleId) && responsibleId > 0) {
-    fields.RESPONSIBLE_ID = responsibleId;
-    fields.CREATED_BY = responsibleId;
-  }
 
   let bitrixJson: BitrixSuccess & BitrixErrorBody;
   try {
@@ -148,22 +179,16 @@ async function runBitrix24TasksTestCore(): Promise<{ status: number; body: Recor
   }
 
   if (bitrixJson.error) {
-    console.error("[bitrix24-api] bitrix api error", safeBitrixLogPayload(bitrixJson));
-    const code = bitrixJson.error;
-    let message =
-      "Bitrix24 не принял запрос на создание задачи. Проверьте права webhook и настройки задач в портале.";
-    if (code === "NO_AUTH_FOUND" || code === "INVALID_CREDENTIALS" || code === "expired_token") {
-      message = "Доступ к Bitrix24 отклонён. Проверьте, что webhook URL актуален и не отозван.";
-    } else if (code === "ERROR_CORE" && String(bitrixJson.error_description ?? "").includes("Responsible")) {
-      message =
-        "В портале требуется ответственный за задачу. Укажите на сервере числовой BITRIX24_TASK_RESPONSIBLE_ID (ID пользователя Bitrix24).";
-    }
+    const bitrixCode = typeof bitrixJson.error === "string" ? bitrixJson.error : "UNKNOWN";
+    console.error("[bitrix24-api] bitrix api error", { bitrixCode });
     return {
       status: 502,
       body: {
         success: false,
         code: "BITRIX24_API_ERROR",
-        message,
+        bitrixCode,
+        message:
+          "Bitrix24 не принял запрос на создание задачи. Проверьте права webhook, ответственного и настройки задач в портале.",
       },
     };
   }
