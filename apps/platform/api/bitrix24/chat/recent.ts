@@ -287,6 +287,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       return;
     }
 
+    if (process.env.BITRIX24_COMMUNICATIONS_UNSAFE_SHARED_WEBHOOK_ENABLED !== "true") {
+      sendJson(res, 403, {
+        success: false,
+        code: "BITRIX24_COMMUNICATIONS_DISABLED",
+        message:
+          "Раздел Коммуникации временно отключён: общий webhook Bitrix24 нельзя использовать для личных чатов сотрудников. Нужна персональная авторизация Bitrix24.",
+      });
+      return;
+    }
+
     const body = readJsonBody(req);
     const out = await runChatRecentCore(body ?? {});
     sendJson(res, out.status, out.body);
