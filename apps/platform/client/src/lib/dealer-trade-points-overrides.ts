@@ -11,6 +11,15 @@ import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
 export const DEALER_TRADE_POINTS_STORAGE_KEY = "tandoor-dealer-trade-points-v1";
 export const DEALER_TRADE_POINTS_EVENT = "tandoor-dealer-trade-points-changed";
 
+/** Стабильный id виртуальной (дефолтной) ТТ дилера без отдельно заведённых точек. */
+export function virtualDefaultTradePointId(dealerId: string): string {
+  return `${dealerId}-default`;
+}
+
+export function isVirtualDefaultTradePointId(dealerId: string, tradePointId: string): boolean {
+  return tradePointId === virtualDefaultTradePointId(dealerId);
+}
+
 export type ManualTradePointRecord = {
   id: string;
   name: string;
@@ -237,6 +246,69 @@ export function getMergedDealerTradePoints(
   return out;
 }
 
+function isFilledStr(v: string | undefined): boolean {
+  const t = (v ?? "").trim();
+  return t !== "" && t !== "—" && t !== "-";
+}
+
+/** Виртуальная (дефолтная) ТТ дилера: использовать, когда у дилера нет ни одной активной точки. */
+export function buildVirtualDefaultTradePoint(dealer: DealerRow): DealerTradePoint {
+  const city = isFilledStr(dealer.city) ? dealer.city.trim() : "—";
+  const address = isFilledStr(dealer.releaseAddress) ? dealer.releaseAddress!.trim() : "Адрес не указан";
+  const phone = isFilledStr(dealer.contacts?.phone) ? dealer.contacts.phone.trim() : undefined;
+  const rop = isFilledStr(dealer.regionalManager) ? dealer.regionalManager.trim() : "—";
+  return {
+    id: virtualDefaultTradePointId(dealer.id),
+    name: "Основная торговая точка",
+    city,
+    address,
+    format: "Розница / салон",
+    status: "Активна",
+    equipment: "—",
+    hardwareStockStatus: "—",
+    doorsStockStatus: "—",
+    distribution: { mk: 0, vh: 0, total: 0 },
+    showcaseStatus: "—",
+    showcaseNeeds: "",
+    lastVisitDate: "—",
+    nextVisitDate: "—",
+    responsibleRegionalManager: rop,
+    issues: "",
+    tasks: [],
+    activityHistory: [],
+    photos: { attached: false },
+    productTrainingStatus: "not_required",
+    productTrainingCompleted: false,
+    contactPhone: phone,
+    contactName: undefined,
+    tpComment: undefined,
+  };
+}
+
+/**
+ * Объединение реальных ТТ и виртуальной дефолтной: если активных точек нет — добавляется виртуальная.
+ * Виртуальная исчезает, как только появляется хотя бы одна явная активная точка.
+ */
+export function getEffectiveDealerTradePoints(
+  row: DealerRow,
+  opts?: { includeArchived?: boolean },
+  state: DealerTradePointsState = loadDealerTradePointsState(),
+): MergedTradePointEntry[] {
+  const merged = getMergedDealerTradePoints(row, opts, state);
+  const includeArchived = opts?.includeArchived === true;
+  const activeCount = includeArchived
+    ? merged.filter((m) => !m.isArchived).length
+    : merged.length;
+  if (activeCount > 0) return merged;
+  const virtualEntry: MergedTradePointEntry = {
+    point: buildVirtualDefaultTradePoint(row),
+    isManual: false,
+    isEdited: false,
+    isArchived: false,
+  };
+  return [virtualEntry, ...merged.filter((m) => includeArchived && m.isArchived)];
+}
+
 export function getResolvedTradePointByIds(
   rawDealerId: string,
   rawPointId: string,
@@ -244,6 +316,20 @@ export function getResolvedTradePointByIds(
 ): { dealer: DealerRow; point: DealerTradePoint; entry: MergedTradePointEntry } | undefined {
   const dealer = getDealerById(rawDealerId);
   if (!dealer) return undefined;
+  const trimmedRaw = rawPointId.trim();
+  if (trimmedRaw === virtualDefaultTradePointId(dealer.id)) {
+    const activeMerged = getMergedDealerTradePoints(dealer, { includeArchived: false }, state);
+    if (activeMerged.length === 0) {
+      const entry: MergedTradePointEntry = {
+        point: buildVirtualDefaultTradePoint(dealer),
+        isManual: false,
+        isEdited: false,
+        isArchived: false,
+      };
+      return { dealer, point: entry.point, entry };
+    }
+    return undefined;
+  }
   const id = normalizeTradePointId(dealer.id, rawPointId);
   const merged = getMergedDealerTradePoints(dealer, { includeArchived: true }, state);
   const entry = merged.find((m) => m.point.id === id);

@@ -75,6 +75,7 @@ import {
   DEALER_TRADE_POINTS_EVENT,
   getMergedDealerTradePoints,
   getResolvedTradePointByIds,
+  isVirtualDefaultTradePointId,
   updateTradePoint,
   type MergedTradePointEntry,
 } from "@/lib/dealer-trade-points-overrides";
@@ -729,7 +730,14 @@ function TradePointDetailContent({
   }, []);
 
   const dealerForRbac = useMemo(() => getDealerById(dealer.id) ?? dealer, [dealer]);
-  const canEditTp = useMemo(() => canEditDealerTradePoints(profile, dealerForRbac), [profile, dealerForRbac]);
+  const isVirtualDefaultPoint = useMemo(
+    () => isVirtualDefaultTradePointId(dealer.id, point.id),
+    [dealer.id, point.id],
+  );
+  const canEditTp = useMemo(
+    () => !isVirtualDefaultPoint && canEditDealerTradePoints(profile, dealerForRbac),
+    [profile, dealerForRbac, isVirtualDefaultPoint],
+  );
   const canEditTpComments = useMemo(() => canEditTradePointComments(profile, dealer), [profile, dealer]);
   const tpComments = useMemo(() => getTradePointComments(dealer.id, point.id), [dealer.id, point.id, commentsBump]);
   const showcaseTasksOpen = useMemo(() => {
@@ -979,7 +987,24 @@ function TradePointDetailContent({
               Архивная
             </Badge>
           ) : null}
+          {isVirtualDefaultPoint ? (
+            <Badge
+              variant="outline"
+              className="text-[10px] font-medium"
+              data-testid="badge-trade-point-virtual-default"
+            >
+              Основная (по дилеру)
+            </Badge>
+          ) : null}
         </div>
+        {isVirtualDefaultPoint ? (
+          <p
+            className="mt-2 text-xs text-muted-foreground"
+            data-testid="text-trade-point-virtual-default-hint"
+          >
+            Точки не заведены отдельно — работаем как с одной основной торговой точкой.
+          </p>
+        ) : null}
         {canEditTp ? (
           <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
             <Button
