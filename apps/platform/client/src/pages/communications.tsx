@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import {
   getBitrix24ChatMessages,
@@ -12,6 +14,7 @@ import {
   type Bitrix24RecentChatDto,
 } from "@/lib/bitrix24-integration";
 import { toast } from "@/hooks/use-toast";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 const LAST_DIALOG_STORAGE_KEY = "tandoor-communications-last-dialog-v1";
 
@@ -36,6 +39,7 @@ function formatRuDateTime(raw: string | undefined): string {
 }
 
 export default function CommunicationsPage() {
+  const isMobile = useIsMobile();
   const [chats, setChats] = useState<Bitrix24RecentChatDto[]>([]);
   const [chatsLoading, setChatsLoading] = useState(false);
   const [chatsError, setChatsError] = useState<string | null>(null);
@@ -47,6 +51,10 @@ export default function CommunicationsPage() {
 
   const [compose, setCompose] = useState("");
   const [sendBusy, setSendBusy] = useState(false);
+
+  /** На узком экране: false — список чатов, true — панель выбранного чата. */
+  const [mobileThreadOpen, setMobileThreadOpen] = useState(false);
+  const didAutoOpenMobileThreadRef = useRef(false);
 
   const selectedChat = useMemo(
     () => (selectedDialogId ? chats.find((c) => c.dialogId === selectedDialogId) ?? null : null),
@@ -99,13 +107,33 @@ export default function CommunicationsPage() {
     void loadMessages(selectedDialogId);
   }, [selectedDialogId, loadMessages]);
 
-  const onSelectChat = useCallback((dialogId: string) => {
-    setSelectedDialogId(dialogId);
-    try {
-      window.localStorage.setItem(LAST_DIALOG_STORAGE_KEY, dialogId);
-    } catch {
-      /* ignore */
+  useEffect(() => {
+    if (!isMobile) {
+      setMobileThreadOpen(false);
+      return;
     }
+    if (didAutoOpenMobileThreadRef.current) return;
+    if (chatsLoading) return;
+    if (!selectedDialogId || !chats.some((c) => c.dialogId === selectedDialogId)) return;
+    didAutoOpenMobileThreadRef.current = true;
+    setMobileThreadOpen(true);
+  }, [isMobile, selectedDialogId, chats, chatsLoading]);
+
+  const onSelectChat = useCallback(
+    (dialogId: string) => {
+      setSelectedDialogId(dialogId);
+      try {
+        window.localStorage.setItem(LAST_DIALOG_STORAGE_KEY, dialogId);
+      } catch {
+        /* ignore */
+      }
+      if (isMobile) setMobileThreadOpen(true);
+    },
+    [isMobile],
+  );
+
+  const onBackToChats = useCallback(() => {
+    setMobileThreadOpen(false);
   }, []);
 
   const onSend = useCallback(async () => {
@@ -131,6 +159,11 @@ export default function CommunicationsPage() {
     toast({ title: "Сообщение отправлено" });
   }, [compose, selectedDialogId, loadMessages]);
 
+  const hideChatListOnMobile = isMobile && mobileThreadOpen;
+  const hideMessagesOnMobile = isMobile && !mobileThreadOpen;
+
+  const emptyMessagesHint = isMobile ? "Выберите чат в списке." : "Выберите чат в списке слева.";
+
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6" data-testid="page-communications">
       <div>
@@ -138,8 +171,22 @@ export default function CommunicationsPage() {
         <p className="mt-1 text-sm text-muted-foreground">Чаты и сообщения Bitrix24 внутри ЛК Тандор.</p>
       </div>
 
+      <Alert
+        className="border-amber-500/50 bg-amber-500/10 text-foreground [&>svg]:text-amber-700 dark:[&>svg]:text-amber-400"
+        data-testid="section-communications-access-warning"
+      >
+        <Info className="h-4 w-4" aria-hidden />
+        <AlertDescription>
+          Временный режим: чаты загружаются через общий webhook Bitrix24 и доступны только администратору. Для доступа
+          сотрудников нужен персональный вход Bitrix24 для каждого пользователя.
+        </AlertDescription>
+      </Alert>
+
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:items-start">
-        <Card className="min-w-0 border-border/80 shadow-sm" data-testid="section-communications-chat-list">
+        <Card
+          className={cn("min-w-0 border-border/80 shadow-sm", hideChatListOnMobile && "hidden md:block")}
+          data-testid="section-communications-chat-list"
+        >
           <CardHeader className="pb-3">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
@@ -228,40 +275,57 @@ export default function CommunicationsPage() {
           </CardContent>
         </Card>
 
-        <Card className="min-w-0 border-border/80 shadow-sm" data-testid="section-communications-chat-messages">
+        <Card
+          className={cn("min-w-0 border-border/80 shadow-sm", hideMessagesOnMobile && "hidden md:block")}
+          data-testid="section-communications-chat-messages"
+        >
           <CardHeader className="pb-3">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div className="min-w-0">
-                <CardTitle className="text-base">
-                  {selectedChat ? selectedChat.title : "Выберите чат"}
-                </CardTitle>
-                <CardDescription className="text-xs">
-                  {selectedDialogId ? (
-                    <>
-                      Сообщения из Bitrix24 (im.dialog.messages.get), диалог{" "}
-                      <span className="font-mono text-[11px]">{selectedDialogId}</span>
-                    </>
-                  ) : (
-                    "Сначала выберите чат слева"
-                  )}
-                </CardDescription>
+            <div className="flex flex-wrap items-start gap-2">
+              {isMobile && mobileThreadOpen && selectedDialogId ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                  onClick={onBackToChats}
+                  data-testid="button-communications-back-to-chats"
+                >
+                  Назад к чатам
+                </Button>
+              ) : null}
+              <div className="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <CardTitle className="text-base">
+                    {selectedChat ? selectedChat.title : "Выберите чат"}
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    {selectedDialogId ? (
+                      <>
+                        Сообщения из Bitrix24 (im.dialog.messages.get), диалог{" "}
+                        <span className="font-mono text-[11px]">{selectedDialogId}</span>
+                      </>
+                    ) : (
+                      emptyMessagesHint
+                    )}
+                  </CardDescription>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                  disabled={!selectedDialogId || messagesLoading}
+                  onClick={() => selectedDialogId && void loadMessages(selectedDialogId)}
+                  data-testid="button-communications-refresh-messages"
+                >
+                  Обновить сообщения
+                </Button>
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="shrink-0"
-                disabled={!selectedDialogId || messagesLoading}
-                onClick={() => selectedDialogId && void loadMessages(selectedDialogId)}
-                data-testid="button-communications-refresh-messages"
-              >
-                Обновить сообщения
-              </Button>
             </div>
           </CardHeader>
           <CardContent className="space-y-3 pt-0">
             {!selectedDialogId ? (
-              <p className="text-sm text-muted-foreground">Выберите чат в списке слева.</p>
+              <p className="text-sm text-muted-foreground">{emptyMessagesHint}</p>
             ) : null}
             {messagesLoading ? <p className="text-sm text-muted-foreground">Загрузка сообщений…</p> : null}
             {messagesError ? (
