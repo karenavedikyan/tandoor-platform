@@ -17,6 +17,7 @@ import { FloatingBackButton } from "@/components/navigation/floating-back-button
 import { cn } from "@/lib/utils";
 import {
   getAllMatrixTasks,
+  MATRIX_TASK_PRIORITY_LABEL,
   MATRIX_TASK_STATUS_LABEL,
   type MatrixTaskWithContext,
 } from "@/lib/trade-point-task-data";
@@ -43,6 +44,12 @@ import { taskMatchesUrgentPresetForBadge } from "@/lib/task-presets";
 import { useRouteSearchParams, buildHashPath } from "@/lib/hash-route-utils";
 import { getEffectiveTeamLeadTeamId, type ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { getAllSalesManagers, getSalesUserById } from "@/lib/sales-control-data";
+import {
+  buildCatalogProductSearchHaystack,
+  CATALOG_PRODUCTS,
+  getProductById,
+} from "@/lib/catalog-data";
+import { getShowcaseMatrixModelsForTradePoint } from "@/lib/trade-point-showcase-matrix-models";
 
 type ViewMode = "cards" | "list";
 
@@ -215,6 +222,127 @@ function managerLabelForDealer(dealerId: string, dealerById: Map<string, (typeof
   return u?.name ?? d.manager ?? "—";
 }
 
+/** Безопасный суффикс для data-testid (taskId может содержать `|`, `/` и т.д.). */
+function safeShowcaseTaskSlug(taskId: string): string {
+  const s = taskId.replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+  return s.length > 0 ? s : "task";
+}
+
+function findCatalogImageByProductNameHint(productName: string): string {
+  const raw = productName.trim();
+  if (raw.length < 2) return "";
+  const n = raw.toLowerCase();
+  const tokens = n
+    .split(/[\s/·.,:;|–—()-]+/)
+    .map((w) => w.trim())
+    .filter((w) => w.length >= 3)
+    .slice(0, 5);
+  if (!tokens.length) return "";
+  let i = 0;
+  for (const p of CATALOG_PRODUCTS) {
+    i += 1;
+    if (i > 400) break;
+    const h = buildCatalogProductSearchHaystack(p);
+    if (tokens.some((t) => h.includes(t))) return p.image?.trim() ?? "";
+  }
+  return "";
+}
+
+function resolveShowcaseTaskDoorImage(
+  task: MatrixTaskWithContext,
+  dealer: (typeof DEALER_BASE_ROWS)[number] | undefined,
+): string {
+  const direct = getProductById(task.productId)?.image?.trim() ?? "";
+  if (direct) return direct;
+  const matrixStored = task.showcaseMatrixImageSrc?.trim() ?? "";
+  if (matrixStored) return matrixStored;
+  if (dealer) {
+    try {
+      const models = getShowcaseMatrixModelsForTradePoint(task.dealerId, task.tradePointId, dealer.clientCategory);
+      const byId = models.find((m) => m.id === task.productId);
+      const byName = models.find((m) => m.name.trim() === task.productName.trim());
+      const m = byId ?? byName;
+      if (m?.imageUrl?.trim()) return m.imageUrl.trim();
+      if (m?.id) {
+        const img = getProductById(m.id)?.image?.trim() ?? "";
+        if (img) return img;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return findCatalogImageByProductNameHint(task.productName);
+}
+
+function modelTitleForShowcaseTask(task: MatrixTaskWithContext): string {
+  return getProductById(task.productId)?.name?.trim() || task.productName;
+}
+
+function showcaseTaskVisualShell(task: MatrixTaskWithContext, urgent: boolean): string {
+  if (task.status === "done") {
+    return "border-border/60 bg-muted/20 opacity-[0.92] ring-1 ring-border/25";
+  }
+  if (task.showcaseExtraStatus === "needs_rop") {
+    return "border-violet-300/75 bg-violet-50/45 ring-1 ring-violet-200/55";
+  }
+  if (task.status === "overdue") {
+    return "border-rose-300/85 bg-rose-50/35 ring-1 ring-rose-200/60";
+  }
+  if (urgent && task.status === "new") {
+    return "border-amber-400/80 bg-amber-50/40 ring-1 ring-amber-300/45";
+  }
+  if (task.status === "new") {
+    return "border-primary/30 bg-primary/[0.06] ring-1 ring-primary/20";
+  }
+  if (task.status === "in_progress" || task.showcaseExtraStatus === "postponed") {
+    return "border-amber-200/90 bg-amber-50/25";
+  }
+  return "border-border/80 bg-card";
+}
+
+function TaskDoorPhoto({
+  src,
+  slug,
+  frameClass,
+  densePlaceholder,
+}: {
+  src: string;
+  slug: string;
+  frameClass: string;
+  densePlaceholder?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "relative shrink-0 overflow-hidden rounded-lg border border-border/60 bg-muted/40",
+        frameClass,
+      )}
+    >
+      {src ? (
+        <img
+          src={src}
+          alt=""
+          data-testid={`img-showcase-task-${slug}`}
+          className={cn(
+            "absolute inset-0 box-border h-full w-full object-contain object-center",
+            densePlaceholder ? "p-0.5" : "p-2",
+          )}
+          loading="lazy"
+        />
+      ) : (
+        <span
+          className={cn(
+            "absolute inset-0 flex items-center justify-center text-muted-foreground",
+            densePlaceholder ? "text-[8px]" : "text-[9px]",
+          )}
+        >
+          Нет фото
+        </span>
+      )}
+    </div>
+  );
+}
+
 function ShowcaseTasksKpis({ tasks }: { tasks: MatrixTaskWithContext[] }) {
   const k = useMemo(() => computeShowcaseTaskKpis(tasks), [tasks]);
   const tiles = [
@@ -257,124 +385,136 @@ function ShowcaseTaskCard({
   const deficit = Math.max(0, task.targetSamples - task.actualSamples);
   const urgent = taskMatchesUrgentPresetForBadge(task, presetClock);
   const manager = managerLabelForDealer(task.dealerId, dealerById);
+  const dealer = dealerById.get(task.dealerId);
+  const img = resolveShowcaseTaskDoorImage(task, dealer);
+  const slug = safeShowcaseTaskSlug(task.taskId);
+  const modelTitle = modelTitleForShowcaseTask(task);
+  const shell = showcaseTaskVisualShell(task, urgent);
+  const canOpenShowcaseTp = Boolean(task.tradePointId?.trim());
 
   return (
-    <Card
-      className={cn(
-        "min-w-0 overflow-hidden rounded-2xl border border-border/80 bg-card shadow-md border-l-4",
-        catMeta.borderLeftClass,
-      )}
-      data-testid={`card-task-${task.taskId}`}
-    >
-      <CardContent className="space-y-3 p-4">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <p className="font-semibold leading-snug text-foreground">{task.dealerName}</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">Менеджер: {manager}</p>
-            {task.source === "showcase_matrix_deficit" ? (
-              <p className="mt-1 text-xs font-medium text-foreground">{task.tradePointName}</p>
-            ) : null}
+    <div data-testid={`card-showcase-task-${slug}`} className="min-w-0">
+      <Card
+        className={cn("min-w-0 overflow-hidden rounded-2xl border shadow-md border-l-4", catMeta.borderLeftClass, shell)}
+        data-testid={`card-task-${task.taskId}`}
+      >
+        <CardContent className="flex min-w-0 flex-col gap-3 p-0">
+          <div className="relative w-full shrink-0 border-b border-border/50 bg-muted/20">
+            <TaskDoorPhoto src={img} slug={slug} frameClass="h-44 w-full sm:h-48" />
           </div>
-          <div className="flex shrink-0 flex-wrap items-start justify-end gap-2">
-            {task.showcaseMatrixImageSrc ? (
-              <img
-                src={task.showcaseMatrixImageSrc}
-                alt=""
-                className="h-14 w-14 shrink-0 rounded-lg border border-border object-cover"
-                loading="lazy"
-              />
-            ) : null}
-            <Badge
-              variant="outline"
-              className={cn("font-medium", catMeta.badgeClass)}
-              data-testid={`badge-task-category-${task.taskId}`}
-              data-task-category="showcase"
-            >
-              Витрина
-            </Badge>
-            {urgent ? (
-              <Badge
-                variant="outline"
-                className="border-amber-300 bg-amber-50 font-semibold text-amber-950 dark:bg-amber-950/30 dark:text-amber-50"
-                data-testid={`badge-task-preset-urgent-${task.taskId}`}
+          <div className="space-y-3 px-4 pb-4 pt-1">
+            <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="line-clamp-2 text-base font-semibold leading-snug text-foreground" title={modelTitle}>
+                  {modelTitle}
+                </p>
+                <p className="mt-1 text-xs font-semibold leading-snug text-foreground">{task.dealerName}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">Менеджер: {manager}</p>
+                {task.source === "showcase_matrix_deficit" ? (
+                  <p className="mt-1 text-[11px] text-muted-foreground">Точка: {task.tradePointName}</p>
+                ) : null}
+              </div>
+              <div className="flex max-w-[11rem] shrink-0 flex-col items-end gap-1.5">
+                <Badge
+                  variant="outline"
+                  className={cn("font-medium", catMeta.badgeClass)}
+                  data-testid={`badge-task-category-${task.taskId}`}
+                  data-task-category="showcase"
+                >
+                  Витрина
+                </Badge>
+                {urgent ? (
+                  <Badge
+                    variant="outline"
+                    className="border-amber-300 bg-amber-50 text-[10px] font-semibold text-amber-950"
+                    data-testid={`badge-task-preset-urgent-${task.taskId}`}
+                  >
+                    Горящая
+                  </Badge>
+                ) : null}
+                <Badge
+                  variant="outline"
+                  className={cn("text-[10px] font-medium", statusTone(task.status))}
+                  data-testid={`badge-showcase-task-status-${slug}`}
+                >
+                  {MATRIX_TASK_STATUS_LABEL[task.status]}
+                </Badge>
+                {task.showcaseExtraStatus === "needs_rop" ? (
+                  <Badge variant="outline" className="border-violet-300 bg-violet-50 text-[10px] font-medium text-violet-950">
+                    Нужна помощь РОПа
+                  </Badge>
+                ) : null}
+                {task.showcaseExtraStatus === "postponed" ? (
+                  <Badge variant="outline" className="border-border bg-muted text-[10px] font-medium">
+                    Отложена
+                  </Badge>
+                ) : null}
+                <Badge variant="outline" className={cn("text-[10px] font-medium", priorityTone(task.priority))}>
+                  {MATRIX_TASK_PRIORITY_LABEL[task.priority]}
+                </Badge>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs sm:grid-cols-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  {task.source === "showcase_matrix_deficit" ? "Модель / зона" : "Категория витрины"}
+                </p>
+                <p className="mt-0.5 line-clamp-2 text-xs font-medium text-foreground">{task.productName}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">План</p>
+                <p className="mt-0.5 text-sm font-medium tabular-nums text-foreground">{task.targetSamples}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Факт</p>
+                <p className="mt-0.5 text-sm font-medium tabular-nums text-foreground">{task.actualSamples}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Дефицит</p>
+                <p className="mt-0.5 text-sm font-medium tabular-nums text-foreground">{deficit}</p>
+              </div>
+              <div className="sm:col-span-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Срок</p>
+                <p className="mt-0.5 text-sm font-medium tabular-nums text-foreground">{task.dueDate}</p>
+              </div>
+            </div>
+
+            <p className="line-clamp-2 text-xs text-muted-foreground">{task.title}</p>
+
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+              {canOpenShowcaseTp ? (
+                <Button
+                  asChild
+                  variant="default"
+                  className="min-h-10 w-full font-semibold sm:w-auto"
+                  data-testid={`button-task-open-trade-point-showcase-${task.taskId}`}
+                >
+                  <Link
+                    href={buildHashPath(`/dealers/${task.dealerId}/trade-points/${task.tradePointId}`, {
+                      tradePointShowcase: "1",
+                    })}
+                    data-testid={`button-showcase-task-open-trade-point-${slug}`}
+                  >
+                    Открыть витрину точки
+                  </Link>
+                </Button>
+              ) : null}
+              <Button
+                asChild
+                variant={canOpenShowcaseTp ? "outline" : "default"}
+                className="min-h-10 w-full font-semibold sm:w-auto"
+                data-testid={`button-task-open-client-${task.taskId}`}
               >
-                Горящая
-              </Badge>
-            ) : null}
-            <Badge variant="outline" className={cn("font-medium", statusTone(task.status))}>
-              {MATRIX_TASK_STATUS_LABEL[task.status]}
-            </Badge>
-            {task.showcaseExtraStatus === "needs_rop" ? (
-              <Badge variant="outline" className="border-violet-300 bg-violet-50 font-medium text-violet-950">
-                Нужна помощь РОПа
-              </Badge>
-            ) : null}
-            {task.showcaseExtraStatus === "postponed" ? (
-              <Badge variant="outline" className="border-border bg-muted font-medium">
-                Отложена
-              </Badge>
-            ) : null}
-            <Badge variant="outline" className={cn("font-medium", priorityTone(task.priority))}>
-              {task.priority === "high" ? "Высокий" : task.priority === "medium" ? "Средний" : "Низкий"}
-            </Badge>
+                <Link href={`/dealers/${task.dealerId}`} data-testid={`button-showcase-task-open-client-${slug}`}>
+                  Открыть клиента
+                </Link>
+              </Button>
+            </div>
           </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs sm:grid-cols-3">
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-              {task.source === "showcase_matrix_deficit" ? "Модель" : "Категория витрины"}
-            </p>
-            <p className="mt-0.5 text-sm font-medium text-foreground">{task.productName}</p>
-          </div>
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">План</p>
-            <p className="mt-0.5 text-sm font-medium tabular-nums text-foreground">{task.targetSamples}</p>
-          </div>
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Факт</p>
-            <p className="mt-0.5 text-sm font-medium tabular-nums text-foreground">{task.actualSamples}</p>
-          </div>
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Дефицит</p>
-            <p className="mt-0.5 text-sm font-medium tabular-nums text-foreground">{deficit}</p>
-          </div>
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Срок</p>
-            <p className="mt-0.5 text-sm font-medium tabular-nums text-foreground">{task.dueDate}</p>
-          </div>
-        </div>
-
-        <p className="text-sm text-muted-foreground">{task.title}</p>
-
-        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-          {task.source === "showcase_matrix_deficit" ? (
-            <Button
-              asChild
-              variant="default"
-              className="min-h-10 w-full font-semibold sm:w-auto"
-              data-testid={`button-task-open-trade-point-showcase-${task.taskId}`}
-            >
-              <Link
-                href={buildHashPath(`/dealers/${task.dealerId}/trade-points/${task.tradePointId}`, {
-                  tradePointShowcase: "1",
-                })}
-              >
-                Витрина точки
-              </Link>
-            </Button>
-          ) : null}
-          <Button
-            asChild
-            variant={task.source === "showcase_matrix_deficit" ? "outline" : "default"}
-            className="min-h-10 w-full font-semibold sm:w-auto"
-            data-testid={`button-task-open-client-${task.taskId}`}
-          >
-            <Link href={`/dealers/${task.dealerId}`}>Открыть клиента</Link>
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
@@ -391,63 +531,101 @@ function ShowcaseTaskListRow({
   const deficit = Math.max(0, task.targetSamples - task.actualSamples);
   const urgent = taskMatchesUrgentPresetForBadge(task, presetClock);
   const manager = managerLabelForDealer(task.dealerId, dealerById);
+  const dealer = dealerById.get(task.dealerId);
+  const img = resolveShowcaseTaskDoorImage(task, dealer);
+  const slug = safeShowcaseTaskSlug(task.taskId);
+  const modelTitle = modelTitleForShowcaseTask(task);
+  const shell = showcaseTaskVisualShell(task, urgent);
+  const canOpenShowcaseTp = Boolean(task.tradePointId?.trim());
 
   return (
-    <Card
-      className={cn(
-        "min-w-0 overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm border-l-4",
-        catMeta.borderLeftClass,
-      )}
-      data-testid={`card-task-${task.taskId}`}
-    >
-      <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0 flex-1 space-y-1.5">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge
-              variant="outline"
-              className={cn("font-medium", catMeta.badgeClass)}
-              data-testid={`badge-task-category-${task.taskId}`}
-            >
-              Витрина
-            </Badge>
-            {urgent ? (
-              <Badge
-                variant="outline"
-                className="border-amber-300 bg-amber-50 text-xs font-semibold text-amber-950"
-                data-testid={`badge-task-preset-urgent-${task.taskId}`}
-              >
-                Горящая
-              </Badge>
-            ) : null}
-            <span className="font-semibold text-foreground">{task.dealerName}</span>
-            <Badge variant="outline" className={cn("font-medium", statusTone(task.status))}>
-              {MATRIX_TASK_STATUS_LABEL[task.status]}
-            </Badge>
+    <div data-testid={`card-showcase-task-${slug}`} className="min-w-0">
+      <Card
+        className={cn("min-w-0 overflow-hidden rounded-xl border shadow-sm border-l-4", catMeta.borderLeftClass, shell)}
+        data-testid={`card-task-${task.taskId}`}
+      >
+        <CardContent className="flex min-w-0 flex-row items-stretch gap-3 p-3 sm:items-center sm:justify-between sm:p-3.5">
+          <div className="shrink-0 self-center">
+            <TaskDoorPhoto src={img} slug={slug} frameClass="h-12 w-10 sm:h-14 sm:w-11" densePlaceholder />
           </div>
-          <p className="text-xs text-muted-foreground">
-            Менеджер: {manager}
-            {task.source === "showcase_matrix_deficit" ? ` · ${task.tradePointName}` : ""} · {task.productName} · план{" "}
-            {task.targetSamples} · факт {task.actualSamples} · дефицит {deficit} · срок {task.dueDate}
-          </p>
-        </div>
-        <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
-          {task.source === "showcase_matrix_deficit" ? (
-            <Button asChild variant="default" size="sm" className="min-h-9 font-semibold">
-              <Link
-                href={buildHashPath(`/dealers/${task.dealerId}/trade-points/${task.tradePointId}`, {
-                  tradePointShowcase: "1",
-                })}
+          <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0 flex-1 space-y-1">
+              <p className="line-clamp-2 text-sm font-semibold leading-snug text-foreground">{modelTitle}</p>
+              <p className="text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">{task.dealerName}</span>
+                <span className="text-muted-foreground"> · </span>
+                Менеджер: {manager}
+                {task.source === "showcase_matrix_deficit" ? ` · ${task.tradePointName}` : ""}
+              </p>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Badge
+                  variant="outline"
+                  className={cn("text-[10px] font-medium", catMeta.badgeClass)}
+                  data-testid={`badge-task-category-${task.taskId}`}
+                >
+                  Витрина
+                </Badge>
+                {urgent ? (
+                  <Badge
+                    variant="outline"
+                    className="border-amber-300 bg-amber-50 text-[10px] font-semibold text-amber-950"
+                    data-testid={`badge-task-preset-urgent-${task.taskId}`}
+                  >
+                    Горящая
+                  </Badge>
+                ) : null}
+                <Badge
+                  variant="outline"
+                  className={cn("text-[10px] font-medium", statusTone(task.status))}
+                  data-testid={`badge-showcase-task-status-${slug}`}
+                >
+                  {MATRIX_TASK_STATUS_LABEL[task.status]}
+                </Badge>
+                {task.showcaseExtraStatus === "needs_rop" ? (
+                  <Badge variant="outline" className="border-violet-300 bg-violet-50 text-[10px] text-violet-950">
+                    РОП
+                  </Badge>
+                ) : null}
+                <span className="text-[10px] text-muted-foreground">
+                  план {task.targetSamples} · факт {task.actualSamples} · деф. {deficit} · до {task.dueDate}
+                </span>
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-col gap-2 self-stretch sm:flex-row sm:items-center">
+              {canOpenShowcaseTp ? (
+                <Button
+                  asChild
+                  variant="default"
+                  size="sm"
+                  className="h-9 min-h-9 shrink-0 px-3 text-xs font-semibold"
+                  data-testid={`button-task-open-trade-point-showcase-${task.taskId}`}
+                >
+                  <Link
+                    href={buildHashPath(`/dealers/${task.dealerId}/trade-points/${task.tradePointId}`, {
+                      tradePointShowcase: "1",
+                    })}
+                    data-testid={`button-showcase-task-open-trade-point-${slug}`}
+                  >
+                    Витрина
+                  </Link>
+                </Button>
+              ) : null}
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="h-9 min-h-9 shrink-0 border-border bg-card px-3 text-xs"
+                data-testid={`button-task-open-client-${task.taskId}`}
               >
-                Витрина точки
-              </Link>
-            </Button>
-          ) : null}
-          <Button asChild variant="outline" size="sm" className="min-h-9 shrink-0 border-border bg-card">
-            <Link href={`/dealers/${task.dealerId}`}>Клиент</Link>
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+                <Link href={`/dealers/${task.dealerId}`} data-testid={`button-showcase-task-open-client-${slug}`}>
+                  Клиент
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
@@ -603,7 +781,7 @@ export default function TasksPage() {
 
   return (
     <div
-      className="min-w-0 max-w-full space-y-4 overflow-x-hidden sm:space-y-6"
+      className="max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom))] min-w-0 max-w-full space-y-4 overflow-x-hidden sm:space-y-6"
       data-testid="page-tasks"
     >
       <section data-testid="section-tasks-showcase-focus" className="space-y-4 sm:space-y-6">
@@ -692,18 +870,18 @@ export default function TasksPage() {
               type="button"
               variant={view === "cards" ? "default" : "outline"}
               className={cn("min-h-10", view === "cards" ? "font-semibold" : "border-border bg-card")}
-              data-testid="button-tasks-view-cards"
+              data-testid="button-showcase-task-view-photo"
               onClick={() => setView("cards")}
               aria-pressed={view === "cards"}
             >
               <LayoutGrid className="mr-1.5 h-4 w-4" aria-hidden />
-              Карточки
+              С фото
             </Button>
             <Button
               type="button"
               variant={view === "list" ? "default" : "outline"}
               className={cn("min-h-10", view === "list" ? "font-semibold" : "border-border bg-card")}
-              data-testid="button-tasks-view-list"
+              data-testid="button-showcase-task-view-list"
               onClick={() => setView("list")}
               aria-pressed={view === "list"}
             >
@@ -769,7 +947,10 @@ export default function TasksPage() {
             </CardContent>
           </Card>
         ) : view === "cards" ? (
-          <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+          <div
+            data-testid="section-showcase-tasks-visual-list"
+            className="grid min-w-0 grid-cols-1 gap-3 overflow-x-hidden sm:grid-cols-2 lg:grid-cols-2"
+          >
             {visibleTasks.map((t) => (
               <ShowcaseTaskCard
                 key={taskRowKey(t)}
@@ -780,7 +961,7 @@ export default function TasksPage() {
             ))}
           </div>
         ) : (
-          <div className="min-w-0 space-y-3">
+          <div data-testid="section-showcase-tasks-visual-list" className="min-w-0 space-y-2 overflow-x-hidden sm:space-y-2.5">
             {visibleTasks.map((t) => (
               <ShowcaseTaskListRow
                 key={taskRowKey(t)}
