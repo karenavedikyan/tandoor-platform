@@ -11,7 +11,7 @@ import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { getProductById, tradePointShowcaseStatusForProduct, type CatalogProduct } from "@/lib/catalog-data";
+import { getProductById } from "@/lib/catalog-data";
 import { MultiSelect } from "@/components/ui/multi-select";
 import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
@@ -34,7 +34,7 @@ import {
   type ShowcaseMatrixStatusId,
 } from "@/lib/trade-point-showcase-matrix-storage";
 import type { ShowcaseTask } from "@/lib/showcase-distribution-data";
-import type { TradePointMatrixSummary } from "@/lib/trade-point-matrix-data";
+import type { MatrixFilterId, TradePointMatrixSummary, TradePointProductMatrixItem } from "@/lib/trade-point-matrix-data";
 import type { MatrixTask, MatrixTaskRecommendation } from "@/lib/trade-point-task-data";
 import {
   getShowcaseMatrixDeficitTasksForTradePoint,
@@ -43,6 +43,7 @@ import {
   MATRIX_TASK_TYPE_LABEL,
 } from "@/lib/trade-point-task-data";
 import { ShowcaseModelPresentationDialog } from "@/components/showcase-model-presentation-dialog";
+import { TradePointProductMatrixVisual } from "@/components/trade-point-product-matrix-visual";
 
 export type ShowcaseMatrixViewMode = "large" | "compact" | "mini" | "list";
 
@@ -260,7 +261,10 @@ export type TradePointShowcasePageBundle = {
   showcaseComment: string;
   distribution: DealerTradePoint["distribution"];
   distributionConclusion: string;
-  tpProducts: CatalogProduct[];
+  productMatrixFiltered: TradePointProductMatrixItem[];
+  productMatrixFilter: MatrixFilterId;
+  onProductMatrixFilterChange: (id: MatrixFilterId) => void;
+  recommendationByProductId: Map<string, MatrixTaskRecommendation>;
   showcaseTasksOpen: ShowcaseTask[];
   openTasksCount: number;
   recommendations: MatrixTaskRecommendation[];
@@ -821,7 +825,10 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
           </div>
 
           <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Матрица моделей</p>
+            <div className="space-y-0.5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Матрица клиента</p>
+              <p className="text-xs text-muted-foreground">Что поставить на витрину по плану.</p>
+            </div>
 
         {filteredModels.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border/80 bg-muted/10 px-3 py-6 text-center text-sm text-muted-foreground">
@@ -1355,6 +1362,20 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
         )}
           </div>
 
+          <Separator className="bg-border/50" />
+
+          <TradePointProductMatrixVisual
+            viewMode={viewMode}
+            matrixSummary={page.matrixSummary}
+            filteredItems={page.productMatrixFiltered}
+            matrixFilter={page.productMatrixFilter}
+            onMatrixFilterChange={page.onProductMatrixFilterChange}
+            recommendationByProductId={page.recommendationByProductId}
+            createdTaskByProductId={page.createdTaskByProductId}
+            onCreateMatrixTask={page.onCreateMatrixTask}
+            onScrollToMatrixTask={page.onScrollToMatrixTask}
+          />
+
           <Separator className="bg-border/60" />
 
           <div
@@ -1444,29 +1465,6 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
                 <p className="text-xs leading-relaxed text-foreground">{page.distributionConclusion}</p>
               </CollapsibleContent>
             </Collapsible>
-          </div>
-
-          <div className="space-y-2" data-testid="section-trade-point-products">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Модели на витрине</p>
-            <div className="space-y-2">
-              {page.tpProducts.map((p) => (
-                <div
-                  key={p.id}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/70 bg-card/90 px-3 py-2"
-                >
-                  <div className="min-w-0 flex-1 space-y-0.5">
-                    <p className="text-sm font-semibold leading-snug">{p.name}</p>
-                    <p className="font-mono text-[10px] text-muted-foreground">{p.article}</p>
-                    <Badge variant="outline" className="mt-1 w-fit border-border bg-muted/50 text-[10px] font-medium">
-                      {tradePointShowcaseStatusForProduct(p)}
-                    </Badge>
-                  </div>
-                  <Button asChild variant="outline" size="sm" className="h-8 shrink-0 text-xs" data-testid={`button-open-product-${p.id}`}>
-                    <Link href={`/catalog/${p.id}`}>Открыть</Link>
-                  </Button>
-                </div>
-              ))}
-            </div>
           </div>
 
           <div

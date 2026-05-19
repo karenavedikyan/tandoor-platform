@@ -1,7 +1,7 @@
 import type { ComponentProps, ComponentType, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
-import { Camera, ChevronDown, ChevronRight, ChevronUp, MapPin, Plus, Store, BookOpen } from "lucide-react";
+import { Camera, ChevronDown, ChevronRight, ChevronUp, MapPin, Store, BookOpen } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,14 +12,11 @@ import { cn } from "@/lib/utils";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
 import { TradePointContactsSection } from "@/components/trade-point-contacts-section";
 import { getDealerById, type DealerRow, type DealerTradePoint } from "@/lib/dealer-base-mock-data";
-import { getTradePointProductPreview } from "@/lib/catalog-data";
 import {
   filterMatrix,
   getTradePointMatrix,
   summarizeMatrix,
   type MatrixFilterId,
-  type MatrixPresenceStatus,
-  type TradePointProductMatrixItem,
 } from "@/lib/trade-point-matrix-data";
 import {
   buildRecommendedMatrixTasks,
@@ -170,12 +167,6 @@ function SurfaceCard({
   );
 }
 
-function priorityClass(p: "Высокий" | "Средний" | "Низкий") {
-  if (p === "Высокий") return "border-red-200 bg-red-50 text-red-900";
-  if (p === "Средний") return "border-amber-200 bg-amber-50 text-amber-950";
-  return "border-border bg-muted text-muted-foreground";
-}
-
 type MatrixTaskFilterId = "all" | "new" | "in_progress" | "overdue" | "high";
 
 const MATRIX_TASK_FILTERS: { id: MatrixTaskFilterId; label: string; testId: string }[] = [
@@ -185,28 +176,6 @@ const MATRIX_TASK_FILTERS: { id: MatrixTaskFilterId; label: string; testId: stri
   { id: "overdue", label: "Просрочено", testId: "filter-trade-point-tasks-matrix-overdue" },
   { id: "high", label: "Высокий приоритет", testId: "filter-trade-point-tasks-matrix-high" },
 ];
-
-const MATRIX_FILTERS: { id: MatrixFilterId; label: string; testId: string }[] = [
-  { id: "all", label: "Все", testId: "filter-trade-point-matrix-all" },
-  { id: "present", label: "Есть на витрине", testId: "filter-trade-point-matrix-present" },
-  { id: "missing", label: "Нет на витрине", testId: "filter-trade-point-matrix-missing" },
-  { id: "zone-a", label: "Зона A", testId: "filter-trade-point-matrix-zone-a" },
-  { id: "entrance", label: "Входные", testId: "filter-trade-point-matrix-entrance" },
-  { id: "interior", label: "Межкомнатные", testId: "filter-trade-point-matrix-interior" },
-];
-
-function presenceTone(p: MatrixPresenceStatus) {
-  if (p === "есть на витрине") return "border-emerald-200 bg-emerald-50 text-emerald-900";
-  if (p === "нужно добавить") return "border-red-200 bg-red-50 text-red-900";
-  if (p === "на проверке") return "border-amber-200 bg-amber-50 text-amber-950";
-  return "border-amber-200 bg-amber-50 text-amber-950";
-}
-
-function zoneTone(zone: "A" | "B" | "C") {
-  if (zone === "A") return "border-primary/40 bg-primary/10 text-primary";
-  if (zone === "B") return "border-border bg-muted text-foreground";
-  return "border-border bg-muted/60 text-muted-foreground";
-}
 
 function taskStatusTone(status: MatrixTaskStatus) {
   if (status === "new") return "border-primary/40 bg-primary/10 text-primary";
@@ -341,164 +310,6 @@ function distributionConclusion(d: DealerTradePoint["distribution"]) {
   if (d.total >= 70) return "Показатели в комфортной зоне, поддерживаем текущий уровень.";
   if (d.total >= 50) return "Есть резерв по ВХ и полноте линейки на точке.";
   return "Нужны меры по усилению дистрибуции и контролю выкладки.";
-}
-
-function MatrixSummary({ items }: { items: TradePointProductMatrixItem[] }) {
-  const summary = useMemo(() => summarizeMatrix(items), [items]);
-  const tiles = [
-    { label: "Должно быть", value: summary.totalRequired, tone: "border-border bg-muted/40 text-foreground" },
-    { label: "На витрине", value: summary.totalPresent, tone: "border-emerald-200 bg-emerald-50 text-emerald-900" },
-    { label: "Отсутствует", value: summary.totalMissing, tone: "border-red-200 bg-red-50 text-red-900" },
-    { label: "На проверке", value: summary.totalUnderReview, tone: "border-amber-200 bg-amber-50 text-amber-950" },
-  ];
-
-  return (
-    <SurfaceCard data-testid="card-trade-point-matrix-summary">
-      <CardContent className="space-y-4 pt-5">
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {tiles.map((t) => (
-            <div key={t.label} className={cn("rounded-xl border px-3 py-2.5", t.tone)}>
-              <p className="text-[11px] font-semibold uppercase tracking-wide opacity-80">{t.label}</p>
-              <p className="mt-1 text-2xl font-bold tabular-nums">{t.value}</p>
-            </div>
-          ))}
-        </div>
-        <div className="grid grid-cols-3 gap-2">
-          {[
-            { label: "Зона A", value: summary.zoneA },
-            { label: "Зона B", value: summary.zoneB },
-            { label: "Зона C", value: summary.zoneC },
-          ].map((z) => (
-            <div key={z.label} className="rounded-xl border border-border bg-card px-3 py-2 text-center">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{z.label}</p>
-              <p className="mt-0.5 text-lg font-semibold tabular-nums text-foreground">{z.value}</p>
-            </div>
-          ))}
-        </div>
-        <div className="grid gap-2 sm:grid-cols-2">
-          <div className="rounded-xl border border-border bg-card px-3 py-2">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Портал входных дверей
-            </p>
-            <p className="mt-0.5 text-sm font-semibold text-foreground">
-              <span className="tabular-nums">{summary.entrancePresent}</span>
-              <span className="text-muted-foreground"> / {summary.entranceRequired}</span>
-            </p>
-          </div>
-          <div className="rounded-xl border border-border bg-card px-3 py-2">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Портал межкомнатных дверей
-            </p>
-            <p className="mt-0.5 text-sm font-semibold text-foreground">
-              <span className="tabular-nums">{summary.interiorPresent}</span>
-              <span className="text-muted-foreground"> / {summary.interiorRequired}</span>
-            </p>
-          </div>
-        </div>
-      </CardContent>
-    </SurfaceCard>
-  );
-}
-
-function MatrixItemCard({
-  item,
-  recommendation,
-  createdTask,
-  onCreateTask,
-  onScrollToTask,
-}: {
-  item: TradePointProductMatrixItem;
-  recommendation?: MatrixTaskRecommendation;
-  createdTask?: MatrixTask;
-  onCreateTask: (rec: MatrixTaskRecommendation) => void;
-  onScrollToTask: (taskId: string) => void;
-}) {
-  const hasTask = Boolean(createdTask);
-  return (
-    <SurfaceCard data-testid={`card-trade-point-matrix-item-${item.productId}`}>
-      <CardContent className="space-y-3 p-4">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <p className="font-semibold leading-snug text-foreground">{item.productName}</p>
-            <p className="font-mono text-xs text-muted-foreground">{item.productArticle}</p>
-          </div>
-          <div className="flex shrink-0 flex-wrap gap-1.5">
-            <Badge variant="outline" className={cn("font-medium", presenceTone(item.presence))}>
-              {item.presence}
-            </Badge>
-            <Badge variant="outline" className={cn("font-medium", zoneTone(item.zone))}>
-              Зона {item.zone}
-            </Badge>
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs sm:grid-cols-3">
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Категория</p>
-            <p className="mt-0.5 text-sm font-medium text-foreground">{item.doorCategory}</p>
-          </div>
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Портал</p>
-            <p className="mt-0.5 text-sm font-medium text-foreground">{item.portal}</p>
-          </div>
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Образцы</p>
-            <p className="mt-0.5 text-sm font-medium tabular-nums text-foreground">
-              {item.actualSamples} / {item.targetSamples}
-            </p>
-          </div>
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Действие</p>
-            <p className="mt-0.5 text-sm font-medium text-foreground">{item.action}</p>
-          </div>
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Приоритет</p>
-            <p className="mt-0.5">
-              <Badge variant="outline" className={cn("font-medium", priorityClass(item.priority))}>
-                {item.priority}
-              </Badge>
-            </p>
-          </div>
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Проверено</p>
-            <p className="mt-0.5 text-sm font-medium tabular-nums text-foreground">{item.lastCheckedAt}</p>
-          </div>
-        </div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-          {recommendation ? (
-            hasTask && createdTask ? (
-              <Button
-                type="button"
-                variant="secondary"
-                className="min-h-10 w-full border border-border sm:w-auto"
-                data-testid={`status-matrix-task-${item.productId}`}
-                onClick={() => onScrollToTask(createdTask.taskId)}
-              >
-                {MATRIX_TASK_STATUS_LABEL[createdTask.status]} · открыть
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                variant="default"
-                className="min-h-10 w-full font-semibold sm:w-auto"
-                data-testid={`button-create-matrix-task-${item.productId}`}
-                onClick={() => onCreateTask(recommendation)}
-              >
-                Создать задачу
-              </Button>
-            )
-          ) : null}
-          <Button
-            asChild
-            variant="outline"
-            className="min-h-10 w-full border-border bg-card sm:w-auto"
-            data-testid={`button-open-matrix-product-${item.productId}`}
-          >
-            <Link href={`/catalog/${item.productId}`}>Открыть модель</Link>
-          </Button>
-        </div>
-      </CardContent>
-    </SurfaceCard>
-  );
 }
 
 function MatrixTaskSummaryCard({
@@ -778,7 +589,6 @@ function TradePointDetailContent({
     () => (dealer.hasProblem ? "Есть вопросы по витрине — согласовать с РМ план работ." : "Состояние в норме для текущего цикла."),
     [dealer.hasProblem],
   );
-  const tpProducts = useMemo(() => getTradePointProductPreview(dealer.id, point.id, 5), [dealer.id, point.id]);
   const matrixItems = useMemo(() => getTradePointMatrix(dealer.id, point.id), [dealer.id, point.id]);
   const matrixSummary = useMemo(() => summarizeMatrix(matrixItems), [matrixItems]);
   const [matrixFilter, setMatrixFilter] = useState<MatrixFilterId>("all");
@@ -1302,83 +1112,6 @@ function TradePointDetailContent({
             </SurfaceCard>
           </section>
 
-          <section
-            id={SECTION_DOM_IDS.matrix}
-            data-testid="section-trade-point-matrix"
-            className="scroll-mt-28 space-y-4 sm:scroll-mt-32"
-          >
-            <SectionTitle subtitle="Позиции каталога, которые должны быть представлены в этой торговой точке.">
-              Матрица товаров
-            </SectionTitle>
-            <MatrixSummary items={matrixItems} />
-
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm text-muted-foreground">
-                Выберите модель в каталоге и добавьте её в матрицу точки.
-              </p>
-              <Button
-                asChild
-                variant="default"
-                className="min-h-10 font-semibold"
-                data-testid="button-add-products-from-catalog"
-              >
-                <Link href="/catalog">
-                  <Plus className="mr-1.5 h-4 w-4" aria-hidden />
-                  Добавить из каталога
-                </Link>
-              </Button>
-            </div>
-
-            <div
-              className="-mx-4 overflow-x-auto px-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:px-0"
-              role="tablist"
-              aria-label="Фильтры матрицы товаров"
-            >
-              <div className="flex gap-2 pb-1">
-                {MATRIX_FILTERS.map((f) => (
-                  <button
-                    key={f.id}
-                    type="button"
-                    role="tab"
-                    aria-selected={matrixFilter === f.id}
-                    onClick={() => setMatrixFilter(f.id)}
-                    data-testid={f.testId}
-                    className={cn(
-                      "min-h-10 shrink-0 rounded-full border px-3.5 py-2 text-sm font-medium transition-colors",
-                      matrixFilter === f.id
-                        ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                        : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground",
-                    )}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {filteredMatrix.length === 0 ? (
-              <SurfaceCard>
-                <CardContent className="pt-5 text-sm text-muted-foreground">
-                  По выбранному фильтру позиций нет.
-                </CardContent>
-              </SurfaceCard>
-            ) : (
-              <div className="space-y-3">
-                {filteredMatrix.map((item) => (
-                  <MatrixItemCard
-                    key={item.productId}
-                    item={item}
-                    recommendation={recommendationByProductId.get(item.productId)}
-                    createdTask={createdTaskByProductId.get(item.productId)}
-                    onCreateTask={handleCreateTask}
-                    onScrollToTask={handleScrollToTask}
-                  />
-                ))}
-              </div>
-            )}
-
-          </section>
-
           <TradePointShowcaseMatrixSection
             dealer={dealer}
             point={point}
@@ -1390,7 +1123,10 @@ function TradePointDetailContent({
               showcaseComment,
               distribution: dist,
               distributionConclusion: conclusion,
-              tpProducts,
+              productMatrixFiltered: filteredMatrix,
+              productMatrixFilter: matrixFilter,
+              onProductMatrixFilterChange: setMatrixFilter,
+              recommendationByProductId,
               showcaseTasksOpen,
               openTasksCount: openShowcaseTasksCount,
               recommendations,
@@ -1434,7 +1170,9 @@ function TradePointDetailContent({
                     </div>
                   ) : null}
                   {createdTasks.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">Пока нет созданных задач по матрице — создайте из раздела «Матрица товаров».</p>
+                    <p className="text-xs text-muted-foreground">
+                      Пока нет созданных задач по матрице — создайте из блока «Фактическая витрина» ниже.
+                    </p>
                   ) : filteredCreatedTasks.length === 0 ? (
                     <p className="text-xs text-muted-foreground">По выбранному фильтру задач нет.</p>
                   ) : (
