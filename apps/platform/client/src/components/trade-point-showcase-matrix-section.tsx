@@ -47,6 +47,23 @@ import { TradePointProductMatrixVisual } from "@/components/trade-point-product-
 
 export type ShowcaseMatrixViewMode = "large" | "compact" | "mini" | "list";
 
+const VIEW_MODE_LABEL_RU: Record<ShowcaseMatrixViewMode, string> = {
+  large: "Крупно",
+  compact: "Компактно",
+  mini: "Мини",
+  list: "Список",
+};
+
+function showcaseModelImageSrc(m: ShowcaseMatrixModelDefinition): string {
+  const direct = m.imageUrl?.trim() ?? "";
+  if (direct) return direct;
+  return getProductById(m.id)?.image?.trim() ?? "";
+}
+
+function deficitTaskThumbSrc(t: { productId: string; showcaseMatrixImageSrc?: string }): string {
+  return getProductById(t.productId)?.image?.trim() || t.showcaseMatrixImageSrc?.trim() || "";
+}
+
 type ShowcaseMatrixQuickFilterId = "needed" | "installed" | "postponed" | "not_relevant" | "all";
 
 type ShowcaseMatrixCategoryFilter = "all" | "entrance" | "interior";
@@ -216,6 +233,8 @@ function recPriorityBadgeClass(p: MatrixTaskRecommendation["priority"]) {
   return "border-border bg-muted text-muted-foreground";
 }
 
+type ShowcasePhotoPlaceholderDensity = "comfortable" | "compact" | "micro";
+
 /** Фото двери целиком: фиксированная рамка (frameClass задаёт размеры) + object-contain, без растягивания по высоте карточки. */
 function ModelDoorPhotoFrame({
   src,
@@ -223,6 +242,7 @@ function ModelDoorPhotoFrame({
   frameClass,
   imgTestId,
   imgPaddingClass = "p-2",
+  placeholderDensity = "comfortable",
 }: {
   src: string;
   alt?: string;
@@ -230,11 +250,21 @@ function ModelDoorPhotoFrame({
   imgTestId?: string;
   /** Отступ картинки от рамки (например p-1 в плотных миниатюрах). */
   imgPaddingClass?: string;
+  /** Плотные режимы — компактный плейсхолдер без «высокой пустой карточки». */
+  placeholderDensity?: ShowcasePhotoPlaceholderDensity;
 }) {
+  const emptyClass =
+    placeholderDensity === "micro"
+      ? "text-[8px] font-medium text-muted-foreground/80"
+      : placeholderDensity === "compact"
+        ? "text-[8px] text-muted-foreground"
+        : "text-[9px] text-muted-foreground";
+  const emptyLabel = placeholderDensity === "micro" ? "—" : "Нет фото";
+
   return (
     <div
       className={cn(
-        "relative shrink-0 overflow-hidden rounded-md border border-border/70 bg-neutral-50",
+        "relative shrink-0 overflow-hidden rounded-md border border-border/60 bg-muted/40",
         frameClass,
       )}
     >
@@ -250,7 +280,14 @@ function ModelDoorPhotoFrame({
           loading="lazy"
         />
       ) : (
-        <span className="absolute inset-0 flex items-center justify-center text-[9px] text-muted-foreground">Нет фото</span>
+        <span
+          className={cn(
+            "absolute inset-0 flex items-center justify-center bg-muted/25 px-0.5 text-center leading-none",
+            emptyClass,
+          )}
+        >
+          {emptyLabel}
+        </span>
       )}
     </div>
   );
@@ -449,9 +486,9 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
     viewMode === "large"
       ? "grid grid-cols-1 items-stretch gap-3 lg:grid-cols-2"
       : viewMode === "compact"
-        ? "grid grid-cols-1 items-stretch gap-2 min-[360px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
+        ? "grid grid-cols-2 items-stretch gap-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
         : viewMode === "mini"
-          ? "grid grid-cols-1 items-stretch gap-1 min-[360px]:grid-cols-2 min-[420px]:grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8"
+          ? "grid max-[340px]:grid-cols-2 grid-cols-3 items-stretch gap-1 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8"
           : "flex flex-col gap-0 overflow-hidden rounded-xl border border-border/80 bg-card";
 
   return (
@@ -459,7 +496,7 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
       <section
         id="section-trade-point-showcase-matrix"
         data-testid="section-trade-point-showcase-matrix"
-        className="scroll-mt-28 space-y-4 overflow-x-hidden min-w-0 sm:scroll-mt-32"
+        className="scroll-mt-28 space-y-4 overflow-x-clip min-w-0 sm:scroll-mt-32"
       >
         <div
           data-testid="section-trade-point-showcase-unified"
@@ -538,7 +575,12 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
                   <ul className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                     {priorityNeedModels.map((m) => (
                       <li key={m.id} className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-amber-200/90 bg-background/70 px-2 py-1.5 sm:min-w-[200px] sm:flex-none">
-                        <ModelDoorPhotoFrame src={m.imageUrl} alt="" frameClass="h-11 w-9 sm:h-12 sm:w-10" />
+                        <ModelDoorPhotoFrame
+                          src={showcaseModelImageSrc(m)}
+                          alt=""
+                          frameClass="h-11 w-9 sm:h-12 sm:w-10"
+                          placeholderDensity="compact"
+                        />
                         <button
                           type="button"
                           className="min-w-0 flex-1 text-left text-sm font-semibold leading-snug text-foreground hover:underline"
@@ -556,100 +598,115 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
             </div>
 
             <div className="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-start lg:justify-between">
-              <div className="flex min-w-0 flex-wrap gap-1.5">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={activeQuickFilter === "needed" ? "default" : "outline"}
-                  className="h-8 shrink-0 text-xs"
-                  data-testid="button-showcase-matrix-filter-needed"
-                  onClick={() => setUserQuickFilter("needed")}
-                >
-                  Нужно поставить
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={activeQuickFilter === "installed" ? "default" : "outline"}
-                  className="h-8 shrink-0 text-xs"
-                  data-testid="button-showcase-matrix-filter-installed"
-                  onClick={() => setUserQuickFilter("installed")}
-                >
-                  На витрине
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={activeQuickFilter === "postponed" ? "default" : "outline"}
-                  className="h-8 shrink-0 text-xs"
-                  data-testid="button-showcase-matrix-filter-postponed"
-                  onClick={() => setUserQuickFilter("postponed")}
-                >
-                  Отложено
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={activeQuickFilter === "not_relevant" ? "default" : "outline"}
-                  className="h-8 shrink-0 text-xs"
-                  data-testid="button-showcase-matrix-filter-not-relevant"
-                  onClick={() => setUserQuickFilter("not_relevant")}
-                >
-                  Не актуально
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={activeQuickFilter === "all" ? "secondary" : "outline"}
-                  className="h-8 shrink-0 text-xs"
-                  data-testid="button-showcase-matrix-filter-all"
-                  onClick={() => setUserQuickFilter("all")}
-                >
-                  Все
-                </Button>
+            <div className="flex min-w-0 flex-wrap gap-1.5">
+              <Button
+                type="button"
+                size="sm"
+                variant={activeQuickFilter === "needed" ? "default" : "outline"}
+                className="h-8 shrink-0 text-xs"
+                data-testid="button-showcase-matrix-filter-needed"
+                onClick={() => setUserQuickFilter("needed")}
+              >
+                Нужно поставить
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={activeQuickFilter === "installed" ? "default" : "outline"}
+                className="h-8 shrink-0 text-xs"
+                data-testid="button-showcase-matrix-filter-installed"
+                onClick={() => setUserQuickFilter("installed")}
+              >
+                На витрине
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={activeQuickFilter === "postponed" ? "default" : "outline"}
+                className="h-8 shrink-0 text-xs"
+                data-testid="button-showcase-matrix-filter-postponed"
+                onClick={() => setUserQuickFilter("postponed")}
+              >
+                Отложено
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={activeQuickFilter === "not_relevant" ? "default" : "outline"}
+                className="h-8 shrink-0 text-xs"
+                data-testid="button-showcase-matrix-filter-not-relevant"
+                onClick={() => setUserQuickFilter("not_relevant")}
+              >
+                Не актуально
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={activeQuickFilter === "all" ? "secondary" : "outline"}
+                className="h-8 shrink-0 text-xs"
+                data-testid="button-showcase-matrix-filter-all"
+                onClick={() => setUserQuickFilter("all")}
+              >
+                Все
+              </Button>
+            </div>
+
+            <div
+              data-testid="section-showcase-matrix-view-sticky-toolbar"
+              className={cn(
+                "sticky z-20 -mx-1 rounded-lg border border-border/70 bg-background/95 px-2 py-2 shadow-sm backdrop-blur-md supports-[backdrop-filter]:bg-background/85",
+                "top-[7.25rem] max-md:top-[7.25rem]",
+                "md:static md:z-0 md:mx-0 md:rounded-none md:border-0 md:border-b-0 md:bg-transparent md:px-0 md:py-0 md:shadow-none md:backdrop-blur-none",
+              )}
+            >
+              <div className="flex min-w-0 flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:justify-between">
+                <p className="text-[11px] text-muted-foreground md:hidden">
+                  <span className="font-semibold text-foreground">Вид матрицы:</span> {VIEW_MODE_LABEL_RU[viewMode]}
+                </p>
+                <div className="flex min-w-0 flex-wrap gap-1.5">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={viewMode === "large" ? "default" : "outline"}
+                    className="h-8 shrink-0 text-xs"
+                    data-testid="button-showcase-matrix-view-large"
+                    onClick={() => setViewMode("large")}
+                  >
+                    Крупно
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={viewMode === "compact" ? "default" : "outline"}
+                    className="h-8 shrink-0 text-xs"
+                    data-testid="button-showcase-matrix-view-compact"
+                    onClick={() => setViewMode("compact")}
+                  >
+                    Компактно
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={viewMode === "mini" ? "default" : "outline"}
+                    className="h-8 shrink-0 text-xs"
+                    data-testid="button-showcase-matrix-view-mini"
+                    onClick={() => setViewMode("mini")}
+                  >
+                    Мини
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={viewMode === "list" ? "default" : "outline"}
+                    className="h-8 shrink-0 text-xs"
+                    data-testid="button-showcase-matrix-view-list"
+                    onClick={() => setViewMode("list")}
+                  >
+                    Список
+                  </Button>
+                </div>
               </div>
-              <div className="flex min-w-0 flex-wrap gap-1.5">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={viewMode === "large" ? "default" : "outline"}
-                  className="h-8 shrink-0 text-xs"
-                  data-testid="button-showcase-matrix-view-large"
-                  onClick={() => setViewMode("large")}
-                >
-                  Крупно
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={viewMode === "compact" ? "default" : "outline"}
-                  className="h-8 shrink-0 text-xs"
-                  data-testid="button-showcase-matrix-view-compact"
-                  onClick={() => setViewMode("compact")}
-                >
-                  Компактно
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={viewMode === "mini" ? "default" : "outline"}
-                  className="h-8 shrink-0 text-xs"
-                  data-testid="button-showcase-matrix-view-mini"
-                  onClick={() => setViewMode("mini")}
-                >
-                  Мини
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={viewMode === "list" ? "default" : "outline"}
-                  className="h-8 shrink-0 text-xs"
-                  data-testid="button-showcase-matrix-view-list"
-                  onClick={() => setViewMode("list")}
-                >
-                  Список
-                </Button>
-              </div>
+            </div>
             </div>
 
             <div className="space-y-2 rounded-lg border border-border/60 bg-muted/10 px-2 py-2 sm:px-3">
@@ -755,17 +812,26 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
             ) : (
               <div className="space-y-2">
                 {deficitTasks.length > 0 ? (
-                  <ul className="space-y-2">
+                  <ul className={cn(viewMode === "large" ? "space-y-2" : "space-y-1")}>
                     {deficitTasks.slice(0, 6).map((t) => (
-                      <li key={t.taskId} className="flex gap-2 rounded-lg border border-border/70 bg-card/80 px-2 py-2 text-sm">
+                      <li
+                        key={t.taskId}
+                        className={cn(
+                          "flex min-w-0 gap-2 rounded-lg border border-border/70 bg-card/80 text-sm",
+                          viewMode === "large" ? "px-2 py-2" : "items-center px-2 py-1.5",
+                        )}
+                      >
                         <ModelDoorPhotoFrame
-                          src={t.showcaseMatrixImageSrc ?? ""}
+                          src={deficitTaskThumbSrc(t)}
                           alt=""
-                          frameClass="h-12 w-10 shrink-0"
+                          frameClass={viewMode === "large" ? "h-12 w-10 shrink-0" : "h-9 w-8 shrink-0"}
+                          placeholderDensity={viewMode === "large" ? "compact" : "micro"}
                         />
                         <div className="min-w-0 flex-1">
-                          <p className="font-medium leading-snug text-foreground">{t.title}</p>
-                          <p className="text-xs text-muted-foreground">
+                          <p className={cn("font-medium leading-snug text-foreground", viewMode !== "large" && "line-clamp-2 text-xs")}>
+                            {t.title}
+                          </p>
+                          <p className={cn("text-muted-foreground", viewMode === "large" ? "text-xs" : "line-clamp-1 text-[10px]")}>
                             {MATRIX_TASK_STATUS_LABEL[t.status]} · срок {t.dueDate}
                           </p>
                         </div>
@@ -774,10 +840,51 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
                   </ul>
                 ) : null}
                 {page.recommendations.length > 0 ? (
-                  <div className="grid gap-2 sm:grid-cols-2">
+                  <div className={cn(viewMode === "large" ? "grid gap-2 sm:grid-cols-2" : "space-y-1")}>
                     {page.recommendations.slice(0, 6).map((rec) => {
                       const created = page.createdTaskByProductId.get(rec.productId);
                       const img = getProductById(rec.productId)?.image ?? "";
+                      if (viewMode !== "large") {
+                        return (
+                          <div
+                            key={rec.taskId}
+                            className="flex min-w-0 items-center gap-2 rounded-lg border border-border/80 bg-card px-2 py-1.5 shadow-sm"
+                          >
+                            <ModelDoorPhotoFrame src={img} alt="" frameClass="h-9 w-8 shrink-0" placeholderDensity="micro" />
+                            <div className="min-w-0 flex-1">
+                              <p className="line-clamp-2 text-xs font-semibold leading-snug text-foreground">{rec.title}</p>
+                              <p className="line-clamp-1 text-[10px] text-muted-foreground">
+                                {MATRIX_TASK_TYPE_LABEL[rec.type]} · зона {rec.zone} · {rec.dueDate}
+                              </p>
+                            </div>
+                            <div className="shrink-0">
+                              {created ? (
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  size="sm"
+                                  className="h-7 px-2 text-[10px]"
+                                  data-testid={`button-focus-recommended-matrix-task-${rec.taskId}`}
+                                  onClick={() => page.onScrollToMatrixTask(created.taskId)}
+                                >
+                                  Открыть
+                                </Button>
+                              ) : (
+                                <Button
+                                  type="button"
+                                  variant="default"
+                                  size="sm"
+                                  className="h-7 px-2 text-[10px] font-semibold"
+                                  data-testid={`button-create-matrix-task-recommended-${rec.taskId}`}
+                                  onClick={() => page.onCreateMatrixTask(rec)}
+                                >
+                                  Задача
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      }
                       return (
                         <div key={rec.taskId} className="flex gap-2 rounded-lg border border-border/80 bg-card p-2 shadow-sm">
                           <ModelDoorPhotoFrame src={img} alt="" frameClass="h-14 w-11 shrink-0" />
@@ -855,136 +962,146 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
               const commentVal = entry.comment ?? "";
 
               if (viewMode === "list") {
+                const imgSrc = showcaseModelImageSrc(m);
                 return (
                   <div
                     key={m.id}
                     data-testid={`row-trade-point-showcase-model-${m.id}`}
                     className={cn(
-                      "flex min-w-0 flex-col gap-1.5 px-2 py-1.5 sm:flex-row sm:items-center sm:gap-3 sm:px-2.5",
+                      "flex min-w-0 flex-row items-center gap-2 px-2 py-1.5",
                       matrixCardShellClass(st),
                       st === "not_relevant" && "opacity-80",
                     )}
                   >
-                    <button type="button" className="shrink-0 self-start sm:self-center" onClick={() => openPresentation(m)}>
+                    <button type="button" className="shrink-0" onClick={() => openPresentation(m)}>
                       <ModelDoorPhotoFrame
-                        src={m.imageUrl}
+                        src={imgSrc}
                         alt=""
-                        frameClass="h-[52px] w-[44px]"
-                        imgPaddingClass="p-1"
+                        frameClass="h-10 w-9 shrink-0"
+                        imgPaddingClass="p-0.5"
                         imgTestId={`image-trade-point-showcase-model-${m.id}`}
+                        placeholderDensity="micro"
                       />
                     </button>
-                    <div className="grid min-w-0 flex-1 grid-cols-1 items-center gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
+                    <div className="min-w-0 flex-1">
                       <button
                         type="button"
-                        className="min-w-0 text-left font-semibold leading-snug text-foreground hover:underline"
+                        className="line-clamp-2 w-full min-w-0 text-left text-sm font-semibold leading-snug text-foreground hover:underline"
                         data-testid={`text-trade-point-showcase-model-title-${m.id}`}
                         onClick={() => openPresentation(m)}
                       >
                         {m.name}
                       </button>
-                      <Badge variant="outline" className="w-fit shrink-0 border-border bg-muted/40 text-[10px] font-medium">
-                        {m.typeLabelRu}
-                      </Badge>
-                      <Badge
-                        variant="outline"
-                        className={cn("w-fit shrink-0 text-[10px] font-medium", priorityBadgeClass(m.basePriority))}
-                        data-testid={`badge-trade-point-showcase-priority-${m.id}`}
-                      >
-                        {priorityLabelRu(m.basePriority)}
-                      </Badge>
-                      <Badge
-                        variant="outline"
-                        className={cn("w-fit shrink-0 text-[10px] font-medium", statusBadgeClass(st))}
-                        data-testid={`badge-trade-point-showcase-status-${m.id}`}
-                      >
-                        {statusLabelRu(st)}
-                      </Badge>
+                      <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1">
+                        <Badge variant="outline" className="max-w-[40%] shrink truncate text-[9px] font-medium">
+                          {m.typeLabelRu}
+                        </Badge>
+                        <Badge
+                          variant="outline"
+                          className={cn("shrink-0 text-[9px] font-medium", priorityBadgeClass(m.basePriority))}
+                          data-testid={`badge-trade-point-showcase-priority-${m.id}`}
+                        >
+                          {priorityLabelRu(m.basePriority)}
+                        </Badge>
+                        <Badge
+                          variant="outline"
+                          className={cn("shrink-0 text-[9px] font-medium", statusBadgeClass(st))}
+                          data-testid={`badge-trade-point-showcase-status-${m.id}`}
+                        >
+                          {statusLabelRu(st)}
+                        </Badge>
+                      </div>
                     </div>
-                    <div className="flex flex-wrap gap-1 sm:ml-auto sm:shrink-0 sm:justify-end">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-8 text-[11px]"
-                        data-testid={`button-trade-point-showcase-open-presentation-${m.id}`}
-                        onClick={() => openPresentation(m)}
-                      >
-                        Презентация
-                      </Button>
+                    <div className="relative flex shrink-0 flex-col items-stretch gap-1">
                       {canEdit ? (
-                        <>
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            className="h-8 text-[11px]"
-                            data-testid={`button-trade-point-showcase-mark-installed-${m.id}`}
-                            onClick={() => persist(m, "installed", commentVal)}
-                          >
-                            Витрина
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="h-8 text-[11px]"
-                            data-testid={`button-trade-point-showcase-postpone-${m.id}`}
-                            onClick={() => persist(m, "postponed", commentVal)}
-                          >
-                            Отложить
-                          </Button>
-                          <Collapsible className="w-full min-w-0 sm:w-auto">
-                            <CollapsibleTrigger asChild>
-                              <Button type="button" variant="ghost" size="sm" className="h-8 gap-1 px-2 text-[11px] text-muted-foreground">
-                                <MoreHorizontal className="h-4 w-4" />
-                                Ещё
-                                <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" />
-                              </Button>
-                            </CollapsibleTrigger>
-                            <CollapsibleContent className="mt-2 w-full space-y-2 rounded-md border border-border/60 bg-muted/20 p-2">
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 w-full justify-start text-[11px] text-muted-foreground"
-                                onClick={() => persist(m, "not_relevant", commentVal)}
-                              >
-                                Не актуально
-                              </Button>
-                              <div className="space-y-1">
-                                <Label className="text-[10px] text-muted-foreground" htmlFor={`showcase-cmt-list-${m.id}`}>
-                                  Комментарий
-                                </Label>
-                                <Textarea
-                                  id={`showcase-cmt-list-${m.id}`}
-                                  rows={2}
-                                  className="min-h-[48px] resize-y text-xs"
-                                  data-testid={`textarea-trade-point-showcase-comment-${m.id}`}
-                                  readOnly={!canEdit}
-                                  value={commentVal}
-                                  onChange={(e) => {
-                                    if (!canEdit) return;
-                                    upsertShowcaseMatrixModelState({
-                                      dealerId: dealer.id,
-                                      tradePointId: point.id,
-                                      model: m,
-                                      status: st,
-                                      comment: e.target.value,
-                                      actorUserId,
-                                      actorName,
-                                    });
-                                  }}
-                                />
-                              </div>
-                              {canEdit ? (
-                                <Button asChild variant="ghost" size="sm" className="h-auto px-0 text-xs font-semibold text-primary underline-offset-2 hover:underline">
-                                  <Link href={`/catalog/${m.id}`}>Каталог</Link>
-                                </Button>
-                              ) : null}
-                            </CollapsibleContent>
-                          </Collapsible>
-                        </>
+                        <Button
+                          type="button"
+                          variant={st === "need_install" ? "default" : "secondary"}
+                          size="sm"
+                          className={cn(
+                            "h-7 px-2 text-[10px] font-semibold leading-none",
+                            st === "need_install" && "ring-1 ring-amber-400/50",
+                          )}
+                          data-testid={`button-trade-point-showcase-mark-installed-${m.id}`}
+                          onClick={() => persist(m, "installed", commentVal)}
+                        >
+                          На витрине
+                        </Button>
+                      ) : null}
+                      {canEdit ? (
+                        <Collapsible>
+                          <CollapsibleTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-7 gap-0.5 px-2 text-[10px] text-muted-foreground"
+                            >
+                              <MoreHorizontal className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                              Ещё
+                              <ChevronDown className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+                            </Button>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent className="absolute right-0 top-full z-20 mt-0.5 min-w-[12rem] max-w-[min(calc(100vw-2rem),18rem)] space-y-2 rounded-md border border-border/60 bg-popover p-2 shadow-lg">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-8 w-full text-xs"
+                              data-testid={`button-trade-point-showcase-open-presentation-${m.id}`}
+                              onClick={() => openPresentation(m)}
+                            >
+                              Презентация
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-8 w-full text-xs"
+                              data-testid={`button-trade-point-showcase-postpone-${m.id}`}
+                              onClick={() => persist(m, "postponed", commentVal)}
+                            >
+                              Отложить
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-full text-xs text-muted-foreground"
+                              onClick={() => persist(m, "not_relevant", commentVal)}
+                            >
+                              Не актуально
+                            </Button>
+                            <div className="space-y-1">
+                              <Label className="text-[10px] text-muted-foreground" htmlFor={`showcase-cmt-list-${m.id}`}>
+                                Комментарий
+                              </Label>
+                              <Textarea
+                                id={`showcase-cmt-list-${m.id}`}
+                                rows={2}
+                                className="min-h-[44px] resize-y text-xs"
+                                data-testid={`textarea-trade-point-showcase-comment-${m.id}`}
+                                readOnly={!canEdit}
+                                value={commentVal}
+                                onChange={(e) => {
+                                  if (!canEdit) return;
+                                  upsertShowcaseMatrixModelState({
+                                    dealerId: dealer.id,
+                                    tradePointId: point.id,
+                                    model: m,
+                                    status: st,
+                                    comment: e.target.value,
+                                    actorUserId,
+                                    actorName,
+                                  });
+                                }}
+                              />
+                            </div>
+                            <Button asChild variant="ghost" size="sm" className="h-auto px-0 text-xs font-semibold text-primary underline-offset-2 hover:underline">
+                              <Link href={`/catalog/${m.id}`}>Каталог</Link>
+                            </Button>
+                          </CollapsibleContent>
+                        </Collapsible>
                       ) : null}
                     </div>
                   </div>
@@ -996,18 +1113,20 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
               const detailsOpen = !!matrixCardDetailsOpenById[m.id];
 
               if (isCompact || isMini) {
-                /** Фиксированная высота зоны фото внутри режима (не min-h, чтобы сетка была ровной). */
+                /** На телефонах — ниже рамка фото, чтобы 2–3 колонки не были «узкими небоскрёбами». */
                 const compactPhotoSlot =
-                  "h-[11.25rem] w-full shrink-0 sm:h-[13.75rem] md:h-[14.5rem] lg:h-[15rem]";
+                  "h-[6.75rem] w-full shrink-0 sm:h-[11.25rem] md:h-[14.5rem] lg:h-[15rem]";
                 const miniPhotoSlot =
-                  "h-[7rem] w-full shrink-0 min-[380px]:h-[7.5rem] md:h-[8.25rem] lg:h-[8.75rem] xl:h-[9.375rem]";
+                  "h-[3.75rem] w-full shrink-0 max-[340px]:h-[3.25rem] sm:h-[7rem] md:h-[8.25rem] lg:h-[8.75rem] xl:h-[9.375rem]";
                 const densityPhotoClass = isMini ? miniPhotoSlot : compactPhotoSlot;
-                const densityPad = isMini ? "p-1" : "p-2.5";
+                const densityPad = isMini ? "p-1" : "p-2";
                 const densityRounded = isMini ? "rounded-lg" : "rounded-2xl";
-                const detailsTriggerLabel = isMini ? "Ещё" : "Подробнее";
+                const detailsTriggerLabel = isMini || isCompact ? "Ещё" : "Подробнее";
+                const imgSrc = showcaseModelImageSrc(m);
+                const phDensity = isMini ? "micro" : "compact";
                 const titleClass = cn(
                   "min-w-0 max-w-full break-words font-semibold leading-snug text-foreground line-clamp-2",
-                  isMini ? "text-[10px]" : "text-sm",
+                  isMini ? "text-[10px]" : "text-xs sm:text-sm",
                 );
 
                 return (
@@ -1024,11 +1143,12 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
                     <div className="flex min-h-0 min-w-0 h-full w-full flex-col">
                       <button type="button" className="relative w-full shrink-0 text-left" onClick={() => openPresentation(m)}>
                         <ModelDoorPhotoFrame
-                          src={m.imageUrl}
+                          src={imgSrc}
                           alt=""
                           frameClass={densityPhotoClass}
-                          imgPaddingClass={isMini ? "p-1" : "p-2"}
+                          imgPaddingClass={isMini ? "p-0.5" : "p-1.5 sm:p-2"}
                           imgTestId={`image-trade-point-showcase-model-${m.id}`}
+                          placeholderDensity={phDensity}
                         />
                       </button>
                       <CardContent className={cn("flex min-h-0 min-w-0 flex-1 flex-col gap-1.5", densityPad)}>
@@ -1038,19 +1158,16 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
                           </p>
                           {isCompact ? (
                             <div className="flex min-w-0 flex-wrap gap-1">
-                              <Badge variant="outline" className="max-w-full shrink-0 text-[10px] font-medium">
-                                {m.typeLabelRu}
-                              </Badge>
                               <Badge
                                 variant="outline"
-                                className={cn("max-w-full shrink-0 text-[10px] font-medium", priorityBadgeClass(m.basePriority))}
-                                data-testid={`badge-trade-point-showcase-priority-${m.id}`}
-                              >
-                                {priorityLabelRu(m.basePriority)}
-                              </Badge>
-                              <Badge
-                                variant="outline"
-                                className={cn("max-w-full shrink-0 text-[10px] font-medium", statusBadgeClass(st))}
+                                className={cn(
+                                  "max-w-full shrink-0 text-[10px] font-semibold",
+                                  st === "need_install"
+                                    ? "border-amber-400 bg-amber-100 text-amber-950 ring-1 ring-amber-300/50"
+                                    : st === "installed"
+                                      ? "border-emerald-300 bg-emerald-50 text-emerald-950"
+                                      : statusBadgeClass(st),
+                                )}
                                 data-testid={`badge-trade-point-showcase-status-${m.id}`}
                               >
                                 {statusLabelRu(st)}
@@ -1111,7 +1228,7 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
                               className={cn("w-full gap-1 text-xs", isMini ? "h-7 text-[10px]" : "h-8")}
                               data-testid={`button-showcase-matrix-card-details-${m.id}`}
                             >
-                              {isMini ? <MoreHorizontal className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden /> : null}
+                              {(isMini || isCompact) ? <MoreHorizontal className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden /> : null}
                               {detailsTriggerLabel}
                               <ChevronDown
                                 className={cn("h-3.5 w-3.5 shrink-0 opacity-70 transition-transform", detailsOpen && "rotate-180")}
@@ -1130,6 +1247,19 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
                                     {m.typeLabelRu}
                                   </Badge>
                                   <Badge variant="outline" className={cn("text-[10px] font-medium", priorityBadgeClass(m.basePriority))}>
+                                    {priorityLabelRu(m.basePriority)}
+                                  </Badge>
+                                </div>
+                              ) : isCompact ? (
+                                <div className="flex flex-wrap gap-1">
+                                  <Badge variant="outline" className="text-[10px] font-medium">
+                                    {m.typeLabelRu}
+                                  </Badge>
+                                  <Badge
+                                    variant="outline"
+                                    className={cn("text-[10px] font-medium", priorityBadgeClass(m.basePriority))}
+                                    data-testid={`badge-trade-point-showcase-priority-${m.id}`}
+                                  >
                                     {priorityLabelRu(m.basePriority)}
                                   </Badge>
                                 </div>
@@ -1237,7 +1367,7 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
                   <div className="flex h-full min-h-0 w-full min-w-0 flex-col sm:flex-row">
                     <button type="button" className="relative w-full shrink-0 text-left sm:w-[200px]" onClick={() => openPresentation(m)}>
                       <ModelDoorPhotoFrame
-                        src={m.imageUrl}
+                        src={showcaseModelImageSrc(m)}
                         alt=""
                         frameClass={photoFrameClass}
                         imgPaddingClass="p-2"
@@ -1273,8 +1403,25 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
                             </Badge>
                           </div>
                         </div>
-                        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{m.importanceReason}</p>
+                        <p className="mt-2 hidden text-xs leading-relaxed text-muted-foreground md:block">{m.importanceReason}</p>
                       </button>
+                      <Collapsible className="md:hidden">
+                        <CollapsibleTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-8 w-full text-xs"
+                            data-testid={`button-showcase-matrix-large-mobile-details-${m.id}`}
+                          >
+                            Подробнее
+                            <ChevronDown className="ml-1 h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
+                          </Button>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <p className="text-xs leading-relaxed text-muted-foreground">{m.importanceReason}</p>
+                        </CollapsibleContent>
+                      </Collapsible>
 
                       <div className="flex flex-wrap gap-1.5">
                         <Button
