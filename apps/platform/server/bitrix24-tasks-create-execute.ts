@@ -118,7 +118,7 @@ function parseWebhookBase(raw: string | undefined): { ok: true; base: string } |
         "В BITRIX24_WEBHOOK_URL указан не базовый webhook (обнаружен profile.json). Укажите базовый URL вида https://<портал>/rest/<user>/<token>/ без имени метода.",
     };
   }
-  t = t.replace(/\/tasks\.task\.add\/?$/i, "");
+  t = t.replace(/\/tasks\.task\.(add|list)\/?$/i, "");
   t = t.replace(/\/+$/, "");
   if (!/^https?:\/\//i.test(t)) {
     return { ok: false, message: "BITRIX24_WEBHOOK_URL должен начинаться с http:// или https://." };

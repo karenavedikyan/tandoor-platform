@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -11,7 +12,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { createBitrix24LkTask } from "@/lib/bitrix24-integration";
+import { createBitrix24LkTask, listBitrix24Tasks } from "@/lib/bitrix24-integration";
+import {
+  BITRIX24_IMPORTED_TASKS_CHANGED_EVENT,
+  getBitrix24ImportedTasks,
+  upsertBitrix24ImportedTasks,
+  type Bitrix24ImportedTask,
+} from "@/lib/bitrix24-imported-tasks";
 import {
   BITRIX24_TASK_LINKS_CHANGED_EVENT,
   addDealerBitrix24TaskLink,
@@ -25,8 +32,10 @@ import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 const LIST_LIMIT = 10;
+const IMPORT_FETCH_LIMIT = 50;
+const IMPORT_PREVIEW = 5;
 
-function formatCreatedAt(iso: string): string {
+function formatRuDateTime(iso: string): string {
   const d = Date.parse(iso);
   if (!Number.isFinite(d)) return iso;
   try {
@@ -64,16 +73,27 @@ export function Bitrix24TasksPanel({
 }: Bitrix24TasksPanelProps) {
   const tidPrefix = scope === "dealer" ? "dealer" : "trade-point";
   const [tick, setTick] = useState(0);
+  const [importTick, setImportTick] = useState(0);
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [formErr, setFormErr] = useState("");
+  const [importLoading, setImportLoading] = useState(false);
+  const [importErr, setImportErr] = useState("");
+  const [onlyOpenImport, setOnlyOpenImport] = useState(true);
+  const [showAllImported, setShowAllImported] = useState(false);
 
   useEffect(() => {
     const fn = () => setTick((n) => n + 1);
     window.addEventListener(BITRIX24_TASK_LINKS_CHANGED_EVENT, fn);
     return () => window.removeEventListener(BITRIX24_TASK_LINKS_CHANGED_EVENT, fn);
+  }, []);
+
+  useEffect(() => {
+    const fn = () => setImportTick((n) => n + 1);
+    window.addEventListener(BITRIX24_IMPORTED_TASKS_CHANGED_EVENT, fn);
+    return () => window.removeEventListener(BITRIX24_IMPORTED_TASKS_CHANGED_EVENT, fn);
   }, []);
 
   const links: Bitrix24TaskLink[] = useMemo(() => {
@@ -83,6 +103,19 @@ export function Bitrix24TasksPanel({
     if (!tradePointId) return [];
     return getTradePointBitrix24TaskLinks(dealerId, tradePointId).slice(0, LIST_LIMIT);
   }, [scope, dealerId, tradePointId, tick]);
+
+  const linkedBitrixIds = useMemo(() => new Set(links.map((l) => l.bitrixTaskId)), [links]);
+
+  const importedVisible: Bitrix24ImportedTask[] = useMemo(() => {
+    return getBitrix24ImportedTasks().filter((t) => !linkedBitrixIds.has(t.bitrixTaskId));
+  }, [linkedBitrixIds, importTick]);
+
+  const importedPreview = useMemo(
+    () => (showAllImported ? importedVisible : importedVisible.slice(0, IMPORT_PREVIEW)),
+    [importedVisible, showAllImported],
+  );
+
+  const canSeeSection = canCreate || links.length > 0 || importedVisible.length > 0;
 
   const resetForm = useCallback(() => {
     setTitle("");
@@ -164,7 +197,21 @@ export function Bitrix24TasksPanel({
     tradePointName,
   ]);
 
-  if (!canCreate && links.length === 0) {
+  const handleImport = useCallback(async () => {
+    setImportErr("");
+    setImportLoading(true);
+    const res = await listBitrix24Tasks({ limit: IMPORT_FETCH_LIMIT, onlyOpen: onlyOpenImport });
+    setImportLoading(false);
+    if (!res.ok) {
+      setImportErr(res.message);
+      return;
+    }
+    upsertBitrix24ImportedTasks(res.tasks);
+    setShowAllImported(false);
+    toast({ title: "Задачи загружены из Bitrix24" });
+  }, [onlyOpenImport]);
+
+  if (!canSeeSection) {
     return null;
   }
 
@@ -176,13 +223,13 @@ export function Bitrix24TasksPanel({
       <div className="space-y-1">
         <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Задачи Bitrix24</h2>
         <p className="max-w-2xl text-sm text-muted-foreground">
-          Создание задачи в портале Bitrix24 из ЛК. Связь с задачей хранится в этом браузере (без синхронизации статусов из
-          Bitrix24).
+          Создание задачи в портале Bitrix24 из ЛК и ручная загрузка списка задач ответственного webhook. Данные о
+          созданных и импортированных задачах хранятся в этом браузере; синхронизация статусов из Bitrix24 не выполняется.
         </p>
       </div>
       <Card className="rounded-2xl border border-border/80 bg-card shadow-md">
         <CardHeader className="space-y-1 pb-2 pt-5 sm:pb-3">
-          <CardTitle className="text-sm font-semibold">Поставленные задачи</CardTitle>
+          <CardTitle className="text-sm font-semibold">Поставленные из ЛК</CardTitle>
           <CardDescription className="text-xs">
             Последние записи по {scope === "dealer" ? "клиенту" : "торговой точке"}.
           </CardDescription>
@@ -202,7 +249,7 @@ export function Bitrix24TasksPanel({
                   <p className="mt-1 text-xs text-muted-foreground">
                     <span data-testid={`text-${tidPrefix}-bitrix24-task-id-${l.id}`}>Bitrix24 #{l.bitrixTaskId}</span>
                     {" · "}
-                    {formatCreatedAt(l.createdAt)}
+                    {formatRuDateTime(l.createdAt)}
                     {" · "}
                     {l.createdByName}
                   </p>
@@ -210,23 +257,105 @@ export function Bitrix24TasksPanel({
               ))}
             </ul>
           )}
-          {canCreate ? (
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              className="min-h-9 w-full font-semibold sm:w-auto"
-              data-testid={`button-${tidPrefix}-bitrix24-task-create`}
-              onClick={() => {
-                resetForm();
-                setOpen(true);
-              }}
-            >
-              Создать задачу в Bitrix24
-            </Button>
-          ) : null}
+          <div className="flex flex-col gap-3 border-t border-border/60 pt-3 sm:flex-row sm:flex-wrap sm:items-center">
+            {canCreate ? (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="min-h-9 w-full font-semibold sm:w-auto"
+                data-testid={`button-${tidPrefix}-bitrix24-task-create`}
+                onClick={() => {
+                  resetForm();
+                  setOpen(true);
+                }}
+              >
+                Создать задачу в Bitrix24
+              </Button>
+            ) : null}
+            {canCreate ? (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-h-9 w-full font-semibold sm:w-auto"
+                  data-testid="button-bitrix24-tasks-import"
+                  disabled={importLoading}
+                  onClick={() => void handleImport()}
+                >
+                  {importLoading ? "Загрузка…" : "Загрузить из Bitrix24"}
+                </Button>
+                <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground sm:text-sm">
+                  <Checkbox
+                    checked={onlyOpenImport}
+                    onCheckedChange={(v) => setOnlyOpenImport(v === true)}
+                    data-testid="checkbox-bitrix24-tasks-only-open"
+                  />
+                  <span>Только открытые</span>
+                </label>
+              </>
+            ) : null}
+          </div>
+          {importErr ? <p className="text-xs font-medium text-destructive">{importErr}</p> : null}
         </CardContent>
       </Card>
+
+      {importedVisible.length > 0 ? (
+        <Card
+          className="rounded-2xl border border-border/80 bg-card shadow-md"
+          data-testid="section-bitrix24-imported-tasks"
+        >
+          <CardHeader className="space-y-1 pb-2 pt-5 sm:pb-3">
+            <CardTitle className="text-sm font-semibold">Задачи из Bitrix24</CardTitle>
+            <CardDescription className="text-xs">
+              Последняя загрузка по кнопке выше (без автоматического обновления). Задачи, уже есть в списке «Поставленные
+              из ЛК», здесь не показываются.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 pb-5">
+            <ul className="space-y-2">
+              {importedPreview.map((st) => (
+                <li
+                  key={st.id}
+                  data-testid={`row-bitrix24-imported-task-${st.id}`}
+                  className="rounded-lg border border-border/70 bg-muted/15 px-3 py-2.5 text-sm"
+                >
+                  <p className="font-medium text-foreground">{st.title}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    <span data-testid={`text-bitrix24-imported-task-id-${st.id}`}>Bitrix24 #{st.bitrixTaskId}</span>
+                    {" · "}
+                    <span data-testid={`text-bitrix24-imported-task-status-${st.id}`}>Статус: {st.status}</span>
+                    {st.deadline ? (
+                      <>
+                        {" · "}
+                        <span data-testid={`text-bitrix24-imported-task-deadline-${st.id}`}>
+                          Срок: {formatRuDateTime(st.deadline)}
+                        </span>
+                      </>
+                    ) : null}
+                  </p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Создана: {st.createdDate ? formatRuDateTime(st.createdDate) : "—"}
+                    {st.changedDate ? ` · Изменена: ${formatRuDateTime(st.changedDate)}` : null}
+                  </p>
+                </li>
+              ))}
+            </ul>
+            {importedVisible.length > IMPORT_PREVIEW ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2 text-xs"
+                onClick={() => setShowAllImported((v) => !v)}
+              >
+                {showAllImported ? "Свернуть" : "Показать все"}
+              </Button>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent className="sm:max-w-lg" data-testid={`dialog-${tidPrefix}-bitrix24-task-create`}>
