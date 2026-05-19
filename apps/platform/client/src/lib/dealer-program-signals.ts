@@ -1,6 +1,7 @@
 /**
  * Рабочие признаки участия клиента в коммерческих программах для пилотной фильтрации:
  * - Спецусловия (индивидуальные коммерческие условия)
+ * - Франшиза (редактируемая характеристика + фолбэк)
  * - Tandoor Club (программа лояльности)
  * - Мотивация / кешбек агента (агентское вознаграждение)
  *
@@ -17,29 +18,42 @@ import { getDealerCharacteristicValue } from "@/lib/dealer-characteristics";
 
 export type DealerProgramSignal = {
   hasSpecialConditions: boolean;
+  hasFranchise: boolean;
   hasTandoorClub: boolean;
   hasCashbackAgent: boolean;
 };
 
 export type DealerProgramFilterId =
   | "special_conditions"
+  | "franchise"
   | "tandoor_club"
   | "cashback_agent";
 
+/** Порядок чипов «Признаки» в клиентской базе. */
+export const DEALER_PROGRAM_FILTER_ORDER: readonly DealerProgramFilterId[] = [
+  "special_conditions",
+  "franchise",
+  "tandoor_club",
+  "cashback_agent",
+];
+
 export const DEALER_PROGRAM_FILTER_LABELS: Record<DealerProgramFilterId, string> = {
   special_conditions: "Спецусловия",
+  franchise: "Франшиза",
   tandoor_club: "Tandoor Club",
   cashback_agent: "Кешбек агент",
 };
 
 export const DEALER_PROGRAM_FILTER_BADGE_TESTID: Record<DealerProgramFilterId, string> = {
   special_conditions: "badge-dealer-special-conditions",
+  franchise: "badge-dealer-franchise",
   tandoor_club: "badge-dealer-tandoor-club",
   cashback_agent: "badge-dealer-cashback-agent",
 };
 
 export const DEALER_PROGRAM_FILTER_BUTTON_TESTID: Record<DealerProgramFilterId, string> = {
   special_conditions: "filter-special-conditions",
+  franchise: "button-dealer-program-filter-franchise",
   tandoor_club: "filter-tandoor-club",
   cashback_agent: "filter-cashback-agents",
 };
@@ -126,6 +140,31 @@ function fallbackCashbackAgent(row: DealerRow): boolean {
   return false;
 }
 
+function textHintsFranchise(row: DealerRow): boolean {
+  const pool = [
+    row.terms.special,
+    row.terms.payment,
+    row.terms.bonuses,
+    row.terms.edo,
+    row.terms.limit,
+    row.name,
+    row.legalEntity,
+    row.holding,
+    row.comment,
+  ]
+    .map((x) => (x ?? "").toLowerCase())
+    .join(" ");
+  return pool.includes("франш");
+}
+
+function fallbackFranchise(row: DealerRow): boolean {
+  if (row.status === "приостановлен") return false;
+  const h = deterministicHash(row);
+  if (row.format === "сетевой" && row.status === "активный") return h % 6 === 2;
+  if (row.status === "активный" && isClientTopTier(row.clientCategory)) return h % 11 === 3;
+  return false;
+}
+
 export function getDealerProgramSignal(row: DealerRow): DealerProgramSignal {
   const t = row.terms;
   const explicitClub = t.tandoorClub === "Участник" || looksAffirmative(t.tandoorClub);
@@ -133,6 +172,7 @@ export function getDealerProgramSignal(row: DealerRow): DealerProgramSignal {
   const explicitCashback = looksAffirmative(t.bonuses);
 
   const ovSpecial = getDealerCharacteristicValue(row.id, "has_special_conditions");
+  const ovFranchise = getDealerCharacteristicValue(row.id, "is_franchise");
   const ovClub = getDealerCharacteristicValue(row.id, "has_tandoor_club");
   const ovCashback = getDealerCharacteristicValue(row.id, "has_cashback_agent");
 
@@ -142,6 +182,12 @@ export function getDealerProgramSignal(row: DealerRow): DealerProgramSignal {
       : ovSpecial === "no"
         ? false
         : explicitSpecial || fallbackSpecialConditions(row);
+  const hasFranchise =
+    ovFranchise === "yes"
+      ? true
+      : ovFranchise === "no"
+        ? false
+        : textHintsFranchise(row) || fallbackFranchise(row);
   const hasClub =
     ovClub === "yes"
       ? true
@@ -157,6 +203,7 @@ export function getDealerProgramSignal(row: DealerRow): DealerProgramSignal {
 
   return {
     hasSpecialConditions: hasSpecial,
+    hasFranchise,
     hasTandoorClub: hasClub,
     hasCashbackAgent: hasCashback,
   };
@@ -170,6 +217,7 @@ export function dealerRowMatchesProgramFilters(
   const s = getDealerProgramSignal(row);
   for (const f of selected) {
     if (f === "special_conditions" && !s.hasSpecialConditions) return false;
+    if (f === "franchise" && !s.hasFranchise) return false;
     if (f === "tandoor_club" && !s.hasTandoorClub) return false;
     if (f === "cashback_agent" && !s.hasCashbackAgent) return false;
   }
