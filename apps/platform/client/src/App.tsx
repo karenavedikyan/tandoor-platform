@@ -46,6 +46,7 @@ const LazyMarketingBriefPublished = lazy(() =>
 const LazyReleaseOne = lazy(() => import("@/pages/release-one"));
 const LazyReleaseClients = lazy(() => import("@/pages/release-clients"));
 const LazyBitrix24Poc = lazy(() => import("@/pages/bitrix24-poc"));
+const LazyCommunications = lazy(() => import("@/pages/communications"));
 const LazyLogin = lazy(() => import("@/pages/login"));
 
 function suspensePage(Lazy: LazyExoticComponent<ComponentType<any>>): ComponentType<any> {
@@ -85,6 +86,7 @@ const MarketingBriefPublishedRoute = suspensePage(LazyMarketingBriefPublished);
 const ReleaseOneRoute = suspensePage(LazyReleaseOne);
 const ReleaseClientsRoute = suspensePage(LazyReleaseClients);
 const Bitrix24PocRoute = suspensePage(LazyBitrix24Poc);
+const CommunicationsRoute = suspensePage(LazyCommunications);
 
 function HashRedirect({ to }: { to: string }) {
   const [, setLoc] = useHashLocation();
@@ -131,6 +133,7 @@ function AuthenticatedApp() {
         <Route path="/sales-manager" component={SalesManagerWorkspaceRoute} />
         <Route path="/bitrix24" component={Bitrix24PocRoute} />
         <Route path="/embedded/bitrix24" component={Bitrix24PocRoute} />
+        <Route path="/communications" component={CommunicationsRoute} />
         <Route path="/dealer-base" component={DealerBaseRoute} />
         <Route path="/client-map" component={ClientMapRoute} />
         <Route path="/catalog/:productId" component={ProductDetailPageRoute} />
