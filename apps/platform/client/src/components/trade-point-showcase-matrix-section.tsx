@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
-import { ChevronDown, MessageSquare, MoreHorizontal, PieChart } from "lucide-react";
+import { ChevronDown, MoreHorizontal, PieChart } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
@@ -240,6 +240,12 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
 
   const [presentationModel, setPresentationModel] = useState<ShowcaseMatrixModelDefinition | null>(null);
   const [presentationOpen, setPresentationOpen] = useState(false);
+  /** Локальное раскрытие деталей карточки (компакт/мини), без localStorage. */
+  const [matrixCardDetailsOpenById, setMatrixCardDetailsOpenById] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    setMatrixCardDetailsOpenById({});
+  }, [viewMode]);
 
   const openPresentation = useCallback((m: ShowcaseMatrixModelDefinition) => {
     setPresentationModel(m);
@@ -267,9 +273,9 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
     viewMode === "large"
       ? "grid grid-cols-1 gap-3 sm:grid-cols-2"
       : viewMode === "compact"
-        ? "grid grid-cols-1 gap-2 min-[380px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
+        ? "grid grid-cols-1 gap-2 min-[360px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
         : viewMode === "mini"
-          ? "grid grid-cols-2 gap-1.5 min-[360px]:grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
+          ? "grid grid-cols-1 gap-1.5 min-[360px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
           : "flex flex-col gap-0 overflow-hidden rounded-xl border border-border/80 bg-card";
 
   return (
@@ -700,154 +706,186 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
                 );
               }
 
-              const isLarge = viewMode === "large";
               const isMini = viewMode === "mini";
               const isCompact = viewMode === "compact";
+              const detailsOpen = !!matrixCardDetailsOpenById[m.id];
 
-              const photoFrameClass = isLarge
-                ? "min-h-[168px] w-full sm:min-h-[180px] sm:w-[172px]"
-                : isMini
-                  ? "h-[4.25rem] w-full"
-                  : "h-[5.5rem] w-full min-[380px]:h-[5.75rem] min-[380px]:w-[6.75rem]";
+              if (isCompact || isMini) {
+                const densityPhotoClass = isMini
+                  ? "min-h-[6.25rem] w-full bg-neutral-50 sm:min-h-[6.75rem]"
+                  : "min-h-[10.5rem] w-full bg-neutral-50 sm:min-h-[11.5rem]";
+                const densityPad = isMini ? "p-1.5" : "p-2.5";
+                const densityRounded = isMini ? "rounded-xl" : "rounded-2xl";
+                const detailsTriggerLabel = isMini ? "Ещё" : "Подробнее";
+                const titleClass = cn(
+                  "min-w-0 max-w-full break-words font-semibold leading-snug text-foreground line-clamp-2",
+                  isMini ? "text-[11px]" : "text-sm",
+                );
 
-              const cardPad = isMini ? "p-1.5" : isCompact ? "p-2" : "p-3 sm:p-3.5";
-              const rounded = isMini ? "rounded-xl" : "rounded-2xl";
-
-              return (
-                <Card
-                  key={m.id}
-                  data-testid={`row-trade-point-showcase-model-${m.id}`}
-                  className={cn("overflow-hidden shadow-md", rounded, matrixCardShellClass(st), st === "not_relevant" && "opacity-[0.88]")}
-                >
-                  <div
+                return (
+                  <Card
+                    key={m.id}
+                    data-testid={`row-trade-point-showcase-model-${m.id}`}
                     className={cn(
-                      "flex w-full min-w-0",
-                      isLarge ? "flex-col sm:flex-row" : isMini ? "flex-col" : "flex-col min-[380px]:flex-row min-[380px]:items-stretch",
+                      "min-w-0 overflow-hidden shadow-md",
+                      densityRounded,
+                      matrixCardShellClass(st),
+                      st === "not_relevant" && "opacity-[0.88]",
                     )}
                   >
-                    <button
-                      type="button"
-                      className={cn(
-                        "relative shrink-0 text-left",
-                        isLarge ? "w-full sm:w-[172px]" : isMini ? "w-full" : "w-full min-[380px]:w-auto",
-                      )}
-                      onClick={() => openPresentation(m)}
-                    >
-                      <ModelDoorPhotoFrame
-                        src={m.imageUrl}
-                        alt=""
-                        frameClass={photoFrameClass}
-                        imgTestId={`image-trade-point-showcase-model-${m.id}`}
-                      />
-                    </button>
-                    <CardContent className={cn("flex min-w-0 flex-1 flex-col gap-2", cardPad)}>
-                      <button type="button" className="w-full min-w-0 text-left" onClick={() => openPresentation(m)}>
-                        <div className={cn("flex flex-col gap-1.5", !isMini && "min-[380px]:flex-row min-[380px]:items-start min-[380px]:justify-between")}>
-                          <p
-                            className={cn(
-                              "min-w-0 font-semibold leading-snug text-foreground",
-                              isMini ? "line-clamp-2 text-[11px]" : "line-clamp-3 text-sm min-[380px]:text-sm",
-                              isLarge && "text-base",
-                            )}
-                            data-testid={`text-trade-point-showcase-model-title-${m.id}`}
-                          >
+                    <div className="flex w-full min-w-0 flex-col">
+                      <button type="button" className="relative w-full shrink-0 text-left" onClick={() => openPresentation(m)}>
+                        <ModelDoorPhotoFrame
+                          src={m.imageUrl}
+                          alt=""
+                          frameClass={densityPhotoClass}
+                          imgTestId={`image-trade-point-showcase-model-${m.id}`}
+                        />
+                      </button>
+                      <CardContent className={cn("flex min-w-0 flex-col gap-2", densityPad)}>
+                        <div className="min-w-0 space-y-1.5">
+                          <p className={titleClass} data-testid={`text-trade-point-showcase-model-title-${m.id}`}>
                             {m.name}
                           </p>
-                          <div
-                            className={cn(
-                              "flex min-w-0 gap-1",
-                              isMini ? "flex-col items-start" : "flex-nowrap items-center overflow-x-auto pb-0.5",
-                            )}
-                          >
-                            <Badge variant="outline" className="shrink-0 text-[10px] font-medium">
-                              {m.typeLabelRu}
-                            </Badge>
-                            <Badge
-                              variant="outline"
-                              className={cn("shrink-0 text-[10px] font-medium", priorityBadgeClass(m.basePriority))}
-                              data-testid={`badge-trade-point-showcase-priority-${m.id}`}
-                            >
-                              {priorityLabelRu(m.basePriority)}
-                            </Badge>
-                            <Badge
-                              variant="outline"
-                              className={cn(
-                                "shrink-0 font-medium",
-                                isMini ? "text-[11px] px-2 py-0.5" : "text-[10px]",
-                                statusBadgeClass(st),
-                              )}
-                              data-testid={`badge-trade-point-showcase-status-${m.id}`}
-                            >
-                              {statusLabelRu(st)}
-                            </Badge>
-                          </div>
+                          {isCompact ? (
+                            <div className="flex min-w-0 flex-wrap gap-1">
+                              <Badge variant="outline" className="max-w-full shrink-0 text-[10px] font-medium">
+                                {m.typeLabelRu}
+                              </Badge>
+                              <Badge
+                                variant="outline"
+                                className={cn("max-w-full shrink-0 text-[10px] font-medium", priorityBadgeClass(m.basePriority))}
+                                data-testid={`badge-trade-point-showcase-priority-${m.id}`}
+                              >
+                                {priorityLabelRu(m.basePriority)}
+                              </Badge>
+                              <Badge
+                                variant="outline"
+                                className={cn("max-w-full shrink-0 text-[10px] font-medium", statusBadgeClass(st))}
+                                data-testid={`badge-trade-point-showcase-status-${m.id}`}
+                              >
+                                {statusLabelRu(st)}
+                              </Badge>
+                            </div>
+                          ) : (
+                            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  "max-w-full text-[10px] font-semibold",
+                                  st === "need_install"
+                                    ? "border-amber-400 bg-amber-100 text-amber-950 ring-1 ring-amber-300/50"
+                                    : st === "installed"
+                                      ? "border-emerald-300 bg-emerald-50 text-emerald-950"
+                                      : statusBadgeClass(st),
+                                )}
+                                data-testid={`badge-trade-point-showcase-status-${m.id}`}
+                              >
+                                {statusLabelRu(st)}
+                              </Badge>
+                            </div>
+                          )}
                         </div>
-                        {isLarge ? <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{m.importanceReason}</p> : null}
-                      </button>
 
-                      {isMini ? (
-                        <div className="mt-auto flex flex-col gap-1">
+                        {canEdit ? (
                           <Button
                             type="button"
-                            variant="secondary"
+                            variant={st === "need_install" ? "default" : "secondary"}
                             size="sm"
-                            className="h-7 w-full px-2 text-[10px] font-semibold"
+                            className={cn(
+                              "h-9 w-full text-xs",
+                              st === "need_install" && "font-semibold shadow-sm ring-1 ring-amber-400/55",
+                              st === "installed" && "border border-emerald-200/90 bg-emerald-50/80 font-medium text-emerald-950 hover:bg-emerald-50",
+                            )}
                             data-testid={`button-trade-point-showcase-mark-installed-${m.id}`}
                             onClick={() => persist(m, "installed", commentVal)}
                           >
                             На витрине
                           </Button>
-                          <Collapsible>
-                            <CollapsibleTrigger asChild>
+                        ) : null}
+
+                        <Collapsible
+                          open={detailsOpen}
+                          onOpenChange={(open) =>
+                            setMatrixCardDetailsOpenById((prev) => ({
+                              ...prev,
+                              [m.id]: open,
+                            }))
+                          }
+                        >
+                          <CollapsibleTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className={cn("h-8 w-full gap-1 text-xs", isMini && "h-7 text-[11px]")}
+                              data-testid={`button-showcase-matrix-card-details-${m.id}`}
+                            >
+                              {isMini ? <MoreHorizontal className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden /> : null}
+                              {detailsTriggerLabel}
+                              <ChevronDown
+                                className={cn("h-3.5 w-3.5 shrink-0 opacity-70 transition-transform", detailsOpen && "rotate-180")}
+                                aria-hidden
+                              />
+                            </Button>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent>
+                            <section
+                              data-testid={`section-showcase-matrix-card-details-${m.id}`}
+                              className="mt-2 space-y-2 rounded-md border border-border/70 bg-muted/20 p-2"
+                            >
+                              {isMini ? (
+                                <div className="flex flex-wrap gap-1">
+                                  <Badge variant="outline" className="text-[10px] font-medium">
+                                    {m.typeLabelRu}
+                                  </Badge>
+                                  <Badge variant="outline" className={cn("text-[10px] font-medium", priorityBadgeClass(m.basePriority))}>
+                                    {priorityLabelRu(m.basePriority)}
+                                  </Badge>
+                                </div>
+                              ) : null}
+                              <p className="text-xs leading-relaxed text-muted-foreground break-words">{m.importanceReason}</p>
                               <Button
                                 type="button"
                                 variant="outline"
                                 size="sm"
-                                className="h-7 w-full gap-1 text-[10px]"
-                              >
-                                <MoreHorizontal className="h-3.5 w-3.5" />
-                                Ещё
-                                <ChevronDown className="h-3 w-3 opacity-70" />
-                              </Button>
-                            </CollapsibleTrigger>
-                            <CollapsibleContent className="mt-1.5 space-y-1.5 rounded-md border border-border/70 bg-background/80 p-1.5">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="h-7 w-full text-[10px]"
+                                className="h-8 w-full text-xs"
                                 data-testid={`button-trade-point-showcase-open-presentation-${m.id}`}
                                 onClick={() => openPresentation(m)}
                               >
                                 Презентация
                               </Button>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="h-7 w-full text-[10px]"
-                                data-testid={`button-trade-point-showcase-postpone-${m.id}`}
-                                onClick={() => persist(m, "postponed", commentVal)}
-                              >
-                                Отложить
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 w-full text-[10px] text-muted-foreground"
-                                onClick={() => persist(m, "not_relevant", commentVal)}
-                              >
-                                Не актуально
-                              </Button>
-                              <div className="space-y-1 pt-0.5">
-                                <Label className="text-[10px] text-muted-foreground" htmlFor={`showcase-cmt-mini-${m.id}`}>
-                                  Комментарий
+                              {canEdit ? (
+                                <>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 w-full text-xs"
+                                    data-testid={`button-trade-point-showcase-postpone-${m.id}`}
+                                    onClick={() => persist(m, "postponed", commentVal)}
+                                  >
+                                    Отложить
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 w-full text-xs text-muted-foreground"
+                                    onClick={() => persist(m, "not_relevant", commentVal)}
+                                  >
+                                    Не актуально
+                                  </Button>
+                                </>
+                              ) : null}
+                              <div className="space-y-1">
+                                <Label className="text-[10px] text-muted-foreground" htmlFor={`showcase-cmt-density-${m.id}`}>
+                                  Комментарий менеджера
                                 </Label>
                                 <Textarea
-                                  id={`showcase-cmt-mini-${m.id}`}
+                                  id={`showcase-cmt-density-${m.id}`}
                                   rows={2}
-                                  className="min-h-[44px] resize-y text-[11px]"
+                                  className={cn("min-h-[48px] resize-y", isMini ? "text-[11px]" : "text-xs")}
                                   data-testid={`textarea-trade-point-showcase-comment-${m.id}`}
                                   readOnly={!canEdit}
                                   value={commentVal}
@@ -866,165 +904,152 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
                                 />
                               </div>
                               {canEdit ? (
-                                <Button asChild variant="ghost" size="sm" className="h-auto px-0 py-0 text-[10px] font-semibold text-primary underline-offset-2 hover:underline">
-                                  <Link href={`/catalog/${m.id}`}>Каталог</Link>
+                                <Button
+                                  asChild
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-auto px-0 text-xs font-semibold text-primary underline-offset-2 hover:underline"
+                                >
+                                  <Link href={`/catalog/${m.id}`}>Открыть в каталоге</Link>
                                 </Button>
                               ) : null}
-                            </CollapsibleContent>
-                          </Collapsible>
+                            </section>
+                          </CollapsibleContent>
+                        </Collapsible>
+                      </CardContent>
+                    </div>
+                  </Card>
+                );
+              }
+
+              const photoFrameClass = "min-h-[168px] w-full sm:min-h-[180px] sm:w-[172px]";
+              const cardPad = "p-3 sm:p-3.5";
+              const rounded = "rounded-2xl";
+
+              return (
+                <Card
+                  key={m.id}
+                  data-testid={`row-trade-point-showcase-model-${m.id}`}
+                  className={cn("overflow-hidden shadow-md", rounded, matrixCardShellClass(st), st === "not_relevant" && "opacity-[0.88]")}
+                >
+                  <div className="flex w-full min-w-0 flex-col sm:flex-row">
+                    <button type="button" className="relative w-full shrink-0 text-left sm:w-[172px]" onClick={() => openPresentation(m)}>
+                      <ModelDoorPhotoFrame
+                        src={m.imageUrl}
+                        alt=""
+                        frameClass={photoFrameClass}
+                        imgTestId={`image-trade-point-showcase-model-${m.id}`}
+                      />
+                    </button>
+                    <CardContent className={cn("flex min-w-0 flex-1 flex-col gap-2", cardPad)}>
+                      <button type="button" className="w-full min-w-0 text-left" onClick={() => openPresentation(m)}>
+                        <div className="flex flex-col gap-1.5 min-[380px]:flex-row min-[380px]:items-start min-[380px]:justify-between">
+                          <p
+                            className="min-w-0 text-base font-semibold leading-snug text-foreground"
+                            data-testid={`text-trade-point-showcase-model-title-${m.id}`}
+                          >
+                            {m.name}
+                          </p>
+                          <div className="flex min-w-0 flex-nowrap items-center gap-1 overflow-x-auto pb-0.5">
+                            <Badge variant="outline" className="shrink-0 text-[10px] font-medium">
+                              {m.typeLabelRu}
+                            </Badge>
+                            <Badge
+                              variant="outline"
+                              className={cn("shrink-0 text-[10px] font-medium", priorityBadgeClass(m.basePriority))}
+                              data-testid={`badge-trade-point-showcase-priority-${m.id}`}
+                            >
+                              {priorityLabelRu(m.basePriority)}
+                            </Badge>
+                            <Badge
+                              variant="outline"
+                              className={cn("shrink-0 text-[10px] font-medium", statusBadgeClass(st))}
+                              data-testid={`badge-trade-point-showcase-status-${m.id}`}
+                            >
+                              {statusLabelRu(st)}
+                            </Badge>
+                          </div>
                         </div>
-                      ) : (
-                        <>
-                          <div className="flex flex-wrap gap-1.5">
+                        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{m.importanceReason}</p>
+                      </button>
+
+                      <div className="flex flex-wrap gap-1.5">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="min-h-9 flex-1 font-semibold sm:flex-none"
+                          data-testid={`button-trade-point-showcase-open-presentation-${m.id}`}
+                          onClick={() => openPresentation(m)}
+                        >
+                          Презентация
+                        </Button>
+                        {canEdit ? (
+                          <>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              className="min-h-9 flex-1 font-semibold sm:flex-none"
+                              data-testid={`button-trade-point-showcase-mark-installed-${m.id}`}
+                              onClick={() => persist(m, "installed", commentVal)}
+                            >
+                              Стоит на витрине
+                            </Button>
                             <Button
                               type="button"
                               variant="outline"
                               size="sm"
-                              className={cn("font-semibold", isCompact ? "h-8 flex-1 text-[11px] sm:flex-none" : "min-h-9 flex-1 sm:flex-none")}
-                              data-testid={`button-trade-point-showcase-open-presentation-${m.id}`}
-                              onClick={() => openPresentation(m)}
+                              className="min-h-9 flex-1 font-semibold sm:flex-none"
+                              data-testid={`button-trade-point-showcase-postpone-${m.id}`}
+                              onClick={() => persist(m, "postponed", commentVal)}
                             >
-                              Презентация
+                              Отложить
                             </Button>
-                            {canEdit ? (
-                              <>
-                                <Button
-                                  type="button"
-                                  variant="secondary"
-                                  size="sm"
-                                  className={cn("font-semibold", isCompact ? "h-8 flex-1 text-[11px] sm:flex-none" : "min-h-9 flex-1 sm:flex-none")}
-                                  data-testid={`button-trade-point-showcase-mark-installed-${m.id}`}
-                                  onClick={() => persist(m, "installed", commentVal)}
-                                >
-                                  Стоит на витрине
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  className={cn("font-semibold", isCompact ? "h-8 flex-1 text-[11px] sm:flex-none" : "min-h-9 flex-1 sm:flex-none")}
-                                  data-testid={`button-trade-point-showcase-postpone-${m.id}`}
-                                  onClick={() => persist(m, "postponed", commentVal)}
-                                >
-                                  Отложить
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  className={cn(
-                                    "text-muted-foreground",
-                                    isCompact ? "h-8 flex-1 text-[11px] sm:flex-none" : "min-h-9 flex-1 sm:flex-none",
-                                  )}
-                                  onClick={() => persist(m, "not_relevant", commentVal)}
-                                >
-                                  Не актуально
-                                </Button>
-                              </>
-                            ) : null}
-                          </div>
-
-                          {isLarge ? (
-                            <div className="space-y-1.5 border-t border-border/60 pt-2">
-                              <Label className="text-xs text-muted-foreground" htmlFor={`showcase-cmt-${m.id}`}>
-                                Комментарий менеджера
-                              </Label>
-                              <Textarea
-                                id={`showcase-cmt-${m.id}`}
-                                rows={2}
-                                className="min-h-[52px] resize-y text-sm"
-                                data-testid={`textarea-trade-point-showcase-comment-${m.id}`}
-                                readOnly={!canEdit}
-                                value={commentVal}
-                                onChange={(e) => {
-                                  if (!canEdit) return;
-                                  upsertShowcaseMatrixModelState({
-                                    dealerId: dealer.id,
-                                    tradePointId: point.id,
-                                    model: m,
-                                    status: st,
-                                    comment: e.target.value,
-                                    actorUserId,
-                                    actorName,
-                                  });
-                                }}
-                              />
-                            </div>
-                          ) : (
-                            <Collapsible className="space-y-1">
-                              <CollapsibleTrigger asChild>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-8 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
-                                >
-                                  <ChevronDown className="h-3.5 w-3.5" />
-                                  Подробнее
-                                </Button>
-                              </CollapsibleTrigger>
-                              <CollapsibleContent className="space-y-2 rounded-md border border-border/60 bg-muted/15 p-2">
-                                <p className="text-xs leading-relaxed text-muted-foreground">{m.importanceReason}</p>
-                                {canEdit ? (
-                                  <Button asChild variant="ghost" size="sm" className="h-auto px-0 text-xs font-semibold text-primary underline-offset-2 hover:underline">
-                                    <Link href={`/catalog/${m.id}`}>Открыть в каталоге</Link>
-                                  </Button>
-                                ) : null}
-                              </CollapsibleContent>
-                            </Collapsible>
-                          )}
-
-                          {!isLarge ? (
-                            <Collapsible>
-                              <CollapsibleTrigger asChild>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-8 gap-1.5 text-xs"
-                                >
-                                  <MessageSquare className="h-3.5 w-3.5" />
-                                  Комментарий
-                                  <ChevronDown className="h-3.5 w-3.5 opacity-70" />
-                                </Button>
-                              </CollapsibleTrigger>
-                              <CollapsibleContent className="pt-2">
-                                <div className="space-y-1.5">
-                                  <Label className="text-xs text-muted-foreground" htmlFor={`showcase-cmt-${m.id}`}>
-                                    Комментарий менеджера
-                                  </Label>
-                                  <Textarea
-                                    id={`showcase-cmt-${m.id}`}
-                                    rows={2}
-                                    className="min-h-[48px] resize-y text-sm"
-                                    data-testid={`textarea-trade-point-showcase-comment-${m.id}`}
-                                    readOnly={!canEdit}
-                                    value={commentVal}
-                                    onChange={(e) => {
-                                      if (!canEdit) return;
-                                      upsertShowcaseMatrixModelState({
-                                        dealerId: dealer.id,
-                                        tradePointId: point.id,
-                                        model: m,
-                                        status: st,
-                                        comment: e.target.value,
-                                        actorUserId,
-                                        actorName,
-                                      });
-                                    }}
-                                  />
-                                </div>
-                              </CollapsibleContent>
-                            </Collapsible>
-                          ) : null}
-
-                          {isLarge && canEdit ? (
-                            <Button asChild variant="ghost" size="sm" className="h-auto px-0 text-xs font-semibold text-primary underline-offset-2 hover:underline">
-                              <Link href={`/catalog/${m.id}`}>Открыть в каталоге</Link>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="min-h-9 flex-1 text-muted-foreground sm:flex-none"
+                              onClick={() => persist(m, "not_relevant", commentVal)}
+                            >
+                              Не актуально
                             </Button>
-                          ) : null}
-                        </>
-                      )}
+                          </>
+                        ) : null}
+                      </div>
+
+                      <div className="space-y-1.5 border-t border-border/60 pt-2">
+                        <Label className="text-xs text-muted-foreground" htmlFor={`showcase-cmt-${m.id}`}>
+                          Комментарий менеджера
+                        </Label>
+                        <Textarea
+                          id={`showcase-cmt-${m.id}`}
+                          rows={2}
+                          className="min-h-[52px] resize-y text-sm"
+                          data-testid={`textarea-trade-point-showcase-comment-${m.id}`}
+                          readOnly={!canEdit}
+                          value={commentVal}
+                          onChange={(e) => {
+                            if (!canEdit) return;
+                            upsertShowcaseMatrixModelState({
+                              dealerId: dealer.id,
+                              tradePointId: point.id,
+                              model: m,
+                              status: st,
+                              comment: e.target.value,
+                              actorUserId,
+                              actorName,
+                            });
+                          }}
+                        />
+                      </div>
+
+                      {canEdit ? (
+                        <Button asChild variant="ghost" size="sm" className="h-auto px-0 text-xs font-semibold text-primary underline-offset-2 hover:underline">
+                          <Link href={`/catalog/${m.id}`}>Открыть в каталоге</Link>
+                        </Button>
+                      ) : null}
                     </CardContent>
                   </div>
                 </Card>
