@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer } from 'node:http';
 import type { Server } from 'node:http';
-import { storage } from "./storage";
+import { registerBitrix24Routes } from "./bitrix24-routes";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -10,6 +10,8 @@ export async function registerRoutes(
   // prefix all routes with /api
   // use storage to perform CRUD operations on the storage interface
   // e.g. app.get("/api/items", async (_req, res) => { ... })
+
+  registerBitrix24Routes(app);
 
   return httpServer;
 }
