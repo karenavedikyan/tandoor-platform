@@ -125,9 +125,30 @@ import { DEALER_CHARACTERISTICS_EVENT } from "@/lib/dealer-characteristics";
 import { SHOWCASE_STORAGE_EVENT } from "@/lib/showcase-distribution-data";
 import { Checkbox } from "@/components/ui/checkbox";
 import { MultiSelect } from "@/components/ui/multi-select";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "@/hooks/use-toast";
+import {
+  collapseRowsByClientGroups,
+  createDealerClientGroup,
+  DEALER_CLIENT_GROUPS_EVENT,
+  findDealerClientGroupByDealerId,
+  formatGroupCodesLine,
+  rowMatchesClientBaseSearch,
+  suggestDealerClientGroupName,
+  type DealerListRow,
+} from "@/lib/dealer-client-groups";
 
 const DEALER_BASE_DISPLAY_LIMIT = 300;
 const TODAY_LIMIT = 100;
+
+const DEALER_BASE_ROW_MAP = new Map(DEALER_BASE_ROWS.map((r) => [r.id, r]));
 
 type QuickFilter = "all" | "active" | "potential" | "attention" | "top" | "no_activity" | "closed";
 
@@ -223,6 +244,9 @@ type PickerArgs = {
   ropTeam: string;
   manager: string;
   managerCatalogForRop: ReturnType<typeof getManagersForRopTeam>;
+  /** Поиск по любому участнику логической группы (localStorage, MVP). */
+  clientGroupSearchUserId?: string;
+  clientGroupSearchDealerById?: Map<string, DealerRow>;
 };
 
 function applyPickerFilters(rows: DealerRow[], args: PickerArgs): DealerRow[] {
@@ -248,6 +272,9 @@ function applyPickerFilters(rows: DealerRow[], args: PickerArgs): DealerRow[] {
       if (!mgrOk) return false;
     }
     if (!q) return true;
+    if (args.clientGroupSearchUserId && args.clientGroupSearchDealerById) {
+      return rowMatchesClientBaseSearch(row, args.search, args.clientGroupSearchUserId, args.clientGroupSearchDealerById);
+    }
     const hay = [
       row.name,
       row.city,
@@ -297,10 +324,11 @@ function rowBelongsToManager(row: DealerRow, m: Pick<SalesUser, "id" | "name">):
   return managerDisplayMatchesCatalogName(row.manager, m.name);
 }
 
-function OpenDealerButton({ id }: { id: string }) {
+function OpenDealerButton({ dealerId, clientGroupId }: { dealerId: string; clientGroupId?: string }) {
+  const href = clientGroupId ? buildHashPath(`/dealers/${dealerId}`, { clientGroupId }) : `/dealers/${dealerId}`;
   return (
-    <Button asChild className="min-h-11 shrink-0 font-semibold" data-testid={`button-open-dealer-${id}`}>
-      <Link href={`/dealers/${id}`}>Открыть</Link>
+    <Button asChild className="min-h-11 shrink-0 font-semibold" data-testid={`button-open-dealer-${dealerId}`}>
+      <Link href={href}>Открыть</Link>
     </Button>
   );
 }
@@ -323,7 +351,7 @@ function ClientListBlock({
   shipmentActiveDayId,
   shipmentUserId,
 }: {
-  rows: DealerRow[];
+  rows: DealerListRow[];
   empty: string;
   compact?: boolean;
   workPlanUserId?: string;
@@ -346,6 +374,7 @@ function ClientListBlock({
   return (
     <div className={cn("space-y-3", compact && "space-y-2")}>
       {rows.map((row) => {
+        const grp = row._clientGroup;
         const hidden = wp ? isDealerHiddenForUser(workPlanUserId, row.id, workPlanState) : false;
         const sched = wp ? getDealerScheduledDateForUser(workPlanUserId, row.id, workPlanState) : null;
         const checked = Boolean(selectedIds?.has(row.id));
@@ -389,6 +418,15 @@ function ClientListBlock({
                   <Badge variant="outline" className={cn("text-xs", statusBadgeClass(row.status))}>
                     {row.status}
                   </Badge>
+                  {grp ? (
+                    <Badge
+                      variant="outline"
+                      className="shrink-0 border-primary/40 bg-primary/10 text-[10px] font-semibold text-primary"
+                      data-testid={`badge-dealer-client-group-${grp.id}`}
+                    >
+                      Объединённый клиент · {grp.dealerIds.length} карточки
+                    </Badge>
+                  ) : null}
                   {row.hasProblem ? (
                     <Badge variant="outline" className="border-red-200 bg-red-50 text-xs text-red-800">
                       Есть вопрос
@@ -477,7 +515,7 @@ function ClientListBlock({
                   ) : null}
                 </div>
                 <p className={cn("text-muted-foreground", compact ? "text-xs" : "text-sm")}>
-                  Код: {row.releaseCode ?? "—"} · {row.city} · {row.manager}
+                  Код: {grp ? formatGroupCodesLine(grp, DEALER_BASE_ROW_MAP) : row.releaseCode ?? "—"} · {row.city} · {row.manager}
                 </p>
                 {!compact ? (
                   <>
@@ -494,7 +532,7 @@ function ClientListBlock({
                   </>
                 ) : null}
               </div>
-              <OpenDealerButton id={row.id} />
+              <OpenDealerButton dealerId={row.id} clientGroupId={grp?.id} />
             </CardContent>
           </Card>
         );
@@ -513,7 +551,7 @@ function ClientTableBlock({
   shipmentActiveDayId,
   shipmentUserId,
 }: {
-  rows: DealerRow[];
+  rows: DealerListRow[];
   workPlanUserId?: string;
   workPlanState?: DealerWorkPlanState;
   showWorkPlanSelect?: boolean;
@@ -527,6 +565,7 @@ function ClientTableBlock({
     <>
       <div className="space-y-3 sm:hidden">
         {rows.map((row) => {
+          const grp = row._clientGroup;
           const hidden = wp ? isDealerHiddenForUser(workPlanUserId, row.id, workPlanState) : false;
           const sched = wp ? getDealerScheduledDateForUser(workPlanUserId, row.id, workPlanState) : null;
           const checked = Boolean(selectedIds?.has(row.id));
@@ -626,6 +665,18 @@ function ClientTableBlock({
                     </Badge>
                   ) : null}
                 </div>
+                {grp ? (
+                  <Badge
+                    variant="outline"
+                    className="w-fit border-primary/40 bg-primary/10 text-[10px] font-semibold text-primary"
+                    data-testid={`badge-dealer-client-group-${grp.id}`}
+                  >
+                    Объединённый клиент · {grp.dealerIds.length} карточки
+                  </Badge>
+                ) : null}
+                <p className="break-words font-mono text-[11px] text-muted-foreground">
+                  {grp ? formatGroupCodesLine(grp, DEALER_BASE_ROW_MAP) : `Код: ${row.releaseCode ?? "—"}`}
+                </p>
                 {ship ? (
                   <div className="space-y-1">
                     <Badge
@@ -651,7 +702,7 @@ function ClientTableBlock({
                 ) : (
                   <p className="text-xs text-muted-foreground line-clamp-2">Адрес не указан</p>
                 )}
-                <OpenDealerButton id={row.id} />
+                <OpenDealerButton dealerId={row.id} clientGroupId={grp?.id} />
               </CardContent>
             </Card>
           );
@@ -673,6 +724,7 @@ function ClientTableBlock({
           </thead>
           <tbody>
             {rows.map((row) => {
+              const grp = row._clientGroup;
               const hidden = wp ? isDealerHiddenForUser(workPlanUserId, row.id, workPlanState) : false;
               const sched = wp ? getDealerScheduledDateForUser(workPlanUserId, row.id, workPlanState) : null;
               const checked = Boolean(selectedIds?.has(row.id));
@@ -695,7 +747,9 @@ function ClientTableBlock({
                       />
                     </td>
                   ) : null}
-                  <td className="px-3 py-3 font-mono text-xs text-muted-foreground">{row.releaseCode ?? "—"}</td>
+                  <td className="max-w-[140px] px-3 py-3 align-top font-mono text-xs text-muted-foreground">
+                    <span className="break-words">{grp ? formatGroupCodesLine(grp, DEALER_BASE_ROW_MAP) : row.releaseCode ?? "—"}</span>
+                  </td>
                   <td className="max-w-[160px] px-3 py-3 align-top" title={row.name}>
                     <div className="flex min-w-0 flex-col gap-1">
                       <span className="truncate font-medium">{row.name}</span>
@@ -765,6 +819,15 @@ function ClientTableBlock({
                           </Badge>
                         ) : null}
                       </div>
+                      {grp ? (
+                        <Badge
+                          variant="outline"
+                          className="w-fit border-primary/40 bg-primary/10 text-[10px] font-semibold text-primary"
+                          data-testid={`badge-dealer-client-group-${grp.id}`}
+                        >
+                          Объединённый клиент · {grp.dealerIds.length} карточки
+                        </Badge>
+                      ) : null}
                       {ship ? (
                         <>
                           <Badge
@@ -805,7 +868,9 @@ function ClientTableBlock({
                   </td>
                   <td className="px-3 py-3">
                     <Button asChild size="sm" className="font-semibold" data-testid={`button-open-dealer-${row.id}`}>
-                      <Link href={`/dealers/${row.id}`}>Открыть</Link>
+                      <Link href={grp ? buildHashPath(`/dealers/${row.id}`, { clientGroupId: grp.id }) : `/dealers/${row.id}`}>
+                        Открыть
+                      </Link>
                     </Button>
                   </td>
                 </tr>
@@ -833,7 +898,7 @@ function DealerBaseSegmentGroups({
   shipmentActiveDayId,
   shipmentUserId,
 }: {
-  rows: DealerRow[];
+  rows: DealerListRow[];
   compact?: boolean;
   variant: "cards" | "table";
   segmentCollapse: DealerBaseSegmentCollapseState;
@@ -987,8 +1052,18 @@ export default function DealerBase() {
   const scopedRows = useMemo(() => roleScopedDealerRows(DEALER_BASE_ROWS, profile), [profile]);
 
   const pickerArgs = useMemo(
-    () => ({ search, quick, cities, categories, ropTeam, manager, managerCatalogForRop }),
-    [search, quick, cities, categories, ropTeam, manager, managerCatalogForRop],
+    () => ({
+      search,
+      quick,
+      cities,
+      categories,
+      ropTeam,
+      manager,
+      managerCatalogForRop,
+      clientGroupSearchUserId: profile.personaUserId,
+      clientGroupSearchDealerById: DEALER_BASE_ROW_MAP,
+    }),
+    [search, quick, cities, categories, ropTeam, manager, managerCatalogForRop, profile.personaUserId],
   );
 
   const pickerFiltered = useMemo(() => applyPickerFilters(scopedRows, pickerArgs), [scopedRows, pickerArgs]);
@@ -1428,6 +1503,12 @@ export default function DealerBase() {
     settlements: string[];
     previousCities: string[];
   }>(null);
+  const [clientGroupsBump, setClientGroupsBump] = useState(0);
+  const [mergeDialogOpen, setMergeDialogOpen] = useState(false);
+  const [mergeMemberIds, setMergeMemberIds] = useState<string[]>([]);
+  const [mergeName, setMergeName] = useState("");
+  const [mergePrimaryId, setMergePrimaryId] = useState("");
+  const [mergeNote, setMergeNote] = useState("");
 
   const toggleSegmentCollapse = useCallback((id: DealerBaseSegmentId) => {
     setSegmentCollapse((prev) => {
@@ -1463,6 +1544,12 @@ export default function DealerBase() {
     const h = () => setCharacteristicsBump((n) => n + 1);
     window.addEventListener(DEALER_CHARACTERISTICS_EVENT, h);
     return () => window.removeEventListener(DEALER_CHARACTERISTICS_EVENT, h);
+  }, []);
+
+  useEffect(() => {
+    const h = () => setClientGroupsBump((n) => n + 1);
+    window.addEventListener(DEALER_CLIENT_GROUPS_EVENT, h);
+    return () => window.removeEventListener(DEALER_CLIENT_GROUPS_EVENT, h);
   }, []);
 
   const workPlanState = useMemo(() => loadDealerWorkPlanState(), [workPlanBump]);
@@ -1519,6 +1606,11 @@ export default function DealerBase() {
     return rowsAfterPrograms.filter((r) => dealerRowMatchesStockFilter(r, stockListFilter));
   }, [rowsAfterPrograms, stockListFilter]);
 
+  const rowsForDisplay = useMemo(
+    () => collapseRowsByClientGroups(rowsFinalForList, profile.personaUserId, DEALER_BASE_ROW_MAP),
+    [rowsFinalForList, profile.personaUserId, clientGroupsBump],
+  );
+
   const stockFilterSummary = useMemo(() => {
     let main = 0;
     let hw = 0;
@@ -1531,7 +1623,7 @@ export default function DealerBase() {
   }, [rowsAfterShipmentDay]);
 
   useEffect(() => {
-    const allowed = new Set(rowsFinalForList.map((r) => r.id));
+    const allowed = new Set(rowsForDisplay.map((r) => r.id));
     setSelectedWpIds((prev) => {
       let changed = false;
       const n = new Set<string>();
@@ -1542,11 +1634,11 @@ export default function DealerBase() {
       if (!changed && n.size === prev.size) return prev;
       return n;
     });
-  }, [rowsFinalForList]);
+  }, [rowsForDisplay]);
 
   const selectedWpRows = useMemo(
-    () => rowsFinalForList.filter((r) => selectedWpIds.has(r.id)),
-    [rowsFinalForList, selectedWpIds],
+    () => rowsForDisplay.filter((r) => selectedWpIds.has(r.id)),
+    [rowsForDisplay, selectedWpIds],
   );
 
   const shipmentDayCounts = useMemo((): ShipmentDayCounts => {
@@ -1583,19 +1675,17 @@ export default function DealerBase() {
     return out;
   }, [profile.personaUserId, routePlanState]);
 
-  const dealerById = useMemo(() => new Map(DEALER_BASE_ROWS.map((r) => [r.id, r])), []);
-
   const routeRowsBySlot = useMemo((): Record<ShipmentRouteSlotId, DealerRow[]> => {
     if (!activeShipmentDayId) return { slot1: [], slot2: [] };
     const uid = profile.personaUserId;
     const s1 = getRouteDealerIds(uid, activeShipmentDayId, "slot1", routePlanState)
-      .map((id) => dealerById.get(id))
+      .map((id) => DEALER_BASE_ROW_MAP.get(id))
       .filter((r): r is DealerRow => Boolean(r));
     const s2 = getRouteDealerIds(uid, activeShipmentDayId, "slot2", routePlanState)
-      .map((id) => dealerById.get(id))
+      .map((id) => DEALER_BASE_ROW_MAP.get(id))
       .filter((r): r is DealerRow => Boolean(r));
     return { slot1: s1, slot2: s2 };
-  }, [activeShipmentDayId, profile.personaUserId, routePlanState, dealerById]);
+  }, [activeShipmentDayId, profile.personaUserId, routePlanState]);
 
   const settlementRowsBySlot = useMemo((): Record<ShipmentRouteSlotId, DealerRow[]> => {
     if (!activeShipmentDayId) return { slot1: [], slot2: [] };
@@ -1618,7 +1708,7 @@ export default function DealerBase() {
 
   const shipmentDaySummary = useMemo(() => {
     if (!activeShipmentDayId) return null;
-    const n = rowsFinalForList.length;
+    const n = rowsForDisplay.length;
     const label = DEALER_SHIPMENT_DAY_LABELS[activeShipmentDayId];
     let line = `День отгрузки: ${label} · ${ruClientsCountLabel(n)}`;
     const defs = listRouteDefinitions(profile.personaUserId, activeShipmentDayId, routePlanState);
@@ -1632,7 +1722,7 @@ export default function DealerBase() {
       line += ` · ${defs[0].name}: ${c0} · ${defs[1].name}: ${c1}`;
     }
     return line;
-  }, [activeShipmentDayId, rowsFinalForList.length, profile.personaUserId, routePlanState, rowsAfterSegmentFilter]);
+  }, [activeShipmentDayId, rowsForDisplay.length, profile.personaUserId, routePlanState, rowsAfterSegmentFilter]);
 
   const shipmentRouteFilterBanner = useMemo(() => {
     if (!shipmentRouteCityFilter) return null;
@@ -1717,6 +1807,64 @@ export default function DealerBase() {
       return n;
     });
   }, []);
+
+  const openMergeClientGroupDialog = useCallback(() => {
+    const ordered = rowsForDisplay.filter((r) => selectedWpIds.has(r.id));
+    if (ordered.length < 2) return;
+    const scope = new Set(scopedRows.map((r) => r.id));
+    for (const r of ordered) {
+      if (!scope.has(r.id)) {
+        toast({
+          title: "Недоступные клиенты",
+          description: "Можно объединять только клиентов в вашей области видимости.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+    for (const r of ordered) {
+      if (findDealerClientGroupByDealerId(profile.personaUserId, r.id)) {
+        toast({
+          title: "Уже в объединении",
+          description: "Отредактируйте существующую группу в карточке клиента или разъедините её.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+    const first = ordered[0];
+    if (!first) return;
+    setMergeMemberIds(ordered.map((r) => r.id));
+    setMergeName(suggestDealerClientGroupName(first));
+    setMergePrimaryId(first.id);
+    setMergeNote("");
+    setMergeDialogOpen(true);
+  }, [profile.personaUserId, rowsForDisplay, scopedRows, selectedWpIds]);
+
+  const saveMergeClientGroup = useCallback(() => {
+    if (mergeMemberIds.length < 2) return;
+    const name = mergeName.trim();
+    if (!name) {
+      toast({ title: "Укажите название объединённого клиента", variant: "destructive" });
+      return;
+    }
+    const primary = mergePrimaryId.trim();
+    if (!primary || !mergeMemberIds.includes(primary)) {
+      toast({ title: "Основная карточка", description: "Выберите основную среди выбранных клиентов.", variant: "destructive" });
+      return;
+    }
+    createDealerClientGroup({
+      userId: profile.personaUserId,
+      userName: getSalesUserById(profile.personaUserId)?.name ?? "Пользователь",
+      name,
+      dealerIds: mergeMemberIds,
+      primaryDealerId: primary,
+      note: mergeNote.trim() || undefined,
+    });
+    setMergeDialogOpen(false);
+    setSelectedWpIds(new Set());
+    toast({ title: "Клиенты объединены", description: "Список обновлён: группа отображается одной строкой." });
+  }, [mergeMemberIds, mergeName, mergeNote, mergePrimaryId, profile.personaUserId]);
 
   const buildDealerAbsHref = useCallback((dealerId: string) => {
     const rel = buildBrowserHashAppHref(`/dealers/${dealerId}`);
@@ -2042,7 +2190,7 @@ export default function DealerBase() {
 
       {resultsCapTotal !== null && !hideResultsCap ? (
         <p className="text-sm text-muted-foreground" data-testid="text-dealer-base-display-cap">
-          Показано {rowsFinalForList.length} из {resultsCapTotal}
+          Показано {rowsForDisplay.length} из {resultsCapTotal}
           {workView === "today" ? ` (лимит режима «Сегодня» ${TODAY_LIMIT})` : ""}
           {workView !== "today" && resultsCapTotal > cap ? ` (лимит отображения ${cap})` : ""}.
           {resultsCapTotal > displayRows.length && workView !== "today"
@@ -2106,6 +2254,8 @@ export default function DealerBase() {
                 setSelectedWpIds(new Set());
               }}
               addToRouteDisabled={selectedWpIds.size === 0}
+              showMergeClientGroup={selectedWpIds.size >= 2}
+              onOpenMergeClientGroup={openMergeClientGroupDialog}
             />
           </div>
         ) : null}
@@ -2236,7 +2386,7 @@ export default function DealerBase() {
                       data-testid={`row-dealer-${row.id}`}
                     >
                       <span className="min-w-0 font-medium">{row.name}</span>
-                      <OpenDealerButton id={row.id} />
+                      <OpenDealerButton dealerId={row.id} />
                     </div>
                   ))}
                   {g.rows.length > 40 ? (
@@ -2289,7 +2439,7 @@ export default function DealerBase() {
           >
             {workView === "my_clients" ? (
               <DealerBaseSegmentGroups
-                rows={rowsFinalForList}
+                rows={rowsForDisplay}
                 compact
                 variant="cards"
                 segmentCollapse={segmentCollapse}
@@ -2301,7 +2451,7 @@ export default function DealerBase() {
               />
             ) : (
               <DealerBaseSegmentGroups
-                rows={rowsFinalForList}
+                rows={rowsForDisplay}
                 variant="cards"
                 segmentCollapse={segmentCollapse}
                 onToggleSegmentCollapse={toggleSegmentCollapse}
@@ -2316,13 +2466,13 @@ export default function DealerBase() {
 
         {workView === "table_all" ? (
           <div data-testid={viewSectionDataTestId("table_all")}>
-            {rowsFinalForList.length === 0 ? (
+            {rowsForDisplay.length === 0 ? (
               <Card className="rounded-2xl border border-dashed border-border bg-muted/30 p-8 text-center text-sm text-muted-foreground">
                 Ничего не найдено.
               </Card>
             ) : (
               <DealerBaseSegmentGroups
-                rows={rowsFinalForList}
+                rows={rowsForDisplay}
                 variant="table"
                 segmentCollapse={segmentCollapse}
                 onToggleSegmentCollapse={toggleSegmentCollapse}
@@ -2337,13 +2487,13 @@ export default function DealerBase() {
 
         {workView === "table_team" ? (
           <div data-testid={viewSectionDataTestId("table_team")}>
-            {rowsFinalForList.length === 0 ? (
+            {rowsForDisplay.length === 0 ? (
               <Card className="rounded-2xl border border-dashed border-border bg-muted/30 p-8 text-center text-sm text-muted-foreground">
                 Нет клиентов команды по фильтрам.
               </Card>
             ) : (
               <DealerBaseSegmentGroups
-                rows={rowsFinalForList}
+                rows={rowsForDisplay}
                 variant="table"
                 segmentCollapse={segmentCollapse}
                 onToggleSegmentCollapse={toggleSegmentCollapse}
@@ -2356,6 +2506,76 @@ export default function DealerBase() {
           </div>
         ) : null}
       </section>
+
+      <Dialog open={mergeDialogOpen} onOpenChange={setMergeDialogOpen}>
+        <DialogContent className="max-w-lg" data-testid="dialog-dealer-client-group-create">
+          <DialogHeader>
+            <DialogTitle>Объединить карточки клиента</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <div className="space-y-1.5">
+              <Label htmlFor="merge-dcg-name">Название объединённого клиента</Label>
+              <Input
+                id="merge-dcg-name"
+                value={mergeName}
+                onChange={(e) => setMergeName(e.target.value)}
+                data-testid="input-dealer-client-group-name"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Основная карточка</Label>
+              <Select value={mergePrimaryId} onValueChange={setMergePrimaryId}>
+                <SelectTrigger data-testid="select-dealer-client-group-primary">
+                  <SelectValue placeholder="Выберите" />
+                </SelectTrigger>
+                <SelectContent>
+                  {mergeMemberIds.map((id) => {
+                    const dr = DEALER_BASE_ROW_MAP.get(id);
+                    return (
+                      <SelectItem key={id} value={id}>
+                        {dr?.name ?? id} ({dr?.releaseCode ?? id})
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="merge-dcg-note">Комментарий</Label>
+              <Textarea
+                id="merge-dcg-note"
+                value={mergeNote}
+                onChange={(e) => setMergeNote(e.target.value)}
+                rows={3}
+                placeholder="Необязательно"
+                data-testid="textarea-dealer-client-group-note"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Выбранные карточки</Label>
+              <ul className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-border p-2 text-sm">
+                {mergeMemberIds.map((id) => {
+                  const dr = DEALER_BASE_ROW_MAP.get(id);
+                  return (
+                    <li key={id} data-testid={`row-dealer-client-group-member-${id}`}>
+                      <span className="font-medium">{dr?.name ?? id}</span>
+                      <span className="text-muted-foreground"> · {dr?.releaseCode ?? "—"}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={() => setMergeDialogOpen(false)}>
+              Отмена
+            </Button>
+            <Button type="button" data-testid="button-dealer-client-group-save" onClick={saveMergeClientGroup}>
+              Объединить
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
