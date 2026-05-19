@@ -9,12 +9,13 @@
 - **MVP «список из Bitrix24»:** по кнопке «Загрузить из Bitrix24» вызывается **`POST /api/bitrix24/tasks/list`** (метод Bitrix24 **`tasks.task.list`** по тому же webhook). Результат кэшируется в **`localStorage`** (`tandoor-bitrix24-imported-tasks-v1`). Это **ручной** импорт, без realtime и без сопоставления задач с дилером/ТТ по сложным правилам (автолинковка по описанию не делается).
 - **MVP «пользователи Bitrix24» (диагностика):** на странице **`#/bitrix24`** блок **«Пользователи Bitrix24»** вызывает **`POST /api/bitrix24/users/list`** (метод **`user.get`**). Нужен только для **сопоставления** `userId` Тандор ↔ `bitrixUserId` в Bitrix24; не хранит маппинг на сервере и не подменяет авторизацию.
 - **MVP «диагностика чатов» (im.*):** на **`#/bitrix24`** блок **«Диагностика чатов Bitrix24»** вызывает **`POST /api/bitrix24/chat/diagnostics`**. Это **не** встроенный чат ЛК, а набор безопасных проб REST (**`im.recent.get`**, при наличии `dialogId` — **`im.dialog.messages.get`**, при `dialogId`+`message` — **`im.message.add`**, при `testNotify: true` — **`im.notify.personal.add`**) для проверки прав webhook. Ошибки по отдельным методам не роняют ответ: в JSON приходит массив **`diagnostics`** с результатом по каждому вызову.
+- **MVP «раздел Коммуникации»:** в основном меню ЛК пункт **«Коммуникации»** (`#/communications`) — список последних чатов, чтение и отправка сообщений **только через Bitrix24** (отдельная система чатов в ЛК не создаётся). Боевые API: **`POST /api/bitrix24/chat/recent`** (`im.recent.get`), **`POST /api/bitrix24/chat/messages`** (`im.dialog.messages.get`), **`POST /api/bitrix24/chat/send`** (`im.message.add`). Диагностический **`/api/bitrix24/chat/diagnostics`** для UI не используется.
 
 ## Переменные окружения (только сервер)
 
 | Переменная | Обязательность | Назначение |
 |------------|----------------|------------|
-| `BITRIX24_WEBHOOK_URL` | **Обязательна** для серверных операций с задачами, списком пользователей и **диагностикой чатов** Bitrix24 (POC и MVP) | Полный базовый URL входящего webhook (как в Bitrix24, сегмент **`/rest/<userId>/<token>/`**). Из **`userId`** в URL автоматически выставляются **ответственный** и **постановщик** задачи (`RESPONSIBLE_ID` / `CREATED_BY`), если не задан override ниже. Для **`tasks.task.list`** фильтр **RESPONSIBLE_ID** берётся из того же правила (override или userId из URL). Для **`user.get`** webhook должен иметь **право на пользователей**. Для **`im.*`** и уведомлений — отдельные права чата/мессенджера в настройках webhook (см. раздел «Диагностика чатов»). |
+| `BITRIX24_WEBHOOK_URL` | **Обязательна** для серверных операций с задачами, списком пользователей, **разделом «Коммуникации»** и **диагностикой чатов** Bitrix24 (POC и MVP) | Полный базовый URL входящего webhook (как в Bitrix24, сегмент **`/rest/<userId>/<token>/`**). Из **`userId`** в URL автоматически выставляются **ответственный** и **постановщик** задачи (`RESPONSIBLE_ID` / `CREATED_BY`), если не задан override ниже. Для **`tasks.task.list`** фильтр **RESPONSIBLE_ID** берётся из того же правила (override или userId из URL). Для **`user.get`** webhook должен иметь **право на пользователей**. Для **`im.*`** и уведомлений — отдельные права чата/мессенджера в настройках webhook (см. разделы «Диагностика чатов» и «Раздел Коммуникации»). |
 | `BITRIX24_TASK_RESPONSIBLE_ID` | **Опционально** (override) | Числовой ID пользователя Bitrix24 — если задан и это положительное целое число, используется **вместо** userId из webhook для `RESPONSIBLE_ID` и `CREATED_BY`. |
 
 **Важно:** webhook URL, токен и секрет **нельзя** класть в клиентский бандл или в git. На Vercel задайте значения в **Environment Variables** для production / preview. Сервер **не** возвращает и **не** логирует полный webhook URL.
@@ -65,7 +66,7 @@ https://<ваш-хост-платформы>/?embedded=bitrix24#/bitrix24
 - **Успех (200):** `{ "success": true, "taskId": "<строка>", "message": "Задача создана в Bitrix24" }`.
 - **Ошибки:** **503** `BITRIX24_NOT_CONFIGURED`; **400** `BITRIX24_WEBHOOK_URL_INVALID` или `BITRIX24_CREATE_VALIDATION_ERROR`; **502** `BITRIX24_API_ERROR` (+ `bitrixCode`), `BITRIX24_BAD_RESPONSE`, `BITRIX24_NETWORK`, `BITRIX24_UNEXPECTED_RESULT`; **500** `INTERNAL_ERROR`.
 
-Каждая Vercel-функция (`api/bitrix24/tasks/test.ts`, `api/bitrix24/tasks/create.ts`, `api/bitrix24/tasks/list.ts`, `api/bitrix24/users/list.ts`, `api/bitrix24/chat/diagnostics.ts`) **самодостаточна**: вся логика валидации и вызова Bitrix24 продублирована внутри файла. В директории `api/` намеренно нет ни одного не-handler .ts-файла — на этом проекте любые межфайловые импорты внутри `api/` (включая `api/_lib/*` с префиксом подчёркивания) приводили к `FUNCTION_INVOCATION_FAILED` в Vercel runtime. Express-маршруты в `server/bitrix24-*-execute.ts` тоже самодостаточны и не зависят от `api/`. Дублирование намеренное — это цена надёжной работы serverless-функций в текущей конфигурации Vercel.
+Каждая Vercel-функция (`api/bitrix24/tasks/test.ts`, `api/bitrix24/tasks/create.ts`, `api/bitrix24/tasks/list.ts`, `api/bitrix24/users/list.ts`, `api/bitrix24/chat/diagnostics.ts`, `api/bitrix24/chat/recent.ts`, `api/bitrix24/chat/messages.ts`, `api/bitrix24/chat/send.ts`) **самодостаточна**: вся логика валидации и вызова Bitrix24 продублирована внутри файла. В директории `api/` намеренно нет ни одного не-handler .ts-файла — на этом проекте любые межфайловые импорты внутри `api/` (включая `api/_lib/*` с префиксом подчёркивания) приводили к `FUNCTION_INVOCATION_FAILED` в Vercel runtime. Express-маршруты в `server/bitrix24-*-execute.ts` тоже самодостаточны и не зависят от `api/`. Дублирование намеренное — это цена надёжной работы serverless-функций в текущей конфигурации Vercel.
 
 ## Backend: список задач из Bitrix24 (MVP)
 
@@ -103,6 +104,42 @@ https://<ваш-хост-платформы>/?embedded=bitrix24#/bitrix24
 
 Клиентский вызов: **`runBitrix24ChatDiagnostics`** в `bitrix24-integration.ts`. UI: **`#/bitrix24`**, блок **«Диагностика чатов Bitrix24»**.
 
+## Раздел «Коммуникации» (MVP, im.*)
+
+**Назначение:** показать последние чаты Bitrix24, прочитать сообщения выбранного диалога и отправить сообщение **от имени пользователя, привязанного к входящему webhook** (как в POC: сообщения уходят от userId из сегмента `/rest/<userId>/` в URL). Отдельной базы сообщений в ЛК нет; обновление списка и переписки в MVP **только вручную** (кнопки «Обновить»), без polling.
+
+### Методы Bitrix24
+
+| Endpoint Тандор | Метод REST Bitrix24 | Назначение |
+|-----------------|---------------------|------------|
+| `POST /api/bitrix24/chat/recent` | **`im.recent.get`** | Последние чаты, нормализованный массив **`chats`** |
+| `POST /api/bitrix24/chat/messages` | **`im.dialog.messages.get`** | Сообщения диалога (`dialogId`, опционально `limit` 1–50, по умолчанию 30). Текст сообщений на сервере приводится к **plain text** (снятие BBCode) для безопасного отображения в UI без `dangerouslySetInnerHTML`. |
+| `POST /api/bitrix24/chat/send` | **`im.message.add`** | Отправка сообщения в диалог (`dialogId`, `message` после trim, 1–2000 символов). |
+
+### Права webhook (ориентир)
+
+В настройках входящего webhook Bitrix24 должны быть разрешены **мессенджер / чат** и методы **`im.recent.get`**, **`im.dialog.messages.get`**, **`im.message.add`**. Точный набор зависит от редакции портала. При ошибке с кодом вроде **`insufficient_scope`** в ЛК показывается понятное сообщение на русском (без `error_description` из Bitrix в ответе API для UI).
+
+### Ошибки (единый стиль с задачами)
+
+Для перечисленных endpoint’ов: **405** `METHOD_NOT_ALLOWED`; **503** `BITRIX24_NOT_CONFIGURED`; **400** `BITRIX24_WEBHOOK_URL_INVALID` или код валидации тела (`BITRIX24_CHAT_MESSAGES_VALIDATION`, `BITRIX24_CHAT_SEND_VALIDATION`); **502** `BITRIX24_API_ERROR` (опционально **`bitrixCode`**, без URL и без секрета в логах — в лог пишется только **`bitrixCode`**); **500** `INTERNAL_ERROR`. Webhook, токен и полный URL **не** возвращаются в JSON и **не** логируются.
+
+### Клиент
+
+Функции в `apps/platform/client/src/lib/bitrix24-integration.ts`: **`listBitrix24RecentChats`**, **`getBitrix24ChatMessages`**, **`sendBitrix24ChatMessage`** (экспортируемые типы **`Bitrix24RecentChatDto`**, **`Bitrix24ChatMessageDto`**). Страница: `apps/platform/client/src/pages/communications.tsx`, маршрут **`#/communications`**, пункт меню **«Коммуникации»** (все авторизованные роли демо-ЛК). В `localStorage` может храниться только **последний выбранный `dialogId`** для удобства (`tandoor-communications-last-dialog-v1`).
+
+### Как проверить
+
+1. Задайте на сервере **`BITRIX24_WEBHOOK_URL`** с правами на **`im.*`** (см. выше).
+2. Войдите в ЛК и откройте **`#/communications`**.
+3. Нажмите **«Обновить»** в блоке чатов — должен появиться список диалогов из Bitrix24.
+4. Выберите чат — загрузятся сообщения; при необходимости нажмите **«Обновить сообщения»**.
+5. Введите текст и нажмите **«Отправить»** — сообщение уходит в Bitrix24, поле ввода очищается, список сообщений обновляется, показывается уведомление «Сообщение отправлено».
+
+### Задел под задачи и клиентов
+
+Если в элементе списка чатов приходит **`entityType: "TASKS_TASK"`** и **`entityId`**, в UI показываются бейдж **«Задача»** и строка **«Задача Bitrix24: {entityId}»**. Полноценная привязка чата к карточке клиента в этом PR **не** делается.
+
 ## ЛК: где создавать задачу и где видна связь
 
 - **Карточка дилера** (`#/dealers/...`): блок «Задачи Bitrix24» после секции «Следующий шаг»; кнопки «Создать…» и «Загрузить из Bitrix24» (и чекбокс «Только открытые») — при **`canEditClientNextStep`**. Список импортированных задач виден всем, кто видит карточку, если в браузере уже есть данные импорта. Задачи с тем же `bitrixTaskId`, что в списке «Поставленные из ЛК», в блоке импорта не дублируются.
@@ -120,10 +157,10 @@ https://<ваш-хост-платформы>/?embedded=bitrix24#/bitrix24
 
 - **`buildCommand`:** `npm run build` — собираются и клиент (`vite`), и серверный бандл для Node.
 - **Rewrite на все пути удалён** — приложение на **hash-router** (`#/…`), для основного сценария отдельный SPA-fallback не нужен.
-- **`POST /api/bitrix24/tasks/test`**, **`POST /api/bitrix24/tasks/create`**, **`POST /api/bitrix24/tasks/list`**, **`POST /api/bitrix24/users/list`** и **`POST /api/bitrix24/chat/diagnostics`** обрабатываются **Serverless Functions** Vercel: `api/bitrix24/tasks/test.ts`, `create.ts`, `list.ts`, `api/bitrix24/users/list.ts`, `api/bitrix24/chat/diagnostics.ts`. Каждый файл **полностью самодостаточен** — вообще никаких импортов из `server/*`, `client/*`, `api/_lib/*` или path-алиасов `@/`. В `api/` нет ни одного вспомогательного модуля. Ответ всегда JSON и `Content-Type: application/json; charset=utf-8`. Так гарантировано не повторится `FUNCTION_INVOCATION_FAILED`, наблюдавшийся после PR #106 и PR #107, когда handler'ы импортировали соседние ts-файлы внутри `api/`.
+- **`POST /api/bitrix24/tasks/test`**, **`POST /api/bitrix24/tasks/create`**, **`POST /api/bitrix24/tasks/list`**, **`POST /api/bitrix24/users/list`**, **`POST /api/bitrix24/chat/diagnostics`**, **`POST /api/bitrix24/chat/recent`**, **`POST /api/bitrix24/chat/messages`**, **`POST /api/bitrix24/chat/send`** обрабатываются **Serverless Functions** Vercel: `api/bitrix24/tasks/test.ts`, `create.ts`, `list.ts`, `api/bitrix24/users/list.ts`, `api/bitrix24/chat/diagnostics.ts`, `api/bitrix24/chat/recent.ts`, `messages.ts`, `send.ts`. Каждый файл **полностью самодостаточен** — вообще никаких импортов из `server/*`, `client/*`, `api/_lib/*` или path-алиасов `@/`. В `api/` нет ни одного вспомогательного модуля. Ответ всегда JSON и `Content-Type: application/json; charset=utf-8`. Так гарантировано не повторится `FUNCTION_INVOCATION_FAILED`, наблюдавшийся после PR #106 и PR #107, когда handler'ы импортировали соседние ts-файлы внутри `api/`.
 - В **`package.json`** задано **`"engines": { "node": "20.x" }`**, чтобы на Vercel использовался **Node 20** вместо «плавающего» runtime по умолчанию.
 
-Локально по-прежнему работает Express: `server/bitrix24-routes.ts` регистрирует маршруты; логика в `server/bitrix24-tasks-test-execute.ts`, `server/bitrix24-tasks-create-execute.ts`, `server/bitrix24-tasks-list-execute.ts`, `server/bitrix24-users-list-execute.ts` и `server/bitrix24-chat-diagnostics-execute.ts` (самодостаточные модули, без импортов из `api/`).
+Локально по-прежнему работает Express: `server/bitrix24-routes.ts` регистрирует маршруты; логика в `server/bitrix24-tasks-test-execute.ts`, `server/bitrix24-tasks-create-execute.ts`, `server/bitrix24-tasks-list-execute.ts`, `server/bitrix24-users-list-execute.ts`, `server/bitrix24-chat-diagnostics-execute.ts`, `server/bitrix24-chat-recent-execute.ts`, `server/bitrix24-chat-messages-execute.ts` и `server/bitrix24-chat-send-execute.ts` (самодостаточные модули, без импортов из `api/`).
 
 Проверка с production (ожидается JSON, не HTML):
 
@@ -151,7 +188,7 @@ curl -i -X POST "https://tandoor-platform.vercel.app/api/bitrix24/tasks/test" \
 
 ## Права API на следующем шаге (ориентир)
 
-Сейчас используются **`tasks.task.add`**, **`tasks.task.list`**, диагностический **`user.get`**, а также диагностические **`im.recent.get`**, **`im.dialog.messages.get`**, **`im.message.add`**, **`im.notify.personal.add`** (только через **`POST /api/bitrix24/chat/diagnostics`**). Дальше по продукту могут понадобиться отдельные scope под CRM и т.д. — подключать по мере сценариев, не расширяя webhook «на всякий случай».
+Сейчас используются **`tasks.task.add`**, **`tasks.task.list`**, диагностический **`user.get`**, а также **`im.recent.get`**, **`im.dialog.messages.get`**, **`im.message.add`** через **раздел «Коммуникации»** и диагностический **`im.notify.personal.add`** (только через **`POST /api/bitrix24/chat/diagnostics`**). Дальше по продукту могут понадобиться отдельные scope под CRM и т.д. — подключать по мере сценариев, не расширяя webhook «на всякий случай».
 
 ## Рекомендации по безопасности после теста
 

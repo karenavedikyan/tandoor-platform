@@ -7,6 +7,7 @@ import {
   Home,
   LayoutGrid,
   ListTodo,
+  MessageCircle,
   LogOut,
   Map,
   MapPinned,
@@ -37,6 +38,7 @@ const SALES_CONTROL_HREF = "/sales-control";
 const ANALYTICS_WORKSPACE_HREF = "/analytics-workspace";
 const MARKETING_BRIEFS_HREF = "/marketing-briefs";
 const SALES_MANAGER_HREF = "/sales-manager";
+const COMMUNICATIONS_HREF = "/communications";
 
 const ICON_BY_TESTID: Partial<Record<string, LucideIcon>> = {
   "nav-main": Home,
@@ -45,6 +47,7 @@ const ICON_BY_TESTID: Partial<Record<string, LucideIcon>> = {
   "nav-dealer-base": Users,
   "nav-catalog": LayoutGrid,
   "nav-tasks": ListTodo,
+  "nav-communications": MessageCircle,
   "nav-training": BookOpen,
   "nav-sales-control": ClipboardList,
   "nav-analytics-workspace": PieChart,
@@ -81,6 +84,10 @@ function isTasksPath(path: string) {
   return path === TASKS_HREF || path.startsWith(`${TASKS_HREF}/`);
 }
 
+function isCommunicationsPath(path: string) {
+  return path === COMMUNICATIONS_HREF;
+}
+
 function isAnalyticsPath(path: string) {
   return path === ANALYTICS_HREF;
 }
@@ -111,6 +118,7 @@ function isNavItemActive(item: PilotNavItem, location: string, isActiveFromLink?
   if (item.testId === "nav-dealer-base") return isClientsSectionPath(location);
   if (item.testId === "nav-catalog") return isCatalogPath(location);
   if (item.testId === "nav-tasks") return isTasksPath(location);
+  if (item.testId === "nav-communications") return isCommunicationsPath(location);
   if (item.testId === "nav-territory-card") return isTerritoryCardPath(location);
   if (item.testId === "nav-analytics") return isAnalyticsPath(location);
   if (item.testId === "nav-training") return isTrainingPath(location);
@@ -143,6 +151,7 @@ function navLinkClass(item: PilotNavItem, location: string, variant: "sidebar" |
 function headerContextLabel(location: string) {
   const pathOnly = location.split("?")[0] ?? location;
   if (pathOnly === "/bitrix24" || pathOnly === "/embedded/bitrix24") return "Bitrix24";
+  if (isCommunicationsPath(pathOnly)) return "Коммуникации";
   if (isMainPath(location)) return "Главная";
   if (location.startsWith("/dealers/")) return "Карточка клиента";
   if (isDealerBasePath(location)) return "Клиенты";
