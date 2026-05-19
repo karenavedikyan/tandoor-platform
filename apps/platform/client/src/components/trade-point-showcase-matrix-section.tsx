@@ -12,6 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { getProductById, tradePointShowcaseStatusForProduct, type CatalogProduct } from "@/lib/catalog-data";
+import { MultiSelect } from "@/components/ui/multi-select";
 import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import {
@@ -46,6 +47,122 @@ import { ShowcaseModelPresentationDialog } from "@/components/showcase-model-pre
 export type ShowcaseMatrixViewMode = "large" | "compact" | "mini" | "list";
 
 type ShowcaseMatrixQuickFilterId = "needed" | "installed" | "postponed" | "not_relevant" | "all";
+
+type ShowcaseMatrixCategoryFilter = "all" | "entrance" | "interior";
+
+type MatrixCatalogFilterRow = {
+  key: string;
+  label: string;
+  options: { value: string; label: string }[];
+};
+
+function modelsMatchingCategory(
+  list: ShowcaseMatrixModelDefinition[],
+  categoryFilter: ShowcaseMatrixCategoryFilter,
+): ShowcaseMatrixModelDefinition[] {
+  if (categoryFilter === "all") return list;
+  if (categoryFilter === "entrance") return list.filter((m) => m.type === "entrance");
+  return list.filter((m) => m.type === "interior");
+}
+
+function collectMatrixCatalogFilterRows(scopeModels: ShowcaseMatrixModelDefinition[]): MatrixCatalogFilterRow[] {
+  const series = new Set<string>();
+  const coating = new Set<string>();
+  const openType = new Set<string>();
+  const colors = new Set<string>();
+  const sizes = new Set<string>();
+  const showcasePri = new Set<string>();
+  const matrixPri = new Set<ShowcaseMatrixModelDefinition["basePriority"]>();
+
+  for (const m of scopeModels) {
+    matrixPri.add(m.basePriority);
+    const p = getProductById(m.id);
+    if (!p) continue;
+    const s = p.series?.trim();
+    if (s) series.add(s);
+    const coat = p.coating?.trim();
+    if (coat) coating.add(coat);
+    const ot = p.openType?.trim();
+    if (ot && ot !== "—" && ot.toLowerCase() !== "см. карточку") openType.add(ot);
+    for (const c of p.colors ?? []) {
+      const t = c?.trim();
+      if (t) colors.add(t);
+    }
+    for (const z of p.sizes ?? []) {
+      const t = z?.trim();
+      if (t) sizes.add(t);
+    }
+    showcasePri.add(String(p.showcasePriority));
+  }
+
+  const rows: MatrixCatalogFilterRow[] = [];
+
+  const pushSimple = (key: string, label: string, vals: Set<string>) => {
+    const sorted = Array.from(vals).sort((a, b) => a.localeCompare(b, "ru"));
+    if (sorted.length >= 2) {
+      rows.push({
+        key,
+        label,
+        options: sorted.map((v) => ({ value: v, label: v })),
+      });
+    }
+  };
+
+  pushSimple("series", "Коллекция / серия", series);
+  pushSimple("coating", "Отделка / покрытие", coating);
+  pushSimple("openType", "Открывание", openType);
+  pushSimple("color", "Цвет", colors);
+  pushSimple("size", "Размер", sizes);
+  pushSimple("showcasePriority", "Приоритет витрины (каталог)", showcasePri);
+
+  if (matrixPri.size >= 2) {
+    const order: ShowcaseMatrixModelDefinition["basePriority"][] = ["high", "medium", "low"];
+    const opts = order.filter((k) => matrixPri.has(k)).map((k) => ({ value: k, label: priorityLabelRu(k) }));
+    if (opts.length >= 2) {
+      rows.push({ key: "matrixPriority", label: "Приоритет матрицы", options: opts });
+    }
+  }
+
+  const orderKeys = ["series", "coating", "openType", "matrixPriority", "showcasePriority", "color", "size"];
+  rows.sort((a, b) => orderKeys.indexOf(a.key) - orderKeys.indexOf(b.key) || a.label.localeCompare(b.label, "ru"));
+  return rows;
+}
+
+function modelPassesMatrixCatalogFilters(
+  m: ShowcaseMatrixModelDefinition,
+  filters: Record<string, string[]>,
+): boolean {
+  for (const [key, selected] of Object.entries(filters)) {
+    if (!selected?.length) continue;
+    if (key === "matrixPriority") {
+      if (!selected.includes(m.basePriority)) return false;
+      continue;
+    }
+    const p = getProductById(m.id);
+    if (!p) return false;
+    if (key === "series") {
+      const v = p.series?.trim() ?? "";
+      if (!selected.includes(v)) return false;
+    } else if (key === "coating") {
+      const v = p.coating?.trim() ?? "";
+      if (!selected.includes(v)) return false;
+    } else if (key === "openType") {
+      const v = p.openType?.trim() ?? "";
+      if (!selected.includes(v)) return false;
+    } else if (key === "showcasePriority") {
+      if (!selected.includes(String(p.showcasePriority))) return false;
+    } else if (key === "color") {
+      const want = new Set(selected);
+      const cols = (p.colors ?? []).map((c) => c.trim()).filter(Boolean);
+      if (!cols.some((c) => want.has(c))) return false;
+    } else if (key === "size") {
+      const want = new Set(selected);
+      const sz = (p.sizes ?? []).map((s) => s.trim()).filter(Boolean);
+      if (!sz.some((s) => want.has(s))) return false;
+    }
+  }
+  return true;
+}
 
 function readViewModeFromStorage(): ShowcaseMatrixViewMode {
   if (typeof window === "undefined") return "compact";
@@ -220,12 +337,61 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
   const autoQuickFilter: ShowcaseMatrixQuickFilterId = statusCounts.need_install > 0 ? "needed" : "all";
   const activeQuickFilter = userQuickFilter ?? autoQuickFilter;
 
-  const filteredModels = useMemo(() => {
+  const [categoryFilter, setCategoryFilter] = useState<ShowcaseMatrixCategoryFilter>("all");
+  const [catalogFilters, setCatalogFilters] = useState<Record<string, string[]>>({});
+  const [catalogFiltersPanelOpen, setCatalogFiltersPanelOpen] = useState(false);
+
+  const statusFilteredModels = useMemo(() => {
     return models.filter((m) => {
       const st = getEffectiveMatrixStatus(dealer.id, point.id, m.id, storage);
       return modelMatchesQuickFilter(st, activeQuickFilter);
     });
   }, [models, storage, dealer.id, point.id, activeQuickFilter]);
+
+  const modelsForCatalogOptionScope = useMemo(
+    () => modelsMatchingCategory(models, categoryFilter),
+    [models, categoryFilter],
+  );
+
+  const catalogFilterRows = useMemo(
+    () => collectMatrixCatalogFilterRows(modelsForCatalogOptionScope),
+    [modelsForCatalogOptionScope],
+  );
+
+  useEffect(() => {
+    setCatalogFilters({});
+  }, [categoryFilter]);
+
+  useEffect(() => {
+    const allowed = new Set(catalogFilterRows.map((r) => r.key));
+    setCatalogFilters((prev) => {
+      let changed = false;
+      const next: Record<string, string[]> = { ...prev };
+      for (const k of Object.keys(next)) {
+        if (!allowed.has(k)) {
+          delete next[k];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [catalogFilterRows]);
+
+  useEffect(() => {
+    if (catalogFilterRows.length === 0) setCatalogFiltersPanelOpen(false);
+  }, [catalogFilterRows.length]);
+
+  const filteredModels = useMemo(() => {
+    return statusFilteredModels.filter((m) => {
+      if (categoryFilter === "entrance" && m.type !== "entrance") return false;
+      if (categoryFilter === "interior" && m.type !== "interior") return false;
+      return modelPassesMatrixCatalogFilters(m, catalogFilters);
+    });
+  }, [statusFilteredModels, categoryFilter, catalogFilters]);
+
+  const setCatalogFilterKey = useCallback((key: string, next: string[]) => {
+    setCatalogFilters((prev) => ({ ...prev, [key]: next }));
+  }, []);
 
   const [viewMode, setViewMode] = useState<ShowcaseMatrixViewMode>("compact");
   const [viewHydrated, setViewHydrated] = useState(false);
@@ -251,7 +417,7 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
 
   useEffect(() => {
     setMatrixCardDetailsOpenById({});
-  }, [viewMode]);
+  }, [viewMode, categoryFilter]);
 
   const openPresentation = useCallback((m: ShowcaseMatrixModelDefinition) => {
     setPresentationModel(m);
@@ -481,6 +647,101 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
                 </Button>
               </div>
             </div>
+
+            <div className="space-y-2 rounded-lg border border-border/60 bg-muted/10 px-2 py-2 sm:px-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+                <div className="min-w-0 space-y-1.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Категория</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={categoryFilter === "all" ? "secondary" : "outline"}
+                      className="h-8 shrink-0 text-xs"
+                      data-testid="button-showcase-matrix-category-all"
+                      onClick={() => setCategoryFilter("all")}
+                    >
+                      Все
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={categoryFilter === "entrance" ? "default" : "outline"}
+                      className="h-8 shrink-0 text-xs"
+                      data-testid="button-showcase-matrix-category-entrance"
+                      onClick={() => setCategoryFilter("entrance")}
+                    >
+                      ВХ двери
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={categoryFilter === "interior" ? "default" : "outline"}
+                      className="h-8 shrink-0 text-xs"
+                      data-testid="button-showcase-matrix-category-interior"
+                      onClick={() => setCategoryFilter("interior")}
+                    >
+                      МК двери
+                    </Button>
+                  </div>
+                </div>
+                {catalogFilterRows.length > 0 ? (
+                  <Collapsible
+                    open={catalogFiltersPanelOpen}
+                    onOpenChange={setCatalogFiltersPanelOpen}
+                    className="min-w-0 w-full sm:w-auto sm:max-w-md"
+                  >
+                    <CollapsibleTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 w-full justify-between gap-2 text-xs sm:w-auto sm:min-w-[11rem]"
+                        data-testid="button-showcase-matrix-catalog-filters-toggle"
+                      >
+                        <span>Фильтры каталога</span>
+                        <ChevronDown
+                          className={cn("h-4 w-4 shrink-0 opacity-70 transition-transform", catalogFiltersPanelOpen && "rotate-180")}
+                          aria-hidden
+                        />
+                      </Button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <section
+                        data-testid="section-showcase-matrix-catalog-filters"
+                        className="mt-2 space-y-2 rounded-md border border-border/70 bg-background/90 p-2"
+                      >
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                          {catalogFilterRows.map((row) => (
+                            <div key={row.key} className="min-w-0 space-y-1">
+                              <Label className="text-[10px] leading-none text-muted-foreground">{row.label}</Label>
+                              <MultiSelect
+                                options={row.options}
+                                value={catalogFilters[row.key] ?? []}
+                                onChange={(next) => setCatalogFilterKey(row.key, next)}
+                                placeholder="Все"
+                                allLabel="Все"
+                                triggerClassName="min-h-9 py-1.5 text-xs"
+                                contentClassName="w-[var(--radix-popover-trigger-width)] max-w-[min(100vw-2rem,24rem)]"
+                                testId={`filter-showcase-matrix-catalog-${row.key}`}
+                                ariaLabel={row.label}
+                                showSearchThreshold={10}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    </CollapsibleContent>
+                  </Collapsible>
+                ) : null}
+              </div>
+              <p className="text-xs text-muted-foreground" data-testid="text-showcase-matrix-visible-count">
+                Показано:{" "}
+                <span className="font-semibold tabular-nums text-foreground">{filteredModels.length}</span>
+                {" из "}
+                <span className="font-semibold tabular-nums text-foreground">{statusFilteredModels.length}</span> моделей
+              </p>
+            </div>
           </div>
 
           <div data-testid="section-trade-point-showcase-recommended-tasks" className="space-y-2">
@@ -565,7 +826,17 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
         {filteredModels.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border/80 bg-muted/10 px-3 py-6 text-center text-sm text-muted-foreground">
             <p>Нет моделей в выбранном фильтре.</p>
-            <Button type="button" variant="secondary" size="sm" className="mt-3" onClick={() => setUserQuickFilter("all")}>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="mt-3"
+              onClick={() => {
+                setUserQuickFilter("all");
+                setCategoryFilter("all");
+                setCatalogFilters({});
+              }}
+            >
               Показать все
             </Button>
           </div>
