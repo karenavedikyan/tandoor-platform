@@ -98,22 +98,25 @@ function recPriorityBadgeClass(p: MatrixTaskRecommendation["priority"]) {
   return "border-border bg-muted text-muted-foreground";
 }
 
-/** Фото двери целиком: фиксированная рамка + object-contain + нейтральный фон. */
+/** Фото двери целиком: фиксированная рамка (frameClass задаёт размеры) + object-contain, без растягивания по высоте карточки. */
 function ModelDoorPhotoFrame({
   src,
   alt,
   frameClass,
   imgTestId,
+  imgPaddingClass = "p-2",
 }: {
   src: string;
   alt?: string;
   frameClass: string;
   imgTestId?: string;
+  /** Отступ картинки от рамки (например p-1 в плотных миниатюрах). */
+  imgPaddingClass?: string;
 }) {
   return (
     <div
       className={cn(
-        "flex shrink-0 items-center justify-center overflow-hidden rounded-md border border-border/70 bg-muted/50",
+        "relative shrink-0 overflow-hidden rounded-md border border-border/70 bg-neutral-50",
         frameClass,
       )}
     >
@@ -122,11 +125,14 @@ function ModelDoorPhotoFrame({
           src={src}
           alt={alt ?? ""}
           data-testid={imgTestId}
-          className="max-h-full max-w-full object-contain object-center p-1"
+          className={cn(
+            "absolute inset-0 box-border h-full w-full object-contain object-center",
+            imgPaddingClass,
+          )}
           loading="lazy"
         />
       ) : (
-        <span className="text-[9px] text-muted-foreground">Нет фото</span>
+        <span className="absolute inset-0 flex items-center justify-center text-[9px] text-muted-foreground">Нет фото</span>
       )}
     </div>
   );
@@ -271,11 +277,11 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
 
   const gridClass =
     viewMode === "large"
-      ? "grid grid-cols-1 gap-3 sm:grid-cols-2"
+      ? "grid grid-cols-1 items-stretch gap-3 lg:grid-cols-2"
       : viewMode === "compact"
-        ? "grid grid-cols-1 gap-2 min-[360px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
+        ? "grid grid-cols-1 items-stretch gap-2 min-[360px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
         : viewMode === "mini"
-          ? "grid grid-cols-1 gap-1.5 min-[360px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
+          ? "grid grid-cols-1 items-stretch gap-1 min-[360px]:grid-cols-2 min-[420px]:grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8"
           : "flex flex-col gap-0 overflow-hidden rounded-xl border border-border/80 bg-card";
 
   return (
@@ -576,7 +582,7 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
                     key={m.id}
                     data-testid={`row-trade-point-showcase-model-${m.id}`}
                     className={cn(
-                      "flex min-w-0 flex-col gap-2 px-2 py-2 sm:flex-row sm:items-center sm:gap-3 sm:px-3",
+                      "flex min-w-0 flex-col gap-1.5 px-2 py-1.5 sm:flex-row sm:items-center sm:gap-3 sm:px-2.5",
                       matrixCardShellClass(st),
                       st === "not_relevant" && "opacity-80",
                     )}
@@ -585,7 +591,8 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
                       <ModelDoorPhotoFrame
                         src={m.imageUrl}
                         alt=""
-                        frameClass="h-12 w-10 sm:h-11 sm:w-9"
+                        frameClass="h-[52px] w-[44px]"
+                        imgPaddingClass="p-1"
                         imgTestId={`image-trade-point-showcase-model-${m.id}`}
                       />
                     </button>
@@ -711,15 +718,18 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
               const detailsOpen = !!matrixCardDetailsOpenById[m.id];
 
               if (isCompact || isMini) {
-                const densityPhotoClass = isMini
-                  ? "min-h-[6.25rem] w-full bg-neutral-50 sm:min-h-[6.75rem]"
-                  : "min-h-[10.5rem] w-full bg-neutral-50 sm:min-h-[11.5rem]";
-                const densityPad = isMini ? "p-1.5" : "p-2.5";
-                const densityRounded = isMini ? "rounded-xl" : "rounded-2xl";
+                /** Фиксированная высота зоны фото внутри режима (не min-h, чтобы сетка была ровной). */
+                const compactPhotoSlot =
+                  "h-[11.25rem] w-full shrink-0 sm:h-[13.75rem] md:h-[14.5rem] lg:h-[15rem]";
+                const miniPhotoSlot =
+                  "h-[7rem] w-full shrink-0 min-[380px]:h-[7.5rem] md:h-[8.25rem] lg:h-[8.75rem] xl:h-[9.375rem]";
+                const densityPhotoClass = isMini ? miniPhotoSlot : compactPhotoSlot;
+                const densityPad = isMini ? "p-1" : "p-2.5";
+                const densityRounded = isMini ? "rounded-lg" : "rounded-2xl";
                 const detailsTriggerLabel = isMini ? "Ещё" : "Подробнее";
                 const titleClass = cn(
                   "min-w-0 max-w-full break-words font-semibold leading-snug text-foreground line-clamp-2",
-                  isMini ? "text-[11px]" : "text-sm",
+                  isMini ? "text-[10px]" : "text-sm",
                 );
 
                 return (
@@ -727,22 +737,23 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
                     key={m.id}
                     data-testid={`row-trade-point-showcase-model-${m.id}`}
                     className={cn(
-                      "min-w-0 overflow-hidden shadow-md",
+                      "flex min-h-0 min-w-0 h-full flex-col overflow-hidden shadow-md",
                       densityRounded,
                       matrixCardShellClass(st),
                       st === "not_relevant" && "opacity-[0.88]",
                     )}
                   >
-                    <div className="flex w-full min-w-0 flex-col">
+                    <div className="flex min-h-0 min-w-0 h-full w-full flex-col">
                       <button type="button" className="relative w-full shrink-0 text-left" onClick={() => openPresentation(m)}>
                         <ModelDoorPhotoFrame
                           src={m.imageUrl}
                           alt=""
                           frameClass={densityPhotoClass}
+                          imgPaddingClass={isMini ? "p-1" : "p-2"}
                           imgTestId={`image-trade-point-showcase-model-${m.id}`}
                         />
                       </button>
-                      <CardContent className={cn("flex min-w-0 flex-col gap-2", densityPad)}>
+                      <CardContent className={cn("flex min-h-0 min-w-0 flex-1 flex-col gap-1.5", densityPad)}>
                         <div className="min-w-0 space-y-1.5">
                           <p className={titleClass} data-testid={`text-trade-point-showcase-model-title-${m.id}`}>
                             {m.name}
@@ -793,7 +804,8 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
                             variant={st === "need_install" ? "default" : "secondary"}
                             size="sm"
                             className={cn(
-                              "h-9 w-full text-xs",
+                              "w-full text-xs",
+                              isMini ? "h-7 text-[10px]" : "h-9",
                               st === "need_install" && "font-semibold shadow-sm ring-1 ring-amber-400/55",
                               st === "installed" && "border border-emerald-200/90 bg-emerald-50/80 font-medium text-emerald-950 hover:bg-emerald-50",
                             )}
@@ -818,7 +830,7 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
                               type="button"
                               variant="outline"
                               size="sm"
-                              className={cn("h-8 w-full gap-1 text-xs", isMini && "h-7 text-[11px]")}
+                              className={cn("w-full gap-1 text-xs", isMini ? "h-7 text-[10px]" : "h-8")}
                               data-testid={`button-showcase-matrix-card-details-${m.id}`}
                             >
                               {isMini ? <MoreHorizontal className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden /> : null}
@@ -844,7 +856,14 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
                                   </Badge>
                                 </div>
                               ) : null}
-                              <p className="text-xs leading-relaxed text-muted-foreground break-words">{m.importanceReason}</p>
+                              <p
+                                className={cn(
+                                  "text-xs leading-relaxed text-muted-foreground break-words",
+                                  isMini && "line-clamp-4 text-[11px] leading-snug",
+                                )}
+                              >
+                                {m.importanceReason}
+                              </p>
                               <Button
                                 type="button"
                                 variant="outline"
@@ -922,7 +941,7 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
                 );
               }
 
-              const photoFrameClass = "min-h-[168px] w-full sm:min-h-[180px] sm:w-[172px]";
+              const photoFrameClass = "h-[15rem] w-full shrink-0 sm:h-[16rem] sm:w-[200px]";
               const cardPad = "p-3 sm:p-3.5";
               const rounded = "rounded-2xl";
 
@@ -930,14 +949,20 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
                 <Card
                   key={m.id}
                   data-testid={`row-trade-point-showcase-model-${m.id}`}
-                  className={cn("overflow-hidden shadow-md", rounded, matrixCardShellClass(st), st === "not_relevant" && "opacity-[0.88]")}
+                  className={cn(
+                    "h-full min-h-0 min-w-0 overflow-hidden shadow-md",
+                    rounded,
+                    matrixCardShellClass(st),
+                    st === "not_relevant" && "opacity-[0.88]",
+                  )}
                 >
-                  <div className="flex w-full min-w-0 flex-col sm:flex-row">
-                    <button type="button" className="relative w-full shrink-0 text-left sm:w-[172px]" onClick={() => openPresentation(m)}>
+                  <div className="flex h-full min-h-0 w-full min-w-0 flex-col sm:flex-row">
+                    <button type="button" className="relative w-full shrink-0 text-left sm:w-[200px]" onClick={() => openPresentation(m)}>
                       <ModelDoorPhotoFrame
                         src={m.imageUrl}
                         alt=""
                         frameClass={photoFrameClass}
+                        imgPaddingClass="p-2"
                         imgTestId={`image-trade-point-showcase-model-${m.id}`}
                       />
                     </button>
