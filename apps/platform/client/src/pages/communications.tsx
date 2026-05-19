@@ -43,6 +43,7 @@ export default function CommunicationsPage() {
   const [chats, setChats] = useState<Bitrix24RecentChatDto[]>([]);
   const [chatsLoading, setChatsLoading] = useState(false);
   const [chatsError, setChatsError] = useState<string | null>(null);
+  const [communicationsDisabled, setCommunicationsDisabled] = useState<string | null>(null);
 
   const [selectedDialogId, setSelectedDialogId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Bitrix24ChatMessageDto[]>([]);
@@ -69,8 +70,15 @@ export default function CommunicationsPage() {
     if (!res.ok) {
       setChats([]);
       setChatsError(res.message);
+      if (res.code === "BITRIX24_COMMUNICATIONS_DISABLED") {
+        setCommunicationsDisabled(res.message);
+        setMessages([]);
+        setMessagesError(null);
+        setSelectedDialogId(null);
+      }
       return;
     }
+    setCommunicationsDisabled(null);
     setChats(res.chats);
     const stored =
       typeof window !== "undefined" ? window.localStorage.getItem(LAST_DIALOG_STORAGE_KEY)?.trim() : "";
@@ -89,6 +97,9 @@ export default function CommunicationsPage() {
     if (!res.ok) {
       setMessages([]);
       setMessagesError(res.message);
+      if (res.code === "BITRIX24_COMMUNICATIONS_DISABLED") {
+        setCommunicationsDisabled(res.message);
+      }
       return;
     }
     setMessages(res.messages);
@@ -152,6 +163,9 @@ export default function CommunicationsPage() {
     setSendBusy(false);
     if (!res.ok) {
       toast({ title: res.message, variant: "destructive" });
+      if (res.code === "BITRIX24_COMMUNICATIONS_DISABLED") {
+        setCommunicationsDisabled(res.message);
+      }
       return;
     }
     setCompose("");
@@ -171,16 +185,26 @@ export default function CommunicationsPage() {
         <p className="mt-1 text-sm text-muted-foreground">Чаты и сообщения Bitrix24 внутри ЛК Тандор.</p>
       </div>
 
-      <Alert
-        className="border-amber-500/50 bg-amber-500/10 text-foreground [&>svg]:text-amber-700 dark:[&>svg]:text-amber-400"
-        data-testid="section-communications-access-warning"
-      >
-        <Info className="h-4 w-4" aria-hidden />
-        <AlertDescription>
-          Временный режим: чаты загружаются через общий webhook Bitrix24 и доступны только администратору. Для доступа
-          сотрудников нужен персональный вход Bitrix24 для каждого пользователя.
-        </AlertDescription>
-      </Alert>
+      {communicationsDisabled ? (
+        <Alert
+          variant="destructive"
+          data-testid="section-communications-disabled"
+        >
+          <Info className="h-4 w-4" aria-hidden />
+          <AlertDescription>{communicationsDisabled}</AlertDescription>
+        </Alert>
+      ) : (
+        <Alert
+          className="border-amber-500/50 bg-amber-500/10 text-foreground [&>svg]:text-amber-700 dark:[&>svg]:text-amber-400"
+          data-testid="section-communications-access-warning"
+        >
+          <Info className="h-4 w-4" aria-hidden />
+          <AlertDescription>
+            Временный режим: чаты загружаются через общий webhook Bitrix24 и доступны только администратору. Для доступа
+            сотрудников нужен персональный вход Bitrix24 для каждого пользователя.
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:items-start">
         <Card
