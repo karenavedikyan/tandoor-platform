@@ -57,18 +57,6 @@ function routeRowsForCopy(ordered: DealerRow[], settlementFallback: DealerRow[])
   return [...settlementFallback].sort((a, b) => a.name.localeCompare(b.name, "ru"));
 }
 
-function clientsOnRouteCardCount(
-  def: ShipmentRouteDefinition,
-  dayId: DealerShipmentDayId,
-  scopedRows: DealerRow[],
-  orderedLen: number,
-): number {
-  if (def.settlements.length > 0) {
-    return countDealersOnRouteSettlements(dayId, def, scopedRows);
-  }
-  return orderedLen;
-}
-
 export type PlannerProps = {
   userId: string;
   dayCounts: ShipmentDayCounts;
@@ -288,12 +276,6 @@ export function DealerShipmentDayPlanner({
               activeDayDefs.map((def) => {
                 const ordered = routeRowsBySlot[def.slotId] ?? [];
                 const settlementFallback = settlementRowsBySlot[def.slotId] ?? [];
-                const routeClientCount = clientsOnRouteCardCount(
-                  def,
-                  activeShipmentDayId,
-                  rowsForRouteSettlementCounts,
-                  ordered.length,
-                );
                 const expanded = expandedSlotId === def.slotId;
                 return (
                   <div
@@ -307,7 +289,6 @@ export function DealerShipmentDayPlanner({
                         <p className="text-xs text-muted-foreground">
                           {def.settlements.length > 0 ? def.settlements.join(", ") : "Населённые пункты не заданы"}
                         </p>
-                        <p className="text-xs font-medium text-foreground">Клиентов по маршруту: {routeClientCount}</p>
                       </div>
                       <div className="flex flex-wrap gap-1.5 sm:max-w-[14rem] sm:justify-end">
                         <Button
