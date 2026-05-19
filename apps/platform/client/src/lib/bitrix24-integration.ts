@@ -17,7 +17,21 @@ export type Bitrix24TaskDraftResult =
   | { ok: false; message: string };
 
 type CreateTestTaskApiOk = { success: true; taskId?: string | number; message?: string };
-type CreateTestTaskApiErr = { success: false; message?: string; code?: string };
+type CreateTestTaskApiErr = { success: false; message?: string; code?: string; bitrixCode?: string };
+
+export type Bitrix24LkCreateTaskPayload = {
+  title: string;
+  description: string;
+  dealerId: string;
+  dealerName: string;
+  tradePointId?: string;
+  tradePointName?: string;
+  returnUrl?: string;
+};
+
+export type Bitrix24LkCreateTaskResult =
+  | { ok: true; taskId: string; message: string }
+  | { ok: false; message: string; code?: string };
 
 export type Bitrix24UrlContext = {
   embedded: boolean;
@@ -112,4 +126,50 @@ export async function createBitrix24TaskDraft(payload: Bitrix24TaskDraftPayload)
       ? err.message
       : "Не удалось создать задачу в Bitrix24. Обратитесь к администратору.";
   return { ok: false, message };
+}
+
+/**
+ * Создание задачи из карточки дилера/ТТ: POST /api/bitrix24/tasks/create (сервер, без секретов в клиенте).
+ */
+export async function createBitrix24LkTask(payload: Bitrix24LkCreateTaskPayload): Promise<Bitrix24LkCreateTaskResult> {
+  let res: Response;
+  try {
+    res = await fetch("/api/bitrix24/tasks/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    return {
+      ok: false,
+      message: "Не удалось связаться с сервером. Проверьте подключение и попробуйте снова.",
+    };
+  }
+
+  let data: unknown;
+  try {
+    data = await res.json();
+  } catch {
+    return { ok: false, message: "Сервер вернул неожиданный ответ при создании задачи." };
+  }
+
+  const body = data as CreateTestTaskApiOk | CreateTestTaskApiErr | Record<string, unknown>;
+  if (typeof body === "object" && body && "success" in body && body.success === true) {
+    const ok = body as CreateTestTaskApiOk;
+    const tid = ok.taskId != null ? String(ok.taskId) : "";
+    if (!tid) {
+      return { ok: false, message: "Сервер не вернул идентификатор задачи Bitrix24." };
+    }
+    const message =
+      typeof ok.message === "string" && ok.message.trim() ? ok.message.trim() : "Задача создана в Bitrix24";
+    return { ok: true, taskId: tid, message };
+  }
+
+  const err = body as CreateTestTaskApiErr;
+  const message =
+    typeof err.message === "string" && err.message.trim()
+      ? err.message.trim()
+      : "Не удалось создать задачу в Bitrix24. Обратитесь к администратору.";
+  return { ok: false, message, code: typeof err.code === "string" ? err.code : undefined };
 }

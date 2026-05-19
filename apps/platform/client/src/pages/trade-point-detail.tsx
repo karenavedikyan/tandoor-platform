@@ -60,6 +60,7 @@ import {
   getTradePointComments,
   TRADE_POINT_COMMENTS_EVENT,
 } from "@/lib/trade-point-comments";
+import { canEditClientNextStep } from "@/lib/client-next-step-data";
 import {
   CLIENT_CONTACTS_EVENT,
   clientContactScopeKeyTradePoint,
@@ -83,6 +84,7 @@ import {
   SHOWCASE_STORAGE_EVENT,
   userLabelFromProfile,
 } from "@/lib/showcase-distribution-data";
+import { Bitrix24TasksPanel } from "@/components/bitrix24-tasks-panel";
 import { TradePointShowcaseMatrixSection } from "@/components/trade-point-showcase-matrix-section";
 import {
   getShowcaseMatrixTpHistoryEvents,
@@ -549,6 +551,7 @@ function TradePointDetailContent({
     [profile, dealerForRbac, isVirtualDefaultPoint],
   );
   const canEditTpComments = useMemo(() => canEditTradePointComments(profile, dealer), [profile, dealer]);
+  const canCreateBitrix24Task = useMemo(() => canEditClientNextStep(profile, dealer), [profile, dealer]);
   const tpComments = useMemo(() => getTradePointComments(dealer.id, point.id), [dealer.id, point.id, commentsBump]);
   const showcaseTasksOpen = useMemo(() => {
     const storage = loadShowcaseStorage();
@@ -1190,6 +1193,17 @@ function TradePointDetailContent({
                 </div>
               ),
             }}
+          />
+
+          <Bitrix24TasksPanel
+            scope="trade_point"
+            dealerId={dealer.id}
+            dealerName={dealer.name}
+            tradePointId={point.id}
+            tradePointName={point.name}
+            canCreate={canCreateBitrix24Task}
+            actorUserId={user?.id ?? profile.personaUserId}
+            actorLabel={user?.name ?? userLabelFromProfile(profile)}
           />
 
           <section id={SECTION_DOM_IDS.history} data-testid="section-trade-point-history" className="scroll-mt-28 space-y-4 sm:scroll-mt-32">
