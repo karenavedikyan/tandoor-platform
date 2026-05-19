@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "wouter";
-import { ChevronDown, Plus } from "lucide-react";
+import { ChevronDown, MoreHorizontal, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -29,9 +29,9 @@ const MATRIX_PRODUCT_FILTERS: { id: MatrixFilterId; label: string; testId: strin
 ];
 
 const PHOTO_LARGE = "h-[15rem] w-full shrink-0 sm:h-[16rem] sm:w-[200px]";
-const PHOTO_COMPACT = "h-[11.25rem] w-full shrink-0 sm:h-[13.75rem] md:h-[14.5rem] lg:h-[15rem]";
-const PHOTO_MINI = "h-[7rem] w-full shrink-0 min-[380px]:h-[7.5rem] md:h-[8.25rem] lg:h-[8.75rem] xl:h-[9.375rem]";
-const PHOTO_LIST = "h-[52px] w-[44px] shrink-0";
+const PHOTO_COMPACT = "h-[6.75rem] w-full shrink-0 sm:h-[11.25rem] md:h-[14.5rem] lg:h-[15rem]";
+const PHOTO_MINI = "h-[3.75rem] w-full shrink-0 max-[340px]:h-[3.25rem] sm:h-[7rem] md:h-[8.25rem] lg:h-[8.75rem] xl:h-[9.375rem]";
+const PHOTO_LIST = "h-10 w-9 shrink-0";
 
 function presenceBadgeClass(p: MatrixPresenceStatus) {
   if (p === "есть на витрине") return "border-emerald-200 bg-emerald-50 text-emerald-900";
@@ -72,15 +72,25 @@ function ModelDoorPhotoFrame({
   frameClass,
   imgTestId,
   imgPaddingClass = "p-2",
+  placeholderDensity = "comfortable",
 }: {
   src: string;
   alt?: string;
   frameClass: string;
   imgTestId?: string;
   imgPaddingClass?: string;
+  placeholderDensity?: "comfortable" | "compact" | "micro";
 }) {
+  const emptyClass =
+    placeholderDensity === "micro"
+      ? "text-[8px] font-medium text-muted-foreground/80"
+      : placeholderDensity === "compact"
+        ? "text-[8px] text-muted-foreground"
+        : "text-[9px] text-muted-foreground";
+  const emptyLabel = placeholderDensity === "micro" ? "—" : "Нет фото";
+
   return (
-    <div className={cn("relative shrink-0 overflow-hidden rounded-md border border-border/70 bg-neutral-50", frameClass)}>
+    <div className={cn("relative shrink-0 overflow-hidden rounded-md border border-border/60 bg-muted/40", frameClass)}>
       {src ? (
         <img
           src={src}
@@ -93,7 +103,14 @@ function ModelDoorPhotoFrame({
           loading="lazy"
         />
       ) : (
-        <span className="absolute inset-0 flex items-center justify-center text-[9px] text-muted-foreground">Нет фото</span>
+        <span
+          className={cn(
+            "absolute inset-0 flex items-center justify-center bg-muted/25 px-0.5 text-center leading-none",
+            emptyClass,
+          )}
+        >
+          {emptyLabel}
+        </span>
       )}
     </div>
   );
@@ -153,10 +170,10 @@ function ProductMatrixSummaryCard({ summary }: { summary: TradePointMatrixSummar
 function productMatrixGridClass(viewMode: ProductMatrixViewMode): string {
   if (viewMode === "large") return "grid grid-cols-1 items-stretch gap-3 lg:grid-cols-2";
   if (viewMode === "compact") {
-    return "grid grid-cols-1 items-stretch gap-2 min-[360px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5";
+    return "grid grid-cols-2 items-stretch gap-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5";
   }
   if (viewMode === "mini") {
-    return "grid grid-cols-1 items-stretch gap-1 min-[360px]:grid-cols-2 min-[420px]:grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8";
+    return "grid max-[340px]:grid-cols-2 grid-cols-3 items-stretch gap-1 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8";
   }
   return "flex flex-col gap-0 overflow-hidden rounded-xl border border-border/80 bg-card";
 }
@@ -241,7 +258,7 @@ export function TradePointProductMatrixVisual({
     </Button>
   );
 
-  const detailsLabel = isMini ? "Ещё" : "Подробнее";
+  const detailsLabel = isMini || isCompact ? "Ещё" : "Подробнее";
 
   const renderItem = (item: TradePointProductMatrixItem) => {
     const img = getProductById(item.productId)?.image ?? "";
@@ -255,48 +272,82 @@ export function TradePointProductMatrixVisual({
         <div
           key={item.productId}
           data-testid={`card-trade-point-product-matrix-${item.productId}`}
-          className={cn(
-            "flex min-w-0 flex-col gap-1.5 px-2 py-1.5 sm:flex-row sm:items-center sm:gap-3 sm:px-2.5",
-            productMatrixCardShellClass(item.presence),
-          )}
+          className={cn("flex min-w-0 flex-row items-center gap-2 px-2 py-1.5", productMatrixCardShellClass(item.presence))}
         >
-          <div className="shrink-0 self-start sm:self-center">
+          <div className="shrink-0">
             <ModelDoorPhotoFrame
               src={img}
               alt=""
               frameClass={PHOTO_LIST}
-              imgPaddingClass="p-1"
+              imgPaddingClass="p-0.5"
               imgTestId={`img-trade-point-product-matrix-${item.productId}`}
+              placeholderDensity="micro"
             />
           </div>
-          <div className="grid min-w-0 flex-1 grid-cols-1 items-center gap-1.5 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
-            <div className="min-w-0">
-              <p className="font-semibold leading-snug text-foreground">{item.productName}</p>
-              <p className="font-mono text-[10px] text-muted-foreground">{item.productArticle}</p>
-            </div>
-            <Badge variant="outline" className={cn("w-fit shrink-0 text-[10px] font-medium", presenceBadgeClass(item.presence))} data-testid={`badge-trade-point-product-matrix-status-${item.productId}`}>
-              {item.presence}
-            </Badge>
-            <div className="flex w-fit flex-wrap gap-1">
-              <Badge variant="outline" className="text-[10px] font-medium">
+          <div className="min-w-0 flex-1">
+            <p className="line-clamp-2 text-sm font-semibold leading-snug text-foreground">{item.productName}</p>
+            <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1">
+              <p className="font-mono text-[9px] text-muted-foreground">{item.productArticle}</p>
+              <Badge variant="outline" className="text-[9px] font-medium">
                 {item.doorCategory}
               </Badge>
-              <Badge variant="outline" className={cn("text-[10px] font-medium", zoneBadgeClass(item.zone))}>
+              <Badge variant="outline" className={cn("text-[9px] font-medium", zoneBadgeClass(item.zone))}>
                 Зона {item.zone}
+              </Badge>
+              <Badge
+                variant="outline"
+                className={cn("shrink-0 text-[9px] font-medium", presenceBadgeClass(item.presence))}
+                data-testid={`badge-trade-point-product-matrix-status-${item.productId}`}
+              >
+                {item.presence}
               </Badge>
             </div>
           </div>
-          <div className="flex flex-wrap gap-1 sm:ml-auto sm:shrink-0 sm:justify-end">
-            {rec ? (created ? (
-              <Button type="button" variant="secondary" size="sm" className="h-8 text-[11px]" data-testid={`button-trade-point-product-matrix-create-task-${item.productId}`} onClick={() => onScrollToMatrixTask(created.taskId)}>
-                {MATRIX_TASK_STATUS_LABEL[created.status]} · открыть
-              </Button>
-            ) : (
-              <Button type="button" variant="default" size="sm" className="h-8 text-[11px] font-semibold" data-testid={`button-trade-point-product-matrix-create-task-${item.productId}`} onClick={() => onCreateMatrixTask(rec)}>
-                Создать задачу
-              </Button>
-            )) : null}
-            {openCatalogButton(item, "h-8 shrink-0 text-[11px]")}
+          <div className="relative flex shrink-0 flex-col items-stretch gap-1">
+            {rec ? (
+              created ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="h-7 px-2 text-[10px]"
+                  data-testid={`button-trade-point-product-matrix-create-task-${item.productId}`}
+                  onClick={() => onScrollToMatrixTask(created.taskId)}
+                >
+                  Открыть
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  className="h-7 px-2 text-[10px] font-semibold"
+                  data-testid={`button-trade-point-product-matrix-create-task-${item.productId}`}
+                  onClick={() => onCreateMatrixTask(rec)}
+                >
+                  Задача
+                </Button>
+              )
+            ) : null}
+            <Collapsible>
+              <CollapsibleTrigger asChild>
+                <Button type="button" variant="outline" size="sm" className="h-7 gap-0.5 px-2 text-[10px] text-muted-foreground">
+                  <MoreHorizontal className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  Ещё
+                  <ChevronDown className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="absolute right-0 top-full z-20 mt-0.5 min-w-[12rem] max-w-[min(calc(100vw-2rem),18rem)] space-y-2 rounded-md border border-border/60 bg-popover p-2 shadow-lg">
+                {openCatalogButton(item, "h-8 w-full shrink-0 text-xs")}
+                <Badge variant="outline" className={cn("w-fit text-[10px] font-medium", matrixItemPriorityClass(item.priority))}>
+                  {item.priority}
+                </Badge>
+                <p className="text-[11px] text-muted-foreground">
+                  <span className="font-medium text-foreground">Портал: </span>
+                  {item.portal}
+                </p>
+              </CollapsibleContent>
+            </Collapsible>
           </div>
         </div>
       );
@@ -304,8 +355,9 @@ export function TradePointProductMatrixVisual({
 
     if (isCompact || isMini) {
       const photoClass = isMini ? PHOTO_MINI : PHOTO_COMPACT;
-      const pad = isMini ? "p-1" : "p-2.5";
+      const pad = isMini ? "p-1" : "p-2";
       const rounded = isMini ? "rounded-lg" : "rounded-2xl";
+      const phDensity = isMini ? "micro" : "compact";
       return (
         <Card
           key={item.productId}
@@ -318,34 +370,30 @@ export function TradePointProductMatrixVisual({
                 src={img}
                 alt=""
                 frameClass={photoClass}
-                imgPaddingClass={isMini ? "p-1" : "p-2"}
+                imgPaddingClass={isMini ? "p-0.5" : "p-1.5 sm:p-2"}
                 imgTestId={`img-trade-point-product-matrix-${item.productId}`}
+                placeholderDensity={phDensity}
               />
             </div>
             <CardContent className={cn("flex min-h-0 flex-1 flex-col gap-1.5", pad)}>
-              <p className={cn("line-clamp-2 min-w-0 max-w-full break-words font-semibold leading-snug text-foreground", isMini ? "text-[10px]" : "text-sm")}>
+              <p
+                className={cn(
+                  "line-clamp-2 min-w-0 max-w-full break-words font-semibold leading-snug text-foreground",
+                  isMini ? "text-[10px]" : "text-xs sm:text-sm",
+                )}
+              >
                 {item.productName}
               </p>
               <div className="flex flex-wrap gap-1">
-                <Badge variant="outline" className={cn("max-w-full text-[10px] font-semibold", presenceBadgeClass(item.presence))} data-testid={`badge-trade-point-product-matrix-status-${item.productId}`}>
+                <Badge
+                  variant="outline"
+                  className={cn("max-w-full text-[10px] font-semibold", presenceBadgeClass(item.presence))}
+                  data-testid={`badge-trade-point-product-matrix-status-${item.productId}`}
+                >
                   {item.presence}
                 </Badge>
-                {!isMini ? (
-                  <>
-                    <Badge variant="outline" className="text-[10px] font-medium">
-                      {item.doorCategory}
-                    </Badge>
-                    <Badge variant="outline" className={cn("text-[10px] font-medium", zoneBadgeClass(item.zone))}>
-                      Зона {item.zone}
-                    </Badge>
-                    <Badge variant="outline" className={cn("text-[10px] font-medium", matrixItemPriorityClass(item.priority))}>
-                      {item.priority}
-                    </Badge>
-                  </>
-                ) : null}
               </div>
               {!showPrimaryInFold && rec ? primaryActionFor(item, "dense") : null}
-              {openCatalogButton(item, cn("w-full", isMini ? "h-7 text-[10px]" : "h-8 text-xs"))}
               <Collapsible open={detailsOpen} onOpenChange={(o) => setDetails(item.productId, o)}>
                 <CollapsibleTrigger asChild>
                   <Button
@@ -355,6 +403,7 @@ export function TradePointProductMatrixVisual({
                     className={cn("w-full gap-1", isMini ? "h-7 text-[10px]" : "h-8 text-xs")}
                     data-testid={`button-trade-point-product-matrix-details-${item.productId}`}
                   >
+                    {(isMini || isCompact) ? <MoreHorizontal className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden /> : null}
                     {detailsLabel}
                     <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 opacity-70 transition-transform", detailsOpen && "rotate-180")} aria-hidden />
                   </Button>
@@ -364,19 +413,17 @@ export function TradePointProductMatrixVisual({
                     data-testid={`section-trade-point-product-matrix-details-${item.productId}`}
                     className="mt-2 space-y-2 rounded-md border border-border/70 bg-muted/20 p-2"
                   >
-                    {isMini ? (
-                      <div className="flex flex-wrap gap-1">
-                        <Badge variant="outline" className="text-[10px] font-medium">
-                          {item.doorCategory}
-                        </Badge>
-                        <Badge variant="outline" className={cn("text-[10px] font-medium", zoneBadgeClass(item.zone))}>
-                          Зона {item.zone}
-                        </Badge>
-                        <Badge variant="outline" className={cn("text-[10px] font-medium", matrixItemPriorityClass(item.priority))}>
-                          {item.priority}
-                        </Badge>
-                      </div>
-                    ) : null}
+                    <div className="flex flex-wrap gap-1">
+                      <Badge variant="outline" className="text-[10px] font-medium">
+                        {item.doorCategory}
+                      </Badge>
+                      <Badge variant="outline" className={cn("text-[10px] font-medium", zoneBadgeClass(item.zone))}>
+                        Зона {item.zone}
+                      </Badge>
+                      <Badge variant="outline" className={cn("text-[10px] font-medium", matrixItemPriorityClass(item.priority))}>
+                        {item.priority}
+                      </Badge>
+                    </div>
                     <p className="text-[11px] text-muted-foreground">
                       <span className="font-medium text-foreground">Портал: </span>
                       {item.portal}
@@ -396,6 +443,7 @@ export function TradePointProductMatrixVisual({
                       <span className="tabular-nums">{item.lastCheckedAt}</span>
                     </p>
                     {showPrimaryInFold && rec ? primaryActionFor(item, "dense") : null}
+                    {openCatalogButton(item, "h-8 w-full text-xs")}
                     {item.presence === "на проверке" ? (
                       <Button type="button" variant="secondary" size="sm" className="h-8 w-full text-xs">
                         Проверить

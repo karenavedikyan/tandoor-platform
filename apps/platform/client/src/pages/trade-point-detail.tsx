@@ -773,7 +773,10 @@ function TradePointDetailContent({
   const breadcrumbDealerLabel = dealer.name;
 
   return (
-    <div className="space-y-4 sm:space-y-6" data-testid="page-trade-point-detail">
+    <div
+      className="max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom))] space-y-4 sm:space-y-6"
+      data-testid="page-trade-point-detail"
+    >
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
         <Button asChild variant="outline" className="min-h-11 w-full border-border bg-card sm:w-auto">
           <Link href={`/dealers/${dealer.id}`} data-testid="link-trade-point-back-to-dealer">
