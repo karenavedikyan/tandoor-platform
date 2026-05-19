@@ -57,7 +57,10 @@ https://<ваш-хост-платформы>/?embedded=bitrix24#/bitrix24
 
 - **`buildCommand`:** `npm run build` — собираются и клиент (`vite`), и серверный бандл для Node.
 - **Rewrite на все пути удалён** — приложение на **hash-router** (`#/…`), для основного сценария отдельный SPA-fallback не нужен.
-- **`POST /api/bitrix24/tasks/test`** обрабатывается **Serverless Function** Vercel: файл `api/bitrix24/tasks/test.ts` (общая логика с Express в `server/bitrix24-tasks-test-execute.ts`).
+- **`POST /api/bitrix24/tasks/test`** обрабатывается **Serverless Function** Vercel: файл `api/bitrix24/tasks/test.ts` — **полностью автономный** (без импорта из `server/`), с перехватом ошибок и ответом **всегда** в JSON и заголовком `Content-Type: application/json`.
+- В **`package.json`** задано **`"engines": { "node": "20.x" }`**, чтобы на Vercel использовался **Node 20** вместо «плавающего» runtime по умолчанию.
+
+Локально по-прежнему работает Express и модуль `server/bitrix24-tasks-test-execute.ts` (та же бизнес-логика и проверка URL webhook).
 
 Проверка с production (ожидается JSON, не HTML):
 
@@ -67,7 +70,7 @@ curl -i -X POST "https://tandoor-platform.vercel.app/api/bitrix24/tasks/test" \
   --data "{}"
 ```
 
-При отсутствии `BITRIX24_WEBHOOK_URL` в env ответ должен быть **503** с телом вида `{"success":false,"code":"BITRIX24_NOT_CONFIGURED",...}`.
+При отсутствии `BITRIX24_WEBHOOK_URL` в env ответ должен быть **503** с телом вида `{"success":false,"code":"BITRIX24_NOT_CONFIGURED",...}`. Некорректный базовый URL (например, с `profile.json` или без `/rest/`) — **400** и код `BITRIX24_WEBHOOK_URL_INVALID`.
 
 ## Как проверить создание задачи
 

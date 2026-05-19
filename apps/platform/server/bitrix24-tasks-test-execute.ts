@@ -10,10 +10,33 @@ const TEST_TASK_DESCRIPTION =
 type BitrixSuccess = { result: unknown };
 type BitrixErrorBody = { error?: string; error_description?: string };
 
-function normalizeWebhookBase(raw: string): string {
-  const t = raw.trim();
-  if (!t) return "";
-  return t.replace(/\/+$/, "");
+/**
+ * Нормализация и проверка базового URL входящего webhook Bitrix24 (синхронно с api/bitrix24/tasks/test.ts).
+ */
+function parseWebhookBase(raw: string | undefined): { ok: true; base: string } | { ok: false; message: string } {
+  if (raw == null || !String(raw).trim()) {
+    return { ok: false, message: "Пустое значение BITRIX24_WEBHOOK_URL." };
+  }
+  let t = String(raw).trim();
+  if (/profile\.json/i.test(t)) {
+    return {
+      ok: false,
+      message:
+        "В BITRIX24_WEBHOOK_URL указан не базовый webhook (обнаружен profile.json). Укажите базовый URL вида https://<портал>/rest/<user>/<token>/ без имени метода.",
+    };
+  }
+  t = t.replace(/\/tasks\.task\.add\/?$/i, "");
+  t = t.replace(/\/+$/, "");
+  if (!/^https?:\/\//i.test(t)) {
+    return { ok: false, message: "BITRIX24_WEBHOOK_URL должен начинаться с http:// или https://." };
+  }
+  if (!/\/rest\//i.test(t)) {
+    return {
+      ok: false,
+      message: "BITRIX24_WEBHOOK_URL должен содержать сегмент /rest/ (базовый входящий webhook Bitrix24).",
+    };
+  }
+  return { ok: true, base: t };
 }
 
 function buildTasksTaskAddUrl(webhookBase: string): string {
@@ -56,8 +79,19 @@ export async function runBitrix24TasksTest(): Promise<Bitrix24TasksTestHttpResul
     };
   }
 
-  const webhookBase = normalizeWebhookBase(webhookRaw);
-  const url = buildTasksTaskAddUrl(webhookBase);
+  const parsed = parseWebhookBase(webhookRaw);
+  if (!parsed.ok) {
+    return {
+      status: 400,
+      body: {
+        success: false,
+        code: "BITRIX24_WEBHOOK_URL_INVALID",
+        message: parsed.message,
+      },
+    };
+  }
+
+  const url = buildTasksTaskAddUrl(parsed.base);
 
   const responsibleRaw = process.env.BITRIX24_TASK_RESPONSIBLE_ID?.trim();
   const responsibleId = responsibleRaw ? Number.parseInt(responsibleRaw, 10) : NaN;

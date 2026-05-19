@@ -1,6 +1,9 @@
 {
   "name": "tandoor-platform",
   "version": "1.0.0",
+  "engines": {
+    "node": "20.x"
+  },
   "license": "MIT",
   "type": "module",
   "scripts": {
