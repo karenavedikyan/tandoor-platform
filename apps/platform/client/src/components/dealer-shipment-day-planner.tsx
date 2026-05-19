@@ -3,6 +3,7 @@ import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import {
   DEALER_SHIPMENT_DAY_LABELS,
   DEALER_SHIPMENT_DAY_ORDER,
+  DEALER_SHIPMENT_DAY_SHORT_LABELS,
   type DealerShipmentDayId,
   type DealerShipmentStatusResult,
 } from "@/lib/dealer-shipment-days";
@@ -183,13 +184,14 @@ export function DealerShipmentDayPlanner({
                 variant={active ? "default" : "outline"}
                 size="sm"
                 className={cn(
-                  "h-auto min-h-10 min-w-0 flex-1 flex-col gap-0.5 px-2 py-1.5 text-left sm:flex-none sm:px-3",
+                  "h-auto min-h-10 min-w-0 flex-1 flex-col gap-0.5 px-2 py-1.5 text-left max-sm:gap-0 max-sm:px-1.5 max-sm:py-1 sm:flex-none sm:px-3",
                   !active && "border-border bg-card",
                 )}
                 data-testid={`button-dealer-shipment-day-${d}`}
                 onClick={() => onSelectDay(d)}
               >
-                <span className="text-xs font-semibold leading-tight">{DEALER_SHIPMENT_DAY_LABELS[d]}</span>
+                <span className="hidden text-xs font-semibold leading-tight sm:inline">{DEALER_SHIPMENT_DAY_LABELS[d]}</span>
+                <span className="text-xs font-semibold leading-none sm:hidden">{DEALER_SHIPMENT_DAY_SHORT_LABELS[d]}</span>
                 <span className="text-[10px] text-muted-foreground">Клиентов: {c.total}</span>
                 <span
                   className="line-clamp-2 w-full text-left text-[9px] leading-snug text-muted-foreground sm:text-[10px]"
