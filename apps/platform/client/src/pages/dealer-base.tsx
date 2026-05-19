@@ -120,6 +120,7 @@ import {
   getDealerProgramSignal,
   type DealerProgramFilterId,
 } from "@/lib/dealer-program-signals";
+import { DEALER_CHARACTERISTICS_EVENT } from "@/lib/dealer-characteristics";
 import { SHOWCASE_STORAGE_EVENT } from "@/lib/showcase-distribution-data";
 import { Checkbox } from "@/components/ui/checkbox";
 import { MultiSelect } from "@/components/ui/multi-select";
@@ -1391,6 +1392,7 @@ export default function DealerBase() {
   const [activeShipmentDayId, setActiveShipmentDayId] = useState<DealerShipmentDayId | null>(null);
   const [routeBump, setRouteBump] = useState(0);
   const [trafficBump, setTrafficBump] = useState(0);
+  const [characteristicsBump, setCharacteristicsBump] = useState(0);
   const [activeRouteSlotForBulk, setActiveRouteSlotForBulk] = useState<ShipmentRouteSlotId>("slot1");
   const [shipmentRouteCityFilter, setShipmentRouteCityFilter] = useState<null | {
     slotId: ShipmentRouteSlotId;
@@ -1429,6 +1431,12 @@ export default function DealerBase() {
     };
   }, []);
 
+  useEffect(() => {
+    const h = () => setCharacteristicsBump((n) => n + 1);
+    window.addEventListener(DEALER_CHARACTERISTICS_EVENT, h);
+    return () => window.removeEventListener(DEALER_CHARACTERISTICS_EVENT, h);
+  }, []);
+
   const workPlanState = useMemo(() => loadDealerWorkPlanState(), [workPlanBump]);
 
   const rowsForWorkPlan = useMemo(
@@ -1450,7 +1458,7 @@ export default function DealerBase() {
   const rowsAfterPrograms = useMemo(() => {
     if (programFilters.length === 0) return rowsAfterShipmentDay;
     return rowsAfterShipmentDay.filter((r) => dealerRowMatchesProgramFilters(r, programFilters));
-  }, [rowsAfterShipmentDay, programFilters]);
+  }, [rowsAfterShipmentDay, programFilters, characteristicsBump]);
 
   const programCounts = useMemo(() => {
     let special = 0;
@@ -1463,7 +1471,7 @@ export default function DealerBase() {
       if (s.hasCashbackAgent) cashback += 1;
     }
     return { special_conditions: special, tandoor_club: club, cashback_agent: cashback };
-  }, [rowsAfterShipmentDay]);
+  }, [rowsAfterShipmentDay, characteristicsBump]);
 
   const toggleProgramFilter = useCallback((id: DealerProgramFilterId) => {
     setProgramFilters((prev) =>

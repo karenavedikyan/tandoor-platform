@@ -22,6 +22,31 @@ import {
 
 type DraftMap = Record<DealerCharacteristicId, DealerCharacteristicEntry>;
 
+function isCashbackAgentCharacteristic(id: DealerCharacteristicId): boolean {
+  return id === "has_cashback_agent";
+}
+
+function characteristicRowTestId(id: DealerCharacteristicId): string {
+  return isCashbackAgentCharacteristic(id)
+    ? "row-dealer-characteristic-cashback-agent"
+    : `row-dealer-characteristic-${id}`;
+}
+
+function characteristicNoteTextareaTestId(id: DealerCharacteristicId): string {
+  return isCashbackAgentCharacteristic(id)
+    ? "textarea-dealer-characteristic-note-cashback-agent"
+    : `textarea-dealer-characteristic-note-${id}`;
+}
+
+function characteristicValueControlTestId(id: DealerCharacteristicId, v: DealerCharacteristicValue): string {
+  if (isCashbackAgentCharacteristic(id)) {
+    if (v === "yes") return "toggle-dealer-characteristic-cashback-agent-yes";
+    if (v === "no") return "toggle-dealer-characteristic-cashback-agent-no";
+    return "toggle-dealer-characteristic-cashback-agent-unset";
+  }
+  return `button-dealer-characteristic-${id}-${v}`;
+}
+
 function emptyDraft(): DraftMap {
   return {
     has_warehouse: { value: "unset", note: "" },
@@ -29,6 +54,7 @@ function emptyDraft(): DraftMap {
     is_franchise: { value: "unset", note: "" },
     has_special_conditions: { value: "unset", note: "" },
     has_tandoor_club: { value: "unset", note: "" },
+    has_cashback_agent: { value: "unset", note: "" },
   };
 }
 
@@ -177,7 +203,7 @@ export function DealerCharacteristicsSection({ row, profile }: Props) {
             return (
               <div
                 key={id}
-                data-testid={`row-dealer-characteristic-${id}`}
+                data-testid={characteristicRowTestId(id)}
                 className="flex flex-col gap-1.5 border-b border-border py-2 last:border-b-0 sm:flex-row sm:items-start sm:gap-3"
               >
                 <div className="min-w-0 flex-1 space-y-1">
@@ -211,7 +237,7 @@ export function DealerCharacteristicsSection({ row, profile }: Props) {
                               type="button"
                               role="radio"
                               aria-checked={active}
-                              data-testid={`button-dealer-characteristic-${id}-${v}`}
+                              data-testid={characteristicValueControlTestId(id, v)}
                               onClick={() => onValueChange(id, v)}
                               className={cn(
                                 "min-h-9 rounded-full border px-3 py-1 text-xs font-semibold transition-colors",
@@ -240,7 +266,7 @@ export function DealerCharacteristicsSection({ row, profile }: Props) {
                           placeholder="Короткий комментарий"
                           rows={2}
                           className="min-h-[44px] resize-y text-sm"
-                          data-testid={`textarea-dealer-characteristic-note-${id}`}
+                          data-testid={characteristicNoteTextareaTestId(id)}
                         />
                       </div>
                     </div>
