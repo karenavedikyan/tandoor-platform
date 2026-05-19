@@ -1,7 +1,7 @@
 /**
  * Редактируемые характеристики клиента (да / нет + примечание).
  * Хранится в localStorage, без backend. Подменяет рабочие признаки склада и
- * программ (спецусловия, Tandoor Club) на странице карточки и в дилерской базе.
+ * программ (спецусловия, Tandoor Club, кешбек агента) на странице карточки и в дилерской базе.
  */
 
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
@@ -17,7 +17,8 @@ export type DealerCharacteristicId =
   | "has_hardware_warehouse"
   | "is_franchise"
   | "has_special_conditions"
-  | "has_tandoor_club";
+  | "has_tandoor_club"
+  | "has_cashback_agent";
 
 export type DealerCharacteristicValue = "yes" | "no" | "unset";
 
@@ -27,6 +28,7 @@ export const DEALER_CHARACTERISTIC_IDS: DealerCharacteristicId[] = [
   "is_franchise",
   "has_special_conditions",
   "has_tandoor_club",
+  "has_cashback_agent",
 ];
 
 export const DEALER_CHARACTERISTIC_LABELS: Record<DealerCharacteristicId, string> = {
@@ -35,6 +37,7 @@ export const DEALER_CHARACTERISTIC_LABELS: Record<DealerCharacteristicId, string
   is_franchise: "Франшиза",
   has_special_conditions: "Спецусловия",
   has_tandoor_club: "Tandoor Club",
+  has_cashback_agent: "Кешбек агент",
 };
 
 export type DealerCharacteristicEntry = {

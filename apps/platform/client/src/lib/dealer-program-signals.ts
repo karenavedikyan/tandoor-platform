@@ -134,6 +134,7 @@ export function getDealerProgramSignal(row: DealerRow): DealerProgramSignal {
 
   const ovSpecial = getDealerCharacteristicValue(row.id, "has_special_conditions");
   const ovClub = getDealerCharacteristicValue(row.id, "has_tandoor_club");
+  const ovCashback = getDealerCharacteristicValue(row.id, "has_cashback_agent");
 
   const hasSpecial =
     ovSpecial === "yes"
@@ -147,11 +148,17 @@ export function getDealerProgramSignal(row: DealerRow): DealerProgramSignal {
       : ovClub === "no"
         ? false
         : explicitClub || fallbackTandoorClub(row);
+  const hasCashback =
+    ovCashback === "yes"
+      ? true
+      : ovCashback === "no"
+        ? false
+        : explicitCashback || fallbackCashbackAgent(row);
 
   return {
     hasSpecialConditions: hasSpecial,
     hasTandoorClub: hasClub,
-    hasCashbackAgent: explicitCashback || fallbackCashbackAgent(row),
+    hasCashbackAgent: hasCashback,
   };
 }
 
