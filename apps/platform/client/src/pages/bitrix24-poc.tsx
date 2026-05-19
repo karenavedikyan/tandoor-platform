@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { ExternalLink, ListChecks, Map, Target, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
 import { buildHashPath } from "@/lib/hash-route-utils";
@@ -10,6 +11,8 @@ import {
   buildBitrix24OpenTandoorUrl,
   createBitrix24TaskDraft,
   getBitrix24ContextFromUrl,
+  listBitrix24Users,
+  type Bitrix24ListedUserDto,
   useBitrix24EmbeddedFlag,
 } from "@/lib/bitrix24-integration";
 
@@ -22,6 +25,10 @@ export default function Bitrix24PocPage() {
   const ctx = getBitrix24ContextFromUrl();
   const [taskHint, setTaskHint] = useState<string | null>(null);
   const [taskBusy, setTaskBusy] = useState(false);
+  const [usersSearch, setUsersSearch] = useState("");
+  const [usersRows, setUsersRows] = useState<Bitrix24ListedUserDto[]>([]);
+  const [usersBusy, setUsersBusy] = useState(false);
+  const [usersHint, setUsersHint] = useState<string | null>(null);
 
   const sampleDealerId = DEALER_BASE_ROWS[0]?.id ?? "001";
 
@@ -46,6 +53,26 @@ export default function Bitrix24PocPage() {
       setTaskBusy(false);
     }
   }, []);
+
+  const onLoadBitrix24Users = useCallback(async () => {
+    setUsersBusy(true);
+    setUsersHint(null);
+    try {
+      const res = await listBitrix24Users({
+        search: usersSearch.trim() || undefined,
+        limit: 50,
+      });
+      if (res.ok) {
+        setUsersRows(res.users);
+        setUsersHint(res.users.length ? null : "Список пуст. Измените поиск или проверьте права user.get.");
+      } else {
+        setUsersRows([]);
+        setUsersHint(res.message);
+      }
+    } finally {
+      setUsersBusy(false);
+    }
+  }, [usersSearch]);
 
   const openFullAppUrl = useMemo(() => buildBitrix24OpenTandoorUrl("/dealer-base"), []);
 
@@ -148,6 +175,79 @@ export default function Bitrix24PocPage() {
               <ExternalLink className="inline h-3 w-3 shrink-0" aria-hidden />
             </a>
           </p>
+        </CardContent>
+      </Card>
+
+      <Card className="border-border/80 shadow-sm" data-testid="section-bitrix24-users">
+        <CardHeader className="space-y-1 pb-2">
+          <CardTitle className="text-base">Пользователи Bitrix24</CardTitle>
+          <CardDescription className="text-xs">
+            Диагностика: список userId сотрудников для сопоставления с пользователями Тандор. Запрос выполняется на сервере (webhook не показывается).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+            <div className="min-w-0 flex-1 space-y-1">
+              <label className="text-xs font-medium text-muted-foreground" htmlFor="bitrix24-users-search">
+                Поиск по имени, фамилии или email
+              </label>
+              <Input
+                id="bitrix24-users-search"
+                value={usersSearch}
+                onChange={(e) => setUsersSearch(e.target.value)}
+                placeholder="Например, Иван или @company.ru"
+                className="min-h-10"
+                data-testid="input-bitrix24-users-search"
+              />
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              className="min-h-10 w-full shrink-0 font-semibold sm:w-auto"
+              disabled={usersBusy}
+              data-testid="button-bitrix24-users-load"
+              onClick={() => void onLoadBitrix24Users()}
+            >
+              {usersBusy ? "Загрузка…" : "Загрузить пользователей"}
+            </Button>
+          </div>
+          {usersHint ? (
+            <p className="rounded-lg border border-border/70 bg-muted/40 px-3 py-2 text-sm text-foreground" role="status">
+              {usersHint}
+            </p>
+          ) : null}
+          {usersRows.length > 0 ? (
+            <div className="overflow-x-auto rounded-lg border border-border/70">
+              <table className="w-full min-w-[28rem] border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-border/80 bg-muted/30 text-xs uppercase tracking-wide text-muted-foreground">
+                    <th className="px-3 py-2 font-medium">ID</th>
+                    <th className="px-3 py-2 font-medium">Имя</th>
+                    <th className="px-3 py-2 font-medium">Email</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {usersRows.map((u) => (
+                    <tr
+                      key={u.bitrixUserId}
+                      className="border-b border-border/60 last:border-0"
+                      data-testid={`row-bitrix24-user-${u.bitrixUserId}`}
+                    >
+                      <td className="px-3 py-2 font-mono text-xs" data-testid={`text-bitrix24-user-id-${u.bitrixUserId}`}>
+                        {u.bitrixUserId}
+                      </td>
+                      <td className="px-3 py-2" data-testid={`text-bitrix24-user-name-${u.bitrixUserId}`}>
+                        {u.fullName || `${u.name} ${u.lastName}`.trim() || "—"}
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground" data-testid={`text-bitrix24-user-email-${u.bitrixUserId}`}>
+                        {u.email ?? "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
     </div>
