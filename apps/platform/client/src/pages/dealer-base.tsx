@@ -75,8 +75,6 @@ import {
 import {
   DEALER_WORK_PLAN_EVENT,
   filterDealersByWorkPlan,
-  formatWorkPlanDateRu,
-  getDealerScheduledDateForUser,
   hideDealersForUser,
   isDealerHiddenForUser,
   loadDealerWorkPlanState,
@@ -86,7 +84,7 @@ import {
   type WorkPlanListFilter,
   WORK_PLAN_FILTER_LABELS,
 } from "@/lib/dealer-work-plan";
-import { DealerShipmentDayPlanner, type ShipmentDayCounts } from "@/components/dealer-shipment-day-planner";
+import { DealerShipmentDayPlanner } from "@/components/dealer-shipment-day-planner";
 import { DealerWorkPlanBulkBar } from "@/components/dealer-work-plan-bulk-bar";
 import { CLIENT_NEXT_STEP_CHANGED_EVENT } from "@/lib/client-next-step-data";
 import {
@@ -347,7 +345,6 @@ function ClientListBlock({
     <div className={cn("space-y-3", compact && "space-y-2")}>
       {rows.map((row) => {
         const hidden = wp ? isDealerHiddenForUser(workPlanUserId, row.id, workPlanState) : false;
-        const sched = wp ? getDealerScheduledDateForUser(workPlanUserId, row.id, workPlanState) : null;
         const checked = Boolean(selectedIds?.has(row.id));
         const ship =
           shipmentActiveDayId && shipmentUserId
@@ -392,11 +389,6 @@ function ClientListBlock({
                   {row.hasProblem ? (
                     <Badge variant="outline" className="border-red-200 bg-red-50 text-xs text-red-800">
                       Есть вопрос
-                    </Badge>
-                  ) : null}
-                  {sched?.date ? (
-                    <Badge variant="outline" className="border-primary/40 bg-primary/10 text-xs font-medium" data-testid={`badge-dealer-scheduled-${row.id}`}>
-                      В работе: {formatWorkPlanDateRu(sched.date)}
                     </Badge>
                   ) : null}
                   {hidden ? (
@@ -528,7 +520,6 @@ function ClientTableBlock({
       <div className="space-y-3 sm:hidden">
         {rows.map((row) => {
           const hidden = wp ? isDealerHiddenForUser(workPlanUserId, row.id, workPlanState) : false;
-          const sched = wp ? getDealerScheduledDateForUser(workPlanUserId, row.id, workPlanState) : null;
           const checked = Boolean(selectedIds?.has(row.id));
           const ship =
             shipmentActiveDayId && shipmentUserId
@@ -560,11 +551,6 @@ function ClientTableBlock({
                     {getClientCategoryLabel(row.clientCategory)}
                   </Badge>
                 </div>
-                {sched?.date ? (
-                  <Badge variant="outline" className="w-fit border-primary/40 bg-primary/10 text-xs" data-testid={`badge-dealer-scheduled-${row.id}`}>
-                    В работе: {formatWorkPlanDateRu(sched.date)}
-                  </Badge>
-                ) : null}
                 {hidden ? (
                   <Badge variant="secondary" className="w-fit text-xs" data-testid={`badge-dealer-hidden-${row.id}`}>
                     Скрыт из рабочего списка
@@ -674,7 +660,6 @@ function ClientTableBlock({
           <tbody>
             {rows.map((row) => {
               const hidden = wp ? isDealerHiddenForUser(workPlanUserId, row.id, workPlanState) : false;
-              const sched = wp ? getDealerScheduledDateForUser(workPlanUserId, row.id, workPlanState) : null;
               const checked = Boolean(selectedIds?.has(row.id));
               const ship =
                 shipmentActiveDayId && shipmentUserId
@@ -699,11 +684,6 @@ function ClientTableBlock({
                   <td className="max-w-[160px] px-3 py-3 align-top" title={row.name}>
                     <div className="flex min-w-0 flex-col gap-1">
                       <span className="truncate font-medium">{row.name}</span>
-                      {sched?.date ? (
-                        <Badge variant="outline" className="w-fit border-primary/40 bg-primary/10 text-[10px]" data-testid={`badge-dealer-scheduled-${row.id}`}>
-                          В работе: {formatWorkPlanDateRu(sched.date)}
-                        </Badge>
-                      ) : null}
                       {hidden ? (
                         <Badge variant="secondary" className="w-fit text-[10px]" data-testid={`badge-dealer-hidden-${row.id}`}>
                           Скрыт из рабочего списка
@@ -930,14 +910,6 @@ function DealerBaseSegmentGroups({
       })}
     </div>
   );
-}
-
-function ruClientsCountLabel(n: number): string {
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  if (mod10 === 1 && mod100 !== 11) return `${n} клиент`;
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return `${n} клиента`;
-  return `${n} клиентов`;
 }
 
 function ruClientNoun(n: number): "клиент" | "клиента" | "клиентов" {
@@ -1549,23 +1521,6 @@ export default function DealerBase() {
     [rowsFinalForList, selectedWpIds],
   );
 
-  const shipmentDayCounts = useMemo((): ShipmentDayCounts => {
-    const init = {} as ShipmentDayCounts;
-    for (const d of DEALER_SHIPMENT_DAY_ORDER) {
-      init[d] = { total: 0, green: 0, yellow: 0, red: 0 };
-    }
-    for (const row of rowsAfterSegmentFilter) {
-      for (const d of getDealerShipmentDays(row)) {
-        init[d].total += 1;
-        const st = getDealerShipmentStatus(row, d, profile.personaUserId, workPlanState);
-        if (st.level === "green") init[d].green += 1;
-        else if (st.level === "yellow") init[d].yellow += 1;
-        else init[d].red += 1;
-      }
-    }
-    return init;
-  }, [rowsAfterSegmentFilter, profile.personaUserId, workPlanState, trafficBump]);
-
   const routePlanState = useMemo(() => loadDealerRoutePlanState(), [routeBump]);
   const routeDefsByDay = useMemo(() => {
     const uid = profile.personaUserId;
@@ -1618,21 +1573,17 @@ export default function DealerBase() {
 
   const shipmentDaySummary = useMemo(() => {
     if (!activeShipmentDayId) return null;
-    const n = rowsFinalForList.length;
     const label = DEALER_SHIPMENT_DAY_LABELS[activeShipmentDayId];
-    let line = `День отгрузки: ${label} · ${ruClientsCountLabel(n)}`;
     const defs = listRouteDefinitions(profile.personaUserId, activeShipmentDayId, routePlanState);
-    if (defs.length === 1 && defs[0]) {
-      const d0 = defs[0];
-      const cnt = countDealersOnRouteSettlements(activeShipmentDayId, d0, rowsAfterSegmentFilter);
-      line += ` · ${d0.name}: ${cnt} ${ruClientNoun(cnt)}`;
-    } else if (defs.length === 2 && defs[0] && defs[1]) {
-      const c0 = countDealersOnRouteSettlements(activeShipmentDayId, defs[0], rowsAfterSegmentFilter);
-      const c1 = countDealersOnRouteSettlements(activeShipmentDayId, defs[1], rowsAfterSegmentFilter);
-      line += ` · ${defs[0].name}: ${c0} · ${defs[1].name}: ${c1}`;
+    if (defs.length === 0) {
+      return `День отгрузки: ${label}`;
     }
-    return line;
-  }, [activeShipmentDayId, rowsFinalForList.length, profile.personaUserId, routePlanState, rowsAfterSegmentFilter]);
+    const parts = defs.map((def) => {
+      const cnt = countDealersOnRouteSettlements(activeShipmentDayId, def, rowsAfterSegmentFilter);
+      return `${def.name}: ${cnt} ${ruClientNoun(cnt)}`;
+    });
+    return `День отгрузки: ${label} · ${parts.join(" · ")}`;
+  }, [activeShipmentDayId, profile.personaUserId, routePlanState, rowsAfterSegmentFilter]);
 
   const shipmentRouteFilterBanner = useMemo(() => {
     if (!shipmentRouteCityFilter) return null;
@@ -1669,7 +1620,13 @@ export default function DealerBase() {
     (slotId: ShipmentRouteSlotId, settlements: string[]) => {
       if (!activeShipmentDayId) return;
       const trimmed = settlements.map((s) => s.trim()).filter(Boolean);
-      const valid = trimmed.filter((c) => scopedRows.some((r) => r.city === c));
+      const lc = (s: string) => s.trim().toLowerCase();
+      const valid = trimmed.filter((c) => {
+        const target = lc(c);
+        return rowsAfterSegmentFilter.some(
+          (r) => lc(r.city) === target && getDealerShipmentDays(r).includes(activeShipmentDayId),
+        );
+      });
       if (valid.length === 0) return;
       const defs = listRouteDefinitions(profile.personaUserId, activeShipmentDayId, routePlanState);
       const defMeta = defs.find((x) => x.slotId === slotId);
@@ -1682,7 +1639,7 @@ export default function DealerBase() {
       setCities(valid);
       setActiveRouteSlotForBulk(slotId);
     },
-    [activeShipmentDayId, profile.personaUserId, routePlanState, scopedRows, cities],
+    [activeShipmentDayId, profile.personaUserId, routePlanState, rowsAfterSegmentFilter, cities],
   );
 
   const canMutateRoute = canMutateWorkPlan;
@@ -2056,7 +2013,6 @@ export default function DealerBase() {
           <div className="mb-3 min-w-0 space-y-3">
             <DealerShipmentDayPlanner
               userId={profile.personaUserId}
-              dayCounts={shipmentDayCounts}
               rowsForRouteSettlementCounts={rowsAfterSegmentFilter}
               routeDefsByDay={routeDefsByDay}
               settlementOptions={cityOptions}

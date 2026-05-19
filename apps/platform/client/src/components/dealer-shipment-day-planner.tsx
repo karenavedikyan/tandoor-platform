@@ -36,15 +36,16 @@ import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, Pencil, Trash2 } from "lucide-react";
 
-export type ShipmentDayCounts = Record<
-  DealerShipmentDayId,
-  { total: number; green: number; yellow: number; red: number }
->;
+function ruClientNoun(n: number): "клиент" | "клиента" | "клиентов" {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return "клиент";
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return "клиента";
+  return "клиентов";
+}
 
-function trafficDotClass(level: "green" | "yellow" | "red"): string {
-  if (level === "green") return "bg-emerald-500";
-  if (level === "yellow") return "bg-amber-400";
-  return "bg-rose-500";
+function formatRouteClientsLine(routeName: string, n: number): string {
+  return `${routeName} · ${n} ${ruClientNoun(n)}`;
 }
 
 function trafficBadgeClass(level: "green" | "yellow" | "red"): string {
@@ -60,7 +61,6 @@ function routeRowsForCopy(ordered: DealerRow[], settlementFallback: DealerRow[])
 
 export type PlannerProps = {
   userId: string;
-  dayCounts: ShipmentDayCounts;
   /** Для подсчёта клиентов по населённым пунктам маршрута (учёт текущего scope). */
   rowsForRouteSettlementCounts: DealerRow[];
   routeDefsByDay: Record<DealerShipmentDayId, ShipmentRouteDefinition[]>;
@@ -83,7 +83,6 @@ export type PlannerProps = {
 
 export function DealerShipmentDayPlanner({
   userId,
-  dayCounts,
   rowsForRouteSettlementCounts,
   routeDefsByDay,
   settlementOptions,
@@ -174,7 +173,6 @@ export function DealerShipmentDayPlanner({
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
           {DEALER_SHIPMENT_DAY_ORDER.map((d) => {
-            const c = dayCounts[d];
             const active = activeShipmentDayId === d;
             const defs = routeDefsByDay[d] ?? [];
             return (
@@ -192,7 +190,6 @@ export function DealerShipmentDayPlanner({
               >
                 <span className="hidden text-xs font-semibold leading-tight sm:inline">{DEALER_SHIPMENT_DAY_LABELS[d]}</span>
                 <span className="text-xs font-semibold leading-none sm:hidden">{DEALER_SHIPMENT_DAY_SHORT_LABELS[d]}</span>
-                <span className="text-[10px] text-muted-foreground">Клиентов: {c.total}</span>
                 <span
                   className="line-clamp-2 w-full text-left text-[9px] leading-snug text-muted-foreground sm:text-[10px]"
                   data-testid={`text-dealer-shipment-day-route-summary-${d}`}
@@ -204,25 +201,11 @@ export function DealerShipmentDayPlanner({
                       const n = countDealersOnRouteSettlements(d, def, rowsForRouteSettlementCounts);
                       return (
                         <span key={def.slotId} className="block truncate" data-testid={`text-dealer-shipment-day-route-count-${d}-${def.slotId}`}>
-                          {def.name} · {n}
+                          {formatRouteClientsLine(def.name, n)}
                         </span>
                       );
                     })
                   )}
-                </span>
-                <span className="flex items-center gap-1 text-[10px] tabular-nums">
-                  <span className="flex items-center gap-0.5">
-                    <span className={cn("h-1.5 w-1.5 rounded-full", trafficDotClass("green"))} aria-hidden />
-                    {c.green}
-                  </span>
-                  <span className="flex items-center gap-0.5">
-                    <span className={cn("h-1.5 w-1.5 rounded-full", trafficDotClass("yellow"))} aria-hidden />
-                    {c.yellow}
-                  </span>
-                  <span className="flex items-center gap-0.5">
-                    <span className={cn("h-1.5 w-1.5 rounded-full", trafficDotClass("red"))} aria-hidden />
-                    {c.red}
-                  </span>
                 </span>
               </Button>
             );
@@ -279,6 +262,7 @@ export function DealerShipmentDayPlanner({
                 const ordered = routeRowsBySlot[def.slotId] ?? [];
                 const settlementFallback = settlementRowsBySlot[def.slotId] ?? [];
                 const expanded = expandedSlotId === def.slotId;
+                const routeClientCount = countDealersOnRouteSettlements(activeShipmentDayId, def, rowsForRouteSettlementCounts);
                 return (
                   <div
                     key={def.slotId}
@@ -287,7 +271,7 @@ export function DealerShipmentDayPlanner({
                   >
                     <div className="flex flex-col gap-2 p-2.5 sm:flex-row sm:items-start sm:justify-between sm:gap-3 sm:p-3">
                       <div className="min-w-0 flex-1 space-y-1">
-                        <p className="text-sm font-semibold text-foreground">{def.name}</p>
+                        <p className="text-sm font-semibold text-foreground">{formatRouteClientsLine(def.name, routeClientCount)}</p>
                         <p className="text-xs text-muted-foreground">
                           {def.settlements.length > 0 ? def.settlements.join(", ") : "Населённые пункты не заданы"}
                         </p>
@@ -360,7 +344,6 @@ export function DealerShipmentDayPlanner({
                         className="border-t border-border/60 bg-muted/10 px-2.5 py-3 sm:px-3"
                         data-testid={`section-dealer-shipment-route-plan-${def.slotId}`}
                       >
-                        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Маршрутный лист</p>
                         {ordered.length === 0 ? (
                           <p className="mb-3 text-sm text-muted-foreground">Клиенты маршрута не выбраны</p>
                         ) : (
