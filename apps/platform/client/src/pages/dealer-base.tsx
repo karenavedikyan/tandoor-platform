@@ -105,6 +105,15 @@ import {
   reorderRouteDealer,
 } from "@/lib/dealer-route-plan";
 import {
+  DEALER_SHIPMENT_ROUTE_DEFS_EVENT,
+  getShipmentRoutesForUserDay,
+  loadDealerShipmentRouteDefsState,
+  removeShipmentRoute,
+  upsertShipmentRoute,
+  type DealerShipmentRouteDefinition,
+} from "@/lib/dealer-shipment-route-definitions";
+import { DealerShipmentRoutesSection } from "@/components/dealer-shipment-routes-section";
+import {
   DEALER_STOCK_FILTER_LABELS,
   dealerRowMatchesStockFilter,
   getDealerStockSignal,
@@ -1381,6 +1390,8 @@ export default function DealerBase() {
   const [activeShipmentDayId, setActiveShipmentDayId] = useState<DealerShipmentDayId | null>(null);
   const [routeBump, setRouteBump] = useState(0);
   const [trafficBump, setTrafficBump] = useState(0);
+  const [routeDefsBump, setRouteDefsBump] = useState(0);
+  const [activeRouteId, setActiveRouteId] = useState<string | null>(null);
 
   const toggleSegmentCollapse = useCallback((id: DealerBaseSegmentId) => {
     setSegmentCollapse((prev) => {
@@ -1400,6 +1411,12 @@ export default function DealerBase() {
     const h = () => setRouteBump((n) => n + 1);
     window.addEventListener(DEALER_ROUTE_PLAN_EVENT, h);
     return () => window.removeEventListener(DEALER_ROUTE_PLAN_EVENT, h);
+  }, []);
+
+  useEffect(() => {
+    const h = () => setRouteDefsBump((n) => n + 1);
+    window.addEventListener(DEALER_SHIPMENT_ROUTE_DEFS_EVENT, h);
+    return () => window.removeEventListener(DEALER_SHIPMENT_ROUTE_DEFS_EVENT, h);
   }, []);
 
   useEffect(() => {
@@ -1516,12 +1533,67 @@ export default function DealerBase() {
     return routeIds.map((id) => byId.get(id)).filter((r): r is DealerRow => Boolean(r));
   }, [routeIds]);
 
+  const routeDefsState = useMemo(() => loadDealerShipmentRouteDefsState(), [routeDefsBump]);
+  const shipmentRoutesForDay = useMemo(
+    () =>
+      activeShipmentDayId
+        ? getShipmentRoutesForUserDay(profile.personaUserId, activeShipmentDayId, routeDefsState)
+        : [],
+    [profile.personaUserId, activeShipmentDayId, routeDefsState],
+  );
+  const activeShipmentRoute = useMemo(
+    () => (activeRouteId ? shipmentRoutesForDay.find((r) => r.id === activeRouteId) ?? null : null),
+    [activeRouteId, shipmentRoutesForDay],
+  );
+
+  useEffect(() => {
+    if (!activeRouteId) return;
+    if (!activeShipmentDayId) {
+      setActiveRouteId(null);
+      return;
+    }
+    const route = shipmentRoutesForDay.find((r) => r.id === activeRouteId);
+    if (!route) {
+      setActiveRouteId(null);
+      return;
+    }
+    if (route.cities.length === 0) {
+      setActiveRouteId(null);
+      return;
+    }
+    const sameSize = cities.length === route.cities.length;
+    const sameSet = sameSize && route.cities.every((c) => cities.includes(c));
+    if (!sameSet) {
+      setActiveRouteId(null);
+    }
+  }, [activeRouteId, activeShipmentDayId, shipmentRoutesForDay, cities]);
+
+  const shipmentRouteClientCount = useCallback(
+    (route: DealerShipmentRouteDefinition) => {
+      if (route.cities.length === 0) return 0;
+      const set = new Set(route.cities);
+      let total = 0;
+      for (const row of scopedRows) {
+        if (!set.has(row.city)) continue;
+        if (activeShipmentDayId && !getDealerShipmentDays(row).includes(activeShipmentDayId)) continue;
+        total += 1;
+      }
+      return total;
+    },
+    [scopedRows, activeShipmentDayId],
+  );
+
   const shipmentDaySummary = useMemo(() => {
     if (!activeShipmentDayId) return null;
     const n = rowsFinalForList.length;
     const label = DEALER_SHIPMENT_DAY_LABELS[activeShipmentDayId];
-    return `День отгрузки: ${label} · ${ruClientsCountLabel(n)}`;
-  }, [activeShipmentDayId, rowsFinalForList.length]);
+    const base = `День отгрузки: ${label} · ${ruClientsCountLabel(n)}`;
+    if (!activeShipmentRoute) return base;
+    const cities = activeShipmentRoute.cities.length > 0
+      ? activeShipmentRoute.cities.join(", ")
+      : "—";
+    return `${base} · Маршрут: ${activeShipmentRoute.name || "Без названия"} (${cities})`;
+  }, [activeShipmentDayId, rowsFinalForList.length, activeShipmentRoute]);
 
   const canMutateRoute = canMutateWorkPlan;
 
@@ -1895,8 +1967,15 @@ export default function DealerBase() {
             <DealerShipmentDayPlanner
               dayCounts={shipmentDayCounts}
               activeShipmentDayId={activeShipmentDayId}
-              onSelectDay={(d) => setActiveShipmentDayId(d)}
-              onResetDay={() => setActiveShipmentDayId(null)}
+              onSelectDay={(d) => {
+                setActiveShipmentDayId(d);
+                setActiveRouteId(null);
+              }}
+              onResetDay={() => {
+                setActiveShipmentDayId(null);
+                setActiveRouteId(null);
+                setCities([]);
+              }}
               activeDaySummary={shipmentDaySummary}
               canEditRoute={canMutateRoute}
               routeRows={routeRowsOrdered}
@@ -1915,6 +1994,37 @@ export default function DealerBase() {
               getShipmentStatus={getShipmentStatusForRow}
               buildDealerHref={buildDealerAbsHref}
             />
+            {activeShipmentDayId ? (
+              <DealerShipmentRoutesSection
+                activeDayId={activeShipmentDayId}
+                routes={shipmentRoutesForDay}
+                cityOptions={cityOptions}
+                canEdit={canMutateRoute}
+                activeRouteId={activeRouteId}
+                routeClientCount={shipmentRouteClientCount}
+                onSave={(input) => {
+                  if (!canMutateRoute) return;
+                  upsertShipmentRoute(profile.personaUserId, activeShipmentDayId, input);
+                }}
+                onRemove={(routeId) => {
+                  if (!canMutateRoute) return;
+                  if (activeRouteId === routeId) {
+                    setActiveRouteId(null);
+                    setCities([]);
+                  }
+                  removeShipmentRoute(profile.personaUserId, activeShipmentDayId, routeId);
+                }}
+                onApplyRoute={(route) => {
+                  if (route.cities.length === 0) return;
+                  setActiveRouteId(route.id);
+                  setCities(route.cities);
+                }}
+                onClearRoute={() => {
+                  setActiveRouteId(null);
+                  setCities([]);
+                }}
+              />
+            ) : null}
           </div>
         ) : null}
         {canMutateWorkPlan && selectedWpIds.size > 0 ? (
