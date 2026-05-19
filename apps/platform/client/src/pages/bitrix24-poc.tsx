@@ -25,7 +25,7 @@ export default function Bitrix24PocPage() {
 
   const sampleDealerId = DEALER_BASE_ROWS[0]?.id ?? "001";
 
-  const onMockTask = useCallback(async () => {
+  const onCreateTestTask = useCallback(async () => {
     setTaskBusy(true);
     setTaskHint(null);
     try {
@@ -33,7 +33,15 @@ export default function Bitrix24PocPage() {
         title: "Тестовая задача из Тандор (POC Bitrix24)",
         description: "Черновик без отправки в Bitrix24.",
       });
-      setTaskHint(res.message);
+      if (res.ok) {
+        const lines = [res.message];
+        if (res.taskId != null && String(res.taskId).length > 0) {
+          lines.push(`ID задачи в Bitrix24: ${res.taskId}`);
+        }
+        setTaskHint(lines.join("\n"));
+      } else {
+        setTaskHint(res.message);
+      }
     } finally {
       setTaskBusy(false);
     }
@@ -104,8 +112,10 @@ export default function Bitrix24PocPage() {
 
       <Card className="border-border/80 shadow-sm">
         <CardHeader className="space-y-1 pb-2">
-          <CardTitle className="text-base">Bitrix24 API (заглушка)</CardTitle>
-          <CardDescription className="text-xs">Без реального webhook и без секретов в клиенте.</CardDescription>
+          <CardTitle className="text-base">Создание задачи в Bitrix24</CardTitle>
+          <CardDescription className="text-xs">
+            Запрос уходит на сервер Тандор; webhook хранится только в переменных окружения (например, на Vercel).
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <Button
@@ -113,13 +123,16 @@ export default function Bitrix24PocPage() {
             variant="outline"
             className="min-h-10 w-full font-semibold sm:w-auto"
             disabled={taskBusy}
-            data-testid="button-bitrix24-mock-task"
-            onClick={() => void onMockTask()}
+            data-testid="button-bitrix24-create-task"
+            onClick={() => void onCreateTestTask()}
           >
             {taskBusy ? "Создание…" : "Создать тестовую задачу в Bitrix24"}
           </Button>
           {taskHint ? (
-            <p className="rounded-lg border border-border/70 bg-muted/40 px-3 py-2 text-sm leading-relaxed text-foreground" role="status">
+            <p
+              className="whitespace-pre-line rounded-lg border border-border/70 bg-muted/40 px-3 py-2 text-sm leading-relaxed text-foreground"
+              role="status"
+            >
               {taskHint}
             </p>
           ) : null}
