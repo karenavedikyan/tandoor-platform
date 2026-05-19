@@ -62,7 +62,7 @@ https://<ваш-хост-платформы>/?embedded=bitrix24#/bitrix24
 - **Успех (200):** `{ "success": true, "taskId": "<строка>", "message": "Задача создана в Bitrix24" }`.
 - **Ошибки:** **503** `BITRIX24_NOT_CONFIGURED`; **400** `BITRIX24_WEBHOOK_URL_INVALID` или `BITRIX24_CREATE_VALIDATION_ERROR`; **502** `BITRIX24_API_ERROR` (+ `bitrixCode`), `BITRIX24_BAD_RESPONSE`, `BITRIX24_NETWORK`, `BITRIX24_UNEXPECTED_RESULT`; **500** `INTERNAL_ERROR`.
 
-Общая работа с webhook вынесена в лёгкий модуль `api/bitrix24/webhook-task-core.ts` (импортируется и Vercel-функциями под `api/`, и Express-бандлом — **без** тяжёлого `server/*` в serverless).
+Общая работа с webhook вынесена в лёгкий модуль `api/_lib/webhook-task-core.ts` (импортируется и Vercel-функциями под `api/`, и Express-бандлом — **без** тяжёлого `server/*` в serverless). Папка `api/_lib/` начинается с подчёркивания — Vercel **не** регистрирует её содержимое как Serverless Functions, поэтому хелперы безопасно шарить между функциями и Express.
 
 ## ЛК: где создавать задачу и где видна связь
 
@@ -80,10 +80,10 @@ https://<ваш-хост-платформы>/?embedded=bitrix24#/bitrix24
 
 - **`buildCommand`:** `npm run build` — собираются и клиент (`vite`), и серверный бандл для Node.
 - **Rewrite на все пути удалён** — приложение на **hash-router** (`#/…`), для основного сценария отдельный SPA-fallback не нужен.
-- **`POST /api/bitrix24/tasks/test`** и **`POST /api/bitrix24/tasks/create`** обрабатываются **Serverless Functions** Vercel: `api/bitrix24/tasks/test.ts` и `api/bitrix24/tasks/create.ts` — только импорты из **`api/bitrix24/*`** (без `server/`), ответ всегда JSON и `Content-Type: application/json`.
+- **`POST /api/bitrix24/tasks/test`** и **`POST /api/bitrix24/tasks/create`** обрабатываются **Serverless Functions** Vercel: `api/bitrix24/tasks/test.ts` и `api/bitrix24/tasks/create.ts` — только импорты из **`api/_lib/*`** (без `server/`, без path-алиасов `@/`), ответ всегда JSON и `Content-Type: application/json`. Любой ts-файл прямо в `api/**` без префикса `_` Vercel считает отдельной функцией — поэтому общие хелперы лежат в `api/_lib/`, а не рядом с handler'ами.
 - В **`package.json`** задано **`"engines": { "node": "20.x" }`**, чтобы на Vercel использовался **Node 20** вместо «плавающего» runtime по умолчанию.
 
-Локально по-прежнему работает Express: `server/bitrix24-routes.ts` регистрирует оба маршрута; логика create реэкспортируется из `api/bitrix24/bitrix24-tasks-create-execute.ts`, тест — через `api/bitrix24/webhook-task-core.ts`.
+Локально по-прежнему работает Express: `server/bitrix24-routes.ts` регистрирует оба маршрута; логика create реэкспортируется из `api/_lib/bitrix24-tasks-create-execute.ts`, тест — через `api/_lib/webhook-task-core.ts`.
 
 Проверка с production (ожидается JSON, не HTML):
 

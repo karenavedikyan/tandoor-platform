@@ -2,7 +2,7 @@
  * Общая логика POST /api/bitrix24/tasks/test для Express (Node).
  */
 
-import { executeBitrix24TaskAdd } from "../api/bitrix24/webhook-task-core";
+import { executeBitrix24TaskAdd } from "../api/_lib/webhook-task-core";
 
 const TEST_TASK_TITLE = "Тестовая задача из Тандор";
 const TEST_TASK_DESCRIPTION =

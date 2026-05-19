@@ -1,5 +1,6 @@
 /**
  * Логика POST /api/bitrix24/tasks/create (Vercel + Express через re-export).
+ * Лежит под api/_lib/ — Vercel игнорирует подпапки с префиксом `_` и не превращает их в функции.
  */
 
 import { executeBitrix24TaskAdd, type Bitrix24TaskAddHttpResult } from "./webhook-task-core";
