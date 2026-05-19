@@ -49,6 +49,26 @@ https://<ваш-хост-платформы>/?embedded=bitrix24#/bitrix24
 
 Если `BITRIX24_WEBHOOK_URL` не задан, API отвечает **503** с понятным JSON (без утечки секретов).
 
+### Production на Vercel
+
+Статический вывод (`outputDirectory: dist/public`) **не** запускает собранный Express (`dist/index.cjs`). Раньше в `vercel.json` был rewrite **`/(.*) → /index.html`**, из‑за чего запросы к **`/api/...`** отдавали SPA (`index.html`), в том числе **405** на POST.
+
+Сейчас:
+
+- **`buildCommand`:** `npm run build` — собираются и клиент (`vite`), и серверный бандл для Node.
+- **Rewrite на все пути удалён** — приложение на **hash-router** (`#/…`), для основного сценария отдельный SPA-fallback не нужен.
+- **`POST /api/bitrix24/tasks/test`** обрабатывается **Serverless Function** Vercel: файл `api/bitrix24/tasks/test.ts` (общая логика с Express в `server/bitrix24-tasks-test-execute.ts`).
+
+Проверка с production (ожидается JSON, не HTML):
+
+```bash
+curl -i -X POST "https://tandoor-platform.vercel.app/api/bitrix24/tasks/test" \
+  -H "content-type: application/json" \
+  --data "{}"
+```
+
+При отсутствии `BITRIX24_WEBHOOK_URL` в env ответ должен быть **503** с телом вида `{"success":false,"code":"BITRIX24_NOT_CONFIGURED",...}`.
+
 ## Как проверить создание задачи
 
 1. Убедитесь, что на окружении задан `BITRIX24_WEBHOOK_URL` (и при необходимости `BITRIX24_TASK_RESPONSIBLE_ID`).
