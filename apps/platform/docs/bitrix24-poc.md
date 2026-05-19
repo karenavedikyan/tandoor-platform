@@ -10,10 +10,10 @@
 
 | Переменная | Обязательность | Назначение |
 |------------|----------------|------------|
-| `BITRIX24_WEBHOOK_URL` | **Обязательна** для кнопки «Создать тестовую задачу» | Полный базовый URL входящего webhook (как в Bitrix24, обычно заканчивается на `/rest/.../`). |
-| `BITRIX24_TASK_RESPONSIBLE_ID` | Опционально | Числовой ID пользователя Bitrix24 — **ответственный** и **постановщик** тестовой задачи. Если в портале обязательно поле «Ответственный», без этого параметра Bitrix24 может вернуть ошибку; тогда добавьте ID пользователя, от имени которого создан webhook, или другого допустимого сотрудника. |
+| `BITRIX24_WEBHOOK_URL` | **Обязательна** для кнопки «Создать тестовую задачу» | Полный базовый URL входящего webhook (как в Bitrix24, сегмент **`/rest/<userId>/<token>/`**). Из **`userId`** в URL автоматически выставляются **ответственный** и **постановщик** тестовой задачи (`RESPONSIBLE_ID` / `CREATED_BY`), если не задан override ниже. |
+| `BITRIX24_TASK_RESPONSIBLE_ID` | **Опционально** (override) | Числовой ID пользователя Bitrix24 — если задан и это положительное целое число, используется **вместо** userId из webhook для `RESPONSIBLE_ID` и `CREATED_BY`. |
 
-**Важно:** webhook URL и любые токены **нельзя** класть в клиентский бандл или в git. На Vercel задайте значения в **Environment Variables** для production / preview.
+**Важно:** webhook URL, токен и секрет **нельзя** класть в клиентский бандл или в git. На Vercel задайте значения в **Environment Variables** для production / preview. Сервер **не** возвращает и **не** логирует полный webhook URL.
 
 ## Как открыть страницу
 
@@ -44,8 +44,10 @@ https://<ваш-хост-платформы>/?embedded=bitrix24#/bitrix24
 ## Backend: создание тестовой задачи
 
 - **Маршрут:** `POST /api/bitrix24/tasks/test`
-- **Метод Bitrix24:** один HTTP POST к `{BITRIX24_WEBHOOK_URL}`**`tasks.task.add`** с телом `{ "fields": { "TITLE": "...", "DESCRIPTION": "...", ... } }`.
+- **Метод Bitrix24:** один HTTP POST к `{BITRIX24_WEBHOOK_URL}`**`tasks.task.add`** с телом `{ "fields": { "TITLE": "...", "DESCRIPTION": "...", "RESPONSIBLE_ID", "CREATED_BY", ... } }`.
+- **Ответственный:** по умолчанию **userId** из сегмента `/rest/<userId>/` в `BITRIX24_WEBHOOK_URL`; при заданном **`BITRIX24_TASK_RESPONSIBLE_ID`** он подменяет это значение.
 - **Чат, уведомления, CRM** в этом POC **не** вызываются (даже если у webhook шире права).
+- При ошибке REST Bitrix24 ответ содержит **`code: "BITRIX24_API_ERROR"`**, поле **`bitrixCode`** (код ошибки из Bitrix **без** `error_description`), фиксированное **`message`**; URL webhook и секрет **не** возвращаются.
 
 Если `BITRIX24_WEBHOOK_URL` не задан, API отвечает **503** с понятным JSON (без утечки секретов).
 
