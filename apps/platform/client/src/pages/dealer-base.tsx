@@ -116,6 +116,7 @@ import {
   DEALER_PROGRAM_FILTER_BADGE_TESTID,
   DEALER_PROGRAM_FILTER_BUTTON_TESTID,
   DEALER_PROGRAM_FILTER_LABELS,
+  DEALER_PROGRAM_FILTER_ORDER,
   dealerRowMatchesProgramFilters,
   getDealerProgramSignal,
   type DealerProgramFilterId,
@@ -430,6 +431,15 @@ function ClientListBlock({
                       Спецусловия
                     </Badge>
                   ) : null}
+                  {programSig.hasFranchise ? (
+                    <Badge
+                      variant="outline"
+                      className="shrink-0 border-cyan-300 bg-cyan-50 text-[10px] font-medium text-cyan-950"
+                      data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.franchise}-${row.id}`}
+                    >
+                      Франшиза
+                    </Badge>
+                  ) : null}
                   {programSig.hasTandoorClub ? (
                     <Badge
                       variant="outline"
@@ -588,6 +598,15 @@ function ClientTableBlock({
                       Спецусловия
                     </Badge>
                   ) : null}
+                  {programSig.hasFranchise ? (
+                    <Badge
+                      variant="outline"
+                      className="border-cyan-300 bg-cyan-50 text-[10px] font-medium text-cyan-950"
+                      data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.franchise}-${row.id}`}
+                    >
+                      Франшиза
+                    </Badge>
+                  ) : null}
                   {programSig.hasTandoorClub ? (
                     <Badge
                       variant="outline"
@@ -716,6 +735,15 @@ function ClientTableBlock({
                             data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.special_conditions}-${row.id}`}
                           >
                             Спецусловия
+                          </Badge>
+                        ) : null}
+                        {programSig.hasFranchise ? (
+                          <Badge
+                            variant="outline"
+                            className="border-cyan-300 bg-cyan-50 text-[10px] font-medium text-cyan-950"
+                            data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.franchise}-${row.id}`}
+                          >
+                            Франшиза
                           </Badge>
                         ) : null}
                         {programSig.hasTandoorClub ? (
@@ -1084,7 +1112,7 @@ export default function DealerBase() {
 
     const programRaws = routeQs.getAll("program");
     const programParsed: DealerProgramFilterId[] = [];
-    const programAllowed: DealerProgramFilterId[] = ["special_conditions", "tandoor_club", "cashback_agent"];
+    const programAllowed: DealerProgramFilterId[] = [...DEALER_PROGRAM_FILTER_ORDER];
     for (const raw of programRaws) {
       for (const part of raw.split(",")) {
         const trimmed = part.trim();
@@ -1462,15 +1490,22 @@ export default function DealerBase() {
 
   const programCounts = useMemo(() => {
     let special = 0;
+    let franchise = 0;
     let club = 0;
     let cashback = 0;
     for (const r of rowsAfterShipmentDay) {
       const s = getDealerProgramSignal(r);
       if (s.hasSpecialConditions) special += 1;
+      if (s.hasFranchise) franchise += 1;
       if (s.hasTandoorClub) club += 1;
       if (s.hasCashbackAgent) cashback += 1;
     }
-    return { special_conditions: special, tandoor_club: club, cashback_agent: cashback };
+    return {
+      special_conditions: special,
+      franchise,
+      tandoor_club: club,
+      cashback_agent: cashback,
+    };
   }, [rowsAfterShipmentDay, characteristicsBump]);
 
   const toggleProgramFilter = useCallback((id: DealerProgramFilterId) => {
@@ -1784,7 +1819,7 @@ export default function DealerBase() {
           <div className="space-y-1.5" data-testid="section-dealer-base-program-filters">
             <p className="text-xs font-medium text-muted-foreground">Признаки</p>
             <div className="flex flex-wrap gap-2">
-              {(["special_conditions", "tandoor_club", "cashback_agent"] as DealerProgramFilterId[]).map((id) => {
+              {DEALER_PROGRAM_FILTER_ORDER.map((id) => {
                 const active = programFilters.includes(id);
                 return (
                   <Button
