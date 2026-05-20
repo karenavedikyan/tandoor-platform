@@ -101,26 +101,35 @@ export function buildBitrixOAuthRestUrl(restCtx: string, method: string, accessT
   return `${base}/rest/${method}?auth=${encodeURIComponent(accessToken)}`;
 }
 
-async function fetchOAuthTokenResponse(params: URLSearchParams): Promise<{ httpStatus: number; json: unknown }> {
+async function fetchOAuthTokenResponse(params: URLSearchParams): Promise<{ httpStatus: number; json: unknown; method: "GET" | "POST" }> {
   const base = resolveTokenEndpoint();
   const getUrl = `${base}/?${params.toString()}`;
 
-  const tryGet = async (): Promise<Response> =>
+  const tryGet = (): Promise<Response> =>
     fetch(getUrl, { method: "GET", headers: { Accept: "application/json" } });
 
-  const tryPost = async (): Promise<Response> =>
+  const tryPost = (): Promise<Response> =>
     fetch(base, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
       body: params.toString(),
     });
 
-  /** По умолчанию — GET как в официальной документации Bitrix24. */
   const preferPost = strEnv("BITRIX24_OAUTH_TOKEN_HTTP_METHOD").toLowerCase() === "post";
-  const primary = preferPost ? await tryPost() : await tryGet();
-  let res = primary;
-  if (!preferPost && (res.status === 405 || res.status === 501)) {
+
+  let res: Response;
+  let method: "GET" | "POST";
+
+  if (preferPost) {
     res = await tryPost();
+    method = "POST";
+  } else {
+    res = await tryGet();
+    method = "GET";
+    if (res.status === 405 || res.status === 501) {
+      res = await tryPost();
+      method = "POST";
+    }
   }
 
   const httpStatus = res.status;
@@ -131,18 +140,42 @@ async function fetchOAuthTokenResponse(params: URLSearchParams): Promise<{ httpS
   } catch {
     json = null;
   }
-  return { httpStatus, json };
+  return { httpStatus, json, method };
 }
 
+export type TokenExchangeMeta = { httpMethod: "GET" | "POST"; includeRedirectUri: boolean };
+
+export type TokenExchangeFailureMeta = TokenExchangeMeta & {
+  httpStatus: number;
+  bitrixCode?: string;
+};
+
 export async function exchangeAuthorizationCode(code: string): Promise<
-  | { ok: true; tokens: TokenOk; client_endpoint?: string }
-  | { ok: false; status: number; code: string; message: string; bitrixCode?: string }
+  | { ok: true; tokens: TokenOk; client_endpoint?: string; exchangeMeta: TokenExchangeMeta }
+  | {
+      ok: false;
+      status: number;
+      code: string;
+      message: string;
+      bitrixCode?: string;
+      tokenAttempt: TokenExchangeFailureMeta;
+    }
 > {
   const clientId = strEnv("BITRIX24_OAUTH_CLIENT_ID");
   const clientSecret = strEnv("BITRIX24_OAUTH_CLIENT_SECRET");
   const redirectUri = resolveRedirectUri();
   if (!clientId || !clientSecret) {
-    return { ok: false, status: 503, code: "BITRIX24_OAUTH_NOT_CONFIGURED", message: "OAuth Bitrix24 не настроен на сервере." };
+    return {
+      ok: false,
+      status: 503,
+      code: "BITRIX24_OAUTH_NOT_CONFIGURED",
+      message: "OAuth Bitrix24 не настроен на сервере.",
+      tokenAttempt: {
+        httpMethod: "GET",
+        includeRedirectUri: false,
+        httpStatus: 0,
+      },
+    };
   }
 
   const buildParams = (includeRedirectUri: boolean): URLSearchParams => {
@@ -159,26 +192,40 @@ export async function exchangeAuthorizationCode(code: string): Promise<
 
   const forceRedirectFirst = strEnv("BITRIX24_OAUTH_TOKEN_INCLUDE_REDIRECT_URI") === "true";
 
-  async function attempt(includeRedirectUri: boolean): Promise<
-    | { ok: true; tokens: TokenOk; client_endpoint?: string }
-    | { ok: false; httpStatus: number; bitrixCode?: string }
-  > {
+  type AttemptOk = {
+    kind: "ok";
+    tokens: TokenOk;
+    client_endpoint?: string;
+    httpMethod: "GET" | "POST";
+    includeRedirectUri: boolean;
+  };
+  type AttemptFail = {
+    kind: "fail";
+    httpStatus: number;
+    bitrixCode?: string;
+    httpMethod: "GET" | "POST";
+    includeRedirectUri: boolean;
+  };
+
+  async function runAttempt(includeRedirectUri: boolean): Promise<AttemptOk | AttemptFail> {
     const params = buildParams(includeRedirectUri);
-    let json: unknown;
     let httpStatus = 0;
+    let json: unknown;
+    let httpMethod: "GET" | "POST" = "GET";
     try {
       const r = await fetchOAuthTokenResponse(params);
       httpStatus = r.httpStatus;
       json = r.json;
+      httpMethod = r.method;
     } catch (e) {
       const m = e instanceof Error ? e.message : String(e);
       console.error("[bitrix24] oauth token step", "exchange_code", "network", { msg: m });
-      return { ok: false, httpStatus: 0 };
+      return { kind: "fail", httpStatus: 0, httpMethod: "GET", includeRedirectUri };
     }
 
     if (json == null || typeof json !== "object" || Array.isArray(json)) {
-      console.error("[bitrix24] oauth token step", "exchange_code", "non_json", { httpStatus });
-      return { ok: false, httpStatus };
+      console.error("[bitrix24] oauth token step", "exchange_code", "non_json", { httpStatus, httpMethod });
+      return { kind: "fail", httpStatus, httpMethod, includeRedirectUri };
     }
 
     const o = json as Record<string, unknown>;
@@ -186,37 +233,43 @@ export async function exchangeAuthorizationCode(code: string): Promise<
       const expires_in = coerceExpiresIn(o.expires_in);
       const client_endpoint = parseClientEndpoint(o);
       return {
-        ok: true,
+        kind: "ok",
         tokens: { access_token: o.access_token, refresh_token: o.refresh_token, expires_in },
         client_endpoint,
+        httpMethod,
+        includeRedirectUri,
       };
     }
 
     const bitrixCode = sanitizeBitrixErrorCode(o.error);
     console.error("[bitrix24] oauth token step", "exchange_code", "bitrix_error", {
       httpStatus,
+      httpMethod,
       bitrixCode: bitrixCode ?? "unknown",
       redirectParam: includeRedirectUri ? "with_redirect_uri" : "no_redirect_uri",
       authorizationCodeLen: code.length,
     });
-    return { ok: false, httpStatus, bitrixCode };
+    return { kind: "fail", httpStatus, bitrixCode, httpMethod, includeRedirectUri };
   }
 
-  let r = await attempt(forceRedirectFirst);
-  if (!r.ok && !forceRedirectFirst) {
-    r = await attempt(true);
-  }
-  if (!r.ok) {
-    if (r.httpStatus === 0) {
+  function toFailure(f: AttemptFail, bitrixOverride?: string): Extract<Awaited<ReturnType<typeof exchangeAuthorizationCode>>, { ok: false }> {
+    const bitrixCode = bitrixOverride ?? f.bitrixCode;
+    const tokenAttempt: TokenExchangeFailureMeta = {
+      httpMethod: f.httpMethod,
+      includeRedirectUri: f.includeRedirectUri,
+      httpStatus: f.httpStatus,
+      bitrixCode,
+    };
+    if (f.httpStatus === 0) {
       return {
         ok: false,
         status: 502,
         code: "BITRIX24_OAUTH_NETWORK",
         message: "Не удалось связаться с сервером авторизации Bitrix24.",
-        bitrixCode: r.bitrixCode,
+        bitrixCode,
+        tokenAttempt,
       };
     }
-    const bitrixCode = r.bitrixCode;
     return {
       ok: false,
       status: 400,
@@ -225,9 +278,32 @@ export async function exchangeAuthorizationCode(code: string): Promise<
         ? `Bitrix24 отклонил обмен кода авторизации (${bitrixCode}). Попробуйте подключить Bitrix24 заново.`
         : "Не удалось обменять код авторизации Bitrix24. Попробуйте подключить Bitrix24 заново.",
       bitrixCode,
+      tokenAttempt,
     };
   }
-  return r;
+
+  const first = await runAttempt(forceRedirectFirst);
+  if (first.kind === "ok") {
+    return {
+      ok: true,
+      tokens: first.tokens,
+      client_endpoint: first.client_endpoint,
+      exchangeMeta: { httpMethod: first.httpMethod, includeRedirectUri: forceRedirectFirst },
+    };
+  }
+  if (!forceRedirectFirst) {
+    const second = await runAttempt(true);
+    if (second.kind === "ok") {
+      return {
+        ok: true,
+        tokens: second.tokens,
+        client_endpoint: second.client_endpoint,
+        exchangeMeta: { httpMethod: second.httpMethod, includeRedirectUri: true },
+      };
+    }
+    return toFailure(second);
+  }
+  return toFailure(first);
 }
 
 export async function refreshAccessToken(refreshToken: string): Promise<
