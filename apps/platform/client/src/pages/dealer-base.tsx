@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { ChevronDown, ChevronRight, Search } from "lucide-react";
+import { ChevronDown, ChevronRight, Search, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -409,13 +409,21 @@ function ClientListBlock({
                     />
                   ) : null}
                   {archiveBulk?.selectableIds.has(row.id) ? (
-                    <Checkbox
-                      checked={archiveBulk.selectedIds.has(row.id)}
-                      onCheckedChange={(v) => archiveBulk.onToggle(row.id, v === true)}
-                      className="h-5 w-5 shrink-0 touch-manipulation sm:h-4 sm:w-4"
-                      data-testid={`checkbox-dealer-select-${row.id}`}
-                      aria-label={`Архивировать клиента ${row.name}`}
-                    />
+                    <span
+                      className={cn(
+                        "inline-flex shrink-0 items-center",
+                        showWorkPlanSelect && wp && onToggleWorkPlanSelect && "border-l border-border/70 pl-2",
+                      )}
+                      data-testid={`wrap-dealer-bulk-select-${row.id}`}
+                    >
+                      <Checkbox
+                        checked={archiveBulk.selectedIds.has(row.id)}
+                        onCheckedChange={(v) => archiveBulk.onToggle(row.id, v === true)}
+                        className="h-5 w-5 shrink-0 touch-manipulation sm:h-4 sm:w-4"
+                        data-testid={`checkbox-dealer-select-${row.id}`}
+                        aria-label={`Удалить клиента ${row.name} из рабочей базы`}
+                      />
+                    </span>
                   ) : null}
                   <span className={cn("font-semibold text-foreground", compact && "text-sm")}>{row.name}</span>
                   <Badge
@@ -587,13 +595,21 @@ function ClientTableBlock({
                       />
                     ) : null}
                     {archiveBulk?.selectableIds.has(row.id) ? (
-                      <Checkbox
-                        checked={archiveBulk.selectedIds.has(row.id)}
-                        onCheckedChange={(v) => archiveBulk.onToggle(row.id, v === true)}
-                        className="h-5 w-5 shrink-0 touch-manipulation sm:h-4 sm:w-4"
-                        data-testid={`checkbox-dealer-select-${row.id}`}
-                        aria-label={`Архивировать клиента ${row.name}`}
-                      />
+                      <span
+                        className={cn(
+                          "inline-flex shrink-0 items-center",
+                          showWorkPlanSelect && wp && onToggleWorkPlanSelect && "border-l border-border/70 pl-2",
+                        )}
+                        data-testid={`wrap-dealer-bulk-select-${row.id}`}
+                      >
+                        <Checkbox
+                          checked={archiveBulk.selectedIds.has(row.id)}
+                          onCheckedChange={(v) => archiveBulk.onToggle(row.id, v === true)}
+                          className="h-5 w-5 shrink-0 touch-manipulation sm:h-4 sm:w-4"
+                          data-testid={`checkbox-dealer-select-${row.id}`}
+                          aria-label={`Удалить клиента ${row.name} из рабочей базы`}
+                        />
+                      </span>
                     ) : null}
                     <span className="font-semibold">{row.name}</span>
                   </div>
@@ -705,7 +721,13 @@ function ClientTableBlock({
                 <th className="w-10 px-2 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground" aria-label="Выбор" />
               ) : null}
               {showArchiveBulkCol ? (
-                <th className="w-10 px-2 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground" aria-label="Архив" />
+                <th
+                  className={cn(
+                    "w-10 px-2 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground",
+                    showWorkPlanSelect && "border-l border-border/70",
+                  )}
+                  aria-label="Удаление из рабочей базы"
+                />
               ) : null}
               {["Код", "Клиент", "Город", "РОП", "Менеджер", "Категория клиента", "Адрес", "Статус", ""].map((h) => (
                 <th key={h} className="whitespace-nowrap px-3 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -738,14 +760,14 @@ function ClientTableBlock({
                     </td>
                   ) : null}
                   {showArchiveBulkCol && archiveBulk ? (
-                    <td className="px-2 py-3 align-middle">
+                    <td className={cn("px-2 py-3 align-middle", showWorkPlanSelect && "border-l border-border/70")}>
                       {archiveBulk.selectableIds.has(row.id) ? (
                         <Checkbox
                           checked={archiveBulk.selectedIds.has(row.id)}
                           onCheckedChange={(v) => archiveBulk.onToggle(row.id, v === true)}
                           className="h-5 w-5 shrink-0 touch-manipulation sm:h-4 sm:w-4"
                           data-testid={`checkbox-dealer-select-${row.id}`}
-                          aria-label={`Архивировать клиента ${row.name}`}
+                          aria-label={`Удалить клиента ${row.name} из рабочей базы`}
                         />
                       ) : null}
                     </td>
@@ -1472,6 +1494,8 @@ export default function DealerBase() {
   );
   const [selectedWpIds, setSelectedWpIds] = useState<Set<string>>(() => new Set());
   const [selectedBulkArchiveDealerIds, setSelectedBulkArchiveDealerIds] = useState<Set<string>>(() => new Set());
+  /** Режим массового удаления: чекбоксы архива показываются только после явного включения. */
+  const [bulkDeleteMode, setBulkDeleteMode] = useState(false);
   const [bulkArchiveDealerDialogOpen, setBulkArchiveDealerDialogOpen] = useState(false);
   const [bulkArchiveDealerBusy, setBulkArchiveDealerBusy] = useState(false);
   const [wpScheduleDate, setWpScheduleDate] = useState("");
@@ -1602,6 +1626,18 @@ export default function DealerBase() {
   }, [rowsAfterShipmentDay]);
 
   useEffect(() => {
+    if (showArchivedDealers) {
+      setBulkDeleteMode(false);
+      setSelectedBulkArchiveDealerIds(new Set());
+    }
+  }, [showArchivedDealers]);
+
+  const exitBulkDeleteMode = useCallback(() => {
+    setBulkDeleteMode(false);
+    setSelectedBulkArchiveDealerIds(new Set());
+  }, []);
+
+  useEffect(() => {
     const allowed = new Set(rowsFinalForList.map((r) => r.id));
     setSelectedWpIds((prev) => {
       let changed = false;
@@ -1663,7 +1699,7 @@ export default function DealerBase() {
   }, [archivableDealerIdsInView, selectedBulkArchiveDealerIds]);
 
   const archiveBulkListProps = useMemo((): DealerListArchiveBulkProps | undefined => {
-    if (!actx.enabled || !canActualizeClientBase(profile) || showArchivedDealers) return undefined;
+    if (!actx.enabled || !canActualizeClientBase(profile) || showArchivedDealers || !bulkDeleteMode) return undefined;
     return {
       selectedIds: selectedBulkArchiveDealerIds,
       selectableIds: archivableDealerIdsInView,
@@ -1673,6 +1709,7 @@ export default function DealerBase() {
     actx.enabled,
     profile,
     showArchivedDealers,
+    bulkDeleteMode,
     selectedBulkArchiveDealerIds,
     archivableDealerIdsInView,
     toggleBulkArchiveDealer,
@@ -1714,6 +1751,7 @@ export default function DealerBase() {
     if (r.success) {
       toast({ title: "Клиенты удалены из рабочей базы" });
       setSelectedBulkArchiveDealerIds(new Set());
+      setBulkDeleteMode(false);
       setBulkArchiveDealerDialogOpen(false);
     } else {
       toast({ title: "Не удалось сохранить", variant: "destructive" });
@@ -1854,6 +1892,13 @@ export default function DealerBase() {
     [needsManagerSelection, workView],
   );
 
+  useEffect(() => {
+    if (!showClientShipmentAndSegments) {
+      setBulkDeleteMode(false);
+      setSelectedBulkArchiveDealerIds(new Set());
+    }
+  }, [showClientShipmentAndSegments]);
+
   const getShipmentStatusForRow = useCallback(
     (row: DealerRow) =>
       getDealerShipmentStatus(row, activeShipmentDayId ?? "monday", profile.personaUserId, workPlanState),
@@ -1889,6 +1934,9 @@ export default function DealerBase() {
     }),
     [profile.personaUserId, workPlanState, canMutateWorkPlan, selectedWpIds, toggleWpSelect],
   );
+
+  const canShowBulkDeleteEntry = actx.enabled && canActualizeClientBase(profile) && !showArchivedDealers;
+  const bulkDeleteHasTargets = archivableDealerIdsInView.size > 0;
 
   return (
     <div className="min-w-0 max-w-full overflow-x-hidden space-y-6 sm:space-y-8" data-testid="page-dealer-base">
@@ -2274,38 +2322,46 @@ export default function DealerBase() {
             />
           </div>
         ) : null}
-        {canMutateWorkPlan && selectedWpIds.size > 0 ? (
-          <div className="mb-3 min-w-0">
-            <DealerWorkPlanBulkBar
-              selectedRows={selectedWpRows}
-              scheduleDate={wpScheduleDate}
-              onScheduleDateChange={setWpScheduleDate}
-              note={wpNote}
-              onNoteChange={setWpNote}
-              onSchedule={() => {
-                if (!wpScheduleDate.trim()) return;
-                scheduleDealersForUser(profile.personaUserId, Array.from(selectedWpIds), wpScheduleDate, wpNote);
-                setSelectedWpIds(new Set());
-              }}
-              onHide={() => {
-                hideDealersForUser(profile.personaUserId, Array.from(selectedWpIds));
-                setSelectedWpIds(new Set());
-              }}
-              onRestore={() => {
-                restoreDealersForUser(profile.personaUserId, Array.from(selectedWpIds));
-                setSelectedWpIds(new Set());
-              }}
-              onCopy={() => {}}
-              onClearSelection={() => setSelectedWpIds(new Set())}
-              buildDealerHref={buildDealerAbsHref}
-              showAddToRoute={Boolean(activeShipmentDayId && canMutateRoute)}
-              onAddToRoute={() => {
-                if (!activeShipmentDayId || !canMutateRoute) return;
-                addDealersToRoute(profile.personaUserId, activeShipmentDayId, Array.from(selectedWpIds), activeRouteSlotForBulk);
-                setSelectedWpIds(new Set());
-              }}
-              addToRouteDisabled={selectedWpIds.size === 0}
-            />
+        {canShowBulkDeleteEntry && showClientShipmentAndSegments ? (
+          <div className="mb-3 min-w-0 space-y-2 rounded-xl border border-border/70 bg-muted/10 p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              {!bulkDeleteMode ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-h-10 shrink-0 gap-2 font-semibold"
+                  data-testid="button-dealer-bulk-delete-mode"
+                  disabled={!bulkDeleteHasTargets}
+                  title={
+                    !bulkDeleteHasTargets
+                      ? "В текущей выборке нет клиентов, которых можно удалить из рабочей базы."
+                      : undefined
+                  }
+                  onClick={() => setBulkDeleteMode(true)}
+                >
+                  <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
+                  <span className="hidden sm:inline">Выбрать для удаления</span>
+                  <span className="sm:hidden">Удалить</span>
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-h-10 shrink-0 font-semibold"
+                  data-testid="button-dealer-bulk-delete-mode-cancel"
+                  onClick={exitBulkDeleteMode}
+                >
+                  Отменить выбор
+                </Button>
+              )}
+            </div>
+            {bulkDeleteMode ? (
+              <p className="text-sm leading-snug text-muted-foreground" data-testid="text-dealer-bulk-delete-mode-hint">
+                Выберите клиентов, которых нужно удалить из рабочей базы.
+              </p>
+            ) : null}
           </div>
         ) : null}
         {archiveBulkListProps && archivableDealerIdsInView.size > 0 && selectedBulkArchiveDealerIds.size > 0 ? (
@@ -2364,6 +2420,40 @@ export default function DealerBase() {
                 Удалить / в архив
               </Button>
             </div>
+          </div>
+        ) : null}
+        {canMutateWorkPlan && selectedWpIds.size > 0 ? (
+          <div className="mb-3 min-w-0">
+            <DealerWorkPlanBulkBar
+              selectedRows={selectedWpRows}
+              scheduleDate={wpScheduleDate}
+              onScheduleDateChange={setWpScheduleDate}
+              note={wpNote}
+              onNoteChange={setWpNote}
+              onSchedule={() => {
+                if (!wpScheduleDate.trim()) return;
+                scheduleDealersForUser(profile.personaUserId, Array.from(selectedWpIds), wpScheduleDate, wpNote);
+                setSelectedWpIds(new Set());
+              }}
+              onHide={() => {
+                hideDealersForUser(profile.personaUserId, Array.from(selectedWpIds));
+                setSelectedWpIds(new Set());
+              }}
+              onRestore={() => {
+                restoreDealersForUser(profile.personaUserId, Array.from(selectedWpIds));
+                setSelectedWpIds(new Set());
+              }}
+              onCopy={() => {}}
+              onClearSelection={() => setSelectedWpIds(new Set())}
+              buildDealerHref={buildDealerAbsHref}
+              showAddToRoute={Boolean(activeShipmentDayId && canMutateRoute)}
+              onAddToRoute={() => {
+                if (!activeShipmentDayId || !canMutateRoute) return;
+                addDealersToRoute(profile.personaUserId, activeShipmentDayId, Array.from(selectedWpIds), activeRouteSlotForBulk);
+                setSelectedWpIds(new Set());
+              }}
+              addToRouteDisabled={selectedWpIds.size === 0}
+            />
           </div>
         ) : null}
         {resultsContextLine ? (
