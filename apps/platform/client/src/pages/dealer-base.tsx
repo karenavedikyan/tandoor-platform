@@ -54,7 +54,15 @@ import {
   type DealerBaseAccessRole,
   type DealerBaseWorkView,
 } from "@/lib/dealer-base-role-views";
+import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actualization-sync-status";
 import { CityConcentrationBlock } from "@/components/city-concentration-block";
+import {
+  loadActualizationState,
+  type ActualizationApiMeta,
+  type ActualizationSyncStatus,
+} from "@/lib/client-base-actualization-api";
+import { canActualizeClientBase } from "@/lib/client-base-actualization-permissions";
+import { createEmptyActualizationState } from "@/lib/client-base-actualization-state";
 import { buildTeamSummary } from "@/lib/team-summary";
 import { TeamSummaryCard } from "@/components/team-summary-card";
 import { buildCityConcentrationRows, buildDealerBaseAllCitiesHref, buildDealerBaseCityDrillHref } from "@/lib/city-concentration";
@@ -946,6 +954,43 @@ export default function DealerBase() {
   const routeQs = useRouteSearchParams();
   const routeKey = useMemo(() => routeQs.toString(), [routeQs]);
 
+  const showActualizationSync = useMemo(() => canActualizeClientBase(profile), [profile]);
+
+  const defaultActualizationMeta = useMemo<ActualizationApiMeta>(
+    () => ({
+      success: false,
+      storageMode: "server_memory",
+      state: createEmptyActualizationState(),
+      updatedAt: null,
+    }),
+    [],
+  );
+
+  const [actualizationPanel, setActualizationPanel] = useState<{
+    pending: boolean;
+    meta: ActualizationApiMeta;
+    sync: ActualizationSyncStatus;
+  } | null>(null);
+
+  const reloadActualization = useCallback(async () => {
+    if (!showActualizationSync) return;
+    setActualizationPanel((prev) => ({
+      pending: true,
+      meta: prev?.meta ?? defaultActualizationMeta,
+      sync: prev?.sync ?? "api_ok",
+    }));
+    const r = await loadActualizationState(profile);
+    setActualizationPanel({ pending: false, meta: r.meta, sync: r.syncStatus });
+  }, [defaultActualizationMeta, profile, showActualizationSync]);
+
+  useEffect(() => {
+    if (!showActualizationSync) {
+      setActualizationPanel(null);
+      return;
+    }
+    void reloadActualization();
+  }, [reloadActualization, showActualizationSync]);
+
   useEffect(() => {
     const allowed = workViewsForAccess(access);
     setWorkView((prev) => (allowed.includes(prev) ? prev : defaultWorkViewForAccess(access)));
@@ -1716,6 +1761,15 @@ export default function DealerBase() {
           </Link>
         </Button>
       </div>
+
+      {showActualizationSync ? (
+        <ClientBaseActualizationSyncStatus
+          isLoading={!actualizationPanel || actualizationPanel.pending}
+          meta={actualizationPanel?.meta ?? defaultActualizationMeta}
+          syncStatus={actualizationPanel?.sync ?? "api_ok"}
+          onRetry={() => void reloadActualization()}
+        />
+      ) : null}
 
       <section className="space-y-3" data-testid="section-dealer-base-kpis">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
