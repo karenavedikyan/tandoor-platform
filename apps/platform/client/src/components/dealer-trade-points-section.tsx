@@ -31,11 +31,12 @@ import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { mergeTradePointsActiveForActualization, mergeTradePointsForActualization } from "@/lib/client-base-actualization-data-merge";
 import { mergeActualizationState } from "@/lib/client-base-actualization-state";
-import { generateStableManualTradePointId, nextManualTradePointInternalCode, isManualActualizationTradePointId } from "@/lib/client-base-actualization-stable-ids";
+import { generateStableManualTradePointId, nextManualTradePointInternalCode, isManualActualizationTradePointId, getTradePointDisplayCodeForActualization } from "@/lib/client-base-actualization-stable-ids";
 import {
   canArchiveTradePointDuringActualization,
-  canCreateTradePointDuringActualization,
+  canEditDealerDuringActualization,
 } from "@/lib/client-base-actualization-permissions";
+import { CLIENT_BASE_ACTUALIZATION_CLEAN_MODE } from "@/lib/client-base-actualization-config";
 import { toast } from "@/hooks/use-toast";
 import { useSectionSaveFeedback } from "@/hooks/use-section-save-feedback";
 import { SectionSaveButton } from "@/components/section-save-button";
@@ -79,9 +80,13 @@ function openShowcaseTasksCount(dealer: DealerRow, mergedActiveCount: number): n
   return tasks.filter((t) => t.status !== "done").length;
 }
 
+/** Единая подпись удаления из рабочей карточки (мягкий архив). */
+const TRADE_POINT_DELETE_FROM_CARD_LABEL = "Удалить ТТ";
+
 export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) {
   const actx = useClientBaseActualization();
-  const useAct = actx.enabled && canCreateTradePointDuringActualization(profile, row);
+  const useAct = actx.enabled && canEditDealerDuringActualization(profile, row);
+  const hideSyntheticTpChrome = actx.enabled && CLIENT_BASE_ACTUALIZATION_CLEAN_MODE;
   const canEdit = canEditDealerTradePoints(profile, row);
   const [tpBump, setTpBump] = useState(0);
   const [expanded, setExpanded] = useState(false);
@@ -107,6 +112,8 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
   const [selectedBulkArchiveTpIds, setSelectedBulkArchiveTpIds] = useState<Set<string>>(() => new Set());
   const [bulkArchiveTpDialogOpen, setBulkArchiveTpDialogOpen] = useState(false);
   const [bulkArchiveTpBusy, setBulkArchiveTpBusy] = useState(false);
+  const [singleDeleteTp, setSingleDeleteTp] = useState<DealerTradePoint | null>(null);
+  const [singleDeleteBusy, setSingleDeleteBusy] = useState(false);
   const addTpSave = useSectionSaveFeedback();
   const editTpSave = useSectionSaveFeedback();
 
@@ -151,7 +158,10 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
     return rawMergedActive.length === 0;
   }, [useAct, actx.state, row, rawMergedActive.length]);
 
-  const showcaseOpen = useMemo(() => openShowcaseTasksCount(row, mergedActive.length), [row, mergedActive.length, tpBump]);
+  const showcaseOpen = useMemo(() => {
+    if (hideSyntheticTpChrome) return undefined;
+    return openShowcaseTasksCount(row, mergedActive.length);
+  }, [hideSyntheticTpChrome, row, mergedActive.length, tpBump]);
 
   const resetAddForm = useCallback(() => {
     setAddName("");
@@ -339,8 +349,8 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
   }, [useAct, editId, editName, editCity, editAddress, editFormat, editContactName, editContactPhone, editComment, actx, row.id, profile]);
 
   const onArchive = useCallback(
-    async (tp: DealerTradePoint) => {
-      if (!useAct || !canArchiveTradePointDuringActualization(profile, row, tp)) return;
+    async (tp: DealerTradePoint): Promise<boolean> => {
+      if (!useAct || !canArchiveTradePointDuringActualization(profile, row, tp)) return false;
       const now = new Date().toISOString();
       const info = {
         tradePointId: tp.id,
@@ -361,9 +371,18 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
           title: "Не удалось сохранить. Проверьте соединение и попробуйте ещё раз.",
           variant: "destructive",
         });
+      return r.success;
     },
     [useAct, actx, row.id, profile],
   );
+
+  const confirmSingleArchiveTradePoint = useCallback(async () => {
+    if (!singleDeleteTp) return;
+    setSingleDeleteBusy(true);
+    const ok = await onArchive(singleDeleteTp);
+    setSingleDeleteBusy(false);
+    if (ok) setSingleDeleteTp(null);
+  }, [singleDeleteTp, onArchive]);
 
   const onRestoreTradePoint = useCallback(
     async (tp: DealerTradePoint) => {
@@ -828,6 +847,12 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
         </p>
       ) : null}
 
+      {useAct && canEdit && !showArchived && archivableTradePointIdsFull.size > 0 ? (
+        <p className="text-xs text-muted-foreground" data-testid="text-trade-point-bulk-selection-hint">
+          Выберите одну или несколько точек, чтобы удалить их из рабочей карточки.
+        </p>
+      ) : null}
+
       {useAct &&
       canEdit &&
       !showArchived &&
@@ -854,7 +879,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                     setSelectedBulkArchiveTpIds(new Set());
                   }
                 }}
-                className="h-5 w-5 shrink-0 touch-manipulation sm:h-4 sm:w-4"
+                className="size-6 shrink-0 touch-manipulation sm:size-5"
                 data-testid="checkbox-trade-point-select-all-visible"
               />
               <Label htmlFor="trade-point-bulk-select-all-visible" className="cursor-pointer text-sm text-muted-foreground">
@@ -897,6 +922,8 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
           const openButtonTestId = isVirtual
             ? "button-dealer-open-default-trade-point"
             : `button-dealer-trade-point-open-${tp.id}`;
+          const canArchiveThisTp =
+            useAct && canEdit && !isVirtual && !isArchived && canArchiveTradePointDuringActualization(profile, row, tp);
           return (
             <Card
               key={tp.id}
@@ -904,6 +931,27 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
               className="rounded-xl border border-border/70 bg-card shadow-xs"
             >
               <CardContent className="space-y-2 p-3 sm:p-4">
+                {showArchived && isArchived ? (
+                  <Badge
+                    variant="secondary"
+                    className="text-xs font-semibold"
+                    data-testid={`badge-trade-point-archived-status-${tp.id}`}
+                  >
+                    В архиве
+                  </Badge>
+                ) : null}
+                {canArchiveThisTp ? (
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    className="min-h-11 w-full touch-manipulation font-semibold sm:min-h-10 sm:w-auto"
+                    data-testid={`button-trade-point-delete-${tp.id}`}
+                    onClick={() => setSingleDeleteTp(tp)}
+                  >
+                    {TRADE_POINT_DELETE_FROM_CARD_LABEL}
+                  </Button>
+                ) : null}
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0 flex-1 space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
@@ -911,7 +959,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                         <Checkbox
                           checked={selectedBulkArchiveTpIds.has(tp.id)}
                           onCheckedChange={(v) => toggleBulkArchiveTp(tp.id, v === true)}
-                          className="h-5 w-5 shrink-0 touch-manipulation sm:h-4 sm:w-4"
+                          className="size-6 shrink-0 touch-manipulation sm:size-5"
                           data-testid={`checkbox-trade-point-select-${tp.id}`}
                           aria-label={`Выбрать торговую точку ${tp.name} для архивации`}
                         />
@@ -938,11 +986,9 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                       ) : null}
                     </div>
                     <p className="text-xs text-muted-foreground">{tp.city}</p>
-                    {tp.releaseCode ? (
-                      <p className="text-xs text-muted-foreground" data-testid={`text-trade-point-internal-code-${tp.id}`}>
-                        Код ТТ: {tp.releaseCode}
-                      </p>
-                    ) : null}
+                    <p className="text-xs text-muted-foreground" data-testid={`text-trade-point-internal-code-${tp.id}`}>
+                      Код ТТ: {getTradePointDisplayCodeForActualization(tp)}
+                    </p>
                     <p
                       className="flex items-start gap-1.5 text-xs leading-relaxed text-foreground"
                       data-testid={`text-dealer-trade-point-address-${tp.id}`}
@@ -958,7 +1004,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                     <TradePointPhotoBlock dealerId={row.id} tradePointId={tp.id} canEdit={canEdit} className="max-w-md" />
                   </div>
                   <div className="flex w-full shrink-0 flex-col items-stretch gap-2 sm:w-auto sm:items-end">
-                    {showBadge ? (
+                    {!hideSyntheticTpChrome && showBadge ? (
                       <Badge
                         variant="outline"
                         className={cn("w-full justify-center text-[10px] font-semibold sm:w-auto")}
@@ -967,7 +1013,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                         Витрина: {tp.showcaseStatus}
                       </Badge>
                     ) : null}
-                    {showcaseOpen != null && showcaseOpen > 0 ? (
+                    {!hideSyntheticTpChrome && showcaseOpen != null && showcaseOpen > 0 ? (
                       <p className="text-center text-[11px] text-muted-foreground sm:text-right">
                         Открытых задач по витрине:{" "}
                         <span className="font-semibold tabular-nums text-foreground">{showcaseOpen}</span>
@@ -997,18 +1043,6 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                         >
                           Редактировать
                         </Button>
-                        {canArchiveTradePointDuringActualization(profile, row, tp) ? (
-                          <Button
-                            type="button"
-                            variant="destructive"
-                            size="sm"
-                            className="min-h-10 w-full font-semibold sm:w-auto"
-                            data-testid={`button-trade-point-archive-${tp.id}`}
-                            onClick={() => void onArchive(tp)}
-                          >
-                            Архивировать ТТ
-                          </Button>
-                        ) : null}
                       </div>
                     ) : null}
                     <Button
@@ -1233,7 +1267,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
           <AlertDialogHeader>
             <AlertDialogTitle>Удалить выбранные торговые точки?</AlertDialogTitle>
             <AlertDialogDescription>
-              Торговые точки будут скрыты из рабочей карточки клиента. Данные не удаляются физически, их можно
+              Торговые точки будут скрыты из рабочей карточки клиента (архив). Данные не удаляются физически, их можно
               восстановить из архива.
               <span className="mt-2 block font-medium text-foreground">Выбрано точек: {bulkArchiveTpDialogCount}</span>
             </AlertDialogDescription>
@@ -1257,7 +1291,48 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
               disabled={bulkArchiveTpBusy || bulkArchiveTpDialogCount === 0}
               onClick={() => void confirmBulkArchiveTradePoints()}
             >
-              {bulkArchiveTpBusy ? "Сохранение…" : "Удалить / в архив"}
+              {bulkArchiveTpBusy ? "Сохранение…" : TRADE_POINT_DELETE_FROM_CARD_LABEL}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={!!singleDeleteTp}
+        onOpenChange={(open) => {
+          if (singleDeleteBusy) return;
+          if (!open) setSingleDeleteTp(null);
+        }}
+      >
+        <AlertDialogContent data-testid="dialog-trade-point-delete-confirm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Удалить торговую точку?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Торговая точка будет скрыта из карточки клиента (архив). Данные не удаляются физически, её можно восстановить
+              из архива.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col gap-2 sm:flex-row">
+            <AlertDialogCancel asChild>
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-10 w-full font-semibold sm:w-auto"
+                data-testid="button-trade-point-delete-cancel"
+                disabled={singleDeleteBusy}
+              >
+                Отмена
+              </Button>
+            </AlertDialogCancel>
+            <Button
+              type="button"
+              variant="destructive"
+              className="min-h-10 w-full font-semibold sm:w-auto"
+              data-testid="button-trade-point-delete-confirm"
+              disabled={singleDeleteBusy || !singleDeleteTp}
+              onClick={() => void confirmSingleArchiveTradePoint()}
+            >
+              {singleDeleteBusy ? "Сохранение…" : TRADE_POINT_DELETE_FROM_CARD_LABEL}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

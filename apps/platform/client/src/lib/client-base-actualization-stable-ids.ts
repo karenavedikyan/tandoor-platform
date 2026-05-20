@@ -2,7 +2,7 @@
  * Стабильные идентификаторы и проверки дублей для ручной актуализации клиентской базы.
  */
 
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
+import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import type { ActualizationState, ManualDealer, ManualTradePoint } from "@/lib/client-base-actualization-state";
 
 function pad2(n: number): string {
@@ -80,6 +80,13 @@ export function stableProvisionalTndClFromDealerId(dealerId: string): string {
 export function stableProvisionalTndTpFromTradePointId(tradePointId: string): string {
   const n = 100000 + (fnv1a32(`TND-TP:${tradePointId}`) % 900000);
   return `TND-TP-${String(n).padStart(6, "0")}`;
+}
+
+/** Код ТТ в списках/анкете: из данных релиза или стабильный TND-TP-* от id (id не меняется). */
+export function getTradePointDisplayCodeForActualization(tp: Pick<DealerTradePoint, "id" | "releaseCode">): string {
+  const c = tp.releaseCode?.trim();
+  if (c) return c;
+  return stableProvisionalTndTpFromTradePointId(tp.id);
 }
 
 function maxDealerCodeSerial(state: ActualizationState): number {
