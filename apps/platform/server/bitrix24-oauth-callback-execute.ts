@@ -3,11 +3,8 @@
  * Обмен code → token, HttpOnly session cookie, редирект в ЛК.
  * Не логирует code, access_token, refresh_token, client_secret.
  *
- * Контракт результата:
- *   - kind: "redirect" — редирект в SPA `/#/communications?...` с safe-статусом.
- *   - kind: "json" — fallback для машинных вызовов (curl/тесты). Поля
- *     `success/code/message` стабильны; `bitrixCode` появляется только если
- *     Bitrix явно дал безопасный код ошибки (whitelist в token-http).
+ * Ожидаемые ошибки — OAuthCallbackError с точным code; общий BITRIX24_OAUTH_CALLBACK_FAILED
+ * только для неизвестных исключений (один catch в конце).
  */
 
 import {
@@ -18,15 +15,27 @@ import {
   sealPersonalSession,
   type Bitrix24PersonalSessionPayload,
 } from "./bitrix24-oauth-crypto-cookie";
+import { OAuthCallbackError, type OAuthCallbackErrorCode, isOAuthCallbackError } from "./bitrix24-oauth-callback-error";
 import {
   exchangeAuthorizationCode,
   fetchBitrixUserCurrent,
   normalizePortalBase,
+  resolveTokenEndpoint,
 } from "./bitrix24-oauth-token-http";
 
 export type Bitrix24OAuthCallbackHttpResult =
   | { kind: "redirect"; location: string; setCookies: string[] }
   | { kind: "json"; status: number; body: Record<string, unknown>; setCookies?: string[] };
+
+const MAX_SET_COOKIE_HEADER_BYTES = 3900;
+
+function oauthCallbackLog(step: string, data?: Record<string, unknown>): void {
+  console.error(`[bitrix24] oauth.callback:${step}`, data ?? {});
+}
+
+function fail(status: number, code: OAuthCallbackErrorCode, message: string, bitrixCode?: string): never {
+  throw new OAuthCallbackError(status, code, message, bitrixCode);
+}
 
 function firstQuery(v: unknown): string {
   if (v == null) return "";
@@ -69,15 +78,6 @@ function buildClearStateCookie(secure: boolean): string {
     .join("; ");
 }
 
-/**
- * SPA использует hash-router (wouter `useHashLocation`), поэтому `?...` после `#/path`
- * считается частью маршрута и роут `/communications` не матчится → SPA рисует Not Found.
- *
- * Безопасный для роутера формат: query до `#`, route в hash. То есть
- * `/?bitrix24=error&code=...#/communications` — браузер сначала загружает корень,
- * hash-router переходит на `/communications`, а параметры доступны через
- * `window.location.search`.
- */
 function buildSpaErrorLocation(code: string, bitrixCode?: string): string {
   const qs = new URLSearchParams();
   qs.set("bitrix24", "error");
@@ -102,26 +102,54 @@ function jsonError(
   return { kind: "json", status, body, setCookies };
 }
 
-/**
- * Вернёт redirect, если запрос явно из браузера (есть state cookie или Accept HTML),
- * иначе JSON — чтобы curl/тесты получали машиночитаемый ответ.
- *
- * В callback Bitrix24 редиректит браузер пользователя, поэтому по умолчанию
- * (когда `prefersBrowserRedirect = true`) мы делаем 302 в SPA.
- */
-function preferBrowserRedirect(prefersBrowserRedirect: boolean): boolean {
-  return prefersBrowserRedirect;
+function portalOriginFromClientEndpoint(ep: string): string | undefined {
+  const t = ep.trim().replace(/\/+$/, "");
+  if (!/\/rest$/i.test(t)) return undefined;
+  return t.replace(/\/rest$/i, "").replace(/\/+$/, "") || undefined;
+}
+
+function isUsablePortalUrl(url: string): boolean {
+  if (!url.trim()) return false;
+  try {
+    const u = new URL(url);
+    if (!u.hostname || u.hostname.length < 3) return false;
+    return u.hostname.includes(".") || u.hostname === "localhost";
+  } catch {
+    return false;
+  }
+}
+
+function resolvePortalBase(tok: { client_endpoint?: string }, envPortal: string): string {
+  const envNorm = envPortal.trim() ? normalizePortalBase(envPortal) : "";
+  const fromEp = tok.client_endpoint ? portalOriginFromClientEndpoint(tok.client_endpoint) : undefined;
+  const epNorm = fromEp ? normalizePortalBase(fromEp) : "";
+  const chosen = isUsablePortalUrl(envNorm) ? envNorm : epNorm;
+  if (!isUsablePortalUrl(chosen)) {
+    fail(
+      503,
+      "BITRIX24_OAUTH_NOT_CONFIGURED",
+      "Укажите корректный BITRIX24_PORTAL_DOMAIN в переменных окружения (или убедитесь, что ответ OAuth содержит client_endpoint с доменом портала).",
+    );
+  }
+  return chosen;
+}
+
+function safeTokenEndpointHost(): string {
+  try {
+    return new URL(`${resolveTokenEndpoint()}/`).hostname;
+  } catch {
+    return "invalid-token-endpoint";
+  }
 }
 
 export async function runBitrix24OAuthCallback(input: {
   query: Record<string, unknown>;
   cookieHeader: string | undefined;
-  /** Если true — ошибки превращаются в 302 на SPA. По умолчанию true (браузерный callback). */
   prefersBrowserRedirect?: boolean;
 }): Promise<Bitrix24OAuthCallbackHttpResult> {
   const secure = cookieSecureFlag();
   const clearState = buildClearStateCookie(secure);
-  const prefersRedirect = preferBrowserRedirect(input.prefersBrowserRedirect ?? true);
+  const prefersRedirect = input.prefersBrowserRedirect ?? true;
 
   const errorResult = (
     status: number,
@@ -132,39 +160,49 @@ export async function runBitrix24OAuthCallback(input: {
   ): Bitrix24OAuthCallbackHttpResult => {
     const cookies = [clearState, ...(extraCookies ?? [])];
     if (prefersRedirect) {
+      oauthCallbackLog("callback:redirect:error", { code, bitrixCode: bitrixCode ?? null, httpStatus: status });
       return { kind: "redirect", location: buildSpaErrorLocation(code, bitrixCode), setCookies: cookies };
     }
+    oauthCallbackLog("callback:redirect:error", { code, bitrixCode: bitrixCode ?? null, httpStatus: status, kind: "json" });
     return jsonError(status, code, message, cookies, bitrixCode);
   };
+
+  oauthCallbackLog("callback:start", {
+    hasCookieHeader: Boolean(input.cookieHeader?.trim()),
+    tokenEndpointHost: safeTokenEndpointHost(),
+  });
 
   try {
     const stateFromQuery = normalizeOAuthState(firstQuery(input.query.state));
     const stateFromCookie = normalizeOAuthState(readCookieValue(input.cookieHeader, "b24_oauth_state"));
 
     if (!stateFromQuery || !stateFromCookie || stateFromQuery !== stateFromCookie) {
-      console.error("[bitrix24] oauth callback state mismatch", {
+      oauthCallbackLog("callback:state-failed", {
         hasQueryState: Boolean(stateFromQuery),
         hasCookieState: Boolean(stateFromCookie),
+        sameLength: stateFromQuery.length === stateFromCookie.length,
       });
-      return errorResult(
+      fail(
         400,
         "BITRIX24_OAUTH_STATE_MISMATCH",
         "Не удалось подтвердить запрос авторизации. Начните подключение Bitrix24 снова из личного кабинета.",
       );
     }
+    oauthCallbackLog("callback:state-ok", {});
 
-    const code = firstQuery(input.query.code);
-    if (!code) {
+    const authCode = firstQuery(input.query.code);
+    if (!authCode) {
       const bitrixError = firstQuery(input.query.error);
       if (bitrixError) {
-        console.error("[bitrix24] oauth callback bitrix error param", { error: bitrixError.slice(0, 64) });
-        return errorResult(
+        oauthCallbackLog("callback:missing-code", { hasBitrixErrorParam: true });
+        fail(
           400,
           "BITRIX24_OAUTH_AUTHORIZATION_DENIED",
           "Bitrix24 отклонил авторизацию. Попробуйте подключить Bitrix24 снова.",
         );
       }
-      return errorResult(
+      oauthCallbackLog("callback:missing-code", { hasBitrixErrorParam: false });
+      fail(
         400,
         "BITRIX24_OAUTH_MISSING_CODE",
         "В ответе Bitrix24 нет кода авторизации. Попробуйте подключить Bitrix24 снова.",
@@ -172,47 +210,57 @@ export async function runBitrix24OAuthCallback(input: {
     }
 
     if (!strEnv("BITRIX24_OAUTH_COOKIE_SECRET")) {
-      return errorResult(
+      oauthCallbackLog("callback:cookie-seal:failed", { reason: "cookie_secret_missing" });
+      fail(
         503,
         "BITRIX24_OAUTH_COOKIE_ERROR",
         "На сервере не задан BITRIX24_OAUTH_COOKIE_SECRET — нельзя безопасно сохранить сессию Bitrix24.",
       );
     }
 
-    let tok: Awaited<ReturnType<typeof exchangeAuthorizationCode>>;
-    try {
-      tok = await exchangeAuthorizationCode(code);
-    } catch (e) {
-      const m = e instanceof Error ? e.message : String(e);
-      console.error("[bitrix24] oauth callback token exchange threw", { msg: m });
-      return errorResult(
-        502,
-        "BITRIX24_OAUTH_TOKEN_ERROR",
-        "Не удалось обменять код авторизации Bitrix24. Попробуйте подключить Bitrix24 заново.",
-      );
-    }
+    oauthCallbackLog("callback:token-request:start", {
+      tokenEndpointHost: safeTokenEndpointHost(),
+      includeRedirectFirst: strEnv("BITRIX24_OAUTH_TOKEN_INCLUDE_REDIRECT_URI") === "true",
+      preferPost: strEnv("BITRIX24_OAUTH_TOKEN_HTTP_METHOD").toLowerCase() === "post",
+    });
+
+    const tok = await exchangeAuthorizationCode(authCode);
     if (!tok.ok) {
-      return errorResult(tok.status, tok.code, tok.message, tok.bitrixCode);
+      const ta = tok.tokenAttempt;
+      oauthCallbackLog("callback:token-request:failed", {
+        bitrixCode: ta.bitrixCode ?? null,
+        httpStatus: ta.httpStatus,
+        method: ta.httpMethod,
+        includeRedirectUri: ta.includeRedirectUri,
+      });
+      fail(tok.status, tok.code as OAuthCallbackErrorCode, tok.message, tok.bitrixCode);
     }
 
-    const portalBase = normalizePortalBase(strEnv("BITRIX24_PORTAL_DOMAIN"));
+    oauthCallbackLog("callback:token-request:success", {
+      method: tok.exchangeMeta.httpMethod,
+      includeRedirectUri: tok.exchangeMeta.includeRedirectUri,
+      hasClientEndpoint: Boolean(tok.client_endpoint?.trim()),
+    });
+
+    const portalBase = resolvePortalBase(tok, strEnv("BITRIX24_PORTAL_DOMAIN"));
     const tokenRestCtx = (tok.client_endpoint?.trim() || portalBase) as string;
 
-    // fetchBitrixUserCurrent — не критичная часть. Если REST вернул ошибку —
-    // продолжаем без user.name/id (сессия с токенами всё равно сохраняется).
     let user: { bitrixUserId?: string; name?: string } = {};
+    oauthCallbackLog("callback:user-current:start", {});
     try {
       const u = await fetchBitrixUserCurrent(tokenRestCtx, tok.tokens.access_token);
       user = { bitrixUserId: u.bitrixUserId, name: u.name };
       if (u.userCurrentError) {
-        console.error("[bitrix24] oauth callback step", "user_current", {
+        oauthCallbackLog("callback:user-current:failed", {
           code: "BITRIX24_OAUTH_USER_CURRENT_ERROR",
           bitrixCode: u.userCurrentBitrixCode ?? "unknown",
         });
+      } else {
+        oauthCallbackLog("callback:user-current:ok", { hasUserId: Boolean(user.bitrixUserId) });
       }
     } catch (e) {
       const m = e instanceof Error ? e.message : String(e);
-      console.error("[bitrix24] oauth callback step", "user_current", "threw", { msg: m });
+      oauthCallbackLog("callback:user-current:failed", { threw: true, msg: m.slice(0, 200) });
     }
 
     const expires_at_ms = Date.now() + tok.tokens.expires_in * 1000;
@@ -227,20 +275,22 @@ export async function runBitrix24OAuthCallback(input: {
       user_name: user.name,
     };
 
+    oauthCallbackLog("callback:cookie-seal:start", {});
     let sealed: string | null;
     try {
       sealed = sealPersonalSession(payload);
     } catch (e) {
       const m = e instanceof Error ? e.message : String(e);
-      console.error("[bitrix24] oauth callback seal threw", { msg: m });
-      return errorResult(
+      oauthCallbackLog("callback:cookie-seal:failed", { reason: "seal_threw", msg: m.slice(0, 200) });
+      fail(
         503,
         "BITRIX24_OAUTH_COOKIE_ERROR",
         "Не удалось зашифровать сессию Bitrix24. Проверьте BITRIX24_OAUTH_COOKIE_SECRET.",
       );
     }
     if (!sealed) {
-      return errorResult(
+      oauthCallbackLog("callback:cookie-seal:failed", { reason: "seal_returned_null" });
+      fail(
         503,
         "BITRIX24_OAUTH_COOKIE_ERROR",
         "Не удалось зашифровать сессию Bitrix24. Проверьте BITRIX24_OAUTH_COOKIE_SECRET.",
@@ -248,23 +298,56 @@ export async function runBitrix24OAuthCallback(input: {
     }
 
     if (sealed.length > 3600) {
-      console.error("[bitrix24] oauth callback sealed cookie too large", { length: sealed.length });
-      return errorResult(
+      oauthCallbackLog("callback:cookie-seal:failed", { reason: "payload_too_large", sealedLen: sealed.length });
+      fail(
         503,
         "BITRIX24_OAUTH_COOKIE_ERROR",
         "Токены Bitrix24 слишком длинные для cookie. Нужно серверное хранилище сессий.",
       );
     }
 
-    const sessionCookie = buildSetPersonalSessionCookie(sealed, secure);
+    let sessionCookie: string;
+    try {
+      sessionCookie = buildSetPersonalSessionCookie(sealed, secure);
+    } catch (e) {
+      const m = e instanceof Error ? e.message : String(e);
+      oauthCallbackLog("callback:cookie-seal:failed", { reason: "build_set_cookie_threw", msg: m.slice(0, 200) });
+      fail(
+        503,
+        "BITRIX24_OAUTH_COOKIE_ERROR",
+        "Не удалось сформировать cookie сессии Bitrix24. Проверьте размер токенов или секрет.",
+      );
+    }
+
+    const cookieBytes = Buffer.byteLength(sessionCookie, "utf8");
+    if (cookieBytes > MAX_SET_COOKIE_HEADER_BYTES) {
+      oauthCallbackLog("callback:cookie-seal:failed", {
+        reason: "set_cookie_header_too_large",
+        cookieHeaderBytes: cookieBytes,
+        maxBytes: MAX_SET_COOKIE_HEADER_BYTES,
+      });
+      fail(
+        503,
+        "BITRIX24_OAUTH_COOKIE_ERROR",
+        "Слишком длинная cookie сессии для браузера или прокси. Нужно серверное хранилище сессий.",
+      );
+    }
+
+    oauthCallbackLog("callback:session-cookie:set", { cookieHeaderBytes: cookieBytes });
+
+    oauthCallbackLog("callback:redirect:success", { path: "connected" });
     return {
       kind: "redirect",
       location: buildSpaSuccessLocation(),
       setCookies: [clearState, sessionCookie],
     };
   } catch (e) {
-    const m = e instanceof Error ? e.message : String(e);
-    console.error("[bitrix24] oauth callback unexpected error", { msg: m });
+    if (isOAuthCallbackError(e)) {
+      return errorResult(e.status, e.code, e.message, e.bitrixCode);
+    }
+    const msg = e instanceof Error ? e.message : String(e);
+    const name = e instanceof Error ? e.name : typeof e;
+    oauthCallbackLog("callback:unexpected", { errorName: name, errorMsg: msg.slice(0, 400) });
     return errorResult(
       500,
       "BITRIX24_OAUTH_CALLBACK_FAILED",

@@ -67,7 +67,7 @@ function describeBitrixOAuthReturnError(appCode: string, bitrixCode: string): st
     case "BITRIX24_OAUTH_NOT_CONFIGURED":
       return "OAuth Bitrix24 не настроен на сервере.";
     case "BITRIX24_OAUTH_CALLBACK_FAILED":
-      return "Внутренняя ошибка при завершении подключения. Попробуйте позже.";
+      return "Неизвестная ошибка сервера при подключении Bitrix24. Смотрите логи функции oauth/callback (строка oauth.callback:unexpected).";
     default:
       return c ? `${c}${bx ? ` (${bx})` : ""}` : "Не удалось подключить Bitrix24. Попробуйте ещё раз.";
   }
