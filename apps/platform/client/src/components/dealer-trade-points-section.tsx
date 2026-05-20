@@ -37,6 +37,16 @@ import {
   canCreateTradePointDuringActualization,
 } from "@/lib/client-base-actualization-permissions";
 import { toast } from "@/hooks/use-toast";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 type Props = {
   row: DealerRow;
@@ -94,6 +104,9 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
   const [editContactPhone, setEditContactPhone] = useState("");
   const [editComment, setEditComment] = useState("");
   const [editSaving, setEditSaving] = useState(false);
+  const [selectedBulkArchiveTpIds, setSelectedBulkArchiveTpIds] = useState<Set<string>>(() => new Set());
+  const [bulkArchiveTpDialogOpen, setBulkArchiveTpDialogOpen] = useState(false);
+  const [bulkArchiveTpBusy, setBulkArchiveTpBusy] = useState(false);
 
   useEffect(() => {
     const fn = () => setTpBump((n) => n + 1);
@@ -357,6 +370,112 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
   const hasArchived = archivedCount > 0;
   void hasAnyTradePointEver;
 
+  const tpListLimit = useMemo(() => {
+    if (expanded || listToShow.length <= 3) return listToShow.length;
+    return Math.min(3, listToShow.length);
+  }, [expanded, listToShow]);
+
+  const tpListSlice = useMemo(() => listToShow.slice(0, tpListLimit), [listToShow, tpListLimit]);
+
+  const archivableTradePointIdsFull = useMemo(() => {
+    if (!useAct || !canEdit || showArchived) return new Set<string>();
+    const s = new Set<string>();
+    for (const entry of mergedActive) {
+      const tp = entry.point;
+      if (isVirtualDefaultTradePointId(row.id, tp.id)) continue;
+      if (!canArchiveTradePointDuringActualization(profile, row, tp)) continue;
+      s.add(tp.id);
+    }
+    return s;
+  }, [useAct, canEdit, showArchived, mergedActive, profile, row]);
+
+  const archivableTradePointIdsInSlice = useMemo(() => {
+    const s = new Set<string>();
+    for (const entry of tpListSlice) {
+      if (archivableTradePointIdsFull.has(entry.point.id)) s.add(entry.point.id);
+    }
+    return s;
+  }, [tpListSlice, archivableTradePointIdsFull]);
+
+  useEffect(() => {
+    setSelectedBulkArchiveTpIds((prev) => {
+      const n = new Set<string>();
+      let changed = false;
+      prev.forEach((id) => {
+        if (archivableTradePointIdsFull.has(id)) n.add(id);
+        else changed = true;
+      });
+      if (!changed && n.size === prev.size) return prev;
+      return n;
+    });
+  }, [archivableTradePointIdsFull]);
+
+  const toggleBulkArchiveTp = useCallback((tradePointId: string, checked: boolean) => {
+    setSelectedBulkArchiveTpIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(tradePointId);
+      else next.delete(tradePointId);
+      return next;
+    });
+  }, []);
+
+  const allVisibleArchiveTpSelected = useMemo(() => {
+    if (archivableTradePointIdsInSlice.size === 0) return false;
+    for (const id of Array.from(archivableTradePointIdsInSlice)) {
+      if (!selectedBulkArchiveTpIds.has(id)) return false;
+    }
+    return true;
+  }, [archivableTradePointIdsInSlice, selectedBulkArchiveTpIds]);
+
+  const someVisibleArchiveTpSelected = useMemo(() => {
+    for (const id of Array.from(archivableTradePointIdsInSlice)) {
+      if (selectedBulkArchiveTpIds.has(id)) return true;
+    }
+    return false;
+  }, [archivableTradePointIdsInSlice, selectedBulkArchiveTpIds]);
+
+  const bulkArchiveTpDialogCount = useMemo(() => {
+    let n = 0;
+    for (const id of Array.from(selectedBulkArchiveTpIds)) {
+      if (archivableTradePointIdsFull.has(id)) n += 1;
+    }
+    return n;
+  }, [selectedBulkArchiveTpIds, archivableTradePointIdsFull]);
+
+  const confirmBulkArchiveTradePoints = useCallback(async () => {
+    const ids = Array.from(selectedBulkArchiveTpIds).filter((id) => archivableTradePointIdsFull.has(id));
+    if (ids.length === 0) {
+      setBulkArchiveTpDialogOpen(false);
+      return;
+    }
+    setBulkArchiveTpBusy(true);
+    const now = new Date().toISOString();
+    const uid = profile.personaUserId;
+    const uname = userLabelFromProfile(profile);
+    const r = await actx.persist((prev) => {
+      const nextArch = { ...prev.archivedTradePointsById };
+      for (const id of ids) {
+        nextArch[id] = {
+          tradePointId: id,
+          dealerId: row.id,
+          archivedAt: now,
+          archivedBy: uid,
+          archivedByName: uname,
+          source: "manual_actualization" as const,
+        };
+      }
+      return mergeActualizationState(prev, { archivedTradePointsById: nextArch });
+    });
+    setBulkArchiveTpBusy(false);
+    if (r.success) {
+      toast({ title: "Торговые точки удалены из рабочей карточки" });
+      setSelectedBulkArchiveTpIds(new Set());
+      setBulkArchiveTpDialogOpen(false);
+    } else {
+      toast({ title: "Не удалось сохранить", variant: "destructive" });
+    }
+  }, [selectedBulkArchiveTpIds, archivableTradePointIdsFull, actx, profile, row.id]);
+
   if (mergedActive.length === 0 && !showArchived && !hasAnyTradePointEver) {
     return (
       <section
@@ -589,9 +708,6 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
     );
   }
 
-  const limit = expanded || listToShow.length <= 3 ? listToShow.length : Math.min(3, listToShow.length);
-  const slice = listToShow.slice(0, limit);
-
   return (
     <section id={sectionDomId} data-testid="section-dealer-trade-points" className="scroll-mt-28 space-y-2 sm:scroll-mt-32">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -636,8 +752,67 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
         </p>
       ) : null}
 
+      {useAct &&
+      canEdit &&
+      !showArchived &&
+      archivableTradePointIdsFull.size > 0 &&
+      selectedBulkArchiveTpIds.size > 0 ? (
+        <div
+          className="flex min-w-0 flex-col gap-3 rounded-xl border border-destructive/25 bg-destructive/5 p-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"
+          data-testid="panel-trade-point-bulk-actions"
+        >
+          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+            <p className="text-sm font-semibold text-foreground" data-testid="text-trade-point-bulk-selected-count">
+              Выбрано точек: {selectedBulkArchiveTpIds.size}
+            </p>
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="trade-point-bulk-select-all-visible"
+                checked={
+                  allVisibleArchiveTpSelected ? true : someVisibleArchiveTpSelected ? "indeterminate" : false
+                }
+                onCheckedChange={(v) => {
+                  if (v === true) {
+                    setSelectedBulkArchiveTpIds(new Set(archivableTradePointIdsInSlice));
+                  } else {
+                    setSelectedBulkArchiveTpIds(new Set());
+                  }
+                }}
+                className="h-5 w-5 shrink-0 touch-manipulation sm:h-4 sm:w-4"
+                data-testid="checkbox-trade-point-select-all-visible"
+              />
+              <Label htmlFor="trade-point-bulk-select-all-visible" className="cursor-pointer text-sm text-muted-foreground">
+                Все на экране
+              </Label>
+            </div>
+          </div>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="min-h-10 w-full font-semibold sm:w-auto"
+              data-testid="button-trade-point-bulk-clear-selection"
+              onClick={() => setSelectedBulkArchiveTpIds(new Set())}
+            >
+              Снять выбор
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              className="min-h-10 w-full font-semibold sm:w-auto"
+              data-testid="button-trade-point-bulk-archive"
+              onClick={() => setBulkArchiveTpDialogOpen(true)}
+            >
+              Удалить / в архив
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       <div className="space-y-2">
-        {slice.map((entry) => {
+        {tpListSlice.map((entry) => {
           const { point: tp, isManual, isEdited, isArchived } = entry;
           const contact = tradePointContact(tp, row, mergedActive.length);
           const showBadge = isFilled(tp.showcaseStatus);
@@ -656,6 +831,15 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0 flex-1 space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
+                      {archivableTradePointIdsFull.has(tp.id) ? (
+                        <Checkbox
+                          checked={selectedBulkArchiveTpIds.has(tp.id)}
+                          onCheckedChange={(v) => toggleBulkArchiveTp(tp.id, v === true)}
+                          className="h-5 w-5 shrink-0 touch-manipulation sm:h-4 sm:w-4"
+                          data-testid={`checkbox-trade-point-select-${tp.id}`}
+                          aria-label={`Выбрать торговую точку ${tp.name} для архивации`}
+                        />
+                      ) : null}
                       <p className="text-sm font-semibold leading-snug text-foreground">{tp.name}</p>
                       {isVirtual ? (
                         <Badge
@@ -923,6 +1107,47 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={bulkArchiveTpDialogOpen}
+        onOpenChange={(open) => {
+          if (bulkArchiveTpBusy) return;
+          setBulkArchiveTpDialogOpen(open);
+        }}
+      >
+        <AlertDialogContent data-testid="dialog-trade-point-bulk-archive-confirm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Удалить выбранные торговые точки?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Торговые точки будут скрыты из рабочей карточки клиента. Данные не удаляются физически, их можно
+              восстановить из архива.
+              <span className="mt-2 block font-medium text-foreground">Выбрано точек: {bulkArchiveTpDialogCount}</span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col gap-2 sm:flex-row">
+            <AlertDialogCancel asChild>
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-10 w-full font-semibold sm:w-auto"
+                data-testid="button-trade-point-bulk-archive-cancel"
+              >
+                Отмена
+              </Button>
+            </AlertDialogCancel>
+            <Button
+              type="button"
+              variant="destructive"
+              className="min-h-10 w-full font-semibold sm:w-auto"
+              data-testid="button-trade-point-bulk-archive-confirm"
+              disabled={bulkArchiveTpBusy || bulkArchiveTpDialogCount === 0}
+              onClick={() => void confirmBulkArchiveTradePoints()}
+            >
+              {bulkArchiveTpBusy ? "Сохранение…" : "Удалить / в архив"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </section>
   );
 }
