@@ -33,9 +33,14 @@ export function canEditDealerDuringActualization(profile: ReleaseDemoProfile, de
   return canEditClientNextStep(profile, dealer);
 }
 
-/** Мягкое архивирование вручную созданного клиента — те же границы ответственности, что и правка. */
+/** Мягкое архивирование клиента (скрытие из рабочей базы) — те же границы ответственности, что и правка. */
 export function canArchiveDealerDuringActualization(profile: ReleaseDemoProfile, dealer: DealerRow): boolean {
   return canEditDealerDuringActualization(profile, dealer);
+}
+
+/** Алиас: менеджер — свои клиенты, РОП — команда, директор — все; маркетолог/аналитик — нет. */
+export function canArchiveDealer(profile: ReleaseDemoProfile, dealer: DealerRow): boolean {
+  return canArchiveDealerDuringActualization(profile, dealer);
 }
 
 export function canCreateTradePointDuringActualization(profile: ReleaseDemoProfile, dealer: DealerRow): boolean {

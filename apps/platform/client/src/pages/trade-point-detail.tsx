@@ -37,7 +37,9 @@ import {
 } from "@/lib/training-attention";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
+import { canActualizeClientBase } from "@/lib/client-base-actualization-permissions";
 import { resolveActualizationTradePointDetail } from "@/lib/client-base-actualization-data-merge";
+import { TradePointManualActualizationView } from "@/components/trade-point-manual-actualization-view";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -472,6 +474,7 @@ function TradePointDetailContent({
   tpMeta: MergedTradePointEntry;
 }) {
   const { profile } = useReleaseDemoProfile();
+  const actx = useClientBaseActualization();
   const { user } = useCurrentUser();
   const activeSection = useActiveSection();
   const [commentsBump, setCommentsBump] = useState(0);
@@ -549,6 +552,11 @@ function TradePointDetailContent({
     () => isVirtualDefaultTradePointId(dealer.id, point.id),
     [dealer.id, point.id],
   );
+  const useManualAnketa =
+    tpMeta.isManual &&
+    !isVirtualDefaultPoint &&
+    actx.enabled &&
+    canActualizeClientBase(profile);
   const canEditTp = useMemo(
     () => !isVirtualDefaultPoint && canEditDealerTradePoints(profile, dealerForRbac),
     [profile, dealerForRbac, isVirtualDefaultPoint],
@@ -774,6 +782,10 @@ function TradePointDetailContent({
   }, [dealer.id, point.id, profile]);
 
   const breadcrumbDealerLabel = dealer.name;
+
+  if (useManualAnketa) {
+    return <TradePointManualActualizationView dealer={dealer} point={point} profile={profile} />;
+  }
 
   return (
     <div

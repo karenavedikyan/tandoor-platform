@@ -525,12 +525,24 @@ export function resolveDealerRowForCard(dealerIdRaw: string, act: ActualizationS
   return undefined;
 }
 
-/** Строки для клиентской базы: manual сверху, затем release с merge. */
-export function buildDealerBaseRowsWithActualization(act: ActualizationState, profile: ReleaseDemoProfile): DealerRow[] {
+export type BuildDealerBaseRowsOptions = {
+  /** Включить клиентов из `archivedDealersById` в список (для режима «Показать архив»). */
+  includeArchivedDealers?: boolean;
+};
+
+/** Строки для клиентской базы: manual сверху, затем release с merge. По умолчанию без архивированных. */
+export function buildDealerBaseRowsWithActualization(
+  act: ActualizationState,
+  profile: ReleaseDemoProfile,
+  opts?: BuildDealerBaseRowsOptions,
+): DealerRow[] {
+  const showArchived = opts?.includeArchivedDealers === true;
+  const includeId = (id: string) => showArchived || !act.archivedDealersById[id];
+
   const manuals = Object.values(act.manuallyCreatedDealersById)
-    .filter((m) => !act.archivedDealersById[m.id])
+    .filter((m) => includeId(m.id))
     .map((m) => mergeDealerRowWithActualization(manualDealerToRow(m, profile), act));
-  const rest = DEALER_BASE_ROWS.map((r) => mergeDealerRowWithActualization(r, act));
+  const rest = DEALER_BASE_ROWS.filter((r) => includeId(r.id)).map((r) => mergeDealerRowWithActualization(r, act));
   return [...manuals, ...rest];
 }
 

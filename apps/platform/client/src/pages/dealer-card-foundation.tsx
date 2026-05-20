@@ -13,6 +13,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -150,6 +158,7 @@ import { canActualizeClientBase, canArchiveDealerDuringActualization, canEditDea
 import { mergeActualizationState } from "@/lib/client-base-actualization-state";
 import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actualization-sync-status";
 import { DealerActualizationEditDialog } from "@/components/client-base-actualization-dealer-forms";
+import { DealerManualActualizationPage } from "@/components/dealer-manual-actualization-page";
 import { PageLoadingFallback } from "@/components/navigation/page-loading";
 
 const SECTION_IDS = [
@@ -746,6 +755,7 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
   const [regionalBump, setRegionalBump] = useState(0);
   const [dealerEditOpen, setDealerEditOpen] = useState(false);
   const [dealerArchiveBusy, setDealerArchiveBusy] = useState(false);
+  const [dealerDeleteDialogOpen, setDealerDeleteDialogOpen] = useState(false);
   const [historyCommentDraft, setHistoryCommentDraft] = useState("");
   const [problemCommentDraft, setProblemCommentDraft] = useState("");
   const [competitorCommentDraft, setCompetitorCommentDraft] = useState("");
@@ -840,10 +850,12 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
   const isManualDealerRow = isManualActualizationDealerId(baseRow.id);
   const canArchiveManualDealer =
     actx.enabled && isManualDealerRow && canArchiveDealerDuringActualization(profile, row);
+  const canSoftArchiveDealer = actx.enabled && canArchiveDealerDuringActualization(profile, row);
 
-  const archiveManualDealer = useCallback(async () => {
-    if (!canArchiveManualDealer) return;
+  const softArchiveDealer = useCallback(async () => {
+    if (!canSoftArchiveDealer) return;
     setDealerArchiveBusy(true);
+    const source = isManualDealerRow ? ("manual_actualization" as const) : ("client_soft_archive" as const);
     const r = await actx.persist((prev) =>
       mergeActualizationState(prev, {
         archivedDealersById: {
@@ -853,14 +865,15 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
             archivedAt: new Date().toISOString(),
             archivedBy: profile.personaUserId,
             archivedByName: userLabelFromProfile(profile),
-            source: "manual_actualization",
+            source,
           },
         },
       }),
     );
     setDealerArchiveBusy(false);
     if (r.success) {
-      toast({ title: "Клиент в архиве" });
+      toast({ title: "Клиент удалён из рабочей базы" });
+      setDealerDeleteDialogOpen(false);
       setLocation("/dealer-base");
     } else {
       toast({
@@ -868,7 +881,7 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
         variant: "destructive",
       });
     }
-  }, [actx, baseRow.id, canArchiveManualDealer, profile, setLocation]);
+  }, [actx, baseRow.id, canSoftArchiveDealer, isManualDealerRow, profile, setLocation]);
 
   const businessCategoryLabel = getClientCategoryLabel(row.clientCategory);
   const rowView = row;
@@ -1245,7 +1258,7 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                           className="min-h-10 w-full shrink-0 font-semibold sm:w-auto"
                           data-testid={`button-dealer-delete-${baseRow.id}`}
                           disabled={dealerArchiveBusy}
-                          onClick={() => void archiveManualDealer()}
+                          onClick={() => void softArchiveDealer()}
                         >
                           {dealerArchiveBusy ? "Сохранение…" : "Архивировать клиента"}
                         </Button>
@@ -1440,17 +1453,20 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                         Редактировать
                       </Button>
                     ) : null}
-                    {canArchiveManualDealer ? (
+                    {canSoftArchiveDealer ? (
                       <Button
                         type="button"
-                        variant="destructive"
+                        variant={isManualDealerRow ? "destructive" : "outline"}
                         size="sm"
-                        className="min-h-10 w-full font-semibold sm:w-auto"
+                        className={cn(
+                          "min-h-10 w-full font-semibold sm:w-auto",
+                          !isManualDealerRow && "border-amber-300/80 bg-amber-50/80 text-amber-950 hover:bg-amber-100/90",
+                        )}
                         data-testid={`button-dealer-delete-${baseRow.id}`}
                         disabled={dealerArchiveBusy}
-                        onClick={() => void archiveManualDealer()}
+                        onClick={() => setDealerDeleteDialogOpen(true)}
                       >
-                        {dealerArchiveBusy ? "Сохранение…" : "Архивировать клиента"}
+                        {isManualDealerRow ? "Удалить клиента" : "В архив"}
                       </Button>
                     ) : null}
                     {canActualizeClientBase(profile) ? (
@@ -2280,6 +2296,39 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
         profile={profile}
       />
 
+      <AlertDialog open={dealerDeleteDialogOpen} onOpenChange={setDealerDeleteDialogOpen}>
+        <AlertDialogContent data-testid="dialog-dealer-delete-confirm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Удалить клиента?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Клиент будет скрыт из рабочей базы. Данные можно будет восстановить.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full sm:w-auto"
+              data-testid="button-dealer-delete-cancel"
+              disabled={dealerArchiveBusy}
+              onClick={() => setDealerDeleteDialogOpen(false)}
+            >
+              Отмена
+            </Button>
+            <Button
+              type="button"
+              variant={isManualDealerRow ? "destructive" : "default"}
+              className="w-full font-semibold sm:w-auto"
+              data-testid="button-dealer-delete-confirm"
+              disabled={dealerArchiveBusy}
+              onClick={() => void softArchiveDealer()}
+            >
+              {dealerArchiveBusy ? "Сохранение…" : isManualDealerRow ? "Удалить клиента" : "В архив"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <FloatingBackButton
         href="/dealer-base"
         label="К базе"
@@ -2293,9 +2342,22 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
 function DealerArchivedGate({ dealerId, profile }: { dealerId: string; profile: ReleaseDemoProfile }) {
   const actx = useClientBaseActualization();
   const [busy, setBusy] = useState(false);
-  const manual = actx.state.manuallyCreatedDealersById[dealerId];
-  if (!manual) return <DealerNotFound />;
-  const row = mergeDealerRowWithActualization(manualDealerToRow(manual, profile), actx.state);
+  const manualEntry = actx.state.manuallyCreatedDealersById[dealerId];
+  const releaseBase = getDealerById(dealerId);
+
+  const row = useMemo(() => {
+    if (manualEntry) {
+      return mergeDealerRowWithActualization(manualDealerToRow(manualEntry, profile), actx.state);
+    }
+    if (releaseBase) {
+      return mergeDealerRowWithActualization(getDealerRowWithProfileOverrides(releaseBase), actx.state);
+    }
+    return undefined;
+  }, [manualEntry, releaseBase, profile, actx.state]);
+
+  if (!row) return <DealerNotFound />;
+
+  const isManual = isManualActualizationDealerId(dealerId);
   const canRestore = actx.enabled && canArchiveDealerDuringActualization(profile, row);
 
   const onRestore = async () => {
@@ -2315,6 +2377,11 @@ function DealerArchivedGate({ dealerId, profile }: { dealerId: string; profile: 
       });
   };
 
+  const title = isManual ? "Клиент удалён" : "Клиент в архиве";
+  const stateText = isManual
+    ? "Клиент скрыт из рабочей базы. Запись сохранена — вы можете восстановить клиента при необходимости."
+    : "Клиент в архиве и скрыт из обычной выдачи. Данные сохранены — при необходимости восстановите клиента в базе.";
+
   return (
     <div className="mx-auto max-w-md space-y-6 px-4 py-10" data-testid="page-dealer-archived">
       <Button asChild variant="outline" className="min-h-11 w-full">
@@ -2322,10 +2389,10 @@ function DealerArchivedGate({ dealerId, profile }: { dealerId: string; profile: 
       </Button>
       <Card className="rounded-2xl border border-border shadow-md">
         <CardHeader>
-          <CardTitle className="text-lg">Клиент архивирован</CardTitle>
+          <CardTitle className="text-lg">{title}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 text-sm text-muted-foreground">
-          <p>Карточка скрыта из обычного списка. При необходимости восстановите доступ.</p>
+          <p data-testid="text-dealer-archived-state">{stateText}</p>
           {canRestore ? (
             <Button
               type="button"
@@ -2364,6 +2431,10 @@ export function DealerCardPage() {
 
   if (actx.enabled && actx.state.archivedDealersById[id]) {
     return <DealerArchivedGate dealerId={id} profile={profile} />;
+  }
+
+  if (actx.enabled && canActualizeClientBase(profile) && isManualActualizationDealerId(id)) {
+    return <DealerManualActualizationPage baseRow={baseRow} profile={profile} />;
   }
 
   return <DealerCardContent baseRow={baseRow} />;

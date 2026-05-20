@@ -42,8 +42,15 @@ import {
   findNameCityDuplicateInActualization,
   generateStableManualDealerId,
   nextManualDealerInternalCode,
+  isManualActualizationDealerId,
 } from "@/lib/client-base-actualization-stable-ids";
-import { mergeActualizationState, type DealerActualizationOverride, type ManualDealer } from "@/lib/client-base-actualization-state";
+import {
+  mergeActualizationState,
+  type DealerActualizationOverride,
+  type DealerActualizationContact,
+  type ManualDealer,
+} from "@/lib/client-base-actualization-state";
+import { newActualizationContactId } from "@/lib/client-base-actualization-contacts-helpers";
 
 function isoNow(): string {
   return new Date().toISOString();
@@ -72,6 +79,11 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
   const [shipmentDayId, setShipmentDayId] = useState<DealerShipmentDayId | "">("");
   const [unloadingOrder, setUnloadingOrder] = useState("");
   const [comment, setComment] = useState("");
+  const [passportClientKind, setPassportClientKind] = useState("other");
+  const [passportLifecycleStatus, setPassportLifecycleStatus] = useState("new");
+  const [passportCategoryTier, setPassportCategoryTier] = useState("none");
+  const [territoryZone, setTerritoryZone] = useState("");
+  const [logisticsComment, setLogisticsComment] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -88,12 +100,22 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
     const uo = state.unloadingOrderByDealerId?.[baseRow.id] ?? getDealerUnloadingOrder(baseRow.id);
     setUnloadingOrder(uo != null ? String(uo) : "");
     const f = state.dealerOverridesById[baseRow.id]?.fields as Record<string, unknown> | undefined;
-    const sd = f?.shipmentDayId;
+    const mf = state.manuallyCreatedDealersById[baseRow.id]?.fields as Record<string, unknown> | undefined;
+    const merged = { ...(mf ?? {}), ...(f ?? {}) };
+    const sd = merged.shipmentDayId ?? f?.shipmentDayId;
     setShipmentDayId(
       sd === "monday" || sd === "tuesday" || sd === "wednesday" || sd === "thursday" || sd === "friday" || sd === "saturday"
-        ? sd
+        ? (sd as DealerShipmentDayId)
         : "",
     );
+    const pk = typeof merged.passportClientKind === "string" ? merged.passportClientKind : "";
+    setPassportClientKind(pk || "other");
+    const ls = typeof merged.passportLifecycleStatus === "string" ? merged.passportLifecycleStatus : "";
+    setPassportLifecycleStatus(ls || "new");
+    const ct = typeof merged.passportCategoryTier === "string" ? merged.passportCategoryTier : "";
+    setPassportCategoryTier(ct || "none");
+    setTerritoryZone(typeof merged.territoryZone === "string" ? merged.territoryZone : "");
+    setLogisticsComment(typeof merged.logisticsComment === "string" ? merged.logisticsComment : "");
   }, [open, baseRow, state]);
 
   const onSave = useCallback(async () => {
@@ -119,6 +141,11 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
         comment: comment.trim(),
         shipmentDayId: shipmentDayId || undefined,
         unloadingOrder: Number.isFinite(uoNum) && uoNum > 0 ? uoNum : undefined,
+        passportClientKind,
+        passportLifecycleStatus,
+        passportCategoryTier,
+        territoryZone: territoryZone.trim() || undefined,
+        logisticsComment: logisticsComment.trim() || undefined,
       };
       const ov: DealerActualizationOverride = {
         dealerId: baseRow.id,
@@ -140,6 +167,47 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
           const map = { ...(next.unloadingOrderByDealerId ?? {}) };
           delete map[baseRow.id];
           next = mergeActualizationState(next, { unloadingOrderByDealerId: map });
+        }
+        const iso = isoNow();
+        next = mergeActualizationState(next, {
+          dealerActualizationAuditByDealerId: {
+            ...next.dealerActualizationAuditByDealerId,
+            [baseRow.id]: { lastUpdatedAt: iso, lastUpdatedBy: uid, lastUpdatedByName: uname },
+          },
+        });
+        if (isManualActualizationDealerId(baseRow.id)) {
+          const m = next.manuallyCreatedDealersById[baseRow.id];
+          if (m) {
+            const prevF = (m.fields ?? {}) as Record<string, unknown>;
+            const shipmentLabel = shipmentDayId ? DEALER_SHIPMENT_DAY_LABELS[shipmentDayId] : "";
+            const mergedFields: Record<string, unknown> = {
+              ...prevF,
+              name: name.trim(),
+              inn: inn.trim(),
+              city: city.trim(),
+              address: address.trim(),
+              phone: phone.trim(),
+              email: email.trim(),
+              manager: manager.trim(),
+              regionalManager: regionalManager.trim(),
+              ropName: ropName.trim(),
+              comment: comment.trim(),
+              shipmentDayId: shipmentDayId || undefined,
+              shipmentDayLabel: shipmentLabel || undefined,
+              passportClientKind,
+              passportLifecycleStatus,
+              passportCategoryTier,
+              territoryZone: territoryZone.trim(),
+              logisticsComment: logisticsComment.trim(),
+              unloadingOrder: Number.isFinite(uoNum) && uoNum > 0 ? uoNum : undefined,
+            };
+            next = mergeActualizationState(next, {
+              manuallyCreatedDealersById: {
+                ...next.manuallyCreatedDealersById,
+                [baseRow.id]: { ...m, fields: mergedFields },
+              },
+            });
+          }
         }
         return next;
       });
@@ -173,6 +241,11 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
     comment,
     shipmentDayId,
     unloadingOrder,
+    passportClientKind,
+    passportLifecycleStatus,
+    passportCategoryTier,
+    territoryZone,
+    logisticsComment,
     baseRow.id,
     persist,
     onOpenChange,
@@ -246,6 +319,62 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
           <div className="space-y-1.5">
             <Label className="text-xs">Порядок выгрузки (число)</Label>
             <Input inputMode="numeric" value={unloadingOrder} onChange={(e) => setUnloadingOrder(e.target.value)} className="min-h-10" />
+          </div>
+          <div className="space-y-2 border-t border-border pt-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Паспорт актуализации</p>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Тип клиента</Label>
+              <Select value={passportClientKind} onValueChange={setPassportClientKind}>
+                <SelectTrigger className="min-h-10">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ip">ИП</SelectItem>
+                  <SelectItem value="ooo">ООО</SelectItem>
+                  <SelectItem value="person">Физлицо</SelectItem>
+                  <SelectItem value="network">Сеть</SelectItem>
+                  <SelectItem value="other">Другое</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Статус (актуализация)</Label>
+              <Select value={passportLifecycleStatus} onValueChange={setPassportLifecycleStatus}>
+                <SelectTrigger className="min-h-10">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="new">Новый</SelectItem>
+                  <SelectItem value="active">Активный</SelectItem>
+                  <SelectItem value="needs_review">Требует проверки</SelectItem>
+                  <SelectItem value="inactive">Неактивный</SelectItem>
+                  <SelectItem value="archived">Архив</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Категория (ТОП)</Label>
+              <Select value={passportCategoryTier} onValueChange={setPassportCategoryTier}>
+                <SelectTrigger className="min-h-10">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="top150">ТОП-150</SelectItem>
+                  <SelectItem value="top350">ТОП-350</SelectItem>
+                  <SelectItem value="top500">ТОП-500</SelectItem>
+                  <SelectItem value="other">Прочие</SelectItem>
+                  <SelectItem value="none">Без категории</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Территория / зона</Label>
+              <Input value={territoryZone} onChange={(e) => setTerritoryZone(e.target.value)} className="min-h-10" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Комментарий по логистике</Label>
+              <Textarea rows={2} value={logisticsComment} onChange={(e) => setLogisticsComment(e.target.value)} className="min-h-[52px]" />
+            </div>
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Комментарий / заметка</Label>
@@ -465,6 +594,37 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
           },
         });
       }
+      const iso = isoNow();
+      const contactPatch: Record<string, DealerActualizationContact> = {};
+      if (contactPerson.trim() || phone.trim() || email.trim()) {
+        const cid = newActualizationContactId(id);
+        contactPatch[cid] = {
+          id: cid,
+          dealerId: id,
+          fullName: contactPerson.trim() || "Контакт",
+          role: "lpr",
+          phone: phone.trim(),
+          email: email.trim(),
+          messenger: "",
+          comment: "",
+          isPrimary: true,
+          createdAt: iso,
+          updatedAt: iso,
+          updatedBy: profile.personaUserId,
+          updatedByName: userLabelFromProfile(profile),
+        };
+      }
+      next = mergeActualizationState(next, {
+        dealerActualizationContactsById: { ...next.dealerActualizationContactsById, ...contactPatch },
+        dealerActualizationAuditByDealerId: {
+          ...next.dealerActualizationAuditByDealerId,
+          [id]: {
+            lastUpdatedAt: iso,
+            lastUpdatedBy: profile.personaUserId,
+            lastUpdatedByName: userLabelFromProfile(profile),
+          },
+        },
+      });
       return next;
     });
 

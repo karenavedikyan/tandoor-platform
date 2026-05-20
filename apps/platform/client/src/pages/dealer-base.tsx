@@ -58,6 +58,7 @@ import { CityConcentrationBlock } from "@/components/city-concentration-block";
 import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actualization-sync-status";
 import { DealerActualizationCreateDialog } from "@/components/client-base-actualization-dealer-forms";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
+import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { canActualizeClientBase, canCreateDealerDuringActualization } from "@/lib/client-base-actualization-permissions";
 import { buildTeamSummary } from "@/lib/team-summary";
 import { TeamSummaryCard } from "@/components/team-summary-card";
@@ -128,6 +129,7 @@ import { DEALER_CHARACTERISTICS_EVENT } from "@/lib/dealer-characteristics";
 import { SHOWCASE_STORAGE_EVENT } from "@/lib/showcase-distribution-data";
 import { Checkbox } from "@/components/ui/checkbox";
 import { MultiSelect } from "@/components/ui/multi-select";
+import { Switch } from "@/components/ui/switch";
 
 const DEALER_BASE_DISPLAY_LIMIT = 300;
 const TODAY_LIMIT = 100;
@@ -955,6 +957,14 @@ export default function DealerBase() {
   const showActualizationSync = useMemo(() => canActualizeClientBase(profile), [profile]);
 
   const [createDealerOpen, setCreateDealerOpen] = useState(false);
+  const [showArchivedDealers, setShowArchivedDealers] = useState(false);
+
+  const mergedRowsForDealerBase = useMemo(() => {
+    if (!actx.enabled) return DEALER_BASE_ROWS;
+    return buildDealerBaseRowsWithActualization(actx.state, profile, {
+      includeArchivedDealers: showArchivedDealers,
+    });
+  }, [actx.enabled, actx.state, profile, showArchivedDealers]);
 
   useEffect(() => {
     const allowed = workViewsForAccess(access);
@@ -969,8 +979,8 @@ export default function DealerBase() {
   const ropSelectOptions = useMemo(() => ropOptionsForProfile(profile, access), [profile, access]);
 
   const scopedRows = useMemo(
-    () => roleScopedDealerRows(actx.enabled ? actx.mergedDealerRows : DEALER_BASE_ROWS, profile),
-    [actx.enabled, actx.mergedDealerRows, profile],
+    () => roleScopedDealerRows(mergedRowsForDealerBase, profile),
+    [mergedRowsForDealerBase, profile],
   );
 
   const pickerArgs = useMemo(
@@ -1025,7 +1035,7 @@ export default function DealerBase() {
     let searchV = "";
     let vw: DealerBaseWorkView = defaultWorkViewForAccess(access);
 
-    const scoped = roleScopedDealerRows(actx.enabled ? actx.mergedDealerRows : DEALER_BASE_ROWS, profile);
+    const scoped = roleScopedDealerRows(mergedRowsForDealerBase, profile);
     const catOpts = Array.from(new Set(scoped.map((r) => r.clientCategory)));
 
     const teamRaw = (routeQs.get("team") ?? routeQs.get("rop"))?.trim() ?? "";
@@ -1118,7 +1128,7 @@ export default function DealerBase() {
     setSearch(searchV);
     setWorkView(vw);
     setProgramFilters(programParsed);
-  }, [profile.personaUserId, profile.role, access, routeKey, routeQs, actx.enabled, actx.mergedDealerRows]);
+  }, [profile.personaUserId, profile.role, access, routeKey, routeQs, mergedRowsForDealerBase]);
 
   const firstRopTeamId = useMemo(() => getRopOptions()[0]?.teamId ?? "", []);
 
@@ -1745,12 +1755,30 @@ export default function DealerBase() {
       </div>
 
       {showActualizationSync ? (
-        <ClientBaseActualizationSyncStatus
-          isLoading={actx.loading}
-          meta={actx.meta}
-          syncStatus={actx.syncStatus}
-          onRetry={() => void actx.refresh()}
-        />
+        <div className="space-y-3">
+          <ClientBaseActualizationSyncStatus
+            isLoading={actx.loading}
+            meta={actx.meta}
+            syncStatus={actx.syncStatus}
+            onRetry={() => void actx.refresh()}
+          />
+          {actx.enabled ? (
+            <div
+              className="flex max-w-md flex-row items-center justify-between gap-3 rounded-xl border border-border/80 bg-muted/15 px-4 py-3"
+              data-testid="section-dealers-archived-toggle"
+            >
+              <Label htmlFor="toggle-dealers-show-archived" className="cursor-pointer text-sm font-medium text-foreground">
+                Показать архив
+              </Label>
+              <Switch
+                id="toggle-dealers-show-archived"
+                checked={showArchivedDealers}
+                onCheckedChange={(v) => setShowArchivedDealers(v === true)}
+                data-testid="toggle-dealers-show-archived"
+              />
+            </div>
+          ) : null}
+        </div>
       ) : null}
 
       <DealerActualizationCreateDialog
@@ -2134,7 +2162,7 @@ export default function DealerBase() {
                   </CardHeader>
                   <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     {mgrs.map((m) => {
-                      const rows = DEALER_BASE_ROWS.filter(
+                      const rows = mergedRowsForDealerBase.filter(
                         (r) => r.releaseTeamId === rop.teamId && rowBelongsToManager(r, m),
                       );
                       const st = managerStatsForRows(rows);
