@@ -140,6 +140,8 @@ Vercel-обработчики Bitrix24 для чатов и OAuth сведены
 3. **Права (scope)** для списка диалогов, сообщений и отправки: в authorize передаётся **`BITRIX24_OAUTH_SCOPE`** или по умолчанию **`im,user`** (`im` — методы мессенджера; **`user`** — для **`user.current`** при первом сохранении сессии и отображения ФИО в статусе).
 4. Скопируйте **client_id** и **client_secret** в переменные **`BITRIX24_OAUTH_CLIENT_ID`** и **`BITRIX24_OAUTH_CLIENT_SECRET`**. **`BITRIX24_PORTAL_DOMAIN`** — базовый URL портала, например `https://ваш-портал.bitrix24.ru`.
 
+> **Реализация на Vercel.** Чтобы не упираться в лимит **12 serverless functions** на Hobby-плане, чат- и OAuth-эндпоинты объединены в **dynamic catch-all**: **`apps/platform/api/bitrix24/chat/[action].ts`** обслуживает `recent`, `messages`, `send`, `diagnostics`, `recent-personal`, `messages-personal`, `send-personal`; **`apps/platform/api/bitrix24/oauth/[action].ts`** — `status`, `start`, `callback`. Публичные URL и поведение **не** изменились.
+
 ### Endpoint’ы OAuth и персональных чатов (рабочий MVP)
 
 | Метод и путь | Назначение |

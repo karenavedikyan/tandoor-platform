@@ -13,6 +13,18 @@ import { runBitrix24ChatSendPersonal } from "./bitrix24-chat-send-personal-execu
 
 const JSON_CT = "application/json; charset=utf-8";
 
+const SHARED_WEBHOOK_DISABLED_BODY = {
+  success: false,
+  code: "BITRIX24_COMMUNICATIONS_DISABLED",
+  message:
+    "Раздел Коммуникации временно отключён: общий webhook Bitrix24 нельзя использовать для личных чатов сотрудников. Нужна персональная авторизация Bitrix24.",
+} as const;
+
+function isUnsafeSharedWebhookEnabled(): boolean {
+  const v = process.env.BITRIX24_COMMUNICATIONS_UNSAFE_SHARED_WEBHOOK_ENABLED;
+  return typeof v === "string" && v.trim().toLowerCase() === "true";
+}
+
 function pickAction(req: VercelRequest): string {
   const a = req.query?.action;
   if (typeof a === "string" && a.trim()) return a.trim();
@@ -65,25 +77,31 @@ export async function bitrix24ChatVercelHandler(req: VercelRequest, res: VercelR
 
     const body = readJsonBody(req);
 
-    if (action === "recent") {
-      const { status, body: b } = await runBitrix24ChatRecent(body ?? {});
-      res.status(status).json(b);
-      return;
-    }
-    if (action === "messages") {
-      const { status, body: b } = await runBitrix24ChatMessages(body ?? {});
-      res.status(status).json(b);
-      return;
-    }
-    if (action === "send") {
-      const { status, body: b } = await runBitrix24ChatSend(body ?? {});
-      res.status(status).json(b);
-      return;
-    }
-    if (action === "diagnostics") {
-      const { status, body: b } = await runBitrix24ChatDiagnostics(body ?? {});
-      res.status(status).json(b);
-      return;
+    if (action === "recent" || action === "messages" || action === "send" || action === "diagnostics") {
+      if (!isUnsafeSharedWebhookEnabled()) {
+        res.status(403).json({ ...SHARED_WEBHOOK_DISABLED_BODY });
+        return;
+      }
+      if (action === "recent") {
+        const { status, body: b } = await runBitrix24ChatRecent(body ?? {});
+        res.status(status).json(b);
+        return;
+      }
+      if (action === "messages") {
+        const { status, body: b } = await runBitrix24ChatMessages(body ?? {});
+        res.status(status).json(b);
+        return;
+      }
+      if (action === "send") {
+        const { status, body: b } = await runBitrix24ChatSend(body ?? {});
+        res.status(status).json(b);
+        return;
+      }
+      if (action === "diagnostics") {
+        const { status, body: b } = await runBitrix24ChatDiagnostics(body ?? {});
+        res.status(status).json(b);
+        return;
+      }
     }
     if (action === "recent-personal") {
       const { status, body: b, setCookies } = await runBitrix24ChatRecentPersonal(cookieHeader(req));

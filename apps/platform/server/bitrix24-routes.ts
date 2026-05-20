@@ -19,6 +19,18 @@ function applySetCookies(res: Response, list: string[] | undefined): void {
   for (const c of list) res.append("Set-Cookie", c);
 }
 
+const SHARED_WEBHOOK_DISABLED_BODY = {
+  success: false,
+  code: "BITRIX24_COMMUNICATIONS_DISABLED",
+  message:
+    "Раздел Коммуникации временно отключён: общий webhook Bitrix24 нельзя использовать для личных чатов сотрудников. Нужна персональная авторизация Bitrix24.",
+} as const;
+
+function isUnsafeSharedWebhookEnabled(): boolean {
+  const v = process.env.BITRIX24_COMMUNICATIONS_UNSAFE_SHARED_WEBHOOK_ENABLED;
+  return typeof v === "string" && v.trim().toLowerCase() === "true";
+}
+
 export function registerBitrix24Routes(app: Express): void {
   app.get("/api/bitrix24/oauth/status", async (req: Request, res: Response) => {
     try {
@@ -200,6 +212,9 @@ export function registerBitrix24Routes(app: Express): void {
 
   app.post("/api/bitrix24/chat/diagnostics", async (req: Request, res: Response) => {
     try {
+      if (!isUnsafeSharedWebhookEnabled()) {
+        return res.status(403).json({ ...SHARED_WEBHOOK_DISABLED_BODY });
+      }
       const { status, body } = await runBitrix24ChatDiagnostics(req.body);
       return res.status(status).json(body);
     } catch (e) {
@@ -215,6 +230,9 @@ export function registerBitrix24Routes(app: Express): void {
 
   app.post("/api/bitrix24/chat/recent", async (req: Request, res: Response) => {
     try {
+      if (!isUnsafeSharedWebhookEnabled()) {
+        return res.status(403).json({ ...SHARED_WEBHOOK_DISABLED_BODY });
+      }
       const { status, body } = await runBitrix24ChatRecent(req.body);
       return res.status(status).json(body);
     } catch (e) {
@@ -230,6 +248,9 @@ export function registerBitrix24Routes(app: Express): void {
 
   app.post("/api/bitrix24/chat/messages", async (req: Request, res: Response) => {
     try {
+      if (!isUnsafeSharedWebhookEnabled()) {
+        return res.status(403).json({ ...SHARED_WEBHOOK_DISABLED_BODY });
+      }
       const { status, body } = await runBitrix24ChatMessages(req.body);
       return res.status(status).json(body);
     } catch (e) {
@@ -245,6 +266,9 @@ export function registerBitrix24Routes(app: Express): void {
 
   app.post("/api/bitrix24/chat/send", async (req: Request, res: Response) => {
     try {
+      if (!isUnsafeSharedWebhookEnabled()) {
+        return res.status(403).json({ ...SHARED_WEBHOOK_DISABLED_BODY });
+      }
       const { status, body } = await runBitrix24ChatSend(req.body);
       return res.status(status).json(body);
     } catch (e) {
