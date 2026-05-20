@@ -84,9 +84,43 @@ function resolveResponsibleIdForTask(webhookBase: string): { ok: true; id: numbe
   };
 }
 
-function validateListBody(raw: unknown): { ok: true; limit: number; onlyOpen: boolean } | { ok: false; message: string } {
+function parseOptionalResponsibleIdFromBody(o: Record<string, unknown>):
+  | { ok: true; id: number | null }
+  | { ok: false; message: string } {
+  if (!Object.prototype.hasOwnProperty.call(o, "responsibleId")) {
+    return { ok: true, id: null };
+  }
+  const v = o.responsibleId;
+  if (v === null || v === undefined) {
+    return { ok: true, id: null };
+  }
+  if (typeof v === "boolean") {
+    return { ok: false, message: "Поле responsibleId должно быть положительным целым числом." };
+  }
+  if (typeof v === "number") {
+    if (!Number.isFinite(v) || !Number.isInteger(v) || v <= 0) {
+      return { ok: false, message: "Поле responsibleId должно быть положительным целым числом." };
+    }
+    return { ok: true, id: v };
+  }
+  if (typeof v === "string") {
+    const s = v.trim();
+    if (s === "") {
+      return { ok: true, id: null };
+    }
+    if (!/^[1-9]\d*$/.test(s)) {
+      return { ok: false, message: "Поле responsibleId должно быть положительным целым числом." };
+    }
+    return { ok: true, id: Number.parseInt(s, 10) };
+  }
+  return { ok: false, message: "Поле responsibleId должно быть положительным целым числом." };
+}
+
+function validateListBody(
+  raw: unknown,
+): { ok: true; limit: number; onlyOpen: boolean; responsibleId: number | null } | { ok: false; message: string } {
   if (raw == null || raw === "") {
-    return { ok: true, limit: DEFAULT_LIMIT, onlyOpen: true };
+    return { ok: true, limit: DEFAULT_LIMIT, onlyOpen: true, responsibleId: null };
   }
   if (typeof raw !== "object" || Array.isArray(raw)) {
     return { ok: false, message: "Ожидается JSON-объект в теле запроса." };
@@ -109,7 +143,11 @@ function validateListBody(raw: unknown): { ok: true; limit: number; onlyOpen: bo
     }
     onlyOpen = v;
   }
-  return { ok: true, limit, onlyOpen };
+  const rid = parseOptionalResponsibleIdFromBody(o);
+  if (!rid.ok) {
+    return { ok: false, message: rid.message };
+  }
+  return { ok: true, limit, onlyOpen, responsibleId: rid.id };
 }
 
 function strOf(v: unknown): string {
@@ -188,15 +226,21 @@ export async function runBitrix24TasksList(rawBody: unknown): Promise<Bitrix24Ta
     };
   }
 
-  const rid = resolveResponsibleIdForTask(parsed.base);
-  if (!rid.ok) {
-    return {
-      status: 400,
-      body: { success: false, code: "BITRIX24_WEBHOOK_URL_INVALID", message: rid.message },
-    };
+  let responsibleNumeric: number;
+  if (validated.responsibleId != null) {
+    responsibleNumeric = validated.responsibleId;
+  } else {
+    const rid = resolveResponsibleIdForTask(parsed.base);
+    if (!rid.ok) {
+      return {
+        status: 400,
+        body: { success: false, code: "BITRIX24_WEBHOOK_URL_INVALID", message: rid.message },
+      };
+    }
+    responsibleNumeric = rid.id;
   }
 
-  const filter: Record<string, string | number> = { RESPONSIBLE_ID: rid.id };
+  const filter: Record<string, string | number> = { RESPONSIBLE_ID: responsibleNumeric };
   if (validated.onlyOpen) {
     filter["!REAL_STATUS"] = 5;
   }

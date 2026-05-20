@@ -5,8 +5,8 @@
 - Можно ли открывать ЛК Тандор **в iframe или слайдере Bitrix24** как отдельную оболочку входа, **без переноса** всего приложения внутрь Bitrix24.
 - Удобство **облегчённого chrome** (`?embedded=bitrix24`): без боковой навигации и тяжёлой шапки.
 - **Реальное создание тестовой задачи** в Bitrix24 через сервер Тандор: вызывается только метод REST **`tasks.task.add`** (входящий webhook URL хранится в `process.env.BITRIX24_WEBHOOK_URL` на сервере, не в клиенте).
-- **MVP «задачи из ЛК»:** менеджер с правами записи по клиенту может создать задачу в Bitrix24 из **карточки дилера** или **карточки торговой точки** (`POST /api/bitrix24/tasks/create`). Связь «что создано» хранится **только в браузере** (`localStorage`), без обратной синхронизации статусов из Bitrix24 и без входящих webhook от Bitrix24.
-- **MVP «список из Bitrix24»:** по кнопке «Загрузить из Bitrix24» вызывается **`POST /api/bitrix24/tasks/list`** (метод Bitrix24 **`tasks.task.list`** по тому же webhook). Результат кэшируется в **`localStorage`** (`tandoor-bitrix24-imported-tasks-v1`). Это **ручной** импорт, без realtime и без сопоставления задач с дилером/ТТ по сложным правилам (автолинковка по описанию не делается).
+- **MVP «задачи из ЛК»:** менеджер с правами записи по клиенту может создать задачу в Bitrix24 из **карточки дилера** или **карточки торговой точки** (`POST /api/bitrix24/tasks/create`). В теле можно передать **`responsibleId`** (положительное целое) — тогда в Bitrix24 в **`RESPONSIBLE_ID`** и **`CREATED_BY`** подставляется он; иначе — прежняя логика (env / URL webhook). Связь «что создано» хранится **только в браузере** (`localStorage`), без обратной синхронизации статусов из Bitrix24 и без входящих webhook от Bitrix24.
+- **MVP «список из Bitrix24»:** по кнопке «Загрузить из Bitrix24» вызывается **`POST /api/bitrix24/tasks/list`** (метод Bitrix24 **`tasks.task.list`** по тому же webhook). В теле запроса можно передать **`responsibleId`** (положительное целое) — тогда фильтр **`RESPONSIBLE_ID`** в Bitrix24 берётся из него; иначе — как раньше из **`BITRIX24_TASK_RESPONSIBLE_ID`** или **`userId`** из URL webhook. Результат кэшируется в **`localStorage`** (`tandoor-bitrix24-imported-tasks-v1`). Это **ручной** импорт, без realtime и без сопоставления задач с дилером/ТТ по сложным правилам (автолинковка по описанию не делается).
 - **MVP «пользователи Bitrix24» (диагностика):** на странице **`#/bitrix24`** блок **«Пользователи Bitrix24»** вызывает **`POST /api/bitrix24/users/list`** (метод **`user.get`**). Нужен только для **сопоставления** `userId` Тандор ↔ `bitrixUserId` в Bitrix24; не хранит маппинг на сервере и не подменяет авторизацию.
 - **MVP «диагностика чатов» (im.*):** на **`#/bitrix24`** блок **«Диагностика чатов Bitrix24»** вызывает **`POST /api/bitrix24/chat/diagnostics`**. Это **не** встроенный чат ЛК, а набор безопасных проб REST (**`im.recent.get`**, при наличии `dialogId` — **`im.dialog.messages.get`**, при `dialogId`+`message` — **`im.message.add`**, при `testNotify: true` — **`im.notify.personal.add`**) для проверки прав webhook. Ошибки по отдельным методам не роняют ответ: в JSON приходит массив **`diagnostics`** с результатом по каждому вызову.
 - **MVP «раздел Коммуникации»:** пункт **«Коммуникации»** (`#/communications`) и чтение/отправка через Bitrix24 — **временно только для роли «директор продаж»** (`sales_director` в демо-ЛК): общий webhook отдаёт **личные чаты пользователя Bitrix24, которому принадлежит webhook**, поэтому доступ для остальных ролей закрыт (см. раздел «Ограничение доступа к Коммуникациям»). Боевые API: **`POST /api/bitrix24/chat/recent`**, **`POST /api/bitrix24/chat/messages`**, **`POST /api/bitrix24/chat/send`**. Диагностический **`/api/bitrix24/chat/diagnostics`** для UI раздела не используется.
@@ -15,8 +15,8 @@
 
 | Переменная | Обязательность | Назначение |
 |------------|----------------|------------|
-| `BITRIX24_WEBHOOK_URL` | **Обязательна** для серверных операций с задачами, списком пользователей, **разделом «Коммуникации»** и **диагностикой чатов** Bitrix24 (POC и MVP) | Полный базовый URL входящего webhook (как в Bitrix24, сегмент **`/rest/<userId>/<token>/`**). Из **`userId`** в URL автоматически выставляются **ответственный** и **постановщик** задачи (`RESPONSIBLE_ID` / `CREATED_BY`), если не задан override ниже. Для **`tasks.task.list`** фильтр **RESPONSIBLE_ID** берётся из того же правила (override или userId из URL). Для **`user.get`** webhook должен иметь **право на пользователей**. Для **`im.*`** и уведомлений — отдельные права чата/мессенджера в настройках webhook (см. разделы «Диагностика чатов» и «Раздел Коммуникации»). |
-| `BITRIX24_TASK_RESPONSIBLE_ID` | **Опционально** (override) | Числовой ID пользователя Bitrix24 — если задан и это положительное целое число, используется **вместо** userId из webhook для `RESPONSIBLE_ID` и `CREATED_BY`. |
+| `BITRIX24_WEBHOOK_URL` | **Обязательна** для серверных операций с задачами, списком пользователей, **разделом «Коммуникации»** и **диагностикой чатов** Bitrix24 (POC и MVP) | Полный базовый URL входящего webhook (как в Bitrix24, сегмент **`/rest/<userId>/<token>/`**). Из **`userId`** в URL автоматически выставляются **ответственный** и **постановщик** задачи (`RESPONSIBLE_ID` / `CREATED_BY`), если в теле **`POST /api/bitrix24/tasks/create`** или **`POST /api/bitrix24/tasks/list`** **не** передан валидный **`responsibleId`** и не задан override **`BITRIX24_TASK_RESPONSIBLE_ID`**. Для **`tasks.task.list`** без **`responsibleId`** в теле фильтр **RESPONSIBLE_ID** берётся из того же правила. Для **`user.get`** webhook должен иметь **право на пользователей**. Для **`im.*`** и уведомлений — отдельные права чата/мессенджера в настройках webhook (см. разделы «Диагностика чатов» и «Раздел Коммуникации»). |
+| `BITRIX24_TASK_RESPONSIBLE_ID` | **Опционально** (override) | Числовой ID пользователя Bitrix24 — если задан и это положительное целое число, используется **вместо** userId из webhook для `RESPONSIBLE_ID` и `CREATED_BY` **и** для фильтра списка задач, **если** в теле запроса **не** передан валидный **`responsibleId`**. |
 | `BITRIX24_COMMUNICATIONS_UNSAFE_SHARED_WEBHOOK_ENABLED` | **Опционально, по умолчанию выключено** | Аварийный «kill switch» для серверных endpoint’ов раздела «Коммуникации» (`/api/bitrix24/chat/recent`, `/messages`, `/send`, `/diagnostics`). По умолчанию (и при любом значении, отличном от строки `"true"`) эти endpoint’ы возвращают **HTTP 403** с `code: "BITRIX24_COMMUNICATIONS_DISABLED"`. Включайте **только** для контролируемого ручного тестирования администратором (значение `"true"`) и **не** оставляйте включённым в production: общий webhook Bitrix24 раскрывает личные чаты пользователя, чей userId/токен указан в `BITRIX24_WEBHOOK_URL`, всем, кто может вызвать API. До появления **персональной** авторизации Bitrix24 (OAuth/токен на пользователя) endpoint’ы должны быть выключены. |
 
 **Важно:** webhook URL, токен и секрет **нельзя** класть в клиентский бандл или в git. На Vercel задайте значения в **Environment Variables** для production / preview. Сервер **не** возвращает и **не** логирует полный webhook URL.
@@ -47,6 +47,13 @@ https://<ваш-хост-платформы>/?embedded=bitrix24#/bitrix24
 
 Для ссылки «открыть полный ЛК» из Bitrix можно собрать URL через `buildBitrix24OpenTandoorUrl("/dealer-base")` в коде (см. `apps/platform/client/src/lib/bitrix24-integration.ts`).
 
+## Персональные задачи Bitrix24
+
+- В демо-ЛК список и создание задач ориентируются на **персональный** **`bitrixUserId`** текущего пользователя: в **`POST /api/bitrix24/tasks/list`** и **`POST /api/bitrix24/tasks/create`** в теле JSON передаётся опциональное поле **`responsibleId`** (строка или число, **положительное целое**). Если оно валидно, в вызовах Bitrix24 **`tasks.task.list`** / **`tasks.task.add`** используется этот ID для **`RESPONSIBLE_ID`** (и при создании — для **`CREATED_BY`**). Если **`responsibleId`** не передан или равен `null`, сохраняется прежняя цепочка: **`BITRIX24_TASK_RESPONSIBLE_ID`** либо **`userId`** из сегмента **`/rest/<userId>/`** в **`BITRIX24_WEBHOOK_URL`**. Некорректное значение даёт **400** с кодом валидации и **безопасным** текстом на русском (без **`error_description`** из Bitrix24 в ответе для UI).
+- **Маппинг** пользователя ЛК → **`bitrixUserId`** в этом PR **статический**, файл **`apps/platform/client/src/lib/bitrix24-user-mapping.ts`**. Его проще заменить на данные из **профиля / backend** без смены остального UI. На production **нельзя** считать переданный с клиента **`responsibleId`** доказательством прав: нужна серверная авторизация и хранение связки на backend; текущий режим — **MVP для демо**.
+- **Общий webhook** остаётся **техническим REST-каналом** (одна служебная учётная запись Bitrix24), а персонализация задач достигается явным **`responsibleId`** в методах задач.
+- **Чаты** (**`im.*`**) к персональным задачам не относятся: для личных чатов сотрудников нужна **персональная** авторизация Bitrix24 (OAuth и т.п.); общий webhook для отображения личной переписки в ЛК **не** используется (см. также раздел «Раздел «Коммуникации»»).
+
 ## Backend: создание тестовой задачи
 
 - **Маршрут:** `POST /api/bitrix24/tasks/test`
@@ -60,10 +67,10 @@ https://<ваш-хост-платформы>/?embedded=bitrix24#/bitrix24
 ## Backend: создание задачи из карточки дилера / ТТ (MVP)
 
 - **Маршрут:** `POST /api/bitrix24/tasks/create`
-- **Тело JSON:** `title` (обязательно, 3–180 символов), `description` (строка, до 4000 символов), `dealerId`, `dealerName` (обязательны), опционально `tradePointId`, `tradePointName`, `returnUrl`.
+- **Тело JSON:** `title` (обязательно, 3–180 символов), `description` (строка, до 4000 символов), `dealerId`, `dealerName` (обязательны), опционально `tradePointId`, `tradePointName`, `returnUrl`, **`responsibleId`** (положительное целое, строка или число).
 - **Поле `DESCRIPTION` в Bitrix24** собирается на сервере из: текста `description`; строки «Клиент: …»; при наличии имени точки — «Торговая точка: …»; при наличии `returnUrl` — «Ссылка в ЛК: …».
 - **`TITLE`** в Bitrix24 = `title` из запроса.
-- **`RESPONSIBLE_ID` / `CREATED_BY`:** та же логика, что у `/api/bitrix24/tasks/test` (override `BITRIX24_TASK_RESPONSIBLE_ID` или userId из webhook).
+- **`RESPONSIBLE_ID` / `CREATED_BY`:** при валидном **`responsibleId`** в теле — оба поля равны ему; иначе — как у `/api/bitrix24/tasks/test` (override `BITRIX24_TASK_RESPONSIBLE_ID` или userId из webhook).
 - **Успех (200):** `{ "success": true, "taskId": "<строка>", "message": "Задача создана в Bitrix24" }`.
 - **Ошибки:** **503** `BITRIX24_NOT_CONFIGURED`; **400** `BITRIX24_WEBHOOK_URL_INVALID` или `BITRIX24_CREATE_VALIDATION_ERROR`; **502** `BITRIX24_API_ERROR` (+ `bitrixCode`), `BITRIX24_BAD_RESPONSE`, `BITRIX24_NETWORK`, `BITRIX24_UNEXPECTED_RESULT`; **500** `INTERNAL_ERROR`.
 
@@ -72,7 +79,7 @@ https://<ваш-хост-платформы>/?embedded=bitrix24#/bitrix24
 ## Backend: список задач из Bitrix24 (MVP)
 
 - **Маршрут:** `POST /api/bitrix24/tasks/list`
-- **Тело JSON (опционально):** `limit` (по умолчанию 20, 1–50), `onlyOpen` (по умолчанию `true`; при `true` в фильтр Bitrix добавляется **`!REAL_STATUS`: 5**, чтобы исключить завершённые задачи).
+- **Тело JSON (опционально):** `limit` (по умолчанию 20, 1–50), `onlyOpen` (по умолчанию `true`; при `true` в фильтр Bitrix добавляется **`!REAL_STATUS`: 5**, чтобы исключить завершённые задачи), **`responsibleId`** (положительное целое, строка или число; при передаче в **`tasks.task.list`** в **`filter.RESPONSIBLE_ID`** подставляется этот ID; если не передан — используется **`BITRIX24_TASK_RESPONSIBLE_ID`** или userId из webhook, как раньше).
 - **Bitrix24:** `tasks.task.list` с `filter.RESPONSIBLE_ID`, `select` по полям ID, TITLE, DESCRIPTION, STATUS, RESPONSIBLE_ID, CREATED_BY, CREATED_DATE, DEADLINE, CHANGED_DATE, сортировка **`CHANGED_DATE` desc**, пагинация **`start`: 0** (до 50 записей за ответ Bitrix; итог дополнительно обрезается до `limit` на сервере).
 - **Успех (200):** `{ "success": true, "tasks": [ { "bitrixTaskId", "title", "description", "status", ... } ] }`.
 - **Ошибки:** **503** `BITRIX24_NOT_CONFIGURED`; **400** `BITRIX24_WEBHOOK_URL_INVALID` или `BITRIX24_LIST_VALIDATION_ERROR`; **502** `BITRIX24_API_ERROR` (+ `bitrixCode`), `BITRIX24_BAD_RESPONSE`, `BITRIX24_NETWORK`; **500** `INTERNAL_ERROR`; **405** `METHOD_NOT_ALLOWED`.
@@ -87,7 +94,7 @@ https://<ваш-хост-платформы>/?embedded=bitrix24#/bitrix24
 - **Ошибки:** **405** `METHOD_NOT_ALLOWED`; **503** `BITRIX24_NOT_CONFIGURED`; **400** `BITRIX24_WEBHOOK_URL_INVALID` или `BITRIX24_USERS_VALIDATION_ERROR`; **502** `BITRIX24_API_ERROR` (+ `bitrixCode`, без `error_description` из Bitrix), `BITRIX24_BAD_RESPONSE`, `BITRIX24_NETWORK`; **500** `INTERNAL_ERROR`.
 - **Права webhook:** кроме задач, для этого MVP входящий webhook должен включать доступ к **пользователям** и методу **`user.get`** (в интерфейсе создания webhook Bitrix24 отметьте соответствующие права).
 
-Клиентский вызов: **`listBitrix24Users`** в `apps/platform/client/src/lib/bitrix24-integration.ts`. UI: страница **`#/bitrix24`**, блок **«Пользователи Bitrix24»**.
+Клиентский вызов: **`listBitrix24Users`** в `apps/platform/client/src/lib/bitrix24-integration.ts`. UI: страница **`#/bitrix24`**, блок **«Пользователи Bitrix24»** и таблица **«Связка пользователей ЛК и Bitrix24»** (статический маппинг + ФИО из списка Bitrix при загрузке).
 
 ## Backend: диагностика чатов Bitrix24 (MVP, im.*)
 
@@ -153,8 +160,8 @@ https://<ваш-хост-платформы>/?embedded=bitrix24#/bitrix24
 
 ## ЛК: где создавать задачу и где видна связь
 
-- **Карточка дилера** (`#/dealers/...`): блок «Задачи Bitrix24» после секции «Следующий шаг»; кнопки «Создать…» и «Загрузить из Bitrix24» (и чекбокс «Только открытые») — при **`canEditClientNextStep`**. Список импортированных задач виден всем, кто видит карточку, если в браузере уже есть данные импорта. Задачи с тем же `bitrixTaskId`, что в списке «Поставленные из ЛК», в блоке импорта не дублируются.
-- **Карточка торговой точки** (`#/dealers/.../trade-points/...`): такой же блок после витринной матрицы точки; импорт и создание — по тем же правилам, что и на карточке дилера.
+- **Карточка дилера** (`#/dealers/...`): блок «Задачи Bitrix24» после секции «Следующий шаг»; кнопки «Создать…» и «Загрузить из Bitrix24» (и чекбокс «Только открытые») — при **`canEditClientNextStep`** и при **настроенной связке** пользователя ЛК с Bitrix24 (иначе показывается предупреждение, кнопки скрыты). Список импортированных задач виден всем, кто видит карточку, если в браузере уже есть данные импорта. Задачи с тем же `bitrixTaskId`, что в списке «Поставленные из ЛК», в блоке импорта не дублируются.
+- **Карточка торговой точки** (`#/dealers/.../trade-points/...`): такой же блок после витринной матрицы точки; импорт и создание — по тем же правилам, что и на карточке дилера (в т.ч. связка с Bitrix24).
 - **Хранение связи (созданные из ЛК):** ключ `localStorage` **`tandoor-bitrix24-task-links-v1`**, структура `linksByDealer` и `linksByTradePoint` (ключ точки: `` `${dealerId}|${tradePointId}` ``). Событие обновления списка: **`tandoor-bitrix24-task-links-changed`**. Код: `apps/platform/client/src/lib/bitrix24-task-links.ts`.
 - **Хранение импорта из Bitrix24:** ключ **`tandoor-bitrix24-imported-tasks-v1`**, событие **`tandoor-bitrix24-imported-tasks-changed`**. Код: `apps/platform/client/src/lib/bitrix24-imported-tasks.ts`. Клиентский вызов списка: **`listBitrix24Tasks`** в `bitrix24-integration.ts`.
 

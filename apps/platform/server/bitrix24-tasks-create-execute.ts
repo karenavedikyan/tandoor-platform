@@ -37,7 +37,7 @@ function asTrimmedString(v: unknown): string | null {
 
 export function validateBitrix24TasksCreateBody(
   raw: unknown,
-): { ok: true; value: Bitrix24TasksCreatePayload } | { ok: false; message: string } {
+): { ok: true; value: Bitrix24TasksCreatePayload; responsibleId: number | null } | { ok: false; message: string } {
   if (raw == null || typeof raw !== "object" || Array.isArray(raw)) {
     return { ok: false, message: "Ожидается JSON-объект в теле запроса." };
   }
@@ -83,9 +83,15 @@ export function validateBitrix24TasksCreateBody(
     returnUrl = ru;
   }
 
+  const rid = parseOptionalResponsibleIdFromBody(o);
+  if (!rid.ok) {
+    return { ok: false, message: rid.message };
+  }
+
   return {
     ok: true,
     value: { title, description, dealerId, dealerName, tradePointId, tradePointName, returnUrl },
+    responsibleId: rid.id,
   };
 }
 
@@ -165,6 +171,38 @@ function resolveResponsibleIdForTask(
   };
 }
 
+function parseOptionalResponsibleIdFromBody(o: Record<string, unknown>):
+  | { ok: true; id: number | null }
+  | { ok: false; message: string } {
+  if (!Object.prototype.hasOwnProperty.call(o, "responsibleId")) {
+    return { ok: true, id: null };
+  }
+  const v = o.responsibleId;
+  if (v === null || v === undefined) {
+    return { ok: true, id: null };
+  }
+  if (typeof v === "boolean") {
+    return { ok: false, message: "Поле responsibleId должно быть положительным целым числом." };
+  }
+  if (typeof v === "number") {
+    if (!Number.isFinite(v) || !Number.isInteger(v) || v <= 0) {
+      return { ok: false, message: "Поле responsibleId должно быть положительным целым числом." };
+    }
+    return { ok: true, id: v };
+  }
+  if (typeof v === "string") {
+    const s = v.trim();
+    if (s === "") {
+      return { ok: true, id: null };
+    }
+    if (!/^[1-9]\d*$/.test(s)) {
+      return { ok: false, message: "Поле responsibleId должно быть положительным целым числом." };
+    }
+    return { ok: true, id: Number.parseInt(s, 10) };
+  }
+  return { ok: false, message: "Поле responsibleId должно быть положительным целым числом." };
+}
+
 function extractTaskId(result: unknown): string | number | null {
   if (result == null) return null;
   if (typeof result === "number" || typeof result === "string") return result;
@@ -207,19 +245,25 @@ export async function runBitrix24TasksCreate(rawBody: unknown): Promise<Bitrix24
 
   const url = buildTasksTaskAddUrl(parsed.base);
 
-  const rid = resolveResponsibleIdForTask(parsed.base);
-  if (!rid.ok) {
-    return {
-      status: 400,
-      body: { success: false, code: "BITRIX24_WEBHOOK_URL_INVALID", message: rid.message },
-    };
+  let responsibleNumeric: number;
+  if (validated.responsibleId != null) {
+    responsibleNumeric = validated.responsibleId;
+  } else {
+    const rid = resolveResponsibleIdForTask(parsed.base);
+    if (!rid.ok) {
+      return {
+        status: 400,
+        body: { success: false, code: "BITRIX24_WEBHOOK_URL_INVALID", message: rid.message },
+      };
+    }
+    responsibleNumeric = rid.id;
   }
 
   const fields: Record<string, string | number> = {
     TITLE: validated.value.title,
     DESCRIPTION: buildBitrixTaskDescription(validated.value),
-    RESPONSIBLE_ID: rid.id,
-    CREATED_BY: rid.id,
+    RESPONSIBLE_ID: responsibleNumeric,
+    CREATED_BY: responsibleNumeric,
   };
 
   let bitrixJson: BitrixSuccess & BitrixErrorBody;
