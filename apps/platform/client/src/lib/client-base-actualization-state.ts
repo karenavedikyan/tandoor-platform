@@ -80,6 +80,66 @@ export type DealerCardViewSettings = {
   updatedBy: string;
 };
 
+/** Контакт клиента в актуализации (единый источник правды для ЛК). */
+export type DealerActualizationContact = {
+  id: string;
+  dealerId: string;
+  fullName: string;
+  /** owner | lpr | buyer | accountant | logistics | seller | other */
+  role: string;
+  phone: string;
+  email: string;
+  messenger: string;
+  comment: string;
+  isPrimary: boolean;
+  createdAt: string;
+  updatedAt: string;
+  updatedBy: string;
+  updatedByName: string;
+};
+
+export type ArchivedDealerContactInfo = {
+  contactId: string;
+  dealerId: string;
+  archivedAt: string;
+  archivedBy: string;
+  archivedByName: string;
+};
+
+export type DealerActualizationAudit = {
+  lastUpdatedAt: string;
+  lastUpdatedBy: string;
+  lastUpdatedByName: string;
+};
+
+/** Параметры витрины / порталов по торговой точке (актуализация). */
+export type TradePointShowcaseActualization = {
+  tradePointId: string;
+  dealerId: string;
+  /** null = не заполнено */
+  hasShowcase: boolean | null;
+  totalPortals: number | null;
+  entrancePortals: number | null;
+  interiorPortals: number | null;
+  showcaseAreaSqm: number | null;
+  showcaseComment: string;
+  tandoorTotalPortals: number | null;
+  tandoorEntrancePortals: number | null;
+  tandoorInteriorPortals: number | null;
+  competitorPortals: number | null;
+  competitorsListed: string;
+  fillingComment: string;
+  hasExpansionPotential: boolean | null;
+  additionalPortalsPotential: number | null;
+  /** high | medium | low */
+  showcasePriority: string;
+  firstPriorityNeed: string;
+  rmRopComment: string;
+  updatedAt: string;
+  updatedBy: string;
+  updatedByName: string;
+};
+
 export type ActualizationState = {
   version: number;
   updatedAt: string | null;
@@ -94,6 +154,11 @@ export type ActualizationState = {
   dealerCardViewSettingsByUserId: Record<string, DealerCardViewSettings>;
   unloadingOrderByDealerId?: Record<string, number>;
   routeOrderByRouteId?: Record<string, Record<string, number>>;
+  /** contactId -> запись (dealerId внутри). */
+  dealerActualizationContactsById: Record<string, DealerActualizationContact>;
+  archivedDealerContactsById: Record<string, ArchivedDealerContactInfo>;
+  tradePointShowcaseActualizationById: Record<string, TradePointShowcaseActualization>;
+  dealerActualizationAuditByDealerId: Record<string, DealerActualizationAudit>;
 };
 
 export function createEmptyActualizationState(): ActualizationState {
@@ -111,6 +176,10 @@ export function createEmptyActualizationState(): ActualizationState {
     dealerCardViewSettingsByUserId: {},
     unloadingOrderByDealerId: {},
     routeOrderByRouteId: {},
+    dealerActualizationContactsById: {},
+    archivedDealerContactsById: {},
+    tradePointShowcaseActualizationById: {},
+    dealerActualizationAuditByDealerId: {},
   };
 }
 
@@ -139,5 +208,21 @@ export function mergeActualizationState(base: ActualizationState, patch: Partial
     },
     unloadingOrderByDealerId: patch.unloadingOrderByDealerId ?? base.unloadingOrderByDealerId,
     routeOrderByRouteId: patch.routeOrderByRouteId ?? base.routeOrderByRouteId,
+    dealerActualizationContactsById: {
+      ...base.dealerActualizationContactsById,
+      ...(patch.dealerActualizationContactsById ?? {}),
+    },
+    archivedDealerContactsById: {
+      ...base.archivedDealerContactsById,
+      ...(patch.archivedDealerContactsById ?? {}),
+    },
+    tradePointShowcaseActualizationById: {
+      ...base.tradePointShowcaseActualizationById,
+      ...(patch.tradePointShowcaseActualizationById ?? {}),
+    },
+    dealerActualizationAuditByDealerId: {
+      ...base.dealerActualizationAuditByDealerId,
+      ...(patch.dealerActualizationAuditByDealerId ?? {}),
+    },
   };
 }

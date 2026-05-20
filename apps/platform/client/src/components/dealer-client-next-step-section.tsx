@@ -22,6 +22,7 @@ import {
   saveClientNextStep,
 } from "@/lib/client-next-step-data";
 import { canViewShowcaseDistribution } from "@/lib/showcase-distribution-data";
+import { canActualizeClientBase } from "@/lib/client-base-actualization-permissions";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { cn } from "@/lib/utils";
 
@@ -44,10 +45,21 @@ type Props = {
   actorUserId: string;
   actorLabel: string;
   onSaved: () => void;
+  /** Карточка ручного клиента в актуализации: показать блок без витрины release. */
+  allowManualActualizationCard?: boolean;
 };
 
-export function DealerClientNextStepSection({ row, profile, actorUserId, actorLabel, onSaved }: Props) {
-  const canView = canViewShowcaseDistribution(profile, row);
+export function DealerClientNextStepSection({
+  row,
+  profile,
+  actorUserId,
+  actorLabel,
+  onSaved,
+  allowManualActualizationCard,
+}: Props) {
+  const canView = allowManualActualizationCard
+    ? canActualizeClientBase(profile)
+    : canViewShowcaseDistribution(profile, row);
   if (!canView) return null;
 
   const canEdit = canEditClientNextStep(profile, row);
