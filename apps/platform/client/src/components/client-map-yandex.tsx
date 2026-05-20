@@ -7,7 +7,7 @@ import { isDealerTop } from "@/lib/dealer-base-role-views";
 import { getClientCategoryLabel } from "@/lib/client-category";
 import { buildBrowserHashAppHref } from "@/lib/hash-route-utils";
 import type { ClientMapMarker } from "@/lib/client-map-data";
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
+import { getDealerRopDisplay, type DealerRow } from "@/lib/dealer-base-mock-data";
 
 const DEFAULT_CENTER: [number, number] = [45.0355, 38.9753];
 const DEFAULT_ZOOM = 7;
@@ -78,7 +78,7 @@ function buildBalloonHtml(m: ClientMapMarker): string {
   <p class="font-semibold leading-snug">${escapeHtml(d.name)}</p>
   <p class="text-muted-foreground">${escapeHtml(d.city)}</p>
   ${addrBlock}
-  <p><span class="text-muted-foreground">РОП:</span> ${escapeHtml(d.regionalManager || "—")}</p>
+  <p><span class="text-muted-foreground">РОП:</span> ${escapeHtml(getDealerRopDisplay(d) || "—")}</p>
   <p><span class="text-muted-foreground">Менеджер:</span> ${escapeHtml(d.manager)}</p>
   <p><span class="text-muted-foreground">Категория:</span> ${escapeHtml(cat)}</p>
   <p class="text-xs"><span class="text-muted-foreground">Источник координат:</span> ${escapeHtml(srcLabel)}</p>

@@ -22,7 +22,7 @@ import {
   getClientCategoryLabel,
   isClientTopTier,
 } from "@/lib/client-category";
-import { DEALER_BASE_ROWS, type DealerRow, type DealerStatus } from "@/lib/dealer-base-mock-data";
+import { DEALER_BASE_ROWS, getDealerRopDisplay, type DealerRow, type DealerStatus } from "@/lib/dealer-base-mock-data";
 import {
   getManagersForRopTeam,
   getRopOptions,
@@ -251,6 +251,7 @@ function applyPickerFilters(rows: DealerRow[], args: PickerArgs): DealerRow[] {
       row.city,
       row.manager,
       row.regionalManager,
+      getDealerRopDisplay(row),
       row.releaseCode ?? "",
       row.releaseAddress ?? "",
       row.clientTypeLabel ?? "",
@@ -473,7 +474,7 @@ function ClientListBlock({
                 </p>
                 {!compact ? (
                   <>
-                    <p className="text-xs text-muted-foreground">РОП: {row.regionalManager}</p>
+                    <p className="text-xs text-muted-foreground">РОП: {getDealerRopDisplay(row) || "—"}</p>
                     <p className="text-xs text-muted-foreground" data-testid={`text-dealer-client-category-${row.id}`}>
                       Категория клиента: {getClientCategoryLabel(row.clientCategory)}
                       {row.clientTypeLabel ? ` · тип в данных: ${row.clientTypeLabel}` : ""} · ТТ: {row.outlets}
@@ -630,7 +631,7 @@ function ClientTableBlock({
                   {row.city} · {row.status}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {row.manager} · РОП: {row.regionalManager}
+                  {row.manager} · РОП: {getDealerRopDisplay(row) || "—"}
                 </p>
                 {row.releaseAddress ? (
                   <p className="text-xs text-muted-foreground line-clamp-2">{row.releaseAddress}</p>
@@ -762,8 +763,8 @@ function ClientTableBlock({
                     </div>
                   </td>
                   <td className="whitespace-nowrap px-3 py-3">{row.city}</td>
-                  <td className="max-w-[120px] truncate px-3 py-3 text-xs" title={row.regionalManager}>
-                    {row.regionalManager}
+                  <td className="max-w-[120px] truncate px-3 py-3 text-xs" title={getDealerRopDisplay(row) || "—"}>
+                    {getDealerRopDisplay(row) || "—"}
                   </td>
                   <td className="max-w-[120px] truncate px-3 py-3 text-xs" title={row.manager}>
                     {row.manager}
