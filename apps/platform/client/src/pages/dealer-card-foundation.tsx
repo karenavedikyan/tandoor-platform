@@ -1440,6 +1440,19 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                         Редактировать
                       </Button>
                     ) : null}
+                    {canArchiveManualDealer ? (
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        className="min-h-10 w-full font-semibold sm:w-auto"
+                        data-testid={`button-dealer-delete-${baseRow.id}`}
+                        disabled={dealerArchiveBusy}
+                        onClick={() => void archiveManualDealer()}
+                      >
+                        {dealerArchiveBusy ? "Сохранение…" : "Архивировать клиента"}
+                      </Button>
+                    ) : null}
                     {canActualizeClientBase(profile) ? (
                       <ClientBaseActualizationSyncStatus
                         syncStatus={actx.syncStatus}
