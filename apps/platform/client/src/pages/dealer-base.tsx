@@ -96,9 +96,9 @@ import {
 } from "@/lib/dealer-shipment-days";
 import {
   addDealersToRoute,
+  computeDisplayedRouteDealerIds,
   countDealersOnRouteSettlements,
   DEALER_ROUTE_PLAN_EVENT,
-  getRouteDealerIds,
   listRouteDefinitions,
   loadDealerRoutePlanState,
   type ShipmentRouteDefinition,
@@ -1450,6 +1450,9 @@ export default function DealerBase() {
     return rowsForWorkPlan.filter((r) => set.has(getDealerBaseSegment(r)));
   }, [rowsForWorkPlan, segmentList]);
 
+  /** Для маршрутов: те же права/рабочий план, но без фильтра ТОП-сегмента — чтобы не «терялись» клиенты. */
+  const rowsForRoutePlanning = useMemo(() => rowsForWorkPlan, [rowsForWorkPlan]);
+
   const rowsAfterShipmentDay = useMemo(() => {
     if (!activeShipmentDayId) return rowsAfterSegmentFilter;
     return rowsAfterSegmentFilter.filter((r) => getDealerShipmentDays(r).includes(activeShipmentDayId));
@@ -1543,33 +1546,18 @@ export default function DealerBase() {
   const routeRowsBySlot = useMemo((): Record<ShipmentRouteSlotId, DealerRow[]> => {
     if (!activeShipmentDayId) return { slot1: [], slot2: [] };
     const uid = profile.personaUserId;
-    const s1 = getRouteDealerIds(uid, activeShipmentDayId, "slot1", routePlanState)
-      .map((id) => dealerById.get(id))
-      .filter((r): r is DealerRow => Boolean(r));
-    const s2 = getRouteDealerIds(uid, activeShipmentDayId, "slot2", routePlanState)
-      .map((id) => dealerById.get(id))
-      .filter((r): r is DealerRow => Boolean(r));
-    return { slot1: s1, slot2: s2 };
-  }, [activeShipmentDayId, profile.personaUserId, routePlanState, dealerById]);
-
-  const settlementRowsBySlot = useMemo((): Record<ShipmentRouteSlotId, DealerRow[]> => {
-    if (!activeShipmentDayId) return { slot1: [], slot2: [] };
-    const defs = listRouteDefinitions(profile.personaUserId, activeShipmentDayId, routePlanState);
+    const defs = listRouteDefinitions(uid, activeShipmentDayId, routePlanState);
     const out: Record<ShipmentRouteSlotId, DealerRow[]> = { slot1: [], slot2: [] };
     for (const def of defs) {
-      const lc = def.settlements.map((x) => x.trim().toLowerCase()).filter(Boolean);
-      const set = new Set(lc);
-      if (set.size === 0) {
-        out[def.slotId] = [];
-        continue;
-      }
-      out[def.slotId] = rowsAfterSegmentFilter.filter(
-        (r) =>
-          getDealerShipmentDays(r).includes(activeShipmentDayId) && set.has(r.city.trim().toLowerCase()),
-      );
+      const ids = computeDisplayedRouteDealerIds(uid, activeShipmentDayId, def, rowsForRoutePlanning, routePlanState);
+      out[def.slotId] = ids.map((id) => dealerById.get(id)).filter((r): r is DealerRow => Boolean(r));
     }
     return out;
-  }, [activeShipmentDayId, profile.personaUserId, routePlanState, rowsAfterSegmentFilter]);
+  }, [activeShipmentDayId, profile.personaUserId, routePlanState, dealerById, rowsForRoutePlanning]);
+
+  const settlementRowsBySlot = useMemo((): Record<ShipmentRouteSlotId, DealerRow[]> => {
+    return { ...routeRowsBySlot };
+  }, [routeRowsBySlot]);
 
   const shipmentDaySummary = useMemo(() => {
     if (!activeShipmentDayId) return null;
@@ -1579,11 +1567,11 @@ export default function DealerBase() {
       return `День отгрузки: ${label}`;
     }
     const parts = defs.map((def) => {
-      const cnt = countDealersOnRouteSettlements(activeShipmentDayId, def, rowsAfterSegmentFilter);
+      const cnt = countDealersOnRouteSettlements(profile.personaUserId, activeShipmentDayId, def, rowsForRoutePlanning);
       return `${def.name}: ${cnt} ${ruClientNoun(cnt)}`;
     });
     return `День отгрузки: ${label} · ${parts.join(" · ")}`;
-  }, [activeShipmentDayId, profile.personaUserId, routePlanState, rowsAfterSegmentFilter]);
+  }, [activeShipmentDayId, profile.personaUserId, routePlanState, rowsForRoutePlanning]);
 
   const shipmentRouteFilterBanner = useMemo(() => {
     if (!shipmentRouteCityFilter) return null;
@@ -1623,7 +1611,7 @@ export default function DealerBase() {
       const lc = (s: string) => s.trim().toLowerCase();
       const valid = trimmed.filter((c) => {
         const target = lc(c);
-        return rowsAfterSegmentFilter.some(
+        return rowsForRoutePlanning.some(
           (r) => lc(r.city) === target && getDealerShipmentDays(r).includes(activeShipmentDayId),
         );
       });
@@ -1639,7 +1627,7 @@ export default function DealerBase() {
       setCities(valid);
       setActiveRouteSlotForBulk(slotId);
     },
-    [activeShipmentDayId, profile.personaUserId, routePlanState, rowsAfterSegmentFilter, cities],
+    [activeShipmentDayId, profile.personaUserId, routePlanState, rowsForRoutePlanning, cities],
   );
 
   const canMutateRoute = canMutateWorkPlan;
@@ -2013,7 +2001,7 @@ export default function DealerBase() {
           <div className="mb-3 min-w-0 space-y-3">
             <DealerShipmentDayPlanner
               userId={profile.personaUserId}
-              rowsForRouteSettlementCounts={rowsAfterSegmentFilter}
+              rowsForRouteSettlementCounts={rowsForRoutePlanning}
               routeDefsByDay={routeDefsByDay}
               settlementOptions={cityOptions}
               activeShipmentDayId={activeShipmentDayId}

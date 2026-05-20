@@ -76,14 +76,23 @@ import {
   getDealerComments,
   getDealerCommentsHistoryEvents,
 } from "@/lib/dealer-card-comments";
-import { getDealerLegalEntityHistoryEvents, DEALER_LEGAL_ENTITIES_EVENT } from "@/lib/dealer-legal-entities";
+import {
+  getDealerLegalEntityHistoryEvents,
+  DEALER_LEGAL_ENTITIES_EVENT,
+  getMergedDealerLegalEntities,
+} from "@/lib/dealer-legal-entities";
 import {
   CLIENT_CONTACTS_EVENT,
   getClientContactDealerHistoryEvents,
   getDealerContacts,
   isClientContactActive,
 } from "@/lib/client-contacts";
-import { getMergedDealerLegalEntities } from "@/lib/dealer-legal-entities";
+import {
+  DEALER_UNLOADING_ORDER_EVENT,
+  getDealerUnloadingOrder,
+  getDealerUnloadingOrderHistoryEvents,
+  setDealerUnloadingOrder,
+} from "@/lib/dealer-unloading-order-storage";
 import { getMergedDealerTradePoints } from "@/lib/dealer-trade-points-overrides";
 import {
   DEALER_TRADE_POINTS_EVENT,
@@ -372,6 +381,13 @@ function buildHistoryEvents(row: DealerRow): DealerHistoryEvent[] {
     at: e.at,
   }));
 
+  const unloadHist: DealerHistoryEvent[] = getDealerUnloadingOrderHistoryEvents(row.id).map((e) => ({
+    id: e.id,
+    meta: e.meta,
+    body: e.body,
+    at: e.at,
+  }));
+
   const boykoExtras: DealerHistoryEvent[] =
     row.releaseManagerId === "mgr-boyko-em"
       ? [
@@ -429,6 +445,7 @@ function buildHistoryEvents(row: DealerRow): DealerHistoryEvent[] {
     ...profHist,
     ...contactHist,
     ...charHist,
+    ...unloadHist,
     ...boykoExtras,
     ...templateEvents,
   ];
@@ -687,6 +704,7 @@ function DealerCardContent({ row }: { row: DealerRow }) {
   const [commentsBump, setCommentsBump] = useState(0);
   const [legalBump, setLegalBump] = useState(0);
   const [dealerDataBump, setDealerDataBump] = useState(0);
+  const [unloadBump, setUnloadBump] = useState(0);
   const [historyCommentDraft, setHistoryCommentDraft] = useState("");
   const [problemCommentDraft, setProblemCommentDraft] = useState("");
   const [competitorCommentDraft, setCompetitorCommentDraft] = useState("");
@@ -749,6 +767,12 @@ function DealerCardContent({ row }: { row: DealerRow }) {
   }, []);
 
   useEffect(() => {
+    const fn = () => setUnloadBump((n) => n + 1);
+    window.addEventListener(DEALER_UNLOADING_ORDER_EVENT, fn);
+    return () => window.removeEventListener(DEALER_UNLOADING_ORDER_EVENT, fn);
+  }, []);
+
+  useEffect(() => {
     setHistoryExpanded(false);
     setShowcaseCategoryListMode("all");
     setHistoryCommentDraft("");
@@ -766,7 +790,7 @@ function DealerCardContent({ row }: { row: DealerRow }) {
   const activeSection = useActiveSection(row.id);
   const historyEvents = useMemo(
     () => buildHistoryEvents(row),
-    [row, showcaseBump, showcaseMatrixBump, nextStepBump, trainingFlagsBump, commentsBump, legalBump, dealerDataBump],
+    [row, showcaseBump, showcaseMatrixBump, nextStepBump, trainingFlagsBump, commentsBump, legalBump, dealerDataBump, unloadBump],
   );
   const historyTimeline = useMemo(() => {
     const sorted = [...historyEvents].sort((a, b) => historySortKey(b) - historySortKey(a));
@@ -857,7 +881,19 @@ function DealerCardContent({ row }: { row: DealerRow }) {
     if (c && c !== "—" && c !== "-") return c;
     return "";
   }, [mergedProfView.city, row.city]);
+
+  const regionalManagerDisplay = useMemo(() => {
+    const fromResp = row.responsibles?.regionalManager?.trim();
+    if (isFilledDataCell(fromResp)) return fromResp!.trim();
+    if (isFilledDataCell(row.regionalManager)) return row.regionalManager.trim();
+    return "";
+  }, [row.responsibles?.regionalManager, row.regionalManager]);
+
+  const unloadingOrderValue = useMemo(() => getDealerUnloadingOrder(row.id), [row.id, unloadBump]);
+
   const [profileEditOpen, setProfileEditOpen] = useState(false);
+  const [unloadDialogOpen, setUnloadDialogOpen] = useState(false);
+  const [unloadDraft, setUnloadDraft] = useState("");
   const [peName, setPeName] = useState(row.name);
   const [peCity, setPeCity] = useState(row.city);
   const [peContactName, setPeContactName] = useState(row.contacts.lpr);
@@ -1125,17 +1161,40 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                         </p>
                       </div>
                     ) : null}
-                    {isFilledDataCell(row.regionalManager) ? (
-                      <div className="min-w-0">
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">РОП</p>
-                        <p className="mt-0.5 break-words text-sm font-medium text-foreground" data-testid="text-dealer-quick-info-rop">
-                          {row.regionalManager.trim()}
-                        </p>
-                      </div>
-                    ) : null}
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Региональный менеджер</p>
+                      <p className="mt-0.5 break-words text-sm font-medium text-foreground" data-testid="text-dealer-quick-info-regional-manager">
+                        {regionalManagerDisplay ? regionalManagerDisplay : "Не назначен"}
+                      </p>
+                    </div>
                     <div className="min-w-0">
                       <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Категория</p>
                       <p className="mt-0.5 break-words text-sm font-medium text-foreground">{businessCategoryLabel}</p>
+                    </div>
+                    <div className="min-w-0 sm:col-span-2 xl:col-span-1">
+                      <div className="flex flex-col gap-1.5 sm:flex-row sm:items-end sm:justify-between">
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Порядок выгрузки</p>
+                          <p className="mt-0.5 text-sm font-medium tabular-nums text-foreground" data-testid="text-dealer-unloading-order">
+                            {unloadingOrderValue != null ? unloadingOrderValue : "Не указан"}
+                          </p>
+                        </div>
+                        {canEditProfile ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="min-h-8 w-full shrink-0 text-xs sm:w-auto"
+                            data-testid="button-dealer-unloading-order-edit"
+                            onClick={() => {
+                              setUnloadDraft(unloadingOrderValue != null ? String(unloadingOrderValue) : "");
+                              setUnloadDialogOpen(true);
+                            }}
+                          >
+                            Изменить
+                          </Button>
+                        ) : null}
+                      </div>
                     </div>
                     {quickMainContactLabel ? (
                       <div className="min-w-0 sm:col-span-2 xl:col-span-2">
@@ -1225,6 +1284,53 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                   </div>
                 </CardContent>
               </SurfaceCard>
+              <Dialog open={unloadDialogOpen} onOpenChange={setUnloadDialogOpen}>
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Порядок выгрузки</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-2 py-1">
+                    <Label htmlFor="dealer-unload-order-input" className="text-xs text-muted-foreground">
+                      Номер (целое число, например 1–12)
+                    </Label>
+                    <Input
+                      id="dealer-unload-order-input"
+                      inputMode="numeric"
+                      value={unloadDraft}
+                      onChange={(e) => setUnloadDraft(e.target.value)}
+                      className="min-h-10"
+                      data-testid="input-dealer-unloading-order"
+                    />
+                    <p className="text-[11px] text-muted-foreground">Оставьте пустым и сохраните, чтобы сбросить значение.</p>
+                  </div>
+                  <DialogFooter className="gap-2 sm:gap-0">
+                    <Button type="button" variant="outline" data-testid="button-dealer-unloading-order-cancel" onClick={() => setUnloadDialogOpen(false)}>
+                      Отмена
+                    </Button>
+                    <Button
+                      type="button"
+                      data-testid="button-dealer-unloading-order-save"
+                      onClick={() => {
+                        const raw = unloadDraft.trim();
+                        const n = parseInt(raw, 10);
+                        const next =
+                          raw === "" || raw === "—" || raw === "-"
+                            ? null
+                            : Number.isFinite(n) && n > 0
+                              ? n
+                              : null;
+                        if (raw !== "" && raw !== "—" && raw !== "-" && !(Number.isFinite(n) && n > 0)) {
+                          return;
+                        }
+                        setDealerUnloadingOrder(row.id, next, profile.personaUserId, user?.name ?? userLabelFromProfile(profile));
+                        setUnloadDialogOpen(false);
+                      }}
+                    >
+                      Сохранить
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </section>
 
             <section

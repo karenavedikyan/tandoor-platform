@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import {
   DEALER_SHIPMENT_DAY_LABELS,
@@ -10,14 +10,19 @@ import {
 import {
   addRouteSlot,
   buildRouteCopyText,
+  computeDisplayedRouteDealerIds,
   countDealersOnRouteSettlements,
   deleteRouteSlot,
+  listDealersWrongShipmentDayForRoute,
+  loadDealerRoutePlanState,
   reorderRouteDealer,
   removeDealerFromRoute,
+  saveRouteEditorState,
+  sortRouteByUnloadingOrder,
   type ShipmentRouteDefinition,
   type ShipmentRouteSlotId,
-  upsertRouteDefinition,
 } from "@/lib/dealer-route-plan";
+import { getDealerUnloadingOrder } from "@/lib/dealer-unloading-order-storage";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -61,16 +66,14 @@ function routeRowsForCopy(ordered: DealerRow[], settlementFallback: DealerRow[])
 
 export type PlannerProps = {
   userId: string;
-  /** Для подсчёта клиентов по населённым пунктам маршрута (учёт текущего scope). */
+  /** Клиенты для маршрута (scope без фильтра ТОП-сегмента). */
   rowsForRouteSettlementCounts: DealerRow[];
   routeDefsByDay: Record<DealerShipmentDayId, ShipmentRouteDefinition[]>;
   settlementOptions: string[];
   activeShipmentDayId: DealerShipmentDayId | null;
   onSelectDay: (d: DealerShipmentDayId) => void;
   onResetDay: () => void;
-  /** Основная строка под карточками дней (день + клиенты + маршруты). */
   activeDaySummaryLine: string | null;
-  /** Баннер фильтра по маршруту. */
   routeFilterBanner: string | null;
   onClearRouteFilter: () => void;
   canEditRoute: boolean;
@@ -104,6 +107,8 @@ export function DealerShipmentDayPlanner({
   const [expandedSlotId, setExpandedSlotId] = useState<ShipmentRouteSlotId | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [editDraft, setEditDraft] = useState<ShipmentRouteDefinition | null>(null);
+  const [editSelectedIds, setEditSelectedIds] = useState<string[]>([]);
+  const [editClientSearch, setEditClientSearch] = useState("");
 
   const activeDayDefs = activeShipmentDayId ? routeDefsByDay[activeShipmentDayId] ?? [] : [];
 
@@ -135,20 +140,48 @@ export function DealerShipmentDayPlanner({
   );
 
   const openEdit = (def: ShipmentRouteDefinition) => {
-    setEditDraft({ ...def, settlements: [...def.settlements] });
+    if (!activeShipmentDayId) return;
+    const state = loadDealerRoutePlanState();
+    const ids = computeDisplayedRouteDealerIds(userId, activeShipmentDayId, def, rowsForRouteSettlementCounts, state);
+    setEditSelectedIds(ids);
+    setEditClientSearch("");
+    setEditDraft({
+      ...def,
+      settlements: [...def.settlements],
+      pinnedDealerIds: def.pinnedDealerIds ? [...def.pinnedDealerIds] : undefined,
+      excludedDealerIds: def.excludedDealerIds ? [...def.excludedDealerIds] : undefined,
+    });
     setEditOpen(true);
   };
 
   const saveEdit = () => {
     if (!activeShipmentDayId || !editDraft) return;
-    upsertRouteDefinition(userId, activeShipmentDayId, {
-      ...editDraft,
-      name: editDraft.name.trim() || "Маршрут",
-    });
+    const named: ShipmentRouteDefinition = { ...editDraft, name: editDraft.name.trim() || "Маршрут" };
+    saveRouteEditorState(userId, activeShipmentDayId, named, editSelectedIds, rowsForRouteSettlementCounts);
     setEditOpen(false);
     setEditDraft(null);
+    setEditSelectedIds([]);
     toast({ title: "Маршрут сохранён" });
   };
+
+  const byId = useMemo(() => new Map(rowsForRouteSettlementCounts.map((r) => [r.id, r])), [rowsForRouteSettlementCounts]);
+
+  const searchOptions = useMemo(() => {
+    const q = editClientSearch.trim().toLowerCase();
+    const selected = new Set(editSelectedIds);
+    return rowsForRouteSettlementCounts
+      .filter((r) => !selected.has(r.id))
+      .filter((r) => {
+        if (!q) return true;
+        return `${r.name} ${r.city}`.toLowerCase().includes(q);
+      })
+      .slice(0, 40);
+  }, [editClientSearch, editSelectedIds, rowsForRouteSettlementCounts]);
+
+  const selectedRows = useMemo(
+    () => editSelectedIds.map((id) => byId.get(id)).filter((r): r is DealerRow => Boolean(r)),
+    [editSelectedIds, byId],
+  );
 
   return (
     <>
@@ -198,7 +231,7 @@ export function DealerShipmentDayPlanner({
                     <span className="text-muted-foreground/90">Маршруты не заданы</span>
                   ) : (
                     defs.map((def) => {
-                      const n = countDealersOnRouteSettlements(d, def, rowsForRouteSettlementCounts);
+                      const n = countDealersOnRouteSettlements(userId, d, def, rowsForRouteSettlementCounts);
                       return (
                         <span key={def.slotId} className="block truncate" data-testid={`text-dealer-shipment-day-route-count-${d}-${def.slotId}`}>
                           {formatRouteClientsLine(def.name, n)}
@@ -262,7 +295,17 @@ export function DealerShipmentDayPlanner({
                 const ordered = routeRowsBySlot[def.slotId] ?? [];
                 const settlementFallback = settlementRowsBySlot[def.slotId] ?? [];
                 const expanded = expandedSlotId === def.slotId;
-                const routeClientCount = countDealersOnRouteSettlements(activeShipmentDayId, def, rowsForRouteSettlementCounts);
+                const routeClientCount = countDealersOnRouteSettlements(
+                  userId,
+                  activeShipmentDayId,
+                  def,
+                  rowsForRouteSettlementCounts,
+                );
+                const pinnedN = def.pinnedDealerIds?.length ?? 0;
+                const wrongDay =
+                  activeShipmentDayId != null
+                    ? listDealersWrongShipmentDayForRoute(activeShipmentDayId, def, rowsForRouteSettlementCounts)
+                    : [];
                 return (
                   <div
                     key={def.slotId}
@@ -275,6 +318,10 @@ export function DealerShipmentDayPlanner({
                         <p className="text-xs text-muted-foreground">
                           {def.settlements.length > 0 ? def.settlements.join(", ") : "Населённые пункты не заданы"}
                         </p>
+                        <ul className="list-inside list-disc text-[11px] leading-snug text-muted-foreground">
+                          <li>По населённым пунктам и дню отгрузки</li>
+                          {pinnedN > 0 ? <li>Закреплено вручную: {pinnedN}</li> : null}
+                        </ul>
                       </div>
                       <div className="flex flex-wrap gap-1.5 sm:max-w-[14rem] sm:justify-end">
                         <Button
@@ -344,12 +391,43 @@ export function DealerShipmentDayPlanner({
                         className="border-t border-border/60 bg-muted/10 px-2.5 py-3 sm:px-3"
                         data-testid={`section-dealer-shipment-route-plan-${def.slotId}`}
                       >
+                        {wrongDay.length > 0 ? (
+                          <div className="mb-3 rounded-lg border border-amber-200/80 bg-amber-50/50 p-2.5 text-xs text-amber-950">
+                            <p className="font-semibold">Не входят из-за другого дня отгрузки ({wrongDay.length})</p>
+                            <p className="mt-1 text-[11px] leading-snug text-amber-900/90">
+                              {wrongDay
+                                .slice(0, 6)
+                                .map((r) => r.name)
+                                .join(", ")}
+                              {wrongDay.length > 6 ? "…" : ""}
+                            </p>
+                            <p className="mt-1 text-[11px] text-amber-900/80">Добавьте клиента вручную в маршрут через «Редактировать».</p>
+                          </div>
+                        ) : null}
+                        {canEditRoute ? (
+                          <div className="mb-3">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="min-h-9 w-full text-xs sm:w-auto"
+                              data-testid={`button-dealer-shipment-route-sort-by-unloading-order-${def.slotId}`}
+                              onClick={() => {
+                                sortRouteByUnloadingOrder(userId, activeShipmentDayId, def, rowsForRouteSettlementCounts);
+                                toast({ title: "Порядок по выгрузке применён" });
+                              }}
+                            >
+                              Сортировать по порядку выгрузки
+                            </Button>
+                          </div>
+                        ) : null}
                         {ordered.length === 0 ? (
                           <p className="mb-3 text-sm text-muted-foreground">Клиенты маршрута не выбраны</p>
                         ) : (
                           <div className="mb-3 space-y-2">
                             {ordered.map((row) => {
                               const st = getShipmentStatus(row);
+                              const uo = getDealerUnloadingOrder(row.id);
                               return (
                                 <div
                                   key={row.id}
@@ -360,6 +438,9 @@ export function DealerShipmentDayPlanner({
                                   <div className="min-w-0 flex-1 space-y-1">
                                     <p className="truncate text-sm font-semibold text-foreground">{row.name}</p>
                                     <p className="text-xs text-muted-foreground">{row.city}</p>
+                                    <p className="text-[11px] text-muted-foreground" data-testid={`text-dealer-route-client-unloading-order-${row.id}`}>
+                                      Порядок выгрузки: {uo != null ? uo : "—"}
+                                    </p>
                                     <Badge variant="outline" className={cn("text-[10px] font-medium", trafficBadgeClass(st.level))}>
                                       {st.label}
                                     </Badge>
@@ -373,7 +454,12 @@ export function DealerShipmentDayPlanner({
                                         className="h-10 w-10 touch-manipulation"
                                         data-testid={`button-dealer-route-up-${row.id}`}
                                         aria-label="Выше"
-                                        onClick={() => reorderRouteDealer(userId, activeShipmentDayId, row.id, "up", def.slotId)}
+                                        onClick={() =>
+                                          reorderRouteDealer(userId, activeShipmentDayId, row.id, "up", def.slotId, {
+                                            def,
+                                            scopedRows: rowsForRouteSettlementCounts,
+                                          })
+                                        }
                                       >
                                         <ArrowUp className="h-4 w-4" />
                                       </Button>
@@ -384,7 +470,12 @@ export function DealerShipmentDayPlanner({
                                         className="h-10 w-10 touch-manipulation"
                                         data-testid={`button-dealer-route-down-${row.id}`}
                                         aria-label="Ниже"
-                                        onClick={() => reorderRouteDealer(userId, activeShipmentDayId, row.id, "down", def.slotId)}
+                                        onClick={() =>
+                                          reorderRouteDealer(userId, activeShipmentDayId, row.id, "down", def.slotId, {
+                                            def,
+                                            scopedRows: rowsForRouteSettlementCounts,
+                                          })
+                                        }
                                       >
                                         <ArrowDown className="h-4 w-4" />
                                       </Button>
@@ -395,7 +486,7 @@ export function DealerShipmentDayPlanner({
                                         className="h-10 w-10 touch-manipulation"
                                         data-testid={`button-dealer-route-remove-${row.id}`}
                                         aria-label="Удалить из маршрута"
-                                        onClick={() => removeDealerFromRoute(userId, activeShipmentDayId, row.id, def.slotId)}
+                                        onClick={() => removeDealerFromRoute(userId, activeShipmentDayId, row.id, def.slotId, row)}
                                       >
                                         <Trash2 className="h-4 w-4" />
                                       </Button>
@@ -442,13 +533,26 @@ export function DealerShipmentDayPlanner({
         </Card>
       ) : null}
 
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="max-w-md" data-testid="dialog-dealer-shipment-route-edit">
-          <DialogHeader>
-            <DialogTitle>Маршрут</DialogTitle>
+      <Dialog
+        open={editOpen}
+        onOpenChange={(o) => {
+          setEditOpen(o);
+          if (!o) {
+            setEditDraft(null);
+            setEditSelectedIds([]);
+            setEditClientSearch("");
+          }
+        }}
+      >
+        <DialogContent
+          className="flex max-h-[min(92vh,720px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg"
+          data-testid="dialog-dealer-shipment-route-edit"
+        >
+          <DialogHeader className="shrink-0 border-b border-border/60 px-4 pb-3 pt-4">
+            <DialogTitle>Редактирование маршрута</DialogTitle>
           </DialogHeader>
-          {editDraft ? (
-            <div className="space-y-3 py-1">
+          {editDraft && activeShipmentDayId ? (
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
               <div className="space-y-1">
                 <Label htmlFor="dealer-route-name">Название</Label>
                 <Input
@@ -456,6 +560,7 @@ export function DealerShipmentDayPlanner({
                   value={editDraft.name}
                   onChange={(e) => setEditDraft({ ...editDraft, name: e.target.value })}
                   className="min-h-10"
+                  data-testid="input-dealer-shipment-route-name"
                 />
               </div>
               <div className="space-y-1">
@@ -471,13 +576,88 @@ export function DealerShipmentDayPlanner({
                   ariaLabel="Населённые пункты маршрута"
                 />
               </div>
+              <div className="space-y-1">
+                <Label htmlFor="dealer-route-client-search">Поиск клиента</Label>
+                <Input
+                  id="dealer-route-client-search"
+                  value={editClientSearch}
+                  onChange={(e) => setEditClientSearch(e.target.value)}
+                  placeholder="Название или город"
+                  className="min-h-10"
+                  data-testid="input-dealer-shipment-route-client-search"
+                />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-muted-foreground">Доступные</p>
+                  <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-border/70 bg-card p-1.5">
+                    {searchOptions.length === 0 ? (
+                      <p className="px-1 py-2 text-xs text-muted-foreground">Нет совпадений</p>
+                    ) : (
+                      searchOptions.map((r) => (
+                        <div
+                          key={r.id}
+                          className="flex items-center justify-between gap-2 rounded border border-transparent px-1.5 py-1 hover:bg-muted/50"
+                          data-testid={`row-dealer-shipment-route-client-option-${r.id}`}
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-xs font-medium text-foreground">{r.name}</p>
+                            <p className="truncate text-[10px] text-muted-foreground">{r.city}</p>
+                          </div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            className="h-8 shrink-0 px-2 text-[10px]"
+                            data-testid={`button-dealer-shipment-route-client-add-${r.id}`}
+                            onClick={() => setEditSelectedIds((prev) => (prev.includes(r.id) ? prev : [...prev, r.id]))}
+                          >
+                            Добавить
+                          </Button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-muted-foreground">В маршруте ({editSelectedIds.length})</p>
+                  <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-border/70 bg-card p-1.5">
+                    {selectedRows.length === 0 ? (
+                      <p className="px-1 py-2 text-xs text-muted-foreground">Список пуст</p>
+                    ) : (
+                      selectedRows.map((r) => (
+                        <div
+                          key={r.id}
+                          className="flex items-center justify-between gap-2 rounded border border-transparent px-1.5 py-1 hover:bg-muted/50"
+                          data-testid={`row-dealer-shipment-route-client-selected-${r.id}`}
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-xs font-medium text-foreground">{r.name}</p>
+                            <p className="truncate text-[10px] text-muted-foreground">{r.city}</p>
+                          </div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-8 shrink-0 px-2 text-[10px]"
+                            data-testid={`button-dealer-shipment-route-client-remove-${r.id}`}
+                            onClick={() => setEditSelectedIds((prev) => prev.filter((id) => id !== r.id))}
+                          >
+                            Убрать
+                          </Button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           ) : null}
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter className="shrink-0 gap-2 border-t border-border/60 px-4 py-3 sm:gap-0">
             <Button type="button" variant="outline" onClick={() => setEditOpen(false)}>
               Отмена
             </Button>
-            <Button type="button" onClick={saveEdit} disabled={!editDraft?.name.trim()}>
+            <Button type="button" data-testid="button-dealer-shipment-route-save" onClick={saveEdit} disabled={!editDraft?.name.trim()}>
               Сохранить
             </Button>
           </DialogFooter>

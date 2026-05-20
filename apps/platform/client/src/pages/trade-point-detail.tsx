@@ -85,6 +85,7 @@ import {
   userLabelFromProfile,
 } from "@/lib/showcase-distribution-data";
 import { Bitrix24TasksPanel } from "@/components/bitrix24-tasks-panel";
+import { TradePointPhotoBlock } from "@/components/trade-point-photo-block";
 import { TradePointShowcaseMatrixSection } from "@/components/trade-point-showcase-matrix-section";
 import {
   getShowcaseMatrixTpHistoryEvents,
@@ -1316,16 +1317,14 @@ function TradePointDetailContent({
           <section id={SECTION_DOM_IDS.photos} data-testid="section-trade-point-photos" className="scroll-mt-28 space-y-4 pb-2 sm:scroll-mt-32">
             <SectionTitle subtitle="Визуальные материалы по точке.">Фото</SectionTitle>
             <SurfaceCard className="mt-3">
-              <CardContent className="pt-5">
-                <div className="flex items-start gap-3 rounded-xl border border-dashed border-border bg-muted/50 p-6">
+              <CardContent className="space-y-3 pt-5">
+                <div className="flex items-start gap-3">
                   <Camera className="mt-0.5 h-6 w-6 shrink-0 text-muted-foreground" aria-hidden />
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">Фотографии не прикреплены</p>
-                    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                      Здесь будут фото торговой точки, витрины и оборудования.
-                    </p>
-                  </div>
+                  <p className="text-sm leading-relaxed text-muted-foreground">
+                    Фото сохраняются в браузере и доступны в карточке клиента и на этой странице.
+                  </p>
                 </div>
+                <TradePointPhotoBlock dealerId={dealer.id} tradePointId={point.id} canEdit={canEditTp} />
               </CardContent>
             </SurfaceCard>
           </section>
