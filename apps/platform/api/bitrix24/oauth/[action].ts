@@ -14,7 +14,7 @@
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { randomBytes } from "node:crypto";
-import { isOAuthCallbackError } from "../../../server/bitrix24-oauth-callback-error";
+import { duckIsOAuthCallbackError } from "../../../shared/bitrix24-oauth-callback-guard";
 
 const JSON_CT = "application/json; charset=utf-8";
 
@@ -264,7 +264,7 @@ async function handleCallback(req: VercelRequest, res: VercelResponse): Promise<
     }
     sendJson(res, out.status, out.body);
   } catch (e) {
-    if (isOAuthCallbackError(e)) {
+    if (duckIsOAuthCallbackError(e)) {
       console.error("[bitrix24-api] oauth callback:typed-error", {
         oauthHandlerBuild: build,
         errorCode: e.code,
@@ -285,7 +285,16 @@ function handleDisconnect(res: VercelResponse): void {
   sendJson(res, 200, { success: true, message: "Подключение Bitrix24 сброшено в этом браузере." });
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
+function sendJsonIfWritable(res: VercelResponse, status: number, body: Record<string, unknown>): void {
+  try {
+    if (res.headersSent || res.writableEnded) return;
+  } catch {
+    return;
+  }
+  sendJson(res, status, body);
+}
+
+async function bitrix24OauthRoute(req: VercelRequest, res: VercelResponse): Promise<void> {
   const action = pickAction(req);
   try {
     if (action === "status" && req.method === "GET") {
@@ -312,7 +321,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   } catch (e) {
     const m = e instanceof Error ? e.message : String(e);
     console.error("[bitrix24-api] oauth", action, m);
-    sendJson(res, 500, {
+    sendJsonIfWritable(res, 500, {
+      success: false,
+      code: "INTERNAL_ERROR",
+      message: "Внутренняя ошибка сервера. Повторите запрос позже.",
+    });
+  }
+}
+
+export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
+  try {
+    await bitrix24OauthRoute(req, res);
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    console.error("[bitrix24-api] oauth handler:unhandled", m.slice(0, 200));
+    sendJsonIfWritable(res, 500, {
       success: false,
       code: "INTERNAL_ERROR",
       message: "Внутренняя ошибка сервера. Повторите запрос позже.",
