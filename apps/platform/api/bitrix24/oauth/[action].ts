@@ -246,7 +246,11 @@ async function handleCallback(req: VercelRequest, res: VercelResponse): Promise<
       try {
         const loc = new URL(out.location);
         const errCode = loc.searchParams.get("code");
-        if (loc.searchParams.get("bitrix24") === "error" && errCode) {
+        if (
+          loc.searchParams.get("bitrix24") === "error" &&
+          errCode &&
+          errCode.startsWith("BITRIX24_")
+        ) {
           console.error("[bitrix24-api] oauth callback:redirect-out", {
             oauthHandlerBuild: build,
             errorCode: errCode,
