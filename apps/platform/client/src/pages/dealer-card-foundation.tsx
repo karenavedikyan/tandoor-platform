@@ -158,6 +158,7 @@ import { canActualizeClientBase, canArchiveDealer, canEditDealerDuringActualizat
 import { mergeActualizationState } from "@/lib/client-base-actualization-state";
 import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actualization-sync-status";
 import { DealerActualizationEditDialog } from "@/components/client-base-actualization-dealer-forms";
+import { DealerManualActualizationPage } from "@/components/dealer-manual-actualization-page";
 import { PageLoadingFallback } from "@/components/navigation/page-loading";
 
 const SECTION_IDS = [
@@ -2403,6 +2404,10 @@ export function DealerCardPage() {
 
   if (actx.enabled && actx.state.archivedDealersById[id]) {
     return <DealerArchivedGate dealerId={id} profile={profile} />;
+  }
+
+  if (actx.enabled && canActualizeClientBase(profile) && isManualActualizationDealerId(id)) {
+    return <DealerManualActualizationPage baseRow={baseRow} profile={profile} />;
   }
 
   return <DealerCardContent baseRow={baseRow} />;
