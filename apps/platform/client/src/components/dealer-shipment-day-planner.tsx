@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import {
   DEALER_SHIPMENT_DAY_LABELS,
@@ -8,6 +8,7 @@ import {
   type DealerShipmentStatusResult,
 } from "@/lib/dealer-shipment-days";
 import {
+  DEALER_ROUTE_PLAN_EVENT,
   addRouteSlot,
   buildRouteCopyText,
   computeDisplayedRouteDealerIds,
@@ -17,7 +18,8 @@ import {
   listDealersWrongShipmentDayForRoute,
   loadDealerRoutePlanState,
   normalizeRouteClientOrder,
-  reorderRouteDealer,
+  parseRouteClientOrderInputStrings,
+  persistRouteClientOrderInputs,
   removeDealerFromRoute,
   saveRouteEditorState,
   sortDealerIdsByRouteClientOrder,
@@ -42,7 +44,7 @@ import { Badge } from "@/components/ui/badge";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
-import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, Pencil, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Pencil, Trash2 } from "lucide-react";
 
 function ruClientNoun(n: number): "клиент" | "клиента" | "клиентов" {
   const mod10 = n % 10;
@@ -54,18 +56,6 @@ function ruClientNoun(n: number): "клиент" | "клиента" | "клие�
 
 function formatRouteClientsLine(routeName: string, n: number): string {
   return `${routeName} · ${n} ${ruClientNoun(n)}`;
-}
-
-function parseRouteClientOrderInputs(raw: Record<string, string>): Record<string, number> {
-  const out: Record<string, number> = {};
-  for (const [id, s] of Object.entries(raw)) {
-    const t = s.trim();
-    if (!t) continue;
-    const n = Number(t);
-    if (!Number.isInteger(n) || n < 1) continue;
-    out[id] = n;
-  }
-  return out;
 }
 
 function trafficBadgeClass(level: "green" | "yellow" | "red"): string {
@@ -125,6 +115,40 @@ export function DealerShipmentDayPlanner({
   const [editSelectedIds, setEditSelectedIds] = useState<string[]>([]);
   const [editOrderById, setEditOrderById] = useState<Record<string, string>>({});
   const [editClientSearch, setEditClientSearch] = useState("");
+  const [routeLocalBump, setRouteLocalBump] = useState(0);
+  const [expandedOrderDraft, setExpandedOrderDraft] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const h = () => setRouteLocalBump((n) => n + 1);
+    window.addEventListener(DEALER_ROUTE_PLAN_EVENT, h);
+    return () => window.removeEventListener(DEALER_ROUTE_PLAN_EVENT, h);
+  }, []);
+
+  useEffect(() => {
+    if (!expandedSlotId || !activeShipmentDayId) {
+      setExpandedOrderDraft({});
+      return;
+    }
+    const def = routeDefsByDay[activeShipmentDayId]?.find((d) => d.slotId === expandedSlotId);
+    if (!def) {
+      setExpandedOrderDraft({});
+      return;
+    }
+    const st = loadDealerRoutePlanState();
+    const ids = computeDisplayedRouteDealerIds(userId, activeShipmentDayId, def, rowsForRouteSettlementCounts, st);
+    const entry = getDealerRouteDayEntry(userId, activeShipmentDayId, expandedSlotId, st);
+    const from = entry?.clientOrderByDealerId ?? {};
+    const next: Record<string, string> = {};
+    for (const id of ids) {
+      const ro = from[id];
+      if (normalizeRouteClientOrder(ro) != null) next[id] = String(ro);
+      else {
+        const go = getDealerUnloadingOrder(id);
+        next[id] = normalizeRouteClientOrder(go) != null ? String(go as number) : "";
+      }
+    }
+    setExpandedOrderDraft(next);
+  }, [expandedSlotId, activeShipmentDayId, userId, rowsForRouteSettlementCounts, routeLocalBump, routeDefsByDay]);
 
   const activeDayDefs = activeShipmentDayId ? routeDefsByDay[activeShipmentDayId] ?? [] : [];
 
@@ -185,7 +209,7 @@ export function DealerShipmentDayPlanner({
   const saveEdit = () => {
     if (!activeShipmentDayId || !editDraft) return;
     const named: ShipmentRouteDefinition = { ...editDraft, name: editDraft.name.trim() || "Маршрут" };
-    const parsed = parseRouteClientOrderInputs(editOrderById);
+    const parsed = parseRouteClientOrderInputStrings(editOrderById);
     const nameById = new Map(rowsForRouteSettlementCounts.map((r) => [r.id, r.name]));
     const ordered = sortDealerIdsByRouteClientOrder(
       editSelectedIds,
@@ -216,7 +240,7 @@ export function DealerShipmentDayPlanner({
   }, [editClientSearch, editSelectedIds, rowsForRouteSettlementCounts]);
 
   const selectedRows = useMemo(() => {
-    const parsed = parseRouteClientOrderInputs(editOrderById);
+    const parsed = parseRouteClientOrderInputStrings(editOrderById);
     const nameById = new Map(rowsForRouteSettlementCounts.map((r) => [r.id, r.name]));
     const ids = sortDealerIdsByRouteClientOrder(
       editSelectedIds,
@@ -463,7 +487,19 @@ export function DealerShipmentDayPlanner({
                               className="min-h-9 w-full text-xs sm:w-auto"
                               data-testid={`button-dealer-shipment-route-sort-by-unloading-order-${def.slotId}`}
                               onClick={() => {
-                                sortRouteByUnloadingOrder(userId, activeShipmentDayId, def, rowsForRouteSettlementCounts);
+                                const ok = sortRouteByUnloadingOrder(
+                                  userId,
+                                  activeShipmentDayId,
+                                  def,
+                                  rowsForRouteSettlementCounts,
+                                );
+                                if (!ok) {
+                                  toast({
+                                    title: "Порядок выгрузки не задан",
+                                    description: "У клиентов не задан порядок выгрузки. Укажите номера вручную.",
+                                  });
+                                  return;
+                                }
                                 toast({ title: "Порядок по выгрузке применён" });
                               }}
                             >
@@ -505,39 +541,50 @@ export function DealerShipmentDayPlanner({
                                     </Badge>
                                   </div>
                                   {canEditRoute ? (
-                                    <div className="flex shrink-0 flex-wrap gap-1.5 sm:flex-nowrap">
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="icon"
-                                        className="h-10 w-10 touch-manipulation"
-                                        data-testid={`button-dealer-route-up-${row.id}`}
-                                        aria-label="Выше"
-                                        onClick={() =>
-                                          reorderRouteDealer(userId, activeShipmentDayId, row.id, "up", def.slotId, {
-                                            def,
-                                            scopedRows: rowsForRouteSettlementCounts,
-                                          })
-                                        }
-                                      >
-                                        <ArrowUp className="h-4 w-4" />
-                                      </Button>
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="icon"
-                                        className="h-10 w-10 touch-manipulation"
-                                        data-testid={`button-dealer-route-down-${row.id}`}
-                                        aria-label="Ниже"
-                                        onClick={() =>
-                                          reorderRouteDealer(userId, activeShipmentDayId, row.id, "down", def.slotId, {
-                                            def,
-                                            scopedRows: rowsForRouteSettlementCounts,
-                                          })
-                                        }
-                                      >
-                                        <ArrowDown className="h-4 w-4" />
-                                      </Button>
+                                    <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end sm:gap-2">
+                                      <div className="flex min-w-0 items-end gap-2 sm:items-center">
+                                        <div className="w-16 shrink-0">
+                                          <Label
+                                            htmlFor={`dealer-route-inline-order-${def.slotId}-${row.id}`}
+                                            className="text-[10px] leading-none text-muted-foreground"
+                                          >
+                                            №
+                                          </Label>
+                                          <Input
+                                            id={`dealer-route-inline-order-${def.slotId}-${row.id}`}
+                                            type="number"
+                                            min={1}
+                                            step={1}
+                                            value={expandedOrderDraft[row.id] ?? ""}
+                                            onChange={(e) =>
+                                              setExpandedOrderDraft((prev) => ({
+                                                ...prev,
+                                                [row.id]: e.target.value,
+                                              }))
+                                            }
+                                            onBlur={(e) => {
+                                              const v = e.target.value;
+                                              setExpandedOrderDraft((prev) => {
+                                                const merged = { ...prev, [row.id]: v };
+                                                queueMicrotask(() =>
+                                                  persistRouteClientOrderInputs(
+                                                    userId,
+                                                    activeShipmentDayId,
+                                                    def.slotId,
+                                                    def,
+                                                    rowsForRouteSettlementCounts,
+                                                    merged,
+                                                  ),
+                                                );
+                                                return merged;
+                                              });
+                                            }}
+                                            inputMode="numeric"
+                                            className="h-10 min-h-10 w-full px-1.5 text-center text-xs tabular-nums"
+                                            data-testid={`input-dealer-route-client-order-${def.slotId}-${row.id}`}
+                                          />
+                                        </div>
+                                      </div>
                                       <Button
                                         type="button"
                                         variant="secondary"
@@ -698,7 +745,7 @@ export function DealerShipmentDayPlanner({
                         className="h-8 shrink-0 self-start px-2 text-[10px] sm:self-auto"
                         data-testid={`button-dealer-route-sort-by-client-order-${editDraft.slotId}`}
                         onClick={() => {
-                          const parsed = parseRouteClientOrderInputs(editOrderById);
+                          const parsed = parseRouteClientOrderInputStrings(editOrderById);
                           const nameById = new Map(rowsForRouteSettlementCounts.map((row) => [row.id, row.name]));
                           setEditSelectedIds((prev) =>
                             sortDealerIdsByRouteClientOrder(

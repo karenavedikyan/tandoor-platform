@@ -23,7 +23,6 @@ import {
   DEALER_BASE_ROWS,
   getDealerById,
   getDealerManagerDisplay,
-  getDealerRegionalManagerDisplay,
   getDealerRopDisplay,
   type DealerRow,
   type DealerStatus,
@@ -96,6 +95,14 @@ import {
   getDealerUnloadingOrderHistoryEvents,
   setDealerUnloadingOrder,
 } from "@/lib/dealer-unloading-order-storage";
+import {
+  DEALER_REGIONAL_MANAGER_OVERRIDES_EVENT,
+  getDealerRegionalManagerEffectiveDisplay,
+  getDealerRegionalManagerHistoryEvents,
+  getRegionalManagerOverrideUserId,
+  listRegionalManagerPickerUsers,
+  setDealerRegionalManagerOverride,
+} from "@/lib/dealer-regional-manager-overrides";
 import { getMergedDealerTradePoints } from "@/lib/dealer-trade-points-overrides";
 import {
   DEALER_TRADE_POINTS_EVENT,
@@ -126,6 +133,7 @@ import {
   SHOWCASE_MATRIX_CHANGED_EVENT,
 } from "@/lib/trade-point-showcase-matrix-storage";
 import { DealerContactsSection } from "@/components/dealer-contacts-section";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const SECTION_IDS = [
   "overview",
@@ -391,6 +399,13 @@ function buildHistoryEvents(row: DealerRow): DealerHistoryEvent[] {
     at: e.at,
   }));
 
+  const regionalHist: DealerHistoryEvent[] = getDealerRegionalManagerHistoryEvents(row.id).map((e) => ({
+    id: e.id,
+    meta: e.meta,
+    body: e.body,
+    at: e.at,
+  }));
+
   const boykoExtras: DealerHistoryEvent[] =
     row.releaseManagerId === "mgr-boyko-em"
       ? [
@@ -449,6 +464,7 @@ function buildHistoryEvents(row: DealerRow): DealerHistoryEvent[] {
     ...contactHist,
     ...charHist,
     ...unloadHist,
+    ...regionalHist,
     ...boykoExtras,
     ...templateEvents,
   ];
@@ -708,6 +724,7 @@ function DealerCardContent({ row }: { row: DealerRow }) {
   const [legalBump, setLegalBump] = useState(0);
   const [dealerDataBump, setDealerDataBump] = useState(0);
   const [unloadBump, setUnloadBump] = useState(0);
+  const [regionalBump, setRegionalBump] = useState(0);
   const [historyCommentDraft, setHistoryCommentDraft] = useState("");
   const [problemCommentDraft, setProblemCommentDraft] = useState("");
   const [competitorCommentDraft, setCompetitorCommentDraft] = useState("");
@@ -776,6 +793,12 @@ function DealerCardContent({ row }: { row: DealerRow }) {
   }, []);
 
   useEffect(() => {
+    const fn = () => setRegionalBump((n) => n + 1);
+    window.addEventListener(DEALER_REGIONAL_MANAGER_OVERRIDES_EVENT, fn);
+    return () => window.removeEventListener(DEALER_REGIONAL_MANAGER_OVERRIDES_EVENT, fn);
+  }, []);
+
+  useEffect(() => {
     setHistoryExpanded(false);
     setShowcaseCategoryListMode("all");
     setHistoryCommentDraft("");
@@ -793,7 +816,7 @@ function DealerCardContent({ row }: { row: DealerRow }) {
   const activeSection = useActiveSection(row.id);
   const historyEvents = useMemo(
     () => buildHistoryEvents(row),
-    [row, showcaseBump, showcaseMatrixBump, nextStepBump, trainingFlagsBump, commentsBump, legalBump, dealerDataBump, unloadBump],
+    [row, showcaseBump, showcaseMatrixBump, nextStepBump, trainingFlagsBump, commentsBump, legalBump, dealerDataBump, unloadBump, regionalBump],
   );
   const historyTimeline = useMemo(() => {
     const sorted = [...historyEvents].sort((a, b) => historySortKey(b) - historySortKey(a));
@@ -886,7 +909,10 @@ function DealerCardContent({ row }: { row: DealerRow }) {
   }, [mergedProfView.city, row.city]);
 
   const quickManagerDisplay = useMemo(() => getDealerManagerDisplay(row), [row]);
-  const regionalManagerDisplay = useMemo(() => getDealerRegionalManagerDisplay(row), [row]);
+  const regionalManagerDisplay = useMemo(
+    () => getDealerRegionalManagerEffectiveDisplay(row),
+    [row, regionalBump],
+  );
   const ropDisplay = useMemo(() => getDealerRopDisplay(row), [row]);
 
   const unloadingOrderValue = useMemo(() => getDealerUnloadingOrder(row.id), [row.id, unloadBump]);
@@ -894,6 +920,9 @@ function DealerCardContent({ row }: { row: DealerRow }) {
   const [profileEditOpen, setProfileEditOpen] = useState(false);
   const [unloadDialogOpen, setUnloadDialogOpen] = useState(false);
   const [unloadDraft, setUnloadDraft] = useState("");
+  const [regionalDialogOpen, setRegionalDialogOpen] = useState(false);
+  const REGIONAL_RM_NONE = "__none__";
+  const [regionalDraftUserId, setRegionalDraftUserId] = useState(REGIONAL_RM_NONE);
   const [peName, setPeName] = useState(row.name);
   const [peCity, setPeCity] = useState(row.city);
   const [peContactName, setPeContactName] = useState(row.contacts.lpr);
@@ -1161,16 +1190,36 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                         {quickManagerDisplay ? quickManagerDisplay : "Не назначен"}
                       </p>
                     </div>
-                    <div className="min-w-0">
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                        Ответственный региональный менеджер
-                      </p>
-                      <p
-                        className="mt-0.5 break-words text-sm font-medium text-foreground"
-                        data-testid="text-dealer-quick-info-regional-manager"
-                      >
-                        {regionalManagerDisplay ? regionalManagerDisplay : "Не назначен"}
-                      </p>
+                    <div className="min-w-0 sm:col-span-2 xl:col-span-1">
+                      <div className="flex flex-col gap-1.5 sm:flex-row sm:items-end sm:justify-between">
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            Ответственный региональный менеджер
+                          </p>
+                          <p
+                            className="mt-0.5 break-words text-sm font-medium text-foreground"
+                            data-testid="text-dealer-quick-info-regional-manager"
+                          >
+                            {regionalManagerDisplay ? regionalManagerDisplay : "Не назначен"}
+                          </p>
+                        </div>
+                        {canEditProfile ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="min-h-8 w-full shrink-0 text-xs sm:w-auto"
+                            data-testid="button-dealer-regional-manager-edit"
+                            onClick={() => {
+                              const cur = getRegionalManagerOverrideUserId(row.id);
+                              setRegionalDraftUserId(cur ?? REGIONAL_RM_NONE);
+                              setRegionalDialogOpen(true);
+                            }}
+                          >
+                            Изменить
+                          </Button>
+                        ) : null}
+                      </div>
                     </div>
                     <div className="min-w-0">
                       <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Ответственный РОП</p>
@@ -1335,6 +1384,65 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                         }
                         setDealerUnloadingOrder(row.id, next, profile.personaUserId, user?.name ?? userLabelFromProfile(profile));
                         setUnloadDialogOpen(false);
+                      }}
+                    >
+                      Сохранить
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+              <Dialog open={regionalDialogOpen} onOpenChange={setRegionalDialogOpen}>
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Ответственный региональный менеджер</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-2 py-1">
+                    <Label htmlFor="dealer-regional-manager-select" className="text-xs text-muted-foreground">
+                      Сотрудник
+                    </Label>
+                    <Select value={regionalDraftUserId} onValueChange={setRegionalDraftUserId}>
+                      <SelectTrigger
+                        id="dealer-regional-manager-select"
+                        className="min-h-10 w-full"
+                        data-testid="select-dealer-regional-manager"
+                      >
+                        <SelectValue placeholder="Не назначен" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={REGIONAL_RM_NONE}>Не назначен</SelectItem>
+                        {listRegionalManagerPickerUsers().map((u) => (
+                          <SelectItem key={u.id} value={u.id}>
+                            {u.name} · {u.roleLabel}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <DialogFooter className="gap-2 sm:gap-0">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      data-testid="button-dealer-regional-manager-cancel"
+                      onClick={() => setRegionalDialogOpen(false)}
+                    >
+                      Отмена
+                    </Button>
+                    <Button
+                      type="button"
+                      data-testid="button-dealer-regional-manager-save"
+                      onClick={() => {
+                        const next =
+                          regionalDraftUserId === REGIONAL_RM_NONE || regionalDraftUserId.trim() === ""
+                            ? null
+                            : regionalDraftUserId;
+                        setDealerRegionalManagerOverride(
+                          row.id,
+                          next,
+                          profile.personaUserId,
+                          user?.name ?? userLabelFromProfile(profile),
+                        );
+                        setRegionalDialogOpen(false);
+                        setRegionalBump((n) => n + 1);
                       }}
                     >
                       Сохранить
