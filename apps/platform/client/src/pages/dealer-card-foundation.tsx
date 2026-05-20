@@ -24,6 +24,7 @@ import {
   getDealerById,
   getDealerManagerDisplay,
   getDealerRopDisplay,
+  normalizeDealerId,
   type DealerRow,
   type DealerStatus,
 } from "@/lib/dealer-base-mock-data";
@@ -134,6 +135,17 @@ import {
 } from "@/lib/trade-point-showcase-matrix-storage";
 import { DealerContactsSection } from "@/components/dealer-contacts-section";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useClientBaseActualization } from "@/context/client-base-actualization-context";
+import {
+  manualDealerToRow,
+  mergeDealerRowWithActualization,
+  mergeLegalEntitiesForActualization,
+  mergeTradePointsActiveForActualization,
+} from "@/lib/client-base-actualization-data-merge";
+import { canActualizeClientBase, canEditDealerDuringActualization } from "@/lib/client-base-actualization-permissions";
+import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actualization-sync-status";
+import { DealerActualizationEditDialog } from "@/components/client-base-actualization-dealer-forms";
+import { PageLoadingFallback } from "@/components/navigation/page-loading";
 
 const SECTION_IDS = [
   "overview",
@@ -709,8 +721,9 @@ function DealerSectionNav({ active }: { active: SectionId }) {
   );
 }
 
-function DealerCardContent({ row }: { row: DealerRow }) {
+function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
   const { profile } = useReleaseDemoProfile();
+  const actx = useClientBaseActualization();
   const { user } = useCurrentUser();
   const [, setLocation] = useLocation();
   const [showcaseBump, setShowcaseBump] = useState(0);
@@ -725,12 +738,13 @@ function DealerCardContent({ row }: { row: DealerRow }) {
   const [dealerDataBump, setDealerDataBump] = useState(0);
   const [unloadBump, setUnloadBump] = useState(0);
   const [regionalBump, setRegionalBump] = useState(0);
+  const [dealerEditOpen, setDealerEditOpen] = useState(false);
   const [historyCommentDraft, setHistoryCommentDraft] = useState("");
   const [problemCommentDraft, setProblemCommentDraft] = useState("");
   const [competitorCommentDraft, setCompetitorCommentDraft] = useState("");
   const [trainingCompleted, setTrainingCompleted] = useState(() => {
-    if (typeof window === "undefined") return row.productTrainingCompleted;
-    const s = sessionStorage.getItem(dealerProductTrainingStorageKey(row.id));
+    if (typeof window === "undefined") return baseRow.productTrainingCompleted;
+    const s = sessionStorage.getItem(dealerProductTrainingStorageKey(baseRow.id));
     if (s === "1") return true;
     if (s === "0") return false;
     return row.productTrainingCompleted;
@@ -805,14 +819,19 @@ function DealerCardContent({ row }: { row: DealerRow }) {
     setProblemCommentDraft("");
     setCompetitorCommentDraft("");
     if (typeof window === "undefined") return;
-    const s = sessionStorage.getItem(dealerProductTrainingStorageKey(row.id));
+    const s = sessionStorage.getItem(dealerProductTrainingStorageKey(baseRow.id));
     if (s === "1") setTrainingCompleted(true);
     else if (s === "0") setTrainingCompleted(false);
-    else setTrainingCompleted(row.productTrainingCompleted);
-  }, [row.id, row.productTrainingCompleted]);
+    else setTrainingCompleted(baseRow.productTrainingCompleted);
+  }, [baseRow.id, baseRow.productTrainingCompleted]);
+
+  const row = useMemo(
+    () => mergeDealerRowWithActualization(getDealerRowWithProfileOverrides(baseRow), actx.state),
+    [baseRow, actx.state, dealerDataBump],
+  );
 
   const businessCategoryLabel = getClientCategoryLabel(row.clientCategory);
-  const rowView = useMemo(() => getDealerRowWithProfileOverrides(row), [row, dealerDataBump]);
+  const rowView = row;
   const activeSection = useActiveSection(row.id);
   const historyEvents = useMemo(
     () => buildHistoryEvents(row),
@@ -847,14 +866,18 @@ function DealerCardContent({ row }: { row: DealerRow }) {
 
   const canEditProfile = useMemo(() => canEditDealerProfile(profile, row), [profile, row]);
   const mergedProfView = useMemo(() => getMergedDealerProfile(row), [row, dealerDataBump]);
-  const tradePointsCount = useMemo(
-    () => getMergedDealerTradePoints(row, { includeArchived: false }).length,
-    [row, dealerDataBump],
-  );
-  const legalEntitiesCount = useMemo(
-    () => getMergedDealerLegalEntities(row).filter((e) => e.status !== "archived").length,
-    [row, legalBump],
-  );
+  const tradePointsCount = useMemo(() => {
+    if (actx.enabled && canActualizeClientBase(profile)) {
+      return mergeTradePointsActiveForActualization(row, actx.state).length;
+    }
+    return getMergedDealerTradePoints(row, { includeArchived: false }).length;
+  }, [row, dealerDataBump, actx.enabled, actx.state, profile]);
+  const legalEntitiesCount = useMemo(() => {
+    if (actx.enabled && canActualizeClientBase(profile)) {
+      return mergeLegalEntitiesForActualization(row, actx.state).filter((e) => e.status !== "archived").length;
+    }
+    return getMergedDealerLegalEntities(row).filter((e) => e.status !== "archived").length;
+  }, [row, legalBump, actx.enabled, actx.state, profile]);
   const storedDealerContacts = useMemo(() => getDealerContacts(row), [row, dealerDataBump]);
   const primaryStoredContact = useMemo(() => {
     const active = storedDealerContacts.filter(isClientContactActive);
@@ -1313,6 +1336,35 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                         {legalEntitiesCount}
                       </p>
                     </div>
+                    {row.actualizationInn ? (
+                      <div className="min-w-0 sm:col-span-2 xl:col-span-3">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">ИНН</p>
+                        <p className="mt-0.5 break-words text-sm font-medium text-foreground">{row.actualizationInn}</p>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="flex flex-col gap-2 border-t border-border/60 pt-3 sm:flex-row sm:flex-wrap sm:items-center">
+                    {canEditDealerDuringActualization(profile, row) ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="min-h-10 w-full font-semibold sm:w-auto"
+                        data-testid="button-dealer-edit"
+                        onClick={() => setDealerEditOpen(true)}
+                      >
+                        Редактировать
+                      </Button>
+                    ) : null}
+                    {canActualizeClientBase(profile) ? (
+                      <ClientBaseActualizationSyncStatus
+                        syncStatus={actx.syncStatus}
+                        meta={actx.meta}
+                        isLoading={actx.loading}
+                        onRetry={() => void actx.refresh()}
+                      />
+                    ) : null}
                   </div>
 
                   <div className="flex flex-wrap gap-1.5 pt-1">
@@ -2091,6 +2143,13 @@ function DealerCardContent({ row }: { row: DealerRow }) {
         </DialogContent>
       </Dialog>
 
+      <DealerActualizationEditDialog
+        open={dealerEditOpen}
+        onOpenChange={setDealerEditOpen}
+        baseRow={baseRow}
+        profile={profile}
+      />
+
       <FloatingBackButton
         href="/dealer-base"
         label="К базе"
@@ -2104,16 +2163,24 @@ function DealerCardContent({ row }: { row: DealerRow }) {
 export function DealerCardPage() {
   const params = useParams<{ id: string }>();
   const rawId = params.id ?? "";
-  const row = getDealerById(rawId);
-  if (!row) {
+  const { profile } = useReleaseDemoProfile();
+  const actx = useClientBaseActualization();
+  const id = normalizeDealerId(rawId);
+  if (actx.enabled && actx.loading && !getDealerById(id) && id.startsWith("manual-dealer")) {
+    return <PageLoadingFallback />;
+  }
+  const baseRow =
+    getDealerById(id) ??
+    (actx.state.manuallyCreatedDealersById[id] ? manualDealerToRow(actx.state.manuallyCreatedDealersById[id], profile) : undefined);
+  if (!baseRow) {
     return <DealerNotFound />;
   }
-  return <DealerCardContent row={row} />;
+  return <DealerCardContent baseRow={baseRow} />;
 }
 
 /** Маршрут `/dealer-card-foundation` — превью карточки первого клиента из базы. */
 export default function DealerCardFoundation() {
   const first = DEALER_BASE_ROWS[0];
   if (!first) return <DealerNotFound />;
-  return <DealerCardContent row={first} />;
+  return <DealerCardContent baseRow={first} />;
 }

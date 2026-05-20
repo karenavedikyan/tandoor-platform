@@ -146,6 +146,8 @@ export type DealerTradePoint = {
 
 export type DealerRow = {
   id: string;
+  /** ИНН из актуализации клиентской базы (отображение поверх моков). */
+  actualizationInn?: string;
   /** Код клиента из Excel Release 1 (если есть). */
   releaseCode?: string;
   /** Тип клиента (как в Excel / справочнике Release 1). */

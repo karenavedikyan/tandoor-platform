@@ -17,7 +17,10 @@ export type DealerLegalEntity = {
   name: string;
   inn?: string;
   kpp?: string;
+  ogrn?: string;
   legalAddress?: string;
+  /** Фактический адрес (актуализация / расширенная карточка). */
+  actualAddress?: string;
   status: DealerLegalEntityStatus;
   comment?: string;
   createdAt: string;
