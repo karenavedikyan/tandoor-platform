@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { MapPin } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +31,7 @@ import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { mergeTradePointsActiveForActualization, mergeTradePointsForActualization } from "@/lib/client-base-actualization-data-merge";
 import { mergeActualizationState } from "@/lib/client-base-actualization-state";
+import { generateStableManualTradePointId } from "@/lib/client-base-actualization-stable-ids";
 import {
   canArchiveTradePointDuringActualization,
   canCreateTradePointDuringActualization,
@@ -81,6 +82,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
   const [addContactName, setAddContactName] = useState("");
   const [addContactPhone, setAddContactPhone] = useState("");
   const [addComment, setAddComment] = useState("");
+  const [addSaving, setAddSaving] = useState(false);
   const [addError, setAddError] = useState("");
   const [editOpen, setEditOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -147,44 +149,70 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
     setAddError("");
   }, []);
 
+  const prevAddOpenRef = useRef(false);
+  const draftTpIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (addOpen && !prevAddOpenRef.current) {
+      draftTpIdRef.current = generateStableManualTradePointId(row.id);
+    }
+    if (!addOpen) {
+      draftTpIdRef.current = null;
+    }
+    prevAddOpenRef.current = addOpen;
+  }, [addOpen, row.id]);
+
   const onAddSave = useCallback(async () => {
     setAddError("");
     if (useAct) {
+      if (addSaving) return;
       if (!addName.trim() || !addCity.trim() || !addAddress.trim() || !addContactName.trim() || !addContactPhone.trim()) {
         setAddError("Заполните название, город, адрес, контактное лицо и телефон.");
         return;
       }
-      const id = `manual-tp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const id = draftTpIdRef.current ?? generateStableManualTradePointId(row.id);
+      draftTpIdRef.current = id;
       const now = new Date().toISOString();
-      const ok = await actx.persist((prev) =>
-        mergeActualizationState(prev, {
-          manuallyCreatedTradePointsById: {
-            ...prev.manuallyCreatedTradePointsById,
-            [id]: {
-              id,
-              dealerId: row.id,
-              fields: {
-                name: addName.trim(),
-                city: addCity.trim(),
-                address: addAddress.trim(),
-                format: addFormat.trim(),
-                contactName: addContactName.trim(),
-                contactPhone: addContactPhone.trim(),
-                comment: addComment.trim(),
-              },
-              createdAt: now,
-              createdBy: profile.personaUserId,
-              createdByName: userLabelFromProfile(profile),
-              source: "manual_actualization",
-            },
+      setAddSaving(true);
+      const r = await actx.persist((prev) => {
+        const existing = prev.manuallyCreatedTradePointsById[id];
+        const rec = {
+          id,
+          dealerId: row.id,
+          fields: {
+            name: addName.trim(),
+            city: addCity.trim(),
+            address: addAddress.trim(),
+            format: addFormat.trim(),
+            contactName: addContactName.trim(),
+            contactPhone: addContactPhone.trim(),
+            comment: addComment.trim(),
           },
-        }),
-      );
-      if (ok) {
+          createdAt: existing?.createdAt ?? now,
+          createdBy: existing?.createdBy ?? profile.personaUserId,
+          createdByName: existing?.createdByName ?? userLabelFromProfile(profile),
+          source: "manual_actualization" as const,
+        };
+        return mergeActualizationState(prev, {
+          manuallyCreatedTradePointsById: { ...prev.manuallyCreatedTradePointsById, [id]: rec },
+        });
+      });
+      setAddSaving(false);
+      if (r.success) {
         toast({ title: "Сохранено" });
         setAddOpen(false);
         resetAddForm();
-      } else toast({ title: "Ошибка сохранения", variant: "destructive" });
+      } else {
+        const extra =
+          r.syncStatus === "local_fallback" || r.storageMode === "local_fallback"
+            ? " Данные могли сохраниться только на этом устройстве."
+            : "";
+        toast({
+          title: "Не удалось сохранить. Проверьте соединение и попробуйте ещё раз.",
+          description: extra.trim() || undefined,
+          variant: "destructive",
+        });
+      }
       return;
     }
     const id = addManualTradePoint(
@@ -219,6 +247,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
     profile,
     row.id,
     resetAddForm,
+    addSaving,
   ]);
 
   const openEdit = useCallback(
@@ -262,17 +291,22 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
       updatedByName: userLabelFromProfile(profile),
       source: "manual_actualization" as const,
     };
-    const ok = await actx.persist((prev) =>
+    const r = await actx.persist((prev) =>
       mergeActualizationState(prev, {
         tradePointOverridesById: { ...prev.tradePointOverridesById, [editId]: ov },
       }),
     );
     setEditSaving(false);
-    if (ok) {
+    if (r.success) {
       toast({ title: "Сохранено" });
       setEditOpen(false);
       setEditId(null);
-    } else toast({ title: "Ошибка сохранения", variant: "destructive" });
+    } else {
+      toast({
+        title: "Не удалось сохранить. Проверьте соединение и попробуйте ещё раз.",
+        variant: "destructive",
+      });
+    }
   }, [useAct, editId, editName, editCity, editAddress, editFormat, editContactName, editContactPhone, editComment, actx, row.id, profile]);
 
   const onArchive = useCallback(
@@ -287,15 +321,36 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
         archivedByName: userLabelFromProfile(profile),
         source: "manual_actualization" as const,
       };
-      const ok = await actx.persist((prev) =>
+      const r = await actx.persist((prev) =>
         mergeActualizationState(prev, {
           archivedTradePointsById: { ...prev.archivedTradePointsById, [tp.id]: info },
         }),
       );
-      if (ok) toast({ title: "Точка архивирована" });
-      else toast({ title: "Ошибка сохранения", variant: "destructive" });
+      if (r.success) toast({ title: "Точка архивирована" });
+      else
+        toast({
+          title: "Не удалось сохранить. Проверьте соединение и попробуйте ещё раз.",
+          variant: "destructive",
+        });
     },
     [useAct, actx, row.id, profile],
+  );
+
+  const onRestoreTradePoint = useCallback(
+    async (tp: DealerTradePoint) => {
+      if (!useAct) return;
+      const r = await actx.persist((prev) => {
+        const { [tp.id]: _removed, ...rest } = prev.archivedTradePointsById;
+        return mergeActualizationState(prev, { archivedTradePointsById: rest });
+      });
+      if (r.success) toast({ title: "Точка восстановлена" });
+      else
+        toast({
+          title: "Не удалось сохранить. Проверьте соединение и попробуйте ещё раз.",
+          variant: "destructive",
+        });
+    },
+    [useAct, actx],
   );
 
   const listToShow = showArchived ? archivedList : mergedActive;
@@ -397,8 +452,14 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
               </div>
             </div>
             <DialogFooter className="flex-col gap-2 sm:flex-row">
-              <Button type="button" className="min-h-10 w-full font-semibold sm:w-auto" data-testid="button-dealer-trade-point-save" onClick={() => void onAddSave()}>
-                Сохранить
+              <Button
+                type="button"
+                className="min-h-10 w-full font-semibold sm:w-auto"
+                data-testid={useAct ? "button-trade-point-create-submit" : "button-dealer-trade-point-save"}
+                disabled={useAct && addSaving}
+                onClick={() => void onAddSave()}
+              >
+                {useAct && addSaving ? "Сохранение…" : "Сохранить"}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -512,8 +573,14 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
               </div>
             </div>
             <DialogFooter className="flex-col gap-2 sm:flex-row">
-              <Button type="button" className="min-h-10 w-full font-semibold sm:w-auto" data-testid="button-dealer-trade-point-save" onClick={() => void onAddSave()}>
-                Сохранить
+              <Button
+                type="button"
+                className="min-h-10 w-full font-semibold sm:w-auto"
+                data-testid={useAct ? "button-trade-point-create-submit" : "button-dealer-trade-point-save"}
+                disabled={useAct && addSaving}
+                onClick={() => void onAddSave()}
+              >
+                {useAct && addSaving ? "Сохранение…" : "Сохранить"}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -570,7 +637,8 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
       ) : null}
 
       <div className="space-y-2">
-        {slice.map(({ point: tp, isManual, isEdited }) => {
+        {slice.map((entry) => {
+          const { point: tp, isManual, isEdited, isArchived } = entry;
           const contact = tradePointContact(tp, row, mergedActive.length);
           const showBadge = isFilled(tp.showcaseStatus);
           const isVirtual = isVirtualDefaultTradePointId(row.id, tp.id);
@@ -640,7 +708,19 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                         <span className="font-semibold tabular-nums text-foreground">{showcaseOpen}</span>
                       </p>
                     ) : null}
-                    {useAct && canEdit && !isVirtual ? (
+                    {useAct && canEdit && !isVirtual && isArchived ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="min-h-10 w-full font-semibold sm:w-auto"
+                        data-testid={`button-trade-point-restore-${tp.id}`}
+                        onClick={() => void onRestoreTradePoint(tp)}
+                      >
+                        Восстановить ТТ
+                      </Button>
+                    ) : null}
+                    {useAct && canEdit && !isVirtual && !isArchived ? (
                       <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
                         <Button
                           type="button"
@@ -783,10 +863,11 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
             <Button
               type="button"
               className="min-h-10 w-full font-semibold sm:w-auto"
-              data-testid="button-dealer-trade-point-save"
+              data-testid={useAct ? "button-trade-point-create-submit" : "button-dealer-trade-point-save"}
+              disabled={useAct && addSaving}
               onClick={() => void onAddSave()}
             >
-              Сохранить
+              {useAct && addSaving ? "Сохранение…" : "Сохранить"}
             </Button>
           </DialogFooter>
         </DialogContent>

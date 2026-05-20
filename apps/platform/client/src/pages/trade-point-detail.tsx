@@ -36,6 +36,8 @@ import {
   trainingAttentionLevelBadgeClass,
 } from "@/lib/training-attention";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
+import { useClientBaseActualization } from "@/context/client-base-actualization-context";
+import { resolveActualizationTradePointDetail } from "@/lib/client-base-actualization-data-merge";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -828,6 +830,14 @@ function TradePointDetailContent({
             Точки не заведены отдельно — работаем как с одной основной торговой точкой.
           </p>
         ) : null}
+        {tpMeta.isManual && !isVirtualDefaultPoint ? (
+          <p
+            className="mt-3 rounded-lg border border-amber-200/80 bg-amber-50/90 px-3 py-2 text-xs leading-relaxed text-amber-950"
+            data-testid="text-trade-point-empty-state"
+          >
+            Для этой торговой точки пока нет данных. Заполните основные сведения или добавьте фото / витрину.
+          </p>
+        ) : null}
         {canEditTp ? (
           <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
             <Button
@@ -849,7 +859,7 @@ function TradePointDetailContent({
                 variant="secondary"
                 size="sm"
                 className="min-h-9 w-full font-semibold sm:w-auto"
-                data-testid="button-trade-point-archive"
+                data-testid={`button-trade-point-archive-${point.id}`}
                 onClick={() => setArchiveOpen(true)}
               >
                 Архивировать точку
@@ -1350,6 +1360,8 @@ export function TradePointDetailPage() {
   const rawDealer = params.dealerId ?? "";
   const rawPoint = params.pointId ?? "";
   const [dataBump, setDataBump] = useState(0);
+  const { profile } = useReleaseDemoProfile();
+  const actx = useClientBaseActualization();
 
   useEffect(() => {
     const fn = () => setDataBump((n) => n + 1);
@@ -1363,13 +1375,28 @@ export function TradePointDetailPage() {
 
   const result = useMemo(() => {
     void dataBump;
-    return getResolvedTradePointByIds(rawDealer, rawPoint);
-  }, [rawDealer, rawPoint, dataBump]);
+    if (actx.enabled) {
+      const r = resolveActualizationTradePointDetail(rawDealer, rawPoint, actx.state, profile);
+      if (r) {
+        return {
+          dealer: getDealerRowWithProfileOverrides(r.dealer),
+          point: r.point,
+          entry: r.entry,
+        };
+      }
+    }
+    const base = getResolvedTradePointByIds(rawDealer, rawPoint);
+    if (!base) return undefined;
+    return {
+      dealer: getDealerRowWithProfileOverrides(base.dealer),
+      point: base.point,
+      entry: base.entry,
+    };
+  }, [rawDealer, rawPoint, dataBump, actx.enabled, actx.state, profile]);
 
   if (!result) {
     return <TradePointNotFound dealerId={rawDealer} />;
   }
 
-  const dealerView = getDealerRowWithProfileOverrides(result.dealer);
-  return <TradePointDetailContent dealer={dealerView} point={result.point} tpMeta={result.entry} />;
+  return <TradePointDetailContent dealer={result.dealer} point={result.point} tpMeta={result.entry} />;
 }

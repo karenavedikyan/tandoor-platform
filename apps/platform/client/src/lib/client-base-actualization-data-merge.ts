@@ -2,12 +2,13 @@
  * Слияние данных клиентской базы с ActualizationState (поверх release + localStorage overrides).
  */
 
-import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
+import type { DealerRow, DealerStatus, DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import {
   DEALER_BASE_ROWS,
   getDealerById,
   getDealerRegionalManagerDisplay,
   normalizeDealerId,
+  normalizeTradePointId,
 } from "@/lib/dealer-base-mock-data";
 import { getDealerRowWithProfileOverrides } from "@/lib/dealer-profile-overrides";
 import {
@@ -25,6 +26,8 @@ import type {
   TradePointActualizationOverride,
 } from "@/lib/client-base-actualization-state";
 import { mergeActualizationState } from "@/lib/client-base-actualization-state";
+import { manualDealerDisplayInternalCode } from "@/lib/client-base-actualization-stable-ids";
+import { normalizeClientCategory, getClientCategoryLabel } from "@/lib/client-category";
 import { DEALER_SHIPMENT_DAY_LABELS, type DealerShipmentDayId } from "@/lib/dealer-shipment-days";
 
 function str(v: unknown): string | undefined {
@@ -116,6 +119,23 @@ export function mergeDealerRowWithActualization(row: DealerRow, act: Actualizati
   const uoNum = num(uo) ?? num(f.unloadingOrder);
   if (uoNum != null && uoNum > 0) {
     r = { ...r, distribution: uoNum };
+  }
+
+  const catRaw = str(f.clientCategory);
+  if (catRaw) {
+    r = { ...r, clientCategory: normalizeClientCategory(catRaw) };
+  }
+  const typeLbl = str(f.clientTypeLabel);
+  if (typeLbl) r = { ...r, clientTypeLabel: typeLbl };
+
+  const stRaw = str(f.status);
+  if (stRaw && ["активный", "потенциальный", "приостановлен", "требует внимания"].includes(stRaw)) {
+    r = { ...r, status: stRaw as DealerStatus };
+  }
+
+  const contactPerson = str(f.contactPerson) ?? str(f.lpr);
+  if (contactPerson) {
+    r = { ...r, contacts: { ...r.contacts, lpr: contactPerson } };
   }
 
   return r;
@@ -352,6 +372,14 @@ export function mergeLegalEntitiesForActualization(row: DealerRow, act: Actualiz
   return [...mergedBase, ...extra];
 }
 
+const DEALER_STATUS_SET = new Set<string>(["активный", "потенциальный", "приостановлен", "требует внимания"]);
+
+function parseDealerStatus(v: unknown): DealerStatus {
+  const s = str(v);
+  if (s && DEALER_STATUS_SET.has(s)) return s as DealerStatus;
+  return "активный";
+}
+
 /** Собрать DealerRow из записи manual dealer (актуализация). */
 export function manualDealerToRow(m: ManualDealer, profile: ReleaseDemoProfile): DealerRow {
   const f = (m.fields ?? {}) as Record<string, unknown>;
@@ -366,6 +394,10 @@ export function manualDealerToRow(m: ManualDealer, profile: ReleaseDemoProfile):
   const releaseManagerId = str(f.releaseManagerId) ?? mgrUser?.id ?? profile.personaUserId;
   const releaseTeamId = str(f.releaseTeamId) ?? teamId;
 
+  const clientCategory = normalizeClientCategory(str(f.clientCategory));
+  const status = parseDealerStatus(f.status);
+  const typeLabel = str(f.clientTypeLabel) ?? getClientCategoryLabel(clientCategory);
+
   const template = DEALER_BASE_ROWS[0]!;
   const row: DealerRow = {
     ...template,
@@ -374,9 +406,11 @@ export function manualDealerToRow(m: ManualDealer, profile: ReleaseDemoProfile):
     city,
     region: str(f.region) ?? city,
     releaseAddress: str(f.address),
-    clientCategory: "lead",
+    releaseCode: manualDealerDisplayInternalCode(m),
+    clientTypeLabel: typeLabel,
+    clientCategory,
     importanceTier: "growth",
-    status: "активный",
+    status,
     format: "одиночный",
     outlets: 0,
     manager: managerName || mgrUser?.name || "—",
@@ -385,7 +419,11 @@ export function manualDealerToRow(m: ManualDealer, profile: ReleaseDemoProfile):
     releaseTeamId,
     releaseManagerId,
     lastActivity: "—",
-    nextAction: str(f.shipmentDayLabel) ? `День отгрузки: ${String(f.shipmentDayLabel)}` : "—",
+    nextAction: str(f.shipmentDayLabel)
+      ? `День отгрузки: ${String(f.shipmentDayLabel)}`
+      : str(f.routeLabel)
+        ? `Маршрут: ${String(f.routeLabel)}`
+        : "—",
     distribution: num(f.unloadingOrder) ?? 0,
     showcaseStatus: "—",
     hasProblem: false,
@@ -402,7 +440,7 @@ export function manualDealerToRow(m: ManualDealer, profile: ReleaseDemoProfile):
       assistant: "—",
     },
     contacts: {
-      lpr: "—",
+      lpr: str(f.contactPerson) ?? str(f.lpr) ?? "—",
       buyer: "—",
       phone: str(f.phone) ?? "—",
       email: str(f.email) ?? "—",
@@ -432,9 +470,29 @@ export function resolveDealerRowForCard(dealerIdRaw: string, act: ActualizationS
 
 /** Строки для клиентской базы: manual сверху, затем release с merge. */
 export function buildDealerBaseRowsWithActualization(act: ActualizationState, profile: ReleaseDemoProfile): DealerRow[] {
-  const manuals = Object.values(act.manuallyCreatedDealersById).map((m) => mergeDealerRowWithActualization(manualDealerToRow(m, profile), act));
+  const manuals = Object.values(act.manuallyCreatedDealersById)
+    .filter((m) => !act.archivedDealersById[m.id])
+    .map((m) => mergeDealerRowWithActualization(manualDealerToRow(m, profile), act));
   const rest = DEALER_BASE_ROWS.map((r) => mergeDealerRowWithActualization(r, act));
   return [...manuals, ...rest];
+}
+
+/** Карточка торговой точки: дилер из actualization + merge ТТ. */
+export function resolveActualizationTradePointDetail(
+  rawDealerId: string,
+  rawPointId: string,
+  act: ActualizationState,
+  profile: ReleaseDemoProfile,
+): { dealer: DealerRow; point: DealerTradePoint; entry: MergedTradePointEntry } | undefined {
+  const dealer = resolveDealerRowForCard(rawDealerId, act, profile);
+  if (!dealer) return undefined;
+  const pidTrim = rawPointId.trim();
+  const merged = mergeTradePointsForActualization(dealer, act);
+  const entry =
+    merged.find((e) => e.point.id === pidTrim) ??
+    merged.find((e) => e.point.id === normalizeTradePointId(dealer.id, pidTrim));
+  if (!entry) return undefined;
+  return { dealer, point: entry.point, entry };
 }
 
 export function patchActualizationState(prev: ActualizationState, patch: Partial<ActualizationState>): ActualizationState {

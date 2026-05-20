@@ -33,6 +33,8 @@ import { DealerShowcaseDistributionSection, type ShowcaseCategoryListMode } from
 import { DealerShowcaseMatrixSummarySection } from "@/components/dealer-showcase-matrix-summary-section";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
+import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
+import { toast } from "@/hooks/use-toast";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { getDealerAnalyticsSignalCards } from "@/lib/dealer-analytics-signals";
 import { buildHashPath } from "@/lib/hash-route-utils";
@@ -141,8 +143,10 @@ import {
   mergeDealerRowWithActualization,
   mergeLegalEntitiesForActualization,
   mergeTradePointsActiveForActualization,
+  resolveDealerRowForCard,
 } from "@/lib/client-base-actualization-data-merge";
-import { canActualizeClientBase, canEditDealerDuringActualization } from "@/lib/client-base-actualization-permissions";
+import { canActualizeClientBase, canArchiveDealerDuringActualization, canEditDealerDuringActualization } from "@/lib/client-base-actualization-permissions";
+import { mergeActualizationState } from "@/lib/client-base-actualization-state";
 import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actualization-sync-status";
 import { DealerActualizationEditDialog } from "@/components/client-base-actualization-dealer-forms";
 import { PageLoadingFallback } from "@/components/navigation/page-loading";
@@ -739,6 +743,7 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
   const [unloadBump, setUnloadBump] = useState(0);
   const [regionalBump, setRegionalBump] = useState(0);
   const [dealerEditOpen, setDealerEditOpen] = useState(false);
+  const [dealerArchiveBusy, setDealerArchiveBusy] = useState(false);
   const [historyCommentDraft, setHistoryCommentDraft] = useState("");
   const [problemCommentDraft, setProblemCommentDraft] = useState("");
   const [competitorCommentDraft, setCompetitorCommentDraft] = useState("");
@@ -747,7 +752,7 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
     const s = sessionStorage.getItem(dealerProductTrainingStorageKey(baseRow.id));
     if (s === "1") return true;
     if (s === "0") return false;
-    return row.productTrainingCompleted;
+    return baseRow.productTrainingCompleted;
   });
 
   useEffect(() => {
@@ -829,6 +834,39 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
     () => mergeDealerRowWithActualization(getDealerRowWithProfileOverrides(baseRow), actx.state),
     [baseRow, actx.state, dealerDataBump],
   );
+
+  const isManualDealerRow = baseRow.id.startsWith("manual-dealer");
+  const canArchiveManualDealer =
+    actx.enabled && isManualDealerRow && canArchiveDealerDuringActualization(profile, row);
+
+  const archiveManualDealer = useCallback(async () => {
+    if (!canArchiveManualDealer) return;
+    setDealerArchiveBusy(true);
+    const r = await actx.persist((prev) =>
+      mergeActualizationState(prev, {
+        archivedDealersById: {
+          ...prev.archivedDealersById,
+          [baseRow.id]: {
+            dealerId: baseRow.id,
+            archivedAt: new Date().toISOString(),
+            archivedBy: profile.personaUserId,
+            archivedByName: userLabelFromProfile(profile),
+            source: "manual_actualization",
+          },
+        },
+      }),
+    );
+    setDealerArchiveBusy(false);
+    if (r.success) {
+      toast({ title: "Клиент в архиве" });
+      setLocation("/dealer-base");
+    } else {
+      toast({
+        title: "Не удалось сохранить. Проверьте соединение и попробуйте ещё раз.",
+        variant: "destructive",
+      });
+    }
+  }, [actx, baseRow.id, canArchiveManualDealer, profile, setLocation]);
 
   const businessCategoryLabel = getClientCategoryLabel(row.clientCategory);
   const rowView = row;
@@ -1336,6 +1374,14 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                         {legalEntitiesCount}
                       </p>
                     </div>
+                    {row.releaseCode ? (
+                      <div className="min-w-0 sm:col-span-2 xl:col-span-1">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Код</p>
+                        <p className="mt-0.5 font-mono text-sm font-medium text-foreground" data-testid="text-dealer-internal-code">
+                          {row.releaseCode}
+                        </p>
+                      </div>
+                    ) : null}
                     {row.actualizationInn ? (
                       <div className="min-w-0 sm:col-span-2 xl:col-span-3">
                         <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">ИНН</p>
@@ -1355,6 +1401,19 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                         onClick={() => setDealerEditOpen(true)}
                       >
                         Редактировать
+                      </Button>
+                    ) : null}
+                    {canArchiveManualDealer ? (
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        className="min-h-10 w-full font-semibold sm:w-auto"
+                        data-testid={`button-dealer-delete-${baseRow.id}`}
+                        disabled={dealerArchiveBusy}
+                        onClick={() => void archiveManualDealer()}
+                      >
+                        {dealerArchiveBusy ? "Сохранение…" : "Архивировать клиента"}
                       </Button>
                     ) : null}
                     {canActualizeClientBase(profile) ? (
@@ -2160,21 +2219,82 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
   );
 }
 
+function DealerArchivedGate({ dealerId, profile }: { dealerId: string; profile: ReleaseDemoProfile }) {
+  const actx = useClientBaseActualization();
+  const [busy, setBusy] = useState(false);
+  const manual = actx.state.manuallyCreatedDealersById[dealerId];
+  if (!manual) return <DealerNotFound />;
+  const row = mergeDealerRowWithActualization(manualDealerToRow(manual, profile), actx.state);
+  const canRestore = actx.enabled && canArchiveDealerDuringActualization(profile, row);
+
+  const onRestore = async () => {
+    if (!canRestore) return;
+    setBusy(true);
+    const r = await actx.persist((prev) => {
+      const { [dealerId]: _removed, ...rest } = prev.archivedDealersById;
+      void _removed;
+      return mergeActualizationState(prev, { archivedDealersById: rest });
+    });
+    setBusy(false);
+    if (r.success) toast({ title: "Клиент восстановлен" });
+    else
+      toast({
+        title: "Не удалось сохранить. Проверьте соединение и попробуйте ещё раз.",
+        variant: "destructive",
+      });
+  };
+
+  return (
+    <div className="mx-auto max-w-md space-y-6 px-4 py-10" data-testid="page-dealer-archived">
+      <Button asChild variant="outline" className="min-h-11 w-full">
+        <Link href="/dealer-base">К клиентской базе</Link>
+      </Button>
+      <Card className="rounded-2xl border border-border shadow-md">
+        <CardHeader>
+          <CardTitle className="text-lg">Клиент архивирован</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4 text-sm text-muted-foreground">
+          <p>Карточка скрыта из обычного списка. При необходимости восстановите доступ.</p>
+          {canRestore ? (
+            <Button
+              type="button"
+              className="min-h-10 w-full font-semibold"
+              data-testid={`button-dealer-restore-${dealerId}`}
+              disabled={busy}
+              onClick={() => void onRestore()}
+            >
+              {busy ? "Сохранение…" : "Восстановить"}
+            </Button>
+          ) : (
+            <p className="text-foreground">Недостаточно прав для восстановления.</p>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export function DealerCardPage() {
   const params = useParams<{ id: string }>();
   const rawId = params.id ?? "";
   const { profile } = useReleaseDemoProfile();
   const actx = useClientBaseActualization();
   const id = normalizeDealerId(rawId);
-  if (actx.enabled && actx.loading && !getDealerById(id) && id.startsWith("manual-dealer")) {
-    return <PageLoadingFallback />;
-  }
-  const baseRow =
-    getDealerById(id) ??
-    (actx.state.manuallyCreatedDealersById[id] ? manualDealerToRow(actx.state.manuallyCreatedDealersById[id], profile) : undefined);
+  if (!id) return <DealerNotFound />;
+
+  const baseRow = actx.enabled ? resolveDealerRowForCard(id, actx.state, profile) : getDealerById(id);
+
   if (!baseRow) {
+    if (actx.enabled && actx.loading && id.startsWith("manual-dealer")) {
+      return <PageLoadingFallback />;
+    }
     return <DealerNotFound />;
   }
+
+  if (actx.enabled && actx.state.archivedDealersById[id]) {
+    return <DealerArchivedGate dealerId={id} profile={profile} />;
+  }
+
   return <DealerCardContent baseRow={baseRow} />;
 }
 
