@@ -848,8 +848,7 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
   );
 
   const isManualDealerRow = isManualActualizationDealerId(baseRow.id);
-  const canArchiveManualDealer =
-    actx.enabled && isManualDealerRow && canArchiveDealerDuringActualization(profile, row);
+  /** Release-карточка: manual-клиенты уходят на DealerManualActualizationPage, здесь всегда false. */
   const canSoftArchiveDealer = actx.enabled && canArchiveDealerDuringActualization(profile, row);
 
   const softArchiveDealer = useCallback(async () => {
@@ -872,7 +871,9 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
     );
     setDealerArchiveBusy(false);
     if (r.success) {
-      toast({ title: "Клиент удалён из рабочей базы" });
+      toast({
+        title: isManualDealerRow ? "Клиент удалён из рабочей базы" : "Клиент перенесён в архив",
+      });
       setDealerDeleteDialogOpen(false);
       setLocation("/dealer-base");
     } else {
@@ -1241,31 +1242,6 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                   </div>
                   <h1 className="text-lg font-semibold tracking-tight text-foreground sm:text-xl">{rowView.name}</h1>
 
-                  {canArchiveManualDealer ? (
-                    <div
-                      className="rounded-xl border-2 border-destructive/40 bg-destructive/5 p-3 sm:p-4"
-                      data-testid="banner-dealer-manual-archive"
-                    >
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <p className="text-sm leading-snug text-foreground">
-                          Клиент создан вручную. При ошибке заведения перенесите запись в архив — она исчезнет из общей
-                          клиентской базы.
-                        </p>
-                        <Button
-                          type="button"
-                          variant="destructive"
-                          size="sm"
-                          className="min-h-10 w-full shrink-0 font-semibold sm:w-auto"
-                          data-testid={`button-dealer-delete-${baseRow.id}`}
-                          disabled={dealerArchiveBusy}
-                          onClick={() => void softArchiveDealer()}
-                        >
-                          {dealerArchiveBusy ? "Сохранение…" : "Архивировать клиента"}
-                        </Button>
-                      </div>
-                    </div>
-                  ) : null}
-
                   <div
                     data-testid="section-dealer-quick-info"
                     className="grid gap-x-4 gap-y-2.5 rounded-lg border border-border/80 bg-muted/10 px-3 py-3 sm:grid-cols-2 xl:grid-cols-3"
@@ -1456,17 +1432,17 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                     {canSoftArchiveDealer ? (
                       <Button
                         type="button"
-                        variant={isManualDealerRow ? "destructive" : "outline"}
+                        variant="outline"
                         size="sm"
                         className={cn(
                           "min-h-10 w-full font-semibold sm:w-auto",
-                          !isManualDealerRow && "border-amber-300/80 bg-amber-50/80 text-amber-950 hover:bg-amber-100/90",
+                          "border-amber-300/80 bg-amber-50/80 text-amber-950 hover:bg-amber-100/90",
                         )}
                         data-testid={`button-dealer-delete-${baseRow.id}`}
                         disabled={dealerArchiveBusy}
                         onClick={() => setDealerDeleteDialogOpen(true)}
                       >
-                        {isManualDealerRow ? "Удалить клиента" : "В архив"}
+                        В архив
                       </Button>
                     ) : null}
                     {canActualizeClientBase(profile) ? (
@@ -2299,9 +2275,11 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
       <AlertDialog open={dealerDeleteDialogOpen} onOpenChange={setDealerDeleteDialogOpen}>
         <AlertDialogContent data-testid="dialog-dealer-delete-confirm">
           <AlertDialogHeader>
-            <AlertDialogTitle>Удалить клиента?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Клиент будет скрыт из рабочей базы. Данные можно будет восстановить.
+            <AlertDialogTitle>В архив?</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2 text-sm">
+              <p>Клиент будет скрыт из рабочей клиентской базы и не будет отображаться в списке по умолчанию.</p>
+              <p>Данные не удаляются физически: карточка, контакты и актуализация сохраняются в состоянии.</p>
+              <p>При необходимости клиента можно восстановить: включите «Показать архив» в базе или откройте прямую ссылку на карточку.</p>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
@@ -2317,13 +2295,13 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
             </Button>
             <Button
               type="button"
-              variant={isManualDealerRow ? "destructive" : "default"}
+              variant="default"
               className="w-full font-semibold sm:w-auto"
               data-testid="button-dealer-delete-confirm"
               disabled={dealerArchiveBusy}
               onClick={() => void softArchiveDealer()}
             >
-              {dealerArchiveBusy ? "Сохранение…" : isManualDealerRow ? "Удалить клиента" : "В архив"}
+              {dealerArchiveBusy ? "Сохранение…" : "В архив"}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -2377,10 +2355,10 @@ function DealerArchivedGate({ dealerId, profile }: { dealerId: string; profile: 
       });
   };
 
-  const title = isManual ? "Клиент удалён" : "Клиент в архиве";
+  const title = "Клиент в архиве";
   const stateText = isManual
-    ? "Клиент скрыт из рабочей базы. Запись сохранена — вы можете восстановить клиента при необходимости."
-    : "Клиент в архиве и скрыт из обычной выдачи. Данные сохранены — при необходимости восстановите клиента в базе.";
+    ? "Клиент скрыт из рабочей базы. Данные не удалены — запись остаётся в состоянии актуализации. Восстановите клиента кнопкой ниже или через переключатель «Показать архив» в списке."
+    : "Клиент в архиве и скрыт из рабочей выдачи. Исходные данные сохранены — восстановите клиента кнопкой ниже или через «Показать архив» в списке.";
 
   return (
     <div className="mx-auto max-w-md space-y-6 px-4 py-10" data-testid="page-dealer-archived">

@@ -55,7 +55,7 @@ import {
   newActualizationContactId,
 } from "@/lib/client-base-actualization-contacts-helpers";
 import {
-  canArchiveDealer,
+  canArchiveDealerDuringActualization,
   canEditDealerDuringActualization,
 } from "@/lib/client-base-actualization-permissions";
 import { DealerActualizationEditDialog } from "@/components/client-base-actualization-dealer-forms";
@@ -156,7 +156,7 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
   }, [actx, baseRow.id, contacts.length, manual, profile]);
 
   const canEdit = canEditDealerDuringActualization(profile, row);
-  const canArchive = canArchiveDealer(profile, row);
+  const canArchive = canArchiveDealerDuringActualization(profile, row);
 
   const softArchive = useCallback(async () => {
     if (!canArchive) return;
@@ -208,8 +208,25 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
         <Button asChild variant="outline" className="min-h-11 w-full sm:w-auto">
           <Link href="/dealer-base">Назад к клиентской базе</Link>
         </Button>
+        {canEdit ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11 w-full font-semibold sm:w-auto"
+            data-testid="button-dealer-edit"
+            onClick={() => setEditOpen(true)}
+          >
+            Редактировать
+          </Button>
+        ) : null}
         {canArchive ? (
-          <Button type="button" variant="destructive" className="min-h-11 w-full sm:w-auto" onClick={() => setDeleteOpen(true)}>
+          <Button
+            type="button"
+            variant="destructive"
+            className="min-h-11 w-full font-semibold sm:w-auto"
+            data-testid={`button-dealer-delete-${baseRow.id}`}
+            onClick={() => setDeleteOpen(true)}
+          >
             Удалить клиента
           </Button>
         ) : null}
@@ -378,7 +395,11 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
         <AlertDialogContent data-testid="dialog-dealer-delete-confirm">
           <AlertDialogHeader>
             <AlertDialogTitle>Удалить клиента?</AlertDialogTitle>
-            <AlertDialogDescription>Клиент будет скрыт из рабочей базы. Данные можно будет восстановить.</AlertDialogDescription>
+            <AlertDialogDescription className="space-y-2 text-sm">
+              <p>Клиент будет скрыт из рабочей клиентской базы и не будет отображаться в списке по умолчанию.</p>
+              <p>Данные не удаляются физически: анкета актуализации, контакты и торговые точки остаются в сохранённом состоянии.</p>
+              <p>Восстановить клиента можно через «Показать архив» в списке или по прямой ссылке на карточку.</p>
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
             <Button type="button" variant="outline" data-testid="button-dealer-delete-cancel" disabled={busy} onClick={() => setDeleteOpen(false)}>
