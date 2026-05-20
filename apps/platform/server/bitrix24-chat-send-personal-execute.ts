@@ -4,7 +4,7 @@
  */
 
 import { getEffectivePersonalSession } from "./bitrix24-oauth-session-service";
-import { bitrixOAuthRest } from "./bitrix24-oauth-token-http";
+import { bitrixOAuthRest, oauthSessionRestContext } from "./bitrix24-oauth-token-http";
 
 export type Bitrix24ChatSendPersonalHttpResult = {
   status: number;
@@ -104,7 +104,7 @@ export async function runBitrix24ChatSendPersonal(
     };
   }
 
-  const bx = await bitrixOAuthRest(eff.session.portal_base, "im.message.add", eff.session.access_token, {
+  const bx = await bitrixOAuthRest(oauthSessionRestContext(eff.session), "im.message.add", eff.session.access_token, {
     DIALOG_ID: dialogId,
     MESSAGE: message,
   });

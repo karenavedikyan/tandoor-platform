@@ -15,6 +15,8 @@ export type Bitrix24PersonalSessionPayload = {
   refresh_token: string;
   expires_at_ms: number;
   portal_base: string;
+  /** База REST из ответа OAuth (`client_endpoint`), надёжнее env для cloud. */
+  rest_base?: string;
   bitrix_user_id?: string;
   user_name?: string;
 };
@@ -59,9 +61,10 @@ export function unsealPersonalSession(sealed: string): Bitrix24PersonalSessionPa
     const expires_at_ms = typeof o.expires_at_ms === "number" ? o.expires_at_ms : 0;
     const portal_base = typeof o.portal_base === "string" ? o.portal_base : "";
     if (!access_token || !refresh_token || !portal_base || !Number.isFinite(expires_at_ms)) return null;
+    const rest_base = typeof o.rest_base === "string" && o.rest_base.trim() ? o.rest_base.trim() : undefined;
     const bitrix_user_id = typeof o.bitrix_user_id === "string" ? o.bitrix_user_id : undefined;
     const user_name = typeof o.user_name === "string" ? o.user_name : undefined;
-    return { access_token, refresh_token, expires_at_ms, portal_base, bitrix_user_id, user_name };
+    return { access_token, refresh_token, expires_at_ms, portal_base, rest_base, bitrix_user_id, user_name };
   } catch {
     return null;
   }

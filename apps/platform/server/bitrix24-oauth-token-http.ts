@@ -1,12 +1,21 @@
 /**
  * Bitrix24 OAuth token exchange / refresh и REST-вызовы с access_token.
  * Не логирует code, access_token, refresh_token, client_secret.
+ *
+ * Обмен code → token для облака Bitrix24 по документации: GET на
+ * `https://oauth.bitrix.info/oauth/token/?grant_type=authorization_code&client_id=...&client_secret=...&code=...`
+ * (без redirect_uri). POST + redirect_uri оставлен как fallback через env.
  */
 
 type TokenOk = {
   access_token: string;
   refresh_token: string;
   expires_in: number;
+};
+
+export type TokenExchangeOk = TokenOk & {
+  /** Из JSON ответа OAuth — `https://{portal}/rest/` */
+  client_endpoint?: string;
 };
 
 function strEnv(name: string): string {
@@ -23,7 +32,7 @@ export function normalizePortalBase(raw: string): string {
   return t;
 }
 
-/** Bitrix24 cloud: token на oauth.bitrix.info; on-prem можно переопределить BITRIX24_OAUTH_TOKEN_URL. */
+/** База URL token endpoint без завершающего `/` (дальше добавляем `/?…`). */
 export function resolveTokenEndpoint(): string {
   const u = strEnv("BITRIX24_OAUTH_TOKEN_URL");
   if (u) return u.replace(/\/+$/, "");
@@ -55,7 +64,7 @@ const SAFE_BITRIX_OAUTH_ERROR_CODES = new Set([
   "PORTAL_DELETED",
 ]);
 
-function sanitizeBitrixErrorCode(raw: unknown): string | undefined {
+export function sanitizeBitrixErrorCode(raw: unknown): string | undefined {
   if (typeof raw !== "string") return undefined;
   const t = raw.trim();
   if (!t) return undefined;
@@ -64,114 +73,188 @@ function sanitizeBitrixErrorCode(raw: unknown): string | undefined {
   return undefined;
 }
 
+function coerceExpiresIn(raw: unknown): number {
+  if (typeof raw === "number" && Number.isFinite(raw) && raw > 0) return raw;
+  if (typeof raw === "string" && /^\d+$/.test(raw.trim())) {
+    const n = parseInt(raw.trim(), 10);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return 3600;
+}
+
+function parseClientEndpoint(o: Record<string, unknown>): string | undefined {
+  const v = o.client_endpoint;
+  if (typeof v !== "string" || !v.trim()) return undefined;
+  return v.trim();
+}
+
+/**
+ * Собирает URL вызова REST-метода.
+ * `restCtx` — либо `BITRIX24_PORTAL_DOMAIN` (без /rest), либо полный `client_endpoint` (`…/rest/`).
+ */
+export function buildBitrixOAuthRestUrl(restCtx: string, method: string, accessToken: string): string {
+  const ctx = restCtx.trim().replace(/\/+$/, "");
+  if (/\/rest$/i.test(ctx)) {
+    return `${ctx}/${method}?auth=${encodeURIComponent(accessToken)}`;
+  }
+  const base = normalizePortalBase(ctx);
+  return `${base}/rest/${method}?auth=${encodeURIComponent(accessToken)}`;
+}
+
+async function fetchOAuthTokenResponse(params: URLSearchParams): Promise<{ httpStatus: number; json: unknown }> {
+  const base = resolveTokenEndpoint();
+  const getUrl = `${base}/?${params.toString()}`;
+
+  const tryGet = async (): Promise<Response> =>
+    fetch(getUrl, { method: "GET", headers: { Accept: "application/json" } });
+
+  const tryPost = async (): Promise<Response> =>
+    fetch(base, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+      body: params.toString(),
+    });
+
+  /** По умолчанию — GET как в официальной документации Bitrix24. */
+  const preferPost = strEnv("BITRIX24_OAUTH_TOKEN_HTTP_METHOD").toLowerCase() === "post";
+  const primary = preferPost ? await tryPost() : await tryGet();
+  let res = primary;
+  if (!preferPost && (res.status === 405 || res.status === 501)) {
+    res = await tryPost();
+  }
+
+  const httpStatus = res.status;
+  const text = await res.text();
+  let json: unknown;
+  try {
+    json = JSON.parse(text) as unknown;
+  } catch {
+    json = null;
+  }
+  return { httpStatus, json };
+}
+
 export async function exchangeAuthorizationCode(code: string): Promise<
-  | { ok: true; tokens: TokenOk }
+  | { ok: true; tokens: TokenOk; client_endpoint?: string }
   | { ok: false; status: number; code: string; message: string; bitrixCode?: string }
 > {
   const clientId = strEnv("BITRIX24_OAUTH_CLIENT_ID");
   const clientSecret = strEnv("BITRIX24_OAUTH_CLIENT_SECRET");
   const redirectUri = resolveRedirectUri();
-  const tokenUrl = resolveTokenEndpoint();
   if (!clientId || !clientSecret) {
     return { ok: false, status: 503, code: "BITRIX24_OAUTH_NOT_CONFIGURED", message: "OAuth Bitrix24 не настроен на сервере." };
   }
-  const body = new URLSearchParams();
-  body.set("grant_type", "authorization_code");
-  body.set("client_id", clientId);
-  body.set("client_secret", clientSecret);
-  body.set("code", code);
-  body.set("redirect_uri", redirectUri);
 
-  let json: unknown;
-  let httpStatus = 0;
-  try {
-    const res = await fetch(tokenUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
-      body: body.toString(),
-    });
-    httpStatus = res.status;
-    const text = await res.text();
+  const buildParams = (includeRedirectUri: boolean): URLSearchParams => {
+    const p = new URLSearchParams();
+    p.set("grant_type", "authorization_code");
+    p.set("client_id", clientId);
+    p.set("client_secret", clientSecret);
+    p.set("code", code);
+    if (includeRedirectUri) {
+      p.set("redirect_uri", redirectUri);
+    }
+    return p;
+  };
+
+  const forceRedirectFirst = strEnv("BITRIX24_OAUTH_TOKEN_INCLUDE_REDIRECT_URI") === "true";
+
+  async function attempt(includeRedirectUri: boolean): Promise<
+    | { ok: true; tokens: TokenOk; client_endpoint?: string }
+    | { ok: false; httpStatus: number; bitrixCode?: string }
+  > {
+    const params = buildParams(includeRedirectUri);
+    let json: unknown;
+    let httpStatus = 0;
     try {
-      json = JSON.parse(text) as unknown;
-    } catch {
-      console.error("[bitrix24] oauth token exchange non-JSON response", { httpStatus });
+      const r = await fetchOAuthTokenResponse(params);
+      httpStatus = r.httpStatus;
+      json = r.json;
+    } catch (e) {
+      const m = e instanceof Error ? e.message : String(e);
+      console.error("[bitrix24] oauth token step", "exchange_code", "network", { msg: m });
+      return { ok: false, httpStatus: 0 };
+    }
+
+    if (json == null || typeof json !== "object" || Array.isArray(json)) {
+      console.error("[bitrix24] oauth token step", "exchange_code", "non_json", { httpStatus });
+      return { ok: false, httpStatus };
+    }
+
+    const o = json as Record<string, unknown>;
+    if (typeof o.access_token === "string" && o.access_token && typeof o.refresh_token === "string" && o.refresh_token) {
+      const expires_in = coerceExpiresIn(o.expires_in);
+      const client_endpoint = parseClientEndpoint(o);
+      return {
+        ok: true,
+        tokens: { access_token: o.access_token, refresh_token: o.refresh_token, expires_in },
+        client_endpoint,
+      };
+    }
+
+    const bitrixCode = sanitizeBitrixErrorCode(o.error);
+    console.error("[bitrix24] oauth token step", "exchange_code", "bitrix_error", {
+      httpStatus,
+      bitrixCode: bitrixCode ?? "unknown",
+      redirectParam: includeRedirectUri ? "with_redirect_uri" : "no_redirect_uri",
+      authorizationCodeLen: code.length,
+    });
+    return { ok: false, httpStatus, bitrixCode };
+  }
+
+  let r = await attempt(forceRedirectFirst);
+  if (!r.ok && !forceRedirectFirst) {
+    r = await attempt(true);
+  }
+  if (!r.ok) {
+    if (r.httpStatus === 0) {
       return {
         ok: false,
         status: 502,
-        code: "BITRIX24_OAUTH_TOKEN_ERROR",
-        message: "Bitrix24 вернул неожиданный ответ при обмене кода авторизации.",
+        code: "BITRIX24_OAUTH_NETWORK",
+        message: "Не удалось связаться с сервером авторизации Bitrix24.",
+        bitrixCode: r.bitrixCode,
       };
     }
-  } catch (e) {
-    const m = e instanceof Error ? e.message : String(e);
-    console.error("[bitrix24] oauth token exchange network error", { msg: m });
+    const bitrixCode = r.bitrixCode;
     return {
       ok: false,
-      status: 502,
-      code: "BITRIX24_OAUTH_NETWORK",
-      message: "Не удалось связаться с сервером авторизации Bitrix24.",
+      status: 400,
+      code: "BITRIX24_OAUTH_TOKEN_ERROR",
+      message: bitrixCode
+        ? `Bitrix24 отклонил обмен кода авторизации (${bitrixCode}). Попробуйте подключить Bitrix24 заново.`
+        : "Не удалось обменять код авторизации Bitrix24. Попробуйте подключить Bitrix24 заново.",
+      bitrixCode,
     };
   }
-
-  const o = (json && typeof json === "object" && !Array.isArray(json) ? json : {}) as Record<string, unknown>;
-  if (typeof o.access_token === "string" && o.access_token && typeof o.refresh_token === "string" && o.refresh_token) {
-    const expires_in = typeof o.expires_in === "number" && Number.isFinite(o.expires_in) ? o.expires_in : 3600;
-    return { ok: true, tokens: { access_token: o.access_token, refresh_token: o.refresh_token, expires_in } };
-  }
-  const bitrixCode = sanitizeBitrixErrorCode(o.error) ?? sanitizeBitrixErrorCode(o.error_description);
-  console.error("[bitrix24] oauth token exchange failed", { httpStatus, bitrixCode: bitrixCode ?? "unknown" });
-  return {
-    ok: false,
-    status: 400,
-    code: "BITRIX24_OAUTH_TOKEN_ERROR",
-    message: bitrixCode
-      ? `Bitrix24 отклонил обмен кода авторизации (${bitrixCode}). Попробуйте подключить Bitrix24 заново.`
-      : "Не удалось обменять код авторизации Bitrix24. Попробуйте подключить Bitrix24 заново.",
-    bitrixCode,
-  };
+  return r;
 }
 
 export async function refreshAccessToken(refreshToken: string): Promise<
-  | { ok: true; tokens: TokenOk }
+  | { ok: true; tokens: TokenOk; client_endpoint?: string }
   | { ok: false; status: number; code: string; message: string; bitrixCode?: string }
 > {
   const clientId = strEnv("BITRIX24_OAUTH_CLIENT_ID");
   const clientSecret = strEnv("BITRIX24_OAUTH_CLIENT_SECRET");
-  const tokenUrl = resolveTokenEndpoint();
   if (!clientId || !clientSecret) {
     return { ok: false, status: 503, code: "BITRIX24_OAUTH_NOT_CONFIGURED", message: "OAuth Bitrix24 не настроен на сервере." };
   }
-  const body = new URLSearchParams();
-  body.set("grant_type", "refresh_token");
-  body.set("client_id", clientId);
-  body.set("client_secret", clientSecret);
-  body.set("refresh_token", refreshToken);
+
+  const params = new URLSearchParams();
+  params.set("grant_type", "refresh_token");
+  params.set("client_id", clientId);
+  params.set("client_secret", clientSecret);
+  params.set("refresh_token", refreshToken);
 
   let json: unknown;
   let httpStatus = 0;
   try {
-    const res = await fetch(tokenUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
-      body: body.toString(),
-    });
-    httpStatus = res.status;
-    const text = await res.text();
-    try {
-      json = JSON.parse(text) as unknown;
-    } catch {
-      console.error("[bitrix24] oauth refresh non-JSON response", { httpStatus });
-      return {
-        ok: false,
-        status: 502,
-        code: "BITRIX24_OAUTH_TOKEN_ERROR",
-        message: "Bitrix24 вернул неожиданный ответ при обновлении токена.",
-      };
-    }
+    const r = await fetchOAuthTokenResponse(params);
+    httpStatus = r.httpStatus;
+    json = r.json;
   } catch (e) {
     const m = e instanceof Error ? e.message : String(e);
-    console.error("[bitrix24] oauth refresh network error", { msg: m });
+    console.error("[bitrix24] oauth token step", "refresh", "network", { msg: m });
     return {
       ok: false,
       status: 502,
@@ -180,14 +263,26 @@ export async function refreshAccessToken(refreshToken: string): Promise<
     };
   }
 
-  const o = (json && typeof json === "object" && !Array.isArray(json) ? json : {}) as Record<string, unknown>;
+  if (json == null || typeof json !== "object" || Array.isArray(json)) {
+    console.error("[bitrix24] oauth token step", "refresh", "non_json", { httpStatus });
+    return {
+      ok: false,
+      status: 502,
+      code: "BITRIX24_OAUTH_TOKEN_ERROR",
+      message: "Bitrix24 вернул неожиданный ответ при обновлении токена.",
+    };
+  }
+
+  const o = json as Record<string, unknown>;
   if (typeof o.access_token === "string" && o.access_token) {
     const rt = typeof o.refresh_token === "string" && o.refresh_token ? o.refresh_token : refreshToken;
-    const expires_in = typeof o.expires_in === "number" && Number.isFinite(o.expires_in) ? o.expires_in : 3600;
-    return { ok: true, tokens: { access_token: o.access_token, refresh_token: rt, expires_in } };
+    const expires_in = coerceExpiresIn(o.expires_in);
+    const client_endpoint = parseClientEndpoint(o);
+    return { ok: true, tokens: { access_token: o.access_token, refresh_token: rt, expires_in }, client_endpoint };
   }
-  const bitrixCode = sanitizeBitrixErrorCode(o.error) ?? sanitizeBitrixErrorCode(o.error_description);
-  console.error("[bitrix24] oauth refresh failed", { httpStatus, bitrixCode: bitrixCode ?? "unknown" });
+
+  const bitrixCode = sanitizeBitrixErrorCode(o.error);
+  console.error("[bitrix24] oauth token step", "refresh", "bitrix_error", { httpStatus, bitrixCode: bitrixCode ?? "unknown" });
   return {
     ok: false,
     status: 401,
@@ -200,14 +295,19 @@ export async function refreshAccessToken(refreshToken: string): Promise<
 type BitrixSuccess = { result?: unknown };
 type BitrixErrorBody = { error?: string };
 
+export function oauthSessionRestContext(session: { portal_base: string; rest_base?: string }): string {
+  const r = session.rest_base?.trim();
+  if (r) return r;
+  return session.portal_base;
+}
+
 export async function bitrixOAuthRest(
-  portalBase: string,
+  restCtx: string,
   method: string,
   accessToken: string,
   jsonBody: Record<string, unknown>,
 ): Promise<{ ok: true; result: unknown } | { ok: false; bitrixCode?: string; message: string }> {
-  const base = normalizePortalBase(portalBase);
-  const url = `${base}/rest/${method}?auth=${encodeURIComponent(accessToken)}`;
+  const url = buildBitrixOAuthRestUrl(restCtx, method, accessToken);
   let parsed: unknown;
   try {
     const res = await fetch(url, {
@@ -226,8 +326,9 @@ export async function bitrixOAuthRest(
   }
   const b = parsed as BitrixSuccess & BitrixErrorBody;
   if (b.error) {
-    const bitrixCode = typeof b.error === "string" ? b.error : "UNKNOWN";
-    console.error("[bitrix24] oauth rest error", { method, bitrixCode });
+    const raw = typeof b.error === "string" ? b.error : "UNKNOWN";
+    const bitrixCode = sanitizeBitrixErrorCode(raw);
+    console.error("[bitrix24] oauth rest error", { method, bitrixCode: bitrixCode ?? "unknown" });
     return {
       ok: false,
       bitrixCode,
@@ -237,12 +338,22 @@ export async function bitrixOAuthRest(
   return { ok: true, result: b.result };
 }
 
-export async function fetchBitrixUserCurrent(
-  portalBase: string,
-  accessToken: string,
-): Promise<{ bitrixUserId?: string; name?: string }> {
-  const r = await bitrixOAuthRest(portalBase, "user.current", accessToken, {});
-  if (!r.ok) return {};
+export type FetchBitrixUserCurrentResult = {
+  bitrixUserId?: string;
+  name?: string;
+  /** Ошибка user.current не блокирует сохранение OAuth-сессии. */
+  userCurrentError?: boolean;
+  userCurrentBitrixCode?: string;
+};
+
+export async function fetchBitrixUserCurrent(restCtx: string, accessToken: string): Promise<FetchBitrixUserCurrentResult> {
+  const r = await bitrixOAuthRest(restCtx, "user.current", accessToken, {});
+  if (!r.ok) {
+    return {
+      userCurrentError: true,
+      userCurrentBitrixCode: sanitizeBitrixErrorCode(r.bitrixCode),
+    };
+  }
   const res = r.result;
   if (res == null || typeof res !== "object" || Array.isArray(res)) return {};
   const u = res as Record<string, unknown>;

@@ -5,7 +5,7 @@
 
 import { extractRecentRows, mapRecentItem, type Bitrix24RecentChatOut } from "./bitrix24-chat-recent-execute";
 import { getEffectivePersonalSession } from "./bitrix24-oauth-session-service";
-import { bitrixOAuthRest } from "./bitrix24-oauth-token-http";
+import { bitrixOAuthRest, oauthSessionRestContext } from "./bitrix24-oauth-token-http";
 
 export type Bitrix24ChatRecentPersonalHttpResult = {
   status: number;
@@ -37,7 +37,7 @@ export async function runBitrix24ChatRecentPersonal(cookieHeader: string | undef
     };
   }
 
-  const bx = await bitrixOAuthRest(eff.session.portal_base, "im.recent.get", eff.session.access_token, {});
+  const bx = await bitrixOAuthRest(oauthSessionRestContext(eff.session), "im.recent.get", eff.session.access_token, {});
   if (!bx.ok) {
     return {
       status: 502,

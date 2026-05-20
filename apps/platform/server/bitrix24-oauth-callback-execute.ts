@@ -35,6 +35,16 @@ function firstQuery(v: unknown): string {
   return String(v);
 }
 
+function normalizeOAuthState(raw: string): string {
+  const t = raw.trim();
+  if (!t) return "";
+  try {
+    return decodeURIComponent(t);
+  } catch {
+    return t;
+  }
+}
+
 function strEnv(name: string): string {
   const v = process.env[name];
   if (v == null) return "";
@@ -128,8 +138,8 @@ export async function runBitrix24OAuthCallback(input: {
   };
 
   try {
-    const stateFromQuery = firstQuery(input.query.state);
-    const stateFromCookie = readCookieValue(input.cookieHeader, "b24_oauth_state");
+    const stateFromQuery = normalizeOAuthState(firstQuery(input.query.state));
+    const stateFromCookie = normalizeOAuthState(readCookieValue(input.cookieHeader, "b24_oauth_state"));
 
     if (!stateFromQuery || !stateFromCookie || stateFromQuery !== stateFromCookie) {
       console.error("[bitrix24] oauth callback state mismatch", {
@@ -164,7 +174,7 @@ export async function runBitrix24OAuthCallback(input: {
     if (!strEnv("BITRIX24_OAUTH_COOKIE_SECRET")) {
       return errorResult(
         503,
-        "BITRIX24_OAUTH_COOKIE_SECRET_MISSING",
+        "BITRIX24_OAUTH_COOKIE_ERROR",
         "На сервере не задан BITRIX24_OAUTH_COOKIE_SECRET — нельзя безопасно сохранить сессию Bitrix24.",
       );
     }
@@ -186,23 +196,33 @@ export async function runBitrix24OAuthCallback(input: {
     }
 
     const portalBase = normalizePortalBase(strEnv("BITRIX24_PORTAL_DOMAIN"));
+    const tokenRestCtx = (tok.client_endpoint?.trim() || portalBase) as string;
 
-    // fetchBitrixUserCurrent — не критичная часть. Если REST вернул ошибку или
-    // упал — продолжаем без user.name/id (статус всё равно сохранит токены).
+    // fetchBitrixUserCurrent — не критичная часть. Если REST вернул ошибку —
+    // продолжаем без user.name/id (сессия с токенами всё равно сохраняется).
     let user: { bitrixUserId?: string; name?: string } = {};
     try {
-      user = await fetchBitrixUserCurrent(portalBase, tok.tokens.access_token);
+      const u = await fetchBitrixUserCurrent(tokenRestCtx, tok.tokens.access_token);
+      user = { bitrixUserId: u.bitrixUserId, name: u.name };
+      if (u.userCurrentError) {
+        console.error("[bitrix24] oauth callback step", "user_current", {
+          code: "BITRIX24_OAUTH_USER_CURRENT_ERROR",
+          bitrixCode: u.userCurrentBitrixCode ?? "unknown",
+        });
+      }
     } catch (e) {
       const m = e instanceof Error ? e.message : String(e);
-      console.error("[bitrix24] oauth callback user.current threw (non-fatal)", { msg: m });
+      console.error("[bitrix24] oauth callback step", "user_current", "threw", { msg: m });
     }
 
     const expires_at_ms = Date.now() + tok.tokens.expires_in * 1000;
+    const restBase = tok.client_endpoint?.trim() || undefined;
     const payload: Bitrix24PersonalSessionPayload = {
       access_token: tok.tokens.access_token,
       refresh_token: tok.tokens.refresh_token,
       expires_at_ms,
       portal_base: portalBase,
+      rest_base: restBase,
       bitrix_user_id: user.bitrixUserId,
       user_name: user.name,
     };
@@ -215,14 +235,14 @@ export async function runBitrix24OAuthCallback(input: {
       console.error("[bitrix24] oauth callback seal threw", { msg: m });
       return errorResult(
         503,
-        "BITRIX24_OAUTH_SEAL_FAILED",
+        "BITRIX24_OAUTH_COOKIE_ERROR",
         "Не удалось зашифровать сессию Bitrix24. Проверьте BITRIX24_OAUTH_COOKIE_SECRET.",
       );
     }
     if (!sealed) {
       return errorResult(
         503,
-        "BITRIX24_OAUTH_SEAL_FAILED",
+        "BITRIX24_OAUTH_COOKIE_ERROR",
         "Не удалось зашифровать сессию Bitrix24. Проверьте BITRIX24_OAUTH_COOKIE_SECRET.",
       );
     }
@@ -231,7 +251,7 @@ export async function runBitrix24OAuthCallback(input: {
       console.error("[bitrix24] oauth callback sealed cookie too large", { length: sealed.length });
       return errorResult(
         503,
-        "BITRIX24_OAUTH_COOKIE_TOO_LARGE",
+        "BITRIX24_OAUTH_COOKIE_ERROR",
         "Токены Bitrix24 слишком длинные для cookie. Нужно серверное хранилище сессий.",
       );
     }

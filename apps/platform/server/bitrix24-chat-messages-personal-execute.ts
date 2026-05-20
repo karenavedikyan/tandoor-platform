@@ -12,7 +12,7 @@ import {
   type Bitrix24ChatMessageOut,
 } from "./bitrix24-chat-messages-execute";
 import { getEffectivePersonalSession } from "./bitrix24-oauth-session-service";
-import { bitrixOAuthRest } from "./bitrix24-oauth-token-http";
+import { bitrixOAuthRest, oauthSessionRestContext } from "./bitrix24-oauth-token-http";
 
 export type Bitrix24ChatMessagesPersonalHttpResult = {
   status: number;
@@ -90,7 +90,7 @@ export async function runBitrix24ChatMessagesPersonal(
     };
   }
 
-  const bx = await bitrixOAuthRest(eff.session.portal_base, "im.dialog.messages.get", eff.session.access_token, {
+  const bx = await bitrixOAuthRest(oauthSessionRestContext(eff.session), "im.dialog.messages.get", eff.session.access_token, {
     DIALOG_ID: dialogId,
     LIMIT: lim,
   });
