@@ -8,9 +8,9 @@ export type Bitrix24ChatMessagesHttpResult = {
   body: Record<string, unknown>;
 };
 
-const DEFAULT_LIMIT = 30;
-const MIN_LIMIT = 1;
-const MAX_LIMIT = 50;
+export const DEFAULT_LIMIT = 30;
+export const MIN_LIMIT = 1;
+export const MAX_LIMIT = 50;
 
 type BitrixSuccess = { result?: unknown };
 type BitrixErrorBody = { error?: string; error_description?: string };
@@ -93,7 +93,7 @@ function boolFromBitrix(v: unknown): boolean | undefined {
   return undefined;
 }
 
-function extractMessagesArray(result: unknown): unknown[] {
+export function extractMessagesArray(result: unknown): unknown[] {
   if (result == null) return [];
   if (Array.isArray(result)) return result;
   if (typeof result === "object" && !Array.isArray(result)) {
@@ -104,7 +104,7 @@ function extractMessagesArray(result: unknown): unknown[] {
   return [];
 }
 
-function mapMessageRow(raw: unknown): Bitrix24ChatMessageOut | null {
+export function mapMessageRow(raw: unknown): Bitrix24ChatMessageOut | null {
   if (raw == null || typeof raw !== "object" || Array.isArray(raw)) return null;
   const o = raw as Record<string, unknown>;
   const idRaw = o.id ?? o.ID ?? o.message_id ?? o.MESSAGE_ID;

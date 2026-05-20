@@ -1,11 +1,23 @@
 /**
  * POST /api/bitrix24/chat/messages-personal для Express (Node).
- * MVP: не вызывает Bitrix24 и не использует BITRIX24_WEBHOOK_URL.
+ * im.dialog.messages.get с персональным OAuth access_token.
  */
+
+import {
+  DEFAULT_LIMIT,
+  extractMessagesArray,
+  mapMessageRow,
+  MAX_LIMIT,
+  MIN_LIMIT,
+  type Bitrix24ChatMessageOut,
+} from "./bitrix24-chat-messages-execute";
+import { getEffectivePersonalSession } from "./bitrix24-oauth-session-service";
+import { bitrixOAuthRest } from "./bitrix24-oauth-token-http";
 
 export type Bitrix24ChatMessagesPersonalHttpResult = {
   status: number;
   body: Record<string, unknown>;
+  setCookies?: string[];
 };
 
 function readJsonBody(raw: unknown): unknown {
@@ -22,7 +34,10 @@ function readJsonBody(raw: unknown): unknown {
   return undefined;
 }
 
-export function runBitrix24ChatMessagesPersonal(body: unknown): Bitrix24ChatMessagesPersonalHttpResult {
+export async function runBitrix24ChatMessagesPersonal(
+  body: unknown,
+  cookieHeader: string | undefined,
+): Promise<Bitrix24ChatMessagesPersonalHttpResult> {
   const parsed = readJsonBody(body) as Record<string, unknown> | undefined;
   const dialogId = typeof parsed?.dialogId === "string" ? parsed.dialogId.trim() : "";
   const limitRaw = parsed?.limit;
@@ -40,25 +55,68 @@ export function runBitrix24ChatMessagesPersonal(body: unknown): Bitrix24ChatMess
       },
     };
   }
-  if (limit != null && (!Number.isFinite(limit) || limit < 1 || limit > 50)) {
+  if (limit != null && (!Number.isFinite(limit) || limit < MIN_LIMIT || limit > MAX_LIMIT)) {
     return {
       status: 400,
       body: {
         success: false,
         code: "BITRIX24_CHAT_MESSAGES_PERSONAL_VALIDATION",
-        message: "Поле limit должно быть целым числом от 1 до 50.",
+        message: `Поле limit должно быть целым числом от ${MIN_LIMIT} до ${MAX_LIMIT}.`,
       },
     };
   }
+  const lim = limit ?? DEFAULT_LIMIT;
 
-  void limit;
+  const eff = await getEffectivePersonalSession(cookieHeader);
+  const setCookies: string[] = [];
+  if (eff.ok) {
+    if (eff.setSessionCookie) setCookies.push(eff.setSessionCookie);
+  } else if (eff.clearSessionCookie) {
+    setCookies.push(eff.clearSessionCookie);
+  }
+
+  if (!eff.ok) {
+    return {
+      status: 401,
+      body: {
+        success: false,
+        code: eff.code,
+        message:
+          eff.code === "BITRIX24_OAUTH_EXPIRED"
+            ? "Сессия Bitrix24 истекла. Подключите Bitrix24 заново."
+            : "Персональный аккаунт Bitrix24 не подключён.",
+      },
+      setCookies: setCookies.length ? setCookies : undefined,
+    };
+  }
+
+  const bx = await bitrixOAuthRest(eff.session.portal_base, "im.dialog.messages.get", eff.session.access_token, {
+    DIALOG_ID: dialogId,
+    LIMIT: lim,
+  });
+  if (!bx.ok) {
+    return {
+      status: 502,
+      body: {
+        success: false,
+        code: "BITRIX24_API_ERROR",
+        bitrixCode: bx.bitrixCode,
+        message: bx.message,
+      },
+      setCookies: setCookies.length ? setCookies : undefined,
+    };
+  }
+
+  const raw = extractMessagesArray(bx.result);
+  const messages: Bitrix24ChatMessageOut[] = [];
+  for (const row of raw) {
+    const m = mapMessageRow(row);
+    if (m) messages.push(m);
+  }
+
   return {
-    status: 401,
-    body: {
-      success: false,
-      code: "BITRIX24_OAUTH_NOT_CONNECTED",
-      message:
-        "Персональный аккаунт Bitrix24 не подключён. Подключите Bitrix24 в разделе «Коммуникации» после настройки OAuth на сервере.",
-    },
+    status: 200,
+    body: { success: true, dialogId, messages },
+    setCookies: setCookies.length ? setCookies : undefined,
   };
 }

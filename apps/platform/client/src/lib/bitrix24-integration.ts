@@ -640,9 +640,18 @@ export type Bitrix24OAuthStatusDto = {
   configured: boolean;
   connected: boolean;
   user?: { bitrixUserId?: string; name?: string };
+  /** Подсказка с сервера (например, не задан BITRIX24_OAUTH_COOKIE_SECRET). */
+  serverHint?: string;
 };
 
-type OAuthStatusApiOk = { success: true; configured?: boolean; connected?: boolean; user?: Bitrix24OAuthStatusDto["user"] };
+type OAuthStatusApiOk = {
+  success: true;
+  configured?: boolean;
+  connected?: boolean;
+  user?: Bitrix24OAuthStatusDto["user"];
+  warning?: string;
+  message?: string;
+};
 type OAuthStatusApiErr = { success: false; message?: string; code?: string };
 
 /**
@@ -672,12 +681,15 @@ export async function getBitrix24OAuthStatus(): Promise<
   const body = data as OAuthStatusApiOk | OAuthStatusApiErr | Record<string, unknown>;
   if (typeof body === "object" && body && "success" in body && body.success === true) {
     const ok = body as OAuthStatusApiOk;
+    let serverHint: string | undefined;
+    if (typeof ok.message === "string" && ok.message.trim()) serverHint = ok.message.trim();
     return {
       ok: true,
       data: {
         configured: ok.configured === true,
         connected: ok.connected === true,
         ...(typeof ok.user === "object" && ok.user ? { user: ok.user } : {}),
+        ...(serverHint ? { serverHint } : {}),
       },
     };
   }
@@ -915,4 +927,30 @@ export async function sendBitrix24PersonalMessage(
     code: typeof err.code === "string" ? err.code : undefined,
     bitrixCode: typeof err.bitrixCode === "string" ? err.bitrixCode : undefined,
   };
+}
+
+/**
+ * Сброс персональной OAuth-сессии Bitrix24 (HttpOnly cookie на сервере).
+ */
+export async function disconnectBitrix24OAuth(): Promise<{ ok: true } | { ok: false; message: string }> {
+  let res: Response;
+  try {
+    res = await fetch("/api/bitrix24/oauth/disconnect", {
+      method: "POST",
+      headers: { Accept: "application/json" },
+      credentials: "same-origin",
+    });
+  } catch {
+    return { ok: false, message: "Не удалось связаться с сервером." };
+  }
+  let data: unknown;
+  try {
+    data = await res.json();
+  } catch {
+    return { ok: false, message: "Сервер вернул неожиданный ответ." };
+  }
+  const b = data as { success?: boolean; message?: string };
+  if (typeof b === "object" && b && b.success === true) return { ok: true };
+  const m = typeof b.message === "string" && b.message.trim() ? b.message.trim() : "Не удалось отключить Bitrix24.";
+  return { ok: false, message: m };
 }

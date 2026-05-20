@@ -9,15 +9,21 @@ import { runBitrix24ChatMessages } from "./bitrix24-chat-messages-execute";
 import { runBitrix24ChatSend } from "./bitrix24-chat-send-execute";
 import { runBitrix24OAuthStatus } from "./bitrix24-oauth-status-execute";
 import { runBitrix24OAuthStart } from "./bitrix24-oauth-start-execute";
-import { runBitrix24OAuthCallback } from "./bitrix24-oauth-callback-execute";
+import { runBitrix24OAuthCallback, runBitrix24OAuthDisconnect } from "./bitrix24-oauth-callback-execute";
 import { runBitrix24ChatRecentPersonal } from "./bitrix24-chat-recent-personal-execute";
 import { runBitrix24ChatMessagesPersonal } from "./bitrix24-chat-messages-personal-execute";
 import { runBitrix24ChatSendPersonal } from "./bitrix24-chat-send-personal-execute";
 
+function applySetCookies(res: Response, list: string[] | undefined): void {
+  if (!list?.length) return;
+  for (const c of list) res.append("Set-Cookie", c);
+}
+
 export function registerBitrix24Routes(app: Express): void {
-  app.get("/api/bitrix24/oauth/status", async (_req: Request, res: Response) => {
+  app.get("/api/bitrix24/oauth/status", async (req: Request, res: Response) => {
     try {
-      const { status, body } = runBitrix24OAuthStatus();
+      const { status, body, setCookies } = await runBitrix24OAuthStatus(req.headers.cookie);
+      applySetCookies(res, setCookies);
       return res.status(status).json(body);
     } catch (e) {
       const m = e instanceof Error ? e.message : String(e);
@@ -48,12 +54,15 @@ export function registerBitrix24Routes(app: Express): void {
 
   app.get("/api/bitrix24/oauth/callback", async (req: Request, res: Response) => {
     try {
-      const { status, body, clearStateCookie } = runBitrix24OAuthCallback({
+      const out = await runBitrix24OAuthCallback({
         query: req.query as Record<string, unknown>,
         cookieHeader: req.headers.cookie,
       });
-      if (clearStateCookie) res.append("Set-Cookie", clearStateCookie);
-      return res.status(status).json(body);
+      applySetCookies(res, out.setCookies);
+      if (out.kind === "redirect") {
+        return res.redirect(302, out.location);
+      }
+      return res.status(out.status).json(out.body);
     } catch (e) {
       const m = e instanceof Error ? e.message : String(e);
       console.error("[bitrix24] oauth/callback", m);
@@ -65,9 +74,26 @@ export function registerBitrix24Routes(app: Express): void {
     }
   });
 
-  app.post("/api/bitrix24/chat/recent-personal", async (_req: Request, res: Response) => {
+  app.post("/api/bitrix24/oauth/disconnect", async (_req: Request, res: Response) => {
     try {
-      const { status, body } = runBitrix24ChatRecentPersonal();
+      const { setCookies } = runBitrix24OAuthDisconnect();
+      applySetCookies(res, setCookies);
+      return res.status(200).json({ success: true, message: "Подключение Bitrix24 сброшено в этом браузере." });
+    } catch (e) {
+      const m = e instanceof Error ? e.message : String(e);
+      console.error("[bitrix24] oauth/disconnect", m);
+      return res.status(500).json({
+        success: false,
+        code: "INTERNAL_ERROR",
+        message: "Внутренняя ошибка сервера. Повторите запрос позже.",
+      });
+    }
+  });
+
+  app.post("/api/bitrix24/chat/recent-personal", async (req: Request, res: Response) => {
+    try {
+      const { status, body, setCookies } = await runBitrix24ChatRecentPersonal(req.headers.cookie);
+      applySetCookies(res, setCookies);
       return res.status(status).json(body);
     } catch (e) {
       const m = e instanceof Error ? e.message : String(e);
@@ -82,7 +108,8 @@ export function registerBitrix24Routes(app: Express): void {
 
   app.post("/api/bitrix24/chat/messages-personal", async (req: Request, res: Response) => {
     try {
-      const { status, body } = runBitrix24ChatMessagesPersonal(req.body);
+      const { status, body, setCookies } = await runBitrix24ChatMessagesPersonal(req.body, req.headers.cookie);
+      applySetCookies(res, setCookies);
       return res.status(status).json(body);
     } catch (e) {
       const m = e instanceof Error ? e.message : String(e);
@@ -97,7 +124,8 @@ export function registerBitrix24Routes(app: Express): void {
 
   app.post("/api/bitrix24/chat/send-personal", async (req: Request, res: Response) => {
     try {
-      const { status, body } = runBitrix24ChatSendPersonal(req.body);
+      const { status, body, setCookies } = await runBitrix24ChatSendPersonal(req.body, req.headers.cookie);
+      applySetCookies(res, setCookies);
       return res.status(status).json(body);
     } catch (e) {
       const m = e instanceof Error ? e.message : String(e);
