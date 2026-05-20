@@ -1400,6 +1400,8 @@ export default function DealerBase() {
     routeName: string;
     settlements: string[];
     previousCities: string[];
+    /** В маршруте заданы НП, но в текущем scope/дне нет клиентов — не оставляем фильтр прошлого маршрута. */
+    noClientsInCurrentScope?: boolean;
   }>(null);
 
   const toggleSegmentCollapse = useCallback((id: DealerBaseSegmentId) => {
@@ -1576,6 +1578,9 @@ export default function DealerBase() {
 
   const shipmentRouteFilterBanner = useMemo(() => {
     if (!shipmentRouteCityFilter) return null;
+    if (shipmentRouteCityFilter.noClientsInCurrentScope) {
+      return `В выбранном маршруте нет клиентов в текущей выборке (${shipmentRouteCityFilter.routeName}).`;
+    }
     const settlementsText = shipmentRouteCityFilter.settlements.filter(Boolean).join(", ");
     return `Показаны клиенты маршрута: ${shipmentRouteCityFilter.routeName} · ${settlementsText}`;
   }, [shipmentRouteCityFilter]);
@@ -1616,16 +1621,18 @@ export default function DealerBase() {
           (r) => lc(r.city) === target && getDealerShipmentDays(r).includes(activeShipmentDayId),
         );
       });
-      if (valid.length === 0) return;
       const defs = listRouteDefinitions(profile.personaUserId, activeShipmentDayId, routePlanState);
       const defMeta = defs.find((x) => x.slotId === slotId);
+      const routeName = defMeta?.name ?? "Маршрут";
+      const noClients = valid.length === 0;
       setShipmentRouteCityFilter((prev) => ({
         slotId,
-        routeName: defMeta?.name ?? "Маршрут",
-        settlements: valid,
+        routeName,
+        settlements: trimmed,
         previousCities: prev ? prev.previousCities : [...cities],
+        noClientsInCurrentScope: noClients,
       }));
-      setCities(valid);
+      setCities(noClients ? [] : [...valid]);
       setActiveRouteSlotForBulk(slotId);
     },
     [activeShipmentDayId, profile.personaUserId, routePlanState, rowsForRoutePlanning, cities],

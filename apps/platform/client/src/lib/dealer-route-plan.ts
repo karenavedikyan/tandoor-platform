@@ -30,6 +30,11 @@ export type ShipmentRouteDefinition = {
 export type DealerRouteDayEntry = {
   dealerIds: string[];
   updatedAt: string;
+  /**
+   * Порядок точек внутри конкретного маршрута (день + слот), не глобальный «Порядок выгрузки» в карточке.
+   * Если ни у кого нет валидного номера (≥1), порядок берётся из dealerIds как раньше.
+   */
+  clientOrderByDealerId?: Record<string, number>;
 };
 
 export type DealerRoutePlanState = {
@@ -49,6 +54,48 @@ export function routePlanDayKey(dayId: DealerShipmentDayId): string {
 
 export function routePlanEntryKey(dayId: DealerShipmentDayId, slotId: ShipmentRouteSlotId): string {
   return `shipment:${dayId}:${slotId}`;
+}
+
+/** Валидный порядок в маршруте: целое ≥ 1. */
+export function normalizeRouteClientOrder(n: unknown): number | null {
+  if (typeof n !== "number" || !Number.isFinite(n) || !Number.isInteger(n) || n < 1) return null;
+  return n;
+}
+
+/**
+ * Сортировка id клиентов по route-specific номерам; при отсутствии валидных номеров — исходный порядок dealerIds.
+ */
+export function sortDealerIdsByRouteClientOrder(
+  dealerIds: string[],
+  clientOrderByDealerId: Record<string, number> | undefined | null,
+  nameById: Map<string, string>,
+): string[] {
+  if (!clientOrderByDealerId || Object.keys(clientOrderByDealerId).length === 0) {
+    return [...dealerIds];
+  }
+  const anyExplicit = dealerIds.some((id) => normalizeRouteClientOrder(clientOrderByDealerId[id]) != null);
+  if (!anyExplicit) return [...dealerIds];
+  return [...dealerIds].sort((a, b) => {
+    const oa = normalizeRouteClientOrder(clientOrderByDealerId[a]);
+    const ob = normalizeRouteClientOrder(clientOrderByDealerId[b]);
+    if (oa != null && ob != null && oa !== ob) return oa - ob;
+    if (oa != null && ob == null) return -1;
+    if (oa == null && ob != null) return 1;
+    const na = nameById.get(a) ?? "";
+    const nb = nameById.get(b) ?? "";
+    return na.localeCompare(nb, "ru", { sensitivity: "base" });
+  });
+}
+
+export function getDealerRouteDayEntry(
+  userId: string,
+  dayId: DealerShipmentDayId,
+  slotId: ShipmentRouteSlotId,
+  state = loadDealerRoutePlanState(),
+): DealerRouteDayEntry | undefined {
+  const s = migrateState(state);
+  const key = routePlanEntryKey(dayId, slotId);
+  return s.routesByUser[userId]?.[key];
 }
 
 function isShipmentDayId(s: string): s is DealerShipmentDayId {
@@ -237,6 +284,21 @@ export function computeAutoRouteDealerIds(
   return out;
 }
 
+function filterClientOrderMapForDealerIds(
+  order: Record<string, number> | undefined,
+  dealerIds: string[],
+): Record<string, number> | undefined {
+  if (!order || dealerIds.length === 0) return undefined;
+  const idset = new Set(dealerIds);
+  const next: Record<string, number> = {};
+  for (const [k, v] of Object.entries(order)) {
+    if (!idset.has(k)) continue;
+    const n = normalizeRouteClientOrder(v);
+    if (n != null) next[k] = n;
+  }
+  return Object.keys(next).length ? next : undefined;
+}
+
 /** Итоговый список id клиентов маршрута (явный порядок в storage или авто+закреплённые). */
 export function computeDisplayedRouteDealerIds(
   userId: string,
@@ -245,9 +307,15 @@ export function computeDisplayedRouteDealerIds(
   scopedRows: DealerRow[],
   state = loadDealerRoutePlanState(),
 ): string[] {
+  const s = migrateState(state);
   const scopedSet = new Set(scopedRows.map((r) => r.id));
-  const saved = getRouteDealerIds(userId, dayId, def.slotId, state).filter((id) => scopedSet.has(id));
-  if (saved.length > 0) return saved;
+  const key = routePlanEntryKey(dayId, def.slotId);
+  const savedRaw = (s.routesByUser[userId]?.[key]?.dealerIds ?? []).filter((id) => scopedSet.has(id));
+  if (savedRaw.length > 0) {
+    const nameById = new Map(scopedRows.map((r) => [r.id, r.name]));
+    const orderMap = s.routesByUser[userId]?.[key]?.clientOrderByDealerId;
+    return sortDealerIdsByRouteClientOrder(savedRaw, orderMap, nameById);
+  }
   const seen = new Set<string>();
   const out: string[] = [];
   for (const id of def.pinnedDealerIds ?? []) {
@@ -283,15 +351,30 @@ export function setRouteDealerIds(
   dayId: DealerShipmentDayId,
   slotId: ShipmentRouteSlotId,
   dealerIds: string[],
+  clientOrderByDealerId?: Record<string, number> | null,
 ): void {
   const state = migrateState(loadDealerRoutePlanState());
   const key = routePlanEntryKey(dayId, slotId);
+  const prevEntry = state.routesByUser[userId]?.[key];
   const routesByUser = { ...state.routesByUser };
   const userRoutes = { ...(routesByUser[userId] ?? {}) };
+  const explicitOrderArg = arguments.length >= 5;
+
+  let nextClientOrder: Record<string, number> | undefined;
+  if (!explicitOrderArg) {
+    nextClientOrder = filterClientOrderMapForDealerIds(prevEntry?.clientOrderByDealerId, dealerIds);
+  } else if (clientOrderByDealerId === null) {
+    nextClientOrder = undefined;
+  } else {
+    nextClientOrder = filterClientOrderMapForDealerIds(clientOrderByDealerId ?? {}, dealerIds);
+  }
+
   if (dealerIds.length === 0) {
     delete userRoutes[key];
   } else {
-    userRoutes[key] = { dealerIds: [...dealerIds], updatedAt: new Date().toISOString() };
+    const entry: DealerRouteDayEntry = { dealerIds: [...dealerIds], updatedAt: new Date().toISOString() };
+    if (nextClientOrder) entry.clientOrderByDealerId = nextClientOrder;
+    userRoutes[key] = entry;
   }
   routesByUser[userId] = userRoutes;
   saveDealerRoutePlanState({ ...state, routesByUser });
@@ -304,6 +387,7 @@ export function saveRouteEditorState(
   def: ShipmentRouteDefinition,
   orderedDealerIds: string[],
   scopedRows: DealerRow[],
+  clientOrderByDealerId?: Record<string, number> | null,
 ): void {
   const scopedSet = new Set(scopedRows.map((r) => r.id));
   const ordered = orderedDealerIds.filter((id) => scopedSet.has(id));
@@ -318,7 +402,11 @@ export function saveRouteEditorState(
     excludedDealerIds: excluded.length ? excluded : undefined,
   };
   upsertRouteDefinition(userId, dayId, nextDef);
-  setRouteDealerIds(userId, dayId, def.slotId, ordered);
+  if (clientOrderByDealerId !== undefined) {
+    setRouteDealerIds(userId, dayId, def.slotId, ordered, clientOrderByDealerId);
+  } else {
+    setRouteDealerIds(userId, dayId, def.slotId, ordered);
+  }
 }
 
 /** Клиенты по НП + дню без учёта ручных исключений (для расчёта pinned/excluded при сохранении). */
@@ -359,7 +447,12 @@ export function sortRouteByUnloadingOrder(
     if (oa == null && ob != null) return 1;
     return a.name.localeCompare(b.name, "ru", { sensitivity: "base" });
   });
-  saveRouteEditorState(userId, dayId, def, rows.map((r) => r.id), scopedRows);
+  const sortedIds = rows.map((r) => r.id);
+  const routeOrder: Record<string, number> = {};
+  sortedIds.forEach((id, idx) => {
+    routeOrder[id] = idx + 1;
+  });
+  saveRouteEditorState(userId, dayId, def, sortedIds, scopedRows, routeOrder);
 }
 
 /** Клиенты в выбранных НП, но с другим днём отгрузки (для подсказки в UI). */
@@ -394,20 +487,27 @@ export function addDealersToRoute(
     upsertRouteDefinition(userId, dayId, { slotId, name: slotId === "slot1" ? "Маршрут 1" : "Маршрут 2", settlements: [] });
   }
   const key = routePlanEntryKey(dayId, slotId);
-  const prev = state.routesByUser[userId]?.[key]?.dealerIds ?? [];
+  const prevEntry = state.routesByUser[userId]?.[key];
+  const prev = prevEntry?.dealerIds ?? [];
+  const prevOrder = { ...(prevEntry?.clientOrderByDealerId ?? {}) };
   const seen = new Set(prev);
   const next = [...prev];
   for (const id of dealerIds) {
     if (!seen.has(id)) {
       seen.add(id);
       next.push(id);
+      const go = getDealerUnloadingOrder(id);
+      if (prevOrder[id] === undefined && normalizeRouteClientOrder(go) != null) {
+        prevOrder[id] = go as number;
+      }
     }
   }
-  const routesByUser = { ...state.routesByUser };
-  const userRoutes = { ...(routesByUser[userId] ?? {}) };
-  userRoutes[key] = { dealerIds: next, updatedAt: new Date().toISOString() };
-  routesByUser[userId] = userRoutes;
-  saveDealerRoutePlanState({ ...state, routesByUser });
+  const mergedOrder = filterClientOrderMapForDealerIds(prevOrder, next);
+  if (mergedOrder) {
+    setRouteDealerIds(userId, dayId, slotId, next, mergedOrder);
+  } else {
+    setRouteDealerIds(userId, dayId, slotId, next);
+  }
 
   patchRouteDefinition(userId, dayId, slotId, (d) => {
     const pin = new Set(d.pinnedDealerIds ?? []);
@@ -436,15 +536,7 @@ export function removeDealerFromRoute(
   const key = routePlanEntryKey(dayId, slotId);
   const prevSaved = state.routesByUser[userId]?.[key]?.dealerIds ?? [];
   const next = prevSaved.filter((id) => id !== dealerId);
-  const routesByUser = { ...state.routesByUser };
-  const userRoutes = { ...(routesByUser[userId] ?? {}) };
-  if (next.length === 0) {
-    delete userRoutes[key];
-  } else {
-    userRoutes[key] = { dealerIds: next, updatedAt: new Date().toISOString() };
-  }
-  routesByUser[userId] = userRoutes;
-  saveDealerRoutePlanState({ ...state, routesByUser });
+  setRouteDealerIds(userId, dayId, slotId, next);
 
   patchRouteDefinition(userId, dayId, slotId, (d) => {
     const pin = new Set(d.pinnedDealerIds ?? []);
@@ -473,28 +565,62 @@ export function reorderRouteDealer(
 ): void {
   let state = migrateState(loadDealerRoutePlanState());
   const key = routePlanEntryKey(dayId, slotId);
-  let prev = [...(state.routesByUser[userId]?.[key]?.dealerIds ?? [])];
+  let entry = state.routesByUser[userId]?.[key];
+  let prev = [...(entry?.dealerIds ?? [])];
   if (prev.length === 0 && seed) {
     prev = computeDisplayedRouteDealerIds(userId, dayId, seed.def, seed.scopedRows, state);
     if (prev.length > 0) {
       setRouteDealerIds(userId, dayId, slotId, prev);
       state = migrateState(loadDealerRoutePlanState());
-      prev = [...(state.routesByUser[userId]?.[key]?.dealerIds ?? [])];
+      entry = state.routesByUser[userId]?.[key];
+      prev = [...(entry?.dealerIds ?? [])];
     }
   }
-  const i = prev.indexOf(dealerId);
+  const nameById = new Map((seed?.scopedRows ?? []).map((r) => [r.id, r.name]));
+  const orderMap = entry?.clientOrderByDealerId;
+  const hasExplicitOrder =
+    orderMap &&
+    Object.keys(orderMap).length > 0 &&
+    prev.some((id) => normalizeRouteClientOrder(orderMap[id]) != null);
+
+  if (!hasExplicitOrder) {
+    const i = prev.indexOf(dealerId);
+    if (i < 0) return;
+    const j = direction === "up" ? i - 1 : i + 1;
+    if (j < 0 || j >= prev.length) return;
+    const next = [...prev];
+    const t = next[i]!;
+    next[i] = next[j]!;
+    next[j] = t;
+    setRouteDealerIds(userId, dayId, slotId, next);
+    return;
+  }
+
+  const displayed = sortDealerIdsByRouteClientOrder(prev, orderMap, nameById);
+  const i = displayed.indexOf(dealerId);
   if (i < 0) return;
   const j = direction === "up" ? i - 1 : i + 1;
-  if (j < 0 || j >= prev.length) return;
-  const next = [...prev];
-  const t = next[i]!;
-  next[i] = next[j]!;
-  next[j] = t;
-  const routesByUser = { ...state.routesByUser };
-  const userRoutes = { ...(routesByUser[userId] ?? {}) };
-  userRoutes[key] = { dealerIds: next, updatedAt: new Date().toISOString() };
-  routesByUser[userId] = userRoutes;
-  saveDealerRoutePlanState({ ...state, routesByUser });
+  if (j < 0 || j >= displayed.length) return;
+  const swapDisplay = [...displayed];
+  const t = swapDisplay[i]!;
+  swapDisplay[i] = swapDisplay[j]!;
+  swapDisplay[j] = t;
+  const idI = displayed[i]!;
+  const idJ = displayed[j]!;
+  const mo: Record<string, number> = { ...orderMap };
+  const nI = normalizeRouteClientOrder(mo[idI]);
+  const nJ = normalizeRouteClientOrder(mo[idJ]);
+  if (nI != null && nJ != null) {
+    mo[idI] = nJ;
+    mo[idJ] = nI;
+  } else if (nI != null) {
+    mo[idJ] = nI;
+    delete mo[idI];
+  } else if (nJ != null) {
+    mo[idI] = nJ;
+    delete mo[idJ];
+  }
+  setRouteDealerIds(userId, dayId, slotId, swapDisplay, mo);
 }
 
 /** Количество клиентов в маршруте (совпадает с отображаемым списком). */
