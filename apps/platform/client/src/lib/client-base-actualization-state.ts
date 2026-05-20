@@ -114,6 +114,36 @@ export type DealerActualizationAudit = {
   lastUpdatedByName: string;
 };
 
+/** Тип портала для учёта выбранных моделей на витрине (снимок, не весь каталог). */
+export type ShowcaseSelectedPortalType = "entrance" | "interior" | "other";
+
+/** Выбранная на витрине модель (минимальный снимок; детали подтягиваются из каталога по productId). */
+export type TradePointShowcaseSelectedModel = {
+  productId: string;
+  productName: string;
+  productType: string;
+  selectedAt: string;
+  selectedBy: string;
+  selectedByName: string;
+  quantity?: number;
+  portalType?: ShowcaseSelectedPortalType;
+  comment?: string;
+};
+
+/** Локальная задача по дефициту обязательной матрицы (без Bitrix до отдельной интеграции). */
+export type ShowcaseMatrixTask = {
+  id: string;
+  tradePointId: string;
+  dealerId: string;
+  productId: string;
+  productName: string;
+  reason: "matrix_required_missing";
+  createdAt: string;
+  createdBy: string;
+  createdByName: string;
+  status: "new" | "done";
+};
+
 /** Параметры витрины / порталов по торговой точке (актуализация). */
 export type TradePointShowcaseActualization = {
   tradePointId: string;
@@ -140,6 +170,10 @@ export type TradePointShowcaseActualization = {
   updatedAt: string;
   updatedBy: string;
   updatedByName: string;
+  /** Модели, реально стоящие на витрине (галочки каталога). Старые записи без поля — []. */
+  selectedShowcaseModels?: TradePointShowcaseSelectedModel[];
+  /** Явно созданные из матрицы задачи (не автоматически при выборе). */
+  showcaseMatrixTasks?: ShowcaseMatrixTask[];
 };
 
 export type ActualizationState = {
