@@ -149,6 +149,7 @@ import {
 import { DEALER_CHARACTERISTICS_EVENT } from "@/lib/dealer-characteristics";
 import { SHOWCASE_STORAGE_EVENT } from "@/lib/showcase-distribution-data";
 import { Checkbox } from "@/components/ui/checkbox";
+import { DealerBulkDeleteCheckbox } from "@/components/dealer-bulk-delete-checkbox";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Switch } from "@/components/ui/switch";
 
@@ -342,15 +343,15 @@ function ClientListBlock({
                   {archiveBulk?.selectableIds.has(row.id) ? (
                     <span
                       className={cn(
-                        "inline-flex shrink-0 items-center",
-                        showWorkPlanSelect && wp && onToggleWorkPlanSelect && "border-l border-border/70 pl-2",
+                        "inline-flex shrink-0 items-center gap-2 rounded-lg border border-destructive/45 bg-destructive/[0.06] px-2 py-1",
+                        showWorkPlanSelect && wp && onToggleWorkPlanSelect && "border-l-2 border-l-destructive/50 pl-2",
                       )}
                       data-testid={`wrap-dealer-bulk-select-${row.id}`}
                     >
-                      <Checkbox
+                      <span className="text-[10px] font-semibold uppercase leading-none text-destructive">Удалить</span>
+                      <DealerBulkDeleteCheckbox
                         checked={archiveBulk.selectedIds.has(row.id)}
                         onCheckedChange={(v) => archiveBulk.onToggle(row.id, v === true)}
-                        className="h-5 w-5 shrink-0 touch-manipulation sm:h-4 sm:w-4"
                         data-testid={`checkbox-dealer-select-${row.id}`}
                         aria-label={`Удалить клиента ${row.name} из рабочей базы`}
                       />
@@ -528,15 +529,15 @@ function ClientTableBlock({
                     {archiveBulk?.selectableIds.has(row.id) ? (
                       <span
                         className={cn(
-                          "inline-flex shrink-0 items-center",
-                          showWorkPlanSelect && wp && onToggleWorkPlanSelect && "border-l border-border/70 pl-2",
+                          "inline-flex shrink-0 items-center gap-2 rounded-lg border border-destructive/45 bg-destructive/[0.06] px-2 py-1",
+                          showWorkPlanSelect && wp && onToggleWorkPlanSelect && "border-l-2 border-l-destructive/50 pl-2",
                         )}
                         data-testid={`wrap-dealer-bulk-select-${row.id}`}
                       >
-                        <Checkbox
+                        <span className="text-[10px] font-semibold uppercase leading-none text-destructive">Удалить</span>
+                        <DealerBulkDeleteCheckbox
                           checked={archiveBulk.selectedIds.has(row.id)}
                           onCheckedChange={(v) => archiveBulk.onToggle(row.id, v === true)}
-                          className="h-5 w-5 shrink-0 touch-manipulation sm:h-4 sm:w-4"
                           data-testid={`checkbox-dealer-select-${row.id}`}
                           aria-label={`Удалить клиента ${row.name} из рабочей базы`}
                         />
@@ -654,11 +655,13 @@ function ClientTableBlock({
               {showArchiveBulkCol ? (
                 <th
                   className={cn(
-                    "w-10 px-2 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground",
-                    showWorkPlanSelect && "border-l border-border/70",
+                    "w-[4.5rem] min-w-[4.5rem] px-2 py-3 text-center text-[10px] font-bold uppercase leading-tight text-destructive",
+                    showWorkPlanSelect && "border-l-2 border-l-destructive/40",
                   )}
                   aria-label="Удаление из рабочей базы"
-                />
+                >
+                  <span className="block max-w-[3.5rem]">Удалить</span>
+                </th>
               ) : null}
               {["Код", "Клиент", "Город", "РОП", "Менеджер", "Категория клиента", "Адрес", "Статус", ""].map((h) => (
                 <th key={h} className="whitespace-nowrap px-3 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -691,12 +694,17 @@ function ClientTableBlock({
                     </td>
                   ) : null}
                   {showArchiveBulkCol && archiveBulk ? (
-                    <td className={cn("px-2 py-3 align-middle", showWorkPlanSelect && "border-l border-border/70")}>
+                    <td
+                      className={cn(
+                        "px-2 py-3 align-middle",
+                        showWorkPlanSelect && "border-l-2 border-l-destructive/35",
+                        "bg-destructive/[0.04]",
+                      )}
+                    >
                       {archiveBulk.selectableIds.has(row.id) ? (
-                        <Checkbox
+                        <DealerBulkDeleteCheckbox
                           checked={archiveBulk.selectedIds.has(row.id)}
                           onCheckedChange={(v) => archiveBulk.onToggle(row.id, v === true)}
-                          className="h-5 w-5 shrink-0 touch-manipulation sm:h-4 sm:w-4"
                           data-testid={`checkbox-dealer-select-${row.id}`}
                           aria-label={`Удалить клиента ${row.name} из рабочей базы`}
                         />
@@ -2289,8 +2297,8 @@ export default function DealerBase() {
               )}
             </div>
             {bulkDeleteMode ? (
-              <p className="text-sm leading-snug text-muted-foreground" data-testid="text-dealer-bulk-delete-mode-hint">
-                Выберите клиентов, которых нужно удалить из рабочей базы.
+              <p className="text-sm leading-snug text-destructive/95" data-testid="text-dealer-bulk-delete-mode-hint">
+                Красным отметьте клиентов, которых нужно удалить из рабочей базы.
               </p>
             ) : null}
           </div>
@@ -2304,8 +2312,8 @@ export default function DealerBase() {
               <p className="text-sm font-semibold text-foreground" data-testid="text-dealer-bulk-selected-count">
                 Выбрано: {selectedBulkArchiveDealerIds.size}
               </p>
-              <div className="flex items-center gap-2">
-                <Checkbox
+              <div className="flex items-center gap-2 rounded-lg border border-destructive/35 bg-destructive/[0.06] px-2 py-1.5">
+                <DealerBulkDeleteCheckbox
                   id="dealer-bulk-select-all-visible"
                   checked={
                     allVisibleArchiveDealersSelected
@@ -2321,10 +2329,13 @@ export default function DealerBase() {
                       setSelectedBulkArchiveDealerIds(new Set());
                     }
                   }}
-                  className="h-5 w-5 shrink-0 touch-manipulation sm:h-4 sm:w-4"
                   data-testid="checkbox-dealer-select-all-visible"
+                  aria-label="Выбрать всех доступных клиентов на экране для удаления из рабочей базы"
                 />
-                <Label htmlFor="dealer-bulk-select-all-visible" className="cursor-pointer text-sm text-muted-foreground">
+                <Label
+                  htmlFor="dealer-bulk-select-all-visible"
+                  className="cursor-pointer text-sm font-medium text-destructive"
+                >
                   Все на экране
                 </Label>
               </div>
