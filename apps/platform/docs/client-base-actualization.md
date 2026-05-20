@@ -114,7 +114,9 @@
 | ТТ: добавить | `button-trade-point-create` |
 | ТТ: диалог | `dialog-trade-point-create` |
 | ТТ: редактировать | `button-trade-point-edit-{tradePointId}` |
-| ТТ: архив | `button-trade-point-archive-{tradePointId}` |
+| ТТ: удалить / в архив (список в карточке клиента) | `button-trade-point-delete-{tradePointId}` |
+| ТТ: подтверждение удаления из карточки | `dialog-trade-point-delete-confirm`, `button-trade-point-delete-confirm`, `button-trade-point-delete-cancel` |
+| ТТ: архив (страница точки) | `button-trade-point-archive-{tradePointId}` |
 | Юрлицо: добавить | `button-legal-entity-create` |
 | Юрлицо: редактировать | `button-legal-entity-edit-{legalEntityId}` |
 | Юрлицо: сохранить | `button-legal-entity-save` |
@@ -127,7 +129,7 @@
 3. Создать нового клиента — появился в списке, карточка открывается по ссылке.
 4. Добавить ТТ — отображается во вкладке «Торговые точки».
 5. Отредактировать ТТ — после обновления страницы правки сохранены.
-6. Архивировать ТТ (при включённом флаге архива для менеджера, если применимо) — точка скрыта из обычного списка.
+6. Удалить ТТ из карточки клиента (с подтверждением) — точка скрыта из обычного списка; после обновления страницы не возвращается.
 7. Добавить юрлицо — видно в карточке.
 8. Маркетолог / аналитик — нет кнопок создания/редактирования актуализации.
 9. `cd apps/platform && npm run check` — успех.

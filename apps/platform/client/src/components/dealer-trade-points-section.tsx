@@ -79,6 +79,13 @@ function openShowcaseTasksCount(dealer: DealerRow, mergedActiveCount: number): n
   return tasks.filter((t) => t.status !== "done").length;
 }
 
+/** Подписи кнопки архивации: ручная ТТ — «удалить», релизная — «в архив». */
+function tradePointArchiveActionLabels(isManual: boolean): { action: string; confirm: string } {
+  return isManual
+    ? { action: "Удалить ТТ", confirm: "Удалить ТТ" }
+    : { action: "В архив", confirm: "В архив" };
+}
+
 export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) {
   const actx = useClientBaseActualization();
   const useAct = actx.enabled && canCreateTradePointDuringActualization(profile, row);
@@ -107,6 +114,11 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
   const [selectedBulkArchiveTpIds, setSelectedBulkArchiveTpIds] = useState<Set<string>>(() => new Set());
   const [bulkArchiveTpDialogOpen, setBulkArchiveTpDialogOpen] = useState(false);
   const [bulkArchiveTpBusy, setBulkArchiveTpBusy] = useState(false);
+  const [singleDeleteTarget, setSingleDeleteTarget] = useState<{
+    tp: DealerTradePoint;
+    isManual: boolean;
+  } | null>(null);
+  const [singleDeleteBusy, setSingleDeleteBusy] = useState(false);
   const addTpSave = useSectionSaveFeedback();
   const editTpSave = useSectionSaveFeedback();
 
@@ -339,8 +351,8 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
   }, [useAct, editId, editName, editCity, editAddress, editFormat, editContactName, editContactPhone, editComment, actx, row.id, profile]);
 
   const onArchive = useCallback(
-    async (tp: DealerTradePoint) => {
-      if (!useAct || !canArchiveTradePointDuringActualization(profile, row, tp)) return;
+    async (tp: DealerTradePoint): Promise<boolean> => {
+      if (!useAct || !canArchiveTradePointDuringActualization(profile, row, tp)) return false;
       const now = new Date().toISOString();
       const info = {
         tradePointId: tp.id,
@@ -361,9 +373,18 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
           title: "Не удалось сохранить. Проверьте соединение и попробуйте ещё раз.",
           variant: "destructive",
         });
+      return r.success;
     },
     [useAct, actx, row.id, profile],
   );
+
+  const confirmSingleArchiveTradePoint = useCallback(async () => {
+    if (!singleDeleteTarget) return;
+    setSingleDeleteBusy(true);
+    const ok = await onArchive(singleDeleteTarget.tp);
+    setSingleDeleteBusy(false);
+    if (ok) setSingleDeleteTarget(null);
+  }, [singleDeleteTarget, onArchive]);
 
   const onRestoreTradePoint = useCallback(
     async (tp: DealerTradePoint) => {
@@ -828,6 +849,12 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
         </p>
       ) : null}
 
+      {useAct && canEdit && !showArchived && archivableTradePointIdsFull.size > 0 ? (
+        <p className="text-xs text-muted-foreground" data-testid="text-trade-point-bulk-selection-hint">
+          Выберите одну или несколько точек, чтобы удалить их из рабочей карточки.
+        </p>
+      ) : null}
+
       {useAct &&
       canEdit &&
       !showArchived &&
@@ -854,7 +881,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                     setSelectedBulkArchiveTpIds(new Set());
                   }
                 }}
-                className="h-5 w-5 shrink-0 touch-manipulation sm:h-4 sm:w-4"
+                className="size-6 shrink-0 touch-manipulation sm:size-5"
                 data-testid="checkbox-trade-point-select-all-visible"
               />
               <Label htmlFor="trade-point-bulk-select-all-visible" className="cursor-pointer text-sm text-muted-foreground">
@@ -897,6 +924,8 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
           const openButtonTestId = isVirtual
             ? "button-dealer-open-default-trade-point"
             : `button-dealer-trade-point-open-${tp.id}`;
+          const canArchiveThisTp =
+            useAct && canEdit && !isVirtual && !isArchived && canArchiveTradePointDuringActualization(profile, row, tp);
           return (
             <Card
               key={tp.id}
@@ -904,6 +933,27 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
               className="rounded-xl border border-border/70 bg-card shadow-xs"
             >
               <CardContent className="space-y-2 p-3 sm:p-4">
+                {showArchived && isArchived ? (
+                  <Badge
+                    variant="secondary"
+                    className="text-xs font-semibold"
+                    data-testid={`badge-trade-point-archived-status-${tp.id}`}
+                  >
+                    В архиве
+                  </Badge>
+                ) : null}
+                {canArchiveThisTp ? (
+                  <Button
+                    type="button"
+                    variant={isManual ? "destructive" : "outline"}
+                    size="sm"
+                    className="min-h-11 w-full touch-manipulation font-semibold sm:min-h-10 sm:w-auto"
+                    data-testid={`button-trade-point-delete-${tp.id}`}
+                    onClick={() => setSingleDeleteTarget({ tp, isManual })}
+                  >
+                    {tradePointArchiveActionLabels(isManual).action}
+                  </Button>
+                ) : null}
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0 flex-1 space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
@@ -911,7 +961,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                         <Checkbox
                           checked={selectedBulkArchiveTpIds.has(tp.id)}
                           onCheckedChange={(v) => toggleBulkArchiveTp(tp.id, v === true)}
-                          className="h-5 w-5 shrink-0 touch-manipulation sm:h-4 sm:w-4"
+                          className="size-6 shrink-0 touch-manipulation sm:size-5"
                           data-testid={`checkbox-trade-point-select-${tp.id}`}
                           aria-label={`Выбрать торговую точку ${tp.name} для архивации`}
                         />
@@ -997,18 +1047,6 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                         >
                           Редактировать
                         </Button>
-                        {canArchiveTradePointDuringActualization(profile, row, tp) ? (
-                          <Button
-                            type="button"
-                            variant="destructive"
-                            size="sm"
-                            className="min-h-10 w-full font-semibold sm:w-auto"
-                            data-testid={`button-trade-point-archive-${tp.id}`}
-                            onClick={() => void onArchive(tp)}
-                          >
-                            Архивировать ТТ
-                          </Button>
-                        ) : null}
                       </div>
                     ) : null}
                     <Button
@@ -1258,6 +1296,51 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
               onClick={() => void confirmBulkArchiveTradePoints()}
             >
               {bulkArchiveTpBusy ? "Сохранение…" : "Удалить / в архив"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={!!singleDeleteTarget}
+        onOpenChange={(open) => {
+          if (singleDeleteBusy) return;
+          if (!open) setSingleDeleteTarget(null);
+        }}
+      >
+        <AlertDialogContent data-testid="dialog-trade-point-delete-confirm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Удалить торговую точку?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Торговая точка будет скрыта из карточки клиента. Данные не удаляются физически, её можно восстановить из
+              архива.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col gap-2 sm:flex-row">
+            <AlertDialogCancel asChild>
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-10 w-full font-semibold sm:w-auto"
+                data-testid="button-trade-point-delete-cancel"
+                disabled={singleDeleteBusy}
+              >
+                Отмена
+              </Button>
+            </AlertDialogCancel>
+            <Button
+              type="button"
+              variant={singleDeleteTarget?.isManual ? "destructive" : "outline"}
+              className="min-h-10 w-full font-semibold sm:w-auto"
+              data-testid="button-trade-point-delete-confirm"
+              disabled={singleDeleteBusy || !singleDeleteTarget}
+              onClick={() => void confirmSingleArchiveTradePoint()}
+            >
+              {singleDeleteBusy
+                ? "Сохранение…"
+                : singleDeleteTarget
+                  ? tradePointArchiveActionLabels(singleDeleteTarget.isManual).confirm
+                  : ""}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
