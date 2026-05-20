@@ -148,9 +148,24 @@ export default function CommunicationsPage() {
     const q = h.indexOf("?");
     if (q < 0) return;
     const sp = new URLSearchParams(h.slice(q + 1));
-    if (sp.get("bitrix24") !== "connected") return;
+    const flag = sp.get("bitrix24");
+    if (flag !== "connected" && flag !== "error") return;
     didProcessOAuthReturnRef.current = true;
-    toast({ title: "Bitrix24 успешно подключён" });
+    if (flag === "connected") {
+      toast({ title: "Bitrix24 успешно подключён" });
+    } else {
+      const code = sp.get("code") || "";
+      const bitrixCode = sp.get("bitrixCode") || "";
+      const description =
+        bitrixCode && code
+          ? `${code} (${bitrixCode})`
+          : code || "Не удалось подключить Bitrix24. Попробуйте ещё раз.";
+      toast({
+        title: "Не удалось подключить Bitrix24",
+        description,
+        variant: "destructive",
+      });
+    }
     navigate("/communications");
     void loadOAuth();
   }, [navigate, loadOAuth]);

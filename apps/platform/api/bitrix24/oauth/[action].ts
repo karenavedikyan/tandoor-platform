@@ -185,14 +185,35 @@ function handleStart(res: VercelResponse): void {
   });
 }
 
+function lkPublicOrigin(): string {
+  const o = strEnv("BITRIX24_LK_PUBLIC_ORIGIN").replace(/\/+$/, "");
+  return o || "https://tandoor-platform.vercel.app";
+}
+
+function buildSpaErrorLocation(code: string, bitrixCode?: string): string {
+  const qs = new URLSearchParams();
+  qs.set("bitrix24", "error");
+  qs.set("code", code);
+  if (bitrixCode) qs.set("bitrixCode", bitrixCode);
+  return `${lkPublicOrigin()}/#/communications?${qs.toString()}`;
+}
+
+/**
+ * Низкоуровневый redirect через setHeader+writeHead, без зависимости от
+ * Express-style helper'а `res.redirect`. На Vercel Rust-runtime эти helper'ы
+ * не всегда привязаны, см. vercel/vercel#16191. setHeader/statusCode/end —
+ * чистый Node http.ServerResponse и работает везде.
+ */
+function rawRedirect(res: VercelResponse, location: string): void {
+  res.setHeader("Location", location);
+  res.statusCode = 302;
+  res.end();
+}
+
 async function handleCallback(req: VercelRequest, res: VercelResponse): Promise<void> {
   if (!isOAuthConfigured()) {
     res.setHeader("Set-Cookie", buildClearStateCookie());
-    sendJson(res, 503, {
-      success: false,
-      code: "BITRIX24_OAUTH_NOT_CONFIGURED",
-      message: "OAuth Bitrix24 не настроен на сервере.",
-    });
+    rawRedirect(res, buildSpaErrorLocation("BITRIX24_OAUTH_NOT_CONFIGURED"));
     return;
   }
   try {
@@ -200,10 +221,11 @@ async function handleCallback(req: VercelRequest, res: VercelResponse): Promise<
     const out = await mod.runBitrix24OAuthCallback({
       query: (req.query ?? {}) as Record<string, unknown>,
       cookieHeader: cookieHeader(req),
+      prefersBrowserRedirect: true,
     });
     applySetCookies(res, out.setCookies);
     if (out.kind === "redirect") {
-      res.redirect(302, out.location);
+      rawRedirect(res, out.location);
       return;
     }
     sendJson(res, out.status, out.body);
@@ -211,11 +233,7 @@ async function handleCallback(req: VercelRequest, res: VercelResponse): Promise<
     const m = e instanceof Error ? e.message : String(e);
     console.error("[bitrix24-api] oauth callback load/run failed", m);
     res.setHeader("Set-Cookie", buildClearStateCookie());
-    sendJson(res, 500, {
-      success: false,
-      code: "INTERNAL_ERROR",
-      message: "Внутренняя ошибка сервера. Повторите запрос позже.",
-    });
+    rawRedirect(res, buildSpaErrorLocation("BITRIX24_OAUTH_CALLBACK_FAILED"));
   }
 }
 
