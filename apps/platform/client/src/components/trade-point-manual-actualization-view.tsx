@@ -22,14 +22,25 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
-import { mergeActualizationState, type TradePointShowcaseActualization } from "@/lib/client-base-actualization-state";
+import {
+  mergeActualizationState,
+  type ShowcaseMatrixTask,
+  type TradePointShowcaseActualization,
+  type TradePointShowcaseSelectedModel,
+} from "@/lib/client-base-actualization-state";
 import { computePortalSummary } from "@/lib/client-base-actualization-portal-math";
+import { getProductById } from "@/lib/catalog-data";
+import {
+  inferShowcasePortalTypeFromCatalogProduct,
+  resolveShowcaseMatrixClientCategory,
+} from "@/lib/trade-point-showcase-matrix-required";
 import { canEditDealerDuringActualization } from "@/lib/client-base-actualization-permissions";
 import { nextManualTradePointInternalCode, isManualActualizationTradePointId, getTradePointDisplayCodeForActualization } from "@/lib/client-base-actualization-stable-ids";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
 import { toast } from "@/hooks/use-toast";
 import { useSectionSaveFeedback } from "@/hooks/use-section-save-feedback";
 import { SectionSaveButton } from "@/components/section-save-button";
+import { TradePointShowcaseCatalogPanel } from "@/components/trade-point-showcase-catalog-panel";
 import { Bitrix24TasksPanel } from "@/components/bitrix24-tasks-panel";
 import { canEditClientNextStep } from "@/lib/client-next-step-data";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -39,6 +50,18 @@ function numOrNull(v: string): number | null {
   if (!t) return null;
   const n = Number(t);
   return Number.isFinite(n) ? n : null;
+}
+
+function normalizeSelectedShowcaseModelsForPersist(list: TradePointShowcaseSelectedModel[]): TradePointShowcaseSelectedModel[] {
+  return list.map((m) => {
+    const p = getProductById(m.productId);
+    return {
+      ...m,
+      productName: (p?.name ?? m.productName).trim(),
+      productType: p?.type ?? m.productType,
+      portalType: m.portalType ?? (p ? inferShowcasePortalTypeFromCatalogProduct(p) : undefined),
+    };
+  });
 }
 
 function emptyShowcase(dealerId: string, tradePointId: string): TradePointShowcaseActualization {
@@ -116,6 +139,11 @@ export function TradePointManualActualizationView(props: {
   const [firstNeed, setFirstNeed] = useState(showcaseRec?.firstPriorityNeed ?? "");
   const [rmComment, setRmComment] = useState(showcaseRec?.rmRopComment ?? "");
 
+  const [selectedShowcaseModels, setSelectedShowcaseModels] = useState<TradePointShowcaseSelectedModel[]>(
+    () => showcaseRec?.selectedShowcaseModels ?? [],
+  );
+  const [showcaseMatrixTasks, setShowcaseMatrixTasks] = useState<ShowcaseMatrixTask[]>(() => showcaseRec?.showcaseMatrixTasks ?? []);
+
   const mainSave = useSectionSaveFeedback();
   const showcaseSave = useSectionSaveFeedback();
 
@@ -152,7 +180,29 @@ export function TradePointManualActualizationView(props: {
     setPriority(sh.showcasePriority || "");
     setFirstNeed(sh.firstPriorityNeed ?? "");
     setRmComment(sh.rmRopComment ?? "");
+    setSelectedShowcaseModels(Array.isArray(sh.selectedShowcaseModels) ? sh.selectedShowcaseModels : []);
+    setShowcaseMatrixTasks(Array.isArray(sh.showcaseMatrixTasks) ? sh.showcaseMatrixTasks : []);
   }, [actx.state.tradePointShowcaseActualizationById, dealer.id, point.id, showcaseUpdatedAt]);
+
+  const dealerMergedFields = useMemo(() => {
+    const manualD = actx.state.manuallyCreatedDealersById[dealer.id];
+    const ov = (actx.state.dealerOverridesById[dealer.id]?.fields ?? {}) as Record<string, unknown>;
+    return { ...((manualD?.fields ?? {}) as Record<string, unknown>), ...ov };
+  }, [actx.state.manuallyCreatedDealersById, actx.state.dealerOverridesById, dealer.id]);
+
+  const matrixClientCategory = useMemo(
+    () => resolveShowcaseMatrixClientCategory(dealer.clientCategory, dealerMergedFields),
+    [dealer.clientCategory, dealerMergedFields],
+  );
+
+  const portalCaps = useMemo(
+    () => ({
+      entrance: numOrNull(entrancePortals) ?? numOrNull(tEnt),
+      interior: numOrNull(interiorPortals) ?? numOrNull(tInt),
+      total: numOrNull(totalPortals) ?? numOrNull(tTotal),
+    }),
+    [entrancePortals, interiorPortals, totalPortals, tEnt, tInt, tTotal],
+  );
 
   const summary = useMemo(() => {
     const row: TradePointShowcaseActualization = {
@@ -301,6 +351,8 @@ export function TradePointManualActualizationView(props: {
         showcasePriority: priority,
         firstPriorityNeed: firstNeed.trim(),
         rmRopComment: rmComment.trim(),
+        selectedShowcaseModels: normalizeSelectedShowcaseModelsForPersist(selectedShowcaseModels),
+        showcaseMatrixTasks,
         updatedAt: iso,
         updatedBy: uid,
         updatedByName: uname,
@@ -336,6 +388,8 @@ export function TradePointManualActualizationView(props: {
     priority,
     firstNeed,
     rmComment,
+    selectedShowcaseModels,
+    showcaseMatrixTasks,
     profile.personaUserId,
   ]);
 
@@ -653,9 +707,25 @@ export function TradePointManualActualizationView(props: {
                     ) : null}
                   </div>
             ) : null}
+            {hasShowcase !== false ? (
+              <TradePointShowcaseCatalogPanel
+                tradePointId={point.id}
+                dealerId={dealer.id}
+                matrixClientCategory={matrixClientCategory}
+                canEdit={canEdit}
+                actorUserId={user?.id ?? profile.personaUserId}
+                actorLabel={(user?.name ?? "").trim() || userLabelFromProfile(profile)}
+                selectedShowcaseModels={selectedShowcaseModels}
+                onChangeSelected={setSelectedShowcaseModels}
+                showcaseMatrixTasks={showcaseMatrixTasks}
+                onChangeTasks={setShowcaseMatrixTasks}
+                onMarkDirty={showcaseSave.markDirty}
+                portalCaps={portalCaps}
+              />
+            ) : null}
             {canEdit ? (
               <SectionSaveButton
-                testId="button-trade-point-section-save-showcase"
+                testId="button-showcase-save"
                 statusTestId="text-save-status-trade-point-showcase"
                 phase={showcaseSave.phase}
                 onSave={() => void showcaseSave.runSave(persistShowcase)}
