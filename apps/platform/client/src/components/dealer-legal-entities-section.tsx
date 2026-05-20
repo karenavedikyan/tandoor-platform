@@ -18,6 +18,8 @@ import {
 } from "@/lib/dealer-legal-entities";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { LegalEntityContactsSubsection } from "@/components/legal-entity-contacts-subsection";
+import { buildLegalEntityNameSuggestions, lookupLegalEntityByInn } from "@/lib/legal-entity-directory";
+import { toast } from "@/hooks/use-toast";
 
 type Props = {
   row: DealerRow;
@@ -50,6 +52,10 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
   const [draftAddress, setDraftAddress] = useState("");
   const [draftStatus, setDraftStatus] = useState<DealerLegalEntityStatus>("additional");
   const [draftComment, setDraftComment] = useState("");
+  const [innLookupResults, setInnLookupResults] = useState<
+    { id: string; name: string; inn: string; kpp?: string; legalAddress?: string; source: string }[]
+  >([]);
+  const [innLookupNote, setInnLookupNote] = useState("");
 
   useEffect(() => {
     const fn = () => setTick((n) => n + 1);
@@ -58,6 +64,8 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
   }, []);
 
   const merged = useMemo(() => getMergedDealerLegalEntities(row), [row, tick]);
+
+  const nameSuggestions = useMemo(() => buildLegalEntityNameSuggestions(draftName, row.id), [draftName, row.id, tick]);
 
   const visible = useMemo(() => {
     const active = merged.filter((e) => e.status !== "archived");
@@ -72,6 +80,8 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
     setDraftAddress("");
     setDraftStatus("additional");
     setDraftComment("");
+    setInnLookupResults([]);
+    setInnLookupNote("");
   }, []);
 
   const loadEntityIntoDraft = useCallback((id: string) => {
@@ -176,19 +186,108 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
                 onChange={(e) => setDraftName(e.target.value)}
                 disabled={!canEdit}
                 className="min-h-10"
-                data-testid="input-dealer-legal-entity-name"
+                data-testid="input-legal-entity-name"
               />
+              {nameSuggestions.length > 0 && canEdit ? (
+                <div
+                  className="max-h-36 space-y-1 overflow-y-auto rounded-md border border-border/70 bg-muted/20 p-2"
+                  data-testid="section-legal-entity-suggestions"
+                >
+                  {nameSuggestions.map((s) => (
+                    <div key={s.id} className="flex items-start justify-between gap-2 rounded border border-transparent px-1 py-0.5 hover:bg-card">
+                      <div className="min-w-0" data-testid={`row-legal-entity-suggestion-${s.id}`}>
+                        <p className="truncate text-xs font-medium text-foreground">{s.name}</p>
+                        {s.inn ? <p className="text-[10px] text-muted-foreground">ИНН {s.inn}</p> : null}
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        className="h-7 shrink-0 px-2 text-[10px]"
+                        data-testid={`button-legal-entity-suggestion-apply-${s.id}`}
+                        onClick={() => {
+                          setDraftName(s.name);
+                          if (s.inn) setDraftInn(s.inn);
+                          if (s.kpp) setDraftKpp(s.kpp);
+                          if (s.legalAddress) setDraftAddress(s.legalAddress);
+                        }}
+                      >
+                        Применить
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 sm:col-span-2">
                 <Label className="text-xs">ИНН</Label>
-                <Input
-                  value={draftInn}
-                  onChange={(e) => setDraftInn(e.target.value)}
-                  disabled={!canEdit}
-                  className="min-h-10"
-                  data-testid="input-dealer-legal-entity-inn"
-                />
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <Input
+                    value={draftInn}
+                    onChange={(e) => {
+                      setDraftInn(e.target.value);
+                      setInnLookupResults([]);
+                      setInnLookupNote("");
+                    }}
+                    disabled={!canEdit}
+                    className="min-h-10 sm:flex-1"
+                    data-testid="input-legal-entity-inn"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="min-h-10 shrink-0 text-xs"
+                    disabled={!canEdit}
+                    data-testid="button-legal-entity-inn-lookup"
+                    onClick={() => {
+                      const res = lookupLegalEntityByInn(draftInn);
+                      if (!res.ok) {
+                        toast({ title: "ИНН", description: res.error, variant: "destructive" });
+                        setInnLookupResults([]);
+                        setInnLookupNote("");
+                        return;
+                      }
+                      setInnLookupResults(res.results);
+                      setInnLookupNote(
+                        res.results.length === 0
+                          ? "По локальной базе данные не найдены. Для автозаполнения из внешних источников нужно подключить сервис проверки ИНН."
+                          : "",
+                      );
+                    }}
+                  >
+                    Найти по ИНН
+                  </Button>
+                </div>
+                {innLookupNote ? <p className="text-[11px] leading-snug text-muted-foreground">{innLookupNote}</p> : null}
+                {innLookupResults.length > 0 ? (
+                  <div className="space-y-1 rounded-md border border-border/70 bg-muted/15 p-2" data-testid="section-legal-entity-inn-results">
+                    {innLookupResults.map((r) => (
+                      <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded px-1 py-1" data-testid={`row-legal-entity-inn-result-${r.id}`}>
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium text-foreground">{r.name}</p>
+                          <p className="text-[10px] text-muted-foreground">{r.source}</p>
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          className="h-8 text-[10px]"
+                          data-testid={`button-legal-entity-inn-result-apply-${r.id}`}
+                          onClick={() => {
+                            setDraftName((prev) => (prev.trim() ? prev : r.name));
+                            setDraftInn(r.inn);
+                            setDraftKpp((k) => (k.trim() ? k : r.kpp ?? ""));
+                            setDraftAddress((a) => (a.trim() ? a : r.legalAddress ?? ""));
+                          }}
+                        >
+                          Применить
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">КПП</Label>

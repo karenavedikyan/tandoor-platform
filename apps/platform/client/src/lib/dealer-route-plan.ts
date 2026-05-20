@@ -10,6 +10,7 @@ import {
   DEALER_SHIPMENT_DAY_ORDER,
   getDealerShipmentDays,
 } from "@/lib/dealer-shipment-days";
+import { getDealerUnloadingOrder } from "@/lib/dealer-unloading-order-storage";
 
 export const DEALER_ROUTE_PLAN_STORAGE_KEY = "tandoor-dealer-route-plan-v1";
 export const DEALER_ROUTE_PLAN_EVENT = "tandoor-dealer-route-plan-changed";
@@ -20,6 +21,10 @@ export type ShipmentRouteDefinition = {
   slotId: ShipmentRouteSlotId;
   name: string;
   settlements: string[];
+  /** Явно добавленные клиенты (остаются в маршруте вне совпадения НП). */
+  pinnedDealerIds?: string[];
+  /** Не подмешивать из авто-подбора по НП, пока не снято вручную. */
+  excludedDealerIds?: string[];
 };
 
 export type DealerRouteDayEntry = {
@@ -199,6 +204,183 @@ export function getRouteForUserDay(userId: string, dayId: DealerShipmentDayId, s
   return getRouteDealerIds(userId, dayId, "slot1", state);
 }
 
+function normCity(s: string): string {
+  return s.trim().toLowerCase();
+}
+
+export function dealerAutoMatchesRouteSettlements(
+  row: DealerRow,
+  dayId: DealerShipmentDayId,
+  def: ShipmentRouteDefinition,
+): boolean {
+  if (!getDealerShipmentDays(row).includes(dayId)) return false;
+  const settlements = def.settlements.map(normCity).filter(Boolean);
+  if (settlements.length === 0) return false;
+  return new Set(settlements).has(normCity(row.city));
+}
+
+/** Авто-подбор по НП и дню отгрузки (с учётом excluded). */
+export function computeAutoRouteDealerIds(
+  dayId: DealerShipmentDayId,
+  def: ShipmentRouteDefinition,
+  scopedRows: DealerRow[],
+): string[] {
+  const excluded = new Set(def.excludedDealerIds ?? []);
+  const byName = new Map(scopedRows.map((r) => [r.id, r.name]));
+  const out: string[] = [];
+  for (const r of scopedRows) {
+    if (excluded.has(r.id)) continue;
+    if (!dealerAutoMatchesRouteSettlements(r, dayId, def)) continue;
+    out.push(r.id);
+  }
+  out.sort((a, b) => (byName.get(a) ?? "").localeCompare(byName.get(b) ?? "", "ru", { sensitivity: "base" }));
+  return out;
+}
+
+/** Итоговый список id клиентов маршрута (явный порядок в storage или авто+закреплённые). */
+export function computeDisplayedRouteDealerIds(
+  userId: string,
+  dayId: DealerShipmentDayId,
+  def: ShipmentRouteDefinition,
+  scopedRows: DealerRow[],
+  state = loadDealerRoutePlanState(),
+): string[] {
+  const scopedSet = new Set(scopedRows.map((r) => r.id));
+  const saved = getRouteDealerIds(userId, dayId, def.slotId, state).filter((id) => scopedSet.has(id));
+  if (saved.length > 0) return saved;
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const id of def.pinnedDealerIds ?? []) {
+    if (!scopedSet.has(id)) continue;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  for (const id of computeAutoRouteDealerIds(dayId, def, scopedRows)) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+function patchRouteDefinition(
+  userId: string,
+  dayId: DealerShipmentDayId,
+  slotId: ShipmentRouteSlotId,
+  mut: (d: ShipmentRouteDefinition) => ShipmentRouteDefinition,
+  state = loadDealerRoutePlanState(),
+): void {
+  const defs = listRouteDefinitions(userId, dayId, state);
+  const cur = defs.find((d) => d.slotId === slotId);
+  if (!cur) return;
+  const nextDef = mut({ ...cur });
+  upsertRouteDefinition(userId, dayId, nextDef);
+}
+
+export function setRouteDealerIds(
+  userId: string,
+  dayId: DealerShipmentDayId,
+  slotId: ShipmentRouteSlotId,
+  dealerIds: string[],
+): void {
+  const state = migrateState(loadDealerRoutePlanState());
+  const key = routePlanEntryKey(dayId, slotId);
+  const routesByUser = { ...state.routesByUser };
+  const userRoutes = { ...(routesByUser[userId] ?? {}) };
+  if (dealerIds.length === 0) {
+    delete userRoutes[key];
+  } else {
+    userRoutes[key] = { dealerIds: [...dealerIds], updatedAt: new Date().toISOString() };
+  }
+  routesByUser[userId] = userRoutes;
+  saveDealerRoutePlanState({ ...state, routesByUser });
+}
+
+/** Сохранить маршрут из редактора: порядок клиентов + метаданные закреплений/исключений. */
+export function saveRouteEditorState(
+  userId: string,
+  dayId: DealerShipmentDayId,
+  def: ShipmentRouteDefinition,
+  orderedDealerIds: string[],
+  scopedRows: DealerRow[],
+): void {
+  const scopedSet = new Set(scopedRows.map((r) => r.id));
+  const ordered = orderedDealerIds.filter((id) => scopedSet.has(id));
+  const rawAuto = new Set(computeRawSettlementDayDealerIds(dayId, def, scopedRows));
+  const pinned = ordered.filter((id) => !rawAuto.has(id));
+  const excludedFromAuto = Array.from(rawAuto).filter((id) => !ordered.includes(id));
+  const prevEx = def.excludedDealerIds ?? [];
+  const excluded = Array.from(new Set([...prevEx, ...excludedFromAuto])).filter((id) => !ordered.includes(id));
+  const nextDef: ShipmentRouteDefinition = {
+    ...def,
+    pinnedDealerIds: pinned.length ? pinned : undefined,
+    excludedDealerIds: excluded.length ? excluded : undefined,
+  };
+  upsertRouteDefinition(userId, dayId, nextDef);
+  setRouteDealerIds(userId, dayId, def.slotId, ordered);
+}
+
+/** Клиенты по НП + дню без учёта ручных исключений (для расчёта pinned/excluded при сохранении). */
+export function computeRawSettlementDayDealerIds(
+  dayId: DealerShipmentDayId,
+  def: ShipmentRouteDefinition,
+  scopedRows: DealerRow[],
+): string[] {
+  const settlements = def.settlements.map(normCity).filter(Boolean);
+  if (settlements.length === 0) return [];
+  const set = new Set(settlements);
+  const byName = new Map(scopedRows.map((r) => [r.id, r.name]));
+  const out: string[] = [];
+  for (const r of scopedRows) {
+    if (!getDealerShipmentDays(r).includes(dayId)) continue;
+    if (!set.has(normCity(r.city))) continue;
+    out.push(r.id);
+  }
+  out.sort((a, b) => (byName.get(a) ?? "").localeCompare(byName.get(b) ?? "", "ru", { sensitivity: "base" }));
+  return out;
+}
+
+export function sortRouteByUnloadingOrder(
+  userId: string,
+  dayId: DealerShipmentDayId,
+  def: ShipmentRouteDefinition,
+  scopedRows: DealerRow[],
+): void {
+  const state = loadDealerRoutePlanState();
+  const ids = computeDisplayedRouteDealerIds(userId, dayId, def, scopedRows, state);
+  const byId = new Map(scopedRows.map((r) => [r.id, r]));
+  const rows = ids.map((id) => byId.get(id)).filter((r): r is DealerRow => Boolean(r));
+  rows.sort((a, b) => {
+    const oa = getDealerUnloadingOrder(a.id);
+    const ob = getDealerUnloadingOrder(b.id);
+    if (oa != null && ob != null && oa !== ob) return oa - ob;
+    if (oa != null && ob == null) return -1;
+    if (oa == null && ob != null) return 1;
+    return a.name.localeCompare(b.name, "ru", { sensitivity: "base" });
+  });
+  saveRouteEditorState(userId, dayId, def, rows.map((r) => r.id), scopedRows);
+}
+
+/** Клиенты в выбранных НП, но с другим днём отгрузки (для подсказки в UI). */
+export function listDealersWrongShipmentDayForRoute(
+  dayId: DealerShipmentDayId,
+  def: ShipmentRouteDefinition,
+  scopedRows: DealerRow[],
+): DealerRow[] {
+  const settlements = def.settlements.map(normCity).filter(Boolean);
+  if (settlements.length === 0) return [];
+  const set = new Set(settlements);
+  const out: DealerRow[] = [];
+  for (const r of scopedRows) {
+    if (!set.has(normCity(r.city))) continue;
+    if (getDealerShipmentDays(r).includes(dayId)) continue;
+    out.push(r);
+  }
+  out.sort((a, b) => a.name.localeCompare(b.name, "ru", { sensitivity: "base" }));
+  return out;
+}
+
 export function addDealersToRoute(
   userId: string,
   dayId: DealerShipmentDayId,
@@ -226,6 +408,21 @@ export function addDealersToRoute(
   userRoutes[key] = { dealerIds: next, updatedAt: new Date().toISOString() };
   routesByUser[userId] = userRoutes;
   saveDealerRoutePlanState({ ...state, routesByUser });
+
+  patchRouteDefinition(userId, dayId, slotId, (d) => {
+    const pin = new Set(d.pinnedDealerIds ?? []);
+    const ex = new Set(d.excludedDealerIds ?? []);
+    for (const id of dealerIds) {
+      pin.add(id);
+      ex.delete(id);
+    }
+    const pinnedDealerIds = Array.from(pin);
+    return {
+      ...d,
+      pinnedDealerIds: pinnedDealerIds.length ? pinnedDealerIds : undefined,
+      excludedDealerIds: ex.size ? Array.from(ex) : undefined,
+    };
+  });
 }
 
 export function removeDealerFromRoute(
@@ -233,11 +430,12 @@ export function removeDealerFromRoute(
   dayId: DealerShipmentDayId,
   dealerId: string,
   slotId: ShipmentRouteSlotId = "slot1",
+  row?: DealerRow,
 ): void {
   const state = migrateState(loadDealerRoutePlanState());
   const key = routePlanEntryKey(dayId, slotId);
-  const prev = state.routesByUser[userId]?.[key]?.dealerIds ?? [];
-  const next = prev.filter((id) => id !== dealerId);
+  const prevSaved = state.routesByUser[userId]?.[key]?.dealerIds ?? [];
+  const next = prevSaved.filter((id) => id !== dealerId);
   const routesByUser = { ...state.routesByUser };
   const userRoutes = { ...(routesByUser[userId] ?? {}) };
   if (next.length === 0) {
@@ -247,6 +445,22 @@ export function removeDealerFromRoute(
   }
   routesByUser[userId] = userRoutes;
   saveDealerRoutePlanState({ ...state, routesByUser });
+
+  patchRouteDefinition(userId, dayId, slotId, (d) => {
+    const pin = new Set(d.pinnedDealerIds ?? []);
+    pin.delete(dealerId);
+    const ex = new Set(d.excludedDealerIds ?? []);
+    if (prevSaved.length === 0) {
+      ex.add(dealerId);
+    } else if (row != null && dealerAutoMatchesRouteSettlements(row, dayId, d)) {
+      ex.add(dealerId);
+    }
+    return {
+      ...d,
+      pinnedDealerIds: pin.size ? Array.from(pin) : undefined,
+      excludedDealerIds: ex.size ? Array.from(ex) : undefined,
+    };
+  });
 }
 
 export function reorderRouteDealer(
@@ -255,10 +469,19 @@ export function reorderRouteDealer(
   dealerId: string,
   direction: "up" | "down",
   slotId: ShipmentRouteSlotId = "slot1",
+  seed?: { def: ShipmentRouteDefinition; scopedRows: DealerRow[] },
 ): void {
-  const state = migrateState(loadDealerRoutePlanState());
+  let state = migrateState(loadDealerRoutePlanState());
   const key = routePlanEntryKey(dayId, slotId);
-  const prev = [...(state.routesByUser[userId]?.[key]?.dealerIds ?? [])];
+  let prev = [...(state.routesByUser[userId]?.[key]?.dealerIds ?? [])];
+  if (prev.length === 0 && seed) {
+    prev = computeDisplayedRouteDealerIds(userId, dayId, seed.def, seed.scopedRows, state);
+    if (prev.length > 0) {
+      setRouteDealerIds(userId, dayId, slotId, prev);
+      state = migrateState(loadDealerRoutePlanState());
+      prev = [...(state.routesByUser[userId]?.[key]?.dealerIds ?? [])];
+    }
+  }
   const i = prev.indexOf(dealerId);
   if (i < 0) return;
   const j = direction === "up" ? i - 1 : i + 1;
@@ -274,21 +497,15 @@ export function reorderRouteDealer(
   saveDealerRoutePlanState({ ...state, routesByUser });
 }
 
+/** Количество клиентов в маршруте (совпадает с отображаемым списком). */
 export function countDealersOnRouteSettlements(
+  userId: string,
   dayId: DealerShipmentDayId,
   def: ShipmentRouteDefinition,
   scopedRows: DealerRow[],
+  state = loadDealerRoutePlanState(),
 ): number {
-  const settlements = def.settlements.map((s) => s.trim().toLowerCase()).filter(Boolean);
-  if (settlements.length === 0) return 0;
-  const set = new Set(settlements);
-  let n = 0;
-  for (const row of scopedRows) {
-    if (!getDealerShipmentDays(row).includes(dayId)) continue;
-    const city = row.city.trim().toLowerCase();
-    if (set.has(city)) n += 1;
-  }
-  return n;
+  return computeDisplayedRouteDealerIds(userId, dayId, def, scopedRows, state).length;
 }
 
 export function buildRouteCopyText(

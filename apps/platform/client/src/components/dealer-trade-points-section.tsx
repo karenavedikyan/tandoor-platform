@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { TradePointPhotoBlock } from "@/components/trade-point-photo-block";
 import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import {
   addManualTradePoint,
@@ -438,6 +439,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                         {contact}
                       </p>
                     ) : null}
+                    <TradePointPhotoBlock dealerId={row.id} tradePointId={tp.id} canEdit={canEdit} className="max-w-md" />
                   </div>
                   <div className="flex w-full shrink-0 flex-col items-stretch gap-2 sm:w-auto sm:items-end">
                     {showBadge ? (
