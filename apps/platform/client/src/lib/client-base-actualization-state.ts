@@ -5,7 +5,7 @@
 
 export const ACTUALIZATION_STATE_VERSION = 1;
 
-export type ActualizationSource = "manual_actualization";
+export type ActualizationSource = "manual_actualization" | "client_soft_archive";
 
 export type DealerActualizationOverride = {
   dealerId: string;
