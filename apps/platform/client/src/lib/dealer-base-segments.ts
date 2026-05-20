@@ -1,9 +1,8 @@
 /**
  * Рабочие сегменты списка клиентской базы (TOP 150 … Новые / Прочие).
- * Не меняет `DealerRow.clientCategory` — только правило отображения в группах.
+ * Источник правды — `DealerRow.clientCategory` (та же модель, что бейдж и фильтры по категории).
  */
 
-import type { ClientCategoryId } from "@/lib/client-category";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 
 export type DealerBaseSegmentId = "top150" | "top350" | "top500" | "top500_plus" | "new" | "other";
@@ -36,7 +35,7 @@ export const DEALER_BASE_SEGMENT_DESCRIPTIONS: Record<DealerBaseSegmentId, strin
   top500: "Стабильный портфель: регулярный мониторинг и задачи по витрине.",
   top500_plus: "Массовый сегмент: дисциплина выкладки и точечные улучшения.",
   new: "Новые клиенты и лиды — быстрый онбординг и первичная постановка задач.",
-  other: "Клиенты вне явных ТОП-сегментов в данных — уточнение статуса и плана.",
+  other: "Клиенты вне ТОП-сегментов (потенциальные, без категории и т.д.).",
 };
 
 export const DEALER_BASE_SEGMENT_FILTER_LABELS: Record<DealerBaseSegmentFilterId, string> = {
@@ -44,51 +43,21 @@ export const DEALER_BASE_SEGMENT_FILTER_LABELS: Record<DealerBaseSegmentFilterId
   ...DEALER_BASE_SEGMENT_LABELS,
 };
 
-function charSum(id: string): number {
-  let s = 0;
-  for (let i = 0; i < id.length; i++) s += id.charCodeAt(i);
-  return s;
-}
-
-/**
- * Детерминированный «псевдо-ТОП» для строк без явной метки TOP в `clientCategory`:
- * используются дистрибуция, категория и хэш id (без Math.random).
- */
-function fallbackSegmentFromRow(row: DealerRow, c: ClientCategoryId): DealerBaseSegmentId {
-  const h = charSum(row.id);
-  const d = row.distribution;
-
-  if (c === "potential") {
-    if (d >= 68) return h % 2 === 0 ? "top500_plus" : "top500";
-    if (d >= 55) return h % 3 === 0 ? "top350" : "top500";
-    if (d >= 42) return h % 2 === 0 ? "top500" : "top350";
-    const m = h % 4;
-    if (m === 0) return "top350";
-    if (m === 1) return "top500";
-    if (m === 2) return "top500_plus";
-    return "other";
-  }
-
-  if (c === "no_sales") return "other";
-
-  if (d >= 70) return h % 2 === 0 ? "top500_plus" : "top500";
-  if (d >= 58) return "top500";
-  if (d >= 46) return "top350";
-  const m = h % 5;
-  if (m <= 1) return "top350";
-  if (m === 2) return "top500";
-  if (m === 3) return "top500_plus";
-  return "other";
-}
-
 export function getDealerBaseSegment(row: DealerRow): DealerBaseSegmentId {
-  const c = row.clientCategory;
-  if (c === "top150") return "top150";
-  if (c === "top350") return "top350";
-  if (c === "top500") return "top500";
-  if (c === "top500plus") return "top500_plus";
-  if (c === "lead") return "new";
-  return fallbackSegmentFromRow(row, c);
+  switch (row.clientCategory) {
+    case "top150":
+      return "top150";
+    case "top350":
+      return "top350";
+    case "top500":
+      return "top500";
+    case "top500plus":
+      return "top500_plus";
+    case "lead":
+      return "new";
+    default:
+      return "other";
+  }
 }
 
 export function sortDealersByName(rows: DealerRow[]): DealerRow[] {
