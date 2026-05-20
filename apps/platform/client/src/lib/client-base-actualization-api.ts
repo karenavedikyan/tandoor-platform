@@ -20,6 +20,8 @@ export type ActualizationApiMeta = {
   state: ActualizationState;
   updatedAt: string | null;
   message?: string;
+  /** Код ошибки с сервера (например ACTUALIZATION_STORAGE_ERROR). */
+  code?: string;
 };
 
 export type ActualizationSyncStatus = "api_ok" | "local_fallback" | "error";
@@ -49,6 +51,7 @@ function parseApiEnvelope(j: Record<string, unknown>): ActualizationApiMeta {
     state: normalizeState(j.state),
     updatedAt: typeof j.updatedAt === "string" || j.updatedAt === null ? (j.updatedAt as string | null) : null,
     message: typeof j.message === "string" ? j.message : undefined,
+    code: typeof j.code === "string" ? j.code : undefined,
   };
 }
 
@@ -107,6 +110,13 @@ export async function loadActualizationState(profile: ReleaseDemoProfile): Promi
       throw new Error(String(res.status));
     }
     const meta = parseApiEnvelope(json);
+    if (!meta.success) {
+      return {
+        meta,
+        syncStatus: "error",
+        errorMessage: meta.message ?? "Сервер вернул ошибку при загрузке состояния актуализации.",
+      };
+    }
     writeLocalCache({ userId, state: meta.state, updatedAt: meta.updatedAt });
     return { meta, syncStatus: "api_ok" };
   } catch {
@@ -155,6 +165,13 @@ export async function saveActualizationState(
       throw new Error(String(res.status));
     }
     const meta = parseApiEnvelope(json);
+    if (!meta.success) {
+      return {
+        meta,
+        syncStatus: "error",
+        errorMessage: meta.message ?? "Сервер вернул ошибку при сохранении состояния актуализации.",
+      };
+    }
     writeLocalCache({ userId, state: meta.state, updatedAt: meta.updatedAt });
     return { meta, syncStatus: "api_ok" };
   } catch {

@@ -25,7 +25,13 @@ function statusLabel(props: ClientBaseActualizationSyncStatusProps): string {
   if (props.syncStatus === "error") return "Ошибка сохранения";
   if (props.syncStatus === "local_fallback") return "Работает локально, синхронизация недоступна";
   if (props.meta.storageMode === "not_configured") return "Серверное хранение не настроено";
-  if (props.syncStatus === "api_ok" && props.meta.success) return "Сохранено";
+  if (props.syncStatus === "api_ok" && props.meta.success) {
+    if (props.meta.storageMode === "persistent") return "Сохранено";
+    if (props.meta.storageMode === "server_memory") {
+      return "Временное серверное хранение, синхронизация между устройствами не гарантирована";
+    }
+    return "Сохранено";
+  }
   return "—";
 }
 
