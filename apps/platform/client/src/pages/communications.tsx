@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "wouter";
 import { Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import {
+  disconnectBitrix24OAuth,
   getBitrix24OAuthStatus,
   getBitrix24PersonalMessages,
   listBitrix24PersonalChats,
@@ -45,6 +47,7 @@ function formatRuDateTime(raw: string | undefined): string {
 
 export default function CommunicationsPage() {
   const isMobile = useIsMobile();
+  const [, navigate] = useLocation();
   const [uiMode, setUiMode] = useState<UiMode>("loading");
   const [pageError, setPageError] = useState<string | null>(null);
   const [oauthSnapshot, setOauthSnapshot] = useState<Bitrix24OAuthStatusDto | null>(null);
@@ -100,7 +103,7 @@ export default function CommunicationsPage() {
     if (!res.ok) {
       setChats([]);
       setChatsError(res.message);
-      if (res.code === "BITRIX24_OAUTH_NOT_CONNECTED") {
+      if (res.code === "BITRIX24_OAUTH_NOT_CONNECTED" || res.code === "BITRIX24_OAUTH_EXPIRED") {
         setUiMode("not_connected");
         setOauthSnapshot((prev) => (prev ? { ...prev, connected: false } : prev));
       }
@@ -124,7 +127,7 @@ export default function CommunicationsPage() {
     if (!res.ok) {
       setMessages([]);
       setMessagesError(res.message);
-      if (res.code === "BITRIX24_OAUTH_NOT_CONNECTED") {
+      if (res.code === "BITRIX24_OAUTH_NOT_CONNECTED" || res.code === "BITRIX24_OAUTH_EXPIRED") {
         setUiMode("not_connected");
         setOauthSnapshot((prev) => (prev ? { ...prev, connected: false } : prev));
       }
@@ -133,9 +136,24 @@ export default function CommunicationsPage() {
     setMessages(res.messages);
   }, []);
 
+  const didProcessOAuthReturnRef = useRef(false);
+
   useEffect(() => {
     void loadOAuth();
   }, [loadOAuth]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || didProcessOAuthReturnRef.current) return;
+    const h = window.location.hash;
+    const q = h.indexOf("?");
+    if (q < 0) return;
+    const sp = new URLSearchParams(h.slice(q + 1));
+    if (sp.get("bitrix24") !== "connected") return;
+    didProcessOAuthReturnRef.current = true;
+    toast({ title: "Bitrix24 успешно подключён" });
+    navigate("/communications");
+    void loadOAuth();
+  }, [navigate, loadOAuth]);
 
   useEffect(() => {
     if (uiMode !== "connected") return;
@@ -191,6 +209,22 @@ export default function CommunicationsPage() {
     window.location.assign(res.redirectUrl);
   }, []);
 
+  const onReconnect = useCallback(() => void onConnect(), [onConnect]);
+
+  const onDisconnect = useCallback(async () => {
+    const res = await disconnectBitrix24OAuth();
+    if (!res.ok) {
+      toast({ title: res.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Bitrix24 отключён в этом браузере" });
+    setOauthSnapshot((prev) => (prev ? { ...prev, connected: false, user: undefined } : prev));
+    setUiMode("not_connected");
+    setChats([]);
+    setSelectedDialogId(null);
+    setMessages([]);
+  }, []);
+
   const onSend = useCallback(async () => {
     if (!selectedDialogId) return;
     const text = compose.trim();
@@ -207,6 +241,10 @@ export default function CommunicationsPage() {
     setSendBusy(false);
     if (!res.ok) {
       toast({ title: res.message, variant: "destructive" });
+      if (res.code === "BITRIX24_OAUTH_NOT_CONNECTED" || res.code === "BITRIX24_OAUTH_EXPIRED") {
+        setUiMode("not_connected");
+        setOauthSnapshot((prev) => (prev ? { ...prev, connected: false } : prev));
+      }
       return;
     }
     setCompose("");
@@ -279,6 +317,15 @@ export default function CommunicationsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {oauthSnapshot?.serverHint ? (
+              <Alert variant="destructive">
+                <Info className="h-4 w-4" aria-hidden />
+                <AlertDescription>{oauthSnapshot.serverHint}</AlertDescription>
+              </Alert>
+            ) : null}
+            <p className="text-sm text-muted-foreground">
+              Если сессия истекла или вы сменили пароль Bitrix24, подключите аккаунт заново.
+            </p>
             <Button
               type="button"
               onClick={() => void onConnect()}
@@ -306,9 +353,32 @@ export default function CommunicationsPage() {
         </p>
       </div>
 
-      {oauthSnapshot?.user?.name ? (
-        <p className="text-sm text-muted-foreground">Подключено как: {oauthSnapshot.user.name}</p>
-      ) : null}
+      <div className="flex flex-wrap items-center gap-2 md:gap-3">
+        <p className="text-sm text-muted-foreground" data-testid="text-communications-oauth-connected-user">
+          {oauthSnapshot?.user?.name || oauthSnapshot?.user?.bitrixUserId
+            ? `Подключено: ${[oauthSnapshot?.user?.name, oauthSnapshot?.user?.bitrixUserId ? `ID ${oauthSnapshot.user.bitrixUserId}` : ""].filter(Boolean).join(" · ")}`
+            : "Bitrix24 подключён"}
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={connectBusy}
+          onClick={() => void onReconnect()}
+          data-testid="button-communications-reconnect-bitrix24"
+        >
+          Подключить заново
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => void onDisconnect()}
+          data-testid="button-communications-disconnect-bitrix24"
+        >
+          Отключить Bitrix24
+        </Button>
+      </div>
 
       {(chatsError && uiMode === "connected") ? (
         <Alert variant="destructive">

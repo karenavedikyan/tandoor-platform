@@ -1,14 +1,14 @@
 /**
  * GET /api/bitrix24/oauth/start для Express (Node).
- * Самодостаточный модуль — без импортов из api/.
  */
 
 import { randomBytes } from "node:crypto";
+import { cookieSecureFlag } from "./bitrix24-oauth-crypto-cookie";
+import { normalizePortalBase, resolveRedirectUri } from "./bitrix24-oauth-token-http";
 
 export type Bitrix24OAuthStartHttpResult = {
   status: number;
   body: Record<string, unknown>;
-  /** Полная строка Set-Cookie для state (HttpOnly). */
   setCookie?: string;
 };
 
@@ -22,14 +22,6 @@ function isOAuthConfigured(): boolean {
   return Boolean(
     strEnv("BITRIX24_OAUTH_CLIENT_ID") && strEnv("BITRIX24_OAUTH_CLIENT_SECRET") && strEnv("BITRIX24_PORTAL_DOMAIN"),
   );
-}
-
-function normalizePortalBase(raw: string): string {
-  let t = raw.trim().replace(/\/+$/, "");
-  if (!/^https?:\/\//i.test(t)) {
-    t = `https://${t}`;
-  }
-  return t;
 }
 
 function randomState(): string {
@@ -51,7 +43,7 @@ export function runBitrix24OAuthStart(): Bitrix24OAuthStartHttpResult {
 
   const clientId = strEnv("BITRIX24_OAUTH_CLIENT_ID");
   const portalBase = normalizePortalBase(strEnv("BITRIX24_PORTAL_DOMAIN"));
-  const redirectUri = strEnv("BITRIX24_OAUTH_REDIRECT_URI");
+  const redirectUri = resolveRedirectUri();
   const scopeRaw = strEnv("BITRIX24_OAUTH_SCOPE");
   const scope = scopeRaw || "im,user";
 
@@ -62,13 +54,14 @@ export function runBitrix24OAuthStart(): Bitrix24OAuthStartHttpResult {
   qs.set("response_type", "code");
   qs.set("state", state);
   qs.set("scope", scope);
-  if (redirectUri) qs.set("redirect_uri", redirectUri);
+  qs.set("redirect_uri", redirectUri);
 
   const redirectUrl = `${authBase}?${qs.toString()}`;
 
-  const setCookie = ["b24_oauth_state=" + state, "Path=/api/bitrix24/oauth", "HttpOnly", "SameSite=Lax", "Max-Age=600"].join(
-    "; ",
-  );
+  const sec = cookieSecureFlag();
+  const setCookie = ["b24_oauth_state=" + state, "Path=/api/bitrix24/oauth", "HttpOnly", "SameSite=Lax", "Max-Age=600", sec ? "Secure" : ""]
+    .filter(Boolean)
+    .join("; ");
 
   return {
     status: 200,
@@ -76,10 +69,6 @@ export function runBitrix24OAuthStart(): Bitrix24OAuthStartHttpResult {
       success: true,
       redirectUrl,
       state,
-      /**
-       * TODO: привязать state к идентификатору пользователя ЛК после появления серверной сессии / JWT.
-       * Сейчас state дополнительно фиксируется только в HttpOnly-cookie для того же браузера.
-       */
       stateBinding: "browser_cookie_mvp",
     },
     setCookie,

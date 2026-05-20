@@ -78,7 +78,7 @@ function boolFromBitrix(v: unknown): boolean | undefined {
   return undefined;
 }
 
-function extractRecentRows(result: unknown): unknown[] {
+export function extractRecentRows(result: unknown): unknown[] {
   if (Array.isArray(result)) return result;
   if (result != null && typeof result === "object" && !Array.isArray(result)) {
     const r = result as Record<string, unknown>;
@@ -103,7 +103,7 @@ function pickNestedChat(item: Record<string, unknown>): Record<string, unknown> 
   return null;
 }
 
-function mapRecentItem(raw: unknown): Bitrix24RecentChatOut | null {
+export function mapRecentItem(raw: unknown): Bitrix24RecentChatOut | null {
   if (raw == null || typeof raw !== "object" || Array.isArray(raw)) return null;
   const item = raw as Record<string, unknown>;
   const chat = pickNestedChat(item);

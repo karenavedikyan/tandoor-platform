@@ -8,8 +8,8 @@
 - **MVP «задачи из ЛК»:** менеджер с правами записи по клиенту может создать задачу в Bitrix24 из **карточки дилера** или **карточки торговой точки** (`POST /api/bitrix24/tasks/create`). В теле можно передать **`responsibleId`** (положительное целое) — тогда в Bitrix24 в **`RESPONSIBLE_ID`** и **`CREATED_BY`** подставляется он; иначе — прежняя логика (env / URL webhook). Связь «что создано» хранится **только в браузере** (`localStorage`), без обратной синхронизации статусов из Bitrix24 и без входящих webhook от Bitrix24.
 - **MVP «список из Bitrix24»:** по кнопке «Загрузить из Bitrix24» вызывается **`POST /api/bitrix24/tasks/list`** (метод Bitrix24 **`tasks.task.list`** по тому же webhook). В теле запроса можно передать **`responsibleId`** (положительное целое) — тогда фильтр **`RESPONSIBLE_ID`** в Bitrix24 берётся из него; иначе — как раньше из **`BITRIX24_TASK_RESPONSIBLE_ID`** или **`userId`** из URL webhook. Результат кэшируется в **`localStorage`** (`tandoor-bitrix24-imported-tasks-v1`). Это **ручной** импорт, без realtime и без сопоставления задач с дилером/ТТ по сложным правилам (автолинковка по описанию не делается).
 - **MVP «пользователи Bitrix24» (диагностика):** на странице **`#/bitrix24`** блок **«Пользователи Bitrix24»** вызывает **`POST /api/bitrix24/users/list`** (метод **`user.get`**). Нужен только для **сопоставления** `userId` Тандор ↔ `bitrixUserId` в Bitrix24; не хранит маппинг на сервере и не подменяет авторизацию.
-- **MVP «диагностика чатов» (im.*):** на **`#/bitrix24`** блок **«Диагностика чатов Bitrix24»** вызывает **`POST /api/bitrix24/chat/diagnostics`**. Это **не** встроенный чат ЛК, а набор безопасных проб REST (**`im.recent.get`**, при наличии `dialogId` — **`im.dialog.messages.get`**, при `dialogId`+`message` — **`im.message.add`**, при `testNotify: true` — **`im.notify.personal.add`**) для проверки прав webhook. Ошибки по отдельным методам не роняют ответ: в JSON приходит массив **`diagnostics`** с результатом по каждому вызову.
-- **MVP «раздел Коммуникации»:** пункт **«Коммуникации»** (`#/communications`) доступен **всем основным ролям** демо-ЛК (менеджер, РОП, директор продаж, маркетолог, аналитик). Личные чаты и сообщения **не** загружаются через общий `BITRIX24_WEBHOOK_URL`: UI опирается на **персональный OAuth** (см. раздел «Персональный OAuth и раздел Коммуникации»). Пока на сервере нет хранения access token на пользователя, раздел показывает экран подключения; API персональных чатов отвечает **`BITRIX24_OAUTH_NOT_CONNECTED`**. Устаревшие **`POST /api/bitrix24/chat/recent`**, **`/messages`**, **`/send`**, **`/diagnostics`** остаются отключёнными по умолчанию (`BITRIX24_COMMUNICATIONS_DISABLED`), если не включён аварийный флаг общего webhook.
+- **MVP «диагностика чатов» (im.*):** на **`#/bitrix24`** блок **«Диагностика чатов Bitrix24»** вызывает **`POST /api/bitrix24/chat/diagnostics`**. По умолчанию (без **`BITRIX24_COMMUNICATIONS_UNSAFE_SHARED_WEBHOOK_ENABLED=true`**) маршрут отвечает **403** `BITRIX24_COMMUNICATIONS_DISABLED`, как и **`recent`/`messages`/`send`**. С включённым флагом — набор проб REST через **общий webhook** (**`im.recent.get`**, при `dialogId` — **`im.dialog.messages.get`**, при `dialogId`+`message` — **`im.message.add`**, при `testNotify: true` — **`im.notify.personal.add`**); в JSON — массив **`diagnostics`**. **Раздел «Коммуникации»** webhook для чатов **не** использует — только персональный OAuth.
+- **MVP «раздел Коммуникации»:** пункт **«Коммуникации»** (`#/communications`) доступен **всем основным ролям** демо-ЛК. Личные чаты идут через **персональный OAuth Bitrix24**: access/refresh token хранятся **только** в **HttpOnly AES-GCM cookie** на сервере (секрет **`BITRIX24_OAUTH_COOKIE_SECRET`**), не в `localStorage`. После успешного callback пользователь перенаправляется на **`#/communications?bitrix24=connected`**. Персональные REST-вызовы: **`im.recent.get`**, **`im.dialog.messages.get`**, **`im.message.add`**. Устаревшие **`POST /api/bitrix24/chat/recent`**, **`/messages`**, **`/send`**, **`/diagnostics`** (общий webhook) по-прежнему **403** `BITRIX24_COMMUNICATIONS_DISABLED` без аварийного флага.
 
 ## Переменные окружения (только сервер)
 
@@ -22,7 +22,10 @@
 | `BITRIX24_OAUTH_CLIENT_SECRET` | **Для персональных чатов (OAuth)** | Секрет приложения; только на сервере. |
 | `BITRIX24_PORTAL_DOMAIN` | **Для персональных чатов (OAuth)** | Домен портала, например `https://example.bitrix24.ru` (допускается без схемы — сервер добавит `https://`). |
 | `BITRIX24_OAUTH_REDIRECT_URI` | **Опционально** | Redirect URI, зарегистрированный в приложении Bitrix24 (часто `https://<хост>/api/bitrix24/oauth/callback`). |
-| `BITRIX24_OAUTH_SCOPE` | **Опционально** | Scope для authorize (по умолчанию на сервере: **`im,user`**). Для связки с задачами через OAuth позже можно добавить **`tasks`**. |
+| `BITRIX24_OAUTH_SCOPE` | **Опционально** | Scope для authorize (по умолчанию на сервере: **`im,user`**). |
+| `BITRIX24_OAUTH_COOKIE_SECRET` | **Обязательна для сохранения сессии** | Строка для **scrypt**→AES-256-GCM шифрования cookie `b24_personal_sess` (access/refresh token). Без неё OAuth настроен, но **`connected`** остаётся ложным: в **`GET /api/bitrix24/oauth/status`** приходит подсказка в **`message`**. |
+| `BITRIX24_LK_PUBLIC_ORIGIN` | **Опционально** | Базовый URL ЛК для редиректа после OAuth (например `https://tandoor-platform.vercel.app`). По умолчанию — тот же хост, что и для **`BITRIX24_OAUTH_REDIRECT_URI`**. |
+| `BITRIX24_OAUTH_TOKEN_URL` | **Опционально** | Endpoint обмена `code`/`refresh_token`. По умолчанию **`https://oauth.bitrix.info/oauth/token`** (облако Bitrix24). On-prem — укажите URL вида `https://<портал>/oauth/token/`. |
 
 **Важно:** webhook URL, токен и секрет **нельзя** класть в клиентский бандл или в git. На Vercel задайте значения в **Environment Variables** для production / preview. Сервер **не** возвращает и **не** логирует полный webhook URL.
 
@@ -79,7 +82,7 @@ https://<ваш-хост-платформы>/?embedded=bitrix24#/bitrix24
 - **Успех (200):** `{ "success": true, "taskId": "<строка>", "message": "Задача создана в Bitrix24" }`.
 - **Ошибки:** **503** `BITRIX24_NOT_CONFIGURED`; **400** `BITRIX24_WEBHOOK_URL_INVALID` или `BITRIX24_CREATE_VALIDATION_ERROR`; **502** `BITRIX24_API_ERROR` (+ `bitrixCode`), `BITRIX24_BAD_RESPONSE`, `BITRIX24_NETWORK`, `BITRIX24_UNEXPECTED_RESULT`; **500** `INTERNAL_ERROR`.
 
-Каждая Vercel-функция (`api/bitrix24/tasks/test.ts`, `api/bitrix24/tasks/create.ts`, `api/bitrix24/tasks/list.ts`, `api/bitrix24/users/list.ts`, `api/bitrix24/chat/diagnostics.ts`, `api/bitrix24/chat/recent.ts`, `api/bitrix24/chat/messages.ts`, `api/bitrix24/chat/send.ts`, `api/bitrix24/oauth/status.ts`, `api/bitrix24/oauth/start.ts`, `api/bitrix24/oauth/callback.ts`, `api/bitrix24/chat/recent-personal.ts`, `api/bitrix24/chat/messages-personal.ts`, `api/bitrix24/chat/send-personal.ts`) **самодостаточна**: вся логика валидации и вызова Bitrix24 продублирована внутри файла. В директории `api/` намеренно нет ни одного не-handler .ts-файла — на этом проекте любые межфайловые импорты внутри `api/` (включая `api/_lib/*` с префиксом подчёркивания) приводили к `FUNCTION_INVOCATION_FAILED` в Vercel runtime. Express-маршруты в `server/bitrix24-*-execute.ts` тоже самодостаточны и не зависят от `api/`. Дублирование намеренное — это цена надёжной работы serverless-функций в текущей конфигурации Vercel.
+Vercel-обработчики Bitrix24 для чатов и OAuth сведены в **два** catch-all-файла (`api/bitrix24/chat/[action].ts`, `api/bitrix24/oauth/[action].ts`), которые **импортируют** общую логику из `server/*` (Express использует те же `*-execute.ts` и модули сессии). Отдельные `api/bitrix24/chat/*.ts` и `api/bitrix24/oauth/*.ts` **не** добавляются — лимит serverless-функций. Задачи и пользователи остаются в `api/bitrix24/tasks/*.ts` и `api/bitrix24/users/list.ts`.
 
 ## Backend: список задач из Bitrix24 (MVP)
 
@@ -103,8 +106,9 @@ https://<ваш-хост-платформы>/?embedded=bitrix24#/bitrix24
 
 ## Backend: диагностика чатов Bitrix24 (MVP, im.*)
 
+- **По умолчанию:** **403** `BITRIX24_COMMUNICATIONS_DISABLED` (общий webhook для `im.*` в ЛК отключён). Ниже — поведение **только** если задан **`BITRIX24_COMMUNICATIONS_UNSAFE_SHARED_WEBHOOK_ENABLED=true`** и настроен webhook.
 - **Назначение:** понять, какие методы REST **мессенджера / чатов** (`im.*`) доступны **текущему входящему webhook**, без построения полноценного чата в ЛК. Ответ **не** означает готовность production-интеграции.
-- **Маршрут:** `POST /api/bitrix24/chat/diagnostics`
+- **Маршрут:** `POST /api/bitrix24/chat/diagnostics` (на Vercel тот же handler, что и остальные chat-маршруты: `api/bitrix24/chat/[action].ts`, сегмент пути = `action`).
 - **Тело JSON (опционально):** `dialogId` (строка), `message` (строка), `testNotify` (boolean, по умолчанию `false`). **`BITRIX24_TASK_RESPONSIBLE_ID` не используется.**
 - **Порядок проверок на сервере:**
   1. **`im.recent.get`** — всегда; тело `{}`; цель — список последних диалогов (если есть права).
@@ -127,32 +131,39 @@ https://<ваш-хост-платформы>/?embedded=bitrix24#/bitrix24
 
 ### Доступ в ЛК
 
-Пункт **«Коммуникации»** и маршрут **`#/communications`** доступны **всем основным ролям** (менеджер, РОП, директор продаж, маркетолог, аналитик): раздел виден всем, а **данные** появляются только после персонального подключения Bitrix24 и появления **`connected: true`** в **`GET /api/bitrix24/oauth/status`** (когда будет реализовано серверное хранение токена). См. `canAccessCommunications` в `apps/platform/client/src/lib/auth-access.ts`.
+Пункт **«Коммуникации»** и маршрут **`#/communications`** доступны **всем основным ролям** (менеджер, РОП, директор продаж, маркетолог, аналитик): раздел виден всем, а **данные** появляются после персонального OAuth и **`connected: true`** в **`GET /api/bitrix24/oauth/status`** (валидная HttpOnly-cookie сессии). См. `canAccessCommunications` в `apps/platform/client/src/lib/auth-access.ts`.
 
-### Новые endpoint’ы (MVP-заготовки)
+### OAuth-приложение в Bitrix24 (локальное)
+
+1. В портале Bitrix24: **Разработчикам** → **Другое** → **Локальное приложение** (или актуальный путь в вашей редакции).
+2. Укажите **Redirect URI** ровно тот, что в env **`BITRIX24_OAUTH_REDIRECT_URI`**, либо значение по умолчанию на сервере: **`https://tandoor-platform.vercel.app/api/bitrix24/oauth/callback`** (для preview/staging — свой хост и тот же путь **`/api/bitrix24/oauth/callback`**).
+3. **Права (scope)** для списка диалогов, сообщений и отправки: в authorize передаётся **`BITRIX24_OAUTH_SCOPE`** или по умолчанию **`im,user`** (`im` — методы мессенджера; **`user`** — для **`user.current`** при первом сохранении сессии и отображения ФИО в статусе).
+4. Скопируйте **client_id** и **client_secret** в переменные **`BITRIX24_OAUTH_CLIENT_ID`** и **`BITRIX24_OAUTH_CLIENT_SECRET`**. **`BITRIX24_PORTAL_DOMAIN`** — базовый URL портала, например `https://ваш-портал.bitrix24.ru`.
 
 > **Реализация на Vercel.** Чтобы не упираться в лимит **12 serverless functions** на Hobby-плане, чат- и OAuth-эндпоинты объединены в **dynamic catch-all**: **`apps/platform/api/bitrix24/chat/[action].ts`** обслуживает `recent`, `messages`, `send`, `diagnostics`, `recent-personal`, `messages-personal`, `send-personal`; **`apps/platform/api/bitrix24/oauth/[action].ts`** — `status`, `start`, `callback`. Публичные URL и поведение **не** изменились.
 
-| Метод и путь | Назначение (MVP) |
-|--------------|------------------|
-| `GET /api/bitrix24/oauth/status` | `{ success, configured, connected }`. **`configured: true`** только если заданы **`BITRIX24_OAUTH_CLIENT_ID`**, **`BITRIX24_OAUTH_CLIENT_SECRET`**, **`BITRIX24_PORTAL_DOMAIN`**. **`connected`** пока всегда **`false`** до хранения токена на сервере. |
-| `GET /api/bitrix24/oauth/start` | Если OAuth не настроен — **503** `BITRIX24_OAUTH_NOT_CONFIGURED`. Иначе **200** и JSON с **`redirectUrl`** (и **`state`**) для перехода на страницу авторизации портала; выставляется HttpOnly-cookie **`b24_oauth_state`** с тем же `state` (привязка к браузеру; **TODO:** привязка к сессии пользователя ЛК). |
-| `GET /api/bitrix24/oauth/callback` | Заготовка: сверка `state` с cookie, **без** логирования `code`/токена. После успешной сверки — **200** с кодом **`BITRIX24_OAUTH_TOKEN_STORAGE_PENDING`** (обмен `code`→token и БД ещё не подключены). |
-| `POST /api/bitrix24/chat/recent-personal` | В будущем: **`im.recent.get`** с персональным access token. Сейчас: **401** `BITRIX24_OAUTH_NOT_CONNECTED`. **Не** использует webhook. |
-| `POST /api/bitrix24/chat/messages-personal` | Тело: `{ dialogId, limit? }`. В будущем: **`im.dialog.messages.get`**. Сейчас: валидация `dialogId` / `limit`, затем **401** `BITRIX24_OAUTH_NOT_CONNECTED`. |
-| `POST /api/bitrix24/chat/send-personal` | Тело: `{ dialogId, message }`. В будущем: **`im.message.add`**. Сейчас: валидация, затем **401** `BITRIX24_OAUTH_NOT_CONNECTED`. |
+### Endpoint’ы OAuth и персональных чатов (рабочий MVP)
 
-Токены **не** отдаются клиенту и **не** кладутся в `localStorage`; последний выбранный диалог в UI кэшируется в **`sessionStorage`** (`tandoor-communications-last-dialog-v1`).
+| Метод и путь | Назначение |
+|--------------|------------|
+| `GET /api/bitrix24/oauth/status` | **`configured`**: заданы client id/secret и portal domain. **`connected`**: расшифрована cookie **`b24_personal_sess`** и токен ещё пригоден (или удалось обновить по refresh). Поле **`user`**: `bitrixUserId`, `name` (из сессии или **`user.current`**). Без **`BITRIX24_OAUTH_COOKIE_SECRET`** сессию сохранить нельзя — в ответе подсказка в **`message`** / **`serverHint`**, **`connected`** остаётся ложным. |
+| `GET /api/bitrix24/oauth/start` | **503** `BITRIX24_OAUTH_NOT_CONFIGURED`, если не хватает OAuth env. Иначе **200**, **`redirectUrl`** на **`{PORTAL}/oauth/authorize/`**; HttpOnly **`b24_oauth_state`** (Path=`/api/bitrix24/oauth`, SameSite=Lax). |
+| `GET /api/bitrix24/oauth/callback` | Обмен **`code`** на токены (**без** логирования code/токенов/secret), проверка **`state`**, шифрование payload в **`b24_personal_sess`**. Успех: **302** на **`#/communications?bitrix24=connected`** (база из **`BITRIX24_LK_PUBLIC_ORIGIN`** или из **`BITRIX24_OAUTH_REDIRECT_URI`**). Ошибка: JSON с безопасным **`message`** (без сырого ответа Bitrix). |
+| `POST /api/bitrix24/oauth/disconnect` | Сбрасывает cookie сессии и state в этом браузере (**200**). |
+| `POST /api/bitrix24/chat/recent-personal` | **`im.recent.get`** с **`?auth=`** персонального access_token из cookie. При истечении access — refresh, обновление cookie, повтор. **401**: **`BITRIX24_OAUTH_NOT_CONNECTED`** / **`BITRIX24_OAUTH_EXPIRED`**. |
+| `POST /api/bitrix24/chat/messages-personal` | Тело `{ dialogId, limit? }` → **`im.dialog.messages.get`**. Та же схема refresh и ошибок. |
+| `POST /api/bitrix24/chat/send-personal` | Тело `{ dialogId, message }` → **`im.message.add`**. Та же схема. |
+
+Токены **не** отдаются в JSON и **не** кладутся в `localStorage` / `sessionStorage`; только HttpOnly cookie на сервере (AES-GCM, ключ из **`BITRIX24_OAUTH_COOKIE_SECRET`** через scrypt). Последний выбранный диалог в UI может кэшироваться в **`sessionStorage`** (`tandoor-communications-last-dialog-v1`) — без токенов.
 
 ### Клиентские функции
 
-В `apps/platform/client/src/lib/bitrix24-integration.ts`: **`getBitrix24OAuthStatus`**, **`startBitrix24OAuth`**, **`listBitrix24PersonalChats`**, **`getBitrix24PersonalMessages`**, **`sendBitrix24PersonalMessage`**. Для диагностики общего webhook по-прежнему существуют **`listBitrix24RecentChats`** / **`getBitrix24ChatMessages`** / **`sendBitrix24ChatMessage`** (старые пути); **страница «Коммуникации» их не вызывает**.
+В `apps/platform/client/src/lib/bitrix24-integration.ts`: **`getBitrix24OAuthStatus`**, **`startBitrix24OAuth`**, **`disconnectBitrix24OAuth`**, **`listBitrix24PersonalChats`**, **`getBitrix24PersonalMessages`**, **`sendBitrix24PersonalMessage`**. Старые вызовы общего webhook (**`listBitrix24RecentChats`** и т.д.) на **`#/communications`** **не** используются.
 
 ### Статус MVP
 
-- UI раздела: состояния **«OAuth не настроен»**, **«Подключите Bitrix24»**, ошибка загрузки статуса; ветка **«подключено»** готова к тому, когда сервер начнёт возвращать **`connected: true`** и данные чатов.
-- Персональные chat-endpoint’ы безопасно отвечают **401** `BITRIX24_OAUTH_NOT_CONNECTED`, пока нет хранения токена.
-- Общий webhook **не** используется для личных сообщений в разделе «Коммуникации».
+- UI: **не настроен** / **подключите** / **подключено** (список диалогов, сообщения, отправка); при **401** — «Подключите Bitrix24 заново».
+- Общий webhook для личных чатов в «Коммуникациях» **не** используется; устаревшие маршруты **`recent`/`messages`/`send`/`diagnostics`** — **403** по умолчанию.
 
 ### Устаревшие endpoint’ы (общий webhook, im.*)
 
@@ -161,13 +172,17 @@ https://<ваш-хост-платформы>/?embedded=bitrix24#/bitrix24
 | `POST /api/bitrix24/chat/recent` | **`im.recent.get`** | Deprecated для ЛК; по умолчанию **403** `BITRIX24_COMMUNICATIONS_DISABLED` |
 | `POST /api/bitrix24/chat/messages` | **`im.dialog.messages.get`** | То же |
 | `POST /api/bitrix24/chat/send` | **`im.message.add`** | То же |
+| `POST /api/bitrix24/chat/diagnostics` | несколько **`im.*`** | То же (**403** по умолчанию) |
 
 ### Как проверить (ручной сценарий)
 
-1. Без OAuth env: откройте **`#/communications`** — сообщение «OAuth Bitrix24 не настроен на сервере».
-2. С тремя OAuth env: экран «Подключите Bitrix24», кнопка уводит на портал (после реализации callback и storage — появится **`connected`**).
-3. **`curl -i -X POST http://localhost:5000/api/bitrix24/chat/recent`** (или ваш хост) без флага unsafe — ожидается **403** `BITRIX24_COMMUNICATIONS_DISABLED`, а не список чужих чатов.
-4. **`curl -i -X POST .../api/bitrix24/chat/recent-personal`** — **401** `BITRIX24_OAUTH_NOT_CONNECTED`.
+1. В Vercel задайте **`BITRIX24_OAUTH_*`**, **`BITRIX24_PORTAL_DOMAIN`**, **`BITRIX24_OAUTH_COOKIE_SECRET`** (достаточно длинная случайная строка).
+2. Без полного набора OAuth env: **`#/communications`** — «OAuth Bitrix24 не настроен на сервере».
+3. С полным набором: «Подключить Bitrix24» → **`/api/bitrix24/oauth/start`** → редирект на портал → после входа callback → **`#/communications?bitrix24=connected`**, **`connected: true`**, список диалогов (**`im.recent.get`**).
+4. Открыть диалог — сообщения (**`im.dialog.messages.get`**); при реализованной отправке — **`im.message.add`**.
+5. **`POST /api/bitrix24/oauth/disconnect`** или кнопка в UI — сброс cookie; снова нужен OAuth.
+6. **`curl -i -X POST .../api/bitrix24/chat/recent`** без unsafe — **403** `BITRIX24_COMMUNICATIONS_DISABLED`.
+7. **`curl -i -X POST .../api/bitrix24/chat/recent-personal`** **без** cookie сессии — **401** `BITRIX24_OAUTH_NOT_CONNECTED`.
 
 ### Задел под задачи и клиентов
 
@@ -190,10 +205,13 @@ https://<ваш-хост-платформы>/?embedded=bitrix24#/bitrix24
 
 - **`buildCommand`:** `npm run build` — собираются и клиент (`vite`), и серверный бандл для Node.
 - **Rewrite на все пути удалён** — приложение на **hash-router** (`#/…`), для основного сценария отдельный SPA-fallback не нужен.
-- **`POST /api/bitrix24/tasks/test`**, **`POST /api/bitrix24/tasks/create`**, **`POST /api/bitrix24/tasks/list`**, **`POST /api/bitrix24/users/list`**, **`POST /api/bitrix24/chat/diagnostics`**, **`POST /api/bitrix24/chat/recent`**, **`POST /api/bitrix24/chat/messages`**, **`POST /api/bitrix24/chat/send`**, **`GET /api/bitrix24/oauth/status`**, **`GET /api/bitrix24/oauth/start`**, **`GET /api/bitrix24/oauth/callback`**, **`POST /api/bitrix24/chat/recent-personal`**, **`POST /api/bitrix24/chat/messages-personal`**, **`POST /api/bitrix24/chat/send-personal`** обрабатываются **Serverless Functions** Vercel: `api/bitrix24/tasks/test.ts`, `create.ts`, `list.ts`, `api/bitrix24/users/list.ts`, `api/bitrix24/chat/diagnostics.ts`, `api/bitrix24/chat/recent.ts`, `messages.ts`, `send.ts`, `api/bitrix24/oauth/status.ts`, `start.ts`, `callback.ts`, `api/bitrix24/chat/recent-personal.ts`, `messages-personal.ts`, `send-personal.ts`. Каждый файл **полностью самодостаточен** — вообще никаких импортов из `server/*`, `client/*`, `api/_lib/*` или path-алиасов `@/`. В `api/` нет ни одного вспомогательного модуля. Ответ всегда JSON и `Content-Type: application/json; charset=utf-8`. Так гарантировано не повторится `FUNCTION_INVOCATION_FAILED`, наблюдавшийся после PR #106 и PR #107, когда handler'ы импортировали соседние ts-файлы внутри `api/`.
-- В **`package.json`** задано **`"engines": { "node": "20.x" }`**, чтобы на Vercel использовался **Node 20** вместо «плавающего» runtime по умолчанию.
+- **Serverless Functions** Vercel для Bitrix24:
+  - **Задачи и пользователи** (как раньше, по одному файлу на маршрут): `api/bitrix24/tasks/test.ts`, `create.ts`, `list.ts`, `api/bitrix24/users/list.ts` — логика в **`server/*-execute.ts`**, импорт из `server/` допустим и используется.
+  - **Чаты и OAuth** — два catch-all, чтобы не превышать лимит числа функций: **`api/bitrix24/chat/[action].ts`** и **`api/bitrix24/oauth/[action].ts`**. Они делегируют в **`server/bitrix24-vercel-chat-entry.ts`** / **`server/bitrix24-vercel-oauth-entry.ts`**, которые по сегменту пути (параметр **`action`**) вызывают те же **`run*`**-модули, что и Express в **`server/bitrix24-routes.ts`**. Примеры URL: **`/api/bitrix24/chat/recent-personal`**, **`/api/bitrix24/oauth/callback`**.
+- Ответы API — JSON с **`Content-Type: application/json; charset=utf-8`**, кроме **302** редиректа после успешного OAuth callback.
+- В **`package.json`** задано **`"engines": { "node": "20.x" }`**, чтобы на Vercel использовался **Node 20**.
 
-Локально по-прежнему работает Express: `server/bitrix24-routes.ts` регистрирует маршруты; логика в `server/bitrix24-tasks-test-execute.ts`, `server/bitrix24-tasks-create-execute.ts`, `server/bitrix24-tasks-list-execute.ts`, `server/bitrix24-users-list-execute.ts`, `server/bitrix24-chat-diagnostics-execute.ts`, `server/bitrix24-chat-recent-execute.ts`, `server/bitrix24-chat-messages-execute.ts`, `server/bitrix24-chat-send-execute.ts`, `server/bitrix24-oauth-status-execute.ts`, `server/bitrix24-oauth-start-execute.ts`, `server/bitrix24-oauth-callback-execute.ts`, `server/bitrix24-chat-recent-personal-execute.ts`, `server/bitrix24-chat-messages-personal-execute.ts`, `server/bitrix24-chat-send-personal-execute.ts` (самодостаточные модули, без импортов из `api/`).
+Локально Express: **`server/bitrix24-routes.ts`**; общая логика OAuth/чатов — **`server/bitrix24-oauth-*.ts`**, **`server/bitrix24-chat-*-personal-execute.ts`**, **`server/bitrix24-oauth-session-service.ts`**, **`server/bitrix24-oauth-crypto-cookie.ts`**, **`server/bitrix24-oauth-token-http.ts`**.
 
 Проверка с production (ожидается JSON, не HTML):
 
@@ -221,7 +239,7 @@ curl -i -X POST "https://tandoor-platform.vercel.app/api/bitrix24/tasks/test" \
 
 ## Права API на следующем шаге (ориентир)
 
-Сейчас используются **`tasks.task.add`**, **`tasks.task.list`**, диагностический **`user.get`**, а также **`im.recent.get`**, **`im.dialog.messages.get`**, **`im.message.add`** через **раздел «Коммуникации»** и диагностический **`im.notify.personal.add`** (только через **`POST /api/bitrix24/chat/diagnostics`**). Дальше по продукту могут понадобиться отдельные scope под CRM и т.д. — подключать по мере сценариев, не расширяя webhook «на всякий случай».
+Сейчас используются **`tasks.task.add`**, **`tasks.task.list`**, диагностический **`user.get`** (через webhook). Методы **`im.recent.get`**, **`im.dialog.messages.get`**, **`im.message.add`** в **разделе «Коммуникации»** вызываются **только с персональным OAuth access_token** (не через общий webhook). Диагностический **`im.notify.personal.add`** — только если включён unsafe-флаг и вызывается **`POST /api/bitrix24/chat/diagnostics`**. Дальше по продукту могут понадобиться отдельные scope под CRM и т.д.
 
 ## Рекомендации по безопасности после теста
 
