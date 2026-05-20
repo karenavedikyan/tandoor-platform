@@ -22,6 +22,7 @@ import {
   getClientCategoryLabel,
   isClientTopTier,
 } from "@/lib/client-category";
+import { getDealerRegionalManagerEffectiveDisplay } from "@/lib/dealer-regional-manager-overrides";
 import { DEALER_BASE_ROWS, getDealerRopDisplay, type DealerRow, type DealerStatus } from "@/lib/dealer-base-mock-data";
 import {
   getManagersForRopTeam,
@@ -250,7 +251,7 @@ function applyPickerFilters(rows: DealerRow[], args: PickerArgs): DealerRow[] {
       row.name,
       row.city,
       row.manager,
-      row.regionalManager,
+      getDealerRegionalManagerEffectiveDisplay(row),
       getDealerRopDisplay(row),
       row.releaseCode ?? "",
       row.releaseAddress ?? "",
