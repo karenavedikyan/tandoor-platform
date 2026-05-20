@@ -31,11 +31,12 @@ import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { mergeTradePointsActiveForActualization, mergeTradePointsForActualization } from "@/lib/client-base-actualization-data-merge";
 import { mergeActualizationState } from "@/lib/client-base-actualization-state";
-import { generateStableManualTradePointId, nextManualTradePointInternalCode, isManualActualizationTradePointId } from "@/lib/client-base-actualization-stable-ids";
+import { generateStableManualTradePointId, nextManualTradePointInternalCode, isManualActualizationTradePointId, getTradePointDisplayCodeForActualization } from "@/lib/client-base-actualization-stable-ids";
 import {
   canArchiveTradePointDuringActualization,
-  canCreateTradePointDuringActualization,
+  canEditDealerDuringActualization,
 } from "@/lib/client-base-actualization-permissions";
+import { CLIENT_BASE_ACTUALIZATION_CLEAN_MODE } from "@/lib/client-base-actualization-config";
 import { toast } from "@/hooks/use-toast";
 import { useSectionSaveFeedback } from "@/hooks/use-section-save-feedback";
 import { SectionSaveButton } from "@/components/section-save-button";
@@ -88,7 +89,8 @@ function tradePointArchiveActionLabels(isManual: boolean): { action: string; con
 
 export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) {
   const actx = useClientBaseActualization();
-  const useAct = actx.enabled && canCreateTradePointDuringActualization(profile, row);
+  const useAct = actx.enabled && canEditDealerDuringActualization(profile, row);
+  const hideSyntheticTpChrome = actx.enabled && CLIENT_BASE_ACTUALIZATION_CLEAN_MODE;
   const canEdit = canEditDealerTradePoints(profile, row);
   const [tpBump, setTpBump] = useState(0);
   const [expanded, setExpanded] = useState(false);
@@ -163,7 +165,10 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
     return rawMergedActive.length === 0;
   }, [useAct, actx.state, row, rawMergedActive.length]);
 
-  const showcaseOpen = useMemo(() => openShowcaseTasksCount(row, mergedActive.length), [row, mergedActive.length, tpBump]);
+  const showcaseOpen = useMemo(() => {
+    if (hideSyntheticTpChrome) return undefined;
+    return openShowcaseTasksCount(row, mergedActive.length);
+  }, [hideSyntheticTpChrome, row, mergedActive.length, tpBump]);
 
   const resetAddForm = useCallback(() => {
     setAddName("");
@@ -988,11 +993,9 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                       ) : null}
                     </div>
                     <p className="text-xs text-muted-foreground">{tp.city}</p>
-                    {tp.releaseCode ? (
-                      <p className="text-xs text-muted-foreground" data-testid={`text-trade-point-internal-code-${tp.id}`}>
-                        Код ТТ: {tp.releaseCode}
-                      </p>
-                    ) : null}
+                    <p className="text-xs text-muted-foreground" data-testid={`text-trade-point-internal-code-${tp.id}`}>
+                      Код ТТ: {getTradePointDisplayCodeForActualization(tp)}
+                    </p>
                     <p
                       className="flex items-start gap-1.5 text-xs leading-relaxed text-foreground"
                       data-testid={`text-dealer-trade-point-address-${tp.id}`}
@@ -1008,7 +1011,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                     <TradePointPhotoBlock dealerId={row.id} tradePointId={tp.id} canEdit={canEdit} className="max-w-md" />
                   </div>
                   <div className="flex w-full shrink-0 flex-col items-stretch gap-2 sm:w-auto sm:items-end">
-                    {showBadge ? (
+                    {!hideSyntheticTpChrome && showBadge ? (
                       <Badge
                         variant="outline"
                         className={cn("w-full justify-center text-[10px] font-semibold sm:w-auto")}
@@ -1017,7 +1020,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                         Витрина: {tp.showcaseStatus}
                       </Badge>
                     ) : null}
-                    {showcaseOpen != null && showcaseOpen > 0 ? (
+                    {!hideSyntheticTpChrome && showcaseOpen != null && showcaseOpen > 0 ? (
                       <p className="text-center text-[11px] text-muted-foreground sm:text-right">
                         Открытых задач по витрине:{" "}
                         <span className="font-semibold tabular-nums text-foreground">{showcaseOpen}</span>
@@ -1271,7 +1274,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
           <AlertDialogHeader>
             <AlertDialogTitle>Удалить выбранные торговые точки?</AlertDialogTitle>
             <AlertDialogDescription>
-              Торговые точки будут скрыты из рабочей карточки клиента. Данные не удаляются физически, их можно
+              Торговые точки будут скрыты из рабочей карточки клиента (архив). Данные не удаляются физически, их можно
               восстановить из архива.
               <span className="mt-2 block font-medium text-foreground">Выбрано точек: {bulkArchiveTpDialogCount}</span>
             </AlertDialogDescription>
@@ -1295,7 +1298,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
               disabled={bulkArchiveTpBusy || bulkArchiveTpDialogCount === 0}
               onClick={() => void confirmBulkArchiveTradePoints()}
             >
-              {bulkArchiveTpBusy ? "Сохранение…" : "Удалить / в архив"}
+              {bulkArchiveTpBusy ? "Сохранение…" : "Удалить ТТ"}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

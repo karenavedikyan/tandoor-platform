@@ -154,6 +154,7 @@ import {
   resolveDealerRowForCard,
 } from "@/lib/client-base-actualization-data-merge";
 import { isManualActualizationDealerId } from "@/lib/client-base-actualization-stable-ids";
+import { CLIENT_BASE_ACTUALIZATION_CLEAN_MODE } from "@/lib/client-base-actualization-config";
 import { canActualizeClientBase, canArchiveDealerDuringActualization, canEditDealerDuringActualization } from "@/lib/client-base-actualization-permissions";
 import { mergeActualizationState } from "@/lib/client-base-actualization-state";
 import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actualization-sync-status";
@@ -2412,7 +2413,12 @@ export function DealerCardPage() {
     return <DealerArchivedGate dealerId={id} profile={profile} />;
   }
 
-  if (actx.enabled && canActualizeClientBase(profile) && isManualActualizationDealerId(id)) {
+  const useCleanActualizationAnketa =
+    actx.enabled &&
+    canActualizeClientBase(profile) &&
+    (CLIENT_BASE_ACTUALIZATION_CLEAN_MODE || isManualActualizationDealerId(id));
+
+  if (useCleanActualizationAnketa) {
     return <DealerManualActualizationPage baseRow={baseRow} profile={profile} />;
   }
 

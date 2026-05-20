@@ -25,7 +25,7 @@ import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import { mergeActualizationState, type TradePointShowcaseActualization } from "@/lib/client-base-actualization-state";
 import { computePortalSummary } from "@/lib/client-base-actualization-portal-math";
 import { canEditDealerDuringActualization } from "@/lib/client-base-actualization-permissions";
-import { nextManualTradePointInternalCode, isManualActualizationTradePointId } from "@/lib/client-base-actualization-stable-ids";
+import { nextManualTradePointInternalCode, isManualActualizationTradePointId, getTradePointDisplayCodeForActualization } from "@/lib/client-base-actualization-stable-ids";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
 import { toast } from "@/hooks/use-toast";
 import { useSectionSaveFeedback } from "@/hooks/use-section-save-feedback";
@@ -181,53 +181,77 @@ export function TradePointManualActualizationView(props: {
     tInt,
   ]);
 
+  /** Не показывать расчёт дефицита/потенциала, пока менеджер не ввёл числовые параметры витрины. */
+  const showPortalMathSummary =
+    hasShowcase === true &&
+    (numOrNull(totalPortals) != null ||
+      numOrNull(entrancePortals) != null ||
+      numOrNull(interiorPortals) != null ||
+      numOrNull(area) != null ||
+      numOrNull(tTotal) != null ||
+      numOrNull(tEnt) != null ||
+      numOrNull(tInt) != null);
+
   const persistMain = useCallback(async (): Promise<boolean> => {
     if (!canEdit) return false;
     const iso = new Date().toISOString();
     const uid = profile.personaUserId;
     const uname = userLabelFromProfile(profile);
+    const formatStr =
+      formatKind === "store"
+        ? "Магазин"
+        : formatKind === "warehouse"
+          ? "Склад"
+          : formatKind === "showroom"
+            ? "Шоурум"
+            : formatKind === "office"
+              ? "Офис"
+              : "Другое";
+    const statusStr =
+      tpStatus === "working"
+        ? "Работает"
+        : tpStatus === "closed"
+          ? "Закрыта"
+          : tpStatus === "seasonal"
+            ? "Сезонная"
+            : "Требует проверки";
+    const nextFields: Record<string, unknown> = {
+      name: name.trim(),
+      city: city.trim(),
+      address: address.trim(),
+      formatKind,
+      tpStatusKind: tpStatus,
+      format: formatStr,
+      status: statusStr,
+      contactName: contactName.trim(),
+      contactPhone: contactPhone.trim(),
+      comment: tpComment.trim(),
+    };
     const r = await actx.persist((prev) => {
-      const rec = prev.manuallyCreatedTradePointsById[point.id];
-      if (!rec) return prev;
-      const nextFields: Record<string, unknown> = {
-        ...(rec.fields as Record<string, unknown>),
-        name: name.trim(),
-        city: city.trim(),
-        address: address.trim(),
-        formatKind,
-        tpStatusKind: tpStatus,
-        format:
-          formatKind === "store"
-            ? "Магазин"
-            : formatKind === "warehouse"
-              ? "Склад"
-              : formatKind === "showroom"
-                ? "Шоурум"
-                : formatKind === "office"
-                  ? "Офис"
-                  : "Другое",
-        status:
-          tpStatus === "working"
-            ? "Работает"
-            : tpStatus === "closed"
-              ? "Закрыта"
-              : tpStatus === "seasonal"
-                ? "Сезонная"
-                : "Требует проверки",
-        contactName: contactName.trim(),
-        contactPhone: contactPhone.trim(),
-        comment: tpComment.trim(),
-      };
-      let nextManual: typeof rec = {
-        ...rec,
-        fields: nextFields,
-      };
-      const ic = (nextManual.internalCode ?? "").trim();
-      if (isManualActualizationTradePointId(point.id) && !/^TND-TP-\d{6}$/i.test(ic)) {
-        nextManual = { ...nextManual, internalCode: nextManualTradePointInternalCode(prev) };
+      if (isManualActualizationTradePointId(point.id)) {
+        const rec = prev.manuallyCreatedTradePointsById[point.id];
+        if (!rec) return prev;
+        const mergedFields = { ...(rec.fields as Record<string, unknown>), ...nextFields };
+        let nextManual = { ...rec, fields: mergedFields };
+        const ic = (nextManual.internalCode ?? "").trim();
+        if (!/^TND-TP-\d{6}$/i.test(ic)) {
+          nextManual = { ...nextManual, internalCode: nextManualTradePointInternalCode(prev) };
+        }
+        return mergeActualizationState(prev, {
+          manuallyCreatedTradePointsById: { ...prev.manuallyCreatedTradePointsById, [point.id]: nextManual },
+        });
       }
+      const ov = {
+        tradePointId: point.id,
+        dealerId: dealer.id,
+        fields: nextFields,
+        updatedAt: iso,
+        updatedBy: uid,
+        updatedByName: uname,
+        source: "manual_actualization" as const,
+      };
       return mergeActualizationState(prev, {
-        manuallyCreatedTradePointsById: { ...prev.manuallyCreatedTradePointsById, [point.id]: nextManual },
+        tradePointOverridesById: { ...prev.tradePointOverridesById, [point.id]: ov },
       });
     });
     if (!r.success) {
@@ -257,8 +281,6 @@ export function TradePointManualActualizationView(props: {
     const uid = profile.personaUserId;
     const uname = userLabelFromProfile(profile);
     const r = await actx.persist((prev) => {
-      const rec = prev.manuallyCreatedTradePointsById[point.id];
-      if (!rec) return prev;
       const sh: TradePointShowcaseActualization = {
         tradePointId: point.id,
         dealerId: dealer.id,
@@ -337,7 +359,7 @@ export function TradePointManualActualizationView(props: {
           <CardTitle className="text-lg">{point.name}</CardTitle>
           <p className="text-xs text-muted-foreground">Клиент: {dealer.name}</p>
           <p className="text-xs text-muted-foreground" data-testid={`text-trade-point-internal-code-${point.id}`}>
-            Код ТТ: {point.releaseCode ?? "—"}
+            Код ТТ: {getTradePointDisplayCodeForActualization(point)}
           </p>
         </CardHeader>
       </Card>
@@ -612,19 +634,23 @@ export function TradePointManualActualizationView(props: {
                       <Textarea rows={2} value={rmComment} onChange={(e) => { setRmComment(e.target.value); showcaseSave.markDirty(); }} disabled={!canEdit} />
                     </div>
 
-                    <div className="rounded-lg border border-border/70 bg-muted/20 p-3 text-sm sm:col-span-2">
-                      <p className="font-semibold text-foreground">Сводка</p>
-                      <p className="mt-1 text-muted-foreground" data-testid="text-trade-point-portal-summary">
-                        Всего порталов: {summary.totalPortals ?? "—"} · Занято Tandoor: {summary.tandoorTotal ?? "—"} · Свободно / конкуренты:{" "}
-                        {summary.freeOrCompetitor ?? "—"}
-                      </p>
-                      <p className="mt-1 text-muted-foreground">
-                        <span data-testid="text-trade-point-entrance-potential">Потенциал входные: {summary.entrancePotential ?? "—"}</span>
-                        {" · "}
-                        <span data-testid="text-trade-point-interior-potential">Потенциал МК: {summary.interiorPotential ?? "—"}</span>
-                      </p>
-                      {summary.needsPrimaryInstall ? <p className="mt-2 text-amber-800">Требуется первичная установка витрины.</p> : null}
-                    </div>
+                    {showPortalMathSummary ? (
+                      <div className="rounded-lg border border-border/70 bg-muted/20 p-3 text-sm sm:col-span-2">
+                        <p className="font-semibold text-foreground">Сводка</p>
+                        <p className="mt-1 text-muted-foreground" data-testid="text-trade-point-portal-summary">
+                          Всего порталов: {summary.totalPortals ?? "—"} · Занято Tandoor: {summary.tandoorTotal ?? "—"} · Свободно / конкуренты:{" "}
+                          {summary.freeOrCompetitor ?? "—"}
+                        </p>
+                        <p className="mt-1 text-muted-foreground">
+                          <span data-testid="text-trade-point-entrance-potential">Потенциал входные: {summary.entrancePotential ?? "—"}</span>
+                          {" · "}
+                          <span data-testid="text-trade-point-interior-potential">Потенциал МК: {summary.interiorPotential ?? "—"}</span>
+                        </p>
+                        {summary.needsPrimaryInstall ? (
+                          <p className="mt-2 text-amber-800">Требуется первичная установка витрины.</p>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
             ) : null}
             {canEdit ? (

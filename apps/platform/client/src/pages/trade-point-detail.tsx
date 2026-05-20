@@ -40,6 +40,7 @@ import { useSectionSaveFeedback } from "@/hooks/use-section-save-feedback";
 import { SectionSaveButton } from "@/components/section-save-button";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { canActualizeClientBase } from "@/lib/client-base-actualization-permissions";
+import { CLIENT_BASE_ACTUALIZATION_CLEAN_MODE } from "@/lib/client-base-actualization-config";
 import { resolveActualizationTradePointDetail } from "@/lib/client-base-actualization-data-merge";
 import { TradePointManualActualizationView } from "@/components/trade-point-manual-actualization-view";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -556,8 +557,8 @@ function TradePointDetailContent({
     () => isVirtualDefaultTradePointId(dealer.id, point.id),
     [dealer.id, point.id],
   );
-  const useManualAnketa =
-    tpMeta.isManual &&
+  const useCleanTradePointAnketa =
+    CLIENT_BASE_ACTUALIZATION_CLEAN_MODE &&
     !isVirtualDefaultPoint &&
     actx.enabled &&
     canActualizeClientBase(profile);
@@ -790,7 +791,7 @@ function TradePointDetailContent({
 
   const breadcrumbDealerLabel = dealer.name;
 
-  if (useManualAnketa) {
+  if (useCleanTradePointAnketa) {
     return <TradePointManualActualizationView dealer={dealer} point={point} profile={profile} />;
   }
 
