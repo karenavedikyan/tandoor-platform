@@ -13,11 +13,14 @@ import {
   computeDisplayedRouteDealerIds,
   countDealersOnRouteSettlements,
   deleteRouteSlot,
+  getDealerRouteDayEntry,
   listDealersWrongShipmentDayForRoute,
   loadDealerRoutePlanState,
+  normalizeRouteClientOrder,
   reorderRouteDealer,
   removeDealerFromRoute,
   saveRouteEditorState,
+  sortDealerIdsByRouteClientOrder,
   sortRouteByUnloadingOrder,
   type ShipmentRouteDefinition,
   type ShipmentRouteSlotId,
@@ -51,6 +54,18 @@ function ruClientNoun(n: number): "клиент" | "клиента" | "клие�
 
 function formatRouteClientsLine(routeName: string, n: number): string {
   return `${routeName} · ${n} ${ruClientNoun(n)}`;
+}
+
+function parseRouteClientOrderInputs(raw: Record<string, string>): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [id, s] of Object.entries(raw)) {
+    const t = s.trim();
+    if (!t) continue;
+    const n = Number(t);
+    if (!Number.isInteger(n) || n < 1) continue;
+    out[id] = n;
+  }
+  return out;
 }
 
 function trafficBadgeClass(level: "green" | "yellow" | "red"): string {
@@ -108,6 +123,7 @@ export function DealerShipmentDayPlanner({
   const [editOpen, setEditOpen] = useState(false);
   const [editDraft, setEditDraft] = useState<ShipmentRouteDefinition | null>(null);
   const [editSelectedIds, setEditSelectedIds] = useState<string[]>([]);
+  const [editOrderById, setEditOrderById] = useState<Record<string, string>>({});
   const [editClientSearch, setEditClientSearch] = useState("");
 
   const activeDayDefs = activeShipmentDayId ? routeDefsByDay[activeShipmentDayId] ?? [] : [];
@@ -145,6 +161,18 @@ export function DealerShipmentDayPlanner({
     const ids = computeDisplayedRouteDealerIds(userId, activeShipmentDayId, def, rowsForRouteSettlementCounts, state);
     setEditSelectedIds(ids);
     setEditClientSearch("");
+    const entry = getDealerRouteDayEntry(userId, activeShipmentDayId, def.slotId, state);
+    const fromStorage = entry?.clientOrderByDealerId ?? {};
+    const initOrder: Record<string, string> = {};
+    for (const id of ids) {
+      const ro = fromStorage[id];
+      if (normalizeRouteClientOrder(ro) != null) initOrder[id] = String(ro);
+      else {
+        const go = getDealerUnloadingOrder(id);
+        initOrder[id] = normalizeRouteClientOrder(go) != null ? String(go as number) : "";
+      }
+    }
+    setEditOrderById(initOrder);
     setEditDraft({
       ...def,
       settlements: [...def.settlements],
@@ -157,10 +185,19 @@ export function DealerShipmentDayPlanner({
   const saveEdit = () => {
     if (!activeShipmentDayId || !editDraft) return;
     const named: ShipmentRouteDefinition = { ...editDraft, name: editDraft.name.trim() || "Маршрут" };
-    saveRouteEditorState(userId, activeShipmentDayId, named, editSelectedIds, rowsForRouteSettlementCounts);
+    const parsed = parseRouteClientOrderInputs(editOrderById);
+    const nameById = new Map(rowsForRouteSettlementCounts.map((r) => [r.id, r.name]));
+    const ordered = sortDealerIdsByRouteClientOrder(
+      editSelectedIds,
+      Object.keys(parsed).length ? parsed : undefined,
+      nameById,
+    );
+    const orderArg = Object.keys(parsed).length ? parsed : null;
+    saveRouteEditorState(userId, activeShipmentDayId, named, ordered, rowsForRouteSettlementCounts, orderArg);
     setEditOpen(false);
     setEditDraft(null);
     setEditSelectedIds([]);
+    setEditOrderById({});
     toast({ title: "Маршрут сохранён" });
   };
 
@@ -178,10 +215,16 @@ export function DealerShipmentDayPlanner({
       .slice(0, 40);
   }, [editClientSearch, editSelectedIds, rowsForRouteSettlementCounts]);
 
-  const selectedRows = useMemo(
-    () => editSelectedIds.map((id) => byId.get(id)).filter((r): r is DealerRow => Boolean(r)),
-    [editSelectedIds, byId],
-  );
+  const selectedRows = useMemo(() => {
+    const parsed = parseRouteClientOrderInputs(editOrderById);
+    const nameById = new Map(rowsForRouteSettlementCounts.map((r) => [r.id, r.name]));
+    const ids = sortDealerIdsByRouteClientOrder(
+      editSelectedIds,
+      Object.keys(parsed).length ? parsed : undefined,
+      nameById,
+    );
+    return ids.map((id) => byId.get(id)).filter((r): r is DealerRow => Boolean(r));
+  }, [editSelectedIds, editOrderById, byId, rowsForRouteSettlementCounts]);
 
   return (
     <>
@@ -251,7 +294,9 @@ export function DealerShipmentDayPlanner({
         ) : null}
         {routeFilterBanner ? (
           <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-            <p className="text-sm text-foreground">{routeFilterBanner}</p>
+            <p className="text-sm text-foreground" data-testid="text-dealer-shipment-route-filter-banner">
+              {routeFilterBanner}
+            </p>
             <Button
               type="button"
               variant="outline"
@@ -295,6 +340,11 @@ export function DealerShipmentDayPlanner({
                 const ordered = routeRowsBySlot[def.slotId] ?? [];
                 const settlementFallback = settlementRowsBySlot[def.slotId] ?? [];
                 const expanded = expandedSlotId === def.slotId;
+                const routePlanSnap = loadDealerRoutePlanState();
+                const routeDayEntry =
+                  activeShipmentDayId != null
+                    ? getDealerRouteDayEntry(userId, activeShipmentDayId, def.slotId, routePlanSnap)
+                    : undefined;
                 const routeClientCount = countDealersOnRouteSettlements(
                   userId,
                   activeShipmentDayId,
@@ -428,6 +478,7 @@ export function DealerShipmentDayPlanner({
                             {ordered.map((row) => {
                               const st = getShipmentStatus(row);
                               const uo = getDealerUnloadingOrder(row.id);
+                              const routeOrder = normalizeRouteClientOrder(routeDayEntry?.clientOrderByDealerId?.[row.id]);
                               return (
                                 <div
                                   key={row.id}
@@ -441,6 +492,14 @@ export function DealerShipmentDayPlanner({
                                     <p className="text-[11px] text-muted-foreground" data-testid={`text-dealer-route-client-unloading-order-${row.id}`}>
                                       Порядок выгрузки: {uo != null ? uo : "—"}
                                     </p>
+                                    {routeOrder != null ? (
+                                      <p
+                                        className="text-[11px] text-muted-foreground"
+                                        data-testid={`text-dealer-route-client-order-${def.slotId}-${row.id}`}
+                                      >
+                                        № в маршруте: {routeOrder}
+                                      </p>
+                                    ) : null}
                                     <Badge variant="outline" className={cn("text-[10px] font-medium", trafficBadgeClass(st.level))}>
                                       {st.label}
                                     </Badge>
@@ -540,6 +599,7 @@ export function DealerShipmentDayPlanner({
           if (!o) {
             setEditDraft(null);
             setEditSelectedIds([]);
+            setEditOrderById({});
             setEditClientSearch("");
           }
         }}
@@ -610,7 +670,15 @@ export function DealerShipmentDayPlanner({
                             variant="secondary"
                             className="h-8 shrink-0 px-2 text-[10px]"
                             data-testid={`button-dealer-shipment-route-client-add-${r.id}`}
-                            onClick={() => setEditSelectedIds((prev) => (prev.includes(r.id) ? prev : [...prev, r.id]))}
+                            onClick={() => {
+                              setEditSelectedIds((prev) => (prev.includes(r.id) ? prev : [...prev, r.id]));
+                              setEditOrderById((po) => {
+                                if (po[r.id] !== undefined) return po;
+                                const go = getDealerUnloadingOrder(r.id);
+                                const seed = normalizeRouteClientOrder(go) != null ? String(go as number) : "";
+                                return { ...po, [r.id]: seed };
+                              });
+                            }}
                           >
                             Добавить
                           </Button>
@@ -620,28 +688,82 @@ export function DealerShipmentDayPlanner({
                   </div>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-xs font-semibold text-muted-foreground">В маршруте ({editSelectedIds.length})</p>
-                  <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-border/70 bg-card p-1.5">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                    <p className="text-xs font-semibold text-muted-foreground">В маршруте ({editSelectedIds.length})</p>
+                    {canEditRoute && selectedRows.length > 0 ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 shrink-0 self-start px-2 text-[10px] sm:self-auto"
+                        data-testid={`button-dealer-route-sort-by-client-order-${editDraft.slotId}`}
+                        onClick={() => {
+                          const parsed = parseRouteClientOrderInputs(editOrderById);
+                          const nameById = new Map(rowsForRouteSettlementCounts.map((row) => [row.id, row.name]));
+                          setEditSelectedIds((prev) =>
+                            sortDealerIdsByRouteClientOrder(
+                              prev,
+                              Object.keys(parsed).length ? parsed : undefined,
+                              nameById,
+                            ),
+                          );
+                        }}
+                      >
+                        По введённым номерам
+                      </Button>
+                    ) : null}
+                  </div>
+                  <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border border-border/70 bg-card p-1.5 sm:max-h-40">
                     {selectedRows.length === 0 ? (
                       <p className="px-1 py-2 text-xs text-muted-foreground">Список пуст</p>
                     ) : (
                       selectedRows.map((r) => (
                         <div
                           key={r.id}
-                          className="flex items-center justify-between gap-2 rounded border border-transparent px-1.5 py-1 hover:bg-muted/50"
+                          className="flex flex-col gap-2 rounded border border-transparent px-1.5 py-2 hover:bg-muted/50 sm:flex-row sm:items-center sm:justify-between sm:gap-2 sm:py-1"
                           data-testid={`row-dealer-shipment-route-client-selected-${r.id}`}
                         >
-                          <div className="min-w-0">
-                            <p className="truncate text-xs font-medium text-foreground">{r.name}</p>
-                            <p className="truncate text-[10px] text-muted-foreground">{r.city}</p>
+                          <div className="flex min-w-0 flex-1 items-end gap-2 sm:items-center">
+                            <div className="flex w-14 shrink-0 flex-col gap-0.5">
+                              <Label
+                                htmlFor={`dealer-route-order-${editDraft.slotId}-${r.id}`}
+                                className="text-[10px] leading-none text-muted-foreground"
+                              >
+                                №
+                              </Label>
+                              <Input
+                                id={`dealer-route-order-${editDraft.slotId}-${r.id}`}
+                                value={editOrderById[r.id] ?? ""}
+                                onChange={(e) =>
+                                  setEditOrderById((prev) => ({
+                                    ...prev,
+                                    [r.id]: e.target.value,
+                                  }))
+                                }
+                                inputMode="numeric"
+                                className="h-9 min-h-9 w-full px-1.5 text-center text-xs tabular-nums"
+                                data-testid={`input-dealer-route-client-order-${editDraft.slotId}-${r.id}`}
+                              />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-xs font-medium text-foreground">{r.name}</p>
+                              <p className="truncate text-[10px] text-muted-foreground">{r.city}</p>
+                            </div>
                           </div>
                           <Button
                             type="button"
                             size="sm"
                             variant="outline"
-                            className="h-8 shrink-0 px-2 text-[10px]"
+                            className="h-9 shrink-0 self-end px-2 text-[10px] sm:self-auto"
                             data-testid={`button-dealer-shipment-route-client-remove-${r.id}`}
-                            onClick={() => setEditSelectedIds((prev) => prev.filter((id) => id !== r.id))}
+                            onClick={() => {
+                              setEditSelectedIds((prev) => prev.filter((id) => id !== r.id));
+                              setEditOrderById((prev) => {
+                                const next = { ...prev };
+                                delete next[r.id];
+                                return next;
+                              });
+                            }}
                           >
                             Убрать
                           </Button>
