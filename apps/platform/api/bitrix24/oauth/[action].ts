@@ -14,8 +14,18 @@
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { randomBytes } from "node:crypto";
+import { isOAuthCallbackError } from "../../../server/bitrix24-oauth-callback-error";
 
 const JSON_CT = "application/json; charset=utf-8";
+
+/** Короткий маркер деплоя для логов/status — без секретов и OAuth-параметров. */
+function oauthHandlerBuildMarker(): string {
+  const sha = process.env.VERCEL_GIT_COMMIT_SHA;
+  if (typeof sha === "string" && sha.length >= 7) return sha.slice(0, 7);
+  const dep = process.env.VERCEL_DEPLOYMENT_ID;
+  if (typeof dep === "string" && dep.length > 0) return dep.slice(0, 12);
+  return "local";
+}
 
 function sendJson(res: VercelResponse, status: number, body: Record<string, unknown>): void {
   res.setHeader("Content-Type", JSON_CT);
@@ -109,8 +119,9 @@ function buildClearPersonalSessionCookieInline(): string {
 }
 
 async function handleStatus(req: VercelRequest, res: VercelResponse): Promise<void> {
+  const build = oauthHandlerBuildMarker();
   if (!isOAuthConfigured()) {
-    sendJson(res, 200, { success: true, configured: false, connected: false });
+    sendJson(res, 200, { success: true, configured: false, connected: false, oauthHandlerBuild: build });
     return;
   }
   if (!isCookieSecretSet()) {
@@ -118,6 +129,7 @@ async function handleStatus(req: VercelRequest, res: VercelResponse): Promise<vo
       success: true,
       configured: true,
       connected: false,
+      oauthHandlerBuild: build,
       warning: "BITRIX24_OAUTH_COOKIE_SECRET",
       message:
         "Задайте BITRIX24_OAUTH_COOKIE_SECRET на сервере, чтобы сохранять OAuth-сессию Bitrix24 в HttpOnly-cookie.",
@@ -129,11 +141,11 @@ async function handleStatus(req: VercelRequest, res: VercelResponse): Promise<vo
     const mod = await import("../../../server/bitrix24-oauth-status-execute");
     const { status, body, setCookies } = await mod.runBitrix24OAuthStatus(cookieHeader(req));
     applySetCookies(res, setCookies);
-    sendJson(res, status, body);
+    sendJson(res, status, { ...body, oauthHandlerBuild: build });
   } catch (e) {
     const m = e instanceof Error ? e.message : String(e);
     console.error("[bitrix24-api] oauth status load/run failed", m);
-    sendJson(res, 200, { success: true, configured: true, connected: false });
+    sendJson(res, 200, { success: true, configured: true, connected: false, oauthHandlerBuild: build });
   }
 }
 
@@ -215,6 +227,8 @@ function rawRedirect(res: VercelResponse, location: string): void {
 }
 
 async function handleCallback(req: VercelRequest, res: VercelResponse): Promise<void> {
+  const build = oauthHandlerBuildMarker();
+  console.error("[bitrix24-api] oauth callback:reached", { oauthHandlerBuild: build });
   if (!isOAuthConfigured()) {
     res.setHeader("Set-Cookie", buildClearStateCookie());
     rawRedirect(res, buildSpaErrorLocation("BITRIX24_OAUTH_NOT_CONFIGURED"));
@@ -229,13 +243,34 @@ async function handleCallback(req: VercelRequest, res: VercelResponse): Promise<
     });
     applySetCookies(res, out.setCookies);
     if (out.kind === "redirect") {
+      try {
+        const loc = new URL(out.location);
+        const errCode = loc.searchParams.get("code");
+        if (loc.searchParams.get("bitrix24") === "error" && errCode) {
+          console.error("[bitrix24-api] oauth callback:redirect-out", {
+            oauthHandlerBuild: build,
+            errorCode: errCode,
+          });
+        }
+      } catch {
+        /* ignore parse errors */
+      }
       rawRedirect(res, out.location);
       return;
     }
     sendJson(res, out.status, out.body);
   } catch (e) {
+    if (isOAuthCallbackError(e)) {
+      console.error("[bitrix24-api] oauth callback:typed-error", {
+        oauthHandlerBuild: build,
+        errorCode: e.code,
+      });
+      res.setHeader("Set-Cookie", buildClearStateCookie());
+      rawRedirect(res, buildSpaErrorLocation(e.code, e.bitrixCode));
+      return;
+    }
     const m = e instanceof Error ? e.message : String(e);
-    console.error("[bitrix24-api] oauth callback load/run failed", m);
+    console.error("[bitrix24-api] oauth callback load/run failed", { oauthHandlerBuild: build, msg: m });
     res.setHeader("Set-Cookie", buildClearStateCookie());
     rawRedirect(res, buildSpaErrorLocation("BITRIX24_OAUTH_CALLBACK_FAILED"));
   }
