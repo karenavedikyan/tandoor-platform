@@ -819,6 +819,11 @@ function TradePointDetailContent({
         <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl" data-testid="text-trade-point-name">
           {point.name}
         </h1>
+        {point.releaseCode ? (
+          <p className="mt-2 text-xs text-muted-foreground" data-testid={`text-trade-point-internal-code-${point.id}`}>
+            Код ТТ: {point.releaseCode}
+          </p>
+        ) : null}
         <div className="mt-2 flex flex-wrap gap-2">
           <Badge variant="outline" className="text-[10px] font-medium">
             № {point.id}
