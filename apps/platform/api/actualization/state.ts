@@ -2,8 +2,13 @@
  * Vercel / Node: GET|POST /api/actualization/state
  * Self-contained: без импортов client/, server/, shared/.
  *
- * MVP: in-memory Map по userId (демо). На Vercel инстансы и cold start не дают
- * настоящей кросс-девайс персистентности — см. docs/client-base-actualization.md
+ * Персистентность: при наличии DATABASE_URL / POSTGRES_URL / NEON_DATABASE_URL
+ * состояние хранится в Postgres (Neon) в таблице client_base_actualization_state.
+ * Иначе — fallback на in-memory Map (явно помечен как server_memory).
+ *
+ * Демо-идентификация: userId из заголовка X-Tandoor-Demo-User-Id или query userId.
+ * Это не production security — при внедрении реальной auth scope_key должен
+ * вычисляться из сессии на сервере.
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
@@ -31,10 +36,20 @@ function readJsonBody(req: VercelRequest): unknown {
   return undefined;
 }
 
-function resolveStorageMode(): "server_memory" | "not_configured" {
+/** Приоритет: DATABASE_URL → POSTGRES_URL → NEON_DATABASE_URL */
+function resolvePostgresUrl(): string | null {
+  const a = process.env.DATABASE_URL?.trim();
+  if (a) return a;
+  const b = process.env.POSTGRES_URL?.trim();
+  if (b) return b;
+  const c = process.env.NEON_DATABASE_URL?.trim();
+  if (c) return c;
+  return null;
+}
+
+function isActualizationGloballyDisabled(): boolean {
   const v = process.env.TANDOOR_ACTUALIZATION_STORAGE?.trim().toLowerCase();
-  if (v === "disabled" || v === "off" || v === "false") return "not_configured";
-  return "server_memory";
+  return v === "disabled" || v === "off" || v === "false";
 }
 
 function emptyState(): Record<string, unknown> {
@@ -62,12 +77,32 @@ function sanitizeUserId(raw: string | undefined): string | null {
   return t;
 }
 
+function sanitizeRole(raw: string | undefined): string | null {
+  if (!raw || typeof raw !== "string") return null;
+  const t = raw.trim();
+  if (!t || t.length > 64) return null;
+  if (!/^[a-zA-Z0-9._-]+$/.test(t)) return null;
+  return t;
+}
+
 function getUserId(req: VercelRequest): string | null {
   const h = req.headers["x-tandoor-demo-user-id"];
   const fromHeader = Array.isArray(h) ? h[0] : h;
   const q = req.query?.userId;
   const fromQuery = typeof q === "string" ? q : Array.isArray(q) ? q[0] : "";
   return sanitizeUserId(fromHeader) ?? sanitizeUserId(fromQuery);
+}
+
+function getRole(req: VercelRequest): string | null {
+  const h = req.headers["x-tandoor-demo-user-role"];
+  const fromHeader = Array.isArray(h) ? h[0] : h;
+  const q = req.query?.role;
+  const fromQuery = typeof q === "string" ? q : Array.isArray(q) ? q[0] : "";
+  return sanitizeRole(fromHeader) ?? sanitizeRole(fromQuery);
+}
+
+function scopeKeyForUser(userId: string): string {
+  return `user:${userId}`;
 }
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
@@ -93,20 +128,45 @@ function buildResponse(
   state: unknown,
   updatedAt: string | null,
   message?: string,
+  code?: string,
 ): Record<string, unknown> {
   const o: Record<string, unknown> = { success, storageMode, state, updatedAt };
   if (message) o.message = message;
+  if (code) o.code = code;
   return o;
 }
 
-export default function handler(req: VercelRequest, res: VercelResponse): void {
+const MSG_PERSISTENT_NOT_CONFIGURED =
+  "Persistent storage не настроен. Задайте DATABASE_URL, POSTGRES_URL или NEON_DATABASE_URL в Vercel.";
+const MSG_SERVER_MEMORY_FALLBACK =
+  "Временное серверное хранение (in-memory): на Vercel данные не гарантированы между инстансами и устройствами.";
+const MSG_PERSISTENT_OK = "Данные сохраняются в Postgres (Neon).";
+const MSG_FEATURE_DISABLED = "Серверное хранение актуализации отключено (TANDOOR_ACTUALIZATION_STORAGE).";
+const MSG_STORAGE_ERROR =
+  "Ошибка обращения к базе данных. Проверьте подключение и миграцию таблицы client_base_actualization_state.";
+
+type SqlFn = (strings: TemplateStringsArray, ...params: unknown[]) => Promise<Record<string, unknown>[]>;
+
+async function createSqlExecutor(connectionString: string): Promise<SqlFn> {
+  const { neon } = await import("@neondatabase/serverless");
+  return neon(connectionString);
+}
+
+function rowUpdatedAtIso(v: unknown): string | null {
+  if (v instanceof Date) return v.toISOString();
+  if (typeof v === "string") return v;
+  return null;
+}
+
+export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   try {
-    const mode = resolveStorageMode();
+    const globallyDisabled = isActualizationGloballyDisabled();
+    const dbUrl = globallyDisabled ? null : resolvePostgresUrl();
     const userId = getUserId(req);
     if (!userId) {
       sendJson(res, 400, {
         success: false,
-        storageMode: mode,
+        storageMode: dbUrl ? "persistent" : "not_configured",
         state: emptyState(),
         updatedAt: null,
         message: "Укажите userId (query) или заголовок X-Tandoor-Demo-User-Id (демо MVP).",
@@ -114,40 +174,19 @@ export default function handler(req: VercelRequest, res: VercelResponse): void {
       return;
     }
 
-    if (req.method === "GET") {
-      if (mode === "not_configured") {
+    const scopeKey = scopeKeyForUser(userId);
+    const role = getRole(req);
+
+    if (globallyDisabled) {
+      if (req.method === "GET") {
         sendJson(
           res,
           200,
-          buildResponse(
-            true,
-            "not_configured",
-            emptyState(),
-            null,
-            "Серверное хранение актуализации отключено (TANDOOR_ACTUALIZATION_STORAGE).",
-          ),
+          buildResponse(true, "not_configured", emptyState(), null, MSG_FEATURE_DISABLED),
         );
         return;
       }
-      const row = memoryStore.get(userId);
-      const state = row?.state ?? emptyState();
-      const updatedAt = row?.updatedAt ?? null;
-      sendJson(
-        res,
-        200,
-        buildResponse(
-          true,
-          "server_memory",
-          state,
-          updatedAt,
-          "In-memory MVP: на Vercel данные не гарантированы между инстансами и устройствами.",
-        ),
-      );
-      return;
-    }
-
-    if (req.method === "POST") {
-      if (mode === "not_configured") {
+      if (req.method === "POST") {
         sendJson(res, 503, {
           success: false,
           storageMode: "not_configured",
@@ -157,12 +196,75 @@ export default function handler(req: VercelRequest, res: VercelResponse): void {
         });
         return;
       }
+      sendJson(res, 405, {
+        success: false,
+        storageMode: "not_configured",
+        state: emptyState(),
+        updatedAt: null,
+        message: "Метод не поддерживается. Используйте GET или POST.",
+      });
+      return;
+    }
+
+    if (req.method === "GET") {
+      if (!dbUrl) {
+        const row = memoryStore.get(userId);
+        const state = row?.state ?? emptyState();
+        const updatedAt = row?.updatedAt ?? null;
+        sendJson(
+          res,
+          200,
+          buildResponse(
+            true,
+            "server_memory",
+            state,
+            updatedAt,
+            `${MSG_PERSISTENT_NOT_CONFIGURED} ${MSG_SERVER_MEMORY_FALLBACK}`,
+          ),
+        );
+        return;
+      }
+
+      try {
+        const sql = await createSqlExecutor(dbUrl);
+        const rows = await sql`
+          SELECT state, updated_at
+          FROM client_base_actualization_state
+          WHERE scope_key = ${scopeKey}
+          LIMIT 1
+        `;
+        const first = rows[0];
+        if (!first) {
+          sendJson(
+            res,
+            200,
+            buildResponse(true, "persistent", emptyState(), null, MSG_PERSISTENT_OK),
+          );
+          return;
+        }
+        const rawState = first.state;
+        const st = coerceState(rawState);
+        const updatedAt = rowUpdatedAtIso(first.updated_at);
+        sendJson(res, 200, buildResponse(true, "persistent", st, updatedAt, MSG_PERSISTENT_OK));
+      } catch (e) {
+        const m = e instanceof Error ? e.message : String(e);
+        console.error("[actualization-api] persistent GET", m.slice(0, 200));
+        sendJson(
+          res,
+          200,
+          buildResponse(false, "persistent", emptyState(), null, MSG_STORAGE_ERROR, "ACTUALIZATION_STORAGE_ERROR"),
+        );
+      }
+      return;
+    }
+
+    if (req.method === "POST") {
       const raw = readJsonBody(req);
       const rawStr = typeof raw === "string" ? raw : JSON.stringify(raw ?? {});
       if (rawStr.length > MAX_BODY_CHARS) {
         sendJson(res, 413, {
           success: false,
-          storageMode: "server_memory",
+          storageMode: dbUrl ? "persistent" : "server_memory",
           state: emptyState(),
           updatedAt: null,
           message: "Слишком большой JSON.",
@@ -170,29 +272,75 @@ export default function handler(req: VercelRequest, res: VercelResponse): void {
         return;
       }
       const body = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>;
+      const bodyUserId = sanitizeUserId(
+        typeof body.userId === "string" ? body.userId : Array.isArray(body.userId) ? String(body.userId[0]) : "",
+      );
+      if (bodyUserId != null && bodyUserId !== userId) {
+        sendJson(res, 400, {
+          success: false,
+          storageMode: dbUrl ? "persistent" : "server_memory",
+          state: emptyState(),
+          updatedAt: null,
+          message: "userId в теле запроса не совпадает с заголовком/query (демо scope).",
+        });
+        return;
+      }
       const incoming = body.state ?? body.patch ?? body;
       const next = coerceState(incoming);
       const now = new Date().toISOString();
       next.updatedAt = now;
       next.updatedBy = userId;
-      memoryStore.set(userId, { state: next, updatedAt: now });
-      sendJson(
-        res,
-        200,
-        buildResponse(
-          true,
-          "server_memory",
-          next,
-          now,
-          "In-memory MVP: на Vercel данные не гарантированы между инстансами и устройствами.",
-        ),
-      );
+      const version = typeof next.version === "number" && Number.isFinite(next.version) ? Math.floor(next.version) : 1;
+
+      if (!dbUrl) {
+        memoryStore.set(userId, { state: next, updatedAt: now });
+        sendJson(
+          res,
+          200,
+          buildResponse(
+            true,
+            "server_memory",
+            next,
+            now,
+            `${MSG_PERSISTENT_NOT_CONFIGURED} ${MSG_SERVER_MEMORY_FALLBACK}`,
+          ),
+        );
+        return;
+      }
+
+      try {
+        const sql = await createSqlExecutor(dbUrl);
+        const stateJson = JSON.stringify(next);
+        const rows = await sql`
+          INSERT INTO client_base_actualization_state (scope_key, user_id, role, state, version)
+          VALUES (${scopeKey}, ${userId}, ${role}, ${stateJson}::jsonb, ${version})
+          ON CONFLICT (scope_key) DO UPDATE SET
+            user_id = EXCLUDED.user_id,
+            role = COALESCE(EXCLUDED.role, client_base_actualization_state.role),
+            state = EXCLUDED.state,
+            version = EXCLUDED.version,
+            updated_at = now()
+          RETURNING state, updated_at
+        `;
+        const first = rows[0];
+        const saved = coerceState(first?.state);
+        const updatedAt = rowUpdatedAtIso(first?.updated_at) ?? now;
+        sendJson(res, 200, buildResponse(true, "persistent", saved, updatedAt, MSG_PERSISTENT_OK));
+      } catch (e) {
+        const m = e instanceof Error ? e.message : String(e);
+        console.error("[actualization-api] persistent POST", m.slice(0, 200));
+        sendJson(
+          res,
+          200,
+          buildResponse(false, "persistent", emptyState(), null, MSG_STORAGE_ERROR, "ACTUALIZATION_STORAGE_ERROR"),
+        );
+      }
       return;
     }
 
     sendJson(res, 405, {
       success: false,
-      storageMode: mode,
+      storageMode: dbUrl ? "persistent" : "server_memory",
       state: emptyState(),
       updatedAt: null,
       message: "Метод не поддерживается. Используйте GET или POST.",
