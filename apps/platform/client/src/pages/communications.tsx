@@ -45,6 +45,34 @@ function formatRuDateTime(raw: string | undefined): string {
   }
 }
 
+/** Понятный текст для query после OAuth callback (без секретов). */
+function describeBitrixOAuthReturnError(appCode: string, bitrixCode: string): string {
+  const bx = bitrixCode.trim();
+  const c = appCode.trim();
+  switch (c) {
+    case "BITRIX24_OAUTH_STATE_MISMATCH":
+      return "Сессия подключения устарела или открыт не тот браузер. Нажмите «Подключить Bitrix24» в личном кабинете ещё раз.";
+    case "BITRIX24_OAUTH_TOKEN_ERROR":
+      return bx
+        ? `Bitrix24 не принял обмен кода авторизации (${bx}). Проверьте redirect URI и настройки локального приложения, затем подключите снова.`
+        : "Bitrix24 не принял обмен кода авторизации. Проверьте настройки OAuth-приложения и подключите снова.";
+    case "BITRIX24_OAUTH_COOKIE_ERROR":
+      return "На сервере не удалось сохранить сессию (cookie). Проверьте BITRIX24_OAUTH_COOKIE_SECRET и лимиты размера cookie.";
+    case "BITRIX24_OAUTH_NETWORK":
+      return "Нет связи с сервером авторизации Bitrix24. Повторите позже.";
+    case "BITRIX24_OAUTH_MISSING_CODE":
+      return "Bitrix24 не вернул код авторизации. Попробуйте подключить снова.";
+    case "BITRIX24_OAUTH_AUTHORIZATION_DENIED":
+      return "Вход в Bitrix24 был отклонён. Подключите снова и подтвердите доступ.";
+    case "BITRIX24_OAUTH_NOT_CONFIGURED":
+      return "OAuth Bitrix24 не настроен на сервере.";
+    case "BITRIX24_OAUTH_CALLBACK_FAILED":
+      return "Внутренняя ошибка при завершении подключения. Попробуйте позже.";
+    default:
+      return c ? `${c}${bx ? ` (${bx})` : ""}` : "Не удалось подключить Bitrix24. Попробуйте ещё раз.";
+  }
+}
+
 export default function CommunicationsPage() {
   const isMobile = useIsMobile();
   const [, navigate] = useLocation();
@@ -173,10 +201,7 @@ export default function CommunicationsPage() {
     } else {
       const code = sp.get("code") || "";
       const bitrixCode = sp.get("bitrixCode") || "";
-      const description =
-        bitrixCode && code
-          ? `${code} (${bitrixCode})`
-          : code || "Не удалось подключить Bitrix24. Попробуйте ещё раз.";
+      const description = describeBitrixOAuthReturnError(code, bitrixCode);
       toast({
         title: "Не удалось подключить Bitrix24",
         description,

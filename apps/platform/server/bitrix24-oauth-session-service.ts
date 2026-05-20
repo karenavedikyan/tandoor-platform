@@ -53,6 +53,7 @@ export async function getEffectivePersonalSession(cookieHeader: string | undefin
     refresh_token: rt.tokens.refresh_token,
     expires_at_ms,
     portal_base: session.portal_base,
+    rest_base: rt.client_endpoint?.trim() || session.rest_base,
     bitrix_user_id: session.bitrix_user_id,
     user_name: session.user_name,
   };

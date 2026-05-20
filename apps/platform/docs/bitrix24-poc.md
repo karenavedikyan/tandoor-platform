@@ -26,6 +26,8 @@
 | `BITRIX24_OAUTH_COOKIE_SECRET` | **Обязательна для сохранения сессии** | Строка для **scrypt**→AES-256-GCM шифрования cookie `b24_personal_sess` (access/refresh token). Без неё OAuth настроен, но **`connected`** остаётся ложным: в **`GET /api/bitrix24/oauth/status`** приходит подсказка в **`message`**. |
 | `BITRIX24_LK_PUBLIC_ORIGIN` | **Опционально** | Базовый URL ЛК для редиректа после OAuth (например `https://tandoor-platform.vercel.app`). По умолчанию — тот же хост, что и для **`BITRIX24_OAUTH_REDIRECT_URI`**. |
 | `BITRIX24_OAUTH_TOKEN_URL` | **Опционально** | Endpoint обмена `code`/`refresh_token`. По умолчанию **`https://oauth.bitrix.info/oauth/token`** (облако Bitrix24). On-prem — укажите URL вида `https://<портал>/oauth/token/`. |
+| `BITRIX24_OAUTH_TOKEN_HTTP_METHOD` | **Опционально** | Если **`post`** — обмен токена через **POST** `application/x-www-form-urlencoded`. По умолчанию — **GET** с query string, как в [официальной документации Bitrix24](https://apidocs.bitrix24.com/settings/oauth/index.html) (без `redirect_uri` в первом запросе). |
+| `BITRIX24_OAUTH_TOKEN_INCLUDE_REDIRECT_URI` | **Опционально** | Если **`true`** — в запрос к token endpoint сразу добавляется **`redirect_uri`** (иначе сначала запрос без него, при ошибке — повтор с `redirect_uri`). |
 
 **Важно:** webhook URL, токен и секрет **нельзя** класть в клиентский бандл или в git. На Vercel задайте значения в **Environment Variables** для production / preview. Сервер **не** возвращает и **не** логирует полный webhook URL.
 

@@ -124,7 +124,7 @@ function personalPreflight(req: VercelRequest):
       status: 503,
       body: {
         success: false,
-        code: "BITRIX24_OAUTH_COOKIE_SECRET_MISSING",
+        code: "BITRIX24_OAUTH_COOKIE_ERROR",
         message: "На сервере не задан BITRIX24_OAUTH_COOKIE_SECRET — нельзя безопасно проверить сессию Bitrix24.",
       },
     };
