@@ -33,6 +33,11 @@ export function canEditDealerDuringActualization(profile: ReleaseDemoProfile, de
   return canEditClientNextStep(profile, dealer);
 }
 
+/** Мягкое архивирование вручную созданного клиента — те же границы ответственности, что и правка. */
+export function canArchiveDealerDuringActualization(profile: ReleaseDemoProfile, dealer: DealerRow): boolean {
+  return canEditDealerDuringActualization(profile, dealer);
+}
+
 export function canCreateTradePointDuringActualization(profile: ReleaseDemoProfile, dealer: DealerRow): boolean {
   return canEditDealerDuringActualization(profile, dealer);
 }

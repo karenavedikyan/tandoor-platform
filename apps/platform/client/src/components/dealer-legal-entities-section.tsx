@@ -137,7 +137,7 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
         updatedBy: actorUserId,
         updatedByName: actorLabel,
       };
-      const ok = await actx.persist((prev) => {
+      const r = await actx.persist((prev) => {
         const cur = prev.legalEntityOverridesByDealerId[row.id] ?? {
           createdById: actorUserId,
           overridesById: {},
@@ -151,13 +151,18 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
           },
         });
       });
-      if (ok) {
+      if (r.success) {
         toast({ title: "Сохранено" });
         setTick((n) => n + 1);
         setEditingId(null);
         setFormOpen(false);
         resetDraft();
-      } else toast({ title: "Ошибка сохранения", variant: "destructive" });
+      } else {
+        toast({
+          title: "Не удалось сохранить. Проверьте соединение и попробуйте ещё раз.",
+          variant: "destructive",
+        });
+      }
       return;
     }
     if (editingId && !editingId.startsWith("passport:")) {
@@ -515,7 +520,7 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
                         onClick={() => {
                           void (async () => {
                             if (useAct) {
-                              const ok = await actx.persist((prev) => {
+                              const r = await actx.persist((prev) => {
                                 const cur = prev.legalEntityOverridesByDealerId[row.id] ?? {
                                   createdById: actorUserId,
                                   overridesById: {},
@@ -531,7 +536,7 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
                                   },
                                 });
                               });
-                              if (ok) {
+                              if (r.success) {
                                 toast({ title: "В архиве" });
                                 setTick((n) => n + 1);
                               }

@@ -16,6 +16,7 @@
 | `canCreateTradePointDuringActualization` | Новая ТТ у клиента. |
 | `canEditTradePointDuringActualization` | Правки ТТ. |
 | `canArchiveTradePointDuringActualization` | Архив / закрытие ТТ (мягкое удаление). |
+| `canArchiveDealerDuringActualization` | Мягкое архивирование вручну созданного клиента (те же границы, что и правка). |
 | `canManageLegalEntitiesDuringActualization` | Юрлица в рамках клиента. |
 
 Правила зоны ответственности **выровнены с** `canEditClientNextStep`:
@@ -46,8 +47,9 @@
 |--------|-----------------------------|
 | Правки полей карточки клиента (название, ИНН, город, адрес, телефон, email, ответственные, день отгрузки, порядок выгрузки, комментарий и др.) | `dealerOverridesById[id]`, при необходимости `unloadingOrderByDealerId`, `dealerShipmentDayLabelByDealerId` и связанные override-поля в override-объекте |
 | ИНН для отображения в краткой информации (если вынесено отдельно от mock) | `dealerOverridesById` / поле `inn` в override; на строке списка — `actualizationInn` после merge |
-| Новый клиент, созданный вручную | `manuallyCreatedDealersById[id]` (id вида `manual-dealer-{timestamp}-{random}`) |
-| Новая торговая точка | `manuallyCreatedTradePointsById[id]` (с привязкой `dealerId`) |
+| Новый клиент, созданный вручную | `manuallyCreatedDealersById[id]` — id **стабилен на время диалога**: `manual-dealer-{yyyyMMddHHmmss}-{shortRandom}`; в записи хранятся `internalCode` (например `MA-MANUAL-000001`), `createdAt`, `createdBy`, `createdByName`, `source: "manual_actualization"`, поля в `fields` |
+| Архив вручну созданного клиента | `archivedDealersById[dealerId]` — запись о мягком архиве; клиент остаётся в `manuallyCreatedDealersById`, но **скрыт** из списка клиентской базы |
+| Новая торговая точка | `manuallyCreatedTradePointsById[id]` — id: `manual-tp-{dealerId}-{yyyyMMddHHmmss}-{shortRandom}`, метаданные создания, при повторном сохранении после ошибки — **тот же id** (upsert) |
 | Правки существующей ТТ | `tradePointOverridesById` |
 | Архив / закрытие ТТ | `archivedTradePointsById` (+ в UI точка скрыта из обычного списка) |
 | Юрлица: добавление, правки, мягкое скрытие | `legalEntityOverridesByDealerId` |
@@ -80,7 +82,7 @@
 
 - **Контекст:** `context/client-base-actualization-context.tsx` — загрузка, `persist(updater)`, `mergedDealerRows`, статус синхронизации.
 - **API:** `lib/client-base-actualization-api.ts` — вызовы GET/POST и разбор `storageMode` / ошибок.
-- **Формы дилера:** `components/client-base-actualization-dealer-forms.tsx` — диалоги редактирования и создания.
+- **Стабильные id и проверки дублей:** `lib/client-base-actualization-stable-ids.ts` — генерация id, поиск дублей по ИНН / названию+городу.
 - **Список клиентов:** `pages/dealer-base.tsx` — строки из merge, кнопка «Добавить клиента», синхронизация.
 - **Карточка:** `pages/dealer-card-foundation.tsx` — merge строки, кнопка «Редактировать», счётчики ТТ/юрлиц.
 - **Торговые точки:** `components/dealer-trade-points-section.tsx` — добавление / редактирование / архив при включённой актуализации и правах.

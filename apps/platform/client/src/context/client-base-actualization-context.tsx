@@ -9,6 +9,7 @@ import {
   loadActualizationState,
   saveActualizationState,
   type ActualizationApiMeta,
+  type ActualizationPersistResult,
   type ActualizationSyncStatus,
 } from "@/lib/client-base-actualization-api";
 import { canActualizeClientBase } from "@/lib/client-base-actualization-permissions";
@@ -25,8 +26,8 @@ export type ClientBaseActualizationContextValue = {
   syncStatus: ActualizationSyncStatus;
   errorMessage?: string;
   refresh: () => Promise<void>;
-  /** Обновить state и отправить на сервер. Возвращает true при успешном сохранении. */
-  persist: (updater: (prev: ActualizationState) => ActualizationState) => Promise<boolean>;
+  /** Обновить state и отправить на сервер. */
+  persist: (updater: (prev: ActualizationState) => ActualizationState) => Promise<ActualizationPersistResult>;
   /** Строки клиентской базы с учётом актуализации (для списков). */
   mergedDealerRows: DealerRow[];
 };
@@ -71,8 +72,8 @@ export function ClientBaseActualizationProvider({ children }: { children: ReactN
   }, [refresh]);
 
   const persist = useCallback(
-    async (updater: (prev: ActualizationState) => ActualizationState): Promise<boolean> => {
-      if (!enabled) return false;
+    async (updater: (prev: ActualizationState) => ActualizationState): Promise<ActualizationPersistResult> => {
+      if (!enabled) return { success: false, syncStatus: "error", storageMode: "not_configured" };
       const next = updater(stateRef.current);
       setState(next);
       const r = await saveActualizationState(profile, next);
@@ -81,10 +82,10 @@ export function ClientBaseActualizationProvider({ children }: { children: ReactN
       setErrorMessage(r.errorMessage);
       if (r.syncStatus === "api_ok" && r.meta.success) {
         setState(r.meta.state);
-        return true;
+        return { success: true, syncStatus: r.syncStatus, storageMode: r.meta.storageMode };
       }
       setState(r.meta.state);
-      return false;
+      return { success: false, syncStatus: r.syncStatus, storageMode: r.meta.storageMode };
     },
     [enabled, profile],
   );
@@ -127,7 +128,7 @@ export function useClientBaseActualization(): ClientBaseActualizationContextValu
       },
       syncStatus: "api_ok",
       refresh: async () => {},
-      persist: async () => false,
+      persist: async () => ({ success: false, syncStatus: "api_ok", storageMode: "not_configured" }),
       mergedDealerRows: [],
     };
   }

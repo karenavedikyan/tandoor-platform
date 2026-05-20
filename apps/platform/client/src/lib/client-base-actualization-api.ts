@@ -26,6 +26,12 @@ export type ActualizationApiMeta = {
 
 export type ActualizationSyncStatus = "api_ok" | "local_fallback" | "error";
 
+export type ActualizationPersistResult = {
+  success: boolean;
+  syncStatus: ActualizationSyncStatus;
+  storageMode: ActualizationStorageMode;
+};
+
 export type ActualizationLoadResult = {
   meta: ActualizationApiMeta;
   syncStatus: ActualizationSyncStatus;

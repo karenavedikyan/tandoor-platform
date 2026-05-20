@@ -1757,6 +1757,7 @@ export default function DealerBase() {
         open={createDealerOpen}
         onOpenChange={setCreateDealerOpen}
         profile={profile}
+        mergedDealerRows={actx.enabled ? actx.mergedDealerRows : DEALER_BASE_ROWS}
         onCreated={(id) => setLocation(`/dealers/${encodeURIComponent(id)}`)}
       />
 

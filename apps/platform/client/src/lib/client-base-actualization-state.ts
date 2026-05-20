@@ -18,6 +18,8 @@ export type DealerActualizationOverride = {
 
 export type ManualDealer = {
   id: string;
+  /** Человекочитаемый код (MA-MANUAL-000001); для старых записей может отсутствовать. */
+  internalCode?: string;
   fields: Record<string, unknown>;
   createdAt: string;
   createdBy: string;
@@ -55,6 +57,15 @@ export type ArchivedTradePointInfo = {
   source: ActualizationSource;
 };
 
+/** Мягкое архивирование вручную созданного клиента (остаётся в manuallyCreatedDealersById). */
+export type ArchivedDealerInfo = {
+  dealerId: string;
+  archivedAt: string;
+  archivedBy: string;
+  archivedByName: string;
+  source: ActualizationSource;
+};
+
 export type LegalEntityActualizationState = {
   createdById: string;
   overridesById: Record<string, unknown>;
@@ -75,6 +86,7 @@ export type ActualizationState = {
   updatedBy: string | null;
   dealerOverridesById: Record<string, DealerActualizationOverride>;
   manuallyCreatedDealersById: Record<string, ManualDealer>;
+  archivedDealersById: Record<string, ArchivedDealerInfo>;
   tradePointOverridesById: Record<string, TradePointActualizationOverride>;
   manuallyCreatedTradePointsById: Record<string, ManualTradePoint>;
   archivedTradePointsById: Record<string, ArchivedTradePointInfo>;
@@ -91,6 +103,7 @@ export function createEmptyActualizationState(): ActualizationState {
     updatedBy: null,
     dealerOverridesById: {},
     manuallyCreatedDealersById: {},
+    archivedDealersById: {},
     tradePointOverridesById: {},
     manuallyCreatedTradePointsById: {},
     archivedTradePointsById: {},
@@ -109,6 +122,7 @@ export function mergeActualizationState(base: ActualizationState, patch: Partial
     version: typeof patch.version === "number" ? patch.version : base.version,
     dealerOverridesById: { ...base.dealerOverridesById, ...(patch.dealerOverridesById ?? {}) },
     manuallyCreatedDealersById: { ...base.manuallyCreatedDealersById, ...(patch.manuallyCreatedDealersById ?? {}) },
+    archivedDealersById: { ...base.archivedDealersById, ...(patch.archivedDealersById ?? {}) },
     tradePointOverridesById: { ...base.tradePointOverridesById, ...(patch.tradePointOverridesById ?? {}) },
     manuallyCreatedTradePointsById: {
       ...base.manuallyCreatedTradePointsById,
