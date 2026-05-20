@@ -144,13 +144,30 @@ export default function CommunicationsPage() {
 
   useEffect(() => {
     if (typeof window === "undefined" || didProcessOAuthReturnRef.current) return;
-    const h = window.location.hash;
-    const q = h.indexOf("?");
-    if (q < 0) return;
-    const sp = new URLSearchParams(h.slice(q + 1));
+
+    // Callback использует route-safe формат `/?bitrix24=...&...#/communications`,
+    // поэтому параметры лежат в `window.location.search`. На случай, если кто-то
+    // ещё в пути с устаревшим форматом `/#/communications?...`, читаем и query из hash.
+    const searchParams = new URLSearchParams(window.location.search);
+    let source: "search" | "hash" | null = searchParams.get("bitrix24") ? "search" : null;
+    let sp = searchParams;
+    if (!source) {
+      const h = window.location.hash;
+      const q = h.indexOf("?");
+      if (q >= 0) {
+        const hp = new URLSearchParams(h.slice(q + 1));
+        if (hp.get("bitrix24")) {
+          sp = hp;
+          source = "hash";
+        }
+      }
+    }
+    if (!source) return;
+
     const flag = sp.get("bitrix24");
     if (flag !== "connected" && flag !== "error") return;
     didProcessOAuthReturnRef.current = true;
+
     if (flag === "connected") {
       toast({ title: "Bitrix24 успешно подключён" });
     } else {
@@ -165,6 +182,13 @@ export default function CommunicationsPage() {
         description,
         variant: "destructive",
       });
+    }
+
+    // Чистим URL: убираем search-параметры/устаревшие hash-параметры, оставляя только `#/communications`.
+    try {
+      window.history.replaceState(null, "", `${window.location.pathname}#/communications`);
+    } catch {
+      /* ignore — навигация ниже всё равно приведёт на нужный маршрут */
     }
     navigate("/communications");
     void loadOAuth();
