@@ -22,6 +22,9 @@ import { getClientCategoryBadgeClass, getClientCategoryLabel } from "@/lib/clien
 import {
   DEALER_BASE_ROWS,
   getDealerById,
+  getDealerManagerDisplay,
+  getDealerRegionalManagerDisplay,
+  getDealerRopDisplay,
   type DealerRow,
   type DealerStatus,
 } from "@/lib/dealer-base-mock-data";
@@ -882,12 +885,9 @@ function DealerCardContent({ row }: { row: DealerRow }) {
     return "";
   }, [mergedProfView.city, row.city]);
 
-  const regionalManagerDisplay = useMemo(() => {
-    const fromResp = row.responsibles?.regionalManager?.trim();
-    if (isFilledDataCell(fromResp)) return fromResp!.trim();
-    if (isFilledDataCell(row.regionalManager)) return row.regionalManager.trim();
-    return "";
-  }, [row.responsibles?.regionalManager, row.regionalManager]);
+  const quickManagerDisplay = useMemo(() => getDealerManagerDisplay(row), [row]);
+  const regionalManagerDisplay = useMemo(() => getDealerRegionalManagerDisplay(row), [row]);
+  const ropDisplay = useMemo(() => getDealerRopDisplay(row), [row]);
 
   const unloadingOrderValue = useMemo(() => getDealerUnloadingOrder(row.id), [row.id, unloadBump]);
 
@@ -1153,18 +1153,29 @@ function DealerCardContent({ row }: { row: DealerRow }) {
                         </p>
                       </div>
                     )}
-                    {isFilledDataCell(row.manager) ? (
-                      <div className="min-w-0">
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Менеджер</p>
-                        <p className="mt-0.5 break-words text-sm font-medium text-foreground" data-testid="text-dealer-quick-info-manager">
-                          {row.manager.trim()}
-                        </p>
-                      </div>
-                    ) : null}
                     <div className="min-w-0">
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Региональный менеджер</p>
-                      <p className="mt-0.5 break-words text-sm font-medium text-foreground" data-testid="text-dealer-quick-info-regional-manager">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Ответственный менеджер
+                      </p>
+                      <p className="mt-0.5 break-words text-sm font-medium text-foreground" data-testid="text-dealer-quick-info-manager">
+                        {quickManagerDisplay ? quickManagerDisplay : "Не назначен"}
+                      </p>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Ответственный региональный менеджер
+                      </p>
+                      <p
+                        className="mt-0.5 break-words text-sm font-medium text-foreground"
+                        data-testid="text-dealer-quick-info-regional-manager"
+                      >
                         {regionalManagerDisplay ? regionalManagerDisplay : "Не назначен"}
+                      </p>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Ответственный РОП</p>
+                      <p className="mt-0.5 break-words text-sm font-medium text-foreground" data-testid="text-dealer-quick-info-rop">
+                        {ropDisplay ? ropDisplay : "Не назначен"}
                       </p>
                     </div>
                     <div className="min-w-0">

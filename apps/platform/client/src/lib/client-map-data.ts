@@ -1,4 +1,4 @@
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
+import { getDealerRopDisplay, type DealerRow } from "@/lib/dealer-base-mock-data";
 import { isClientTopTier } from "@/lib/client-category";
 import { dealerNeedsAttention, isDealerTop } from "@/lib/dealer-base-role-views";
 import type { getManagersForRopTeam } from "@/lib/rop-manager-filters";
@@ -73,6 +73,7 @@ export function filterClientMapRows(rows: DealerRow[], args: ClientMapPickerArgs
       row.city,
       row.manager,
       row.regionalManager,
+      getDealerRopDisplay(row),
       row.releaseCode ?? "",
       row.releaseAddress ?? "",
       row.clientTypeLabel ?? "",

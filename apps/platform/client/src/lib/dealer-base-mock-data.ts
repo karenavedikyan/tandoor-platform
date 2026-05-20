@@ -163,7 +163,10 @@ export type DealerRow = {
   format: DealerFormat;
   outlets: number;
   manager: string;
+  /** Региональный менеджер (отдельно от РОП); в Release 1 из Excel пока нет — оставлять пустым. */
   regionalManager: string;
+  /** РОП / руководитель команды (из `ropName` в данных Release 1). */
+  ropName: string;
   /** Команда (РОП) из Release 1 — для фильтров. */
   releaseTeamId?: string;
   /** Менеджер (id из sales-control) из Release 1 — для фильтров. */
@@ -189,6 +192,32 @@ export type DealerRow = {
   issues: DealerIssueDetail;
 } & ProductTrainingFields & IndigoTrainingFields;
 
+function isFilledResponsiblePersonName(v: string | undefined | null): boolean {
+  const t = (v ?? "").trim();
+  return t !== "" && t !== "—" && t !== "-";
+}
+
+/** Ответственный менеджер для карточки / списков (без плейсхолдеров «—»). */
+export function getDealerManagerDisplay(row: DealerRow): string {
+  if (isFilledResponsiblePersonName(row.manager)) return row.manager.trim();
+  if (isFilledResponsiblePersonName(row.responsibles?.salesManager)) return row.responsibles.salesManager.trim();
+  return "";
+}
+
+/** Региональный менеджер; не подставляет РОП. */
+export function getDealerRegionalManagerDisplay(row: DealerRow): string {
+  if (isFilledResponsiblePersonName(row.responsibles?.regionalManager)) return row.responsibles.regionalManager.trim();
+  if (isFilledResponsiblePersonName(row.regionalManager)) return row.regionalManager.trim();
+  return "";
+}
+
+/** РОП / руководитель команды. */
+export function getDealerRopDisplay(row: DealerRow): string {
+  if (isFilledResponsiblePersonName(row.ropName)) return row.ropName.trim();
+  if (isFilledResponsiblePersonName(row.responsibles?.director)) return row.responsibles.director.trim();
+  return "";
+}
+
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -202,7 +231,7 @@ function mapReleaseStatus(c: ReleaseClient): DealerStatus {
 
 function buildTradePointsFromReleaseClient(
   c: ReleaseClient,
-  rop: string,
+  regionalManagerForTradePoint: string,
   city: string,
   addr: string,
   clientCategory: ClientCategoryId,
@@ -225,7 +254,7 @@ function buildTradePointsFromReleaseClient(
     showcaseNeeds: "",
     lastVisitDate: "—",
     nextVisitDate: "—",
-    responsibleRegionalManager: rop,
+    responsibleRegionalManager: regionalManagerForTradePoint,
     issues: "Детальная аналитика точки — в следующих релизах.",
     tasks: [],
     activityHistory: [],
@@ -262,7 +291,7 @@ function mapReleaseClientToDealerRow(c: ReleaseClient): DealerRow {
   const mkPct = 55;
   const vhPct = 52;
   const totalPct = 54;
-  const tradePoints = buildTradePointsFromReleaseClient(c, rop, city, addr, clientCategory, mkPct, vhPct, totalPct);
+  const tradePoints = buildTradePointsFromReleaseClient(c, "—", city, addr, clientCategory, mkPct, vhPct, totalPct);
   const hasProblem = c.normalizedClientType === "nonTarget" || c.isClosed;
   const outlets = tradePoints.length;
   const format: DealerFormat = outlets > 1 ? "сетевой" : "одиночный";
@@ -280,7 +309,8 @@ function mapReleaseClientToDealerRow(c: ReleaseClient): DealerRow {
     format,
     outlets,
     manager: mgr,
-    regionalManager: rop,
+    regionalManager: "",
+    ropName: rop === "—" ? "" : rop,
     releaseTeamId: c.teamId,
     releaseManagerId: c.managerId,
     lastActivity: "—",
@@ -294,9 +324,9 @@ function mapReleaseClientToDealerRow(c: ReleaseClient): DealerRow {
     holding: "—",
     tradePoints,
     responsibles: {
-      director: "—",
+      director: rop === "—" ? "—" : rop,
       salesManager: mgr,
-      regionalManager: rop,
+      regionalManager: "",
       assistant: "—",
     },
     contacts: {

@@ -3,7 +3,7 @@
  */
 
 import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
-import { getDealerById, normalizeTradePointId } from "@/lib/dealer-base-mock-data";
+import { getDealerById, getDealerRegionalManagerDisplay, normalizeTradePointId } from "@/lib/dealer-base-mock-data";
 import { canEditClientNextStep } from "@/lib/client-next-step-data";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
@@ -147,7 +147,7 @@ function actorFromProfile(profile: ReleaseDemoProfile): { id: string; name: stri
 }
 
 function defaultTradePointFromManual(m: ManualTradePointRecord, dealer: DealerRow): DealerTradePoint {
-  const rop = dealer.regionalManager?.trim() && dealer.regionalManager !== "—" ? dealer.regionalManager : "—";
+  const rm = getDealerRegionalManagerDisplay(dealer) || "—";
   return {
     id: m.id,
     name: m.name,
@@ -163,7 +163,7 @@ function defaultTradePointFromManual(m: ManualTradePointRecord, dealer: DealerRo
     showcaseNeeds: "",
     lastVisitDate: "—",
     nextVisitDate: "—",
-    responsibleRegionalManager: rop,
+    responsibleRegionalManager: rm,
     issues: m.comment?.trim() || "",
     tasks: [],
     activityHistory: [],
@@ -256,7 +256,7 @@ export function buildVirtualDefaultTradePoint(dealer: DealerRow): DealerTradePoi
   const city = isFilledStr(dealer.city) ? dealer.city.trim() : "—";
   const address = isFilledStr(dealer.releaseAddress) ? dealer.releaseAddress!.trim() : "Адрес не указан";
   const phone = isFilledStr(dealer.contacts?.phone) ? dealer.contacts.phone.trim() : undefined;
-  const rop = isFilledStr(dealer.regionalManager) ? dealer.regionalManager.trim() : "—";
+  const rm = getDealerRegionalManagerDisplay(dealer) || "—";
   return {
     id: virtualDefaultTradePointId(dealer.id),
     name: "Основная торговая точка",
@@ -272,7 +272,7 @@ export function buildVirtualDefaultTradePoint(dealer: DealerRow): DealerTradePoi
     showcaseNeeds: "",
     lastVisitDate: "—",
     nextVisitDate: "—",
-    responsibleRegionalManager: rop,
+    responsibleRegionalManager: rm,
     issues: "",
     tasks: [],
     activityHistory: [],
