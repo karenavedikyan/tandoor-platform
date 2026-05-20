@@ -154,7 +154,7 @@ import {
   resolveDealerRowForCard,
 } from "@/lib/client-base-actualization-data-merge";
 import { isManualActualizationDealerId } from "@/lib/client-base-actualization-stable-ids";
-import { canActualizeClientBase, canArchiveDealer, canEditDealerDuringActualization } from "@/lib/client-base-actualization-permissions";
+import { canActualizeClientBase, canArchiveDealerDuringActualization, canEditDealerDuringActualization } from "@/lib/client-base-actualization-permissions";
 import { mergeActualizationState } from "@/lib/client-base-actualization-state";
 import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actualization-sync-status";
 import { DealerActualizationEditDialog } from "@/components/client-base-actualization-dealer-forms";
@@ -848,7 +848,9 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
   );
 
   const isManualDealerRow = isManualActualizationDealerId(baseRow.id);
-  const canSoftArchiveDealer = actx.enabled && canArchiveDealer(profile, row);
+  const canArchiveManualDealer =
+    actx.enabled && isManualDealerRow && canArchiveDealerDuringActualization(profile, row);
+  const canSoftArchiveDealer = actx.enabled && canArchiveDealerDuringActualization(profile, row);
 
   const softArchiveDealer = useCallback(async () => {
     if (!canSoftArchiveDealer) return;
@@ -1238,6 +1240,31 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                     ) : null}
                   </div>
                   <h1 className="text-lg font-semibold tracking-tight text-foreground sm:text-xl">{rowView.name}</h1>
+
+                  {canArchiveManualDealer ? (
+                    <div
+                      className="rounded-xl border-2 border-destructive/40 bg-destructive/5 p-3 sm:p-4"
+                      data-testid="banner-dealer-manual-archive"
+                    >
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-sm leading-snug text-foreground">
+                          Клиент создан вручную. При ошибке заведения перенесите запись в архив — она исчезнет из общей
+                          клиентской базы.
+                        </p>
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          className="min-h-10 w-full shrink-0 font-semibold sm:w-auto"
+                          data-testid={`button-dealer-delete-${baseRow.id}`}
+                          disabled={dealerArchiveBusy}
+                          onClick={() => void softArchiveDealer()}
+                        >
+                          {dealerArchiveBusy ? "Сохранение…" : "Архивировать клиента"}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
 
                   <div
                     data-testid="section-dealer-quick-info"
@@ -2331,7 +2358,7 @@ function DealerArchivedGate({ dealerId, profile }: { dealerId: string; profile: 
   if (!row) return <DealerNotFound />;
 
   const isManual = isManualActualizationDealerId(dealerId);
-  const canRestore = actx.enabled && canArchiveDealer(profile, row);
+  const canRestore = actx.enabled && canArchiveDealerDuringActualization(profile, row);
 
   const onRestore = async () => {
     if (!canRestore) return;
