@@ -53,10 +53,13 @@ export async function bitrix24OauthVercelHandler(req: VercelRequest, res: Vercel
       const out = await runBitrix24OAuthCallback({
         query: (req.query ?? {}) as Record<string, unknown>,
         cookieHeader: cookieHeader(req),
+        prefersBrowserRedirect: true,
       });
       applySetCookies(res, out.setCookies);
       if (out.kind === "redirect") {
-        res.redirect(302, out.location);
+        res.setHeader("Location", out.location);
+        res.statusCode = 302;
+        res.end();
         return;
       }
       res.setHeader("Content-Type", JSON_CT);

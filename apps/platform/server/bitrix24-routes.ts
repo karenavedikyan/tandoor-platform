@@ -69,6 +69,7 @@ export function registerBitrix24Routes(app: Express): void {
       const out = await runBitrix24OAuthCallback({
         query: req.query as Record<string, unknown>,
         cookieHeader: req.headers.cookie,
+        prefersBrowserRedirect: true,
       });
       applySetCookies(res, out.setCookies);
       if (out.kind === "redirect") {
