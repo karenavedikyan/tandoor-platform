@@ -75,7 +75,7 @@ export function DealerStaticProfileSection({ row, categoryLabel: _categoryLabel 
   const extraFields = useMemo(
     () =>
       [
-        { label: "Код", value: row.releaseCode ?? "" },
+        { label: "Код клиента", value: row.releaseCode ?? "" },
         { label: "Внутренний id", value: row.id },
         { label: "Тип в данных", value: row.clientTypeLabel ?? "" },
         { label: "Формат", value: row.format },

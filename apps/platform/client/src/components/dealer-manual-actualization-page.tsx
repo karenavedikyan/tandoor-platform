@@ -64,6 +64,8 @@ import { DealerClientNextStepSection } from "@/components/dealer-client-next-ste
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
 import { toast } from "@/hooks/use-toast";
+import { useSectionSaveFeedback } from "@/hooks/use-section-save-feedback";
+import { SectionSaveButton } from "@/components/section-save-button";
 import { Bitrix24TasksPanel } from "@/components/bitrix24-tasks-panel";
 import { DealerTradePointsSection } from "@/components/dealer-trade-points-section";
 import { canEditClientNextStep } from "@/lib/client-next-step-data";
@@ -242,7 +244,12 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
       <Card className="rounded-2xl border border-border/80">
         <CardHeader className="pb-2">
           <CardTitle className="text-lg">{row.name}</CardTitle>
-          <p className="text-xs text-muted-foreground">Код: {row.releaseCode ?? "—"}</p>
+          <p className="text-xs text-muted-foreground">
+            Код клиента:{" "}
+            <span className="font-mono font-medium text-foreground" data-testid="text-dealer-internal-code">
+              {row.releaseCode ?? "—"}
+            </span>
+          </p>
         </CardHeader>
         <CardContent className="space-y-2 border-t border-border/60 pt-3 text-sm">
           <p className="text-muted-foreground">
@@ -383,6 +390,7 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
                 canCreate={canEditClientNextStep(profile, row)}
                 actorUserId={user?.id ?? profile.personaUserId}
                 actorLabel={user?.name ?? userLabelFromProfile(profile)}
+                compact
               />
             </div>
           </AccordionContent>
@@ -440,7 +448,7 @@ function DealerContactsActualizationBlock(props: {
   const [email, setEmail] = useState("");
   const [messenger, setMessenger] = useState("");
   const [comment, setComment] = useState("");
-  const [saving, setSaving] = useState(false);
+  const contactDialogSave = useSectionSaveFeedback();
 
   const contacts = useMemo(() => {
     void tick;
@@ -455,6 +463,7 @@ function DealerContactsActualizationBlock(props: {
     setEmail("");
     setMessenger("");
     setComment("");
+    contactDialogSave.markDirty();
     setDialogOpen(true);
   };
 
@@ -466,24 +475,24 @@ function DealerContactsActualizationBlock(props: {
     setEmail(c.email);
     setMessenger(c.messenger);
     setComment(c.comment);
+    contactDialogSave.markDirty();
     setDialogOpen(true);
   };
 
-  const persistContacts = async (updater: (prev: ActualizationState) => ActualizationState) => {
-    setSaving(true);
+  const persistContacts = async (updater: (prev: ActualizationState) => ActualizationState): Promise<boolean> => {
     const r = await actx.persist(updater);
-    setSaving(false);
     if (r.success) {
-      toast({ title: "Сохранено" });
-      setDialogOpen(false);
       setTick((n) => n + 1);
-    } else toast({ title: "Не удалось сохранить", variant: "destructive" });
+      return true;
+    }
+    toast({ title: "Не удалось сохранить", variant: "destructive" });
+    return false;
   };
 
   const onSave = async () => {
     if (!fullName.trim()) {
       toast({ title: "Укажите ФИО контакта", variant: "destructive" });
-      return;
+      return false;
     }
     const iso = new Date().toISOString();
     const uid = profile.personaUserId;
@@ -492,7 +501,7 @@ function DealerContactsActualizationBlock(props: {
     const wasPrimary = editing?.isPrimary ?? false;
     const makePrimary = !editing || contacts.length === 0 ? true : wasPrimary;
 
-    await persistContacts((prev) => {
+    return persistContacts((prev) => {
       let nextContacts = { ...prev.dealerActualizationContactsById };
       const list = listActiveActualizationContactsForDealer(prev, dealerId);
       const nextRec: DealerActualizationContact = {
@@ -523,7 +532,7 @@ function DealerContactsActualizationBlock(props: {
   };
 
   const onSetPrimary = async (c: DealerActualizationContact) => {
-    await persistContacts((prev) => {
+    const ok = await persistContacts((prev) => {
       let next = { ...prev.dealerActualizationContactsById };
       const list = listActiveActualizationContactsForDealer(prev, dealerId);
       const iso = new Date().toISOString();
@@ -534,10 +543,11 @@ function DealerContactsActualizationBlock(props: {
       }
       return mergeActualizationState(prev, { dealerActualizationContactsById: next });
     });
+    if (ok) toast({ title: "Сохранено" });
   };
 
   const onArchive = async (c: DealerActualizationContact) => {
-    await persistContacts((prev) => {
+    const ok = await persistContacts((prev) => {
       const info = {
         contactId: c.id,
         dealerId,
@@ -558,6 +568,7 @@ function DealerContactsActualizationBlock(props: {
         archivedDealerContactsById: { ...prev.archivedDealerContactsById, [c.id]: info },
       });
     });
+    if (ok) toast({ title: "Сохранено" });
   };
 
   return (
@@ -617,11 +628,24 @@ function DealerContactsActualizationBlock(props: {
           <div className="grid gap-2 py-2">
             <div className="space-y-1">
               <Label className="text-xs">ФИО</Label>
-              <Input className="min-h-10" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+              <Input
+                className="min-h-10"
+                value={fullName}
+                onChange={(e) => {
+                  setFullName(e.target.value);
+                  contactDialogSave.markDirty();
+                }}
+              />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Роль</Label>
-              <Select value={role} onValueChange={setRole}>
+              <Select
+                value={role}
+                onValueChange={(v) => {
+                  setRole(v);
+                  contactDialogSave.markDirty();
+                }}
+              >
                 <SelectTrigger className="min-h-10">
                   <SelectValue />
                 </SelectTrigger>
@@ -638,28 +662,66 @@ function DealerContactsActualizationBlock(props: {
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Телефон</Label>
-              <Input className="min-h-10" value={phone} onChange={(e) => setPhone(e.target.value)} />
+              <Input
+                className="min-h-10"
+                value={phone}
+                onChange={(e) => {
+                  setPhone(e.target.value);
+                  contactDialogSave.markDirty();
+                }}
+              />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Email</Label>
-              <Input className="min-h-10" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <Input
+                className="min-h-10"
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  contactDialogSave.markDirty();
+                }}
+              />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Мессенджер</Label>
-              <Input className="min-h-10" value={messenger} onChange={(e) => setMessenger(e.target.value)} />
+              <Input
+                className="min-h-10"
+                value={messenger}
+                onChange={(e) => {
+                  setMessenger(e.target.value);
+                  contactDialogSave.markDirty();
+                }}
+              />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Комментарий</Label>
-              <Textarea rows={2} value={comment} onChange={(e) => setComment(e.target.value)} />
+              <Textarea
+                rows={2}
+                value={comment}
+                onChange={(e) => {
+                  setComment(e.target.value);
+                  contactDialogSave.markDirty();
+                }}
+              />
             </div>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
               Отмена
             </Button>
-            <Button type="button" disabled={saving} onClick={() => void onSave()}>
-              Сохранить
-            </Button>
+            <SectionSaveButton
+              testId="button-dealer-section-save-contacts"
+              statusTestId="text-save-status-contacts-dialog"
+              phase={contactDialogSave.phase}
+              disabled={contactDialogSave.phase === "saving"}
+              onSave={() =>
+                void contactDialogSave.runSave(async () => {
+                  const ok = await onSave();
+                  if (ok) setDialogOpen(false);
+                  return ok;
+                })
+              }
+            />
           </DialogFooter>
         </DialogContent>
       </Dialog>

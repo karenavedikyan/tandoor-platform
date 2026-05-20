@@ -18,7 +18,7 @@ export type DealerActualizationOverride = {
 
 export type ManualDealer = {
   id: string;
-  /** Человекочитаемый код (MA-MANUAL-000001); для старых записей может отсутствовать. */
+  /** Человекочитаемый код TND-CL-000001 (в UI); legacy: MA-MANUAL-*. */
   internalCode?: string;
   fields: Record<string, unknown>;
   createdAt: string;
@@ -40,6 +40,8 @@ export type TradePointActualizationOverride = {
 export type ManualTradePoint = {
   id: string;
   dealerId: string;
+  /** Человекочитаемый код TND-TP-000001; для старых записей может отсутствовать. */
+  internalCode?: string;
   fields: Record<string, unknown>;
   createdAt: string;
   createdBy: string;

@@ -117,6 +117,8 @@ export type DealerTradePoint = {
   city: string;
   address: string;
   format: string;
+  /** Человекочитаемый код ТТ (например TND-TP-000001) после актуализации. */
+  releaseCode?: string;
   /** Статус торговой точки */
   status: string;
   equipment: string;

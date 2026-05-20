@@ -25,8 +25,11 @@ import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import { mergeActualizationState, type TradePointShowcaseActualization } from "@/lib/client-base-actualization-state";
 import { computePortalSummary } from "@/lib/client-base-actualization-portal-math";
 import { canEditDealerDuringActualization } from "@/lib/client-base-actualization-permissions";
+import { nextManualTradePointInternalCode, isManualActualizationTradePointId } from "@/lib/client-base-actualization-stable-ids";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
 import { toast } from "@/hooks/use-toast";
+import { useSectionSaveFeedback } from "@/hooks/use-section-save-feedback";
+import { SectionSaveButton } from "@/components/section-save-button";
 import { Bitrix24TasksPanel } from "@/components/bitrix24-tasks-panel";
 import { canEditClientNextStep } from "@/lib/client-next-step-data";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -113,7 +116,8 @@ export function TradePointManualActualizationView(props: {
   const [firstNeed, setFirstNeed] = useState(showcaseRec?.firstPriorityNeed ?? "");
   const [rmComment, setRmComment] = useState(showcaseRec?.rmRopComment ?? "");
 
-  const [saving, setSaving] = useState(false);
+  const mainSave = useSectionSaveFeedback();
+  const showcaseSave = useSectionSaveFeedback();
 
   useEffect(() => {
     const mf = (manualRec?.fields ?? {}) as Record<string, unknown>;
@@ -177,9 +181,8 @@ export function TradePointManualActualizationView(props: {
     tInt,
   ]);
 
-  const onSaveAll = useCallback(async () => {
-    if (!canEdit) return;
-    setSaving(true);
+  const persistMain = useCallback(async (): Promise<boolean> => {
+    if (!canEdit) return false;
     const iso = new Date().toISOString();
     const uid = profile.personaUserId;
     const uname = userLabelFromProfile(profile);
@@ -215,10 +218,47 @@ export function TradePointManualActualizationView(props: {
         contactPhone: contactPhone.trim(),
         comment: tpComment.trim(),
       };
-      const nextManual = {
+      let nextManual: typeof rec = {
         ...rec,
         fields: nextFields,
       };
+      const ic = (nextManual.internalCode ?? "").trim();
+      if (isManualActualizationTradePointId(point.id) && !/^TND-TP-\d{6}$/i.test(ic)) {
+        nextManual = { ...nextManual, internalCode: nextManualTradePointInternalCode(prev) };
+      }
+      return mergeActualizationState(prev, {
+        manuallyCreatedTradePointsById: { ...prev.manuallyCreatedTradePointsById, [point.id]: nextManual },
+      });
+    });
+    if (!r.success) {
+      toast({ title: "Ошибка сохранения", variant: "destructive" });
+      return false;
+    }
+    return true;
+  }, [
+    actx,
+    canEdit,
+    dealer.id,
+    point.id,
+    name,
+    city,
+    address,
+    formatKind,
+    tpStatus,
+    contactName,
+    contactPhone,
+    tpComment,
+    profile.personaUserId,
+  ]);
+
+  const persistShowcase = useCallback(async (): Promise<boolean> => {
+    if (!canEdit) return false;
+    const iso = new Date().toISOString();
+    const uid = profile.personaUserId;
+    const uname = userLabelFromProfile(profile);
+    const r = await actx.persist((prev) => {
+      const rec = prev.manuallyCreatedTradePointsById[point.id];
+      if (!rec) return prev;
       const sh: TradePointShowcaseActualization = {
         tradePointId: point.id,
         dealerId: dealer.id,
@@ -244,26 +284,19 @@ export function TradePointManualActualizationView(props: {
         updatedByName: uname,
       };
       return mergeActualizationState(prev, {
-        manuallyCreatedTradePointsById: { ...prev.manuallyCreatedTradePointsById, [point.id]: nextManual },
         tradePointShowcaseActualizationById: { ...prev.tradePointShowcaseActualizationById, [point.id]: sh },
       });
     });
-    setSaving(false);
-    if (r.success) toast({ title: "Сохранено" });
-    else toast({ title: "Ошибка сохранения", variant: "destructive" });
+    if (!r.success) {
+      toast({ title: "Ошибка сохранения", variant: "destructive" });
+      return false;
+    }
+    return true;
   }, [
     actx,
     canEdit,
     dealer.id,
     point.id,
-    name,
-    city,
-    address,
-    formatKind,
-    tpStatus,
-    contactName,
-    contactPhone,
-    tpComment,
     hasShowcase,
     totalPortals,
     entrancePortals,
@@ -303,6 +336,9 @@ export function TradePointManualActualizationView(props: {
         <CardHeader>
           <CardTitle className="text-lg">{point.name}</CardTitle>
           <p className="text-xs text-muted-foreground">Клиент: {dealer.name}</p>
+          <p className="text-xs text-muted-foreground" data-testid={`text-trade-point-internal-code-${point.id}`}>
+            Код ТТ: {point.releaseCode ?? "—"}
+          </p>
         </CardHeader>
       </Card>
 
@@ -312,11 +348,11 @@ export function TradePointManualActualizationView(props: {
           <AccordionContent className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1 sm:col-span-2">
               <Label className="text-xs">Название</Label>
-              <Input className="min-h-10" value={name} onChange={(e) => setName(e.target.value)} disabled={!canEdit} />
+              <Input className="min-h-10" value={name} onChange={(e) => { setName(e.target.value); mainSave.markDirty(); }} disabled={!canEdit} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Формат</Label>
-              <Select value={formatKind} onValueChange={setFormatKind} disabled={!canEdit}>
+              <Select value={formatKind} onValueChange={(v) => { setFormatKind(v); mainSave.markDirty(); }} disabled={!canEdit}>
                 <SelectTrigger className="min-h-10">
                   <SelectValue />
                 </SelectTrigger>
@@ -331,7 +367,7 @@ export function TradePointManualActualizationView(props: {
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Статус</Label>
-              <Select value={tpStatus} onValueChange={setTpStatus} disabled={!canEdit}>
+              <Select value={tpStatus} onValueChange={(v) => { setTpStatus(v); mainSave.markDirty(); }} disabled={!canEdit}>
                 <SelectTrigger className="min-h-10">
                   <SelectValue />
                 </SelectTrigger>
@@ -345,24 +381,34 @@ export function TradePointManualActualizationView(props: {
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Город</Label>
-              <Input className="min-h-10" value={city} onChange={(e) => setCity(e.target.value)} disabled={!canEdit} />
+              <Input className="min-h-10" value={city} onChange={(e) => { setCity(e.target.value); mainSave.markDirty(); }} disabled={!canEdit} />
             </div>
             <div className="space-y-1 sm:col-span-2">
               <Label className="text-xs">Адрес</Label>
-              <Textarea rows={2} value={address} onChange={(e) => setAddress(e.target.value)} disabled={!canEdit} />
+              <Textarea rows={2} value={address} onChange={(e) => { setAddress(e.target.value); mainSave.markDirty(); }} disabled={!canEdit} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Контакт точки</Label>
-              <Input className="min-h-10" value={contactName} onChange={(e) => setContactName(e.target.value)} disabled={!canEdit} />
+              <Input className="min-h-10" value={contactName} onChange={(e) => { setContactName(e.target.value); mainSave.markDirty(); }} disabled={!canEdit} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Телефон точки</Label>
-              <Input className="min-h-10" value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} disabled={!canEdit} />
+              <Input className="min-h-10" value={contactPhone} onChange={(e) => { setContactPhone(e.target.value); mainSave.markDirty(); }} disabled={!canEdit} />
             </div>
             <div className="space-y-1 sm:col-span-2">
               <Label className="text-xs">Комментарий</Label>
-              <Textarea rows={2} value={tpComment} onChange={(e) => setTpComment(e.target.value)} disabled={!canEdit} />
+              <Textarea rows={2} value={tpComment} onChange={(e) => { setTpComment(e.target.value); mainSave.markDirty(); }} disabled={!canEdit} />
             </div>
+            {canEdit ? (
+              <div className="sm:col-span-2">
+                <SectionSaveButton
+                  testId="button-trade-point-section-save-main"
+                  statusTestId="text-save-status-trade-point-main-view"
+                  phase={mainSave.phase}
+                  onSave={() => void mainSave.runSave(persistMain)}
+                />
+              </div>
+            ) : null}
           </AccordionContent>
         </AccordionItem>
 
@@ -397,17 +443,17 @@ export function TradePointManualActualizationView(props: {
             {canEdit ? (
               <div className="flex flex-wrap gap-2">
                 {hasShowcase !== true ? (
-                  <Button type="button" size="sm" variant="default" onClick={() => setHasShowcase(true)}>
+                  <Button type="button" size="sm" variant="default" onClick={() => { setHasShowcase(true); showcaseSave.markDirty(); }}>
                     Заполнить витрину
                   </Button>
                 ) : null}
                 {hasShowcase !== false ? (
-                  <Button type="button" size="sm" variant="outline" onClick={() => setHasShowcase(false)}>
+                  <Button type="button" size="sm" variant="outline" onClick={() => { setHasShowcase(false); showcaseSave.markDirty(); }}>
                     Нет витрины / порталов
                   </Button>
                 ) : null}
                 {hasShowcase != null ? (
-                  <Button type="button" size="sm" variant="ghost" onClick={() => setHasShowcase(null)}>
+                  <Button type="button" size="sm" variant="ghost" onClick={() => { setHasShowcase(null); showcaseSave.markDirty(); }}>
                     Сбросить выбор
                   </Button>
                 ) : null}
@@ -422,7 +468,10 @@ export function TradePointManualActualizationView(props: {
                         inputMode="numeric"
                         data-testid="input-trade-point-total-portals"
                         value={totalPortals}
-                        onChange={(e) => setTotalPortals(e.target.value)}
+                        onChange={(e) => {
+                          setTotalPortals(e.target.value);
+                          showcaseSave.markDirty();
+                        }}
                         disabled={!canEdit}
                       />
                     </div>
@@ -433,7 +482,10 @@ export function TradePointManualActualizationView(props: {
                         inputMode="decimal"
                         data-testid="input-trade-point-showcase-area"
                         value={area}
-                        onChange={(e) => setArea(e.target.value)}
+                        onChange={(e) => {
+                          setArea(e.target.value);
+                          showcaseSave.markDirty();
+                        }}
                         disabled={!canEdit}
                       />
                     </div>
@@ -444,7 +496,10 @@ export function TradePointManualActualizationView(props: {
                         inputMode="numeric"
                         data-testid="input-trade-point-entrance-portals"
                         value={entrancePortals}
-                        onChange={(e) => setEntrancePortals(e.target.value)}
+                        onChange={(e) => {
+                          setEntrancePortals(e.target.value);
+                          showcaseSave.markDirty();
+                        }}
                         disabled={!canEdit}
                       />
                     </div>
@@ -455,13 +510,16 @@ export function TradePointManualActualizationView(props: {
                         inputMode="numeric"
                         data-testid="input-trade-point-interior-portals"
                         value={interiorPortals}
-                        onChange={(e) => setInteriorPortals(e.target.value)}
+                        onChange={(e) => {
+                          setInteriorPortals(e.target.value);
+                          showcaseSave.markDirty();
+                        }}
                         disabled={!canEdit}
                       />
                     </div>
                     <div className="space-y-1 sm:col-span-2">
                       <Label className="text-xs">Комментарий по витрине</Label>
-                      <Textarea rows={2} value={showcaseComment} onChange={(e) => setShowcaseComment(e.target.value)} disabled={!canEdit} />
+                      <Textarea rows={2} value={showcaseComment} onChange={(e) => { setShowcaseComment(e.target.value); showcaseSave.markDirty(); }} disabled={!canEdit} />
                     </div>
 
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:col-span-2">Текущее заполнение</p>
@@ -472,7 +530,10 @@ export function TradePointManualActualizationView(props: {
                         inputMode="numeric"
                         data-testid="input-trade-point-tandoor-total-portals"
                         value={tTotal}
-                        onChange={(e) => setTTotal(e.target.value)}
+                        onChange={(e) => {
+                          setTTotal(e.target.value);
+                          showcaseSave.markDirty();
+                        }}
                         disabled={!canEdit}
                       />
                     </div>
@@ -483,7 +544,10 @@ export function TradePointManualActualizationView(props: {
                         inputMode="numeric"
                         data-testid="input-trade-point-tandoor-entrance-portals"
                         value={tEnt}
-                        onChange={(e) => setTEnt(e.target.value)}
+                        onChange={(e) => {
+                          setTEnt(e.target.value);
+                          showcaseSave.markDirty();
+                        }}
                         disabled={!canEdit}
                       />
                     </div>
@@ -494,37 +558,40 @@ export function TradePointManualActualizationView(props: {
                         inputMode="numeric"
                         data-testid="input-trade-point-tandoor-interior-portals"
                         value={tInt}
-                        onChange={(e) => setTInt(e.target.value)}
+                        onChange={(e) => {
+                          setTInt(e.target.value);
+                          showcaseSave.markDirty();
+                        }}
                         disabled={!canEdit}
                       />
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs">Занято конкурентами (порталов)</Label>
-                      <Input className="min-h-10" inputMode="numeric" value={compPortals} onChange={(e) => setCompPortals(e.target.value)} disabled={!canEdit} />
+                      <Input className="min-h-10" inputMode="numeric" value={compPortals} onChange={(e) => { setCompPortals(e.target.value); showcaseSave.markDirty(); }} disabled={!canEdit} />
                     </div>
                     <div className="space-y-1 sm:col-span-2">
                       <Label className="text-xs">Какие конкуренты</Label>
-                      <Textarea rows={2} value={competitorsListed} onChange={(e) => setCompetitorsListed(e.target.value)} disabled={!canEdit} />
+                      <Textarea rows={2} value={competitorsListed} onChange={(e) => { setCompetitorsListed(e.target.value); showcaseSave.markDirty(); }} disabled={!canEdit} />
                     </div>
                     <div className="space-y-1 sm:col-span-2">
                       <Label className="text-xs">Что стоит сейчас</Label>
-                      <Textarea rows={2} value={fillingComment} onChange={(e) => setFillingComment(e.target.value)} disabled={!canEdit} />
+                      <Textarea rows={2} value={fillingComment} onChange={(e) => { setFillingComment(e.target.value); showcaseSave.markDirty(); }} disabled={!canEdit} />
                     </div>
 
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:col-span-2">Потенциал</p>
                     <div className="flex items-center gap-2 sm:col-span-2">
-                      <Checkbox id="exp-pot" checked={expPot === true} disabled={!canEdit} onCheckedChange={(v) => setExpPot(v === true ? true : v === false ? false : null)} />
+                      <Checkbox id="exp-pot" checked={expPot === true} disabled={!canEdit} onCheckedChange={(v) => { setExpPot(v === true ? true : v === false ? false : null); showcaseSave.markDirty(); }} />
                       <Label htmlFor="exp-pot" className="text-sm">
                         Есть потенциал расширения
                       </Label>
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs">Доп. порталов можно занять</Label>
-                      <Input className="min-h-10" inputMode="numeric" value={addPortals} onChange={(e) => setAddPortals(e.target.value)} disabled={!canEdit} />
+                      <Input className="min-h-10" inputMode="numeric" value={addPortals} onChange={(e) => { setAddPortals(e.target.value); showcaseSave.markDirty(); }} disabled={!canEdit} />
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs">Приоритет витрины</Label>
-                      <Select value={priority || "__none__"} onValueChange={(v) => setPriority(v === "__none__" ? "" : v)} disabled={!canEdit}>
+                      <Select value={priority || "__none__"} onValueChange={(v) => { setPriority(v === "__none__" ? "" : v); showcaseSave.markDirty(); }} disabled={!canEdit}>
                         <SelectTrigger className="min-h-10">
                           <SelectValue placeholder="Не выбран" />
                         </SelectTrigger>
@@ -538,11 +605,11 @@ export function TradePointManualActualizationView(props: {
                     </div>
                     <div className="space-y-1 sm:col-span-2">
                       <Label className="text-xs">Что поставить в первую очередь</Label>
-                      <Textarea rows={2} value={firstNeed} onChange={(e) => setFirstNeed(e.target.value)} disabled={!canEdit} />
+                      <Textarea rows={2} value={firstNeed} onChange={(e) => { setFirstNeed(e.target.value); showcaseSave.markDirty(); }} disabled={!canEdit} />
                     </div>
                     <div className="space-y-1 sm:col-span-2">
                       <Label className="text-xs">Комментарий для РМ/РОП</Label>
-                      <Textarea rows={2} value={rmComment} onChange={(e) => setRmComment(e.target.value)} disabled={!canEdit} />
+                      <Textarea rows={2} value={rmComment} onChange={(e) => { setRmComment(e.target.value); showcaseSave.markDirty(); }} disabled={!canEdit} />
                     </div>
 
                     <div className="rounded-lg border border-border/70 bg-muted/20 p-3 text-sm sm:col-span-2">
@@ -561,9 +628,12 @@ export function TradePointManualActualizationView(props: {
                   </div>
             ) : null}
             {canEdit ? (
-              <Button type="button" className="font-semibold" data-testid="button-trade-point-showcase-edit" disabled={saving} onClick={() => void onSaveAll()}>
-                {saving ? "Сохранение…" : "Сохранить витрину и точку"}
-              </Button>
+              <SectionSaveButton
+                testId="button-trade-point-section-save-showcase"
+                statusTestId="text-save-status-trade-point-showcase"
+                phase={showcaseSave.phase}
+                onSave={() => void showcaseSave.runSave(persistShowcase)}
+              />
             ) : null}
           </AccordionContent>
         </AccordionItem>
@@ -579,6 +649,7 @@ export function TradePointManualActualizationView(props: {
           canCreate={canEditClientNextStep(profile, dealer)}
           actorUserId={user?.id ?? profile.personaUserId}
           actorLabel={user?.name ?? userLabelFromProfile(profile)}
+          compact
         />
       </div>
     </div>

@@ -1810,6 +1810,7 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                 canCreate={canEditClientNextStep(profile, row)}
                 actorUserId={user?.id ?? profile.personaUserId}
                 actorLabel={user?.name ?? userLabelFromProfile(profile)}
+                compact
               />
             ) : null}
 

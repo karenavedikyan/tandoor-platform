@@ -3,7 +3,7 @@
  */
 
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import type { ActualizationState, ManualDealer } from "@/lib/client-base-actualization-state";
+import type { ActualizationState, ManualDealer, ManualTradePoint } from "@/lib/client-base-actualization-state";
 
 function pad2(n: number): string {
   return String(n).padStart(2, "0");
@@ -40,15 +40,103 @@ export function normalizeInnDigits(inn: string): string {
   return inn.replace(/\D/g, "");
 }
 
-/** Следующий человекочитаемый код MA-MANUAL-000001 по уже созданным ручным клиентам. */
-export function nextManualDealerInternalCode(state: ActualizationState): string {
+const TND_CL_RE = /^TND-CL-(\d{6})$/i;
+const TND_TP_RE = /^TND-TP-(\d{6})$/i;
+const MA_MANUAL_RE = /^MA-MANUAL-(\d+)$/i;
+
+function parseTndClSerial(raw: string): number | null {
+  const m = TND_CL_RE.exec(raw.trim());
+  if (!m) return null;
+  return parseInt(m[1], 10);
+}
+
+function parseTndTpSerial(raw: string): number | null {
+  const m = TND_TP_RE.exec(raw.trim());
+  if (!m) return null;
+  return parseInt(m[1], 10);
+}
+
+function parseMaManualSerial(raw: string): number | null {
+  const m = MA_MANUAL_RE.exec(raw.trim());
+  if (!m) return null;
+  return parseInt(m[1], 10);
+}
+
+function fnv1a32(input: string): number {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < input.length; i++) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h >>> 0;
+}
+
+/** Стабильный показ кода до первой записи TND-CL в состояние (не меняет id). */
+export function stableProvisionalTndClFromDealerId(dealerId: string): string {
+  const n = 100000 + (fnv1a32(`TND-CL:${dealerId}`) % 900000);
+  return `TND-CL-${String(n).padStart(6, "0")}`;
+}
+
+export function stableProvisionalTndTpFromTradePointId(tradePointId: string): string {
+  const n = 100000 + (fnv1a32(`TND-TP:${tradePointId}`) % 900000);
+  return `TND-TP-${String(n).padStart(6, "0")}`;
+}
+
+function maxDealerCodeSerial(state: ActualizationState): number {
   let max = 0;
   for (const m of Object.values(state.manuallyCreatedDealersById)) {
     const raw = (m.internalCode ?? "").trim();
-    const m1 = /^MA-MANUAL-(\d+)$/i.exec(raw);
-    if (m1) max = Math.max(max, parseInt(m1[1], 10));
+    let n = parseTndClSerial(raw);
+    if (n == null) n = parseMaManualSerial(raw);
+    if (n != null) max = Math.max(max, n);
   }
-  return `MA-MANUAL-${String(max + 1).padStart(6, "0")}`;
+  return max;
+}
+
+/** Следующий свободный код TND-CL-000001 по ручным клиентам (учитывает legacy MA-MANUAL-*). */
+export function nextManualDealerInternalCode(state: ActualizationState): string {
+  return `TND-CL-${String(maxDealerCodeSerial(state) + 1).padStart(6, "0")}`;
+}
+
+function maxTradePointCodeSerial(state: ActualizationState): number {
+  let max = 0;
+  for (const m of Object.values(state.manuallyCreatedTradePointsById)) {
+    const raw = (m.internalCode ?? "").trim();
+    let n = parseTndTpSerial(raw);
+    if (n == null) n = parseMaManualSerial(raw);
+    if (n != null) max = Math.max(max, n);
+  }
+  return max;
+}
+
+export function nextManualTradePointInternalCode(state: ActualizationState): string {
+  return `TND-TP-${String(maxTradePointCodeSerial(state) + 1).padStart(6, "0")}`;
+}
+
+/** Код клиента для UI (TND-CL или стабильный provisional, пока не сохранён internalCode). */
+export function getManualDealerDisplayCode(m: ManualDealer): string {
+  const raw = (m.internalCode ?? "").trim();
+  const tnd = parseTndClSerial(raw);
+  if (tnd != null) return `TND-CL-${String(tnd).padStart(6, "0")}`;
+  const ma = parseMaManualSerial(raw);
+  if (ma != null) return `TND-CL-${String(ma).padStart(6, "0")}`;
+  if (raw && !raw.toLowerCase().startsWith("manual-")) return raw;
+  return stableProvisionalTndClFromDealerId(m.id);
+}
+
+/** @deprecated используйте getManualDealerDisplayCode */
+export function manualDealerDisplayInternalCode(m: ManualDealer): string {
+  return getManualDealerDisplayCode(m);
+}
+
+export function getManualTradePointDisplayCode(m: ManualTradePoint): string {
+  const raw = (m.internalCode ?? "").trim();
+  const tnd = parseTndTpSerial(raw);
+  if (tnd != null) return `TND-TP-${String(tnd).padStart(6, "0")}`;
+  const ma = parseMaManualSerial(raw);
+  if (ma != null) return `TND-TP-${String(ma).padStart(6, "0")}`;
+  if (raw && !raw.toLowerCase().startsWith("manual-")) return raw;
+  return stableProvisionalTndTpFromTradePointId(m.id);
 }
 
 export type InnDuplicateMatch = {
@@ -118,10 +206,4 @@ export function findNameCityDuplicateInActualization(
   }
 
   return null;
-}
-
-export function manualDealerDisplayInternalCode(m: ManualDealer): string {
-  const c = m.internalCode?.trim();
-  if (c) return c;
-  return `MANUAL-${m.id.replace(/^manual-dealer-/, "").slice(0, 24)}`;
 }
