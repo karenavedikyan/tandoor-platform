@@ -49,9 +49,15 @@ export function salesControlHomeHref(role: SalesRole): string {
   return "/sales-control";
 }
 
-/** Раздел «Коммуникации» (Bitrix24): временно только для директора продаж — общий webhook = чаты владельца webhook. */
+/** Раздел «Коммуникации» (Bitrix24): доступен всем основным ролям; личные чаты только после персонального OAuth (см. страницу /communications). */
 export function canAccessCommunications(role: SalesRole): boolean {
-  return role === "sales_director";
+  return (
+    role === "sales_manager" ||
+    role === "team_lead" ||
+    role === "sales_director" ||
+    role === "marketer" ||
+    role === "analyst"
+  );
 }
 
 export function canAccessPath(role: SalesRole, path: string): boolean {
@@ -155,6 +161,7 @@ export function getPilotNavItems(role: SalesRole): PilotNavItem[] {
     push({ href: "/dealer-base", label: "Клиенты", testId: "nav-dealer-base", badge: NAV_BADGE_CLIENTS });
     push({ href: "/client-map", label: "Карта клиентов", testId: "nav-client-map" });
     push({ href: "/tasks", label: "Задачи по витрине", testId: "nav-tasks" });
+    push({ href: "/communications", label: "Коммуникации", testId: "nav-communications" });
     push({ href: "/catalog", label: "Каталог", testId: "nav-catalog" });
     push({ href: "/training", label: "Обучение", testId: "nav-training" });
     push({ href: sch, label: "План-факт продаж", testId: "nav-sales-control" });
@@ -167,6 +174,7 @@ export function getPilotNavItems(role: SalesRole): PilotNavItem[] {
     push({ href: "/dealer-base", label: "Клиенты команды", testId: "nav-dealer-base", badge: NAV_BADGE_CLIENTS });
     push({ href: "/client-map", label: "Карта клиентов", testId: "nav-client-map" });
     push({ href: "/tasks", label: "Задачи по витрине", testId: "nav-tasks" });
+    push({ href: "/communications", label: "Коммуникации", testId: "nav-communications" });
     push({ href: "/analytics-workspace", label: "Аналитика команды", testId: "nav-analytics-workspace" });
     push({ href: sch, label: "План-факт продаж", testId: "nav-sales-control" });
     push({ href: "/catalog", label: "Каталог", testId: "nav-catalog" });
@@ -194,6 +202,7 @@ export function getPilotNavItems(role: SalesRole): PilotNavItem[] {
     push({ href: "/marketing-briefs", label: "Маркетинговые брифы", testId: "nav-marketing-briefs" });
     push({ href: "/catalog", label: "Каталог", testId: "nav-catalog" });
     push({ href: "/training", label: "Обучение", testId: "nav-training" });
+    push({ href: "/communications", label: "Коммуникации", testId: "nav-communications" });
     push({ href: "/dealer-base", label: "Клиенты (просмотр)", testId: "nav-dealer-base", badge: NAV_BADGE_CLIENTS });
     push({ href: "/client-map", label: "Карта клиентов", testId: "nav-client-map" });
     return items;
@@ -204,6 +213,7 @@ export function getPilotNavItems(role: SalesRole): PilotNavItem[] {
     push({ href: "/dealer-base", label: "Клиенты", testId: "nav-dealer-base", badge: NAV_BADGE_CLIENTS });
     push({ href: "/client-map", label: "Карта клиентов", testId: "nav-client-map" });
     push({ href: "/tasks", label: "Задачи по витрине", testId: "nav-tasks" });
+    push({ href: "/communications", label: "Коммуникации", testId: "nav-communications" });
     push({ href: "/catalog", label: "Каталог", testId: "nav-catalog" });
     push({ href: "/marketing-briefs", label: "Маркетинговые брифы", testId: "nav-marketing-briefs" });
     return items;

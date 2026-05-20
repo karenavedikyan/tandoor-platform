@@ -633,3 +633,286 @@ export async function sendBitrix24ChatMessage(
     bitrixCode: typeof err.bitrixCode === "string" ? err.bitrixCode : undefined,
   };
 }
+
+// --- Персональный OAuth Bitrix24 (раздел «Коммуникации»): не использует общий BITRIX24_WEBHOOK_URL для im.* ---
+
+export type Bitrix24OAuthStatusDto = {
+  configured: boolean;
+  connected: boolean;
+  user?: { bitrixUserId?: string; name?: string };
+};
+
+type OAuthStatusApiOk = { success: true; configured?: boolean; connected?: boolean; user?: Bitrix24OAuthStatusDto["user"] };
+type OAuthStatusApiErr = { success: false; message?: string; code?: string };
+
+/**
+ * Статус персональной авторизации Bitrix24: GET /api/bitrix24/oauth/status
+ */
+export async function getBitrix24OAuthStatus(): Promise<
+  { ok: true; data: Bitrix24OAuthStatusDto } | { ok: false; message: string; code?: string }
+> {
+  let res: Response;
+  try {
+    res = await fetch("/api/bitrix24/oauth/status", {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      credentials: "same-origin",
+    });
+  } catch {
+    return { ok: false, message: "Не удалось связаться с сервером. Проверьте подключение и попробуйте снова." };
+  }
+
+  let data: unknown;
+  try {
+    data = await res.json();
+  } catch {
+    return { ok: false, message: "Сервер вернул неожиданный ответ при проверке статуса Bitrix24." };
+  }
+
+  const body = data as OAuthStatusApiOk | OAuthStatusApiErr | Record<string, unknown>;
+  if (typeof body === "object" && body && "success" in body && body.success === true) {
+    const ok = body as OAuthStatusApiOk;
+    return {
+      ok: true,
+      data: {
+        configured: ok.configured === true,
+        connected: ok.connected === true,
+        ...(typeof ok.user === "object" && ok.user ? { user: ok.user } : {}),
+      },
+    };
+  }
+
+  const err = body as OAuthStatusApiErr;
+  const message =
+    typeof err.message === "string" && err.message.trim()
+      ? err.message.trim()
+      : "Не удалось получить статус OAuth Bitrix24.";
+  return { ok: false, message, code: typeof err.code === "string" ? err.code : undefined };
+}
+
+type OAuthStartApiOk = { success: true; redirectUrl?: string };
+type OAuthStartApiErr = { success: false; message?: string; code?: string };
+
+/**
+ * Старт OAuth Bitrix24: GET /api/bitrix24/oauth/start (редирект URL приходит в JSON).
+ */
+export async function startBitrix24OAuth(): Promise<
+  { ok: true; redirectUrl: string } | { ok: false; message: string; code?: string }
+> {
+  let res: Response;
+  try {
+    res = await fetch("/api/bitrix24/oauth/start", {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      credentials: "same-origin",
+    });
+  } catch {
+    return { ok: false, message: "Не удалось связаться с сервером. Проверьте подключение и попробуйте снова." };
+  }
+
+  let data: unknown;
+  try {
+    data = await res.json();
+  } catch {
+    return { ok: false, message: "Сервер вернул неожиданный ответ при запуске OAuth Bitrix24." };
+  }
+
+  const body = data as OAuthStartApiOk | OAuthStartApiErr | Record<string, unknown>;
+  if (typeof body === "object" && body && "success" in body && body.success === true) {
+    const ok = body as OAuthStartApiOk;
+    const u = typeof ok.redirectUrl === "string" && ok.redirectUrl.trim() ? ok.redirectUrl.trim() : "";
+    if (!u) {
+      return { ok: false, message: "Сервер не вернул адрес перенаправления Bitrix24." };
+    }
+    return { ok: true, redirectUrl: u };
+  }
+
+  const err = body as OAuthStartApiErr;
+  const message =
+    typeof err.message === "string" && err.message.trim()
+      ? err.message.trim()
+      : "Не удалось начать подключение Bitrix24.";
+  return { ok: false, message, code: typeof err.code === "string" ? err.code : undefined };
+}
+
+type ChatRecentPersonalApiOk = { success: true; chats?: Bitrix24RecentChatDto[] };
+type ChatRecentPersonalApiErr = { success: false; message?: string; code?: string; bitrixCode?: string };
+
+/**
+ * Личные чаты текущего пользователя Bitrix24: POST /api/bitrix24/chat/recent-personal (персональный токен на сервере).
+ */
+export async function listBitrix24PersonalChats(): Promise<
+  { ok: true; chats: Bitrix24RecentChatDto[] } | { ok: false; message: string; code?: string; bitrixCode?: string }
+> {
+  let res: Response;
+  try {
+    res = await fetch("/api/bitrix24/chat/recent-personal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      credentials: "same-origin",
+      body: "{}",
+    });
+  } catch {
+    return { ok: false, message: "Не удалось связаться с сервером. Проверьте подключение и попробуйте снова." };
+  }
+
+  let data: unknown;
+  try {
+    data = await res.json();
+  } catch {
+    return { ok: false, message: "Сервер вернул неожиданный ответ при загрузке чатов Bitrix24." };
+  }
+
+  const body = data as ChatRecentPersonalApiOk | ChatRecentPersonalApiErr | Record<string, unknown>;
+  if (typeof body === "object" && body && "success" in body && body.success === true) {
+    const ok = body as ChatRecentPersonalApiOk;
+    const raw = Array.isArray(ok.chats) ? ok.chats : [];
+    const chats: Bitrix24RecentChatDto[] = raw.map((row: unknown) => {
+      const c = row as Record<string, unknown>;
+      const out: Bitrix24RecentChatDto = {
+        dialogId: String(c.dialogId ?? ""),
+        title: String(c.title ?? ""),
+      };
+      if (typeof c.chatId === "number" && Number.isFinite(c.chatId)) out.chatId = c.chatId;
+      if (typeof c.lastMessageText === "string" && c.lastMessageText.trim()) out.lastMessageText = c.lastMessageText.trim();
+      if (typeof c.lastMessageDate === "string" && c.lastMessageDate.trim()) out.lastMessageDate = c.lastMessageDate.trim();
+      if (typeof c.unread === "boolean") out.unread = c.unread;
+      if (typeof c.counter === "number" && Number.isFinite(c.counter)) out.counter = c.counter;
+      if (typeof c.type === "string" && c.type.trim()) out.type = c.type.trim();
+      if (typeof c.entityType === "string" && c.entityType.trim()) out.entityType = c.entityType.trim();
+      if (typeof c.entityId === "string" && c.entityId.trim()) out.entityId = c.entityId.trim();
+      return out;
+    });
+    return { ok: true, chats };
+  }
+
+  const err = body as ChatRecentPersonalApiErr;
+  return {
+    ok: false,
+    message: humanizeBitrixChatApiFailure(err),
+    code: typeof err.code === "string" ? err.code : undefined,
+    bitrixCode: typeof err.bitrixCode === "string" ? err.bitrixCode : undefined,
+  };
+}
+
+/**
+ * Сообщения личного диалога: POST /api/bitrix24/chat/messages-personal
+ */
+export async function getBitrix24PersonalMessages(
+  dialogId: string,
+  limit?: number,
+): Promise<
+  | { ok: true; dialogId: string; messages: Bitrix24ChatMessageDto[] }
+  | { ok: false; message: string; code?: string; bitrixCode?: string }
+> {
+  const trimmed = String(dialogId ?? "").trim();
+  if (!trimmed) {
+    return { ok: false, message: "Не указан идентификатор диалога Bitrix24." };
+  }
+  const payload: Record<string, unknown> = { dialogId: trimmed };
+  if (limit != null) payload.limit = limit;
+
+  let res: Response;
+  try {
+    res = await fetch("/api/bitrix24/chat/messages-personal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    return { ok: false, message: "Не удалось связаться с сервером. Проверьте подключение и попробуйте снова." };
+  }
+
+  let data: unknown;
+  try {
+    data = await res.json();
+  } catch {
+    return { ok: false, message: "Сервер вернул неожиданный ответ при загрузке сообщений Bitrix24." };
+  }
+
+  const body = data as ChatMessagesApiOk | ChatMessagesApiErr | Record<string, unknown>;
+  if (typeof body === "object" && body && "success" in body && body.success === true) {
+    const ok = body as ChatMessagesApiOk;
+    const did = typeof ok.dialogId === "string" && ok.dialogId.trim() ? ok.dialogId.trim() : trimmed;
+    const raw = Array.isArray(ok.messages) ? ok.messages : [];
+    const messages: Bitrix24ChatMessageDto[] = raw.map((row: unknown) => {
+      const m = row as Record<string, unknown>;
+      const idRaw = m.id;
+      const id = typeof idRaw === "number" || typeof idRaw === "string" ? idRaw : String(idRaw ?? "");
+      const msg: Bitrix24ChatMessageDto = {
+        id,
+        text: String(m.text ?? ""),
+      };
+      if (typeof m.authorId === "number" && Number.isFinite(m.authorId)) msg.authorId = m.authorId;
+      if (typeof m.date === "string" && m.date.trim()) msg.date = m.date.trim();
+      if (typeof m.unread === "boolean") msg.unread = m.unread;
+      return msg;
+    });
+    return { ok: true, dialogId: did, messages };
+  }
+
+  const err = body as ChatMessagesApiErr;
+  return {
+    ok: false,
+    message: humanizeBitrixChatApiFailure(err),
+    code: typeof err.code === "string" ? err.code : undefined,
+    bitrixCode: typeof err.bitrixCode === "string" ? err.bitrixCode : undefined,
+  };
+}
+
+/**
+ * Отправка в личный диалог: POST /api/bitrix24/chat/send-personal
+ */
+export async function sendBitrix24PersonalMessage(
+  dialogId: string,
+  message: string,
+): Promise<{ ok: true; messageId: string | number } | { ok: false; message: string; code?: string; bitrixCode?: string }> {
+  const trimmedDialog = String(dialogId ?? "").trim();
+  const trimmedMsg = String(message ?? "").trim();
+  if (!trimmedDialog) {
+    return { ok: false, message: "Не указан идентификатор диалога Bitrix24." };
+  }
+  if (!trimmedMsg.length) {
+    return { ok: false, message: "Введите текст сообщения." };
+  }
+  if (trimmedMsg.length > 2000) {
+    return { ok: false, message: "Сообщение не может быть длиннее 2000 символов." };
+  }
+
+  let res: Response;
+  try {
+    res = await fetch("/api/bitrix24/chat/send-personal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ dialogId: trimmedDialog, message: trimmedMsg }),
+    });
+  } catch {
+    return { ok: false, message: "Не удалось связаться с сервером. Проверьте подключение и попробуйте снова." };
+  }
+
+  let data: unknown;
+  try {
+    data = await res.json();
+  } catch {
+    return { ok: false, message: "Сервер вернул неожиданный ответ при отправке сообщения в Bitrix24." };
+  }
+
+  const body = data as ChatSendApiOk | ChatSendApiErr | Record<string, unknown>;
+  if (typeof body === "object" && body && "success" in body && body.success === true) {
+    const ok = body as ChatSendApiOk;
+    if (ok.messageId == null) {
+      return { ok: false, message: "Сервер не вернул идентификатор сообщения Bitrix24." };
+    }
+    return { ok: true, messageId: ok.messageId };
+  }
+
+  const err = body as ChatSendApiErr;
+  return {
+    ok: false,
+    message: humanizeBitrixChatApiFailure(err),
+    code: typeof err.code === "string" ? err.code : undefined,
+    bitrixCode: typeof err.bitrixCode === "string" ? err.bitrixCode : undefined,
+  };
+}
