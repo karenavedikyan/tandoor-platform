@@ -17,7 +17,6 @@ import { cn } from "@/lib/utils";
 import {
   CLIENT_CATEGORY_META,
   type ClientCategoryId,
-  clientCategoryMatchesFilter,
   getClientCategoryBadgeClass,
   getClientCategoryLabel,
   isClientTopTier,
@@ -54,6 +53,11 @@ import {
   type DealerBaseAccessRole,
   type DealerBaseWorkView,
 } from "@/lib/dealer-base-role-views";
+import {
+  applyDealerBasePickerFilters,
+  type ClientCategorySelection,
+  type QuickFilter,
+} from "@/lib/dealer-base-picker-filters";
 import { CityConcentrationBlock } from "@/components/city-concentration-block";
 import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actualization-sync-status";
 import { DealerActualizationCreateDialog } from "@/components/client-base-actualization-dealer-forms";
@@ -151,8 +155,6 @@ import { Switch } from "@/components/ui/switch";
 const DEALER_BASE_DISPLAY_LIMIT = 300;
 const TODAY_LIMIT = 100;
 
-type QuickFilter = "all" | "active" | "potential" | "attention" | "top" | "no_activity" | "closed";
-
 const QUICK_FROM_URL: Record<string, QuickFilter> = {
   all: "all",
   active: "active",
@@ -215,77 +217,6 @@ function statusBadgeClass(status: DealerStatus) {
 }
 
 type ClientCategoryRouteFilter = ClientCategoryId | "all" | "__top_tier__";
-type ClientCategorySelection = Exclude<ClientCategoryRouteFilter, "all">;
-function applyQuickFilter(row: DealerRow, q: QuickFilter): boolean {
-  switch (q) {
-    case "all":
-      return row.status !== "приостановлен";
-    case "active":
-      return row.status === "активный";
-    case "potential":
-      return row.status === "потенциальный";
-    case "attention":
-      return row.status === "требует внимания" || row.hasProblem;
-    case "top":
-      return isClientTopTier(row.clientCategory);
-    case "no_activity":
-      return !row.hasRecentActivity;
-    case "closed":
-      return row.status === "приостановлен";
-    default:
-      return true;
-  }
-}
-
-type PickerArgs = {
-  search: string;
-  quick: QuickFilter;
-  cities: string[];
-  categories: ClientCategorySelection[];
-  ropTeam: string;
-  manager: string;
-  managerCatalogForRop: ReturnType<typeof getManagersForRopTeam>;
-};
-
-function applyPickerFilters(rows: DealerRow[], args: PickerArgs): DealerRow[] {
-  const q = args.search.trim().toLowerCase();
-  const citySet = args.cities.length > 0 ? new Set(args.cities) : null;
-  const categorySelections = args.categories;
-  return rows.filter((row) => {
-    if (!applyQuickFilter(row, args.quick)) return false;
-    if (citySet && !citySet.has(row.city)) return false;
-    if (categorySelections.length > 0) {
-      const ok = categorySelections.some((c) => clientCategoryMatchesFilter(row.clientCategory, c));
-      if (!ok) return false;
-    }
-    if (!isRopOrManagerAllFilter(args.ropTeam)) {
-      if (row.releaseTeamId !== args.ropTeam) return false;
-    }
-    if (!isRopOrManagerAllFilter(args.manager)) {
-      let mgrOk = row.releaseManagerId === args.manager;
-      if (!mgrOk) {
-        const cat = args.managerCatalogForRop.find((m) => m.id === args.manager);
-        mgrOk = Boolean(cat && managerDisplayMatchesCatalogName(row.manager, cat.name));
-      }
-      if (!mgrOk) return false;
-    }
-    if (!q) return true;
-    const hay = [
-      row.name,
-      row.city,
-      row.manager,
-      getDealerRegionalManagerEffectiveDisplay(row),
-      getDealerRopDisplay(row),
-      row.releaseCode ?? "",
-      row.releaseAddress ?? "",
-      row.clientTypeLabel ?? "",
-      row.id,
-    ]
-      .join(" ")
-      .toLowerCase();
-    return hay.includes(q);
-  });
-}
 
 function managerStatsForRows(rows: DealerRow[]) {
   const total = rows.length;
@@ -1076,7 +1007,7 @@ export default function DealerBase() {
     [search, quick, cities, categories, ropTeam, manager, managerCatalogForRop],
   );
 
-  const pickerFiltered = useMemo(() => applyPickerFilters(scopedRows, pickerArgs), [scopedRows, pickerArgs]);
+  const pickerFiltered = useMemo(() => applyDealerBasePickerFilters(scopedRows, pickerArgs), [scopedRows, pickerArgs]);
 
   const kpis = useMemo(() => {
     const total = pickerFiltered.length;
@@ -1300,7 +1231,7 @@ export default function DealerBase() {
   }, [pickerFiltered, manager, managerCatalogForRop]);
 
   const teamTablePickerRows = useMemo(
-    () => applyPickerFilters(teamRowsForModes, pickerArgs),
+    () => applyDealerBasePickerFilters(teamRowsForModes, pickerArgs),
     [teamRowsForModes, pickerArgs],
   );
 
@@ -1379,7 +1310,7 @@ export default function DealerBase() {
       return pickerFiltered.slice(0, limit);
     }
     if (workView === "table_team") {
-      return applyPickerFilters(teamRowsForModes, pickerArgs).slice(0, limit);
+      return applyDealerBasePickerFilters(teamRowsForModes, pickerArgs).slice(0, limit);
     }
     return [];
   }, [
@@ -1453,7 +1384,7 @@ export default function DealerBase() {
       case "table_all":
         return pickerFiltered.length;
       case "table_team":
-        return applyPickerFilters(teamRowsForModes, pickerArgs).length;
+        return applyDealerBasePickerFilters(teamRowsForModes, pickerArgs).length;
       default:
         return null;
     }
