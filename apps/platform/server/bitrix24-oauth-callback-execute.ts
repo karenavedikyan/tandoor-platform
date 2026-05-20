@@ -59,16 +59,25 @@ function buildClearStateCookie(secure: boolean): string {
     .join("; ");
 }
 
+/**
+ * SPA использует hash-router (wouter `useHashLocation`), поэтому `?...` после `#/path`
+ * считается частью маршрута и роут `/communications` не матчится → SPA рисует Not Found.
+ *
+ * Безопасный для роутера формат: query до `#`, route в hash. То есть
+ * `/?bitrix24=error&code=...#/communications` — браузер сначала загружает корень,
+ * hash-router переходит на `/communications`, а параметры доступны через
+ * `window.location.search`.
+ */
 function buildSpaErrorLocation(code: string, bitrixCode?: string): string {
   const qs = new URLSearchParams();
   qs.set("bitrix24", "error");
   qs.set("code", code);
   if (bitrixCode) qs.set("bitrixCode", bitrixCode);
-  return `${lkPublicOrigin()}/#/communications?${qs.toString()}`;
+  return `${lkPublicOrigin()}/?${qs.toString()}#/communications`;
 }
 
 function buildSpaSuccessLocation(): string {
-  return `${lkPublicOrigin()}/#/communications?bitrix24=connected`;
+  return `${lkPublicOrigin()}/?bitrix24=connected#/communications`;
 }
 
 function jsonError(

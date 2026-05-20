@@ -190,12 +190,16 @@ function lkPublicOrigin(): string {
   return o || "https://tandoor-platform.vercel.app";
 }
 
+/**
+ * SPA использует hash-router, поэтому query должна стоять до `#`, а маршрут — в hash.
+ * Иначе wouter трактует `?...` как часть пути и страница Communications не матчится.
+ */
 function buildSpaErrorLocation(code: string, bitrixCode?: string): string {
   const qs = new URLSearchParams();
   qs.set("bitrix24", "error");
   qs.set("code", code);
   if (bitrixCode) qs.set("bitrixCode", bitrixCode);
-  return `${lkPublicOrigin()}/#/communications?${qs.toString()}`;
+  return `${lkPublicOrigin()}/?${qs.toString()}#/communications`;
 }
 
 /**
