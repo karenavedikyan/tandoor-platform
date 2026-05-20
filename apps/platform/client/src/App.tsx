@@ -15,6 +15,7 @@ import NotFound from "@/pages/not-found";
 import PreviewUnavailable from "@/pages/preview-unavailable";
 import InternalPrototypePlaceholder from "@/pages/internal-prototype-placeholder";
 import { INTERNAL_PROTOTYPE_ROUTES } from "@/lib/preview-config";
+import { ClientBaseActualizationProvider } from "@/context/client-base-actualization-context";
 
 const LazySalesManagerWorkspace = lazy(() => import("@/pages/sales-manager-workspace"));
 const LazyDealerBase = lazy(() => import("@/pages/dealer-base"));
@@ -127,7 +128,8 @@ function AuthenticatedApp() {
       }}
       embeddedBitrix24={embeddedBitrix24}
     >
-      <Switch>
+      <ClientBaseActualizationProvider>
+        <Switch>
         <Route path="/" component={SalesManagerWorkspaceRoute} />
         <Route path="/main" component={SalesManagerWorkspaceRoute} />
         <Route path="/sales-manager" component={SalesManagerWorkspaceRoute} />
@@ -165,7 +167,8 @@ function AuthenticatedApp() {
           <Route key={path} path={path} component={InternalPrototypePlaceholder} />
         ))}
         <Route component={NotFound} />
-      </Switch>
+        </Switch>
+      </ClientBaseActualizationProvider>
     </AppShell>
   );
 }

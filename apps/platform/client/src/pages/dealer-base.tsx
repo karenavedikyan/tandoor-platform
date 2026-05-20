@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { ChevronDown, ChevronRight, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -54,15 +54,11 @@ import {
   type DealerBaseAccessRole,
   type DealerBaseWorkView,
 } from "@/lib/dealer-base-role-views";
-import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actualization-sync-status";
 import { CityConcentrationBlock } from "@/components/city-concentration-block";
-import {
-  loadActualizationState,
-  type ActualizationApiMeta,
-  type ActualizationSyncStatus,
-} from "@/lib/client-base-actualization-api";
-import { canActualizeClientBase } from "@/lib/client-base-actualization-permissions";
-import { createEmptyActualizationState } from "@/lib/client-base-actualization-state";
+import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actualization-sync-status";
+import { DealerActualizationCreateDialog } from "@/components/client-base-actualization-dealer-forms";
+import { useClientBaseActualization } from "@/context/client-base-actualization-context";
+import { canActualizeClientBase, canCreateDealerDuringActualization } from "@/lib/client-base-actualization-permissions";
 import { buildTeamSummary } from "@/lib/team-summary";
 import { TeamSummaryCard } from "@/components/team-summary-card";
 import { buildCityConcentrationRows, buildDealerBaseAllCitiesHref, buildDealerBaseCityDrillHref } from "@/lib/city-concentration";
@@ -953,43 +949,12 @@ export default function DealerBase() {
 
   const routeQs = useRouteSearchParams();
   const routeKey = useMemo(() => routeQs.toString(), [routeQs]);
+  const [, setLocation] = useLocation();
+  const actx = useClientBaseActualization();
 
   const showActualizationSync = useMemo(() => canActualizeClientBase(profile), [profile]);
 
-  const defaultActualizationMeta = useMemo<ActualizationApiMeta>(
-    () => ({
-      success: false,
-      storageMode: "server_memory",
-      state: createEmptyActualizationState(),
-      updatedAt: null,
-    }),
-    [],
-  );
-
-  const [actualizationPanel, setActualizationPanel] = useState<{
-    pending: boolean;
-    meta: ActualizationApiMeta;
-    sync: ActualizationSyncStatus;
-  } | null>(null);
-
-  const reloadActualization = useCallback(async () => {
-    if (!showActualizationSync) return;
-    setActualizationPanel((prev) => ({
-      pending: true,
-      meta: prev?.meta ?? defaultActualizationMeta,
-      sync: prev?.sync ?? "api_ok",
-    }));
-    const r = await loadActualizationState(profile);
-    setActualizationPanel({ pending: false, meta: r.meta, sync: r.syncStatus });
-  }, [defaultActualizationMeta, profile, showActualizationSync]);
-
-  useEffect(() => {
-    if (!showActualizationSync) {
-      setActualizationPanel(null);
-      return;
-    }
-    void reloadActualization();
-  }, [reloadActualization, showActualizationSync]);
+  const [createDealerOpen, setCreateDealerOpen] = useState(false);
 
   useEffect(() => {
     const allowed = workViewsForAccess(access);
@@ -1003,7 +968,10 @@ export default function DealerBase() {
   );
   const ropSelectOptions = useMemo(() => ropOptionsForProfile(profile, access), [profile, access]);
 
-  const scopedRows = useMemo(() => roleScopedDealerRows(DEALER_BASE_ROWS, profile), [profile]);
+  const scopedRows = useMemo(
+    () => roleScopedDealerRows(actx.enabled ? actx.mergedDealerRows : DEALER_BASE_ROWS, profile),
+    [actx.enabled, actx.mergedDealerRows, profile],
+  );
 
   const pickerArgs = useMemo(
     () => ({ search, quick, cities, categories, ropTeam, manager, managerCatalogForRop }),
@@ -1057,7 +1025,7 @@ export default function DealerBase() {
     let searchV = "";
     let vw: DealerBaseWorkView = defaultWorkViewForAccess(access);
 
-    const scoped = roleScopedDealerRows(DEALER_BASE_ROWS, profile);
+    const scoped = roleScopedDealerRows(actx.enabled ? actx.mergedDealerRows : DEALER_BASE_ROWS, profile);
     const catOpts = Array.from(new Set(scoped.map((r) => r.clientCategory)));
 
     const teamRaw = (routeQs.get("team") ?? routeQs.get("rop"))?.trim() ?? "";
@@ -1150,7 +1118,7 @@ export default function DealerBase() {
     setSearch(searchV);
     setWorkView(vw);
     setProgramFilters(programParsed);
-  }, [profile.personaUserId, profile.role, access, routeKey, routeQs]);
+  }, [profile.personaUserId, profile.role, access, routeKey, routeQs, actx.enabled, actx.mergedDealerRows]);
 
   const firstRopTeamId = useMemo(() => getRopOptions()[0]?.teamId ?? "", []);
 
@@ -1747,29 +1715,50 @@ export default function DealerBase() {
             Клиентская база: поиск, фильтры и переход в карточку клиента.
           </p>
         </div>
-        <Button variant="outline" size="sm" className="shrink-0 self-start" asChild>
-          <Link
-            href={buildHashPath("/client-map", {
-              ...(cities.length > 0 ? { city: cities.join(",") } : {}),
-              ...(isRopOrManagerAllFilter(ropTeam) ? {} : { team: ropTeam }),
-              ...(isRopOrManagerAllFilter(manager) ? {} : { manager }),
-              ...(quick !== "all" ? { quick } : {}),
-            })}
-            data-testid="button-dealer-base-open-client-map"
-          >
-            Карта клиентов
-          </Link>
-        </Button>
+        <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row sm:justify-end">
+          {canCreateDealerDuringActualization(profile) && actx.enabled ? (
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              className="min-h-10 w-full font-semibold sm:w-auto"
+              data-testid="button-dealer-create"
+              onClick={() => setCreateDealerOpen(true)}
+            >
+              Добавить клиента
+            </Button>
+          ) : null}
+          <Button variant="outline" size="sm" className="shrink-0 self-start sm:self-start" asChild>
+            <Link
+              href={buildHashPath("/client-map", {
+                ...(cities.length > 0 ? { city: cities.join(",") } : {}),
+                ...(isRopOrManagerAllFilter(ropTeam) ? {} : { team: ropTeam }),
+                ...(isRopOrManagerAllFilter(manager) ? {} : { manager }),
+                ...(quick !== "all" ? { quick } : {}),
+              })}
+              data-testid="button-dealer-base-open-client-map"
+            >
+              Карта клиентов
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {showActualizationSync ? (
         <ClientBaseActualizationSyncStatus
-          isLoading={!actualizationPanel || actualizationPanel.pending}
-          meta={actualizationPanel?.meta ?? defaultActualizationMeta}
-          syncStatus={actualizationPanel?.sync ?? "api_ok"}
-          onRetry={() => void reloadActualization()}
+          isLoading={actx.loading}
+          meta={actx.meta}
+          syncStatus={actx.syncStatus}
+          onRetry={() => void actx.refresh()}
         />
       ) : null}
+
+      <DealerActualizationCreateDialog
+        open={createDealerOpen}
+        onOpenChange={setCreateDealerOpen}
+        profile={profile}
+        onCreated={(id) => setLocation(`/dealers/${encodeURIComponent(id)}`)}
+      />
 
       <section className="space-y-3" data-testid="section-dealer-base-kpis">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">

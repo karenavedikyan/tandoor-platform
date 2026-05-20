@@ -26,8 +26,16 @@ import {
   getMergedDealerTradePoints,
   isVirtualDefaultTradePointId,
 } from "@/lib/dealer-trade-points-overrides";
-import { getShowcaseTasksForDealerDisplay, loadShowcaseStorage } from "@/lib/showcase-distribution-data";
+import { getShowcaseTasksForDealerDisplay, loadShowcaseStorage, userLabelFromProfile } from "@/lib/showcase-distribution-data";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
+import { useClientBaseActualization } from "@/context/client-base-actualization-context";
+import { mergeTradePointsActiveForActualization, mergeTradePointsForActualization } from "@/lib/client-base-actualization-data-merge";
+import { mergeActualizationState } from "@/lib/client-base-actualization-state";
+import {
+  canArchiveTradePointDuringActualization,
+  canCreateTradePointDuringActualization,
+} from "@/lib/client-base-actualization-permissions";
+import { toast } from "@/hooks/use-toast";
 
 type Props = {
   row: DealerRow;
@@ -59,6 +67,8 @@ function openShowcaseTasksCount(dealer: DealerRow, mergedActiveCount: number): n
 }
 
 export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) {
+  const actx = useClientBaseActualization();
+  const useAct = actx.enabled && canCreateTradePointDuringActualization(profile, row);
   const canEdit = canEditDealerTradePoints(profile, row);
   const [tpBump, setTpBump] = useState(0);
   const [expanded, setExpanded] = useState(false);
@@ -67,10 +77,21 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
   const [addName, setAddName] = useState("");
   const [addCity, setAddCity] = useState("");
   const [addAddress, setAddAddress] = useState("");
+  const [addFormat, setAddFormat] = useState("Розница / салон");
   const [addContactName, setAddContactName] = useState("");
   const [addContactPhone, setAddContactPhone] = useState("");
   const [addComment, setAddComment] = useState("");
   const [addError, setAddError] = useState("");
+  const [editOpen, setEditOpen] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editCity, setEditCity] = useState("");
+  const [editAddress, setEditAddress] = useState("");
+  const [editFormat, setEditFormat] = useState("");
+  const [editContactName, setEditContactName] = useState("");
+  const [editContactPhone, setEditContactPhone] = useState("");
+  const [editComment, setEditComment] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
 
   useEffect(() => {
     const fn = () => setTpBump((n) => n + 1);
@@ -78,15 +99,40 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
     return () => window.removeEventListener(DEALER_TRADE_POINTS_EVENT, fn);
   }, []);
 
+  useEffect(() => {
+    if (useAct) setTpBump((n) => n + 1);
+  }, [useAct, actx.state]);
+
   const rawMergedActive = useMemo(() => getMergedDealerTradePoints(row, { includeArchived: false }), [row, tpBump]);
-  const mergedActive = useMemo(() => getEffectiveDealerTradePoints(row, { includeArchived: false }), [row, tpBump]);
-  const mergedArchived = useMemo(() => getMergedDealerTradePoints(row, { includeArchived: true }), [row, tpBump]);
-  const archivedCount = useMemo(() => mergedArchived.filter((m) => m.isArchived).length, [mergedArchived]);
-  const archivedList = useMemo(() => mergedArchived.filter((m) => m.isArchived), [mergedArchived]);
+  const mergedActive = useMemo(() => {
+    if (useAct) return mergeTradePointsActiveForActualization(row, actx.state);
+    return getEffectiveDealerTradePoints(row, { includeArchived: false });
+  }, [useAct, actx.state, row, tpBump]);
+  const mergedArchived = useMemo(() => {
+    if (useAct) return mergeTradePointsForActualization(row, actx.state).filter((m) => m.isArchived);
+    return getMergedDealerTradePoints(row, { includeArchived: true }).filter((m) => m.isArchived);
+  }, [useAct, actx.state, row, tpBump]);
+  const mergedArchivedCount = useMemo(() => {
+    if (useAct) return mergeTradePointsForActualization(row, actx.state).filter((m) => m.isArchived).length;
+    return getMergedDealerTradePoints(row, { includeArchived: true }).filter((m) => m.isArchived).length;
+  }, [useAct, actx.state, row, tpBump]);
+  const archivedCount = mergedArchivedCount;
+  const archivedList = mergedArchived;
   const hasSeeds = row.tradePoints.length > 0;
   const hasManualStored = getManualTradePoints(row.id).length > 0;
-  const hasAnyTradePointEver = hasSeeds || hasManualStored;
-  const isUsingVirtualDefault = rawMergedActive.length === 0;
+  const hasAnyTradePointEver = useMemo(() => {
+    if (useAct) {
+      return mergeTradePointsForActualization(row, actx.state).some((m) => !isVirtualDefaultTradePointId(row.id, m.point.id));
+    }
+    return hasSeeds || hasManualStored;
+  }, [useAct, actx.state, row, hasSeeds, hasManualStored]);
+  const isUsingVirtualDefault = useMemo(() => {
+    if (useAct) {
+      const a = mergeTradePointsActiveForActualization(row, actx.state);
+      return a.length === 1 && isVirtualDefaultTradePointId(row.id, a[0].point.id);
+    }
+    return rawMergedActive.length === 0;
+  }, [useAct, actx.state, row, rawMergedActive.length]);
 
   const showcaseOpen = useMemo(() => openShowcaseTasksCount(row, mergedActive.length), [row, mergedActive.length, tpBump]);
 
@@ -94,14 +140,53 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
     setAddName("");
     setAddCity("");
     setAddAddress("");
+    setAddFormat("Розница / салон");
     setAddContactName("");
     setAddContactPhone("");
     setAddComment("");
     setAddError("");
   }, []);
 
-  const onAddSave = useCallback(() => {
+  const onAddSave = useCallback(async () => {
     setAddError("");
+    if (useAct) {
+      if (!addName.trim() || !addCity.trim() || !addAddress.trim() || !addContactName.trim() || !addContactPhone.trim()) {
+        setAddError("Заполните название, город, адрес, контактное лицо и телефон.");
+        return;
+      }
+      const id = `manual-tp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const now = new Date().toISOString();
+      const ok = await actx.persist((prev) =>
+        mergeActualizationState(prev, {
+          manuallyCreatedTradePointsById: {
+            ...prev.manuallyCreatedTradePointsById,
+            [id]: {
+              id,
+              dealerId: row.id,
+              fields: {
+                name: addName.trim(),
+                city: addCity.trim(),
+                address: addAddress.trim(),
+                format: addFormat.trim(),
+                contactName: addContactName.trim(),
+                contactPhone: addContactPhone.trim(),
+                comment: addComment.trim(),
+              },
+              createdAt: now,
+              createdBy: profile.personaUserId,
+              createdByName: userLabelFromProfile(profile),
+              source: "manual_actualization",
+            },
+          },
+        }),
+      );
+      if (ok) {
+        toast({ title: "Сохранено" });
+        setAddOpen(false);
+        resetAddForm();
+      } else toast({ title: "Ошибка сохранения", variant: "destructive" });
+      return;
+    }
     const id = addManualTradePoint(
       row.id,
       {
@@ -121,7 +206,97 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
     setTpBump((n) => n + 1);
     setAddOpen(false);
     resetAddForm();
-  }, [addName, addCity, addAddress, addContactName, addContactPhone, addComment, profile, row.id, resetAddForm]);
+  }, [
+    useAct,
+    actx,
+    addName,
+    addCity,
+    addAddress,
+    addFormat,
+    addContactName,
+    addContactPhone,
+    addComment,
+    profile,
+    row.id,
+    resetAddForm,
+  ]);
+
+  const openEdit = useCallback(
+    (tp: DealerTradePoint) => {
+      setEditId(tp.id);
+      setEditName(tp.name);
+      setEditCity(tp.city);
+      setEditAddress(tp.address);
+      setEditFormat(tp.format);
+      setEditContactName(tp.contactName ?? "");
+      setEditContactPhone(tp.contactPhone ?? "");
+      setEditComment(tp.tpComment ?? "");
+      setEditOpen(true);
+    },
+    [],
+  );
+
+  const onEditSave = useCallback(async () => {
+    if (!useAct || !editId) return;
+    if (!editName.trim() || !editCity.trim() || !editAddress.trim()) {
+      toast({ title: "Заполните название, город и адрес", variant: "destructive" });
+      return;
+    }
+    setEditSaving(true);
+    const now = new Date().toISOString();
+    const fields: Record<string, unknown> = {
+      name: editName.trim(),
+      city: editCity.trim(),
+      address: editAddress.trim(),
+      format: editFormat.trim(),
+      contactName: editContactName.trim(),
+      contactPhone: editContactPhone.trim(),
+      comment: editComment.trim(),
+    };
+    const ov = {
+      tradePointId: editId,
+      dealerId: row.id,
+      fields,
+      updatedAt: now,
+      updatedBy: profile.personaUserId,
+      updatedByName: userLabelFromProfile(profile),
+      source: "manual_actualization" as const,
+    };
+    const ok = await actx.persist((prev) =>
+      mergeActualizationState(prev, {
+        tradePointOverridesById: { ...prev.tradePointOverridesById, [editId]: ov },
+      }),
+    );
+    setEditSaving(false);
+    if (ok) {
+      toast({ title: "Сохранено" });
+      setEditOpen(false);
+      setEditId(null);
+    } else toast({ title: "Ошибка сохранения", variant: "destructive" });
+  }, [useAct, editId, editName, editCity, editAddress, editFormat, editContactName, editContactPhone, editComment, actx, row.id, profile]);
+
+  const onArchive = useCallback(
+    async (tp: DealerTradePoint) => {
+      if (!useAct || !canArchiveTradePointDuringActualization(profile, row, tp)) return;
+      const now = new Date().toISOString();
+      const info = {
+        tradePointId: tp.id,
+        dealerId: row.id,
+        archivedAt: now,
+        archivedBy: profile.personaUserId,
+        archivedByName: userLabelFromProfile(profile),
+        source: "manual_actualization" as const,
+      };
+      const ok = await actx.persist((prev) =>
+        mergeActualizationState(prev, {
+          archivedTradePointsById: { ...prev.archivedTradePointsById, [tp.id]: info },
+        }),
+      );
+      if (ok) toast({ title: "Точка архивирована" });
+      else toast({ title: "Ошибка сохранения", variant: "destructive" });
+    },
+    [useAct, actx, row.id, profile],
+  );
 
   const listToShow = showArchived ? archivedList : mergedActive;
   const hasArchived = archivedCount > 0;
@@ -142,7 +317,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
               variant="outline"
               size="sm"
               className="min-h-9 w-full font-semibold sm:w-auto"
-              data-testid="button-dealer-trade-point-add"
+              data-testid="button-trade-point-create"
               onClick={() => {
                 resetAddForm();
                 setAddOpen(true);
@@ -154,7 +329,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
         </div>
         <p className="text-sm text-muted-foreground">Торговые точки не указаны.</p>
         <Dialog open={addOpen} onOpenChange={setAddOpen}>
-          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md" data-testid="dialog-dealer-trade-point-add">
+          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md" data-testid="dialog-trade-point-create">
             <DialogHeader>
               <DialogTitle className="text-base">Новая торговая точка</DialogTitle>
             </DialogHeader>
@@ -189,6 +364,10 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                 />
               </div>
               <div className="space-y-1.5">
+                <Label className="text-xs">Тип / формат</Label>
+                <Input value={addFormat} onChange={(e) => setAddFormat(e.target.value)} className="min-h-10" />
+              </div>
+              <div className="space-y-1.5">
                 <Label className="text-xs">Контактное лицо</Label>
                 <Input
                   value={addContactName}
@@ -218,7 +397,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
               </div>
             </div>
             <DialogFooter className="flex-col gap-2 sm:flex-row">
-              <Button type="button" className="min-h-10 w-full font-semibold sm:w-auto" data-testid="button-dealer-trade-point-save" onClick={onAddSave}>
+              <Button type="button" className="min-h-10 w-full font-semibold sm:w-auto" data-testid="button-dealer-trade-point-save" onClick={() => void onAddSave()}>
                 Сохранить
               </Button>
             </DialogFooter>
@@ -252,7 +431,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                 variant="outline"
                 size="sm"
                 className="min-h-9 w-full font-semibold sm:w-auto"
-                data-testid="button-dealer-trade-point-add"
+                data-testid="button-trade-point-create"
                 onClick={() => {
                   resetAddForm();
                   setAddOpen(true);
@@ -265,7 +444,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
         </div>
         <p className="text-sm text-muted-foreground">Активных торговых точек нет.</p>
         <Dialog open={addOpen} onOpenChange={setAddOpen}>
-          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md" data-testid="dialog-dealer-trade-point-add">
+          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md" data-testid="dialog-trade-point-create">
             <DialogHeader>
               <DialogTitle className="text-base">Новая торговая точка</DialogTitle>
             </DialogHeader>
@@ -300,6 +479,10 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                 />
               </div>
               <div className="space-y-1.5">
+                <Label className="text-xs">Тип / формат</Label>
+                <Input value={addFormat} onChange={(e) => setAddFormat(e.target.value)} className="min-h-10" />
+              </div>
+              <div className="space-y-1.5">
                 <Label className="text-xs">Контактное лицо</Label>
                 <Input
                   value={addContactName}
@@ -329,7 +512,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
               </div>
             </div>
             <DialogFooter className="flex-col gap-2 sm:flex-row">
-              <Button type="button" className="min-h-10 w-full font-semibold sm:w-auto" data-testid="button-dealer-trade-point-save" onClick={onAddSave}>
+              <Button type="button" className="min-h-10 w-full font-semibold sm:w-auto" data-testid="button-dealer-trade-point-save" onClick={() => void onAddSave()}>
                 Сохранить
               </Button>
             </DialogFooter>
@@ -365,7 +548,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
               variant="outline"
               size="sm"
               className="min-h-9 w-full font-semibold sm:w-auto"
-              data-testid="button-dealer-trade-point-add"
+              data-testid="button-trade-point-create"
               onClick={() => {
                 resetAddForm();
                 setAddOpen(true);
@@ -457,6 +640,32 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                         <span className="font-semibold tabular-nums text-foreground">{showcaseOpen}</span>
                       </p>
                     ) : null}
+                    {useAct && canEdit && !isVirtual ? (
+                      <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="min-h-10 w-full font-semibold sm:w-auto"
+                          data-testid={`button-trade-point-edit-${tp.id}`}
+                          onClick={() => openEdit(tp)}
+                        >
+                          Редактировать
+                        </Button>
+                        {canArchiveTradePointDuringActualization(profile, row, tp) ? (
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="sm"
+                            className="min-h-10 w-full font-semibold sm:w-auto"
+                            data-testid={`button-trade-point-archive-${tp.id}`}
+                            onClick={() => void onArchive(tp)}
+                          >
+                            Архивировать ТТ
+                          </Button>
+                        ) : null}
+                      </div>
+                    ) : null}
                     <Button
                       asChild
                       variant="default"
@@ -503,7 +712,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
       ) : null}
 
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md" data-testid="dialog-dealer-trade-point-add">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md" data-testid="dialog-trade-point-create">
           <DialogHeader>
             <DialogTitle className="text-base">Новая торговая точка</DialogTitle>
           </DialogHeader>
@@ -538,6 +747,10 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
               />
             </div>
             <div className="space-y-1.5">
+              <Label className="text-xs">Тип / формат</Label>
+              <Input value={addFormat} onChange={(e) => setAddFormat(e.target.value)} className="min-h-10" />
+            </div>
+            <div className="space-y-1.5">
               <Label className="text-xs">Контактное лицо</Label>
               <Input
                 value={addContactName}
@@ -567,7 +780,63 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
             </div>
           </div>
           <DialogFooter className="flex-col gap-2 sm:flex-row">
-            <Button type="button" className="min-h-10 w-full font-semibold sm:w-auto" data-testid="button-dealer-trade-point-save" onClick={onAddSave}>
+            <Button
+              type="button"
+              className="min-h-10 w-full font-semibold sm:w-auto"
+              data-testid="button-dealer-trade-point-save"
+              onClick={() => void onAddSave()}
+            >
+              Сохранить
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto pb-24 sm:max-w-md" data-testid="dialog-trade-point-edit">
+          <DialogHeader>
+            <DialogTitle className="text-base">Редактирование торговой точки</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Название</Label>
+              <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="min-h-10" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Тип / формат</Label>
+              <Input value={editFormat} onChange={(e) => setEditFormat(e.target.value)} className="min-h-10" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Город</Label>
+              <Input value={editCity} onChange={(e) => setEditCity(e.target.value)} className="min-h-10" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Адрес</Label>
+              <Textarea value={editAddress} onChange={(e) => setEditAddress(e.target.value)} rows={2} className="min-h-[52px]" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Контактное лицо</Label>
+              <Input value={editContactName} onChange={(e) => setEditContactName(e.target.value)} className="min-h-10" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Телефон</Label>
+              <Input value={editContactPhone} onChange={(e) => setEditContactPhone(e.target.value)} className="min-h-10" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Комментарий</Label>
+              <Textarea value={editComment} onChange={(e) => setEditComment(e.target.value)} rows={2} className="min-h-[52px]" />
+            </div>
+          </div>
+          <DialogFooter className="sticky bottom-0 border-t border-border bg-background pt-3">
+            <Button type="button" variant="outline" className="min-h-10 w-full sm:w-auto" onClick={() => setEditOpen(false)}>
+              Отмена
+            </Button>
+            <Button
+              type="button"
+              className="min-h-10 w-full font-semibold sm:w-auto"
+              disabled={editSaving}
+              onClick={() => void onEditSave()}
+            >
               Сохранить
             </Button>
           </DialogFooter>

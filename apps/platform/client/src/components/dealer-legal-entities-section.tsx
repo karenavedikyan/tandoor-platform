@@ -20,6 +20,10 @@ import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { LegalEntityContactsSubsection } from "@/components/legal-entity-contacts-subsection";
 import { buildLegalEntityNameSuggestions, lookupLegalEntityByInn } from "@/lib/legal-entity-directory";
 import { toast } from "@/hooks/use-toast";
+import { useClientBaseActualization } from "@/context/client-base-actualization-context";
+import { mergeLegalEntitiesForActualization } from "@/lib/client-base-actualization-data-merge";
+import { mergeActualizationState } from "@/lib/client-base-actualization-state";
+import { canManageLegalEntitiesDuringActualization } from "@/lib/client-base-actualization-permissions";
 
 type Props = {
   row: DealerRow;
@@ -40,6 +44,8 @@ function isFilled(v: string | undefined): boolean {
 }
 
 export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLabel }: Props) {
+  const actx = useClientBaseActualization();
+  const useAct = actx.enabled && canManageLegalEntitiesDuringActualization(profile, row);
   const canEdit = canEditDealerLegalEntities(profile, row);
   const [tick, setTick] = useState(0);
   const [showArchived, setShowArchived] = useState(false);
@@ -52,6 +58,8 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
   const [draftAddress, setDraftAddress] = useState("");
   const [draftStatus, setDraftStatus] = useState<DealerLegalEntityStatus>("additional");
   const [draftComment, setDraftComment] = useState("");
+  const [draftOgrn, setDraftOgrn] = useState("");
+  const [draftActualAddress, setDraftActualAddress] = useState("");
   const [innLookupResults, setInnLookupResults] = useState<
     { id: string; name: string; inn: string; kpp?: string; legalAddress?: string; source: string }[]
   >([]);
@@ -63,7 +71,14 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
     return () => window.removeEventListener(DEALER_LEGAL_ENTITIES_EVENT, fn);
   }, []);
 
-  const merged = useMemo(() => getMergedDealerLegalEntities(row), [row, tick]);
+  useEffect(() => {
+    if (useAct) setTick((n) => n + 1);
+  }, [useAct, actx.state]);
+
+  const merged = useMemo(() => {
+    if (useAct) return mergeLegalEntitiesForActualization(row, actx.state);
+    return getMergedDealerLegalEntities(row);
+  }, [row, tick, useAct, actx.state]);
 
   const nameSuggestions = useMemo(() => buildLegalEntityNameSuggestions(draftName, row.id), [draftName, row.id, tick]);
 
@@ -80,25 +95,71 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
     setDraftAddress("");
     setDraftStatus("additional");
     setDraftComment("");
+    setDraftOgrn("");
+    setDraftActualAddress("");
     setInnLookupResults([]);
     setInnLookupNote("");
   }, []);
 
-  const loadEntityIntoDraft = useCallback((id: string) => {
-    const e = merged.find((x) => x.id === id && !x.isPassportSeed);
-    if (!e) return;
-    setDraftName(e.name);
-    setDraftInn(e.inn ?? "");
-    setDraftKpp(e.kpp ?? "");
-    setDraftAddress(e.legalAddress ?? "");
-    setDraftStatus(e.status);
-    setDraftComment(e.comment ?? "");
-    setEditingId(id);
-    setFormOpen(true);
-  }, [merged]);
+  const loadEntityIntoDraft = useCallback(
+    (id: string) => {
+      const e = merged.find((x) => x.id === id && (!x.isPassportSeed || useAct));
+      if (!e) return;
+      setDraftName(e.name);
+      setDraftInn(e.inn ?? "");
+      setDraftKpp(e.kpp ?? "");
+      setDraftAddress(e.legalAddress ?? "");
+      setDraftOgrn(e.ogrn ?? "");
+      setDraftActualAddress(e.actualAddress ?? "");
+      setDraftStatus(e.status);
+      setDraftComment(e.comment ?? "");
+      setEditingId(id);
+      setFormOpen(true);
+    },
+    [merged, useAct],
+  );
 
-  const onSave = useCallback(() => {
+  const onSave = useCallback(async () => {
     if (!canEdit || !draftName.trim()) return;
+    if (useAct) {
+      const id = editingId ?? `manual-le-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const now = new Date().toISOString();
+      const payload: Record<string, unknown> = {
+        name: draftName.trim(),
+        inn: draftInn.trim(),
+        kpp: draftKpp.trim(),
+        ogrn: draftOgrn.trim(),
+        legalAddress: draftAddress.trim(),
+        actualAddress: draftActualAddress.trim(),
+        status: draftStatus,
+        comment: draftComment.trim(),
+        updatedAt: now,
+        updatedBy: actorUserId,
+        updatedByName: actorLabel,
+      };
+      const ok = await actx.persist((prev) => {
+        const cur = prev.legalEntityOverridesByDealerId[row.id] ?? {
+          createdById: actorUserId,
+          overridesById: {},
+          archivedById: {},
+        };
+        const nextOverrides = { ...cur.overridesById, [id]: { ...(cur.overridesById[id] as object), ...payload } };
+        return mergeActualizationState(prev, {
+          legalEntityOverridesByDealerId: {
+            ...prev.legalEntityOverridesByDealerId,
+            [row.id]: { ...cur, overridesById: nextOverrides },
+          },
+        });
+      });
+      if (ok) {
+        toast({ title: "Сохранено" });
+        setTick((n) => n + 1);
+        setEditingId(null);
+        setFormOpen(false);
+        resetDraft();
+      } else toast({ title: "Ошибка сохранения", variant: "destructive" });
+      return;
+    }
     if (editingId && !editingId.startsWith("passport:")) {
       updateDealerLegalEntity(
         row.id,
@@ -132,9 +193,13 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
     resetDraft();
   }, [
     canEdit,
+    useAct,
+    actx,
     draftName,
     draftInn,
     draftKpp,
+    draftOgrn,
+    draftActualAddress,
     draftAddress,
     draftStatus,
     draftComment,
@@ -161,7 +226,7 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
             size="sm"
             variant="outline"
             className="min-h-9 w-full font-semibold sm:w-auto"
-            data-testid="button-dealer-legal-entity-add"
+            data-testid="button-legal-entity-create"
             onClick={() => {
               setEditingId(null);
               resetDraft();
@@ -312,6 +377,27 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
               />
             </div>
             <div className="space-y-1.5">
+              <Label className="text-xs">ОГРН</Label>
+              <Input
+                value={draftOgrn}
+                onChange={(e) => setDraftOgrn(e.target.value)}
+                disabled={!canEdit}
+                className="min-h-10"
+                data-testid="input-dealer-legal-entity-ogrn"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Фактический адрес</Label>
+              <Textarea
+                value={draftActualAddress}
+                onChange={(e) => setDraftActualAddress(e.target.value)}
+                disabled={!canEdit}
+                rows={2}
+                className="min-h-[52px] resize-y text-sm"
+                data-testid="textarea-dealer-legal-entity-actual-address"
+              />
+            </div>
+            <div className="space-y-1.5">
               <Label className="text-xs">Статус</Label>
               <Select
                 value={draftStatus}
@@ -344,9 +430,9 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
                 <Button
                   type="button"
                   className="min-h-9 font-semibold"
-                  data-testid="button-dealer-legal-entity-save"
+                  data-testid="button-legal-entity-save"
                   disabled={!draftName.trim()}
-                  onClick={onSave}
+                  onClick={() => void onSave()}
                 >
                   Сохранить
                 </Button>
@@ -390,6 +476,10 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
                   ) : isFilled(e.kpp) ? (
                     <p className="text-xs text-muted-foreground">КПП {e.kpp}</p>
                   ) : null}
+                  {isFilled(e.ogrn) ? <p className="text-xs text-muted-foreground">ОГРН {e.ogrn}</p> : null}
+                  {isFilled(e.actualAddress) ? (
+                    <p className="text-xs leading-relaxed text-muted-foreground">Факт. адрес: {e.actualAddress}</p>
+                  ) : null}
                   {isFilled(e.legalAddress) ? (
                     <p className="text-xs leading-relaxed text-muted-foreground">{e.legalAddress}</p>
                   ) : null}
@@ -403,14 +493,14 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
                     entityArchived={false}
                   />
                 </div>
-                {canEdit && !e.isPassportSeed ? (
+                {canEdit && (!e.isPassportSeed || useAct) ? (
                   <div className="flex shrink-0 flex-col gap-1.5 sm:flex-row">
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
                       className="min-h-9 px-2 text-xs font-semibold"
-                      data-testid={`button-dealer-legal-entity-edit-${e.id}`}
+                      data-testid={`button-legal-entity-edit-${e.id}`}
                       onClick={() => loadEntityIntoDraft(e.id)}
                     >
                       Изменить
@@ -423,8 +513,33 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
                         className="min-h-9 px-2 text-xs font-semibold"
                         data-testid={`button-dealer-legal-entity-archive-${e.id}`}
                         onClick={() => {
-                          archiveDealerLegalEntity(row.id, e.id, actorUserId, actorLabel);
-                          setTick((n) => n + 1);
+                          void (async () => {
+                            if (useAct) {
+                              const ok = await actx.persist((prev) => {
+                                const cur = prev.legalEntityOverridesByDealerId[row.id] ?? {
+                                  createdById: actorUserId,
+                                  overridesById: {},
+                                  archivedById: {},
+                                };
+                                return mergeActualizationState(prev, {
+                                  legalEntityOverridesByDealerId: {
+                                    ...prev.legalEntityOverridesByDealerId,
+                                    [row.id]: {
+                                      ...cur,
+                                      archivedById: { ...cur.archivedById, [e.id]: true },
+                                    },
+                                  },
+                                });
+                              });
+                              if (ok) {
+                                toast({ title: "В архиве" });
+                                setTick((n) => n + 1);
+                              }
+                            } else {
+                              archiveDealerLegalEntity(row.id, e.id, actorUserId, actorLabel);
+                              setTick((n) => n + 1);
+                            }
+                          })();
                         }}
                       >
                         В архив
@@ -467,7 +582,7 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
                           variant="outline"
                           size="sm"
                           className="mt-2 min-h-8 text-xs"
-                          data-testid={`button-dealer-legal-entity-edit-${e.id}`}
+                          data-testid={`button-legal-entity-edit-${e.id}`}
                           onClick={() => loadEntityIntoDraft(e.id)}
                         >
                           Изменить
