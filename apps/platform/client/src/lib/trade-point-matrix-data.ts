@@ -1,6 +1,7 @@
 import type { CatalogProduct } from "./catalog-product-type";
 import { MOCK_CATALOG_PRODUCTS } from "./catalog-mock-products";
 import { normalizeDealerIdForCatalog } from "./catalog-dealer-id";
+import { isManualActualizationTradePointId } from "@/lib/client-base-actualization-stable-ids";
 
 export type ShowcaseZone = "A" | "B" | "C";
 
@@ -154,6 +155,7 @@ export function getTradePointMatrix(
   dealerId: string,
   pointId: string,
 ): TradePointProductMatrixItem[] {
+  if (isManualActualizationTradePointId(pointId)) return [];
   const d = normalizeDealerIdForCatalog(dealerId);
   const normalizedPoint = pointId.includes("-")
     ? pointId.trim()

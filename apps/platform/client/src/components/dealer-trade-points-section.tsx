@@ -382,7 +382,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
             </Button>
           ) : null}
         </div>
-        <p className="text-sm text-muted-foreground">Торговые точки не указаны.</p>
+        <p className="text-sm text-muted-foreground">Торговые точки не добавлены.</p>
         <Dialog open={addOpen} onOpenChange={setAddOpen}>
           <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md" data-testid="dialog-trade-point-create">
             <DialogHeader>

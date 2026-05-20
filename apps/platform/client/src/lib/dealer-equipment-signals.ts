@@ -4,6 +4,7 @@
 
 import type { ClientCategoryId } from "@/lib/client-category";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
+import { isManualActualizationDealerId } from "@/lib/client-base-actualization-stable-ids";
 
 export type DealerEquipmentStatus = "ok" | "needs_check" | "missing" | "outdated";
 
@@ -104,6 +105,17 @@ function statusToLabels(status: DealerEquipmentStatus, hasRows: boolean): { stat
 }
 
 export function getDealerEquipmentSignal(row: DealerRow): DealerEquipmentSignal {
+  if (isManualActualizationDealerId(row.id)) {
+    const { statusLabel, summary } = statusToLabels("missing", false);
+    return {
+      hasEquipment: false,
+      summary,
+      status: "missing",
+      statusLabel,
+      items: [],
+      reason: "Для клиента из актуализации оборудование на точках пока не описано.",
+    };
+  }
   const ext = row as DealerRow & { releaseEquipmentNote?: string };
   const hash =
     charSum(row.id) +

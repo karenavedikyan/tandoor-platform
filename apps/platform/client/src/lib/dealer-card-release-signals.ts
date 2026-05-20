@@ -5,6 +5,7 @@
 
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import type { ShowcaseCategoryId } from "@/lib/showcase-distribution-data";
+import { isManualActualizationDealerId } from "@/lib/client-base-actualization-stable-ids";
 
 export function charSumId(id: string): number {
   let sum = 0;
@@ -30,6 +31,7 @@ const CAT_CYCLE: ShowcaseCategoryId[] = ["entrance_doors", "interior_doors", "ha
 
 /** Раскрываемый блок «неактуальная витрина»; null — не показывать. */
 export function getOutdatedShowcaseBundle(row: DealerRow): OutdatedShowcaseBundle | null {
+  if (isManualActualizationDealerId(row.id)) return null;
   const h = charSumId(row.id);
   if (h % 5 === 0) return null;
   const cat0 = CAT_CYCLE[h % 4];
@@ -68,6 +70,7 @@ export type ShowcaseRecommendationItem = {
 };
 
 export function getShowcaseRecommendationItems(row: DealerRow): ShowcaseRecommendationItem[] {
+  if (isManualActualizationDealerId(row.id)) return [];
   const h = charSumId(row.id);
   if (h % 7 === 0) return [];
   const cat = CAT_CYCLE[(h + 2) % 4];
@@ -97,6 +100,7 @@ export type CompetitorActivityRow = {
 };
 
 export function getCompetitorActivityRows(row: DealerRow): CompetitorActivityRow[] {
+  if (isManualActualizationDealerId(row.id)) return [];
   const list = row.competitors.list.trim();
   const promo = row.competitors.strengths.trim();
   const rm = row.competitors.rmComment.trim();

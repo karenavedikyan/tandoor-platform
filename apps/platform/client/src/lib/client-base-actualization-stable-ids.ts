@@ -26,6 +26,16 @@ export function generateStableManualTradePointId(dealerId: string, now = new Dat
   return `manual-tp-${dealerId}-${formatManualIdTimestamp(now)}-${shortRandom()}`;
 }
 
+/** Клиент, созданный только через актуализацию (не release-строка). */
+export function isManualActualizationDealerId(dealerId: string): boolean {
+  return dealerId.trim().startsWith("manual-dealer-");
+}
+
+/** Торговая точка, созданная только через актуализацию. */
+export function isManualActualizationTradePointId(tradePointId: string): boolean {
+  return tradePointId.trim().startsWith("manual-tp-");
+}
+
 export function normalizeInnDigits(inn: string): string {
   return inn.replace(/\D/g, "");
 }

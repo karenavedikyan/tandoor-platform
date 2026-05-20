@@ -6,6 +6,7 @@
 import { isClientTopTier } from "@/lib/client-category";
 import { DEALER_BASE_ROWS, type DealerRow, type DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import { getDealerAnalyticsSignalCards } from "@/lib/dealer-analytics-signals";
+import { isManualActualizationDealerId, isManualActualizationTradePointId } from "@/lib/client-base-actualization-stable-ids";
 
 export type TrainingAttentionLevel = "none" | "watch" | "recommended" | "priority";
 
@@ -77,6 +78,15 @@ export function getDealerTrainingAttentionSignal(
   dealer: DealerRow,
   productTrainingCompletedOverride?: boolean,
 ): TrainingAttentionSignal {
+  if (isManualActualizationDealerId(dealer.id)) {
+    return {
+      level: "none",
+      label: "Обучение и сигналы появятся после данных по точкам и витрине",
+      reasons: [],
+      recommendedActions: [],
+      suggestedTrainingProgramIds: [],
+    };
+  }
   const completed = mergeCompleted(dealer, productTrainingCompletedOverride);
   if (completed) {
     return {
@@ -164,6 +174,15 @@ export function getTradePointTrainingAttentionSignal(
   point: DealerTradePoint,
   productTrainingCompletedOverride?: boolean,
 ): TrainingAttentionSignal {
+  if (isManualActualizationTradePointId(point.id) || isManualActualizationDealerId(dealer.id)) {
+    return {
+      level: "none",
+      label: "Обучение и сигналы появятся после заполнения витрины и матрицы",
+      reasons: [],
+      recommendedActions: [],
+      suggestedTrainingProgramIds: [],
+    };
+  }
   const completed = tpCompleted(point, dealer.id, productTrainingCompletedOverride);
   if (completed) {
     return {
