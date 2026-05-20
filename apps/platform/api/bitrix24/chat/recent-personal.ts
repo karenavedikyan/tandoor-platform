@@ -1,0 +1,43 @@
+/**
+ * Vercel Serverless: POST /api/bitrix24/chat/recent-personal
+ *
+ * Полностью автономный handler: без импортов из других файлов api/, server/*, client/*, @/.
+ * Не использует BITRIX24_WEBHOOK_URL.
+ */
+import type { VercelRequest, VercelResponse } from "@vercel/node";
+
+const JSON_CT = "application/json; charset=utf-8";
+
+function sendJson(res: VercelResponse, status: number, body: Record<string, unknown>): void {
+  res.setHeader("Content-Type", JSON_CT);
+  res.status(status).json(body);
+}
+
+export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
+  try {
+    if (req.method !== "POST") {
+      res.setHeader("Allow", "POST");
+      sendJson(res, 405, {
+        success: false,
+        code: "METHOD_NOT_ALLOWED",
+        message: "Используйте POST с заголовком content-type: application/json.",
+      });
+      return;
+    }
+
+    sendJson(res, 401, {
+      success: false,
+      code: "BITRIX24_OAUTH_NOT_CONNECTED",
+      message:
+        "Персональный аккаунт Bitrix24 не подключён. Подключите Bitrix24 в разделе «Коммуникации» после настройки OAuth на сервере.",
+    });
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    console.error("[bitrix24-api] chat/recent-personal unhandled", m);
+    sendJson(res, 500, {
+      success: false,
+      code: "INTERNAL_ERROR",
+      message: "Внутренняя ошибка сервера. Повторите запрос позже.",
+    });
+  }
+}

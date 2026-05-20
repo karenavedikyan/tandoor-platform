@@ -1,6 +1,9 @@
 /**
  * Vercel Serverless: POST /api/bitrix24/chat/recent
  *
+ * @deprecated Для раздела «Коммуникации» в ЛК не используйте: личные чаты через общий webhook небезопасны.
+ * Используйте персональный OAuth и POST /api/bitrix24/chat/recent-personal.
+ *
  * Полностью автономный handler: без импортов из других файлов api/, server/*, client/*, @/.
  * Вызывает im.recent.get и возвращает нормализованный список чатов.
  */

@@ -7,16 +7,21 @@ import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import {
-  getBitrix24ChatMessages,
-  listBitrix24RecentChats,
-  sendBitrix24ChatMessage,
+  getBitrix24OAuthStatus,
+  getBitrix24PersonalMessages,
+  listBitrix24PersonalChats,
+  sendBitrix24PersonalMessage,
+  startBitrix24OAuth,
   type Bitrix24ChatMessageDto,
+  type Bitrix24OAuthStatusDto,
   type Bitrix24RecentChatDto,
 } from "@/lib/bitrix24-integration";
 import { toast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 
-const LAST_DIALOG_STORAGE_KEY = "tandoor-communications-last-dialog-v1";
+const LAST_DIALOG_SESSION_KEY = "tandoor-communications-last-dialog-v1";
+
+type UiMode = "loading" | "error" | "not_configured" | "not_connected" | "connected";
 
 function testIdSlug(id: string | number): string {
   const s = String(id);
@@ -40,10 +45,13 @@ function formatRuDateTime(raw: string | undefined): string {
 
 export default function CommunicationsPage() {
   const isMobile = useIsMobile();
+  const [uiMode, setUiMode] = useState<UiMode>("loading");
+  const [pageError, setPageError] = useState<string | null>(null);
+  const [oauthSnapshot, setOauthSnapshot] = useState<Bitrix24OAuthStatusDto | null>(null);
+
   const [chats, setChats] = useState<Bitrix24RecentChatDto[]>([]);
   const [chatsLoading, setChatsLoading] = useState(false);
   const [chatsError, setChatsError] = useState<string | null>(null);
-  const [communicationsDisabled, setCommunicationsDisabled] = useState<string | null>(null);
 
   const [selectedDialogId, setSelectedDialogId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Bitrix24ChatMessageDto[]>([]);
@@ -52,8 +60,8 @@ export default function CommunicationsPage() {
 
   const [compose, setCompose] = useState("");
   const [sendBusy, setSendBusy] = useState(false);
+  const [connectBusy, setConnectBusy] = useState(false);
 
-  /** На узком экране: false — список чатов, true — панель выбранного чата. */
   const [mobileThreadOpen, setMobileThreadOpen] = useState(false);
   const didAutoOpenMobileThreadRef = useRef(false);
 
@@ -62,26 +70,45 @@ export default function CommunicationsPage() {
     [chats, selectedDialogId],
   );
 
+  const loadOAuth = useCallback(async () => {
+    setUiMode("loading");
+    setPageError(null);
+    const res = await getBitrix24OAuthStatus();
+    if (!res.ok) {
+      setOauthSnapshot(null);
+      setPageError(res.message);
+      setUiMode("error");
+      return;
+    }
+    setOauthSnapshot(res.data);
+    if (!res.data.configured) {
+      setUiMode("not_configured");
+      return;
+    }
+    if (!res.data.connected) {
+      setUiMode("not_connected");
+      return;
+    }
+    setUiMode("connected");
+  }, []);
+
   const loadChats = useCallback(async () => {
     setChatsLoading(true);
     setChatsError(null);
-    const res = await listBitrix24RecentChats();
+    const res = await listBitrix24PersonalChats();
     setChatsLoading(false);
     if (!res.ok) {
       setChats([]);
       setChatsError(res.message);
-      if (res.code === "BITRIX24_COMMUNICATIONS_DISABLED") {
-        setCommunicationsDisabled(res.message);
-        setMessages([]);
-        setMessagesError(null);
-        setSelectedDialogId(null);
+      if (res.code === "BITRIX24_OAUTH_NOT_CONNECTED") {
+        setUiMode("not_connected");
+        setOauthSnapshot((prev) => (prev ? { ...prev, connected: false } : prev));
       }
       return;
     }
-    setCommunicationsDisabled(null);
     setChats(res.chats);
     const stored =
-      typeof window !== "undefined" ? window.localStorage.getItem(LAST_DIALOG_STORAGE_KEY)?.trim() : "";
+      typeof window !== "undefined" ? window.sessionStorage.getItem(LAST_DIALOG_SESSION_KEY)?.trim() : "";
     setSelectedDialogId((prev) => {
       if (prev && res.chats.some((c) => c.dialogId === prev)) return prev;
       if (stored && res.chats.some((c) => c.dialogId === stored)) return stored;
@@ -92,13 +119,14 @@ export default function CommunicationsPage() {
   const loadMessages = useCallback(async (dialogId: string) => {
     setMessagesLoading(true);
     setMessagesError(null);
-    const res = await getBitrix24ChatMessages(dialogId, 30);
+    const res = await getBitrix24PersonalMessages(dialogId, 30);
     setMessagesLoading(false);
     if (!res.ok) {
       setMessages([]);
       setMessagesError(res.message);
-      if (res.code === "BITRIX24_COMMUNICATIONS_DISABLED") {
-        setCommunicationsDisabled(res.message);
+      if (res.code === "BITRIX24_OAUTH_NOT_CONNECTED") {
+        setUiMode("not_connected");
+        setOauthSnapshot((prev) => (prev ? { ...prev, connected: false } : prev));
       }
       return;
     }
@@ -106,8 +134,13 @@ export default function CommunicationsPage() {
   }, []);
 
   useEffect(() => {
+    void loadOAuth();
+  }, [loadOAuth]);
+
+  useEffect(() => {
+    if (uiMode !== "connected") return;
     void loadChats();
-  }, [loadChats]);
+  }, [uiMode, loadChats]);
 
   useEffect(() => {
     if (!selectedDialogId) {
@@ -134,7 +167,7 @@ export default function CommunicationsPage() {
     (dialogId: string) => {
       setSelectedDialogId(dialogId);
       try {
-        window.localStorage.setItem(LAST_DIALOG_STORAGE_KEY, dialogId);
+        window.sessionStorage.setItem(LAST_DIALOG_SESSION_KEY, dialogId);
       } catch {
         /* ignore */
       }
@@ -145,6 +178,17 @@ export default function CommunicationsPage() {
 
   const onBackToChats = useCallback(() => {
     setMobileThreadOpen(false);
+  }, []);
+
+  const onConnect = useCallback(async () => {
+    setConnectBusy(true);
+    const res = await startBitrix24OAuth();
+    setConnectBusy(false);
+    if (!res.ok) {
+      toast({ title: res.message, variant: "destructive" });
+      return;
+    }
+    window.location.assign(res.redirectUrl);
   }, []);
 
   const onSend = useCallback(async () => {
@@ -159,13 +203,10 @@ export default function CommunicationsPage() {
       return;
     }
     setSendBusy(true);
-    const res = await sendBitrix24ChatMessage(selectedDialogId, text);
+    const res = await sendBitrix24PersonalMessage(selectedDialogId, text);
     setSendBusy(false);
     if (!res.ok) {
       toast({ title: res.message, variant: "destructive" });
-      if (res.code === "BITRIX24_COMMUNICATIONS_DISABLED") {
-        setCommunicationsDisabled(res.message);
-      }
       return;
     }
     setCompose("");
@@ -175,47 +216,117 @@ export default function CommunicationsPage() {
 
   const hideChatListOnMobile = isMobile && mobileThreadOpen;
   const hideMessagesOnMobile = isMobile && !mobileThreadOpen;
-
   const emptyMessagesHint = isMobile ? "Выберите чат в списке." : "Выберите чат в списке слева.";
 
+  if (uiMode === "loading") {
+    return (
+      <div className="mx-auto w-full max-w-6xl space-y-6" data-testid="page-communications">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Коммуникации</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Загрузка…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (uiMode === "error") {
+    return (
+      <div className="mx-auto w-full max-w-6xl space-y-6" data-testid="page-communications">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Коммуникации</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Bitrix24</p>
+        </div>
+        <Alert variant="destructive">
+          <Info className="h-4 w-4" aria-hidden />
+          <AlertDescription data-testid="text-communications-error">{pageError ?? "Произошла ошибка."}</AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+  if (uiMode === "not_configured") {
+    return (
+      <div className="mx-auto w-full max-w-6xl space-y-6" data-testid="page-communications">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Коммуникации</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Личные чаты и сообщения Bitrix24.</p>
+        </div>
+        <Alert>
+          <Info className="h-4 w-4" aria-hidden />
+          <AlertDescription data-testid="text-communications-error">
+            OAuth Bitrix24 не настроен на сервере. Администратору нужно задать переменные окружения BITRIX24_OAUTH_CLIENT_ID,
+            BITRIX24_OAUTH_CLIENT_SECRET и BITRIX24_PORTAL_DOMAIN.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+  if (uiMode === "not_connected") {
+    return (
+      <div className="mx-auto w-full max-w-6xl space-y-6" data-testid="page-communications">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Коммуникации</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Личные чаты только после персонального подключения Bitrix24.</p>
+        </div>
+
+        <Card data-testid="section-communications-connect" className="border-border/80 shadow-sm">
+          <CardHeader>
+            <CardTitle>Подключите Bitrix24</CardTitle>
+            <CardDescription>
+              Чтобы видеть личные чаты и сообщения, нужно подключить ваш личный аккаунт Bitrix24. Общий webhook для этого не
+              используется.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Button
+              type="button"
+              onClick={() => void onConnect()}
+              disabled={connectBusy}
+              data-testid="button-communications-connect-bitrix24"
+            >
+              Подключить Bitrix24
+            </Button>
+            <p className="text-sm text-muted-foreground" data-testid="text-communications-connect-status">
+              OAuth Bitrix24 будет доступен после настройки client_id/client_secret.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // --- connected ---
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6" data-testid="page-communications">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Коммуникации</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Чаты и сообщения Bitrix24 внутри ЛК Тандор.</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Ваши диалоги Bitrix24 (персональный доступ). Данные не запрашиваются через общий webhook.
+        </p>
       </div>
 
-      {communicationsDisabled ? (
-        <Alert
-          variant="destructive"
-          data-testid="section-communications-disabled"
-        >
+      {oauthSnapshot?.user?.name ? (
+        <p className="text-sm text-muted-foreground">Подключено как: {oauthSnapshot.user.name}</p>
+      ) : null}
+
+      {(chatsError && uiMode === "connected") ? (
+        <Alert variant="destructive">
           <Info className="h-4 w-4" aria-hidden />
-          <AlertDescription>{communicationsDisabled}</AlertDescription>
+          <AlertDescription data-testid="text-communications-error">{chatsError}</AlertDescription>
         </Alert>
-      ) : (
-        <Alert
-          className="border-amber-500/50 bg-amber-500/10 text-foreground [&>svg]:text-amber-700 dark:[&>svg]:text-amber-400"
-          data-testid="section-communications-access-warning"
-        >
-          <Info className="h-4 w-4" aria-hidden />
-          <AlertDescription>
-            Временный режим: чаты загружаются через общий webhook Bitrix24 и доступны только администратору. Для доступа
-            сотрудников нужен персональный вход Bitrix24 для каждого пользователя.
-          </AlertDescription>
-        </Alert>
-      )}
+      ) : null}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:items-start">
         <Card
           className={cn("min-w-0 border-border/80 shadow-sm", hideChatListOnMobile && "hidden md:block")}
-          data-testid="section-communications-chat-list"
+          data-testid="section-communications-dialogs"
         >
           <CardHeader className="pb-3">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
-                <CardTitle className="text-base">Чаты Bitrix24</CardTitle>
-                <CardDescription className="text-xs">Последние диалоги (im.recent.get)</CardDescription>
+                <CardTitle className="text-base">Диалоги</CardTitle>
+                <CardDescription className="text-xs">Последние диалоги из Bitrix24</CardDescription>
               </div>
               <Button
                 type="button"
@@ -224,7 +335,6 @@ export default function CommunicationsPage() {
                 className="shrink-0"
                 disabled={chatsLoading}
                 onClick={() => void loadChats()}
-                data-testid="button-communications-refresh-chats"
               >
                 Обновить
               </Button>
@@ -232,13 +342,8 @@ export default function CommunicationsPage() {
           </CardHeader>
           <CardContent className="space-y-2 pt-0">
             {chatsLoading ? <p className="text-sm text-muted-foreground">Загрузка…</p> : null}
-            {chatsError ? (
-              <p className="text-sm text-destructive" role="alert">
-                {chatsError}
-              </p>
-            ) : null}
             {!chatsLoading && !chatsError && chats.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Нет чатов для отображения. Нажмите «Обновить».</p>
+              <p className="text-sm text-muted-foreground">Нет диалогов для отображения.</p>
             ) : null}
             <ul className="max-h-[min(70vh,520px)] space-y-1 overflow-y-auto overflow-x-hidden pr-1">
               {chats.map((c) => {
@@ -252,26 +357,15 @@ export default function CommunicationsPage() {
                       onClick={() => onSelectChat(c.dialogId)}
                       className={cn(
                         "flex w-full flex-col gap-1 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors",
-                        active
-                          ? "border-primary/60 bg-primary/10"
-                          : "border-border/70 bg-card hover:bg-muted/60",
+                        active ? "border-primary/60 bg-primary/10" : "border-border/70 bg-card hover:bg-muted/60",
                       )}
-                      data-testid={`row-communications-chat-${slug}`}
+                      data-testid={`card-communications-dialog-${slug}`}
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <span
-                          className="min-w-0 flex-1 truncate font-medium text-foreground"
-                          data-testid={`text-communications-chat-title-${slug}`}
-                        >
-                          {c.title}
-                        </span>
+                        <span className="min-w-0 flex-1 truncate font-medium text-foreground">{c.title}</span>
                         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
                           {typeof c.counter === "number" && c.counter > 0 ? (
-                            <Badge
-                              variant="secondary"
-                              className="h-6 min-w-6 rounded-md px-1.5 text-xs tabular-nums"
-                              data-testid={`badge-communications-chat-counter-${slug}`}
-                            >
+                            <Badge variant="secondary" className="h-6 min-w-6 rounded-md px-1.5 text-xs tabular-nums">
                               {c.counter}
                             </Badge>
                           ) : null}
@@ -301,32 +395,22 @@ export default function CommunicationsPage() {
 
         <Card
           className={cn("min-w-0 border-border/80 shadow-sm", hideMessagesOnMobile && "hidden md:block")}
-          data-testid="section-communications-chat-messages"
+          data-testid="section-communications-messages"
         >
           <CardHeader className="pb-3">
             <div className="flex flex-wrap items-start gap-2">
               {isMobile && mobileThreadOpen && selectedDialogId ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="shrink-0"
-                  onClick={onBackToChats}
-                  data-testid="button-communications-back-to-chats"
-                >
+                <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={onBackToChats}>
                   Назад к чатам
                 </Button>
               ) : null}
               <div className="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <CardTitle className="text-base">
-                    {selectedChat ? selectedChat.title : "Выберите чат"}
-                  </CardTitle>
+                  <CardTitle className="text-base">{selectedChat ? selectedChat.title : "Выберите диалог"}</CardTitle>
                   <CardDescription className="text-xs">
                     {selectedDialogId ? (
                       <>
-                        Сообщения из Bitrix24 (im.dialog.messages.get), диалог{" "}
-                        <span className="font-mono text-[11px]">{selectedDialogId}</span>
+                        Сообщения, диалог <span className="font-mono text-[11px]">{selectedDialogId}</span>
                       </>
                     ) : (
                       emptyMessagesHint
@@ -340,7 +424,6 @@ export default function CommunicationsPage() {
                   className="shrink-0"
                   disabled={!selectedDialogId || messagesLoading}
                   onClick={() => selectedDialogId && void loadMessages(selectedDialogId)}
-                  data-testid="button-communications-refresh-messages"
                 >
                   Обновить сообщения
                 </Button>
@@ -353,12 +436,12 @@ export default function CommunicationsPage() {
             ) : null}
             {messagesLoading ? <p className="text-sm text-muted-foreground">Загрузка сообщений…</p> : null}
             {messagesError ? (
-              <p className="text-sm text-destructive" role="alert">
+              <p className="text-sm text-destructive" role="alert" data-testid="text-communications-error">
                 {messagesError}
               </p>
             ) : null}
             {selectedDialogId && !messagesLoading && !messagesError && messages.length === 0 ? (
-              <p className="text-sm text-muted-foreground">В этом чате пока нет сообщений в выборке.</p>
+              <p className="text-sm text-muted-foreground">В этом диалоге пока нет сообщений в выборке.</p>
             ) : null}
 
             <ul className="max-h-[min(50vh,360px)] space-y-2 overflow-y-auto overflow-x-hidden pr-1">
@@ -384,17 +467,17 @@ export default function CommunicationsPage() {
               <Textarea
                 value={compose}
                 onChange={(e) => setCompose(e.target.value)}
-                placeholder="Текст сообщения для Bitrix24…"
+                placeholder="Текст сообщения…"
                 rows={3}
                 disabled={!selectedDialogId || sendBusy}
                 className="min-h-[88px] resize-y text-sm"
-                data-testid="textarea-communications-message"
+                data-testid="input-communications-message"
               />
               <Button
                 type="button"
                 disabled={!selectedDialogId || sendBusy || !compose.trim().length}
                 onClick={() => void onSend()}
-                data-testid="button-communications-send-message"
+                data-testid="button-communications-send"
               >
                 Отправить
               </Button>
