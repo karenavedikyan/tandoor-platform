@@ -80,8 +80,12 @@ function openShowcaseTasksCount(dealer: DealerRow, mergedActiveCount: number): n
   return tasks.filter((t) => t.status !== "done").length;
 }
 
-/** Единая подпись удаления из рабочей карточки (мягкий архив). */
-const TRADE_POINT_DELETE_FROM_CARD_LABEL = "Удалить ТТ";
+/** Подписи кнопки архивации: ручная ТТ — «удалить», релизная — «в архив». */
+function tradePointArchiveActionLabels(isManual: boolean): { action: string; confirm: string } {
+  return isManual
+    ? { action: "Удалить ТТ", confirm: "Удалить ТТ" }
+    : { action: "В архив", confirm: "В архив" };
+}
 
 export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) {
   const actx = useClientBaseActualization();
@@ -112,7 +116,10 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
   const [selectedBulkArchiveTpIds, setSelectedBulkArchiveTpIds] = useState<Set<string>>(() => new Set());
   const [bulkArchiveTpDialogOpen, setBulkArchiveTpDialogOpen] = useState(false);
   const [bulkArchiveTpBusy, setBulkArchiveTpBusy] = useState(false);
-  const [singleDeleteTp, setSingleDeleteTp] = useState<DealerTradePoint | null>(null);
+  const [singleDeleteTarget, setSingleDeleteTarget] = useState<{
+    tp: DealerTradePoint;
+    isManual: boolean;
+  } | null>(null);
   const [singleDeleteBusy, setSingleDeleteBusy] = useState(false);
   const addTpSave = useSectionSaveFeedback();
   const editTpSave = useSectionSaveFeedback();
@@ -377,12 +384,12 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
   );
 
   const confirmSingleArchiveTradePoint = useCallback(async () => {
-    if (!singleDeleteTp) return;
+    if (!singleDeleteTarget) return;
     setSingleDeleteBusy(true);
-    const ok = await onArchive(singleDeleteTp);
+    const ok = await onArchive(singleDeleteTarget.tp);
     setSingleDeleteBusy(false);
-    if (ok) setSingleDeleteTp(null);
-  }, [singleDeleteTp, onArchive]);
+    if (ok) setSingleDeleteTarget(null);
+  }, [singleDeleteTarget, onArchive]);
 
   const onRestoreTradePoint = useCallback(
     async (tp: DealerTradePoint) => {
@@ -943,13 +950,13 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                 {canArchiveThisTp ? (
                   <Button
                     type="button"
-                    variant="destructive"
+                    variant={isManual ? "destructive" : "outline"}
                     size="sm"
                     className="min-h-11 w-full touch-manipulation font-semibold sm:min-h-10 sm:w-auto"
                     data-testid={`button-trade-point-delete-${tp.id}`}
-                    onClick={() => setSingleDeleteTp(tp)}
+                    onClick={() => setSingleDeleteTarget({ tp, isManual })}
                   >
-                    {TRADE_POINT_DELETE_FROM_CARD_LABEL}
+                    {tradePointArchiveActionLabels(isManual).action}
                   </Button>
                 ) : null}
                 <div className="flex flex-wrap items-start justify-between gap-2">
@@ -1291,25 +1298,25 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
               disabled={bulkArchiveTpBusy || bulkArchiveTpDialogCount === 0}
               onClick={() => void confirmBulkArchiveTradePoints()}
             >
-              {bulkArchiveTpBusy ? "Сохранение…" : TRADE_POINT_DELETE_FROM_CARD_LABEL}
+              {bulkArchiveTpBusy ? "Сохранение…" : "Удалить ТТ"}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
       <AlertDialog
-        open={!!singleDeleteTp}
+        open={!!singleDeleteTarget}
         onOpenChange={(open) => {
           if (singleDeleteBusy) return;
-          if (!open) setSingleDeleteTp(null);
+          if (!open) setSingleDeleteTarget(null);
         }}
       >
         <AlertDialogContent data-testid="dialog-trade-point-delete-confirm">
           <AlertDialogHeader>
             <AlertDialogTitle>Удалить торговую точку?</AlertDialogTitle>
             <AlertDialogDescription>
-              Торговая точка будет скрыта из карточки клиента (архив). Данные не удаляются физически, её можно восстановить
-              из архива.
+              Торговая точка будет скрыта из карточки клиента. Данные не удаляются физически, её можно восстановить из
+              архива.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex-col gap-2 sm:flex-row">
@@ -1326,13 +1333,17 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
             </AlertDialogCancel>
             <Button
               type="button"
-              variant="destructive"
+              variant={singleDeleteTarget?.isManual ? "destructive" : "outline"}
               className="min-h-10 w-full font-semibold sm:w-auto"
               data-testid="button-trade-point-delete-confirm"
-              disabled={singleDeleteBusy || !singleDeleteTp}
+              disabled={singleDeleteBusy || !singleDeleteTarget}
               onClick={() => void confirmSingleArchiveTradePoint()}
             >
-              {singleDeleteBusy ? "Сохранение…" : TRADE_POINT_DELETE_FROM_CARD_LABEL}
+              {singleDeleteBusy
+                ? "Сохранение…"
+                : singleDeleteTarget
+                  ? tradePointArchiveActionLabels(singleDeleteTarget.isManual).confirm
+                  : ""}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
