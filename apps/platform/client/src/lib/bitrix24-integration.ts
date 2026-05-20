@@ -27,6 +27,8 @@ export type Bitrix24LkCreateTaskPayload = {
   tradePointId?: string;
   tradePointName?: string;
   returnUrl?: string;
+  /** Положительный ID ответственного в Bitrix24 (опционально; иначе серверный fallback). */
+  responsibleId?: string | number;
 };
 
 export type Bitrix24LkCreateTaskResult =
@@ -132,13 +134,24 @@ export async function createBitrix24TaskDraft(payload: Bitrix24TaskDraftPayload)
  * Создание задачи из карточки дилера/ТТ: POST /api/bitrix24/tasks/create (сервер, без секретов в клиенте).
  */
 export async function createBitrix24LkTask(payload: Bitrix24LkCreateTaskPayload): Promise<Bitrix24LkCreateTaskResult> {
+  const requestBody: Record<string, unknown> = {
+    title: payload.title,
+    description: payload.description,
+    dealerId: payload.dealerId,
+    dealerName: payload.dealerName,
+  };
+  if (payload.tradePointId != null) requestBody.tradePointId = payload.tradePointId;
+  if (payload.tradePointName != null) requestBody.tradePointName = payload.tradePointName;
+  if (payload.returnUrl != null) requestBody.returnUrl = payload.returnUrl;
+  if (payload.responsibleId != null) requestBody.responsibleId = payload.responsibleId;
+
   let res: Response;
   try {
     res = await fetch("/api/bitrix24/tasks/create", {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       credentials: "same-origin",
-      body: JSON.stringify(payload),
+      body: JSON.stringify(requestBody),
     });
   } catch {
     return {
@@ -195,10 +208,12 @@ type ListTasksApiErr = { success: false; message?: string; code?: string; bitrix
 export async function listBitrix24Tasks(options?: {
   limit?: number;
   onlyOpen?: boolean;
+  responsibleId?: string | number;
 }): Promise<{ ok: true; tasks: Bitrix24ListedTaskDto[] } | { ok: false; message: string; code?: string }> {
   const payload: Record<string, unknown> = {};
   if (options?.limit != null) payload.limit = options.limit;
   if (options?.onlyOpen != null) payload.onlyOpen = options.onlyOpen;
+  if (options?.responsibleId != null) payload.responsibleId = options.responsibleId;
 
   let res: Response;
   try {

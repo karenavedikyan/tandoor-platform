@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -12,7 +13,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { toast } from "@/hooks/use-toast";
 import { createBitrix24LkTask, listBitrix24Tasks } from "@/lib/bitrix24-integration";
+import {
+  getBitrix24UserIdForProfile,
+  hasBitrix24UserMapping,
+} from "@/lib/bitrix24-user-mapping";
 import {
   BITRIX24_IMPORTED_TASKS_CHANGED_EVENT,
   getBitrix24ImportedTasks,
@@ -28,7 +34,8 @@ import {
   newBitrix24TaskLinkId,
   type Bitrix24TaskLink,
 } from "@/lib/bitrix24-task-links";
-import { toast } from "@/hooks/use-toast";
+import { MOCK_AUTH_CHANGED_EVENT } from "@/lib/mock-auth";
+import { loadReleaseDemoProfile, RELEASE_DEMO_PROFILE_EVENT, type ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { cn } from "@/lib/utils";
 
 const LIST_LIMIT = 10;
@@ -83,6 +90,21 @@ export function Bitrix24TasksPanel({
   const [importErr, setImportErr] = useState("");
   const [onlyOpenImport, setOnlyOpenImport] = useState(true);
   const [showAllImported, setShowAllImported] = useState(false);
+  const [profile, setProfile] = useState<ReleaseDemoProfile>(() => loadReleaseDemoProfile());
+
+  useEffect(() => {
+    const sync = () => setProfile(loadReleaseDemoProfile());
+    window.addEventListener(RELEASE_DEMO_PROFILE_EVENT, sync);
+    window.addEventListener(MOCK_AUTH_CHANGED_EVENT, sync);
+    return () => {
+      window.removeEventListener(RELEASE_DEMO_PROFILE_EVENT, sync);
+      window.removeEventListener(MOCK_AUTH_CHANGED_EVENT, sync);
+    };
+  }, []);
+
+  const bitrixUserId = useMemo(() => getBitrix24UserIdForProfile(profile), [profile]);
+  const bitrixTasksAllowed = useMemo(() => hasBitrix24UserMapping(profile), [profile]);
+  const canUseBitrixRestActions = canCreate && bitrixTasksAllowed;
 
   useEffect(() => {
     const fn = () => setTick((n) => n + 1);
@@ -146,6 +168,10 @@ export function Bitrix24TasksPanel({
       setFormErr("Описание не длиннее 4000 символов.");
       return;
     }
+    if (!bitrixTasksAllowed || bitrixUserId == null) {
+      setFormErr("Для вашего пользователя не настроена связка с Bitrix24. Обратитесь к администратору.");
+      return;
+    }
     const returnUrl = typeof window !== "undefined" ? window.location.href : undefined;
     setSubmitting(true);
     const res = await createBitrix24LkTask({
@@ -156,6 +182,7 @@ export function Bitrix24TasksPanel({
       tradePointId: scope === "trade_point" ? tradePointId : undefined,
       tradePointName: scope === "trade_point" ? tradePointName : undefined,
       returnUrl,
+      responsibleId: bitrixUserId,
     });
     setSubmitting(false);
     if (!res.ok) {
@@ -187,6 +214,8 @@ export function Bitrix24TasksPanel({
   }, [
     actorLabel,
     actorUserId,
+    bitrixTasksAllowed,
+    bitrixUserId,
     dealerId,
     dealerName,
     description,
@@ -199,8 +228,16 @@ export function Bitrix24TasksPanel({
 
   const handleImport = useCallback(async () => {
     setImportErr("");
+    if (!bitrixTasksAllowed || bitrixUserId == null) {
+      setImportErr("Для вашего пользователя не настроена связка с Bitrix24. Обратитесь к администратору.");
+      return;
+    }
     setImportLoading(true);
-    const res = await listBitrix24Tasks({ limit: IMPORT_FETCH_LIMIT, onlyOpen: onlyOpenImport });
+    const res = await listBitrix24Tasks({
+      limit: IMPORT_FETCH_LIMIT,
+      onlyOpen: onlyOpenImport,
+      responsibleId: bitrixUserId,
+    });
     setImportLoading(false);
     if (!res.ok) {
       setImportErr(res.message);
@@ -209,7 +246,7 @@ export function Bitrix24TasksPanel({
     upsertBitrix24ImportedTasks(res.tasks);
     setShowAllImported(false);
     toast({ title: "Задачи загружены из Bitrix24" });
-  }, [onlyOpenImport]);
+  }, [bitrixTasksAllowed, bitrixUserId, onlyOpenImport]);
 
   if (!canSeeSection) {
     return null;
@@ -223,9 +260,25 @@ export function Bitrix24TasksPanel({
       <div className="space-y-1">
         <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Задачи Bitrix24</h2>
         <p className="max-w-2xl text-sm text-muted-foreground">
-          Создание задачи в портале Bitrix24 из ЛК и ручная загрузка списка задач ответственного webhook. Данные о
+          Создание задачи в портале Bitrix24 из ЛК и загрузка списка задач по вашему ответственному в Bitrix24. Данные о
           созданных и импортированных задачах хранятся в этом браузере; синхронизация статусов из Bitrix24 не выполняется.
         </p>
+        {canCreate && !bitrixTasksAllowed ? (
+          <Alert
+            variant="destructive"
+            className="mt-2 border-destructive/40 py-3"
+            data-testid="alert-bitrix24-user-not-mapped"
+          >
+            <AlertDescription className="text-sm">
+              Для вашего пользователя не настроена связка с Bitrix24. Обратитесь к администратору.
+            </AlertDescription>
+          </Alert>
+        ) : null}
+        {bitrixUserId ? (
+          <p className="text-xs text-muted-foreground" data-testid="text-bitrix24-user-id">
+            Bitrix24 ID: {bitrixUserId}
+          </p>
+        ) : null}
       </div>
       <Card className="rounded-2xl border border-border/80 bg-card shadow-md">
         <CardHeader className="space-y-1 pb-2 pt-5 sm:pb-3">
@@ -258,7 +311,7 @@ export function Bitrix24TasksPanel({
             </ul>
           )}
           <div className="flex flex-col gap-3 border-t border-border/60 pt-3 sm:flex-row sm:flex-wrap sm:items-center">
-            {canCreate ? (
+            {canUseBitrixRestActions ? (
               <Button
                 type="button"
                 variant="secondary"
@@ -273,7 +326,7 @@ export function Bitrix24TasksPanel({
                 Создать задачу в Bitrix24
               </Button>
             ) : null}
-            {canCreate ? (
+            {canUseBitrixRestActions ? (
               <>
                 <Button
                   type="button"

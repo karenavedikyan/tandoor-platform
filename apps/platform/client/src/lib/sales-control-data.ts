@@ -129,6 +129,7 @@ const MARKETERS: SalesUser[] = [
 const ANALYST: SalesUser = { id: "user-anl-ivanets", name: "Иванец Данил", role: "analyst" };
 
 const MANAGERS_K: SalesUser[] = [
+  { id: "mgr-avedikyan-ka", name: "Аведикян Карен", role: "sales_manager", teamId: "team-kupiansky" },
   { id: "mgr-boyko-em", name: "Бойко Екатерина Михайловна", role: "sales_manager", teamId: "team-kupiansky" },
   { id: "mgr-yakubova-ys", name: "Якубова Юлия Сергеевна", role: "sales_manager", teamId: "team-kupiansky" },
   { id: "mgr-fedorov-dv", name: "Федоров Данил Владимирович", role: "sales_manager", teamId: "team-kupiansky" },

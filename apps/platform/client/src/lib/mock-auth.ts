@@ -30,6 +30,7 @@ const SUPPORT_ROLE_PASSWORD = "123";
 
 /** Явное соответствие userId → username. Для пользователей не в карте логин выводится из id. */
 const EXPLICIT_USERNAMES: Record<string, string> = {
+  "mgr-avedikyan-ka": "avedikyan",
   "user-dir-goncharenko": "goncharenko",
   "user-tl-kupiansky": "kupiansky",
   "user-tl-skalaban": "skalaban",

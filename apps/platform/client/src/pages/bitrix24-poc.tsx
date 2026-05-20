@@ -20,6 +20,9 @@ import {
   runBitrix24ChatDiagnostics,
   useBitrix24EmbeddedFlag,
 } from "@/lib/bitrix24-integration";
+import { getBitrix24UserIdForSalesUserId } from "@/lib/bitrix24-user-mapping";
+import { releaseDemoRoleLabel } from "@/lib/release-demo-profile";
+import { SALES_USERS } from "@/lib/sales-control-data";
 
 function withEmbedded(path: string): string {
   return buildHashPath(path, { embedded: "bitrix24" });
@@ -111,6 +114,19 @@ export default function Bitrix24PocPage() {
   }, [chatDialogId, chatMessage, chatTestNotify]);
 
   const openFullAppUrl = useMemo(() => buildBitrix24OpenTandoorUrl("/dealer-base"), []);
+
+  const lkBitrixMappingRows = useMemo(() => {
+    return SALES_USERS.map((u) => {
+      const bitrixUserId = getBitrix24UserIdForSalesUserId(u.id);
+      const bx = bitrixUserId ? usersRows.find((r) => r.bitrixUserId === bitrixUserId) : undefined;
+      const bitrixFio =
+        (bx?.fullName && bx.fullName.trim()) ||
+        [bx?.name, bx?.lastName].filter(Boolean).join(" ").trim() ||
+        null;
+      const mapped = bitrixUserId != null;
+      return { user: u, bitrixUserId, bitrixFio, mapped };
+    });
+  }, [usersRows]);
 
   return (
     <div
@@ -284,6 +300,46 @@ export default function Bitrix24PocPage() {
               </table>
             </div>
           ) : null}
+        </CardContent>
+      </Card>
+
+      <Card className="border-border/80 shadow-sm" data-testid="section-bitrix24-user-mapping">
+        <CardHeader className="space-y-1 pb-2">
+          <CardTitle className="text-base">Связка пользователей ЛК и Bitrix24</CardTitle>
+          <CardDescription className="text-xs">
+            Статический маппинг в клиенте (MVP). Колонка «ФИО Bitrix24» заполняется, если выше загружен список
+            пользователей портала и ID совпадает с маппингом.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto rounded-lg border border-border/70">
+            <table className="w-full min-w-[36rem] border-collapse text-left text-sm">
+              <thead>
+                <tr className="border-b border-border/80 bg-muted/30 text-xs uppercase tracking-wide text-muted-foreground">
+                  <th className="px-3 py-2 font-medium">Пользователь ЛК</th>
+                  <th className="px-3 py-2 font-medium">Роль</th>
+                  <th className="px-3 py-2 font-medium">bitrixUserId</th>
+                  <th className="px-3 py-2 font-medium">ФИО Bitrix24</th>
+                  <th className="px-3 py-2 font-medium">Статус</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lkBitrixMappingRows.map((row) => (
+                  <tr
+                    key={row.user.id}
+                    className="border-b border-border/60 last:border-0"
+                    data-testid={`row-bitrix24-user-mapping-${row.user.id}`}
+                  >
+                    <td className="px-3 py-2">{row.user.name}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{releaseDemoRoleLabel(row.user.role)}</td>
+                    <td className="px-3 py-2 font-mono text-xs">{row.bitrixUserId ?? "—"}</td>
+                    <td className="px-3 py-2">{row.bitrixFio ?? "—"}</td>
+                    <td className="px-3 py-2">{row.mapped ? "найден" : "не найден"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </CardContent>
       </Card>
 
