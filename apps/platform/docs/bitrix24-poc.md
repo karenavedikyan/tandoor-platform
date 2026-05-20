@@ -131,6 +131,8 @@ https://<ваш-хост-платформы>/?embedded=bitrix24#/bitrix24
 
 ### Новые endpoint’ы (MVP-заготовки)
 
+> **Реализация на Vercel.** Чтобы не упираться в лимит **12 serverless functions** на Hobby-плане, чат- и OAuth-эндпоинты объединены в **dynamic catch-all**: **`apps/platform/api/bitrix24/chat/[action].ts`** обслуживает `recent`, `messages`, `send`, `diagnostics`, `recent-personal`, `messages-personal`, `send-personal`; **`apps/platform/api/bitrix24/oauth/[action].ts`** — `status`, `start`, `callback`. Публичные URL и поведение **не** изменились.
+
 | Метод и путь | Назначение (MVP) |
 |--------------|------------------|
 | `GET /api/bitrix24/oauth/status` | `{ success, configured, connected }`. **`configured: true`** только если заданы **`BITRIX24_OAUTH_CLIENT_ID`**, **`BITRIX24_OAUTH_CLIENT_SECRET`**, **`BITRIX24_PORTAL_DOMAIN`**. **`connected`** пока всегда **`false`** до хранения токена на сервере. |
