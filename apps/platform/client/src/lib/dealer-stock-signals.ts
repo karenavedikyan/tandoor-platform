@@ -5,6 +5,7 @@
 import type { ClientCategoryId } from "@/lib/client-category";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import { getDealerCharacteristicValue } from "@/lib/dealer-characteristics";
+import { isManualActualizationDealerId } from "@/lib/client-base-actualization-stable-ids";
 
 export type DealerStockSignal = {
   hasMainWarehouse: boolean;
@@ -104,6 +105,15 @@ function deterministicFallback(row: DealerRow): { main: boolean; hw: boolean } {
 }
 
 export function getDealerStockSignal(row: DealerRow): DealerStockSignal {
+  if (isManualActualizationDealerId(row.id)) {
+    return {
+      hasMainWarehouse: false,
+      hasHardwareWarehouse: false,
+      mainWarehouseLabel: "Склад не указан",
+      hardwareWarehouseLabel: "Склад не указан",
+      reason: "Для клиента из актуализации признак склада задаётся вручную в карточке.",
+    };
+  }
   const ovMain = getDealerCharacteristicValue(row.id, "has_warehouse");
   const ovHw = getDealerCharacteristicValue(row.id, "has_hardware_warehouse");
 

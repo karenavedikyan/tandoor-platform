@@ -4,6 +4,7 @@
 
 import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import { getDealerById, getDealerRegionalManagerDisplay, normalizeTradePointId } from "@/lib/dealer-base-mock-data";
+import { isManualActualizationDealerId } from "@/lib/client-base-actualization-stable-ids";
 import { canEditClientNextStep } from "@/lib/client-next-step-data";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
@@ -300,6 +301,9 @@ export function getEffectiveDealerTradePoints(
     ? merged.filter((m) => !m.isArchived).length
     : merged.length;
   if (activeCount > 0) return merged;
+  if (isManualActualizationDealerId(row.id)) {
+    return merged;
+  }
   const virtualEntry: MergedTradePointEntry = {
     point: buildVirtualDefaultTradePoint(row),
     isManual: false,

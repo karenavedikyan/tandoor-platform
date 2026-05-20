@@ -4,6 +4,12 @@
 
 import type { DealerRow, DealerStatus, DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import {
+  type DealerTerms,
+  type DealerSalesKpis,
+  type DealerDistributionDetail,
+  type DealerShowcaseDetail,
+  type DealerCompetitorsDetail,
+  type DealerIssueDetail,
   DEALER_BASE_ROWS,
   getDealerById,
   getDealerRegionalManagerDisplay,
@@ -26,7 +32,10 @@ import type {
   TradePointActualizationOverride,
 } from "@/lib/client-base-actualization-state";
 import { mergeActualizationState } from "@/lib/client-base-actualization-state";
-import { manualDealerDisplayInternalCode } from "@/lib/client-base-actualization-stable-ids";
+import {
+  isManualActualizationDealerId,
+  manualDealerDisplayInternalCode,
+} from "@/lib/client-base-actualization-stable-ids";
 import { normalizeClientCategory, getClientCategoryLabel } from "@/lib/client-category";
 import { DEALER_SHIPMENT_DAY_LABELS, type DealerShipmentDayId } from "@/lib/dealer-shipment-days";
 
@@ -40,6 +49,51 @@ function num(v: unknown): number | undefined {
   if (typeof v !== "number" || !Number.isFinite(v)) return undefined;
   return v;
 }
+
+const MANUAL_DEALER_EMPTY_TERMS: DealerTerms = {
+  tandoorClub: "—",
+  special: "—",
+  payment: "—",
+  edo: "—",
+  limit: "—",
+  bonuses: "—",
+};
+
+const MANUAL_DEALER_EMPTY_SALES_KPIS: DealerSalesKpis = {
+  quarterRub: "—",
+  mkUnits: "—",
+  vhUnits: "—",
+  furnitureRub: "—",
+};
+
+const MANUAL_DEALER_EMPTY_DISTRIBUTION_DETAIL: DealerDistributionDetail = {
+  mk: 0,
+  vh: 0,
+  total: 0,
+  checkDate: "—",
+};
+
+const MANUAL_DEALER_EMPTY_SHOWCASE: DealerShowcaseDetail = {
+  equipment: "—",
+  todo: "—",
+  status: "—",
+  goalLink: "—",
+};
+
+const MANUAL_DEALER_EMPTY_COMPETITORS: DealerCompetitorsDetail = {
+  list: "",
+  strengths: "",
+  mgrComment: "",
+  rmComment: "",
+};
+
+const MANUAL_DEALER_EMPTY_ISSUES: DealerIssueDetail = {
+  summary: "—",
+  who: "—",
+  date: "—",
+  next: "—",
+  state: "—",
+};
 
 function isShipmentDayId(v: unknown): v is DealerShipmentDayId {
   return (
@@ -276,6 +330,11 @@ export function mergeTradePointsForActualization(row: DealerRow, act: Actualizat
   const active = merged.filter((m) => !m.isArchived);
   if (active.length > 0) return merged;
 
+  /** У ручного клиента без ТТ не подставляем виртуальную точку из адреса дилера. */
+  if (isManualActualizationDealerId(row.id)) {
+    return merged;
+  }
+
   const virtualEntry: MergedTradePointEntry = {
     point: {
       id: virtualDefaultTradePointId(row.id),
@@ -314,7 +373,7 @@ export function mergeTradePointsActiveForActualization(row: DealerRow, act: Actu
 
 /** Юрлица: база из LS+паспорт + overrides/archived из actualization. */
 export function mergeLegalEntitiesForActualization(row: DealerRow, act: ActualizationState): MergedDealerLegalEntity[] {
-  const base = getMergedDealerLegalEntities(row);
+  const base = isManualActualizationDealerId(row.id) ? [] : getMergedDealerLegalEntities(row);
   const st = act.legalEntityOverridesByDealerId[row.id];
   if (!st) return base;
 
@@ -398,9 +457,7 @@ export function manualDealerToRow(m: ManualDealer, profile: ReleaseDemoProfile):
   const status = parseDealerStatus(f.status);
   const typeLabel = str(f.clientTypeLabel) ?? getClientCategoryLabel(clientCategory);
 
-  const template = DEALER_BASE_ROWS[0]!;
   const row: DealerRow = {
-    ...template,
     id: m.id,
     name,
     city,
@@ -409,7 +466,7 @@ export function manualDealerToRow(m: ManualDealer, profile: ReleaseDemoProfile):
     releaseCode: manualDealerDisplayInternalCode(m),
     clientTypeLabel: typeLabel,
     clientCategory,
-    importanceTier: "growth",
+    importanceTier: "baseline",
     status,
     format: "одиночный",
     outlets: 0,
@@ -430,7 +487,7 @@ export function manualDealerToRow(m: ManualDealer, profile: ReleaseDemoProfile):
     comment: str(f.comment) ?? "",
     hasRecentActivity: false,
     actualizationInn: str(f.inn),
-    legalEntity: template.legalEntity,
+    legalEntity: "",
     holding: "—",
     tradePoints: [],
     responsibles: {
@@ -446,12 +503,12 @@ export function manualDealerToRow(m: ManualDealer, profile: ReleaseDemoProfile):
       email: str(f.email) ?? "—",
       channel: "—",
     },
-    terms: template.terms,
-    salesKpis: template.salesKpis,
-    distributionDetail: template.distributionDetail,
-    showcase: template.showcase,
-    competitors: template.competitors,
-    issues: template.issues,
+    terms: { ...MANUAL_DEALER_EMPTY_TERMS },
+    salesKpis: { ...MANUAL_DEALER_EMPTY_SALES_KPIS },
+    distributionDetail: { ...MANUAL_DEALER_EMPTY_DISTRIBUTION_DETAIL },
+    showcase: { ...MANUAL_DEALER_EMPTY_SHOWCASE },
+    competitors: { ...MANUAL_DEALER_EMPTY_COMPETITORS },
+    issues: { ...MANUAL_DEALER_EMPTY_ISSUES },
     productTrainingStatus: "not_required",
     productTrainingCompleted: false,
     indigoTrainingCandidate: false,

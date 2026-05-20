@@ -78,6 +78,16 @@
 
 Индикатор: `client-base-actualization-sync-status.tsx` (`text-actualization-sync-status`, `text-actualization-offline-fallback`).
 
+## Ручной клиент / ТТ без подмешивания release
+
+Идентификаторы: префиксы `manual-dealer-` и `manual-tp-` (см. `isManualActualizationDealerId` / `isManualActualizationTradePointId` в `client-base-actualization-stable-ids.ts`).
+
+- **Строка дилера** (`manualDealerToRow`): не копируется первая строка `DEALER_BASE_ROWS`; витрина, конкуренты, KPI, дистрибуция и связанные поля — нейтральные пустые значения, чтобы детерминированные «пилотные» хелперы не подставляли демо.
+- **Нет виртуальной ТТ** без явных точек: `mergeTradePointsForActualization` и `getEffectiveDealerTradePoints` не добавляют «Основную торговую точку» с адресом из карточки дилера.
+- **Юрлица из release** не подмешиваются: `mergeLegalEntitiesForActualization` для ручного дилера стартует с пустого списка.
+- **Синтетика по id** отключена в общих модулях: `dealer-card-release-signals`, `dealer-stock-signals`, `dealer-equipment-signals`, `showcase-distribution-data` (план витрины и задачи), `trade-point-matrix-data` (матрица для `manual-tp-`), `training-attention.ts`.
+- **Карточка клиента** (`dealer-card-foundation.tsx`): отдельные empty state для витрины, конкурентов, истории; блок Bitrix24 и характеристики скрыты, чтобы не вводить в заблуждение.
+
 ## Клиентский слой (этап 3)
 
 - **Контекст:** `context/client-base-actualization-context.tsx` — загрузка, `persist(updater)`, `mergedDealerRows`, статус синхронизации.
@@ -129,7 +139,7 @@
 
 ## Ограничения по охвату репозитория
 
-Чат Bitrix24, OAuth, Коммуникации, каталог, матрица витрины, карта клиентов и смежные модули **вне** задач актуализации — изменения сосредоточены в `apps/platform` и описанных выше файлах.
+Чат Bitrix24, OAuth, Коммуникации, каталог, карта клиентов и смежные модули **вне** задач актуализации — изменения сосредоточены в `apps/platform` и описанных выше файлах. Для **ручного** клиента/ТТ изоляция от демо-данных витрины/матрицы выполняется в перечисленных выше файлах актуализации и карточки.
 
 ## Технический выбор драйвера БД
 

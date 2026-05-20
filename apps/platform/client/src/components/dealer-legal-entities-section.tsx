@@ -451,7 +451,7 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
       ) : null}
 
       {visible.active.length === 0 && visible.arch.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Юрлица не указаны.</p>
+        <p className="text-sm text-muted-foreground">Юридические лица не добавлены.</p>
       ) : (
         <div className="space-y-2">
           {visible.active.map((e) => (

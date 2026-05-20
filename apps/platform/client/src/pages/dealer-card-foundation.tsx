@@ -145,6 +145,7 @@ import {
   mergeTradePointsActiveForActualization,
   resolveDealerRowForCard,
 } from "@/lib/client-base-actualization-data-merge";
+import { isManualActualizationDealerId } from "@/lib/client-base-actualization-stable-ids";
 import { canActualizeClientBase, canArchiveDealerDuringActualization, canEditDealerDuringActualization } from "@/lib/client-base-actualization-permissions";
 import { mergeActualizationState } from "@/lib/client-base-actualization-state";
 import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actualization-sync-status";
@@ -335,6 +336,7 @@ function addCalendarDaysIso(base: Date, days: number): string {
 
 /** Лента: витрина, шаги, обучение, комментарии, системные шаблоны; сортировка по дате по убыванию. */
 function buildHistoryEvents(row: DealerRow): DealerHistoryEvent[] {
+  if (isManualActualizationDealerId(row.id)) return [];
   const storage = loadShowcaseStorage();
   const showcaseHist: DealerHistoryEvent[] = getShowcaseHistoryForDealer(row.id, storage).map((e) => ({
     id: e.id,
@@ -835,7 +837,7 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
     [baseRow, actx.state, dealerDataBump],
   );
 
-  const isManualDealerRow = baseRow.id.startsWith("manual-dealer");
+  const isManualDealerRow = isManualActualizationDealerId(baseRow.id);
   const canArchiveManualDealer =
     actx.enabled && isManualDealerRow && canArchiveDealerDuringActualization(profile, row);
 
@@ -1068,6 +1070,9 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
   }, [profile, row, user]);
 
   const primaryLine = useMemo(() => {
+    if (isManualDealerRow) {
+      return "Клиент создан вручную в актуализации: витрина и история появятся после появления реальных данных.";
+    }
     if (!canViewShowcaseDistribution(profile, row)) {
       return "Витрина по этому клиенту недоступна в вашем профиле — откройте клиента из своей базы или свяжитесь с ответственным менеджером.";
     }
@@ -1079,16 +1084,23 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
     if (nextStepStored)
       return `Ближайший шаг: ${clientNextStepActionLabel(nextStepStored.actionType)} на ${formatIsoDayToRu(nextStepStored.contactDate)}.`;
     return "Срочных сигналов нет — поддерживайте регулярный контакт и актуальность витрины.";
-  }, [profile, row, nextStepOverdue, showcaseDailySignals, nextStepStored]);
+  }, [isManualDealerRow, profile, row, nextStepOverdue, showcaseDailySignals, nextStepStored]);
 
-  const dealerProducts = useMemo(() => getDealerProductPreview(row.id, 5), [row.id]);
-  const analyticsSignals = useMemo(() => getDealerAnalyticsSignalCards(row), [row]);
+  const dealerProducts = useMemo(() => {
+    if (isManualDealerRow) return [];
+    return getDealerProductPreview(row.id, 5);
+  }, [isManualDealerRow, row.id]);
+  const analyticsSignals = useMemo(() => {
+    if (isManualDealerRow) return [];
+    return getDealerAnalyticsSignalCards(row);
+  }, [isManualDealerRow, row]);
 
   const trainingSignal = useMemo(
     () => getDealerTrainingAttentionSignal(row, trainingCompleted),
     [row, trainingCompleted],
   );
-  const showTrainingSection = trainingSignal.level !== "none" || row.indigoTrainingCandidate;
+  const showTrainingSection =
+    !isManualDealerRow && (trainingSignal.level !== "none" || row.indigoTrainingCandidate);
 
   const hasTermsBlock = useMemo(
     () =>
@@ -1215,6 +1227,31 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                     ) : null}
                   </div>
                   <h1 className="text-lg font-semibold tracking-tight text-foreground sm:text-xl">{rowView.name}</h1>
+
+                  {canArchiveManualDealer ? (
+                    <div
+                      className="rounded-xl border-2 border-destructive/40 bg-destructive/5 p-3 sm:p-4"
+                      data-testid="banner-dealer-manual-archive"
+                    >
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-sm leading-snug text-foreground">
+                          Клиент создан вручную. При ошибке заведения перенесите запись в архив — она исчезнет из общей
+                          клиентской базы.
+                        </p>
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          className="min-h-10 w-full shrink-0 font-semibold sm:w-auto"
+                          data-testid={`button-dealer-delete-${baseRow.id}`}
+                          disabled={dealerArchiveBusy}
+                          onClick={() => void archiveManualDealer()}
+                        >
+                          {dealerArchiveBusy ? "Сохранение…" : "Архивировать клиента"}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
 
                   <div
                     data-testid="section-dealer-quick-info"
@@ -1403,19 +1440,6 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                         Редактировать
                       </Button>
                     ) : null}
-                    {canArchiveManualDealer ? (
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="sm"
-                        className="min-h-10 w-full font-semibold sm:w-auto"
-                        data-testid={`button-dealer-delete-${baseRow.id}`}
-                        disabled={dealerArchiveBusy}
-                        onClick={() => void archiveManualDealer()}
-                      >
-                        {dealerArchiveBusy ? "Сохранение…" : "Архивировать клиента"}
-                      </Button>
-                    ) : null}
                     {canActualizeClientBase(profile) ? (
                       <ClientBaseActualizationSyncStatus
                         syncStatus={actx.syncStatus}
@@ -1572,7 +1596,7 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
               <DealerContactsSection row={row} profile={profile} variant="embedded" />
             </section>
 
-            <DealerCharacteristicsSection row={row} profile={profile} />
+            {!isManualDealerRow ? <DealerCharacteristicsSection row={row} profile={profile} /> : null}
 
             <section
               id={SECTION_DOM_IDS.work}
@@ -1624,22 +1648,44 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
               />
             </section>
 
-            <DealerShowcaseDistributionSection
-              row={row}
-              profile={profile}
-              categoryListMode={showcaseCategoryListMode}
-              onCategoryListModeChange={setShowcaseCategoryListMode}
-              distributionSnapshotStale={distributionSnap.isStale}
-              distributionSnapshotLabel={distributionSnap.displayLabel}
-              onPlanShowcaseCheck={onPlanShowcaseCheck}
-              onApplied={() => setShowcaseBump((n) => n + 1)}
-            />
+            {canViewShowcaseCard && isManualDealerRow ? (
+              <section
+                id={SECTION_DOM_IDS.showcase_distribution}
+                data-testid="section-dealer-showcase-distribution"
+                className="scroll-mt-28 space-y-3 sm:scroll-mt-32"
+              >
+                <div className="space-y-1">
+                  <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Витрина и задачи</h2>
+                  <p className="max-w-2xl text-sm text-muted-foreground">План и факт по категориям появятся после появления данных по витрине.</p>
+                </div>
+                <SurfaceCard>
+                  <CardContent className="px-3 py-4 sm:px-4">
+                    <p className="text-sm text-muted-foreground" data-testid="text-dealer-showcase-manual-empty">
+                      Витрина пока не заполнена.
+                    </p>
+                  </CardContent>
+                </SurfaceCard>
+              </section>
+            ) : canViewShowcaseCard ? (
+              <DealerShowcaseDistributionSection
+                row={row}
+                profile={profile}
+                categoryListMode={showcaseCategoryListMode}
+                onCategoryListModeChange={setShowcaseCategoryListMode}
+                distributionSnapshotStale={distributionSnap.isStale}
+                distributionSnapshotLabel={distributionSnap.displayLabel}
+                onPlanShowcaseCheck={onPlanShowcaseCheck}
+                onApplied={() => setShowcaseBump((n) => n + 1)}
+              />
+            ) : null}
 
-            <DealerShowcaseMatrixSummarySection row={row} profile={profile} />
+            {canViewShowcaseCard && !isManualDealerRow ? (
+              <DealerShowcaseMatrixSummarySection row={row} profile={profile} />
+            ) : null}
 
             <DealerTradePointsSection row={row} sectionDomId={SECTION_DOM_IDS.points} profile={profile} />
 
-            {competitorActivityRows.length > 0 || canEditCardComments ? (
+            {competitorActivityRows.length > 0 || canEditCardComments || isManualDealerRow ? (
               <section
                 data-testid="section-dealer-competitor-activity"
                 className="scroll-mt-28 space-y-2 sm:scroll-mt-32"
@@ -1655,6 +1701,11 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                 </SectionTitle>
                 <SurfaceCard>
                   <CardContent className="space-y-3 px-3 py-3 sm:px-4">
+                    {isManualDealerRow && competitorActivityRows.length === 0 && competitorCommentPreview.length === 0 ? (
+                      <p className="text-sm text-muted-foreground" data-testid="text-dealer-competitors-manual-empty">
+                        Данные по конкурентам пока не заполнены.
+                      </p>
+                    ) : null}
                     {competitorActivityRows.length > 0 ? (
                       <div className="space-y-2">
                         {competitorActivityRows.map((a) => (
@@ -1746,14 +1797,16 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
               onSaved={() => setNextStepBump((n) => n + 1)}
             />
 
-            <Bitrix24TasksPanel
-              scope="dealer"
-              dealerId={row.id}
-              dealerName={rowView.name}
-              canCreate={canEditClientNextStep(profile, row)}
-              actorUserId={user?.id ?? profile.personaUserId}
-              actorLabel={user?.name ?? userLabelFromProfile(profile)}
-            />
+            {!isManualDealerRow ? (
+              <Bitrix24TasksPanel
+                scope="dealer"
+                dealerId={row.id}
+                dealerName={rowView.name}
+                canCreate={canEditClientNextStep(profile, row)}
+                actorUserId={user?.id ?? profile.personaUserId}
+                actorLabel={user?.name ?? userLabelFromProfile(profile)}
+              />
+            ) : null}
 
             {showTermsDistributionBlock ? (
               <section
@@ -1863,6 +1916,11 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                         Добавить
                       </Button>
                     </div>
+                  ) : null}
+                  {historyTimeline.length === 0 ? (
+                    <p className="py-4 text-sm text-muted-foreground" data-testid="text-dealer-history-empty">
+                      История активности пока пустая.
+                    </p>
                   ) : null}
                   {(historyExpanded ? historyTimeline : historyTimeline.slice(0, 3)).map((ev) => {
                     const nav = inferHistoryNavTarget(ev);

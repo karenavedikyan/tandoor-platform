@@ -9,6 +9,7 @@ import { getSalesUserById } from "@/lib/sales-control-data";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { getEffectiveTeamLeadTeamId } from "@/lib/release-demo-profile";
 import { mapSalesRoleToDealerBaseAccess } from "@/lib/dealer-base-role-views";
+import { isManualActualizationDealerId } from "@/lib/client-base-actualization-stable-ids";
 
 export type ShowcaseCategoryId = "entrance_doors" | "interior_doors" | "hardware" | "molding";
 
@@ -239,6 +240,7 @@ export function buildBaseDistributionRows(dealer: DealerRow): ShowcaseDistributi
 }
 
 export function mergeDistributionWithOverrides(dealer: DealerRow, storage: ShowcaseStorageV1): ShowcaseDistributionRow[] {
+  if (isManualActualizationDealerId(dealer.id)) return [];
   const base = buildBaseDistributionRows(dealer);
   return base.map((row) => {
     const o = storage.overrides[showcaseOverrideStorageKey(dealer.id, row.categoryId)];
@@ -305,6 +307,7 @@ export function mergeTasksWithStorage(tasks: ShowcaseTask[], storage: ShowcaseSt
 
 /** Активные и выполненные задачи по витрине для карточки клиента. */
 export function getShowcaseTasksForDealerDisplay(dealer: DealerRow, storage: ShowcaseStorageV1): ShowcaseTask[] {
+  if (isManualActualizationDealerId(dealer.id)) return [];
   const rows = mergeDistributionWithOverrides(dealer, storage);
   const fromDeficit = mergeTasksWithStorage(buildShowcaseTasksFromRows(rows), storage);
   const seen = new Set(fromDeficit.map((t) => t.taskId));
