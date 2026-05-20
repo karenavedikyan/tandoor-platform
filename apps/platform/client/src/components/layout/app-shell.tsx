@@ -201,8 +201,19 @@ function NavLinksList({
           data-testid={item.testId}
         >
           <span className="min-w-0 flex-1 truncate text-left">{item.label}</span>
-          {item.badge != null ? (
-            <Badge variant="secondary" className="h-6 min-w-6 shrink-0 rounded-md border border-border/60 bg-muted px-1.5 text-xs tabular-nums text-foreground">
+          {item.testId === "nav-dealer-base" && item.badgeLoading ? (
+            <span
+              className="h-6 min-w-7 shrink-0 animate-pulse rounded-md bg-muted"
+              aria-busy
+              aria-label="Загрузка количества клиентов"
+              data-testid={variant === "sidebar" ? "text-sidebar-clients-count" : "text-mobile-sidebar-clients-count"}
+            />
+          ) : item.badge != null ? (
+            <Badge
+              variant="secondary"
+              className="h-6 min-w-6 shrink-0 rounded-md border border-border/60 bg-muted px-1.5 text-xs tabular-nums text-foreground"
+              data-testid={variant === "sidebar" ? "text-sidebar-clients-count" : "text-mobile-sidebar-clients-count"}
+            >
               {item.badge}
             </Badge>
           ) : null}

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, type ComponentType, type LazyExoticComponent } from "react";
+import { lazy, Suspense, useEffect, useMemo, type ComponentType, type LazyExoticComponent } from "react";
 import { Switch, Route, Router, useLocation } from "wouter";
 import { useHashLocation } from "wouter/use-hash-location";
 import { queryClient } from "./lib/queryClient";
@@ -15,7 +15,10 @@ import NotFound from "@/pages/not-found";
 import PreviewUnavailable from "@/pages/preview-unavailable";
 import InternalPrototypePlaceholder from "@/pages/internal-prototype-placeholder";
 import { INTERNAL_PROTOTYPE_ROUTES } from "@/lib/preview-config";
-import { ClientBaseActualizationProvider } from "@/context/client-base-actualization-context";
+import { ClientBaseActualizationProvider, useClientBaseActualization } from "@/context/client-base-actualization-context";
+import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
+import { resolveSidebarWorkingDealerClientCount } from "@/lib/dealer-base-sidebar-client-count";
+import type { SalesUser } from "@/lib/sales-control-data";
 
 const LazySalesManagerWorkspace = lazy(() => import("@/pages/sales-manager-workspace"));
 const LazyDealerBase = lazy(() => import("@/pages/dealer-base"));
@@ -97,39 +100,39 @@ function HashRedirect({ to }: { to: string }) {
   return <PageLoadingFallback />;
 }
 
-function AuthenticatedApp() {
-  const [loc] = useLocation();
-  const [, setLoc] = useHashLocation();
-  const { isAuthenticated, user, logout } = useMockAuth();
-  const embeddedBitrix24 = useBitrix24EmbeddedFlag();
-
-  const path = loc && loc.length > 0 ? loc : "/";
-
-  if (!isAuthenticated || !user) {
-    return <HashRedirect to="/login" />;
-  }
-
-  if (!canAccessPath(user.role, path)) {
-    return <HashRedirect to={defaultHomePathForRole(user.role)} />;
-  }
-
-  const navItems = getPilotNavItems(user.role);
-  const homeHref = defaultHomePathForRole(user.role);
-  const shellHomeHref = embeddedBitrix24 ? buildHashPath(homeHref.split("?")[0] ?? homeHref, { embedded: "bitrix24" }) : homeHref;
+function AuthenticatedShell({
+  user,
+  shellHomeHref,
+  embeddedBitrix24,
+  onLogout,
+}: {
+  user: SalesUser;
+  shellHomeHref: string;
+  embeddedBitrix24: boolean;
+  onLogout: () => void;
+}) {
+  const { profile } = useReleaseDemoProfile();
+  const actx = useClientBaseActualization();
+  const dealerNavCount = useMemo(
+    () =>
+      resolveSidebarWorkingDealerClientCount(profile, {
+        enabled: actx.enabled,
+        loading: actx.loading,
+        state: actx.state,
+      }),
+    [profile, actx.enabled, actx.loading, actx.state],
+  );
+  const navItems = useMemo(() => getPilotNavItems(user.role, dealerNavCount), [user.role, dealerNavCount]);
 
   return (
     <AppShell
       navItems={navItems}
       homeHref={shellHomeHref}
       userName={user.name}
-      onLogout={() => {
-        logout();
-        setLoc("/login");
-      }}
+      onLogout={onLogout}
       embeddedBitrix24={embeddedBitrix24}
     >
-      <ClientBaseActualizationProvider>
-        <Switch>
+      <Switch>
         <Route path="/" component={SalesManagerWorkspaceRoute} />
         <Route path="/main" component={SalesManagerWorkspaceRoute} />
         <Route path="/sales-manager" component={SalesManagerWorkspaceRoute} />
@@ -167,9 +170,42 @@ function AuthenticatedApp() {
           <Route key={path} path={path} component={InternalPrototypePlaceholder} />
         ))}
         <Route component={NotFound} />
-        </Switch>
-      </ClientBaseActualizationProvider>
+      </Switch>
     </AppShell>
+  );
+}
+
+function AuthenticatedApp() {
+  const [loc] = useLocation();
+  const [, setLoc] = useHashLocation();
+  const { isAuthenticated, user, logout } = useMockAuth();
+  const embeddedBitrix24 = useBitrix24EmbeddedFlag();
+
+  const path = loc && loc.length > 0 ? loc : "/";
+
+  if (!isAuthenticated || !user) {
+    return <HashRedirect to="/login" />;
+  }
+
+  if (!canAccessPath(user.role, path)) {
+    return <HashRedirect to={defaultHomePathForRole(user.role)} />;
+  }
+
+  const homeHref = defaultHomePathForRole(user.role);
+  const shellHomeHref = embeddedBitrix24 ? buildHashPath(homeHref.split("?")[0] ?? homeHref, { embedded: "bitrix24" }) : homeHref;
+
+  return (
+    <ClientBaseActualizationProvider>
+      <AuthenticatedShell
+        user={user}
+        shellHomeHref={shellHomeHref}
+        embeddedBitrix24={embeddedBitrix24}
+        onLogout={() => {
+          logout();
+          setLoc("/login");
+        }}
+      />
+    </ClientBaseActualizationProvider>
   );
 }
 
