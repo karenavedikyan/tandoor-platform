@@ -33,8 +33,9 @@ import type {
 } from "@/lib/client-base-actualization-state";
 import { mergeActualizationState } from "@/lib/client-base-actualization-state";
 import {
+  getManualDealerDisplayCode,
+  getManualTradePointDisplayCode,
   isManualActualizationDealerId,
-  manualDealerDisplayInternalCode,
 } from "@/lib/client-base-actualization-stable-ids";
 import { normalizeClientCategory, getClientCategoryLabel } from "@/lib/client-category";
 import { DEALER_SHIPMENT_DAY_LABELS, type DealerShipmentDayId } from "@/lib/dealer-shipment-days";
@@ -208,6 +209,7 @@ function tradePointFromManualActualization(m: ManualTradePoint, dealer: DealerRo
     city,
     address,
     format,
+    releaseCode: getManualTradePointDisplayCode(m),
     status: str(fields.status) ?? "Активна",
     equipment: "—",
     hardwareStockStatus: "—",
@@ -324,6 +326,16 @@ export function mergeTradePointsForActualization(row: DealerRow, act: Actualizat
     if (prev) {
       byId.set(arch.tradePointId, { ...prev, isArchived: true, point: { ...prev.point, status: "Архив" } });
     }
+  }
+
+  /** Актуальный человекочитаемый код ТТ для ручных точек (после overrides). */
+  for (const [id, entry] of Array.from(byId.entries())) {
+    const m = act.manuallyCreatedTradePointsById[id];
+    if (!m || m.dealerId !== row.id) continue;
+    byId.set(id, {
+      ...entry,
+      point: { ...entry.point, releaseCode: getManualTradePointDisplayCode(m) },
+    });
   }
 
   const merged = Array.from(byId.values());
@@ -463,7 +475,7 @@ export function manualDealerToRow(m: ManualDealer, profile: ReleaseDemoProfile):
     city,
     region: str(f.region) ?? city,
     releaseAddress: str(f.address),
-    releaseCode: manualDealerDisplayInternalCode(m),
+    releaseCode: getManualDealerDisplayCode(m),
     clientTypeLabel: typeLabel,
     clientCategory,
     importanceTier: "baseline",

@@ -25,6 +25,8 @@ import { canViewShowcaseDistribution } from "@/lib/showcase-distribution-data";
 import { canActualizeClientBase } from "@/lib/client-base-actualization-permissions";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { cn } from "@/lib/utils";
+import { useSectionSaveFeedback } from "@/hooks/use-section-save-feedback";
+import { SectionSaveButton } from "@/components/section-save-button";
 
 const ACTION_OPTIONS: { id: ClientNextStepActionType; label: string }[] = [
   { id: "call", label: "Звонок" },
@@ -63,6 +65,7 @@ export function DealerClientNextStepSection({
   if (!canView) return null;
 
   const canEdit = canEditClientNextStep(profile, row);
+  const nextStepSave = useSectionSaveFeedback();
   const [tick, setTick] = useState(0);
   const [actionType, setActionType] = useState<ClientNextStepActionType>("visit");
   const [contactDate, setContactDate] = useState("");
@@ -97,8 +100,8 @@ export function DealerClientNextStepSection({
 
   const stored = getClientNextStepForDealer(row.id, loadClientNextStepsStorage());
 
-  const onSave = useCallback(() => {
-    if (!canEdit || !contactDate.trim()) return;
+  const onSave = useCallback((): boolean => {
+    if (!canEdit || !contactDate.trim()) return false;
     saveClientNextStep(row.id, {
       actionType,
       contactDate: contactDate.trim(),
@@ -108,6 +111,7 @@ export function DealerClientNextStepSection({
     });
     setEditing(false);
     onSaved();
+    return true;
   }, [canEdit, row.id, actionType, contactDate, comment, actorUserId, actorLabel, onSaved]);
 
   const summaryText = stored
@@ -176,7 +180,10 @@ export function DealerClientNextStepSection({
                   <Label className="text-xs">Тип действия</Label>
                   <Select
                     value={actionType}
-                    onValueChange={(v) => setActionType(v as ClientNextStepActionType)}
+                    onValueChange={(v) => {
+                      setActionType(v as ClientNextStepActionType);
+                      nextStepSave.markDirty();
+                    }}
                     disabled={!canEdit}
                   >
                     <SelectTrigger className="min-h-10" data-testid="select-dealer-next-step-type">
@@ -196,7 +203,10 @@ export function DealerClientNextStepSection({
                   <Input
                     type="date"
                     value={contactDate}
-                    onChange={(e) => setContactDate(e.target.value)}
+                    onChange={(e) => {
+                      setContactDate(e.target.value);
+                      nextStepSave.markDirty();
+                    }}
                     disabled={!canEdit}
                     className="min-h-10"
                     data-testid="input-dealer-next-step-date"
@@ -207,7 +217,10 @@ export function DealerClientNextStepSection({
                 <Label className="text-xs">Комментарий</Label>
                 <Textarea
                   value={comment}
-                  onChange={(e) => setComment(e.target.value)}
+                  onChange={(e) => {
+                    setComment(e.target.value);
+                    nextStepSave.markDirty();
+                  }}
                   disabled={!canEdit}
                   rows={3}
                   className="min-h-[72px] resize-y text-sm"
@@ -217,15 +230,13 @@ export function DealerClientNextStepSection({
               </div>
               {canEdit ? (
                 <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    className="min-h-9 font-semibold"
-                    data-testid="button-dealer-next-step-save"
-                    onClick={onSave}
+                  <SectionSaveButton
+                    testId="button-dealer-next-step-save"
+                    statusTestId="text-save-status-next-step"
+                    phase={nextStepSave.phase}
+                    onSave={() => void nextStepSave.runSave(async () => Promise.resolve(onSave()))}
                     disabled={!contactDate.trim()}
-                  >
-                    Сохранить
-                  </Button>
+                  />
                   {stored ? (
                     <Button type="button" variant="ghost" size="sm" className="min-h-9" onClick={() => setEditing(false)}>
                       Отмена

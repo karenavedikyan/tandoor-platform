@@ -20,6 +20,8 @@ import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { LegalEntityContactsSubsection } from "@/components/legal-entity-contacts-subsection";
 import { buildLegalEntityNameSuggestions, lookupLegalEntityByInn } from "@/lib/legal-entity-directory";
 import { toast } from "@/hooks/use-toast";
+import { useSectionSaveFeedback } from "@/hooks/use-section-save-feedback";
+import { SectionSaveButton } from "@/components/section-save-button";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { mergeLegalEntitiesForActualization } from "@/lib/client-base-actualization-data-merge";
 import { mergeActualizationState } from "@/lib/client-base-actualization-state";
@@ -64,6 +66,7 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
     { id: string; name: string; inn: string; kpp?: string; legalAddress?: string; source: string }[]
   >([]);
   const [innLookupNote, setInnLookupNote] = useState("");
+  const legalFormSave = useSectionSaveFeedback();
 
   useEffect(() => {
     const fn = () => setTick((n) => n + 1);
@@ -99,7 +102,8 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
     setDraftActualAddress("");
     setInnLookupResults([]);
     setInnLookupNote("");
-  }, []);
+    legalFormSave.markDirty();
+  }, [legalFormSave]);
 
   const loadEntityIntoDraft = useCallback(
     (id: string) => {
@@ -114,13 +118,14 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
       setDraftStatus(e.status);
       setDraftComment(e.comment ?? "");
       setEditingId(id);
+      legalFormSave.markDirty();
       setFormOpen(true);
     },
-    [merged, useAct],
+    [merged, useAct, legalFormSave],
   );
 
-  const onSave = useCallback(async () => {
-    if (!canEdit || !draftName.trim()) return;
+  const onSave = useCallback(async (): Promise<boolean> => {
+    if (!canEdit || !draftName.trim()) return false;
     if (useAct) {
       const id = editingId ?? `manual-le-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const now = new Date().toISOString();
@@ -152,18 +157,17 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
         });
       });
       if (r.success) {
-        toast({ title: "Сохранено" });
         setTick((n) => n + 1);
         setEditingId(null);
         setFormOpen(false);
         resetDraft();
-      } else {
-        toast({
-          title: "Не удалось сохранить. Проверьте соединение и попробуйте ещё раз.",
-          variant: "destructive",
-        });
+        return true;
       }
-      return;
+      toast({
+        title: "Не удалось сохранить. Проверьте соединение и попробуйте ещё раз.",
+        variant: "destructive",
+      });
+      return false;
     }
     if (editingId && !editingId.startsWith("passport:")) {
       updateDealerLegalEntity(
@@ -196,6 +200,7 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
     setEditingId(null);
     setFormOpen(false);
     resetDraft();
+    return true;
   }, [
     canEdit,
     useAct,
@@ -253,7 +258,10 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
               <Label className="text-xs">Наименование</Label>
               <Input
                 value={draftName}
-                onChange={(e) => setDraftName(e.target.value)}
+                onChange={(e) => {
+                  setDraftName(e.target.value);
+                  legalFormSave.markDirty();
+                }}
                 disabled={!canEdit}
                 className="min-h-10"
                 data-testid="input-legal-entity-name"
@@ -280,6 +288,7 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
                           if (s.inn) setDraftInn(s.inn);
                           if (s.kpp) setDraftKpp(s.kpp);
                           if (s.legalAddress) setDraftAddress(s.legalAddress);
+                          legalFormSave.markDirty();
                         }}
                       >
                         Применить
@@ -299,6 +308,7 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
                       setDraftInn(e.target.value);
                       setInnLookupResults([]);
                       setInnLookupNote("");
+                      legalFormSave.markDirty();
                     }}
                     disabled={!canEdit}
                     className="min-h-10 sm:flex-1"
@@ -350,6 +360,7 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
                             setDraftInn(r.inn);
                             setDraftKpp((k) => (k.trim() ? k : r.kpp ?? ""));
                             setDraftAddress((a) => (a.trim() ? a : r.legalAddress ?? ""));
+                            legalFormSave.markDirty();
                           }}
                         >
                           Применить
@@ -363,7 +374,10 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
                 <Label className="text-xs">КПП</Label>
                 <Input
                   value={draftKpp}
-                  onChange={(e) => setDraftKpp(e.target.value)}
+                  onChange={(e) => {
+                    setDraftKpp(e.target.value);
+                    legalFormSave.markDirty();
+                  }}
                   disabled={!canEdit}
                   className="min-h-10"
                   data-testid="input-dealer-legal-entity-kpp"
@@ -374,7 +388,10 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
               <Label className="text-xs">Юридический адрес</Label>
               <Textarea
                 value={draftAddress}
-                onChange={(e) => setDraftAddress(e.target.value)}
+                onChange={(e) => {
+                  setDraftAddress(e.target.value);
+                  legalFormSave.markDirty();
+                }}
                 disabled={!canEdit}
                 rows={2}
                 className="min-h-[52px] resize-y text-sm"
@@ -385,7 +402,10 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
               <Label className="text-xs">ОГРН</Label>
               <Input
                 value={draftOgrn}
-                onChange={(e) => setDraftOgrn(e.target.value)}
+                onChange={(e) => {
+                  setDraftOgrn(e.target.value);
+                  legalFormSave.markDirty();
+                }}
                 disabled={!canEdit}
                 className="min-h-10"
                 data-testid="input-dealer-legal-entity-ogrn"
@@ -395,7 +415,10 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
               <Label className="text-xs">Фактический адрес</Label>
               <Textarea
                 value={draftActualAddress}
-                onChange={(e) => setDraftActualAddress(e.target.value)}
+                onChange={(e) => {
+                  setDraftActualAddress(e.target.value);
+                  legalFormSave.markDirty();
+                }}
                 disabled={!canEdit}
                 rows={2}
                 className="min-h-[52px] resize-y text-sm"
@@ -406,7 +429,10 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
               <Label className="text-xs">Статус</Label>
               <Select
                 value={draftStatus}
-                onValueChange={(v) => setDraftStatus(v as DealerLegalEntityStatus)}
+                onValueChange={(v) => {
+                  setDraftStatus(v as DealerLegalEntityStatus);
+                  legalFormSave.markDirty();
+                }}
                 disabled={!canEdit}
               >
                 <SelectTrigger className="min-h-10" data-testid="select-dealer-legal-entity-status">
@@ -423,7 +449,10 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
               <Label className="text-xs">Комментарий</Label>
               <Textarea
                 value={draftComment}
-                onChange={(e) => setDraftComment(e.target.value)}
+                onChange={(e) => {
+                  setDraftComment(e.target.value);
+                  legalFormSave.markDirty();
+                }}
                 disabled={!canEdit}
                 rows={2}
                 className="min-h-[52px] resize-y text-sm"
@@ -432,15 +461,25 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
             </div>
             {canEdit ? (
               <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  className="min-h-9 font-semibold"
-                  data-testid="button-legal-entity-save"
-                  disabled={!draftName.trim()}
-                  onClick={() => void onSave()}
-                >
-                  Сохранить
-                </Button>
+                {useAct ? (
+                  <SectionSaveButton
+                    testId="button-dealer-section-save-legal-entities"
+                    statusTestId="text-save-status-legal-entities"
+                    phase={legalFormSave.phase}
+                    disabled={!draftName.trim()}
+                    onSave={() => void legalFormSave.runSave(onSave)}
+                  />
+                ) : (
+                  <Button
+                    type="button"
+                    className="min-h-9 font-semibold"
+                    data-testid="button-legal-entity-save"
+                    disabled={!draftName.trim()}
+                    onClick={() => void onSave()}
+                  >
+                    Сохранить
+                  </Button>
+                )}
                 <Button type="button" variant="ghost" size="sm" className="min-h-9" onClick={onCancelForm}>
                   Отмена
                 </Button>

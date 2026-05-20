@@ -36,6 +36,8 @@ import {
   trainingAttentionLevelBadgeClass,
 } from "@/lib/training-attention";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
+import { useSectionSaveFeedback } from "@/hooks/use-section-save-feedback";
+import { SectionSaveButton } from "@/components/section-save-button";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { canActualizeClientBase } from "@/lib/client-base-actualization-permissions";
 import { resolveActualizationTradePointDetail } from "@/lib/client-base-actualization-data-merge";
@@ -88,6 +90,7 @@ import {
   SHOWCASE_STORAGE_EVENT,
   userLabelFromProfile,
 } from "@/lib/showcase-distribution-data";
+import { toast } from "@/hooks/use-toast";
 import { Bitrix24TasksPanel } from "@/components/bitrix24-tasks-panel";
 import { TradePointPhotoBlock } from "@/components/trade-point-photo-block";
 import { TradePointShowcaseMatrixSection } from "@/components/trade-point-showcase-matrix-section";
@@ -500,6 +503,7 @@ function TradePointDetailContent({
   );
   const [eMainWh, setEMainWh] = useState(Boolean(point.tpHasMainWarehouse));
   const [eHwWh, setEHwWh] = useState(Boolean(point.tpHasHardwareWarehouse));
+  const tpEditSave = useSectionSaveFeedback();
 
   useEffect(() => {
     setEName(point.name);
@@ -715,13 +719,15 @@ function TradePointDetailContent({
 
   const toggleShipmentDay = useCallback((day: DealerShipmentDayId) => {
     setEShipmentDays((prev) => (prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]));
-  }, []);
+    tpEditSave.markDirty();
+  }, [tpEditSave]);
 
-  const handleSaveEdit = useCallback(() => {
+  const handleSaveEdit = useCallback((): boolean => {
     setEditErr("");
     if (!eName.trim() || !eCity.trim() || !eAddress.trim()) {
       setEditErr("Укажите название, город и адрес.");
-      return;
+      toast({ title: "Укажите название, город и адрес.", variant: "destructive" });
+      return false;
     }
     updateTradePoint(
       dealer.id,
@@ -741,6 +747,7 @@ function TradePointDetailContent({
       profile,
     );
     setEditing(false);
+    return true;
   }, [
     eName,
     eCity,
@@ -916,15 +923,37 @@ function TradePointDetailContent({
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5 sm:col-span-2">
                 <Label className="text-xs">Название</Label>
-                <Input className="min-h-10" value={eName} onChange={(e) => setEName(e.target.value)} data-testid="input-trade-point-edit-name" />
+                <Input
+                  className="min-h-10"
+                  value={eName}
+                  onChange={(e) => {
+                    setEName(e.target.value);
+                    tpEditSave.markDirty();
+                  }}
+                  data-testid="input-trade-point-edit-name"
+                />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Город</Label>
-                <Input className="min-h-10" value={eCity} onChange={(e) => setECity(e.target.value)} data-testid="input-trade-point-edit-city" />
+                <Input
+                  className="min-h-10"
+                  value={eCity}
+                  onChange={(e) => {
+                    setECity(e.target.value);
+                    tpEditSave.markDirty();
+                  }}
+                  data-testid="input-trade-point-edit-city"
+                />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Статус витрины</Label>
-                <Select value={eShowcase} onValueChange={setEShowcase}>
+                <Select
+                  value={eShowcase}
+                  onValueChange={(v) => {
+                    setEShowcase(v);
+                    tpEditSave.markDirty();
+                  }}
+                >
                   <SelectTrigger className="min-h-10" data-testid="select-trade-point-edit-showcase-status">
                     <SelectValue />
                   </SelectTrigger>
@@ -943,7 +972,10 @@ function TradePointDetailContent({
                   rows={2}
                   className="min-h-[52px] resize-y text-sm"
                   value={eAddress}
-                  onChange={(e) => setEAddress(e.target.value)}
+                  onChange={(e) => {
+                    setEAddress(e.target.value);
+                    tpEditSave.markDirty();
+                  }}
                   data-testid="textarea-trade-point-edit-address"
                 />
               </div>
@@ -952,7 +984,10 @@ function TradePointDetailContent({
                 <Input
                   className="min-h-10"
                   value={eContactName}
-                  onChange={(e) => setEContactName(e.target.value)}
+                  onChange={(e) => {
+                    setEContactName(e.target.value);
+                    tpEditSave.markDirty();
+                  }}
                   data-testid="input-trade-point-edit-contact-name"
                 />
               </div>
@@ -961,7 +996,10 @@ function TradePointDetailContent({
                 <Input
                   className="min-h-10"
                   value={eContactPhone}
-                  onChange={(e) => setEContactPhone(e.target.value)}
+                  onChange={(e) => {
+                    setEContactPhone(e.target.value);
+                    tpEditSave.markDirty();
+                  }}
                   data-testid="input-trade-point-edit-contact-phone"
                 />
               </div>
@@ -971,7 +1009,10 @@ function TradePointDetailContent({
                   rows={2}
                   className="min-h-[52px] resize-y text-sm"
                   value={eComment}
-                  onChange={(e) => setEComment(e.target.value)}
+                  onChange={(e) => {
+                    setEComment(e.target.value);
+                    tpEditSave.markDirty();
+                  }}
                   data-testid="textarea-trade-point-edit-comment"
                 />
               </div>
@@ -998,22 +1039,28 @@ function TradePointDetailContent({
             </div>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <label className="flex cursor-pointer items-center gap-2 text-sm">
-                <Checkbox checked={eMainWh} onCheckedChange={(v) => setEMainWh(v === true)} data-testid="checkbox-trade-point-edit-main-warehouse" />
+                <Checkbox checked={eMainWh} onCheckedChange={(v) => { setEMainWh(v === true); tpEditSave.markDirty(); }} data-testid="checkbox-trade-point-edit-main-warehouse" />
                 <span>Склад дверей</span>
               </label>
               <label className="flex cursor-pointer items-center gap-2 text-sm">
                 <Checkbox
                   checked={eHwWh}
-                  onCheckedChange={(v) => setEHwWh(v === true)}
+                  onCheckedChange={(v) => {
+                    setEHwWh(v === true);
+                    tpEditSave.markDirty();
+                  }}
                   data-testid="checkbox-trade-point-edit-hardware-warehouse"
                 />
                 <span>Склад фурнитуры</span>
               </label>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button type="button" className="min-h-9 font-semibold" data-testid="button-trade-point-edit-save" onClick={handleSaveEdit}>
-                Сохранить
-              </Button>
+              <SectionSaveButton
+                testId="button-trade-point-section-save-main"
+                statusTestId="text-save-status-trade-point-detail-edit"
+                phase={tpEditSave.phase}
+                onSave={() => void tpEditSave.runSave(async () => Promise.resolve(handleSaveEdit()))}
+              />
               <Button type="button" variant="ghost" size="sm" className="min-h-9" data-testid="button-trade-point-edit-cancel" onClick={handleCancelEdit}>
                 Отмена
               </Button>
@@ -1230,6 +1277,7 @@ function TradePointDetailContent({
             canCreate={canCreateBitrix24Task}
             actorUserId={user?.id ?? profile.personaUserId}
             actorLabel={user?.name ?? userLabelFromProfile(profile)}
+            compact
           />
 
           <section id={SECTION_DOM_IDS.history} data-testid="section-trade-point-history" className="scroll-mt-28 space-y-4 sm:scroll-mt-32">

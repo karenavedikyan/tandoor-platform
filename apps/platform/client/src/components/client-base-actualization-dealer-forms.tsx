@@ -7,6 +7,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -35,6 +41,8 @@ import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
 import { getAllSalesManagers, getSalesUserById, getTeamManagers, type SalesUser } from "@/lib/sales-control-data";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { toast } from "@/hooks/use-toast";
+import { useSectionSaveFeedback } from "@/hooks/use-section-save-feedback";
+import { SectionSaveButton } from "@/components/section-save-button";
 import { getClientCategoryOptions } from "@/lib/client-category";
 import type { ClientCategoryId } from "@/lib/client-category";
 import {
@@ -66,7 +74,10 @@ export type DealerActualizationEditDialogProps = {
 export function DealerActualizationEditDialog(props: DealerActualizationEditDialogProps): ReactElement {
   const { open, onOpenChange, baseRow, profile } = props;
   const { persist, state } = useClientBaseActualization();
-  const [saving, setSaving] = useState(false);
+  const passportSave = useSectionSaveFeedback();
+  const responsiblesSave = useSectionSaveFeedback();
+  const logisticsSave = useSectionSaveFeedback();
+  const contactsSave = useSectionSaveFeedback();
   const [name, setName] = useState("");
   const [inn, setInn] = useState("");
   const [city, setCity] = useState("");
@@ -118,116 +129,123 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
     setLogisticsComment(typeof merged.logisticsComment === "string" ? merged.logisticsComment : "");
   }, [open, baseRow, state]);
 
-  const onSave = useCallback(async () => {
+  const persistAll = useCallback(async (): Promise<boolean> => {
     if (!name.trim()) {
       toast({ title: "Заполните название клиента", variant: "destructive" });
-      return;
+      return false;
     }
-    setSaving(true);
-    try {
-      const uid = profile.personaUserId;
-      const uname = userLabelFromProfile(profile);
-      const uoNum = unloadingOrder.trim() ? Math.floor(Number(unloadingOrder.trim())) : NaN;
-      const fields: Record<string, unknown> = {
-        dealerName: name.trim(),
-        inn: inn.trim() || undefined,
-        city: city.trim(),
-        address: address.trim(),
-        phone: phone.trim(),
-        email: email.trim(),
-        manager: manager.trim(),
-        regionalManager: regionalManager.trim(),
-        ropName: ropName.trim(),
-        comment: comment.trim(),
-        shipmentDayId: shipmentDayId || undefined,
-        unloadingOrder: Number.isFinite(uoNum) && uoNum > 0 ? uoNum : undefined,
-        passportClientKind,
-        passportLifecycleStatus,
-        passportCategoryTier,
-        territoryZone: territoryZone.trim() || undefined,
-        logisticsComment: logisticsComment.trim() || undefined,
-      };
-      const ov: DealerActualizationOverride = {
-        dealerId: baseRow.id,
-        fields,
-        updatedAt: isoNow(),
-        updatedBy: uid,
-        updatedByName: uname,
-        source: "manual_actualization",
-      };
-      const r = await persist((prev) => {
-        let next = mergeActualizationState(prev, {
-          dealerOverridesById: { ...prev.dealerOverridesById, [baseRow.id]: ov },
-        });
-        if (Number.isFinite(uoNum) && uoNum > 0) {
-          next = mergeActualizationState(next, {
-            unloadingOrderByDealerId: { ...(next.unloadingOrderByDealerId ?? {}), [baseRow.id]: uoNum },
-          });
-        } else {
-          const map = { ...(next.unloadingOrderByDealerId ?? {}) };
-          delete map[baseRow.id];
-          next = mergeActualizationState(next, { unloadingOrderByDealerId: map });
-        }
-        const iso = isoNow();
+    const uid = profile.personaUserId;
+    const uname = userLabelFromProfile(profile);
+    const uoNum = unloadingOrder.trim() ? Math.floor(Number(unloadingOrder.trim())) : NaN;
+    const fields: Record<string, unknown> = {
+      dealerName: name.trim(),
+      inn: inn.trim() || undefined,
+      city: city.trim(),
+      address: address.trim(),
+      phone: phone.trim(),
+      email: email.trim(),
+      manager: manager.trim(),
+      regionalManager: regionalManager.trim(),
+      ropName: ropName.trim(),
+      comment: comment.trim(),
+      shipmentDayId: shipmentDayId || undefined,
+      unloadingOrder: Number.isFinite(uoNum) && uoNum > 0 ? uoNum : undefined,
+      passportClientKind,
+      passportLifecycleStatus,
+      passportCategoryTier,
+      territoryZone: territoryZone.trim() || undefined,
+      logisticsComment: logisticsComment.trim() || undefined,
+    };
+    const ov: DealerActualizationOverride = {
+      dealerId: baseRow.id,
+      fields,
+      updatedAt: isoNow(),
+      updatedBy: uid,
+      updatedByName: uname,
+      source: "manual_actualization",
+    };
+    const r = await persist((prev) => {
+      let next = mergeActualizationState(prev, {
+        dealerOverridesById: { ...prev.dealerOverridesById, [baseRow.id]: ov },
+      });
+      if (Number.isFinite(uoNum) && uoNum > 0) {
         next = mergeActualizationState(next, {
-          dealerActualizationAuditByDealerId: {
-            ...next.dealerActualizationAuditByDealerId,
-            [baseRow.id]: { lastUpdatedAt: iso, lastUpdatedBy: uid, lastUpdatedByName: uname },
-          },
+          unloadingOrderByDealerId: { ...(next.unloadingOrderByDealerId ?? {}), [baseRow.id]: uoNum },
         });
-        if (isManualActualizationDealerId(baseRow.id)) {
-          const m = next.manuallyCreatedDealersById[baseRow.id];
-          if (m) {
-            const prevF = (m.fields ?? {}) as Record<string, unknown>;
-            const shipmentLabel = shipmentDayId ? DEALER_SHIPMENT_DAY_LABELS[shipmentDayId] : "";
-            const mergedFields: Record<string, unknown> = {
-              ...prevF,
-              name: name.trim(),
-              inn: inn.trim(),
-              city: city.trim(),
-              address: address.trim(),
-              phone: phone.trim(),
-              email: email.trim(),
-              manager: manager.trim(),
-              regionalManager: regionalManager.trim(),
-              ropName: ropName.trim(),
-              comment: comment.trim(),
-              shipmentDayId: shipmentDayId || undefined,
-              shipmentDayLabel: shipmentLabel || undefined,
-              passportClientKind,
-              passportLifecycleStatus,
-              passportCategoryTier,
-              territoryZone: territoryZone.trim(),
-              logisticsComment: logisticsComment.trim(),
-              unloadingOrder: Number.isFinite(uoNum) && uoNum > 0 ? uoNum : undefined,
-            };
-            next = mergeActualizationState(next, {
-              manuallyCreatedDealersById: {
-                ...next.manuallyCreatedDealersById,
-                [baseRow.id]: { ...m, fields: mergedFields },
-              },
-            });
+      } else {
+        const map = { ...(next.unloadingOrderByDealerId ?? {}) };
+        delete map[baseRow.id];
+        next = mergeActualizationState(next, { unloadingOrderByDealerId: map });
+      }
+      const iso = isoNow();
+      next = mergeActualizationState(next, {
+        dealerActualizationAuditByDealerId: {
+          ...next.dealerActualizationAuditByDealerId,
+          [baseRow.id]: { lastUpdatedAt: iso, lastUpdatedBy: uid, lastUpdatedByName: uname },
+        },
+      });
+      if (isManualActualizationDealerId(baseRow.id)) {
+        const m = next.manuallyCreatedDealersById[baseRow.id];
+        if (m) {
+          const prevF = (m.fields ?? {}) as Record<string, unknown>;
+          const shipmentLabel = shipmentDayId ? DEALER_SHIPMENT_DAY_LABELS[shipmentDayId] : "";
+          const mergedFields: Record<string, unknown> = {
+            ...prevF,
+            name: name.trim(),
+            inn: inn.trim(),
+            city: city.trim(),
+            address: address.trim(),
+            phone: phone.trim(),
+            email: email.trim(),
+            manager: manager.trim(),
+            regionalManager: regionalManager.trim(),
+            ropName: ropName.trim(),
+            comment: comment.trim(),
+            shipmentDayId: shipmentDayId || undefined,
+            shipmentDayLabel: shipmentLabel || undefined,
+            passportClientKind,
+            passportLifecycleStatus,
+            passportCategoryTier,
+            territoryZone: territoryZone.trim(),
+            logisticsComment: logisticsComment.trim(),
+            unloadingOrder: Number.isFinite(uoNum) && uoNum > 0 ? uoNum : undefined,
+          };
+          next = mergeActualizationState(next, {
+            manuallyCreatedDealersById: {
+              ...next.manuallyCreatedDealersById,
+              [baseRow.id]: { ...m, fields: mergedFields },
+            },
+          });
+          const m2 = next.manuallyCreatedDealersById[baseRow.id];
+          if (m2) {
+            const ic = (m2.internalCode ?? "").trim();
+            if (!/^TND-CL-\d{6}$/i.test(ic)) {
+              const code = nextManualDealerInternalCode(next);
+              next = mergeActualizationState(next, {
+                manuallyCreatedDealersById: {
+                  ...next.manuallyCreatedDealersById,
+                  [baseRow.id]: { ...m2, internalCode: code },
+                },
+              });
+            }
           }
         }
-        return next;
-      });
-      if (r.success) {
-        toast({ title: "Сохранено" });
-        onOpenChange(false);
-      } else {
-        const extra =
-          r.syncStatus === "local_fallback" || r.storageMode === "local_fallback"
-            ? " Данные могли сохраниться только на этом устройстве."
-            : "";
-        toast({
-          title: "Не удалось сохранить. Проверьте соединение и попробуйте ещё раз.",
-          description: extra.trim() || "Проверьте статус синхронизации.",
-          variant: "destructive",
-        });
       }
-    } finally {
-      setSaving(false);
+      return next;
+    });
+    if (!r.success) {
+      const extra =
+        r.syncStatus === "local_fallback" || r.storageMode === "local_fallback"
+          ? " Данные могли сохраниться только на этом устройстве."
+          : "";
+      toast({
+        title: "Не удалось сохранить. Проверьте соединение и попробуйте ещё раз.",
+        description: extra.trim() || "Проверьте статус синхронизации.",
+        variant: "destructive",
+      });
+      return false;
     }
+    return true;
   }, [
     name,
     inn,
@@ -248,7 +266,6 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
     logisticsComment,
     baseRow.id,
     persist,
-    onOpenChange,
     profile,
   ]);
 
@@ -258,135 +275,309 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
         <DialogHeader>
           <DialogTitle className="text-base">Редактирование клиента</DialogTitle>
         </DialogHeader>
-        <div className="space-y-3 py-1">
-          <div className="space-y-1.5">
-            <Label className="text-xs">
-              Название клиента <span className="text-destructive">*</span>
-            </Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} className="min-h-10" />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">ИНН</Label>
-            <Input value={inn} onChange={(e) => setInn(e.target.value)} className="min-h-10" />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Город / населённый пункт</Label>
-            <Input value={city} onChange={(e) => setCity(e.target.value)} className="min-h-10" />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Адрес</Label>
-            <Textarea value={address} onChange={(e) => setAddress(e.target.value)} rows={2} className="min-h-[52px]" />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Телефон</Label>
-            <Input value={phone} onChange={(e) => setPhone(e.target.value)} className="min-h-10" />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Email</Label>
-            <Input value={email} onChange={(e) => setEmail(e.target.value)} className="min-h-10" />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Ответственный менеджер</Label>
-            <Input value={manager} onChange={(e) => setManager(e.target.value)} className="min-h-10" />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Ответственный региональный менеджер</Label>
-            <Input value={regionalManager} onChange={(e) => setRegionalManager(e.target.value)} className="min-h-10" />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Ответственный РОП</Label>
-            <Input value={ropName} onChange={(e) => setRopName(e.target.value)} className="min-h-10" />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">День отгрузки</Label>
-            <Select
-              value={shipmentDayId || "__none__"}
-              onValueChange={(v) => setShipmentDayId(v === "__none__" ? "" : (v as DealerShipmentDayId))}
-            >
-              <SelectTrigger className="min-h-10">
-                <SelectValue placeholder="Не выбран" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__">Не выбран</SelectItem>
-                {DEALER_SHIPMENT_DAY_ORDER.map((d) => (
-                  <SelectItem key={d} value={d}>
-                    {DEALER_SHIPMENT_DAY_LABELS[d]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Порядок выгрузки (число)</Label>
-            <Input inputMode="numeric" value={unloadingOrder} onChange={(e) => setUnloadingOrder(e.target.value)} className="min-h-10" />
-          </div>
-          <div className="space-y-2 border-t border-border pt-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Паспорт актуализации</p>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Тип клиента</Label>
-              <Select value={passportClientKind} onValueChange={setPassportClientKind}>
-                <SelectTrigger className="min-h-10">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ip">ИП</SelectItem>
-                  <SelectItem value="ooo">ООО</SelectItem>
-                  <SelectItem value="person">Физлицо</SelectItem>
-                  <SelectItem value="network">Сеть</SelectItem>
-                  <SelectItem value="other">Другое</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Статус (актуализация)</Label>
-              <Select value={passportLifecycleStatus} onValueChange={setPassportLifecycleStatus}>
-                <SelectTrigger className="min-h-10">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="new">Новый</SelectItem>
-                  <SelectItem value="active">Активный</SelectItem>
-                  <SelectItem value="needs_review">Требует проверки</SelectItem>
-                  <SelectItem value="inactive">Неактивный</SelectItem>
-                  <SelectItem value="archived">Архив</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Категория (ТОП)</Label>
-              <Select value={passportCategoryTier} onValueChange={setPassportCategoryTier}>
-                <SelectTrigger className="min-h-10">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="top150">ТОП-150</SelectItem>
-                  <SelectItem value="top350">ТОП-350</SelectItem>
-                  <SelectItem value="top500">ТОП-500</SelectItem>
-                  <SelectItem value="other">Прочие</SelectItem>
-                  <SelectItem value="none">Без категории</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Территория / зона</Label>
-              <Input value={territoryZone} onChange={(e) => setTerritoryZone(e.target.value)} className="min-h-10" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Комментарий по логистике</Label>
-              <Textarea rows={2} value={logisticsComment} onChange={(e) => setLogisticsComment(e.target.value)} className="min-h-[52px]" />
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Комментарий / заметка</Label>
-            <Textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} className="min-h-[52px]" />
-          </div>
-        </div>
-        <DialogFooter className="sticky bottom-0 border-t border-border bg-background pt-3">
+        <Accordion type="multiple" defaultValue={["passport", "responsibles", "logistics", "contacts"]} className="py-1">
+          <AccordionItem value="passport">
+            <AccordionTrigger className="text-left text-sm font-semibold">Паспорт клиента</AccordionTrigger>
+            <AccordionContent className="space-y-3 pb-4 pt-1">
+              <div className="space-y-1.5">
+                <Label className="text-xs">ИНН</Label>
+                <Input
+                  value={inn}
+                  onChange={(e) => {
+                    setInn(e.target.value);
+                    passportSave.markDirty();
+                  }}
+                  className="min-h-10"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Тип клиента</Label>
+                <Select
+                  value={passportClientKind}
+                  onValueChange={(v) => {
+                    setPassportClientKind(v);
+                    passportSave.markDirty();
+                  }}
+                >
+                  <SelectTrigger className="min-h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ip">ИП</SelectItem>
+                    <SelectItem value="ooo">ООО</SelectItem>
+                    <SelectItem value="person">Физлицо</SelectItem>
+                    <SelectItem value="network">Сеть</SelectItem>
+                    <SelectItem value="other">Другое</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Статус (актуализация)</Label>
+                <Select
+                  value={passportLifecycleStatus}
+                  onValueChange={(v) => {
+                    setPassportLifecycleStatus(v);
+                    passportSave.markDirty();
+                  }}
+                >
+                  <SelectTrigger className="min-h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="new">Новый</SelectItem>
+                    <SelectItem value="active">Активный</SelectItem>
+                    <SelectItem value="needs_review">Требует проверки</SelectItem>
+                    <SelectItem value="inactive">Неактивный</SelectItem>
+                    <SelectItem value="archived">Архив</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Категория (ТОП)</Label>
+                <Select
+                  value={passportCategoryTier}
+                  onValueChange={(v) => {
+                    setPassportCategoryTier(v);
+                    passportSave.markDirty();
+                  }}
+                >
+                  <SelectTrigger className="min-h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="top150">ТОП-150</SelectItem>
+                    <SelectItem value="top350">ТОП-350</SelectItem>
+                    <SelectItem value="top500">ТОП-500</SelectItem>
+                    <SelectItem value="other">Прочие</SelectItem>
+                    <SelectItem value="none">Без категории</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <SectionSaveButton
+                testId="button-dealer-section-save-passport"
+                statusTestId="text-save-status-passport"
+                phase={passportSave.phase}
+                onSave={() =>
+                  void passportSave.runSave(async () => {
+                    return persistAll();
+                  })
+                }
+              />
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="responsibles">
+            <AccordionTrigger className="text-left text-sm font-semibold">Ответственные</AccordionTrigger>
+            <AccordionContent className="space-y-3 pb-4 pt-1">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Ответственный менеджер</Label>
+                <Input
+                  value={manager}
+                  onChange={(e) => {
+                    setManager(e.target.value);
+                    responsiblesSave.markDirty();
+                  }}
+                  className="min-h-10"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Ответственный региональный менеджер</Label>
+                <Input
+                  value={regionalManager}
+                  onChange={(e) => {
+                    setRegionalManager(e.target.value);
+                    responsiblesSave.markDirty();
+                  }}
+                  className="min-h-10"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Ответственный РОП</Label>
+                <Input
+                  value={ropName}
+                  onChange={(e) => {
+                    setRopName(e.target.value);
+                    responsiblesSave.markDirty();
+                  }}
+                  className="min-h-10"
+                />
+              </div>
+              <SectionSaveButton
+                testId="button-dealer-section-save-responsibles"
+                statusTestId="text-save-status-responsibles"
+                phase={responsiblesSave.phase}
+                onSave={() =>
+                  void responsiblesSave.runSave(async () => {
+                    return persistAll();
+                  })
+                }
+              />
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="logistics">
+            <AccordionTrigger className="text-left text-sm font-semibold">Адрес и логистика</AccordionTrigger>
+            <AccordionContent className="space-y-3 pb-4 pt-1">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Город / населённый пункт</Label>
+                <Input
+                  value={city}
+                  onChange={(e) => {
+                    setCity(e.target.value);
+                    logisticsSave.markDirty();
+                  }}
+                  className="min-h-10"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Адрес</Label>
+                <Textarea
+                  value={address}
+                  onChange={(e) => {
+                    setAddress(e.target.value);
+                    logisticsSave.markDirty();
+                  }}
+                  rows={2}
+                  className="min-h-[52px]"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">День отгрузки</Label>
+                <Select
+                  value={shipmentDayId || "__none__"}
+                  onValueChange={(v) => {
+                    setShipmentDayId(v === "__none__" ? "" : (v as DealerShipmentDayId));
+                    logisticsSave.markDirty();
+                  }}
+                >
+                  <SelectTrigger className="min-h-10">
+                    <SelectValue placeholder="Не выбран" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Не выбран</SelectItem>
+                    {DEALER_SHIPMENT_DAY_ORDER.map((d) => (
+                      <SelectItem key={d} value={d}>
+                        {DEALER_SHIPMENT_DAY_LABELS[d]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Порядок выгрузки (число)</Label>
+                <Input
+                  inputMode="numeric"
+                  value={unloadingOrder}
+                  onChange={(e) => {
+                    setUnloadingOrder(e.target.value);
+                    logisticsSave.markDirty();
+                  }}
+                  className="min-h-10"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Территория / зона</Label>
+                <Input
+                  value={territoryZone}
+                  onChange={(e) => {
+                    setTerritoryZone(e.target.value);
+                    logisticsSave.markDirty();
+                  }}
+                  className="min-h-10"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Комментарий по логистике</Label>
+                <Textarea
+                  rows={2}
+                  value={logisticsComment}
+                  onChange={(e) => {
+                    setLogisticsComment(e.target.value);
+                    logisticsSave.markDirty();
+                  }}
+                  className="min-h-[52px]"
+                />
+              </div>
+              <SectionSaveButton
+                testId="button-dealer-section-save-logistics"
+                statusTestId="text-save-status-logistics"
+                phase={logisticsSave.phase}
+                onSave={() =>
+                  void logisticsSave.runSave(async () => {
+                    return persistAll();
+                  })
+                }
+              />
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="contacts">
+            <AccordionTrigger className="text-left text-sm font-semibold">Контакты и заметка</AccordionTrigger>
+            <AccordionContent className="space-y-3 pb-4 pt-1">
+              <div className="space-y-1.5">
+                <Label className="text-xs">
+                  Название клиента <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  value={name}
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    contactsSave.markDirty();
+                  }}
+                  className="min-h-10"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Телефон</Label>
+                <Input
+                  value={phone}
+                  onChange={(e) => {
+                    setPhone(e.target.value);
+                    contactsSave.markDirty();
+                  }}
+                  className="min-h-10"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Email</Label>
+                <Input
+                  value={email}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    contactsSave.markDirty();
+                  }}
+                  className="min-h-10"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Комментарий / заметка</Label>
+                <Textarea
+                  value={comment}
+                  onChange={(e) => {
+                    setComment(e.target.value);
+                    contactsSave.markDirty();
+                  }}
+                  rows={2}
+                  className="min-h-[52px]"
+                />
+              </div>
+              <SectionSaveButton
+                testId="button-dealer-section-save-contacts"
+                statusTestId="text-save-status-contacts"
+                phase={contactsSave.phase}
+                onSave={() =>
+                  void contactsSave.runSave(async () => {
+                    return persistAll();
+                  })
+                }
+              />
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+        <DialogFooter className="sticky bottom-0 flex-col items-stretch gap-2 border-t border-border bg-background pt-3 sm:flex-row sm:justify-between">
+          <p className="text-xs text-muted-foreground">Сохраняйте изменения кнопкой внутри каждого блока.</p>
           <Button type="button" variant="outline" className="min-h-10 w-full sm:w-auto" onClick={() => onOpenChange(false)}>
-            Отмена
-          </Button>
-          <Button type="button" className="min-h-10 w-full font-semibold sm:w-auto" data-testid="button-dealer-save" disabled={saving} onClick={() => void onSave()}>
-            Сохранить
+            Закрыть без сохранения
           </Button>
         </DialogFooter>
       </DialogContent>

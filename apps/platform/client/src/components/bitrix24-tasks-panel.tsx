@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -66,6 +68,10 @@ export type Bitrix24TasksPanelProps = {
   canCreate: boolean;
   actorUserId: string;
   actorLabel: string;
+  /** Компактный аккордеон: по умолчанию свёрнут, краткая строка статуса в заголовке */
+  compact?: boolean;
+  /** При compact: изначально раскрыть блок */
+  defaultExpanded?: boolean;
 };
 
 export function Bitrix24TasksPanel({
@@ -77,8 +83,12 @@ export function Bitrix24TasksPanel({
   canCreate,
   actorUserId,
   actorLabel,
+  compact,
+  defaultExpanded,
 }: Bitrix24TasksPanelProps) {
   const tidPrefix = scope === "dealer" ? "dealer" : "trade-point";
+  const isCompact = compact === true;
+  const [compactOpen, setCompactOpen] = useState(defaultExpanded === true);
   const [tick, setTick] = useState(0);
   const [importTick, setImportTick] = useState(0);
   const [open, setOpen] = useState(false);
@@ -118,6 +128,10 @@ export function Bitrix24TasksPanel({
     return () => window.removeEventListener(BITRIX24_IMPORTED_TASKS_CHANGED_EVENT, fn);
   }, []);
 
+  useEffect(() => {
+    setCompactOpen(defaultExpanded === true);
+  }, [defaultExpanded, dealerId, tradePointId, scope]);
+
   const links: Bitrix24TaskLink[] = useMemo(() => {
     if (scope === "dealer") {
       return getDealerBitrix24TaskLinks(dealerId).slice(0, LIST_LIMIT);
@@ -138,6 +152,11 @@ export function Bitrix24TasksPanel({
   );
 
   const canSeeSection = canCreate || links.length > 0 || importedVisible.length > 0;
+
+  const compactSummary = useMemo(() => {
+    const idTxt = bitrixUserId != null ? String(bitrixUserId) : "—";
+    return `ID: ${idTxt} · задач из ЛК: ${links.length} · из Bitrix24: ${importedVisible.length}`;
+  }, [bitrixUserId, links.length, importedVisible.length]);
 
   const resetForm = useCallback(() => {
     setTitle("");
@@ -252,35 +271,12 @@ export function Bitrix24TasksPanel({
     return null;
   }
 
-  return (
-    <section
-      data-testid={`section-${tidPrefix}-bitrix24-tasks`}
-      className={cn("scroll-mt-28 space-y-3 sm:scroll-mt-32")}
-    >
-      <div className="space-y-1">
-        <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Задачи Bitrix24</h2>
-        <p className="max-w-2xl text-sm text-muted-foreground">
-          Создание задачи в портале Bitrix24 из ЛК и загрузка списка задач по вашему ответственному в Bitrix24. Данные о
-          созданных и импортированных задачах хранятся в этом браузере; синхронизация статусов из Bitrix24 не выполняется.
-        </p>
-        {canCreate && !bitrixTasksAllowed ? (
-          <Alert
-            variant="destructive"
-            className="mt-2 border-destructive/40 py-3"
-            data-testid="alert-bitrix24-user-not-mapped"
-          >
-            <AlertDescription className="text-sm">
-              Для вашего пользователя не настроена связка с Bitrix24. Обратитесь к администратору.
-            </AlertDescription>
-          </Alert>
-        ) : null}
-        {bitrixUserId ? (
-          <p className="text-xs text-muted-foreground" data-testid="text-bitrix24-user-id">
-            Bitrix24 ID: {bitrixUserId}
-          </p>
-        ) : null}
-      </div>
-      <Card className="rounded-2xl border border-border/80 bg-card shadow-md">
+  const compactToggleTestId = scope === "dealer" ? "button-dealer-bitrix24-toggle" : "button-trade-point-bitrix24-toggle";
+  const compactWrapTestId = scope === "dealer" ? "section-dealer-bitrix24-compact" : "section-trade-point-bitrix24-compact";
+
+  const tasksCards = (
+    <>
+      <Card className={cn("rounded-2xl border border-border/80 bg-card shadow-md", isCompact && "shadow-xs")}>
         <CardHeader className="space-y-1 pb-2 pt-5 sm:pb-3">
           <CardTitle className="text-sm font-semibold">Поставленные из ЛК</CardTitle>
           <CardDescription className="text-xs">
@@ -356,7 +352,7 @@ export function Bitrix24TasksPanel({
 
       {importedVisible.length > 0 ? (
         <Card
-          className="rounded-2xl border border-border/80 bg-card shadow-md"
+          className={cn("rounded-2xl border border-border/80 bg-card shadow-md", isCompact && "shadow-xs")}
           data-testid="section-bitrix24-imported-tasks"
         >
           <CardHeader className="space-y-1 pb-2 pt-5 sm:pb-3">
@@ -409,6 +405,80 @@ export function Bitrix24TasksPanel({
           </CardContent>
         </Card>
       ) : null}
+    </>
+  );
+
+  return (
+    <section
+      data-testid={`section-${tidPrefix}-bitrix24-tasks`}
+      className={cn("scroll-mt-28 space-y-3 sm:scroll-mt-32", isCompact && "space-y-2")}
+    >
+      {isCompact ? (
+        <div data-testid={compactWrapTestId}>
+          <Collapsible open={compactOpen} onOpenChange={setCompactOpen}>
+            <CollapsibleTrigger asChild>
+              <button
+                type="button"
+                className="flex w-full min-w-0 items-center gap-2 rounded-xl border border-border/70 bg-card px-3 py-2.5 text-left sm:px-4"
+                data-testid={compactToggleTestId}
+              >
+                <ChevronDown className={cn("h-4 w-4 shrink-0 transition-transform", compactOpen && "rotate-180")} aria-hidden />
+                <span className="shrink-0 font-semibold text-foreground">Bitrix24</span>
+                <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{compactSummary}</span>
+              </button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-2 space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Не коммерческие данные: задачи из ЛК и загрузка из Bitrix24. Подробности — внутри блока ниже.
+              </p>
+              {canCreate && !bitrixTasksAllowed ? (
+                <Alert
+                  variant="destructive"
+                  className="border-destructive/40 py-3"
+                  data-testid="alert-bitrix24-user-not-mapped"
+                >
+                  <AlertDescription className="text-sm">
+                    Для вашего пользователя не настроена связка с Bitrix24. Обратитесь к администратору.
+                  </AlertDescription>
+                </Alert>
+              ) : null}
+              {bitrixUserId ? (
+                <p className="text-xs text-muted-foreground" data-testid="text-bitrix24-user-id">
+                  Bitrix24 ID: {bitrixUserId}
+                </p>
+              ) : null}
+              {tasksCards}
+            </CollapsibleContent>
+          </Collapsible>
+        </div>
+      ) : (
+        <>
+          <div className="space-y-1">
+            <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Задачи Bitrix24</h2>
+            <p className="max-w-2xl text-sm text-muted-foreground">
+              Создание задачи в портале Bitrix24 из ЛК и загрузка списка задач по вашему ответственному в Bitrix24. Данные о
+              созданных и импортированных задачах хранятся в этом браузере; синхронизация статусов из Bitrix24 не выполняется.
+            </p>
+            {canCreate && !bitrixTasksAllowed ? (
+              <Alert
+                variant="destructive"
+                className="mt-2 border-destructive/40 py-3"
+                data-testid="alert-bitrix24-user-not-mapped"
+              >
+                <AlertDescription className="text-sm">
+                  Для вашего пользователя не настроена связка с Bitrix24. Обратитесь к администратору.
+                </AlertDescription>
+              </Alert>
+            ) : null}
+            {bitrixUserId ? (
+              <p className="text-xs text-muted-foreground" data-testid="text-bitrix24-user-id">
+                Bitrix24 ID: {bitrixUserId}
+              </p>
+            ) : null}
+          </div>
+          {tasksCards}
+        </>
+      )}
 
       <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent className="sm:max-w-lg" data-testid={`dialog-${tidPrefix}-bitrix24-task-create`}>

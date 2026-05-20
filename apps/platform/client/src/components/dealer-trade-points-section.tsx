@@ -31,12 +31,14 @@ import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { mergeTradePointsActiveForActualization, mergeTradePointsForActualization } from "@/lib/client-base-actualization-data-merge";
 import { mergeActualizationState } from "@/lib/client-base-actualization-state";
-import { generateStableManualTradePointId } from "@/lib/client-base-actualization-stable-ids";
+import { generateStableManualTradePointId, nextManualTradePointInternalCode, isManualActualizationTradePointId } from "@/lib/client-base-actualization-stable-ids";
 import {
   canArchiveTradePointDuringActualization,
   canCreateTradePointDuringActualization,
 } from "@/lib/client-base-actualization-permissions";
 import { toast } from "@/hooks/use-toast";
+import { useSectionSaveFeedback } from "@/hooks/use-section-save-feedback";
+import { SectionSaveButton } from "@/components/section-save-button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   AlertDialog,
@@ -92,7 +94,6 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
   const [addContactName, setAddContactName] = useState("");
   const [addContactPhone, setAddContactPhone] = useState("");
   const [addComment, setAddComment] = useState("");
-  const [addSaving, setAddSaving] = useState(false);
   const [addError, setAddError] = useState("");
   const [editOpen, setEditOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -103,10 +104,11 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
   const [editContactName, setEditContactName] = useState("");
   const [editContactPhone, setEditContactPhone] = useState("");
   const [editComment, setEditComment] = useState("");
-  const [editSaving, setEditSaving] = useState(false);
   const [selectedBulkArchiveTpIds, setSelectedBulkArchiveTpIds] = useState<Set<string>>(() => new Set());
   const [bulkArchiveTpDialogOpen, setBulkArchiveTpDialogOpen] = useState(false);
   const [bulkArchiveTpBusy, setBulkArchiveTpBusy] = useState(false);
+  const addTpSave = useSectionSaveFeedback();
+  const editTpSave = useSectionSaveFeedback();
 
   useEffect(() => {
     const fn = () => setTpBump((n) => n + 1);
@@ -175,23 +177,23 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
     prevAddOpenRef.current = addOpen;
   }, [addOpen, row.id]);
 
-  const onAddSave = useCallback(async () => {
+  const onAddSave = useCallback(async (): Promise<boolean> => {
     setAddError("");
     if (useAct) {
-      if (addSaving) return;
       if (!addName.trim() || !addCity.trim() || !addAddress.trim() || !addContactName.trim() || !addContactPhone.trim()) {
         setAddError("Заполните название, город, адрес, контактное лицо и телефон.");
-        return;
+        return false;
       }
       const id = draftTpIdRef.current ?? generateStableManualTradePointId(row.id);
       draftTpIdRef.current = id;
       const now = new Date().toISOString();
-      setAddSaving(true);
       const r = await actx.persist((prev) => {
         const existing = prev.manuallyCreatedTradePointsById[id];
+        const internalCode = nextManualTradePointInternalCode(prev);
         const rec = {
           id,
           dealerId: row.id,
+          internalCode,
           fields: {
             name: addName.trim(),
             city: addCity.trim(),
@@ -210,11 +212,10 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
           manuallyCreatedTradePointsById: { ...prev.manuallyCreatedTradePointsById, [id]: rec },
         });
       });
-      setAddSaving(false);
       if (r.success) {
-        toast({ title: "Сохранено" });
         setAddOpen(false);
         resetAddForm();
+        return true;
       } else {
         const extra =
           r.syncStatus === "local_fallback" || r.storageMode === "local_fallback"
@@ -225,8 +226,8 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
           description: extra.trim() || undefined,
           variant: "destructive",
         });
+        return false;
       }
-      return;
     }
     const id = addManualTradePoint(
       row.id,
@@ -242,11 +243,12 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
     );
     if (!id) {
       setAddError("Заполните название, город, адрес, контактное лицо и телефон.");
-      return;
+      return false;
     }
     setTpBump((n) => n + 1);
     setAddOpen(false);
     resetAddForm();
+    return true;
   }, [
     useAct,
     actx,
@@ -260,7 +262,8 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
     profile,
     row.id,
     resetAddForm,
-    addSaving,
+    useAct,
+    actx,
   ]);
 
   const openEdit = useCallback(
@@ -273,18 +276,18 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
       setEditContactName(tp.contactName ?? "");
       setEditContactPhone(tp.contactPhone ?? "");
       setEditComment(tp.tpComment ?? "");
+      editTpSave.markDirty();
       setEditOpen(true);
     },
     [],
   );
 
-  const onEditSave = useCallback(async () => {
-    if (!useAct || !editId) return;
+  const onEditSave = useCallback(async (): Promise<boolean> => {
+    if (!useAct || !editId) return false;
     if (!editName.trim() || !editCity.trim() || !editAddress.trim()) {
       toast({ title: "Заполните название, город и адрес", variant: "destructive" });
-      return;
+      return false;
     }
-    setEditSaving(true);
     const now = new Date().toISOString();
     const fields: Record<string, unknown> = {
       name: editName.trim(),
@@ -304,22 +307,35 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
       updatedByName: userLabelFromProfile(profile),
       source: "manual_actualization" as const,
     };
-    const r = await actx.persist((prev) =>
-      mergeActualizationState(prev, {
+    const r = await actx.persist((prev) => {
+      let next = mergeActualizationState(prev, {
         tradePointOverridesById: { ...prev.tradePointOverridesById, [editId]: ov },
-      }),
-    );
-    setEditSaving(false);
+      });
+      const manual = next.manuallyCreatedTradePointsById[editId];
+      if (manual && manual.dealerId === row.id && isManualActualizationTradePointId(editId)) {
+        const ic = (manual.internalCode ?? "").trim();
+        if (!/^TND-TP-\d{6}$/i.test(ic)) {
+          const code = nextManualTradePointInternalCode(next);
+          next = mergeActualizationState(next, {
+            manuallyCreatedTradePointsById: {
+              ...next.manuallyCreatedTradePointsById,
+              [editId]: { ...manual, internalCode: code },
+            },
+          });
+        }
+      }
+      return next;
+    });
     if (r.success) {
-      toast({ title: "Сохранено" });
       setEditOpen(false);
       setEditId(null);
-    } else {
-      toast({
-        title: "Не удалось сохранить. Проверьте соединение и попробуйте ещё раз.",
-        variant: "destructive",
-      });
+      return true;
     }
+    toast({
+      title: "Не удалось сохранить. Проверьте соединение и попробуйте ещё раз.",
+      variant: "destructive",
+    });
+    return false;
   }, [useAct, editId, editName, editCity, editAddress, editFormat, editContactName, editContactPhone, editComment, actx, row.id, profile]);
 
   const onArchive = useCallback(
@@ -494,6 +510,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
               data-testid="button-trade-point-create"
               onClick={() => {
                 resetAddForm();
+                addTpSave.markDirty();
                 setAddOpen(true);
               }}
             >
@@ -513,7 +530,10 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                 <Label className="text-xs">Название ТТ</Label>
                 <Input
                   value={addName}
-                  onChange={(e) => setAddName(e.target.value)}
+                  onChange={(e) => {
+                    setAddName(e.target.value);
+                    addTpSave.markDirty();
+                  }}
                   className="min-h-10"
                   data-testid="input-dealer-trade-point-name"
                 />
@@ -522,7 +542,10 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                 <Label className="text-xs">Город</Label>
                 <Input
                   value={addCity}
-                  onChange={(e) => setAddCity(e.target.value)}
+                  onChange={(e) => {
+                    setAddCity(e.target.value);
+                    addTpSave.markDirty();
+                  }}
                   className="min-h-10"
                   data-testid="input-dealer-trade-point-city"
                 />
@@ -531,7 +554,10 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                 <Label className="text-xs">Адрес</Label>
                 <Textarea
                   value={addAddress}
-                  onChange={(e) => setAddAddress(e.target.value)}
+                  onChange={(e) => {
+                    setAddAddress(e.target.value);
+                    addTpSave.markDirty();
+                  }}
                   rows={2}
                   className="min-h-[52px] resize-y text-sm"
                   data-testid="textarea-dealer-trade-point-address"
@@ -539,13 +565,19 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Тип / формат</Label>
-                <Input value={addFormat} onChange={(e) => setAddFormat(e.target.value)} className="min-h-10" />
+                <Input value={addFormat} onChange={(e) => {
+                    setAddFormat(e.target.value);
+                    addTpSave.markDirty();
+                  }} className="min-h-10" />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Контактное лицо</Label>
                 <Input
                   value={addContactName}
-                  onChange={(e) => setAddContactName(e.target.value)}
+                  onChange={(e) => {
+                    setAddContactName(e.target.value);
+                    addTpSave.markDirty();
+                  }}
                   className="min-h-10"
                   data-testid="input-dealer-trade-point-contact-name"
                 />
@@ -554,7 +586,10 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                 <Label className="text-xs">Телефон</Label>
                 <Input
                   value={addContactPhone}
-                  onChange={(e) => setAddContactPhone(e.target.value)}
+                  onChange={(e) => {
+                    setAddContactPhone(e.target.value);
+                    addTpSave.markDirty();
+                  }}
                   className="min-h-10"
                   data-testid="input-dealer-trade-point-contact-phone"
                 />
@@ -563,7 +598,10 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                 <Label className="text-xs">Комментарий</Label>
                 <Textarea
                   value={addComment}
-                  onChange={(e) => setAddComment(e.target.value)}
+                  onChange={(e) => {
+                    setAddComment(e.target.value);
+                    addTpSave.markDirty();
+                  }}
                   rows={2}
                   className="min-h-[52px] resize-y text-sm"
                   data-testid="textarea-dealer-trade-point-comment"
@@ -571,15 +609,23 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
               </div>
             </div>
             <DialogFooter className="flex-col gap-2 sm:flex-row">
-              <Button
-                type="button"
-                className="min-h-10 w-full font-semibold sm:w-auto"
-                data-testid={useAct ? "button-trade-point-create-submit" : "button-dealer-trade-point-save"}
-                disabled={useAct && addSaving}
-                onClick={() => void onAddSave()}
-              >
-                {useAct && addSaving ? "Сохранение…" : "Сохранить"}
-              </Button>
+              {useAct ? (
+                <SectionSaveButton
+                  testId="button-trade-point-section-save-main"
+                  statusTestId="text-save-status-trade-point-main"
+                  phase={addTpSave.phase}
+                  onSave={() => void addTpSave.runSave(onAddSave)}
+                />
+              ) : (
+                <Button
+                  type="button"
+                  className="min-h-10 w-full font-semibold sm:w-auto"
+                  data-testid="button-dealer-trade-point-save"
+                  onClick={() => void onAddSave()}
+                >
+                  Сохранить
+                </Button>
+              )}
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -634,7 +680,10 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                 <Label className="text-xs">Название ТТ</Label>
                 <Input
                   value={addName}
-                  onChange={(e) => setAddName(e.target.value)}
+                  onChange={(e) => {
+                    setAddName(e.target.value);
+                    addTpSave.markDirty();
+                  }}
                   className="min-h-10"
                   data-testid="input-dealer-trade-point-name"
                 />
@@ -643,7 +692,10 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                 <Label className="text-xs">Город</Label>
                 <Input
                   value={addCity}
-                  onChange={(e) => setAddCity(e.target.value)}
+                  onChange={(e) => {
+                    setAddCity(e.target.value);
+                    addTpSave.markDirty();
+                  }}
                   className="min-h-10"
                   data-testid="input-dealer-trade-point-city"
                 />
@@ -652,7 +704,10 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                 <Label className="text-xs">Адрес</Label>
                 <Textarea
                   value={addAddress}
-                  onChange={(e) => setAddAddress(e.target.value)}
+                  onChange={(e) => {
+                    setAddAddress(e.target.value);
+                    addTpSave.markDirty();
+                  }}
                   rows={2}
                   className="min-h-[52px] resize-y text-sm"
                   data-testid="textarea-dealer-trade-point-address"
@@ -660,13 +715,19 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Тип / формат</Label>
-                <Input value={addFormat} onChange={(e) => setAddFormat(e.target.value)} className="min-h-10" />
+                <Input value={addFormat} onChange={(e) => {
+                    setAddFormat(e.target.value);
+                    addTpSave.markDirty();
+                  }} className="min-h-10" />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Контактное лицо</Label>
                 <Input
                   value={addContactName}
-                  onChange={(e) => setAddContactName(e.target.value)}
+                  onChange={(e) => {
+                    setAddContactName(e.target.value);
+                    addTpSave.markDirty();
+                  }}
                   className="min-h-10"
                   data-testid="input-dealer-trade-point-contact-name"
                 />
@@ -675,7 +736,10 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                 <Label className="text-xs">Телефон</Label>
                 <Input
                   value={addContactPhone}
-                  onChange={(e) => setAddContactPhone(e.target.value)}
+                  onChange={(e) => {
+                    setAddContactPhone(e.target.value);
+                    addTpSave.markDirty();
+                  }}
                   className="min-h-10"
                   data-testid="input-dealer-trade-point-contact-phone"
                 />
@@ -684,7 +748,10 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                 <Label className="text-xs">Комментарий</Label>
                 <Textarea
                   value={addComment}
-                  onChange={(e) => setAddComment(e.target.value)}
+                  onChange={(e) => {
+                    setAddComment(e.target.value);
+                    addTpSave.markDirty();
+                  }}
                   rows={2}
                   className="min-h-[52px] resize-y text-sm"
                   data-testid="textarea-dealer-trade-point-comment"
@@ -692,15 +759,23 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
               </div>
             </div>
             <DialogFooter className="flex-col gap-2 sm:flex-row">
-              <Button
-                type="button"
-                className="min-h-10 w-full font-semibold sm:w-auto"
-                data-testid={useAct ? "button-trade-point-create-submit" : "button-dealer-trade-point-save"}
-                disabled={useAct && addSaving}
-                onClick={() => void onAddSave()}
-              >
-                {useAct && addSaving ? "Сохранение…" : "Сохранить"}
-              </Button>
+              {useAct ? (
+                <SectionSaveButton
+                  testId="button-trade-point-section-save-main"
+                  statusTestId="text-save-status-trade-point-main"
+                  phase={addTpSave.phase}
+                  onSave={() => void addTpSave.runSave(onAddSave)}
+                />
+              ) : (
+                <Button
+                  type="button"
+                  className="min-h-10 w-full font-semibold sm:w-auto"
+                  data-testid="button-dealer-trade-point-save"
+                  onClick={() => void onAddSave()}
+                >
+                  Сохранить
+                </Button>
+              )}
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -734,6 +809,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
               data-testid="button-trade-point-create"
               onClick={() => {
                 resetAddForm();
+                addTpSave.markDirty();
                 setAddOpen(true);
               }}
             >
@@ -862,6 +938,11 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                       ) : null}
                     </div>
                     <p className="text-xs text-muted-foreground">{tp.city}</p>
+                    {tp.releaseCode ? (
+                      <p className="text-xs text-muted-foreground" data-testid={`text-trade-point-internal-code-${tp.id}`}>
+                        Код ТТ: {tp.releaseCode}
+                      </p>
+                    ) : null}
                     <p
                       className="flex items-start gap-1.5 text-xs leading-relaxed text-foreground"
                       data-testid={`text-dealer-trade-point-address-${tp.id}`}
@@ -986,7 +1067,10 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
               <Label className="text-xs">Название ТТ</Label>
               <Input
                 value={addName}
-                onChange={(e) => setAddName(e.target.value)}
+                onChange={(e) => {
+                    setAddName(e.target.value);
+                    addTpSave.markDirty();
+                  }}
                 className="min-h-10"
                 data-testid="input-dealer-trade-point-name"
               />
@@ -995,7 +1079,10 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
               <Label className="text-xs">Город</Label>
               <Input
                 value={addCity}
-                onChange={(e) => setAddCity(e.target.value)}
+                onChange={(e) => {
+                    setAddCity(e.target.value);
+                    addTpSave.markDirty();
+                  }}
                 className="min-h-10"
                 data-testid="input-dealer-trade-point-city"
               />
@@ -1004,7 +1091,10 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
               <Label className="text-xs">Адрес</Label>
               <Textarea
                 value={addAddress}
-                onChange={(e) => setAddAddress(e.target.value)}
+                onChange={(e) => {
+                    setAddAddress(e.target.value);
+                    addTpSave.markDirty();
+                  }}
                 rows={2}
                 className="min-h-[52px] resize-y text-sm"
                 data-testid="textarea-dealer-trade-point-address"
@@ -1012,13 +1102,19 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Тип / формат</Label>
-              <Input value={addFormat} onChange={(e) => setAddFormat(e.target.value)} className="min-h-10" />
+              <Input value={addFormat} onChange={(e) => {
+                    setAddFormat(e.target.value);
+                    addTpSave.markDirty();
+                  }} className="min-h-10" />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Контактное лицо</Label>
               <Input
                 value={addContactName}
-                onChange={(e) => setAddContactName(e.target.value)}
+                onChange={(e) => {
+                    setAddContactName(e.target.value);
+                    addTpSave.markDirty();
+                  }}
                 className="min-h-10"
                 data-testid="input-dealer-trade-point-contact-name"
               />
@@ -1027,7 +1123,10 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
               <Label className="text-xs">Телефон</Label>
               <Input
                 value={addContactPhone}
-                onChange={(e) => setAddContactPhone(e.target.value)}
+                onChange={(e) => {
+                    setAddContactPhone(e.target.value);
+                    addTpSave.markDirty();
+                  }}
                 className="min-h-10"
                 data-testid="input-dealer-trade-point-contact-phone"
               />
@@ -1036,7 +1135,10 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
               <Label className="text-xs">Комментарий</Label>
               <Textarea
                 value={addComment}
-                onChange={(e) => setAddComment(e.target.value)}
+                onChange={(e) => {
+                    setAddComment(e.target.value);
+                    addTpSave.markDirty();
+                  }}
                 rows={2}
                 className="min-h-[52px] resize-y text-sm"
                 data-testid="textarea-dealer-trade-point-comment"
@@ -1044,15 +1146,23 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
             </div>
           </div>
           <DialogFooter className="flex-col gap-2 sm:flex-row">
-            <Button
-              type="button"
-              className="min-h-10 w-full font-semibold sm:w-auto"
-              data-testid={useAct ? "button-trade-point-create-submit" : "button-dealer-trade-point-save"}
-              disabled={useAct && addSaving}
-              onClick={() => void onAddSave()}
-            >
-              {useAct && addSaving ? "Сохранение…" : "Сохранить"}
-            </Button>
+            {useAct ? (
+              <SectionSaveButton
+                testId="button-trade-point-section-save-main"
+                statusTestId="text-save-status-trade-point-main"
+                phase={addTpSave.phase}
+                onSave={() => void addTpSave.runSave(onAddSave)}
+              />
+            ) : (
+              <Button
+                type="button"
+                className="min-h-10 w-full font-semibold sm:w-auto"
+                data-testid="button-dealer-trade-point-save"
+                onClick={() => void onAddSave()}
+              >
+                Сохранить
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1065,45 +1175,49 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
           <div className="space-y-3 py-1">
             <div className="space-y-1.5">
               <Label className="text-xs">Название</Label>
-              <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="min-h-10" />
+              <Input value={editName} onChange={(e) => { setEditName(e.target.value); editTpSave.markDirty(); }} className="min-h-10" />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Тип / формат</Label>
-              <Input value={editFormat} onChange={(e) => setEditFormat(e.target.value)} className="min-h-10" />
+              <Input value={editFormat} onChange={(e) => { setEditFormat(e.target.value); editTpSave.markDirty(); }} className="min-h-10" />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Город</Label>
-              <Input value={editCity} onChange={(e) => setEditCity(e.target.value)} className="min-h-10" />
+              <Input value={editCity} onChange={(e) => { setEditCity(e.target.value); editTpSave.markDirty(); }} className="min-h-10" />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Адрес</Label>
-              <Textarea value={editAddress} onChange={(e) => setEditAddress(e.target.value)} rows={2} className="min-h-[52px]" />
+              <Textarea value={editAddress} onChange={(e) => { setEditAddress(e.target.value); editTpSave.markDirty(); }} rows={2} className="min-h-[52px]" />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Контактное лицо</Label>
-              <Input value={editContactName} onChange={(e) => setEditContactName(e.target.value)} className="min-h-10" />
+              <Input value={editContactName} onChange={(e) => { setEditContactName(e.target.value); editTpSave.markDirty(); }} className="min-h-10" />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Телефон</Label>
-              <Input value={editContactPhone} onChange={(e) => setEditContactPhone(e.target.value)} className="min-h-10" />
+              <Input value={editContactPhone} onChange={(e) => { setEditContactPhone(e.target.value); editTpSave.markDirty(); }} className="min-h-10" />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Комментарий</Label>
-              <Textarea value={editComment} onChange={(e) => setEditComment(e.target.value)} rows={2} className="min-h-[52px]" />
+              <Textarea value={editComment} onChange={(e) => { setEditComment(e.target.value); editTpSave.markDirty(); }} rows={2} className="min-h-[52px]" />
             </div>
           </div>
           <DialogFooter className="sticky bottom-0 border-t border-border bg-background pt-3">
             <Button type="button" variant="outline" className="min-h-10 w-full sm:w-auto" onClick={() => setEditOpen(false)}>
               Отмена
             </Button>
-            <Button
-              type="button"
-              className="min-h-10 w-full font-semibold sm:w-auto"
-              disabled={editSaving}
-              onClick={() => void onEditSave()}
-            >
-              Сохранить
-            </Button>
+            {useAct ? (
+              <SectionSaveButton
+                testId="button-trade-point-section-save-main"
+                statusTestId="text-save-status-trade-point-edit"
+                phase={editTpSave.phase}
+                onSave={() => void editTpSave.runSave(onEditSave)}
+              />
+            ) : (
+              <Button type="button" className="min-h-10 w-full font-semibold sm:w-auto" onClick={() => void onEditSave()}>
+                Сохранить
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
