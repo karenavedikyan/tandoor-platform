@@ -88,7 +88,7 @@ function tradePointFormatFromPoint(tp: DealerTradePoint): string | null {
   return fmt || null;
 }
 
-function deriveShowcaseBucket(sh: TradePointShowcaseActualization | undefined): {
+export function deriveShowcaseBucket(sh: TradePointShowcaseActualization | undefined): {
   bucket: TradePointShowcaseBucket;
   label: string;
 } {
@@ -126,7 +126,7 @@ function portalCapsFromShowcase(sh: TradePointShowcaseActualization | undefined)
   };
 }
 
-function countMatrixDeficit(dealer: DealerRow, act: ActualizationState, sh: TradePointShowcaseActualization | undefined): number {
+export function countShowcaseMatrixDeficitForDealer(dealer: DealerRow, act: ActualizationState, sh: TradePointShowcaseActualization | undefined): number {
   const fields = dealerMergedFields(dealer.id, act);
   const cat = resolveShowcaseMatrixClientCategory(dealer.clientCategory, fields);
   if (!cat) return 0;
@@ -180,7 +180,7 @@ export function buildTradePointListForActualization(
         (summary.interiorPotential != null && summary.interiorPotential > 0) ||
         (summary.freeOrCompetitor != null && summary.freeOrCompetitor > 0);
 
-      const matrixDeficitCount = countMatrixDeficit(dealer, act, sh);
+      const matrixDeficitCount = countShowcaseMatrixDeficitForDealer(dealer, act, sh);
       const showcaseNewTasksCount = (sh?.showcaseMatrixTasks ?? []).filter((t) => t.status === "new").length;
       const modelsOnShowcaseCount = selected.length;
       const portalsTotal = sh?.totalPortals ?? sh?.tandoorTotalPortals ?? null;

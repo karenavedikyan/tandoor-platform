@@ -263,6 +263,7 @@ function tradePointFromManualActualization(m: ManualTradePoint, dealer: DealerRo
     productTrainingStatus: "not_required",
     productTrainingCompleted: false,
     contactPhone: str(fields.contactPhone) ?? str(fields.phone),
+    contactEmail: str(fields.email) ?? undefined,
     contactName: str(fields.contactName),
     tpComment: str(fields.comment) ?? str(fields.tpComment),
   };
@@ -278,6 +279,9 @@ function applyTradePointFields(base: DealerTradePoint, fields: Record<string, un
   if (fields.contactName !== undefined) o.contactName = str(fields.contactName);
   if (fields.contactPhone !== undefined) o.contactPhone = str(fields.contactPhone);
   if (fields.phone !== undefined) o.contactPhone = str(fields.phone) ?? o.contactPhone;
+  if (fields.email !== undefined) {
+    o.contactEmail = str(fields.email) ?? undefined;
+  }
   if (fields.comment !== undefined || fields.tpComment !== undefined) {
     o.tpComment = str(fields.tpComment) ?? str(fields.comment) ?? o.tpComment;
   }
