@@ -15,6 +15,7 @@ import type { ClientCategoryId } from "@/lib/client-category";
 import { isClientTopTier } from "@/lib/client-category";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import { getDealerCharacteristicValue } from "@/lib/dealer-characteristics";
+import { isManualActualizationDealerId } from "@/lib/client-base-actualization-stable-ids";
 
 export type DealerProgramSignal = {
   hasSpecialConditions: boolean;
@@ -45,10 +46,10 @@ export const DEALER_PROGRAM_FILTER_LABELS: Record<DealerProgramFilterId, string>
 };
 
 export const DEALER_PROGRAM_FILTER_BADGE_TESTID: Record<DealerProgramFilterId, string> = {
-  special_conditions: "badge-dealer-special-conditions",
+  special_conditions: "badge-dealer-special-terms",
   franchise: "badge-dealer-franchise",
   tandoor_club: "badge-dealer-tandoor-club",
-  cashback_agent: "badge-dealer-cashback-agent",
+  cashback_agent: "badge-dealer-cashback-client",
 };
 
 export const DEALER_PROGRAM_FILTER_BUTTON_TESTID: Record<DealerProgramFilterId, string> = {
@@ -167,6 +168,20 @@ function fallbackFranchise(row: DealerRow): boolean {
 
 export function getDealerProgramSignal(row: DealerRow): DealerProgramSignal {
   const t = row.terms;
+
+  if (isManualActualizationDealerId(row.id)) {
+    return {
+      hasSpecialConditions: row.hasSpecialTerms === true,
+      hasFranchise: false,
+      hasTandoorClub: row.isTandoorClubMember === true,
+      hasCashbackAgent: row.isCashbackClient === true,
+    };
+  }
+
+  const actSpecial = row.hasSpecialTerms;
+  const actClub = row.isTandoorClubMember;
+  const actCash = row.isCashbackClient;
+
   const explicitClub = t.tandoorClub === "Участник" || looksAffirmative(t.tandoorClub);
   const explicitSpecial = looksAffirmative(t.special);
   const explicitCashback = looksAffirmative(t.bonuses);
@@ -177,11 +192,15 @@ export function getDealerProgramSignal(row: DealerRow): DealerProgramSignal {
   const ovCashback = getDealerCharacteristicValue(row.id, "has_cashback_agent");
 
   const hasSpecial =
-    ovSpecial === "yes"
+    actSpecial === true
       ? true
-      : ovSpecial === "no"
+      : actSpecial === false
         ? false
-        : explicitSpecial || fallbackSpecialConditions(row);
+        : ovSpecial === "yes"
+          ? true
+          : ovSpecial === "no"
+            ? false
+            : explicitSpecial || fallbackSpecialConditions(row);
   const hasFranchise =
     ovFranchise === "yes"
       ? true
@@ -189,17 +208,25 @@ export function getDealerProgramSignal(row: DealerRow): DealerProgramSignal {
         ? false
         : textHintsFranchise(row) || fallbackFranchise(row);
   const hasClub =
-    ovClub === "yes"
+    actClub === true
       ? true
-      : ovClub === "no"
+      : actClub === false
         ? false
-        : explicitClub || fallbackTandoorClub(row);
+        : ovClub === "yes"
+          ? true
+          : ovClub === "no"
+            ? false
+            : explicitClub || fallbackTandoorClub(row);
   const hasCashback =
-    ovCashback === "yes"
+    actCash === true
       ? true
-      : ovCashback === "no"
+      : actCash === false
         ? false
-        : explicitCashback || fallbackCashbackAgent(row);
+        : ovCashback === "yes"
+          ? true
+          : ovCashback === "no"
+            ? false
+            : explicitCashback || fallbackCashbackAgent(row);
 
   return {
     hasSpecialConditions: hasSpecial,

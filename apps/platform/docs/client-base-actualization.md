@@ -48,7 +48,7 @@
 |--------|-----------------------------|
 | Правки полей карточки клиента (название, ИНН, город, адрес, телефон, email, ответственные, день отгрузки, порядок выгрузки, комментарий и др.) | `dealerOverridesById[id]`, при необходимости `unloadingOrderByDealerId`, `dealerShipmentDayLabelByDealerId` и связанные override-поля в override-объекте |
 | ИНН для отображения в краткой информации (если вынесено отдельно от mock) | `dealerOverridesById` / поле `inn` в override; на строке списка — `actualizationInn` после merge |
-| Новый клиент, созданный вручную | `manuallyCreatedDealersById[id]` — id **стабилен на время диалога**: `manual-dealer-{yyyyMMddHHmmss}-{shortRandom}`; в записи хранятся `internalCode` (например `MA-MANUAL-000001`), `createdAt`, `createdBy`, `createdByName`, `source: "manual_actualization"`, поля в `fields` |
+| Новый клиент, созданный вручную | `manuallyCreatedDealersById[id]` — id **стабилен на время диалога**: `manual-dealer-{yyyyMMddHHmmss}-{shortRandom}`; в записи хранятся `internalCode` (например `MA-MANUAL-000001`), `createdAt`, `createdBy`, `createdByName`, `source: "manual_actualization"`, поля в `fields` (в т. ч. коммерческие характеристики и `external1cCode`) |
 | Архив вручну созданного клиента | `archivedDealersById[dealerId]` — запись о мягком архиве; клиент остаётся в `manuallyCreatedDealersById`, но **скрыт** из списка клиентской базы |
 | Новая торговая точка | `manuallyCreatedTradePointsById[id]` — id: `manual-tp-{dealerId}-{yyyyMMddHHmmss}-{shortRandom}`, метаданные создания, при повторном сохранении после ошибки — **тот же id** (upsert) |
 | Правки существующей ТТ | `tradePointOverridesById` |
@@ -95,6 +95,8 @@
 Идентификаторы: префиксы `manual-dealer-` и `manual-tp-` (см. `isManualActualizationDealerId` / `isManualActualizationTradePointId` в `client-base-actualization-stable-ids.ts`).
 
 - **Строка дилера** (`manualDealerToRow`): не копируется первая строка `DEALER_BASE_ROWS`; витрина, конкуренты, KPI, дистрибуция и связанные поля — нейтральные пустые значения, чтобы детерминированные «пилотные» хелперы не подставляли демо.
+- **Коммерческие признаки** (склады двери/фурнитуры, Tandoor Club, спецусловия, КЭШБЭК, код 1С): хранятся в `manuallyCreatedDealersById` / `dealerOverridesById` в `fields`, мержатся в `DealerRow` (`mergeDealerRowWithActualization`). По умолчанию для ручного клиента все три-state поля — **`null` («не указано»)**. В списке «Клиентская база» бейджи «Tandoor Club», «Спецусловия», «Кешбек агент» и склады показываются **только при явном `true`** (`getDealerProgramSignal` / `getDealerStockSignal` для `manual-dealer-*` не используют эвристики от категории и `dealer-characteristics`).
+- **Карта клиентов** (`pages/client-map.tsx`): при включённой актуализации строки берутся из `buildDealerBaseRowsWithActualization(state, profile, { includeArchivedDealers: false })`, поэтому клиенты из `archivedDealersById` **не попадают на карту** по умолчанию; ручные клиенты — в наборе, если проходят роль и фильтры (координаты — по прежней логике `client-map-data`).
 - **Нет виртуальной ТТ** без явных точек: `mergeTradePointsForActualization` и `getEffectiveDealerTradePoints` не добавляют «Основную торговую точку» с адресом из карточки дилера.
 - **Юрлица из release** не подмешиваются: `mergeLegalEntitiesForActualization` для ручного дилера стартует с пустого списка.
 - **Синтетика по id** отключена в общих модулях: `dealer-card-release-signals`, `dealer-stock-signals`, `dealer-equipment-signals`, `showcase-distribution-data` (план витрины и задачи), `trade-point-matrix-data` (матрица для `manual-tp-`), `training-attention.ts`.
@@ -142,6 +144,8 @@
 | Юрлицо: пустой список | `text-legal-entities-empty-state` |
 | Юрлицо: восстановить из архива | `button-legal-entity-restore-{legalEntityId}` |
 | Статус синхронизации | `text-actualization-sync-status` |
+| Коммерческие характеристики (форма / анкета) | `section-dealer-commercial-characteristics`, `select-dealer-door-warehouse`, `textarea-dealer-door-warehouse-comment`, `select-dealer-hardware-warehouse`, `textarea-dealer-hardware-warehouse-comment`, `select-dealer-tandoor-club`, `textarea-dealer-tandoor-club-comment`, `select-dealer-special-terms`, `textarea-dealer-special-terms-comment`, `select-dealer-cashback-client`, `textarea-dealer-cashback-client-comment`, `input-dealer-external-1c-code`, `text-dealer-external-1c-code` |
+| Бейджи в списке клиентской базы (программы) | `badge-dealer-special-terms-{id}`, `badge-dealer-tandoor-club-{id}`, `badge-dealer-cashback-client-{id}` (суффикс `id` клиента для уникальности в списке) |
 
 ## Ручные проверки (acceptance)
 
@@ -162,7 +166,7 @@
 
 ## Ограничения по охвату репозитория
 
-Чат Bitrix24, OAuth, Коммуникации, каталог, карта клиентов и смежные модули **вне** задач актуализации — изменения сосредоточены в `apps/platform` и описанных выше файлах. Для **ручного** клиента/ТТ изоляция от демо-данных витрины/матрицы выполняется в перечисленных выше файлах актуализации и карточки.
+Чат Bitrix24, OAuth, Коммуникации, каталог и смежные модули **вне** задач актуализации — изменения сосредоточены в `apps/platform` и описанных выше файлах. **Карта клиентов** при включённой актуализации использует merge-строки без архивированных клиентов. Для **ручного** клиента/ТТ изоляция от демо-данных витрины/матрицы выполняется в перечисленных выше файлах актуализации и карточки.
 
 ## Технический выбор драйвера БД
 

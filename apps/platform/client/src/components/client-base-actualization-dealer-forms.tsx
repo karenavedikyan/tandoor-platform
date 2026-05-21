@@ -52,6 +52,7 @@ import {
   nextManualDealerInternalCode,
   isManualActualizationDealerId,
 } from "@/lib/client-base-actualization-stable-ids";
+import { mergeDealerRowWithActualization } from "@/lib/client-base-actualization-data-merge";
 import {
   mergeActualizationState,
   type DealerActualizationOverride,
@@ -59,6 +60,178 @@ import {
   type ManualDealer,
 } from "@/lib/client-base-actualization-state";
 import { newActualizationContactId } from "@/lib/client-base-actualization-contacts-helpers";
+import {
+  type DealerCommercialTriSelect,
+  commercialTriFromBoolNull,
+  commercialTriToBoolNull,
+} from "@/lib/dealer-commercial-characteristics";
+
+function CommercialCharacteristicsFormSection(props: {
+  door: DealerCommercialTriSelect;
+  setDoor: (v: DealerCommercialTriSelect) => void;
+  doorComment: string;
+  setDoorComment: (v: string) => void;
+  hardware: DealerCommercialTriSelect;
+  setHardware: (v: DealerCommercialTriSelect) => void;
+  hardwareComment: string;
+  setHardwareComment: (v: string) => void;
+  club: DealerCommercialTriSelect;
+  setClub: (v: DealerCommercialTriSelect) => void;
+  clubComment: string;
+  setClubComment: (v: string) => void;
+  special: DealerCommercialTriSelect;
+  setSpecial: (v: DealerCommercialTriSelect) => void;
+  specialComment: string;
+  setSpecialComment: (v: string) => void;
+  cashback: DealerCommercialTriSelect;
+  setCashback: (v: DealerCommercialTriSelect) => void;
+  cashbackComment: string;
+  setCashbackComment: (v: string) => void;
+  external1c: string;
+  setExternal1c: (v: string) => void;
+  onMarkDirty: () => void;
+}): ReactElement {
+  const {
+    door,
+    setDoor,
+    doorComment,
+    setDoorComment,
+    hardware,
+    setHardware,
+    hardwareComment,
+    setHardwareComment,
+    club,
+    setClub,
+    clubComment,
+    setClubComment,
+    special,
+    setSpecial,
+    specialComment,
+    setSpecialComment,
+    cashback,
+    setCashback,
+    cashbackComment,
+    setCashbackComment,
+    external1c,
+    setExternal1c,
+    onMarkDirty,
+  } = props;
+
+  const triSelect = (value: DealerCommercialTriSelect, onChange: (v: DealerCommercialTriSelect) => void, testId: string) => (
+    <Select
+      value={value}
+      onValueChange={(v) => {
+        onChange(v as DealerCommercialTriSelect);
+        onMarkDirty();
+      }}
+    >
+      <SelectTrigger className="min-h-10 w-full min-w-0" data-testid={testId}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="unset">Не указано</SelectItem>
+        <SelectItem value="yes">Да</SelectItem>
+        <SelectItem value="no">Нет</SelectItem>
+      </SelectContent>
+    </Select>
+  );
+
+  return (
+    <div data-testid="section-dealer-commercial-characteristics" className="space-y-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Коммерческие характеристики</p>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-1.5 sm:col-span-1">
+          <Label className="text-xs">Склад двери</Label>
+          {triSelect(door, setDoor, "select-dealer-door-warehouse")}
+          <Label className="text-xs text-muted-foreground">Комментарий</Label>
+          <Textarea
+            data-testid="textarea-dealer-door-warehouse-comment"
+            rows={2}
+            className="min-h-[52px]"
+            value={doorComment}
+            onChange={(e) => {
+              setDoorComment(e.target.value);
+              onMarkDirty();
+            }}
+          />
+        </div>
+        <div className="space-y-1.5 sm:col-span-1">
+          <Label className="text-xs">Склад фурнитуры</Label>
+          {triSelect(hardware, setHardware, "select-dealer-hardware-warehouse")}
+          <Label className="text-xs text-muted-foreground">Комментарий</Label>
+          <Textarea
+            data-testid="textarea-dealer-hardware-warehouse-comment"
+            rows={2}
+            className="min-h-[52px]"
+            value={hardwareComment}
+            onChange={(e) => {
+              setHardwareComment(e.target.value);
+              onMarkDirty();
+            }}
+          />
+        </div>
+        <div className="space-y-1.5 sm:col-span-1">
+          <Label className="text-xs">Tandoor Club</Label>
+          {triSelect(club, setClub, "select-dealer-tandoor-club")}
+          <Label className="text-xs text-muted-foreground">Комментарий</Label>
+          <Textarea
+            data-testid="textarea-dealer-tandoor-club-comment"
+            rows={2}
+            className="min-h-[52px]"
+            value={clubComment}
+            onChange={(e) => {
+              setClubComment(e.target.value);
+              onMarkDirty();
+            }}
+          />
+        </div>
+        <div className="space-y-1.5 sm:col-span-1">
+          <Label className="text-xs">Спец. условия</Label>
+          {triSelect(special, setSpecial, "select-dealer-special-terms")}
+          <Label className="text-xs text-muted-foreground">Комментарий</Label>
+          <Textarea
+            data-testid="textarea-dealer-special-terms-comment"
+            rows={2}
+            className="min-h-[52px]"
+            value={specialComment}
+            onChange={(e) => {
+              setSpecialComment(e.target.value);
+              onMarkDirty();
+            }}
+          />
+        </div>
+        <div className="space-y-1.5 sm:col-span-1">
+          <Label className="text-xs">КЭШБЭК клиент</Label>
+          {triSelect(cashback, setCashback, "select-dealer-cashback-client")}
+          <Label className="text-xs text-muted-foreground">Комментарий</Label>
+          <Textarea
+            data-testid="textarea-dealer-cashback-client-comment"
+            rows={2}
+            className="min-h-[52px]"
+            value={cashbackComment}
+            onChange={(e) => {
+              setCashbackComment(e.target.value);
+              onMarkDirty();
+            }}
+          />
+        </div>
+        <div className="space-y-1.5 sm:col-span-2">
+          <Label className="text-xs">Код клиента в 1С</Label>
+          <Input
+            data-testid="input-dealer-external-1c-code"
+            className="min-h-10"
+            value={external1c}
+            onChange={(e) => {
+              setExternal1c(e.target.value);
+              onMarkDirty();
+            }}
+            placeholder="Необязательно"
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function isoNow(): string {
   return new Date().toISOString();
@@ -78,6 +251,7 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
   const responsiblesSave = useSectionSaveFeedback();
   const logisticsSave = useSectionSaveFeedback();
   const contactsSave = useSectionSaveFeedback();
+  const commercialSave = useSectionSaveFeedback();
   const [name, setName] = useState("");
   const [inn, setInn] = useState("");
   const [city, setCity] = useState("");
@@ -95,6 +269,17 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
   const [passportCategoryTier, setPassportCategoryTier] = useState("none");
   const [territoryZone, setTerritoryZone] = useState("");
   const [logisticsComment, setLogisticsComment] = useState("");
+  const [doorTri, setDoorTri] = useState<DealerCommercialTriSelect>("unset");
+  const [doorComment, setDoorComment] = useState("");
+  const [hardwareTri, setHardwareTri] = useState<DealerCommercialTriSelect>("unset");
+  const [hardwareComment, setHardwareComment] = useState("");
+  const [clubTri, setClubTri] = useState<DealerCommercialTriSelect>("unset");
+  const [clubComment, setClubComment] = useState("");
+  const [specialTri, setSpecialTri] = useState<DealerCommercialTriSelect>("unset");
+  const [specialComment, setSpecialComment] = useState("");
+  const [cashbackTri, setCashbackTri] = useState<DealerCommercialTriSelect>("unset");
+  const [cashbackComment, setCashbackComment] = useState("");
+  const [external1c, setExternal1c] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -127,6 +312,18 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
     setPassportCategoryTier(ct || "none");
     setTerritoryZone(typeof merged.territoryZone === "string" ? merged.territoryZone : "");
     setLogisticsComment(typeof merged.logisticsComment === "string" ? merged.logisticsComment : "");
+    const effective = mergeDealerRowWithActualization(baseRow, state);
+    setDoorTri(commercialTriFromBoolNull(effective.hasDoorWarehouse));
+    setDoorComment((effective.doorWarehouseComment ?? "").trim());
+    setHardwareTri(commercialTriFromBoolNull(effective.hasHardwareWarehouse));
+    setHardwareComment((effective.hardwareWarehouseComment ?? "").trim());
+    setClubTri(commercialTriFromBoolNull(effective.isTandoorClubMember));
+    setClubComment((effective.tandoorClubComment ?? "").trim());
+    setSpecialTri(commercialTriFromBoolNull(effective.hasSpecialTerms));
+    setSpecialComment((effective.specialTermsComment ?? "").trim());
+    setCashbackTri(commercialTriFromBoolNull(effective.isCashbackClient));
+    setCashbackComment((effective.cashbackComment ?? "").trim());
+    setExternal1c((effective.external1cCode ?? "").trim());
   }, [open, baseRow, state]);
 
   const persistAll = useCallback(async (): Promise<boolean> => {
@@ -155,6 +352,17 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
       passportCategoryTier,
       territoryZone: territoryZone.trim() || undefined,
       logisticsComment: logisticsComment.trim() || undefined,
+      hasDoorWarehouse: commercialTriToBoolNull(doorTri),
+      doorWarehouseComment: doorComment.trim(),
+      hasHardwareWarehouse: commercialTriToBoolNull(hardwareTri),
+      hardwareWarehouseComment: hardwareComment.trim(),
+      isTandoorClubMember: commercialTriToBoolNull(clubTri),
+      tandoorClubComment: clubComment.trim(),
+      hasSpecialTerms: commercialTriToBoolNull(specialTri),
+      specialTermsComment: specialComment.trim(),
+      isCashbackClient: commercialTriToBoolNull(cashbackTri),
+      cashbackComment: cashbackComment.trim(),
+      external1cCode: external1c.trim() || undefined,
     };
     const ov: DealerActualizationOverride = {
       dealerId: baseRow.id,
@@ -209,6 +417,17 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
             territoryZone: territoryZone.trim(),
             logisticsComment: logisticsComment.trim(),
             unloadingOrder: Number.isFinite(uoNum) && uoNum > 0 ? uoNum : undefined,
+            hasDoorWarehouse: commercialTriToBoolNull(doorTri),
+            doorWarehouseComment: doorComment.trim(),
+            hasHardwareWarehouse: commercialTriToBoolNull(hardwareTri),
+            hardwareWarehouseComment: hardwareComment.trim(),
+            isTandoorClubMember: commercialTriToBoolNull(clubTri),
+            tandoorClubComment: clubComment.trim(),
+            hasSpecialTerms: commercialTriToBoolNull(specialTri),
+            specialTermsComment: specialComment.trim(),
+            isCashbackClient: commercialTriToBoolNull(cashbackTri),
+            cashbackComment: cashbackComment.trim(),
+            external1cCode: external1c.trim() || undefined,
           };
           next = mergeActualizationState(next, {
             manuallyCreatedDealersById: {
@@ -264,6 +483,17 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
     passportCategoryTier,
     territoryZone,
     logisticsComment,
+    doorTri,
+    doorComment,
+    hardwareTri,
+    hardwareComment,
+    clubTri,
+    clubComment,
+    specialTri,
+    specialComment,
+    cashbackTri,
+    cashbackComment,
+    external1c,
     baseRow.id,
     persist,
     profile,
@@ -275,7 +505,7 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
         <DialogHeader>
           <DialogTitle className="text-base">Редактирование клиента</DialogTitle>
         </DialogHeader>
-        <Accordion type="multiple" defaultValue={["passport", "responsibles", "logistics", "contacts"]} className="py-1">
+        <Accordion type="multiple" defaultValue={["passport", "responsibles", "logistics", "contacts", "commercial"]} className="py-1">
           <AccordionItem value="passport">
             <AccordionTrigger className="text-left text-sm font-semibold">Паспорт клиента</AccordionTrigger>
             <AccordionContent className="space-y-3 pb-4 pt-1">
@@ -573,6 +803,47 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
               />
             </AccordionContent>
           </AccordionItem>
+
+          <AccordionItem value="commercial">
+            <AccordionTrigger className="text-left text-sm font-semibold">Коммерческие характеристики</AccordionTrigger>
+            <AccordionContent className="space-y-3 pb-4 pt-1">
+              <CommercialCharacteristicsFormSection
+                door={doorTri}
+                setDoor={setDoorTri}
+                doorComment={doorComment}
+                setDoorComment={setDoorComment}
+                hardware={hardwareTri}
+                setHardware={setHardwareTri}
+                hardwareComment={hardwareComment}
+                setHardwareComment={setHardwareComment}
+                club={clubTri}
+                setClub={setClubTri}
+                clubComment={clubComment}
+                setClubComment={setClubComment}
+                special={specialTri}
+                setSpecial={setSpecialTri}
+                specialComment={specialComment}
+                setSpecialComment={setSpecialComment}
+                cashback={cashbackTri}
+                setCashback={setCashbackTri}
+                cashbackComment={cashbackComment}
+                setCashbackComment={setCashbackComment}
+                external1c={external1c}
+                setExternal1c={setExternal1c}
+                onMarkDirty={() => commercialSave.markDirty()}
+              />
+              <SectionSaveButton
+                testId="button-dealer-section-save-commercial"
+                statusTestId="text-save-status-commercial"
+                phase={commercialSave.phase}
+                onSave={() =>
+                  void commercialSave.runSave(async () => {
+                    return persistAll();
+                  })
+                }
+              />
+            </AccordionContent>
+          </AccordionItem>
         </Accordion>
         <DialogFooter className="sticky bottom-0 flex-col items-stretch gap-2 border-t border-border bg-background pt-3 sm:flex-row sm:justify-between">
           <p className="text-xs text-muted-foreground">Сохраняйте изменения кнопкой внутри каждого блока.</p>
@@ -628,6 +899,17 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
   const [legalOgrn, setLegalOgrn] = useState("");
   const [legalAddress, setLegalAddress] = useState("");
   const [legalActualAddress, setLegalActualAddress] = useState("");
+  const [doorTri, setDoorTri] = useState<DealerCommercialTriSelect>("unset");
+  const [doorComment, setDoorComment] = useState("");
+  const [hardwareTri, setHardwareTri] = useState<DealerCommercialTriSelect>("unset");
+  const [hardwareComment, setHardwareComment] = useState("");
+  const [clubTri, setClubTri] = useState<DealerCommercialTriSelect>("unset");
+  const [clubComment, setClubComment] = useState("");
+  const [specialTri, setSpecialTri] = useState<DealerCommercialTriSelect>("unset");
+  const [specialComment, setSpecialComment] = useState("");
+  const [cashbackTri, setCashbackTri] = useState<DealerCommercialTriSelect>("unset");
+  const [cashbackComment, setCashbackComment] = useState("");
+  const [external1c, setExternal1c] = useState("");
 
   const [innDupOpen, setInnDupOpen] = useState(false);
   const [innDupMatch, setInnDupMatch] = useState<{ dealerId: string; name: string } | null>(null);
@@ -680,6 +962,17 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
     setLegalOgrn("");
     setLegalAddress("");
     setLegalActualAddress("");
+    setDoorTri("unset");
+    setDoorComment("");
+    setHardwareTri("unset");
+    setHardwareComment("");
+    setClubTri("unset");
+    setClubComment("");
+    setSpecialTri("unset");
+    setSpecialComment("");
+    setCashbackTri("unset");
+    setCashbackComment("");
+    setExternal1c("");
   }, [open, profile.personaUserId]);
 
   const categoryOptions = useMemo(() => getClientCategoryOptions().filter((o) => o.value !== "all"), []);
@@ -738,6 +1031,17 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
       contactPerson: contactPerson.trim(),
       phone: phone.trim(),
       email: email.trim(),
+      hasDoorWarehouse: commercialTriToBoolNull(doorTri),
+      doorWarehouseComment: doorComment.trim(),
+      hasHardwareWarehouse: commercialTriToBoolNull(hardwareTri),
+      hardwareWarehouseComment: hardwareComment.trim(),
+      isTandoorClubMember: commercialTriToBoolNull(clubTri),
+      tandoorClubComment: clubComment.trim(),
+      hasSpecialTerms: commercialTriToBoolNull(specialTri),
+      specialTermsComment: specialComment.trim(),
+      isCashbackClient: commercialTriToBoolNull(cashbackTri),
+      cashbackComment: cashbackComment.trim(),
+      external1cCode: external1c.trim() || undefined,
     };
 
     const r = await persist((prev) => {
@@ -860,6 +1164,17 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
     legalOgrn,
     legalAddress,
     legalActualAddress,
+    doorTri,
+    doorComment,
+    hardwareTri,
+    hardwareComment,
+    clubTri,
+    clubComment,
+    specialTri,
+    specialComment,
+    cashbackTri,
+    cashbackComment,
+    external1c,
     categoryOptions,
     persist,
     onOpenChange,
@@ -1110,6 +1425,32 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
                 <Input value={email} onChange={(e) => setEmail(e.target.value)} className="min-h-10" />
               </div>
             </div>
+
+            <CommercialCharacteristicsFormSection
+              door={doorTri}
+              setDoor={setDoorTri}
+              doorComment={doorComment}
+              setDoorComment={setDoorComment}
+              hardware={hardwareTri}
+              setHardware={setHardwareTri}
+              hardwareComment={hardwareComment}
+              setHardwareComment={setHardwareComment}
+              club={clubTri}
+              setClub={setClubTri}
+              clubComment={clubComment}
+              setClubComment={setClubComment}
+              special={specialTri}
+              setSpecial={setSpecialTri}
+              specialComment={specialComment}
+              setSpecialComment={setSpecialComment}
+              cashback={cashbackTri}
+              setCashback={setCashbackTri}
+              cashbackComment={cashbackComment}
+              setCashbackComment={setCashbackComment}
+              external1c={external1c}
+              setExternal1c={setExternal1c}
+              onMarkDirty={() => {}}
+            />
 
             <div className="space-y-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Юридическое лицо (необязательно)</p>

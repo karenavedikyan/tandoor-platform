@@ -106,12 +106,16 @@ function deterministicFallback(row: DealerRow): { main: boolean; hw: boolean } {
 
 export function getDealerStockSignal(row: DealerRow): DealerStockSignal {
   if (isManualActualizationDealerId(row.id)) {
+    const door = row.hasDoorWarehouse === true;
+    const hw = row.hasHardwareWarehouse === true;
+    const doorUnset = row.hasDoorWarehouse == null;
+    const hwUnset = row.hasHardwareWarehouse == null;
     return {
-      hasMainWarehouse: false,
-      hasHardwareWarehouse: false,
-      mainWarehouseLabel: "Склад не указан",
-      hardwareWarehouseLabel: "Склад не указан",
-      reason: "Для клиента из актуализации признак склада задаётся вручную в карточке.",
+      hasMainWarehouse: door,
+      hasHardwareWarehouse: hw,
+      mainWarehouseLabel: door ? "Есть склад двери" : doorUnset ? "Склад двери не указан" : "Нет склада двери",
+      hardwareWarehouseLabel: hw ? "Есть склад фурнитуры" : hwUnset ? "Склад фурнитуры не указан" : "Нет склада фурнитуры",
+      reason: "Признаки склада задаются в блоке «Коммерческие характеристики» актуализации.",
     };
   }
   const ovMain = getDealerCharacteristicValue(row.id, "has_warehouse");

@@ -16,6 +16,8 @@ import {
 } from "@/components/ui/select";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
+import { useClientBaseActualization } from "@/context/client-base-actualization-context";
+import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { DEALER_BASE_ROWS, type DealerRow } from "@/lib/dealer-base-mock-data";
 import {
   initialRopManagerForProfile,
@@ -99,6 +101,7 @@ function roleSubtitle(role: SalesRole, profile: ReleaseDemoProfile): string {
 
 export default function ClientMapPage() {
   const { profile } = useReleaseDemoProfile();
+  const actx = useClientBaseActualization();
   const [, setLoc] = useHashLocation();
   const access = useMemo(() => mapSalesRoleToDealerBaseAccess(profile.role), [profile.role]);
 
@@ -133,7 +136,10 @@ export default function ClientMapPage() {
     let qv: ClientMapQuickFilter = "all";
     let cityV: string[] = [];
     let searchV = "";
-    const scoped = roleScopedDealerRows(DEALER_BASE_ROWS, profile);
+    const scoped = roleScopedDealerRows(
+      actx.enabled ? buildDealerBaseRowsWithActualization(actx.state, profile, { includeArchivedDealers: false }) : DEALER_BASE_ROWS,
+      profile,
+    );
     const teamRaw = (routeQs.get("team") ?? routeQs.get("rop"))?.trim() ?? "";
     const managerRaw = routeQs.get("manager")?.trim() ?? "";
     const quickRaw = (routeQs.get("quick") ?? "").trim().toLowerCase();
@@ -164,13 +170,19 @@ export default function ClientMapPage() {
     setQuick(qv);
     setSelectedCities(cityV);
     setSearch(searchV);
-  }, [profile.personaUserId, profile.role, access, routeKey, routeQs]);
+  }, [profile.personaUserId, profile.role, access, routeKey, routeQs, actx.enabled, actx.state]);
 
   const managerCatalogForRop = useMemo(() => getManagersForRopTeam(ropTeam), [ropTeam]);
   const managerOptions = useMemo(() => managerOptionsForProfile(profile, access, ropTeam), [profile, access, ropTeam]);
   const ropSelectOptions = useMemo(() => ropOptionsForProfile(profile, access), [profile, access]);
 
-  const scopedRows = useMemo(() => roleScopedDealerRows(DEALER_BASE_ROWS, profile), [profile]);
+  const baseRowsForMap = useMemo(
+    () =>
+      actx.enabled ? buildDealerBaseRowsWithActualization(actx.state, profile, { includeArchivedDealers: false }) : DEALER_BASE_ROWS,
+    [actx.enabled, actx.state, profile],
+  );
+
+  const scopedRows = useMemo(() => roleScopedDealerRows(baseRowsForMap, profile), [baseRowsForMap, profile]);
 
   const pickerArgs = useMemo(
     () => ({ search, quick, cities: selectedCities, ropTeam, manager, managerCatalogForRop }),
