@@ -43,6 +43,7 @@ import { useClientBaseActualization } from "@/context/client-base-actualization-
 import { toast } from "@/hooks/use-toast";
 import { useSectionSaveFeedback } from "@/hooks/use-section-save-feedback";
 import { SectionSaveButton } from "@/components/section-save-button";
+import { AddressSuggestInput } from "@/components/address-suggest-input";
 import { getClientCategoryOptions } from "@/lib/client-category";
 import type { ClientCategoryId } from "@/lib/client-category";
 import {
@@ -661,14 +662,16 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Адрес</Label>
-                <Textarea
+                <AddressSuggestInput
+                  key={baseRow.id}
                   value={address}
-                  onChange={(e) => {
-                    setAddress(e.target.value);
+                  onChange={(v) => {
+                    setAddress(v);
                     logisticsSave.markDirty();
                   }}
                   rows={2}
-                  className="min-h-[52px]"
+                  className="[&_textarea]:min-h-[52px]"
+                  testId="input-dealer-edit-address-suggest"
                 />
               </div>
               <div className="space-y-1.5">
@@ -1344,12 +1347,14 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Адрес</Label>
-                <Textarea
-                  data-testid="input-dealer-create-address"
+                <AddressSuggestInput
+                  key={draftDealerIdRef.current ?? "dealer-create"}
                   value={address}
-                  onChange={(e) => setAddress(e.target.value)}
+                  onChange={(v) => setAddress(v)}
+                  disabled={saving}
                   rows={2}
-                  className="min-h-[52px]"
+                  className="[&_textarea]:min-h-[52px]"
+                  testId="input-dealer-create-address"
                 />
               </div>
               <div className="space-y-1.5">
@@ -1474,11 +1479,25 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Юридический адрес</Label>
-                <Textarea value={legalAddress} onChange={(e) => setLegalAddress(e.target.value)} rows={2} className="min-h-[52px]" />
+                <AddressSuggestInput
+                  value={legalAddress}
+                  onChange={(v) => setLegalAddress(v)}
+                  disabled={saving}
+                  rows={2}
+                  className="[&_textarea]:min-h-[52px]"
+                  testId="input-dealer-create-legal-address-suggest"
+                />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Фактический адрес</Label>
-                <Textarea value={legalActualAddress} onChange={(e) => setLegalActualAddress(e.target.value)} rows={2} className="min-h-[52px]" />
+                <AddressSuggestInput
+                  value={legalActualAddress}
+                  onChange={(v) => setLegalActualAddress(v)}
+                  disabled={saving}
+                  rows={2}
+                  className="[&_textarea]:min-h-[52px]"
+                  testId="input-dealer-create-legal-actual-address-suggest"
+                />
               </div>
             </div>
           </div>

@@ -26,6 +26,7 @@ export type LegalEntityInnLookupResult = {
   name: string;
   inn: string;
   kpp?: string;
+  ogrn?: string;
   legalAddress?: string;
   source: string;
 };
