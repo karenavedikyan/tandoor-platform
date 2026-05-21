@@ -34,6 +34,9 @@ function defaultPickerArgsForNav(profile: ReleaseDemoProfile, access: DealerBase
     ropTeam: init.ropTeam,
     manager: init.manager,
     managerCatalogForRop: getManagersForRopTeam(init.ropTeam),
+    geoRegion: "",
+    geoDistrict: "",
+    geoLocality: "",
   };
 }
 

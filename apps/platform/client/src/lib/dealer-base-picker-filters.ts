@@ -11,6 +11,8 @@ import { getDealerRegionalManagerEffectiveDisplay } from "@/lib/dealer-regional-
 import { isRopOrManagerAllFilter, managerDisplayMatchesCatalogName } from "@/lib/rop-manager-filters";
 import type { SalesUser } from "@/lib/sales-control-data";
 
+import { rowMatchesGeoFilters } from "@/lib/dealer-base-geo-parse";
+
 export type QuickFilter = "all" | "active" | "potential" | "attention" | "top" | "no_activity" | "closed";
 
 type ClientCategoryRouteFilter = ClientCategoryId | "all" | "__top_tier__";
@@ -24,6 +26,10 @@ export type DealerBasePickerArgs = {
   ropTeam: string;
   manager: string;
   managerCatalogForRop: SalesUser[];
+  /** Пустая строка — без фильтра */
+  geoRegion: string;
+  geoDistrict: string;
+  geoLocality: string;
 };
 
 export function applyQuickFilter(row: DealerRow, q: QuickFilter): boolean {
@@ -58,6 +64,7 @@ export function applyDealerBasePickerFilters(rows: DealerRow[], args: DealerBase
       const ok = categorySelections.some((c) => clientCategoryMatchesFilter(row.clientCategory, c));
       if (!ok) return false;
     }
+    if (!rowMatchesGeoFilters(row, args.geoRegion, args.geoDistrict, args.geoLocality)) return false;
     if (!isRopOrManagerAllFilter(args.ropTeam)) {
       if (row.releaseTeamId !== args.ropTeam) return false;
     }
