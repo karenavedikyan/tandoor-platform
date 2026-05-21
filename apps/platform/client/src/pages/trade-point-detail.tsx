@@ -1149,12 +1149,12 @@ function TradePointDetailContent({
             className="scroll-mt-28 space-y-4 sm:scroll-mt-32"
           >
             <SectionTitle subtitle="Основные сведения по точке.">Общее</SectionTitle>
-            <SurfaceCard className="p-3 sm:p-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
-                <ShowcaseCoverPhotoSlot kind="trade_point" dealer={dealer} tradePoint={point} profile={profile} size="hero" rounded="xl" className="shrink-0" />
+            <SurfaceCard className="overflow-hidden border border-border border-l-4 border-l-primary p-3 sm:p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
+                <ShowcaseCoverPhotoSlot kind="trade_point" dealer={dealer} tradePoint={point} profile={profile} size="hero" rounded="xl" className="w-full shrink-0 sm:max-w-[15rem]" />
                 <div className="min-w-0 flex-1 space-y-1">
-                  <h2 className="text-lg font-semibold text-foreground">{point.name}</h2>
-                  <p className="text-sm text-muted-foreground">{point.city}</p>
+                  <h2 className="line-clamp-2 text-lg font-semibold leading-snug text-foreground">{point.name}</h2>
+                  <p className="line-clamp-2 text-sm text-muted-foreground sm:line-clamp-1">{[point.city, point.address?.trim()].filter(Boolean).join(" · ")}</p>
                 </div>
               </div>
             </SurfaceCard>

@@ -12,7 +12,7 @@ function initialsFromTpName(name: string): string {
 }
 
 const sizeClass: Record<"xs" | "sm", string> = {
-  xs: "h-9 w-9 min-h-9 min-w-9 text-[10px]",
+  xs: "h-10 w-10 min-h-10 min-w-10 text-[10px]",
   sm: "h-12 w-12 min-h-12 min-w-12 text-xs",
 };
 

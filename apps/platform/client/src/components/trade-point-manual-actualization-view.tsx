@@ -5,12 +5,11 @@
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
-import { Camera, ChevronDown, ChevronRight, Pencil } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -53,12 +52,12 @@ import { TradePointShowcaseCatalogPanel } from "@/components/trade-point-showcas
 import { Bitrix24TasksPanel } from "@/components/bitrix24-tasks-panel";
 import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actualization-sync-status";
 import { EntityActualizationPhotoGallery } from "@/components/entity-actualization-photo-gallery";
-import { SafeImage } from "@/components/safe-image";
+import { ShowcaseCoverPhotoSlot } from "@/components/showcase-cover-photo-slot";
 import { canEditClientNextStep } from "@/lib/client-next-step-data";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { cn } from "@/lib/utils";
 import { formatDisplayDateTime } from "@/lib/format-display-date";
-import { getTradePointCoverDisplayUrls, listActiveTradePointPhotos } from "@/lib/client-base-actualization-photos";
+import { listActiveTradePointPhotos } from "@/lib/client-base-actualization-photos";
 
 function numOrNull(v: string): number | null {
   const t = v.trim();
@@ -140,12 +139,6 @@ function TpHeroCell({
       </p>
     </div>
   );
-}
-
-function tpHeroInitials(name: string): string {
-  const t = name.trim();
-  if (!t) return "?";
-  return t.slice(0, 2).toUpperCase();
 }
 
 const TP_CLEAN_SECTION_BASE = ["passport", "address_format", "responsibles", "photos", "showcase", "comments", "bitrix"] as const;
@@ -289,7 +282,6 @@ export function TradePointManualActualizationView(props: {
 
   const [showcaseDirty, setShowcaseDirty] = useState(false);
   const [extraDetailsOpen, setExtraDetailsOpen] = useState(false);
-  const [photoDialogOpen, setPhotoDialogOpen] = useState(false);
 
   const mainSave = useSectionSaveFeedback();
   const showcaseSave = useSectionSaveFeedback();
@@ -622,18 +614,6 @@ export function TradePointManualActualizationView(props: {
     return "";
   }, [contactName, contactPhone]);
 
-  const tpCoverThumb = useMemo(() => {
-    const u = getTradePointCoverDisplayUrls(actx.state, point.id);
-    const t = u?.thumb?.trim();
-    if (t) return t;
-    return point.coverPhotoThumbnailUrl?.trim() || point.coverPhotoUrl?.trim() || "";
-  }, [actx.state, point.id, point.coverPhotoThumbnailUrl, point.coverPhotoUrl]);
-
-  const openPhotoDialog = useCallback(() => {
-    if (!canEditUi) return;
-    setPhotoDialogOpen(true);
-  }, [canEditUi]);
-
   const showcaseTriggerSummary = useMemo(() => {
     if (hasShowcase === null) return "Состояние витрины не выбрано";
     if (hasShowcase === false) return "Без витрины";
@@ -801,56 +781,22 @@ export function TradePointManualActualizationView(props: {
         />
 
         <section className="overflow-hidden rounded-xl border border-border border-l-[3px] border-l-primary bg-card shadow-sm">
-          <div className="flex flex-col gap-3 px-3.5 py-3 sm:flex-row sm:items-stretch sm:gap-4 sm:px-4 sm:py-4">
-            <div
-              className="relative h-36 w-full shrink-0 overflow-hidden rounded-lg border border-border bg-muted sm:h-auto sm:min-h-[7.5rem] sm:w-44"
-              data-testid="trade-point-manual-hero-visual"
-            >
-              {tpCoverThumb ? (
-                <div className="absolute inset-0 h-full w-full" data-testid={`image-trade-point-cover-photo-${point.id}`}>
-                  <SafeImage src={tpCoverThumb} alt="" className="absolute inset-0 h-full w-full" objectFit="cover" />
-                </div>
-              ) : (
-                <div
-                  className="flex h-full min-h-[9rem] w-full flex-col items-center justify-center gap-1 bg-primary/5 px-2 text-center text-primary sm:min-h-0"
-                  data-testid={`placeholder-trade-point-cover-photo-${point.id}`}
-                >
-                  <Camera className="h-5 w-5" aria-hidden />
-                  <span className="text-[11px] font-semibold leading-tight">
-                    {canEditUi ? "Добавить фото" : tpHeroInitials(name.trim() || point.name)}
-                  </span>
-                </div>
-              )}
-              {canEditUi ? (
-                <button
-                  type="button"
-                  className="absolute inset-0 z-[1] min-h-10 min-w-10 cursor-pointer rounded-lg outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-primary"
-                  aria-label={tpCoverThumb ? "Открыть фото торговой точки" : "Добавить фото торговой точки"}
-                  data-testid={tpCoverThumb ? `button-trade-point-cover-photo-open-${point.id}` : `button-trade-point-cover-photo-add-${point.id}`}
-                  onClick={openPhotoDialog}
-                />
-              ) : null}
-              {canEditUi && tpCoverThumb ? (
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="secondary"
-                  className="absolute right-1.5 top-1.5 z-[2] h-9 w-9 min-h-9 min-w-9 border border-border bg-card/95 p-0 text-foreground shadow-sm hover:bg-primary/15"
-                  data-testid={`button-trade-point-cover-photo-edit-${point.id}`}
-                  aria-label="Редактировать фото торговой точки"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openPhotoDialog();
-                  }}
-                >
-                  <Pencil className="h-4 w-4 text-primary" aria-hidden />
-                </Button>
-              ) : null}
+          <div className="flex flex-col gap-3 px-3.5 py-3 sm:flex-row sm:items-start sm:gap-4 sm:px-4 sm:py-4">
+            <div className="w-full shrink-0 sm:max-w-[15rem]" data-testid="trade-point-manual-hero-visual">
+              <ShowcaseCoverPhotoSlot
+                kind="trade_point"
+                dealer={dealer}
+                tradePoint={point}
+                profile={profile}
+                size="hero"
+                rounded="xl"
+                className="w-full"
+              />
             </div>
             <div className="min-w-0 flex-1 space-y-2">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                 <div className="min-w-0">
-                  <h1 className="text-base font-semibold leading-snug tracking-tight text-foreground sm:text-lg">
+                  <h1 className="line-clamp-2 text-base font-semibold leading-snug tracking-tight text-foreground sm:text-lg">
                     {name.trim() || point.name}
                   </h1>
                   <p className="mt-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Торговая точка</p>
@@ -1618,20 +1564,6 @@ export function TradePointManualActualizationView(props: {
         </AccordionItem>
         </Accordion>
 
-        <Dialog open={photoDialogOpen} onOpenChange={setPhotoDialogOpen}>
-          <DialogContent className="max-h-[min(92dvh,40rem)] w-[calc(100vw-1rem)] max-w-lg overflow-y-auto sm:max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Фото торговой точки</DialogTitle>
-            </DialogHeader>
-            <EntityActualizationPhotoGallery
-              entityType="trade_point"
-              entityId={point.id}
-              canEdit={canEditUi}
-              profile={profile}
-              compact
-            />
-          </DialogContent>
-        </Dialog>
       </div>
     </div>
   );
