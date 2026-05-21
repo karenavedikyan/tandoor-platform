@@ -37,6 +37,7 @@ import {
   getManualTradePointDisplayCode,
   isManualActualizationDealerId,
 } from "@/lib/client-base-actualization-stable-ids";
+import { isLegalEntityArchivedInActualization } from "@/lib/client-base-actualization-legal-entities";
 import { normalizeClientCategory, getClientCategoryLabel } from "@/lib/client-category";
 import { DEALER_SHIPMENT_DAY_LABELS, type DealerShipmentDayId } from "@/lib/dealer-shipment-days";
 
@@ -387,9 +388,13 @@ export function mergeTradePointsActiveForActualization(row: DealerRow, act: Actu
 export function mergeLegalEntitiesForActualization(row: DealerRow, act: ActualizationState): MergedDealerLegalEntity[] {
   const base = isManualActualizationDealerId(row.id) ? [] : getMergedDealerLegalEntities(row);
   const st = act.legalEntityOverridesByDealerId[row.id];
-  if (!st) return base;
 
-  const archived = new Set(Object.keys(st.archivedById ?? {}));
+  const isArchived = (entityId: string) => isLegalEntityArchivedInActualization(act, row.id, entityId);
+
+  if (!st) {
+    return base.map((e) => (isArchived(e.id) ? { ...e, status: "archived" as const } : e));
+  }
+
   const overrides = st.overridesById ?? {};
 
   const knownIds = new Set(base.map((e) => e.id));
@@ -401,6 +406,8 @@ export function mergeLegalEntitiesForActualization(row: DealerRow, act: Actualiz
     if (!knownIds.has(id)) {
       const name = str(o.name);
       if (!name) continue;
+      const archivedFlag = isArchived(id);
+      const stFromO = str(o.status) as MergedDealerLegalEntity["status"];
       extra.push({
         id,
         name,
@@ -409,7 +416,12 @@ export function mergeLegalEntitiesForActualization(row: DealerRow, act: Actualiz
         ogrn: str(o.ogrn),
         legalAddress: str(o.legalAddress),
         actualAddress: str(o.actualAddress),
-        status: (str(o.status) as MergedDealerLegalEntity["status"]) === "archived" ? "archived" : "additional",
+        internalCode: str(o.internalCode) || undefined,
+        entityType: str(o.entityType) || undefined,
+        primaryContact: str(o.primaryContact) || undefined,
+        phone: str(o.phone) || undefined,
+        email: str(o.email) || undefined,
+        status: archivedFlag ? "archived" : stFromO === "archived" ? "archived" : "additional",
         comment: str(o.comment),
         createdAt: str(o.createdAt) ?? new Date().toISOString(),
         updatedAt: str(o.updatedAt) ?? new Date().toISOString(),
@@ -423,11 +435,12 @@ export function mergeLegalEntitiesForActualization(row: DealerRow, act: Actualiz
 
   const mergedBase = base.map((e) => {
     const o = overrides[e.id];
+    const archivedFlag = isArchived(e.id);
     if (!o || typeof o !== "object" || Array.isArray(o)) {
-      return archived.has(e.id) ? { ...e, status: "archived" as const } : e;
+      return archivedFlag ? { ...e, status: "archived" as const } : e;
     }
     const rec = o as Record<string, unknown>;
-      return {
+    return {
       ...e,
       name: str(rec.name) ?? e.name,
       inn: str(rec.inn) ?? e.inn,
@@ -436,7 +449,12 @@ export function mergeLegalEntitiesForActualization(row: DealerRow, act: Actualiz
       legalAddress: str(rec.legalAddress) ?? e.legalAddress,
       actualAddress: str(rec.actualAddress) ?? e.actualAddress,
       comment: str(rec.comment) ?? e.comment,
-      status: archived.has(e.id) ? ("archived" as const) : e.status,
+      internalCode: str(rec.internalCode) || e.internalCode,
+      entityType: str(rec.entityType) || e.entityType,
+      primaryContact: str(rec.primaryContact) || e.primaryContact,
+      phone: str(rec.phone) || e.phone,
+      email: str(rec.email) || e.email,
+      status: archivedFlag ? ("archived" as const) : e.status,
     } as MergedDealerLegalEntity;
   });
 

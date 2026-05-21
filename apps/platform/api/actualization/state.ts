@@ -62,6 +62,7 @@ function emptyState(): Record<string, unknown> {
     tradePointOverridesById: {},
     manuallyCreatedTradePointsById: {},
     archivedTradePointsById: {},
+    archivedLegalEntitiesById: {},
     legalEntityOverridesByDealerId: {},
     dealerCardViewSettingsByUserId: {},
     unloadingOrderByDealerId: {},

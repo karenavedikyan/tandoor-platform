@@ -1,15 +1,27 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import {
   addDealerLegalEntity,
   archiveDealerLegalEntity,
+  allocateNextLegalEntityCodeLocal,
   canEditDealerLegalEntities,
   DEALER_LEGAL_ENTITIES_EVENT,
   getMergedDealerLegalEntities,
@@ -25,7 +37,17 @@ import { SectionSaveButton } from "@/components/section-save-button";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { mergeLegalEntitiesForActualization } from "@/lib/client-base-actualization-data-merge";
 import { mergeActualizationState } from "@/lib/client-base-actualization-state";
-import { canManageLegalEntitiesDuringActualization } from "@/lib/client-base-actualization-permissions";
+import {
+  canActualizeClientBase,
+  canEditDealerDuringActualization,
+  canManageLegalEntitiesDuringActualization,
+} from "@/lib/client-base-actualization-permissions";
+import {
+  allocateNextLegalEntityDisplayCode,
+  buildArchivedLegalEntityInfo,
+  generateManualLegalEntityStableId,
+  restoreLegalEntityFromArchive,
+} from "@/lib/client-base-actualization-legal-entities";
 
 type Props = {
   row: DealerRow;
@@ -40,32 +62,67 @@ const STATUS_LABELS: Record<DealerLegalEntityStatus, string> = {
   archived: "Архив",
 };
 
+const ENTITY_TYPE_VALUES = ["ooo", "ip", "self_employed", "other"] as const;
+type EntityTypeValue = (typeof ENTITY_TYPE_VALUES)[number];
+
+const ENTITY_TYPE_LABELS: Record<EntityTypeValue, string> = {
+  ooo: "ООО",
+  ip: "ИП",
+  self_employed: "Самозанятый",
+  other: "Другое",
+};
+
 function isFilled(v: string | undefined): boolean {
   const t = (v ?? "").trim();
   return t !== "" && t !== "—" && t !== "-";
 }
 
+function normalizeInn(v: string): string {
+  return v.replace(/\s+/g, "").trim();
+}
+
+function entityTypeLabel(v: string | undefined): string {
+  const t = (v ?? "").trim() as EntityTypeValue;
+  return ENTITY_TYPE_LABELS[t] ?? (t ? t : "—");
+}
+
 export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLabel }: Props) {
   const actx = useClientBaseActualization();
   const useAct = actx.enabled && canManageLegalEntitiesDuringActualization(profile, row);
-  const canEdit = canEditDealerLegalEntities(profile, row);
+  const canMutate = useMemo(
+    () =>
+      actx.enabled
+        ? canActualizeClientBase(profile) && canEditDealerDuringActualization(profile, row)
+        : canEditDealerLegalEntities(profile, row),
+    [actx.enabled, profile, row],
+  );
+
   const [tick, setTick] = useState(0);
   const [showArchived, setShowArchived] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const newEntityIdRef = useRef<string | null>(null);
+  const skipInnDupOnceRef = useRef(false);
 
   const [draftName, setDraftName] = useState("");
   const [draftInn, setDraftInn] = useState("");
+  const [draftEntityType, setDraftEntityType] = useState<EntityTypeValue>("ooo");
   const [draftKpp, setDraftKpp] = useState("");
-  const [draftAddress, setDraftAddress] = useState("");
-  const [draftStatus, setDraftStatus] = useState<DealerLegalEntityStatus>("additional");
-  const [draftComment, setDraftComment] = useState("");
   const [draftOgrn, setDraftOgrn] = useState("");
+  const [draftAddress, setDraftAddress] = useState("");
   const [draftActualAddress, setDraftActualAddress] = useState("");
+  const [draftPrimaryContact, setDraftPrimaryContact] = useState("");
+  const [draftPhone, setDraftPhone] = useState("");
+  const [draftEmail, setDraftEmail] = useState("");
+  const [draftComment, setDraftComment] = useState("");
   const [innLookupResults, setInnLookupResults] = useState<
     { id: string; name: string; inn: string; kpp?: string; legalAddress?: string; source: string }[]
   >([]);
   const [innLookupNote, setInnLookupNote] = useState("");
+
+  const [archiveTarget, setArchiveTarget] = useState<{ id: string; name: string } | null>(null);
+  const [innDupModal, setInnDupModal] = useState<{ inn: string; existingId: string; existingName: string } | null>(null);
+
   const legalFormSave = useSectionSaveFeedback();
 
   useEffect(() => {
@@ -91,19 +148,44 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
     return { active, arch };
   }, [merged]);
 
+  const findInnDuplicate = useCallback(
+    (innRaw: string, excludeId: string | null) => {
+      const inn = normalizeInn(innRaw);
+      if (!inn) return null as { id: string; name: string } | null;
+      for (const e of visible.active) {
+        if (excludeId && e.id === excludeId) continue;
+        if (normalizeInn(e.inn ?? "") === inn) return { id: e.id, name: e.name };
+      }
+      return null;
+    },
+    [visible.active],
+  );
+
   const resetDraft = useCallback(() => {
     setDraftName("");
     setDraftInn("");
+    setDraftEntityType("ooo");
     setDraftKpp("");
-    setDraftAddress("");
-    setDraftStatus("additional");
-    setDraftComment("");
     setDraftOgrn("");
+    setDraftAddress("");
     setDraftActualAddress("");
+    setDraftPrimaryContact("");
+    setDraftPhone("");
+    setDraftEmail("");
+    setDraftComment("");
     setInnLookupResults([]);
     setInnLookupNote("");
+    newEntityIdRef.current = null;
     legalFormSave.markDirty();
   }, [legalFormSave]);
+
+  const openAddDialog = useCallback(() => {
+    resetDraft();
+    newEntityIdRef.current = generateManualLegalEntityStableId();
+    setEditingId(null);
+    setFormOpen(true);
+    legalFormSave.markDirty();
+  }, [resetDraft, legalFormSave]);
 
   const loadEntityIntoDraft = useCallback(
     (id: string) => {
@@ -111,44 +193,96 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
       if (!e) return;
       setDraftName(e.name);
       setDraftInn(e.inn ?? "");
+      const et = (e.entityType ?? "ooo") as EntityTypeValue;
+      setDraftEntityType((ENTITY_TYPE_VALUES as readonly string[]).includes(et) ? et : "other");
       setDraftKpp(e.kpp ?? "");
-      setDraftAddress(e.legalAddress ?? "");
       setDraftOgrn(e.ogrn ?? "");
+      setDraftAddress(e.legalAddress ?? "");
       setDraftActualAddress(e.actualAddress ?? "");
-      setDraftStatus(e.status);
+      setDraftPrimaryContact(e.primaryContact ?? "");
+      setDraftPhone(e.phone ?? "");
+      setDraftEmail(e.email ?? "");
       setDraftComment(e.comment ?? "");
       setEditingId(id);
-      legalFormSave.markDirty();
+      newEntityIdRef.current = null;
       setFormOpen(true);
+      legalFormSave.markDirty();
     },
     [merged, useAct, legalFormSave],
   );
 
   const onSave = useCallback(async (): Promise<boolean> => {
-    if (!canEdit || !draftName.trim()) return false;
+    if (!canMutate || !draftName.trim()) {
+      toast({ title: "Укажите название юрлица", variant: "destructive" });
+      return false;
+    }
+    if (!normalizeInn(draftInn)) {
+      toast({ title: "Укажите ИНН", variant: "destructive" });
+      return false;
+    }
+    if (!draftEntityType) {
+      toast({ title: "Выберите тип юрлица", variant: "destructive" });
+      return false;
+    }
+
+    const targetId = editingId ?? newEntityIdRef.current;
+    if (!targetId) {
+      toast({ title: "Не удалось определить идентификатор записи", variant: "destructive" });
+      return false;
+    }
+
+    if (!skipInnDupOnceRef.current) {
+      const dup = findInnDuplicate(draftInn, editingId);
+      if (dup) {
+        setInnDupModal({ inn: normalizeInn(draftInn), existingId: dup.id, existingName: dup.name });
+        return false;
+      }
+    }
+    skipInnDupOnceRef.current = false;
+
+    const now = new Date().toISOString();
+    const prevEntitySnap = merged.find((x) => x.id === targetId);
+
     if (useAct) {
-      const id = editingId ?? `manual-le-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      const now = new Date().toISOString();
-      const payload: Record<string, unknown> = {
-        name: draftName.trim(),
-        inn: draftInn.trim(),
-        kpp: draftKpp.trim(),
-        ogrn: draftOgrn.trim(),
-        legalAddress: draftAddress.trim(),
-        actualAddress: draftActualAddress.trim(),
-        status: draftStatus,
-        comment: draftComment.trim(),
-        updatedAt: now,
-        updatedBy: actorUserId,
-        updatedByName: actorLabel,
-      };
       const r = await actx.persist((prev) => {
         const cur = prev.legalEntityOverridesByDealerId[row.id] ?? {
           createdById: actorUserId,
           overridesById: {},
           archivedById: {},
         };
-        const nextOverrides = { ...cur.overridesById, [id]: { ...(cur.overridesById[id] as object), ...payload } };
+        const existingInternal = (prevEntitySnap?.internalCode ?? "").trim();
+        const internalCode = existingInternal || allocateNextLegalEntityDisplayCode(prev);
+
+        const statusResolved: DealerLegalEntityStatus =
+          prevEntitySnap?.isPassportSeed && prevEntitySnap.status === "main" ? "main" : "additional";
+
+        const payload: Record<string, unknown> = {
+          name: draftName.trim(),
+          inn: normalizeInn(draftInn),
+          entityType: draftEntityType,
+          kpp: draftKpp.trim(),
+          ogrn: draftOgrn.trim(),
+          legalAddress: draftAddress.trim(),
+          actualAddress: draftActualAddress.trim(),
+          primaryContact: draftPrimaryContact.trim(),
+          phone: draftPhone.trim(),
+          email: draftEmail.trim(),
+          comment: draftComment.trim(),
+          internalCode,
+          status: statusResolved,
+          updatedAt: now,
+          updatedBy: actorUserId,
+          updatedByName: actorLabel,
+        };
+        if (!editingId) {
+          payload.createdAt = now;
+        } else if (prevEntitySnap?.createdAt) {
+          payload.createdAt = prevEntitySnap.createdAt;
+        } else {
+          payload.createdAt = now;
+        }
+
+        const nextOverrides = { ...cur.overridesById, [targetId]: { ...(cur.overridesById[targetId] as object), ...payload } };
         return mergeActualizationState(prev, {
           legalEntityOverridesByDealerId: {
             ...prev.legalEntityOverridesByDealerId,
@@ -159,6 +293,7 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
       if (r.success) {
         setTick((n) => n + 1);
         setEditingId(null);
+        newEntityIdRef.current = null;
         setFormOpen(false);
         resetDraft();
         return true;
@@ -169,6 +304,7 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
       });
       return false;
     }
+
     if (editingId && !editingId.startsWith("passport:")) {
       updateDealerLegalEntity(
         row.id,
@@ -177,8 +313,14 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
           name: draftName,
           inn: draftInn,
           kpp: draftKpp,
+          ogrn: draftOgrn,
           legalAddress: draftAddress,
-          status: draftStatus,
+          actualAddress: draftActualAddress,
+          entityType: draftEntityType,
+          primaryContact: draftPrimaryContact,
+          phone: draftPhone,
+          email: draftEmail,
+          status: "additional",
           comment: draftComment,
         },
         actorUserId,
@@ -189,8 +331,15 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
         name: draftName,
         inn: draftInn,
         kpp: draftKpp,
+        ogrn: draftOgrn,
         legalAddress: draftAddress,
-        status: draftStatus,
+        actualAddress: draftActualAddress,
+        entityType: draftEntityType,
+        primaryContact: draftPrimaryContact,
+        phone: draftPhone,
+        email: draftEmail,
+        internalCode: allocateNextLegalEntityCodeLocal(),
+        status: "additional",
         comment: draftComment,
         updatedBy: actorUserId,
         updatedByName: actorLabel,
@@ -198,49 +347,106 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
     }
     setTick((n) => n + 1);
     setEditingId(null);
+    newEntityIdRef.current = null;
     setFormOpen(false);
     resetDraft();
     return true;
   }, [
-    canEdit,
+    canMutate,
     useAct,
     actx,
     draftName,
     draftInn,
+    draftEntityType,
     draftKpp,
     draftOgrn,
-    draftActualAddress,
     draftAddress,
-    draftStatus,
+    draftActualAddress,
+    draftPrimaryContact,
+    draftPhone,
+    draftEmail,
     draftComment,
     editingId,
     row.id,
     actorUserId,
     actorLabel,
     resetDraft,
+    merged,
+    findInnDuplicate,
+    merged,
   ]);
 
   const onCancelForm = useCallback(() => {
     setFormOpen(false);
     setEditingId(null);
+    newEntityIdRef.current = null;
     resetDraft();
   }, [resetDraft]);
+
+  const confirmArchive = useCallback(async () => {
+    if (!archiveTarget || !canMutate) return;
+    const eid = archiveTarget.id;
+    if (useAct) {
+      const r = await actx.persist((prev) =>
+        mergeActualizationState(prev, {
+          archivedLegalEntitiesById: {
+            ...prev.archivedLegalEntitiesById,
+            [eid]: buildArchivedLegalEntityInfo({
+              legalEntityId: eid,
+              dealerId: row.id,
+              archivedBy: actorUserId,
+              archivedByName: actorLabel,
+              source: "manual_actualization",
+            }),
+          },
+        }),
+      );
+      if (r.success) {
+        toast({ title: "Юрлицо скрыто из рабочей карточки" });
+        setTick((n) => n + 1);
+      } else {
+        toast({ title: "Не удалось сохранить", variant: "destructive" });
+      }
+    } else {
+      archiveDealerLegalEntity(row.id, eid, actorUserId, actorLabel);
+      setTick((n) => n + 1);
+      toast({ title: "В архиве" });
+    }
+    setArchiveTarget(null);
+  }, [archiveTarget, canMutate, useAct, actx, row.id, actorUserId, actorLabel]);
+
+  const onRestore = useCallback(
+    async (legalEntityId: string) => {
+      if (!useAct || !canMutate) return;
+      const r = await actx.persist((prev) => restoreLegalEntityFromArchive(prev, row.id, legalEntityId));
+      if (r.success) {
+        toast({ title: "Юрлицо восстановлено в рабочем списке" });
+        setTick((n) => n + 1);
+      } else {
+        toast({ title: "Не удалось сохранить", variant: "destructive" });
+      }
+    },
+    [useAct, canMutate, actx, row.id],
+  );
 
   return (
     <section id="dealer-section-legal-entities" data-testid="section-dealer-legal-entities" className="scroll-mt-28 space-y-2 sm:scroll-mt-32">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <h3 className="text-sm font-semibold text-foreground sm:text-base">Юридические лица</h3>
-        {canEdit ? (
+        {canMutate ? (
           <Button
             type="button"
             size="sm"
             variant="outline"
             className="min-h-9 w-full font-semibold sm:w-auto"
-            data-testid="button-legal-entity-create"
+            data-testid="button-legal-entity-add"
             onClick={() => {
-              setEditingId(null);
-              resetDraft();
-              setFormOpen((v) => !v);
+              if (formOpen && !editingId) {
+                setFormOpen(false);
+                onCancelForm();
+              } else {
+                openAddDialog();
+              }
             }}
           >
             {formOpen && !editingId ? "Закрыть форму" : "Добавить юрлицо"}
@@ -248,25 +454,39 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
         ) : null}
       </div>
 
-      {formOpen ? (
-        <Card className="rounded-xl border border-border/70 bg-card shadow-xs">
-          <CardHeader className="space-y-1 p-3 pb-2 sm:p-4">
-            <CardTitle className="text-sm">{editingId ? "Редактирование" : "Новое юрлицо"}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 p-3 pt-0 sm:p-4 sm:pt-0">
+      <Dialog open={formOpen} onOpenChange={(o) => !o && onCancelForm()}>
+        <DialogContent className="max-h-[min(90vh,720px)] overflow-y-auto sm:max-w-lg" data-testid="dialog-legal-entity-form">
+          <DialogHeader>
+            <DialogTitle>{editingId ? "Редактирование юрлица" : "Новое юрлицо"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {editingId ? (
+              <p className="text-xs text-muted-foreground">
+                Код юрлица:{" "}
+                <span className="font-mono font-medium text-foreground" data-testid={`text-legal-entity-code-${editingId}`}>
+                  {(merged.find((x) => x.id === editingId)?.internalCode ?? "—").trim() || "—"}
+                </span>
+              </p>
+            ) : newEntityIdRef.current ? (
+              <p className="text-xs text-muted-foreground">
+                После сохранения будет назначен код вида <span className="font-mono">TND-LE-······</span>
+              </p>
+            ) : null}
             <div className="space-y-1.5">
-              <Label className="text-xs">Наименование</Label>
+              <Label className="text-xs">
+                Название юрлица / ИП <span className="text-destructive">*</span>
+              </Label>
               <Input
                 value={draftName}
                 onChange={(e) => {
                   setDraftName(e.target.value);
                   legalFormSave.markDirty();
                 }}
-                disabled={!canEdit}
+                disabled={!canMutate}
                 className="min-h-10"
                 data-testid="input-legal-entity-name"
               />
-              {nameSuggestions.length > 0 && canEdit ? (
+              {nameSuggestions.length > 0 && canMutate ? (
                 <div
                   className="max-h-36 space-y-1 overflow-y-auto rounded-md border border-border/70 bg-muted/20 p-2"
                   data-testid="section-legal-entity-suggestions"
@@ -299,8 +519,34 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
               ) : null}
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label className="text-xs">
+                  Тип <span className="text-destructive">*</span>
+                </Label>
+                <Select
+                  value={draftEntityType}
+                  onValueChange={(v) => {
+                    setDraftEntityType(v as EntityTypeValue);
+                    legalFormSave.markDirty();
+                  }}
+                  disabled={!canMutate}
+                >
+                  <SelectTrigger className="min-h-10" data-testid="select-legal-entity-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(Object.keys(ENTITY_TYPE_LABELS) as EntityTypeValue[]).map((k) => (
+                      <SelectItem key={k} value={k}>
+                        {ENTITY_TYPE_LABELS[k]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="space-y-1.5 sm:col-span-2">
-                <Label className="text-xs">ИНН</Label>
+                <Label className="text-xs">
+                  ИНН <span className="text-destructive">*</span>
+                </Label>
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                   <Input
                     value={draftInn}
@@ -310,7 +556,7 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
                       setInnLookupNote("");
                       legalFormSave.markDirty();
                     }}
-                    disabled={!canEdit}
+                    disabled={!canMutate}
                     className="min-h-10 sm:flex-1"
                     data-testid="input-legal-entity-inn"
                   />
@@ -319,7 +565,7 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
                     variant="outline"
                     size="sm"
                     className="min-h-10 shrink-0 text-xs"
-                    disabled={!canEdit}
+                    disabled={!canMutate}
                     data-testid="button-legal-entity-inn-lookup"
                     onClick={() => {
                       const res = lookupLegalEntityByInn(draftInn);
@@ -378,9 +624,22 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
                     setDraftKpp(e.target.value);
                     legalFormSave.markDirty();
                   }}
-                  disabled={!canEdit}
+                  disabled={!canMutate}
                   className="min-h-10"
-                  data-testid="input-dealer-legal-entity-kpp"
+                  data-testid="input-legal-entity-kpp"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">ОГРН / ОГРНИП</Label>
+                <Input
+                  value={draftOgrn}
+                  onChange={(e) => {
+                    setDraftOgrn(e.target.value);
+                    legalFormSave.markDirty();
+                  }}
+                  disabled={!canMutate}
+                  className="min-h-10"
+                  data-testid="input-legal-entity-ogrn"
                 />
               </div>
             </div>
@@ -392,23 +651,10 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
                   setDraftAddress(e.target.value);
                   legalFormSave.markDirty();
                 }}
-                disabled={!canEdit}
+                disabled={!canMutate}
                 rows={2}
                 className="min-h-[52px] resize-y text-sm"
-                data-testid="textarea-dealer-legal-entity-address"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">ОГРН</Label>
-              <Input
-                value={draftOgrn}
-                onChange={(e) => {
-                  setDraftOgrn(e.target.value);
-                  legalFormSave.markDirty();
-                }}
-                disabled={!canEdit}
-                className="min-h-10"
-                data-testid="input-dealer-legal-entity-ogrn"
+                data-testid="input-legal-entity-legal-address"
               />
             </div>
             <div className="space-y-1.5">
@@ -419,31 +665,52 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
                   setDraftActualAddress(e.target.value);
                   legalFormSave.markDirty();
                 }}
-                disabled={!canEdit}
+                disabled={!canMutate}
                 rows={2}
                 className="min-h-[52px] resize-y text-sm"
-                data-testid="textarea-dealer-legal-entity-actual-address"
+                data-testid="input-legal-entity-actual-address"
               />
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Статус</Label>
-              <Select
-                value={draftStatus}
-                onValueChange={(v) => {
-                  setDraftStatus(v as DealerLegalEntityStatus);
-                  legalFormSave.markDirty();
-                }}
-                disabled={!canEdit}
-              >
-                <SelectTrigger className="min-h-10" data-testid="select-dealer-legal-entity-status">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="main">{STATUS_LABELS.main}</SelectItem>
-                  <SelectItem value="additional">{STATUS_LABELS.additional}</SelectItem>
-                  <SelectItem value="archived">{STATUS_LABELS.archived}</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label className="text-xs">Основной контакт</Label>
+                <Input
+                  value={draftPrimaryContact}
+                  onChange={(e) => {
+                    setDraftPrimaryContact(e.target.value);
+                    legalFormSave.markDirty();
+                  }}
+                  disabled={!canMutate}
+                  className="min-h-10"
+                  data-testid="input-legal-entity-contact"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Телефон</Label>
+                <Input
+                  value={draftPhone}
+                  onChange={(e) => {
+                    setDraftPhone(e.target.value);
+                    legalFormSave.markDirty();
+                  }}
+                  disabled={!canMutate}
+                  className="min-h-10"
+                  data-testid="input-legal-entity-phone"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Email</Label>
+                <Input
+                  value={draftEmail}
+                  onChange={(e) => {
+                    setDraftEmail(e.target.value);
+                    legalFormSave.markDirty();
+                  }}
+                  disabled={!canMutate}
+                  className="min-h-10"
+                  data-testid="input-legal-entity-email"
+                />
+              </div>
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Комментарий</Label>
@@ -453,20 +720,22 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
                   setDraftComment(e.target.value);
                   legalFormSave.markDirty();
                 }}
-                disabled={!canEdit}
+                disabled={!canMutate}
                 rows={2}
                 className="min-h-[52px] resize-y text-sm"
-                data-testid="textarea-dealer-legal-entity-comment"
+                data-testid="textarea-legal-entity-comment"
               />
             </div>
-            {canEdit ? (
-              <div className="flex flex-wrap gap-2">
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            {canMutate ? (
+              <>
                 {useAct ? (
                   <SectionSaveButton
-                    testId="button-dealer-section-save-legal-entities"
+                    testId="button-legal-entity-save"
                     statusTestId="text-save-status-legal-entities"
                     phase={legalFormSave.phase}
-                    disabled={!draftName.trim()}
+                    disabled={!draftName.trim() || !normalizeInn(draftInn)}
                     onSave={() => void legalFormSave.runSave(onSave)}
                   />
                 ) : (
@@ -474,7 +743,7 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
                     type="button"
                     className="min-h-9 font-semibold"
                     data-testid="button-legal-entity-save"
-                    disabled={!draftName.trim()}
+                    disabled={!draftName.trim() || !normalizeInn(draftInn)}
                     onClick={() => void onSave()}
                   >
                     Сохранить
@@ -483,116 +752,110 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
                 <Button type="button" variant="ghost" size="sm" className="min-h-9" onClick={onCancelForm}>
                   Отмена
                 </Button>
-              </div>
+              </>
             ) : null}
-          </CardContent>
-        </Card>
-      ) : null}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {visible.active.length === 0 && visible.arch.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Юридические лица не добавлены.</p>
+        <p className="text-sm text-muted-foreground" data-testid="text-legal-entities-empty-state">
+          Юридические лица не добавлены.
+        </p>
       ) : (
         <div className="space-y-2">
           {visible.active.map((e) => (
-            <div
+            <Card
               key={e.id}
-              data-testid={`row-dealer-legal-entity-${e.id}`}
-              className="rounded-lg border border-border/70 bg-muted/10 px-3 py-2.5"
+              data-testid={`card-legal-entity-${e.id}`}
+              className="overflow-hidden rounded-lg border border-border/70 bg-muted/10 shadow-xs"
             >
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div className="min-w-0 flex-1 space-y-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-sm font-semibold leading-snug text-foreground">{e.name}</p>
-                    {e.isPassportSeed ? (
+              <CardContent className="space-y-2 p-3 pt-3 sm:p-3.5">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-semibold leading-snug text-foreground">{e.name}</p>
+                      {e.isPassportSeed ? (
+                        <Badge variant="outline" className="text-[10px]">
+                          Из данных релиза
+                        </Badge>
+                      ) : null}
                       <Badge variant="outline" className="text-[10px]">
-                        Из данных релиза
+                        {entityTypeLabel(e.entityType)}
                       </Badge>
+                      <Badge variant="secondary" className="text-[10px]">
+                        {STATUS_LABELS[e.status]}
+                      </Badge>
+                    </div>
+                    {isFilled(e.internalCode) ? (
+                      <p className="text-xs text-muted-foreground">
+                        Код юрлица:{" "}
+                        <span className="font-mono font-medium text-foreground" data-testid={`text-legal-entity-code-${e.id}`}>
+                          {e.internalCode}
+                        </span>
+                      </p>
                     ) : null}
-                    <Badge variant="outline" className="text-[10px]">
-                      {STATUS_LABELS[e.status]}
-                    </Badge>
+                    {isFilled(e.inn) ? (
+                      <p className="text-xs text-muted-foreground">
+                        ИНН {e.inn}
+                        {isFilled(e.kpp) ? ` · КПП ${e.kpp}` : ""}
+                      </p>
+                    ) : isFilled(e.kpp) ? (
+                      <p className="text-xs text-muted-foreground">КПП {e.kpp}</p>
+                    ) : null}
+                    {isFilled(e.ogrn) ? <p className="text-xs text-muted-foreground">ОГРН {e.ogrn}</p> : null}
+                    {isFilled(e.primaryContact) || isFilled(e.phone) || isFilled(e.email) ? (
+                      <p className="text-xs text-muted-foreground">
+                        {isFilled(e.primaryContact) ? <span>Контакт: {e.primaryContact}. </span> : null}
+                        {isFilled(e.phone) ? <span>Тел.: {e.phone}. </span> : null}
+                        {isFilled(e.email) ? <span>{e.email}</span> : null}
+                      </p>
+                    ) : null}
+                    {isFilled(e.actualAddress) ? (
+                      <p className="text-xs leading-relaxed text-muted-foreground">Факт. адрес: {e.actualAddress}</p>
+                    ) : null}
+                    {isFilled(e.legalAddress) ? (
+                      <p className="text-xs leading-relaxed text-muted-foreground">Юр. адрес: {e.legalAddress}</p>
+                    ) : null}
+                    {isFilled(e.comment) ? <p className="text-xs text-foreground">{e.comment}</p> : null}
+                    <LegalEntityContactsSubsection
+                      row={row}
+                      legalEntityId={e.id}
+                      legalEntityName={e.name}
+                      profile={profile}
+                      canEdit={canEditDealerLegalEntities(profile, row)}
+                      entityArchived={false}
+                    />
                   </div>
-                  {isFilled(e.inn) ? (
-                    <p className="text-xs text-muted-foreground">
-                      ИНН {e.inn}
-                      {isFilled(e.kpp) ? ` · КПП ${e.kpp}` : ""}
-                    </p>
-                  ) : isFilled(e.kpp) ? (
-                    <p className="text-xs text-muted-foreground">КПП {e.kpp}</p>
-                  ) : null}
-                  {isFilled(e.ogrn) ? <p className="text-xs text-muted-foreground">ОГРН {e.ogrn}</p> : null}
-                  {isFilled(e.actualAddress) ? (
-                    <p className="text-xs leading-relaxed text-muted-foreground">Факт. адрес: {e.actualAddress}</p>
-                  ) : null}
-                  {isFilled(e.legalAddress) ? (
-                    <p className="text-xs leading-relaxed text-muted-foreground">{e.legalAddress}</p>
-                  ) : null}
-                  {isFilled(e.comment) ? <p className="text-xs text-foreground">{e.comment}</p> : null}
-                  <LegalEntityContactsSubsection
-                    row={row}
-                    legalEntityId={e.id}
-                    legalEntityName={e.name}
-                    profile={profile}
-                    canEdit={canEdit}
-                    entityArchived={false}
-                  />
-                </div>
-                {canEdit && (!e.isPassportSeed || useAct) ? (
-                  <div className="flex shrink-0 flex-col gap-1.5 sm:flex-row">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="min-h-9 px-2 text-xs font-semibold"
-                      data-testid={`button-legal-entity-edit-${e.id}`}
-                      onClick={() => loadEntityIntoDraft(e.id)}
-                    >
-                      Изменить
-                    </Button>
-                    {e.status !== "archived" ? (
+                  {canMutate && (!e.isPassportSeed || useAct) ? (
+                    <div className="flex shrink-0 flex-col gap-1.5 sm:flex-row">
                       <Button
                         type="button"
-                        variant="secondary"
+                        variant="outline"
                         size="sm"
                         className="min-h-9 px-2 text-xs font-semibold"
-                        data-testid={`button-dealer-legal-entity-archive-${e.id}`}
-                        onClick={() => {
-                          void (async () => {
-                            if (useAct) {
-                              const r = await actx.persist((prev) => {
-                                const cur = prev.legalEntityOverridesByDealerId[row.id] ?? {
-                                  createdById: actorUserId,
-                                  overridesById: {},
-                                  archivedById: {},
-                                };
-                                return mergeActualizationState(prev, {
-                                  legalEntityOverridesByDealerId: {
-                                    ...prev.legalEntityOverridesByDealerId,
-                                    [row.id]: {
-                                      ...cur,
-                                      archivedById: { ...cur.archivedById, [e.id]: true },
-                                    },
-                                  },
-                                });
-                              });
-                              if (r.success) {
-                                toast({ title: "В архиве" });
-                                setTick((n) => n + 1);
-                              }
-                            } else {
-                              archiveDealerLegalEntity(row.id, e.id, actorUserId, actorLabel);
-                              setTick((n) => n + 1);
-                            }
-                          })();
-                        }}
+                        data-testid={`button-legal-entity-edit-${e.id}`}
+                        onClick={() => loadEntityIntoDraft(e.id)}
                       >
-                        В архив
+                        Редактировать
                       </Button>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
-            </div>
+                      {e.status !== "archived" ? (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          className="min-h-9 px-2 text-xs font-semibold"
+                          data-testid={`button-legal-entity-delete-${e.id}`}
+                          onClick={() => setArchiveTarget({ id: e.id, name: e.name })}
+                        >
+                          В архив
+                        </Button>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              </CardContent>
+            </Card>
           ))}
 
           {visible.arch.length > 0 ? (
@@ -609,38 +872,48 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
               {showArchived ? (
                 <div className="mt-2 space-y-2 opacity-90">
                   {visible.arch.map((e) => (
-                    <div
-                      key={e.id}
-                      data-testid={`row-dealer-legal-entity-${e.id}`}
-                      className="rounded-lg border border-dashed border-border/80 bg-muted/5 px-3 py-2"
-                    >
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-sm font-medium text-muted-foreground">{e.name}</p>
-                        <Badge variant="outline" className="text-[10px]">
-                          Архив
-                        </Badge>
-                      </div>
-                      {canEdit && !e.isPassportSeed ? (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="mt-2 min-h-8 text-xs"
-                          data-testid={`button-legal-entity-edit-${e.id}`}
-                          onClick={() => loadEntityIntoDraft(e.id)}
-                        >
-                          Изменить
-                        </Button>
-                      ) : null}
-                      <LegalEntityContactsSubsection
-                        row={row}
-                        legalEntityId={e.id}
-                        legalEntityName={e.name}
-                        profile={profile}
-                        canEdit={canEdit}
-                        entityArchived={true}
-                      />
-                    </div>
+                    <Card key={e.id} data-testid={`card-legal-entity-${e.id}`} className="border-dashed border-border/80 bg-muted/5">
+                      <CardContent className="p-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-medium text-muted-foreground">{e.name}</p>
+                          <Badge variant="outline" className="text-[10px]">
+                            Архив
+                          </Badge>
+                        </div>
+                        {canMutate && useAct ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="mt-2 min-h-8 text-xs"
+                            data-testid={`button-legal-entity-restore-${e.id}`}
+                            onClick={() => void onRestore(e.id)}
+                          >
+                            Восстановить
+                          </Button>
+                        ) : null}
+                        {canMutate && !useAct && !e.isPassportSeed ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="mt-2 min-h-8 text-xs"
+                            data-testid={`button-legal-entity-edit-${e.id}`}
+                            onClick={() => loadEntityIntoDraft(e.id)}
+                          >
+                            Редактировать
+                          </Button>
+                        ) : null}
+                        <LegalEntityContactsSubsection
+                          row={row}
+                          legalEntityId={e.id}
+                          legalEntityName={e.name}
+                          profile={profile}
+                          canEdit={canEditDealerLegalEntities(profile, row)}
+                          entityArchived={true}
+                        />
+                      </CardContent>
+                    </Card>
                   ))}
                 </div>
               ) : null}
@@ -648,6 +921,61 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
           ) : null}
         </div>
       )}
+
+      <AlertDialog open={archiveTarget != null} onOpenChange={(o) => !o && setArchiveTarget(null)}>
+        <AlertDialogContent data-testid="dialog-legal-entity-delete-confirm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Скрыть юрлицо из карточки?</AlertDialogTitle>
+            <AlertDialogDescription className="text-sm leading-relaxed">
+              Юрлицо будет скрыто из рабочей карточки клиента. Данные не удаляются физически и могут быть восстановлены позднее.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-legal-entity-delete-cancel">Отмена</AlertDialogCancel>
+            <AlertDialogAction data-testid="button-legal-entity-delete-confirm" onClick={() => void confirmArchive()}>
+              Скрыть
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={innDupModal != null} onOpenChange={(o) => !o && setInnDupModal(null)}>
+        <AlertDialogContent data-testid="dialog-legal-entity-inn-duplicate">
+          <AlertDialogHeader>
+            <AlertDialogTitle>ИНН уже используется</AlertDialogTitle>
+            <AlertDialogDescription className="text-sm leading-relaxed">
+              У этого клиента уже есть активное юрлицо с ИНН {innDupModal?.inn}: «{innDupModal?.existingName}».
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full sm:w-auto"
+              onClick={() => {
+                if (!innDupModal) return;
+                const id = innDupModal.existingId;
+                setInnDupModal(null);
+                loadEntityIntoDraft(id);
+              }}
+            >
+              Открыть существующее
+            </Button>
+            <Button
+              type="button"
+              variant="default"
+              className="w-full sm:w-auto"
+              onClick={() => {
+                skipInnDupOnceRef.current = true;
+                setInnDupModal(null);
+                void legalFormSave.runSave(onSave);
+              }}
+            >
+              Всё равно создать
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </section>
   );
 }

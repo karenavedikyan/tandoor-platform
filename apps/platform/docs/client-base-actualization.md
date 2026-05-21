@@ -53,9 +53,20 @@
 | Новая торговая точка | `manuallyCreatedTradePointsById[id]` — id: `manual-tp-{dealerId}-{yyyyMMddHHmmss}-{shortRandom}`, метаданные создания, при повторном сохранении после ошибки — **тот же id** (upsert) |
 | Правки существующей ТТ | `tradePointOverridesById` |
 | Архив / закрытие ТТ | `archivedTradePointsById` (+ в UI точка скрыта из обычного списка) |
-| Юрлица: добавление, правки, мягкое скрытие | `legalEntityOverridesByDealerId` |
+| Юрлица: поля записей (в т. ч. вручную созданные) | `legalEntityOverridesByDealerId[dealerId].overridesById[legalEntityId]` — объект с полями `name`, `inn`, `entityType` (`ooo` \| `ip` \| `self_employed` \| `other`), `internalCode` (`TND-LE-000001`), адреса, контакты, `comment`, метаданные `updatedAt` / `updatedBy` |
+| Юрлица: мягкий архив (release и manual) | `archivedLegalEntitiesById[legalEntityId]` — `{ legalEntityId, dealerId, archivedAt, archivedBy, archivedByName, source }`; запись в `overridesById` **не удаляется** |
+| Юрлица (legacy внутри dealer-блока) | `legalEntityOverridesByDealerId[dealerId].archivedById` — по-прежнему учитывается в merge; новые архивы пишутся в `archivedLegalEntitiesById` |
 
 `mergeActualizationState()` используется при локальных обновлениях перед отправкой на сервер.
+
+### Юрлица: id, код, merge, восстановление
+
+- **Технический id** вручную добавленного юрлица: `manual-legal-entity-{yyyyMMddHHmmss}-{random}` — задаётся один раз при открытии диалога «Добавить» и сохраняется в `overridesById` при первом успешном сохранении (повторный submit после ошибки не создаёт новый id).
+- **Код в UI:** `TND-LE-000006` — выдаётся функцией `allocateNextLegalEntityDisplayCode` в `client-base-actualization-legal-entities.ts` по максимуму уже занятых кодов в состоянии актуализации.
+- **Слияние:** `mergeLegalEntitiesForActualization` в `client-base-actualization-data-merge.ts` — база из паспорта + LS (`getMergedDealerLegalEntities`) для release-клиентов, только overrides для manual-клиента; архив: `isLegalEntityArchivedInActualization` (новый top-level + legacy `archivedById`).
+- **Восстановление:** `restoreLegalEntityFromArchive(state, dealerId, legalEntityId)` в `client-base-actualization-legal-entities.ts` — снимает запись из `archivedLegalEntitiesById` и legacy-архива; в UI кнопка «Восстановить» в раскрытом списке архива при включённой актуализации.
+- **Права на кнопки добавления / редактирования / архива:** при включённой актуализации — `canActualizeClientBase(profile) && canEditDealerDuringActualization(profile, row)`; без актуализации — прежний `canEditDealerLegalEntities` (зона ответственности как у карточки). Контакты по юрлицу редактируются по `canEditDealerLegalEntities` отдельно.
+- **Проверка вручную:** режим актуализации → карточка клиента → блок «Юридические лица» → «Добавить юрлицо» → заполнить обязательные поля → сохранить → F5 → юрлицо и код на месте → «В архив» → подтвердить → F5 не возвращает в активный список → «Архив» → «Восстановить» → снова в активном списке.
 
 ## API и персистентность
 
@@ -97,7 +108,7 @@
 - **Список клиентов:** `pages/dealer-base.tsx` — строки из merge, кнопка «Добавить клиента», синхронизация.
 - **Карточка:** `pages/dealer-card-foundation.tsx` — merge строки, кнопка «Редактировать», счётчики ТТ/юрлиц.
 - **Торговые точки:** `components/dealer-trade-points-section.tsx` — добавление / редактирование / архив при включённой актуализации и правах.
-- **Юрлица:** `components/dealer-legal-entities-section.tsx` — add/edit/архив через override.
+- **Юрлица:** `components/dealer-legal-entities-section.tsx` — диалог формы, сохранение в `legalEntityOverridesByDealerId`, архив в `archivedLegalEntitiesById`, дубль ИНН, `SectionSaveButton` при актуализации; хелперы в `lib/client-base-actualization-legal-entities.ts`.
 - **Провайдер в дереве:** `App.tsx` оборачивает маршруты в `ClientBaseActualizationProvider`.
 
 После каждого сохранения: обновление локального `state`, вызов сохранения через API, тост «Сохранено» или сообщение об ошибке на русском.
@@ -118,9 +129,18 @@
 | ТТ: удалить / в архив (список в карточке клиента) | `button-trade-point-delete-{tradePointId}` |
 | ТТ: подтверждение удаления из карточки | `dialog-trade-point-delete-confirm`, `button-trade-point-delete-confirm`, `button-trade-point-delete-cancel` |
 | ТТ: архив (страница точки) | `button-trade-point-archive-{tradePointId}` |
-| Юрлицо: добавить | `button-legal-entity-create` |
-| Юрлицо: редактировать | `button-legal-entity-edit-{legalEntityId}` |
+| Юрлицо: секция | `section-dealer-legal-entities` |
+| Юрлицо: добавить | `button-legal-entity-add` |
+| Юрлицо: форма (диалог) | `dialog-legal-entity-form` |
+| Юрлицо: поля | `input-legal-entity-name`, `input-legal-entity-inn`, `select-legal-entity-type`, `input-legal-entity-kpp`, `input-legal-entity-ogrn`, `input-legal-entity-legal-address`, `input-legal-entity-actual-address`, `input-legal-entity-contact` (основной контакт), `input-legal-entity-phone`, `input-legal-entity-email`, `textarea-legal-entity-comment` |
 | Юрлицо: сохранить | `button-legal-entity-save` |
+| Юрлицо: карточка в списке | `card-legal-entity-{legalEntityId}` |
+| Юрлицо: код | `text-legal-entity-code-{legalEntityId}` |
+| Юрлицо: редактировать | `button-legal-entity-edit-{legalEntityId}` |
+| Юрлицо: в архив | `button-legal-entity-delete-{legalEntityId}` |
+| Юрлицо: подтверждение архива | `dialog-legal-entity-delete-confirm`, `button-legal-entity-delete-confirm`, `button-legal-entity-delete-cancel` |
+| Юрлицо: пустой список | `text-legal-entities-empty-state` |
+| Юрлицо: восстановить из архива | `button-legal-entity-restore-{legalEntityId}` |
 | Статус синхронизации | `text-actualization-sync-status` |
 
 ## Ручные проверки (acceptance)
@@ -131,7 +151,7 @@
 4. Добавить ТТ — отображается во вкладке «Торговые точки».
 5. Отредактировать ТТ — после обновления страницы правки сохранены.
 6. Удалить ТТ из карточки клиента (с подтверждением) — точка скрыта из обычного списка; после обновления страницы не возвращается.
-7. Добавить юрлицо — видно в карточке.
+7. Добавить юрлицо в актуализации — диалог, код `TND-LE-…`, после F5 на месте; дубль ИНН — предупреждение; «В архив» с подтверждением — скрыто из активного списка, после F5 не возвращается; в архиве — «Восстановить».
 8. Маркетолог / аналитик — нет кнопок создания/редактирования актуализации.
 9. `cd apps/platform && npm run check` — успех.
 10. `npm run build` — успех.

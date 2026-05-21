@@ -14,6 +14,10 @@ export type DealerLegalEntityStatus = "main" | "additional" | "archived";
 
 export type DealerLegalEntity = {
   id: string;
+  /** Отображаемый код TND-LE-000001 для записей актуализации. */
+  internalCode?: string;
+  /** ООО | ИП | self_employed | other */
+  entityType?: string;
   name: string;
   inn?: string;
   kpp?: string;
@@ -21,6 +25,9 @@ export type DealerLegalEntity = {
   legalAddress?: string;
   /** Фактический адрес (актуализация / расширенная карточка). */
   actualAddress?: string;
+  primaryContact?: string;
+  phone?: string;
+  email?: string;
   status: DealerLegalEntityStatus;
   comment?: string;
   createdAt: string;
@@ -96,6 +103,19 @@ export function saveDealerLegalEntitiesState(state: DealerLegalEntitiesState): v
   window.dispatchEvent(new CustomEvent(DEALER_LEGAL_ENTITIES_EVENT));
 }
 
+export function allocateNextLegalEntityCodeLocal(): string {
+  const st = loadDealerLegalEntitiesState();
+  let max = 0;
+  for (const list of Object.values(st.entitiesByDealer)) {
+    for (const e of list) {
+      const m = /^TND-LE-(\d{1,9})$/i.exec(e.internalCode?.trim() ?? "");
+      if (m) max = Math.max(max, parseInt(m[1]!, 10));
+    }
+  }
+  const n = max + 1;
+  return `TND-LE-${String(n).padStart(6, "0")}`;
+}
+
 export function getDealerLegalEntities(
   dealerId: string,
   state: DealerLegalEntitiesState = loadDealerLegalEntitiesState(),
@@ -143,7 +163,14 @@ export function addDealerLegalEntity(
     name: string;
     inn?: string;
     kpp?: string;
+    ogrn?: string;
     legalAddress?: string;
+    actualAddress?: string;
+    entityType?: string;
+    primaryContact?: string;
+    phone?: string;
+    email?: string;
+    internalCode?: string;
     status: DealerLegalEntityStatus;
     comment?: string;
     updatedBy: string;
@@ -157,10 +184,17 @@ export function addDealerLegalEntity(
   const id = `le-${dealerId}-${Date.now()}`;
   const entity: DealerLegalEntity = {
     id,
+    internalCode: payload.internalCode?.trim() || allocateNextLegalEntityCodeLocal(),
+    entityType: payload.entityType?.trim() || undefined,
     name,
     inn: payload.inn?.trim() || undefined,
     kpp: payload.kpp?.trim() || undefined,
+    ogrn: payload.ogrn?.trim() || undefined,
     legalAddress: payload.legalAddress?.trim() || undefined,
+    actualAddress: payload.actualAddress?.trim() || undefined,
+    primaryContact: payload.primaryContact?.trim() || undefined,
+    phone: payload.phone?.trim() || undefined,
+    email: payload.email?.trim() || undefined,
     status: payload.status,
     comment: payload.comment?.trim() || undefined,
     createdAt: now,
@@ -178,7 +212,22 @@ export function updateDealerLegalEntity(
   dealerId: string,
   entityId: string,
   patch: Partial<
-    Pick<DealerLegalEntity, "name" | "inn" | "kpp" | "legalAddress" | "status" | "comment">
+    Pick<
+      DealerLegalEntity,
+      | "name"
+      | "inn"
+      | "kpp"
+      | "ogrn"
+      | "legalAddress"
+      | "actualAddress"
+      | "entityType"
+      | "primaryContact"
+      | "phone"
+      | "email"
+      | "internalCode"
+      | "status"
+      | "comment"
+    >
   >,
   updatedBy: string,
   updatedByName: string,
@@ -195,7 +244,14 @@ export function updateDealerLegalEntity(
     name: patch.name != null ? patch.name.trim() : cur.name,
     inn: patch.inn !== undefined ? patch.inn.trim() || undefined : cur.inn,
     kpp: patch.kpp !== undefined ? patch.kpp.trim() || undefined : cur.kpp,
+    ogrn: patch.ogrn !== undefined ? patch.ogrn.trim() || undefined : cur.ogrn,
     legalAddress: patch.legalAddress !== undefined ? patch.legalAddress.trim() || undefined : cur.legalAddress,
+    actualAddress: patch.actualAddress !== undefined ? patch.actualAddress.trim() || undefined : cur.actualAddress,
+    entityType: patch.entityType !== undefined ? patch.entityType.trim() || undefined : cur.entityType,
+    primaryContact: patch.primaryContact !== undefined ? patch.primaryContact.trim() || undefined : cur.primaryContact,
+    phone: patch.phone !== undefined ? patch.phone.trim() || undefined : cur.phone,
+    email: patch.email !== undefined ? patch.email.trim() || undefined : cur.email,
+    internalCode: patch.internalCode !== undefined ? patch.internalCode.trim() || undefined : cur.internalCode,
     status: patch.status ?? cur.status,
     comment: patch.comment !== undefined ? patch.comment.trim() || undefined : cur.comment,
     updatedAt: now,
