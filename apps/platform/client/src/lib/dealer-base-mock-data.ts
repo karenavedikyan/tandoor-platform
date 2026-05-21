@@ -132,6 +132,8 @@ export type DealerTradePoint = {
   responsibleRegionalManager: string;
   /** Телефон точки (если известен). */
   contactPhone?: string;
+  /** Email точки (актуализация / overrides). */
+  contactEmail?: string;
   /** Контактное лицо на точке. */
   contactName?: string;
   /** Заметка менеджера по точке (ручной ввод). */

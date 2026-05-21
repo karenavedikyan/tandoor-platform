@@ -155,6 +155,8 @@ import { DEALER_CHARACTERISTICS_EVENT } from "@/lib/dealer-characteristics";
 import { SHOWCASE_STORAGE_EVENT } from "@/lib/showcase-distribution-data";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DealerBulkDeleteCheckbox } from "@/components/dealer-bulk-delete-checkbox";
+import { DealerBaseDealerShowcaseGrid } from "@/components/dealer-base-dealer-showcase-grid";
+import type { ActualizationState } from "@/lib/client-base-actualization-state";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Switch } from "@/components/ui/switch";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
@@ -166,10 +168,10 @@ const TODAY_LIMIT = 100;
 const DEALER_BASE_FILTERS_COLLAPSED_LS_KEY = "tandoor-dealer-base-filters-collapsed-v1";
 const DEALER_BASE_VIEW_MODE_LS_KEY = "tandoor-dealer-base-view-mode-v1";
 
-type DealerBaseClientViewMode = "cards" | "compact" | "list" | "table";
+type DealerBaseClientViewMode = "cards" | "compact" | "list" | "table" | "dealer_showcase";
 
 function parseDealerBaseViewMode(raw: string | null): DealerBaseClientViewMode | null {
-  if (raw === "cards" || raw === "compact" || raw === "list" || raw === "table") return raw;
+  if (raw === "cards" || raw === "compact" || raw === "list" || raw === "table" || raw === "dealer_showcase") return raw;
   return null;
 }
 
@@ -1055,6 +1057,7 @@ function DealerBaseSegmentGroups({
   shipmentActiveDayId,
   shipmentUserId,
   archiveBulk,
+  actualizationState,
 }: {
   rows: DealerRow[];
   displayMode: DealerBaseClientViewMode;
@@ -1073,6 +1076,7 @@ function DealerBaseSegmentGroups({
   shipmentActiveDayId?: DealerShipmentDayId | null;
   shipmentUserId?: string;
   archiveBulk?: DealerListArchiveBulkProps;
+  actualizationState: ActualizationState;
 }) {
   const buckets = useMemo(() => partitionDealersBySegment(rows), [rows]);
 
@@ -1092,6 +1096,23 @@ function DealerBaseSegmentGroups({
     };
     const effectiveMode: DealerBaseClientViewMode =
       displayMode === "table" && narrowViewport ? "list" : displayMode;
+    if (effectiveMode === "dealer_showcase") {
+      return (
+        <DealerBaseDealerShowcaseGrid
+          rows={segRows}
+          empty=""
+          actualizationState={actualizationState}
+          workPlanUserId={workPlanUserId}
+          workPlanState={workPlanState}
+          showWorkPlanSelect={showWorkPlanSelect}
+          selectedIds={selectedIds}
+          onToggleWorkPlanSelect={onToggleWorkPlanSelect}
+          shipmentActiveDayId={shipmentActiveDayId}
+          shipmentUserId={shipmentUserId}
+          archiveBulk={archiveBulk}
+        />
+      );
+    }
     if (effectiveMode === "cards") {
       return <ClientListBlock {...common} compact={Boolean(cardsMyClientsDensity)} />;
     }
@@ -2491,6 +2512,11 @@ export default function DealerBase() {
               {(
                 [
                   { id: "cards" as const, label: "Карточки", tid: "button-dealer-base-view-cards" },
+                  {
+                    id: "dealer_showcase" as const,
+                    label: "Витрина дилеров",
+                    tid: "button-dealer-base-view-dealer-showcase",
+                  },
                   { id: "compact" as const, label: "Компактно", tid: "button-dealer-base-view-compact" },
                   { id: "list" as const, label: "Список", tid: "button-dealer-base-view-list" },
                   { id: "table" as const, label: "Таблица", tid: "button-dealer-base-view-table" },
@@ -3326,6 +3352,7 @@ export default function DealerBase() {
                 emptyMessage="Нет клиентов по выбранным фильтрам."
                 shipmentActiveDayId={activeShipmentDayId}
                 shipmentUserId={profile.personaUserId}
+                actualizationState={actx.state}
                 {...workPlanListProps}
                 archiveBulk={archiveBulkListProps}
               />
@@ -3340,6 +3367,7 @@ export default function DealerBase() {
                 emptyMessage="Нет записей."
                 shipmentActiveDayId={activeShipmentDayId}
                 shipmentUserId={profile.personaUserId}
+                actualizationState={actx.state}
                 {...workPlanListProps}
                 archiveBulk={archiveBulkListProps}
               />
@@ -3364,6 +3392,7 @@ export default function DealerBase() {
                 emptyMessage="Ничего не найдено."
                 shipmentActiveDayId={activeShipmentDayId}
                 shipmentUserId={profile.personaUserId}
+                actualizationState={actx.state}
                 {...workPlanListProps}
                 archiveBulk={archiveBulkListProps}
               />
@@ -3388,6 +3417,7 @@ export default function DealerBase() {
                 emptyMessage="Нет клиентов команды по фильтрам."
                 shipmentActiveDayId={activeShipmentDayId}
                 shipmentUserId={profile.personaUserId}
+                actualizationState={actx.state}
                 {...workPlanListProps}
                 archiveBulk={archiveBulkListProps}
               />
