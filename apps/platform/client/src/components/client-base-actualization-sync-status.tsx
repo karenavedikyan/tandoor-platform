@@ -5,6 +5,8 @@
 import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import type { ActualizationApiMeta, ActualizationSyncStatus } from "@/lib/client-base-actualization-api";
+import { formatDisplayDateTime } from "@/lib/format-display-date";
+import { cn } from "@/lib/utils";
 
 export type ClientBaseActualizationSyncStatusProps = {
   syncStatus: ActualizationSyncStatus;
@@ -14,13 +16,6 @@ export type ClientBaseActualizationSyncStatusProps = {
   /** Компактный вид для карточки клиента в clean-актуализации */
   compact?: boolean;
 };
-
-function formatSavedAt(iso: string | null): string {
-  if (!iso) return "—";
-  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(iso);
-  if (!m) return iso;
-  return `${m[3]}.${m[2]}.${m[1]} ${m[4]}:${m[5]}`;
-}
 
 function statusLabel(props: ClientBaseActualizationSyncStatusProps): string {
   if (props.isLoading) return "Сохраняем…";
@@ -36,7 +31,7 @@ function statusLabel(props: ClientBaseActualizationSyncStatusProps): string {
     }
     return "Сохранено";
   }
-  return "—";
+  return "Не указано";
 }
 
 function storageModeShort(meta: ActualizationApiMeta): string | null {
@@ -52,31 +47,34 @@ export function ClientBaseActualizationSyncStatus(props: ClientBaseActualization
   const showOffline = syncStatus === "local_fallback";
   const showRetry = syncStatus === "error" && onRetry;
   const storageShort = storageModeShort(meta);
+  const savedAtLabel = meta.updatedAt?.trim() ? formatDisplayDateTime(meta.updatedAt) : null;
 
   if (compact) {
     return (
       <div
-        className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-border/60 bg-muted/25 px-2.5 py-1.5 text-xs text-muted-foreground"
+        className="flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-md border border-border/50 bg-muted/20 px-2 py-1.5 text-[11px] leading-tight text-muted-foreground"
         data-testid="section-client-base-actualization-sync"
       >
         <span className="font-medium text-foreground" data-testid="text-actualization-sync-status">
           {label}
         </span>
-        <span className="tabular-nums" data-testid="text-actualization-last-saved-at">
-          {formatSavedAt(meta.updatedAt)}
-        </span>
+        {meta.updatedAt?.trim() ? (
+          <span className="tabular-nums text-muted-foreground/90" data-testid="text-actualization-last-saved-at">
+            {formatDisplayDateTime(meta.updatedAt)}
+          </span>
+        ) : null}
         {storageShort && !showOffline ? (
-          <span className="rounded border border-emerald-600/25 bg-emerald-600/5 px-1.5 py-0.5 text-[10px] font-medium text-emerald-900 dark:text-emerald-100">
+          <span className="rounded border border-border/50 bg-background/80 px-1 py-0 text-[9px] font-medium uppercase tracking-wide text-muted-foreground">
             {storageShort}
           </span>
         ) : null}
         {showOffline ? (
-          <span className="text-amber-800 dark:text-amber-300" data-testid="text-actualization-offline-fallback">
+          <span className="text-[10px] text-amber-800 dark:text-amber-300" data-testid="text-actualization-offline-fallback">
             Локально, без синхронизации между устройствами
           </span>
         ) : null}
         {meta.message && !showOffline && !isLoading ? (
-          <span className="max-w-full text-[11px] text-muted-foreground/90">{meta.message}</span>
+          <span className="w-full max-w-full text-[10px] leading-snug text-muted-foreground/85">{meta.message}</span>
         ) : null}
         {showRetry ? (
           <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={onRetry} data-testid="button-actualization-sync-retry">
@@ -96,8 +94,8 @@ export function ClientBaseActualizationSyncStatus(props: ClientBaseActualization
       <span className="font-medium text-foreground" data-testid="text-actualization-sync-status">
         {label}
       </span>
-      <span className="text-muted-foreground" data-testid="text-actualization-last-saved-at">
-        Обновлено: {formatSavedAt(meta.updatedAt)}
+      <span className={cn("text-muted-foreground", savedAtLabel && savedAtLabel !== "Не указано" && "tabular-nums")} data-testid="text-actualization-last-saved-at">
+        Обновлено: {savedAtLabel ?? "Не указано"}
       </span>
       {showOffline ? (
         <span className="text-amber-700 dark:text-amber-400" data-testid="text-actualization-offline-fallback">
