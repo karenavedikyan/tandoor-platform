@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { ChevronDown, ChevronRight, Search, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Search, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -152,9 +152,18 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { DealerBulkDeleteCheckbox } from "@/components/dealer-bulk-delete-checkbox";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Switch } from "@/components/ui/switch";
+import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
+import { normalizeGeoCompare, parseDealerGeoFromRow } from "@/lib/dealer-base-geo-parse";
 
 const DEALER_BASE_DISPLAY_LIMIT = 300;
 const TODAY_LIMIT = 100;
+
+const DEALER_BASE_FILTERS_COLLAPSED_LS_KEY = "tandoor-dealer-base-filters-collapsed-v1";
+
+function isNarrowViewport(): boolean {
+  if (typeof window === "undefined") return true;
+  return window.innerWidth < 768;
+}
 
 const QUICK_FROM_URL: Record<string, QuickFilter> = {
   all: "all",
@@ -206,7 +215,7 @@ const QUICK_FILTERS: { id: QuickFilter; label: string; testId: string }[] = [
   { id: "active", label: "Активные", testId: "filter-dealers-active" },
   { id: "potential", label: "Потенциальные", testId: "filter-dealers-potential" },
   { id: "attention", label: "Требуют внимания", testId: "filter-dealers-attention" },
-  { id: "top", label: "ТОП-сегмент", testId: "filter-dealers-top" },
+  { id: "top", label: "ТОП", testId: "filter-dealers-top" },
   { id: "closed", label: "Закрытые", testId: "filter-dealers-closed" },
 ];
 
@@ -975,6 +984,10 @@ export default function DealerBase() {
     const p = loadReleaseDemoProfile();
     return initialRopManagerForProfile(p, mapSalesRoleToDealerBaseAccess(p.role)).manager;
   });
+  const [geoRegion, setGeoRegion] = useState("");
+  const [geoDistrict, setGeoDistrict] = useState("");
+  const [geoLocality, setGeoLocality] = useState("");
+  const [advancedFiltersCollapsed, setAdvancedFiltersCollapsed] = useState(true);
 
   const routeQs = useRouteSearchParams();
   const routeKey = useMemo(() => routeQs.toString(), [routeQs]);
@@ -1010,9 +1023,55 @@ export default function DealerBase() {
     [mergedRowsForDealerBase, profile],
   );
 
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(DEALER_BASE_FILTERS_COLLAPSED_LS_KEY);
+      if (raw === "true" || raw === "false") {
+        setAdvancedFiltersCollapsed(raw === "true");
+      } else {
+        setAdvancedFiltersCollapsed(isNarrowViewport());
+      }
+    } catch {
+      setAdvancedFiltersCollapsed(isNarrowViewport());
+    }
+  }, []);
+
+  const persistAdvancedFiltersCollapsed = useCallback((collapsed: boolean) => {
+    setAdvancedFiltersCollapsed(collapsed);
+    try {
+      localStorage.setItem(DEALER_BASE_FILTERS_COLLAPSED_LS_KEY, String(collapsed));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const defaultRopManager = useMemo(() => initialRopManagerForProfile(profile, access), [profile, access]);
+
   const pickerArgs = useMemo(
-    () => ({ search, quick, cities, categories, ropTeam, manager, managerCatalogForRop }),
-    [search, quick, cities, categories, ropTeam, manager, managerCatalogForRop],
+    () => ({
+      search,
+      quick,
+      cities,
+      categories,
+      ropTeam,
+      manager,
+      managerCatalogForRop,
+      geoRegion,
+      geoDistrict,
+      geoLocality,
+    }),
+    [
+      search,
+      quick,
+      cities,
+      categories,
+      ropTeam,
+      manager,
+      managerCatalogForRop,
+      geoRegion,
+      geoDistrict,
+      geoLocality,
+    ],
   );
 
   const pickerFiltered = useMemo(() => applyDealerBasePickerFilters(scopedRows, pickerArgs), [scopedRows, pickerArgs]);
@@ -1040,6 +1099,50 @@ export default function DealerBase() {
     return Array.from(s).sort((a, b) => a.localeCompare(b, "ru"));
   }, [scopedRows]);
 
+  /** Варианты геофильтров и счётчики по строкам в зоне видимости (без геофильтра). */
+  const dealerBaseGeoCatalog = useMemo(() => {
+    const rowsWithGeo = scopedRows.map((row) => ({ row, p: parseDealerGeoFromRow(row) }));
+
+    const regionCounts = new Map<string, number>();
+    for (const { p } of rowsWithGeo) {
+      if (!p.region) continue;
+      regionCounts.set(p.region, (regionCounts.get(p.region) ?? 0) + 1);
+    }
+    const regionList = Array.from(regionCounts.entries())
+      .map(([label, count]) => ({ label, count }))
+      .sort((a, b) => a.label.localeCompare(b.label, "ru"));
+
+    const districtSource = rowsWithGeo.filter(({ p }) => {
+      if (!geoRegion.trim()) return true;
+      return normalizeGeoCompare(p.region) === normalizeGeoCompare(geoRegion);
+    });
+    const districtCounts = new Map<string, number>();
+    for (const { p } of districtSource) {
+      if (!p.district) continue;
+      districtCounts.set(p.district, (districtCounts.get(p.district) ?? 0) + 1);
+    }
+    const districtList = Array.from(districtCounts.entries())
+      .map(([label, count]) => ({ label, count }))
+      .sort((a, b) => a.label.localeCompare(b.label, "ru"));
+
+    const localitySource = rowsWithGeo.filter(({ p }) => {
+      if (geoRegion.trim() && normalizeGeoCompare(p.region) !== normalizeGeoCompare(geoRegion)) return false;
+      if (geoDistrict.trim() && normalizeGeoCompare(p.district) !== normalizeGeoCompare(geoDistrict)) return false;
+      return true;
+    });
+    const localityCounts = new Map<string, number>();
+    for (const { p, row } of localitySource) {
+      const loc = (p.locality || row.city || "").trim();
+      if (!loc) continue;
+      localityCounts.set(loc, (localityCounts.get(loc) ?? 0) + 1);
+    }
+    const localityList = Array.from(localityCounts.entries())
+      .map(([label, count]) => ({ label, count }))
+      .sort((a, b) => a.label.localeCompare(b.label, "ru"));
+
+    return { regionList, districtList, localityList };
+  }, [scopedRows, geoRegion, geoDistrict]);
+
   useEffect(() => {
     const d = initialRopManagerForProfile(profile, access);
     if (!routeKey) {
@@ -1051,6 +1154,9 @@ export default function DealerBase() {
       setSearch("");
       setWorkView(defaultWorkViewForAccess(access));
       setProgramFilters([]);
+      setGeoRegion("");
+      setGeoDistrict("");
+      setGeoLocality("");
       return;
     }
 
@@ -1548,6 +1654,159 @@ export default function DealerBase() {
     );
   }, []);
 
+  const defaultWorkPlanFilterValue = profile.role === "marketer" || profile.role === "analyst" ? "all" : "active";
+
+  const dealerBaseActiveFilterChips = useMemo(() => {
+    const chips: { key: string; label: string; onRemove: () => void }[] = [];
+    const q = search.trim();
+    if (q) {
+      const short = q.length > 40 ? `${q.slice(0, 37)}…` : q;
+      chips.push({
+        key: "search",
+        label: `Поиск: ${short}`,
+        onRemove: () => setSearch(""),
+      });
+    }
+    if (quick !== "all") {
+      const lab = QUICK_FILTERS.find((f) => f.id === quick)?.label ?? quick;
+      chips.push({
+        key: "quick",
+        label: `Статус: ${lab}`,
+        onRemove: () => setQuick("all"),
+      });
+    }
+    for (const id of programFilters) {
+      chips.push({
+        key: `program-${id}`,
+        label: `Признак: ${DEALER_PROGRAM_FILTER_LABELS[id]}`,
+        onRemove: () => setProgramFilters((prev) => prev.filter((x) => x !== id)),
+      });
+    }
+    if (workPlanFilter !== defaultWorkPlanFilterValue) {
+      chips.push({
+        key: "work-plan",
+        label: `Рабочий план: ${WORK_PLAN_FILTER_LABELS[workPlanFilter]}`,
+        onRemove: () => setWorkPlanFilter(defaultWorkPlanFilterValue as WorkPlanListFilter),
+      });
+    }
+    if (segmentList.length > 0) {
+      for (const seg of segmentList) {
+        chips.push({
+          key: `segment-${seg}`,
+          label: `Сегмент: ${DEALER_BASE_SEGMENT_LABELS[seg]}`,
+          onRemove: () => setSegmentList((prev) => prev.filter((x) => x !== seg)),
+        });
+      }
+    }
+    if (stockListFilter !== "all") {
+      chips.push({
+        key: "stock",
+        label: `Склад: ${DEALER_STOCK_FILTER_LABELS[stockListFilter]}`,
+        onRemove: () => setStockListFilter("all"),
+      });
+    }
+    if (geoRegion.trim()) {
+      chips.push({
+        key: "geo-region",
+        label: `Регион: ${geoRegion.trim()}`,
+        onRemove: () => {
+          setGeoRegion("");
+          setGeoDistrict("");
+          setGeoLocality("");
+        },
+      });
+    }
+    if (geoDistrict.trim()) {
+      chips.push({
+        key: "geo-district",
+        label: `Район: ${geoDistrict.trim()}`,
+        onRemove: () => {
+          setGeoDistrict("");
+          setGeoLocality("");
+        },
+      });
+    }
+    if (geoLocality.trim()) {
+      chips.push({
+        key: "geo-locality",
+        label: `Населённый пункт: ${geoLocality.trim()}`,
+        onRemove: () => setGeoLocality(""),
+      });
+    }
+    for (const c of cities) {
+      chips.push({
+        key: `city-${c}`,
+        label: `Город: ${c}`,
+        onRemove: () => setCities((prev) => prev.filter((x) => x !== c)),
+      });
+    }
+    for (const cat of categories) {
+      const catLabel = cat === "__top_tier__" ? "ТОП-сегмент" : getClientCategoryLabel(cat);
+      chips.push({
+        key: `category-${cat}`,
+        label: `Категория: ${catLabel}`,
+        onRemove: () => setCategories((prev) => prev.filter((x) => x !== cat)),
+      });
+    }
+    if (ropTeam !== defaultRopManager.ropTeam) {
+      const lab = getRopOptions().find((o) => o.teamId === ropTeam)?.label ?? ropTeam;
+      chips.push({
+        key: "rop",
+        label: `РОП: ${lab}`,
+        onRemove: () => {
+          setRopTeam(defaultRopManager.ropTeam);
+          setManager(defaultRopManager.manager);
+        },
+      });
+    }
+    if (manager !== defaultRopManager.manager && !hideManagerFilterInTeamView) {
+      const lab =
+        managerCatalogForRop.find((m) => m.id === manager)?.name ?? getSalesUserById(manager)?.name ?? manager;
+      chips.push({
+        key: "manager",
+        label: `Менеджер: ${lab}`,
+        onRemove: () => setManager(defaultRopManager.manager),
+      });
+    }
+    return chips;
+  }, [
+    search,
+    quick,
+    programFilters,
+    workPlanFilter,
+    defaultWorkPlanFilterValue,
+    segmentList,
+    stockListFilter,
+    geoRegion,
+    geoDistrict,
+    geoLocality,
+    cities,
+    categories,
+    ropTeam,
+    manager,
+    defaultRopManager,
+    managerCatalogForRop,
+    hideManagerFilterInTeamView,
+  ]);
+
+  const dealerBaseActiveFilterCount = dealerBaseActiveFilterChips.length;
+
+  const resetDealerBaseFilters = useCallback(() => {
+    setSearch("");
+    setQuick("all");
+    setProgramFilters([]);
+    setWorkPlanFilter(profile.role === "marketer" || profile.role === "analyst" ? "all" : "active");
+    setSegmentList([]);
+    setStockListFilter("all");
+    setCities([]);
+    setCategories([]);
+    setGeoRegion("");
+    setGeoDistrict("");
+    setGeoLocality("");
+    setRopTeam(defaultRopManager.ropTeam);
+    setManager(defaultRopManager.manager);
+  }, [profile.role, defaultRopManager]);
+
   const rowsFinalForList = useMemo(() => {
     if (stockListFilter === "all") return rowsAfterPrograms;
     return rowsAfterPrograms.filter((r) => dealerRowMatchesStockFilter(r, stockListFilter));
@@ -1975,255 +2234,465 @@ export default function DealerBase() {
       </section>
 
       <Card className="rounded-2xl border border-border/80 bg-card shadow-md">
-        <CardContent className="space-y-4 p-4 sm:p-5">
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+        <CardContent className="space-y-2.5 p-3 sm:space-y-3 sm:p-4">
+          <div className="relative min-w-0">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground sm:left-3" aria-hidden />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Поиск: название, код, город, РОП, менеджер, тип, адрес, ИНН"
-              className="min-h-11 rounded-xl border-border pl-10"
+              className="min-h-9 rounded-lg border-border pl-9 text-sm sm:min-h-10 sm:rounded-xl sm:pl-10"
               data-testid="input-dealer-base-search"
             />
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            {QUICK_FILTERS.map((f) => (
-              <Button
-                key={f.id}
-                type="button"
-                size="sm"
-                variant={quick === f.id ? "default" : "outline"}
-                className={cn("rounded-full", quick === f.id ? "" : "border-border bg-card")}
-                onClick={() => setQuick(f.id)}
-                data-testid={f.testId}
-              >
-                {f.label}
-              </Button>
-            ))}
-          </div>
-
-          <div className="space-y-1.5" data-testid="section-dealer-base-program-filters">
-            <p className="text-xs font-medium text-muted-foreground">Признаки</p>
-            <div className="flex flex-wrap gap-2">
-              {DEALER_PROGRAM_FILTER_ORDER.map((id) => {
-                const active = programFilters.includes(id);
-                return (
-                  <Button
-                    key={id}
-                    type="button"
-                    size="sm"
-                    variant={active ? "default" : "outline"}
-                    className={cn("rounded-full", active ? "" : "border-border bg-card")}
-                    onClick={() => toggleProgramFilter(id)}
-                    aria-pressed={active}
-                    data-testid={DEALER_PROGRAM_FILTER_BUTTON_TESTID[id]}
-                  >
-                    {DEALER_PROGRAM_FILTER_LABELS[id]} · {programCounts[id]}
-                  </Button>
-                );
-              })}
-              {programFilters.length > 0 ? (
+          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+            <div className="flex min-w-0 flex-wrap gap-1.5">
+              {QUICK_FILTERS.map((f) => (
                 <Button
+                  key={f.id}
                   type="button"
                   size="sm"
+                  variant={quick === f.id ? "default" : "outline"}
+                  className={cn(
+                    "h-8 shrink-0 rounded-full px-2.5 text-xs font-medium sm:h-9 sm:px-3",
+                    quick === f.id ? "" : "border-border bg-card",
+                  )}
+                  onClick={() => setQuick(f.id)}
+                  data-testid={f.testId}
+                >
+                  {f.label}
+                </Button>
+              ))}
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 shrink-0 self-start text-xs font-semibold sm:self-center"
+              data-testid="button-dealer-base-filters-toggle"
+              aria-expanded={!advancedFiltersCollapsed}
+              onClick={() => persistAdvancedFiltersCollapsed(!advancedFiltersCollapsed)}
+            >
+              {advancedFiltersCollapsed ? "Показать фильтры" : "Свернуть фильтры"}
+            </Button>
+          </div>
+
+          {advancedFiltersCollapsed ? (
+            <section
+              className="rounded-lg border border-border/60 bg-muted/15 px-2.5 py-2 sm:px-3"
+              data-testid="section-dealer-base-filters-summary"
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-medium text-foreground">Фильтры: {dealerBaseActiveFilterCount} активных</span>
+                <Button
+                  type="button"
                   variant="ghost"
-                  className="rounded-full text-xs"
-                  onClick={() => setProgramFilters([])}
-                  data-testid="filter-programs-reset"
+                  size="sm"
+                  className="h-7 px-2 text-xs font-semibold"
+                  data-testid="button-dealer-base-filters-reset"
+                  onClick={resetDealerBaseFilters}
                 >
                   Сбросить
                 </Button>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="min-w-0 space-y-1">
-              <Label className="text-xs font-medium text-muted-foreground">Рабочий план</Label>
-              <Select value={workPlanFilter} onValueChange={(v) => setWorkPlanFilter(v as WorkPlanListFilter)}>
-                <SelectTrigger className="min-h-10 w-full min-w-0 max-w-[16rem] rounded-xl" data-testid="select-dealer-work-plan-filter">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {(Object.keys(WORK_PLAN_FILTER_LABELS) as WorkPlanListFilter[]).map((k) => (
-                    <SelectItem key={k} value={k}>
-                      {WORK_PLAN_FILTER_LABELS[k]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="min-w-0 space-y-1">
-              <Label className="text-xs font-medium text-muted-foreground">Сегмент списка</Label>
-              <MultiSelect
-                options={DEALER_BASE_SEGMENT_ORDER.map((s) => ({ value: s, label: DEALER_BASE_SEGMENT_LABELS[s] }))}
-                value={segmentList}
-                onChange={(next) => setSegmentList(next as DealerBaseSegmentId[])}
-                placeholder="Все сегменты"
-                allLabel="Все сегменты"
-                triggerClassName="min-h-10 max-w-[16rem]"
-                testId="select-dealer-segment-filter"
-                ariaLabel="Сегмент списка"
-              />
-            </div>
-            <div className="min-w-0 space-y-1">
-              <Label className="text-xs font-medium text-muted-foreground">Склад</Label>
-              <Select value={stockListFilter} onValueChange={(v) => setStockListFilter(v as DealerStockListFilterId)}>
-                <SelectTrigger className="min-h-10 w-full min-w-0 max-w-[16rem] rounded-xl" data-testid="select-dealer-stock-filter">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {(Object.keys(DEALER_STOCK_FILTER_LABELS) as DealerStockListFilterId[]).map((k) => (
-                    <SelectItem key={k} value={k}>
-                      {DEALER_STOCK_FILTER_LABELS[k]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div
-            className={cn(
-              "grid min-w-0 gap-4 sm:grid-cols-2",
-              hideManagerFilterInTeamView ? "lg:grid-cols-3" : "lg:grid-cols-4",
-            )}
-          >
-            <div className="min-w-0 space-y-2">
-              <Label className="text-xs font-medium text-muted-foreground">Город</Label>
-              <MultiSelect
-                options={cityOptions.map((c) => ({ value: c, label: c }))}
-                value={cities}
-                onChange={setCities}
-                placeholder="Все города"
-                allLabel="Все города"
-                testId="select-dealer-base-city"
-                ariaLabel="Город"
-              />
-            </div>
-            <div className="min-w-0 space-y-2">
-              <Label className="text-xs font-medium text-muted-foreground">Категория клиента</Label>
-              <MultiSelect
-                options={categoryOptions.map((c) => ({ value: c, label: getClientCategoryLabel(c) }))}
-                value={categories as string[]}
-                onChange={(next) => setCategories(next as ClientCategorySelection[])}
-                placeholder="Все категории"
-                allLabel="Все категории"
-                testId="select-dealer-base-category"
-                ariaLabel="Категория клиента"
-              />
-            </div>
-            <div className="min-w-0 space-y-2">
-              <Label className="text-xs font-medium text-muted-foreground">РОП</Label>
-              <Select value={ropTeam} onValueChange={onRopChange}>
-                <SelectTrigger className="min-h-11 min-w-0 rounded-xl" data-testid="select-dealer-base-rop">
-                  <SelectValue placeholder="РОП" />
-                </SelectTrigger>
-                <SelectContent>
-                  {access === "sales_director" ? (
-                    <SelectItem value="all">Все РОПы</SelectItem>
-                  ) : null}
-                  {ropSelectOptions.map((r) => (
-                    <SelectItem key={r.teamId} value={r.teamId}>
-                      {r.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {!hideManagerFilterInTeamView ? (
-              <div className="min-w-0 space-y-2">
-                <Label className="text-xs font-medium text-muted-foreground">Менеджер</Label>
-                <Select value={manager} onValueChange={handleManagerChange}>
-                  <SelectTrigger className="min-h-11 min-w-0 rounded-xl" data-testid="select-dealer-base-manager">
-                    <SelectValue placeholder="Менеджер" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {access === "sales_director" || access === "team_lead" ? (
-                      <SelectItem value="all">Все менеджеры</SelectItem>
-                    ) : null}
-                    {managerOptions.map((m) => (
-                      <SelectItem key={m.id} value={m.id}>
-                        {m.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
               </div>
-            ) : null}
-          </div>
-
-          {hideManagerFilterInTeamView ? (
-            <p className="text-xs text-muted-foreground" data-testid="text-dealer-base-manager-filter-hint">
-              Выберите режим менеджера, чтобы смотреть клиентов конкретного менеджера.
-            </p>
+              {dealerBaseActiveFilterChips.length > 0 ? (
+                <div className="mt-2 flex flex-wrap gap-1.5" data-testid="panel-dealer-base-active-filter-chips">
+                  {dealerBaseActiveFilterChips.map((c) => (
+                    <span
+                      key={c.key}
+                      className="inline-flex max-w-full items-center gap-0.5 rounded-full border border-border/80 bg-background py-0.5 pl-2 pr-0.5 text-[11px] font-medium leading-tight text-foreground sm:text-xs"
+                      data-testid={`chip-dealer-base-filter-${c.key}`}
+                    >
+                      <span className="min-w-0 max-w-[min(14rem,70vw)] truncate">{c.label}</span>
+                      <button
+                        type="button"
+                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                        aria-label={`Снять: ${c.label}`}
+                        data-testid={`button-dealer-base-filter-chip-remove-${c.key}`}
+                        onClick={c.onRemove}
+                      >
+                        <X className="h-3 w-3" aria-hidden />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </section>
           ) : null}
 
-          <section className="space-y-4 border-t border-border pt-4" data-testid="section-dealer-base-role-views">
-            <p className="text-xs font-medium text-muted-foreground">Рабочий режим:</p>
-            <div className="flex min-w-0 flex-col gap-6">
-              {groupUi.department ? (
-                <div className="min-w-0 space-y-2" data-testid="section-dealer-base-role-group-department">
-                  <p className="text-sm font-semibold text-foreground">Отдел</p>
-                  <div className="flex flex-wrap gap-2">
-                    {viewsInGroupForAccess(access, "department").map((vid) => (
+          <Collapsible open={!advancedFiltersCollapsed}>
+            <CollapsibleContent className="space-y-3 data-[state=closed]:hidden">
+              <section className="space-y-2" data-testid="section-dealer-base-advanced-filters">
+                {!advancedFiltersCollapsed && dealerBaseActiveFilterChips.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5" data-testid="panel-dealer-base-active-filter-chips">
+                    {dealerBaseActiveFilterChips.map((c) => (
+                      <span
+                        key={`open-${c.key}`}
+                        className="inline-flex max-w-full items-center gap-0.5 rounded-full border border-border/80 bg-muted/20 py-0.5 pl-2 pr-0.5 text-[11px] font-medium leading-tight sm:text-xs"
+                        data-testid={`chip-dealer-base-filter-${c.key}`}
+                      >
+                        <span className="min-w-0 max-w-[min(14rem,70vw)] truncate">{c.label}</span>
+                        <button
+                          type="button"
+                          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                          aria-label={`Снять: ${c.label}`}
+                          data-testid={`button-dealer-base-filter-chip-remove-${c.key}`}
+                          onClick={c.onRemove}
+                        >
+                          <X className="h-3 w-3" aria-hidden />
+                        </button>
+                      </span>
+                    ))}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs font-semibold"
+                      onClick={resetDealerBaseFilters}
+                    >
+                      Сбросить все
+                    </Button>
+                  </div>
+                ) : null}
+
+                <div className="space-y-1.5" data-testid="section-dealer-base-program-filters">
+                  <p className="text-xs font-medium text-muted-foreground">Признаки</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {DEALER_PROGRAM_FILTER_ORDER.map((id) => {
+                      const active = programFilters.includes(id);
+                      return (
+                        <Button
+                          key={id}
+                          type="button"
+                          size="sm"
+                          variant={active ? "default" : "outline"}
+                          className={cn(
+                            "h-8 rounded-full px-2.5 text-xs font-medium sm:h-9 sm:px-3",
+                            active ? "" : "border-border bg-card",
+                          )}
+                          onClick={() => toggleProgramFilter(id)}
+                          aria-pressed={active}
+                          data-testid={DEALER_PROGRAM_FILTER_BUTTON_TESTID[id]}
+                        >
+                          {DEALER_PROGRAM_FILTER_LABELS[id]} · {programCounts[id]}
+                        </Button>
+                      );
+                    })}
+                    {programFilters.length > 0 ? (
                       <Button
-                        key={vid}
                         type="button"
                         size="sm"
-                        variant={workView === vid ? "default" : "outline"}
-                        className={cn("rounded-full", workView !== vid && "border-border bg-card")}
-                        onClick={() => handleSelectWorkView(vid)}
-                        data-testid={`button-dealer-base-view-${vid}`}
+                        variant="ghost"
+                        className="h-8 rounded-full px-2 text-xs"
+                        onClick={() => setProgramFilters([])}
+                        data-testid="filter-programs-reset"
                       >
-                        {DEALER_BASE_VIEW_LABELS[vid]}
+                        Сбросить
                       </Button>
-                    ))}
+                    ) : null}
                   </div>
                 </div>
-              ) : null}
-              {groupUi.team ? (
-                <div className="min-w-0 space-y-2" data-testid="section-dealer-base-role-group-team">
-                  <p className="text-sm font-semibold text-foreground">Команда</p>
-                  <div className="flex flex-wrap gap-2">
-                    {viewsInGroupForAccess(access, "team").map((vid) => (
-                      <Button
-                        key={vid}
-                        type="button"
-                        size="sm"
-                        variant={workView === vid ? "default" : "outline"}
-                        className={cn("rounded-full", workView !== vid && "border-border bg-card")}
-                        onClick={() => handleSelectWorkView(vid)}
-                        data-testid={`button-dealer-base-view-${vid}`}
+
+                <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="min-w-0 space-y-1">
+                    <Label className="text-xs font-medium text-muted-foreground">Рабочий план</Label>
+                    <Select value={workPlanFilter} onValueChange={(v) => setWorkPlanFilter(v as WorkPlanListFilter)}>
+                      <SelectTrigger
+                        className="h-9 min-h-0 w-full min-w-0 rounded-lg text-sm sm:rounded-xl"
+                        data-testid="select-dealer-work-plan-filter"
                       >
-                        {DEALER_BASE_VIEW_LABELS[vid]}
-                      </Button>
-                    ))}
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(Object.keys(WORK_PLAN_FILTER_LABELS) as WorkPlanListFilter[]).map((k) => (
+                          <SelectItem key={k} value={k}>
+                            {WORK_PLAN_FILTER_LABELS[k]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="min-w-0 space-y-1">
+                    <Label className="text-xs font-medium text-muted-foreground">Сегмент списка</Label>
+                    <MultiSelect
+                      options={DEALER_BASE_SEGMENT_ORDER.map((s) => ({ value: s, label: DEALER_BASE_SEGMENT_LABELS[s] }))}
+                      value={segmentList}
+                      onChange={(next) => setSegmentList(next as DealerBaseSegmentId[])}
+                      placeholder="Все сегменты"
+                      allLabel="Все сегменты"
+                      triggerClassName="h-9 min-h-9 w-full max-w-none rounded-lg text-sm sm:rounded-xl"
+                      testId="select-dealer-segment-filter"
+                      ariaLabel="Сегмент списка"
+                    />
+                  </div>
+                  <div className="min-w-0 space-y-1">
+                    <Label className="text-xs font-medium text-muted-foreground">Склад</Label>
+                    <Select value={stockListFilter} onValueChange={(v) => setStockListFilter(v as DealerStockListFilterId)}>
+                      <SelectTrigger
+                        className="h-9 min-h-0 w-full min-w-0 rounded-lg text-sm sm:rounded-xl"
+                        data-testid="select-dealer-stock-filter"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(Object.keys(DEALER_STOCK_FILTER_LABELS) as DealerStockListFilterId[]).map((k) => (
+                          <SelectItem key={k} value={k}>
+                            {DEALER_STOCK_FILTER_LABELS[k]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
-              ) : null}
-              {groupUi.manager ? (
-                <div className="min-w-0 space-y-2" data-testid="section-dealer-base-role-group-manager">
-                  <p className="text-sm font-semibold text-foreground">Менеджер</p>
-                  <div className="flex flex-wrap gap-2">
-                    {viewsInGroupForAccess(access, "manager").map((vid) => (
-                      <Button
-                        key={vid}
-                        type="button"
-                        size="sm"
-                        variant={workView === vid ? "default" : "outline"}
-                        className={cn("rounded-full", workView !== vid && "border-border bg-card")}
-                        onClick={() => handleSelectWorkView(vid)}
-                        data-testid={`button-dealer-base-view-${vid}`}
+
+                <div className="space-y-2 border-t border-border/60 pt-2">
+                  <p className="text-xs font-semibold text-muted-foreground">География</p>
+                  <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="min-w-0 space-y-1">
+                      <Label className="text-xs font-medium text-muted-foreground">Регион / край / область</Label>
+                      <Select
+                        value={geoRegion ? geoRegion : "__all__"}
+                        onValueChange={(v) => {
+                          const next = v === "__all__" ? "" : v;
+                          setGeoRegion(next);
+                          setGeoDistrict("");
+                          setGeoLocality("");
+                        }}
                       >
-                        {DEALER_BASE_VIEW_LABELS[vid]}
-                      </Button>
-                    ))}
+                        <SelectTrigger
+                          className="h-9 min-h-0 w-full min-w-0 rounded-lg text-sm sm:rounded-xl"
+                          data-testid="select-dealer-base-region"
+                        >
+                          <SelectValue placeholder="Все регионы" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__all__">Все регионы</SelectItem>
+                          {dealerBaseGeoCatalog.regionList.map((r) => (
+                            <SelectItem key={r.label} value={r.label}>
+                              {r.label} ({r.count})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="min-w-0 space-y-1">
+                      <Label className="text-xs font-medium text-muted-foreground">Район</Label>
+                      <Select
+                        value={geoDistrict ? geoDistrict : "__all__"}
+                        onValueChange={(v) => {
+                          const next = v === "__all__" ? "" : v;
+                          setGeoDistrict(next);
+                          setGeoLocality("");
+                        }}
+                      >
+                        <SelectTrigger
+                          className="h-9 min-h-0 w-full min-w-0 rounded-lg text-sm sm:rounded-xl"
+                          data-testid="select-dealer-base-district"
+                        >
+                          <SelectValue placeholder="Все районы" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__all__">Все районы</SelectItem>
+                          {dealerBaseGeoCatalog.districtList.map((r) => (
+                            <SelectItem key={r.label} value={r.label}>
+                              {r.label} ({r.count})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="min-w-0 space-y-1">
+                      <Label className="text-xs font-medium text-muted-foreground">Город / населённый пункт</Label>
+                      <Select
+                        value={geoLocality ? geoLocality : "__all__"}
+                        onValueChange={(v) => {
+                          setGeoLocality(v === "__all__" ? "" : v);
+                        }}
+                      >
+                        <SelectTrigger
+                          className="h-9 min-h-0 w-full min-w-0 rounded-lg text-sm sm:rounded-xl"
+                          data-testid="select-dealer-base-locality"
+                        >
+                          <SelectValue placeholder="Все населённые пункты" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__all__">Все населённые пункты</SelectItem>
+                          {dealerBaseGeoCatalog.localityList.map((r) => (
+                            <SelectItem key={r.label} value={r.label}>
+                              {r.label} ({r.count})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 </div>
-              ) : null}
-            </div>
-          </section>
+
+                <div className="space-y-2 border-t border-border/60 pt-2">
+                  <p className="text-xs font-semibold text-muted-foreground">Ответственные</p>
+                  <div
+                    className={cn(
+                      "grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2",
+                      hideManagerFilterInTeamView ? "lg:grid-cols-3" : "lg:grid-cols-4",
+                    )}
+                  >
+                    <div className="min-w-0 space-y-1">
+                      <Label className="text-xs font-medium text-muted-foreground">Город</Label>
+                      <MultiSelect
+                        options={cityOptions.map((c) => ({ value: c, label: c }))}
+                        value={cities}
+                        onChange={setCities}
+                        placeholder="Все города"
+                        allLabel="Все города"
+                        triggerClassName="h-9 min-h-9 w-full rounded-lg text-sm sm:rounded-xl"
+                        testId="select-dealer-base-city"
+                        ariaLabel="Город"
+                      />
+                    </div>
+                    <div className="min-w-0 space-y-1">
+                      <Label className="text-xs font-medium text-muted-foreground">Категория клиента</Label>
+                      <MultiSelect
+                        options={categoryOptions.map((c) => ({ value: c, label: getClientCategoryLabel(c) }))}
+                        value={categories as string[]}
+                        onChange={(next) => setCategories(next as ClientCategorySelection[])}
+                        placeholder="Все категории"
+                        allLabel="Все категории"
+                        triggerClassName="h-9 min-h-9 w-full rounded-lg text-sm sm:rounded-xl"
+                        testId="select-dealer-base-category"
+                        ariaLabel="Категория клиента"
+                      />
+                    </div>
+                    <div className="min-w-0 space-y-1">
+                      <Label className="text-xs font-medium text-muted-foreground">РОП</Label>
+                      <Select value={ropTeam} onValueChange={onRopChange}>
+                        <SelectTrigger
+                          className="h-9 min-h-0 w-full min-w-0 rounded-lg text-sm sm:rounded-xl"
+                          data-testid="select-dealer-base-rop"
+                        >
+                          <SelectValue placeholder="РОП" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {access === "sales_director" ? <SelectItem value="all">Все РОПы</SelectItem> : null}
+                          {ropSelectOptions.map((r) => (
+                            <SelectItem key={r.teamId} value={r.teamId}>
+                              {r.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {!hideManagerFilterInTeamView ? (
+                      <div className="min-w-0 space-y-1">
+                        <Label className="text-xs font-medium text-muted-foreground">Менеджер</Label>
+                        <Select value={manager} onValueChange={handleManagerChange}>
+                          <SelectTrigger
+                            className="h-9 min-h-0 w-full min-w-0 rounded-lg text-sm sm:rounded-xl"
+                            data-testid="select-dealer-base-manager"
+                          >
+                            <SelectValue placeholder="Менеджер" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {access === "sales_director" || access === "team_lead" ? (
+                              <SelectItem value="all">Все менеджеры</SelectItem>
+                            ) : null}
+                            {managerOptions.map((m) => (
+                              <SelectItem key={m.id} value={m.id}>
+                                {m.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+
+                {hideManagerFilterInTeamView ? (
+                  <p className="text-xs text-muted-foreground" data-testid="text-dealer-base-manager-filter-hint">
+                    Выберите режим менеджера, чтобы смотреть клиентов конкретного менеджера.
+                  </p>
+                ) : null}
+
+                <div className="space-y-2 border-t border-border/60 pt-2">
+                  <p className="text-xs font-semibold text-muted-foreground">Рабочий режим</p>
+                  <section className="space-y-3" data-testid="section-dealer-base-role-views">
+                    <div className="flex min-w-0 flex-col gap-4">
+                      {groupUi.department ? (
+                        <div className="min-w-0 space-y-1.5" data-testid="section-dealer-base-role-group-department">
+                          <p className="text-xs font-semibold text-foreground sm:text-sm">Отдел</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {viewsInGroupForAccess(access, "department").map((vid) => (
+                              <Button
+                                key={vid}
+                                type="button"
+                                size="sm"
+                                variant={workView === vid ? "default" : "outline"}
+                                className={cn(
+                                  "h-8 rounded-full px-2.5 text-xs sm:h-9 sm:px-3",
+                                  workView !== vid && "border-border bg-card",
+                                )}
+                                onClick={() => handleSelectWorkView(vid)}
+                                data-testid={`button-dealer-base-view-${vid}`}
+                              >
+                                {DEALER_BASE_VIEW_LABELS[vid]}
+                              </Button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                      {groupUi.team ? (
+                        <div className="min-w-0 space-y-1.5" data-testid="section-dealer-base-role-group-team">
+                          <p className="text-xs font-semibold text-foreground sm:text-sm">Команда</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {viewsInGroupForAccess(access, "team").map((vid) => (
+                              <Button
+                                key={vid}
+                                type="button"
+                                size="sm"
+                                variant={workView === vid ? "default" : "outline"}
+                                className={cn(
+                                  "h-8 rounded-full px-2.5 text-xs sm:h-9 sm:px-3",
+                                  workView !== vid && "border-border bg-card",
+                                )}
+                                onClick={() => handleSelectWorkView(vid)}
+                                data-testid={`button-dealer-base-view-${vid}`}
+                              >
+                                {DEALER_BASE_VIEW_LABELS[vid]}
+                              </Button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                      {groupUi.manager ? (
+                        <div className="min-w-0 space-y-1.5" data-testid="section-dealer-base-role-group-manager">
+                          <p className="text-xs font-semibold text-foreground sm:text-sm">Менеджер</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {viewsInGroupForAccess(access, "manager").map((vid) => (
+                              <Button
+                                key={vid}
+                                type="button"
+                                size="sm"
+                                variant={workView === vid ? "default" : "outline"}
+                                className={cn(
+                                  "h-8 rounded-full px-2.5 text-xs sm:h-9 sm:px-3",
+                                  workView !== vid && "border-border bg-card",
+                                )}
+                                onClick={() => handleSelectWorkView(vid)}
+                                data-testid={`button-dealer-base-view-${vid}`}
+                              >
+                                {DEALER_BASE_VIEW_LABELS[vid]}
+                              </Button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  </section>
+                </div>
+              </section>
+            </CollapsibleContent>
+          </Collapsible>
         </CardContent>
       </Card>
 
