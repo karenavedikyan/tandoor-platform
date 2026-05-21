@@ -5,7 +5,7 @@
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
-import { Building2, ExternalLink, Info, Store, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Info, Store, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -95,9 +95,36 @@ const TASKS_FILTER_LABELS: Record<Exclude<TasksFilter, "all">, string> = {
 
 const UNFILLED_SHOWCASE_BUCKETS: TradePointShowcaseBucket[] = ["not_filled", "partial", "needs_attention"];
 
+const LS_TRADE_POINTS_VIEW_MODE = "tandoor-trade-points-view-mode-v1";
+const LS_TRADE_POINTS_FILTERS_COLLAPSED = "tandoor-trade-points-filters-collapsed-v1";
+
+function readViewModeFromStorage(): ViewMode {
+  if (typeof window === "undefined") return "cards";
+  try {
+    const v = window.localStorage.getItem(LS_TRADE_POINTS_VIEW_MODE);
+    if (v === "cards" || v === "list" || v === "compact") return v;
+  } catch {
+    /* ignore */
+  }
+  return "cards";
+}
+
+function readFiltersCollapsedFromStorage(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(LS_TRADE_POINTS_FILTERS_COLLAPSED) === "1";
+  } catch {
+    return false;
+  }
+}
+
 /** Круглый селектор удаления ТТ: ≥28px на mobile, иконка галочки крупнее. */
 const TRADE_POINT_BULK_CHECKBOX_CLASS =
   "!box-border !h-7 !w-7 !min-h-[28px] !min-w-[28px] !border-2 sm:!h-8 sm:!w-8 sm:!min-h-8 sm:!min-w-8 [&_svg]:!h-4 [&_svg]:!w-4";
+
+/** Компактный чекбокс для dense-режимов (bulk), без раздувания карточки/строки. */
+const TRADE_POINT_BULK_CHECKBOX_COMPACT_CLASS =
+  "!box-border !h-5 !w-5 !min-h-5 !min-w-5 !border-2 [&_svg]:!h-2.5 [&_svg]:!w-2.5 md:!h-6 md:!w-6 md:!min-h-6 md:!min-w-6 md:[&_svg]:!h-3 md:[&_svg]:!w-3";
 
 function searchMatches(haystack: string, query: string): boolean {
   const q = query.trim().toLowerCase();
@@ -156,7 +183,8 @@ export default function TradePointsPage(): ReactElement {
   const isMobile = useIsMobile();
   const actState = actx.enabled ? actx.state : createEmptyActualizationState();
 
-  const [viewMode, setViewMode] = useState<ViewMode>("cards");
+  const [viewMode, setViewMode] = useState<ViewMode>(() => readViewModeFromStorage());
+  const [desktopFiltersCollapsed, setDesktopFiltersCollapsed] = useState(() => readFiltersCollapsedFromStorage());
   const [search, setSearch] = useState("");
   const [cityFilter, setCityFilter] = useState<string[]>([]);
   const [dealerFilter, setDealerFilter] = useState<string>("__all__");
@@ -405,6 +433,22 @@ export default function TradePointsPage(): ReactElement {
     }
     return n;
   }, [selectedBulkTpKeys, archivableTpKeysInView]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(LS_TRADE_POINTS_VIEW_MODE, viewMode);
+    } catch {
+      /* ignore */
+    }
+  }, [viewMode]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(LS_TRADE_POINTS_FILTERS_COLLAPSED, desktopFiltersCollapsed ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, [desktopFiltersCollapsed]);
 
   useEffect(() => {
     if (showArchived) {
@@ -888,31 +932,35 @@ export default function TradePointsPage(): ReactElement {
     );
   };
 
-  const renderBulkRowControl = (r: TradePointListRow) => {
+  const renderBulkRowControl = (r: TradePointListRow, opts?: { dense?: boolean }) => {
+    const dense = opts?.dense === true;
+    const cbClass = dense ? TRADE_POINT_BULK_CHECKBOX_COMPACT_CLASS : TRADE_POINT_BULK_CHECKBOX_CLASS;
     if (!bulkDeleteMode || !canShowBulkTradePointControls) return null;
     const k = rowKey(r);
     const selected = selectedBulkTpKeys.has(k);
     if (canArchiveRow(r)) {
       return (
-        <div className="flex shrink-0 items-center gap-2 sm:gap-2.5">
+        <div className={cn("flex shrink-0 items-center", dense ? "gap-1" : "gap-2 sm:gap-2.5")}>
           <DealerBulkDeleteCheckbox
             id={`tp-bulk-${k}`}
             checked={selected}
             onCheckedChange={(v) => toggleBulkTp(k, v === true)}
             data-testid={`checkbox-trade-points-select-${r.tradePointId}`}
             aria-label="Выбрать торговую точку для удаления из рабочей базы"
-            className={TRADE_POINT_BULK_CHECKBOX_CLASS}
+            className={cbClass}
           />
-          <button
-            type="button"
-            className={cn(
-              "shrink-0 text-left text-xs font-semibold leading-none underline-offset-2 hover:underline sm:text-sm",
-              selected ? "text-destructive" : "text-destructive/90",
-            )}
-            onClick={() => toggleBulkTp(k, !selected)}
-          >
-            {selected ? "Выбрано" : "Выбрать"}
-          </button>
+          {!dense ? (
+            <button
+              type="button"
+              className={cn(
+                "shrink-0 text-left text-xs font-semibold leading-none underline-offset-2 hover:underline sm:text-sm",
+                selected ? "text-destructive" : "text-destructive/90",
+              )}
+              onClick={() => toggleBulkTp(k, !selected)}
+            >
+              {selected ? "Выбрано" : "Выбрать"}
+            </button>
+          ) : null}
         </div>
       );
     }
@@ -937,6 +985,11 @@ export default function TradePointsPage(): ReactElement {
       </div>
     );
   };
+
+  const listDesktopGridCols =
+    bulkDeleteMode && canShowBulkTradePointControls
+      ? "md:grid-cols-[auto_minmax(0,4.5rem)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,4.5rem)_minmax(0,6.5rem)_minmax(0,3.5rem)_auto]"
+      : "md:grid-cols-[minmax(0,4.5rem)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,4.5rem)_minmax(0,6.5rem)_minmax(0,3.5rem)_auto]";
 
   return (
     <div className="min-w-0 max-w-full space-y-4 overflow-x-hidden px-1 sm:space-y-6 sm:px-0" data-testid="page-trade-points">
@@ -986,43 +1039,58 @@ export default function TradePointsPage(): ReactElement {
         className={cn(
           "rounded-xl border border-border/70 bg-muted/20 p-3",
           "max-md:flex max-md:flex-col max-md:gap-2 max-md:text-sm",
-          "md:grid md:gap-2 md:p-3 lg:grid-cols-3",
+          "md:flex md:flex-wrap md:items-center md:gap-x-4 md:gap-y-1 md:text-sm",
         )}
       >
-        <p className="max-md:leading-snug md:text-sm" data-testid="text-trade-points-found-summary">
+        <p className="max-md:leading-snug md:inline md:shrink-0" data-testid="text-trade-points-found-summary">
           <span className="font-medium text-foreground">Найдено:</span>{" "}
           <span data-testid="text-trade-points-found-count">
             {filteredSorted.length} из {summary.total} ТТ
           </span>
         </p>
-        <p className="max-md:leading-snug md:text-sm" data-testid="text-trade-points-list-deficit-count">
+        <span className="hidden md:inline md:text-muted-foreground" aria-hidden>
+          ·
+        </span>
+        <p className="max-md:leading-snug md:inline md:shrink-0" data-testid="text-trade-points-total-count">
+          <span className="font-medium text-foreground">Всего рабочих ТТ:</span> {summary.total}
+        </p>
+        <span className="hidden md:inline md:text-muted-foreground" aria-hidden>
+          ·
+        </span>
+        <p className="max-md:leading-snug md:inline md:shrink-0" data-testid="text-trade-points-list-deficit-count">
           <span className="font-medium text-foreground">Дефицит:</span> {listStats.deficit}
         </p>
-        <p className="max-md:leading-snug md:text-sm" data-testid="text-trade-points-list-unfilled-showcase-count">
+        <span className="hidden md:inline md:text-muted-foreground" aria-hidden>
+          ·
+        </span>
+        <p className="max-md:leading-snug md:inline md:shrink-0" data-testid="text-trade-points-list-unfilled-showcase-count">
           <span className="font-medium text-foreground">Витрина не заполнена:</span> {listStats.unfilledShowcase}
         </p>
-        <div className="max-md:hidden md:contents">
-          <p className="text-sm" data-testid="text-trade-points-total-count">
-            <span className="font-medium text-foreground">Всего рабочих ТТ:</span> {summary.total}
-          </p>
-          <p className="text-sm" data-testid="text-trade-points-showcase-filled-count">
+        <span className="hidden md:inline md:text-muted-foreground" aria-hidden>
+          ·
+        </span>
+        <p className="max-md:leading-snug md:inline md:shrink-0" data-testid="text-trade-points-with-tasks-count">
+          <span className="font-medium text-foreground">С задачами:</span> {summary.tasks}
+        </p>
+        <div className="max-md:mt-1 max-md:flex max-md:flex-col max-md:gap-2 max-md:border-t max-md:border-border/60 max-md:pt-2 md:contents">
+          <p className="text-sm md:hidden" data-testid="text-trade-points-showcase-filled-count">
             <span className="font-medium text-foreground">С заполненной витриной:</span> {summary.filled}
           </p>
-          <p className="text-sm">
+          <p className="text-sm md:hidden">
             <span className="font-medium text-foreground">Без витрины:</span> {summary.noShow}
           </p>
-          <p className="text-sm" data-testid="text-trade-points-showcase-missing-count">
+          <p className="text-sm md:hidden" data-testid="text-trade-points-showcase-missing-count">
             <span className="font-medium text-foreground">Витрина не заполнена / частично (всего):</span> {summary.missing}
           </p>
-          <p className="text-sm" data-testid="text-trade-points-matrix-deficit-count">
+          <p className="text-sm md:hidden" data-testid="text-trade-points-matrix-deficit-count">
             <span className="font-medium text-foreground">С дефицитом по матрице (всего):</span> {summary.deficit}
-          </p>
-          <p className="text-sm">
-            <span className="font-medium text-foreground">С задачами по витрине:</span> {summary.tasks}
           </p>
         </div>
         {activeFilterCount > 0 ? (
-          <p className="text-sm font-medium text-amber-950 dark:text-amber-100 md:col-span-2 lg:col-span-3" data-testid="text-trade-points-active-filters-banner">
+          <p
+            className="text-sm font-medium text-amber-950 dark:text-amber-100 max-md:pt-1 md:ml-auto md:w-full md:pt-1 lg:w-auto"
+            data-testid="text-trade-points-active-filters-banner"
+          >
             Фильтры активны: {activeFilterCount}
           </p>
         ) : null}
@@ -1112,7 +1180,7 @@ export default function TradePointsPage(): ReactElement {
               }}
               data-testid="checkbox-trade-points-select-all-visible"
               aria-label="Выбрать все доступные для удаления торговые точки на экране"
-              className={TRADE_POINT_BULK_CHECKBOX_CLASS}
+              className={viewMode === "compact" ? TRADE_POINT_BULK_CHECKBOX_COMPACT_CLASS : TRADE_POINT_BULK_CHECKBOX_CLASS}
             />
             <Label htmlFor="tp-bulk-select-all-visible" className="cursor-pointer text-sm font-semibold text-destructive sm:text-base">
               Выбрать доступные на экране
@@ -1201,39 +1269,101 @@ export default function TradePointsPage(): ReactElement {
       ) : (
         <Card>
           <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 pb-2">
-            <CardTitle className="text-base">Фильтры</CardTitle>
-            {activeFilterCount > 0 ? (
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline" className="font-mono">
-                  <span data-testid="text-trade-points-active-filters-count">{activeFilterCount}</span> активных
-                </Badge>
-                <Button type="button" variant="ghost" size="sm" onClick={resetAllFilters}>
-                  Сбросить
-                </Button>
-              </div>
-            ) : null}
-          </CardHeader>
-          {activeFilterCount > 0 ? (
-            <CardContent className="border-t pt-3">
-              <div className="flex flex-wrap gap-2" data-testid="panel-trade-points-active-filter-chips">
-                {activeFilterChips.map((c) => (
-                  <Badge key={c.filterKey} variant="secondary" className="max-w-full gap-1 py-1 pl-2 pr-1" data-testid={`chip-trade-points-filter-${c.filterKey}`}>
-                    <span className="truncate">{c.label}</span>
-                    <button
-                      type="button"
-                      className="rounded p-0.5 hover:bg-background/80"
-                      data-testid={`button-trade-points-filter-chip-remove-${c.filterKey}`}
-                      aria-label={`Сбросить: ${c.label}`}
-                      onClick={() => removeFilterChip(c.filterKey)}
-                    >
-                      ×
-                    </button>
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+              <CardTitle className="text-base">Фильтры</CardTitle>
+              {!desktopFiltersCollapsed && activeFilterCount > 0 ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline" className="font-mono">
+                    <span data-testid="text-trade-points-active-filters-count">{activeFilterCount}</span> активных
                   </Badge>
-                ))}
+                  <Button type="button" variant="ghost" size="sm" onClick={resetAllFilters}>
+                    Сбросить
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="min-h-9 shrink-0 gap-1.5"
+              data-testid={desktopFiltersCollapsed ? "button-trade-points-filters-expand" : "button-trade-points-filters-collapse"}
+              onClick={() => setDesktopFiltersCollapsed((v) => !v)}
+            >
+              {desktopFiltersCollapsed ? (
+                <>
+                  <ChevronDown className="h-4 w-4 shrink-0" aria-hidden />
+                  Показать фильтры
+                </>
+              ) : (
+                <>
+                  <ChevronUp className="h-4 w-4 shrink-0" aria-hidden />
+                  Свернуть фильтры
+                </>
+              )}
+            </Button>
+          </CardHeader>
+          {desktopFiltersCollapsed ? (
+            <CardContent className="pt-0">
+              <div
+                className="flex flex-col gap-3 rounded-lg border border-border/70 bg-muted/30 px-3 py-2.5"
+                data-testid="section-trade-points-filters-collapsed-summary"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-medium text-foreground">Фильтры: {activeFilterCount} активных</span>
+                  {activeFilterCount > 0 ? (
+                    <Button type="button" variant="secondary" size="sm" className="h-8" data-testid="button-trade-points-filters-reset" onClick={resetAllFilters}>
+                      Сбросить все
+                    </Button>
+                  ) : null}
+                </div>
+                {activeFilterCount > 0 ? (
+                  <div className="flex flex-wrap gap-2" data-testid="panel-trade-points-active-filter-chips">
+                    {activeFilterChips.map((c) => (
+                      <Badge key={c.filterKey} variant="secondary" className="max-w-full gap-1 py-1 pl-2 pr-1" data-testid={`chip-trade-points-filter-${c.filterKey}`}>
+                        <span className="truncate">{c.label}</span>
+                        <button
+                          type="button"
+                          className="rounded p-0.5 hover:bg-background/80"
+                          data-testid={`button-trade-points-filter-chip-remove-${c.filterKey}`}
+                          aria-label={`Сбросить: ${c.label}`}
+                          onClick={() => removeFilterChip(c.filterKey)}
+                        >
+                          ×
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Нет активных фильтров. Раскройте блок, чтобы задать поиск и отбор.</p>
+                )}
               </div>
             </CardContent>
-          ) : null}
-          <CardContent className={activeFilterCount > 0 ? "pt-0" : ""}>{filterForm}</CardContent>
+          ) : (
+            <>
+              {activeFilterCount > 0 ? (
+                <CardContent className="border-t pt-3">
+                  <div className="flex flex-wrap gap-2" data-testid="panel-trade-points-active-filter-chips">
+                    {activeFilterChips.map((c) => (
+                      <Badge key={c.filterKey} variant="secondary" className="max-w-full gap-1 py-1 pl-2 pr-1" data-testid={`chip-trade-points-filter-${c.filterKey}`}>
+                        <span className="truncate">{c.label}</span>
+                        <button
+                          type="button"
+                          className="rounded p-0.5 hover:bg-background/80"
+                          data-testid={`button-trade-points-filter-chip-remove-${c.filterKey}`}
+                          aria-label={`Сбросить: ${c.label}`}
+                          onClick={() => removeFilterChip(c.filterKey)}
+                        >
+                          ×
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                </CardContent>
+              ) : null}
+              <CardContent className={activeFilterCount > 0 ? "pt-0" : ""}>{filterForm}</CardContent>
+            </>
+          )}
         </Card>
       )}
 
@@ -1271,174 +1401,214 @@ export default function TradePointsPage(): ReactElement {
 
       {viewMode === "list" ? (
         <div className="overflow-hidden rounded-xl border border-border/80">
-          <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,0.7fr)_minmax(0,1fr)_minmax(0,0.9fr)_auto] gap-2 border-b bg-muted/40 px-2 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground max-md:hidden">
+          <div
+            className={cn(
+              "hidden gap-2 border-b bg-muted/40 px-2 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground md:grid md:items-center",
+              listDesktopGridCols,
+            )}
+          >
+            {bulkDeleteMode && canShowBulkTradePointControls ? <span className="sr-only">Выбор</span> : null}
+            <span>Код</span>
             <span>ТТ</span>
             <span>Клиент</span>
             <span>Город</span>
-            <span>Адрес</span>
             <span>Витрина</span>
+            <span>Дефицит</span>
             <span className="text-right">Действия</span>
           </div>
           <ul className="divide-y divide-border/70">
             {tradePointsRowsForList.map((r) => {
               const k = rowKey(r);
               const bulkRowSelected = bulkDeleteMode && selectedBulkTpKeys.has(k) && canArchiveRow(r);
+              const listBulkDense = !isMobile;
               return (
-              <li
-                key={k}
-                data-testid={`row-trade-point-${r.tradePointId}`}
-                className={cn(
-                  "flex flex-col gap-2 px-2 py-3 md:grid md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,0.7fr)_minmax(0,1fr)_minmax(0,0.9fr)_auto] md:items-center md:gap-2",
-                  bulkRowSelected && "rounded-md border border-destructive/45 bg-destructive/[0.04] md:rounded-sm",
-                )}
-              >
-                <div className="flex w-full min-w-0 items-start gap-2 sm:items-center sm:gap-3">
-                  {renderBulkRowControl(r)}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-start justify-between gap-2 md:block">
-                      <div className="min-w-0 md:space-y-0.5">
-                        <p className="font-mono text-[11px] text-muted-foreground md:text-xs" data-testid={`text-trade-point-list-code-${r.tradePointId}`}>
+                <li
+                  key={k}
+                  data-testid={`row-trade-point-${r.tradePointId}`}
+                  className={cn(
+                    bulkRowSelected && "rounded-md border border-destructive/45 bg-destructive/[0.04] md:rounded-none md:border-x-0 md:border-t-0 md:border-b",
+                  )}
+                >
+                  <div className="flex flex-col gap-2 px-2 py-3 md:hidden">
+                    <div className="flex w-full min-w-0 items-start gap-2">
+                      {renderBulkRowControl(r, { dense: false })}
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <p className="font-mono text-[11px] text-muted-foreground" data-testid={`text-trade-point-list-code-${r.tradePointId}`}>
                           {r.tradePointDisplayCode}
                         </p>
                         <p className="line-clamp-2 text-sm font-medium leading-snug">{r.tradePointName}</p>
-                      </div>
-                      <div className="flex shrink-0 flex-wrap items-center gap-1 md:hidden">
-                        <Badge variant="outline" className="text-[10px]">
-                          {r.showcaseBucketLabel}
-                        </Badge>
-                        {r.matrixDeficitCount > 0 ? (
-                          <Badge variant="destructive" className="text-[10px]">
-                            Деф. {r.matrixDeficitCount}
-                          </Badge>
-                        ) : null}
-                        {r.isArchived ? (
-                          <Badge variant="secondary" className="text-[10px]">
-                            В архиве
-                          </Badge>
-                        ) : null}
+                        <p className="line-clamp-1 text-xs text-muted-foreground">{r.city}</p>
                       </div>
                     </div>
-                    <p className="mt-1 line-clamp-1 text-xs text-muted-foreground md:hidden">{r.city}</p>
-                  </div>
-                </div>
-                <div className="min-w-0 md:block">
-                  <p className="line-clamp-1 text-sm font-medium" data-testid={`text-trade-point-list-dealer-${r.tradePointId}`}>
-                    {r.dealerName}
-                  </p>
-                  <p className="hidden text-xs text-muted-foreground md:block">{r.dealerClientCode}</p>
-                </div>
-                <p className="hidden text-sm md:block">{r.city}</p>
-                <p className="hidden line-clamp-2 text-sm text-muted-foreground md:block">{r.address}</p>
-                <div className="hidden text-xs md:block">
-                  <p>{r.showcaseBucketLabel}</p>
-                  {r.portalsTotal != null ? <p className="text-muted-foreground">Порталов: {r.portalsTotal}</p> : null}
-                  {r.matrixDeficitCount > 0 ? (
-                    <p>
-                      <span className="font-semibold text-destructive">Дефицит: {r.matrixDeficitCount}</span>
+                    <p className="line-clamp-1 text-sm font-medium" data-testid={`text-trade-point-list-dealer-${r.tradePointId}`}>
+                      {r.dealerName}
                     </p>
-                  ) : null}
-                </div>
-                <div className="flex w-full flex-wrap items-center justify-end gap-1.5 md:w-auto md:justify-end">
-                  <Button
-                    asChild
-                    size="sm"
-                    variant="default"
-                    className="h-9 min-w-9 shrink-0 px-0 md:min-h-9 md:px-3"
-                    data-testid={`button-trade-point-list-open-${r.tradePointId}`}
-                    title="Открыть ТТ"
-                  >
-                    <Link href={tpHref(r)} aria-label="Открыть ТТ">
-                      <ExternalLink className="h-4 w-4 md:hidden" aria-hidden />
-                      <span className="hidden md:inline">Открыть ТТ</span>
-                    </Link>
-                  </Button>
-                  <Button
-                    asChild
-                    size="sm"
-                    variant="outline"
-                    className="h-9 min-w-9 shrink-0 px-0 md:min-h-9 md:px-3"
-                    data-testid={`button-trade-point-list-open-dealer-${r.dealerId}-${r.tradePointId}`}
-                    title="Клиент"
-                  >
-                    <Link href={dealerHref(r)} aria-label="Клиент">
-                      <Building2 className="h-4 w-4 md:hidden" aria-hidden />
-                      <span className="hidden md:inline">Клиент</span>
-                    </Link>
-                  </Button>
-                  {!bulkDeleteMode && !canArchiveRow(r) ? renderArchiveHint(r) : null}
-                  {!bulkDeleteMode && canArchiveRow(r) ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="destructive"
-                      className="h-9 min-w-9 shrink-0 px-0 md:min-h-9 md:px-3"
-                      data-testid={`button-trade-point-list-delete-${r.tradePointId}`}
-                      title="Удалить ТТ"
-                      onClick={() => setArchiveTarget(r)}
-                    >
-                      <Trash2 className="h-4 w-4 md:hidden" aria-hidden />
-                      <span className="hidden md:inline">Удалить ТТ</span>
-                    </Button>
-                  ) : null}
-                </div>
-              </li>
+                    <div className="flex flex-wrap items-center gap-1">
+                      <Badge variant="outline" className="text-[10px]">
+                        {r.showcaseBucketLabel}
+                      </Badge>
+                      {r.matrixDeficitCount > 0 ? (
+                        <Badge variant="destructive" className="text-[10px]">
+                          Деф. {r.matrixDeficitCount}
+                        </Badge>
+                      ) : null}
+                      {r.isArchived ? (
+                        <Badge variant="secondary" className="text-[10px]">
+                          В архиве
+                        </Badge>
+                      ) : null}
+                    </div>
+                    <div className="flex flex-wrap items-center justify-end gap-1.5">
+                      <Button asChild size="sm" variant="default" className="h-8 min-h-8 px-2 text-xs" data-testid={`button-trade-point-list-open-${r.tradePointId}`} title="ТТ">
+                        <Link href={tpHref(r)}>ТТ</Link>
+                      </Button>
+                      <Button asChild size="sm" variant="outline" className="h-8 min-h-8 px-2 text-xs" data-testid={`button-trade-point-list-open-dealer-${r.dealerId}-${r.tradePointId}`} title="Клиент">
+                        <Link href={dealerHref(r)}>Клиент</Link>
+                      </Button>
+                      {!bulkDeleteMode && !canArchiveRow(r) ? renderArchiveHint(r) : null}
+                      {!bulkDeleteMode && canArchiveRow(r) ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="destructive"
+                          className="h-8 min-h-8 w-8 shrink-0 p-0"
+                          data-testid={`button-trade-point-list-delete-${r.tradePointId}`}
+                          title="Удалить ТТ"
+                          onClick={() => setArchiveTarget(r)}
+                        >
+                          <Trash2 className="h-4 w-4" aria-hidden />
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div className={cn("hidden md:grid md:items-center md:gap-x-2 md:px-2 md:py-2 md:text-sm", listDesktopGridCols)}>
+                    {bulkDeleteMode && canShowBulkTradePointControls ? (
+                      <div className="flex items-center justify-start">{renderBulkRowControl(r, { dense: listBulkDense })}</div>
+                    ) : null}
+                    <div className="font-mono text-[11px] text-muted-foreground tabular-nums" data-testid={`text-trade-point-list-code-${r.tradePointId}`}>
+                      {r.tradePointDisplayCode}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="line-clamp-1 text-sm font-medium leading-tight">{r.tradePointName}</p>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="line-clamp-1 text-sm font-medium" data-testid={`text-trade-point-list-dealer-${r.tradePointId}`}>
+                        {r.dealerName}
+                      </p>
+                    </div>
+                    <div className="min-w-0 text-sm">{r.city}</div>
+                    <div className="min-w-0">
+                      <Badge variant="outline" className="max-w-full truncate text-[10px]">
+                        {r.showcaseBucketLabel}
+                      </Badge>
+                    </div>
+                    <div className="min-w-0">
+                      {r.matrixDeficitCount > 0 ? (
+                        <Badge variant="destructive" className="text-[10px]">
+                          Деф. {r.matrixDeficitCount}
+                        </Badge>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </div>
+                    <div className="flex min-w-0 justify-end gap-1">
+                      <Button asChild size="sm" variant="default" className="h-7 shrink-0 px-2 text-xs" data-testid={`button-trade-point-list-open-${r.tradePointId}`} title="ТТ">
+                        <Link href={tpHref(r)}>ТТ</Link>
+                      </Button>
+                      <Button asChild size="sm" variant="outline" className="h-7 shrink-0 px-2 text-xs" data-testid={`button-trade-point-list-open-dealer-${r.dealerId}-${r.tradePointId}`} title="Клиент">
+                        <Link href={dealerHref(r)}>Клиент</Link>
+                      </Button>
+                      {!bulkDeleteMode && !canArchiveRow(r) ? renderArchiveHint(r) : null}
+                      {!bulkDeleteMode && canArchiveRow(r) ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="destructive"
+                          className="h-7 w-7 shrink-0 p-0"
+                          data-testid={`button-trade-point-list-delete-${r.tradePointId}`}
+                          title="Удалить ТТ"
+                          onClick={() => setArchiveTarget(r)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                </li>
               );
             })}
           </ul>
         </div>
       ) : viewMode === "compact" ? (
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
           {tradePointsRowsForList.map((r) => {
             const k = rowKey(r);
             const bulkCardSelected = bulkDeleteMode && selectedBulkTpKeys.has(k) && canArchiveRow(r);
             return (
-            <Card
-              key={k}
-              data-testid={`compact-card-trade-point-${r.tradePointId}`}
-              className={cn(
-                "overflow-hidden border-border/80 shadow-sm",
-                bulkCardSelected && "border-destructive/50 bg-destructive/[0.03]",
-              )}
-            >
-              <CardContent className="space-y-2 p-3">
-                <div className="flex w-full items-start gap-2 sm:items-center sm:gap-3">
-                  {renderBulkRowControl(r)}
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <p className="line-clamp-2 text-sm font-semibold leading-tight">{r.tradePointName}</p>
-                    <p className="line-clamp-1 text-xs text-muted-foreground">{r.dealerName}</p>
-                    <p className="text-xs text-muted-foreground">{r.city}</p>
+              <Card
+                key={k}
+                data-testid={`compact-card-trade-point-${r.tradePointId}`}
+                className={cn(
+                  "flex h-[160px] min-h-[140px] max-h-[180px] flex-col overflow-hidden border-border/80 shadow-sm",
+                  bulkCardSelected && "border-destructive/50 bg-destructive/[0.03]",
+                )}
+              >
+                <CardContent className="flex min-h-0 flex-1 flex-col gap-1.5 p-2 sm:p-2.5">
+                  <div className="flex min-h-0 flex-1 gap-2">
+                    {bulkDeleteMode && canShowBulkTradePointControls ? (
+                      <div className="flex shrink-0 flex-col items-center pt-0.5">{renderBulkRowControl(r, { dense: true })}</div>
+                    ) : null}
+                    <div className="min-w-0 flex-1 space-y-0.5">
+                      <p className="font-mono text-[10px] leading-none text-muted-foreground">{r.tradePointDisplayCode}</p>
+                      <p className="line-clamp-1 text-sm font-semibold leading-tight">{r.tradePointName}</p>
+                      <p className="line-clamp-1 text-xs text-muted-foreground">{r.city}</p>
+                      <p className="line-clamp-1 text-xs font-medium leading-snug">{r.dealerName}</p>
+                    </div>
                   </div>
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  <Badge variant="outline" className="text-[10px]">
-                    {r.showcaseBucketLabel}
-                  </Badge>
-                  {r.matrixDeficitCount > 0 ? (
-                    <Badge variant="destructive" className="text-[10px]">
-                      Дефицит {r.matrixDeficitCount}
+                  <div className="flex shrink-0 flex-wrap gap-1">
+                    <Badge variant="outline" className="max-w-full truncate px-1.5 py-0 text-[10px] leading-tight">
+                      {r.showcaseBucketLabel}
                     </Badge>
-                  ) : null}
-                  {r.isArchived ? (
-                    <Badge variant="secondary" className="text-[10px]">
-                      В архиве
-                    </Badge>
-                  ) : null}
-                </div>
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  <Button asChild size="sm" variant="default" className="h-8 flex-1 text-xs">
-                    <Link href={tpHref(r)}>Открыть</Link>
-                  </Button>
-                  <Button asChild size="sm" variant="outline" className="h-8 flex-1 text-xs">
-                    <Link href={dealerHref(r)}>Клиент</Link>
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+                    {r.matrixDeficitCount > 0 ? (
+                      <Badge variant="destructive" className="px-1.5 py-0 text-[10px] leading-tight">
+                        Деф. {r.matrixDeficitCount}
+                      </Badge>
+                    ) : null}
+                    {r.isArchived ? (
+                      <Badge variant="secondary" className="px-1.5 py-0 text-[10px] leading-tight">
+                        Архив
+                      </Badge>
+                    ) : null}
+                  </div>
+                  <div className="mt-auto flex shrink-0 flex-wrap gap-1">
+                    <Button asChild size="sm" variant="default" className="h-7 min-h-7 flex-1 px-2 text-[11px] font-semibold sm:flex-none">
+                      <Link href={tpHref(r)}>ТТ</Link>
+                    </Button>
+                    <Button asChild size="sm" variant="outline" className="h-7 min-h-7 flex-1 px-2 text-[11px] font-semibold sm:flex-none">
+                      <Link href={dealerHref(r)}>Клиент</Link>
+                    </Button>
+                    {!bulkDeleteMode && !canArchiveRow(r) ? <span className="inline-flex shrink-0">{renderArchiveHint(r)}</span> : null}
+                    {!bulkDeleteMode && canArchiveRow(r) ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="destructive"
+                        className="h-7 w-7 shrink-0 p-0"
+                        title="Удалить ТТ"
+                        onClick={() => setArchiveTarget(r)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                      </Button>
+                    ) : null}
+                  </div>
+                </CardContent>
+              </Card>
             );
           })}
         </div>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="mx-auto grid w-full max-w-6xl gap-3 sm:grid-cols-2">
           {tradePointsRowsForList.map((r) => {
             const k = rowKey(r);
             const bulkCardSelected = bulkDeleteMode && selectedBulkTpKeys.has(k) && canArchiveRow(r);
@@ -1452,9 +1622,9 @@ export default function TradePointsPage(): ReactElement {
               )}
             >
               <CardHeader className="space-y-2 pb-2">
-                <div className="flex w-full flex-wrap items-start gap-2 sm:gap-3">
-                  {renderBulkRowControl(r)}
-                  <div className="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-2">
+                <div className="flex w-full flex-col gap-2 sm:gap-2">
+                  {bulkDeleteMode && canShowBulkTradePointControls ? <div className="flex w-full shrink-0">{renderBulkRowControl(r)}</div> : null}
+                  <div className="flex w-full flex-wrap items-start gap-2 sm:gap-3">
                     <div className="min-w-0 flex-1 space-y-1">
                       <p className="font-mono text-[11px] text-muted-foreground">{r.tradePointDisplayCode}</p>
                       <CardTitle className="text-base leading-snug">{r.tradePointName}</CardTitle>
