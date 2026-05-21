@@ -546,6 +546,12 @@ export function TradePointManualActualizationView(props: {
     writeTpCleanOpenSections(point.id, openSections);
   }, [point.id, openSections, sectionsHydrated]);
 
+  useEffect(() => {
+    if (!showTasksSection && openSections.includes("tasks")) {
+      setOpenSections((prev) => prev.filter((id) => id !== "tasks"));
+    }
+  }, [showTasksSection, openSections]);
+
   const onAccordionValueChange = useCallback(
     (next: string[]) => {
       const allowed = new Set<string>([...TP_CLEAN_SECTION_BASE, ...(showTasksSection ? ["tasks"] : [])]);
