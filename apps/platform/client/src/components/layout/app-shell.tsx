@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { TandoorLogo } from "@/components/tandoor-logo";
+import { ThemeToggleDesktop, ThemeToggleMobileBlock } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 import type { PilotNavItem } from "@/lib/auth-access";
 
@@ -294,17 +295,20 @@ export function AppShell({
         <header className="sticky top-0 z-40 border-b border-border/70 bg-card/95 px-3 py-2 shadow-xs backdrop-blur supports-[backdrop-filter]:bg-card/90">
           <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3">
             <BrandBlock homeHref={homeHref} className="max-w-[132px]" />
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-9 shrink-0 gap-1 border-border/80 px-2.5 text-xs"
-              data-testid="button-auth-logout"
-              onClick={onLogout}
-            >
-              <LogOut className="h-3.5 w-3.5" aria-hidden />
-              <span className="hidden sm:inline">Выход</span>
-            </Button>
+            <div className="flex shrink-0 items-center gap-2">
+              <ThemeToggleDesktop className="h-9 w-9" />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 shrink-0 gap-1 border-border/80 px-2.5 text-xs"
+                data-testid="button-auth-logout"
+                onClick={onLogout}
+              >
+                <LogOut className="h-3.5 w-3.5" aria-hidden />
+                <span className="hidden sm:inline">Выход</span>
+              </Button>
+            </div>
           </div>
         </header>
         <main className="mx-auto w-full max-w-3xl flex-1 px-3 py-4 sm:px-4 sm:py-5">{children}</main>
@@ -383,6 +387,7 @@ export function AppShell({
             </Button>
           </form>
           <div className="ml-auto flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-2 sm:gap-3">
+            <ThemeToggleDesktop />
             <Button type="button" variant="outline" size="sm" className="max-w-[10rem] truncate border-border/80" data-testid="button-current-city">
               <span data-testid="text-current-city">{cityLabel}</span>
             </Button>
@@ -438,6 +443,7 @@ export function AppShell({
                       data-testid="nav-preview-mobile"
                     />
                   </div>
+                  <ThemeToggleMobileBlock />
                   <div className="border-t border-border/60 px-5 pb-4 pt-3">
                     <p className="mb-2 text-xs text-muted-foreground">{userName}</p>
                     <Button type="button" variant="outline" className="w-full gap-2" onClick={onLogout}>

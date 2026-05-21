@@ -4,7 +4,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Tandoor Figma shell (Tandoor Anastasia · ЛК менеджеров) — светлая палитра + Exo 2 */
+/* Tandoor: светлая и тёмная тема через CSS variables (Tailwind `darkMode: class`). */
 :root {
   --figma-app-bg: #eeeff6;
   --figma-surface-2: #e3e6f3;
@@ -14,32 +14,34 @@
   --opaque-button-border-intensity: -8;
   --elevate-1: rgba(34, 38, 49, 0.04);
   --elevate-2: rgba(34, 38, 49, 0.08);
-  --background: 232 33% 95%;
+  /* Light: background #EEEFF6, surface #FFFFFF, surface-2 #E3E6F3, text #222631, muted #8F96B0 */
+  --background: 233 25% 95%;
   --foreground: 222 21% 17%;
-  --border: 228 14% 77%;
+  --border: 228 18% 86%;
   --card: 0 0% 100%;
   --card-foreground: 222 21% 17%;
-  --card-border: 228 14% 85%;
+  --card-border: 228 22% 90%;
   --sidebar: 0 0% 100%;
   --sidebar-foreground: 222 21% 17%;
-  --sidebar-border: 228 14% 82%;
+  --sidebar-border: 228 18% 88%;
   --sidebar-primary: 82 57% 51%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 228 28% 92%;
+  --sidebar-accent: 228 22% 92%;
   --sidebar-accent-foreground: 222 21% 17%;
   --sidebar-ring: 82 57% 51%;
   --popover: 0 0% 100%;
   --popover-foreground: 222 21% 17%;
-  --popover-border: 228 14% 82%;
+  --popover-border: 228 18% 88%;
   --primary: 82 57% 51%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 228 28% 92%;
-  --secondary-foreground: 222 26% 28%;
-  --muted: 228 28% 92%;
+  --secondary: 228 22% 92%;
+  --secondary-foreground: 222 21% 17%;
+  --muted: 228 22% 92%;
   --muted-foreground: 225 14% 48%;
-  --accent: 228 35% 94%;
+  --accent: 228 28% 94%;
   --accent-foreground: 222 21% 17%;
-  --destructive: 0 66% 55%;
+  /* Нейтральный «опасный» акцент без красного (Tandoor). */
+  --destructive: 222 16% 36%;
   --destructive-foreground: 0 0% 100%;
   --input: 228 14% 82%;
   --ring: 82 57% 51%;
@@ -107,45 +109,48 @@
 }
 
 .dark {
-  --button-outline: rgba(255, 255, 255, 0.1);
-  --badge-outline: rgba(255, 255, 255, 0.05);
+  --button-outline: rgba(255, 255, 255, 0.12);
+  --badge-outline: rgba(255, 255, 255, 0.06);
   --opaque-button-border-intensity: 9;
   --elevate-1: rgba(255, 255, 255, 0.04);
   --elevate-2: rgba(255, 255, 255, 0.09);
-  --background: 0 0% 7%;
-  --foreground: 0 0% 98%;
-  --border: 0 0% 16%;
-  --card: 0 0% 9%;
-  --card-foreground: 0 0% 98%;
-  --card-border: 0 0% 13%;
-  --sidebar: 0 0% 11%;
-  --sidebar-foreground: 0 0% 98%;
-  --sidebar-border: 0 0% 15%;
-  --sidebar-primary: 82 100% 38%;
+  /* Dark: background ~#050604, surface #0E120A, surface-2 #171D12, text #FFFFFF */
+  --figma-app-bg: #050604;
+  --figma-surface-2: #171d12;
+  --background: 100 22% 2%;
+  --foreground: 0 0% 100%;
+  --border: 90 14% 22%;
+  --card: 95 30% 5.5%;
+  --card-foreground: 0 0% 100%;
+  --card-border: 90 18% 14%;
+  --sidebar: 96 26% 4.5%;
+  --sidebar-foreground: 0 0% 100%;
+  --sidebar-border: 90 16% 16%;
+  --sidebar-primary: 82 57% 51%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 0 0% 16%;
-  --sidebar-accent-foreground: 0 0% 98%;
-  --sidebar-ring: 82 100% 38%;
-  --popover: 0 0% 13%;
-  --popover-foreground: 0 0% 98%;
-  --popover-border: 0 0% 17%;
-  --primary: 82 100% 38%;
+  --sidebar-accent: 90 22% 10%;
+  --sidebar-accent-foreground: 0 0% 100%;
+  --sidebar-ring: 82 57% 51%;
+  --popover: 95 28% 7%;
+  --popover-foreground: 0 0% 100%;
+  --popover-border: 90 16% 18%;
+  --primary: 82 57% 51%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 0 0% 18%;
-  --secondary-foreground: 0 0% 98%;
-  --muted: 0 0% 19%;
-  --muted-foreground: 0 0% 65%;
-  --accent: 95 50% 53%;
-  --accent-foreground: 0 0% 98%;
-  --destructive: 0 84% 42%;
-  --destructive-foreground: 0 0% 98%;
-  --input: 0 0% 30%;
-  --ring: 82 100% 38%;
-  --chart-1: 82 100% 45%;
-  --chart-2: 95 50% 53%;
-  --chart-3: 173 58% 55%;
-  --chart-4: 43 74% 65%;
-  --chart-5: 27 87% 65%;
+  --secondary: 90 22% 10%;
+  --secondary-foreground: 0 0% 100%;
+  --muted: 90 22% 10%;
+  --muted-foreground: 0 0% 62%;
+  --accent: 90 22% 12%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 88 14% 28%;
+  --destructive-foreground: 0 0% 100%;
+  --input: 90 14% 26%;
+  --ring: 82 57% 51%;
+  --chart-1: 82 57% 51%;
+  --chart-2: 82 40% 42%;
+  --chart-3: 0 0% 62%;
+  --chart-4: 82 45% 45%;
+  --chart-5: 222 15% 40%;
   --shadow-2xs: 0px 2px 0px 0px hsl(0 0% 0% / 0);
   --shadow-xs: 0px 2px 0px 0px hsl(0 0% 0% / 0);
   --shadow-sm: 0px 2px 0px 0px hsl(0 0% 0% / 0), 0px 1px 2px -1px hsl(0 0% 0% / 0);
