@@ -158,6 +158,35 @@ export type ShowcaseMatrixTask = {
   status: "new" | "done";
 };
 
+/** Тип фото клиента / ТТ в актуализации (только URL в state, без base64). */
+export type ActualizationEntityPhotoKind = "facade" | "logo" | "showcase" | "interior" | "other";
+
+/** Метаданные фото дилера или торговой точки. */
+export type ActualizationEntityPhoto = {
+  id: string;
+  entityId: string;
+  entityType: "dealer" | "trade_point";
+  url: string;
+  thumbnailUrl?: string;
+  fileName?: string;
+  mimeType?: string;
+  sizeBytes?: number;
+  width?: number;
+  height?: number;
+  kind: ActualizationEntityPhotoKind;
+  title?: string;
+  comment?: string;
+  isCover: boolean;
+  uploadedAt: string;
+  uploadedBy: string;
+  uploadedByName?: string;
+  sortOrder?: number;
+  /** Мягкое скрытие из галереи (не удаляем запись с диска хранилища в этом PR). */
+  archivedAt?: string;
+  archivedBy?: string;
+  archivedByName?: string;
+};
+
 /** Параметры витрины / порталов по торговой точке (актуализация). */
 export type TradePointShowcaseActualization = {
   tradePointId: string;
@@ -211,6 +240,10 @@ export type ActualizationState = {
   archivedDealerContactsById: Record<string, ArchivedDealerContactInfo>;
   tradePointShowcaseActualizationById: Record<string, TradePointShowcaseActualization>;
   dealerActualizationAuditByDealerId: Record<string, DealerActualizationAudit>;
+  /** Фото дилеров: dealerId → список (в т. ч. с archivedAt). */
+  dealerPhotosByDealerId: Record<string, ActualizationEntityPhoto[]>;
+  /** Фото торговых точек: tradePointId → список. */
+  tradePointPhotosByTradePointId: Record<string, ActualizationEntityPhoto[]>;
 };
 
 export function createEmptyActualizationState(): ActualizationState {
@@ -233,6 +266,8 @@ export function createEmptyActualizationState(): ActualizationState {
     archivedDealerContactsById: {},
     tradePointShowcaseActualizationById: {},
     dealerActualizationAuditByDealerId: {},
+    dealerPhotosByDealerId: {},
+    tradePointPhotosByTradePointId: {},
   };
 }
 
@@ -277,6 +312,11 @@ export function mergeActualizationState(base: ActualizationState, patch: Partial
     dealerActualizationAuditByDealerId: {
       ...base.dealerActualizationAuditByDealerId,
       ...(patch.dealerActualizationAuditByDealerId ?? {}),
+    },
+    dealerPhotosByDealerId: { ...base.dealerPhotosByDealerId, ...(patch.dealerPhotosByDealerId ?? {}) },
+    tradePointPhotosByTradePointId: {
+      ...base.tradePointPhotosByTradePointId,
+      ...(patch.tradePointPhotosByTradePointId ?? {}),
     },
   };
 }

@@ -39,6 +39,7 @@ import {
 } from "@/lib/client-base-actualization-stable-ids";
 import { isLegalEntityArchivedInActualization } from "@/lib/client-base-actualization-legal-entities";
 import { normalizeClientCategory, getClientCategoryLabel } from "@/lib/client-category";
+import { getDealerCoverDisplayUrls, getTradePointCoverDisplayUrls } from "@/lib/client-base-actualization-photos";
 import {
   readCommercialBoolNull,
   readCommercialString,
@@ -229,6 +230,9 @@ export function mergeDealerRowWithActualization(row: DealerRow, act: Actualizati
     r = { ...r, ...(t ? { external1cCode: t } : { external1cCode: undefined }) };
   }
 
+  const cov = getDealerCoverDisplayUrls(act, row.id);
+  if (cov) r = { ...r, coverPhotoUrl: cov.url, coverPhotoThumbnailUrl: cov.thumb };
+
   return r;
 }
 
@@ -325,6 +329,17 @@ function entryFromOverride(o: TradePointActualizationOverride, dealer: DealerRow
   };
 }
 
+function attachTradePointCoverPhotos(entries: MergedTradePointEntry[], act: ActualizationState): MergedTradePointEntry[] {
+  return entries.map((e) => {
+    const u = getTradePointCoverDisplayUrls(act, e.point.id);
+    if (!u) return e;
+    return {
+      ...e,
+      point: { ...e.point, coverPhotoUrl: u.url, coverPhotoThumbnailUrl: u.thumb },
+    };
+  });
+}
+
 /** Торговые точки: release + LS + actualization (manual / overrides / archive). */
 export function mergeTradePointsForActualization(row: DealerRow, act: ActualizationState): MergedTradePointEntry[] {
   const displayRow = mergeDealerRowWithActualization(row, act);
@@ -378,7 +393,7 @@ export function mergeTradePointsForActualization(row: DealerRow, act: Actualizat
     });
   }
 
-  const merged = Array.from(byId.values());
+  const merged = attachTradePointCoverPhotos(Array.from(byId.values()), act);
   const active = merged.filter((m) => !m.isArchived);
   if (active.length > 0) return merged;
 
@@ -416,7 +431,7 @@ export function mergeTradePointsForActualization(row: DealerRow, act: Actualizat
     isEdited: false,
     isArchived: false,
   };
-  return [virtualEntry, ...merged.filter((m) => m.isArchived)];
+  return attachTradePointCoverPhotos([virtualEntry, ...merged.filter((m) => m.isArchived)], act);
 }
 
 export function mergeTradePointsActiveForActualization(row: DealerRow, act: ActualizationState): MergedTradePointEntry[] {

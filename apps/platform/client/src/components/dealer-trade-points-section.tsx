@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { TradePointPhotoBlock } from "@/components/trade-point-photo-block";
+import { TradePointRowListThumb } from "@/components/trade-point-row-list-thumb";
 import { AddressSuggestInput } from "@/components/address-suggest-input";
 import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import {
@@ -962,6 +963,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                           aria-label={`Выбрать торговую точку ${tp.name} для архивации`}
                         />
                       ) : null}
+                      <TradePointRowListThumb point={tp} size="sm" className="shrink-0" />
                       <p className="text-sm font-semibold leading-snug text-foreground">{tp.name}</p>
                       {isVirtual ? (
                         <Badge

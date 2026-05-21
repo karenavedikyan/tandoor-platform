@@ -1,13 +1,8 @@
-import { useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import {
-  compressImageFileToDataUrl,
-  getTradePointPhotoDataUrl,
-  removeTradePointPhoto,
-  setTradePointPhotoDataUrl,
-  TRADE_POINT_PHOTO_EVENT,
-} from "@/lib/trade-point-photo-storage";
+"use client";
+
+import type { ReactElement } from "react";
+import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
+import { EntityActualizationPhotoGallery } from "@/components/entity-actualization-photo-gallery";
 
 type Props = {
   dealerId: string;
@@ -18,92 +13,21 @@ type Props = {
   compact?: boolean;
 };
 
-export function TradePointPhotoBlock({ dealerId, tradePointId, canEdit, className, compact }: Props) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [photo, setPhoto] = useState<string | null>(() => getTradePointPhotoDataUrl(dealerId, tradePointId));
-  const [err, setErr] = useState("");
-
-  useEffect(() => {
-    const fn = () => setPhoto(getTradePointPhotoDataUrl(dealerId, tradePointId));
-    window.addEventListener(TRADE_POINT_PHOTO_EVENT, fn);
-    return () => window.removeEventListener(TRADE_POINT_PHOTO_EVENT, fn);
-  }, [dealerId, tradePointId]);
-
-  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    e.target.value = "";
-    if (!f) return;
-    setErr("");
-    const r = await compressImageFileToDataUrl(f);
-    if (!r.ok) {
-      setErr(r.error);
-      return;
-    }
-    setTradePointPhotoDataUrl(dealerId, tradePointId, r.dataUrl);
-    setPhoto(r.dataUrl);
-  };
-
+/**
+ * Фото торговой точки в актуализации: URL в состоянии, без base64 в localStorage.
+ * `dealerId` сохранён в пропсах для совместимости с существующими вызовами и тестами.
+ */
+export function TradePointPhotoBlock({ dealerId, tradePointId, canEdit, className, compact }: Props): ReactElement {
+  void dealerId;
+  const { profile } = useReleaseDemoProfile();
   return (
-    <div className={cn(compact ? "space-y-1.5" : "space-y-2", className)}>
-      {err ? <p className="text-xs font-medium text-destructive">{err}</p> : null}
-      {photo ? (
-        <img
-          src={photo}
-          alt=""
-          className={cn(
-            "w-full rounded-md border border-border/70 object-contain",
-            compact ? "max-h-28" : "max-h-48",
-          )}
-          data-testid={`img-trade-point-photo-${tradePointId}`}
-        />
-      ) : (
-        <div
-          className={cn(
-            "flex items-center justify-center rounded-md border border-dashed border-border/80 bg-muted/15 px-2 text-center text-xs text-muted-foreground",
-            compact ? "min-h-14 py-2" : "min-h-[7rem]",
-          )}
-          data-testid={`placeholder-trade-point-photo-${tradePointId}`}
-        >
-          Фото не добавлено
-        </div>
-      )}
-      {canEdit ? (
-        <div className="flex flex-wrap gap-1.5">
-          <input
-            ref={inputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            data-testid={`input-trade-point-photo-${tradePointId}`}
-            onChange={onFile}
-          />
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className={cn("text-xs", compact ? "h-7 min-h-0 px-2" : "min-h-9")}
-            data-testid={`button-trade-point-photo-add-${tradePointId}`}
-            onClick={() => inputRef.current?.click()}
-          >
-            {photo ? "Изменить фото" : "Добавить фото"}
-          </Button>
-          {photo ? (
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              className={cn("text-xs", compact ? "h-7 min-h-0 px-2" : "min-h-9")}
-              data-testid={`button-trade-point-photo-remove-${tradePointId}`}
-              onClick={() => {
-                removeTradePointPhoto(dealerId, tradePointId);
-                setPhoto(null);
-              }}
-            >
-              Удалить фото
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
+    <EntityActualizationPhotoGallery
+      entityType="trade_point"
+      entityId={tradePointId}
+      canEdit={canEdit}
+      profile={profile}
+      compact={compact}
+      className={className}
+    />
   );
 }

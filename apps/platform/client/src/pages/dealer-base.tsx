@@ -156,6 +156,7 @@ import { SHOWCASE_STORAGE_EVENT } from "@/lib/showcase-distribution-data";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DealerBulkDeleteCheckbox } from "@/components/dealer-bulk-delete-checkbox";
 import { DealerBaseDealerShowcaseGrid } from "@/components/dealer-base-dealer-showcase-grid";
+import { DealerRowListAvatar } from "@/components/dealer-row-list-avatar";
 import type { ActualizationState } from "@/lib/client-base-actualization-state";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Switch } from "@/components/ui/switch";
@@ -166,18 +167,40 @@ const DEALER_BASE_DISPLAY_LIMIT = 300;
 const TODAY_LIMIT = 100;
 
 const DEALER_BASE_FILTERS_COLLAPSED_LS_KEY = "tandoor-dealer-base-filters-collapsed-v1";
+/** Legacy: режимы «карточки / витрина / …»; мигрируем в {@link SHOWCASE_DENSITY_LS_KEY}. */
 const DEALER_BASE_VIEW_MODE_LS_KEY = "tandoor-dealer-base-view-mode-v1";
+const SHOWCASE_DENSITY_LS_KEY = "tandoor-dealer-showcase-density-v1";
 
-type DealerBaseClientViewMode = "cards" | "compact" | "list" | "table" | "dealer_showcase";
+/** Плотность отображения внутри основного режима «Витрина дилеров». */
+type DealerShowcaseDensity = "large" | "compact" | "list" | "table";
 
-function parseDealerBaseViewMode(raw: string | null): DealerBaseClientViewMode | null {
-  if (raw === "cards" || raw === "compact" || raw === "list" || raw === "table" || raw === "dealer_showcase") return raw;
+function parseShowcaseDensity(raw: string | null): DealerShowcaseDensity | null {
+  if (raw === "large" || raw === "compact" || raw === "list" || raw === "table") return raw;
   return null;
 }
 
-function defaultDealerBaseViewModeForViewport(): DealerBaseClientViewMode {
-  if (typeof window === "undefined") return "list";
-  return window.innerWidth < 768 ? "compact" : "list";
+/** Миграция со старого ключа `tandoor-dealer-base-view-mode-v1`. */
+function migrateLegacyDealerBaseViewMode(legacyRaw: string | null, narrowViewport: boolean): DealerShowcaseDensity {
+  const legacy = legacyRaw?.trim();
+  if (!legacy) return narrowViewport ? "compact" : "large";
+  if (legacy === "dealer_showcase" || legacy === "cards") return narrowViewport ? "compact" : "large";
+  if (legacy === "compact") return "compact";
+  if (legacy === "list") return "list";
+  if (legacy === "table") return "table";
+  return narrowViewport ? "compact" : "large";
+}
+
+function readShowcaseDensityFromStorage(): DealerShowcaseDensity {
+  if (typeof window === "undefined") return "large";
+  const narrow = window.innerWidth < 768;
+  try {
+    const d = parseShowcaseDensity(localStorage.getItem(SHOWCASE_DENSITY_LS_KEY));
+    if (d) return d;
+    const old = localStorage.getItem(DEALER_BASE_VIEW_MODE_LS_KEY);
+    return migrateLegacyDealerBaseViewMode(old, narrow);
+  } catch {
+    return narrow ? "compact" : "large";
+  }
 }
 
 function formatIsoDayToRuShort(iso: string): string {
@@ -307,212 +330,6 @@ function shipmentTrafficBadgeClass(level: "green" | "yellow" | "red"): string {
   return "border-rose-300 bg-rose-50 text-rose-950";
 }
 
-function ClientListBlock({
-  rows,
-  empty,
-  compact,
-  workPlanUserId,
-  workPlanState,
-  showWorkPlanSelect,
-  selectedIds,
-  onToggleWorkPlanSelect,
-  shipmentActiveDayId,
-  shipmentUserId,
-  archiveBulk,
-}: {
-  rows: DealerRow[];
-  empty: string;
-  compact?: boolean;
-  workPlanUserId?: string;
-  workPlanState?: DealerWorkPlanState;
-  showWorkPlanSelect?: boolean;
-  selectedIds?: Set<string>;
-  onToggleWorkPlanSelect?: (dealerId: string, checked: boolean) => void;
-  shipmentActiveDayId?: DealerShipmentDayId | null;
-  shipmentUserId?: string;
-  archiveBulk?: DealerListArchiveBulkProps;
-}) {
-  const wp = workPlanUserId && workPlanState;
-  if (rows.length === 0) {
-    if (!empty.trim()) return null;
-    return (
-      <Card className="rounded-2xl border border-dashed border-border bg-muted/30 p-8 text-center text-sm text-muted-foreground">
-        {empty}
-      </Card>
-    );
-  }
-  return (
-    <div className={cn("space-y-3", compact && "space-y-2")}>
-      {rows.map((row) => {
-        const hidden = wp ? isDealerHiddenForUser(workPlanUserId, row.id, workPlanState) : false;
-        const checked = Boolean(selectedIds?.has(row.id));
-        const ship =
-          shipmentActiveDayId && shipmentUserId
-            ? getDealerShipmentStatus(row, shipmentActiveDayId, shipmentUserId, workPlanState)
-            : null;
-        const stockSig = getDealerStockSignal(row);
-        const programSig = getDealerProgramSignal(row);
-        return (
-          <Card
-            key={row.id}
-            className="rounded-2xl border border-border/80 bg-card shadow-sm"
-            data-testid={`row-dealer-${row.id}`}
-          >
-            <CardContent
-              className={cn(
-                "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4",
-                compact ? "p-3 sm:gap-3" : "p-4 sm:gap-4",
-              )}
-            >
-              <div className={cn("min-w-0 flex-1", compact ? "space-y-1" : "space-y-2")}>
-                <div className="flex flex-wrap items-center gap-2">
-                  {showWorkPlanSelect && wp && onToggleWorkPlanSelect ? (
-                    <Checkbox
-                      checked={checked}
-                      onCheckedChange={(v) => onToggleWorkPlanSelect(row.id, v === true)}
-                      className="h-5 w-5 shrink-0 touch-manipulation sm:h-4 sm:w-4"
-                      data-testid={`checkbox-dealer-workplan-select-${row.id}`}
-                      aria-label={`Выбрать клиента ${row.name} для плана работ`}
-                    />
-                  ) : null}
-                  {archiveBulk?.selectableIds.has(row.id) ? (
-                    <span
-                      className={cn(
-                        "inline-flex shrink-0 items-center gap-2 rounded-lg border border-destructive/45 bg-destructive/[0.06] px-2 py-1",
-                        showWorkPlanSelect && wp && onToggleWorkPlanSelect && "border-l-2 border-l-destructive/50 pl-2",
-                      )}
-                      data-testid={`wrap-dealer-bulk-select-${row.id}`}
-                    >
-                      <span className="text-[10px] font-semibold uppercase leading-none text-destructive">Удалить</span>
-                      <DealerBulkDeleteCheckbox
-                        checked={archiveBulk.selectedIds.has(row.id)}
-                        onCheckedChange={(v) => archiveBulk.onToggle(row.id, v === true)}
-                        data-testid={`checkbox-dealer-select-${row.id}`}
-                        aria-label={`Удалить клиента ${row.name} из рабочей базы`}
-                      />
-                    </span>
-                  ) : null}
-                  <span className={cn("font-semibold text-foreground", compact && "text-sm")}>{row.name}</span>
-                  <Badge
-                    variant="outline"
-                    className={cn("text-xs", getClientCategoryBadgeClass(row.clientCategory))}
-                    data-testid={`badge-dealer-client-category-${row.id}`}
-                  >
-                    {getClientCategoryLabel(row.clientCategory)}
-                  </Badge>
-                  <Badge variant="outline" className={cn("text-xs", statusBadgeClass(row.status))}>
-                    {row.status}
-                  </Badge>
-                  {row.hasProblem ? (
-                    <Badge variant="outline" className="border-red-200 bg-red-50 text-xs text-red-800">
-                      Есть вопрос
-                    </Badge>
-                  ) : null}
-                  {hidden ? (
-                    <Badge variant="secondary" className="text-xs font-medium" data-testid={`badge-dealer-hidden-${row.id}`}>
-                      Скрыт из рабочего списка
-                    </Badge>
-                  ) : null}
-                  {stockSig.hasMainWarehouse ? (
-                    <Badge
-                      variant="outline"
-                      className="shrink-0 border-slate-300 bg-slate-50 text-[10px] font-medium text-slate-900"
-                      data-testid={`badge-dealer-main-warehouse-${row.id}`}
-                    >
-                      Есть склад
-                    </Badge>
-                  ) : null}
-                  {stockSig.hasHardwareWarehouse ? (
-                    <Badge
-                      variant="outline"
-                      className="shrink-0 border-violet-300 bg-violet-50 text-[10px] font-medium text-violet-950"
-                      data-testid={`badge-dealer-hardware-warehouse-${row.id}`}
-                    >
-                      Фурнитура
-                    </Badge>
-                  ) : null}
-                  {programSig.hasSpecialConditions ? (
-                    <Badge
-                      variant="outline"
-                      className="shrink-0 border-amber-300 bg-amber-50 text-[10px] font-medium text-amber-950"
-                      data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.special_conditions}-${row.id}`}
-                    >
-                      Спецусловия
-                    </Badge>
-                  ) : null}
-                  {programSig.hasFranchise ? (
-                    <Badge
-                      variant="outline"
-                      className="shrink-0 border-cyan-300 bg-cyan-50 text-[10px] font-medium text-cyan-950"
-                      data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.franchise}-${row.id}`}
-                    >
-                      Франшиза
-                    </Badge>
-                  ) : null}
-                  {programSig.hasTandoorClub ? (
-                    <Badge
-                      variant="outline"
-                      className="shrink-0 border-indigo-300 bg-indigo-50 text-[10px] font-medium text-indigo-950"
-                      data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.tandoor_club}-${row.id}`}
-                    >
-                      Tandoor Club
-                    </Badge>
-                  ) : null}
-                  {programSig.hasCashbackAgent ? (
-                    <Badge
-                      variant="outline"
-                      className="shrink-0 border-emerald-300 bg-emerald-50 text-[10px] font-medium text-emerald-950"
-                      data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.cashback_agent}-${row.id}`}
-                    >
-                      Кешбек агент
-                    </Badge>
-                  ) : null}
-                  {ship ? (
-                    <>
-                      <Badge
-                        variant="outline"
-                        className={cn("text-[10px] font-semibold", shipmentTrafficBadgeClass(ship.level))}
-                        data-testid={`badge-dealer-shipment-status-${row.id}`}
-                      >
-                        {ship.label}
-                      </Badge>
-                      <p
-                        className="w-full basis-full text-[10px] leading-snug text-muted-foreground"
-                        data-testid={`text-dealer-shipment-status-reason-${row.id}`}
-                      >
-                        {ship.reason}
-                      </p>
-                    </>
-                  ) : null}
-                </div>
-                <p className={cn("text-muted-foreground", compact ? "text-xs" : "text-sm")}>
-                  Код: {row.releaseCode ?? "—"} · {row.city} · {row.manager}
-                </p>
-                {!compact ? (
-                  <>
-                    <p className="text-xs text-muted-foreground">РОП: {getDealerRopDisplay(row) || "—"}</p>
-                    <p className="text-xs text-muted-foreground" data-testid={`text-dealer-client-category-${row.id}`}>
-                      Категория клиента: {getClientCategoryLabel(row.clientCategory)}
-                      {row.clientTypeLabel ? ` · тип в данных: ${row.clientTypeLabel}` : ""} · ТТ: {row.outlets}
-                    </p>
-                    {row.releaseAddress ? (
-                      <p className="text-xs text-muted-foreground">Адрес: {row.releaseAddress}</p>
-                    ) : (
-                      <p className="text-xs text-muted-foreground">Адрес не указан</p>
-                    )}
-                  </>
-                ) : null}
-              </div>
-              <OpenDealerButton id={row.id} />
-            </CardContent>
-          </Card>
-        );
-      })}
-    </div>
-  );
-}
-
-
 type DealerBaseNextStepsStorage = ReturnType<typeof loadClientNextStepsStorage>;
 
 type DealerRowRendererBaseProps = {
@@ -601,52 +418,57 @@ function ClientCompactGridBlock({
                   </Link>
                 </Button>
               </div>
-              <p className="line-clamp-2 text-sm font-semibold leading-tight text-foreground">{row.name}</p>
-              <p className="font-mono text-[11px] text-muted-foreground">{row.releaseCode ?? "—"}</p>
-              <p className="truncate text-[11px] text-muted-foreground">{row.city}</p>
-              <div className="flex flex-wrap gap-1">
-                <Badge
-                  variant="outline"
-                  className={cn("px-1.5 py-0 text-[10px]", getClientCategoryBadgeClass(row.clientCategory))}
-                  data-testid={`badge-dealer-client-category-${row.id}`}
-                >
-                  {getClientCategoryLabel(row.clientCategory)}
-                </Badge>
-                <Badge variant="outline" className={cn("px-1.5 py-0 text-[10px]", statusBadgeClass(row.status))}>
-                  {row.status}
-                </Badge>
-              </div>
-              {hidden ? (
-                <Badge variant="secondary" className="w-fit text-[10px]" data-testid={`badge-dealer-hidden-${row.id}`}>
-                  Скрыт
-                </Badge>
-              ) : null}
-              <div className="flex flex-wrap gap-1">
-                {stockSig.hasMainWarehouse ? (
-                  <span className="rounded border border-slate-300 bg-slate-50 px-1 py-0 text-[9px] font-semibold text-slate-900" data-testid={`badge-dealer-main-warehouse-${row.id}`}>
-                    Склад
-                  </span>
-                ) : null}
-                {stockSig.hasHardwareWarehouse ? (
-                  <span className="rounded border border-violet-300 bg-violet-50 px-1 py-0 text-[9px] font-semibold text-violet-950" data-testid={`badge-dealer-hardware-warehouse-${row.id}`}>
-                    Фурн
-                  </span>
-                ) : null}
-                {programSig.hasTandoorClub ? (
-                  <span className="rounded border border-indigo-300 bg-indigo-50 px-1 py-0 text-[9px] font-semibold text-indigo-950" data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.tandoor_club}-${row.id}`}>
-                    ТК
-                  </span>
-                ) : null}
-                {programSig.hasCashbackAgent ? (
-                  <span className="rounded border border-emerald-300 bg-emerald-50 px-1 py-0 text-[9px] font-semibold text-emerald-950" data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.cashback_agent}-${row.id}`}>
-                    КБ
-                  </span>
-                ) : null}
-                {programSig.hasSpecialConditions ? (
-                  <span className="rounded border border-amber-300 bg-amber-50 px-1 py-0 text-[9px] font-semibold text-amber-950" data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.special_conditions}-${row.id}`}>
-                    СУ
-                  </span>
-                ) : null}
+              <div className="flex gap-2">
+                <DealerRowListAvatar row={row} size="sm" className="self-start" />
+                <div className="min-w-0 flex-1 space-y-0.5">
+                  <p className="line-clamp-2 text-sm font-semibold leading-tight text-foreground">{row.name}</p>
+                  <p className="font-mono text-[11px] text-muted-foreground">{row.releaseCode ?? "—"}</p>
+                  <p className="truncate text-[11px] text-muted-foreground">{row.city}</p>
+                  <div className="flex flex-wrap gap-1">
+                    <Badge
+                      variant="outline"
+                      className={cn("px-1.5 py-0 text-[10px]", getClientCategoryBadgeClass(row.clientCategory))}
+                      data-testid={`badge-dealer-client-category-${row.id}`}
+                    >
+                      {getClientCategoryLabel(row.clientCategory)}
+                    </Badge>
+                    <Badge variant="outline" className={cn("px-1.5 py-0 text-[10px]", statusBadgeClass(row.status))}>
+                      {row.status}
+                    </Badge>
+                  </div>
+                  {hidden ? (
+                    <Badge variant="secondary" className="w-fit text-[10px]" data-testid={`badge-dealer-hidden-${row.id}`}>
+                      Скрыт
+                    </Badge>
+                  ) : null}
+                  <div className="flex flex-wrap gap-1">
+                    {stockSig.hasMainWarehouse ? (
+                      <span className="rounded border border-slate-300 bg-slate-50 px-1 py-0 text-[9px] font-semibold text-slate-900" data-testid={`badge-dealer-main-warehouse-${row.id}`}>
+                        Склад
+                      </span>
+                    ) : null}
+                    {stockSig.hasHardwareWarehouse ? (
+                      <span className="rounded border border-violet-300 bg-violet-50 px-1 py-0 text-[9px] font-semibold text-violet-950" data-testid={`badge-dealer-hardware-warehouse-${row.id}`}>
+                        Фурн
+                      </span>
+                    ) : null}
+                    {programSig.hasTandoorClub ? (
+                      <span className="rounded border border-indigo-300 bg-indigo-50 px-1 py-0 text-[9px] font-semibold text-indigo-950" data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.tandoor_club}-${row.id}`}>
+                        ТК
+                      </span>
+                    ) : null}
+                    {programSig.hasCashbackAgent ? (
+                      <span className="rounded border border-emerald-300 bg-emerald-50 px-1 py-0 text-[9px] font-semibold text-emerald-950" data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.cashback_agent}-${row.id}`}>
+                        КБ
+                      </span>
+                    ) : null}
+                    {programSig.hasSpecialConditions ? (
+                      <span className="rounded border border-amber-300 bg-amber-50 px-1 py-0 text-[9px] font-semibold text-amber-950" data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.special_conditions}-${row.id}`}>
+                        СУ
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -733,26 +555,31 @@ function ClientListRowsBlock({
                   </Link>
                 </Button>
               </div>
-              <p className="mt-1 font-mono text-xs text-muted-foreground">{row.releaseCode ?? "—"}</p>
-              <p className="mt-0.5 font-medium leading-snug">{row.name}</p>
-              <p className="mt-1 text-xs text-muted-foreground">ИНН: {innCell(row)}</p>
-              <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                <span>{row.city}</span>
-                <span>·</span>
-                <span>ТТ: {row.outlets}</span>
+              <div className="mt-2 flex gap-2">
+                <DealerRowListAvatar row={row} size="sm" className="shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="font-mono text-xs text-muted-foreground">{row.releaseCode ?? "—"}</p>
+                  <p className="mt-0.5 font-medium leading-snug">{row.name}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">ИНН: {innCell(row)}</p>
+                  <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                    <span>{row.city}</span>
+                    <span>·</span>
+                    <span>ТТ: {row.outlets}</span>
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    <Badge variant="outline" className={cn("text-[10px]", getClientCategoryBadgeClass(row.clientCategory))} data-testid={`badge-dealer-client-category-${row.id}`}>
+                      {getClientCategoryLabel(row.clientCategory)}
+                    </Badge>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">Менеджер: {row.manager || "—"}</p>
+                  {nextLine ? <p className="mt-1 text-xs text-foreground">Следующий шаг: {nextLine}</p> : null}
+                  {hidden ? (
+                    <Badge variant="secondary" className="mt-1 w-fit text-[10px]" data-testid={`badge-dealer-hidden-${row.id}`}>
+                      Скрыт из рабочего списка
+                    </Badge>
+                  ) : null}
+                </div>
               </div>
-              <div className="mt-1 flex flex-wrap gap-1">
-                <Badge variant="outline" className={cn("text-[10px]", getClientCategoryBadgeClass(row.clientCategory))} data-testid={`badge-dealer-client-category-${row.id}`}>
-                  {getClientCategoryLabel(row.clientCategory)}
-                </Badge>
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">Менеджер: {row.manager || "—"}</p>
-              {nextLine ? <p className="mt-1 text-xs text-foreground">Следующий шаг: {nextLine}</p> : null}
-              {hidden ? (
-                <Badge variant="secondary" className="mt-1 w-fit text-[10px]" data-testid={`badge-dealer-hidden-${row.id}`}>
-                  Скрыт из рабочего списка
-                </Badge>
-              ) : null}
             </div>
           );
         })}
@@ -765,6 +592,7 @@ function ClientListRowsBlock({
               {archiveBulk && rows.some((r) => archiveBulk.selectableIds.has(r.id)) ? (
                 <th className="w-14 px-2 py-2 text-center text-destructive">Удал.</th>
               ) : null}
+              <th className="w-11 px-1 py-2 text-center font-normal normal-case" aria-label="Фото" />
               <th className="px-2 py-2">Код</th>
               <th className="px-2 py-2">Клиент</th>
               <th className="px-2 py-2">ИНН</th>
@@ -807,6 +635,9 @@ function ClientListRowsBlock({
                       ) : null}
                     </td>
                   ) : null}
+                  <td className="px-1 py-1.5 align-middle">
+                    <DealerRowListAvatar row={row} size="xs" />
+                  </td>
                   <td className="whitespace-nowrap px-2 py-1.5 font-mono text-xs text-muted-foreground">{row.releaseCode ?? "—"}</td>
                   <td className="max-w-[10rem] px-2 py-1.5 align-top">
                     <span className="line-clamp-2 font-medium" title={row.name}>
@@ -933,6 +764,7 @@ function DealerBaseDataTable({
             {showArchiveBulkCol ? (
               <th className="w-14 px-2 py-2 text-center text-destructive">Удал.</th>
             ) : null}
+            <th className="w-11 px-1 py-2 text-center font-normal normal-case" aria-label="Фото" />
             <th className="px-2 py-2">Код</th>
             {sortableTh("name", "Клиент")}
             <th className="px-2 py-2">ИНН</th>
@@ -986,6 +818,9 @@ function DealerBaseDataTable({
                     ) : null}
                   </td>
                 ) : null}
+                <td className="px-1 py-1.5 align-middle">
+                  <DealerRowListAvatar row={row} size="xs" />
+                </td>
                 <td className="whitespace-nowrap px-2 py-1.5 font-mono text-xs text-muted-foreground">{row.releaseCode ?? "—"}</td>
                 <td className="max-w-[11rem] px-2 py-1.5 align-top text-xs">
                   <div className="line-clamp-2 font-medium" title={row.name}>
@@ -1042,8 +877,7 @@ function DealerBaseDataTable({
 
 function DealerBaseSegmentGroups({
   rows,
-  displayMode,
-  cardsMyClientsDensity,
+  showcaseDensity,
   narrowViewport,
   nextStepsStorage,
   segmentCollapse,
@@ -1060,9 +894,7 @@ function DealerBaseSegmentGroups({
   actualizationState,
 }: {
   rows: DealerRow[];
-  displayMode: DealerBaseClientViewMode;
-  /** Только для режима «Карточки»: плотные карточки в «Мои клиенты». */
-  cardsMyClientsDensity?: boolean;
+  showcaseDensity: DealerShowcaseDensity;
   narrowViewport: boolean;
   nextStepsStorage: DealerBaseNextStepsStorage;
   segmentCollapse: DealerBaseSegmentCollapseState;
@@ -1094,9 +926,9 @@ function DealerBaseSegmentGroups({
       archiveBulk,
       nextStepsStorage,
     };
-    const effectiveMode: DealerBaseClientViewMode =
-      displayMode === "table" && narrowViewport ? "list" : displayMode;
-    if (effectiveMode === "dealer_showcase") {
+    const effectiveDensity: DealerShowcaseDensity =
+      showcaseDensity === "table" && narrowViewport ? "list" : showcaseDensity;
+    if (effectiveDensity === "large") {
       return (
         <DealerBaseDealerShowcaseGrid
           rows={segRows}
@@ -1113,13 +945,10 @@ function DealerBaseSegmentGroups({
         />
       );
     }
-    if (effectiveMode === "cards") {
-      return <ClientListBlock {...common} compact={Boolean(cardsMyClientsDensity)} />;
-    }
-    if (effectiveMode === "compact") {
+    if (effectiveDensity === "compact") {
       return <ClientCompactGridBlock {...common} />;
     }
-    if (effectiveMode === "list") {
+    if (effectiveDensity === "list") {
       return <ClientListRowsBlock {...common} />;
     }
     return <DealerBaseDataTable {...common} />;
@@ -1214,16 +1043,7 @@ export default function DealerBase() {
   const [geoDistrict, setGeoDistrict] = useState("");
   const [geoLocality, setGeoLocality] = useState("");
   const [advancedFiltersCollapsed, setAdvancedFiltersCollapsed] = useState(true);
-  const [dealerViewMode, setDealerViewMode] = useState<DealerBaseClientViewMode>(() => {
-    if (typeof window === "undefined") return "list";
-    try {
-      const s = parseDealerBaseViewMode(localStorage.getItem(DEALER_BASE_VIEW_MODE_LS_KEY));
-      if (s) return s;
-    } catch {
-      /* ignore */
-    }
-    return defaultDealerBaseViewModeForViewport();
-  });
+  const [showcaseDensity, setShowcaseDensity] = useState<DealerShowcaseDensity>(() => readShowcaseDensityFromStorage());
 
   const [viewportNarrow, setViewportNarrow] = useState(() =>
     typeof window !== "undefined" ? window.innerWidth < 768 : false,
@@ -1293,10 +1113,26 @@ export default function DealerBase() {
     }
   }, []);
 
-  const persistDealerViewMode = useCallback((m: DealerBaseClientViewMode) => {
-    setDealerViewMode(m);
+  const persistShowcaseDensity = useCallback((d: DealerShowcaseDensity) => {
+    setShowcaseDensity(d);
     try {
-      localStorage.setItem(DEALER_BASE_VIEW_MODE_LS_KEY, m);
+      localStorage.setItem(SHOWCASE_DENSITY_LS_KEY, d);
+      localStorage.removeItem(DEALER_BASE_VIEW_MODE_LS_KEY);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  /** Однократно переносим legacy `tandoor-dealer-base-view-mode-v1` в новый ключ и удаляем старый. */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      if (localStorage.getItem(SHOWCASE_DENSITY_LS_KEY)) return;
+      const narrow = window.innerWidth < 768;
+      const old = localStorage.getItem(DEALER_BASE_VIEW_MODE_LS_KEY);
+      const migrated = migrateLegacyDealerBaseViewMode(old, narrow);
+      localStorage.setItem(SHOWCASE_DENSITY_LS_KEY, migrated);
+      localStorage.removeItem(DEALER_BASE_VIEW_MODE_LS_KEY);
     } catch {
       /* ignore */
     }
@@ -2493,7 +2329,7 @@ export default function DealerBase() {
 
       <Card className="rounded-2xl border border-border/80 bg-card shadow-md">
         <CardContent className="space-y-2.5 p-3 sm:space-y-3 sm:p-4">
-          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-end sm:gap-4">
             <div className="relative min-w-0 flex-1">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground sm:left-3" aria-hidden />
               <Input
@@ -2505,39 +2341,50 @@ export default function DealerBase() {
               />
             </div>
             <div
-              className="flex min-w-0 flex-wrap gap-1.5 sm:max-w-[min(100%,28rem)] sm:justify-end"
-              role="group"
-              aria-label="Режим отображения клиентов"
+              className="flex min-w-0 shrink-0 flex-col gap-2 sm:items-end"
+              data-testid="section-dealer-showcase-mode-toolbar"
             >
-              {(
-                [
-                  { id: "cards" as const, label: "Карточки", tid: "button-dealer-base-view-cards" },
-                  {
-                    id: "dealer_showcase" as const,
-                    label: "Витрина дилеров",
-                    tid: "button-dealer-base-view-dealer-showcase",
-                  },
-                  { id: "compact" as const, label: "Компактно", tid: "button-dealer-base-view-compact" },
-                  { id: "list" as const, label: "Список", tid: "button-dealer-base-view-list" },
-                  { id: "table" as const, label: "Таблица", tid: "button-dealer-base-view-table" },
-                ] as const
-              ).map((opt) => (
-                <Button
-                  key={opt.id}
-                  type="button"
-                  size="sm"
-                  variant={dealerViewMode === opt.id ? "default" : "outline"}
-                  className={cn(
-                    "h-8 shrink-0 rounded-full px-2.5 text-xs font-medium sm:h-9 sm:px-3",
-                    dealerViewMode === opt.id ? "" : "border-border bg-card",
-                  )}
-                  data-testid={opt.tid}
-                  aria-pressed={dealerViewMode === opt.id}
-                  onClick={() => persistDealerViewMode(opt.id)}
-                >
-                  {opt.label}
-                </Button>
-              ))}
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[#8F96B0]">Витрина дилеров</p>
+                <p className="hidden text-[11px] text-[#8F96B0] sm:block">Рабочий вид списка клиентов</p>
+              </div>
+              <div
+                className="flex min-w-0 flex-wrap gap-1.5"
+                role="radiogroup"
+                aria-label="Плотность отображения витрины дилеров"
+              >
+                {(
+                  [
+                    { id: "large" as const, label: "Крупно", tid: "button-dealer-showcase-density-large" },
+                    { id: "compact" as const, label: "Компактно", tid: "button-dealer-showcase-density-compact" },
+                    { id: "list" as const, label: "Список", tid: "button-dealer-showcase-density-list" },
+                    { id: "table" as const, label: "Таблица", tid: "button-dealer-showcase-density-table" },
+                  ] as const
+                ).map((opt) => {
+                  const active = showcaseDensity === opt.id;
+                  return (
+                    <Button
+                      key={opt.id}
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className={cn(
+                        "h-8 shrink-0 rounded-full px-2.5 text-xs font-semibold sm:h-9 sm:px-3",
+                        active
+                          ? "border-[#9ACA3C] bg-[#9ACA3C] text-[#FFFFFF] hover:bg-[#86B832]"
+                          : "border-[#E3E6F3] bg-[#FFFFFF] text-[#222631] hover:bg-[#EEEFF6]",
+                      )}
+                      data-testid={opt.tid}
+                      aria-pressed={active}
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() => persistShowcaseDensity(opt.id)}
+                    >
+                      {opt.label}
+                    </Button>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
@@ -3343,8 +3190,7 @@ export default function DealerBase() {
             {workView === "my_clients" ? (
               <DealerBaseSegmentGroups
                 rows={rowsFinalForList}
-                displayMode={dealerViewMode}
-                cardsMyClientsDensity
+                showcaseDensity={showcaseDensity}
                 narrowViewport={viewportNarrow}
                 nextStepsStorage={nextStepsStorage}
                 segmentCollapse={segmentCollapse}
@@ -3359,7 +3205,7 @@ export default function DealerBase() {
             ) : (
               <DealerBaseSegmentGroups
                 rows={rowsFinalForList}
-                displayMode={dealerViewMode}
+                showcaseDensity={showcaseDensity}
                 narrowViewport={viewportNarrow}
                 nextStepsStorage={nextStepsStorage}
                 segmentCollapse={segmentCollapse}
@@ -3384,7 +3230,7 @@ export default function DealerBase() {
             ) : (
               <DealerBaseSegmentGroups
                 rows={rowsFinalForList}
-                displayMode={dealerViewMode}
+                showcaseDensity={showcaseDensity}
                 narrowViewport={viewportNarrow}
                 nextStepsStorage={nextStepsStorage}
                 segmentCollapse={segmentCollapse}
@@ -3409,7 +3255,7 @@ export default function DealerBase() {
             ) : (
               <DealerBaseSegmentGroups
                 rows={rowsFinalForList}
-                displayMode={dealerViewMode}
+                showcaseDensity={showcaseDensity}
                 narrowViewport={viewportNarrow}
                 nextStepsStorage={nextStepsStorage}
                 segmentCollapse={segmentCollapse}

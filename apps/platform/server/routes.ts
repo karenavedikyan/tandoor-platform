@@ -3,6 +3,7 @@ import { createServer } from 'node:http';
 import type { Server } from 'node:http';
 import { registerBitrix24Routes } from "./bitrix24-routes";
 import { registerDadataRoutes } from "./dadata-routes";
+import { registerUploadRoutes } from "./upload-routes";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -14,6 +15,7 @@ export async function registerRoutes(
 
   registerBitrix24Routes(app);
   registerDadataRoutes(app);
+  registerUploadRoutes(app);
 
   return httpServer;
 }
