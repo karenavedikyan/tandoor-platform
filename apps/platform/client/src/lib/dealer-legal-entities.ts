@@ -176,9 +176,9 @@ export function addDealerLegalEntity(
     updatedBy: string;
     updatedByName: string;
   },
-): void {
+): string | undefined {
   const name = payload.name.trim();
-  if (!name) return;
+  if (!name) return undefined;
   const state = loadDealerLegalEntitiesState();
   const now = isoNow();
   const id = `le-${dealerId}-${Date.now()}`;
@@ -206,6 +206,7 @@ export function addDealerLegalEntity(
   state.entitiesByDealer[dealerId] = [entity, ...prev];
   pushHistory(state, dealerId, `Добавлено юрлицо: ${name}`, payload.updatedByName);
   saveDealerLegalEntitiesState(state);
+  return id;
 }
 
 export function updateDealerLegalEntity(
