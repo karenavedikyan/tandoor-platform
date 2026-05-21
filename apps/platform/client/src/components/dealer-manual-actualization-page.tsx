@@ -7,7 +7,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -38,7 +37,7 @@ import { useClientBaseActualization } from "@/context/client-base-actualization-
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import { getClientCategoryLabel } from "@/lib/client-category";
-import { mergeTradePointsActiveForActualization, mergeDealerRowWithActualization } from "@/lib/client-base-actualization-data-merge";
+import { mergeTradePointsActiveForActualization, mergeDealerRowWithActualization, mergeLegalEntitiesForActualization } from "@/lib/client-base-actualization-data-merge";
 import { commercialTriLabelRu } from "@/lib/dealer-commercial-characteristics";
 import {
   mergeActualizationState,
@@ -66,7 +65,14 @@ import { SectionSaveButton } from "@/components/section-save-button";
 import { Bitrix24TasksPanel } from "@/components/bitrix24-tasks-panel";
 import { DealerTradePointsSection } from "@/components/dealer-trade-points-section";
 import { DealerLegalEntitiesSection } from "@/components/dealer-legal-entities-section";
-import { canEditClientNextStep } from "@/lib/client-next-step-data";
+import {
+  canEditClientNextStep,
+  CLIENT_NEXT_STEP_CHANGED_EVENT,
+  clientNextStepActionLabel,
+  getClientNextStepForDealer,
+  loadClientNextStepsStorage,
+} from "@/lib/client-next-step-data";
+import { cn } from "@/lib/utils";
 
 const PASSPORT_KIND_LABELS: Record<string, string> = {
   ip: "ИП",
@@ -91,6 +97,68 @@ const TIER_LABELS: Record<string, string> = {
   other: "Прочие",
   none: "Без категории",
 };
+
+const CLEAN_CARD_SECTION_IDS = ["passport", "commercial", "responsibles", "logistics", "contacts", "legal", "tps", "next"] as const;
+
+function cleanCardSectionsLsKey(dealerId: string): string {
+  return `tandoor-dealer-clean-card-sections-v1-${dealerId}`;
+}
+
+function readCleanCardOpenSections(dealerId: string): string[] | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(cleanCardSectionsLsKey(dealerId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return null;
+    const next = parsed.filter((x): x is string => typeof x === "string" && (CLEAN_CARD_SECTION_IDS as readonly string[]).includes(x));
+    return next;
+  } catch {
+    return null;
+  }
+}
+
+function writeCleanCardOpenSections(dealerId: string, ids: string[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(cleanCardSectionsLsKey(dealerId), JSON.stringify(ids));
+  } catch {
+    /* ignore */
+  }
+}
+
+type SectionStatusKind = "empty" | "partial" | "complete" | "attention";
+
+function SectionStatusBadge(props: { status: SectionStatusKind }): ReactElement {
+  const { status } = props;
+  const map: Record<SectionStatusKind, { label: string; className: string }> = {
+    empty: { label: "Не заполнено", className: "border-muted-foreground/40 text-muted-foreground" },
+    partial: { label: "Есть данные", className: "border-amber-600/35 text-amber-950 dark:text-amber-100" },
+    complete: { label: "Заполнено", className: "border-emerald-600/40 bg-emerald-600/5 text-emerald-950 dark:text-emerald-50" },
+    attention: { label: "Требует внимания", className: "border-amber-600/50 bg-amber-500/10 text-amber-950 dark:text-amber-50" },
+  };
+  const m = map[status];
+  return (
+    <Badge variant="outline" className={cn("h-5 shrink-0 whitespace-nowrap px-2 py-0 text-[10px] font-normal leading-none", m.className)}>
+      {m.label}
+    </Badge>
+  );
+}
+
+function AccordionSectionTrigger(props: { title: string; summary: string; status: SectionStatusKind }): ReactElement {
+  const { title, summary, status } = props;
+  return (
+    <AccordionTrigger className="items-start gap-3 py-3.5 text-left hover:no-underline [&[data-state=open]]:bg-muted/20">
+      <div className="flex min-w-0 flex-1 flex-col gap-1 pr-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-semibold leading-snug text-foreground">{title}</span>
+          <SectionStatusBadge status={status} />
+        </div>
+        <p className="line-clamp-2 text-xs font-normal leading-relaxed text-muted-foreground">{summary}</p>
+      </div>
+    </AccordionTrigger>
+  );
+}
 
 function str(v: unknown): string {
   if (typeof v !== "string") return "";
@@ -187,88 +255,253 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
 
   const tps = useMemo(() => mergeTradePointsActiveForActualization(row, actx.state), [row, actx.state]);
 
-  let filledShowcase = 0;
-  let needShowcase = 0;
-  for (const e of tps) {
-    const sh = actx.state.tradePointShowcaseActualizationById[e.point.id];
-    const s = computePortalSummary(sh);
-    if (sh?.hasShowcase === false) continue;
-    if (s.totalPortals != null && s.totalPortals > 0 && (s.tandoorTotal ?? 0) > 0) filledShowcase += 1;
-    else if (s.needsPrimaryInstall) needShowcase += 1;
-  }
+  const { filledShowcase, needShowcase } = useMemo(() => {
+    let filled = 0;
+    let need = 0;
+    for (const e of tps) {
+      const sh = actx.state.tradePointShowcaseActualizationById[e.point.id];
+      const s = computePortalSummary(sh);
+      if (sh?.hasShowcase === false) continue;
+      if (s.totalPortals != null && s.totalPortals > 0 && (s.tandoorTotal ?? 0) > 0) filled += 1;
+      else if (s.needsPrimaryInstall) need += 1;
+    }
+    return { filledShowcase: filled, needShowcase: need };
+  }, [tps, actx.state]);
 
   const passportKind = str(f.passportClientKind);
   const lifecycle = str(f.passportLifecycleStatus);
   const tier = str(f.passportCategoryTier);
 
+  const [openSections, setOpenSections] = useState<string[]>([]);
+  const [sectionsHydrated, setSectionsHydrated] = useState(false);
+  const [nextStepTick, setNextStepTick] = useState(0);
+
+  useEffect(() => {
+    const saved = readCleanCardOpenSections(baseRow.id);
+    setOpenSections(saved ?? []);
+    setSectionsHydrated(true);
+  }, [baseRow.id]);
+
+  useEffect(() => {
+    if (!sectionsHydrated) return;
+    writeCleanCardOpenSections(baseRow.id, openSections);
+  }, [baseRow.id, openSections, sectionsHydrated]);
+
+  useEffect(() => {
+    const fn = () => setNextStepTick((n) => n + 1);
+    window.addEventListener(CLIENT_NEXT_STEP_CHANGED_EVENT, fn);
+    return () => window.removeEventListener(CLIENT_NEXT_STEP_CHANGED_EVENT, fn);
+  }, []);
+
+  const activeLegals = useMemo(
+    () => mergeLegalEntitiesForActualization(row, actx.state).filter((e) => e.status !== "archived"),
+    [row, actx.state],
+  );
+
+  const nextStepRec = useMemo(
+    () => getClientNextStepForDealer(baseRow.id, loadClientNextStepsStorage()),
+    [baseRow.id, nextStepTick],
+  );
+
+  const sectionMeta = useMemo(() => {
+    const passportSummaryParts: string[] = [];
+    if (passportKind) passportSummaryParts.push(PASSPORT_KIND_LABELS[passportKind] ?? passportKind);
+    if (lifecycle) passportSummaryParts.push(LIFECYCLE_LABELS[lifecycle] ?? lifecycle);
+    passportSummaryParts.push(tier ? TIER_LABELS[tier] ?? tier : getClientCategoryLabel(row.clientCategory));
+    const passportSummary = passportSummaryParts.filter(Boolean).join(" · ") || "Паспорт не заполнен";
+
+    let passportStatus: SectionStatusKind = "empty";
+    if (lifecycle === "needs_review") passportStatus = "attention";
+    else if (passportKind && lifecycle && (tier || row.clientCategory !== "uncategorized")) passportStatus = "complete";
+    else if (passportKind || str(f.inn) || lifecycle || tier) passportStatus = "partial";
+
+    const commercialTri = [row.hasDoorWarehouse, row.hasHardwareWarehouse, row.isTandoorClubMember, row.hasSpecialTerms, row.isCashbackClient];
+    let commercialSet = 0;
+    for (const v of commercialTri) if (v !== null && v !== undefined) commercialSet += 1;
+    let commercialStatus: SectionStatusKind =
+      commercialSet === 0 ? "empty" : commercialSet === commercialTri.length ? "complete" : "partial";
+    const commercialSummary =
+      commercialSet === 0 ? "Коммерческие признаки не отмечены" : `Отмечено ${commercialSet} из ${commercialTri.length} блоков`;
+
+    const hasMgr = Boolean(row.manager?.trim());
+    const hasRm = Boolean(row.regionalManager?.trim());
+    const hasRop = Boolean(row.ropName?.trim());
+    const responsiblesStatus: SectionStatusKind =
+      !hasMgr && !hasRm && !hasRop ? "empty" : hasMgr && hasRm ? "complete" : "partial";
+    const responsiblesSummary = [hasMgr && `Менеджер: ${row.manager}`, hasRm && `РМ: ${row.regionalManager}`]
+      .filter(Boolean)
+      .join(" · ") || "Ответственные не указаны";
+
+    const hasCity = Boolean(row.city?.trim());
+    const hasAddr = Boolean(row.releaseAddress?.trim());
+    const hasLog = hasCity || hasAddr || Boolean(str(f.shipmentDayLabel)) || Boolean(str(f.routeLabel));
+    const logisticsStatus: SectionStatusKind = !hasLog ? "empty" : hasCity && hasAddr ? "complete" : "partial";
+    const logisticsSummary = [row.city?.trim() || undefined, str(f.shipmentDayLabel) || undefined].filter(Boolean).join(" · ") || "Адрес и логистика не заполнены";
+
+    const contactsStatus: SectionStatusKind =
+      contacts.length === 0 ? "empty" : primary && (primary.phone?.trim() || primary.email?.trim()) ? "complete" : "partial";
+    const contactsSummary =
+      contacts.length === 0 ? "Контакты не добавлены" : `${contacts.length} контакт(ов) · основной: ${primary?.fullName ?? "—"}`;
+
+    const legalStatus: SectionStatusKind = activeLegals.length === 0 ? "empty" : "partial";
+    const legalSummary = activeLegals.length === 0 ? "Юрлица не добавлены" : `Активных юрлиц: ${activeLegals.length}`;
+
+    let tradePointsStatus: SectionStatusKind = "empty";
+    if (tps.length === 0) tradePointsStatus = "empty";
+    else if (needShowcase > 0) tradePointsStatus = "attention";
+    else if (tps.length > 0 && filledShowcase === tps.length && tps.length > 0) tradePointsStatus = "complete";
+    else tradePointsStatus = "partial";
+    const tradePointsSummary =
+      tps.length === 0
+        ? "Торговые точки не добавлены"
+        : `Точек: ${tps.length} · витрина ок: ${filledShowcase}${needShowcase > 0 ? ` · нужна витрина: ${needShowcase}` : ""}`;
+
+    let nextStatus: SectionStatusKind = nextStepRec ? "partial" : "empty";
+    if (nextStepRec?.contactDate?.trim()) nextStatus = "complete";
+    const nextSummary = nextStepRec
+      ? `${clientNextStepActionLabel(nextStepRec.actionType)}${nextStepRec.contactDate ? ` · ${nextStepRec.contactDate}` : ""}`
+      : "Следующий шаг не зафиксирован";
+
+    return {
+      passport: { summary: passportSummary, status: passportStatus },
+      commercial: { summary: commercialSummary, status: commercialStatus },
+      responsibles: { summary: responsiblesSummary, status: responsiblesStatus },
+      logistics: { summary: logisticsSummary, status: logisticsStatus },
+      contacts: { summary: contactsSummary, status: contactsStatus },
+      legal: { summary: legalSummary, status: legalStatus },
+      tps: { summary: tradePointsSummary, status: tradePointsStatus },
+      next: { summary: nextSummary, status: nextStatus },
+    };
+  }, [
+    activeLegals,
+    contacts,
+    filledShowcase,
+    f,
+    lifecycle,
+    needShowcase,
+    nextStepRec,
+    passportKind,
+    primary,
+    row,
+    tier,
+    tps.length,
+  ]);
+
+  const allSectionsExpanded =
+    CLEAN_CARD_SECTION_IDS.length > 0 && CLEAN_CARD_SECTION_IDS.every((id) => openSections.includes(id));
+
+  const toggleExpandAll = useCallback(() => {
+    setOpenSections(allSectionsExpanded ? [] : [...CLEAN_CARD_SECTION_IDS]);
+  }, [allSectionsExpanded]);
+
   return (
-    <div className="min-w-0 max-w-full space-y-4 overflow-x-hidden sm:space-y-6" data-testid="page-dealer-manual-actualization">
-      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-        <Button asChild variant="outline" className="min-h-11 w-full sm:w-auto">
-          <Link href="/dealer-base">Назад к клиентской базе</Link>
-        </Button>
-        {canEdit ? (
+    <div className="min-w-0 max-w-full overflow-x-hidden bg-muted/15 pb-8 pt-1 sm:pb-10" data-testid="page-dealer-manual-actualization">
+      <div className="mx-auto w-full max-w-5xl space-y-4 px-3 sm:space-y-5 sm:px-4 lg:px-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <Button asChild variant="ghost" size="sm" className="h-9 w-fit justify-start gap-1.5 px-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+            <Link href="/dealer-base">
+              <span aria-hidden>←</span> Назад к клиентской базе
+            </Link>
+          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {canEdit ? (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="min-h-9 min-w-[9rem] font-semibold"
+                data-testid="button-dealer-edit"
+                onClick={() => setEditOpen(true)}
+              >
+                Редактировать
+              </Button>
+            ) : null}
+            {canArchive ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="min-h-9 border-destructive/40 font-medium text-destructive hover:bg-destructive/10"
+                data-testid={`button-dealer-delete-${baseRow.id}`}
+                onClick={() => setDeleteOpen(true)}
+              >
+                Удалить клиента
+              </Button>
+            ) : null}
+          </div>
+        </div>
+
+        <ClientBaseActualizationSyncStatus
+          compact
+          isLoading={actx.loading}
+          meta={actx.meta}
+          syncStatus={actx.syncStatus}
+          onRetry={() => void actx.refresh()}
+        />
+
+        <section className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm ring-1 ring-emerald-600/10">
+          <div className="border-b border-emerald-600/10 bg-emerald-600/[0.07] px-4 py-3.5 sm:px-5">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+              <h1 className="text-lg font-semibold leading-snug tracking-tight text-foreground sm:text-xl">{row.name}</h1>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Код</span>
+                <span className="font-mono text-sm font-semibold text-emerald-900 dark:text-emerald-100" data-testid="text-dealer-internal-code">
+                  {row.releaseCode ?? "—"}
+                </span>
+              </div>
+            </div>
+          </div>
+          <div className="grid gap-3 px-4 py-4 text-sm sm:grid-cols-2 sm:px-5">
+            <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2 sm:col-span-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Код в 1С</p>
+              <p className="mt-0.5 font-medium text-foreground" data-testid="text-dealer-external-1c-code">
+                {row.external1cCode?.trim() || "—"}
+              </p>
+            </div>
+            <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Основной контакт</p>
+              <p className="mt-0.5 font-medium text-foreground" data-testid="text-dealer-primary-contact">
+                {primary?.fullName ?? "—"}
+              </p>
+            </div>
+            <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Телефон</p>
+              <p className="mt-0.5 text-foreground" data-testid="text-dealer-primary-phone">
+                {primary?.phone?.trim() || "—"}
+              </p>
+            </div>
+            <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2 sm:col-span-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Email</p>
+              <p className="mt-0.5 break-words text-foreground" data-testid="text-dealer-primary-email">
+                {primary?.email?.trim() || "—"}
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Разделы анкеты</p>
           <Button
             type="button"
             variant="outline"
-            className="min-h-11 w-full font-semibold sm:w-auto"
-            data-testid="button-dealer-edit"
-            onClick={() => setEditOpen(true)}
+            size="sm"
+            className="h-9 w-full text-xs sm:w-auto"
+            data-testid="button-dealer-sections-expand-all"
+            onClick={toggleExpandAll}
           >
-            Редактировать
+            {allSectionsExpanded ? "Свернуть всё" : "Развернуть всё"}
           </Button>
-        ) : null}
-        {canArchive ? (
-          <Button
-            type="button"
-            variant="destructive"
-            className="min-h-11 w-full font-semibold sm:w-auto"
-            data-testid={`button-dealer-delete-${baseRow.id}`}
-            onClick={() => setDeleteOpen(true)}
+        </div>
+
+        <Accordion type="multiple" className="space-y-2" value={openSections} onValueChange={setOpenSections}>
+          <AccordionItem
+            value="passport"
+            data-testid="section-dealer-passport"
+            className="overflow-hidden rounded-xl border border-border/60 bg-card !border-b-0 shadow-sm"
           >
-            Удалить клиента
-          </Button>
-        ) : null}
-      </div>
-
-      <ClientBaseActualizationSyncStatus
-        isLoading={actx.loading}
-        meta={actx.meta}
-        syncStatus={actx.syncStatus}
-        onRetry={() => void actx.refresh()}
-      />
-
-      <Card className="rounded-2xl border border-border/80">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-lg">{row.name}</CardTitle>
-          <p className="text-xs text-muted-foreground">
-            Код клиента:{" "}
-            <span className="font-mono font-medium text-foreground" data-testid="text-dealer-internal-code">
-              {row.releaseCode ?? "—"}
-            </span>
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-2 border-t border-border/60 pt-3 text-sm">
-          <p className="text-muted-foreground">
-            <span className="font-medium text-foreground">Основной контакт:</span>{" "}
-            <span data-testid="text-dealer-primary-contact">{primary?.fullName ?? "—"}</span>
-          </p>
-          <p className="text-muted-foreground">
-            <span className="font-medium text-foreground">Телефон:</span>{" "}
-            <span data-testid="text-dealer-primary-phone">{primary?.phone?.trim() || "—"}</span>
-          </p>
-          <p className="text-muted-foreground">
-            <span className="font-medium text-foreground">Email:</span>{" "}
-            <span data-testid="text-dealer-primary-email">{primary?.email?.trim() || "—"}</span>
-          </p>
-        </CardContent>
-      </Card>
-
-      <Accordion type="multiple" defaultValue={["passport", "commercial", "responsibles", "logistics", "contacts", "legal", "tps", "next"]} className="rounded-2xl border border-border/80 bg-card px-3 sm:px-4">
-        <AccordionItem value="passport" data-testid="section-dealer-passport">
-          <AccordionTrigger className="text-left text-sm font-semibold">Паспорт клиента</AccordionTrigger>
-          <AccordionContent className="space-y-2 text-sm">
-            <div className="grid gap-2 sm:grid-cols-2">
+            <AccordionSectionTrigger title="Паспорт клиента" summary={sectionMeta.passport.summary} status={sectionMeta.passport.status} />
+            <AccordionContent className="border-t border-border/40 px-2 pb-3 pt-2 text-sm sm:px-3">
+            <div className="grid gap-2.5 sm:grid-cols-2">
               <Field label="Код клиента" value={row.releaseCode ?? "—"} />
               <Field label="Название" value={row.name} />
               <Field label="Тип клиента" value={passportKind ? (PASSPORT_KIND_LABELS[passportKind] ?? passportKind) : "—"} />
@@ -287,10 +520,18 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
           </AccordionContent>
         </AccordionItem>
 
-        <AccordionItem value="commercial" data-testid="section-dealer-commercial-characteristics">
-          <AccordionTrigger className="text-left text-sm font-semibold">Коммерческие характеристики</AccordionTrigger>
-          <AccordionContent className="space-y-3 text-sm">
-            <div className="grid gap-2 sm:grid-cols-2">
+        <AccordionItem
+          value="commercial"
+          data-testid="section-dealer-commercial-characteristics"
+          className="overflow-hidden rounded-xl border border-border/60 bg-card !border-b-0 shadow-sm"
+        >
+          <AccordionSectionTrigger
+            title="Коммерческие характеристики"
+            summary={sectionMeta.commercial.summary}
+            status={sectionMeta.commercial.status}
+          />
+          <AccordionContent className="border-t border-border/40 space-y-3 px-2 pb-3 pt-2 text-sm sm:px-3">
+            <div className="grid gap-2.5 sm:grid-cols-2">
               <Field label="Склад двери" value={commercialTriLabelRu(row.hasDoorWarehouse)} />
               <div className="sm:col-span-2">
                 <Field label="Комментарий (склад двери)" value={row.doorWarehouseComment?.trim() || "—"} />
@@ -326,9 +567,13 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
           </AccordionContent>
         </AccordionItem>
 
-        <AccordionItem value="responsibles" data-testid="section-dealer-responsibles">
-          <AccordionTrigger className="text-left text-sm font-semibold">Ответственные</AccordionTrigger>
-          <AccordionContent className="space-y-2 text-sm">
+        <AccordionItem
+          value="responsibles"
+          data-testid="section-dealer-responsibles"
+          className="overflow-hidden rounded-xl border border-border/60 bg-card !border-b-0 shadow-sm"
+        >
+          <AccordionSectionTrigger title="Ответственные" summary={sectionMeta.responsibles.summary} status={sectionMeta.responsibles.status} />
+          <AccordionContent className="border-t border-border/40 space-y-2 px-2 pb-3 pt-2 text-sm sm:px-3">
             <Field label="Менеджер" value={row.manager || "—"} />
             <Field label="Региональный менеджер" value={row.regionalManager?.trim() || "—"} />
             <Field label="РОП" value={row.ropName?.trim() || "—"} />
@@ -343,9 +588,13 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
           </AccordionContent>
         </AccordionItem>
 
-        <AccordionItem value="logistics" data-testid="section-dealer-logistics">
-          <AccordionTrigger className="text-left text-sm font-semibold">Адрес и логистика</AccordionTrigger>
-          <AccordionContent className="space-y-2 text-sm">
+        <AccordionItem
+          value="logistics"
+          data-testid="section-dealer-logistics"
+          className="overflow-hidden rounded-xl border border-border/60 bg-card !border-b-0 shadow-sm"
+        >
+          <AccordionSectionTrigger title="Адрес и логистика" summary={sectionMeta.logistics.summary} status={sectionMeta.logistics.status} />
+          <AccordionContent className="border-t border-border/40 space-y-2 px-2 pb-3 pt-2 text-sm sm:px-3">
             <Field label="Город" value={row.city || "—"} />
             <Field label="Адрес" value={row.releaseAddress?.trim() || "—"} />
             <Field label="День отгрузки" value={str(f.shipmentDayLabel) || "—"} />
@@ -360,16 +609,20 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
           </AccordionContent>
         </AccordionItem>
 
-        <AccordionItem value="contacts" data-testid="section-dealer-contacts">
-          <AccordionTrigger className="text-left text-sm font-semibold">Контакты клиента</AccordionTrigger>
-          <AccordionContent>
+        <AccordionItem
+          value="contacts"
+          data-testid="section-dealer-contacts"
+          className="overflow-hidden rounded-xl border border-border/60 bg-card !border-b-0 shadow-sm"
+        >
+          <AccordionSectionTrigger title="Контакты клиента" summary={sectionMeta.contacts.summary} status={sectionMeta.contacts.status} />
+          <AccordionContent className="border-t border-border/40 px-2 pb-3 pt-2 sm:px-3">
             <DealerContactsActualizationBlock dealerId={baseRow.id} profile={profile} canEdit={canEdit} />
           </AccordionContent>
         </AccordionItem>
 
-        <AccordionItem value="legal">
-          <AccordionTrigger className="text-left text-sm font-semibold">Юридические лица</AccordionTrigger>
-          <AccordionContent className="pt-1 text-sm">
+        <AccordionItem value="legal" className="overflow-hidden rounded-xl border border-border/60 bg-card !border-b-0 shadow-sm">
+          <AccordionSectionTrigger title="Юридические лица" summary={sectionMeta.legal.summary} status={sectionMeta.legal.status} />
+          <AccordionContent className="border-t border-border/40 px-2 pb-3 pt-1 text-sm sm:px-3">
             <DealerLegalEntitiesSection
               row={row}
               profile={profile}
@@ -380,9 +633,13 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
           </AccordionContent>
         </AccordionItem>
 
-        <AccordionItem value="tps" data-testid="section-dealer-trade-points">
-          <AccordionTrigger className="text-left text-sm font-semibold">Торговые точки</AccordionTrigger>
-          <AccordionContent className="space-y-3 text-sm">
+        <AccordionItem
+          value="tps"
+          data-testid="section-dealer-trade-points"
+          className="overflow-hidden rounded-xl border border-border/60 bg-card !border-b-0 shadow-sm"
+        >
+          <AccordionSectionTrigger title="Торговые точки" summary={sectionMeta.tps.summary} status={sectionMeta.tps.status} />
+          <AccordionContent className="border-t border-border/40 space-y-3 px-2 pb-3 pt-2 text-sm sm:px-3">
             <p className="text-muted-foreground">
               Всего точек: <span className="font-semibold text-foreground">{tps.length}</span>
               {" · "}
@@ -395,9 +652,13 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
           </AccordionContent>
         </AccordionItem>
 
-        <AccordionItem value="next" data-testid="section-dealer-next-step">
-          <AccordionTrigger className="text-left text-sm font-semibold">Следующий шаг и задачи</AccordionTrigger>
-          <AccordionContent className="space-y-4">
+        <AccordionItem
+          value="next"
+          data-testid="section-dealer-next-step"
+          className="overflow-hidden rounded-xl border border-border/60 bg-card !border-b-0 shadow-sm"
+        >
+          <AccordionSectionTrigger title="Следующий шаг и задачи" summary={sectionMeta.next.summary} status={sectionMeta.next.status} />
+          <AccordionContent className="border-t border-border/40 space-y-4 px-2 pb-3 pt-2 sm:px-3">
             <DealerClientNextStepSection
               row={row}
               profile={profile}
@@ -419,7 +680,8 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
             </div>
           </AccordionContent>
         </AccordionItem>
-      </Accordion>
+        </Accordion>
+      </div>
 
       <DealerActualizationEditDialog open={editOpen} onOpenChange={setEditOpen} baseRow={baseRow} profile={profile} />
 
@@ -449,9 +711,9 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
 
 function Field({ label, value }: { label: string; value: string }) {
   return (
-    <div>
+    <div className="rounded-lg border border-border/50 bg-muted/15 px-2.5 py-2">
       <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="mt-0.5 text-foreground">{value}</p>
+      <p className="mt-0.5 text-sm text-foreground">{value}</p>
     </div>
   );
 }

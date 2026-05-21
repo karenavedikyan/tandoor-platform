@@ -120,6 +120,17 @@
 - **Карточка:** `pages/dealer-card-foundation.tsx` — merge строки, кнопка «Редактировать», счётчики ТТ/юрлиц.
 - **Торговые точки:** `components/dealer-trade-points-section.tsx` — добавление / редактирование / архив при включённой актуализации и правах.
 - **Юрлица:** `components/dealer-legal-entities-section.tsx` — диалог формы, сохранение в `legalEntityOverridesByDealerId`, архив в `archivedLegalEntitiesById`, дубль ИНН, `SectionSaveButton` при актуализации; хелперы в `lib/client-base-actualization-legal-entities.ts`. Тот же блок подключён в **чистой анкете** `components/dealer-manual-actualization-page.tsx` (аккордеон «Юридические лица»), а не только в полной карточке `dealer-card-foundation.tsx`.
+
+### Карточка клиента в clean mode (`dealer-manual-actualization-page.tsx`)
+
+Используется для **вручную созданного** клиента и для **release-клиента** при `CLIENT_BASE_ACTUALIZATION_CLEAN_MODE` (без демо-блоков).
+
+- **Верх страницы:** компактная ссылка «Назад к клиентской базе», кнопка «Редактировать» (`button-dealer-edit`), «Удалить клиента» — компактная outline-кнопка с акцентом destructive (`button-dealer-delete-{id}`).
+- **Hero-блок:** название, код клиента (`text-dealer-internal-code`), код 1С (`text-dealer-external-1c-code`), основной контакт и контакты (`text-dealer-primary-*`).
+- **Синхронизация:** компактный режим `ClientBaseActualizationSyncStatus` с `compact` — статус, время обновления, кратко про хранение (Postgres / память сервера и т.д.).
+- **Секции анкеты:** внешний вид — отдельные карточки-аккордеоны; в свёрнутом заголовке — краткая строка-summary и текстовый бейдж («Не заполнено» / «Есть данные» / «Заполнено» / «Требует внимания»), плюс стандартный chevron.
+- **По умолчанию все секции свёрнуты.** Кнопка **«Развернуть всё» / «Свернуть всё»** (`button-dealer-sections-expand-all`). Состояние раскрытия сохраняется в `localStorage` по ключу `tandoor-dealer-clean-card-sections-v1-{dealerId}` (массив id открытых секций). После сохранения данных секции **сами по себе не раскрываются** — только меняется контент и summary.
+- **Контейнер:** на широком экране контент ограничен `max-w-5xl`, фон страницы слегка отличается от карточек для читаемости.
 - **Провайдер в дереве:** `App.tsx` оборачивает маршруты в `ClientBaseActualizationProvider`.
 
 После каждого сохранения: обновление локального `state`, вызов сохранения через API, тост «Сохранено» или сообщение об ошибке на русском.
@@ -136,6 +147,7 @@
 | Элемент | testid |
 |---------|--------|
 | Редактировать клиента | `button-dealer-edit` |
+| Развернуть / свернуть все секции clean-карточки | `button-dealer-sections-expand-all` |
 | Диалог редактирования | `dialog-dealer-edit` |
 | Сохранить правки клиента | `button-dealer-save` |
 | Открыть «Добавить клиента» | `button-dealer-create` |
