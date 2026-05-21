@@ -38,11 +38,7 @@ import { useClientBaseActualization } from "@/context/client-base-actualization-
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import { getClientCategoryLabel } from "@/lib/client-category";
-import {
-  mergeLegalEntitiesForActualization,
-  mergeTradePointsActiveForActualization,
-  mergeDealerRowWithActualization,
-} from "@/lib/client-base-actualization-data-merge";
+import { mergeTradePointsActiveForActualization, mergeDealerRowWithActualization } from "@/lib/client-base-actualization-data-merge";
 import {
   mergeActualizationState,
   type ActualizationState,
@@ -68,6 +64,7 @@ import { useSectionSaveFeedback } from "@/hooks/use-section-save-feedback";
 import { SectionSaveButton } from "@/components/section-save-button";
 import { Bitrix24TasksPanel } from "@/components/bitrix24-tasks-panel";
 import { DealerTradePointsSection } from "@/components/dealer-trade-points-section";
+import { DealerLegalEntitiesSection } from "@/components/dealer-legal-entities-section";
 import { canEditClientNextStep } from "@/lib/client-next-step-data";
 
 const PASSPORT_KIND_LABELS: Record<string, string> = {
@@ -188,7 +185,6 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
   }, [actx, baseRow.id, canArchive, profile, setLocation]);
 
   const tps = useMemo(() => mergeTradePointsActiveForActualization(row, actx.state), [row, actx.state]);
-  const legal = useMemo(() => mergeLegalEntitiesForActualization(row, actx.state), [row, actx.state]);
 
   let filledShowcase = 0;
   let needShowcase = 0;
@@ -331,28 +327,16 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
           </AccordionContent>
         </AccordionItem>
 
-        <AccordionItem value="legal" data-testid="section-dealer-legal-entities">
+        <AccordionItem value="legal">
           <AccordionTrigger className="text-left text-sm font-semibold">Юридические лица</AccordionTrigger>
-          <AccordionContent className="space-y-2 text-sm">
-            {legal.filter((e) => e.status !== "archived").length === 0 ? (
-              <p className="text-muted-foreground">Не заполнено</p>
-            ) : (
-              legal
-                .filter((e) => e.status !== "archived")
-                .map((e) => (
-                  <div key={e.id} className="rounded-lg border border-border/70 p-3">
-                    <p className="font-medium">{e.name}</p>
-                    <p className="text-xs text-muted-foreground">ИНН {e.inn ?? "—"} · КПП {e.kpp ?? "—"} · ОГРН {e.ogrn ?? "—"}</p>
-                    <p className="text-xs text-muted-foreground">Юр. адрес: {e.legalAddress ?? "—"}</p>
-                    <p className="text-xs text-muted-foreground">Факт. адрес: {e.actualAddress ?? "—"}</p>
-                  </div>
-                ))
-            )}
-            {canEdit ? (
-              <Button type="button" size="sm" variant="outline" className="mt-2 font-semibold" onClick={() => setEditOpen(true)}>
-                Редактировать через форму клиента
-              </Button>
-            ) : null}
+          <AccordionContent className="pt-1 text-sm">
+            <DealerLegalEntitiesSection
+              row={row}
+              profile={profile}
+              actorUserId={user?.id ?? profile.personaUserId}
+              actorLabel={user?.name?.trim() ? user.name.trim() : userLabelFromProfile(profile)}
+              embedInAccordion
+            />
           </AccordionContent>
         </AccordionItem>
 
