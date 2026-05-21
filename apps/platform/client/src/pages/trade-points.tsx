@@ -33,6 +33,7 @@ import { MultiSelect } from "@/components/ui/multi-select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DealerBulkDeleteCheckbox } from "@/components/dealer-bulk-delete-checkbox";
+import { TradePointRowListThumb } from "@/components/trade-point-row-list-thumb";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -988,8 +989,8 @@ export default function TradePointsPage(): ReactElement {
 
   const listDesktopGridCols =
     bulkDeleteMode && canShowBulkTradePointControls
-      ? "md:grid-cols-[auto_minmax(0,4.5rem)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,4.5rem)_minmax(0,6.5rem)_minmax(0,3.5rem)_auto]"
-      : "md:grid-cols-[minmax(0,4.5rem)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,4.5rem)_minmax(0,6.5rem)_minmax(0,3.5rem)_auto]";
+      ? "md:grid-cols-[auto_minmax(0,2.75rem)_minmax(0,4.5rem)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,4.5rem)_minmax(0,6.5rem)_minmax(0,3.5rem)_auto]"
+      : "md:grid-cols-[minmax(0,2.75rem)_minmax(0,4.5rem)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,4.5rem)_minmax(0,6.5rem)_minmax(0,3.5rem)_auto]";
 
   return (
     <div className="min-w-0 max-w-full space-y-4 overflow-x-hidden px-1 sm:space-y-6 sm:px-0" data-testid="page-trade-points">
@@ -1408,6 +1409,7 @@ export default function TradePointsPage(): ReactElement {
             )}
           >
             {bulkDeleteMode && canShowBulkTradePointControls ? <span className="sr-only">Выбор</span> : null}
+            <span className="sr-only">Фото</span>
             <span>Код</span>
             <span>ТТ</span>
             <span>Клиент</span>
@@ -1432,6 +1434,7 @@ export default function TradePointsPage(): ReactElement {
                   <div className="flex flex-col gap-2 px-2 py-3 md:hidden">
                     <div className="flex w-full min-w-0 items-start gap-2">
                       {renderBulkRowControl(r, { dense: false })}
+                      <TradePointRowListThumb point={r.point} size="xs" className="shrink-0" />
                       <div className="min-w-0 flex-1 space-y-1">
                         <p className="font-mono text-[11px] text-muted-foreground" data-testid={`text-trade-point-list-code-${r.tradePointId}`}>
                           {r.tradePointDisplayCode}
@@ -1486,6 +1489,9 @@ export default function TradePointsPage(): ReactElement {
                     {bulkDeleteMode && canShowBulkTradePointControls ? (
                       <div className="flex items-center justify-start">{renderBulkRowControl(r, { dense: listBulkDense })}</div>
                     ) : null}
+                    <div className="flex justify-center">
+                      <TradePointRowListThumb point={r.point} size="xs" />
+                    </div>
                     <div className="font-mono text-[11px] text-muted-foreground tabular-nums" data-testid={`text-trade-point-list-code-${r.tradePointId}`}>
                       {r.tradePointDisplayCode}
                     </div>
@@ -1559,6 +1565,7 @@ export default function TradePointsPage(): ReactElement {
                     {bulkDeleteMode && canShowBulkTradePointControls ? (
                       <div className="flex shrink-0 flex-col items-center pt-0.5">{renderBulkRowControl(r, { dense: true })}</div>
                     ) : null}
+                    <TradePointRowListThumb point={r.point} size="xs" className="shrink-0" />
                     <div className="min-w-0 flex-1 space-y-0.5">
                       <p className="font-mono text-[10px] leading-none text-muted-foreground">{r.tradePointDisplayCode}</p>
                       <p className="line-clamp-1 text-sm font-semibold leading-tight">{r.tradePointName}</p>
@@ -1625,6 +1632,7 @@ export default function TradePointsPage(): ReactElement {
                 <div className="flex w-full flex-col gap-2 sm:gap-2">
                   {bulkDeleteMode && canShowBulkTradePointControls ? <div className="flex w-full shrink-0">{renderBulkRowControl(r)}</div> : null}
                   <div className="flex w-full flex-wrap items-start gap-2 sm:gap-3">
+                    <TradePointRowListThumb point={r.point} size="sm" className="shrink-0" />
                     <div className="min-w-0 flex-1 space-y-1">
                       <p className="font-mono text-[11px] text-muted-foreground">{r.tradePointDisplayCode}</p>
                       <CardTitle className="text-base leading-snug">{r.tradePointName}</CardTitle>

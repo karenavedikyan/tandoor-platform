@@ -65,6 +65,9 @@ import { SectionSaveButton } from "@/components/section-save-button";
 import { Bitrix24TasksPanel } from "@/components/bitrix24-tasks-panel";
 import { DealerTradePointsSection } from "@/components/dealer-trade-points-section";
 import { DealerLegalEntitiesSection } from "@/components/dealer-legal-entities-section";
+import { EntityActualizationPhotoGallery } from "@/components/entity-actualization-photo-gallery";
+import { SafeImage } from "@/components/safe-image";
+import { listActiveDealerPhotos } from "@/lib/client-base-actualization-photos";
 import {
   canEditClientNextStep,
   CLIENT_NEXT_STEP_CHANGED_EVENT,
@@ -99,7 +102,7 @@ const TIER_LABELS: Record<string, string> = {
   none: "Без категории",
 };
 
-const CLEAN_CARD_SECTION_IDS = ["passport", "commercial", "responsibles", "logistics", "contacts", "legal", "tps", "next"] as const;
+const CLEAN_CARD_SECTION_IDS = ["passport", "commercial", "responsibles", "logistics", "contacts", "legal", "photos", "tps", "next"] as const;
 
 function cleanCardSectionsLsKey(dealerId: string): string {
   return `tandoor-dealer-clean-card-sections-v1-${dealerId}`;
@@ -168,6 +171,16 @@ function str(v: unknown): string {
 
 function mergedManualFields(manual: { fields: Record<string, unknown> } | undefined, ov: Record<string, unknown> | undefined): Record<string, unknown> {
   return { ...(manual?.fields ?? {}), ...(ov ?? {}) };
+}
+
+function dealerHeroInitials(name: string): string {
+  const parts = name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2);
+  if (parts.length === 0) return "?";
+  return parts.map((p) => p[0]?.toUpperCase() ?? "").join("") || "?";
 }
 
 function HeroCell({ label, value, testId }: { label: string; value: string | undefined; testId?: string }): ReactElement {
@@ -321,6 +334,7 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
   );
 
   const sectionMeta = useMemo(() => {
+    const dealerPhotosN = listActiveDealerPhotos(actx.state, baseRow.id).length;
     const passportSummaryParts: string[] = [];
     if (passportKind) passportSummaryParts.push(PASSPORT_KIND_LABELS[passportKind] ?? passportKind);
     if (lifecycle) passportSummaryParts.push(LIFECYCLE_LABELS[lifecycle] ?? lifecycle);
@@ -363,6 +377,9 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
     const legalStatus: SectionStatusKind = activeLegals.length === 0 ? "empty" : "partial";
     const legalSummary = activeLegals.length === 0 ? "Юрлица не добавлены" : `Активных юрлиц: ${activeLegals.length}`;
 
+    const photosStatus: SectionStatusKind = dealerPhotosN === 0 ? "empty" : "partial";
+    const photosSummary = dealerPhotosN === 0 ? "Фото не добавлены" : `${dealerPhotosN} фото в галерее`;
+
     let tradePointsStatus: SectionStatusKind = "empty";
     if (tps.length === 0) tradePointsStatus = "empty";
     else if (needShowcase > 0) tradePointsStatus = "attention";
@@ -388,11 +405,14 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
       logistics: { summary: logisticsSummary, status: logisticsStatus },
       contacts: { summary: contactsSummary, status: contactsStatus },
       legal: { summary: legalSummary, status: legalStatus },
+      photos: { summary: photosSummary, status: photosStatus },
       tps: { summary: tradePointsSummary, status: tradePointsStatus },
       next: { summary: nextSummary, status: nextStatus },
     };
   }, [
     activeLegals,
+    actx.state,
+    baseRow.id,
     contacts,
     filledShowcase,
     f,
@@ -459,23 +479,44 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
         />
 
         <section className="overflow-hidden rounded-xl border border-border/60 border-l-[3px] border-l-emerald-600/75 bg-card shadow-sm">
-          <div className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4 sm:px-5 sm:py-3">
-            <h1 className="text-base font-semibold leading-tight tracking-tight text-foreground sm:text-lg">{row.name}</h1>
-            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0">
-              <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Код</span>
-              <span
-                className="font-mono text-sm font-semibold tabular-nums text-emerald-800 dark:text-emerald-200"
-                data-testid="text-dealer-internal-code"
-              >
-                {row.releaseCode?.trim() ? row.releaseCode : "Не указано"}
-              </span>
+          <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-stretch sm:gap-4 sm:px-5 sm:py-4">
+            <div
+              className="relative h-36 w-full shrink-0 overflow-hidden rounded-lg border border-[#E3E6F3] bg-[#EEEFF6] sm:h-auto sm:min-h-[7.5rem] sm:w-44"
+              data-testid="dealer-manual-hero-visual"
+            >
+              {row.coverPhotoThumbnailUrl?.trim() || row.coverPhotoUrl?.trim() ? (
+                <SafeImage
+                  src={(row.coverPhotoThumbnailUrl || row.coverPhotoUrl) as string}
+                  alt=""
+                  className="absolute inset-0 h-full w-full"
+                  objectFit="cover"
+                />
+              ) : (
+                <div className="flex h-full min-h-[9rem] w-full items-center justify-center bg-[#9ACA3C]/10 text-2xl font-bold text-[#222631] sm:min-h-0">
+                  {dealerHeroInitials(row.name)}
+                </div>
+              )}
             </div>
-          </div>
-          <div className="grid grid-cols-1 gap-x-8 gap-y-2.5 border-t border-border/40 px-4 py-3 sm:grid-cols-2 sm:px-5 sm:py-3">
-            <HeroCell label="Код в 1С" value={row.external1cCode} testId="text-dealer-external-1c-code" />
-            <HeroCell label="Основной контакт" value={primary?.fullName} testId="text-dealer-primary-contact" />
-            <HeroCell label="Телефон" value={primary?.phone} testId="text-dealer-primary-phone" />
-            <HeroCell label="Email" value={primary?.email} testId="text-dealer-primary-email" />
+            <div className="min-w-0 flex-1 space-y-2">
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+                <h1 className="text-base font-semibold leading-tight tracking-tight text-foreground sm:text-lg">{row.name}</h1>
+                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0">
+                  <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Код</span>
+                  <span
+                    className="font-mono text-sm font-semibold tabular-nums text-emerald-800 dark:text-emerald-200"
+                    data-testid="text-dealer-internal-code"
+                  >
+                    {row.releaseCode?.trim() ? row.releaseCode : "Не указано"}
+                  </span>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-x-8 gap-y-2.5 border-t border-border/40 pt-3 sm:grid-cols-2">
+                <HeroCell label="Код в 1С" value={row.external1cCode} testId="text-dealer-external-1c-code" />
+                <HeroCell label="Основной контакт" value={primary?.fullName} testId="text-dealer-primary-contact" />
+                <HeroCell label="Телефон" value={primary?.phone} testId="text-dealer-primary-phone" />
+                <HeroCell label="Email" value={primary?.email} testId="text-dealer-primary-email" />
+              </div>
+            </div>
           </div>
         </section>
 
@@ -626,6 +667,17 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
               actorLabel={user?.name?.trim() ? user.name.trim() : userLabelFromProfile(profile)}
               embedInAccordion
             />
+          </AccordionContent>
+        </AccordionItem>
+
+        <AccordionItem
+          value="photos"
+          data-testid="section-dealer-photos"
+          className="overflow-hidden rounded-lg border border-border/50 bg-card !border-b-0 shadow-sm"
+        >
+          <AccordionSectionTrigger title="Фото клиента" summary={sectionMeta.photos.summary} status={sectionMeta.photos.status} />
+          <AccordionContent className="border-t border-border/35 px-3 pb-2.5 pt-1.5 sm:px-3.5">
+            <EntityActualizationPhotoGallery entityType="dealer" entityId={baseRow.id} canEdit={canEdit} profile={profile} />
           </AccordionContent>
         </AccordionItem>
 

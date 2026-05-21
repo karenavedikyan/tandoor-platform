@@ -156,6 +156,7 @@ import { SHOWCASE_STORAGE_EVENT } from "@/lib/showcase-distribution-data";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DealerBulkDeleteCheckbox } from "@/components/dealer-bulk-delete-checkbox";
 import { DealerBaseDealerShowcaseGrid } from "@/components/dealer-base-dealer-showcase-grid";
+import { DealerRowListAvatar } from "@/components/dealer-row-list-avatar";
 import type { ActualizationState } from "@/lib/client-base-actualization-state";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Switch } from "@/components/ui/switch";
@@ -364,7 +365,9 @@ function ClientListBlock({
                 compact ? "p-3 sm:gap-3" : "p-4 sm:gap-4",
               )}
             >
-              <div className={cn("min-w-0 flex-1", compact ? "space-y-1" : "space-y-2")}>
+              <div className="flex min-w-0 flex-1 gap-3">
+                <DealerRowListAvatar row={row} size="md" className="max-sm:mt-0.5" />
+                <div className={cn("min-w-0 flex-1", compact ? "space-y-1" : "space-y-2")}>
                 <div className="flex flex-wrap items-center gap-2">
                   {showWorkPlanSelect && wp && onToggleWorkPlanSelect ? (
                     <Checkbox
@@ -502,6 +505,7 @@ function ClientListBlock({
                     )}
                   </>
                 ) : null}
+                </div>
               </div>
               <OpenDealerButton id={row.id} />
             </CardContent>
@@ -601,52 +605,57 @@ function ClientCompactGridBlock({
                   </Link>
                 </Button>
               </div>
-              <p className="line-clamp-2 text-sm font-semibold leading-tight text-foreground">{row.name}</p>
-              <p className="font-mono text-[11px] text-muted-foreground">{row.releaseCode ?? "—"}</p>
-              <p className="truncate text-[11px] text-muted-foreground">{row.city}</p>
-              <div className="flex flex-wrap gap-1">
-                <Badge
-                  variant="outline"
-                  className={cn("px-1.5 py-0 text-[10px]", getClientCategoryBadgeClass(row.clientCategory))}
-                  data-testid={`badge-dealer-client-category-${row.id}`}
-                >
-                  {getClientCategoryLabel(row.clientCategory)}
-                </Badge>
-                <Badge variant="outline" className={cn("px-1.5 py-0 text-[10px]", statusBadgeClass(row.status))}>
-                  {row.status}
-                </Badge>
-              </div>
-              {hidden ? (
-                <Badge variant="secondary" className="w-fit text-[10px]" data-testid={`badge-dealer-hidden-${row.id}`}>
-                  Скрыт
-                </Badge>
-              ) : null}
-              <div className="flex flex-wrap gap-1">
-                {stockSig.hasMainWarehouse ? (
-                  <span className="rounded border border-slate-300 bg-slate-50 px-1 py-0 text-[9px] font-semibold text-slate-900" data-testid={`badge-dealer-main-warehouse-${row.id}`}>
-                    Склад
-                  </span>
-                ) : null}
-                {stockSig.hasHardwareWarehouse ? (
-                  <span className="rounded border border-violet-300 bg-violet-50 px-1 py-0 text-[9px] font-semibold text-violet-950" data-testid={`badge-dealer-hardware-warehouse-${row.id}`}>
-                    Фурн
-                  </span>
-                ) : null}
-                {programSig.hasTandoorClub ? (
-                  <span className="rounded border border-indigo-300 bg-indigo-50 px-1 py-0 text-[9px] font-semibold text-indigo-950" data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.tandoor_club}-${row.id}`}>
-                    ТК
-                  </span>
-                ) : null}
-                {programSig.hasCashbackAgent ? (
-                  <span className="rounded border border-emerald-300 bg-emerald-50 px-1 py-0 text-[9px] font-semibold text-emerald-950" data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.cashback_agent}-${row.id}`}>
-                    КБ
-                  </span>
-                ) : null}
-                {programSig.hasSpecialConditions ? (
-                  <span className="rounded border border-amber-300 bg-amber-50 px-1 py-0 text-[9px] font-semibold text-amber-950" data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.special_conditions}-${row.id}`}>
-                    СУ
-                  </span>
-                ) : null}
+              <div className="flex gap-2">
+                <DealerRowListAvatar row={row} size="sm" className="self-start" />
+                <div className="min-w-0 flex-1 space-y-0.5">
+                  <p className="line-clamp-2 text-sm font-semibold leading-tight text-foreground">{row.name}</p>
+                  <p className="font-mono text-[11px] text-muted-foreground">{row.releaseCode ?? "—"}</p>
+                  <p className="truncate text-[11px] text-muted-foreground">{row.city}</p>
+                  <div className="flex flex-wrap gap-1">
+                    <Badge
+                      variant="outline"
+                      className={cn("px-1.5 py-0 text-[10px]", getClientCategoryBadgeClass(row.clientCategory))}
+                      data-testid={`badge-dealer-client-category-${row.id}`}
+                    >
+                      {getClientCategoryLabel(row.clientCategory)}
+                    </Badge>
+                    <Badge variant="outline" className={cn("px-1.5 py-0 text-[10px]", statusBadgeClass(row.status))}>
+                      {row.status}
+                    </Badge>
+                  </div>
+                  {hidden ? (
+                    <Badge variant="secondary" className="w-fit text-[10px]" data-testid={`badge-dealer-hidden-${row.id}`}>
+                      Скрыт
+                    </Badge>
+                  ) : null}
+                  <div className="flex flex-wrap gap-1">
+                    {stockSig.hasMainWarehouse ? (
+                      <span className="rounded border border-slate-300 bg-slate-50 px-1 py-0 text-[9px] font-semibold text-slate-900" data-testid={`badge-dealer-main-warehouse-${row.id}`}>
+                        Склад
+                      </span>
+                    ) : null}
+                    {stockSig.hasHardwareWarehouse ? (
+                      <span className="rounded border border-violet-300 bg-violet-50 px-1 py-0 text-[9px] font-semibold text-violet-950" data-testid={`badge-dealer-hardware-warehouse-${row.id}`}>
+                        Фурн
+                      </span>
+                    ) : null}
+                    {programSig.hasTandoorClub ? (
+                      <span className="rounded border border-indigo-300 bg-indigo-50 px-1 py-0 text-[9px] font-semibold text-indigo-950" data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.tandoor_club}-${row.id}`}>
+                        ТК
+                      </span>
+                    ) : null}
+                    {programSig.hasCashbackAgent ? (
+                      <span className="rounded border border-emerald-300 bg-emerald-50 px-1 py-0 text-[9px] font-semibold text-emerald-950" data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.cashback_agent}-${row.id}`}>
+                        КБ
+                      </span>
+                    ) : null}
+                    {programSig.hasSpecialConditions ? (
+                      <span className="rounded border border-amber-300 bg-amber-50 px-1 py-0 text-[9px] font-semibold text-amber-950" data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.special_conditions}-${row.id}`}>
+                        СУ
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -733,26 +742,31 @@ function ClientListRowsBlock({
                   </Link>
                 </Button>
               </div>
-              <p className="mt-1 font-mono text-xs text-muted-foreground">{row.releaseCode ?? "—"}</p>
-              <p className="mt-0.5 font-medium leading-snug">{row.name}</p>
-              <p className="mt-1 text-xs text-muted-foreground">ИНН: {innCell(row)}</p>
-              <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                <span>{row.city}</span>
-                <span>·</span>
-                <span>ТТ: {row.outlets}</span>
+              <div className="mt-2 flex gap-2">
+                <DealerRowListAvatar row={row} size="sm" className="shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="font-mono text-xs text-muted-foreground">{row.releaseCode ?? "—"}</p>
+                  <p className="mt-0.5 font-medium leading-snug">{row.name}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">ИНН: {innCell(row)}</p>
+                  <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                    <span>{row.city}</span>
+                    <span>·</span>
+                    <span>ТТ: {row.outlets}</span>
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    <Badge variant="outline" className={cn("text-[10px]", getClientCategoryBadgeClass(row.clientCategory))} data-testid={`badge-dealer-client-category-${row.id}`}>
+                      {getClientCategoryLabel(row.clientCategory)}
+                    </Badge>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">Менеджер: {row.manager || "—"}</p>
+                  {nextLine ? <p className="mt-1 text-xs text-foreground">Следующий шаг: {nextLine}</p> : null}
+                  {hidden ? (
+                    <Badge variant="secondary" className="mt-1 w-fit text-[10px]" data-testid={`badge-dealer-hidden-${row.id}`}>
+                      Скрыт из рабочего списка
+                    </Badge>
+                  ) : null}
+                </div>
               </div>
-              <div className="mt-1 flex flex-wrap gap-1">
-                <Badge variant="outline" className={cn("text-[10px]", getClientCategoryBadgeClass(row.clientCategory))} data-testid={`badge-dealer-client-category-${row.id}`}>
-                  {getClientCategoryLabel(row.clientCategory)}
-                </Badge>
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">Менеджер: {row.manager || "—"}</p>
-              {nextLine ? <p className="mt-1 text-xs text-foreground">Следующий шаг: {nextLine}</p> : null}
-              {hidden ? (
-                <Badge variant="secondary" className="mt-1 w-fit text-[10px]" data-testid={`badge-dealer-hidden-${row.id}`}>
-                  Скрыт из рабочего списка
-                </Badge>
-              ) : null}
             </div>
           );
         })}
@@ -765,6 +779,7 @@ function ClientListRowsBlock({
               {archiveBulk && rows.some((r) => archiveBulk.selectableIds.has(r.id)) ? (
                 <th className="w-14 px-2 py-2 text-center text-destructive">Удал.</th>
               ) : null}
+              <th className="w-11 px-1 py-2 text-center font-normal normal-case" aria-label="Фото" />
               <th className="px-2 py-2">Код</th>
               <th className="px-2 py-2">Клиент</th>
               <th className="px-2 py-2">ИНН</th>
@@ -807,6 +822,9 @@ function ClientListRowsBlock({
                       ) : null}
                     </td>
                   ) : null}
+                  <td className="px-1 py-1.5 align-middle">
+                    <DealerRowListAvatar row={row} size="xs" />
+                  </td>
                   <td className="whitespace-nowrap px-2 py-1.5 font-mono text-xs text-muted-foreground">{row.releaseCode ?? "—"}</td>
                   <td className="max-w-[10rem] px-2 py-1.5 align-top">
                     <span className="line-clamp-2 font-medium" title={row.name}>
@@ -933,6 +951,7 @@ function DealerBaseDataTable({
             {showArchiveBulkCol ? (
               <th className="w-14 px-2 py-2 text-center text-destructive">Удал.</th>
             ) : null}
+            <th className="w-11 px-1 py-2 text-center font-normal normal-case" aria-label="Фото" />
             <th className="px-2 py-2">Код</th>
             {sortableTh("name", "Клиент")}
             <th className="px-2 py-2">ИНН</th>
@@ -986,6 +1005,9 @@ function DealerBaseDataTable({
                     ) : null}
                   </td>
                 ) : null}
+                <td className="px-1 py-1.5 align-middle">
+                  <DealerRowListAvatar row={row} size="xs" />
+                </td>
                 <td className="whitespace-nowrap px-2 py-1.5 font-mono text-xs text-muted-foreground">{row.releaseCode ?? "—"}</td>
                 <td className="max-w-[11rem] px-2 py-1.5 align-top text-xs">
                   <div className="line-clamp-2 font-medium" title={row.name}>

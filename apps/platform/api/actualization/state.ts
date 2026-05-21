@@ -67,6 +67,8 @@ function emptyState(): Record<string, unknown> {
     dealerCardViewSettingsByUserId: {},
     unloadingOrderByDealerId: {},
     routeOrderByRouteId: {},
+    dealerPhotosByDealerId: {},
+    tradePointPhotosByTradePointId: {},
   };
 }
 

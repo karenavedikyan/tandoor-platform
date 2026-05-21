@@ -51,11 +51,13 @@ import { SectionSaveButton } from "@/components/section-save-button";
 import { TradePointShowcaseCatalogPanel } from "@/components/trade-point-showcase-catalog-panel";
 import { Bitrix24TasksPanel } from "@/components/bitrix24-tasks-panel";
 import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actualization-sync-status";
+import { EntityActualizationPhotoGallery } from "@/components/entity-actualization-photo-gallery";
+import { SafeImage } from "@/components/safe-image";
 import { canEditClientNextStep } from "@/lib/client-next-step-data";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { cn } from "@/lib/utils";
 import { formatDisplayDateTime } from "@/lib/format-display-date";
-import { TradePointPhotoBlock } from "@/components/trade-point-photo-block";
+import { getTradePointCoverDisplayUrls, listActiveTradePointPhotos } from "@/lib/client-base-actualization-photos";
 
 function numOrNull(v: string): number | null {
   const t = v.trim();
@@ -139,7 +141,13 @@ function TpHeroCell({
   );
 }
 
-const TP_CLEAN_SECTION_BASE = ["passport", "address_format", "responsibles", "showcase", "comments", "bitrix"] as const;
+function tpHeroInitials(name: string): string {
+  const t = name.trim();
+  if (!t) return "?";
+  return t.slice(0, 2).toUpperCase();
+}
+
+const TP_CLEAN_SECTION_BASE = ["passport", "address_format", "responsibles", "photos", "showcase", "comments", "bitrix"] as const;
 
 function tpCleanSectionsLsKey(tradePointId: string): string {
   return `tandoor-trade-point-clean-card-sections-v1-${tradePointId}`;
@@ -559,7 +567,7 @@ export function TradePointManualActualizationView(props: {
   const showTasksSection = openMatrixTasks.length > 0;
 
   const orderedSectionIds = useMemo(() => {
-    const head = ["passport", "address_format", "responsibles", "showcase"] as const;
+    const head = ["passport", "address_format", "responsibles", "photos", "showcase"] as const;
     const tail = ["comments", "bitrix"] as const;
     return [...head, ...(showTasksSection ? (["tasks"] as const) : []), ...tail] as string[];
   }, [showTasksSection]);
@@ -612,6 +620,13 @@ export function TradePointManualActualizationView(props: {
     return "";
   }, [contactName, contactPhone]);
 
+  const tpCoverThumb = useMemo(() => {
+    const u = getTradePointCoverDisplayUrls(actx.state, point.id);
+    const t = u?.thumb?.trim();
+    if (t) return t;
+    return point.coverPhotoThumbnailUrl?.trim() || point.coverPhotoUrl?.trim() || "";
+  }, [actx.state, point.id, point.coverPhotoThumbnailUrl, point.coverPhotoUrl]);
+
   const showcaseTriggerSummary = useMemo(() => {
     if (hasShowcase === null) return "Состояние витрины не выбрано";
     if (hasShowcase === false) return "Без витрины";
@@ -657,6 +672,10 @@ export function TradePointManualActualizationView(props: {
     const responsiblesStatus: TpSectionStatusKind =
       !hasMgr && !hasRm ? "empty" : hasMgr && hasRm ? "complete" : "partial";
 
+    const tpPhotoCount = listActiveTradePointPhotos(actx.state, point.id).length;
+    const photosSummary = tpPhotoCount === 0 ? "Фото не добавлены" : `${tpPhotoCount} фото`;
+    const photosStatus: TpSectionStatusKind = tpPhotoCount === 0 ? "empty" : "partial";
+
     let showcaseStatusMeta: TpSectionStatusKind = "needs_fill";
     if (hasShowcase === false) showcaseStatusMeta = "no_showcase";
     else if (hasShowcase === null) showcaseStatusMeta = "needs_fill";
@@ -683,12 +702,15 @@ export function TradePointManualActualizationView(props: {
       passport: { summary: passportSummary, status: passportStatus },
       address: { summary: addressSummary, status: addressStatus },
       responsibles: { summary: respSummary, status: responsiblesStatus },
+      photos: { summary: photosSummary, status: photosStatus },
       showcase: { summary: showcaseTriggerSummary, status: showcaseStatusMeta },
       tasks: { summary: tasksSummary, status: tasksStatus },
       comments: { summary: commentsSummary, status: commentsStatus },
       bitrix: { summary: bitrixSummary, status: bitrixStatus },
     };
   }, [
+    actx.state,
+    point.id,
     name,
     formatKind,
     tpStatus,
@@ -772,84 +794,94 @@ export function TradePointManualActualizationView(props: {
         />
 
         <section className="overflow-hidden rounded-xl border border-border/60 border-l-[3px] border-l-emerald-600/75 bg-card shadow-sm">
-          <div className="px-3.5 py-3 sm:px-4">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-              <div className="min-w-0">
-                <h1 className="text-base font-semibold leading-snug tracking-tight text-foreground sm:text-lg">
-                  {name.trim() || point.name}
-                </h1>
-                <p className="mt-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Торговая точка</p>
-              </div>
-              <div className="shrink-0 text-left sm:text-right">
-                <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Код ТТ</p>
-                <p
-                  className="font-mono text-sm font-semibold tabular-nums text-emerald-800 dark:text-emerald-200"
-                  data-testid={`text-trade-point-internal-code-${point.id}`}
-                >
-                  {getTradePointDisplayCodeForActualization(point)}
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              <TpHeroCell label="Клиент" value={dealer.name} />
-              <TpHeroCell label="Код клиента" value={dealer.releaseCode?.trim()} mono testId="text-trade-point-hero-dealer-code" />
-              <TpHeroCell label="Город" value={city.trim()} />
-              <TpHeroCell
-                label="Формат / категория"
-                value={`${formatKindLabel(formatKind)} · ${getClientCategoryLabel(dealer.clientCategory)}`}
-              />
-              <div className="min-w-0 sm:col-span-2 lg:col-span-2">
-                <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Адрес</p>
-                <p className="mt-0.5 whitespace-pre-wrap break-words text-[13px] leading-snug text-foreground">
-                  {address.trim() ? address.trim() : "Не указано"}
-                </p>
-              </div>
-              <TpHeroCell label="Контакт" value={heroContact || undefined} />
-            </div>
-
-            <div className="mt-2.5 flex flex-wrap gap-1.5">
-              {isArchived ? (
-                <Badge variant="secondary" className="h-[1.125rem] px-1.5 py-0 text-[10px] font-normal leading-none">
-                  В архиве
-                </Badge>
-              ) : null}
-              {hasShowcase === null ? (
-                <Badge
-                  variant="outline"
-                  className="h-[1.125rem] border-amber-500/35 px-1.5 py-0 text-[10px] font-normal leading-none text-amber-950 dark:text-amber-100"
-                >
-                  Витрина не заполнена
-                </Badge>
-              ) : hasShowcase === false ? (
-                <Badge variant="outline" className="h-[1.125rem] px-1.5 py-0 text-[10px] font-normal leading-none text-muted-foreground">
-                  Нет витрины
-                </Badge>
+          <div className="flex flex-col gap-3 px-3.5 py-3 sm:flex-row sm:items-stretch sm:gap-4 sm:px-4 sm:py-4">
+            <div
+              className="relative h-36 w-full shrink-0 overflow-hidden rounded-lg border border-[#E3E6F3] bg-[#EEEFF6] sm:h-auto sm:min-h-[7.5rem] sm:w-44"
+              data-testid="trade-point-manual-hero-visual"
+            >
+              {tpCoverThumb ? (
+                <SafeImage src={tpCoverThumb} alt="" className="absolute inset-0 h-full w-full" objectFit="cover" />
               ) : (
-                <Badge
-                  variant="outline"
-                  className="h-[1.125rem] border-emerald-600/35 bg-emerald-600/10 px-1.5 py-0 text-[10px] font-normal leading-none text-emerald-950 dark:text-emerald-50"
-                >
-                  Есть витрина
-                </Badge>
+                <div className="flex h-full min-h-[9rem] w-full items-center justify-center bg-[#9ACA3C]/10 text-2xl font-bold text-[#222631] sm:min-h-0">
+                  {tpHeroInitials(name.trim() || point.name)}
+                </div>
               )}
-              {hasShowcase === true && matrixClientCategory && missingRequiredModelCount > 0 ? (
-                <Badge
-                  variant="outline"
-                  className="h-[1.125rem] border-amber-500/40 bg-amber-500/[0.06] px-1.5 py-0 text-[10px] font-normal leading-none text-amber-950 dark:text-amber-100"
-                >
-                  Есть дефицит
-                </Badge>
-              ) : null}
-              {hasShowcase === true ? (
-                <Badge variant="outline" className="h-[1.125rem] px-1.5 py-0 text-[10px] font-normal leading-none text-muted-foreground">
-                  Порталы: {numOrNull(totalPortals) != null && numOrNull(totalPortals)! >= 0 ? numOrNull(totalPortals) : "Не указано"}
-                </Badge>
-              ) : null}
             </div>
+            <div className="min-w-0 flex-1 space-y-2">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                <div className="min-w-0">
+                  <h1 className="text-base font-semibold leading-snug tracking-tight text-foreground sm:text-lg">
+                    {name.trim() || point.name}
+                  </h1>
+                  <p className="mt-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Торговая точка</p>
+                </div>
+                <div className="shrink-0 text-left sm:text-right">
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Код ТТ</p>
+                  <p
+                    className="font-mono text-sm font-semibold tabular-nums text-emerald-800 dark:text-emerald-200"
+                    data-testid={`text-trade-point-internal-code-${point.id}`}
+                  >
+                    {getTradePointDisplayCodeForActualization(point)}
+                  </p>
+                </div>
+              </div>
 
-            <div className="mt-3 border-t border-border/40 pt-3">
-              <TradePointPhotoBlock dealerId={dealer.id} tradePointId={point.id} canEdit={canEditUi} compact className="max-w-md" />
+              <div className="grid gap-2 border-t border-border/40 pt-3 sm:grid-cols-2 lg:grid-cols-3">
+                <TpHeroCell label="Клиент" value={dealer.name} />
+                <TpHeroCell label="Код клиента" value={dealer.releaseCode?.trim()} mono testId="text-trade-point-hero-dealer-code" />
+                <TpHeroCell label="Город" value={city.trim()} />
+                <TpHeroCell
+                  label="Формат / категория"
+                  value={`${formatKindLabel(formatKind)} · ${getClientCategoryLabel(dealer.clientCategory)}`}
+                />
+                <div className="min-w-0 sm:col-span-2 lg:col-span-2">
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Адрес</p>
+                  <p className="mt-0.5 whitespace-pre-wrap break-words text-[13px] leading-snug text-foreground">
+                    {address.trim() ? address.trim() : "Не указано"}
+                  </p>
+                </div>
+                <TpHeroCell label="Контакт" value={heroContact || undefined} />
+              </div>
+
+              <div className="flex flex-wrap gap-1.5 border-t border-border/40 pt-2.5">
+                {isArchived ? (
+                  <Badge variant="secondary" className="h-[1.125rem] px-1.5 py-0 text-[10px] font-normal leading-none">
+                    В архиве
+                  </Badge>
+                ) : null}
+                {hasShowcase === null ? (
+                  <Badge
+                    variant="outline"
+                    className="h-[1.125rem] border-amber-500/35 px-1.5 py-0 text-[10px] font-normal leading-none text-amber-950 dark:text-amber-100"
+                  >
+                    Витрина не заполнена
+                  </Badge>
+                ) : hasShowcase === false ? (
+                  <Badge variant="outline" className="h-[1.125rem] px-1.5 py-0 text-[10px] font-normal leading-none text-muted-foreground">
+                    Нет витрины
+                  </Badge>
+                ) : (
+                  <Badge
+                    variant="outline"
+                    className="h-[1.125rem] border-emerald-600/35 bg-emerald-600/10 px-1.5 py-0 text-[10px] font-normal leading-none text-emerald-950 dark:text-emerald-50"
+                  >
+                    Есть витрина
+                  </Badge>
+                )}
+                {hasShowcase === true && matrixClientCategory && missingRequiredModelCount > 0 ? (
+                  <Badge
+                    variant="outline"
+                    className="h-[1.125rem] border-amber-500/40 bg-amber-500/[0.06] px-1.5 py-0 text-[10px] font-normal leading-none text-amber-950 dark:text-amber-100"
+                  >
+                    Есть дефицит
+                  </Badge>
+                ) : null}
+                {hasShowcase === true ? (
+                  <Badge variant="outline" className="h-[1.125rem] px-1.5 py-0 text-[10px] font-normal leading-none text-muted-foreground">
+                    Порталы: {numOrNull(totalPortals) != null && numOrNull(totalPortals)! >= 0 ? numOrNull(totalPortals) : "Не указано"}
+                  </Badge>
+                ) : null}
+              </div>
             </div>
           </div>
         </section>
@@ -962,6 +994,13 @@ export function TradePointManualActualizationView(props: {
               <span className="mt-0.5 block text-[13px] font-medium text-foreground">{inheritedRop}</span>
               <span className="text-[10px] text-muted-foreground/80">с карточки клиента</span>
             </p>
+          </AccordionContent>
+        </AccordionItem>
+
+        <AccordionItem value="photos" data-testid="section-trade-point-photos" className="overflow-hidden rounded-lg border border-border/50 bg-card !border-b-0 shadow-xs">
+          <TpAccordionSectionTrigger title="Фото торговой точки" summary={sectionMeta.photos.summary} status={sectionMeta.photos.status} />
+          <AccordionContent className="border-t border-border/40 px-2.5 pb-2.5 pt-1.5 sm:px-3">
+            <EntityActualizationPhotoGallery entityType="trade_point" entityId={point.id} canEdit={canEditUi} profile={profile} />
           </AccordionContent>
         </AccordionItem>
 
