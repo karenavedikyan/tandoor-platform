@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { TradePointPhotoBlock } from "@/components/trade-point-photo-block";
+import { AddressSuggestInput } from "@/components/address-suggest-input";
 import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import {
   addManualTradePoint,
@@ -578,15 +579,16 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Адрес</Label>
-                <Textarea
+                <AddressSuggestInput
                   value={addAddress}
-                  onChange={(e) => {
-                    setAddAddress(e.target.value);
+                  onChange={(v) => {
+                    setAddAddress(v);
                     addTpSave.markDirty();
                   }}
+                  disabled={!canEdit}
                   rows={2}
-                  className="min-h-[52px] resize-y text-sm"
-                  data-testid="textarea-dealer-trade-point-address"
+                  className="[&_textarea]:min-h-[52px]"
+                  testId="input-dealer-trade-point-address-suggest"
                 />
               </div>
               <div className="space-y-1.5">
@@ -728,15 +730,16 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Адрес</Label>
-                <Textarea
+                <AddressSuggestInput
                   value={addAddress}
-                  onChange={(e) => {
-                    setAddAddress(e.target.value);
+                  onChange={(v) => {
+                    setAddAddress(v);
                     addTpSave.markDirty();
                   }}
+                  disabled={!canEdit}
                   rows={2}
-                  className="min-h-[52px] resize-y text-sm"
-                  data-testid="textarea-dealer-trade-point-address"
+                  className="[&_textarea]:min-h-[52px]"
+                  testId="input-dealer-trade-point-address-suggest"
                 />
               </div>
               <div className="space-y-1.5">
@@ -1130,15 +1133,16 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Адрес</Label>
-              <Textarea
+              <AddressSuggestInput
                 value={addAddress}
-                onChange={(e) => {
-                    setAddAddress(e.target.value);
+                onChange={(v) => {
+                    setAddAddress(v);
                     addTpSave.markDirty();
                   }}
+                disabled={!canEdit}
                 rows={2}
-                className="min-h-[52px] resize-y text-sm"
-                data-testid="textarea-dealer-trade-point-address"
+                className="[&_textarea]:min-h-[52px]"
+                testId="input-dealer-trade-point-address-suggest"
               />
             </div>
             <div className="space-y-1.5">
@@ -1228,7 +1232,18 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Адрес</Label>
-              <Textarea value={editAddress} onChange={(e) => { setEditAddress(e.target.value); editTpSave.markDirty(); }} rows={2} className="min-h-[52px]" />
+              <AddressSuggestInput
+                key={editId ?? "tp-edit"}
+                value={editAddress}
+                onChange={(v) => {
+                  setEditAddress(v);
+                  editTpSave.markDirty();
+                }}
+                disabled={!canEdit}
+                rows={2}
+                className="[&_textarea]:min-h-[52px]"
+                testId="input-dealer-trade-point-address-suggest"
+              />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Контактное лицо</Label>

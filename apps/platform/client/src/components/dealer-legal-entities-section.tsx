@@ -32,7 +32,9 @@ import {
 } from "@/lib/dealer-legal-entities";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { LegalEntityContactsSubsection } from "@/components/legal-entity-contacts-subsection";
-import { buildLegalEntityNameSuggestions, lookupLegalEntityByInn } from "@/lib/legal-entity-directory";
+import { buildLegalEntityNameSuggestions, lookupLegalEntityByInn, type LegalEntityInnLookupResult } from "@/lib/legal-entity-directory";
+import { fetchDadataPartiesByInn } from "@/lib/dadata-party-lookup-api";
+import { AddressSuggestInput } from "@/components/address-suggest-input";
 import { toast } from "@/hooks/use-toast";
 import { useSectionSaveFeedback } from "@/hooks/use-section-save-feedback";
 import { SectionSaveButton } from "@/components/section-save-button";
@@ -258,9 +260,7 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
   const [draftPhone, setDraftPhone] = useState("");
   const [draftEmail, setDraftEmail] = useState("");
   const [draftComment, setDraftComment] = useState("");
-  const [innLookupResults, setInnLookupResults] = useState<
-    { id: string; name: string; inn: string; kpp?: string; legalAddress?: string; source: string }[]
-  >([]);
+  const [innLookupResults, setInnLookupResults] = useState<LegalEntityInnLookupResult[]>([]);
   const [innLookupNote, setInnLookupNote] = useState("");
 
   const [archiveTarget, setArchiveTarget] = useState<{ id: string; name: string } | null>(null);
@@ -923,8 +923,10 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
                               setDraftName(s.name);
                               if (s.inn) setDraftInn(s.inn);
                               if (s.kpp) setDraftKpp(s.kpp);
-                              if (s.legalAddress) setDraftAddress(s.legalAddress);
-                              if (sameAsLegal && s.legalAddress) setDraftActualAddress(s.legalAddress);
+                              if (s.legalAddress?.trim()) {
+                                setDraftAddress(s.legalAddress.trim());
+                                if (sameAsLegal) setDraftActualAddress(s.legalAddress.trim());
+                              }
                               markFormEdited();
                             }}
                           >
@@ -983,19 +985,31 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
                         disabled={!canMutate}
                         data-testid="button-legal-entity-inn-lookup"
                         onClick={() => {
-                          const res = lookupLegalEntityByInn(draftInn);
-                          if (!res.ok) {
-                            toast({ title: "ИНН", description: res.error, variant: "destructive" });
-                            setInnLookupResults([]);
-                            setInnLookupNote("");
-                            return;
-                          }
-                          setInnLookupResults(res.results);
-                          setInnLookupNote(
-                            res.results.length === 0
-                              ? "По локальной базе данные не найдены. Для автозаполнения из внешних источников нужно подключить сервис проверки ИНН."
-                              : "",
-                          );
+                          void (async () => {
+                            const res = lookupLegalEntityByInn(draftInn);
+                            if (!res.ok) {
+                              toast({ title: "ИНН", description: res.error, variant: "destructive" });
+                              setInnLookupResults([]);
+                              setInnLookupNote("");
+                              return;
+                            }
+                            let merged = [...res.results];
+                            const dadata = await fetchDadataPartiesByInn(draftInn);
+                            if (dadata.success && dadata.items.length > 0) {
+                              for (const d of dadata.items) {
+                                const dup = merged.some(
+                                  (m) => normalizeInn(m.inn) === normalizeInn(d.inn) && m.name.trim() === d.name.trim(),
+                                );
+                                if (!dup) merged.push(d);
+                              }
+                            }
+                            setInnLookupResults(merged);
+                            setInnLookupNote(
+                              merged.length === 0
+                                ? "По локальной базе и DaData данные не найдены. Проверьте ИНН или подключение DaData в настройках окружения."
+                                : "",
+                            );
+                          })();
                         }}
                       >
                         Найти по ИНН
@@ -1024,11 +1038,12 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
                                 setDraftName((prev) => (prev.trim() ? prev : r.name));
                                 setDraftInn(r.inn);
                                 setDraftKpp((k) => (k.trim() ? k : r.kpp ?? ""));
-                                setDraftAddress((a) => {
-                                  const next = a.trim() ? a : r.legalAddress ?? "";
-                                  if (sameAsLegal) setDraftActualAddress(next);
-                                  return next;
-                                });
+                                if (r.ogrn?.trim()) setDraftOgrn((o) => (o.trim() ? o : r.ogrn ?? ""));
+                                if (r.legalAddress?.trim()) {
+                                  const addr = r.legalAddress.trim();
+                                  setDraftAddress(addr);
+                                  if (sameAsLegal) setDraftActualAddress(addr);
+                                }
                                 markFormEdited();
                               }}
                             >
@@ -1072,20 +1087,18 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
 
               <section data-testid="section-legal-entity-form-addresses" className="space-y-4 rounded-lg border border-border/60 bg-card/30 p-3 sm:p-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Адреса</p>
-                <DirtyFieldWrap dirty={dirtyFlags.legalAddress} fieldKey="legalAddress" label="Юридический адрес" htmlFor="le-legal-addr">
-                  <Textarea
-                    id="le-legal-addr"
+                <DirtyFieldWrap dirty={dirtyFlags.legalAddress} fieldKey="legalAddress" label="Юридический адрес">
+                  <AddressSuggestInput
+                    key={`le-legal-${editingId ?? newEntityIdRef.current ?? "new"}`}
                     value={draftAddress}
-                    onChange={(e) => {
-                      const v = e.target.value;
+                    onChange={(v) => {
                       setDraftAddress(v);
                       if (sameAsLegal) setDraftActualAddress(v);
                       markFormEdited();
                     }}
                     disabled={!canMutate}
                     rows={3}
-                    className="min-h-[72px] w-full min-w-0 resize-y text-sm"
-                    data-testid="input-legal-entity-legal-address"
+                    testId="input-legal-entity-legal-address-suggest"
                   />
                 </DirtyFieldWrap>
                 <div className="flex items-center gap-2">
@@ -1104,19 +1117,18 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
                     Фактический адрес совпадает с юридическим
                   </Label>
                 </div>
-                <DirtyFieldWrap dirty={dirtyFlags.actualAddress} fieldKey="actualAddress" label="Фактический адрес" htmlFor="le-actual-addr">
-                  <Textarea
-                    id="le-actual-addr"
+                <DirtyFieldWrap dirty={dirtyFlags.actualAddress} fieldKey="actualAddress" label="Фактический адрес">
+                  <AddressSuggestInput
+                    key={`le-actual-${editingId ?? newEntityIdRef.current ?? "new"}`}
                     value={draftActualAddress}
-                    onChange={(e) => {
-                      setDraftActualAddress(e.target.value);
+                    onChange={(v) => {
+                      setDraftActualAddress(v);
                       setSameAsLegal(false);
                       markFormEdited();
                     }}
                     disabled={!canMutate || sameAsLegal}
                     rows={3}
-                    className="min-h-[72px] w-full min-w-0 resize-y text-sm"
-                    data-testid="input-legal-entity-actual-address"
+                    testId="input-legal-entity-actual-address-suggest"
                   />
                 </DirtyFieldWrap>
               </section>
