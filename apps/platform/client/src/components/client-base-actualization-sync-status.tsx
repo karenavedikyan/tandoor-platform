@@ -69,7 +69,7 @@ export function ClientBaseActualizationSyncStatus(props: ClientBaseActualization
           </span>
         ) : null}
         {showOffline ? (
-          <span className="text-[10px] text-amber-800 dark:text-amber-300" data-testid="text-actualization-offline-fallback">
+          <span className="text-[10px] text-muted-foreground" data-testid="text-actualization-offline-fallback">
             Локально, без синхронизации между устройствами
           </span>
         ) : null}
@@ -98,7 +98,7 @@ export function ClientBaseActualizationSyncStatus(props: ClientBaseActualization
         Обновлено: {savedAtLabel ?? "Не указано"}
       </span>
       {showOffline ? (
-        <span className="text-amber-700 dark:text-amber-400" data-testid="text-actualization-offline-fallback">
+        <span className="text-muted-foreground" data-testid="text-actualization-offline-fallback">
           Локальный режим без кросс-девайс синхронизации
         </span>
       ) : null}

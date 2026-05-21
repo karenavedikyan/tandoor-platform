@@ -32,6 +32,10 @@
 - `icon-theme-light`, `icon-theme-dark`, `icon-theme-system` — на соответствующих контролах.
 - `text-current-theme` — подпись текущего режима в мобильном блоке.
 
+## Чистая актуализация (карточки клиента / ТТ)
+
+Экраны `dealer-manual-actualization-page.tsx` и `trade-point-manual-actualization-view.tsx`, блок синхронизации `client-base-actualization-sync-status.tsx`, галерея `entity-actualization-photo-gallery.tsx` используют только семантические классы (`bg-card`, `border-border`, `text-primary`, `bg-primary`, `text-muted-foreground` и т.д.), без tailwind-палитр emerald/amber/slate и без «светлых» hex-фонов, чтобы в **dark** не выбиваться из карточки.
+
 ## Как проверить
 
 1. `cd apps/platform && npm run check && npm run build`.

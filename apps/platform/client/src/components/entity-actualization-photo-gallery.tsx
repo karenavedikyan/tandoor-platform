@@ -216,14 +216,14 @@ export function EntityActualizationPhotoGallery(props: EntityActualizationPhotoG
   return (
     <div className={cn("space-y-3", className)}>
       {uploadConfigured === false ? (
-        <p className="rounded-md border border-[#E3E6F3] bg-[#EEEFF6] px-3 py-2 text-xs text-[#222631]">
+        <p className="rounded-md border border-border bg-muted px-3 py-2 text-xs text-foreground">
           Загрузка фото пока не настроена. Фотографии из галереи по-прежнему отображаются; добавление новых недоступно до настройки хранилища.
         </p>
       ) : null}
 
       {photos.length === 0 ? (
         <div
-          className="rounded-lg border border-dashed border-[#E3E6F3] bg-[#FFFFFF] px-3 py-6 text-center text-sm text-[#8F96B0]"
+          className="rounded-lg border border-dashed border-border bg-card px-3 py-6 text-center text-sm text-muted-foreground"
           data-testid={`entity-photo-empty-${entityType}-${entityId}`}
         >
           {emptyHint}
@@ -235,23 +235,23 @@ export function EntityActualizationPhotoGallery(props: EntityActualizationPhotoG
             return (
               <div
                 key={p.id}
-                className="space-y-2 rounded-lg border border-[#E3E6F3] bg-[#FFFFFF] p-2 shadow-sm"
+                className="space-y-2 rounded-lg border border-border bg-card p-2 shadow-sm"
                 data-testid={`entity-photo-tile-${p.id}`}
               >
                 <button
                   type="button"
-                  className="relative aspect-square w-full overflow-hidden rounded-md border border-[#E3E6F3] bg-[#EEEFF6] text-left outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-[#9ACA3C]"
+                  className="relative aspect-square w-full overflow-hidden rounded-md border border-border bg-muted text-left outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-primary"
                   onClick={() => setLightbox(p)}
                 >
                   <SafeImage src={thumb} alt={p.title || KIND_LABELS[p.kind]} className="absolute inset-0 h-full w-full" />
                   {p.isCover ? (
-                    <span className="absolute left-1.5 top-1.5 rounded bg-[#9ACA3C] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#FFFFFF]">
+                    <span className="absolute left-1.5 top-1.5 rounded bg-primary px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-primary-foreground">
                       Главное фото
                     </span>
                   ) : null}
                 </button>
                 <div className="flex flex-wrap items-center gap-1">
-                  <Badge variant="outline" className="border-[#9ACA3C]/35 bg-[#FFFFFF] text-[10px] font-medium text-[#222631]">
+                  <Badge variant="outline" className="border-primary/35 bg-card text-[10px] font-medium text-foreground">
                     {KIND_LABELS[p.kind]}
                   </Badge>
                 </div>
@@ -274,7 +274,7 @@ export function EntityActualizationPhotoGallery(props: EntityActualizationPhotoG
                         type="button"
                         size="sm"
                         variant="secondary"
-                        className="h-8 w-full bg-[#9ACA3C] text-xs font-semibold text-[#FFFFFF] hover:bg-[#86B832]"
+                        className="h-8 w-full bg-primary text-xs font-semibold text-primary-foreground hover:bg-[#86B832]"
                         disabled={p.isCover}
                         onClick={() => void makeCover(p.id)}
                       >
@@ -284,7 +284,7 @@ export function EntityActualizationPhotoGallery(props: EntityActualizationPhotoG
                         type="button"
                         size="sm"
                         variant="outline"
-                        className="h-8 w-full border-[#9ACA3C]/40 text-xs font-medium text-[#222631] hover:bg-[#9ACA3C]/10"
+                        className="h-8 w-full border-primary/40 text-xs font-medium text-foreground hover:bg-primary/10"
                         onClick={() => void makeFacadeAndCover(p.id)}
                       >
                         Фасад и главное
@@ -293,7 +293,7 @@ export function EntityActualizationPhotoGallery(props: EntityActualizationPhotoG
                         type="button"
                         size="sm"
                         variant="outline"
-                        className="h-8 w-full border-[#222631]/20 text-xs text-[#222631] hover:bg-[#EEEFF6]"
+                        className="h-8 w-full border-border text-xs text-foreground hover:bg-muted"
                         onClick={() => void archive(p.id)}
                       >
                         В архив
@@ -324,7 +324,7 @@ export function EntityActualizationPhotoGallery(props: EntityActualizationPhotoG
           <Button
             type="button"
             size="sm"
-            className="h-9 bg-[#9ACA3C] font-semibold text-[#FFFFFF] hover:bg-[#86B832] disabled:opacity-60"
+            className="h-9 bg-primary font-semibold text-primary-foreground hover:bg-[#86B832] disabled:opacity-60"
             disabled={uploading || uploadConfigured === false}
             data-testid={`button-entity-photo-add-${entityType}-${entityId}`}
             onClick={() => inputRef.current?.click()}
@@ -335,16 +335,16 @@ export function EntityActualizationPhotoGallery(props: EntityActualizationPhotoG
       ) : null}
 
       <Dialog open={lightbox != null} onOpenChange={(o) => !o && setLightbox(null)}>
-        <DialogContent className="max-h-[min(100dvh,48rem)] w-[calc(100vw-1rem)] max-w-lg overflow-y-auto border-[#E3E6F3] p-0 sm:max-w-2xl">
+        <DialogContent className="max-h-[min(100dvh,48rem)] w-[calc(100vw-1rem)] max-w-lg overflow-y-auto border-border p-0 sm:max-w-2xl">
           {lightbox ? (
             <>
-              <DialogHeader className="space-y-1 border-b border-[#E3E6F3] px-4 py-3 text-left">
-                <DialogTitle className="text-base text-[#222631]">
+              <DialogHeader className="space-y-1 border-b border-border px-4 py-3 text-left">
+                <DialogTitle className="text-base text-foreground">
                   {lightbox.title?.trim() || KIND_LABELS[lightbox.kind]}
                 </DialogTitle>
-                <p className="text-xs text-[#8F96B0]">{KIND_LABELS[lightbox.kind]}</p>
+                <p className="text-xs text-muted-foreground">{KIND_LABELS[lightbox.kind]}</p>
               </DialogHeader>
-              <div className="max-h-[55vh] w-full overflow-hidden bg-[#222631]/5 px-2 py-3 sm:max-h-[60vh]">
+              <div className="max-h-[55vh] w-full overflow-hidden bg-muted/40 px-2 py-3 sm:max-h-[60vh]">
                 <div className="relative mx-auto flex max-h-[52vh] max-w-full items-center justify-center sm:max-h-[58vh]">
                   <SafeImage
                     src={lightbox.url}
@@ -354,25 +354,25 @@ export function EntityActualizationPhotoGallery(props: EntityActualizationPhotoG
                   />
                 </div>
               </div>
-              <div className="space-y-2 px-4 py-3 text-sm text-[#222631]">
+              <div className="space-y-2 px-4 py-3 text-sm text-foreground">
                 {lightbox.comment?.trim() ? (
                   <p>
-                    <span className="text-[10px] font-semibold uppercase text-[#8F96B0]">Комментарий</span>
+                    <span className="text-[10px] font-semibold uppercase text-muted-foreground">Комментарий</span>
                     <span className="mt-0.5 block whitespace-pre-wrap">{lightbox.comment}</span>
                   </p>
                 ) : null}
-                <p className="text-xs text-[#8F96B0]">
+                <p className="text-xs text-muted-foreground">
                   Загрузил{lightbox.uploadedByName ? ` ${lightbox.uploadedByName}` : ""}
                   {lightbox.uploadedAt ? ` · ${formatDisplayDateTime(lightbox.uploadedAt)}` : ""}
                 </p>
               </div>
               {canEdit ? (
-                <DialogFooter className="flex-col gap-2 border-t border-[#E3E6F3] px-4 py-3 sm:flex-row sm:justify-end">
+                <DialogFooter className="flex-col gap-2 border-t border-border px-4 py-3 sm:flex-row sm:justify-end">
                   <Button
                     type="button"
                     size="sm"
                     variant="secondary"
-                    className="w-full bg-[#9ACA3C] text-[#FFFFFF] hover:bg-[#86B832] sm:w-auto"
+                    className="w-full bg-primary text-primary-foreground hover:bg-[#86B832] sm:w-auto"
                     disabled={lightbox.isCover}
                     onClick={() => void makeCover(lightbox.id)}
                   >
@@ -382,7 +382,7 @@ export function EntityActualizationPhotoGallery(props: EntityActualizationPhotoG
                     type="button"
                     size="sm"
                     variant="outline"
-                    className="w-full border-[#9ACA3C]/40 sm:w-auto"
+                    className="w-full border-primary/40 sm:w-auto"
                     onClick={() => void makeFacadeAndCover(lightbox.id)}
                   >
                     Фасад и главное
