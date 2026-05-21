@@ -913,6 +913,12 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
   const [cashbackTri, setCashbackTri] = useState<DealerCommercialTriSelect>("unset");
   const [cashbackComment, setCashbackComment] = useState("");
   const [external1c, setExternal1c] = useState("");
+  /** Поля паспорта / логистики: должны попадать в `manuallyCreatedDealersById[id].fields` при создании (см. анкету «Паспорт клиента»). */
+  const [passportClientKind, setPassportClientKind] = useState("other");
+  const [passportLifecycleStatus, setPassportLifecycleStatus] = useState("new");
+  const [passportCategoryTier, setPassportCategoryTier] = useState("none");
+  const [territoryZone, setTerritoryZone] = useState("");
+  const [logisticsComment, setLogisticsComment] = useState("");
 
   const [innDupOpen, setInnDupOpen] = useState(false);
   const [innDupMatch, setInnDupMatch] = useState<{ dealerId: string; name: string } | null>(null);
@@ -976,6 +982,11 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
     setCashbackTri("unset");
     setCashbackComment("");
     setExternal1c("");
+    setPassportClientKind("other");
+    setPassportLifecycleStatus("new");
+    setPassportCategoryTier("none");
+    setTerritoryZone("");
+    setLogisticsComment("");
   }, [open, profile.personaUserId]);
 
   const categoryOptions = useMemo(() => getClientCategoryOptions().filter((o) => o.value !== "all"), []);
@@ -1030,6 +1041,11 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
       shipmentDayLabel: shipmentLabel || undefined,
       routeLabel: routeLabel.trim() || undefined,
       unloadingOrder: Number.isFinite(uoNum) && uoNum > 0 ? uoNum : undefined,
+      passportClientKind,
+      passportLifecycleStatus,
+      passportCategoryTier,
+      territoryZone: territoryZone.trim() || undefined,
+      logisticsComment: logisticsComment.trim() || undefined,
       comment: comment.trim(),
       contactPerson: contactPerson.trim(),
       phone: phone.trim(),
@@ -1157,6 +1173,11 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
     shipmentDayId,
     routeLabel,
     unloadingOrder,
+    passportClientKind,
+    passportLifecycleStatus,
+    passportCategoryTier,
+    territoryZone,
+    logisticsComment,
     comment,
     contactPerson,
     phone,
@@ -1338,6 +1359,55 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
             </div>
 
             <div className="space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Паспорт клиента</p>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Тип клиента</Label>
+                <Select value={passportClientKind} onValueChange={setPassportClientKind}>
+                  <SelectTrigger className="min-h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ip">ИП</SelectItem>
+                    <SelectItem value="ooo">ООО</SelectItem>
+                    <SelectItem value="person">Физлицо</SelectItem>
+                    <SelectItem value="network">Сеть</SelectItem>
+                    <SelectItem value="other">Другое</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Статус (актуализация)</Label>
+                <Select value={passportLifecycleStatus} onValueChange={setPassportLifecycleStatus}>
+                  <SelectTrigger className="min-h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="new">Новый</SelectItem>
+                    <SelectItem value="active">Активный</SelectItem>
+                    <SelectItem value="needs_review">Требует проверки</SelectItem>
+                    <SelectItem value="inactive">Неактивный</SelectItem>
+                    <SelectItem value="archived">Архив</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Категория (ТОП)</Label>
+                <Select value={passportCategoryTier} onValueChange={setPassportCategoryTier}>
+                  <SelectTrigger className="min-h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="top150">ТОП-150</SelectItem>
+                    <SelectItem value="top350">ТОП-350</SelectItem>
+                    <SelectItem value="top500">ТОП-500</SelectItem>
+                    <SelectItem value="other">Прочие</SelectItem>
+                    <SelectItem value="none">Без категории</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Адрес и логистика</p>
               <div className="space-y-1.5">
                 <Label className="text-xs">
@@ -1383,6 +1453,14 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
               <div className="space-y-1.5">
                 <Label className="text-xs">Порядок выгрузки</Label>
                 <Input value={unloadingOrder} onChange={(e) => setUnloadingOrder(e.target.value)} className="min-h-10" inputMode="numeric" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Территория / зона</Label>
+                <Input value={territoryZone} onChange={(e) => setTerritoryZone(e.target.value)} className="min-h-10" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Комментарий по логистике</Label>
+                <Textarea value={logisticsComment} onChange={(e) => setLogisticsComment(e.target.value)} rows={2} className="min-h-[52px]" />
               </div>
             </div>
 
