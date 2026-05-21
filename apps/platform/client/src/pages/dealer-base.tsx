@@ -598,9 +598,11 @@ function ClientListRowsBlock({
                 <p className="line-clamp-2 text-sm font-semibold leading-snug text-foreground">{row.name}</p>
                 <p className="truncate text-[11px] text-muted-foreground">{row.city}</p>
                 <div className="mt-0.5 flex flex-wrap items-center gap-1">
-                  <Badge variant="outline" className={cn("text-[10px]", badgeOutline)} data-testid={`badge-dealer-client-category-${row.id}`}>
-                    {getClientCategoryLabel(row.clientCategory)}
-                  </Badge>
+                  <span data-testid={`text-dealer-client-category-${row.id}`}>
+                    <Badge variant="outline" className={cn("text-[10px]", badgeOutline)} data-testid={`badge-dealer-client-category-${row.id}`}>
+                      {getClientCategoryLabel(row.clientCategory)}
+                    </Badge>
+                  </span>
                   <Badge variant="outline" className={cn("text-[10px]", statusBadgeClass(row.status))}>
                     {row.status}
                   </Badge>
