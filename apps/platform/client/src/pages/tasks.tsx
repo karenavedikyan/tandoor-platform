@@ -29,6 +29,8 @@ import {
   managerDisplayMatchesCatalogName,
 } from "@/lib/rop-manager-filters";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
+import { useClientBaseActualization } from "@/context/client-base-actualization-context";
+import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import {
   initialRopManagerForProfile,
   managerOptionsForProfile,
@@ -632,11 +634,22 @@ function ShowcaseTaskListRow({
 export default function TasksPage() {
   const { profile } = useReleaseDemoProfile();
   const access = useMemo(() => mapSalesRoleToDealerBaseAccess(profile.role), [profile.role]);
+  const actx = useClientBaseActualization();
+
+  const workingDealerRows = useMemo(
+    () =>
+      actx.enabled
+        ? buildDealerBaseRowsWithActualization(actx.state, profile, { includeArchivedDealers: false })
+        : DEALER_BASE_ROWS,
+    [actx.enabled, actx.state, profile],
+  );
 
   const allowedDealerIds = useMemo(() => {
-    const scoped = roleScopedDealerRows(DEALER_BASE_ROWS, profile);
+    const scoped = roleScopedDealerRows(workingDealerRows, profile);
     return new Set(scoped.map((d) => d.id));
-  }, [profile]);
+  }, [workingDealerRows, profile]);
+
+  const actualizationLoading = actx.enabled && actx.loading;
 
   const [showcaseTick, setShowcaseTick] = useState(0);
   useEffect(() => {
@@ -650,9 +663,10 @@ export default function TasksPage() {
   }, []);
 
   const showcaseTasks = useMemo(() => {
+    if (actualizationLoading) return [] as MatrixTaskWithContext[];
     const raw = sortTasks(getAllMatrixTasks()).filter((t) => allowedDealerIds.has(t.dealerId));
     return getShowcaseOnlyTasks(raw);
-  }, [allowedDealerIds, showcaseTick]);
+  }, [actualizationLoading, allowedDealerIds, showcaseTick]);
 
   const [query, setQuery] = useState("");
   const [view, setView] = useState<ViewMode>("cards");
