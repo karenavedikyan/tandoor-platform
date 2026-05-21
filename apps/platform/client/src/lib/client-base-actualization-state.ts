@@ -68,6 +68,15 @@ export type ArchivedDealerInfo = {
   source: ActualizationSource;
 };
 
+export type ArchivedLegalEntityInfo = {
+  legalEntityId: string;
+  dealerId: string;
+  archivedAt: string;
+  archivedBy: string;
+  archivedByName: string;
+  source: ActualizationSource;
+};
+
 export type LegalEntityActualizationState = {
   createdById: string;
   overridesById: Record<string, unknown>;
@@ -186,6 +195,8 @@ export type ActualizationState = {
   tradePointOverridesById: Record<string, TradePointActualizationOverride>;
   manuallyCreatedTradePointsById: Record<string, ManualTradePoint>;
   archivedTradePointsById: Record<string, ArchivedTradePointInfo>;
+  /** Мягкое скрытие юрлица (release и manual); ключ — legalEntityId. */
+  archivedLegalEntitiesById: Record<string, ArchivedLegalEntityInfo>;
   legalEntityOverridesByDealerId: Record<string, LegalEntityActualizationState>;
   dealerCardViewSettingsByUserId: Record<string, DealerCardViewSettings>;
   unloadingOrderByDealerId?: Record<string, number>;
@@ -208,6 +219,7 @@ export function createEmptyActualizationState(): ActualizationState {
     tradePointOverridesById: {},
     manuallyCreatedTradePointsById: {},
     archivedTradePointsById: {},
+    archivedLegalEntitiesById: {},
     legalEntityOverridesByDealerId: {},
     dealerCardViewSettingsByUserId: {},
     unloadingOrderByDealerId: {},
@@ -234,6 +246,7 @@ export function mergeActualizationState(base: ActualizationState, patch: Partial
       ...(patch.manuallyCreatedTradePointsById ?? {}),
     },
     archivedTradePointsById: { ...base.archivedTradePointsById, ...(patch.archivedTradePointsById ?? {}) },
+    archivedLegalEntitiesById: { ...base.archivedLegalEntitiesById, ...(patch.archivedLegalEntitiesById ?? {}) },
     legalEntityOverridesByDealerId: {
       ...base.legalEntityOverridesByDealerId,
       ...(patch.legalEntityOverridesByDealerId ?? {}),
