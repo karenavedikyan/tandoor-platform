@@ -16,7 +16,7 @@ function initialsFromName(name: string): string {
 }
 
 const sizeClass: Record<"xs" | "sm" | "md", string> = {
-  xs: "h-9 w-9 min-h-9 min-w-9 text-[11px]",
+  xs: "h-10 w-10 min-h-10 min-w-10 text-[11px]",
   sm: "h-10 w-10 min-h-10 min-w-10 text-xs",
   md: "h-14 w-14 min-h-14 min-w-14 text-sm",
 };

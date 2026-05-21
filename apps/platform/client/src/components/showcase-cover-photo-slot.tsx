@@ -16,14 +16,18 @@ import {
 } from "@/lib/client-base-actualization-permissions";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 
-export type ShowcaseCoverPhotoSlotSize = "hero" | "large" | "grid" | "list" | "branch";
+export type ShowcaseCoverPhotoSlotSize = "hero" | "large" | "grid" | "list" | "branch" | "table";
 
+/** Внешний контейнер с явными размерами; контент — absolute inset-0 внутри. */
 const frameClass: Record<ShowcaseCoverPhotoSlotSize, string> = {
-  hero: "h-28 w-28 min-h-28 min-w-28 sm:h-32 sm:w-32 sm:min-h-32 sm:min-w-32",
-  large: "h-[5.25rem] w-[5.25rem] min-h-[5.25rem] min-w-[5.25rem] sm:h-24 sm:w-24 sm:min-h-24 sm:min-w-24",
-  grid: "h-14 w-14 min-h-14 min-w-14 sm:h-16 sm:w-16 sm:min-h-16 sm:min-w-16",
-  list: "h-12 w-12 min-h-12 min-w-12",
-  branch: "h-10 w-10 min-h-10 min-w-10 sm:h-11 sm:w-11 sm:min-h-11 sm:min-w-11",
+  hero:
+    "relative aspect-video w-full max-w-full shrink-0 sm:aspect-[4/3] sm:max-h-[13rem] sm:w-[min(100%,15rem)] sm:max-w-[15rem]",
+  large:
+    "relative aspect-video w-full shrink-0 sm:aspect-[4/3] sm:max-h-[12rem] sm:w-[min(100%,14rem)] sm:max-w-[14rem]",
+  grid: "relative aspect-[4/3] w-full shrink-0",
+  list: "relative h-[4.5rem] w-[4.5rem] min-h-[4.5rem] min-w-[4.5rem] shrink-0",
+  branch: "relative h-16 w-16 min-h-16 min-w-16 shrink-0",
+  table: "relative h-10 w-10 min-h-10 min-w-10 shrink-0",
 };
 
 export type ShowcaseCoverPhotoSlotProps = {
@@ -55,7 +59,9 @@ export function ShowcaseCoverPhotoSlot(props: ShowcaseCoverPhotoSlotProps): Reac
 
   const tp = kind === "trade_point" ? tradePoint : undefined;
   if (kind === "trade_point" && !tp) {
-    return <div className={cn("rounded-lg border border-border bg-muted", frameClass[size], className)} aria-hidden />;
+    return (
+      <div className={cn("relative shrink-0 overflow-hidden rounded-lg border border-border bg-muted", frameClass[size], className)} aria-hidden />
+    );
   }
 
   const displaySrc = kind === "dealer" ? dealerDisplaySrc(dealer) : tradePointDisplaySrc(tp!);
@@ -90,31 +96,48 @@ export function ShowcaseCoverPhotoSlot(props: ShowcaseCoverPhotoSlotProps): Reac
     setOpen(true);
   };
 
-  const showCompactHint = size === "grid" || size === "list" || size === "branch";
+  const isTinyThumb = size === "branch" || size === "table";
+  const showTwoLinePlaceholder = size === "hero" || size === "large" || size === "grid" || size === "list";
+
+  const placeholderTitle =
+    kind === "dealer" ? "Добавьте фото или логотип" : "Добавьте фото точки";
+  const placeholderSubtitle =
+    kind === "dealer" ? "Сделайте клиента узнаваемым" : "Покажите фасад или витрину";
 
   return (
     <>
-      <div
-        className={cn("relative shrink-0", frameClass[size], className)}
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => e.stopPropagation()}
-      >
-        <div className={cn("relative h-full w-full overflow-hidden border border-border bg-card", roundCn)}>
+      <div className={cn("group", frameClass[size], className)} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+        <div className={cn("absolute inset-0 overflow-hidden border border-border bg-card", roundCn)}>
           {hasImage ? (
-            <div className="absolute inset-0 h-full w-full" data-testid={imageTestId}>
+            <div className="absolute inset-0" data-testid={imageTestId}>
               <SafeImage src={displaySrc} alt="" className="absolute inset-0 h-full w-full" objectFit="cover" />
             </div>
           ) : (
             <div
               className={cn(
-                "flex h-full min-h-9 w-full flex-col items-center justify-center gap-0.5 bg-muted/40 p-1 text-muted-foreground",
+                "absolute inset-0 flex flex-col items-center justify-center gap-0.5 bg-muted/40 p-1 text-center text-muted-foreground",
                 !canEditGallery && "opacity-90",
+                isTinyThumb && "gap-0 p-0.5",
               )}
               data-testid={placeholderTestId}
             >
-              <Camera className={cn("shrink-0 text-primary", showCompactHint ? "h-4 w-4" : "h-5 w-5")} aria-hidden />
-              {!showCompactHint ? (
-                <span className="px-0.5 text-center text-[10px] font-medium leading-tight">Добавить фото</span>
+              <Camera className={cn("shrink-0 text-primary", isTinyThumb ? "h-3.5 w-3.5" : "h-5 w-5")} aria-hidden />
+              {showTwoLinePlaceholder ? (
+                <>
+                  <span
+                    className={cn(
+                      "line-clamp-2 px-0.5 text-center font-medium leading-tight text-foreground",
+                      size === "list" ? "text-[8px]" : "text-[10px]",
+                    )}
+                  >
+                    {placeholderTitle}
+                  </span>
+                  {size !== "list" ? (
+                    <span className="line-clamp-2 px-0.5 text-center text-[9px] leading-tight text-muted-foreground">
+                      {placeholderSubtitle}
+                    </span>
+                  ) : null}
+                </>
               ) : null}
             </div>
           )}
@@ -149,7 +172,11 @@ export function ShowcaseCoverPhotoSlot(props: ShowcaseCoverPhotoSlotProps): Reac
               type="button"
               size="icon"
               variant="secondary"
-              className="absolute right-0.5 top-0.5 z-[2] h-9 w-9 min-h-9 min-w-9 border border-border bg-card/95 p-0 text-foreground shadow-sm hover:bg-primary/15"
+              className={cn(
+                "absolute right-0.5 top-0.5 z-[2] h-9 w-9 min-h-9 min-w-9 border border-border bg-card/95 p-0 text-foreground shadow-sm transition-opacity",
+                "max-sm:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100",
+                "hover:bg-[#86B832]/20",
+              )}
               data-testid={editTestId}
               aria-label="Редактировать фото"
               onClick={(e) => {

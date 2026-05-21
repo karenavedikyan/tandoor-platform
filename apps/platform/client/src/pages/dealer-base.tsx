@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import {
   ChevronDown,
@@ -83,6 +83,9 @@ import {
 } from "@/lib/client-base-actualization-permissions";
 import { isManualActualizationDealerId } from "@/lib/client-base-actualization-stable-ids";
 import { mergeActualizationState } from "@/lib/client-base-actualization-state";
+import { mergeTradePointsForActualization } from "@/lib/client-base-actualization-data-merge";
+import { getManualDealerDisplayCode } from "@/lib/client-base-actualization-stable-ids";
+import { countShowcaseMatrixDeficitForDealer } from "@/lib/trade-point-list-for-actualization";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
 import { toast } from "@/hooks/use-toast";
 import {
@@ -169,7 +172,6 @@ import { SHOWCASE_STORAGE_EVENT } from "@/lib/showcase-distribution-data";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DealerBulkDeleteCheckbox } from "@/components/dealer-bulk-delete-checkbox";
 import { DealerBaseDealerShowcaseGrid } from "@/components/dealer-base-dealer-showcase-grid";
-import { DealerRowListAvatar } from "@/components/dealer-row-list-avatar";
 import { ShowcaseCoverPhotoSlot } from "@/components/showcase-cover-photo-slot";
 import { cleanContactDisplay, mailtoHref, telHref, whatsAppHref } from "@/lib/dealer-contact-links";
 import type { ActualizationState } from "@/lib/client-base-actualization-state";
@@ -366,7 +368,7 @@ function ClientCompactGridBlock({
   rows,
   empty,
   profile,
-  actualizationState: _actualizationState,
+  actualizationState,
   workPlanUserId,
   workPlanState,
   showWorkPlanSelect,
@@ -379,7 +381,6 @@ function ClientCompactGridBlock({
 }: DealerRowRendererBaseProps) {
   const wp = workPlanUserId && workPlanState;
   void _nextStepsStorage;
-  void _actualizationState;
   void shipmentActiveDayId;
   void shipmentUserId;
   if (rows.length === 0) {
@@ -394,19 +395,65 @@ function ClientCompactGridBlock({
   const badgeSoft = "border-primary/30 bg-primary/10 text-foreground";
 
   return (
-    <div className="grid grid-cols-2 gap-2 lg:grid-cols-3 xl:grid-cols-4">
+    <div className="grid min-w-0 grid-cols-1 gap-2 min-[380px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {rows.map((row) => {
         const hidden = wp ? isDealerHiddenForUser(workPlanUserId, row.id, workPlanState) : false;
         const checked = Boolean(selectedIds?.has(row.id));
         const stockSig = getDealerStockSignal(row);
         const programSig = getDealerProgramSignal(row);
+        const codeStr = showcaseClientCode(row, actualizationState);
+        const metaLine = [row.city?.trim() || "—", codeStr, getClientCategoryLabel(row.clientCategory)].join(" · ");
+
+        const extraBadges: ReactNode[] = [];
+        if (stockSig.hasMainWarehouse) {
+          extraBadges.push(
+            <Badge key="mw" variant="outline" className={cn("px-1 py-0 text-[9px] font-semibold", badgeSoft)} data-testid={`badge-dealer-main-warehouse-${row.id}`}>
+              Склад
+            </Badge>,
+          );
+        }
+        if (stockSig.hasHardwareWarehouse) {
+          extraBadges.push(
+            <Badge key="hw" variant="outline" className={cn("px-1 py-0 text-[9px] font-semibold", badgeSoft)} data-testid={`badge-dealer-hardware-warehouse-${row.id}`}>
+              Фурн
+            </Badge>,
+          );
+        }
+        if (programSig.hasTandoorClub) {
+          extraBadges.push(
+            <Badge key="tc" variant="outline" className={cn("px-1 py-0 text-[9px] font-semibold", badgeSoft)} data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.tandoor_club}-${row.id}`}>
+              ТК
+            </Badge>,
+          );
+        }
+        if (programSig.hasCashbackAgent) {
+          extraBadges.push(
+            <Badge key="cb" variant="outline" className={cn("px-1 py-0 text-[9px] font-semibold", badgeSoft)} data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.cashback_agent}-${row.id}`}>
+              КБ
+            </Badge>,
+          );
+        }
+        if (programSig.hasSpecialConditions) {
+          extraBadges.push(
+            <Badge key="su" variant="outline" className={cn("px-1 py-0 text-[9px] font-semibold", badgeSoft)} data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.special_conditions}-${row.id}`}>
+              СУ
+            </Badge>,
+          );
+        }
+        const badgeCap = 4;
+        const visExtra = extraBadges.slice(0, badgeCap);
+        const extraRest = extraBadges.length - visExtra.length;
+
         return (
           <Card
             key={row.id}
-            className="rounded-xl border border-border/80 bg-card shadow-sm"
+            className="overflow-hidden rounded-xl border border-border border-l-4 border-l-primary bg-card shadow-sm"
             data-testid={`card-dealer-compact-${row.id}`}
           >
-            <CardContent className="flex min-h-0 flex-col gap-2 p-2.5">
+            <CardContent
+              className="flex min-h-0 flex-col gap-2 p-2.5"
+              data-testid={`section-dealer-showcase-card-grid-${row.id}`}
+            >
               <div className="flex min-w-0 flex-wrap items-start justify-between gap-1.5">
                 <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
                   {showWorkPlanSelect && wp && onToggleWorkPlanSelect ? (
@@ -442,64 +489,43 @@ function ClientCompactGridBlock({
                   </Link>
                 </Button>
               </div>
-              <div className="flex min-w-0 gap-2">
-                <ShowcaseCoverPhotoSlot kind="dealer" dealer={row} profile={profile} size="grid" rounded="md" className="shrink-0" />
-                <div className="min-w-0 flex-1 space-y-0.5">
-                  <p className="line-clamp-2 text-sm font-semibold leading-tight text-foreground">{row.name}</p>
-                  <p className="truncate text-[11px] text-muted-foreground">{row.city}</p>
-                  <div className="flex flex-wrap gap-1">
-                    <Badge
-                      variant="outline"
-                      className={cn("px-1.5 py-0 text-[10px] font-medium", badgeOutline)}
-                      data-testid={`badge-dealer-client-category-${row.id}`}
-                    >
-                      {getClientCategoryLabel(row.clientCategory)}
-                    </Badge>
-                    <Badge variant="outline" className={cn("px-1.5 py-0 text-[10px]", statusBadgeClass(row.status))}>
-                      {row.status}
-                    </Badge>
-                  </div>
-                  {row.outlets > 1 ? (
-                    <Badge variant="outline" className={cn("w-fit px-1.5 py-0 text-[10px] tabular-nums", badgeOutline)}>
-                      Сеть · {row.outlets} ТТ
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline" className={cn("w-fit px-1.5 py-0 text-[10px] tabular-nums", badgeOutline)}>
-                      {row.outlets} ТТ
-                    </Badge>
-                  )}
-                  {hidden ? (
-                    <Badge variant="secondary" className="w-fit text-[10px]" data-testid={`badge-dealer-hidden-${row.id}`}>
-                      Скрыт
+              <ShowcaseCoverPhotoSlot kind="dealer" dealer={row} profile={profile} size="grid" rounded="lg" className="w-full shrink-0" />
+              <div className="min-w-0 space-y-1">
+                <p className="line-clamp-2 text-sm font-semibold leading-tight text-foreground">{row.name}</p>
+                <p className="line-clamp-2 text-[11px] leading-snug text-muted-foreground min-[380px]:line-clamp-1">{metaLine}</p>
+                <div className="flex flex-wrap gap-1">
+                  <Badge
+                    variant="outline"
+                    className={cn("px-1.5 py-0 text-[10px] font-medium", badgeOutline)}
+                    data-testid={`badge-dealer-client-category-${row.id}`}
+                  >
+                    {getClientCategoryLabel(row.clientCategory)}
+                  </Badge>
+                  <Badge variant="outline" className={cn("px-1.5 py-0 text-[10px]", statusBadgeClass(row.status))}>
+                    {row.status}
+                  </Badge>
+                </div>
+                {row.outlets > 1 ? (
+                  <Badge variant="outline" className={cn("w-fit px-1.5 py-0 text-[10px] tabular-nums", badgeOutline)}>
+                    Сеть · {row.outlets} ТТ
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className={cn("w-fit px-1.5 py-0 text-[10px] tabular-nums", badgeOutline)}>
+                    {row.outlets} ТТ
+                  </Badge>
+                )}
+                {hidden ? (
+                  <Badge variant="secondary" className="w-fit text-[10px]" data-testid={`badge-dealer-hidden-${row.id}`}>
+                    Скрыт
+                  </Badge>
+                ) : null}
+                <div className="flex max-w-full flex-wrap gap-1">
+                  {visExtra}
+                  {extraRest > 0 ? (
+                    <Badge variant="outline" className={cn("px-1 py-0 text-[9px] font-semibold tabular-nums", badgeOutline)}>
+                      +{extraRest}
                     </Badge>
                   ) : null}
-                  <div className="flex flex-wrap gap-1">
-                    {stockSig.hasMainWarehouse ? (
-                      <Badge variant="outline" className={cn("px-1 py-0 text-[9px] font-semibold", badgeSoft)} data-testid={`badge-dealer-main-warehouse-${row.id}`}>
-                        Склад
-                      </Badge>
-                    ) : null}
-                    {stockSig.hasHardwareWarehouse ? (
-                      <Badge variant="outline" className={cn("px-1 py-0 text-[9px] font-semibold", badgeSoft)} data-testid={`badge-dealer-hardware-warehouse-${row.id}`}>
-                        Фурн
-                      </Badge>
-                    ) : null}
-                    {programSig.hasTandoorClub ? (
-                      <Badge variant="outline" className={cn("px-1 py-0 text-[9px] font-semibold", badgeSoft)} data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.tandoor_club}-${row.id}`}>
-                        ТК
-                      </Badge>
-                    ) : null}
-                    {programSig.hasCashbackAgent ? (
-                      <Badge variant="outline" className={cn("px-1 py-0 text-[9px] font-semibold", badgeSoft)} data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.cashback_agent}-${row.id}`}>
-                        КБ
-                      </Badge>
-                    ) : null}
-                    {programSig.hasSpecialConditions ? (
-                      <Badge variant="outline" className={cn("px-1 py-0 text-[9px] font-semibold", badgeSoft)} data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.special_conditions}-${row.id}`}>
-                        СУ
-                      </Badge>
-                    ) : null}
-                  </div>
                 </div>
               </div>
             </CardContent>
@@ -515,11 +541,34 @@ function innCell(row: DealerRow): string {
   return t || "—";
 }
 
+function showcaseClientCode(row: DealerRow, act: ActualizationState): string {
+  const rel = row.releaseCode?.trim();
+  if (rel) return rel;
+  const m = act.manuallyCreatedDealersById[row.id];
+  if (m) return getManualDealerDisplayCode(m);
+  return "—";
+}
+
+function dealerShowcaseAggregateHint(row: DealerRow, act: ActualizationState): string | null {
+  const merged = mergeTradePointsForActualization(row, act).filter((e) => !e.isArchived);
+  if (merged.length === 0) return null;
+  for (const e of merged) {
+    const sh = act.tradePointShowcaseActualizationById[e.point.id];
+    if (countShowcaseMatrixDeficitForDealer(row, act, sh) > 0) return "Дефицит витрины";
+  }
+  const anyFilled = merged.some((e) => {
+    const sh = act.tradePointShowcaseActualizationById[e.point.id];
+    return sh?.hasShowcase != null;
+  });
+  if (!anyFilled) return "Витрина не заполнена";
+  return "Витрина";
+}
+
 function ClientListRowsBlock({
   rows,
   empty,
   profile,
-  actualizationState: _actualizationState,
+  actualizationState,
   workPlanUserId,
   workPlanState,
   showWorkPlanSelect,
@@ -531,7 +580,6 @@ function ClientListRowsBlock({
   nextStepsStorage,
 }: DealerRowRendererBaseProps) {
   const wp = workPlanUserId && workPlanState;
-  void _actualizationState;
   void shipmentActiveDayId;
   void shipmentUserId;
   if (rows.length === 0) {
@@ -544,6 +592,7 @@ function ClientListRowsBlock({
   }
 
   const badgeOutline = "border-primary/35 bg-card text-foreground";
+  const badgeSoft = "border-primary/30 bg-primary/10 text-foreground";
 
   const iconBtnClass =
     "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-card text-foreground hover:bg-primary/10";
@@ -560,11 +609,14 @@ function ClientListRowsBlock({
         const tel = phone ? telHref(phone) : null;
         const wa = phone ? whatsAppHref(phone) : null;
         const mail = email ? mailtoHref(email) : null;
+        const showcaseHint = dealerShowcaseAggregateHint(row, actualizationState);
+        const codeStr = showcaseClientCode(row, actualizationState);
+        const innLine = innCell(row);
         return (
           <div
             key={row.id}
             className="flex min-w-0 items-stretch gap-1.5 p-2 sm:gap-2 sm:p-2.5"
-            data-testid={`row-dealer-list-${row.id}`}
+            data-testid={`row-dealer-showcase-list-${row.id}`}
           >
             <div className="flex shrink-0 flex-col items-start gap-1 pt-0.5">
               {showWorkPlanSelect && wp && onToggleWorkPlanSelect ? (
@@ -596,8 +648,11 @@ function ClientListRowsBlock({
               <ShowcaseCoverPhotoSlot kind="dealer" dealer={row} profile={profile} size="list" rounded="md" className="shrink-0" />
               <div className="min-w-0 flex-1">
                 <p className="line-clamp-2 text-sm font-semibold leading-snug text-foreground">{row.name}</p>
-                <p className="truncate text-[11px] text-muted-foreground">{row.city}</p>
-                <div className="mt-0.5 flex flex-wrap items-center gap-1">
+                <p className="line-clamp-1 text-[11px] text-muted-foreground">{row.city}</p>
+                <p className="mt-0.5 line-clamp-1 text-[10px] text-muted-foreground">
+                  {[innLine !== "—" ? `ИНН ${innLine}` : null, `Код ${codeStr}`].filter(Boolean).join(" · ")}
+                </p>
+                <div className="mt-0.5 flex max-w-full flex-wrap items-center gap-1">
                   <span data-testid={`text-dealer-client-category-${row.id}`}>
                     <Badge variant="outline" className={cn("text-[10px]", badgeOutline)} data-testid={`badge-dealer-client-category-${row.id}`}>
                       {getClientCategoryLabel(row.clientCategory)}
@@ -606,6 +661,20 @@ function ClientListRowsBlock({
                   <Badge variant="outline" className={cn("text-[10px]", statusBadgeClass(row.status))}>
                     {row.status}
                   </Badge>
+                  <Badge variant="outline" className={cn("text-[10px] tabular-nums", badgeOutline)}>
+                    {row.outlets} ТТ
+                  </Badge>
+                  {showcaseHint ? (
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "max-w-full truncate text-[9px]",
+                        showcaseHint === "Дефицит витрины" ? badgeSoft : badgeOutline,
+                      )}
+                    >
+                      {showcaseHint}
+                    </Badge>
+                  ) : null}
                   {hidden ? (
                     <Badge variant="secondary" className="text-[10px]" data-testid={`badge-dealer-hidden-${row.id}`}>
                       Скрыт
@@ -614,9 +683,6 @@ function ClientListRowsBlock({
                 </div>
                 {nextLine ? <p className="mt-0.5 line-clamp-1 text-[10px] text-muted-foreground">{nextLine}</p> : null}
               </div>
-              <Badge variant="outline" className={cn("hidden shrink-0 tabular-nums sm:inline-flex", badgeOutline)}>
-                {row.outlets} ТТ
-              </Badge>
             </Link>
             <div className="flex shrink-0 items-center gap-0.5 sm:gap-1" onClick={(e) => e.stopPropagation()}>
               {tel ? (
@@ -642,6 +708,11 @@ function ClientListRowsBlock({
                   <Mail className="h-4 w-4 text-primary" />
                 </a>
               ) : null}
+              <Button asChild size="sm" variant="secondary" className="h-9 shrink-0 px-2 text-xs font-semibold sm:hidden">
+                <Link href={`/dealers/${row.id}`} data-testid={`button-open-dealer-mobile-${row.id}`} onClick={(e) => e.stopPropagation()}>
+                  Открыть
+                </Link>
+              </Button>
               <Button asChild size="sm" variant="secondary" className="hidden h-9 shrink-0 px-2 text-xs font-semibold sm:inline-flex">
                 <Link href={`/dealers/${row.id}`} data-testid={`button-open-dealer-${row.id}`} onClick={(e) => e.stopPropagation()}>
                   Открыть
@@ -679,7 +750,7 @@ function sortDealerRowsForTable(rows: DealerRow[], key: TableSortKey, dir: "asc"
 function DealerBaseDataTable({
   rows,
   empty,
-  profile: _profile,
+  profile,
   actualizationState: _actualizationState,
   workPlanUserId,
   workPlanState,
@@ -692,7 +763,6 @@ function DealerBaseDataTable({
   nextStepsStorage,
 }: DealerRowRendererBaseProps) {
   const wp = workPlanUserId && workPlanState;
-  void _profile;
   void _actualizationState;
   const [sortKey, setSortKey] = useState<TableSortKey>("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -797,8 +867,10 @@ function DealerBaseDataTable({
                     ) : null}
                   </td>
                 ) : null}
-                <td className="px-1 py-1.5 align-middle">
-                  <DealerRowListAvatar row={row} size="xs" />
+                <td className="px-1 py-1.5 align-middle" data-testid={`cell-dealer-showcase-table-photo-${row.id}`}>
+                  <div className="flex justify-center">
+                    <ShowcaseCoverPhotoSlot kind="dealer" dealer={row} profile={profile} size="table" rounded="md" />
+                  </div>
                 </td>
                 <td className="whitespace-nowrap px-2 py-1.5 font-mono text-xs text-muted-foreground">{row.releaseCode ?? "—"}</td>
                 <td className="max-w-[11rem] px-2 py-1.5 align-top text-xs">

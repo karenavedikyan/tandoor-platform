@@ -1205,10 +1205,10 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
               data-testid="section-dealer-overview"
               className="scroll-mt-28 space-y-3 sm:scroll-mt-32 lg:scroll-mt-32"
             >
-              <SurfaceCard className="p-3 sm:p-4">
+              <SurfaceCard className="overflow-hidden border border-border border-l-4 border-l-primary p-3 sm:p-4">
                 <CardContent className="space-y-3 p-0 sm:space-y-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
-                    <ShowcaseCoverPhotoSlot kind="dealer" dealer={row} profile={profile} size="hero" rounded="xl" className="shrink-0" />
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
+                    <ShowcaseCoverPhotoSlot kind="dealer" dealer={row} profile={profile} size="hero" rounded="xl" className="w-full shrink-0 sm:max-w-[15rem]" />
                     <div className="min-w-0 flex-1 space-y-3">
                   <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                     <Badge variant="outline" className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", statusBadgeClass(row.status))}>
@@ -1245,7 +1245,7 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                       </Badge>
                     ) : null}
                   </div>
-                  <h1 className="text-lg font-semibold tracking-tight text-foreground sm:text-xl">{rowView.name}</h1>
+                  <h1 className="line-clamp-2 text-lg font-semibold tracking-tight text-foreground sm:text-xl">{rowView.name}</h1>
                     </div>
                   </div>
 

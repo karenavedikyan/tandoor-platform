@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { Building2, Mail, MessageCircle, Phone } from "lucide-react";
@@ -232,13 +233,16 @@ function TradePointShowcaseRow({
   return (
     <div
       className={cn(
-        "min-w-0 overflow-hidden rounded-md border border-border bg-card py-2 pl-2 pr-2 shadow-none sm:py-2.5 sm:pr-2.5",
-        "border-l-4",
+        "min-w-0 overflow-hidden rounded-md border border-border bg-muted/20 py-2 pl-2 pr-2 shadow-none sm:py-2 sm:pr-2.5",
+        "border-l-2",
         accentBorder,
       )}
       data-testid={`card-dealer-showcase-trade-point-${tp.id}`}
     >
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+      <div
+        className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3"
+        data-testid={`row-dealer-showcase-trade-point-${tp.id}`}
+      >
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
             <div className="flex min-w-0 items-start gap-2">
@@ -252,7 +256,7 @@ function TradePointShowcaseRow({
                 className="shrink-0"
               />
               <div className="min-w-0">
-                <span className="text-sm font-semibold leading-snug text-foreground">{tp.name}</span>
+                <span className="line-clamp-1 text-sm font-semibold leading-snug text-foreground">{tp.name}</span>
                 <p className="font-mono text-[10px] leading-tight text-muted-foreground">{getTradePointDisplayCodeForActualization(tp)}</p>
               </div>
             </div>
@@ -260,19 +264,18 @@ function TradePointShowcaseRow({
               asChild
               size="sm"
               variant="outline"
-              className="h-7 shrink-0 rounded-md border border-primary/35 bg-card px-2.5 text-[11px] font-medium text-foreground hover:bg-primary/10 sm:mt-0"
+              className="h-7 shrink-0 rounded-md border border-border bg-card px-2.5 text-[11px] font-medium text-foreground hover:bg-primary/10 sm:mt-0"
             >
               <Link href={tpHref} data-testid={`button-dealer-showcase-open-trade-point-${tp.id}`}>
                 Открыть ТТ
               </Link>
             </Button>
           </div>
-          <p className="text-[11px] leading-snug text-muted-foreground">
-            {tp.city}
-            {tp.address ? ` · ${tp.address}` : ""}
+          <p className="line-clamp-2 text-[11px] leading-snug text-muted-foreground">
+            {[tp.city?.trim(), tp.address?.trim()].filter(Boolean).join(" · ")}
           </p>
-          <div className="flex flex-wrap gap-1">
-            <Badge variant="outline" className={cn("text-[10px] font-medium", statusBadgeCn)}>
+          <div className="flex max-w-full flex-wrap gap-1">
+            <Badge variant="outline" className={cn("max-w-full truncate text-[10px] font-medium", statusBadgeCn)}>
               {line}
             </Badge>
             {summary.hasExpansionPotentialComputed ? (
@@ -282,10 +285,12 @@ function TradePointShowcaseRow({
             ) : null}
           </div>
           {(portals || tandoor) && (
-            <p className="text-[10px] leading-tight text-muted-foreground">{[portals, tandoor].filter(Boolean).join(" · ")}</p>
+            <p className="line-clamp-2 text-[10px] leading-tight text-muted-foreground">{[portals, tandoor].filter(Boolean).join(" · ")}</p>
           )}
-          {ship ? <p className="text-[10px] text-muted-foreground">Отгрузка: {ship.label}</p> : null}
-          {cleanContact(tp.contactName) ? <p className="text-[11px] text-muted-foreground">Контакт: {tp.contactName}</p> : null}
+          {ship ? <p className="line-clamp-1 text-[10px] text-muted-foreground">Отгрузка: {ship.label}</p> : null}
+          {cleanContact(tp.contactName) ? (
+            <p className="line-clamp-1 text-[11px] text-muted-foreground">Контакт: {tp.contactName}</p>
+          ) : null}
         </div>
       </div>
       <div className="mt-2 flex max-w-full flex-wrap gap-1.5 border-t border-border pt-2">
@@ -375,48 +380,140 @@ function DealerShowcaseCard({
 
   const tpCount = merged.length;
   const [expanded, setExpanded] = useState(false);
-  const initialTpCap = typeof window !== "undefined" && window.innerWidth >= 768 ? 3 : 2;
+  const initialTpCap = 3;
   const visibleTp = expanded ? merged : merged.slice(0, initialTpCap);
   const restCount = merged.length - visibleTp.length;
+
+  const innCodeCityLine = [inn ? `ИНН ${inn}` : null, `Код ${code}`, cityLine !== "—" ? cityLine : null].filter(Boolean).join(" · ");
+
+  const secondaryBadges = useMemo(() => {
+    const nodes: ReactNode[] = [];
+    nodes.push(
+      <Badge key="cat" variant="outline" className={cn("text-[10px]", badgeOutline)}>
+        {getClientCategoryLabel(row.clientCategory)}
+      </Badge>,
+    );
+    nodes.push(
+      <Badge key="status" variant="outline" className={cn("text-[10px]", statusBadgeClass(row.status))}>
+        {dealerShowcaseStatusLabel(row.status)}
+      </Badge>,
+    );
+    if (stockSig.hasMainWarehouse) {
+      nodes.push(
+        <Badge key="mw" variant="outline" className={cn("text-[10px]", badgeSoft)} data-testid={`badge-dealer-main-warehouse-${row.id}`}>
+          Склад двери
+        </Badge>,
+      );
+    }
+    if (stockSig.hasHardwareWarehouse) {
+      nodes.push(
+        <Badge key="hw" variant="outline" className={cn("text-[10px]", badgeSoft)} data-testid={`badge-dealer-hardware-warehouse-${row.id}`}>
+          Склад фурнитуры
+        </Badge>,
+      );
+    }
+    if (programSig.hasTandoorClub) {
+      nodes.push(
+        <Badge
+          key="tc"
+          variant="outline"
+          className={cn("text-[10px]", badgeSoft)}
+          data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.tandoor_club}-${row.id}`}
+        >
+          Tandoor Club
+        </Badge>,
+      );
+    }
+    if (programSig.hasCashbackAgent) {
+      nodes.push(
+        <Badge
+          key="cb"
+          variant="outline"
+          className={cn("text-[10px]", badgeSoft)}
+          data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.cashback_agent}-${row.id}`}
+        >
+          Кэшбэк
+        </Badge>,
+      );
+    }
+    if (programSig.hasSpecialConditions) {
+      nodes.push(
+        <Badge
+          key="sc"
+          variant="outline"
+          className={cn("text-[10px]", badgeSoft)}
+          data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.special_conditions}-${row.id}`}
+        >
+          Спецусловия
+        </Badge>,
+      );
+    }
+    if (hidden) {
+      nodes.push(
+        <Badge key="hid" variant="outline" className="border-border bg-muted text-[10px] text-muted-foreground" data-testid={`badge-dealer-hidden-${row.id}`}>
+          Скрыт из рабочего списка
+        </Badge>,
+      );
+    }
+    return nodes;
+  }, [
+    row.id,
+    row.clientCategory,
+    row.status,
+    stockSig.hasMainWarehouse,
+    stockSig.hasHardwareWarehouse,
+    programSig.hasTandoorClub,
+    programSig.hasCashbackAgent,
+    programSig.hasSpecialConditions,
+    hidden,
+  ]);
+
+  const badgeCap = 4;
+  const visibleSecondaryBadges = secondaryBadges.slice(0, badgeCap);
+  const secondaryBadgeRest = secondaryBadges.length - visibleSecondaryBadges.length;
 
   return (
     <Card
       className="overflow-hidden rounded-xl border border-border border-l-4 border-l-primary bg-card shadow-sm"
       data-testid={`card-dealer-showcase-${row.id}`}
     >
-      <CardContent className="space-y-3 p-3 text-foreground sm:p-4">
-        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex min-w-0 gap-3">
-            {showWorkPlanSelect && wp && onToggleWorkPlanSelect ? (
-              <Checkbox
-                checked={checked}
-                onCheckedChange={(v) => onToggleWorkPlanSelect(row.id, v === true)}
-                className="mt-1 h-4 w-4 shrink-0"
-                data-testid={`checkbox-dealer-workplan-select-${row.id}`}
-                aria-label={`Выбрать клиента ${row.name} для плана работ`}
-              />
-            ) : null}
-            {archiveBulk?.selectableIds.has(row.id) ? (
-              <span
-                className={cn(
-                  "mt-1 inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-foreground/20 bg-muted px-2 py-1",
-                  showWorkPlanSelect && wp && onToggleWorkPlanSelect && "border-l-2 border-l-primary/50 pl-2",
-                )}
-                data-testid={`wrap-dealer-bulk-select-${row.id}`}
-              >
-                <span className="text-[9px] font-bold uppercase text-foreground">Удалить</span>
-                <DealerBulkDeleteCheckbox
-                  checked={archiveBulk.selectedIds.has(row.id)}
-                  onCheckedChange={(v: boolean | "indeterminate") => archiveBulk.onToggle(row.id, v === true)}
-                  data-testid={`checkbox-dealer-select-${row.id}`}
-                  aria-label={`Удалить клиента ${row.name} из рабочей базы`}
+      <CardContent className="space-y-3 p-3 text-foreground sm:p-4" data-testid={`section-dealer-showcase-card-large-${row.id}`}>
+        <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
+          <div className="flex min-w-0 flex-col gap-2 md:flex-1 md:flex-row md:gap-4">
+            <div className="flex min-w-0 flex-wrap items-start gap-2">
+              {showWorkPlanSelect && wp && onToggleWorkPlanSelect ? (
+                <Checkbox
+                  checked={checked}
+                  onCheckedChange={(v) => onToggleWorkPlanSelect(row.id, v === true)}
+                  className="mt-1 h-4 w-4 shrink-0"
+                  data-testid={`checkbox-dealer-workplan-select-${row.id}`}
+                  aria-label={`Выбрать клиента ${row.name} для плана работ`}
                 />
-              </span>
-            ) : null}
-            <ShowcaseCoverPhotoSlot kind="dealer" dealer={row} profile={profile} size="large" rounded="lg" className="shrink-0" />
+              ) : null}
+              {archiveBulk?.selectableIds.has(row.id) ? (
+                <span
+                  className={cn(
+                    "mt-1 inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border bg-muted px-2 py-1",
+                    showWorkPlanSelect && wp && onToggleWorkPlanSelect && "border-l-2 border-l-primary/50 pl-2",
+                  )}
+                  data-testid={`wrap-dealer-bulk-select-${row.id}`}
+                >
+                  <span className="text-[9px] font-bold uppercase text-foreground">Удалить</span>
+                  <DealerBulkDeleteCheckbox
+                    checked={archiveBulk.selectedIds.has(row.id)}
+                    onCheckedChange={(v: boolean | "indeterminate") => archiveBulk.onToggle(row.id, v === true)}
+                    data-testid={`checkbox-dealer-select-${row.id}`}
+                    aria-label={`Удалить клиента ${row.name} из рабочей базы`}
+                  />
+                </span>
+              ) : null}
+            </div>
+
+            <ShowcaseCoverPhotoSlot kind="dealer" dealer={row} profile={profile} size="large" rounded="lg" className="w-full shrink-0 md:max-w-[14rem]" />
+
             <div className="min-w-0 flex-1 space-y-1.5">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <h3 className="text-base font-semibold leading-tight text-foreground sm:text-lg">{row.name}</h3>
+              <h3 className="line-clamp-2 text-base font-semibold leading-snug text-foreground sm:text-lg">{row.name}</h3>
+              <div className="flex max-w-full flex-wrap items-center gap-1">
                 <Badge variant="outline" className={cn("text-[10px] font-semibold", badgeOutline)}>
                   Дилер
                 </Badge>
@@ -434,55 +531,27 @@ function DealerShowcaseCard({
                   </Badge>
                 ) : null}
               </div>
-              <p className="text-xs text-muted-foreground">{regionLine || "—"}</p>
-              <p className="line-clamp-2 text-[11px] leading-snug text-muted-foreground">
-                {[inn ? `ИНН ${inn}` : null, `Код ${code}`, contactName ? contactName : null, phone ? phone : null].filter(Boolean).join(" · ") || "—"}
+              {regionLine ? <p className="line-clamp-1 text-xs text-muted-foreground">{regionLine}</p> : null}
+              <p className="line-clamp-1 text-[11px] leading-snug text-muted-foreground">{innCodeCityLine || "—"}</p>
+              <p className="line-clamp-1 text-[11px] leading-snug text-muted-foreground">
+                {[contactName, phone].filter(Boolean).join(" · ") || null}
               </p>
-              <div className="flex flex-wrap gap-1">
-                <Badge variant="outline" className={cn("text-[10px]", badgeOutline)}>
-                  {getClientCategoryLabel(row.clientCategory)}
-                </Badge>
-                <Badge variant="outline" className={cn("text-[10px]", statusBadgeClass(row.status))}>
-                  {dealerShowcaseStatusLabel(row.status)}
-                </Badge>
-                {stockSig.hasMainWarehouse ? (
-                  <Badge variant="outline" className={cn("text-[10px]", badgeSoft)} data-testid={`badge-dealer-main-warehouse-${row.id}`}>
-                    Склад двери
-                  </Badge>
-                ) : null}
-                {stockSig.hasHardwareWarehouse ? (
-                  <Badge variant="outline" className={cn("text-[10px]", badgeSoft)} data-testid={`badge-dealer-hardware-warehouse-${row.id}`}>
-                    Склад фурнитуры
-                  </Badge>
-                ) : null}
-                {programSig.hasTandoorClub ? (
-                  <Badge variant="outline" className={cn("text-[10px]", badgeSoft)} data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.tandoor_club}-${row.id}`}>
-                    Tandoor Club
-                  </Badge>
-                ) : null}
-                {programSig.hasCashbackAgent ? (
-                  <Badge variant="outline" className={cn("text-[10px]", badgeSoft)} data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.cashback_agent}-${row.id}`}>
-                    Кэшбэк
-                  </Badge>
-                ) : null}
-                {programSig.hasSpecialConditions ? (
-                  <Badge variant="outline" className={cn("text-[10px]", badgeSoft)} data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.special_conditions}-${row.id}`}>
-                    Спецусловия
+              <div className="flex max-w-full flex-wrap gap-1">
+                {visibleSecondaryBadges}
+                {secondaryBadgeRest > 0 ? (
+                  <Badge variant="outline" className={cn("text-[10px] font-semibold tabular-nums", badgeOutline)}>
+                    +{secondaryBadgeRest}
                   </Badge>
                 ) : null}
               </div>
-              {hidden ? (
-                <Badge variant="outline" className="w-fit border-border bg-muted text-[10px] text-muted-foreground" data-testid={`badge-dealer-hidden-${row.id}`}>
-                  Скрыт из рабочего списка
-                </Badge>
-              ) : null}
             </div>
           </div>
-          <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:min-w-[12rem]">
+
+          <div className="flex w-full shrink-0 flex-col gap-2 md:w-auto md:min-w-[11rem]">
             <Button
               asChild
               size="sm"
-              className="h-9 w-full rounded-full bg-primary font-semibold text-primary-foreground hover:bg-primary/90 sm:w-auto"
+              className="h-9 w-full rounded-full bg-primary font-semibold text-primary-foreground hover:bg-[#86B832] md:w-auto"
             >
               <Link href={`/dealers/${row.id}`} data-testid={`button-dealer-showcase-open-${row.id}`}>
                 Открыть клиента
@@ -497,25 +566,25 @@ function DealerShowcaseCard({
         </div>
 
         {(contactName || phone || email) && (
-          <div className="rounded-lg border border-primary/25 bg-muted px-3 py-2 text-sm">
+          <div className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm">
             <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold text-muted-foreground">
               <Building2 className="h-3.5 w-3.5 text-primary" aria-hidden />
               Основной контакт
             </div>
-            {contactName ? <p className="mt-1 font-medium text-foreground">{contactName}</p> : null}
-            {phone ? <p className="text-xs text-foreground">{phone}</p> : null}
-            {email ? <p className="text-xs text-muted-foreground">{email}</p> : null}
+            {contactName ? <p className="mt-1 line-clamp-2 font-medium text-foreground">{contactName}</p> : null}
+            {phone ? <p className="line-clamp-1 text-xs text-foreground">{phone}</p> : null}
+            {email ? <p className="line-clamp-1 text-xs text-muted-foreground">{email}</p> : null}
           </div>
         )}
 
         {merged.length > 0 ? (
           <section
-            className="rounded-lg border border-primary/25 bg-muted/60 p-2 sm:p-2.5"
+            className="rounded-lg border border-border bg-muted/20 p-2 sm:p-2.5"
             data-testid={`section-dealer-showcase-branches-${row.id}`}
           >
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <h4 className="text-xs font-semibold uppercase tracking-wide text-foreground">Филиалы / торговые точки</h4>
-              <Badge variant="outline" className="h-5 border border-primary/35 bg-card px-2 text-[10px] font-semibold tabular-nums text-foreground">
+              <Badge variant="outline" className="h-5 border border-border bg-card px-2 text-[10px] font-semibold tabular-nums text-foreground">
                 {merged.length}
               </Badge>
             </div>
