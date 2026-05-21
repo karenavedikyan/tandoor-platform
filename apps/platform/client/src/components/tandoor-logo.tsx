@@ -18,20 +18,37 @@ export function TandoorLogo({
   variant = "onLight",
   "data-testid": testId,
 }: TandoorLogoProps) {
-  const src = variant === "onDark" ? logoLight : logoOfficial;
+  const sizeClass = compact ? "max-h-8 max-w-[9.5rem]" : "max-h-[60px] max-w-[168px]";
+
+  if (variant === "onDark") {
+    return (
+      <img
+        src={logoLight}
+        alt="Tandoor"
+        className={cn("block h-auto w-auto max-w-full shrink-0 object-contain object-left", sizeClass, className)}
+        loading="eager"
+        decoding="async"
+        data-testid={testId}
+      />
+    );
+  }
 
   return (
-    <img
-      src={src}
-      alt="Tandoor"
-      className={cn(
-        "block h-auto w-auto max-w-full shrink-0 object-contain object-left",
-        compact ? "max-h-8 max-w-[9.5rem]" : "max-h-[60px] max-w-[168px]",
-        className,
-      )}
-      loading="eager"
-      decoding="async"
-      data-testid={testId}
-    />
+    <span className={cn("relative block h-auto w-auto max-w-full shrink-0", sizeClass, className)} data-testid={testId}>
+      <img
+        src={logoOfficial}
+        alt="Tandoor"
+        className="block h-auto w-auto max-w-full object-contain object-left dark:hidden"
+        loading="eager"
+        decoding="async"
+      />
+      <img
+        src={logoLight}
+        alt="Tandoor"
+        className="hidden h-auto w-auto max-w-full object-contain object-left dark:block"
+        loading="eager"
+        decoding="async"
+      />
+    </span>
   );
 }
