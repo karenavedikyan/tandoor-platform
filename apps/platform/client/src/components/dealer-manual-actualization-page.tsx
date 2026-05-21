@@ -66,7 +66,7 @@ import { Bitrix24TasksPanel } from "@/components/bitrix24-tasks-panel";
 import { DealerTradePointsSection } from "@/components/dealer-trade-points-section";
 import { DealerLegalEntitiesSection } from "@/components/dealer-legal-entities-section";
 import { EntityActualizationPhotoGallery } from "@/components/entity-actualization-photo-gallery";
-import { SafeImage } from "@/components/safe-image";
+import { ShowcaseCoverPhotoSlot } from "@/components/showcase-cover-photo-slot";
 import { listActiveDealerPhotos } from "@/lib/client-base-actualization-photos";
 import {
   canEditClientNextStep,
@@ -171,16 +171,6 @@ function str(v: unknown): string {
 
 function mergedManualFields(manual: { fields: Record<string, unknown> } | undefined, ov: Record<string, unknown> | undefined): Record<string, unknown> {
   return { ...(manual?.fields ?? {}), ...(ov ?? {}) };
-}
-
-function dealerHeroInitials(name: string): string {
-  const parts = name
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2);
-  if (parts.length === 0) return "?";
-  return parts.map((p) => p[0]?.toUpperCase() ?? "").join("") || "?";
 }
 
 function HeroCell({ label, value, testId }: { label: string; value: string | undefined; testId?: string }): ReactElement {
@@ -480,22 +470,8 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
 
         <section className="overflow-hidden rounded-xl border border-border border-l-[3px] border-l-primary bg-card shadow-sm">
           <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-stretch sm:gap-4 sm:px-5 sm:py-4">
-            <div
-              className="relative h-36 w-full shrink-0 overflow-hidden rounded-lg border border-border bg-muted sm:h-auto sm:min-h-[7.5rem] sm:w-44"
-              data-testid="dealer-manual-hero-visual"
-            >
-              {row.coverPhotoThumbnailUrl?.trim() || row.coverPhotoUrl?.trim() ? (
-                <SafeImage
-                  src={(row.coverPhotoThumbnailUrl || row.coverPhotoUrl) as string}
-                  alt=""
-                  className="absolute inset-0 h-full w-full"
-                  objectFit="cover"
-                />
-              ) : (
-                <div className="flex h-full min-h-[9rem] w-full items-center justify-center bg-primary/5 text-2xl font-bold text-primary sm:min-h-0">
-                  {dealerHeroInitials(row.name)}
-                </div>
-              )}
+            <div data-testid="dealer-manual-hero-visual" className="w-full shrink-0 sm:max-w-[15rem]">
+              <ShowcaseCoverPhotoSlot kind="dealer" dealer={row} profile={profile} size="hero" rounded="lg" />
             </div>
             <div className="min-w-0 flex-1 space-y-2">
               <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
