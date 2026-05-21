@@ -108,7 +108,7 @@
 - **Список клиентов:** `pages/dealer-base.tsx` — строки из merge, кнопка «Добавить клиента», синхронизация.
 - **Карточка:** `pages/dealer-card-foundation.tsx` — merge строки, кнопка «Редактировать», счётчики ТТ/юрлиц.
 - **Торговые точки:** `components/dealer-trade-points-section.tsx` — добавление / редактирование / архив при включённой актуализации и правах.
-- **Юрлица:** `components/dealer-legal-entities-section.tsx` — диалог формы, сохранение в `legalEntityOverridesByDealerId`, архив в `archivedLegalEntitiesById`, дубль ИНН, `SectionSaveButton` при актуализации; хелперы в `lib/client-base-actualization-legal-entities.ts`.
+- **Юрлица:** `components/dealer-legal-entities-section.tsx` — диалог формы, сохранение в `legalEntityOverridesByDealerId`, архив в `archivedLegalEntitiesById`, дубль ИНН, `SectionSaveButton` при актуализации; хелперы в `lib/client-base-actualization-legal-entities.ts`. Тот же блок подключён в **чистой анкете** `components/dealer-manual-actualization-page.tsx` (аккордеон «Юридические лица»), а не только в полной карточке `dealer-card-foundation.tsx`.
 - **Провайдер в дереве:** `App.tsx` оборачивает маршруты в `ClientBaseActualizationProvider`.
 
 После каждого сохранения: обновление локального `state`, вызов сохранения через API, тост «Сохранено» или сообщение об ошибке на русском.
