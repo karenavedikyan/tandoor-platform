@@ -158,6 +158,7 @@ import { CLIENT_BASE_ACTUALIZATION_CLEAN_MODE } from "@/lib/client-base-actualiz
 import { canActualizeClientBase, canArchiveDealerDuringActualization, canEditDealerDuringActualization } from "@/lib/client-base-actualization-permissions";
 import { mergeActualizationState } from "@/lib/client-base-actualization-state";
 import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actualization-sync-status";
+import { ShowcaseCoverPhotoSlot } from "@/components/showcase-cover-photo-slot";
 import { DealerActualizationEditDialog } from "@/components/client-base-actualization-dealer-forms";
 import { DealerManualActualizationPage } from "@/components/dealer-manual-actualization-page";
 import { PageLoadingFallback } from "@/components/navigation/page-loading";
@@ -1206,6 +1207,9 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
             >
               <SurfaceCard className="p-3 sm:p-4">
                 <CardContent className="space-y-3 p-0 sm:space-y-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+                    <ShowcaseCoverPhotoSlot kind="dealer" dealer={row} profile={profile} size="hero" rounded="xl" className="shrink-0" />
+                    <div className="min-w-0 flex-1 space-y-3">
                   <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                     <Badge variant="outline" className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", statusBadgeClass(row.status))}>
                       {row.status}
@@ -1218,12 +1222,12 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                       {businessCategoryLabel}
                     </Badge>
                     {canViewShowcaseCard && showcaseDailySignals.openCt > 0 ? (
-                      <Badge variant="outline" className="rounded-full border-amber-200 bg-amber-50 text-[11px] font-semibold text-amber-950">
+                      <Badge variant="outline" className="rounded-full border-primary/35 bg-primary/10 text-[11px] font-semibold text-foreground">
                         Задачи по витрине
                       </Badge>
                     ) : null}
                     {canViewShowcaseCard && showcaseDailySignals.hasDeficit ? (
-                      <Badge variant="outline" className="rounded-full border-rose-200 bg-rose-50 text-[11px] font-semibold text-rose-950">
+                      <Badge variant="outline" className="rounded-full border-primary/40 bg-card text-[11px] font-semibold text-foreground">
                         Дефицит
                       </Badge>
                     ) : null}
@@ -1242,6 +1246,8 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                     ) : null}
                   </div>
                   <h1 className="text-lg font-semibold tracking-tight text-foreground sm:text-xl">{rowView.name}</h1>
+                    </div>
+                  </div>
 
                   <div
                     data-testid="section-dealer-quick-info"

@@ -27,7 +27,7 @@ export function TradePointRowListThumb(props: {
   if (src) {
     return (
       <div
-        className={cn("relative shrink-0 overflow-hidden rounded-md border border-[#E3E6F3] bg-[#FFFFFF]", sz, className)}
+        className={cn("relative shrink-0 overflow-hidden rounded-md border border-border bg-card", sz, className)}
         data-testid={`trade-point-list-thumb-${point.id}`}
       >
         <SafeImage src={src} alt="" className="absolute inset-0 h-full w-full" objectFit="cover" />
@@ -37,7 +37,7 @@ export function TradePointRowListThumb(props: {
   return (
     <div
       className={cn(
-        "flex shrink-0 items-center justify-center rounded-md border border-[#9ACA3C]/25 bg-[#EEEFF6] font-semibold text-[#8F96B0]",
+        "flex shrink-0 items-center justify-center rounded-md border border-border bg-muted font-semibold text-muted-foreground",
         sz,
         className,
       )}

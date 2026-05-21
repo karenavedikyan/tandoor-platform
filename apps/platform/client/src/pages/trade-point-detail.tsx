@@ -94,6 +94,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { Bitrix24TasksPanel } from "@/components/bitrix24-tasks-panel";
 import { TradePointPhotoBlock } from "@/components/trade-point-photo-block";
+import { ShowcaseCoverPhotoSlot } from "@/components/showcase-cover-photo-slot";
 import { TradePointShowcaseMatrixSection } from "@/components/trade-point-showcase-matrix-section";
 import {
   getShowcaseMatrixTpHistoryEvents,
@@ -1148,6 +1149,15 @@ function TradePointDetailContent({
             className="scroll-mt-28 space-y-4 sm:scroll-mt-32"
           >
             <SectionTitle subtitle="Основные сведения по точке.">Общее</SectionTitle>
+            <SurfaceCard className="p-3 sm:p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+                <ShowcaseCoverPhotoSlot kind="trade_point" dealer={dealer} tradePoint={point} profile={profile} size="hero" rounded="xl" className="shrink-0" />
+                <div className="min-w-0 flex-1 space-y-1">
+                  <h2 className="text-lg font-semibold text-foreground">{point.name}</h2>
+                  <p className="text-sm text-muted-foreground">{point.city}</p>
+                </div>
+              </div>
+            </SurfaceCard>
             <div className="mt-3 grid gap-4 lg:grid-cols-2 lg:items-start">
               <SurfaceCard>
                 <CardContent className="space-y-0 pt-5">
