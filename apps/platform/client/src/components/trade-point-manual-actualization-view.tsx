@@ -5,11 +5,12 @@
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { Camera, ChevronDown, ChevronRight, Pencil } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -288,6 +289,7 @@ export function TradePointManualActualizationView(props: {
 
   const [showcaseDirty, setShowcaseDirty] = useState(false);
   const [extraDetailsOpen, setExtraDetailsOpen] = useState(false);
+  const [photoDialogOpen, setPhotoDialogOpen] = useState(false);
 
   const mainSave = useSectionSaveFeedback();
   const showcaseSave = useSectionSaveFeedback();
@@ -627,6 +629,11 @@ export function TradePointManualActualizationView(props: {
     return point.coverPhotoThumbnailUrl?.trim() || point.coverPhotoUrl?.trim() || "";
   }, [actx.state, point.id, point.coverPhotoThumbnailUrl, point.coverPhotoUrl]);
 
+  const openPhotoDialog = useCallback(() => {
+    if (!canEditUi) return;
+    setPhotoDialogOpen(true);
+  }, [canEditUi]);
+
   const showcaseTriggerSummary = useMemo(() => {
     if (hasShowcase === null) return "Состояние витрины не выбрано";
     if (hasShowcase === false) return "Без витрины";
@@ -800,12 +807,45 @@ export function TradePointManualActualizationView(props: {
               data-testid="trade-point-manual-hero-visual"
             >
               {tpCoverThumb ? (
-                <SafeImage src={tpCoverThumb} alt="" className="absolute inset-0 h-full w-full" objectFit="cover" />
+                <div className="absolute inset-0 h-full w-full" data-testid={`image-trade-point-cover-photo-${point.id}`}>
+                  <SafeImage src={tpCoverThumb} alt="" className="absolute inset-0 h-full w-full" objectFit="cover" />
+                </div>
               ) : (
-                <div className="flex h-full min-h-[9rem] w-full items-center justify-center bg-primary/5 text-2xl font-bold text-primary sm:min-h-0">
-                  {tpHeroInitials(name.trim() || point.name)}
+                <div
+                  className="flex h-full min-h-[9rem] w-full flex-col items-center justify-center gap-1 bg-primary/5 px-2 text-center text-primary sm:min-h-0"
+                  data-testid={`placeholder-trade-point-cover-photo-${point.id}`}
+                >
+                  <Camera className="h-5 w-5" aria-hidden />
+                  <span className="text-[11px] font-semibold leading-tight">
+                    {canEditUi ? "Добавить фото" : tpHeroInitials(name.trim() || point.name)}
+                  </span>
                 </div>
               )}
+              {canEditUi ? (
+                <button
+                  type="button"
+                  className="absolute inset-0 z-[1] min-h-10 min-w-10 cursor-pointer rounded-lg outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-primary"
+                  aria-label={tpCoverThumb ? "Открыть фото торговой точки" : "Добавить фото торговой точки"}
+                  data-testid={tpCoverThumb ? `button-trade-point-cover-photo-open-${point.id}` : `button-trade-point-cover-photo-add-${point.id}`}
+                  onClick={openPhotoDialog}
+                />
+              ) : null}
+              {canEditUi && tpCoverThumb ? (
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="secondary"
+                  className="absolute right-1.5 top-1.5 z-[2] h-9 w-9 min-h-9 min-w-9 border border-border bg-card/95 p-0 text-foreground shadow-sm hover:bg-primary/15"
+                  data-testid={`button-trade-point-cover-photo-edit-${point.id}`}
+                  aria-label="Редактировать фото торговой точки"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openPhotoDialog();
+                  }}
+                >
+                  <Pencil className="h-4 w-4 text-primary" aria-hidden />
+                </Button>
+              ) : null}
             </div>
             <div className="min-w-0 flex-1 space-y-2">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
@@ -1576,7 +1616,22 @@ export function TradePointManualActualizationView(props: {
             />
           </AccordionContent>
         </AccordionItem>
-      </Accordion>
+        </Accordion>
+
+        <Dialog open={photoDialogOpen} onOpenChange={setPhotoDialogOpen}>
+          <DialogContent className="max-h-[min(92dvh,40rem)] w-[calc(100vw-1rem)] max-w-lg overflow-y-auto sm:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Фото торговой точки</DialogTitle>
+            </DialogHeader>
+            <EntityActualizationPhotoGallery
+              entityType="trade_point"
+              entityId={point.id}
+              canEdit={canEditUi}
+              profile={profile}
+              compact
+            />
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
