@@ -54,6 +54,8 @@ import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actu
 import { canEditClientNextStep } from "@/lib/client-next-step-data";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { cn } from "@/lib/utils";
+import { formatDisplayDateTime } from "@/lib/format-display-date";
+import { TradePointPhotoBlock } from "@/components/trade-point-photo-block";
 
 function numOrNull(v: string): number | null {
   const t = v.trim();
@@ -103,8 +105,38 @@ function emptyShowcase(dealerId: string, tradePointId: string): TradePointShowca
 }
 
 function dashNum(n: number | null | undefined): string {
-  if (n == null || !Number.isFinite(n)) return "—";
+  if (n == null || !Number.isFinite(n)) return "Не указано";
   return String(n);
+}
+
+function TpHeroCell({
+  label,
+  value,
+  mono,
+  testId,
+}: {
+  label: string;
+  value: string | undefined;
+  mono?: boolean;
+  testId?: string;
+}): ReactElement {
+  const v = value?.trim();
+  const empty = !v || v === "—";
+  return (
+    <div className="min-w-0">
+      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p
+        className={cn(
+          "mt-0.5 text-[13px] leading-snug",
+          empty ? "text-muted-foreground" : "font-medium text-foreground",
+          !empty && mono && "font-mono tabular-nums text-emerald-800 dark:text-emerald-200",
+        )}
+        data-testid={testId}
+      >
+        {empty ? "Не указано" : v}
+      </p>
+    </div>
+  );
 }
 
 const TP_CLEAN_SECTION_BASE = ["passport", "address_format", "responsibles", "showcase", "comments", "bitrix"] as const;
@@ -145,16 +177,16 @@ type TpSectionStatusKind = "empty" | "partial" | "complete" | "attention" | "no_
 function TradePointSectionStatusBadge(props: { status: TpSectionStatusKind }): ReactElement {
   const { status } = props;
   const map: Record<TpSectionStatusKind, { label: string; className: string }> = {
-    empty: { label: "Не заполнено", className: "border-muted-foreground/40 text-muted-foreground" },
-    partial: { label: "Есть данные", className: "border-amber-600/35 text-amber-950 dark:text-amber-100" },
-    complete: { label: "Заполнено", className: "border-emerald-600/40 bg-emerald-600/5 text-emerald-950 dark:text-emerald-50" },
-    attention: { label: "Требует внимания", className: "border-amber-600/50 bg-amber-500/10 text-amber-950 dark:text-amber-50" },
-    no_showcase: { label: "Нет витрины", className: "border-border text-muted-foreground" },
-    needs_fill: { label: "Нужно заполнить", className: "border-amber-600/40 text-amber-950 dark:text-amber-100" },
+    empty: { label: "Не заполнено", className: "border-border/60 bg-muted/30 text-muted-foreground" },
+    partial: { label: "Есть данные", className: "border-emerald-600/20 bg-emerald-600/[0.06] text-emerald-950 dark:text-emerald-100" },
+    complete: { label: "Заполнено", className: "border-emerald-600/35 bg-emerald-600/10 text-emerald-950 dark:text-emerald-50" },
+    attention: { label: "Требует внимания", className: "border-amber-500/40 bg-amber-500/[0.08] text-amber-950 dark:text-amber-100" },
+    no_showcase: { label: "Нет витрины", className: "border-border/60 text-muted-foreground" },
+    needs_fill: { label: "Нужно заполнить", className: "border-amber-500/35 bg-amber-500/[0.06] text-amber-950 dark:text-amber-100" },
   };
   const m = map[status];
   return (
-    <Badge variant="outline" className={cn("h-5 shrink-0 whitespace-nowrap px-2 py-0 text-[10px] font-normal leading-none", m.className)}>
+    <Badge variant="outline" className={cn("h-[1.125rem] shrink-0 whitespace-nowrap px-1.5 py-0 text-[10px] font-normal leading-none", m.className)}>
       {m.label}
     </Badge>
   );
@@ -163,13 +195,13 @@ function TradePointSectionStatusBadge(props: { status: TpSectionStatusKind }): R
 function TpAccordionSectionTrigger(props: { title: string; summary: string; status: TpSectionStatusKind }): ReactElement {
   const { title, summary, status } = props;
   return (
-    <AccordionTrigger className="items-start gap-3 py-3.5 text-left hover:no-underline [&[data-state=open]]:bg-muted/20">
-      <div className="flex min-w-0 flex-1 flex-col gap-1 pr-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-semibold leading-snug text-foreground">{title}</span>
+    <AccordionTrigger className="items-start gap-2 px-3 py-3 text-left hover:no-underline max-sm:px-3 max-sm:py-3 [&[data-state=open]]:bg-emerald-600/[0.04]">
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5 pr-1">
+        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+          <span className="text-sm font-semibold leading-tight text-foreground">{title}</span>
           <TradePointSectionStatusBadge status={status} />
         </div>
-        <p className="line-clamp-2 text-xs font-normal leading-relaxed text-muted-foreground">{summary}</p>
+        <p className="line-clamp-2 text-sm font-normal leading-snug text-muted-foreground">{summary}</p>
       </div>
     </AccordionTrigger>
   );
@@ -516,9 +548,9 @@ export function TradePointManualActualizationView(props: {
     profile.personaUserId,
   ]);
 
-  const inheritedRm = dealer.regionalManager?.trim() || "—";
-  const inheritedMgr = dealer.manager?.trim() || "—";
-  const inheritedRop = dealer.ropName?.trim() || "—";
+  const inheritedRm = dealer.regionalManager?.trim() || "Не указано";
+  const inheritedMgr = dealer.manager?.trim() || "Не указано";
+  const inheritedRop = dealer.ropName?.trim() || "Не указано";
 
   const openMatrixTasks = useMemo(
     () => showcaseMatrixTasks.filter((t) => t.tradePointId === point.id && t.status === "new"),
@@ -581,19 +613,18 @@ export function TradePointManualActualizationView(props: {
   }, [contactName, contactPhone]);
 
   const showcaseTriggerSummary = useMemo(() => {
-    const parts: string[] = [];
-    if (hasShowcase === null) parts.push("Состояние витрины не выбрано");
-    else if (hasShowcase === false) parts.push("Без витрины");
-    else {
-      parts.push("Есть витрина");
-      parts.push(`порталов всего ${dashNum(numOrNull(totalPortals))}`);
-      parts.push(`Tandoor ${dashNum(numOrNull(tTotal))}`);
-      parts.push(`свободно/конкуренты ${dashNum(summary.freeOrCompetitor)}`);
-      parts.push(`потенциал вх. ${dashNum(summary.entrancePotential)} · МК ${dashNum(summary.interiorPotential)}`);
-      parts.push(`дефицит матрицы ${matrixClientCategory ? missingRequiredModelCount : "—"}`);
-      parts.push(`моделей на витрине ${selectedShowcaseModels.length}`);
-    }
-    return parts.join(" · ");
+    if (hasShowcase === null) return "Состояние витрины не выбрано";
+    if (hasShowcase === false) return "Без витрины";
+    const deficit = matrixClientCategory ? String(missingRequiredModelCount) : "Не указано";
+    return [
+      "Есть витрина",
+      `порталы ${dashNum(numOrNull(totalPortals))}`,
+      `Tandoor ${dashNum(numOrNull(tTotal))}`,
+      `своб./конк. ${dashNum(summary.freeOrCompetitor)}`,
+      `пот. ${dashNum(summary.entrancePotential)}/${dashNum(summary.interiorPotential)}`,
+      `дефицит ${deficit}`,
+      `моделей ${selectedShowcaseModels.length}`,
+    ].join(" · ");
   }, [
     hasShowcase,
     totalPortals,
@@ -608,14 +639,14 @@ export function TradePointManualActualizationView(props: {
 
   const sectionMeta = useMemo(() => {
     const passportFilled = Boolean(name.trim()) && Boolean(formatKind) && Boolean(tpStatus);
-    const passportSummary = [name.trim() || "—", formatKindLabel(formatKind), tpStatusKindLabel(tpStatus)].join(" · ");
+    const passportSummary = [name.trim() || "Не указано", formatKindLabel(formatKind), tpStatusKindLabel(tpStatus)].join(" · ");
     let passportStatus: TpSectionStatusKind = "empty";
     if (passportFilled) passportStatus = tpStatus === "needs_review" ? "attention" : "complete";
     else if (name.trim() || formatKind || tpStatus) passportStatus = "partial";
 
     const cityOk = Boolean(city.trim());
     const addrOk = Boolean(address.trim());
-    const addressSummary = [city.trim() || "—", (address.trim() || "—").slice(0, 80)].join(" · ");
+    const addressSummary = [city.trim() || "Не указано", (address.trim() || "Не указано").slice(0, 80)].join(" · ");
     let addressStatus: TpSectionStatusKind = "empty";
     if (cityOk && addrOk) addressStatus = contactName.trim() || contactPhone.trim() ? "complete" : "partial";
     else if (cityOk || addrOk) addressStatus = "partial";
@@ -645,7 +676,7 @@ export function TradePointManualActualizationView(props: {
     const commentsSummary = cmt ? `${cmt.slice(0, 100)}${cmt.length > 100 ? "…" : ""}` : "Комментарий не заполнен";
     const commentsStatus: TpSectionStatusKind = cmt ? "complete" : "empty";
 
-    const bitrixSummary = "Задачи Bitrix24 по точке (компактно)";
+    const bitrixSummary = "Задачи Bitrix24 по точке";
     const bitrixStatus: TpSectionStatusKind = "partial";
 
     return {
@@ -689,23 +720,28 @@ export function TradePointManualActualizationView(props: {
       className="min-w-0 max-w-full overflow-x-hidden bg-muted/15 pb-8 pt-1 max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:pb-10"
       data-testid="page-trade-point-manual-actualization"
     >
-      <div className="mx-auto w-full max-w-5xl space-y-4 px-3 sm:space-y-5 sm:px-4 lg:px-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-          <Button asChild variant="ghost" size="sm" className="h-9 w-fit justify-start gap-1.5 px-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+      <div className="mx-auto w-full max-w-5xl space-y-3 px-3 sm:space-y-4 sm:px-4 lg:px-6">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          <Button
+            asChild
+            variant="ghost"
+            size="sm"
+            className="h-8 w-fit justify-start gap-1.5 px-2 text-xs font-medium text-muted-foreground hover:text-foreground"
+          >
             <Link href="/dealer-base">
               <span aria-hidden>←</span> Назад
             </Link>
           </Button>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button asChild variant="outline" size="sm" className="h-9 min-w-[8.5rem] text-xs font-medium">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Button asChild variant="outline" size="sm" className="h-8 px-2.5 text-xs font-medium">
               <Link href={`/dealers/${dealer.id}`}>К клиенту</Link>
             </Button>
             {canEditUi ? (
               <Button
                 type="button"
-                variant="secondary"
+                variant="default"
                 size="sm"
-                className="h-9 min-w-[8.5rem] text-xs font-semibold"
+                className="h-8 min-w-[7.5rem] bg-emerald-700 px-3 text-xs font-semibold text-white hover:bg-emerald-800"
                 data-testid="button-trade-point-edit"
                 onClick={expandPassportAndAddress}
               >
@@ -717,7 +753,7 @@ export function TradePointManualActualizationView(props: {
                 type="button"
                 variant="outline"
                 size="sm"
-                className="h-9 border-destructive/40 text-xs font-medium text-destructive hover:bg-destructive/10"
+                className="h-8 border-destructive/30 px-2.5 text-xs font-medium text-destructive hover:bg-destructive/[0.06]"
                 data-testid={`button-trade-point-archive-${point.id}`}
                 onClick={() => onRequestArchive?.()}
               >
@@ -735,86 +771,96 @@ export function TradePointManualActualizationView(props: {
           onRetry={() => void actx.refresh()}
         />
 
-        <section className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm ring-1 ring-emerald-600/10">
-          <div className="border-b border-emerald-600/10 bg-emerald-600/[0.07] px-4 py-3.5 sm:px-5">
+        <section className="overflow-hidden rounded-xl border border-border/60 border-l-[3px] border-l-emerald-600/75 bg-card shadow-sm">
+          <div className="px-3.5 py-3 sm:px-4">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-              <h1 className="text-lg font-semibold leading-snug tracking-tight text-foreground sm:text-xl">{name.trim() || point.name}</h1>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Код ТТ</span>
-                <span className="font-mono text-sm font-semibold text-emerald-900 dark:text-emerald-100" data-testid={`text-trade-point-internal-code-${point.id}`}>
+              <div className="min-w-0">
+                <h1 className="text-base font-semibold leading-snug tracking-tight text-foreground sm:text-lg">
+                  {name.trim() || point.name}
+                </h1>
+                <p className="mt-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Торговая точка</p>
+              </div>
+              <div className="shrink-0 text-left sm:text-right">
+                <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Код ТТ</p>
+                <p
+                  className="font-mono text-sm font-semibold tabular-nums text-emerald-800 dark:text-emerald-200"
+                  data-testid={`text-trade-point-internal-code-${point.id}`}
+                >
                   {getTradePointDisplayCodeForActualization(point)}
-                </span>
+                </p>
               </div>
             </div>
-          </div>
-          <div className="grid gap-3 px-4 py-4 text-sm sm:grid-cols-2 sm:px-5">
-            <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2 sm:col-span-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Клиент</p>
-              <p className="mt-0.5 font-medium text-foreground">{dealer.name}</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Код клиента: <span className="font-mono text-foreground">{dealer.releaseCode?.trim() || "—"}</span>
-              </p>
+
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              <TpHeroCell label="Клиент" value={dealer.name} />
+              <TpHeroCell label="Код клиента" value={dealer.releaseCode?.trim()} mono testId="text-trade-point-hero-dealer-code" />
+              <TpHeroCell label="Город" value={city.trim()} />
+              <TpHeroCell
+                label="Формат / категория"
+                value={`${formatKindLabel(formatKind)} · ${getClientCategoryLabel(dealer.clientCategory)}`}
+              />
+              <div className="min-w-0 sm:col-span-2 lg:col-span-2">
+                <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Адрес</p>
+                <p className="mt-0.5 whitespace-pre-wrap break-words text-[13px] leading-snug text-foreground">
+                  {address.trim() ? address.trim() : "Не указано"}
+                </p>
+              </div>
+              <TpHeroCell label="Контакт" value={heroContact || undefined} />
             </div>
-            <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Город</p>
-              <p className="mt-0.5 font-medium text-foreground">{city.trim() || "—"}</p>
-            </div>
-            <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Формат / категория</p>
-              <p className="mt-0.5 font-medium text-foreground">
-                {formatKindLabel(formatKind)} · {getClientCategoryLabel(dealer.clientCategory)}
-              </p>
-            </div>
-            <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2 sm:col-span-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Адрес</p>
-              <p className="mt-0.5 whitespace-pre-wrap break-words leading-snug text-foreground">{address.trim() || "—"}</p>
-            </div>
-            <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2 sm:col-span-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Основной контакт</p>
-              <p className="mt-0.5 text-foreground">{heroContact || "—"}</p>
-            </div>
-            <div className="flex flex-wrap gap-2 sm:col-span-2">
+
+            <div className="mt-2.5 flex flex-wrap gap-1.5">
               {isArchived ? (
-                <Badge variant="secondary" className="text-[10px] font-normal">
+                <Badge variant="secondary" className="h-[1.125rem] px-1.5 py-0 text-[10px] font-normal leading-none">
                   В архиве
                 </Badge>
               ) : null}
               {hasShowcase === null ? (
-                <Badge variant="outline" className="border-amber-600/40 text-[10px] font-normal text-amber-950 dark:text-amber-100">
+                <Badge
+                  variant="outline"
+                  className="h-[1.125rem] border-amber-500/35 px-1.5 py-0 text-[10px] font-normal leading-none text-amber-950 dark:text-amber-100"
+                >
                   Витрина не заполнена
                 </Badge>
               ) : hasShowcase === false ? (
-                <Badge variant="outline" className="text-[10px] font-normal">
+                <Badge variant="outline" className="h-[1.125rem] px-1.5 py-0 text-[10px] font-normal leading-none text-muted-foreground">
                   Нет витрины
                 </Badge>
               ) : (
-                <Badge className="bg-emerald-700 text-[10px] font-normal text-white hover:bg-emerald-700">Есть витрина</Badge>
+                <Badge
+                  variant="outline"
+                  className="h-[1.125rem] border-emerald-600/35 bg-emerald-600/10 px-1.5 py-0 text-[10px] font-normal leading-none text-emerald-950 dark:text-emerald-50"
+                >
+                  Есть витрина
+                </Badge>
               )}
               {hasShowcase === true && matrixClientCategory && missingRequiredModelCount > 0 ? (
-                <Badge variant="outline" className="border-amber-600/45 text-[10px] font-normal text-amber-950 dark:text-amber-100">
-                  Есть дефицит матрицы
+                <Badge
+                  variant="outline"
+                  className="h-[1.125rem] border-amber-500/40 bg-amber-500/[0.06] px-1.5 py-0 text-[10px] font-normal leading-none text-amber-950 dark:text-amber-100"
+                >
+                  Есть дефицит
                 </Badge>
               ) : null}
-              {numOrNull(totalPortals) != null && numOrNull(totalPortals)! >= 0 ? (
-                <Badge variant="outline" className="text-[10px] font-normal">
-                  Порталы: {numOrNull(totalPortals)}
-                </Badge>
-              ) : hasShowcase === true ? (
-                <Badge variant="outline" className="text-[10px] font-normal text-muted-foreground">
-                  Порталы: —
+              {hasShowcase === true ? (
+                <Badge variant="outline" className="h-[1.125rem] px-1.5 py-0 text-[10px] font-normal leading-none text-muted-foreground">
+                  Порталы: {numOrNull(totalPortals) != null && numOrNull(totalPortals)! >= 0 ? numOrNull(totalPortals) : "Не указано"}
                 </Badge>
               ) : null}
+            </div>
+
+            <div className="mt-3 border-t border-border/40 pt-3">
+              <TradePointPhotoBlock dealerId={dealer.id} tradePointId={point.id} canEdit={canEditUi} compact className="max-w-md" />
             </div>
           </div>
         </section>
 
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center justify-between gap-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Разделы анкеты</p>
           <Button
             type="button"
-            variant="outline"
+            variant="ghost"
             size="sm"
-            className="h-9 w-full text-xs sm:w-auto"
+            className="h-8 shrink-0 px-2 text-xs font-medium text-emerald-900 hover:bg-emerald-600/10 dark:text-emerald-100"
             data-testid="button-trade-point-sections-expand-all"
             onClick={toggleExpandAll}
           >
@@ -822,19 +868,19 @@ export function TradePointManualActualizationView(props: {
           </Button>
         </div>
 
-        <Accordion type="multiple" className="space-y-2" value={openSections} onValueChange={onAccordionValueChange}>
-        <AccordionItem value="passport" data-testid="section-trade-point-passport" className="overflow-hidden rounded-xl border border-border/60 bg-card !border-b-0 shadow-sm">
+        <Accordion type="multiple" className="space-y-1.5" value={openSections} onValueChange={onAccordionValueChange}>
+        <AccordionItem value="passport" data-testid="section-trade-point-passport" className="overflow-hidden rounded-lg border border-border/50 bg-card !border-b-0 shadow-xs">
           <TpAccordionSectionTrigger title="Паспорт торговой точки" summary={sectionMeta.passport.summary} status={sectionMeta.passport.status} />
-          <AccordionContent className="border-t border-border/40 px-2 pb-3 pt-2 text-sm sm:px-3">
-            <div className="grid gap-3 sm:grid-cols-2">
+          <AccordionContent className="border-t border-border/40 px-2.5 pb-2.5 pt-1.5 text-sm sm:px-3">
+            <div className="grid gap-2 sm:grid-cols-2">
             <div className="space-y-1 sm:col-span-2">
-              <Label className="text-xs">Название</Label>
-              <Input className="min-h-10" value={name} onChange={(e) => { setName(e.target.value); mainSave.markDirty(); }} disabled={!canEditUi} />
+              <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Название</Label>
+              <Input className="min-h-9" value={name} onChange={(e) => { setName(e.target.value); mainSave.markDirty(); }} disabled={!canEditUi} />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Формат</Label>
+              <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Формат</Label>
               <Select value={formatKind} onValueChange={(v) => { setFormatKind(v); mainSave.markDirty(); }} disabled={!canEditUi}>
-                <SelectTrigger className="min-h-10">
+                <SelectTrigger className="min-h-9">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -847,9 +893,9 @@ export function TradePointManualActualizationView(props: {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Статус</Label>
+              <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Статус</Label>
               <Select value={tpStatus} onValueChange={(v) => { setTpStatus(v); mainSave.markDirty(); }} disabled={!canEditUi}>
-                <SelectTrigger className="min-h-10">
+                <SelectTrigger className="min-h-9">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -864,25 +910,25 @@ export function TradePointManualActualizationView(props: {
           </AccordionContent>
         </AccordionItem>
 
-        <AccordionItem value="address_format" data-testid="section-trade-point-address-format" className="overflow-hidden rounded-xl border border-border/60 bg-card !border-b-0 shadow-sm">
+        <AccordionItem value="address_format" data-testid="section-trade-point-address-format" className="overflow-hidden rounded-lg border border-border/50 bg-card !border-b-0 shadow-xs">
           <TpAccordionSectionTrigger title="Адрес и формат" summary={sectionMeta.address.summary} status={sectionMeta.address.status} />
-          <AccordionContent className="border-t border-border/40 px-2 pb-3 pt-2 text-sm sm:px-3">
-            <div className="grid gap-3 sm:grid-cols-2">
+          <AccordionContent className="border-t border-border/40 px-2.5 pb-2.5 pt-1.5 text-sm sm:px-3">
+            <div className="grid gap-2 sm:grid-cols-2">
             <div className="space-y-1">
-              <Label className="text-xs">Город</Label>
-              <Input className="min-h-10" value={city} onChange={(e) => { setCity(e.target.value); mainSave.markDirty(); }} disabled={!canEditUi} />
+              <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Город</Label>
+              <Input className="min-h-9" value={city} onChange={(e) => { setCity(e.target.value); mainSave.markDirty(); }} disabled={!canEditUi} />
             </div>
             <div className="space-y-1 sm:col-span-2">
-              <Label className="text-xs">Адрес</Label>
-              <Textarea rows={2} value={address} onChange={(e) => { setAddress(e.target.value); mainSave.markDirty(); }} disabled={!canEditUi} />
+              <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Адрес</Label>
+              <Textarea rows={2} className="min-h-[4rem] resize-y" value={address} onChange={(e) => { setAddress(e.target.value); mainSave.markDirty(); }} disabled={!canEditUi} />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Контакт точки</Label>
-              <Input className="min-h-10" value={contactName} onChange={(e) => { setContactName(e.target.value); mainSave.markDirty(); }} disabled={!canEditUi} />
+              <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Контакт точки</Label>
+              <Input className="min-h-9" value={contactName} onChange={(e) => { setContactName(e.target.value); mainSave.markDirty(); }} disabled={!canEditUi} />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Телефон точки</Label>
-              <Input className="min-h-10" value={contactPhone} onChange={(e) => { setContactPhone(e.target.value); mainSave.markDirty(); }} disabled={!canEditUi} />
+              <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Телефон точки</Label>
+              <Input className="min-h-9" value={contactPhone} onChange={(e) => { setContactPhone(e.target.value); mainSave.markDirty(); }} disabled={!canEditUi} />
             </div>
             {canEditUi ? (
               <div className="sm:col-span-2">
@@ -898,58 +944,59 @@ export function TradePointManualActualizationView(props: {
           </AccordionContent>
         </AccordionItem>
 
-        <AccordionItem value="responsibles" data-testid="section-trade-point-responsibles" className="overflow-hidden rounded-xl border border-border/60 bg-card !border-b-0 shadow-sm">
+        <AccordionItem value="responsibles" data-testid="section-trade-point-responsibles" className="overflow-hidden rounded-lg border border-border/50 bg-card !border-b-0 shadow-xs">
           <TpAccordionSectionTrigger title="Ответственные" summary={sectionMeta.responsibles.summary} status={sectionMeta.responsibles.status} />
-          <AccordionContent className="border-t border-border/40 space-y-2 px-2 pb-3 pt-2 text-sm text-muted-foreground sm:px-3">
-            <p>
-              <span className="font-medium text-foreground">Менеджер:</span> {inheritedMgr}{" "}
-              <span className="text-xs">(унаследовано от клиента)</span>
+          <AccordionContent className="space-y-1.5 border-t border-border/40 px-2.5 pb-2.5 pt-1.5 text-sm text-muted-foreground sm:px-3">
+            <p className="leading-snug">
+              <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Менеджер</span>
+              <span className="mt-0.5 block text-[13px] font-medium text-foreground">{inheritedMgr}</span>
+              <span className="text-[10px] text-muted-foreground/80">с карточки клиента</span>
             </p>
-            <p>
-              <span className="font-medium text-foreground">Региональный менеджер:</span> {inheritedRm}{" "}
-              <span className="text-xs">(унаследовано от клиента)</span>
+            <p className="leading-snug">
+              <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Региональный менеджер</span>
+              <span className="mt-0.5 block text-[13px] font-medium text-foreground">{inheritedRm}</span>
+              <span className="text-[10px] text-muted-foreground/80">с карточки клиента</span>
             </p>
-            <p>
-              <span className="font-medium text-foreground">РОП:</span> {inheritedRop}{" "}
-              <span className="text-xs">(унаследовано от клиента)</span>
+            <p className="leading-snug">
+              <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">РОП</span>
+              <span className="mt-0.5 block text-[13px] font-medium text-foreground">{inheritedRop}</span>
+              <span className="text-[10px] text-muted-foreground/80">с карточки клиента</span>
             </p>
           </AccordionContent>
         </AccordionItem>
 
-        <AccordionItem value="showcase" data-testid="section-trade-point-showcase-portals" className="overflow-hidden rounded-xl border border-border/60 bg-card !border-b-0 shadow-sm">
+        <AccordionItem value="showcase" data-testid="section-trade-point-showcase-portals" className="overflow-hidden rounded-lg border border-border/50 bg-card !border-b-0 shadow-xs">
           <TpAccordionSectionTrigger title="Витрина и порталы" summary={sectionMeta.showcase.summary} status={sectionMeta.showcase.status} />
-          <AccordionContent className="space-y-3 overflow-x-hidden border-t border-border/40 px-2 pb-3 pt-2 sm:px-3">
-            <div
-              className="rounded-xl border border-border/70 bg-muted/10 p-3 sm:p-4"
-              data-testid="section-showcase-summary"
-            >
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                <div className="min-w-0 space-y-2">
+          <AccordionContent className="space-y-2 overflow-x-hidden border-t border-border/40 px-2.5 pb-2.5 pt-1.5 sm:px-3">
+            <div className="rounded-lg border border-border/50 bg-muted/10 p-2.5 sm:p-3" data-testid="section-showcase-summary">
+              <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0 space-y-1">
                   {hasShowcase === true ? (
-                    <p className="text-xs leading-relaxed text-muted-foreground">
+                    <p className="text-sm leading-snug text-muted-foreground">
                       Порталы всего: {dashNum(numOrNull(totalPortals))} · Tandoor: {dashNum(numOrNull(tTotal))} · Свободно / конкуренты:{" "}
                       {dashNum(summary.freeOrCompetitor)} · Дефицит матрицы:{" "}
-                      {matrixClientCategory ? missingRequiredModelCount : "—"} · Моделей выбрано: {selectedShowcaseModels.length}
+                      {matrixClientCategory ? String(missingRequiredModelCount) : "Не указано"} · Моделей выбрано: {selectedShowcaseModels.length}
                     </p>
                   ) : hasShowcase === false ? (
-                    <p className="text-xs text-muted-foreground">Витрины нет — порталы, сводка и каталог скрыты.</p>
+                    <p className="text-sm leading-snug text-muted-foreground">Витрины нет — порталы, сводка и каталог скрыты.</p>
                   ) : (
-                    <p className="text-xs text-muted-foreground">Выберите состояние витрины или отложите заполнение.</p>
+                    <p className="text-sm leading-snug text-muted-foreground">Выберите состояние витрины или отложите заполнение.</p>
                   )}
+                  {showcaseRec?.updatedAt?.trim() ? (
+                    <p className="text-[10px] text-muted-foreground/90">
+                      Обновлено витрины: {formatDisplayDateTime(showcaseRec.updatedAt)}
+                    </p>
+                  ) : null}
                 </div>
                 {canEditUi ? (
-                  <div className="hidden shrink-0 flex-col items-stretch gap-2 md:flex md:min-w-[220px] md:items-end">
+                  <div className="hidden shrink-0 flex-col items-stretch gap-1.5 md:flex md:min-w-[200px] md:items-end">
                     <SectionSaveButton
                       testId="button-showcase-save"
                       statusTestId="text-save-status-trade-point-showcase"
                       phase={showcaseSave.phase}
                       onSave={() => void showcaseSave.runSave(persistShowcase)}
                     />
-                    <p
-                      className="text-xs text-muted-foreground"
-                      data-testid="text-showcase-save-status"
-                      aria-live="polite"
-                    >
+                    <p className="text-[10px] leading-snug text-muted-foreground" data-testid="text-showcase-save-status" aria-live="polite">
                       {showcaseSave.phase === "saving"
                         ? "Сохраняем…"
                         : showcaseSave.phase === "success"
@@ -963,41 +1010,41 @@ export function TradePointManualActualizationView(props: {
               </div>
 
               {hasShowcase === true ? (
-                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
-                  <div className="rounded-lg border border-border/60 bg-background/80 px-2 py-1.5">
+                <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
+                  <div className="rounded-md border border-border/40 px-2 py-1">
                     <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Порталы всего</p>
-                    <p className="text-sm font-semibold tabular-nums">{dashNum(numOrNull(totalPortals))}</p>
+                    <p className="text-[13px] font-semibold tabular-nums leading-snug text-foreground">{dashNum(numOrNull(totalPortals))}</p>
                   </div>
-                  <div className="rounded-lg border border-border/60 bg-background/80 px-2 py-1.5">
+                  <div className="rounded-md border border-border/40 px-2 py-1">
                     <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Tandoor</p>
-                    <p className="text-sm font-semibold tabular-nums">{dashNum(numOrNull(tTotal))}</p>
+                    <p className="text-[13px] font-semibold tabular-nums leading-snug text-foreground">{dashNum(numOrNull(tTotal))}</p>
                   </div>
-                  <div className="rounded-lg border border-border/60 bg-background/80 px-2 py-1.5">
+                  <div className="rounded-md border border-border/40 px-2 py-1">
                     <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Свободно / конкуренты</p>
-                    <p className="text-sm font-semibold tabular-nums">{dashNum(summary.freeOrCompetitor)}</p>
+                    <p className="text-[13px] font-semibold tabular-nums leading-snug text-foreground">{dashNum(summary.freeOrCompetitor)}</p>
                   </div>
-                  <div className="rounded-lg border border-border/60 bg-background/80 px-2 py-1.5">
+                  <div className="rounded-md border border-border/40 px-2 py-1">
                     <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Потенциал входные</p>
-                    <p className="text-sm font-semibold tabular-nums">{dashNum(summary.entrancePotential)}</p>
+                    <p className="text-[13px] font-semibold tabular-nums leading-snug text-foreground">{dashNum(summary.entrancePotential)}</p>
                   </div>
-                  <div className="rounded-lg border border-border/60 bg-background/80 px-2 py-1.5">
+                  <div className="rounded-md border border-border/40 px-2 py-1">
                     <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Потенциал МК</p>
-                    <p className="text-sm font-semibold tabular-nums">{dashNum(summary.interiorPotential)}</p>
+                    <p className="text-[13px] font-semibold tabular-nums leading-snug text-foreground">{dashNum(summary.interiorPotential)}</p>
                   </div>
-                  <div className="rounded-lg border border-border/60 bg-background/80 px-2 py-1.5">
+                  <div className="rounded-md border border-border/40 px-2 py-1">
                     <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Моделей выбрано</p>
-                    <p className="text-sm font-semibold tabular-nums">{selectedShowcaseModels.length}</p>
+                    <p className="text-[13px] font-semibold tabular-nums leading-snug text-foreground">{selectedShowcaseModels.length}</p>
                   </div>
-                  <div className="rounded-lg border border-border/60 bg-background/80 px-2 py-1.5">
+                  <div className="rounded-md border border-border/40 px-2 py-1">
                     <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Нужно поставить</p>
                     <p
                       className={
                         missingRequiredModelCount > 0
-                          ? "text-sm font-semibold tabular-nums text-amber-900 dark:text-amber-100"
-                          : "text-sm font-semibold tabular-nums"
+                          ? "text-[13px] font-semibold tabular-nums leading-snug text-amber-900 dark:text-amber-100"
+                          : "text-[13px] font-semibold tabular-nums leading-snug text-foreground"
                       }
                     >
-                      {matrixClientCategory ? missingRequiredModelCount : "—"}
+                      {matrixClientCategory ? missingRequiredModelCount : "Не указано"}
                     </p>
                   </div>
                 </div>
@@ -1009,12 +1056,12 @@ export function TradePointManualActualizationView(props: {
             ) : null}
 
             {hasShowcase === null && canEditUi ? (
-              <div className="grid gap-2 sm:grid-cols-3">
+              <div className="grid gap-1.5 sm:grid-cols-3">
                 <Button
                   type="button"
                   size="sm"
                   variant="default"
-                  className="min-h-10 w-full"
+                  className="h-8 w-full bg-emerald-700 text-xs font-semibold text-white hover:bg-emerald-800"
                   onClick={() => {
                     setHasShowcase(true);
                     markShowcaseDirty();
@@ -1026,7 +1073,7 @@ export function TradePointManualActualizationView(props: {
                   type="button"
                   size="sm"
                   variant="outline"
-                  className="min-h-10 w-full"
+                  className="h-8 w-full text-xs font-medium"
                   onClick={() => {
                     setHasShowcase(false);
                     markShowcaseDirty();
@@ -1037,8 +1084,8 @@ export function TradePointManualActualizationView(props: {
                 <Button
                   type="button"
                   size="sm"
-                  variant="secondary"
-                  className="min-h-10 w-full"
+                  variant="outline"
+                  className="h-8 w-full text-xs font-medium"
                   onClick={() => {
                     setHasShowcase(null);
                     markShowcaseDirty();
@@ -1050,15 +1097,18 @@ export function TradePointManualActualizationView(props: {
             ) : null}
 
             {hasShowcase === false ? (
-              <div className="rounded-xl border border-dashed border-border/80 bg-muted/15 px-4 py-6 text-center">
-                <p className="text-sm font-medium text-foreground">Витрины нет</p>
-                <p className="mt-1 text-xs text-muted-foreground">Каталог моделей и расчёт дефицита скрыты, пока не отмечено «Есть витрина».</p>
+              <div className="rounded-lg border border-dashed border-border/60 bg-muted/10 px-3 py-4 text-center">
+                <p className="text-sm font-semibold text-foreground">Витрины нет</p>
+                <p className="mt-1 text-xs leading-snug text-muted-foreground">
+                  Каталог моделей и расчёт дефицита скрыты, пока не отмечено «Есть витрина».
+                </p>
                 {canEditUi ? (
-                  <div className="mt-4 flex flex-wrap justify-center gap-2">
+                  <div className="mt-3 flex flex-wrap justify-center gap-1.5">
                     <Button
                       type="button"
                       size="sm"
                       variant="default"
+                      className="h-8 bg-emerald-700 text-xs font-semibold text-white hover:bg-emerald-800"
                       onClick={() => {
                         setHasShowcase(true);
                         markShowcaseDirty();
@@ -1069,7 +1119,8 @@ export function TradePointManualActualizationView(props: {
                     <Button
                       type="button"
                       size="sm"
-                      variant="ghost"
+                      variant="outline"
+                      className="h-8 text-xs font-medium"
                       onClick={() => {
                         setHasShowcase(null);
                         markShowcaseDirty();
@@ -1084,14 +1135,14 @@ export function TradePointManualActualizationView(props: {
 
             {hasShowcase === true ? (
               <>
-                <div className="space-y-4" data-testid="section-showcase-portal-fields">
+                <div className="space-y-2" data-testid="section-showcase-portal-fields">
                   <div>
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Основные порталы</p>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Основные порталы</p>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
                       <div className="space-y-1">
-                        <Label className="text-xs">Всего порталов</Label>
+                        <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Всего порталов</Label>
                         <Input
-                          className="min-h-10"
+                          className="min-h-9"
                           inputMode="numeric"
                           data-testid="input-trade-point-total-portals"
                           value={totalPortals}
@@ -1103,9 +1154,9 @@ export function TradePointManualActualizationView(props: {
                         />
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-xs">Под входные двери</Label>
+                        <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Под входные двери</Label>
                         <Input
-                          className="min-h-10"
+                          className="min-h-9"
                           inputMode="numeric"
                           data-testid="input-trade-point-entrance-portals"
                           value={entrancePortals}
@@ -1117,9 +1168,9 @@ export function TradePointManualActualizationView(props: {
                         />
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-xs">Под межкомнатные</Label>
+                        <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Под межкомнатные</Label>
                         <Input
-                          className="min-h-10"
+                          className="min-h-9"
                           inputMode="numeric"
                           data-testid="input-trade-point-interior-portals"
                           value={interiorPortals}
@@ -1131,9 +1182,9 @@ export function TradePointManualActualizationView(props: {
                         />
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-xs">Площадь витрины, м²</Label>
+                        <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Площадь витрины, м²</Label>
                         <Input
-                          className="min-h-10"
+                          className="min-h-9"
                           inputMode="decimal"
                           data-testid="input-trade-point-showcase-area"
                           value={area}
@@ -1148,12 +1199,12 @@ export function TradePointManualActualizationView(props: {
                   </div>
 
                   <div>
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Заполнение</p>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Заполнение</p>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
                       <div className="space-y-1">
-                        <Label className="text-xs">Порталы Tandoor всего</Label>
+                        <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Порталы Tandoor всего</Label>
                         <Input
-                          className="min-h-10"
+                          className="min-h-9"
                           inputMode="numeric"
                           data-testid="input-trade-point-tandoor-total-portals"
                           value={tTotal}
@@ -1165,9 +1216,9 @@ export function TradePointManualActualizationView(props: {
                         />
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-xs">Tandoor входные</Label>
+                        <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Tandoor входные</Label>
                         <Input
-                          className="min-h-10"
+                          className="min-h-9"
                           inputMode="numeric"
                           data-testid="input-trade-point-tandoor-entrance-portals"
                           value={tEnt}
@@ -1179,9 +1230,9 @@ export function TradePointManualActualizationView(props: {
                         />
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-xs">Tandoor межкомнатные</Label>
+                        <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Tandoor межкомнатные</Label>
                         <Input
-                          className="min-h-10"
+                          className="min-h-9"
                           inputMode="numeric"
                           data-testid="input-trade-point-tandoor-interior-portals"
                           value={tInt}
@@ -1193,9 +1244,9 @@ export function TradePointManualActualizationView(props: {
                         />
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-xs">Конкуренты / свободные порталы</Label>
+                        <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Конкуренты / свободные порталы</Label>
                         <Input
-                          className="min-h-10"
+                          className="min-h-9"
                           inputMode="numeric"
                           value={compPortals}
                           onChange={(e) => {
@@ -1209,20 +1260,26 @@ export function TradePointManualActualizationView(props: {
                   </div>
                 </div>
 
-                <div className="rounded-lg border border-border/70 bg-muted/20 p-3 text-sm">
-                  <p className="font-semibold text-foreground">Сводка по порталам</p>
+                <div className="rounded-md border border-border/40 bg-muted/10 p-2.5 text-sm">
+                  <p className="text-xs font-semibold text-foreground">Сводка по порталам</p>
                   {!showPortalMathSummary ? (
-                    <p className="mt-2 text-xs text-muted-foreground">Заполните порталы, чтобы увидеть потенциал.</p>
+                    <p className="mt-1.5 text-xs leading-snug text-muted-foreground">Заполните порталы, чтобы увидеть потенциал.</p>
                   ) : (
                     <>
-                      <p className="mt-2 text-muted-foreground" data-testid="text-trade-point-portal-summary">
-                        Всего порталов: {summary.totalPortals ?? "—"} · Занято Tandoor: {summary.tandoorTotal ?? "—"} · Свободно / конкуренты:{" "}
-                        {summary.freeOrCompetitor ?? "—"}
+                      <p className="mt-1.5 text-xs leading-snug text-muted-foreground" data-testid="text-trade-point-portal-summary">
+                        Всего порталов: {summary.totalPortals != null ? summary.totalPortals : "Не указано"} · Занято Tandoor:{" "}
+                        {summary.tandoorTotal != null ? summary.tandoorTotal : "Не указано"} · Свободно / конкуренты:{" "}
+                        {summary.freeOrCompetitor != null ? summary.freeOrCompetitor : "Не указано"}
                       </p>
-                      <p className="mt-2 text-muted-foreground">
+                      <p className="mt-1.5 text-xs leading-snug text-muted-foreground">
                         Потенциально свободно: входные —{" "}
-                        <span data-testid="text-trade-point-entrance-potential">{summary.entrancePotential ?? "—"}</span>, межкомнатные —{" "}
-                        <span data-testid="text-trade-point-interior-potential">{summary.interiorPotential ?? "—"}</span>
+                        <span data-testid="text-trade-point-entrance-potential">
+                          {summary.entrancePotential != null ? summary.entrancePotential : "Не указано"}
+                        </span>
+                        , межкомнатные —{" "}
+                        <span data-testid="text-trade-point-interior-potential">
+                          {summary.interiorPotential != null ? summary.interiorPotential : "Не указано"}
+                        </span>
                         {matrixClientCategory ? (
                           <>
                             {" "}
@@ -1248,14 +1305,14 @@ export function TradePointManualActualizationView(props: {
                 <div data-testid="section-showcase-extra-details">
                   <Collapsible open={extraDetailsOpen} onOpenChange={setExtraDetailsOpen}>
                   <CollapsibleTrigger asChild>
-                    <Button type="button" variant="outline" size="sm" className="h-9 w-full justify-between gap-2 sm:w-auto">
+                    <Button type="button" variant="outline" size="sm" className="h-8 w-full justify-between gap-2 text-xs font-medium sm:w-auto">
                       <span>Дополнительные детали</span>
                       {extraDetailsOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                     </Button>
                   </CollapsibleTrigger>
-                  <CollapsibleContent className="space-y-3 pt-3">
+                  <CollapsibleContent className="space-y-2 pt-2">
                     <div className="space-y-1">
-                      <Label className="text-xs">Текущее заполнение (текстом)</Label>
+                      <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Текущее заполнение (текстом)</Label>
                       <Textarea
                         rows={2}
                         value={fillingComment}
@@ -1267,7 +1324,7 @@ export function TradePointManualActualizationView(props: {
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">Комментарий по витрине</Label>
+                      <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Комментарий по витрине</Label>
                       <Textarea
                         rows={2}
                         value={showcaseComment}
@@ -1279,7 +1336,7 @@ export function TradePointManualActualizationView(props: {
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">Приоритет витрины</Label>
+                      <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Приоритет витрины</Label>
                       <Select
                         value={priority || "__none__"}
                         onValueChange={(v) => {
@@ -1288,7 +1345,7 @@ export function TradePointManualActualizationView(props: {
                         }}
                         disabled={!canEditUi}
                       >
-                        <SelectTrigger className="min-h-10">
+                        <SelectTrigger className="min-h-9">
                           <SelectValue placeholder="Не выбран" />
                         </SelectTrigger>
                         <SelectContent>
@@ -1300,7 +1357,7 @@ export function TradePointManualActualizationView(props: {
                       </Select>
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">Конкуренты (список)</Label>
+                      <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Конкуренты (список)</Label>
                       <Textarea
                         rows={2}
                         value={competitorsListed}
@@ -1312,7 +1369,7 @@ export function TradePointManualActualizationView(props: {
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">Что поставить в первую очередь</Label>
+                      <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Что поставить в первую очередь</Label>
                       <Textarea
                         rows={2}
                         value={firstNeed}
@@ -1324,7 +1381,7 @@ export function TradePointManualActualizationView(props: {
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">Комментарий для РМ/РОП</Label>
+                      <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Комментарий для РМ/РОП</Label>
                       <Textarea
                         rows={2}
                         value={rmComment}
@@ -1345,14 +1402,14 @@ export function TradePointManualActualizationView(props: {
                           markShowcaseDirty();
                         }}
                       />
-                      <Label htmlFor="exp-pot" className="text-sm">
+                      <Label htmlFor="exp-pot" className="text-xs font-normal text-muted-foreground">
                         Есть потенциал расширения
                       </Label>
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">Доп. порталов можно занять</Label>
+                      <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Доп. порталов можно занять</Label>
                       <Input
-                        className="min-h-10"
+                        className="min-h-9"
                         inputMode="numeric"
                         value={addPortals}
                         onChange={(e) => {
@@ -1384,7 +1441,7 @@ export function TradePointManualActualizationView(props: {
             ) : null}
 
             {canEditUi ? (
-              <div className="sticky bottom-0 z-20 -mx-3 mt-4 flex items-center justify-between gap-3 border-t border-border/80 bg-background/95 px-3 py-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/90 sm:-mx-4 md:hidden">
+              <div className="sticky bottom-0 z-20 -mx-2.5 mt-3 flex items-center justify-between gap-2 border-t border-border/60 bg-background/95 px-2.5 py-1.5 pb-[calc(0.5rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/90 sm:-mx-3 md:hidden">
                 <p
                   className={
                     showcaseSave.phase === "success"
@@ -1418,20 +1475,23 @@ export function TradePointManualActualizationView(props: {
           <AccordionItem
             value="tasks"
             data-testid="section-trade-point-showcase-tasks-summary"
-            className="overflow-hidden rounded-xl border border-border/60 bg-card !border-b-0 shadow-sm"
+            className="overflow-hidden rounded-lg border border-border/50 bg-card !border-b-0 shadow-xs"
           >
             <TpAccordionSectionTrigger
               title="Задачи по витрине"
               summary={sectionMeta.tasks.summary}
               status={sectionMeta.tasks.status}
             />
-            <AccordionContent className="border-t border-border/40 space-y-2 px-2 pb-3 pt-2 text-sm sm:px-3">
-              <p className="text-xs text-muted-foreground">
+            <AccordionContent className="border-t border-border/40 px-2.5 pb-2.5 pt-1.5 sm:px-3">
+              <p className="text-xs leading-snug text-muted-foreground">
                 Полный список и отметки статуса — во вкладке «Задачи» внутри раздела «Витрина и порталы» (каталог моделей).
               </p>
-              <ul className="list-inside list-disc space-y-1 text-sm text-foreground">
+              <ul className="mt-1.5 space-y-0.5 text-xs leading-snug text-foreground">
                 {openMatrixTasks.slice(0, 8).map((t) => (
-                  <li key={t.id}>{t.productName.trim() || t.productId}</li>
+                  <li key={t.id} className="flex gap-1.5">
+                    <span className="text-muted-foreground">•</span>
+                    <span className="min-w-0 break-words">{t.productName.trim() || t.productId}</span>
+                  </li>
                 ))}
               </ul>
               {openMatrixTasks.length > 8 ? (
@@ -1441,15 +1501,15 @@ export function TradePointManualActualizationView(props: {
           </AccordionItem>
         ) : null}
 
-        <AccordionItem value="comments" data-testid="section-trade-point-comments" className="overflow-hidden rounded-xl border border-border/60 bg-card !border-b-0 shadow-sm">
+        <AccordionItem value="comments" data-testid="section-trade-point-comments" className="overflow-hidden rounded-lg border border-border/50 bg-card !border-b-0 shadow-xs">
           <TpAccordionSectionTrigger title="Комментарии" summary={sectionMeta.comments.summary} status={sectionMeta.comments.status} />
-          <AccordionContent className="border-t border-border/40 px-2 pb-3 pt-2 text-sm sm:px-3">
+          <AccordionContent className="border-t border-border/40 px-2.5 pb-2.5 pt-1.5 text-sm sm:px-3">
             <div className="space-y-1 sm:col-span-2">
-              <Label className="text-xs">Комментарий по точке</Label>
-              <Textarea rows={3} value={tpComment} onChange={(e) => { setTpComment(e.target.value); mainSave.markDirty(); }} disabled={!canEditUi} />
+              <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Комментарий по точке</Label>
+              <Textarea rows={3} className="min-h-[5rem] resize-y text-sm" value={tpComment} onChange={(e) => { setTpComment(e.target.value); mainSave.markDirty(); }} disabled={!canEditUi} />
             </div>
             {canEditUi ? (
-              <div className="mt-3">
+              <div className="mt-2">
                 <SectionSaveButton
                   testId="button-trade-point-section-save-comments"
                   statusTestId="text-save-status-trade-point-main-view"
@@ -1461,9 +1521,9 @@ export function TradePointManualActualizationView(props: {
           </AccordionContent>
         </AccordionItem>
 
-        <AccordionItem value="bitrix" data-testid="section-trade-point-bitrix" className="overflow-hidden rounded-xl border border-border/60 bg-card !border-b-0 shadow-sm">
+        <AccordionItem value="bitrix" data-testid="section-trade-point-bitrix" className="overflow-hidden rounded-lg border border-border/50 bg-card !border-b-0 shadow-xs">
           <TpAccordionSectionTrigger title="Bitrix24" summary={sectionMeta.bitrix.summary} status={sectionMeta.bitrix.status} />
-          <AccordionContent className="border-t border-border/40 px-2 pb-3 pt-2 sm:px-3">
+          <AccordionContent className="border-t border-border/40 px-2.5 pb-2.5 pt-1.5 sm:px-3">
             <Bitrix24TasksPanel
               scope="trade_point"
               dealerId={dealer.id}
