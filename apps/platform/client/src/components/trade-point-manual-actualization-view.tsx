@@ -5,9 +5,12 @@
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -31,6 +34,8 @@ import {
 import { computePortalSummary } from "@/lib/client-base-actualization-portal-math";
 import { getProductById } from "@/lib/catalog-data";
 import {
+  computeShowcasePortalOverfill,
+  getRequiredShowcaseMatrixDefinitions,
   inferShowcasePortalTypeFromCatalogProduct,
   resolveShowcaseMatrixClientCategory,
 } from "@/lib/trade-point-showcase-matrix-required";
@@ -92,6 +97,11 @@ function emptyShowcase(dealerId: string, tradePointId: string): TradePointShowca
   };
 }
 
+function dashNum(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return "—";
+  return String(n);
+}
+
 export function TradePointManualActualizationView(props: {
   dealer: DealerRow;
   point: DealerTradePoint;
@@ -144,8 +154,16 @@ export function TradePointManualActualizationView(props: {
   );
   const [showcaseMatrixTasks, setShowcaseMatrixTasks] = useState<ShowcaseMatrixTask[]>(() => showcaseRec?.showcaseMatrixTasks ?? []);
 
+  const [showcaseDirty, setShowcaseDirty] = useState(false);
+  const [extraDetailsOpen, setExtraDetailsOpen] = useState(false);
+
   const mainSave = useSectionSaveFeedback();
   const showcaseSave = useSectionSaveFeedback();
+
+  const markShowcaseDirty = useCallback(() => {
+    setShowcaseDirty(true);
+    showcaseSave.markDirty();
+  }, [showcaseSave.markDirty]);
 
   useEffect(() => {
     const mf = (manualRec?.fields ?? {}) as Record<string, unknown>;
@@ -160,9 +178,8 @@ export function TradePointManualActualizationView(props: {
     setTpStatus(rf("tpStatusKind") || "working");
   }, [point, manualRec]);
 
-  const showcaseUpdatedAt = showcaseRec?.updatedAt;
   useEffect(() => {
-    const sh = actx.state.tradePointShowcaseActualizationById[point.id] ?? emptyShowcase(dealer.id, point.id);
+    const sh = showcaseRec ?? emptyShowcase(dealer.id, point.id);
     setHasShowcase(sh.hasShowcase);
     setTotalPortals(sh.totalPortals != null ? String(sh.totalPortals) : "");
     setEntrancePortals(sh.entrancePortals != null ? String(sh.entrancePortals) : "");
@@ -182,7 +199,8 @@ export function TradePointManualActualizationView(props: {
     setRmComment(sh.rmRopComment ?? "");
     setSelectedShowcaseModels(Array.isArray(sh.selectedShowcaseModels) ? sh.selectedShowcaseModels : []);
     setShowcaseMatrixTasks(Array.isArray(sh.showcaseMatrixTasks) ? sh.showcaseMatrixTasks : []);
-  }, [actx.state.tradePointShowcaseActualizationById, dealer.id, point.id, showcaseUpdatedAt]);
+    setShowcaseDirty(false);
+  }, [showcaseRec, dealer.id, point.id]);
 
   const dealerMergedFields = useMemo(() => {
     const manualD = actx.state.manuallyCreatedDealersById[dealer.id];
@@ -202,6 +220,19 @@ export function TradePointManualActualizationView(props: {
       total: numOrNull(totalPortals) ?? numOrNull(tTotal),
     }),
     [entrancePortals, interiorPortals, totalPortals, tEnt, tInt, tTotal],
+  );
+
+  const selectedProductIds = useMemo(() => new Set(selectedShowcaseModels.map((m) => m.productId)), [selectedShowcaseModels]);
+
+  const missingRequiredModelCount = useMemo(() => {
+    if (!matrixClientCategory) return 0;
+    const defs = getRequiredShowcaseMatrixDefinitions(matrixClientCategory);
+    return defs.filter((d) => !selectedProductIds.has(d.id)).length;
+  }, [matrixClientCategory, selectedProductIds]);
+
+  const portalOverfill = useMemo(
+    () => hasShowcase === true && computeShowcasePortalOverfill(selectedShowcaseModels, portalCaps, getProductById),
+    [hasShowcase, selectedShowcaseModels, portalCaps],
   );
 
   const summary = useMemo(() => {
@@ -508,166 +539,387 @@ export function TradePointManualActualizationView(props: {
 
         <AccordionItem value="showcase" data-testid="section-trade-point-showcase-portals">
           <AccordionTrigger className="text-left text-sm font-semibold">Витрина и порталы</AccordionTrigger>
-          <AccordionContent className="space-y-4">
+          <AccordionContent className="space-y-4 overflow-x-hidden pt-1">
+            <div
+              className="rounded-xl border border-border/70 bg-muted/10 p-3 sm:p-4"
+              data-testid="section-showcase-summary"
+            >
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0 space-y-2">
+                  {hasShowcase === null ? (
+                    <Badge variant="secondary" className="font-normal">
+                      Не заполнено
+                    </Badge>
+                  ) : hasShowcase === false ? (
+                    <Badge variant="outline" className="font-normal">
+                      Нет витрины
+                    </Badge>
+                  ) : (
+                    <Badge className="bg-emerald-700 font-normal text-white hover:bg-emerald-700">Есть витрина</Badge>
+                  )}
+                  {hasShowcase === true ? (
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      Порталы всего: {dashNum(numOrNull(totalPortals))} · Tandoor: {dashNum(numOrNull(tTotal))} · Свободно / конкуренты:{" "}
+                      {dashNum(summary.freeOrCompetitor)} · Дефицит матрицы:{" "}
+                      {matrixClientCategory ? missingRequiredModelCount : "—"} · Моделей выбрано: {selectedShowcaseModels.length}
+                    </p>
+                  ) : hasShowcase === false ? (
+                    <p className="text-xs text-muted-foreground">Витрины нет — порталы, сводка и каталог скрыты.</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Выберите состояние витрины или отложите заполнение.</p>
+                  )}
+                </div>
+                {canEdit ? (
+                  <div className="hidden shrink-0 flex-col items-stretch gap-2 md:flex md:min-w-[220px] md:items-end">
+                    <SectionSaveButton
+                      testId="button-showcase-save"
+                      statusTestId="text-save-status-trade-point-showcase"
+                      phase={showcaseSave.phase}
+                      onSave={() => void showcaseSave.runSave(persistShowcase)}
+                    />
+                    <p
+                      className="text-xs text-muted-foreground"
+                      data-testid="text-showcase-save-status"
+                      aria-live="polite"
+                    >
+                      {showcaseSave.phase === "saving"
+                        ? "Сохраняем…"
+                        : showcaseSave.phase === "success"
+                          ? "Сохранено"
+                          : showcaseDirty
+                            ? "Есть несохранённые изменения"
+                            : "Нет несохранённых изменений"}
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+
+              {hasShowcase === true ? (
+                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
+                  <div className="rounded-lg border border-border/60 bg-background/80 px-2 py-1.5">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Порталы всего</p>
+                    <p className="text-sm font-semibold tabular-nums">{dashNum(numOrNull(totalPortals))}</p>
+                  </div>
+                  <div className="rounded-lg border border-border/60 bg-background/80 px-2 py-1.5">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Tandoor</p>
+                    <p className="text-sm font-semibold tabular-nums">{dashNum(numOrNull(tTotal))}</p>
+                  </div>
+                  <div className="rounded-lg border border-border/60 bg-background/80 px-2 py-1.5">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Свободно / конкуренты</p>
+                    <p className="text-sm font-semibold tabular-nums">{dashNum(summary.freeOrCompetitor)}</p>
+                  </div>
+                  <div className="rounded-lg border border-border/60 bg-background/80 px-2 py-1.5">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Потенциал входные</p>
+                    <p className="text-sm font-semibold tabular-nums">{dashNum(summary.entrancePotential)}</p>
+                  </div>
+                  <div className="rounded-lg border border-border/60 bg-background/80 px-2 py-1.5">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Потенциал МК</p>
+                    <p className="text-sm font-semibold tabular-nums">{dashNum(summary.interiorPotential)}</p>
+                  </div>
+                  <div className="rounded-lg border border-border/60 bg-background/80 px-2 py-1.5">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Моделей выбрано</p>
+                    <p className="text-sm font-semibold tabular-nums">{selectedShowcaseModels.length}</p>
+                  </div>
+                  <div className="rounded-lg border border-border/60 bg-background/80 px-2 py-1.5">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Нужно поставить</p>
+                    <p
+                      className={
+                        missingRequiredModelCount > 0
+                          ? "text-sm font-semibold tabular-nums text-amber-900 dark:text-amber-100"
+                          : "text-sm font-semibold tabular-nums"
+                      }
+                    >
+                      {matrixClientCategory ? missingRequiredModelCount : "—"}
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            {hasShowcase === null && !canEdit ? (
+              <p className="text-sm text-muted-foreground">Состояние витрины не заполнено.</p>
+            ) : null}
+
+            {hasShowcase === null && canEdit ? (
+              <div className="grid gap-2 sm:grid-cols-3">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="default"
+                  className="min-h-10 w-full"
+                  onClick={() => {
+                    setHasShowcase(true);
+                    markShowcaseDirty();
+                  }}
+                >
+                  Есть витрина
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="min-h-10 w-full"
+                  onClick={() => {
+                    setHasShowcase(false);
+                    markShowcaseDirty();
+                  }}
+                >
+                  Нет витрины / порталов
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  className="min-h-10 w-full"
+                  onClick={() => {
+                    setHasShowcase(null);
+                    markShowcaseDirty();
+                  }}
+                >
+                  Заполнить позже
+                </Button>
+              </div>
+            ) : null}
+
             {hasShowcase === false ? (
-              <p className="text-sm text-muted-foreground">Витрина / порталы: нет. Поля дефицита и сводка по порталам не применяются.</p>
-            ) : hasShowcase === null ? (
-              <p className="text-sm text-muted-foreground">Параметры витрины не заполнены.</p>
-            ) : (
-              <p className="text-sm text-muted-foreground">Витрина / порталы: да.</p>
-            )}
-            {canEdit ? (
-              <div className="flex flex-wrap gap-2">
-                {hasShowcase !== true ? (
-                  <Button type="button" size="sm" variant="default" onClick={() => { setHasShowcase(true); showcaseSave.markDirty(); }}>
-                    Заполнить витрину
-                  </Button>
-                ) : null}
-                {hasShowcase !== false ? (
-                  <Button type="button" size="sm" variant="outline" onClick={() => { setHasShowcase(false); showcaseSave.markDirty(); }}>
-                    Нет витрины / порталов
-                  </Button>
-                ) : null}
-                {hasShowcase != null ? (
-                  <Button type="button" size="sm" variant="ghost" onClick={() => { setHasShowcase(null); showcaseSave.markDirty(); }}>
-                    Сбросить выбор
-                  </Button>
+              <div className="rounded-xl border border-dashed border-border/80 bg-muted/15 px-4 py-6 text-center">
+                <p className="text-sm font-medium text-foreground">Витрины нет</p>
+                <p className="mt-1 text-xs text-muted-foreground">Каталог моделей и расчёт дефицита скрыты, пока не отмечено «Есть витрина».</p>
+                {canEdit ? (
+                  <div className="mt-4 flex flex-wrap justify-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="default"
+                      onClick={() => {
+                        setHasShowcase(true);
+                        markShowcaseDirty();
+                      }}
+                    >
+                      Есть витрина
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setHasShowcase(null);
+                        markShowcaseDirty();
+                      }}
+                    >
+                      Заполнить позже
+                    </Button>
+                  </div>
                 ) : null}
               </div>
             ) : null}
+
             {hasShowcase === true ? (
-              <div className="grid gap-3 sm:grid-cols-2">
+              <>
+                <div className="space-y-4" data-testid="section-showcase-portal-fields">
+                  <div>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Основные порталы</p>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Всего порталов</Label>
+                        <Input
+                          className="min-h-10"
+                          inputMode="numeric"
+                          data-testid="input-trade-point-total-portals"
+                          value={totalPortals}
+                          onChange={(e) => {
+                            setTotalPortals(e.target.value);
+                            markShowcaseDirty();
+                          }}
+                          disabled={!canEdit}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Под входные двери</Label>
+                        <Input
+                          className="min-h-10"
+                          inputMode="numeric"
+                          data-testid="input-trade-point-entrance-portals"
+                          value={entrancePortals}
+                          onChange={(e) => {
+                            setEntrancePortals(e.target.value);
+                            markShowcaseDirty();
+                          }}
+                          disabled={!canEdit}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Под межкомнатные</Label>
+                        <Input
+                          className="min-h-10"
+                          inputMode="numeric"
+                          data-testid="input-trade-point-interior-portals"
+                          value={interiorPortals}
+                          onChange={(e) => {
+                            setInteriorPortals(e.target.value);
+                            markShowcaseDirty();
+                          }}
+                          disabled={!canEdit}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Площадь витрины, м²</Label>
+                        <Input
+                          className="min-h-10"
+                          inputMode="decimal"
+                          data-testid="input-trade-point-showcase-area"
+                          value={area}
+                          onChange={(e) => {
+                            setArea(e.target.value);
+                            markShowcaseDirty();
+                          }}
+                          disabled={!canEdit}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Заполнение</p>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Порталы Tandoor всего</Label>
+                        <Input
+                          className="min-h-10"
+                          inputMode="numeric"
+                          data-testid="input-trade-point-tandoor-total-portals"
+                          value={tTotal}
+                          onChange={(e) => {
+                            setTTotal(e.target.value);
+                            markShowcaseDirty();
+                          }}
+                          disabled={!canEdit}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Tandoor входные</Label>
+                        <Input
+                          className="min-h-10"
+                          inputMode="numeric"
+                          data-testid="input-trade-point-tandoor-entrance-portals"
+                          value={tEnt}
+                          onChange={(e) => {
+                            setTEnt(e.target.value);
+                            markShowcaseDirty();
+                          }}
+                          disabled={!canEdit}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Tandoor межкомнатные</Label>
+                        <Input
+                          className="min-h-10"
+                          inputMode="numeric"
+                          data-testid="input-trade-point-tandoor-interior-portals"
+                          value={tInt}
+                          onChange={(e) => {
+                            setTInt(e.target.value);
+                            markShowcaseDirty();
+                          }}
+                          disabled={!canEdit}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Конкуренты / свободные порталы</Label>
+                        <Input
+                          className="min-h-10"
+                          inputMode="numeric"
+                          value={compPortals}
+                          onChange={(e) => {
+                            setCompPortals(e.target.value);
+                            markShowcaseDirty();
+                          }}
+                          disabled={!canEdit}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-border/70 bg-muted/20 p-3 text-sm">
+                  <p className="font-semibold text-foreground">Сводка по порталам</p>
+                  {!showPortalMathSummary ? (
+                    <p className="mt-2 text-xs text-muted-foreground">Заполните порталы, чтобы увидеть потенциал.</p>
+                  ) : (
+                    <>
+                      <p className="mt-2 text-muted-foreground" data-testid="text-trade-point-portal-summary">
+                        Всего порталов: {summary.totalPortals ?? "—"} · Занято Tandoor: {summary.tandoorTotal ?? "—"} · Свободно / конкуренты:{" "}
+                        {summary.freeOrCompetitor ?? "—"}
+                      </p>
+                      <p className="mt-2 text-muted-foreground">
+                        Потенциально свободно: входные —{" "}
+                        <span data-testid="text-trade-point-entrance-potential">{summary.entrancePotential ?? "—"}</span>, межкомнатные —{" "}
+                        <span data-testid="text-trade-point-interior-potential">{summary.interiorPotential ?? "—"}</span>
+                        {matrixClientCategory ? (
+                          <>
+                            {" "}
+                            · Дефицит матрицы (обязательные без витрины):{" "}
+                            <span className={missingRequiredModelCount > 0 ? "font-medium text-amber-900 dark:text-amber-100" : ""}>
+                              {missingRequiredModelCount}
+                            </span>
+                          </>
+                        ) : null}
+                      </p>
+                      {portalOverfill ? (
+                        <p className="mt-2 text-xs font-medium text-amber-900 dark:text-amber-100">
+                          Переполнение: выбранных моделей больше, чем доступных порталов по типам или всего.
+                        </p>
+                      ) : null}
+                      {summary.needsPrimaryInstall ? (
+                        <p className="mt-2 text-xs font-medium text-amber-900 dark:text-amber-100">Требуется первичная установка витрины.</p>
+                      ) : null}
+                    </>
+                  )}
+                </div>
+
+                <div data-testid="section-showcase-extra-details">
+                  <Collapsible open={extraDetailsOpen} onOpenChange={setExtraDetailsOpen}>
+                  <CollapsibleTrigger asChild>
+                    <Button type="button" variant="outline" size="sm" className="h-9 w-full justify-between gap-2 sm:w-auto">
+                      <span>Дополнительные детали</span>
+                      {extraDetailsOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="space-y-3 pt-3">
                     <div className="space-y-1">
-                      <Label className="text-xs">Всего порталов</Label>
-                      <Input
-                        className="min-h-10"
-                        inputMode="numeric"
-                        data-testid="input-trade-point-total-portals"
-                        value={totalPortals}
+                      <Label className="text-xs">Текущее заполнение (текстом)</Label>
+                      <Textarea
+                        rows={2}
+                        value={fillingComment}
                         onChange={(e) => {
-                          setTotalPortals(e.target.value);
-                          showcaseSave.markDirty();
+                          setFillingComment(e.target.value);
+                          markShowcaseDirty();
                         }}
                         disabled={!canEdit}
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">Площадь витрины, м²</Label>
-                      <Input
-                        className="min-h-10"
-                        inputMode="decimal"
-                        data-testid="input-trade-point-showcase-area"
-                        value={area}
-                        onChange={(e) => {
-                          setArea(e.target.value);
-                          showcaseSave.markDirty();
-                        }}
-                        disabled={!canEdit}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Порталы под входные двери</Label>
-                      <Input
-                        className="min-h-10"
-                        inputMode="numeric"
-                        data-testid="input-trade-point-entrance-portals"
-                        value={entrancePortals}
-                        onChange={(e) => {
-                          setEntrancePortals(e.target.value);
-                          showcaseSave.markDirty();
-                        }}
-                        disabled={!canEdit}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Порталы под межкомнатные</Label>
-                      <Input
-                        className="min-h-10"
-                        inputMode="numeric"
-                        data-testid="input-trade-point-interior-portals"
-                        value={interiorPortals}
-                        onChange={(e) => {
-                          setInteriorPortals(e.target.value);
-                          showcaseSave.markDirty();
-                        }}
-                        disabled={!canEdit}
-                      />
-                    </div>
-                    <div className="space-y-1 sm:col-span-2">
                       <Label className="text-xs">Комментарий по витрине</Label>
-                      <Textarea rows={2} value={showcaseComment} onChange={(e) => { setShowcaseComment(e.target.value); showcaseSave.markDirty(); }} disabled={!canEdit} />
-                    </div>
-
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:col-span-2">Текущее заполнение</p>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Занято Tandoor всего</Label>
-                      <Input
-                        className="min-h-10"
-                        inputMode="numeric"
-                        data-testid="input-trade-point-tandoor-total-portals"
-                        value={tTotal}
+                      <Textarea
+                        rows={2}
+                        value={showcaseComment}
                         onChange={(e) => {
-                          setTTotal(e.target.value);
-                          showcaseSave.markDirty();
+                          setShowcaseComment(e.target.value);
+                          markShowcaseDirty();
                         }}
                         disabled={!canEdit}
                       />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Tandoor входные</Label>
-                      <Input
-                        className="min-h-10"
-                        inputMode="numeric"
-                        data-testid="input-trade-point-tandoor-entrance-portals"
-                        value={tEnt}
-                        onChange={(e) => {
-                          setTEnt(e.target.value);
-                          showcaseSave.markDirty();
-                        }}
-                        disabled={!canEdit}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Tandoor межкомнатные</Label>
-                      <Input
-                        className="min-h-10"
-                        inputMode="numeric"
-                        data-testid="input-trade-point-tandoor-interior-portals"
-                        value={tInt}
-                        onChange={(e) => {
-                          setTInt(e.target.value);
-                          showcaseSave.markDirty();
-                        }}
-                        disabled={!canEdit}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Занято конкурентами (порталов)</Label>
-                      <Input className="min-h-10" inputMode="numeric" value={compPortals} onChange={(e) => { setCompPortals(e.target.value); showcaseSave.markDirty(); }} disabled={!canEdit} />
-                    </div>
-                    <div className="space-y-1 sm:col-span-2">
-                      <Label className="text-xs">Какие конкуренты</Label>
-                      <Textarea rows={2} value={competitorsListed} onChange={(e) => { setCompetitorsListed(e.target.value); showcaseSave.markDirty(); }} disabled={!canEdit} />
-                    </div>
-                    <div className="space-y-1 sm:col-span-2">
-                      <Label className="text-xs">Что стоит сейчас</Label>
-                      <Textarea rows={2} value={fillingComment} onChange={(e) => { setFillingComment(e.target.value); showcaseSave.markDirty(); }} disabled={!canEdit} />
-                    </div>
-
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:col-span-2">Потенциал</p>
-                    <div className="flex items-center gap-2 sm:col-span-2">
-                      <Checkbox id="exp-pot" checked={expPot === true} disabled={!canEdit} onCheckedChange={(v) => { setExpPot(v === true ? true : v === false ? false : null); showcaseSave.markDirty(); }} />
-                      <Label htmlFor="exp-pot" className="text-sm">
-                        Есть потенциал расширения
-                      </Label>
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Доп. порталов можно занять</Label>
-                      <Input className="min-h-10" inputMode="numeric" value={addPortals} onChange={(e) => { setAddPortals(e.target.value); showcaseSave.markDirty(); }} disabled={!canEdit} />
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs">Приоритет витрины</Label>
-                      <Select value={priority || "__none__"} onValueChange={(v) => { setPriority(v === "__none__" ? "" : v); showcaseSave.markDirty(); }} disabled={!canEdit}>
+                      <Select
+                        value={priority || "__none__"}
+                        onValueChange={(v) => {
+                          setPriority(v === "__none__" ? "" : v);
+                          markShowcaseDirty();
+                        }}
+                        disabled={!canEdit}
+                      >
                         <SelectTrigger className="min-h-10">
                           <SelectValue placeholder="Не выбран" />
                         </SelectTrigger>
@@ -679,57 +931,117 @@ export function TradePointManualActualizationView(props: {
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="space-y-1 sm:col-span-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Конкуренты (список)</Label>
+                      <Textarea
+                        rows={2}
+                        value={competitorsListed}
+                        onChange={(e) => {
+                          setCompetitorsListed(e.target.value);
+                          markShowcaseDirty();
+                        }}
+                        disabled={!canEdit}
+                      />
+                    </div>
+                    <div className="space-y-1">
                       <Label className="text-xs">Что поставить в первую очередь</Label>
-                      <Textarea rows={2} value={firstNeed} onChange={(e) => { setFirstNeed(e.target.value); showcaseSave.markDirty(); }} disabled={!canEdit} />
+                      <Textarea
+                        rows={2}
+                        value={firstNeed}
+                        onChange={(e) => {
+                          setFirstNeed(e.target.value);
+                          markShowcaseDirty();
+                        }}
+                        disabled={!canEdit}
+                      />
                     </div>
-                    <div className="space-y-1 sm:col-span-2">
+                    <div className="space-y-1">
                       <Label className="text-xs">Комментарий для РМ/РОП</Label>
-                      <Textarea rows={2} value={rmComment} onChange={(e) => { setRmComment(e.target.value); showcaseSave.markDirty(); }} disabled={!canEdit} />
+                      <Textarea
+                        rows={2}
+                        value={rmComment}
+                        onChange={(e) => {
+                          setRmComment(e.target.value);
+                          markShowcaseDirty();
+                        }}
+                        disabled={!canEdit}
+                      />
                     </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Checkbox
+                        id="exp-pot"
+                        checked={expPot === true}
+                        disabled={!canEdit}
+                        onCheckedChange={(v) => {
+                          setExpPot(v === true ? true : v === false ? false : null);
+                          markShowcaseDirty();
+                        }}
+                      />
+                      <Label htmlFor="exp-pot" className="text-sm">
+                        Есть потенциал расширения
+                      </Label>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Доп. порталов можно занять</Label>
+                      <Input
+                        className="min-h-10"
+                        inputMode="numeric"
+                        value={addPortals}
+                        onChange={(e) => {
+                          setAddPortals(e.target.value);
+                          markShowcaseDirty();
+                        }}
+                        disabled={!canEdit}
+                      />
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+                </div>
 
-                    {showPortalMathSummary ? (
-                      <div className="rounded-lg border border-border/70 bg-muted/20 p-3 text-sm sm:col-span-2">
-                        <p className="font-semibold text-foreground">Сводка</p>
-                        <p className="mt-1 text-muted-foreground" data-testid="text-trade-point-portal-summary">
-                          Всего порталов: {summary.totalPortals ?? "—"} · Занято Tandoor: {summary.tandoorTotal ?? "—"} · Свободно / конкуренты:{" "}
-                          {summary.freeOrCompetitor ?? "—"}
-                        </p>
-                        <p className="mt-1 text-muted-foreground">
-                          <span data-testid="text-trade-point-entrance-potential">Потенциал входные: {summary.entrancePotential ?? "—"}</span>
-                          {" · "}
-                          <span data-testid="text-trade-point-interior-potential">Потенциал МК: {summary.interiorPotential ?? "—"}</span>
-                        </p>
-                        {summary.needsPrimaryInstall ? (
-                          <p className="mt-2 text-amber-800">Требуется первичная установка витрины.</p>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </div>
+                <TradePointShowcaseCatalogPanel
+                  tradePointId={point.id}
+                  dealerId={dealer.id}
+                  matrixClientCategory={matrixClientCategory}
+                  canEdit={canEdit}
+                  actorUserId={user?.id ?? profile.personaUserId}
+                  actorLabel={(user?.name ?? "").trim() || userLabelFromProfile(profile)}
+                  selectedShowcaseModels={selectedShowcaseModels}
+                  onChangeSelected={setSelectedShowcaseModels}
+                  showcaseMatrixTasks={showcaseMatrixTasks}
+                  onChangeTasks={setShowcaseMatrixTasks}
+                  onMarkDirty={markShowcaseDirty}
+                  portalCaps={portalCaps}
+                />
+              </>
             ) : null}
-            {hasShowcase !== false ? (
-              <TradePointShowcaseCatalogPanel
-                tradePointId={point.id}
-                dealerId={dealer.id}
-                matrixClientCategory={matrixClientCategory}
-                canEdit={canEdit}
-                actorUserId={user?.id ?? profile.personaUserId}
-                actorLabel={(user?.name ?? "").trim() || userLabelFromProfile(profile)}
-                selectedShowcaseModels={selectedShowcaseModels}
-                onChangeSelected={setSelectedShowcaseModels}
-                showcaseMatrixTasks={showcaseMatrixTasks}
-                onChangeTasks={setShowcaseMatrixTasks}
-                onMarkDirty={showcaseSave.markDirty}
-                portalCaps={portalCaps}
-              />
-            ) : null}
+
             {canEdit ? (
-              <SectionSaveButton
-                testId="button-showcase-save"
-                statusTestId="text-save-status-trade-point-showcase"
-                phase={showcaseSave.phase}
-                onSave={() => void showcaseSave.runSave(persistShowcase)}
-              />
+              <div className="sticky bottom-0 z-20 -mx-3 mt-4 flex items-center justify-between gap-3 border-t border-border/80 bg-background/95 px-3 py-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/90 sm:-mx-4 md:hidden">
+                <p
+                  className={
+                    showcaseSave.phase === "success"
+                      ? "min-w-0 flex-1 text-xs font-medium text-emerald-700 dark:text-emerald-400"
+                      : "min-w-0 flex-1 text-xs text-muted-foreground"
+                  }
+                  data-testid="text-showcase-save-status-toolbar"
+                  aria-live="polite"
+                >
+                  {showcaseSave.phase === "saving"
+                    ? "Сохраняем…"
+                    : showcaseSave.phase === "success"
+                      ? "Сохранено"
+                      : showcaseDirty
+                        ? "Есть несохранённые изменения"
+                        : "Изменений нет"}
+                </p>
+                <SectionSaveButton
+                  testId="button-showcase-save-bottom"
+                  statusTestId="text-save-status-trade-point-showcase-bottom"
+                  phase={showcaseSave.phase}
+                  onSave={() => void showcaseSave.runSave(persistShowcase)}
+                  className="shrink-0"
+                />
+              </div>
             ) : null}
           </AccordionContent>
         </AccordionItem>
