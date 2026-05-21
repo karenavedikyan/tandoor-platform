@@ -1981,7 +1981,7 @@ export default function DealerBase() {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Поиск: название, код, город, РОП, менеджер, тип, адрес"
+              placeholder="Поиск: название, код, город, РОП, менеджер, тип, адрес, ИНН"
               className="min-h-11 rounded-xl border-border pl-10"
               data-testid="input-dealer-base-search"
             />
