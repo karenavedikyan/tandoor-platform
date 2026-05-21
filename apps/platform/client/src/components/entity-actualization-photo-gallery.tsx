@@ -94,7 +94,7 @@ export function EntityActualizationPhotoGallery(props: EntityActualizationPhotoG
 
   const emptyHint =
     entityType === "dealer"
-      ? "Фото пока нет. Добавьте фасад, логотип или витрину, чтобы менеджерам было проще узнавать клиента."
+      ? "Добавьте фото или логотип\nСделайте клиента узнаваемым"
       : "Добавьте фасад или витрину точки, чтобы быстро понимать формат магазина.";
 
   const uploaderId = (user?.id?.trim() || profile.personaUserId || "unknown").slice(0, 96);
@@ -223,7 +223,7 @@ export function EntityActualizationPhotoGallery(props: EntityActualizationPhotoG
 
       {photos.length === 0 ? (
         <div
-          className="rounded-lg border border-dashed border-border bg-card px-3 py-6 text-center text-sm text-muted-foreground"
+          className="whitespace-pre-line rounded-lg border border-dashed border-border bg-card px-3 py-6 text-center text-sm text-muted-foreground"
           data-testid={`entity-photo-empty-${entityType}-${entityId}`}
         >
           {emptyHint}
