@@ -113,6 +113,7 @@
 
 ## Клиентский слой (этап 3)
 
+- **Тема интерфейса (светлая / тёмная / системная):** см. `docs/theme-ui.md` — `ThemeProvider`, ключ `tandoor-theme-v1`, переключатель в шапке и в мобильном меню; витрина дилеров использует семантические классы темы.
 - **Контекст:** `context/client-base-actualization-context.tsx` — загрузка, `persist(updater)`, `mergedDealerRows`, статус синхронизации.
 - **API:** `lib/client-base-actualization-api.ts` — вызовы GET/POST и разбор `storageMode` / ошибок.
 - **Стабильные id и проверки дублей:** `lib/client-base-actualization-stable-ids.ts` — генерация id, поиск дублей по ИНН / названию+городу.

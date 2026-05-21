@@ -35,9 +35,9 @@ import { DealerBulkDeleteCheckbox } from "@/components/dealer-bulk-delete-checkb
 import { SafeImage } from "@/components/safe-image";
 import { TradePointRowListThumb } from "@/components/trade-point-row-list-thumb";
 
-const badgeOutline = "border-[#9ACA3C]/35 bg-[#FFFFFF] text-[#222631]";
-const badgeSoft = "border-[#9ACA3C]/30 bg-[#9ACA3C]/10 text-[#222631]";
-const badgeNeutral = "border-[#E3E6F3] bg-[#FFFFFF] text-[#222631]";
+const badgeOutline = "border-primary/35 bg-card text-foreground";
+const badgeSoft = "border-primary/30 bg-primary/10 text-foreground";
+const badgeNeutral = "border-border bg-card text-foreground";
 
 type ArchiveBulk = {
   selectedIds: Set<string>;
@@ -131,7 +131,7 @@ function dealerShowcaseStatusLabel(status: DealerRow["status"]): string {
 
 /** Статусы дилера — только фирменная палитра, различие по тексту. */
 function statusBadgeClass(_status: DealerRow["status"]): string {
-  return cn("border-[#9ACA3C]/30 bg-[#FFFFFF] text-[#222631]");
+  return cn("border-primary/30 bg-card text-foreground");
 }
 
 function tradePointPortalCaptions(act: ActualizationState, tpId: string): { portals: string | null; tandoor: string | null } {
@@ -169,10 +169,10 @@ function ContactAction({
   const isBranch = variant === "branch";
   const short = BRANCH_CONTACT_SHORT[label] ?? label.slice(0, 4);
   const btnClass = cn(
-    "h-8 gap-1 text-xs font-medium text-[#222631]",
+    "h-8 gap-1 text-xs font-medium text-foreground",
     isBranch
-      ? "rounded-md border border-[#9ACA3C]/35 bg-[#FFFFFF] px-2 hover:bg-[#9ACA3C]/10"
-      : "rounded-full border border-[#9ACA3C]/35 bg-[#FFFFFF] px-2.5 hover:bg-[#9ACA3C]/10",
+      ? "rounded-md border border-primary/35 bg-card px-2 hover:bg-primary/10"
+      : "rounded-full border border-primary/35 bg-card px-2.5 hover:bg-primary/10",
   );
   const labelNode = isBranch ? (
     <>
@@ -186,7 +186,7 @@ function ContactAction({
     return (
       <Button asChild size="sm" variant="outline" className={btnClass}>
         <a href={href} data-testid={testId} className="inline-flex min-h-8 min-w-0 items-center gap-1">
-          <Icon className="h-3.5 w-3.5 shrink-0 text-[#9ACA3C]" aria-hidden />
+          <Icon className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
           {labelNode}
         </a>
       </Button>
@@ -197,7 +197,7 @@ function ContactAction({
       <TooltipTrigger asChild>
         <span className="inline-block max-w-full">
           <Button type="button" size="sm" variant="outline" disabled className={cn(btnClass, "opacity-70")}>
-            <Icon className="h-3.5 w-3.5 shrink-0 text-[#8F96B0]" aria-hidden />
+            <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
             {labelNode}
           </Button>
         </span>
@@ -210,16 +210,16 @@ function ContactAction({
 /** Левая полоса: фирменный зелёный при витрине или необходимости внимания; иначе нейтральная. */
 function tradePointBranchAccentClass(line: string, deficit: number, newTasks: number): string {
   const needsBrandGreen = deficit > 0 || newTasks > 0 || line === "Есть витрина";
-  if (needsBrandGreen) return "border-l-[#9ACA3C]";
-  return "border-l-[#E3E6F3]";
+  if (needsBrandGreen) return "border-l-primary";
+  return "border-l-border";
 }
 
 function tradePointShowcaseStatusBadgeClass(line: string, deficit: number, newTasks: number): string {
   if (deficit > 0 || newTasks > 0 || line === "Есть дефицит") {
-    return "border-[#9ACA3C] bg-[#9ACA3C]/10 text-[#222631]";
+    return "border-primary bg-primary/10 text-foreground";
   }
   if (line === "Есть витрина") {
-    return "border-[#9ACA3C]/40 bg-[#FFFFFF] text-[#222631]";
+    return "border-primary/40 bg-card text-foreground";
   }
   return badgeNeutral;
 }
@@ -263,7 +263,7 @@ function TradePointShowcaseRow({
   return (
     <div
       className={cn(
-        "min-w-0 overflow-hidden rounded-md border border-[#E3E6F3] bg-[#FFFFFF] py-2 pl-2 pr-2 shadow-none sm:py-2.5 sm:pr-2.5",
+        "min-w-0 overflow-hidden rounded-md border border-border bg-card py-2 pl-2 pr-2 shadow-none sm:py-2.5 sm:pr-2.5",
         "border-l-4",
         accentBorder,
       )}
@@ -275,22 +275,22 @@ function TradePointShowcaseRow({
             <div className="flex min-w-0 items-start gap-2">
               <TradePointRowListThumb point={tp} size="xs" className="shrink-0" />
               <div className="min-w-0">
-                <span className="text-sm font-semibold leading-snug text-[#222631]">{tp.name}</span>
-                <p className="font-mono text-[10px] leading-tight text-[#8F96B0]">{getTradePointDisplayCodeForActualization(tp)}</p>
+                <span className="text-sm font-semibold leading-snug text-foreground">{tp.name}</span>
+                <p className="font-mono text-[10px] leading-tight text-muted-foreground">{getTradePointDisplayCodeForActualization(tp)}</p>
               </div>
             </div>
             <Button
               asChild
               size="sm"
               variant="outline"
-              className="h-7 shrink-0 rounded-md border border-[#9ACA3C]/35 bg-[#FFFFFF] px-2.5 text-[11px] font-medium text-[#222631] hover:bg-[#9ACA3C]/10 sm:mt-0"
+              className="h-7 shrink-0 rounded-md border border-primary/35 bg-card px-2.5 text-[11px] font-medium text-foreground hover:bg-primary/10 sm:mt-0"
             >
               <Link href={tpHref} data-testid={`button-dealer-showcase-open-trade-point-${tp.id}`}>
                 Открыть ТТ
               </Link>
             </Button>
           </div>
-          <p className="text-[11px] leading-snug text-[#8F96B0]">
+          <p className="text-[11px] leading-snug text-muted-foreground">
             {tp.city}
             {tp.address ? ` · ${tp.address}` : ""}
           </p>
@@ -305,13 +305,13 @@ function TradePointShowcaseRow({
             ) : null}
           </div>
           {(portals || tandoor) && (
-            <p className="text-[10px] leading-tight text-[#8F96B0]">{[portals, tandoor].filter(Boolean).join(" · ")}</p>
+            <p className="text-[10px] leading-tight text-muted-foreground">{[portals, tandoor].filter(Boolean).join(" · ")}</p>
           )}
-          {ship ? <p className="text-[10px] text-[#8F96B0]">Отгрузка: {ship.label}</p> : null}
-          {cleanContact(tp.contactName) ? <p className="text-[11px] text-[#8F96B0]">Контакт: {tp.contactName}</p> : null}
+          {ship ? <p className="text-[10px] text-muted-foreground">Отгрузка: {ship.label}</p> : null}
+          {cleanContact(tp.contactName) ? <p className="text-[11px] text-muted-foreground">Контакт: {tp.contactName}</p> : null}
         </div>
       </div>
-      <div className="mt-2 flex max-w-full flex-wrap gap-1.5 border-t border-[#E3E6F3] pt-2">
+      <div className="mt-2 flex max-w-full flex-wrap gap-1.5 border-t border-border pt-2">
         <ContactAction
           variant="branch"
           label="Позвонить"
@@ -402,10 +402,10 @@ function DealerShowcaseCard({
 
   return (
     <Card
-      className="overflow-hidden rounded-xl border border-[#E3E6F3] border-l-4 border-l-[#9ACA3C] bg-[#FFFFFF] shadow-sm"
+      className="overflow-hidden rounded-xl border border-border border-l-4 border-l-primary bg-card shadow-sm"
       data-testid={`card-dealer-showcase-${row.id}`}
     >
-      <CardContent className="space-y-3 p-3 text-[#222631] sm:p-4">
+      <CardContent className="space-y-3 p-3 text-foreground sm:p-4">
         <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex min-w-0 gap-3">
             {showWorkPlanSelect && wp && onToggleWorkPlanSelect ? (
@@ -420,12 +420,12 @@ function DealerShowcaseCard({
             {archiveBulk?.selectableIds.has(row.id) ? (
               <span
                 className={cn(
-                  "mt-1 inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-[#222631]/20 bg-[#EEEFF6] px-2 py-1",
-                  showWorkPlanSelect && wp && onToggleWorkPlanSelect && "border-l-2 border-l-[#9ACA3C]/50 pl-2",
+                  "mt-1 inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-foreground/20 bg-muted px-2 py-1",
+                  showWorkPlanSelect && wp && onToggleWorkPlanSelect && "border-l-2 border-l-primary/50 pl-2",
                 )}
                 data-testid={`wrap-dealer-bulk-select-${row.id}`}
               >
-                <span className="text-[9px] font-bold uppercase text-[#222631]">Удалить</span>
+                <span className="text-[9px] font-bold uppercase text-foreground">Удалить</span>
                 <DealerBulkDeleteCheckbox
                   checked={archiveBulk.selectedIds.has(row.id)}
                   onCheckedChange={(v: boolean | "indeterminate") => archiveBulk.onToggle(row.id, v === true)}
@@ -438,7 +438,7 @@ function DealerShowcaseCard({
               const cover = row.coverPhotoThumbnailUrl?.trim() || row.coverPhotoUrl?.trim();
               if (cover) {
                 return (
-                  <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md border border-[#9ACA3C]/25 bg-[#FFFFFF]">
+                  <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md border border-primary/25 bg-card">
                     <SafeImage src={cover} alt="" className="absolute inset-0 h-full w-full" objectFit="cover" />
                   </div>
                 );
@@ -446,20 +446,20 @@ function DealerShowcaseCard({
               const logo = (row as DealerRow & { logoUrl?: string }).logoUrl?.trim();
               if (logo) {
                 return (
-                  <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-[#9ACA3C]/25 bg-[#FFFFFF]">
+                  <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-primary/25 bg-card">
                     <img src={logo} alt="" className="h-full w-full object-contain" loading="lazy" />
                   </div>
                 );
               }
               return (
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-[#9ACA3C]/30 bg-[#9ACA3C]/10 text-base font-bold text-[#222631]">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-primary/30 bg-primary/10 text-base font-bold text-foreground">
                   {initialsFromName(row.name)}
                 </div>
               );
             })()}
             <div className="min-w-0 flex-1 space-y-1.5">
               <div className="flex flex-wrap items-center gap-1.5">
-                <h3 className="text-base font-semibold leading-tight text-[#222631] sm:text-lg">{row.name}</h3>
+                <h3 className="text-base font-semibold leading-tight text-foreground sm:text-lg">{row.name}</h3>
                 <Badge variant="outline" className={cn("text-[10px] font-semibold", badgeOutline)}>
                   Дилер
                 </Badge>
@@ -477,9 +477,9 @@ function DealerShowcaseCard({
                   </Badge>
                 ) : null}
               </div>
-              <p className="font-mono text-xs text-[#8F96B0]">{code}</p>
-              {inn ? <p className="text-xs text-[#8F96B0]">ИНН: {inn}</p> : null}
-              <p className="text-xs text-[#8F96B0]">{regionLine || "—"}</p>
+              <p className="font-mono text-xs text-muted-foreground">{code}</p>
+              {inn ? <p className="text-xs text-muted-foreground">ИНН: {inn}</p> : null}
+              <p className="text-xs text-muted-foreground">{regionLine || "—"}</p>
               <div className="flex flex-wrap gap-1">
                 <Badge variant="outline" className={cn("text-[10px]", badgeOutline)}>
                   {getClientCategoryLabel(row.clientCategory)}
@@ -514,7 +514,7 @@ function DealerShowcaseCard({
                 ) : null}
               </div>
               {hidden ? (
-                <Badge variant="outline" className="w-fit border-[#E3E6F3] bg-[#EEEFF6] text-[10px] text-[#8F96B0]" data-testid={`badge-dealer-hidden-${row.id}`}>
+                <Badge variant="outline" className="w-fit border-border bg-muted text-[10px] text-muted-foreground" data-testid={`badge-dealer-hidden-${row.id}`}>
                   Скрыт из рабочего списка
                 </Badge>
               ) : null}
@@ -524,7 +524,7 @@ function DealerShowcaseCard({
             <Button
               asChild
               size="sm"
-              className="h-9 w-full rounded-full bg-[#9ACA3C] font-semibold text-[#FFFFFF] hover:bg-[#86B832] sm:w-auto"
+              className="h-9 w-full rounded-full bg-primary font-semibold text-primary-foreground hover:bg-primary/90 sm:w-auto"
             >
               <Link href={`/dealers/${row.id}`} data-testid={`button-dealer-showcase-open-${row.id}`}>
                 Открыть клиента
@@ -539,25 +539,25 @@ function DealerShowcaseCard({
         </div>
 
         {(contactName || phone || email) && (
-          <div className="rounded-lg border border-[#9ACA3C]/25 bg-[#EEEFF6] px-3 py-2 text-sm">
-            <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold text-[#8F96B0]">
-              <Building2 className="h-3.5 w-3.5 text-[#9ACA3C]" aria-hidden />
+          <div className="rounded-lg border border-primary/25 bg-muted px-3 py-2 text-sm">
+            <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+              <Building2 className="h-3.5 w-3.5 text-primary" aria-hidden />
               Основной контакт
             </div>
-            {contactName ? <p className="mt-1 font-medium text-[#222631]">{contactName}</p> : null}
-            {phone ? <p className="text-xs text-[#222631]">{phone}</p> : null}
-            {email ? <p className="text-xs text-[#8F96B0]">{email}</p> : null}
+            {contactName ? <p className="mt-1 font-medium text-foreground">{contactName}</p> : null}
+            {phone ? <p className="text-xs text-foreground">{phone}</p> : null}
+            {email ? <p className="text-xs text-muted-foreground">{email}</p> : null}
           </div>
         )}
 
         {merged.length > 0 ? (
           <section
-            className="rounded-lg border border-[#9ACA3C]/25 bg-[#E3E6F3]/60 p-2 sm:p-2.5"
+            className="rounded-lg border border-primary/25 bg-muted/60 p-2 sm:p-2.5"
             data-testid={`section-dealer-showcase-branches-${row.id}`}
           >
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-              <h4 className="text-xs font-semibold uppercase tracking-wide text-[#222631]">Филиалы / торговые точки</h4>
-              <Badge variant="outline" className="h-5 border border-[#9ACA3C]/35 bg-[#FFFFFF] px-2 text-[10px] font-semibold tabular-nums text-[#222631]">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-foreground">Филиалы / торговые точки</h4>
+              <Badge variant="outline" className="h-5 border border-primary/35 bg-card px-2 text-[10px] font-semibold tabular-nums text-foreground">
                 {merged.length}
               </Badge>
             </div>
@@ -579,7 +579,7 @@ function DealerShowcaseCard({
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="mt-2 h-8 w-full text-xs font-semibold text-[#222631] hover:bg-[#9ACA3C]/10"
+                className="mt-2 h-8 w-full text-xs font-semibold text-foreground hover:bg-primary/10"
                 onClick={() => setExpanded(true)}
               >
                 Показать все точки ({merged.length})
@@ -610,7 +610,7 @@ export function DealerBaseDealerShowcaseGrid(props: DealerShowcaseGridProps) {
   if (rows.length === 0) {
     if (!empty.trim()) return null;
     return (
-      <Card className="rounded-2xl border border-dashed border-[#9ACA3C]/30 bg-[#EEEFF6] p-8 text-center text-sm text-[#8F96B0]">
+      <Card className="rounded-2xl border border-dashed border-primary/30 bg-muted p-8 text-center text-sm text-muted-foreground">
         {empty}
       </Card>
     );
