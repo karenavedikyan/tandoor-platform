@@ -15,8 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { TradePointPhotoBlock } from "@/components/trade-point-photo-block";
-import { TradePointRowListThumb } from "@/components/trade-point-row-list-thumb";
+import { ShowcaseCoverPhotoSlot } from "@/components/showcase-cover-photo-slot";
 import { AddressSuggestInput } from "@/components/address-suggest-input";
 import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import {
@@ -963,7 +962,15 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                           aria-label={`Выбрать торговую точку ${tp.name} для архивации`}
                         />
                       ) : null}
-                      <TradePointRowListThumb point={tp} size="sm" className="shrink-0" />
+                      <ShowcaseCoverPhotoSlot
+                        kind="trade_point"
+                        dealer={row}
+                        tradePoint={tp}
+                        profile={profile}
+                        size="branch"
+                        rounded="md"
+                        className="shrink-0"
+                      />
                       <p className="text-sm font-semibold leading-snug text-foreground">{tp.name}</p>
                       {isVirtual ? (
                         <Badge
@@ -1001,13 +1008,6 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                         {contact}
                       </p>
                     ) : null}
-                    <TradePointPhotoBlock
-                      dealerId={row.id}
-                      tradePointId={tp.id}
-                      canEdit={canEdit}
-                      className="max-w-md"
-                      compact={hideSyntheticTpChrome}
-                    />
                   </div>
                   <div className="flex w-full min-w-0 shrink-0 flex-col gap-2 sm:w-auto sm:max-w-[14rem] sm:items-stretch">
                     {!hideSyntheticTpChrome && showBadge ? (
