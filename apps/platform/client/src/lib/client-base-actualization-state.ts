@@ -20,6 +20,11 @@ export type ManualDealer = {
   id: string;
   /** Человекочитаемый код TND-CL-000001 (в UI); legacy: MA-MANUAL-*. */
   internalCode?: string;
+  /**
+   * Поля анкеты. В т. ч. коммерческие (актуализация): `hasDoorWarehouse`, `hasHardwareWarehouse`,
+   * `isTandoorClubMember`, `hasSpecialTerms`, `isCashbackClient` — `boolean | null` (null = «не указано»),
+   * комментарии `*Comment`, `external1cCode` (строка). См. `dealer-commercial-characteristics.ts` и документацию.
+   */
   fields: Record<string, unknown>;
   createdAt: string;
   createdBy: string;

@@ -150,6 +150,19 @@ export type DealerRow = {
   id: string;
   /** ИНН из актуализации клиентской базы (отображение поверх моков). */
   actualizationInn?: string;
+  /** Коммерческие признаки из актуализации: null = не указано, до явного да/нет. */
+  hasDoorWarehouse?: boolean | null;
+  doorWarehouseComment?: string;
+  hasHardwareWarehouse?: boolean | null;
+  hardwareWarehouseComment?: string;
+  isTandoorClubMember?: boolean | null;
+  tandoorClubComment?: string;
+  hasSpecialTerms?: boolean | null;
+  specialTermsComment?: string;
+  isCashbackClient?: boolean | null;
+  cashbackComment?: string;
+  /** Код клиента во внешней учётной системе (1С), для будущей синхронизации. */
+  external1cCode?: string;
   /** Код клиента из Excel Release 1 (если есть). */
   releaseCode?: string;
   /** Тип клиента (как в Excel / справочнике Release 1). */

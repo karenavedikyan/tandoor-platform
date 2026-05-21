@@ -39,6 +39,10 @@ import {
 } from "@/lib/client-base-actualization-stable-ids";
 import { isLegalEntityArchivedInActualization } from "@/lib/client-base-actualization-legal-entities";
 import { normalizeClientCategory, getClientCategoryLabel } from "@/lib/client-category";
+import {
+  readCommercialBoolNull,
+  readCommercialString,
+} from "@/lib/dealer-commercial-characteristics";
 import { DEALER_SHIPMENT_DAY_LABELS, type DealerShipmentDayId } from "@/lib/dealer-shipment-days";
 
 function str(v: unknown): string | undefined {
@@ -192,6 +196,37 @@ export function mergeDealerRowWithActualization(row: DealerRow, act: Actualizati
   const contactPerson = str(f.contactPerson) ?? str(f.lpr);
   if (contactPerson) {
     r = { ...r, contacts: { ...r.contacts, lpr: contactPerson } };
+  }
+
+  const cf = f as Record<string, unknown>;
+  if ("hasDoorWarehouse" in cf) r = { ...r, hasDoorWarehouse: readCommercialBoolNull(cf, "hasDoorWarehouse") };
+  if ("doorWarehouseComment" in cf) {
+    const t = readCommercialString(cf, "doorWarehouseComment").trim();
+    r = { ...r, doorWarehouseComment: t || undefined };
+  }
+  if ("hasHardwareWarehouse" in cf) r = { ...r, hasHardwareWarehouse: readCommercialBoolNull(cf, "hasHardwareWarehouse") };
+  if ("hardwareWarehouseComment" in cf) {
+    const t = readCommercialString(cf, "hardwareWarehouseComment").trim();
+    r = { ...r, hardwareWarehouseComment: t || undefined };
+  }
+  if ("isTandoorClubMember" in cf) r = { ...r, isTandoorClubMember: readCommercialBoolNull(cf, "isTandoorClubMember") };
+  if ("tandoorClubComment" in cf) {
+    const t = readCommercialString(cf, "tandoorClubComment").trim();
+    r = { ...r, tandoorClubComment: t || undefined };
+  }
+  if ("hasSpecialTerms" in cf) r = { ...r, hasSpecialTerms: readCommercialBoolNull(cf, "hasSpecialTerms") };
+  if ("specialTermsComment" in cf) {
+    const t = readCommercialString(cf, "specialTermsComment").trim();
+    r = { ...r, specialTermsComment: t || undefined };
+  }
+  if ("isCashbackClient" in cf) r = { ...r, isCashbackClient: readCommercialBoolNull(cf, "isCashbackClient") };
+  if ("cashbackComment" in cf) {
+    const t = readCommercialString(cf, "cashbackComment").trim();
+    r = { ...r, cashbackComment: t || undefined };
+  }
+  if ("external1cCode" in cf) {
+    const t = str(cf.external1cCode);
+    r = { ...r, ...(t ? { external1cCode: t } : { external1cCode: undefined }) };
   }
 
   return r;
@@ -491,6 +526,17 @@ export function manualDealerToRow(m: ManualDealer, profile: ReleaseDemoProfile):
     id: m.id,
     name,
     city,
+    hasDoorWarehouse: readCommercialBoolNull(f, "hasDoorWarehouse"),
+    doorWarehouseComment: readCommercialString(f, "doorWarehouseComment").trim() || undefined,
+    hasHardwareWarehouse: readCommercialBoolNull(f, "hasHardwareWarehouse"),
+    hardwareWarehouseComment: readCommercialString(f, "hardwareWarehouseComment").trim() || undefined,
+    isTandoorClubMember: readCommercialBoolNull(f, "isTandoorClubMember"),
+    tandoorClubComment: readCommercialString(f, "tandoorClubComment").trim() || undefined,
+    hasSpecialTerms: readCommercialBoolNull(f, "hasSpecialTerms"),
+    specialTermsComment: readCommercialString(f, "specialTermsComment").trim() || undefined,
+    isCashbackClient: readCommercialBoolNull(f, "isCashbackClient"),
+    cashbackComment: readCommercialString(f, "cashbackComment").trim() || undefined,
+    external1cCode: str(f.external1cCode),
     region: str(f.region) ?? city,
     releaseAddress: str(f.address),
     releaseCode: getManualDealerDisplayCode(m),

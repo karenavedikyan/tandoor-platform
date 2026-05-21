@@ -39,6 +39,7 @@ import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import { getClientCategoryLabel } from "@/lib/client-category";
 import { mergeTradePointsActiveForActualization, mergeDealerRowWithActualization } from "@/lib/client-base-actualization-data-merge";
+import { commercialTriLabelRu } from "@/lib/dealer-commercial-characteristics";
 import {
   mergeActualizationState,
   type ActualizationState,
@@ -263,7 +264,7 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
         </CardContent>
       </Card>
 
-      <Accordion type="multiple" defaultValue={["passport", "responsibles", "logistics", "contacts", "legal", "tps", "next"]} className="rounded-2xl border border-border/80 bg-card px-3 sm:px-4">
+      <Accordion type="multiple" defaultValue={["passport", "commercial", "responsibles", "logistics", "contacts", "legal", "tps", "next"]} className="rounded-2xl border border-border/80 bg-card px-3 sm:px-4">
         <AccordionItem value="passport" data-testid="section-dealer-passport">
           <AccordionTrigger className="text-left text-sm font-semibold">Паспорт клиента</AccordionTrigger>
           <AccordionContent className="space-y-2 text-sm">
@@ -276,6 +277,45 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
               <Field label="Категория" value={tier ? (TIER_LABELS[tier] ?? tier) : getClientCategoryLabel(row.clientCategory)} />
               <div className="sm:col-span-2">
                 <Field label="Общий комментарий" value={row.comment?.trim() || str(f.comment) || "—"} />
+              </div>
+            </div>
+            {canEdit ? (
+              <Button type="button" size="sm" className="mt-2 font-semibold" onClick={() => setEditOpen(true)}>
+                Редактировать
+              </Button>
+            ) : null}
+          </AccordionContent>
+        </AccordionItem>
+
+        <AccordionItem value="commercial" data-testid="section-dealer-commercial-characteristics">
+          <AccordionTrigger className="text-left text-sm font-semibold">Коммерческие характеристики</AccordionTrigger>
+          <AccordionContent className="space-y-3 text-sm">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Field label="Склад двери" value={commercialTriLabelRu(row.hasDoorWarehouse)} />
+              <div className="sm:col-span-2">
+                <Field label="Комментарий (склад двери)" value={row.doorWarehouseComment?.trim() || "—"} />
+              </div>
+              <Field label="Склад фурнитуры" value={commercialTriLabelRu(row.hasHardwareWarehouse)} />
+              <div className="sm:col-span-2">
+                <Field label="Комментарий (склад фурнитуры)" value={row.hardwareWarehouseComment?.trim() || "—"} />
+              </div>
+              <Field label="Tandoor Club" value={commercialTriLabelRu(row.isTandoorClubMember)} />
+              <div className="sm:col-span-2">
+                <Field label="Комментарий (Tandoor Club)" value={row.tandoorClubComment?.trim() || "—"} />
+              </div>
+              <Field label="Спец. условия" value={commercialTriLabelRu(row.hasSpecialTerms)} />
+              <div className="sm:col-span-2">
+                <Field label="Комментарий (спец. условия)" value={row.specialTermsComment?.trim() || "—"} />
+              </div>
+              <Field label="КЭШБЭК клиент" value={commercialTriLabelRu(row.isCashbackClient)} />
+              <div className="sm:col-span-2">
+                <Field label="Комментарий (КЭШБЭК)" value={row.cashbackComment?.trim() || "—"} />
+              </div>
+              <div className="sm:col-span-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Код клиента в 1С</p>
+                <p className="mt-0.5 text-foreground" data-testid="text-dealer-external-1c-code">
+                  {row.external1cCode?.trim() || "Не указан"}
+                </p>
               </div>
             </div>
             {canEdit ? (
