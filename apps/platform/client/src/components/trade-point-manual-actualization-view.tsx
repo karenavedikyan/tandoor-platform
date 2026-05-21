@@ -131,7 +131,7 @@ function TpHeroCell({
         className={cn(
           "mt-0.5 text-[13px] leading-snug",
           empty ? "text-muted-foreground" : "font-medium text-foreground",
-          !empty && mono && "font-mono tabular-nums text-emerald-800 dark:text-emerald-200",
+          !empty && mono && "font-mono tabular-nums text-primary",
         )}
         data-testid={testId}
       >
@@ -186,11 +186,11 @@ function TradePointSectionStatusBadge(props: { status: TpSectionStatusKind }): R
   const { status } = props;
   const map: Record<TpSectionStatusKind, { label: string; className: string }> = {
     empty: { label: "Не заполнено", className: "border-border/60 bg-muted/30 text-muted-foreground" },
-    partial: { label: "Есть данные", className: "border-emerald-600/20 bg-emerald-600/[0.06] text-emerald-950 dark:text-emerald-100" },
-    complete: { label: "Заполнено", className: "border-emerald-600/35 bg-emerald-600/10 text-emerald-950 dark:text-emerald-50" },
-    attention: { label: "Требует внимания", className: "border-amber-500/40 bg-amber-500/[0.08] text-amber-950 dark:text-amber-100" },
+    partial: { label: "Есть данные", className: "border-primary/30 bg-primary/10 text-foreground" },
+    complete: { label: "Заполнено", className: "border-primary/40 bg-primary/15 text-foreground" },
+    attention: { label: "Требует внимания", className: "border-border bg-muted text-foreground" },
     no_showcase: { label: "Нет витрины", className: "border-border/60 text-muted-foreground" },
-    needs_fill: { label: "Нужно заполнить", className: "border-amber-500/35 bg-amber-500/[0.06] text-amber-950 dark:text-amber-100" },
+    needs_fill: { label: "Нужно заполнить", className: "border-border bg-muted/80 text-foreground" },
   };
   const m = map[status];
   return (
@@ -203,7 +203,7 @@ function TradePointSectionStatusBadge(props: { status: TpSectionStatusKind }): R
 function TpAccordionSectionTrigger(props: { title: string; summary: string; status: TpSectionStatusKind }): ReactElement {
   const { title, summary, status } = props;
   return (
-    <AccordionTrigger className="items-start gap-2 px-3 py-3 text-left hover:no-underline max-sm:px-3 max-sm:py-3 [&[data-state=open]]:bg-emerald-600/[0.04]">
+    <AccordionTrigger className="items-start gap-2 px-3 py-3 text-left hover:no-underline max-sm:px-3 max-sm:py-3 [&[data-state=open]]:bg-primary/5">
       <div className="flex min-w-0 flex-1 flex-col gap-0.5 pr-1">
         <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
           <span className="text-sm font-semibold leading-tight text-foreground">{title}</span>
@@ -763,7 +763,7 @@ export function TradePointManualActualizationView(props: {
                 type="button"
                 variant="default"
                 size="sm"
-                className="h-8 min-w-[7.5rem] bg-emerald-700 px-3 text-xs font-semibold text-white hover:bg-emerald-800"
+                className="h-8 min-w-[7.5rem] bg-primary px-3 text-xs font-semibold text-primary-foreground hover:bg-[#86B832]"
                 data-testid="button-trade-point-edit"
                 onClick={expandPassportAndAddress}
               >
@@ -775,7 +775,7 @@ export function TradePointManualActualizationView(props: {
                 type="button"
                 variant="outline"
                 size="sm"
-                className="h-8 border-destructive/30 px-2.5 text-xs font-medium text-destructive hover:bg-destructive/[0.06]"
+                className="h-8 border-border bg-card px-2.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
                 data-testid={`button-trade-point-archive-${point.id}`}
                 onClick={() => onRequestArchive?.()}
               >
@@ -793,16 +793,16 @@ export function TradePointManualActualizationView(props: {
           onRetry={() => void actx.refresh()}
         />
 
-        <section className="overflow-hidden rounded-xl border border-border/60 border-l-[3px] border-l-emerald-600/75 bg-card shadow-sm">
+        <section className="overflow-hidden rounded-xl border border-border border-l-[3px] border-l-primary bg-card shadow-sm">
           <div className="flex flex-col gap-3 px-3.5 py-3 sm:flex-row sm:items-stretch sm:gap-4 sm:px-4 sm:py-4">
             <div
-              className="relative h-36 w-full shrink-0 overflow-hidden rounded-lg border border-[#E3E6F3] bg-[#EEEFF6] sm:h-auto sm:min-h-[7.5rem] sm:w-44"
+              className="relative h-36 w-full shrink-0 overflow-hidden rounded-lg border border-border bg-muted sm:h-auto sm:min-h-[7.5rem] sm:w-44"
               data-testid="trade-point-manual-hero-visual"
             >
               {tpCoverThumb ? (
                 <SafeImage src={tpCoverThumb} alt="" className="absolute inset-0 h-full w-full" objectFit="cover" />
               ) : (
-                <div className="flex h-full min-h-[9rem] w-full items-center justify-center bg-[#9ACA3C]/10 text-2xl font-bold text-[#222631] sm:min-h-0">
+                <div className="flex h-full min-h-[9rem] w-full items-center justify-center bg-primary/5 text-2xl font-bold text-primary sm:min-h-0">
                   {tpHeroInitials(name.trim() || point.name)}
                 </div>
               )}
@@ -818,7 +818,7 @@ export function TradePointManualActualizationView(props: {
                 <div className="shrink-0 text-left sm:text-right">
                   <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Код ТТ</p>
                   <p
-                    className="font-mono text-sm font-semibold tabular-nums text-emerald-800 dark:text-emerald-200"
+                    className="font-mono text-sm font-semibold tabular-nums text-primary"
                     data-testid={`text-trade-point-internal-code-${point.id}`}
                   >
                     {getTradePointDisplayCodeForActualization(point)}
@@ -852,7 +852,7 @@ export function TradePointManualActualizationView(props: {
                 {hasShowcase === null ? (
                   <Badge
                     variant="outline"
-                    className="h-[1.125rem] border-amber-500/35 px-1.5 py-0 text-[10px] font-normal leading-none text-amber-950 dark:text-amber-100"
+                    className="h-[1.125rem] border-border bg-muted/50 px-1.5 py-0 text-[10px] font-normal leading-none text-muted-foreground"
                   >
                     Витрина не заполнена
                   </Badge>
@@ -863,7 +863,7 @@ export function TradePointManualActualizationView(props: {
                 ) : (
                   <Badge
                     variant="outline"
-                    className="h-[1.125rem] border-emerald-600/35 bg-emerald-600/10 px-1.5 py-0 text-[10px] font-normal leading-none text-emerald-950 dark:text-emerald-50"
+                    className="h-[1.125rem] border-primary/40 bg-primary/10 px-1.5 py-0 text-[10px] font-normal leading-none text-foreground"
                   >
                     Есть витрина
                   </Badge>
@@ -871,13 +871,13 @@ export function TradePointManualActualizationView(props: {
                 {hasShowcase === true && matrixClientCategory && missingRequiredModelCount > 0 ? (
                   <Badge
                     variant="outline"
-                    className="h-[1.125rem] border-amber-500/40 bg-amber-500/[0.06] px-1.5 py-0 text-[10px] font-normal leading-none text-amber-950 dark:text-amber-100"
+                    className="h-[1.125rem] border-primary/50 bg-card px-1.5 py-0 text-[10px] font-normal leading-none text-foreground"
                   >
                     Есть дефицит
                   </Badge>
                 ) : null}
                 {hasShowcase === true ? (
-                  <Badge variant="outline" className="h-[1.125rem] px-1.5 py-0 text-[10px] font-normal leading-none text-muted-foreground">
+                  <Badge variant="outline" className="h-[1.125rem] border-border bg-card px-1.5 py-0 text-[10px] font-normal leading-none text-muted-foreground">
                     Порталы: {numOrNull(totalPortals) != null && numOrNull(totalPortals)! >= 0 ? numOrNull(totalPortals) : "Не указано"}
                   </Badge>
                 ) : null}
@@ -892,7 +892,7 @@ export function TradePointManualActualizationView(props: {
             type="button"
             variant="ghost"
             size="sm"
-            className="h-8 shrink-0 px-2 text-xs font-medium text-emerald-900 hover:bg-emerald-600/10 dark:text-emerald-100"
+            className="h-8 shrink-0 px-2 text-xs font-medium text-muted-foreground hover:bg-primary/10 hover:text-foreground"
             data-testid="button-trade-point-sections-expand-all"
             onClick={toggleExpandAll}
           >
@@ -1079,7 +1079,7 @@ export function TradePointManualActualizationView(props: {
                     <p
                       className={
                         missingRequiredModelCount > 0
-                          ? "text-[13px] font-semibold tabular-nums leading-snug text-amber-900 dark:text-amber-100"
+                          ? "text-[13px] font-semibold tabular-nums leading-snug text-foreground"
                           : "text-[13px] font-semibold tabular-nums leading-snug text-foreground"
                       }
                     >
@@ -1100,7 +1100,7 @@ export function TradePointManualActualizationView(props: {
                   type="button"
                   size="sm"
                   variant="default"
-                  className="h-8 w-full bg-emerald-700 text-xs font-semibold text-white hover:bg-emerald-800"
+                  className="h-8 w-full bg-primary text-xs font-semibold text-primary-foreground hover:bg-[#86B832]"
                   onClick={() => {
                     setHasShowcase(true);
                     markShowcaseDirty();
@@ -1147,7 +1147,7 @@ export function TradePointManualActualizationView(props: {
                       type="button"
                       size="sm"
                       variant="default"
-                      className="h-8 bg-emerald-700 text-xs font-semibold text-white hover:bg-emerald-800"
+                      className="h-8 bg-primary text-xs font-semibold text-primary-foreground hover:bg-[#86B832]"
                       onClick={() => {
                         setHasShowcase(true);
                         markShowcaseDirty();
@@ -1323,19 +1323,19 @@ export function TradePointManualActualizationView(props: {
                           <>
                             {" "}
                             · Дефицит матрицы (обязательные без витрины):{" "}
-                            <span className={missingRequiredModelCount > 0 ? "font-medium text-amber-900 dark:text-amber-100" : ""}>
+                            <span className={missingRequiredModelCount > 0 ? "font-medium text-foreground" : ""}>
                               {missingRequiredModelCount}
                             </span>
                           </>
                         ) : null}
                       </p>
                       {portalOverfill ? (
-                        <p className="mt-2 text-xs font-medium text-amber-900 dark:text-amber-100">
+                        <p className="mt-2 text-xs font-medium text-foreground">
                           Переполнение: выбранных моделей больше, чем доступных порталов по типам или всего.
                         </p>
                       ) : null}
                       {summary.needsPrimaryInstall ? (
-                        <p className="mt-2 text-xs font-medium text-amber-900 dark:text-amber-100">Требуется первичная установка витрины.</p>
+                        <p className="mt-2 text-xs font-medium text-foreground">Требуется первичная установка витрины.</p>
                       ) : null}
                     </>
                   )}
@@ -1484,7 +1484,7 @@ export function TradePointManualActualizationView(props: {
                 <p
                   className={
                     showcaseSave.phase === "success"
-                      ? "min-w-0 flex-1 text-xs font-medium text-emerald-700 dark:text-emerald-400"
+                      ? "min-w-0 flex-1 text-xs font-medium text-primary"
                       : "min-w-0 flex-1 text-xs text-muted-foreground"
                   }
                   data-testid="text-showcase-save-status-toolbar"

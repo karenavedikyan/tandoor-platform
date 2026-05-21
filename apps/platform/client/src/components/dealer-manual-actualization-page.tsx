@@ -137,9 +137,9 @@ function SectionStatusBadge(props: { status: SectionStatusKind }): ReactElement 
   const { status } = props;
   const map: Record<SectionStatusKind, { label: string; className: string }> = {
     empty: { label: "Не заполнено", className: "border-border/60 bg-muted/30 text-muted-foreground" },
-    partial: { label: "Есть данные", className: "border-emerald-600/20 bg-emerald-600/[0.06] text-emerald-950 dark:text-emerald-100" },
-    complete: { label: "Заполнено", className: "border-emerald-600/35 bg-emerald-600/10 text-emerald-950 dark:text-emerald-50" },
-    attention: { label: "Требует внимания", className: "border-amber-500/40 bg-amber-500/[0.08] text-amber-950 dark:text-amber-100" },
+    partial: { label: "Есть данные", className: "border-primary/30 bg-primary/10 text-foreground" },
+    complete: { label: "Заполнено", className: "border-primary/40 bg-primary/15 text-foreground" },
+    attention: { label: "Требует внимания", className: "border-border bg-muted text-foreground" },
   };
   const m = map[status];
   return (
@@ -152,7 +152,7 @@ function SectionStatusBadge(props: { status: SectionStatusKind }): ReactElement 
 function AccordionSectionTrigger(props: { title: string; summary: string; status: SectionStatusKind }): ReactElement {
   const { title, summary, status } = props;
   return (
-    <AccordionTrigger className="items-start gap-2 px-3.5 py-3.5 text-left hover:no-underline max-sm:px-3.5 max-sm:py-3.5 [&[data-state=open]]:bg-emerald-600/[0.04]">
+    <AccordionTrigger className="items-start gap-2 px-3.5 py-3.5 text-left hover:no-underline max-sm:px-3.5 max-sm:py-3.5 [&[data-state=open]]:bg-primary/5">
       <div className="flex min-w-0 flex-1 flex-col gap-0.5 pr-1">
         <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
           <span className="text-sm font-semibold leading-tight text-foreground">{title}</span>
@@ -448,7 +448,7 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
                 type="button"
                 variant="default"
                 size="sm"
-                className="h-8 min-w-[7.5rem] bg-emerald-700 px-3 text-xs font-semibold text-white hover:bg-emerald-800"
+                className="h-8 min-w-[7.5rem] bg-primary px-3 text-xs font-semibold text-primary-foreground hover:bg-[#86B832]"
                 data-testid="button-dealer-edit"
                 onClick={() => setEditOpen(true)}
               >
@@ -460,7 +460,7 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
                 type="button"
                 variant="outline"
                 size="sm"
-                className="h-8 border-destructive/30 px-3 text-xs font-medium text-destructive hover:bg-destructive/[0.06]"
+                className="h-8 border-border bg-card px-3 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
                 data-testid={`button-dealer-delete-${baseRow.id}`}
                 onClick={() => setDeleteOpen(true)}
               >
@@ -478,10 +478,10 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
           onRetry={() => void actx.refresh()}
         />
 
-        <section className="overflow-hidden rounded-xl border border-border/60 border-l-[3px] border-l-emerald-600/75 bg-card shadow-sm">
+        <section className="overflow-hidden rounded-xl border border-border border-l-[3px] border-l-primary bg-card shadow-sm">
           <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-stretch sm:gap-4 sm:px-5 sm:py-4">
             <div
-              className="relative h-36 w-full shrink-0 overflow-hidden rounded-lg border border-[#E3E6F3] bg-[#EEEFF6] sm:h-auto sm:min-h-[7.5rem] sm:w-44"
+              className="relative h-36 w-full shrink-0 overflow-hidden rounded-lg border border-border bg-muted sm:h-auto sm:min-h-[7.5rem] sm:w-44"
               data-testid="dealer-manual-hero-visual"
             >
               {row.coverPhotoThumbnailUrl?.trim() || row.coverPhotoUrl?.trim() ? (
@@ -492,7 +492,7 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
                   objectFit="cover"
                 />
               ) : (
-                <div className="flex h-full min-h-[9rem] w-full items-center justify-center bg-[#9ACA3C]/10 text-2xl font-bold text-[#222631] sm:min-h-0">
+                <div className="flex h-full min-h-[9rem] w-full items-center justify-center bg-primary/5 text-2xl font-bold text-primary sm:min-h-0">
                   {dealerHeroInitials(row.name)}
                 </div>
               )}
@@ -503,7 +503,7 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
                 <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0">
                   <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Код</span>
                   <span
-                    className="font-mono text-sm font-semibold tabular-nums text-emerald-800 dark:text-emerald-200"
+                    className="font-mono text-sm font-semibold tabular-nums text-primary"
                     data-testid="text-dealer-internal-code"
                   >
                     {row.releaseCode?.trim() ? row.releaseCode : "Не указано"}
@@ -526,7 +526,7 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
             type="button"
             variant="ghost"
             size="sm"
-            className="h-8 shrink-0 px-2 text-xs font-medium text-emerald-800 hover:bg-emerald-600/10 hover:text-emerald-950 dark:text-emerald-200 dark:hover:text-emerald-50"
+            className="h-8 shrink-0 px-2 text-xs font-medium text-muted-foreground hover:bg-primary/10 hover:text-foreground"
             data-testid="button-dealer-sections-expand-all"
             onClick={toggleExpandAll}
           >
@@ -947,7 +947,7 @@ function DealerContactsActualizationBlock(props: {
                       {c.isPrimary ? (
                         <Badge
                           variant="outline"
-                          className="ml-2 h-[1.125rem] border-emerald-600/30 bg-emerald-600/[0.06] px-1.5 py-0 text-[10px] font-normal leading-none text-emerald-950 dark:text-emerald-100"
+                          className="ml-2 h-[1.125rem] border-primary/30 bg-primary/10 px-1.5 py-0 text-[10px] font-normal leading-none text-foreground"
                         >
                           Основной
                         </Badge>
@@ -994,7 +994,7 @@ function DealerContactsActualizationBlock(props: {
                         type="button"
                         size="sm"
                         variant="outline"
-                        className="h-8 border-destructive/25 px-2 text-xs font-medium text-destructive hover:bg-destructive/[0.05]"
+                        className="h-8 border-border px-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
                         data-testid={`button-dealer-contact-delete-${c.id}`}
                         onClick={() => void onArchive(c)}
                       >
@@ -1013,7 +1013,7 @@ function DealerContactsActualizationBlock(props: {
           type="button"
           size="sm"
           variant="outline"
-          className="h-8 border-emerald-600/35 px-3 text-xs font-medium text-emerald-900 hover:bg-emerald-600/[0.08] dark:text-emerald-100 dark:hover:bg-emerald-950/40"
+          className="h-8 border-border bg-card px-3 text-xs font-medium text-foreground hover:bg-primary/10"
           data-testid="button-dealer-contact-create"
           onClick={openCreate}
         >
