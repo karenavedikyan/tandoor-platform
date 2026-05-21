@@ -54,6 +54,8 @@ type Props = {
   profile: ReleaseDemoProfile;
   actorUserId: string;
   actorLabel: string;
+  /** Родитель (Accordion) уже показывает заголовок «Юридические лица» — скрыть дублирующий h3. */
+  embedInAccordion?: boolean;
 };
 
 const STATUS_LABELS: Record<DealerLegalEntityStatus, string> = {
@@ -86,16 +88,16 @@ function entityTypeLabel(v: string | undefined): string {
   return ENTITY_TYPE_LABELS[t] ?? (t ? t : "—");
 }
 
-export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLabel }: Props) {
+export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLabel, embedInAccordion = false }: Props) {
   const actx = useClientBaseActualization();
   const useAct = actx.enabled && canManageLegalEntitiesDuringActualization(profile, row);
-  const canMutate = useMemo(
-    () =>
-      actx.enabled
-        ? canActualizeClientBase(profile) && canEditDealerDuringActualization(profile, row)
-        : canEditDealerLegalEntities(profile, row),
-    [actx.enabled, profile, row],
-  );
+  /** В актуализации — зона как у карточки; без актуализации — прежний LS-режим. */
+  const canMutate = useMemo(() => {
+    if (actx.enabled) {
+      return canActualizeClientBase(profile) && canEditDealerDuringActualization(profile, row);
+    }
+    return canEditDealerLegalEntities(profile, row);
+  }, [actx.enabled, profile, row]);
 
   const [tick, setTick] = useState(0);
   const [showArchived, setShowArchived] = useState(false);
@@ -431,8 +433,16 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
 
   return (
     <section id="dealer-section-legal-entities" data-testid="section-dealer-legal-entities" className="scroll-mt-28 space-y-2 sm:scroll-mt-32">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <h3 className="text-sm font-semibold text-foreground sm:text-base">Юридические лица</h3>
+      <div
+        className={
+          embedInAccordion
+            ? "flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end"
+            : "flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+        }
+      >
+        {!embedInAccordion ? (
+          <h3 className="text-sm font-semibold text-foreground sm:text-base">Юридические лица</h3>
+        ) : null}
         {canMutate ? (
           <Button
             type="button"
