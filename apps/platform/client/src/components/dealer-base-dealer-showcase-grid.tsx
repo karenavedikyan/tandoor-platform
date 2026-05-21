@@ -32,8 +32,14 @@ import type { DealerShipmentDayId } from "@/lib/dealer-shipment-days";
 import { getDealerShipmentStatus } from "@/lib/dealer-shipment-days";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DealerBulkDeleteCheckbox } from "@/components/dealer-bulk-delete-checkbox";
-import { SafeImage } from "@/components/safe-image";
-import { TradePointRowListThumb } from "@/components/trade-point-row-list-thumb";
+import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
+import {
+  cleanContactDisplay as cleanContact,
+  mailtoHref,
+  telHref,
+  whatsAppHref,
+} from "@/lib/dealer-contact-links";
+import { ShowcaseCoverPhotoSlot } from "@/components/showcase-cover-photo-slot";
 
 const badgeOutline = "border-primary/35 bg-card text-foreground";
 const badgeSoft = "border-primary/30 bg-primary/10 text-foreground";
@@ -48,6 +54,7 @@ type ArchiveBulk = {
 export type DealerShowcaseGridProps = {
   rows: DealerRow[];
   empty: string;
+  profile: ReleaseDemoProfile;
   actualizationState: ActualizationState;
   workPlanUserId?: string;
   workPlanState?: DealerWorkPlanState;
@@ -58,46 +65,6 @@ export type DealerShowcaseGridProps = {
   shipmentUserId?: string;
   archiveBulk?: ArchiveBulk;
 };
-
-function cleanContact(s: string | undefined | null): string | null {
-  const t = (s ?? "").trim();
-  if (!t || t === "—" || t === "-") return null;
-  return t;
-}
-
-function hrefTel(raw: string): string | null {
-  const t = raw.trim();
-  if (!t) return null;
-  if (t.startsWith("+")) return `tel:${t.replace(/\s/g, "")}`;
-  const d = t.replace(/\D/g, "");
-  if (d.length < 10) return null;
-  return `tel:+${d}`;
-}
-
-function hrefWhatsApp(raw: string): string | null {
-  const d = raw.replace(/\D/g, "");
-  if (d.length < 10) return null;
-  let n = d;
-  if (n.length === 11 && n.startsWith("8")) n = `7${n.slice(1)}`;
-  if (n.length === 10) n = `7${n}`;
-  return `https://wa.me/${n}`;
-}
-
-function hrefMailto(raw: string): string | null {
-  const t = raw.trim();
-  if (!t || !t.includes("@")) return null;
-  return `mailto:${t}`;
-}
-
-function initialsFromName(name: string): string {
-  const parts = name
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2);
-  if (parts.length === 0) return "?";
-  return parts.map((p) => p[0]?.toUpperCase() ?? "").join("") || "?";
-}
 
 function dealerClientCode(row: DealerRow, act: ActualizationState): string {
   const rel = row.releaseCode?.trim();
@@ -228,6 +195,7 @@ function TradePointShowcaseRow({
   dealer,
   tp,
   act,
+  profile,
   shipmentActiveDayId,
   shipmentUserId,
   workPlanState,
@@ -235,6 +203,7 @@ function TradePointShowcaseRow({
   dealer: DealerRow;
   tp: DealerTradePoint;
   act: ActualizationState;
+  profile: ReleaseDemoProfile;
   shipmentActiveDayId?: DealerShipmentDayId | null;
   shipmentUserId?: string;
   workPlanState?: DealerWorkPlanState;
@@ -248,9 +217,9 @@ function TradePointShowcaseRow({
   const phone = cleanContact(tp.contactPhone);
   const tpEmail = cleanContact(tp.contactEmail);
   const tpHref = buildHashPath(`/dealers/${dealer.id}/trade-points/${tp.id}`, { tradePointShowcase: "1" });
-  const tel = phone ? hrefTel(phone) : null;
-  const wa = phone ? hrefWhatsApp(phone) : null;
-  const tpMail = tpEmail ? hrefMailto(tpEmail) : null;
+  const tel = phone ? telHref(phone) : null;
+  const wa = phone ? whatsAppHref(phone) : null;
+  const tpMail = tpEmail ? mailtoHref(tpEmail) : null;
 
   const accentBorder = tradePointBranchAccentClass(line, deficit, newTasks);
   const statusBadgeCn = tradePointShowcaseStatusBadgeClass(line, deficit, newTasks);
@@ -273,7 +242,15 @@ function TradePointShowcaseRow({
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
             <div className="flex min-w-0 items-start gap-2">
-              <TradePointRowListThumb point={tp} size="xs" className="shrink-0" />
+              <ShowcaseCoverPhotoSlot
+                kind="trade_point"
+                dealer={dealer}
+                tradePoint={tp}
+                profile={profile}
+                size="branch"
+                rounded="md"
+                className="shrink-0"
+              />
               <div className="min-w-0">
                 <span className="text-sm font-semibold leading-snug text-foreground">{tp.name}</span>
                 <p className="font-mono text-[10px] leading-tight text-muted-foreground">{getTradePointDisplayCodeForActualization(tp)}</p>
@@ -344,6 +321,7 @@ function TradePointShowcaseRow({
 function DealerShowcaseCard({
   row,
   act,
+  profile,
   workPlanUserId,
   workPlanState,
   showWorkPlanSelect,
@@ -355,6 +333,7 @@ function DealerShowcaseCard({
 }: {
   row: DealerRow;
   act: ActualizationState;
+  profile: ReleaseDemoProfile;
   workPlanUserId?: string;
   workPlanState?: DealerWorkPlanState;
   showWorkPlanSelect?: boolean;
@@ -390,9 +369,9 @@ function DealerShowcaseCard({
   const phone = cleanContact(row.contacts?.phone);
   const email = cleanContact(row.contacts?.email);
   const contactName = cleanContact(row.contacts?.lpr);
-  const tel = phone ? hrefTel(phone) : null;
-  const wa = phone ? hrefWhatsApp(phone) : null;
-  const mail = email ? hrefMailto(email) : null;
+  const tel = phone ? telHref(phone) : null;
+  const wa = phone ? whatsAppHref(phone) : null;
+  const mail = email ? mailtoHref(email) : null;
 
   const tpCount = merged.length;
   const [expanded, setExpanded] = useState(false);
@@ -434,29 +413,7 @@ function DealerShowcaseCard({
                 />
               </span>
             ) : null}
-            {(() => {
-              const cover = row.coverPhotoThumbnailUrl?.trim() || row.coverPhotoUrl?.trim();
-              if (cover) {
-                return (
-                  <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md border border-primary/25 bg-card">
-                    <SafeImage src={cover} alt="" className="absolute inset-0 h-full w-full" objectFit="cover" />
-                  </div>
-                );
-              }
-              const logo = (row as DealerRow & { logoUrl?: string }).logoUrl?.trim();
-              if (logo) {
-                return (
-                  <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-primary/25 bg-card">
-                    <img src={logo} alt="" className="h-full w-full object-contain" loading="lazy" />
-                  </div>
-                );
-              }
-              return (
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-primary/30 bg-primary/10 text-base font-bold text-foreground">
-                  {initialsFromName(row.name)}
-                </div>
-              );
-            })()}
+            <ShowcaseCoverPhotoSlot kind="dealer" dealer={row} profile={profile} size="large" rounded="lg" className="shrink-0" />
             <div className="min-w-0 flex-1 space-y-1.5">
               <div className="flex flex-wrap items-center gap-1.5">
                 <h3 className="text-base font-semibold leading-tight text-foreground sm:text-lg">{row.name}</h3>
@@ -477,9 +434,10 @@ function DealerShowcaseCard({
                   </Badge>
                 ) : null}
               </div>
-              <p className="font-mono text-xs text-muted-foreground">{code}</p>
-              {inn ? <p className="text-xs text-muted-foreground">ИНН: {inn}</p> : null}
               <p className="text-xs text-muted-foreground">{regionLine || "—"}</p>
+              <p className="line-clamp-2 text-[11px] leading-snug text-muted-foreground">
+                {[inn ? `ИНН ${inn}` : null, `Код ${code}`, contactName ? contactName : null, phone ? phone : null].filter(Boolean).join(" · ") || "—"}
+              </p>
               <div className="flex flex-wrap gap-1">
                 <Badge variant="outline" className={cn("text-[10px]", badgeOutline)}>
                   {getClientCategoryLabel(row.clientCategory)}
@@ -568,6 +526,7 @@ function DealerShowcaseCard({
                   dealer={row}
                   tp={e.point}
                   act={act}
+                  profile={profile}
                   shipmentActiveDayId={shipmentActiveDayId}
                   shipmentUserId={shipmentUserId}
                   workPlanState={workPlanState}
@@ -596,6 +555,7 @@ export function DealerBaseDealerShowcaseGrid(props: DealerShowcaseGridProps) {
   const {
     rows,
     empty,
+    profile,
     actualizationState,
     workPlanUserId,
     workPlanState,
@@ -618,12 +578,13 @@ export function DealerBaseDealerShowcaseGrid(props: DealerShowcaseGridProps) {
 
   return (
     <TooltipProvider delayDuration={200}>
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-3">
+      <div className="grid grid-cols-1 gap-3">
         {rows.map((row) => (
           <DealerShowcaseCard
             key={row.id}
             row={row}
             act={actualizationState}
+            profile={profile}
             workPlanUserId={workPlanUserId}
             workPlanState={workPlanState}
             showWorkPlanSelect={showWorkPlanSelect}

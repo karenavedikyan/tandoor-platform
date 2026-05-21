@@ -1,6 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { ChevronDown, ChevronRight, Search, Trash2, X } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  LayoutGrid,
+  LayoutTemplate,
+  List,
+  Mail,
+  MessageCircle,
+  Phone,
+  Search,
+  Table2,
+  Trash2,
+  X,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -157,6 +170,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { DealerBulkDeleteCheckbox } from "@/components/dealer-bulk-delete-checkbox";
 import { DealerBaseDealerShowcaseGrid } from "@/components/dealer-base-dealer-showcase-grid";
 import { DealerRowListAvatar } from "@/components/dealer-row-list-avatar";
+import { ShowcaseCoverPhotoSlot } from "@/components/showcase-cover-photo-slot";
+import { cleanContactDisplay, mailtoHref, telHref, whatsAppHref } from "@/lib/dealer-contact-links";
 import type { ActualizationState } from "@/lib/client-base-actualization-state";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Switch } from "@/components/ui/switch";
@@ -172,22 +187,23 @@ const DEALER_BASE_VIEW_MODE_LS_KEY = "tandoor-dealer-base-view-mode-v1";
 const SHOWCASE_DENSITY_LS_KEY = "tandoor-dealer-showcase-density-v1";
 
 /** Плотность отображения внутри основного режима «Витрина дилеров». */
-type DealerShowcaseDensity = "large" | "compact" | "list" | "table";
+type DealerShowcaseDensity = "large" | "grid" | "list" | "table";
 
 function parseShowcaseDensity(raw: string | null): DealerShowcaseDensity | null {
-  if (raw === "large" || raw === "compact" || raw === "list" || raw === "table") return raw;
+  if (raw === "large" || raw === "grid" || raw === "list" || raw === "table") return raw;
+  if (raw === "compact") return "grid";
   return null;
 }
 
 /** Миграция со старого ключа `tandoor-dealer-base-view-mode-v1`. */
 function migrateLegacyDealerBaseViewMode(legacyRaw: string | null, narrowViewport: boolean): DealerShowcaseDensity {
   const legacy = legacyRaw?.trim();
-  if (!legacy) return narrowViewport ? "compact" : "large";
-  if (legacy === "dealer_showcase" || legacy === "cards") return narrowViewport ? "compact" : "large";
-  if (legacy === "compact") return "compact";
+  if (!legacy) return narrowViewport ? "grid" : "large";
+  if (legacy === "dealer_showcase" || legacy === "cards") return narrowViewport ? "grid" : "large";
+  if (legacy === "compact") return "grid";
   if (legacy === "list") return "list";
   if (legacy === "table") return "table";
-  return narrowViewport ? "compact" : "large";
+  return narrowViewport ? "grid" : "large";
 }
 
 function readShowcaseDensityFromStorage(): DealerShowcaseDensity {
@@ -199,7 +215,7 @@ function readShowcaseDensityFromStorage(): DealerShowcaseDensity {
     const old = localStorage.getItem(DEALER_BASE_VIEW_MODE_LS_KEY);
     return migrateLegacyDealerBaseViewMode(old, narrow);
   } catch {
-    return narrow ? "compact" : "large";
+    return narrow ? "grid" : "large";
   }
 }
 
@@ -269,10 +285,14 @@ const QUICK_FILTERS: { id: QuickFilter; label: string; testId: string }[] = [
 ];
 
 function statusBadgeClass(status: DealerStatus) {
-  if (status === "требует внимания") return "border-amber-300 bg-amber-50 text-amber-950";
-  if (status === "потенциальный") return "border-sky-200 bg-sky-50 text-sky-950";
-  if (status === "приостановлен") return "border-neutral-200 bg-muted text-muted-foreground";
-  return "border-emerald-200 bg-emerald-50 text-emerald-950";
+  void status;
+  return "border-primary/30 bg-card text-foreground";
+}
+
+function shipmentTrafficBadgeClass(level: "green" | "yellow" | "red"): string {
+  if (level === "green") return "border-primary/40 bg-primary/10 text-foreground";
+  if (level === "yellow") return "border-primary/45 bg-card text-foreground";
+  return "border-destructive/45 bg-destructive/10 text-destructive";
 }
 
 type ClientCategoryRouteFilter = ClientCategoryId | "all" | "__top_tier__";
@@ -324,17 +344,13 @@ type DealerListArchiveBulkProps = {
   onToggle: (dealerId: string, checked: boolean) => void;
 };
 
-function shipmentTrafficBadgeClass(level: "green" | "yellow" | "red"): string {
-  if (level === "green") return "border-emerald-300 bg-emerald-50 text-emerald-950";
-  if (level === "yellow") return "border-amber-300 bg-amber-50 text-amber-950";
-  return "border-rose-300 bg-rose-50 text-rose-950";
-}
-
 type DealerBaseNextStepsStorage = ReturnType<typeof loadClientNextStepsStorage>;
 
 type DealerRowRendererBaseProps = {
   rows: DealerRow[];
   empty: string;
+  profile: ReleaseDemoProfile;
+  actualizationState: ActualizationState;
   workPlanUserId?: string;
   workPlanState?: DealerWorkPlanState;
   showWorkPlanSelect?: boolean;
@@ -349,6 +365,8 @@ type DealerRowRendererBaseProps = {
 function ClientCompactGridBlock({
   rows,
   empty,
+  profile,
+  actualizationState: _actualizationState,
   workPlanUserId,
   workPlanState,
   showWorkPlanSelect,
@@ -361,6 +379,9 @@ function ClientCompactGridBlock({
 }: DealerRowRendererBaseProps) {
   const wp = workPlanUserId && workPlanState;
   void _nextStepsStorage;
+  void _actualizationState;
+  void shipmentActiveDayId;
+  void shipmentUserId;
   if (rows.length === 0) {
     if (!empty.trim()) return null;
     return (
@@ -369,8 +390,11 @@ function ClientCompactGridBlock({
       </Card>
     );
   }
+  const badgeOutline = "border-primary/35 bg-card text-foreground";
+  const badgeSoft = "border-primary/30 bg-primary/10 text-foreground";
+
   return (
-    <div className="grid grid-cols-1 gap-2 min-[400px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+    <div className="grid grid-cols-2 gap-2 lg:grid-cols-3 xl:grid-cols-4">
       {rows.map((row) => {
         const hidden = wp ? isDealerHiddenForUser(workPlanUserId, row.id, workPlanState) : false;
         const checked = Boolean(selectedIds?.has(row.id));
@@ -418,16 +442,15 @@ function ClientCompactGridBlock({
                   </Link>
                 </Button>
               </div>
-              <div className="flex gap-2">
-                <DealerRowListAvatar row={row} size="sm" className="self-start" />
+              <div className="flex min-w-0 gap-2">
+                <ShowcaseCoverPhotoSlot kind="dealer" dealer={row} profile={profile} size="grid" rounded="md" className="shrink-0" />
                 <div className="min-w-0 flex-1 space-y-0.5">
                   <p className="line-clamp-2 text-sm font-semibold leading-tight text-foreground">{row.name}</p>
-                  <p className="font-mono text-[11px] text-muted-foreground">{row.releaseCode ?? "—"}</p>
                   <p className="truncate text-[11px] text-muted-foreground">{row.city}</p>
                   <div className="flex flex-wrap gap-1">
                     <Badge
                       variant="outline"
-                      className={cn("px-1.5 py-0 text-[10px]", getClientCategoryBadgeClass(row.clientCategory))}
+                      className={cn("px-1.5 py-0 text-[10px] font-medium", badgeOutline)}
                       data-testid={`badge-dealer-client-category-${row.id}`}
                     >
                       {getClientCategoryLabel(row.clientCategory)}
@@ -436,6 +459,15 @@ function ClientCompactGridBlock({
                       {row.status}
                     </Badge>
                   </div>
+                  {row.outlets > 1 ? (
+                    <Badge variant="outline" className={cn("w-fit px-1.5 py-0 text-[10px] tabular-nums", badgeOutline)}>
+                      Сеть · {row.outlets} ТТ
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className={cn("w-fit px-1.5 py-0 text-[10px] tabular-nums", badgeOutline)}>
+                      {row.outlets} ТТ
+                    </Badge>
+                  )}
                   {hidden ? (
                     <Badge variant="secondary" className="w-fit text-[10px]" data-testid={`badge-dealer-hidden-${row.id}`}>
                       Скрыт
@@ -443,29 +475,29 @@ function ClientCompactGridBlock({
                   ) : null}
                   <div className="flex flex-wrap gap-1">
                     {stockSig.hasMainWarehouse ? (
-                      <span className="rounded border border-slate-300 bg-slate-50 px-1 py-0 text-[9px] font-semibold text-slate-900" data-testid={`badge-dealer-main-warehouse-${row.id}`}>
+                      <Badge variant="outline" className={cn("px-1 py-0 text-[9px] font-semibold", badgeSoft)} data-testid={`badge-dealer-main-warehouse-${row.id}`}>
                         Склад
-                      </span>
+                      </Badge>
                     ) : null}
                     {stockSig.hasHardwareWarehouse ? (
-                      <span className="rounded border border-violet-300 bg-violet-50 px-1 py-0 text-[9px] font-semibold text-violet-950" data-testid={`badge-dealer-hardware-warehouse-${row.id}`}>
+                      <Badge variant="outline" className={cn("px-1 py-0 text-[9px] font-semibold", badgeSoft)} data-testid={`badge-dealer-hardware-warehouse-${row.id}`}>
                         Фурн
-                      </span>
+                      </Badge>
                     ) : null}
                     {programSig.hasTandoorClub ? (
-                      <span className="rounded border border-indigo-300 bg-indigo-50 px-1 py-0 text-[9px] font-semibold text-indigo-950" data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.tandoor_club}-${row.id}`}>
+                      <Badge variant="outline" className={cn("px-1 py-0 text-[9px] font-semibold", badgeSoft)} data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.tandoor_club}-${row.id}`}>
                         ТК
-                      </span>
+                      </Badge>
                     ) : null}
                     {programSig.hasCashbackAgent ? (
-                      <span className="rounded border border-emerald-300 bg-emerald-50 px-1 py-0 text-[9px] font-semibold text-emerald-950" data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.cashback_agent}-${row.id}`}>
+                      <Badge variant="outline" className={cn("px-1 py-0 text-[9px] font-semibold", badgeSoft)} data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.cashback_agent}-${row.id}`}>
                         КБ
-                      </span>
+                      </Badge>
                     ) : null}
                     {programSig.hasSpecialConditions ? (
-                      <span className="rounded border border-amber-300 bg-amber-50 px-1 py-0 text-[9px] font-semibold text-amber-950" data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.special_conditions}-${row.id}`}>
+                      <Badge variant="outline" className={cn("px-1 py-0 text-[9px] font-semibold", badgeSoft)} data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.special_conditions}-${row.id}`}>
                         СУ
-                      </span>
+                      </Badge>
                     ) : null}
                   </div>
                 </div>
@@ -486,6 +518,8 @@ function innCell(row: DealerRow): string {
 function ClientListRowsBlock({
   rows,
   empty,
+  profile,
+  actualizationState: _actualizationState,
   workPlanUserId,
   workPlanState,
   showWorkPlanSelect,
@@ -497,6 +531,9 @@ function ClientListRowsBlock({
   nextStepsStorage,
 }: DealerRowRendererBaseProps) {
   const wp = workPlanUserId && workPlanState;
+  void _actualizationState;
+  void shipmentActiveDayId;
+  void shipmentUserId;
   if (rows.length === 0) {
     if (!empty.trim()) return null;
     return (
@@ -505,178 +542,116 @@ function ClientListRowsBlock({
       </Card>
     );
   }
-  const showArchiveBulkCol = Boolean(archiveBulk && rows.some((r) => archiveBulk.selectableIds.has(r.id)));
+
+  const badgeOutline = "border-primary/35 bg-card text-foreground";
+
+  const iconBtnClass =
+    "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-card text-foreground hover:bg-primary/10";
+
   return (
-    <>
-      <div className="space-y-2 sm:hidden">
-        {rows.map((row) => {
-          const hidden = wp ? isDealerHiddenForUser(workPlanUserId, row.id, workPlanState) : false;
-          const checked = Boolean(selectedIds?.has(row.id));
-          const ns = getClientNextStepForDealer(row.id, nextStepsStorage);
-          const nextLine = ns ? `${clientNextStepActionLabel(ns.actionType)} · ${formatIsoDayToRuShort(ns.contactDate)}` : null;
-          return (
-            <div
-              key={row.id}
-              className="rounded-xl border border-border/80 bg-card p-3 text-sm shadow-sm"
-              data-testid={`row-dealer-list-${row.id}`}
+    <div className="min-w-0 divide-y divide-border overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+      {rows.map((row) => {
+        const hidden = wp ? isDealerHiddenForUser(workPlanUserId, row.id, workPlanState) : false;
+        const checked = Boolean(selectedIds?.has(row.id));
+        const ns = getClientNextStepForDealer(row.id, nextStepsStorage);
+        const nextLine = ns ? `${clientNextStepActionLabel(ns.actionType)} · ${formatIsoDayToRuShort(ns.contactDate)}` : null;
+        const phone = cleanContactDisplay(row.contacts?.phone);
+        const email = cleanContactDisplay(row.contacts?.email);
+        const tel = phone ? telHref(phone) : null;
+        const wa = phone ? whatsAppHref(phone) : null;
+        const mail = email ? mailtoHref(email) : null;
+        return (
+          <div
+            key={row.id}
+            className="flex min-w-0 items-stretch gap-1.5 p-2 sm:gap-2 sm:p-2.5"
+            data-testid={`row-dealer-list-${row.id}`}
+          >
+            <div className="flex shrink-0 flex-col items-start gap-1 pt-0.5">
+              {showWorkPlanSelect && wp && onToggleWorkPlanSelect ? (
+                <Checkbox
+                  checked={checked}
+                  onCheckedChange={(v) => onToggleWorkPlanSelect(row.id, v === true)}
+                  className="h-4 w-4"
+                  data-testid={`checkbox-dealer-workplan-select-${row.id}`}
+                  aria-label={`Выбрать клиента ${row.name} для плана работ`}
+                />
+              ) : null}
+              {archiveBulk?.selectableIds.has(row.id) ? (
+                <span className="inline-flex flex-col items-center gap-0.5 rounded-md border border-destructive/35 bg-destructive/[0.04] px-1 py-1" data-testid={`wrap-dealer-bulk-select-${row.id}`}>
+                  <span className="text-[8px] font-bold uppercase text-destructive">Del</span>
+                  <DealerBulkDeleteCheckbox
+                    checked={archiveBulk.selectedIds.has(row.id)}
+                    onCheckedChange={(v) => archiveBulk.onToggle(row.id, v === true)}
+                    data-testid={`checkbox-dealer-select-${row.id}`}
+                    aria-label={`Удалить клиента ${row.name} из рабочей базы`}
+                  />
+                </span>
+              ) : null}
+            </div>
+            <Link
+              href={`/dealers/${row.id}`}
+              className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg pr-1 outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-primary sm:gap-3"
+              data-testid={`link-dealer-list-open-${row.id}`}
             >
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div className="flex min-w-0 flex-wrap items-center gap-2">
-                  {showWorkPlanSelect && wp && onToggleWorkPlanSelect ? (
-                    <Checkbox
-                      checked={checked}
-                      onCheckedChange={(v) => onToggleWorkPlanSelect(row.id, v === true)}
-                      className="h-5 w-5 shrink-0"
-                      data-testid={`checkbox-dealer-workplan-select-${row.id}`}
-                      aria-label={`Выбрать клиента ${row.name} для плана работ`}
-                    />
-                  ) : null}
-                  {archiveBulk?.selectableIds.has(row.id) ? (
-                    <span
-                      className={cn(
-                        "inline-flex shrink-0 items-center gap-2 rounded-lg border border-destructive/45 bg-destructive/[0.06] px-2 py-1",
-                        showWorkPlanSelect && wp && onToggleWorkPlanSelect && "border-l-2 border-l-destructive/50 pl-2",
-                      )}
-                      data-testid={`wrap-dealer-bulk-select-${row.id}`}
-                    >
-                      <span className="text-[10px] font-semibold uppercase text-destructive">Удалить</span>
-                      <DealerBulkDeleteCheckbox
-                        checked={archiveBulk.selectedIds.has(row.id)}
-                        onCheckedChange={(v) => archiveBulk.onToggle(row.id, v === true)}
-                        data-testid={`checkbox-dealer-select-${row.id}`}
-                        aria-label={`Удалить клиента ${row.name} из рабочей базы`}
-                      />
-                    </span>
-                  ) : null}
-                </div>
-                <Button asChild size="sm" variant="secondary" className="h-8 shrink-0 text-xs font-semibold">
-                  <Link href={`/dealers/${row.id}`} data-testid={`button-open-dealer-${row.id}`}>
-                    Открыть
-                  </Link>
-                </Button>
-              </div>
-              <div className="mt-2 flex gap-2">
-                <DealerRowListAvatar row={row} size="sm" className="shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <p className="font-mono text-xs text-muted-foreground">{row.releaseCode ?? "—"}</p>
-                  <p className="mt-0.5 font-medium leading-snug">{row.name}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">ИНН: {innCell(row)}</p>
-                  <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                    <span>{row.city}</span>
-                    <span>·</span>
-                    <span>ТТ: {row.outlets}</span>
-                  </div>
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    <Badge variant="outline" className={cn("text-[10px]", getClientCategoryBadgeClass(row.clientCategory))} data-testid={`badge-dealer-client-category-${row.id}`}>
+              <ShowcaseCoverPhotoSlot kind="dealer" dealer={row} profile={profile} size="list" rounded="md" className="shrink-0" />
+              <div className="min-w-0 flex-1">
+                <p className="line-clamp-2 text-sm font-semibold leading-snug text-foreground">{row.name}</p>
+                <p className="truncate text-[11px] text-muted-foreground">{row.city}</p>
+                <div className="mt-0.5 flex flex-wrap items-center gap-1">
+                  <span data-testid={`text-dealer-client-category-${row.id}`}>
+                    <Badge variant="outline" className={cn("text-[10px]", badgeOutline)} data-testid={`badge-dealer-client-category-${row.id}`}>
                       {getClientCategoryLabel(row.clientCategory)}
                     </Badge>
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground">Менеджер: {row.manager || "—"}</p>
-                  {nextLine ? <p className="mt-1 text-xs text-foreground">Следующий шаг: {nextLine}</p> : null}
+                  </span>
+                  <Badge variant="outline" className={cn("text-[10px]", statusBadgeClass(row.status))}>
+                    {row.status}
+                  </Badge>
                   {hidden ? (
-                    <Badge variant="secondary" className="mt-1 w-fit text-[10px]" data-testid={`badge-dealer-hidden-${row.id}`}>
-                      Скрыт из рабочего списка
+                    <Badge variant="secondary" className="text-[10px]" data-testid={`badge-dealer-hidden-${row.id}`}>
+                      Скрыт
                     </Badge>
                   ) : null}
                 </div>
+                {nextLine ? <p className="mt-0.5 line-clamp-1 text-[10px] text-muted-foreground">{nextLine}</p> : null}
               </div>
-            </div>
-          );
-        })}
-      </div>
-      <div className="hidden min-w-0 sm:block sm:overflow-x-auto sm:rounded-xl sm:border sm:border-border/80 sm:bg-card sm:shadow-sm">
-        <table className="w-full min-w-[56rem] text-left text-sm">
-          <thead className="border-b border-border bg-muted/40">
-            <tr className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              {showWorkPlanSelect ? <th className="w-10 px-2 py-2" aria-label="Выбор" /> : null}
-              {archiveBulk && rows.some((r) => archiveBulk.selectableIds.has(r.id)) ? (
-                <th className="w-14 px-2 py-2 text-center text-destructive">Удал.</th>
+              <Badge variant="outline" className={cn("hidden shrink-0 tabular-nums sm:inline-flex", badgeOutline)}>
+                {row.outlets} ТТ
+              </Badge>
+            </Link>
+            <div className="flex shrink-0 items-center gap-0.5 sm:gap-1" onClick={(e) => e.stopPropagation()}>
+              {tel ? (
+                <a href={tel} className={iconBtnClass} data-testid={`link-dealer-list-call-${row.id}`} aria-label="Позвонить" onClick={(e) => e.stopPropagation()}>
+                  <Phone className="h-4 w-4 text-primary" />
+                </a>
+              ) : (
+                <span className={cn(iconBtnClass, "cursor-not-allowed opacity-45")} title="Телефон не указан" aria-hidden>
+                  <Phone className="h-4 w-4 text-muted-foreground" />
+                </span>
+              )}
+              {wa ? (
+                <a href={wa} className={iconBtnClass} data-testid={`link-dealer-list-whatsapp-${row.id}`} aria-label="WhatsApp" onClick={(e) => e.stopPropagation()}>
+                  <MessageCircle className="h-4 w-4 text-primary" />
+                </a>
+              ) : (
+                <span className={cn(iconBtnClass, "cursor-not-allowed opacity-45")} title="Телефон не указан" aria-hidden>
+                  <MessageCircle className="h-4 w-4 text-muted-foreground" />
+                </span>
+              )}
+              {mail ? (
+                <a href={mail} className={cn(iconBtnClass, "hidden sm:inline-flex")} data-testid={`link-dealer-list-email-${row.id}`} aria-label="Email" onClick={(e) => e.stopPropagation()}>
+                  <Mail className="h-4 w-4 text-primary" />
+                </a>
               ) : null}
-              <th className="w-11 px-1 py-2 text-center font-normal normal-case" aria-label="Фото" />
-              <th className="px-2 py-2">Код</th>
-              <th className="px-2 py-2">Клиент</th>
-              <th className="px-2 py-2">ИНН</th>
-              <th className="px-2 py-2">Город</th>
-              <th className="px-2 py-2">Категория</th>
-              <th className="px-2 py-2">Менеджер</th>
-              <th className="px-2 py-2">ТТ</th>
-              <th className="min-w-[8rem] px-2 py-2">След. шаг</th>
-              <th className="px-2 py-2" />
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => {
-              const hidden = wp ? isDealerHiddenForUser(workPlanUserId, row.id, workPlanState) : false;
-              const checked = Boolean(selectedIds?.has(row.id));
-              const ns = getClientNextStepForDealer(row.id, nextStepsStorage);
-              const nextLine = ns ? `${clientNextStepActionLabel(ns.actionType)} · ${formatIsoDayToRuShort(ns.contactDate)}` : "—";
-              return (
-                <tr key={row.id} className="border-b border-border/80 last:border-0" data-testid={`row-dealer-list-${row.id}`}>
-                  {showWorkPlanSelect && wp && onToggleWorkPlanSelect ? (
-                    <td className="px-2 py-1.5 align-middle">
-                      <Checkbox
-                        checked={checked}
-                        onCheckedChange={(v) => onToggleWorkPlanSelect(row.id, v === true)}
-                        className="h-4 w-4"
-                        data-testid={`checkbox-dealer-workplan-select-${row.id}`}
-                        aria-label={`Выбрать клиента ${row.name} для плана работ`}
-                      />
-                    </td>
-                  ) : null}
-                  {showArchiveBulkCol && archiveBulk ? (
-                    <td className="bg-destructive/[0.04] px-2 py-1.5 text-center align-middle">
-                      {archiveBulk.selectableIds.has(row.id) ? (
-                        <DealerBulkDeleteCheckbox
-                          checked={archiveBulk.selectedIds.has(row.id)}
-                          onCheckedChange={(v) => archiveBulk.onToggle(row.id, v === true)}
-                          data-testid={`checkbox-dealer-select-${row.id}`}
-                          aria-label={`Удалить клиента ${row.name} из рабочей базы`}
-                        />
-                      ) : null}
-                    </td>
-                  ) : null}
-                  <td className="px-1 py-1.5 align-middle">
-                    <DealerRowListAvatar row={row} size="xs" />
-                  </td>
-                  <td className="whitespace-nowrap px-2 py-1.5 font-mono text-xs text-muted-foreground">{row.releaseCode ?? "—"}</td>
-                  <td className="max-w-[10rem] px-2 py-1.5 align-top">
-                    <span className="line-clamp-2 font-medium" title={row.name}>
-                      {row.name}
-                    </span>
-                    {hidden ? (
-                      <Badge variant="secondary" className="mt-0.5 w-fit text-[10px]" data-testid={`badge-dealer-hidden-${row.id}`}>
-                        Скрыт
-                      </Badge>
-                    ) : null}
-                  </td>
-                  <td className="whitespace-nowrap px-2 py-1.5 font-mono text-xs">{innCell(row)}</td>
-                  <td className="max-w-[6rem] truncate px-2 py-1.5 text-xs" title={row.city}>
-                    {row.city}
-                  </td>
-                  <td className="max-w-[7rem] px-2 py-1.5 text-xs" data-testid={`text-dealer-client-category-${row.id}`}>
-                    <span className="line-clamp-2">{getClientCategoryLabel(row.clientCategory)}</span>
-                  </td>
-                  <td className="max-w-[8rem] truncate px-2 py-1.5 text-xs" title={row.manager}>
-                    {row.manager}
-                  </td>
-                  <td className="whitespace-nowrap px-2 py-1.5 tabular-nums text-xs">{row.outlets}</td>
-                  <td className="max-w-[12rem] px-2 py-1.5 text-xs text-muted-foreground" title={nextLine}>
-                    <span className="line-clamp-2">{nextLine}</span>
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <Button asChild size="sm" variant="secondary" className="h-8 text-xs font-semibold">
-                      <Link href={`/dealers/${row.id}`} data-testid={`button-open-dealer-${row.id}`}>
-                        Открыть
-                      </Link>
-                    </Button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </>
+              <Button asChild size="sm" variant="secondary" className="hidden h-9 shrink-0 px-2 text-xs font-semibold sm:inline-flex">
+                <Link href={`/dealers/${row.id}`} data-testid={`button-open-dealer-${row.id}`} onClick={(e) => e.stopPropagation()}>
+                  Открыть
+                </Link>
+              </Button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -704,6 +679,8 @@ function sortDealerRowsForTable(rows: DealerRow[], key: TableSortKey, dir: "asc"
 function DealerBaseDataTable({
   rows,
   empty,
+  profile: _profile,
+  actualizationState: _actualizationState,
   workPlanUserId,
   workPlanState,
   showWorkPlanSelect,
@@ -715,6 +692,8 @@ function DealerBaseDataTable({
   nextStepsStorage,
 }: DealerRowRendererBaseProps) {
   const wp = workPlanUserId && workPlanState;
+  void _profile;
+  void _actualizationState;
   const [sortKey, setSortKey] = useState<TableSortKey>("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
@@ -882,6 +861,7 @@ function DealerBaseSegmentGroups({
   nextStepsStorage,
   segmentCollapse,
   onToggleSegmentCollapse,
+  profile,
   workPlanUserId,
   workPlanState,
   showWorkPlanSelect,
@@ -899,6 +879,7 @@ function DealerBaseSegmentGroups({
   nextStepsStorage: DealerBaseNextStepsStorage;
   segmentCollapse: DealerBaseSegmentCollapseState;
   onToggleSegmentCollapse: (id: DealerBaseSegmentId) => void;
+  profile: ReleaseDemoProfile;
   workPlanUserId?: string;
   workPlanState?: DealerWorkPlanState;
   showWorkPlanSelect?: boolean;
@@ -916,6 +897,8 @@ function DealerBaseSegmentGroups({
     const common: DealerRowRendererBaseProps = {
       rows: segRows,
       empty: "",
+      profile,
+      actualizationState,
       workPlanUserId,
       workPlanState,
       showWorkPlanSelect,
@@ -933,6 +916,7 @@ function DealerBaseSegmentGroups({
         <DealerBaseDealerShowcaseGrid
           rows={segRows}
           empty=""
+          profile={profile}
           actualizationState={actualizationState}
           workPlanUserId={workPlanUserId}
           workPlanState={workPlanState}
@@ -945,7 +929,7 @@ function DealerBaseSegmentGroups({
         />
       );
     }
-    if (effectiveDensity === "compact") {
+    if (effectiveDensity === "grid") {
       return <ClientCompactGridBlock {...common} />;
     }
     if (effectiveDensity === "list") {
@@ -1133,6 +1117,18 @@ export default function DealerBase() {
       const migrated = migrateLegacyDealerBaseViewMode(old, narrow);
       localStorage.setItem(SHOWCASE_DENSITY_LS_KEY, migrated);
       localStorage.removeItem(DEALER_BASE_VIEW_MODE_LS_KEY);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  /** Миграция сохранённого значения `compact` → `grid` (переименование режима). */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      if (localStorage.getItem(SHOWCASE_DENSITY_LS_KEY) !== "compact") return;
+      localStorage.setItem(SHOWCASE_DENSITY_LS_KEY, "grid");
+      setShowcaseDensity("grid");
     } catch {
       /* ignore */
     }
@@ -2341,46 +2337,49 @@ export default function DealerBase() {
               />
             </div>
             <div
-              className="flex min-w-0 shrink-0 flex-col gap-2 sm:items-end"
+              className="flex min-w-0 shrink-0 flex-col gap-2 sm:ml-auto sm:items-end"
               data-testid="section-dealer-showcase-mode-toolbar"
             >
               <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-wide text-[#8F96B0]">Витрина дилеров</p>
-                <p className="hidden text-[11px] text-[#8F96B0] sm:block">Рабочий вид списка клиентов</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Витрина дилеров</p>
+                <p className="hidden text-[11px] text-muted-foreground sm:block">Рабочий вид списка клиентов</p>
               </div>
               <div
-                className="flex min-w-0 flex-wrap gap-1.5"
+                className="flex min-w-0 items-center justify-end gap-0.5 rounded-lg border border-border bg-card p-0.5"
+                data-testid="section-dealer-showcase-density-icons"
                 role="radiogroup"
                 aria-label="Плотность отображения витрины дилеров"
               >
                 {(
                   [
-                    { id: "large" as const, label: "Крупно", tid: "button-dealer-showcase-density-large" },
-                    { id: "compact" as const, label: "Компактно", tid: "button-dealer-showcase-density-compact" },
-                    { id: "list" as const, label: "Список", tid: "button-dealer-showcase-density-list" },
-                    { id: "table" as const, label: "Таблица", tid: "button-dealer-showcase-density-table" },
+                    { id: "large" as const, label: "Крупно", tid: "button-dealer-showcase-density-large", icon: LayoutTemplate },
+                    { id: "grid" as const, label: "Сетка", tid: "button-dealer-showcase-density-grid", icon: LayoutGrid },
+                    { id: "list" as const, label: "Список", tid: "button-dealer-showcase-density-list", icon: List },
+                    { id: "table" as const, label: "Таблица", tid: "button-dealer-showcase-density-table", icon: Table2 },
                   ] as const
                 ).map((opt) => {
+                  const Icon = opt.icon;
                   const active = showcaseDensity === opt.id;
                   return (
                     <Button
                       key={opt.id}
                       type="button"
-                      size="sm"
                       variant="outline"
+                      size="icon"
                       className={cn(
-                        "h-8 shrink-0 rounded-full px-2.5 text-xs font-semibold sm:h-9 sm:px-3",
+                        "h-9 w-9 shrink-0 rounded-md border",
                         active
-                          ? "border-[#9ACA3C] bg-[#9ACA3C] text-[#FFFFFF] hover:bg-[#86B832]"
-                          : "border-[#E3E6F3] bg-[#FFFFFF] text-[#222631] hover:bg-[#EEEFF6]",
+                          ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
+                          : "border-transparent bg-card text-muted-foreground hover:bg-muted hover:text-foreground",
                       )}
                       data-testid={opt.tid}
+                      aria-label={opt.label}
                       aria-pressed={active}
                       role="radio"
                       aria-checked={active}
                       onClick={() => persistShowcaseDensity(opt.id)}
                     >
-                      {opt.label}
+                      <Icon className="h-4 w-4" aria-hidden />
                     </Button>
                   );
                 })}
@@ -3190,6 +3189,7 @@ export default function DealerBase() {
             {workView === "my_clients" ? (
               <DealerBaseSegmentGroups
                 rows={rowsFinalForList}
+                profile={profile}
                 showcaseDensity={showcaseDensity}
                 narrowViewport={viewportNarrow}
                 nextStepsStorage={nextStepsStorage}
@@ -3205,6 +3205,7 @@ export default function DealerBase() {
             ) : (
               <DealerBaseSegmentGroups
                 rows={rowsFinalForList}
+                profile={profile}
                 showcaseDensity={showcaseDensity}
                 narrowViewport={viewportNarrow}
                 nextStepsStorage={nextStepsStorage}
@@ -3230,6 +3231,7 @@ export default function DealerBase() {
             ) : (
               <DealerBaseSegmentGroups
                 rows={rowsFinalForList}
+                profile={profile}
                 showcaseDensity={showcaseDensity}
                 narrowViewport={viewportNarrow}
                 nextStepsStorage={nextStepsStorage}
@@ -3255,6 +3257,7 @@ export default function DealerBase() {
             ) : (
               <DealerBaseSegmentGroups
                 rows={rowsFinalForList}
+                profile={profile}
                 showcaseDensity={showcaseDensity}
                 narrowViewport={viewportNarrow}
                 nextStepsStorage={nextStepsStorage}

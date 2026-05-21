@@ -33,7 +33,7 @@ export function DealerRowListAvatar(props: { row: DealerRow; size?: "xs" | "sm" 
   if (src) {
     return (
       <div
-        className={cn("relative shrink-0 overflow-hidden rounded-md border border-[#E3E6F3] bg-[#FFFFFF]", sz, className)}
+        className={cn("relative shrink-0 overflow-hidden rounded-md border border-border bg-card", sz, className)}
         data-testid={`dealer-list-avatar-img-${row.id}`}
       >
         <SafeImage src={src} alt="" className="absolute inset-0 h-full w-full" objectFit="cover" />
@@ -43,7 +43,7 @@ export function DealerRowListAvatar(props: { row: DealerRow; size?: "xs" | "sm" 
   return (
     <div
       className={cn(
-        "flex shrink-0 items-center justify-center rounded-md border border-[#9ACA3C]/30 bg-[#9ACA3C]/10 font-bold text-[#222631]",
+        "flex shrink-0 items-center justify-center rounded-md border border-primary/30 bg-primary/10 font-bold text-foreground",
         sz,
         className,
       )}
