@@ -39,7 +39,7 @@ import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { useSectionSaveFeedback } from "@/hooks/use-section-save-feedback";
 import { SectionSaveButton } from "@/components/section-save-button";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
-import { canActualizeClientBase } from "@/lib/client-base-actualization-permissions";
+import { canActualizeClientBase, canArchiveTradePointDuringActualization } from "@/lib/client-base-actualization-permissions";
 import { CLIENT_BASE_ACTUALIZATION_CLEAN_MODE } from "@/lib/client-base-actualization-config";
 import { resolveActualizationTradePointDetail } from "@/lib/client-base-actualization-data-merge";
 import { TradePointManualActualizationView } from "@/components/trade-point-manual-actualization-view";
@@ -792,7 +792,41 @@ function TradePointDetailContent({
   const breadcrumbDealerLabel = dealer.name;
 
   if (useCleanTradePointAnketa) {
-    return <TradePointManualActualizationView dealer={dealer} point={point} profile={profile} />;
+    const canArchiveTpClean =
+      canEditTp && !tpMeta.isArchived && canArchiveTradePointDuringActualization(profile, dealerForRbac, point);
+    return (
+      <>
+        <TradePointManualActualizationView
+          dealer={dealer}
+          point={point}
+          profile={profile}
+          isArchived={tpMeta.isArchived}
+          onRequestArchive={canArchiveTpClean ? () => setArchiveOpen(true) : undefined}
+        />
+        <Dialog open={archiveOpen} onOpenChange={setArchiveOpen}>
+          <DialogContent className="sm:max-w-md" data-testid="dialog-trade-point-archive-confirm">
+            <DialogHeader>
+              <DialogTitle className="text-base">Архивировать точку?</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground">Точка будет скрыта из списка активных. Удаление не выполняется.</p>
+            <DialogFooter className="gap-2 sm:justify-end">
+              <Button type="button" variant="outline" className="min-h-9" onClick={() => setArchiveOpen(false)}>
+                Отмена
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                className="min-h-9 font-semibold"
+                data-testid="button-trade-point-archive-confirm"
+                onClick={handleConfirmArchive}
+              >
+                В архив
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </>
+    );
   }
 
   return (
