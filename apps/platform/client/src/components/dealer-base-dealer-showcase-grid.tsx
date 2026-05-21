@@ -140,25 +140,50 @@ function tradePointPortalCaptions(act: ActualizationState, tpId: string): { port
   return { portals, tandoor };
 }
 
+const BRANCH_CONTACT_SHORT: Record<string, string> = {
+  Позвонить: "Звонок",
+  WhatsApp: "WA",
+  Email: "Почта",
+};
+
 function ContactAction({
   label,
   icon: Icon,
   href,
   disabledReason,
   testId,
+  variant = "dealer",
 }: {
   label: string;
   icon: typeof Phone;
   href: string | null;
   disabledReason: string;
   testId: string;
+  /** Вложенные действия ТТ: компактнее, на узком экране короткая подпись у иконки. */
+  variant?: "dealer" | "branch";
 }) {
+  const isBranch = variant === "branch";
+  const short = BRANCH_CONTACT_SHORT[label] ?? label.slice(0, 4);
+  const btnClass = cn(
+    "h-8 gap-1 text-xs font-medium",
+    isBranch
+      ? "rounded-md border-slate-200/90 bg-white/90 px-2 text-slate-800 hover:bg-white hover:text-slate-900"
+      : "rounded-full border-emerald-200/80 px-2.5 text-emerald-950 hover:bg-emerald-50",
+  );
+  const labelNode = isBranch ? (
+    <>
+      <span className="hidden sm:inline">{label}</span>
+      <span className="sm:hidden">{short}</span>
+    </>
+  ) : (
+    label
+  );
   if (href) {
     return (
-      <Button asChild size="sm" variant="outline" className="h-8 gap-1 rounded-full border-emerald-200/80 px-2.5 text-xs font-medium text-emerald-950 hover:bg-emerald-50">
-        <a href={href} data-testid={testId} className="inline-flex items-center gap-1">
+      <Button asChild size="sm" variant="outline" className={btnClass}>
+        <a href={href} data-testid={testId} className="inline-flex min-h-8 min-w-0 items-center gap-1">
           <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
-          {label}
+          {labelNode}
         </a>
       </Button>
     );
@@ -166,16 +191,22 @@ function ContactAction({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span className="inline-block">
-          <Button type="button" size="sm" variant="outline" disabled className="h-8 gap-1 rounded-full px-2.5 text-xs">
+        <span className="inline-block max-w-full">
+          <Button type="button" size="sm" variant="outline" disabled className={cn(btnClass, "opacity-80")}>
             <Icon className="h-3.5 w-3.5 shrink-0 opacity-50" aria-hidden />
-            {label}
+            {labelNode}
           </Button>
         </span>
       </TooltipTrigger>
       <TooltipContent side="top">{disabledReason}</TooltipContent>
     </Tooltip>
   );
+}
+
+function tradePointBranchAccentClass(line: string, deficit: number, newTasks: number): string {
+  if (deficit > 0 || newTasks > 0) return "border-l-amber-500";
+  if (line === "Есть витрина") return "border-l-emerald-500";
+  return "border-l-slate-300";
 }
 
 function TradePointShowcaseRow({
@@ -206,6 +237,8 @@ function TradePointShowcaseRow({
   const wa = phone ? hrefWhatsApp(phone) : null;
   const tpMail = tpEmail ? hrefMailto(tpEmail) : null;
 
+  const accentBorder = tradePointBranchAccentClass(line, deficit, newTasks);
+
   const statusClass =
     deficit > 0 || newTasks > 0
       ? "border-amber-300 bg-amber-50 text-amber-950"
@@ -222,17 +255,30 @@ function TradePointShowcaseRow({
 
   return (
     <div
-      className="rounded-lg border border-border/70 bg-muted/10 p-2.5 sm:p-3"
+      className={cn(
+        "min-w-0 overflow-hidden rounded-md border border-slate-200/80 bg-background/90 py-2 pl-2 pr-2 shadow-none sm:py-2.5 sm:pr-2.5",
+        "border-l-4",
+        accentBorder,
+      )}
       data-testid={`card-dealer-showcase-trade-point-${tp.id}`}
     >
-      <div className="flex flex-wrap items-start justify-between gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
         <div className="min-w-0 flex-1 space-y-1">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <Store className="h-3.5 w-3.5 shrink-0 text-emerald-700" aria-hidden />
-            <span className="text-sm font-semibold leading-tight text-foreground">{tp.name}</span>
+          <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
+            <div className="flex min-w-0 items-start gap-1.5">
+              <Store className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500" aria-hidden />
+              <div className="min-w-0">
+                <span className="text-sm font-semibold leading-snug text-foreground">{tp.name}</span>
+                <p className="font-mono text-[10px] leading-tight text-muted-foreground">{getTradePointDisplayCodeForActualization(tp)}</p>
+              </div>
+            </div>
+            <Button asChild size="sm" variant="outline" className="h-7 shrink-0 rounded-md px-2.5 text-[11px] font-medium text-slate-700 sm:mt-0">
+              <Link href={tpHref} data-testid={`button-dealer-showcase-open-trade-point-${tp.id}`}>
+                Открыть ТТ
+              </Link>
+            </Button>
           </div>
-          <p className="font-mono text-[11px] text-muted-foreground">{getTradePointDisplayCodeForActualization(tp)}</p>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-[11px] leading-snug text-muted-foreground">
             {tp.city}
             {tp.address ? ` · ${tp.address}` : ""}
           </p>
@@ -247,27 +293,15 @@ function TradePointShowcaseRow({
             ) : null}
           </div>
           {(portals || tandoor) && (
-            <p className="text-[11px] text-muted-foreground">
-              {[portals, tandoor].filter(Boolean).join(" · ")}
-            </p>
+            <p className="text-[10px] leading-tight text-muted-foreground">{[portals, tandoor].filter(Boolean).join(" · ")}</p>
           )}
-          {ship ? (
-            <p className="text-[10px] text-muted-foreground">
-              Отгрузка: {ship.label}
-            </p>
-          ) : null}
-          {cleanContact(tp.contactName) ? <p className="text-xs text-foreground">Контакт: {tp.contactName}</p> : null}
-        </div>
-        <div className="flex shrink-0 flex-col gap-1 sm:flex-row sm:flex-wrap sm:justify-end">
-          <Button asChild size="sm" variant="secondary" className="h-8 rounded-full px-3 text-xs font-semibold">
-            <Link href={tpHref} data-testid={`button-dealer-showcase-open-trade-point-${tp.id}`}>
-              Открыть ТТ
-            </Link>
-          </Button>
+          {ship ? <p className="text-[10px] text-muted-foreground">Отгрузка: {ship.label}</p> : null}
+          {cleanContact(tp.contactName) ? <p className="text-[11px] text-muted-foreground">Контакт: {tp.contactName}</p> : null}
         </div>
       </div>
-      <div className="mt-2 flex flex-wrap gap-1.5">
+      <div className="mt-2 flex max-w-full flex-wrap gap-1.5 border-t border-slate-100/90 pt-2">
         <ContactAction
+          variant="branch"
           label="Позвонить"
           icon={Phone}
           href={tel}
@@ -275,6 +309,7 @@ function TradePointShowcaseRow({
           testId={`link-dealer-showcase-trade-point-call-${tp.id}`}
         />
         <ContactAction
+          variant="branch"
           label="WhatsApp"
           icon={MessageCircle}
           href={wa}
@@ -282,6 +317,7 @@ function TradePointShowcaseRow({
           testId={`link-dealer-showcase-trade-point-whatsapp-${tp.id}`}
         />
         <ContactAction
+          variant="branch"
           label="Email"
           icon={Mail}
           href={tpMail}
@@ -354,7 +390,7 @@ function DealerShowcaseCard({
 
   return (
     <Card
-      className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm ring-1 ring-emerald-900/[0.04]"
+      className="overflow-hidden rounded-xl border border-border/70 border-l-4 border-l-emerald-600 bg-card shadow-sm ring-1 ring-slate-900/[0.03]"
       data-testid={`card-dealer-showcase-${row.id}`}
     >
       <CardContent className="space-y-3 p-3 sm:p-4">
@@ -479,9 +515,9 @@ function DealerShowcaseCard({
         </div>
 
         {(contactName || phone || email) && (
-          <div className="rounded-lg border border-border/60 bg-muted/10 px-3 py-2 text-sm">
+          <div className="rounded-lg border border-emerald-100/80 bg-emerald-50/25 px-3 py-2 text-sm">
             <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-              <Building2 className="h-3.5 w-3.5" aria-hidden />
+              <Building2 className="h-3.5 w-3.5 text-emerald-800/70" aria-hidden />
               Основной контакт
             </div>
             {contactName ? <p className="mt-1 font-medium text-foreground">{contactName}</p> : null}
@@ -491,9 +527,17 @@ function DealerShowcaseCard({
         )}
 
         {merged.length > 0 ? (
-          <div className="space-y-2 border-t border-border/60 pt-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Торговые точки</p>
-            <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+          <section
+            className="rounded-lg border border-emerald-100/90 bg-emerald-50/35 p-2 sm:p-2.5"
+            data-testid={`section-dealer-showcase-branches-${row.id}`}
+          >
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-emerald-950/90">Филиалы / торговые точки</h4>
+              <Badge variant="secondary" className="h-5 border border-emerald-200/80 bg-white/90 px-2 text-[10px] font-semibold tabular-nums text-emerald-900">
+                {merged.length}
+              </Badge>
+            </div>
+            <div className="flex flex-col gap-1.5">
               {visibleTp.map((e) => (
                 <TradePointShowcaseRow
                   key={e.point.id}
@@ -507,11 +551,17 @@ function DealerShowcaseCard({
               ))}
             </div>
             {restCount > 0 && !expanded ? (
-              <Button type="button" variant="ghost" size="sm" className="h-8 w-full text-xs font-semibold text-emerald-800" onClick={() => setExpanded(true)}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="mt-2 h-8 w-full text-xs font-semibold text-emerald-900 hover:bg-white/60"
+                onClick={() => setExpanded(true)}
+              >
                 Показать все точки ({merged.length})
               </Button>
             ) : null}
-          </div>
+          </section>
         ) : null}
       </CardContent>
     </Card>
