@@ -146,6 +146,9 @@ export type DealerTradePoint = {
   activityHistory: TradePointActivity[];
   /** Заглушка: вложения фото пока нет */
   photos: { attached: boolean };
+  /** Главное фото ТТ (URL из актуализации). */
+  coverPhotoUrl?: string;
+  coverPhotoThumbnailUrl?: string;
 } & ProductTrainingFields;
 
 export type DealerRow = {
@@ -167,6 +170,10 @@ export type DealerRow = {
   external1cCode?: string;
   /** Код клиента из Excel Release 1 (если есть). */
   releaseCode?: string;
+  /** URL главного фото (актуализация, обложка). */
+  coverPhotoUrl?: string;
+  /** Превью главного фото для списков. */
+  coverPhotoThumbnailUrl?: string;
   /** Тип клиента (как в Excel / справочнике Release 1). */
   clientTypeLabel?: string;
   /** Адрес из Excel (для списка и поиска). */

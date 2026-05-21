@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
-import { Building2, Mail, MessageCircle, Phone, Store } from "lucide-react";
+import { Building2, Mail, MessageCircle, Phone } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -32,6 +32,8 @@ import type { DealerShipmentDayId } from "@/lib/dealer-shipment-days";
 import { getDealerShipmentStatus } from "@/lib/dealer-shipment-days";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DealerBulkDeleteCheckbox } from "@/components/dealer-bulk-delete-checkbox";
+import { SafeImage } from "@/components/safe-image";
+import { TradePointRowListThumb } from "@/components/trade-point-row-list-thumb";
 
 const badgeOutline = "border-[#9ACA3C]/35 bg-[#FFFFFF] text-[#222631]";
 const badgeSoft = "border-[#9ACA3C]/30 bg-[#9ACA3C]/10 text-[#222631]";
@@ -270,8 +272,8 @@ function TradePointShowcaseRow({
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
-            <div className="flex min-w-0 items-start gap-1.5">
-              <Store className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#8F96B0]" aria-hidden />
+            <div className="flex min-w-0 items-start gap-2">
+              <TradePointRowListThumb point={tp} size="xs" className="shrink-0" />
               <div className="min-w-0">
                 <span className="text-sm font-semibold leading-snug text-[#222631]">{tp.name}</span>
                 <p className="font-mono text-[10px] leading-tight text-[#8F96B0]">{getTradePointDisplayCodeForActualization(tp)}</p>
@@ -426,13 +428,21 @@ function DealerShowcaseCard({
                 <span className="text-[9px] font-bold uppercase text-[#222631]">Удалить</span>
                 <DealerBulkDeleteCheckbox
                   checked={archiveBulk.selectedIds.has(row.id)}
-                  onCheckedChange={(v) => archiveBulk.onToggle(row.id, v === true)}
+                  onCheckedChange={(v: boolean | "indeterminate") => archiveBulk.onToggle(row.id, v === true)}
                   data-testid={`checkbox-dealer-select-${row.id}`}
                   aria-label={`Удалить клиента ${row.name} из рабочей базы`}
                 />
               </span>
             ) : null}
             {(() => {
+              const cover = row.coverPhotoThumbnailUrl?.trim() || row.coverPhotoUrl?.trim();
+              if (cover) {
+                return (
+                  <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md border border-[#9ACA3C]/25 bg-[#FFFFFF]">
+                    <SafeImage src={cover} alt="" className="absolute inset-0 h-full w-full" objectFit="cover" />
+                  </div>
+                );
+              }
               const logo = (row as DealerRow & { logoUrl?: string }).logoUrl?.trim();
               if (logo) {
                 return (
