@@ -4,9 +4,11 @@ import { MainPlanExecutionChart } from "@/components/main-plan-execution-chart";
 import { TeamSummaryCard } from "@/components/team-summary-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { canAccessPath, salesControlHomeHref } from "@/lib/auth-access";
+import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
 import {
   dealerNeedsAttention,
@@ -56,10 +58,23 @@ function MainLinkButton({ href, label, testId }: MainLink) {
 export function MainRoleDashboard() {
   const { user } = useCurrentUser();
   const { profile } = useReleaseDemoProfile();
+  const actx = useClientBaseActualization();
   const role = (user?.role ?? profile.role) as SalesRole;
 
-  const scopedClients = useMemo(() => roleScopedDealerRows(DEALER_BASE_ROWS, profile), [profile]);
+  const baseRowsForDashboard = useMemo(
+    () =>
+      actx.enabled
+        ? buildDealerBaseRowsWithActualization(actx.state, profile, { includeArchivedDealers: false })
+        : DEALER_BASE_ROWS,
+    [actx.enabled, actx.state, profile],
+  );
+  const scopedClients = useMemo(
+    () => roleScopedDealerRows(baseRowsForDashboard, profile),
+    [baseRowsForDashboard, profile],
+  );
   const dealerIds = useMemo(() => new Set(scopedClients.map((r) => r.id)), [scopedClients]);
+  const dashboardLoading = actx.enabled && actx.loading;
+  const workingBaseEmpty = !dashboardLoading && scopedClients.length === 0;
 
   const { totalClients, activeClients, attentionClients, openTasks, extraKpiLabel, extraKpiValue } = useMemo(() => {
     const total = scopedClients.length;
@@ -313,11 +328,28 @@ export function MainRoleDashboard() {
           ) : null}
         </div>
 
-        <MainPlanExecutionChart
-          scope={planExecutionScope}
-          managerCount={planExecutionManagerCount}
-          periodLabel={planExecutionPeriodLabel}
-        />
+        {workingBaseEmpty ? (
+          <Card
+            className="rounded-xl border border-dashed border-border/80 bg-card"
+            data-testid="card-main-empty-working-base"
+          >
+            <CardContent className="space-y-1 p-4">
+              <p className="text-sm font-semibold text-foreground">
+                Рабочая база пуста после актуализации.
+              </p>
+              <p className="text-sm text-muted-foreground">
+                План-факт и сводки скрыты до появления реальных клиентов. Создайте клиента вручную
+                или верните клиента из архива в «Клиентской базе».
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <MainPlanExecutionChart
+            scope={planExecutionScope}
+            managerCount={planExecutionManagerCount}
+            periodLabel={planExecutionPeriodLabel}
+          />
+        )}
 
         <div className="flex min-w-0 flex-wrap gap-2">
           {links.map((l) => (
@@ -326,7 +358,7 @@ export function MainRoleDashboard() {
         </div>
       </section>
 
-      {(role === "sales_director" || role === "team_lead") && teamSummaries.length > 0 ? (
+      {(role === "sales_director" || role === "team_lead") && teamSummaries.length > 0 && !workingBaseEmpty ? (
         <section className="space-y-3 border-t border-border pt-6" data-testid="section-main-team-summaries">
           <h2 className="text-lg font-semibold text-foreground">
             {role === "sales_director" ? "Команды РОПов" : "Моя команда"}
