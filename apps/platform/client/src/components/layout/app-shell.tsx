@@ -15,6 +15,7 @@ import {
   Menu,
   PieChart,
   Search,
+  Store,
   Users,
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -29,6 +30,7 @@ import type { PilotNavItem } from "@/lib/auth-access";
 const MAIN_HREF = "/main";
 const TERRITORY_CARD_HREF = "/territory-card";
 const DEALER_BASE_HREF = "/dealer-base";
+const TRADE_POINTS_HREF = "/trade-points";
 const CLIENT_MAP_HREF = "/client-map";
 const CATALOG_HREF = "/catalog";
 const TASKS_HREF = "/tasks";
@@ -45,6 +47,7 @@ const ICON_BY_TESTID: Partial<Record<string, LucideIcon>> = {
   "nav-client-map": Map,
   "nav-territory-card": MapPinned,
   "nav-dealer-base": Users,
+  "nav-trade-points": Store,
   "nav-catalog": LayoutGrid,
   "nav-tasks": ListTodo,
   "nav-communications": MessageCircle,
@@ -66,6 +69,11 @@ function isMainPath(path: string) {
 
 function isDealerBasePath(path: string) {
   return path === DEALER_BASE_HREF;
+}
+
+function isTradePointsPath(path: string) {
+  const p = path.split("?")[0] ?? path;
+  return p === TRADE_POINTS_HREF;
 }
 
 function isClientMapPath(path: string) {
@@ -116,6 +124,7 @@ function isNavItemActive(item: PilotNavItem, location: string, isActiveFromLink?
   if (isActiveFromLink !== undefined) return isActiveFromLink;
   if (item.testId === "nav-main") return isMainPath(location);
   if (item.testId === "nav-dealer-base") return isClientsSectionPath(location);
+  if (item.testId === "nav-trade-points") return isTradePointsPath(location);
   if (item.testId === "nav-catalog") return isCatalogPath(location);
   if (item.testId === "nav-tasks") return isTasksPath(location);
   if (item.testId === "nav-communications") return isCommunicationsPath(location);
@@ -153,6 +162,7 @@ function headerContextLabel(location: string) {
   if (pathOnly === "/bitrix24" || pathOnly === "/embedded/bitrix24") return "Bitrix24";
   if (isCommunicationsPath(pathOnly)) return "Коммуникации";
   if (isMainPath(location)) return "Главная";
+  if (isTradePointsPath(pathOnly)) return "Торговые точки";
   if (location.startsWith("/dealers/")) return "Карточка клиента";
   if (isDealerBasePath(location)) return "Клиенты";
   if (isClientMapPath(location)) return "Карта клиентов";
@@ -201,18 +211,34 @@ function NavLinksList({
           data-testid={item.testId}
         >
           <span className="min-w-0 flex-1 truncate text-left">{item.label}</span>
-          {item.testId === "nav-dealer-base" && item.badgeLoading ? (
+          {(item.testId === "nav-dealer-base" || item.testId === "nav-trade-points") && item.badgeLoading ? (
             <span
               className="h-6 min-w-7 shrink-0 animate-pulse rounded-md bg-muted"
               aria-busy
-              aria-label="Загрузка количества клиентов"
-              data-testid={variant === "sidebar" ? "text-sidebar-clients-count" : "text-mobile-sidebar-clients-count"}
+              aria-label={item.testId === "nav-trade-points" ? "Загрузка количества точек" : "Загрузка количества клиентов"}
+              data-testid={
+                item.testId === "nav-trade-points"
+                  ? variant === "sidebar"
+                    ? "text-sidebar-trade-points-count"
+                    : "text-mobile-sidebar-trade-points-count"
+                  : variant === "sidebar"
+                    ? "text-sidebar-clients-count"
+                    : "text-mobile-sidebar-clients-count"
+              }
             />
           ) : item.badge != null ? (
             <Badge
               variant="secondary"
               className="h-6 min-w-6 shrink-0 rounded-md border border-border/60 bg-muted px-1.5 text-xs tabular-nums text-foreground"
-              data-testid={variant === "sidebar" ? "text-sidebar-clients-count" : "text-mobile-sidebar-clients-count"}
+              data-testid={
+                item.testId === "nav-trade-points"
+                  ? variant === "sidebar"
+                    ? "text-sidebar-trade-points-count"
+                    : "text-mobile-sidebar-trade-points-count"
+                  : variant === "sidebar"
+                    ? "text-sidebar-clients-count"
+                    : "text-mobile-sidebar-clients-count"
+              }
             >
               {item.badge}
             </Badge>

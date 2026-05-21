@@ -18,10 +18,12 @@ import { INTERNAL_PROTOTYPE_ROUTES } from "@/lib/preview-config";
 import { ClientBaseActualizationProvider, useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { resolveSidebarWorkingDealerClientCount } from "@/lib/dealer-base-sidebar-client-count";
+import { countWorkingTradePointsForSidebar } from "@/lib/trade-point-list-for-actualization";
 import type { SalesUser } from "@/lib/sales-control-data";
 
 const LazySalesManagerWorkspace = lazy(() => import("@/pages/sales-manager-workspace"));
 const LazyDealerBase = lazy(() => import("@/pages/dealer-base"));
+const LazyTradePoints = lazy(() => import("@/pages/trade-points"));
 const LazyClientMap = lazy(() => import("@/pages/client-map"));
 const LazyDealerCardFoundation = lazy(() => import("@/pages/dealer-card-foundation"));
 const LazyDealerCardPage = lazy(() => import("@/pages/dealer-card-foundation").then((m) => ({ default: m.DealerCardPage })));
@@ -64,6 +66,7 @@ function suspensePage(Lazy: LazyExoticComponent<ComponentType<any>>): ComponentT
 
 const SalesManagerWorkspaceRoute = suspensePage(LazySalesManagerWorkspace);
 const DealerBaseRoute = suspensePage(LazyDealerBase);
+const TradePointsRoute = suspensePage(LazyTradePoints);
 const ClientMapRoute = suspensePage(LazyClientMap);
 const DealerCardFoundationRoute = suspensePage(LazyDealerCardFoundation);
 const DealerCardPageRoute = suspensePage(LazyDealerCardPage);
@@ -122,7 +125,15 @@ function AuthenticatedShell({
       }),
     [profile, actx.enabled, actx.loading, actx.state],
   );
-  const navItems = useMemo(() => getPilotNavItems(user.role, dealerNavCount), [user.role, dealerNavCount]);
+  const tradePointNavCount = useMemo(() => {
+    if (!actx.enabled) return undefined;
+    if (actx.loading) return null;
+    return countWorkingTradePointsForSidebar(profile, actx.state);
+  }, [actx.enabled, actx.loading, actx.state, profile]);
+  const navItems = useMemo(
+    () => getPilotNavItems(user.role, dealerNavCount, tradePointNavCount),
+    [user.role, dealerNavCount, tradePointNavCount],
+  );
 
   return (
     <AppShell
@@ -140,6 +151,7 @@ function AuthenticatedShell({
         <Route path="/embedded/bitrix24" component={Bitrix24PocRoute} />
         <Route path="/communications" component={CommunicationsRoute} />
         <Route path="/dealer-base" component={DealerBaseRoute} />
+        <Route path="/trade-points" component={TradePointsRoute} />
         <Route path="/client-map" component={ClientMapRoute} />
         <Route path="/catalog/:productId" component={ProductDetailPageRoute} />
         <Route path="/catalog" component={CatalogPageRoute} />
