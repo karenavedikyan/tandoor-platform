@@ -70,6 +70,8 @@ export function applyDealerBasePickerFilters(rows: DealerRow[], args: DealerBase
       if (!mgrOk) return false;
     }
     if (!q) return true;
+    const innRaw = row.actualizationInn ?? "";
+    const innDigits = innRaw.replace(/\D/g, "");
     const hay = [
       row.name,
       row.city,
@@ -80,9 +82,13 @@ export function applyDealerBasePickerFilters(rows: DealerRow[], args: DealerBase
       row.releaseAddress ?? "",
       row.clientTypeLabel ?? "",
       row.id,
+      innRaw,
+      innDigits,
     ]
       .join(" ")
       .toLowerCase();
-    return hay.includes(q);
+    if (hay.includes(q)) return true;
+    const qDigits = q.replace(/\D/g, "");
+    return Boolean(qDigits && innDigits && innDigits.includes(qDigits));
   });
 }

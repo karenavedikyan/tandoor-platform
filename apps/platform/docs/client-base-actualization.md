@@ -116,7 +116,7 @@
 - **Контекст:** `context/client-base-actualization-context.tsx` — загрузка, `persist(updater)`, `mergedDealerRows`, статус синхронизации.
 - **API:** `lib/client-base-actualization-api.ts` — вызовы GET/POST и разбор `storageMode` / ошибок.
 - **Стабильные id и проверки дублей:** `lib/client-base-actualization-stable-ids.ts` — генерация id, поиск дублей по ИНН / названию+городу.
-- **Список клиентов:** `pages/dealer-base.tsx` — строки из merge, кнопка «Добавить клиента», синхронизация.
+- **Список клиентов:** `pages/dealer-base.tsx` — строки из merge, кнопка «Добавить клиента», синхронизация. Поиск (`lib/dealer-base-picker-filters.ts`) ищет по названию, коду, городу, РОП, менеджеру, типу, адресу, идентификатору и `actualizationInn` (с нормализацией к цифрам — можно вводить ИНН с пробелами/дефисами или только цифры).
 - **Карточка:** `pages/dealer-card-foundation.tsx` — merge строки, кнопка «Редактировать», счётчики ТТ/юрлиц.
 - **Торговые точки:** `components/dealer-trade-points-section.tsx` — добавление / редактирование / архив при включённой актуализации и правах.
 - **Юрлица:** `components/dealer-legal-entities-section.tsx` — диалог формы, сохранение в `legalEntityOverridesByDealerId`, архив в `archivedLegalEntitiesById`, дубль ИНН, `SectionSaveButton` при актуализации; хелперы в `lib/client-base-actualization-legal-entities.ts`. Тот же блок подключён в **чистой анкете** `components/dealer-manual-actualization-page.tsx` (аккордеон «Юридические лица»), а не только в полной карточке `dealer-card-foundation.tsx`.
