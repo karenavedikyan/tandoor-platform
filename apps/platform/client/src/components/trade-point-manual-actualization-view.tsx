@@ -9,7 +9,6 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -39,7 +38,11 @@ import {
   inferShowcasePortalTypeFromCatalogProduct,
   resolveShowcaseMatrixClientCategory,
 } from "@/lib/trade-point-showcase-matrix-required";
-import { canEditDealerDuringActualization } from "@/lib/client-base-actualization-permissions";
+import {
+  canArchiveTradePointDuringActualization,
+  canEditDealerDuringActualization,
+} from "@/lib/client-base-actualization-permissions";
+import { getClientCategoryLabel } from "@/lib/client-category";
 import { nextManualTradePointInternalCode, isManualActualizationTradePointId, getTradePointDisplayCodeForActualization } from "@/lib/client-base-actualization-stable-ids";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
 import { toast } from "@/hooks/use-toast";
@@ -47,8 +50,10 @@ import { useSectionSaveFeedback } from "@/hooks/use-section-save-feedback";
 import { SectionSaveButton } from "@/components/section-save-button";
 import { TradePointShowcaseCatalogPanel } from "@/components/trade-point-showcase-catalog-panel";
 import { Bitrix24TasksPanel } from "@/components/bitrix24-tasks-panel";
+import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actualization-sync-status";
 import { canEditClientNextStep } from "@/lib/client-next-step-data";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { cn } from "@/lib/utils";
 
 function numOrNull(v: string): number | null {
   const t = v.trim();
@@ -102,15 +107,102 @@ function dashNum(n: number | null | undefined): string {
   return String(n);
 }
 
+const TP_CLEAN_SECTION_BASE = ["passport", "address_format", "responsibles", "showcase", "comments", "bitrix"] as const;
+
+function tpCleanSectionsLsKey(tradePointId: string): string {
+  return `tandoor-trade-point-clean-card-sections-v1-${tradePointId}`;
+}
+
+function isTpCleanSectionId(id: string, includeTasks: boolean): boolean {
+  if ((TP_CLEAN_SECTION_BASE as readonly string[]).includes(id)) return true;
+  return includeTasks && id === "tasks";
+}
+
+function readTpCleanOpenSections(tradePointId: string, includeTasks: boolean): string[] | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(tpCleanSectionsLsKey(tradePointId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return null;
+    return parsed.filter((x): x is string => typeof x === "string" && isTpCleanSectionId(x, includeTasks));
+  } catch {
+    return null;
+  }
+}
+
+function writeTpCleanOpenSections(tradePointId: string, ids: string[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(tpCleanSectionsLsKey(tradePointId), JSON.stringify(ids));
+  } catch {
+    /* ignore */
+  }
+}
+
+type TpSectionStatusKind = "empty" | "partial" | "complete" | "attention" | "no_showcase" | "needs_fill";
+
+function TradePointSectionStatusBadge(props: { status: TpSectionStatusKind }): ReactElement {
+  const { status } = props;
+  const map: Record<TpSectionStatusKind, { label: string; className: string }> = {
+    empty: { label: "Не заполнено", className: "border-muted-foreground/40 text-muted-foreground" },
+    partial: { label: "Есть данные", className: "border-amber-600/35 text-amber-950 dark:text-amber-100" },
+    complete: { label: "Заполнено", className: "border-emerald-600/40 bg-emerald-600/5 text-emerald-950 dark:text-emerald-50" },
+    attention: { label: "Требует внимания", className: "border-amber-600/50 bg-amber-500/10 text-amber-950 dark:text-amber-50" },
+    no_showcase: { label: "Нет витрины", className: "border-border text-muted-foreground" },
+    needs_fill: { label: "Нужно заполнить", className: "border-amber-600/40 text-amber-950 dark:text-amber-100" },
+  };
+  const m = map[status];
+  return (
+    <Badge variant="outline" className={cn("h-5 shrink-0 whitespace-nowrap px-2 py-0 text-[10px] font-normal leading-none", m.className)}>
+      {m.label}
+    </Badge>
+  );
+}
+
+function TpAccordionSectionTrigger(props: { title: string; summary: string; status: TpSectionStatusKind }): ReactElement {
+  const { title, summary, status } = props;
+  return (
+    <AccordionTrigger className="items-start gap-3 py-3.5 text-left hover:no-underline [&[data-state=open]]:bg-muted/20">
+      <div className="flex min-w-0 flex-1 flex-col gap-1 pr-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-semibold leading-snug text-foreground">{title}</span>
+          <TradePointSectionStatusBadge status={status} />
+        </div>
+        <p className="line-clamp-2 text-xs font-normal leading-relaxed text-muted-foreground">{summary}</p>
+      </div>
+    </AccordionTrigger>
+  );
+}
+
+function formatKindLabel(kind: string): string {
+  if (kind === "store") return "Магазин";
+  if (kind === "warehouse") return "Склад";
+  if (kind === "showroom") return "Шоурум";
+  if (kind === "office") return "Офис";
+  return "Другое";
+}
+
+function tpStatusKindLabel(kind: string): string {
+  if (kind === "working") return "Работает";
+  if (kind === "closed") return "Закрыта";
+  if (kind === "seasonal") return "Сезонная";
+  return "Требует проверки";
+}
+
 export function TradePointManualActualizationView(props: {
   dealer: DealerRow;
   point: DealerTradePoint;
   profile: ReleaseDemoProfile;
+  /** Точка в архиве — поля только для чтения */
+  isArchived?: boolean;
+  onRequestArchive?: () => void;
 }): ReactElement {
-  const { dealer, point, profile } = props;
+  const { dealer, point, profile, isArchived = false, onRequestArchive } = props;
   const actx = useClientBaseActualization();
   const { user } = useCurrentUser();
-  const canEdit = canEditDealerDuringActualization(profile, dealer);
+  const canEditBase = canEditDealerDuringActualization(profile, dealer);
+  const canEditUi = canEditBase && !isArchived;
 
   const manualRec = actx.state.manuallyCreatedTradePointsById[point.id];
   const fields = (manualRec?.fields ?? {}) as Record<string, unknown>;
@@ -274,7 +366,7 @@ export function TradePointManualActualizationView(props: {
       numOrNull(tInt) != null);
 
   const persistMain = useCallback(async (): Promise<boolean> => {
-    if (!canEdit) return false;
+    if (!canEditUi) return false;
     const iso = new Date().toISOString();
     const uid = profile.personaUserId;
     const uname = userLabelFromProfile(profile);
@@ -342,7 +434,7 @@ export function TradePointManualActualizationView(props: {
     return true;
   }, [
     actx,
-    canEdit,
+    canEditUi,
     dealer.id,
     point.id,
     name,
@@ -357,7 +449,7 @@ export function TradePointManualActualizationView(props: {
   ]);
 
   const persistShowcase = useCallback(async (): Promise<boolean> => {
-    if (!canEdit) return false;
+    if (!canEditUi) return false;
     const iso = new Date().toISOString();
     const uid = profile.personaUserId;
     const uname = userLabelFromProfile(profile);
@@ -399,7 +491,7 @@ export function TradePointManualActualizationView(props: {
     return true;
   }, [
     actx,
-    canEdit,
+    canEditUi,
     dealer.id,
     point.id,
     hasShowcase,
@@ -428,38 +520,320 @@ export function TradePointManualActualizationView(props: {
   const inheritedMgr = dealer.manager?.trim() || "—";
   const inheritedRop = dealer.ropName?.trim() || "—";
 
+  const openMatrixTasks = useMemo(
+    () => showcaseMatrixTasks.filter((t) => t.tradePointId === point.id && t.status === "new"),
+    [showcaseMatrixTasks, point.id],
+  );
+  const showTasksSection = openMatrixTasks.length > 0;
+
+  const orderedSectionIds = useMemo(() => {
+    const head = ["passport", "address_format", "responsibles", "showcase"] as const;
+    const tail = ["comments", "bitrix"] as const;
+    return [...head, ...(showTasksSection ? (["tasks"] as const) : []), ...tail] as string[];
+  }, [showTasksSection]);
+
+  const [openSections, setOpenSections] = useState<string[]>([]);
+  const [sectionsHydrated, setSectionsHydrated] = useState(false);
+
+  useEffect(() => {
+    const saved = readTpCleanOpenSections(point.id, true);
+    setOpenSections(saved ?? []);
+    setSectionsHydrated(true);
+  }, [point.id]);
+
+  useEffect(() => {
+    if (!sectionsHydrated) return;
+    writeTpCleanOpenSections(point.id, openSections);
+  }, [point.id, openSections, sectionsHydrated]);
+
+  useEffect(() => {
+    if (!showTasksSection && openSections.includes("tasks")) {
+      setOpenSections((prev) => prev.filter((id) => id !== "tasks"));
+    }
+  }, [showTasksSection, openSections]);
+
+  const onAccordionValueChange = useCallback(
+    (next: string[]) => {
+      const allowed = new Set<string>([...TP_CLEAN_SECTION_BASE, ...(showTasksSection ? ["tasks"] : [])]);
+      setOpenSections(next.filter((id) => allowed.has(id)));
+    },
+    [showTasksSection],
+  );
+
+  const allSectionsExpanded =
+    orderedSectionIds.length > 0 && orderedSectionIds.every((id) => openSections.includes(id));
+
+  const toggleExpandAll = useCallback(() => {
+    setOpenSections(allSectionsExpanded ? [] : [...orderedSectionIds]);
+  }, [allSectionsExpanded, orderedSectionIds]);
+
+  const expandPassportAndAddress = useCallback(() => {
+    setOpenSections((prev) => Array.from(new Set([...prev, "passport", "address_format"])));
+  }, []);
+
+  const heroContact = useMemo(() => {
+    const n = contactName.trim();
+    const p = contactPhone.trim();
+    if (n && p) return `${n} · ${p}`;
+    if (p) return p;
+    if (n) return n;
+    return "";
+  }, [contactName, contactPhone]);
+
+  const showcaseTriggerSummary = useMemo(() => {
+    const parts: string[] = [];
+    if (hasShowcase === null) parts.push("Состояние витрины не выбрано");
+    else if (hasShowcase === false) parts.push("Без витрины");
+    else {
+      parts.push("Есть витрина");
+      parts.push(`порталов всего ${dashNum(numOrNull(totalPortals))}`);
+      parts.push(`Tandoor ${dashNum(numOrNull(tTotal))}`);
+      parts.push(`свободно/конкуренты ${dashNum(summary.freeOrCompetitor)}`);
+      parts.push(`потенциал вх. ${dashNum(summary.entrancePotential)} · МК ${dashNum(summary.interiorPotential)}`);
+      parts.push(`дефицит матрицы ${matrixClientCategory ? missingRequiredModelCount : "—"}`);
+      parts.push(`моделей на витрине ${selectedShowcaseModels.length}`);
+    }
+    return parts.join(" · ");
+  }, [
+    hasShowcase,
+    totalPortals,
+    tTotal,
+    summary.freeOrCompetitor,
+    summary.entrancePotential,
+    summary.interiorPotential,
+    matrixClientCategory,
+    missingRequiredModelCount,
+    selectedShowcaseModels.length,
+  ]);
+
+  const sectionMeta = useMemo(() => {
+    const passportFilled = Boolean(name.trim()) && Boolean(formatKind) && Boolean(tpStatus);
+    const passportSummary = [name.trim() || "—", formatKindLabel(formatKind), tpStatusKindLabel(tpStatus)].join(" · ");
+    let passportStatus: TpSectionStatusKind = "empty";
+    if (passportFilled) passportStatus = tpStatus === "needs_review" ? "attention" : "complete";
+    else if (name.trim() || formatKind || tpStatus) passportStatus = "partial";
+
+    const cityOk = Boolean(city.trim());
+    const addrOk = Boolean(address.trim());
+    const addressSummary = [city.trim() || "—", (address.trim() || "—").slice(0, 80)].join(" · ");
+    let addressStatus: TpSectionStatusKind = "empty";
+    if (cityOk && addrOk) addressStatus = contactName.trim() || contactPhone.trim() ? "complete" : "partial";
+    else if (cityOk || addrOk) addressStatus = "partial";
+
+    const respSummary = `Менеджер: ${inheritedMgr} · РМ: ${inheritedRm}`;
+    const hasMgr = Boolean(dealer.manager?.trim());
+    const hasRm = Boolean(dealer.regionalManager?.trim());
+    const responsiblesStatus: TpSectionStatusKind =
+      !hasMgr && !hasRm ? "empty" : hasMgr && hasRm ? "complete" : "partial";
+
+    let showcaseStatusMeta: TpSectionStatusKind = "needs_fill";
+    if (hasShowcase === false) showcaseStatusMeta = "no_showcase";
+    else if (hasShowcase === null) showcaseStatusMeta = "needs_fill";
+    else if (summary.needsPrimaryInstall || portalOverfill || (matrixClientCategory && missingRequiredModelCount > 0)) {
+      showcaseStatusMeta = "attention";
+    } else if (numOrNull(totalPortals) != null && numOrNull(tTotal) != null && matrixClientCategory && missingRequiredModelCount === 0) {
+      showcaseStatusMeta = "complete";
+    } else {
+      showcaseStatusMeta = "partial";
+    }
+
+    const tasksSummary =
+      openMatrixTasks.length === 0 ? "Нет открытых задач" : `Открытых задач по витрине: ${openMatrixTasks.length}`;
+    const tasksStatus: TpSectionStatusKind = openMatrixTasks.length === 0 ? "complete" : "attention";
+
+    const cmt = tpComment.trim();
+    const commentsSummary = cmt ? `${cmt.slice(0, 100)}${cmt.length > 100 ? "…" : ""}` : "Комментарий не заполнен";
+    const commentsStatus: TpSectionStatusKind = cmt ? "complete" : "empty";
+
+    const bitrixSummary = "Задачи Bitrix24 по точке (компактно)";
+    const bitrixStatus: TpSectionStatusKind = "partial";
+
+    return {
+      passport: { summary: passportSummary, status: passportStatus },
+      address: { summary: addressSummary, status: addressStatus },
+      responsibles: { summary: respSummary, status: responsiblesStatus },
+      showcase: { summary: showcaseTriggerSummary, status: showcaseStatusMeta },
+      tasks: { summary: tasksSummary, status: tasksStatus },
+      comments: { summary: commentsSummary, status: commentsStatus },
+      bitrix: { summary: bitrixSummary, status: bitrixStatus },
+    };
+  }, [
+    name,
+    formatKind,
+    tpStatus,
+    city,
+    address,
+    contactName,
+    contactPhone,
+    inheritedMgr,
+    inheritedRm,
+    dealer.manager,
+    dealer.regionalManager,
+    showcaseTriggerSummary,
+    hasShowcase,
+    summary.needsPrimaryInstall,
+    portalOverfill,
+    matrixClientCategory,
+    missingRequiredModelCount,
+    totalPortals,
+    tTotal,
+    openMatrixTasks.length,
+    tpComment,
+  ]);
+
+  const canShowArchive =
+    Boolean(onRequestArchive) && canArchiveTradePointDuringActualization(profile, dealer, point) && !isArchived;
+
   return (
-    <div className="max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom))] space-y-4 sm:space-y-6" data-testid="page-trade-point-manual-actualization">
-      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-        <Button asChild variant="outline" className="min-h-11 w-full sm:w-auto">
-          <Link href={`/dealers/${dealer.id}`}>Назад к клиенту</Link>
-        </Button>
-        <Button asChild variant="secondary" className="min-h-11 w-full sm:w-auto">
-          <Link href="/dealer-base">К клиентской базе</Link>
-        </Button>
-      </div>
+    <div
+      className="min-w-0 max-w-full overflow-x-hidden bg-muted/15 pb-8 pt-1 max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:pb-10"
+      data-testid="page-trade-point-manual-actualization"
+    >
+      <div className="mx-auto w-full max-w-5xl space-y-4 px-3 sm:space-y-5 sm:px-4 lg:px-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          <Button asChild variant="ghost" size="sm" className="h-9 w-fit justify-start gap-1.5 px-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+            <Link href="/dealer-base">
+              <span aria-hidden>←</span> Назад
+            </Link>
+          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button asChild variant="outline" size="sm" className="h-9 min-w-[8.5rem] text-xs font-medium">
+              <Link href={`/dealers/${dealer.id}`}>К клиенту</Link>
+            </Button>
+            {canEditUi ? (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="h-9 min-w-[8.5rem] text-xs font-semibold"
+                data-testid="button-trade-point-edit"
+                onClick={expandPassportAndAddress}
+              >
+                Редактировать
+              </Button>
+            ) : null}
+            {canShowArchive ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 border-destructive/40 text-xs font-medium text-destructive hover:bg-destructive/10"
+                data-testid={`button-trade-point-archive-${point.id}`}
+                onClick={() => onRequestArchive?.()}
+              >
+                В архив
+              </Button>
+            ) : null}
+          </div>
+        </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">{point.name}</CardTitle>
-          <p className="text-xs text-muted-foreground">Клиент: {dealer.name}</p>
-          <p className="text-xs text-muted-foreground" data-testid={`text-trade-point-internal-code-${point.id}`}>
-            Код ТТ: {getTradePointDisplayCodeForActualization(point)}
-          </p>
-        </CardHeader>
-      </Card>
+        <ClientBaseActualizationSyncStatus
+          compact
+          isLoading={actx.loading}
+          meta={actx.meta}
+          syncStatus={actx.syncStatus}
+          onRetry={() => void actx.refresh()}
+        />
 
-      <Accordion type="multiple" defaultValue={["passport", "showcase"]} className="rounded-2xl border border-border/80 bg-card px-3 sm:px-4">
-        <AccordionItem value="passport" data-testid="section-trade-point-passport">
-          <AccordionTrigger className="text-left text-sm font-semibold">Паспорт торговой точки</AccordionTrigger>
-          <AccordionContent className="grid gap-3 sm:grid-cols-2">
+        <section className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm ring-1 ring-emerald-600/10">
+          <div className="border-b border-emerald-600/10 bg-emerald-600/[0.07] px-4 py-3.5 sm:px-5">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+              <h1 className="text-lg font-semibold leading-snug tracking-tight text-foreground sm:text-xl">{name.trim() || point.name}</h1>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Код ТТ</span>
+                <span className="font-mono text-sm font-semibold text-emerald-900 dark:text-emerald-100" data-testid={`text-trade-point-internal-code-${point.id}`}>
+                  {getTradePointDisplayCodeForActualization(point)}
+                </span>
+              </div>
+            </div>
+          </div>
+          <div className="grid gap-3 px-4 py-4 text-sm sm:grid-cols-2 sm:px-5">
+            <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2 sm:col-span-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Клиент</p>
+              <p className="mt-0.5 font-medium text-foreground">{dealer.name}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Код клиента: <span className="font-mono text-foreground">{dealer.releaseCode?.trim() || "—"}</span>
+              </p>
+            </div>
+            <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Город</p>
+              <p className="mt-0.5 font-medium text-foreground">{city.trim() || "—"}</p>
+            </div>
+            <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Формат / категория</p>
+              <p className="mt-0.5 font-medium text-foreground">
+                {formatKindLabel(formatKind)} · {getClientCategoryLabel(dealer.clientCategory)}
+              </p>
+            </div>
+            <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2 sm:col-span-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Адрес</p>
+              <p className="mt-0.5 whitespace-pre-wrap break-words leading-snug text-foreground">{address.trim() || "—"}</p>
+            </div>
+            <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2 sm:col-span-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Основной контакт</p>
+              <p className="mt-0.5 text-foreground">{heroContact || "—"}</p>
+            </div>
+            <div className="flex flex-wrap gap-2 sm:col-span-2">
+              {isArchived ? (
+                <Badge variant="secondary" className="text-[10px] font-normal">
+                  В архиве
+                </Badge>
+              ) : null}
+              {hasShowcase === null ? (
+                <Badge variant="outline" className="border-amber-600/40 text-[10px] font-normal text-amber-950 dark:text-amber-100">
+                  Витрина не заполнена
+                </Badge>
+              ) : hasShowcase === false ? (
+                <Badge variant="outline" className="text-[10px] font-normal">
+                  Нет витрины
+                </Badge>
+              ) : (
+                <Badge className="bg-emerald-700 text-[10px] font-normal text-white hover:bg-emerald-700">Есть витрина</Badge>
+              )}
+              {hasShowcase === true && matrixClientCategory && missingRequiredModelCount > 0 ? (
+                <Badge variant="outline" className="border-amber-600/45 text-[10px] font-normal text-amber-950 dark:text-amber-100">
+                  Есть дефицит матрицы
+                </Badge>
+              ) : null}
+              {numOrNull(totalPortals) != null && numOrNull(totalPortals)! >= 0 ? (
+                <Badge variant="outline" className="text-[10px] font-normal">
+                  Порталы: {numOrNull(totalPortals)}
+                </Badge>
+              ) : hasShowcase === true ? (
+                <Badge variant="outline" className="text-[10px] font-normal text-muted-foreground">
+                  Порталы: —
+                </Badge>
+              ) : null}
+            </div>
+          </div>
+        </section>
+
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Разделы анкеты</p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-9 w-full text-xs sm:w-auto"
+            data-testid="button-trade-point-sections-expand-all"
+            onClick={toggleExpandAll}
+          >
+            {allSectionsExpanded ? "Свернуть всё" : "Развернуть всё"}
+          </Button>
+        </div>
+
+        <Accordion type="multiple" className="space-y-2" value={openSections} onValueChange={onAccordionValueChange}>
+        <AccordionItem value="passport" data-testid="section-trade-point-passport" className="overflow-hidden rounded-xl border border-border/60 bg-card !border-b-0 shadow-sm">
+          <TpAccordionSectionTrigger title="Паспорт торговой точки" summary={sectionMeta.passport.summary} status={sectionMeta.passport.status} />
+          <AccordionContent className="border-t border-border/40 px-2 pb-3 pt-2 text-sm sm:px-3">
+            <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1 sm:col-span-2">
               <Label className="text-xs">Название</Label>
-              <Input className="min-h-10" value={name} onChange={(e) => { setName(e.target.value); mainSave.markDirty(); }} disabled={!canEdit} />
+              <Input className="min-h-10" value={name} onChange={(e) => { setName(e.target.value); mainSave.markDirty(); }} disabled={!canEditUi} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Формат</Label>
-              <Select value={formatKind} onValueChange={(v) => { setFormatKind(v); mainSave.markDirty(); }} disabled={!canEdit}>
+              <Select value={formatKind} onValueChange={(v) => { setFormatKind(v); mainSave.markDirty(); }} disabled={!canEditUi}>
                 <SelectTrigger className="min-h-10">
                   <SelectValue />
                 </SelectTrigger>
@@ -474,7 +848,7 @@ export function TradePointManualActualizationView(props: {
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Статус</Label>
-              <Select value={tpStatus} onValueChange={(v) => { setTpStatus(v); mainSave.markDirty(); }} disabled={!canEdit}>
+              <Select value={tpStatus} onValueChange={(v) => { setTpStatus(v); mainSave.markDirty(); }} disabled={!canEditUi}>
                 <SelectTrigger className="min-h-10">
                   <SelectValue />
                 </SelectTrigger>
@@ -486,27 +860,31 @@ export function TradePointManualActualizationView(props: {
                 </SelectContent>
               </Select>
             </div>
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+
+        <AccordionItem value="address_format" data-testid="section-trade-point-address-format" className="overflow-hidden rounded-xl border border-border/60 bg-card !border-b-0 shadow-sm">
+          <TpAccordionSectionTrigger title="Адрес и формат" summary={sectionMeta.address.summary} status={sectionMeta.address.status} />
+          <AccordionContent className="border-t border-border/40 px-2 pb-3 pt-2 text-sm sm:px-3">
+            <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <Label className="text-xs">Город</Label>
-              <Input className="min-h-10" value={city} onChange={(e) => { setCity(e.target.value); mainSave.markDirty(); }} disabled={!canEdit} />
+              <Input className="min-h-10" value={city} onChange={(e) => { setCity(e.target.value); mainSave.markDirty(); }} disabled={!canEditUi} />
             </div>
             <div className="space-y-1 sm:col-span-2">
               <Label className="text-xs">Адрес</Label>
-              <Textarea rows={2} value={address} onChange={(e) => { setAddress(e.target.value); mainSave.markDirty(); }} disabled={!canEdit} />
+              <Textarea rows={2} value={address} onChange={(e) => { setAddress(e.target.value); mainSave.markDirty(); }} disabled={!canEditUi} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Контакт точки</Label>
-              <Input className="min-h-10" value={contactName} onChange={(e) => { setContactName(e.target.value); mainSave.markDirty(); }} disabled={!canEdit} />
+              <Input className="min-h-10" value={contactName} onChange={(e) => { setContactName(e.target.value); mainSave.markDirty(); }} disabled={!canEditUi} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Телефон точки</Label>
-              <Input className="min-h-10" value={contactPhone} onChange={(e) => { setContactPhone(e.target.value); mainSave.markDirty(); }} disabled={!canEdit} />
+              <Input className="min-h-10" value={contactPhone} onChange={(e) => { setContactPhone(e.target.value); mainSave.markDirty(); }} disabled={!canEditUi} />
             </div>
-            <div className="space-y-1 sm:col-span-2">
-              <Label className="text-xs">Комментарий</Label>
-              <Textarea rows={2} value={tpComment} onChange={(e) => { setTpComment(e.target.value); mainSave.markDirty(); }} disabled={!canEdit} />
-            </div>
-            {canEdit ? (
+            {canEditUi ? (
               <div className="sm:col-span-2">
                 <SectionSaveButton
                   testId="button-trade-point-section-save-main"
@@ -516,12 +894,13 @@ export function TradePointManualActualizationView(props: {
                 />
               </div>
             ) : null}
+            </div>
           </AccordionContent>
         </AccordionItem>
 
-        <AccordionItem value="responsibles" data-testid="section-trade-point-responsibles">
-          <AccordionTrigger className="text-left text-sm font-semibold">Ответственные по точке</AccordionTrigger>
-          <AccordionContent className="space-y-2 text-sm text-muted-foreground">
+        <AccordionItem value="responsibles" data-testid="section-trade-point-responsibles" className="overflow-hidden rounded-xl border border-border/60 bg-card !border-b-0 shadow-sm">
+          <TpAccordionSectionTrigger title="Ответственные" summary={sectionMeta.responsibles.summary} status={sectionMeta.responsibles.status} />
+          <AccordionContent className="border-t border-border/40 space-y-2 px-2 pb-3 pt-2 text-sm text-muted-foreground sm:px-3">
             <p>
               <span className="font-medium text-foreground">Менеджер:</span> {inheritedMgr}{" "}
               <span className="text-xs">(унаследовано от клиента)</span>
@@ -537,26 +916,15 @@ export function TradePointManualActualizationView(props: {
           </AccordionContent>
         </AccordionItem>
 
-        <AccordionItem value="showcase" data-testid="section-trade-point-showcase-portals">
-          <AccordionTrigger className="text-left text-sm font-semibold">Витрина и порталы</AccordionTrigger>
-          <AccordionContent className="space-y-4 overflow-x-hidden pt-1">
+        <AccordionItem value="showcase" data-testid="section-trade-point-showcase-portals" className="overflow-hidden rounded-xl border border-border/60 bg-card !border-b-0 shadow-sm">
+          <TpAccordionSectionTrigger title="Витрина и порталы" summary={sectionMeta.showcase.summary} status={sectionMeta.showcase.status} />
+          <AccordionContent className="space-y-3 overflow-x-hidden border-t border-border/40 px-2 pb-3 pt-2 sm:px-3">
             <div
               className="rounded-xl border border-border/70 bg-muted/10 p-3 sm:p-4"
               data-testid="section-showcase-summary"
             >
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div className="min-w-0 space-y-2">
-                  {hasShowcase === null ? (
-                    <Badge variant="secondary" className="font-normal">
-                      Не заполнено
-                    </Badge>
-                  ) : hasShowcase === false ? (
-                    <Badge variant="outline" className="font-normal">
-                      Нет витрины
-                    </Badge>
-                  ) : (
-                    <Badge className="bg-emerald-700 font-normal text-white hover:bg-emerald-700">Есть витрина</Badge>
-                  )}
                   {hasShowcase === true ? (
                     <p className="text-xs leading-relaxed text-muted-foreground">
                       Порталы всего: {dashNum(numOrNull(totalPortals))} · Tandoor: {dashNum(numOrNull(tTotal))} · Свободно / конкуренты:{" "}
@@ -569,7 +937,7 @@ export function TradePointManualActualizationView(props: {
                     <p className="text-xs text-muted-foreground">Выберите состояние витрины или отложите заполнение.</p>
                   )}
                 </div>
-                {canEdit ? (
+                {canEditUi ? (
                   <div className="hidden shrink-0 flex-col items-stretch gap-2 md:flex md:min-w-[220px] md:items-end">
                     <SectionSaveButton
                       testId="button-showcase-save"
@@ -636,11 +1004,11 @@ export function TradePointManualActualizationView(props: {
               ) : null}
             </div>
 
-            {hasShowcase === null && !canEdit ? (
+            {hasShowcase === null && !canEditUi ? (
               <p className="text-sm text-muted-foreground">Состояние витрины не заполнено.</p>
             ) : null}
 
-            {hasShowcase === null && canEdit ? (
+            {hasShowcase === null && canEditUi ? (
               <div className="grid gap-2 sm:grid-cols-3">
                 <Button
                   type="button"
@@ -685,7 +1053,7 @@ export function TradePointManualActualizationView(props: {
               <div className="rounded-xl border border-dashed border-border/80 bg-muted/15 px-4 py-6 text-center">
                 <p className="text-sm font-medium text-foreground">Витрины нет</p>
                 <p className="mt-1 text-xs text-muted-foreground">Каталог моделей и расчёт дефицита скрыты, пока не отмечено «Есть витрина».</p>
-                {canEdit ? (
+                {canEditUi ? (
                   <div className="mt-4 flex flex-wrap justify-center gap-2">
                     <Button
                       type="button"
@@ -731,7 +1099,7 @@ export function TradePointManualActualizationView(props: {
                             setTotalPortals(e.target.value);
                             markShowcaseDirty();
                           }}
-                          disabled={!canEdit}
+                          disabled={!canEditUi}
                         />
                       </div>
                       <div className="space-y-1">
@@ -745,7 +1113,7 @@ export function TradePointManualActualizationView(props: {
                             setEntrancePortals(e.target.value);
                             markShowcaseDirty();
                           }}
-                          disabled={!canEdit}
+                          disabled={!canEditUi}
                         />
                       </div>
                       <div className="space-y-1">
@@ -759,7 +1127,7 @@ export function TradePointManualActualizationView(props: {
                             setInteriorPortals(e.target.value);
                             markShowcaseDirty();
                           }}
-                          disabled={!canEdit}
+                          disabled={!canEditUi}
                         />
                       </div>
                       <div className="space-y-1">
@@ -773,7 +1141,7 @@ export function TradePointManualActualizationView(props: {
                             setArea(e.target.value);
                             markShowcaseDirty();
                           }}
-                          disabled={!canEdit}
+                          disabled={!canEditUi}
                         />
                       </div>
                     </div>
@@ -793,7 +1161,7 @@ export function TradePointManualActualizationView(props: {
                             setTTotal(e.target.value);
                             markShowcaseDirty();
                           }}
-                          disabled={!canEdit}
+                          disabled={!canEditUi}
                         />
                       </div>
                       <div className="space-y-1">
@@ -807,7 +1175,7 @@ export function TradePointManualActualizationView(props: {
                             setTEnt(e.target.value);
                             markShowcaseDirty();
                           }}
-                          disabled={!canEdit}
+                          disabled={!canEditUi}
                         />
                       </div>
                       <div className="space-y-1">
@@ -821,7 +1189,7 @@ export function TradePointManualActualizationView(props: {
                             setTInt(e.target.value);
                             markShowcaseDirty();
                           }}
-                          disabled={!canEdit}
+                          disabled={!canEditUi}
                         />
                       </div>
                       <div className="space-y-1">
@@ -834,7 +1202,7 @@ export function TradePointManualActualizationView(props: {
                             setCompPortals(e.target.value);
                             markShowcaseDirty();
                           }}
-                          disabled={!canEdit}
+                          disabled={!canEditUi}
                         />
                       </div>
                     </div>
@@ -895,7 +1263,7 @@ export function TradePointManualActualizationView(props: {
                           setFillingComment(e.target.value);
                           markShowcaseDirty();
                         }}
-                        disabled={!canEdit}
+                        disabled={!canEditUi}
                       />
                     </div>
                     <div className="space-y-1">
@@ -907,7 +1275,7 @@ export function TradePointManualActualizationView(props: {
                           setShowcaseComment(e.target.value);
                           markShowcaseDirty();
                         }}
-                        disabled={!canEdit}
+                        disabled={!canEditUi}
                       />
                     </div>
                     <div className="space-y-1">
@@ -918,7 +1286,7 @@ export function TradePointManualActualizationView(props: {
                           setPriority(v === "__none__" ? "" : v);
                           markShowcaseDirty();
                         }}
-                        disabled={!canEdit}
+                        disabled={!canEditUi}
                       >
                         <SelectTrigger className="min-h-10">
                           <SelectValue placeholder="Не выбран" />
@@ -940,7 +1308,7 @@ export function TradePointManualActualizationView(props: {
                           setCompetitorsListed(e.target.value);
                           markShowcaseDirty();
                         }}
-                        disabled={!canEdit}
+                        disabled={!canEditUi}
                       />
                     </div>
                     <div className="space-y-1">
@@ -952,7 +1320,7 @@ export function TradePointManualActualizationView(props: {
                           setFirstNeed(e.target.value);
                           markShowcaseDirty();
                         }}
-                        disabled={!canEdit}
+                        disabled={!canEditUi}
                       />
                     </div>
                     <div className="space-y-1">
@@ -964,14 +1332,14 @@ export function TradePointManualActualizationView(props: {
                           setRmComment(e.target.value);
                           markShowcaseDirty();
                         }}
-                        disabled={!canEdit}
+                        disabled={!canEditUi}
                       />
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <Checkbox
                         id="exp-pot"
                         checked={expPot === true}
-                        disabled={!canEdit}
+                        disabled={!canEditUi}
                         onCheckedChange={(v) => {
                           setExpPot(v === true ? true : v === false ? false : null);
                           markShowcaseDirty();
@@ -991,7 +1359,7 @@ export function TradePointManualActualizationView(props: {
                           setAddPortals(e.target.value);
                           markShowcaseDirty();
                         }}
-                        disabled={!canEdit}
+                        disabled={!canEditUi}
                       />
                     </div>
                   </CollapsibleContent>
@@ -1002,7 +1370,7 @@ export function TradePointManualActualizationView(props: {
                   tradePointId={point.id}
                   dealerId={dealer.id}
                   matrixClientCategory={matrixClientCategory}
-                  canEdit={canEdit}
+                  canEdit={canEditUi}
                   actorUserId={user?.id ?? profile.personaUserId}
                   actorLabel={(user?.name ?? "").trim() || userLabelFromProfile(profile)}
                   selectedShowcaseModels={selectedShowcaseModels}
@@ -1015,7 +1383,7 @@ export function TradePointManualActualizationView(props: {
               </>
             ) : null}
 
-            {canEdit ? (
+            {canEditUi ? (
               <div className="sticky bottom-0 z-20 -mx-3 mt-4 flex items-center justify-between gap-3 border-t border-border/80 bg-background/95 px-3 py-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/90 sm:-mx-4 md:hidden">
                 <p
                   className={
@@ -1045,20 +1413,71 @@ export function TradePointManualActualizationView(props: {
             ) : null}
           </AccordionContent>
         </AccordionItem>
-      </Accordion>
 
-      <div data-testid="section-trade-point-bitrix">
-        <Bitrix24TasksPanel
-          scope="trade_point"
-          dealerId={dealer.id}
-          dealerName={dealer.name}
-          tradePointId={point.id}
-          tradePointName={point.name}
-          canCreate={canEditClientNextStep(profile, dealer)}
-          actorUserId={user?.id ?? profile.personaUserId}
-          actorLabel={user?.name ?? userLabelFromProfile(profile)}
-          compact
-        />
+        {showTasksSection ? (
+          <AccordionItem
+            value="tasks"
+            data-testid="section-trade-point-showcase-tasks-summary"
+            className="overflow-hidden rounded-xl border border-border/60 bg-card !border-b-0 shadow-sm"
+          >
+            <TpAccordionSectionTrigger
+              title="Задачи по витрине"
+              summary={sectionMeta.tasks.summary}
+              status={sectionMeta.tasks.status}
+            />
+            <AccordionContent className="border-t border-border/40 space-y-2 px-2 pb-3 pt-2 text-sm sm:px-3">
+              <p className="text-xs text-muted-foreground">
+                Полный список и отметки статуса — во вкладке «Задачи» внутри раздела «Витрина и порталы» (каталог моделей).
+              </p>
+              <ul className="list-inside list-disc space-y-1 text-sm text-foreground">
+                {openMatrixTasks.slice(0, 8).map((t) => (
+                  <li key={t.id}>{t.productName.trim() || t.productId}</li>
+                ))}
+              </ul>
+              {openMatrixTasks.length > 8 ? (
+                <p className="text-xs text-muted-foreground">И ещё {openMatrixTasks.length - 8}…</p>
+              ) : null}
+            </AccordionContent>
+          </AccordionItem>
+        ) : null}
+
+        <AccordionItem value="comments" data-testid="section-trade-point-comments" className="overflow-hidden rounded-xl border border-border/60 bg-card !border-b-0 shadow-sm">
+          <TpAccordionSectionTrigger title="Комментарии" summary={sectionMeta.comments.summary} status={sectionMeta.comments.status} />
+          <AccordionContent className="border-t border-border/40 px-2 pb-3 pt-2 text-sm sm:px-3">
+            <div className="space-y-1 sm:col-span-2">
+              <Label className="text-xs">Комментарий по точке</Label>
+              <Textarea rows={3} value={tpComment} onChange={(e) => { setTpComment(e.target.value); mainSave.markDirty(); }} disabled={!canEditUi} />
+            </div>
+            {canEditUi ? (
+              <div className="mt-3">
+                <SectionSaveButton
+                  testId="button-trade-point-section-save-comments"
+                  statusTestId="text-save-status-trade-point-main-view"
+                  phase={mainSave.phase}
+                  onSave={() => void mainSave.runSave(persistMain)}
+                />
+              </div>
+            ) : null}
+          </AccordionContent>
+        </AccordionItem>
+
+        <AccordionItem value="bitrix" data-testid="section-trade-point-bitrix" className="overflow-hidden rounded-xl border border-border/60 bg-card !border-b-0 shadow-sm">
+          <TpAccordionSectionTrigger title="Bitrix24" summary={sectionMeta.bitrix.summary} status={sectionMeta.bitrix.status} />
+          <AccordionContent className="border-t border-border/40 px-2 pb-3 pt-2 sm:px-3">
+            <Bitrix24TasksPanel
+              scope="trade_point"
+              dealerId={dealer.id}
+              dealerName={dealer.name}
+              tradePointId={point.id}
+              tradePointName={point.name}
+              canCreate={canEditClientNextStep(profile, dealer)}
+              actorUserId={user?.id ?? profile.personaUserId}
+              actorLabel={user?.name ?? userLabelFromProfile(profile)}
+              compact
+            />
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
       </div>
     </div>
   );
