@@ -38,6 +38,7 @@ import {
 } from "@/lib/bitrix24-task-links";
 import { MOCK_AUTH_CHANGED_EVENT } from "@/lib/mock-auth";
 import { loadReleaseDemoProfile, RELEASE_DEMO_PROFILE_EVENT, type ReleaseDemoProfile } from "@/lib/release-demo-profile";
+import { formatDisplayDateTime } from "@/lib/format-display-date";
 import { cn } from "@/lib/utils";
 
 const LIST_LIMIT = 10;
@@ -45,16 +46,7 @@ const IMPORT_FETCH_LIMIT = 50;
 const IMPORT_PREVIEW = 5;
 
 function formatRuDateTime(iso: string): string {
-  const d = Date.parse(iso);
-  if (!Number.isFinite(d)) return iso;
-  try {
-    return new Intl.DateTimeFormat("ru-RU", {
-      dateStyle: "short",
-      timeStyle: "short",
-    }).format(new Date(d));
-  } catch {
-    return iso;
-  }
+  return formatDisplayDateTime(iso);
 }
 
 type Scope = "dealer" | "trade_point";
