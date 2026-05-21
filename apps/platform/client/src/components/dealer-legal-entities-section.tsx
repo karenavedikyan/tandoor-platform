@@ -53,6 +53,7 @@ import {
   restoreLegalEntityFromArchive,
 } from "@/lib/client-base-actualization-legal-entities";
 import { cn } from "@/lib/utils";
+import { formatDisplayDate } from "@/lib/format-display-date";
 
 type Props = {
   row: DealerRow;
@@ -162,14 +163,7 @@ function isFilled(v: string | undefined): boolean {
 
 function entityTypeLabel(v: string | undefined): string {
   const t = (v ?? "").trim() as EntityTypeValue;
-  return ENTITY_TYPE_LABELS[t] ?? (t ? t : "—");
-}
-
-function formatUpdatedAt(iso: string | undefined): string | null {
-  if (!iso?.trim()) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return ENTITY_TYPE_LABELS[t] ?? (t ? t : "Не указано");
 }
 
 type FieldDirtyKey =
@@ -1280,7 +1274,7 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
       ) : (
         <div className="space-y-2">
           {visible.active.map((e) => {
-            const updatedLabel = formatUpdatedAt(e.updatedAt);
+            const updatedLabel = formatDisplayDate(e.updatedAt);
             const manualBadge =
               e.isPassportSeed && legalEntityHasOverrides(e.id) ? (
                 <Badge variant="outline" className="text-[10px] font-normal">
@@ -1356,7 +1350,7 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
                       ) : (
                         <p className="text-xs italic text-muted-foreground">Контакт не указан</p>
                       )}
-                      {updatedLabel ? (
+                      {updatedLabel !== "Не указано" ? (
                         <p className="text-[11px] text-muted-foreground">Обновлено: {updatedLabel}</p>
                       ) : null}
                       {isFilled(e.comment) ? <p className="text-xs text-foreground">{e.comment}</p> : null}
@@ -1384,9 +1378,9 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
                         {e.status !== "archived" ? (
                           <Button
                             type="button"
-                            variant="secondary"
+                            variant="outline"
                             size="sm"
-                            className="min-h-9 px-2 text-xs font-semibold"
+                            className="min-h-8 border-destructive/25 px-2 text-xs font-medium text-destructive hover:bg-destructive/[0.05]"
                             data-testid={`button-legal-entity-delete-${e.id}`}
                             onClick={() => setArchiveTarget({ id: e.id, name: e.name })}
                           >

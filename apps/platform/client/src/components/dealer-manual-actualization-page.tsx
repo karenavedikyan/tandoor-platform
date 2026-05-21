@@ -73,6 +73,7 @@ import {
   loadClientNextStepsStorage,
 } from "@/lib/client-next-step-data";
 import { cn } from "@/lib/utils";
+import { formatDisplayDate, formatDisplayDateTime } from "@/lib/format-display-date";
 
 const PASSPORT_KIND_LABELS: Record<string, string> = {
   ip: "ИП",
@@ -132,14 +133,14 @@ type SectionStatusKind = "empty" | "partial" | "complete" | "attention";
 function SectionStatusBadge(props: { status: SectionStatusKind }): ReactElement {
   const { status } = props;
   const map: Record<SectionStatusKind, { label: string; className: string }> = {
-    empty: { label: "Не заполнено", className: "border-muted-foreground/40 text-muted-foreground" },
-    partial: { label: "Есть данные", className: "border-amber-600/35 text-amber-950 dark:text-amber-100" },
-    complete: { label: "Заполнено", className: "border-emerald-600/40 bg-emerald-600/5 text-emerald-950 dark:text-emerald-50" },
-    attention: { label: "Требует внимания", className: "border-amber-600/50 bg-amber-500/10 text-amber-950 dark:text-amber-50" },
+    empty: { label: "Не заполнено", className: "border-border/60 bg-muted/30 text-muted-foreground" },
+    partial: { label: "Есть данные", className: "border-emerald-600/20 bg-emerald-600/[0.06] text-emerald-950 dark:text-emerald-100" },
+    complete: { label: "Заполнено", className: "border-emerald-600/35 bg-emerald-600/10 text-emerald-950 dark:text-emerald-50" },
+    attention: { label: "Требует внимания", className: "border-amber-500/40 bg-amber-500/[0.08] text-amber-950 dark:text-amber-100" },
   };
   const m = map[status];
   return (
-    <Badge variant="outline" className={cn("h-5 shrink-0 whitespace-nowrap px-2 py-0 text-[10px] font-normal leading-none", m.className)}>
+    <Badge variant="outline" className={cn("h-[1.125rem] shrink-0 whitespace-nowrap px-1.5 py-0 text-[10px] font-normal leading-none", m.className)}>
       {m.label}
     </Badge>
   );
@@ -148,13 +149,13 @@ function SectionStatusBadge(props: { status: SectionStatusKind }): ReactElement 
 function AccordionSectionTrigger(props: { title: string; summary: string; status: SectionStatusKind }): ReactElement {
   const { title, summary, status } = props;
   return (
-    <AccordionTrigger className="items-start gap-3 py-3.5 text-left hover:no-underline [&[data-state=open]]:bg-muted/20">
-      <div className="flex min-w-0 flex-1 flex-col gap-1 pr-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-semibold leading-snug text-foreground">{title}</span>
+    <AccordionTrigger className="items-start gap-2 px-3.5 py-3.5 text-left hover:no-underline max-sm:px-3.5 max-sm:py-3.5 [&[data-state=open]]:bg-emerald-600/[0.04]">
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5 pr-1">
+        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+          <span className="text-sm font-semibold leading-tight text-foreground">{title}</span>
           <SectionStatusBadge status={status} />
         </div>
-        <p className="line-clamp-2 text-xs font-normal leading-relaxed text-muted-foreground">{summary}</p>
+        <p className="line-clamp-2 text-sm font-normal leading-snug text-muted-foreground">{summary}</p>
       </div>
     </AccordionTrigger>
   );
@@ -167,6 +168,22 @@ function str(v: unknown): string {
 
 function mergedManualFields(manual: { fields: Record<string, unknown> } | undefined, ov: Record<string, unknown> | undefined): Record<string, unknown> {
   return { ...(manual?.fields ?? {}), ...(ov ?? {}) };
+}
+
+function HeroCell({ label, value, testId }: { label: string; value: string | undefined; testId?: string }): ReactElement {
+  const v = value?.trim();
+  const empty = !v || v === "—";
+  return (
+    <div className="min-w-0">
+      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p
+        className={cn("mt-0.5 text-[13px] leading-snug", empty ? "text-muted-foreground" : "font-medium text-foreground")}
+        data-testid={testId}
+      >
+        {empty ? "Не указано" : v}
+      </p>
+    </div>
+  );
 }
 
 export function DealerManualActualizationPage(props: { baseRow: DealerRow; profile: ReleaseDemoProfile }): ReactElement {
@@ -341,7 +358,7 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
     const contactsStatus: SectionStatusKind =
       contacts.length === 0 ? "empty" : primary && (primary.phone?.trim() || primary.email?.trim()) ? "complete" : "partial";
     const contactsSummary =
-      contacts.length === 0 ? "Контакты не добавлены" : `${contacts.length} контакт(ов) · основной: ${primary?.fullName ?? "—"}`;
+      contacts.length === 0 ? "Контакты не добавлены" : `${contacts.length} контакт(ов) · основной: ${primary?.fullName?.trim() || "Не указано"}`;
 
     const legalStatus: SectionStatusKind = activeLegals.length === 0 ? "empty" : "partial";
     const legalSummary = activeLegals.length === 0 ? "Юрлица не добавлены" : `Активных юрлиц: ${activeLegals.length}`;
@@ -359,7 +376,9 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
     let nextStatus: SectionStatusKind = nextStepRec ? "partial" : "empty";
     if (nextStepRec?.contactDate?.trim()) nextStatus = "complete";
     const nextSummary = nextStepRec
-      ? `${clientNextStepActionLabel(nextStepRec.actionType)}${nextStepRec.contactDate ? ` · ${nextStepRec.contactDate}` : ""}`
+      ? `${clientNextStepActionLabel(nextStepRec.actionType)}${
+          nextStepRec.contactDate?.trim() ? ` · ${formatDisplayDate(nextStepRec.contactDate)}` : ""
+        }`
       : "Следующий шаг не зафиксирован";
 
     return {
@@ -396,20 +415,20 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
 
   return (
     <div className="min-w-0 max-w-full overflow-x-hidden bg-muted/15 pb-8 pt-1 sm:pb-10" data-testid="page-dealer-manual-actualization">
-      <div className="mx-auto w-full max-w-5xl space-y-4 px-3 sm:space-y-5 sm:px-4 lg:px-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <Button asChild variant="ghost" size="sm" className="h-9 w-fit justify-start gap-1.5 px-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+      <div className="mx-auto w-full max-w-5xl space-y-3 px-3 sm:space-y-4 sm:px-4 lg:px-6">
+        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+          <Button asChild variant="ghost" size="sm" className="h-8 w-fit justify-start gap-1.5 px-2 text-xs font-medium text-muted-foreground hover:text-foreground">
             <Link href="/dealer-base">
               <span aria-hidden>←</span> Назад к клиентской базе
             </Link>
           </Button>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
             {canEdit ? (
               <Button
                 type="button"
-                variant="secondary"
+                variant="default"
                 size="sm"
-                className="min-h-9 min-w-[9rem] font-semibold"
+                className="h-8 min-w-[7.5rem] bg-emerald-700 px-3 text-xs font-semibold text-white hover:bg-emerald-800"
                 data-testid="button-dealer-edit"
                 onClick={() => setEditOpen(true)}
               >
@@ -421,7 +440,7 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
                 type="button"
                 variant="outline"
                 size="sm"
-                className="min-h-9 border-destructive/40 font-medium text-destructive hover:bg-destructive/10"
+                className="h-8 border-destructive/30 px-3 text-xs font-medium text-destructive hover:bg-destructive/[0.06]"
                 data-testid={`button-dealer-delete-${baseRow.id}`}
                 onClick={() => setDeleteOpen(true)}
               >
@@ -439,53 +458,34 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
           onRetry={() => void actx.refresh()}
         />
 
-        <section className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm ring-1 ring-emerald-600/10">
-          <div className="border-b border-emerald-600/10 bg-emerald-600/[0.07] px-4 py-3.5 sm:px-5">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-              <h1 className="text-lg font-semibold leading-snug tracking-tight text-foreground sm:text-xl">{row.name}</h1>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Код</span>
-                <span className="font-mono text-sm font-semibold text-emerald-900 dark:text-emerald-100" data-testid="text-dealer-internal-code">
-                  {row.releaseCode ?? "—"}
-                </span>
-              </div>
+        <section className="overflow-hidden rounded-xl border border-border/60 border-l-[3px] border-l-emerald-600/75 bg-card shadow-sm">
+          <div className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4 sm:px-5 sm:py-3">
+            <h1 className="text-base font-semibold leading-tight tracking-tight text-foreground sm:text-lg">{row.name}</h1>
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0">
+              <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Код</span>
+              <span
+                className="font-mono text-sm font-semibold tabular-nums text-emerald-800 dark:text-emerald-200"
+                data-testid="text-dealer-internal-code"
+              >
+                {row.releaseCode?.trim() ? row.releaseCode : "Не указано"}
+              </span>
             </div>
           </div>
-          <div className="grid gap-3 px-4 py-4 text-sm sm:grid-cols-2 sm:px-5">
-            <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2 sm:col-span-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Код в 1С</p>
-              <p className="mt-0.5 font-medium text-foreground" data-testid="text-dealer-external-1c-code">
-                {row.external1cCode?.trim() || "—"}
-              </p>
-            </div>
-            <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Основной контакт</p>
-              <p className="mt-0.5 font-medium text-foreground" data-testid="text-dealer-primary-contact">
-                {primary?.fullName ?? "—"}
-              </p>
-            </div>
-            <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Телефон</p>
-              <p className="mt-0.5 text-foreground" data-testid="text-dealer-primary-phone">
-                {primary?.phone?.trim() || "—"}
-              </p>
-            </div>
-            <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2 sm:col-span-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Email</p>
-              <p className="mt-0.5 break-words text-foreground" data-testid="text-dealer-primary-email">
-                {primary?.email?.trim() || "—"}
-              </p>
-            </div>
+          <div className="grid grid-cols-1 gap-x-8 gap-y-2.5 border-t border-border/40 px-4 py-3 sm:grid-cols-2 sm:px-5 sm:py-3">
+            <HeroCell label="Код в 1С" value={row.external1cCode} testId="text-dealer-external-1c-code" />
+            <HeroCell label="Основной контакт" value={primary?.fullName} testId="text-dealer-primary-contact" />
+            <HeroCell label="Телефон" value={primary?.phone} testId="text-dealer-primary-phone" />
+            <HeroCell label="Email" value={primary?.email} testId="text-dealer-primary-email" />
           </div>
         </section>
 
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Разделы анкеты</p>
+        <div className="flex items-center justify-between gap-2 border-b border-border/30 pb-2">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Разделы анкеты</p>
           <Button
             type="button"
-            variant="outline"
+            variant="ghost"
             size="sm"
-            className="h-9 w-full text-xs sm:w-auto"
+            className="h-8 shrink-0 px-2 text-xs font-medium text-emerald-800 hover:bg-emerald-600/10 hover:text-emerald-950 dark:text-emerald-200 dark:hover:text-emerald-50"
             data-testid="button-dealer-sections-expand-all"
             onClick={toggleExpandAll}
           >
@@ -493,27 +493,25 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
           </Button>
         </div>
 
-        <Accordion type="multiple" className="space-y-2" value={openSections} onValueChange={setOpenSections}>
+        <Accordion type="multiple" className="space-y-1.5" value={openSections} onValueChange={setOpenSections}>
           <AccordionItem
             value="passport"
             data-testid="section-dealer-passport"
-            className="overflow-hidden rounded-xl border border-border/60 bg-card !border-b-0 shadow-sm"
+            className="overflow-hidden rounded-lg border border-border/50 bg-card !border-b-0 shadow-sm"
           >
             <AccordionSectionTrigger title="Паспорт клиента" summary={sectionMeta.passport.summary} status={sectionMeta.passport.status} />
-            <AccordionContent className="border-t border-border/40 px-2 pb-3 pt-2 text-sm sm:px-3">
-            <div className="grid gap-2.5 sm:grid-cols-2">
+            <AccordionContent className="border-t border-border/35 px-3 pb-2.5 pt-1.5 text-sm sm:px-3.5">
+            <div className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
               <Field label="Код клиента" value={row.releaseCode ?? "—"} />
               <Field label="Название" value={row.name} />
               <Field label="Тип клиента" value={passportKind ? (PASSPORT_KIND_LABELS[passportKind] ?? passportKind) : "—"} />
               <Field label="ИНН" value={row.actualizationInn?.trim() || str(f.inn) || "—"} />
               <Field label="Статус" value={lifecycle ? (LIFECYCLE_LABELS[lifecycle] ?? lifecycle) : row.status} />
               <Field label="Категория" value={tier ? (TIER_LABELS[tier] ?? tier) : getClientCategoryLabel(row.clientCategory)} />
-              <div className="sm:col-span-2">
-                <Field label="Общий комментарий" value={row.comment?.trim() || str(f.comment) || "—"} />
-              </div>
+              <Field label="Общий комментарий" value={row.comment?.trim() || str(f.comment) || "—"} emphasis className="sm:col-span-2" />
             </div>
             {canEdit ? (
-              <Button type="button" size="sm" className="mt-2 font-semibold" onClick={() => setEditOpen(true)}>
+              <Button type="button" variant="outline" size="sm" className="mt-2 h-8 px-3 text-xs font-medium" onClick={() => setEditOpen(true)}>
                 Редактировать
               </Button>
             ) : null}
@@ -523,44 +521,29 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
         <AccordionItem
           value="commercial"
           data-testid="section-dealer-commercial-characteristics"
-          className="overflow-hidden rounded-xl border border-border/60 bg-card !border-b-0 shadow-sm"
+          className="overflow-hidden rounded-lg border border-border/50 bg-card !border-b-0 shadow-sm"
         >
           <AccordionSectionTrigger
             title="Коммерческие характеристики"
             summary={sectionMeta.commercial.summary}
             status={sectionMeta.commercial.status}
           />
-          <AccordionContent className="border-t border-border/40 space-y-3 px-2 pb-3 pt-2 text-sm sm:px-3">
-            <div className="grid gap-2.5 sm:grid-cols-2">
+          <AccordionContent className="border-t border-border/35 space-y-1.5 px-3 pb-2.5 pt-1.5 text-sm sm:px-3.5">
+            <div className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
               <Field label="Склад двери" value={commercialTriLabelRu(row.hasDoorWarehouse)} />
-              <div className="sm:col-span-2">
-                <Field label="Комментарий (склад двери)" value={row.doorWarehouseComment?.trim() || "—"} />
-              </div>
+              <Field label="Комментарий (склад двери)" value={row.doorWarehouseComment?.trim() || "—"} emphasis className="sm:col-span-2" />
               <Field label="Склад фурнитуры" value={commercialTriLabelRu(row.hasHardwareWarehouse)} />
-              <div className="sm:col-span-2">
-                <Field label="Комментарий (склад фурнитуры)" value={row.hardwareWarehouseComment?.trim() || "—"} />
-              </div>
+              <Field label="Комментарий (склад фурнитуры)" value={row.hardwareWarehouseComment?.trim() || "—"} emphasis className="sm:col-span-2" />
               <Field label="Tandoor Club" value={commercialTriLabelRu(row.isTandoorClubMember)} />
-              <div className="sm:col-span-2">
-                <Field label="Комментарий (Tandoor Club)" value={row.tandoorClubComment?.trim() || "—"} />
-              </div>
+              <Field label="Комментарий (Tandoor Club)" value={row.tandoorClubComment?.trim() || "—"} emphasis className="sm:col-span-2" />
               <Field label="Спец. условия" value={commercialTriLabelRu(row.hasSpecialTerms)} />
-              <div className="sm:col-span-2">
-                <Field label="Комментарий (спец. условия)" value={row.specialTermsComment?.trim() || "—"} />
-              </div>
+              <Field label="Комментарий (спец. условия)" value={row.specialTermsComment?.trim() || "—"} emphasis className="sm:col-span-2" />
               <Field label="КЭШБЭК клиент" value={commercialTriLabelRu(row.isCashbackClient)} />
-              <div className="sm:col-span-2">
-                <Field label="Комментарий (КЭШБЭК)" value={row.cashbackComment?.trim() || "—"} />
-              </div>
-              <div className="sm:col-span-2">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Код клиента в 1С</p>
-                <p className="mt-0.5 text-foreground" data-testid="text-dealer-external-1c-code">
-                  {row.external1cCode?.trim() || "Не указан"}
-                </p>
-              </div>
+              <Field label="Комментарий (КЭШБЭК)" value={row.cashbackComment?.trim() || "—"} emphasis className="sm:col-span-2" />
+              <Field label="Код клиента в 1С" value={row.external1cCode?.trim() || "—"} emphasis className="sm:col-span-2" />
             </div>
             {canEdit ? (
-              <Button type="button" size="sm" className="mt-2 font-semibold" onClick={() => setEditOpen(true)}>
+              <Button type="button" variant="outline" size="sm" className="mt-2 h-8 px-3 text-xs font-medium" onClick={() => setEditOpen(true)}>
                 Редактировать
               </Button>
             ) : null}
@@ -570,18 +553,29 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
         <AccordionItem
           value="responsibles"
           data-testid="section-dealer-responsibles"
-          className="overflow-hidden rounded-xl border border-border/60 bg-card !border-b-0 shadow-sm"
+          className="overflow-hidden rounded-lg border border-border/50 bg-card !border-b-0 shadow-sm"
         >
           <AccordionSectionTrigger title="Ответственные" summary={sectionMeta.responsibles.summary} status={sectionMeta.responsibles.status} />
-          <AccordionContent className="border-t border-border/40 space-y-2 px-2 pb-3 pt-2 text-sm sm:px-3">
+          <AccordionContent className="border-t border-border/35 px-3 pb-2.5 pt-1.5 text-sm sm:px-3.5">
+            <div className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
             <Field label="Менеджер" value={row.manager || "—"} />
             <Field label="Региональный менеджер" value={row.regionalManager?.trim() || "—"} />
             <Field label="РОП" value={row.ropName?.trim() || "—"} />
             <Field label="Территория / зона" value={str(f.territoryZone) || "—"} />
             <Field label="Кто актуализировал" value={audit?.lastUpdatedByName ?? manual?.createdByName ?? "—"} />
-            <Field label="Дата последней актуализации" value={audit?.lastUpdatedAt ?? manual?.createdAt ?? "—"} />
+            <Field
+              label="Дата последней актуализации"
+              value={
+                audit?.lastUpdatedAt
+                  ? formatDisplayDateTime(audit.lastUpdatedAt)
+                  : manual?.createdAt
+                    ? formatDisplayDateTime(manual.createdAt)
+                    : ""
+              }
+            />
+            </div>
             {canEdit ? (
-              <Button type="button" size="sm" className="mt-2 font-semibold" onClick={() => setEditOpen(true)}>
+              <Button type="button" variant="outline" size="sm" className="mt-2 h-8 px-3 text-xs font-medium" onClick={() => setEditOpen(true)}>
                 Редактировать
               </Button>
             ) : null}
@@ -591,18 +585,20 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
         <AccordionItem
           value="logistics"
           data-testid="section-dealer-logistics"
-          className="overflow-hidden rounded-xl border border-border/60 bg-card !border-b-0 shadow-sm"
+          className="overflow-hidden rounded-lg border border-border/50 bg-card !border-b-0 shadow-sm"
         >
           <AccordionSectionTrigger title="Адрес и логистика" summary={sectionMeta.logistics.summary} status={sectionMeta.logistics.status} />
-          <AccordionContent className="border-t border-border/40 space-y-2 px-2 pb-3 pt-2 text-sm sm:px-3">
+          <AccordionContent className="border-t border-border/35 px-3 pb-2.5 pt-1.5 text-sm sm:px-3.5">
+            <div className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
             <Field label="Город" value={row.city || "—"} />
-            <Field label="Адрес" value={row.releaseAddress?.trim() || "—"} />
+            <Field label="Адрес" value={row.releaseAddress?.trim() || "—"} emphasis className="sm:col-span-2" />
             <Field label="День отгрузки" value={str(f.shipmentDayLabel) || "—"} />
             <Field label="Маршрут / направление" value={str(f.routeLabel) || "—"} />
             <Field label="Порядок выгрузки" value={row.distribution > 0 ? String(row.distribution) : "—"} />
-            <Field label="Комментарий по логистике" value={str(f.logisticsComment) || "—"} />
+            <Field label="Комментарий по логистике" value={str(f.logisticsComment) || "—"} emphasis className="sm:col-span-2" />
+            </div>
             {canEdit ? (
-              <Button type="button" size="sm" className="mt-2 font-semibold" onClick={() => setEditOpen(true)}>
+              <Button type="button" variant="outline" size="sm" className="mt-2 h-8 px-3 text-xs font-medium" onClick={() => setEditOpen(true)}>
                 Редактировать
               </Button>
             ) : null}
@@ -612,17 +608,17 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
         <AccordionItem
           value="contacts"
           data-testid="section-dealer-contacts"
-          className="overflow-hidden rounded-xl border border-border/60 bg-card !border-b-0 shadow-sm"
+          className="overflow-hidden rounded-lg border border-border/50 bg-card !border-b-0 shadow-sm"
         >
           <AccordionSectionTrigger title="Контакты клиента" summary={sectionMeta.contacts.summary} status={sectionMeta.contacts.status} />
-          <AccordionContent className="border-t border-border/40 px-2 pb-3 pt-2 sm:px-3">
+          <AccordionContent className="border-t border-border/35 px-3 pb-2.5 pt-1.5 sm:px-3.5">
             <DealerContactsActualizationBlock dealerId={baseRow.id} profile={profile} canEdit={canEdit} />
           </AccordionContent>
         </AccordionItem>
 
-        <AccordionItem value="legal" className="overflow-hidden rounded-xl border border-border/60 bg-card !border-b-0 shadow-sm">
+        <AccordionItem value="legal" className="overflow-hidden rounded-lg border border-border/50 bg-card !border-b-0 shadow-sm">
           <AccordionSectionTrigger title="Юридические лица" summary={sectionMeta.legal.summary} status={sectionMeta.legal.status} />
-          <AccordionContent className="border-t border-border/40 px-2 pb-3 pt-1 text-sm sm:px-3">
+          <AccordionContent className="border-t border-border/35 px-3 pb-2.5 pt-1 text-sm sm:px-3.5">
             <DealerLegalEntitiesSection
               row={row}
               profile={profile}
@@ -636,10 +632,10 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
         <AccordionItem
           value="tps"
           data-testid="section-dealer-trade-points"
-          className="overflow-hidden rounded-xl border border-border/60 bg-card !border-b-0 shadow-sm"
+          className="overflow-hidden rounded-lg border border-border/50 bg-card !border-b-0 shadow-sm"
         >
           <AccordionSectionTrigger title="Торговые точки" summary={sectionMeta.tps.summary} status={sectionMeta.tps.status} />
-          <AccordionContent className="border-t border-border/40 space-y-3 px-2 pb-3 pt-2 text-sm sm:px-3">
+          <AccordionContent className="border-t border-border/35 space-y-2 px-3 pb-2.5 pt-1.5 text-sm sm:px-3.5">
             <p className="text-muted-foreground">
               Всего точек: <span className="font-semibold text-foreground">{tps.length}</span>
               {" · "}
@@ -655,10 +651,10 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
         <AccordionItem
           value="next"
           data-testid="section-dealer-next-step"
-          className="overflow-hidden rounded-xl border border-border/60 bg-card !border-b-0 shadow-sm"
+          className="overflow-hidden rounded-lg border border-border/50 bg-card !border-b-0 shadow-sm"
         >
           <AccordionSectionTrigger title="Следующий шаг и задачи" summary={sectionMeta.next.summary} status={sectionMeta.next.status} />
-          <AccordionContent className="border-t border-border/40 space-y-4 px-2 pb-3 pt-2 sm:px-3">
+          <AccordionContent className="border-t border-border/35 space-y-3 px-3 pb-2.5 pt-1.5 sm:px-3.5">
             <DealerClientNextStepSection
               row={row}
               profile={profile}
@@ -709,11 +705,31 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
   );
 }
 
-function Field({ label, value }: { label: string; value: string }) {
+function Field({
+  label,
+  value,
+  emphasis,
+  className,
+  testId,
+}: {
+  label: string;
+  value: string;
+  emphasis?: boolean;
+  className?: string;
+  testId?: string;
+}): ReactElement {
+  const trimmed = value.trim();
+  const missing = !trimmed || trimmed === "—";
+  const display = missing ? "Не указано" : value;
   return (
-    <div className="rounded-lg border border-border/50 bg-muted/15 px-2.5 py-2">
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="mt-0.5 text-sm text-foreground">{value}</p>
+    <div className={cn("min-w-0", emphasis && "rounded-md border border-border/40 bg-muted/10 px-2.5 py-2", className)}>
+      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p
+        className={cn("mt-0.5 text-[13px] leading-snug", missing ? "text-muted-foreground" : "text-foreground")}
+        data-testid={testId}
+      >
+        {display}
+      </p>
     </div>
   );
 }
@@ -858,50 +874,97 @@ function DealerContactsActualizationBlock(props: {
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2.5">
       {contacts.length === 0 ? (
-        <p className="text-muted-foreground">Контакты не указаны</p>
+        <p className="text-sm text-muted-foreground">Контакты не указаны</p>
       ) : (
-        <ul className="space-y-2">
-          {contacts.map((c) => (
-            <li key={c.id} className="rounded-lg border border-border/70 p-3" data-testid={`card-dealer-contact-${c.id}`}>
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
-                  <p className="font-medium">
-                    {c.fullName}
-                    {c.isPrimary ? (
-                      <Badge className="ml-2" variant="secondary">
-                        Основной
-                      </Badge>
+        <ul className="space-y-1.5">
+          {contacts.map((c) => {
+            const phoneDisp = c.phone?.trim() ? c.phone.trim() : "Не указано";
+            const emailDisp = c.email?.trim() ? c.email.trim() : "Не указано";
+            return (
+              <li
+                key={c.id}
+                className="rounded-lg border border-border/50 bg-card/40 p-2.5 sm:p-3"
+                data-testid={`card-dealer-contact-${c.id}`}
+              >
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+                  <div className="min-w-0 space-y-1">
+                    <p className="text-sm font-semibold leading-snug text-foreground">
+                      {c.fullName}
+                      {c.isPrimary ? (
+                        <Badge
+                          variant="outline"
+                          className="ml-2 h-[1.125rem] border-emerald-600/30 bg-emerald-600/[0.06] px-1.5 py-0 text-[10px] font-normal leading-none text-emerald-950 dark:text-emerald-100"
+                        >
+                          Основной
+                        </Badge>
+                      ) : null}
+                    </p>
+                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Роль: {c.role}</p>
+                    <p className="text-xs leading-snug text-muted-foreground">
+                      <span className="text-muted-foreground/80">Тел.:</span> {phoneDisp}{" "}
+                      <span className="text-muted-foreground/60">·</span>{" "}
+                      <span className="text-muted-foreground/80">Email:</span> {emailDisp}
+                    </p>
+                    {c.messenger?.trim() ? (
+                      <p className="text-xs text-muted-foreground">Мессенджер: {c.messenger.trim()}</p>
                     ) : null}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Роль: {c.role}</p>
-                  <p className="text-xs">{c.phone || "—"} · {c.email || "—"}</p>
-                  {c.messenger ? <p className="text-xs">Мессенджер: {c.messenger}</p> : null}
-                  {c.comment ? <p className="text-xs text-muted-foreground">{c.comment}</p> : null}
-                </div>
-                {canEdit ? (
-                  <div className="flex flex-col gap-1">
-                    <Button type="button" size="sm" variant="outline" data-testid={`button-dealer-contact-edit-${c.id}`} onClick={() => openEdit(c)}>
-                      Изменить
-                    </Button>
-                    {!c.isPrimary ? (
-                      <Button type="button" size="sm" variant="secondary" data-testid={`button-dealer-contact-set-primary-${c.id}`} onClick={() => void onSetPrimary(c)}>
-                        Сделать основным
-                      </Button>
+                    {c.comment?.trim() ? (
+                      <p className="text-xs leading-snug text-muted-foreground/90">{c.comment.trim()}</p>
                     ) : null}
-                    <Button type="button" size="sm" variant="ghost" className="text-destructive" data-testid={`button-dealer-contact-delete-${c.id}`} onClick={() => void onArchive(c)}>
-                      Удалить
-                    </Button>
                   </div>
-                ) : null}
-              </div>
-            </li>
-          ))}
+                  {canEdit ? (
+                    <div className="flex flex-wrap items-center gap-1.5 sm:shrink-0 sm:justify-end">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-8 px-2 text-xs font-medium"
+                        data-testid={`button-dealer-contact-edit-${c.id}`}
+                        onClick={() => openEdit(c)}
+                      >
+                        Изменить
+                      </Button>
+                      {!c.isPrimary ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8 px-2 text-xs font-medium"
+                          data-testid={`button-dealer-contact-set-primary-${c.id}`}
+                          onClick={() => void onSetPrimary(c)}
+                        >
+                          Сделать основным
+                        </Button>
+                      ) : null}
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-8 border-destructive/25 px-2 text-xs font-medium text-destructive hover:bg-destructive/[0.05]"
+                        data-testid={`button-dealer-contact-delete-${c.id}`}
+                        onClick={() => void onArchive(c)}
+                      >
+                        Удалить
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
       {canEdit ? (
-        <Button type="button" size="sm" className="font-semibold" data-testid="button-dealer-contact-create" onClick={openCreate}>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-8 border-emerald-600/35 px-3 text-xs font-medium text-emerald-900 hover:bg-emerald-600/[0.08] dark:text-emerald-100 dark:hover:bg-emerald-950/40"
+          data-testid="button-dealer-contact-create"
+          onClick={openCreate}
+        >
           Добавить контакт
         </Button>
       ) : null}

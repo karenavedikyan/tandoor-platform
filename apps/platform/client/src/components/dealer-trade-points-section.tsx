@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
-import { MapPin } from "lucide-react";
+import { MapPin, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -869,11 +869,11 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
       archivableTradePointIdsFull.size > 0 &&
       selectedBulkArchiveTpIds.size > 0 ? (
         <div
-          className="flex min-w-0 flex-col gap-3 rounded-xl border border-destructive/25 bg-destructive/5 p-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"
+          className="flex min-w-0 flex-col gap-2.5 rounded-lg border border-border/60 bg-muted/15 p-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"
           data-testid="panel-trade-point-bulk-actions"
         >
           <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-            <p className="text-sm font-semibold text-foreground" data-testid="text-trade-point-bulk-selected-count">
+            <p className="text-xs font-semibold text-foreground" data-testid="text-trade-point-bulk-selected-count">
               Выбрано точек: {selectedBulkArchiveTpIds.size}
             </p>
             <div className="flex items-center gap-2">
@@ -897,12 +897,12 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
               </Label>
             </div>
           </div>
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:justify-end">
+          <div className="flex w-full flex-col gap-1.5 sm:w-auto sm:flex-row sm:justify-end">
             <Button
               type="button"
               variant="outline"
               size="sm"
-              className="min-h-10 w-full font-semibold sm:w-auto"
+              className="h-8 w-full text-xs font-medium sm:w-auto"
               data-testid="button-trade-point-bulk-clear-selection"
               onClick={() => setSelectedBulkArchiveTpIds(new Set())}
             >
@@ -910,9 +910,9 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
             </Button>
             <Button
               type="button"
-              variant="destructive"
+              variant="outline"
               size="sm"
-              className="min-h-10 w-full font-semibold sm:w-auto"
+              className="h-8 w-full border-destructive/35 text-xs font-medium text-destructive hover:bg-destructive/[0.06] sm:w-auto"
               data-testid="button-trade-point-bulk-archive"
               onClick={() => setBulkArchiveTpDialogOpen(true)}
             >
@@ -938,31 +938,19 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
             <Card
               key={tp.id}
               data-testid={rowTestId}
-              className="rounded-xl border border-border/70 bg-card shadow-xs"
+              className="rounded-lg border border-border/60 bg-card shadow-xs"
             >
-              <CardContent className="space-y-2 p-3 sm:p-4">
+              <CardContent className="space-y-2 p-3 sm:p-3.5">
                 {showArchived && isArchived ? (
                   <Badge
                     variant="secondary"
-                    className="text-xs font-semibold"
+                    className="text-[10px] font-medium"
                     data-testid={`badge-trade-point-archived-status-${tp.id}`}
                   >
                     В архиве
                   </Badge>
                 ) : null}
-                {canArchiveThisTp ? (
-                  <Button
-                    type="button"
-                    variant={isManual ? "destructive" : "outline"}
-                    size="sm"
-                    className="min-h-11 w-full touch-manipulation font-semibold sm:min-h-10 sm:w-auto"
-                    data-testid={`button-trade-point-delete-${tp.id}`}
-                    onClick={() => setSingleDeleteTarget({ tp, isManual })}
-                  >
-                    {tradePointArchiveActionLabels(isManual).action}
-                  </Button>
-                ) : null}
-                <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
                   <div className="min-w-0 flex-1 space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
                       {archivableTradePointIdsFull.has(tp.id) ? (
@@ -1000,7 +988,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                       Код ТТ: {getTradePointDisplayCodeForActualization(tp)}
                     </p>
                     <p
-                      className="flex items-start gap-1.5 text-xs leading-relaxed text-foreground"
+                      className="flex items-start gap-1.5 text-xs leading-snug text-foreground"
                       data-testid={`text-dealer-trade-point-address-${tp.id}`}
                     >
                       <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
@@ -1011,9 +999,15 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                         {contact}
                       </p>
                     ) : null}
-                    <TradePointPhotoBlock dealerId={row.id} tradePointId={tp.id} canEdit={canEdit} className="max-w-md" />
+                    <TradePointPhotoBlock
+                      dealerId={row.id}
+                      tradePointId={tp.id}
+                      canEdit={canEdit}
+                      className="max-w-md"
+                      compact={hideSyntheticTpChrome}
+                    />
                   </div>
-                  <div className="flex w-full shrink-0 flex-col items-stretch gap-2 sm:w-auto sm:items-end">
+                  <div className="flex w-full min-w-0 shrink-0 flex-col gap-2 sm:w-auto sm:max-w-[14rem] sm:items-stretch">
                     {!hideSyntheticTpChrome && showBadge ? (
                       <Badge
                         variant="outline"
@@ -1034,38 +1028,56 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                         type="button"
                         variant="outline"
                         size="sm"
-                        className="min-h-10 w-full font-semibold sm:w-auto"
+                        className="h-8 w-full text-xs font-medium sm:w-auto"
                         data-testid={`button-trade-point-restore-${tp.id}`}
                         onClick={() => void onRestoreTradePoint(tp)}
                       >
                         Восстановить ТТ
                       </Button>
                     ) : null}
-                    {useAct && canEdit && !isVirtual && !isArchived ? (
-                      <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
+                    <div className="mt-1 flex flex-col gap-1.5 border-t border-border/40 pt-2 sm:mt-0 sm:border-t-0 sm:pt-0">
+                      <Button
+                        asChild
+                        variant="default"
+                        size="sm"
+                        className={cn(
+                          "h-8 w-full px-2 text-xs font-semibold",
+                          hideSyntheticTpChrome && "bg-emerald-700 text-white hover:bg-emerald-800",
+                        )}
+                        data-testid={openButtonTestId}
+                      >
+                        <Link href={`/dealers/${row.id}/trade-points/${tp.id}`}>
+                          {isVirtual ? "Открыть основную точку" : "Открыть точку"}
+                        </Link>
+                      </Button>
+                      {useAct && canEdit && !isVirtual && !isArchived ? (
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
-                          className="min-h-10 w-full font-semibold sm:w-auto"
+                          className="h-8 w-full px-2 text-xs font-medium"
                           data-testid={`button-trade-point-edit-${tp.id}`}
                           onClick={() => openEdit(tp)}
                         >
                           Редактировать
                         </Button>
-                      </div>
-                    ) : null}
-                    <Button
-                      asChild
-                      variant="default"
-                      size="sm"
-                      className="min-h-10 w-full font-semibold sm:w-auto"
-                      data-testid={openButtonTestId}
-                    >
-                      <Link href={`/dealers/${row.id}/trade-points/${tp.id}`}>
-                        {isVirtual ? "Открыть основную точку" : "Открыть точку"}
-                      </Link>
-                    </Button>
+                      ) : null}
+                      {canArchiveThisTp ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="inline-flex h-8 w-full items-center justify-center gap-1 border-destructive/30 px-2 text-xs font-medium text-destructive hover:bg-destructive/[0.06] sm:justify-start"
+                          data-testid={`button-trade-point-delete-${tp.id}`}
+                          onClick={() => setSingleDeleteTarget({ tp, isManual })}
+                          title={tradePointArchiveActionLabels(isManual).action}
+                          aria-label={tradePointArchiveActionLabels(isManual).action}
+                        >
+                          <Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                          <span className="max-sm:sr-only">{tradePointArchiveActionLabels(isManual).action}</span>
+                        </Button>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
               </CardContent>

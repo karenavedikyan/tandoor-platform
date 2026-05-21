@@ -14,9 +14,11 @@ type Props = {
   tradePointId: string;
   canEdit: boolean;
   className?: string;
+  /** Компактный вид в списках clean-актуализации */
+  compact?: boolean;
 };
 
-export function TradePointPhotoBlock({ dealerId, tradePointId, canEdit, className }: Props) {
+export function TradePointPhotoBlock({ dealerId, tradePointId, canEdit, className, compact }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [photo, setPhoto] = useState<string | null>(() => getTradePointPhotoDataUrl(dealerId, tradePointId));
   const [err, setErr] = useState("");
@@ -42,25 +44,31 @@ export function TradePointPhotoBlock({ dealerId, tradePointId, canEdit, classNam
   };
 
   return (
-    <div className={cn("space-y-2", className)}>
+    <div className={cn(compact ? "space-y-1.5" : "space-y-2", className)}>
       {err ? <p className="text-xs font-medium text-destructive">{err}</p> : null}
       {photo ? (
         <img
           src={photo}
           alt=""
-          className="max-h-48 w-full rounded-md border border-border/70 object-contain"
+          className={cn(
+            "w-full rounded-md border border-border/70 object-contain",
+            compact ? "max-h-28" : "max-h-48",
+          )}
           data-testid={`img-trade-point-photo-${tradePointId}`}
         />
       ) : (
         <div
-          className="flex min-h-[7rem] items-center justify-center rounded-md border border-dashed border-border/80 bg-muted/20 px-2 text-center text-xs text-muted-foreground"
+          className={cn(
+            "flex items-center justify-center rounded-md border border-dashed border-border/80 bg-muted/15 px-2 text-center text-xs text-muted-foreground",
+            compact ? "min-h-14 py-2" : "min-h-[7rem]",
+          )}
           data-testid={`placeholder-trade-point-photo-${tradePointId}`}
         >
           Фото не добавлено
         </div>
       )}
       {canEdit ? (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-1.5">
           <input
             ref={inputRef}
             type="file"
@@ -73,7 +81,7 @@ export function TradePointPhotoBlock({ dealerId, tradePointId, canEdit, classNam
             type="button"
             variant="outline"
             size="sm"
-            className="min-h-9 text-xs"
+            className={cn("text-xs", compact ? "h-7 min-h-0 px-2" : "min-h-9")}
             data-testid={`button-trade-point-photo-add-${tradePointId}`}
             onClick={() => inputRef.current?.click()}
           >
@@ -84,7 +92,7 @@ export function TradePointPhotoBlock({ dealerId, tradePointId, canEdit, classNam
               type="button"
               variant="secondary"
               size="sm"
-              className="min-h-9 text-xs"
+              className={cn("text-xs", compact ? "h-7 min-h-0 px-2" : "min-h-9")}
               data-testid={`button-trade-point-photo-remove-${tradePointId}`}
               onClick={() => {
                 removeTradePointPhoto(dealerId, tradePointId);
