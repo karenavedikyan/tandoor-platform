@@ -5,6 +5,7 @@
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
+import { Check, ChevronsUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Accordion,
@@ -33,6 +34,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import type { DealerRow, DealerStatus } from "@/lib/dealer-base-mock-data";
 import { DEALER_SHIPMENT_DAY_LABELS, DEALER_SHIPMENT_DAY_ORDER, type DealerShipmentDayId } from "@/lib/dealer-shipment-days";
 import { getDealerUnloadingOrder } from "@/lib/dealer-unloading-order-storage";
@@ -66,6 +69,77 @@ import {
   commercialTriFromBoolNull,
   commercialTriToBoolNull,
 } from "@/lib/dealer-commercial-characteristics";
+import { cn } from "@/lib/utils";
+
+const REGIONAL_MANAGER_OPTIONS = [
+  "Мельник Владимир Викторович",
+  "Богачев Денис Николаевич",
+  "Бойко Сергей Валерьевич",
+  "Дзодзиков Георгий Викторович",
+  "Дрогобицкий Игорь Ярославович",
+  "Серебряков Юрий Витальевич",
+] as const;
+
+const ROP_OPTIONS = [
+  "Купянский Родион Александрович",
+  "Скалабан Александр Александрович",
+  "Сапожков Артем Эдуардович",
+] as const;
+
+function ResponsiblePersonCombobox(props: {
+  value: string;
+  onValueChange: (value: string) => void;
+  options: readonly string[];
+  placeholder: string;
+  searchPlaceholder: string;
+  emptyText: string;
+  testId: string;
+}): ReactElement {
+  const { value, onValueChange, options, placeholder, searchPlaceholder, emptyText, testId } = props;
+  const [open, setOpen] = useState(false);
+  const selected = value.trim();
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className={cn("min-h-10 w-full justify-between bg-background px-3 text-left font-normal", !selected && "text-muted-foreground")}
+          data-testid={testId}
+        >
+          <span className="min-w-0 truncate">{selected || placeholder}</span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+        <Command>
+          <CommandInput placeholder={searchPlaceholder} />
+          <CommandList>
+            <CommandEmpty>{emptyText}</CommandEmpty>
+            <CommandGroup>
+              {options.map((option) => (
+                <CommandItem
+                  key={option}
+                  value={option}
+                  onSelect={() => {
+                    onValueChange(option);
+                    setOpen(false);
+                  }}
+                >
+                  <Check className={cn("h-4 w-4 text-primary", selected === option ? "opacity-100" : "opacity-0")} aria-hidden />
+                  <span className="min-w-0 truncate">{option}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 function CommercialCharacteristicsFormSection(props: {
   door: DealerCommercialTriSelect;
@@ -613,24 +687,32 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Ответственный региональный менеджер</Label>
-                <Input
+                <ResponsiblePersonCombobox
                   value={regionalManager}
-                  onChange={(e) => {
-                    setRegionalManager(e.target.value);
+                  onValueChange={(next) => {
+                    setRegionalManager(next);
                     responsiblesSave.markDirty();
                   }}
-                  className="min-h-10"
+                  options={REGIONAL_MANAGER_OPTIONS}
+                  placeholder="Выберите регионального менеджера"
+                  searchPlaceholder="Введите ФИО регионального менеджера"
+                  emptyText="Региональный менеджер не найден."
+                  testId="select-dealer-regional-manager"
                 />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Ответственный РОП</Label>
-                <Input
+                <ResponsiblePersonCombobox
                   value={ropName}
-                  onChange={(e) => {
-                    setRopName(e.target.value);
+                  onValueChange={(next) => {
+                    setRopName(next);
                     responsiblesSave.markDirty();
                   }}
-                  className="min-h-10"
+                  options={ROP_OPTIONS}
+                  placeholder="Выберите РОП"
+                  searchPlaceholder="Введите ФИО РОП"
+                  emptyText="РОП не найден."
+                  testId="select-dealer-rop"
                 />
               </div>
               <SectionSaveButton
@@ -1485,11 +1567,27 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Ответственный региональный менеджер</Label>
-                <Input value={regionalManager} onChange={(e) => setRegionalManager(e.target.value)} className="min-h-10" />
+                <ResponsiblePersonCombobox
+                  value={regionalManager}
+                  onValueChange={setRegionalManager}
+                  options={REGIONAL_MANAGER_OPTIONS}
+                  placeholder="Выберите регионального менеджера"
+                  searchPlaceholder="Введите ФИО регионального менеджера"
+                  emptyText="Региональный менеджер не найден."
+                  testId="select-dealer-create-regional-manager"
+                />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Ответственный РОП</Label>
-                <Input value={ropName} onChange={(e) => setRopName(e.target.value)} className="min-h-10" />
+                <ResponsiblePersonCombobox
+                  value={ropName}
+                  onValueChange={setRopName}
+                  options={ROP_OPTIONS}
+                  placeholder="Выберите РОП"
+                  searchPlaceholder="Введите ФИО РОП"
+                  emptyText="РОП не найден."
+                  testId="select-dealer-create-rop"
+                />
               </div>
             </div>
 
