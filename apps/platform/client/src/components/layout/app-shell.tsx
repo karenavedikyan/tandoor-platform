@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
+  BarChart3,
   BookOpen,
   ClipboardList,
   Home,
@@ -42,8 +43,10 @@ const ANALYTICS_WORKSPACE_HREF = "/analytics-workspace";
 const MARKETING_BRIEFS_HREF = "/marketing-briefs";
 const SALES_MANAGER_HREF = "/sales-manager";
 const COMMUNICATIONS_HREF = "/communications";
+const CLIENT_BASE_ACTIVITY_HREF = "/client-base-activity";
 
 const ICON_BY_TESTID: Partial<Record<string, LucideIcon>> = {
+  "nav-client-base-activity": BarChart3,
   "nav-main": Home,
   "nav-client-map": Map,
   "nav-territory-card": MapPinned,
@@ -117,6 +120,11 @@ function isAnalyticsWorkspacePath(path: string) {
   return path === ANALYTICS_WORKSPACE_HREF || path.startsWith(`${ANALYTICS_WORKSPACE_HREF}/`);
 }
 
+function isClientBaseActivityPath(path: string) {
+  const p = path.split("?")[0] ?? path;
+  return p === CLIENT_BASE_ACTIVITY_HREF;
+}
+
 function isMarketingBriefsPath(path: string) {
   return path === MARKETING_BRIEFS_HREF || path.startsWith(`${MARKETING_BRIEFS_HREF}/`);
 }
@@ -136,6 +144,7 @@ function isNavItemActive(item: PilotNavItem, location: string, isActiveFromLink?
   if (item.testId === "nav-analytics-workspace") return isAnalyticsWorkspacePath(location);
   if (item.testId === "nav-client-map") return isClientMapPath(location);
   if (item.testId === "nav-marketing-briefs") return isMarketingBriefsPath(location);
+  if (item.testId === "nav-client-base-activity") return isClientBaseActivityPath(location);
   return pathMatchesNavHref(location, item.href);
 }
 
@@ -161,6 +170,7 @@ function navLinkClass(item: PilotNavItem, location: string, variant: "sidebar" |
 function headerContextLabel(location: string) {
   const pathOnly = location.split("?")[0] ?? location;
   if (pathOnly === "/bitrix24" || pathOnly === "/embedded/bitrix24") return "Bitrix24";
+  if (isClientBaseActivityPath(pathOnly)) return "Актуализация базы";
   if (isCommunicationsPath(pathOnly)) return "Коммуникации";
   if (isMainPath(location)) return "Главная";
   if (isTradePointsPath(pathOnly)) return "Торговые точки";

@@ -88,11 +88,17 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
     return any([
       (x) => x === "/main" || isUnder(x, "/main"),
       (x) => isUnder(x, "/analytics-workspace"),
-      (x) => isUnder(x, "/dealer-base") || isUnder(x, "/dealers") || isUnder(x, "/trade-points") || isUnder(x, "/client-map"),
+      (x) =>
+        isUnder(x, "/dealer-base") ||
+        isUnder(x, "/dealers") ||
+        isUnder(x, "/trade-points") ||
+        isUnder(x, "/client-map") ||
+        x === "/client-base-activity",
       (x) => isUnder(x, "/tasks"),
       (x) => isUnder(x, "/catalog"),
       (x) => isUnder(x, "/training"),
       (x) => isUnder(x, "/marketing-briefs"),
+      (x) => isUnder(x, "/communications"),
       (x) =>
         x === "/sales-control" ||
         isUnder(x, "/sales-control/team-lead") ||
@@ -106,12 +112,22 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
       (x) => x === "/" || isUnder(x, "/main") || isUnder(x, "/sales-manager"),
       (x) => isUnder(x, "/territory-card"),
       (x) => isUnder(x, "/analytics-workspace"),
-      (x) => isUnder(x, "/dealer-base") || isUnder(x, "/dealers") || isUnder(x, "/trade-points") || isUnder(x, "/client-map"),
+      (x) =>
+        isUnder(x, "/dealer-base") ||
+        isUnder(x, "/dealers") ||
+        isUnder(x, "/trade-points") ||
+        isUnder(x, "/client-map") ||
+        x === "/client-base-activity",
       (x) => isUnder(x, "/tasks"),
       (x) => isUnder(x, "/catalog"),
       (x) => isUnder(x, "/training"),
       (x) => isUnder(x, "/marketing-briefs"),
-      (x) => isUnder(x, "/sales-control"),
+      (x) => isUnder(x, "/communications"),
+      (x) =>
+        x === "/sales-control" ||
+        isUnder(x, "/sales-control/director") ||
+        isUnder(x, "/sales-control/plans") ||
+        isUnder(x, "/sales-control/performance"),
     ]);
   }
 
@@ -149,6 +165,10 @@ export function userHasRole(role: SalesRole, allowed: SalesRole[]): boolean {
 export const canAccessRoute = canAccessPath;
 
 export { userHasRole as requireRole };
+
+export function canAccessClientBaseActivityDashboard(role: SalesRole): boolean {
+  return role === "sales_director" || role === "team_lead";
+}
 
 export function getPilotNavItems(
   role: SalesRole,
@@ -190,6 +210,7 @@ export function getPilotNavItems(
   if (role === "team_lead") {
     push({ href: "/main", label: "Главная", testId: "nav-main" });
     push({ href: "/dealer-base", label: "Клиенты команды", testId: "nav-dealer-base", ...dealerNavExtras() });
+    push({ href: "/client-base-activity", label: "Актуализация базы", testId: "nav-client-base-activity" });
     push({ href: "/trade-points", label: "Торговые точки", testId: "nav-trade-points", ...tradePointNavExtras() });
     push({ href: "/client-map", label: "Карта клиентов", testId: "nav-client-map" });
     push({ href: "/tasks", label: "Задачи по витрине", testId: "nav-tasks" });
@@ -206,6 +227,7 @@ export function getPilotNavItems(
     push({ href: "/main", label: "Главная", testId: "nav-main" });
     push({ href: "/territory-card", label: "Карточка территории", testId: "nav-territory-card" });
     push({ href: "/dealer-base", label: "Клиенты", testId: "nav-dealer-base", ...dealerNavExtras() });
+    push({ href: "/client-base-activity", label: "Актуализация базы", testId: "nav-client-base-activity" });
     push({ href: "/trade-points", label: "Торговые точки", testId: "nav-trade-points", ...tradePointNavExtras() });
     push({ href: "/client-map", label: "Карта клиентов", testId: "nav-client-map" });
     push({ href: "/tasks", label: "Задачи по витрине", testId: "nav-tasks" });
