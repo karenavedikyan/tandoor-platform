@@ -2331,8 +2331,10 @@ function ArchivedDealerCardBanner({ dealerId, profile, row }: { dealerId: string
 
   const onRestore = async () => {
     if (!canRestore) return;
+    if (!actx.state.archivedDealersById[dealerId]) return;
     setBusy(true);
     const r = await actx.persist((prev) => {
+      if (!prev.archivedDealersById[dealerId]) return prev;
       const { [dealerId]: _removed, ...rest } = prev.archivedDealersById;
       void _removed;
       return mergeActualizationState(prev, { archivedDealersById: rest });
