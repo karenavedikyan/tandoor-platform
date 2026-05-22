@@ -2,8 +2,8 @@
  * Дашборд активности команды по актуализации клиентской базы (РОП / директор).
  */
 
-import type { ReactElement } from "react";
-import { useMemo, useState } from "react";
+import type { ReactElement, ReactNode } from "react";
+import { Component, useMemo, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -84,6 +84,36 @@ function deltaLabel(cur: number, prev: number): string {
   return `${d > 0 ? "+" : ""}${d}% к пред. периоду`;
 }
 
+type ActivityBoundaryState = { error: Error | null };
+
+class ClientBaseActivityDashboardBoundary extends Component<{ children: ReactNode }, ActivityBoundaryState> {
+  state: ActivityBoundaryState = { error: null };
+
+  static getDerivedStateFromError(error: Error): ActivityBoundaryState {
+    return { error };
+  }
+
+  render(): ReactNode {
+    if (this.state.error) {
+      return (
+        <div
+          className="mx-auto max-w-lg space-y-4 px-4 py-8 sm:px-6"
+          data-testid="page-client-base-activity-dashboard"
+        >
+          <h1 className="text-xl font-semibold">Актуализация базы</h1>
+          <p className="text-sm text-muted-foreground">
+            Не удалось отобразить дашборд. Обновите страницу или откройте раздел позже.
+          </p>
+          <p className="rounded-lg border border-border bg-muted/30 p-3 font-mono text-xs text-muted-foreground">
+            {this.state.error.message}
+          </p>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 function KpiCard({
   title,
   value,
@@ -104,7 +134,25 @@ function KpiCard({
   );
 }
 
+function ChartEmptyPlaceholder({ title, text }: { title: string; text: string }): ReactElement {
+  return (
+    <div className="flex h-full min-h-[200px] w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border/80 bg-muted/10 px-4 py-6 text-center">
+      <BarChart3 className="h-8 w-8 shrink-0 text-primary/50" aria-hidden />
+      <p className="text-sm font-medium text-foreground">{title}</p>
+      <p className="max-w-xs text-xs text-muted-foreground">{text}</p>
+    </div>
+  );
+}
+
 export default function ClientBaseActivityDashboardPage(): ReactElement {
+  return (
+    <ClientBaseActivityDashboardBoundary>
+      <ClientBaseActivityDashboardInner />
+    </ClientBaseActivityDashboardBoundary>
+  );
+}
+
+function ClientBaseActivityDashboardInner(): ReactElement {
   const actx = useClientBaseActualization();
   const { profile } = useReleaseDemoProfile();
   const isMobile = useIsMobile();
@@ -117,7 +165,7 @@ export default function ClientBaseActivityDashboardPage(): ReactElement {
   const [city, setCity] = useState<string>("__all__");
   const [typeFilter, setTypeFilter] = useState<ActivityTypeFilter>("all");
   const [onlyActiveManagers, setOnlyActiveManagers] = useState(false);
-  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(true);
   const [detailManagerId, setDetailManagerId] = useState<string | null>(null);
 
   const mergedAll = useMemo(
@@ -243,9 +291,11 @@ export default function ClientBaseActivityDashboardPage(): ReactElement {
 
   const idleManagers = useMemo(() => roster.filter((m) => !last7Ids.has(m.id)), [roster, last7Ids]);
 
+  const hasFilteredActivity = filteredEvents.length > 0;
+
   if (!actx.enabled) {
     return (
-      <div className="mx-auto max-w-2xl space-y-3 px-3 py-8 sm:px-0" data-testid="page-client-base-activity-dashboard">
+      <div className="mx-auto max-w-2xl space-y-3 px-4 py-8 sm:px-6" data-testid="page-client-base-activity-dashboard">
         <h1 className="text-xl font-semibold">Актуализация базы</h1>
         <p className="text-sm text-muted-foreground">Дашборд доступен при включённой актуализации клиентской базы.</p>
       </div>
@@ -256,7 +306,7 @@ export default function ClientBaseActivityDashboardPage(): ReactElement {
   const mutedFill = "hsl(var(--muted-foreground) / 0.35)";
 
   return (
-    <div className="min-w-0 space-y-4 px-2 pb-8 sm:space-y-6 sm:px-0" data-testid="page-client-base-activity-dashboard">
+    <div className="min-w-0 space-y-4 px-3 pb-10 pt-1 sm:space-y-6 sm:px-0 sm:pb-8 sm:pt-0" data-testid="page-client-base-activity-dashboard">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
@@ -268,6 +318,21 @@ export default function ClientBaseActivityDashboardPage(): ReactElement {
           </p>
         </div>
       </div>
+
+      {!hasFilteredActivity ? (
+        <Card className="rounded-2xl border border-border/80 bg-muted/10 shadow-sm" data-testid="section-activity-empty">
+          <CardContent className="flex flex-col items-center gap-3 px-4 py-10 text-center sm:px-6">
+            <BarChart3 className="h-12 w-12 text-primary/60" aria-hidden />
+            <div className="space-y-2">
+              <p className="text-base font-semibold text-foreground">Пока нет активности по актуализации базы</p>
+              <p className="mx-auto max-w-md text-sm text-muted-foreground">
+                В выбранном периоде и с учётом фильтров нет зафиксированных действий. Когда менеджеры начнут заполнять
+                клиентов, торговые точки, юрлица, фото и витрины, здесь появятся графики и рейтинг.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Collapsible open={isMobile ? mobileFiltersOpen : true} onOpenChange={(o) => isMobile && setMobileFiltersOpen(o)}>
         <Card className="rounded-2xl border border-border/80 bg-card shadow-sm">
@@ -506,20 +571,27 @@ export default function ClientBaseActivityDashboardPage(): ReactElement {
             <CardTitle className="text-base">Динамика по дням</CardTitle>
           </CardHeader>
           <CardContent className="h-[240px] w-full min-w-0" data-testid="chart-activity-by-day">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={byDay} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-border/50" />
-                <XAxis dataKey="day" tick={{ fontSize: 10 }} />
-                <YAxis width={28} tick={{ fontSize: 10 }} />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="dealers" stackId="a" fill={primaryFill} name="Клиенты" />
-                <Bar dataKey="tradePoints" stackId="a" fill="hsl(var(--primary) / 0.65)" name="ТТ" />
-                <Bar dataKey="legal" stackId="a" fill="hsl(var(--primary) / 0.45)" name="Юрлица" />
-                <Bar dataKey="photos" stackId="a" fill="hsl(var(--muted-foreground) / 0.4)" name="Фото" />
-                <Bar dataKey="showcase" stackId="a" fill="hsl(var(--foreground) / 0.25)" name="Витрина" />
-              </BarChart>
-            </ResponsiveContainer>
+            {byDay.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={byDay} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-border/50" />
+                  <XAxis dataKey="day" tick={{ fontSize: 10 }} />
+                  <YAxis width={28} tick={{ fontSize: 10 }} />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="dealers" stackId="a" fill={primaryFill} name="Клиенты" />
+                  <Bar dataKey="tradePoints" stackId="a" fill="hsl(var(--primary) / 0.65)" name="ТТ" />
+                  <Bar dataKey="legal" stackId="a" fill="hsl(var(--primary) / 0.45)" name="Юрлица" />
+                  <Bar dataKey="photos" stackId="a" fill="hsl(var(--muted-foreground) / 0.4)" name="Фото" />
+                  <Bar dataKey="showcase" stackId="a" fill="hsl(var(--foreground) / 0.25)" name="Витрина" />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <ChartEmptyPlaceholder
+                title="Нет данных по дням"
+                text="Нет событий в выбранном периоде — график появится после действий менеджеров."
+              />
+            )}
           </CardContent>
         </Card>
 
@@ -528,15 +600,22 @@ export default function ClientBaseActivityDashboardPage(): ReactElement {
             <CardTitle className="text-base">Активность по менеджерам (score)</CardTitle>
           </CardHeader>
           <CardContent className="h-[240px] w-full min-w-0" data-testid="chart-activity-by-manager">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart layout="vertical" data={managerChartData} margin={{ top: 4, right: 16, left: 4, bottom: 4 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal className="stroke-border/50" />
-                <XAxis type="number" tick={{ fontSize: 10 }} />
-                <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 10 }} />
-                <Tooltip />
-                <Bar dataKey="score" fill={primaryFill} radius={[0, 4, 4, 0]} name="Score" />
-              </BarChart>
-            </ResponsiveContainer>
+            {managerChartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart layout="vertical" data={managerChartData} margin={{ top: 4, right: 16, left: 4, bottom: 4 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal className="stroke-border/50" />
+                  <XAxis type="number" tick={{ fontSize: 10 }} />
+                  <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 10 }} />
+                  <Tooltip />
+                  <Bar dataKey="score" fill={primaryFill} radius={[0, 4, 4, 0]} name="Score" />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <ChartEmptyPlaceholder
+                title="Нет данных по менеджерам"
+                text="Нет действий с ненулевым score в выбранном периоде."
+              />
+            )}
           </CardContent>
         </Card>
       </div>
@@ -547,17 +626,24 @@ export default function ClientBaseActivityDashboardPage(): ReactElement {
             <CardTitle className="text-base">Структура действий</CardTitle>
           </CardHeader>
           <CardContent className="mx-auto h-[220px] w-full max-w-sm" data-testid="chart-activity-breakdown">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={breakdown} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={48} outerRadius={72} paddingAngle={2}>
-                  {breakdown.map((_, i) => (
-                    <Cell key={i} fill={i % 2 === 0 ? primaryFill : mutedFill} />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
+            {breakdown.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={breakdown} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={48} outerRadius={72} paddingAngle={2}>
+                    {breakdown.map((_, i) => (
+                      <Cell key={i} fill={i % 2 === 0 ? primaryFill : mutedFill} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <ChartEmptyPlaceholder
+                title="Нет структуры действий"
+                text="Нет событий для круговой диаграммы в текущих фильтрах."
+              />
+            )}
           </CardContent>
         </Card>
 
