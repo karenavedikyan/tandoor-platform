@@ -212,6 +212,36 @@
 | Коммерческие характеристики (форма / анкета) | `section-dealer-commercial-characteristics`, `select-dealer-door-warehouse`, `textarea-dealer-door-warehouse-comment`, `select-dealer-hardware-warehouse`, `textarea-dealer-hardware-warehouse-comment`, `select-dealer-tandoor-club`, `textarea-dealer-tandoor-club-comment`, `select-dealer-special-terms`, `textarea-dealer-special-terms-comment`, `select-dealer-cashback-client`, `textarea-dealer-cashback-client-comment`, `input-dealer-external-1c-code`, `text-dealer-external-1c-code` |
 | Бейджи в списке клиентской базы (программы) | `badge-dealer-special-terms-{id}`, `badge-dealer-tandoor-club-{id}`, `badge-dealer-cashback-client-{id}` (суффикс `id` клиента для уникальности в списке) |
 
+## Дашборд активности актуализации
+
+**Назначение.** Отдельный экран для **директора продаж** (`sales_director`) и **РОП / руководителя команды** (`team_lead`): на период ручного заполнения клиентской базы видно, кто из менеджеров вносит данные, сводные KPI, динамику по дням, доли видов активности, качество заполнения и список типовых проблемных карточек. Менеджерам пункт меню и маршрут **не показываются** (см. `canAccessClientBaseActivityDashboard` и навигацию в `auth-access.ts`).
+
+**Маршрут и UI.** Страница: `apps/platform/client/src/pages/client-base-activity-dashboard.tsx`, путь **`/client-base-activity`**, заголовок в интерфейсе — «Актуализация базы». Корневой контейнер: `data-testid="page-client-base-activity-dashboard"`.
+
+**Источники данных.** Снимок `ActualizationState` и список клиентов после merge с актуализацией. Псевдо-события собираются в `client-base-activity-metrics.ts` из:
+
+- `manuallyCreatedDealersById`, `dealerOverridesById`;
+- `manuallyCreatedTradePointsById`, `tradePointOverridesById`;
+- `legalEntityOverridesByDealerId`;
+- архивов: `archivedDealersById`, `archivedTradePointsById`, `archivedLegalEntitiesById`, `archivedDealerContactsById`;
+- `dealerPhotosByDealerId`, `tradePointPhotosByTradePointId`;
+- `tradePointShowcaseActualizationById` (заполненная витрина, задачи матрицы `showcaseMatrixTasks`);
+- `dealerActualizationContactsById` (атрибуция по `updatedBy` / `updatedByName`).
+
+Если имя пользователя не передано в данных, используется справочник `getSalesUserById`, затем эвристика по строке клиента, иначе подпись «Не определён».
+
+**Метрики (KPI в шапке).** За выбранный период (или «всё время»): созданные вручную клиенты, обновления клиента (override), ручные ТТ, касания юрлиц (по датам в overrides), загруженные фото (клиент + ТТ), число ТТ с заполненной витриной (с учётом периода по `showcaseUpdatedAt` из строки списка ТТ), текущие показатели дефицита матрицы и открытых задач, число менеджеров с хотя бы одним действием в периоде. При необходимости сравнение с предыдущим таким же по длине интервалом — для подписи «к предыдущему периоду» на карточках KPI.
+
+**Score активности.** Условный балл по менеджеру: веса за виды событий заданы в `SCORE` в `client-base-activity-metrics.ts` (создание клиента, обновление, ТТ, юрлицо, контакт, фото, витрина, архивы, задачи матрицы и т. д.). Рейтинг сортируется по score и дате последней активности. Статусы «Активно» / «Слабо» / «Нет активности» зависят от числа действий в выбранном периоде и давности последнего события (пороги в `activityStatusForManager`).
+
+**Графики (Recharts).** Динамика по дням (стек по типам), горизонтальные бары по score, круговая/кольцевая доля структуры активности — `data-testid`: `chart-activity-by-day`, `chart-activity-by-manager`, `chart-activity-breakdown`. Блок качества базы — `section-activity-quality`, проблемные зоны — `section-activity-problems`.
+
+**Фильтры.** Период (сегодня / вчера / 7 / 30 / всё время), РОП, менеджер, региональный менеджер, город, тип активности, переключатель «только с активностью» — `data-testid`: `select-activity-period`, `select-activity-rop`, `select-activity-manager`, `select-activity-regional-manager`, `select-activity-city`, `select-activity-type`, `switch-activity-only-active`.
+
+**Drilldown по менеджеру.** Клик по строке рейтинга открывает диалог с хронологией псевдо-событий: `dialog-activity-manager-detail`, `list-activity-manager-events`, строки `row-activity-event-{eventId}`.
+
+**Mobile.** KPI в две колонки, графики с адаптивной высотой без горизонтального скролла, таблица менеджеров заменяется карточками, фильтры в `Collapsible`, детализация в `Dialog`.
+
 ## Архив клиентов и торговых точек
 
 - **Архив клиента** (`archivedDealersById`) — это soft-delete: клиент **скрыт** из рабочей клиентской базы и из списка торговых точек (точки этого клиента не строятся в `buildTradePointListForActualization`, пока клиент в архиве).
