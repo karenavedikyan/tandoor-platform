@@ -27,6 +27,12 @@ import {
 } from "@/lib/client-contacts";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { cn } from "@/lib/utils";
+import {
+  formatRussianPhoneInput,
+  isValidRussianPhone,
+  RU_PHONE_INVALID_MESSAGE,
+  RU_PHONE_PLACEHOLDER,
+} from "@/lib/phone-format";
 
 function isFilled(v: string | undefined): boolean {
   const t = (v ?? "").trim();
@@ -109,7 +115,7 @@ export function TradePointContactsSection({ row, tradePoint, profile }: Props) {
     setDraft({
       fullName: c.fullName,
       role: c.role ?? "",
-      phone: c.phone ?? "",
+      phone: formatRussianPhoneInput(c.phone ?? ""),
       whatsapp: c.whatsapp ?? "",
       telegram: c.telegram ?? "",
       email: c.email ?? "",
@@ -127,7 +133,13 @@ export function TradePointContactsSection({ row, tradePoint, profile }: Props) {
       setFormErr("Укажите ФИО.");
       return;
     }
+    const phoneDraft = draft.phone ?? "";
+    if (phoneDraft.trim() && !isValidRussianPhone(phoneDraft)) {
+      setFormErr(RU_PHONE_INVALID_MESSAGE);
+      return;
+    }
     if (!canEdit) return;
+    const phoneFormatted = phoneDraft.trim() ? formatRussianPhoneInput(phoneDraft) : "";
     if (editingId) {
       updateTradePointContact(
         row.id,
@@ -136,7 +148,7 @@ export function TradePointContactsSection({ row, tradePoint, profile }: Props) {
         {
           fullName: draft.fullName,
           role: draft.role,
-          phone: draft.phone,
+          phone: phoneFormatted,
           whatsapp: draft.whatsapp,
           telegram: draft.telegram,
           email: draft.email,
@@ -153,7 +165,7 @@ export function TradePointContactsSection({ row, tradePoint, profile }: Props) {
         {
           fullName: draft.fullName,
           role: draft.role,
-          phone: draft.phone,
+          phone: phoneFormatted,
           whatsapp: draft.whatsapp,
           telegram: draft.telegram,
           email: draft.email,
@@ -390,7 +402,9 @@ export function TradePointContactsSection({ row, tradePoint, profile }: Props) {
               <Input
                 className="min-h-10"
                 value={draft.phone}
-                onChange={(e) => setDraft((d) => ({ ...d, phone: e.target.value }))}
+                inputMode="tel"
+                placeholder={RU_PHONE_PLACEHOLDER}
+                onChange={(e) => setDraft((d) => ({ ...d, phone: formatRussianPhoneInput(e.target.value) }))}
                 data-testid="input-trade-point-contact-phone"
               />
             </div>

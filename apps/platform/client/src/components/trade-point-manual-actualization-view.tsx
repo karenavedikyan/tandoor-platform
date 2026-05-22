@@ -962,6 +962,7 @@ export function TradePointManualActualizationView(props: {
                 value={contactPhone}
                 inputMode="tel"
                 placeholder={RU_PHONE_PLACEHOLDER}
+                data-testid="input-trade-point-phone"
                 onChange={(e) => {
                   setContactPhone(formatRussianPhoneInput(e.target.value));
                   mainSave.markDirty();
