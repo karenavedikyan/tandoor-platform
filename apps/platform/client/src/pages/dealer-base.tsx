@@ -3,6 +3,7 @@ import { Link, useLocation } from "wouter";
 import {
   ChevronDown,
   ChevronRight,
+  Info,
   LayoutGrid,
   LayoutTemplate,
   List,
@@ -14,6 +15,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -364,6 +366,19 @@ type DealerRowRendererBaseProps = {
   nextStepsStorage: DealerBaseNextStepsStorage;
 };
 
+function archivedDealerListBadge(row: DealerRow, act: ActualizationState): ReactNode {
+  if (!act.archivedDealersById[row.id]) return null;
+  return (
+    <Badge
+      variant="secondary"
+      className="border-border/70 bg-muted/80 px-1.5 py-0 text-[10px] font-medium text-foreground"
+      data-testid={`badge-dealer-archived-${row.id}`}
+    >
+      В архиве
+    </Badge>
+  );
+}
+
 function ClientCompactGridBlock({
   rows,
   empty,
@@ -504,6 +519,7 @@ function ClientCompactGridBlock({
                   <Badge variant="outline" className={cn("px-1.5 py-0 text-[10px]", statusBadgeClass(row.status))}>
                     {row.status}
                   </Badge>
+                  {archivedDealerListBadge(row, actualizationState)}
                 </div>
                 {row.outlets > 1 ? (
                   <Badge variant="outline" className={cn("w-fit px-1.5 py-0 text-[10px] tabular-nums", badgeOutline)}>
@@ -661,6 +677,7 @@ function ClientListRowsBlock({
                   <Badge variant="outline" className={cn("text-[10px]", statusBadgeClass(row.status))}>
                     {row.status}
                   </Badge>
+                  {archivedDealerListBadge(row, actualizationState)}
                   <Badge variant="outline" className={cn("text-[10px] tabular-nums", badgeOutline)}>
                     {row.outlets} ТТ
                   </Badge>
@@ -751,7 +768,7 @@ function DealerBaseDataTable({
   rows,
   empty,
   profile,
-  actualizationState: _actualizationState,
+  actualizationState,
   workPlanUserId,
   workPlanState,
   showWorkPlanSelect,
@@ -763,7 +780,6 @@ function DealerBaseDataTable({
   nextStepsStorage,
 }: DealerRowRendererBaseProps) {
   const wp = workPlanUserId && workPlanState;
-  void _actualizationState;
   const [sortKey, setSortKey] = useState<TableSortKey>("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
@@ -877,6 +893,7 @@ function DealerBaseDataTable({
                   <div className="line-clamp-2 font-medium" title={row.name}>
                     {row.name}
                   </div>
+                  {archivedDealerListBadge(row, actualizationState)}
                   {hidden ? (
                     <Badge variant="secondary" className="mt-0.5 w-fit text-[10px]" data-testid={`badge-dealer-hidden-${row.id}`}>
                       Скрыт
@@ -2921,6 +2938,14 @@ export default function DealerBase() {
       ) : null}
 
       <section className="min-w-0" data-testid="section-dealer-base-results">
+        {showArchivedDealers && actx.enabled ? (
+          <Alert className="mb-3 border-primary/30 bg-primary/5" data-testid="text-dealer-base-archive-mode-hint">
+            <Info className="h-4 w-4 text-primary" aria-hidden />
+            <AlertDescription>
+              Вы смотрите архивных клиентов. Изменения в карточках сохраняются, но клиент не вернётся в рабочую базу без восстановления.
+            </AlertDescription>
+          </Alert>
+        ) : null}
         {showClientShipmentAndSegments ? (
           <div className="mb-3 min-w-0 space-y-3">
             <DealerShipmentDayPlanner

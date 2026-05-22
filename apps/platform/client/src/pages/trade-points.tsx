@@ -865,6 +865,9 @@ export default function TradePointsPage(): ReactElement {
             Показать архивные ТТ
           </Label>
           <p className="text-[11px] text-muted-foreground">По умолчанию скрыты архивные точки и клиенты в архиве не попадают в список.</p>
+          <p className="text-[11px] text-muted-foreground" data-testid="text-trade-points-archived-dealers-hidden-hint">
+            Точки архивных клиентов скрыты из рабочего списка. Восстановите клиента, чтобы вернуть его точки в рабочую базу.
+          </p>
         </div>
         <Switch id="toggle-archived-tp" checked={showArchived} data-testid="toggle-trade-points-show-archived" onCheckedChange={(v) => setShowArchived(v === true)} />
       </div>

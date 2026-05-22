@@ -147,7 +147,6 @@ import { DealerContactsSection } from "@/components/dealer-contacts-section";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import {
-  manualDealerToRow,
   mergeDealerRowWithActualization,
   mergeLegalEntitiesForActualization,
   mergeTradePointsActiveForActualization,
@@ -851,7 +850,7 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
 
   const isManualDealerRow = isManualActualizationDealerId(baseRow.id);
   /** Release-карточка: manual-клиенты уходят на DealerManualActualizationPage, здесь всегда false. */
-  const canSoftArchiveDealer = actx.enabled && canArchiveDealerDuringActualization(profile, row);
+  const canSoftArchiveDealer = actx.enabled && !actx.state.archivedDealersById[baseRow.id] && canArchiveDealerDuringActualization(profile, row);
 
   const softArchiveDealer = useCallback(async () => {
     if (!canSoftArchiveDealer) return;
@@ -2287,7 +2286,7 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
             <AlertDialogDescription className="space-y-2 text-sm">
               <p>Клиент будет скрыт из рабочей клиентской базы и не будет отображаться в списке по умолчанию.</p>
               <p>Данные не удаляются физически: карточка, контакты и актуализация сохраняются в состоянии.</p>
-              <p>При необходимости клиента можно восстановить: включите «Показать архив» в базе или откройте прямую ссылку на карточку.</p>
+              <p>При необходимости клиента можно восстановить: кнопка «Восстановить клиента» на карточке, режим «Показать архив» в клиентской базе или прямая ссылка.</p>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
@@ -2325,25 +2324,9 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
   );
 }
 
-function DealerArchivedGate({ dealerId, profile }: { dealerId: string; profile: ReleaseDemoProfile }) {
+function ArchivedDealerCardBanner({ dealerId, profile, row }: { dealerId: string; profile: ReleaseDemoProfile; row: DealerRow }) {
   const actx = useClientBaseActualization();
   const [busy, setBusy] = useState(false);
-  const manualEntry = actx.state.manuallyCreatedDealersById[dealerId];
-  const releaseBase = getDealerById(dealerId);
-
-  const row = useMemo(() => {
-    if (manualEntry) {
-      return mergeDealerRowWithActualization(manualDealerToRow(manualEntry, profile), actx.state);
-    }
-    if (releaseBase) {
-      return mergeDealerRowWithActualization(getDealerRowWithProfileOverrides(releaseBase), actx.state);
-    }
-    return undefined;
-  }, [manualEntry, releaseBase, profile, actx.state]);
-
-  if (!row) return <DealerNotFound />;
-
-  const isManual = isManualActualizationDealerId(dealerId);
   const canRestore = actx.enabled && canArchiveDealerDuringActualization(profile, row);
 
   const onRestore = async () => {
@@ -2363,37 +2346,30 @@ function DealerArchivedGate({ dealerId, profile }: { dealerId: string; profile: 
       });
   };
 
-  const title = "Клиент в архиве";
-  const stateText = isManual
-    ? "Клиент скрыт из рабочей базы. Данные не удалены — запись остаётся в состоянии актуализации. Восстановите клиента кнопкой ниже или через переключатель «Показать архив» в списке."
-    : "Клиент в архиве и скрыт из рабочей выдачи. Исходные данные сохранены — восстановите клиента кнопкой ниже или через «Показать архив» в списке.";
-
   return (
-    <div className="mx-auto max-w-md space-y-6 px-4 py-10" data-testid="page-dealer-archived">
-      <Button asChild variant="outline" className="min-h-11 w-full">
-        <Link href="/dealer-base">К клиентской базе</Link>
-      </Button>
-      <Card className="rounded-2xl border border-border shadow-md">
-        <CardHeader>
-          <CardTitle className="text-lg">{title}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4 text-sm text-muted-foreground">
-          <p data-testid="text-dealer-archived-state">{stateText}</p>
-          {canRestore ? (
-            <Button
-              type="button"
-              className="min-h-10 w-full font-semibold"
-              data-testid={`button-dealer-restore-${dealerId}`}
-              disabled={busy}
-              onClick={() => void onRestore()}
-            >
-              {busy ? "Сохранение…" : "Восстановить"}
-            </Button>
-          ) : (
-            <p className="text-foreground">Недостаточно прав для восстановления.</p>
-          )}
-        </CardContent>
-      </Card>
+    <div className="border-b border-border/80 bg-muted/25 px-3 py-3 sm:px-4" data-testid="banner-dealer-card-archived-region">
+      <div className="mx-auto flex max-w-5xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+        <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
+          <Badge variant="secondary" className="w-fit shrink-0 border-border/80 text-xs font-medium" data-testid="badge-dealer-card-archived">
+            В архиве
+          </Badge>
+          <p className="min-w-0 text-sm leading-snug text-muted-foreground" data-testid="text-dealer-card-archived-hint">
+            Клиент скрыт из рабочей базы. Редактирование сохранит изменения, но не восстановит клиента.
+          </p>
+        </div>
+        {canRestore ? (
+          <Button
+            type="button"
+            variant="default"
+            className="h-10 shrink-0 px-4 text-sm font-semibold sm:min-w-[12rem]"
+            data-testid={`button-dealer-restore-${dealerId}`}
+            disabled={busy}
+            onClick={() => void onRestore()}
+          >
+            {busy ? "Сохранение…" : "Восстановить клиента"}
+          </Button>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -2415,20 +2391,25 @@ export function DealerCardPage() {
     return <DealerNotFound />;
   }
 
-  if (actx.enabled && actx.state.archivedDealersById[id]) {
-    return <DealerArchivedGate dealerId={id} profile={profile} />;
-  }
+  const isArchivedDealer = actx.enabled && Boolean(actx.state.archivedDealersById[id]);
 
   const useCleanActualizationAnketa =
     actx.enabled &&
     canActualizeClientBase(profile) &&
     (CLIENT_BASE_ACTUALIZATION_CLEAN_MODE || isManualActualizationDealerId(id));
 
-  if (useCleanActualizationAnketa) {
-    return <DealerManualActualizationPage baseRow={baseRow} profile={profile} />;
-  }
+  const mainContent = useCleanActualizationAnketa ? (
+    <DealerManualActualizationPage baseRow={baseRow} profile={profile} />
+  ) : (
+    <DealerCardContent baseRow={baseRow} />
+  );
 
-  return <DealerCardContent baseRow={baseRow} />;
+  return (
+    <>
+      {isArchivedDealer ? <ArchivedDealerCardBanner dealerId={id} profile={profile} row={baseRow} /> : null}
+      {mainContent}
+    </>
+  );
 }
 
 /** Маршрут `/dealer-card-foundation` — превью карточки первого клиента из базы. */
