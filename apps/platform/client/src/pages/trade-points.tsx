@@ -5,7 +5,21 @@
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
-import { ChevronDown, ChevronUp, Info, Store, Trash2 } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Info,
+  LayoutGrid,
+  LayoutTemplate,
+  List,
+  Mail,
+  MessageCircle,
+  Phone,
+  Search,
+  Store,
+  Table2,
+  Trash2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,7 +47,7 @@ import { MultiSelect } from "@/components/ui/multi-select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DealerBulkDeleteCheckbox } from "@/components/dealer-bulk-delete-checkbox";
-import { TradePointRowListThumb } from "@/components/trade-point-row-list-thumb";
+import { ShowcaseCoverPhotoSlot } from "@/components/showcase-cover-photo-slot";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -48,13 +62,16 @@ import {
   type TradePointListRow,
   type TradePointShowcaseBucket,
 } from "@/lib/trade-point-list-for-actualization";
+import { cleanContactDisplay, mailtoHref, telHref, whatsAppHref } from "@/lib/dealer-contact-links";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
 import { toast } from "@/hooks/use-toast";
 import { getClientCategoryLabel, type ClientCategoryId } from "@/lib/client-category";
+import type { DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import { cn } from "@/lib/utils";
 import { useCurrentUser } from "@/hooks/use-current-user";
 
-type ViewMode = "cards" | "list" | "compact";
+/** Плотность отображения списка торговых точек (как «Витрина дилеров»). */
+type TradePointShowcaseDensity = "large" | "grid" | "list" | "table";
 
 type SortKey =
   | "city"
@@ -96,18 +113,37 @@ const TASKS_FILTER_LABELS: Record<Exclude<TasksFilter, "all">, string> = {
 
 const UNFILLED_SHOWCASE_BUCKETS: TradePointShowcaseBucket[] = ["not_filled", "partial", "needs_attention"];
 
-const LS_TRADE_POINTS_VIEW_MODE = "tandoor-trade-points-view-mode-v1";
+const LS_TRADE_POINTS_DENSITY = "tandoor-trade-points-density-v1";
+/** Legacy: «карточки / список / компактно» → мигрируем в {@link LS_TRADE_POINTS_DENSITY}. */
+const LS_TRADE_POINTS_VIEW_MODE_LEGACY = "tandoor-trade-points-view-mode-v1";
 const LS_TRADE_POINTS_FILTERS_COLLAPSED = "tandoor-trade-points-filters-collapsed-v1";
 
-function readViewModeFromStorage(): ViewMode {
-  if (typeof window === "undefined") return "cards";
+function parseTradePointDensity(raw: string | null): TradePointShowcaseDensity | null {
+  if (raw === "large" || raw === "grid" || raw === "list" || raw === "table") return raw;
+  if (raw === "compact") return "grid";
+  if (raw === "cards") return "large";
+  return null;
+}
+
+function migrateLegacyTradePointsViewMode(legacyRaw: string | null, narrowViewport: boolean): TradePointShowcaseDensity {
+  const v = legacyRaw?.trim();
+  if (v === "cards") return narrowViewport ? "grid" : "large";
+  if (v === "compact") return "grid";
+  if (v === "list") return "list";
+  return narrowViewport ? "grid" : "large";
+}
+
+function readTradePointDensityFromStorage(): TradePointShowcaseDensity {
+  if (typeof window === "undefined") return "large";
+  const narrow = window.innerWidth < 768;
   try {
-    const v = window.localStorage.getItem(LS_TRADE_POINTS_VIEW_MODE);
-    if (v === "cards" || v === "list" || v === "compact") return v;
+    const d = parseTradePointDensity(window.localStorage.getItem(LS_TRADE_POINTS_DENSITY));
+    if (d) return d;
+    const old = window.localStorage.getItem(LS_TRADE_POINTS_VIEW_MODE_LEGACY);
+    return migrateLegacyTradePointsViewMode(old, narrow);
   } catch {
-    /* ignore */
+    return narrow ? "grid" : "large";
   }
-  return "cards";
 }
 
 function readFiltersCollapsedFromStorage(): boolean {
@@ -126,6 +162,30 @@ const TRADE_POINT_BULK_CHECKBOX_CLASS =
 /** Компактный чекбокс для dense-режимов (bulk), без раздувания карточки/строки. */
 const TRADE_POINT_BULK_CHECKBOX_COMPACT_CLASS =
   "!box-border !h-5 !w-5 !min-h-5 !min-w-5 !border-2 [&_svg]:!h-2.5 [&_svg]:!w-2.5 md:!h-6 md:!w-6 md:!min-h-6 md:!min-w-6 md:[&_svg]:!h-3 md:[&_svg]:!w-3";
+
+function tradePointContactUrls(point: DealerTradePoint): {
+  phone: string | null;
+  email: string | null;
+  tel: string | null;
+  wa: string | null;
+  mail: string | null;
+} {
+  const phone = cleanContactDisplay(point.contactPhone);
+  const email = cleanContactDisplay(point.contactEmail);
+  return {
+    phone,
+    email,
+    tel: phone ? telHref(phone) : null,
+    wa: phone ? whatsAppHref(phone) : null,
+    mail: email ? mailtoHref(email) : null,
+  };
+}
+
+const TP_CONTACT_ICON_BTN =
+  "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-card text-foreground hover:bg-primary/10 sm:h-9 sm:w-9";
+
+const TP_CONTACT_ICON_BTN_COMPACT =
+  "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-card text-foreground hover:bg-primary/10";
 
 function searchMatches(haystack: string, query: string): boolean {
   const q = query.trim().toLowerCase();
@@ -184,7 +244,7 @@ export default function TradePointsPage(): ReactElement {
   const isMobile = useIsMobile();
   const actState = actx.enabled ? actx.state : createEmptyActualizationState();
 
-  const [viewMode, setViewMode] = useState<ViewMode>(() => readViewModeFromStorage());
+  const [tradePointDensity, setTradePointDensity] = useState<TradePointShowcaseDensity>(() => readTradePointDensityFromStorage());
   const [desktopFiltersCollapsed, setDesktopFiltersCollapsed] = useState(() => readFiltersCollapsedFromStorage());
   const [search, setSearch] = useState("");
   const [cityFilter, setCityFilter] = useState<string[]>([]);
@@ -435,13 +495,35 @@ export default function TradePointsPage(): ReactElement {
     return n;
   }, [selectedBulkTpKeys, archivableTpKeysInView]);
 
-  useEffect(() => {
+  const effectiveDensity: TradePointShowcaseDensity = useMemo(
+    () => (isMobile && tradePointDensity === "table" ? "list" : tradePointDensity),
+    [isMobile, tradePointDensity],
+  );
+
+  const persistTradePointDensity = useCallback((d: TradePointShowcaseDensity) => {
+    setTradePointDensity(d);
     try {
-      window.localStorage.setItem(LS_TRADE_POINTS_VIEW_MODE, viewMode);
+      window.localStorage.setItem(LS_TRADE_POINTS_DENSITY, d);
+      window.localStorage.removeItem(LS_TRADE_POINTS_VIEW_MODE_LEGACY);
     } catch {
       /* ignore */
     }
-  }, [viewMode]);
+  }, []);
+
+  /** Однократно переносим legacy `tandoor-trade-points-view-mode-v1` в новый ключ. */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      if (window.localStorage.getItem(LS_TRADE_POINTS_DENSITY)) return;
+      const narrow = window.innerWidth < 768;
+      const old = window.localStorage.getItem(LS_TRADE_POINTS_VIEW_MODE_LEGACY);
+      const migrated = migrateLegacyTradePointsViewMode(old, narrow);
+      window.localStorage.setItem(LS_TRADE_POINTS_DENSITY, migrated);
+      window.localStorage.removeItem(LS_TRADE_POINTS_VIEW_MODE_LEGACY);
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   useEffect(() => {
     try {
@@ -695,20 +777,53 @@ export default function TradePointsPage(): ReactElement {
   const tpHref = (r: TradePointListRow) => `/dealers/${encodeURIComponent(r.dealerId)}/trade-points/${encodeURIComponent(r.tradePointId)}`;
   const dealerHref = (r: TradePointListRow) => `/dealers/${encodeURIComponent(r.dealerId)}`;
 
+  const tpBadgeOutline = "border-primary/35 bg-card text-foreground";
+  const tpBadgeSoft = "border-primary/30 bg-primary/10 text-foreground";
+
+  const renderTpContactIcons = (r: TradePointListRow, iconSize: "default" | "compact" | "table") => {
+    const { tel, wa, mail } = tradePointContactUrls(r.point);
+    const btn = iconSize === "default" ? TP_CONTACT_ICON_BTN : TP_CONTACT_ICON_BTN_COMPACT;
+    const icn = iconSize === "table" ? "h-3.5 w-3.5" : "h-4 w-4";
+    const id = r.tradePointId;
+    return (
+      <div className="flex shrink-0 items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+        {tel ? (
+          <a href={tel} className={btn} data-testid={`link-trade-point-call-${id}`} aria-label="Позвонить" onClick={(e) => e.stopPropagation()}>
+            <Phone className={cn("text-primary", icn)} />
+          </a>
+        ) : (
+          <span className={cn(btn, "cursor-not-allowed opacity-45")} title="Телефон не указан" aria-hidden>
+            <Phone className={cn("text-muted-foreground", icn)} />
+          </span>
+        )}
+        {wa ? (
+          <a href={wa} className={btn} data-testid={`link-trade-point-whatsapp-${id}`} aria-label="WhatsApp" onClick={(e) => e.stopPropagation()}>
+            <MessageCircle className={cn("text-primary", icn)} />
+          </a>
+        ) : (
+          <span className={cn(btn, "cursor-not-allowed opacity-45")} title="Телефон не указан" aria-hidden>
+            <MessageCircle className={cn("text-muted-foreground", icn)} />
+          </span>
+        )}
+        {mail ? (
+          <a
+            href={mail}
+            className={cn(btn, iconSize === "compact" ? "hidden sm:inline-flex" : iconSize === "table" ? "inline-flex" : "hidden sm:inline-flex")}
+            data-testid={`link-trade-point-email-${id}`}
+            aria-label="Email"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Mail className={cn("text-primary", icn)} />
+          </a>
+        ) : null}
+      </div>
+    );
+  };
+
   const filtersCollapsibleOpen = isMobile ? mobileFiltersOpen : true;
 
   const filterForm = (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      <div className="space-y-1 sm:col-span-2 lg:col-span-3">
-        <Label className="text-xs">Поиск</Label>
-        <Input
-          className="min-h-10"
-          value={search}
-          data-testid="input-trade-points-search"
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="ТТ, адрес, город, клиент, коды…"
-        />
-      </div>
       <div className="space-y-1">
         <Label className="text-xs">Город</Label>
         <MultiSelect options={cityOptions} value={cityFilter} onChange={setCityFilter} placeholder="Все города" testId="filter-trade-points-city" />
@@ -912,9 +1027,6 @@ export default function TradePointsPage(): ReactElement {
     </Button>
   );
 
-  const viewModeBtnClass = (active: boolean) =>
-    cn("min-h-10 shrink-0 touch-manipulation", active && "ring-2 ring-primary ring-offset-2 ring-offset-background");
-
   const renderArchiveHint = (row: TradePointListRow) => {
     const reason = archiveBlockReason(row);
     if (!reason || canArchiveRow(row)) return null;
@@ -958,7 +1070,7 @@ export default function TradePointsPage(): ReactElement {
               type="button"
               className={cn(
                 "shrink-0 text-left text-xs font-semibold leading-none underline-offset-2 hover:underline sm:text-sm",
-                selected ? "text-destructive" : "text-destructive/90",
+                selected ? "text-primary" : "text-muted-foreground",
               )}
               onClick={() => toggleBulkTp(k, !selected)}
             >
@@ -990,14 +1102,9 @@ export default function TradePointsPage(): ReactElement {
     );
   };
 
-  const listDesktopGridCols =
-    bulkDeleteMode && canShowBulkTradePointControls
-      ? "md:grid-cols-[auto_minmax(0,2.75rem)_minmax(0,4.5rem)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,4.5rem)_minmax(0,6.5rem)_minmax(0,3.5rem)_auto]"
-      : "md:grid-cols-[minmax(0,2.75rem)_minmax(0,4.5rem)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,4.5rem)_minmax(0,6.5rem)_minmax(0,3.5rem)_auto]";
-
   return (
     <div className="min-w-0 max-w-full space-y-4 overflow-x-hidden px-1 sm:space-y-6 sm:px-0" data-testid="page-trade-points">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-3">
         <div className="min-w-0 space-y-1">
           <div className="flex items-center gap-2">
             <Store className="h-6 w-6 shrink-0 text-muted-foreground" aria-hidden />
@@ -1005,38 +1112,75 @@ export default function TradePointsPage(): ReactElement {
           </div>
           <p className="text-sm text-muted-foreground">Все точки клиентов, доступные по вашей зоне ответственности</p>
         </div>
-        <div className="flex shrink-0 flex-wrap gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant={viewMode === "cards" ? "default" : "outline"}
-            className={viewModeBtnClass(viewMode === "cards")}
-            data-testid="button-trade-points-view-cards"
-            onClick={() => setViewMode("cards")}
-          >
-            Карточки
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={viewMode === "list" ? "default" : "outline"}
-            className={viewModeBtnClass(viewMode === "list")}
-            data-testid="button-trade-points-view-list"
-            onClick={() => setViewMode("list")}
-          >
-            Список
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={viewMode === "compact" ? "default" : "outline"}
-            className={viewModeBtnClass(viewMode === "compact")}
-            data-testid="button-trade-points-view-compact"
-            onClick={() => setViewMode("compact")}
-          >
-            Компактно
-          </Button>
-        </div>
+
+        <Card className="rounded-2xl border border-border/80 bg-card shadow-md">
+          <CardContent className="space-y-2.5 p-3 sm:p-4">
+            <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-end sm:gap-4">
+              <div className="relative min-w-0 flex-1">
+                <Search
+                  className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground sm:left-3"
+                  aria-hidden
+                />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="ТТ, адрес, город, клиент, коды…"
+                  className="min-h-9 rounded-lg border-border pl-9 text-sm sm:min-h-10 sm:rounded-xl sm:pl-10"
+                  data-testid="input-trade-points-search"
+                />
+              </div>
+              <div
+                className="flex min-w-0 shrink-0 flex-col gap-2 sm:ml-auto sm:items-end"
+                data-testid="section-trade-points-mode-toolbar"
+              >
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Отображение</p>
+                  <p className="hidden text-[11px] text-muted-foreground sm:block">Плотность списка торговых точек</p>
+                </div>
+                <div
+                  className="flex min-w-0 items-center justify-end gap-0.5 rounded-lg border border-border bg-card p-0.5"
+                  data-testid="section-trade-points-density-icons"
+                  role="radiogroup"
+                  aria-label="Плотность отображения торговых точек"
+                >
+                  {(
+                    [
+                      { id: "large" as const, label: "Крупно", tid: "button-trade-points-density-large", icon: LayoutTemplate },
+                      { id: "grid" as const, label: "Сетка", tid: "button-trade-points-density-grid", icon: LayoutGrid },
+                      { id: "list" as const, label: "Список", tid: "button-trade-points-density-list", icon: List },
+                      { id: "table" as const, label: "Таблица", tid: "button-trade-points-density-table", icon: Table2 },
+                    ] as const
+                  ).map((opt) => {
+                    const Icon = opt.icon;
+                    const active = tradePointDensity === opt.id;
+                    return (
+                      <Button
+                        key={opt.id}
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className={cn(
+                          "h-9 w-9 shrink-0 rounded-md border",
+                          active
+                            ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
+                            : "border-transparent bg-card text-muted-foreground hover:bg-muted hover:text-foreground",
+                        )}
+                        data-testid={opt.tid}
+                        aria-label={opt.label}
+                        aria-pressed={active}
+                        role="radio"
+                        aria-checked={active}
+                        onClick={() => persistTradePointDensity(opt.id)}
+                      >
+                        <Icon className="h-4 w-4" aria-hidden />
+                      </Button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <div
@@ -1092,7 +1236,7 @@ export default function TradePointsPage(): ReactElement {
         </div>
         {activeFilterCount > 0 ? (
           <p
-            className="text-sm font-medium text-amber-950 dark:text-amber-100 max-md:pt-1 md:ml-auto md:w-full md:pt-1 lg:w-auto"
+            className="text-sm font-medium text-foreground max-md:pt-1 md:ml-auto md:w-full md:pt-1 lg:w-auto"
             data-testid="text-trade-points-active-filters-banner"
           >
             Фильтры активны: {activeFilterCount}
@@ -1100,7 +1244,7 @@ export default function TradePointsPage(): ReactElement {
         ) : null}
       </div>
 
-      <div className="flex flex-wrap gap-2 rounded-xl border border-primary/20 bg-primary/5 p-3">
+      <div className="flex flex-wrap gap-2 rounded-xl border border-border bg-muted/30 p-3">
         <span className="w-full text-xs font-semibold uppercase tracking-wide text-muted-foreground md:w-auto md:py-1.5">Быстрые фильтры</span>
         {quickPresetButton("all", "Все")}
         {quickPresetButton("unfilled_showcase", "Не заполнена витрина")}
@@ -1160,7 +1304,7 @@ export default function TradePointsPage(): ReactElement {
           {bulkDeleteMode && canShowBulkTradePointControls && eligibleTradePointsInFilterCount === 0 && filteredSorted.length > 0 ? (
             <div
               role="alert"
-              className="rounded-lg border border-amber-500/45 bg-amber-500/10 px-3 py-2 text-sm text-amber-950 dark:text-amber-50"
+              className="rounded-lg border border-border bg-muted/50 px-3 py-2 text-sm text-muted-foreground"
               data-testid="text-trade-points-bulk-no-eligible-alert"
             >
               В текущем списке нет торговых точек, доступных для удаления.
@@ -1171,7 +1315,7 @@ export default function TradePointsPage(): ReactElement {
 
       {bulkDeleteMode && canShowBulkTradePointControls && eligibleTradePointsInFilterCount > 0 ? (
         <div
-          className="space-y-3 rounded-xl border-2 border-destructive/35 bg-destructive/[0.08] p-3 shadow-sm"
+          className="space-y-3 rounded-xl border border-border bg-card p-3 shadow-sm"
           data-testid="panel-trade-points-bulk-actions"
         >
           <div className="flex flex-wrap items-center gap-3">
@@ -1184,15 +1328,15 @@ export default function TradePointsPage(): ReactElement {
               }}
               data-testid="checkbox-trade-points-select-all-visible"
               aria-label="Выбрать все доступные для удаления торговые точки на экране"
-              className={viewMode === "compact" ? TRADE_POINT_BULK_CHECKBOX_COMPACT_CLASS : TRADE_POINT_BULK_CHECKBOX_CLASS}
+              className={effectiveDensity !== "large" ? TRADE_POINT_BULK_CHECKBOX_COMPACT_CLASS : TRADE_POINT_BULK_CHECKBOX_CLASS}
             />
-            <Label htmlFor="tp-bulk-select-all-visible" className="cursor-pointer text-sm font-semibold text-destructive sm:text-base">
+            <Label htmlFor="tp-bulk-select-all-visible" className="cursor-pointer text-sm font-semibold text-foreground sm:text-base">
               Выбрать доступные на экране
             </Label>
           </div>
           {bulkSelectedVisibleCount > 0 ? (
-            <div className="flex flex-col gap-3 border-t border-destructive/25 pt-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-              <p className="text-base font-bold text-destructive" data-testid="text-trade-points-bulk-selected-count">
+            <div className="flex flex-col gap-3 border-t border-border pt-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+              <p className="text-base font-bold text-foreground" data-testid="text-trade-points-bulk-selected-count">
                 Выбрано: {bulkSelectedVisibleCount}
               </p>
               <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:justify-end">
@@ -1200,7 +1344,7 @@ export default function TradePointsPage(): ReactElement {
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="min-h-11 w-full font-semibold sm:min-h-10 sm:w-auto"
+                  className="min-h-11 w-full border-border font-semibold sm:min-h-10 sm:w-auto"
                   data-testid="button-trade-points-bulk-clear-selection"
                   onClick={() => setSelectedBulkTpKeys(new Set())}
                 >
@@ -1208,9 +1352,9 @@ export default function TradePointsPage(): ReactElement {
                 </Button>
                 <Button
                   type="button"
-                  variant="destructive"
+                  variant="outline"
                   size="default"
-                  className="min-h-11 w-full text-base font-bold shadow-md sm:min-h-10 sm:w-auto"
+                  className="min-h-11 w-full border-primary/40 bg-primary/10 text-base font-bold text-foreground hover:bg-primary/15 sm:min-h-10 sm:w-auto"
                   data-testid="button-trade-points-bulk-archive"
                   onClick={() => setBulkArchiveDialogOpen(true)}
                 >
@@ -1403,58 +1547,144 @@ export default function TradePointsPage(): ReactElement {
         </div>
       ) : null}
 
-      {viewMode === "list" ? (
-        <div className="overflow-hidden rounded-xl border border-border/80">
-          <div
-            className={cn(
-              "hidden gap-2 border-b bg-muted/40 px-2 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground md:grid md:items-center",
-              listDesktopGridCols,
-            )}
-          >
-            {bulkDeleteMode && canShowBulkTradePointControls ? <span className="sr-only">Выбор</span> : null}
-            <span className="sr-only">Фото</span>
-            <span>Код</span>
-            <span>ТТ</span>
-            <span>Клиент</span>
-            <span>Город</span>
-            <span>Витрина</span>
-            <span>Дефицит</span>
-            <span className="text-right">Действия</span>
-          </div>
+      {effectiveDensity === "table" ? (
+        <div className="w-full min-w-0 overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
+          <table className="w-full table-fixed border-collapse text-left text-sm">
+            <thead>
+              <tr className="border-b bg-muted/40 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {bulkDeleteMode && canShowBulkTradePointControls ? <th className="w-10 p-2 align-middle" /> : null}
+                <th className="w-14 p-2 align-middle">Фото</th>
+                <th className="w-[18%] p-2 align-middle">Торговая точка</th>
+                <th className="w-[16%] p-2 align-middle">Клиент</th>
+                <th className="w-[10%] p-2 align-middle">Город</th>
+                <th className="w-[18%] p-2 align-middle">Адрес</th>
+                <th className="w-[12%] p-2 align-middle">Витрина</th>
+                <th className="w-[8%] p-2 align-middle">Дефицит</th>
+                <th className="w-[14%] p-2 align-middle">Контакт</th>
+                <th className="w-[14%] p-2 align-middle text-right">Действия</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/70">
+              {tradePointsRowsForList.map((r) => {
+                const k = rowKey(r);
+                const bulkRowSelected = bulkDeleteMode && selectedBulkTpKeys.has(k) && canArchiveRow(r);
+                const contacts = tradePointContactUrls(r.point);
+                return (
+                  <tr
+                    key={k}
+                    data-testid={`row-trade-point-table-${r.tradePointId}`}
+                    className={cn(bulkRowSelected && "bg-primary/[0.06]")}
+                  >
+                    {bulkDeleteMode && canShowBulkTradePointControls ? (
+                      <td className="p-2 align-middle">{renderBulkRowControl(r, { dense: true })}</td>
+                    ) : null}
+                    <td className="p-2 align-middle" data-testid={`cell-trade-point-table-photo-${r.tradePointId}`}>
+                      <ShowcaseCoverPhotoSlot kind="trade_point" dealer={r.dealer} tradePoint={r.point} profile={profile} size="table" rounded="md" />
+                    </td>
+                    <td className="p-2 align-middle">
+                      <p className="font-mono text-[10px] text-muted-foreground">{r.tradePointDisplayCode}</p>
+                      <p className="line-clamp-2 font-medium leading-snug">{r.tradePointName}</p>
+                    </td>
+                    <td className="p-2 align-middle">
+                      <p className="line-clamp-2 text-sm">{r.dealerName}</p>
+                    </td>
+                    <td className="p-2 align-middle">
+                      <p className="truncate">{r.city}</p>
+                    </td>
+                    <td className="p-2 align-middle text-muted-foreground">
+                      <p className="line-clamp-2 text-xs">{r.address}</p>
+                    </td>
+                    <td className="p-2 align-middle">
+                      <Badge variant="outline" className={cn("text-[10px]", tpBadgeOutline)}>
+                        {r.showcaseBucketLabel}
+                      </Badge>
+                    </td>
+                    <td className="p-2 align-middle">
+                      {r.matrixDeficitCount > 0 ? (
+                        <Badge variant="outline" className={cn("text-[10px]", tpBadgeSoft)}>
+                          Деф. {r.matrixDeficitCount}
+                        </Badge>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="p-2 align-middle">
+                      <p className="line-clamp-1 text-xs text-foreground">{cleanContactDisplay(r.point.contactName) ?? "—"}</p>
+                      {contacts.phone ? <p className="line-clamp-1 text-[10px] text-muted-foreground">{contacts.phone}</p> : null}
+                    </td>
+                    <td className="p-2 align-middle">
+                      <div className="flex flex-wrap items-center justify-end gap-1">
+                        {renderTpContactIcons(r, "table")}
+                        <Button asChild size="sm" variant="secondary" className="h-8 shrink-0 px-2 text-xs font-semibold">
+                          <Link href={tpHref(r)} data-testid={`button-trade-point-table-open-${r.tradePointId}`}>
+                            Открыть
+                          </Link>
+                        </Button>
+                        <Button asChild size="sm" variant="secondary" className="hidden h-8 shrink-0 px-2 text-xs font-semibold xl:inline-flex">
+                          <Link href={dealerHref(r)}>К клиенту</Link>
+                        </Button>
+                        {!bulkDeleteMode && !canArchiveRow(r) ? renderArchiveHint(r) : null}
+                        {!bulkDeleteMode && canArchiveRow(r) ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-8 w-8 shrink-0 border-border p-0 text-muted-foreground hover:bg-muted"
+                            data-testid={`button-trade-point-list-delete-${r.tradePointId}`}
+                            title="В архив"
+                            onClick={() => setArchiveTarget(r)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                          </Button>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : effectiveDensity === "list" ? (
+        <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
           <ul className="divide-y divide-border/70">
             {tradePointsRowsForList.map((r) => {
               const k = rowKey(r);
               const bulkRowSelected = bulkDeleteMode && selectedBulkTpKeys.has(k) && canArchiveRow(r);
-              const listBulkDense = !isMobile;
+              const addrShort = [r.city, r.address].filter((x) => x && x !== "—").join(" · ");
               return (
                 <li
                   key={k}
-                  data-testid={`row-trade-point-${r.tradePointId}`}
-                  className={cn(
-                    bulkRowSelected && "rounded-md border border-destructive/45 bg-destructive/[0.04] md:rounded-none md:border-x-0 md:border-t-0 md:border-b",
-                  )}
+                  data-testid={`row-trade-point-list-${r.tradePointId}`}
+                  className={cn("flex min-w-0 gap-2 p-2.5 sm:gap-3 sm:p-3", bulkRowSelected && "bg-primary/[0.06]")}
                 >
-                  <div className="flex flex-col gap-2 px-2 py-3 md:hidden">
-                    <div className="flex w-full min-w-0 items-start gap-2">
-                      {renderBulkRowControl(r, { dense: false })}
-                      <TradePointRowListThumb point={r.point} size="xs" className="shrink-0" />
-                      <div className="min-w-0 flex-1 space-y-1">
-                        <p className="font-mono text-[11px] text-muted-foreground" data-testid={`text-trade-point-list-code-${r.tradePointId}`}>
-                          {r.tradePointDisplayCode}
-                        </p>
-                        <p className="line-clamp-2 text-sm font-medium leading-snug">{r.tradePointName}</p>
-                        <p className="line-clamp-1 text-xs text-muted-foreground">{r.city}</p>
-                      </div>
-                    </div>
-                    <p className="line-clamp-1 text-sm font-medium" data-testid={`text-trade-point-list-dealer-${r.tradePointId}`}>
+                  {bulkDeleteMode && canShowBulkTradePointControls ? (
+                    <div className="flex shrink-0 items-start pt-0.5">{renderBulkRowControl(r, { dense: true })}</div>
+                  ) : null}
+                  <ShowcaseCoverPhotoSlot
+                    kind="trade_point"
+                    dealer={r.dealer}
+                    tradePoint={r.point}
+                    profile={profile}
+                    size="list"
+                    rounded="md"
+                    className="shrink-0"
+                  />
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <p className="font-mono text-[10px] text-muted-foreground" data-testid={`text-trade-point-list-code-${r.tradePointId}`}>
+                      {r.tradePointDisplayCode}
+                    </p>
+                    <p className="line-clamp-2 text-sm font-semibold leading-snug text-foreground">{r.tradePointName}</p>
+                    <p className="line-clamp-1 text-xs text-muted-foreground">{addrShort || "—"}</p>
+                    <p className="line-clamp-1 text-xs font-medium text-foreground" data-testid={`text-trade-point-list-dealer-${r.tradePointId}`}>
                       {r.dealerName}
                     </p>
                     <div className="flex flex-wrap items-center gap-1">
-                      <Badge variant="outline" className="text-[10px]">
+                      <Badge variant="outline" className={cn("text-[10px]", tpBadgeOutline)}>
                         {r.showcaseBucketLabel}
                       </Badge>
                       {r.matrixDeficitCount > 0 ? (
-                        <Badge variant="destructive" className="text-[10px]">
+                        <Badge variant="outline" className={cn("text-[10px]", tpBadgeSoft)}>
                           Деф. {r.matrixDeficitCount}
                         </Badge>
                       ) : null}
@@ -1464,153 +1694,77 @@ export default function TradePointsPage(): ReactElement {
                         </Badge>
                       ) : null}
                     </div>
-                    <div className="flex flex-wrap items-center justify-end gap-1.5">
-                      <Button asChild size="sm" variant="default" className="h-8 min-h-8 px-2 text-xs" data-testid={`button-trade-point-list-open-${r.tradePointId}`} title="ТТ">
-                        <Link href={tpHref(r)}>ТТ</Link>
-                      </Button>
-                      <Button asChild size="sm" variant="outline" className="h-8 min-h-8 px-2 text-xs" data-testid={`button-trade-point-list-open-dealer-${r.dealerId}-${r.tradePointId}`} title="Клиент">
-                        <Link href={dealerHref(r)}>Клиент</Link>
-                      </Button>
-                      {!bulkDeleteMode && !canArchiveRow(r) ? renderArchiveHint(r) : null}
-                      {!bulkDeleteMode && canArchiveRow(r) ? (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="destructive"
-                          className="h-8 min-h-8 w-8 shrink-0 p-0"
-                          data-testid={`button-trade-point-list-delete-${r.tradePointId}`}
-                          title="Удалить ТТ"
-                          onClick={() => setArchiveTarget(r)}
-                        >
-                          <Trash2 className="h-4 w-4" aria-hidden />
-                        </Button>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  <div className={cn("hidden md:grid md:items-center md:gap-x-2 md:px-2 md:py-2 md:text-sm", listDesktopGridCols)}>
-                    {bulkDeleteMode && canShowBulkTradePointControls ? (
-                      <div className="flex items-center justify-start">{renderBulkRowControl(r, { dense: listBulkDense })}</div>
+                    {cleanContactDisplay(r.point.contactName) ? (
+                      <p className="line-clamp-1 text-[11px] text-muted-foreground">{cleanContactDisplay(r.point.contactName)}</p>
                     ) : null}
-                    <div className="flex justify-center">
-                      <TradePointRowListThumb point={r.point} size="xs" />
-                    </div>
-                    <div className="font-mono text-[11px] text-muted-foreground tabular-nums" data-testid={`text-trade-point-list-code-${r.tradePointId}`}>
-                      {r.tradePointDisplayCode}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="line-clamp-1 text-sm font-medium leading-tight">{r.tradePointName}</p>
-                    </div>
-                    <div className="min-w-0">
-                      <p className="line-clamp-1 text-sm font-medium" data-testid={`text-trade-point-list-dealer-${r.tradePointId}`}>
-                        {r.dealerName}
-                      </p>
-                    </div>
-                    <div className="min-w-0 text-sm">{r.city}</div>
-                    <div className="min-w-0">
-                      <Badge variant="outline" className="max-w-full truncate text-[10px]">
-                        {r.showcaseBucketLabel}
-                      </Badge>
-                    </div>
-                    <div className="min-w-0">
-                      {r.matrixDeficitCount > 0 ? (
-                        <Badge variant="destructive" className="text-[10px]">
-                          Деф. {r.matrixDeficitCount}
-                        </Badge>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </div>
-                    <div className="flex min-w-0 justify-end gap-1">
-                      <Button asChild size="sm" variant="default" className="h-7 shrink-0 px-2 text-xs" data-testid={`button-trade-point-list-open-${r.tradePointId}`} title="ТТ">
-                        <Link href={tpHref(r)}>ТТ</Link>
+                  </div>
+                  <div className="ml-auto flex shrink-0 flex-col items-end gap-1.5 self-center sm:flex-row sm:items-center">
+                    {renderTpContactIcons(r, "compact")}
+                    <Button asChild size="sm" variant="secondary" className="h-8 shrink-0 px-2 text-xs font-semibold" data-testid={`button-trade-point-list-open-${r.tradePointId}`}>
+                      <Link href={tpHref(r)}>Открыть</Link>
+                    </Button>
+                    <Button asChild size="sm" variant="outline" className="h-8 shrink-0 border-border px-2 text-xs" data-testid={`button-trade-point-list-open-dealer-${r.dealerId}-${r.tradePointId}`}>
+                      <Link href={dealerHref(r)}>К клиенту</Link>
+                    </Button>
+                    {!bulkDeleteMode && !canArchiveRow(r) ? renderArchiveHint(r) : null}
+                    {!bulkDeleteMode && canArchiveRow(r) ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-8 w-8 shrink-0 border-border p-0 text-muted-foreground hover:bg-muted"
+                        data-testid={`button-trade-point-list-delete-${r.tradePointId}`}
+                        title="В архив"
+                        onClick={() => setArchiveTarget(r)}
+                      >
+                        <Trash2 className="h-4 w-4" aria-hidden />
                       </Button>
-                      <Button asChild size="sm" variant="outline" className="h-7 shrink-0 px-2 text-xs" data-testid={`button-trade-point-list-open-dealer-${r.dealerId}-${r.tradePointId}`} title="Клиент">
-                        <Link href={dealerHref(r)}>Клиент</Link>
-                      </Button>
-                      {!bulkDeleteMode && !canArchiveRow(r) ? renderArchiveHint(r) : null}
-                      {!bulkDeleteMode && canArchiveRow(r) ? (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="destructive"
-                          className="h-7 w-7 shrink-0 p-0"
-                          data-testid={`button-trade-point-list-delete-${r.tradePointId}`}
-                          title="Удалить ТТ"
-                          onClick={() => setArchiveTarget(r)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" aria-hidden />
-                        </Button>
-                      ) : null}
-                    </div>
+                    ) : null}
                   </div>
                 </li>
               );
             })}
           </ul>
         </div>
-      ) : viewMode === "compact" ? (
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
+      ) : effectiveDensity === "grid" ? (
+        <div className="grid grid-cols-2 gap-2 sm:gap-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {tradePointsRowsForList.map((r) => {
             const k = rowKey(r);
             const bulkCardSelected = bulkDeleteMode && selectedBulkTpKeys.has(k) && canArchiveRow(r);
             return (
               <Card
                 key={k}
-                data-testid={`compact-card-trade-point-${r.tradePointId}`}
+                data-testid={`card-trade-point-grid-${r.tradePointId}`}
                 className={cn(
-                  "flex h-[160px] min-h-[140px] max-h-[180px] flex-col overflow-hidden border-border/80 shadow-sm",
-                  bulkCardSelected && "border-destructive/50 bg-destructive/[0.03]",
+                  "flex min-h-0 flex-col overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm",
+                  bulkCardSelected && "ring-2 ring-primary/35 ring-offset-2 ring-offset-background",
                 )}
               >
+                <div className="relative">
+                  {bulkDeleteMode && canShowBulkTradePointControls ? (
+                    <div className="absolute left-1 top-1 z-10 rounded-md bg-card/90 p-0.5 shadow-sm">{renderBulkRowControl(r, { dense: true })}</div>
+                  ) : null}
+                  <ShowcaseCoverPhotoSlot kind="trade_point" dealer={r.dealer} tradePoint={r.point} profile={profile} size="grid" rounded="lg" className="w-full" />
+                </div>
                 <CardContent className="flex min-h-0 flex-1 flex-col gap-1.5 p-2 sm:p-2.5">
-                  <div className="flex min-h-0 flex-1 gap-2">
-                    {bulkDeleteMode && canShowBulkTradePointControls ? (
-                      <div className="flex shrink-0 flex-col items-center pt-0.5">{renderBulkRowControl(r, { dense: true })}</div>
-                    ) : null}
-                    <TradePointRowListThumb point={r.point} size="xs" className="shrink-0" />
-                    <div className="min-w-0 flex-1 space-y-0.5">
-                      <p className="font-mono text-[10px] leading-none text-muted-foreground">{r.tradePointDisplayCode}</p>
-                      <p className="line-clamp-1 text-sm font-semibold leading-tight">{r.tradePointName}</p>
-                      <p className="line-clamp-1 text-xs text-muted-foreground">{r.city}</p>
-                      <p className="line-clamp-1 text-xs font-medium leading-snug">{r.dealerName}</p>
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 flex-wrap gap-1">
-                    <Badge variant="outline" className="max-w-full truncate px-1.5 py-0 text-[10px] leading-tight">
+                  <p className="line-clamp-2 text-sm font-semibold leading-tight text-foreground">{r.tradePointName}</p>
+                  <p className="line-clamp-1 text-xs text-muted-foreground">{r.city}</p>
+                  <p className="line-clamp-1 text-xs font-medium text-foreground">{r.dealerName}</p>
+                  <div className="flex flex-wrap gap-1">
+                    <Badge variant="outline" className={cn("max-w-full truncate px-1.5 py-0 text-[10px]", tpBadgeOutline)}>
                       {r.showcaseBucketLabel}
                     </Badge>
                     {r.matrixDeficitCount > 0 ? (
-                      <Badge variant="destructive" className="px-1.5 py-0 text-[10px] leading-tight">
+                      <Badge variant="outline" className={cn("px-1.5 py-0 text-[10px]", tpBadgeSoft)}>
                         Деф. {r.matrixDeficitCount}
                       </Badge>
                     ) : null}
-                    {r.isArchived ? (
-                      <Badge variant="secondary" className="px-1.5 py-0 text-[10px] leading-tight">
-                        Архив
-                      </Badge>
-                    ) : null}
                   </div>
-                  <div className="mt-auto flex shrink-0 flex-wrap gap-1">
-                    <Button asChild size="sm" variant="default" className="h-7 min-h-7 flex-1 px-2 text-[11px] font-semibold sm:flex-none">
-                      <Link href={tpHref(r)}>ТТ</Link>
+                  <div className="mt-auto flex flex-wrap items-center gap-1 border-t border-border/60 pt-1.5">
+                    {renderTpContactIcons(r, "compact")}
+                    <Button asChild size="sm" variant="secondary" className="ml-auto h-7 shrink-0 px-2 text-[11px] font-semibold">
+                      <Link href={tpHref(r)}>Открыть</Link>
                     </Button>
-                    <Button asChild size="sm" variant="outline" className="h-7 min-h-7 flex-1 px-2 text-[11px] font-semibold sm:flex-none">
-                      <Link href={dealerHref(r)}>Клиент</Link>
-                    </Button>
-                    {!bulkDeleteMode && !canArchiveRow(r) ? <span className="inline-flex shrink-0">{renderArchiveHint(r)}</span> : null}
-                    {!bulkDeleteMode && canArchiveRow(r) ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="destructive"
-                        className="h-7 w-7 shrink-0 p-0"
-                        title="Удалить ТТ"
-                        onClick={() => setArchiveTarget(r)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" aria-hidden />
-                      </Button>
-                    ) : null}
                   </div>
                 </CardContent>
               </Card>
@@ -1618,104 +1772,116 @@ export default function TradePointsPage(): ReactElement {
           })}
         </div>
       ) : (
-        <div className="mx-auto grid w-full max-w-6xl gap-3 sm:grid-cols-2">
+        <div className="mx-auto flex w-full max-w-4xl flex-col gap-3">
           {tradePointsRowsForList.map((r) => {
             const k = rowKey(r);
             const bulkCardSelected = bulkDeleteMode && selectedBulkTpKeys.has(k) && canArchiveRow(r);
+            const cname = cleanContactDisplay(r.point.contactName);
             return (
-            <Card
-              key={k}
-              data-testid={`card-trade-point-${r.tradePointId}`}
-              className={cn(
-                "overflow-hidden",
-                bulkCardSelected && "border-destructive/50 bg-destructive/[0.03]",
-              )}
-            >
-              <CardHeader className="space-y-2 pb-2">
-                <div className="flex w-full flex-col gap-2 sm:gap-2">
+              <Card
+                key={k}
+                data-testid={`card-trade-point-large-${r.tradePointId}`}
+                className={cn(
+                  "overflow-hidden rounded-2xl border border-border/80 border-l-4 border-l-primary/55 bg-card shadow-md",
+                  bulkCardSelected && "ring-2 ring-primary/35 ring-offset-2 ring-offset-background",
+                )}
+              >
+                <CardContent className="space-y-3 p-3 sm:p-4">
                   {bulkDeleteMode && canShowBulkTradePointControls ? <div className="flex w-full shrink-0">{renderBulkRowControl(r)}</div> : null}
-                  <div className="flex w-full flex-wrap items-start gap-2 sm:gap-3">
-                    <TradePointRowListThumb point={r.point} size="sm" className="shrink-0" />
-                    <div className="min-w-0 flex-1 space-y-1">
-                      <p className="font-mono text-[11px] text-muted-foreground">{r.tradePointDisplayCode}</p>
-                      <CardTitle className="text-base leading-snug">{r.tradePointName}</CardTitle>
-                    </div>
-                    <div className="flex shrink-0 flex-wrap justify-end gap-1">
-                      <Badge variant="outline" className="text-[10px]">
-                        {r.showcaseBucketLabel}
-                      </Badge>
-                      {r.matrixDeficitCount > 0 ? (
-                        <Badge variant="destructive" className="text-[10px]">
-                          Дефицит {r.matrixDeficitCount}
-                        </Badge>
+                  <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:gap-4">
+                    <ShowcaseCoverPhotoSlot kind="trade_point" dealer={r.dealer} tradePoint={r.point} profile={profile} size="large" className="shrink-0" />
+                    <div className="min-w-0 flex-1 space-y-2">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="min-w-0 space-y-1">
+                          <p className="font-mono text-[11px] text-muted-foreground">{r.tradePointDisplayCode}</p>
+                          <CardTitle className="text-lg leading-snug sm:text-xl">{r.tradePointName}</CardTitle>
+                          <p className="text-sm text-muted-foreground">
+                            <span className="font-medium text-foreground">{r.city}</span>
+                            {r.address && r.address !== "—" ? <span className="mt-0.5 block text-xs">{r.address}</span> : null}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 flex-wrap justify-end gap-1">
+                          <Badge variant="outline" className={cn("text-[10px]", tpBadgeOutline)}>
+                            {r.showcaseBucketLabel}
+                          </Badge>
+                          {r.matrixDeficitCount > 0 ? (
+                            <Badge variant="outline" className={cn("text-[10px]", tpBadgeSoft)}>
+                              Дефицит {r.matrixDeficitCount}
+                            </Badge>
+                          ) : null}
+                          {r.isArchived ? (
+                            <Badge variant="secondary" className="text-[10px]">
+                              В архиве
+                            </Badge>
+                          ) : null}
+                        </div>
+                      </div>
+                      <p className="text-sm">
+                        <span className="text-muted-foreground">Клиент:</span>{" "}
+                        <span className="font-medium text-foreground">{r.dealerName}</span>{" "}
+                        <span className="text-xs text-muted-foreground">({r.dealerClientCode})</span>
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        <span className="font-medium text-foreground">Категория:</span> {r.clientCategoryLabel}
+                        {r.tradePointFormatLabel ? (
+                          <>
+                            {" "}
+                            · <span className="font-medium text-foreground">Формат:</span> {r.tradePointFormatLabel}
+                          </>
+                        ) : null}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        <span className="font-medium text-foreground">Витрина:</span> {r.showcaseBucketLabel}
+                        {r.portalsTotal != null ? ` · порталов: ${r.portalsTotal}` : ""} · моделей: {r.modelsOnShowcaseCount}
+                      </p>
+                      {r.showcaseNewTasksCount > 0 ? (
+                        <p className="text-xs font-medium text-primary">Задач по витрине: {r.showcaseNewTasksCount}</p>
                       ) : null}
-                      {r.isArchived ? (
-                        <Badge variant="secondary" className="text-[10px]">
-                          В архиве
-                        </Badge>
+                      {r.showcaseUpdatedAt ? (
+                        <p className="text-xs text-muted-foreground">Обновлено: {new Date(r.showcaseUpdatedAt).toLocaleString("ru-RU")}</p>
                       ) : null}
+                      <div className="space-y-1 border-t border-border/60 pt-2 text-xs text-muted-foreground">
+                        <p>
+                          <span className="font-medium text-foreground">Контакт:</span> {cname ?? "—"}
+                        </p>
+                        <p>
+                          <span className="font-medium text-foreground">Менеджер:</span> {staffDisplayForDetail(r.manager)}
+                        </p>
+                        <p>
+                          <span className="font-medium text-foreground">Рег. менеджер:</span> {staffDisplayForDetail(r.regionalManager)}
+                        </p>
+                        <p>
+                          <span className="font-medium text-foreground">РОП:</span> {staffDisplayForDetail(r.rop)}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-2">
+                        {renderTpContactIcons(r, "default")}
+                      </div>
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        <Button asChild size="sm" variant="default" data-testid={`button-trade-point-large-open-${r.tradePointId}`}>
+                          <Link href={tpHref(r)}>Открыть ТТ</Link>
+                        </Button>
+                        <Button asChild size="sm" variant="outline" className="border-border">
+                          <Link href={dealerHref(r)}>К клиенту</Link>
+                        </Button>
+                        {!bulkDeleteMode && !canArchiveRow(r) ? renderArchiveHint(r) : null}
+                        {!bulkDeleteMode && canArchiveRow(r) ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="border-border text-muted-foreground hover:bg-muted"
+                            data-testid={`button-trade-point-list-delete-${r.tradePointId}`}
+                            onClick={() => setArchiveTarget(r)}
+                          >
+                            В архив
+                          </Button>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  <span className="font-medium text-foreground">{r.city}</span>
-                  {r.address && r.address !== "—" ? <span className="block text-xs">{r.address}</span> : null}
-                </p>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <p className="line-clamp-2">
-                  <span className="text-muted-foreground">Клиент:</span>{" "}
-                  <span className="font-medium">{r.dealerName}</span> <span className="text-xs text-muted-foreground">({r.dealerClientCode})</span>
-                </p>
-                <p>
-                  <span className="text-muted-foreground">Категория:</span> {r.clientCategoryLabel}
-                </p>
-                {r.tradePointFormatLabel ? (
-                  <p>
-                    <span className="text-muted-foreground">Формат ТТ:</span> {r.tradePointFormatLabel}
-                  </p>
-                ) : null}
-                <p>
-                  <span className="text-muted-foreground">Витрина:</span> {r.showcaseBucketLabel}
-                  {r.portalsTotal != null ? ` · порталов: ${r.portalsTotal}` : ""} · моделей: {r.modelsOnShowcaseCount}
-                </p>
-                {r.matrixDeficitCount > 0 ? (
-                  <p className="text-sm">
-                    <span className="font-semibold text-destructive">Дефицит матрицы:</span>{" "}
-                    <span className="text-foreground">{r.matrixDeficitCount}</span>
-                  </p>
-                ) : null}
-                {r.showcaseNewTasksCount > 0 ? <p className="text-xs text-emerald-800">Задач по витрине: {r.showcaseNewTasksCount}</p> : null}
-                {r.showcaseUpdatedAt ? (
-                  <p className="text-xs text-muted-foreground">Обновлено: {new Date(r.showcaseUpdatedAt).toLocaleString("ru-RU")}</p>
-                ) : null}
-                <div className="space-y-1 border-t border-border/60 pt-2 text-xs">
-                  <p>
-                    <span className="text-muted-foreground">Менеджер:</span> {staffDisplayForDetail(r.manager)}
-                  </p>
-                  <p>
-                    <span className="text-muted-foreground">Рег. менеджер:</span> {staffDisplayForDetail(r.regionalManager)}
-                  </p>
-                  <p>
-                    <span className="text-muted-foreground">РОП:</span> {staffDisplayForDetail(r.rop)}
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2 pt-1">
-                  <Button asChild size="sm" variant="default">
-                    <Link href={tpHref(r)}>Открыть ТТ</Link>
-                  </Button>
-                  <Button asChild size="sm" variant="outline">
-                    <Link href={dealerHref(r)}>Клиент</Link>
-                  </Button>
-                  {!bulkDeleteMode && !canArchiveRow(r) ? renderArchiveHint(r) : null}
-                  {!bulkDeleteMode && canArchiveRow(r) ? (
-                    <Button type="button" size="sm" variant="destructive" onClick={() => setArchiveTarget(r)}>
-                      Удалить ТТ
-                    </Button>
-                  ) : null}
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
             );
           })}
         </div>

@@ -120,6 +120,20 @@
 - **Список клиентов:** `pages/dealer-base.tsx` — строки из merge, кнопка «Добавить клиента», синхронизация. Поиск (`lib/dealer-base-picker-filters.ts`) ищет по названию, коду, городу, РОП, менеджеру, типу, адресу, идентификатору и `actualizationInn` (с нормализацией к цифрам — можно вводить ИНН с пробелами/дефисами или только цифры). **Фильтры:** расширенный блок (признаки, план, сегмент, склад, география, ответственные, рабочий режим) сворачивается; строка поиска и быстрые статусы остаются на виду. На узком экране по умолчанию блок свёрнут, на широком — развёрнут при первом визите; состояние «свёрнуто» хранится в `localStorage` (`tandoor-dealer-base-filters-collapsed-v1`). **Витрина дилеров** — основной режим списка; три плотности (как в RemCard по механике, палитра Tandoor): **Крупно**, **Сетка**, **Список**; дополнительно **Таблица**. Переключатель иконками: `section-dealer-showcase-density-icons`, кнопки `button-dealer-showcase-density-large|grid|list|table`. Быстрое фото клиента и ТТ из витрины: `components/showcase-cover-photo-slot.tsx` + `EntityActualizationPhotoGallery` (обложка из merge, первое загруженное фото становится главным через `appendDealerPhoto` / `appendTradePointPhoto`). Подробные `data-testid`, миграция `compact`→`grid` в `localStorage`, проверки light/dark/mobile — см. `docs/dealer-showcase-density-ux.md`. Крупный вид — карточки в одну колонку; внутри — торговые точки как филиалы. **Геофильтры** (регион, район, населённый пункт): значения строятся из полей `city` и адреса строки без внешней геокодировки (`lib/dealer-base-geo-parse.ts`), эвристический разбор строки адреса; фильтрация подключена в `applyDealerBasePickerFilters`.
 - **Карточка:** `pages/dealer-card-foundation.tsx` — merge строки, кнопка «Редактировать», счётчики ТТ/юрлиц.
 - **Торговые точки:** `components/dealer-trade-points-section.tsx` — добавление / редактирование / архив при включённой актуализации и правах.
+
+### Отображение торговых точек
+
+Страница **`pages/trade-points.tsx`** — сводный список по зоне ответственности (`buildTradePointListForActualization`).
+
+- **Режимы:** Крупно, Сетка, Список, Таблица — как у «Витрины дилеров»; блок `section-trade-points-density-icons`, кнопки `button-trade-points-density-large|grid|list|table`.
+- **localStorage:** ключ **`tandoor-trade-points-density-v1`**. Миграция с **`tandoor-trade-points-view-mode-v1`**: `cards`→`large`, `compact`→`grid`, `list`→`list`; старый ключ удаляется при переносе или при следующем сохранении плотности.
+- **Mobile:** режим «Таблица» на узком экране отображается как «Список», без горизонтального скролла.
+- **Фото:** `ShowcaseCoverPhotoSlot` с `kind="trade_point"` и размерами `large` / `grid` / `list` / `table`; тексты плейсхолдера «Добавьте фото точки» / «Покажите фасад или витрину».
+- **Контакты:** `lib/dealer-contact-links.ts` — ссылки tel / WhatsApp / mailto в карточках и строках.
+- **Тесты / разметка:** `card-trade-point-large-{id}`, `card-trade-point-grid-{id}`, `row-trade-point-list-{id}`, `row-trade-point-table-{id}`, `cell-trade-point-table-photo-{id}`.
+- **Архив:** подсказка `text-trade-points-archived-dealers-hidden-hint`; точки архивных клиентов не в рабочем списке до восстановления клиента.
+- **Массовый выбор:** `panel-trade-points-bulk-actions`, чекбоксы во всех режимах плотности.
+
 - **Юрлица:** `components/dealer-legal-entities-section.tsx` — диалог формы, сохранение в `legalEntityOverridesByDealerId`, архив в `archivedLegalEntitiesById`, дубль ИНН, `SectionSaveButton` при актуализации; хелперы в `lib/client-base-actualization-legal-entities.ts`. Тот же блок подключён в **чистой анкете** `components/dealer-manual-actualization-page.tsx` (аккордеон «Юридические лица»), а не только в полной карточке `dealer-card-foundation.tsx`.
 
 ### Карточка клиента в clean mode (`dealer-manual-actualization-page.tsx`)
