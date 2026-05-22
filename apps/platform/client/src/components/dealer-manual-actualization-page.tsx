@@ -76,6 +76,12 @@ import {
   loadClientNextStepsStorage,
 } from "@/lib/client-next-step-data";
 import { cn } from "@/lib/utils";
+import {
+  formatRussianPhoneInput,
+  isValidRussianPhone,
+  RU_PHONE_INVALID_MESSAGE,
+  RU_PHONE_PLACEHOLDER,
+} from "@/lib/phone-format";
 import { formatDisplayDate, formatDisplayDateTime } from "@/lib/format-display-date";
 
 const PASSPORT_KIND_LABELS: Record<string, string> = {
@@ -227,7 +233,7 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
         dealerId: baseRow.id,
         fullName: cn || "Контакт",
         role: "lpr",
-        phone: ph,
+        phone: ph ? formatRussianPhoneInput(ph) : "",
         email: em,
         messenger: "",
         comment: "",
@@ -801,7 +807,7 @@ function DealerContactsActualizationBlock(props: {
     setEditing(c);
     setFullName(c.fullName);
     setRole(c.role || "lpr");
-    setPhone(c.phone);
+    setPhone(formatRussianPhoneInput(c.phone ?? ""));
     setEmail(c.email);
     setMessenger(c.messenger);
     setComment(c.comment);
@@ -824,6 +830,11 @@ function DealerContactsActualizationBlock(props: {
       toast({ title: "Укажите ФИО контакта", variant: "destructive" });
       return false;
     }
+    if (phone.trim() && !isValidRussianPhone(phone)) {
+      toast({ title: RU_PHONE_INVALID_MESSAGE, variant: "destructive" });
+      return false;
+    }
+    const phoneFormatted = phone.trim() ? formatRussianPhoneInput(phone) : "";
     const iso = new Date().toISOString();
     const uid = profile.personaUserId;
     const uname = userLabelFromProfile(profile);
@@ -839,7 +850,7 @@ function DealerContactsActualizationBlock(props: {
         dealerId,
         fullName: fullName.trim(),
         role,
-        phone: phone.trim(),
+        phone: phoneFormatted,
         email: email.trim(),
         messenger: messenger.trim(),
         comment: comment.trim(),
@@ -1042,8 +1053,10 @@ function DealerContactsActualizationBlock(props: {
               <Input
                 className="min-h-10"
                 value={phone}
+                inputMode="tel"
+                placeholder={RU_PHONE_PLACEHOLDER}
                 onChange={(e) => {
-                  setPhone(e.target.value);
+                  setPhone(formatRussianPhoneInput(e.target.value));
                   contactDialogSave.markDirty();
                 }}
               />

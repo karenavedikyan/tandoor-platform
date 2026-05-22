@@ -15,6 +15,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import {
+  formatRussianPhoneInput,
+  isValidRussianPhone,
+  RU_PHONE_INVALID_MESSAGE,
+  RU_PHONE_PLACEHOLDER,
+} from "@/lib/phone-format";
 import { ShowcaseCoverPhotoSlot } from "@/components/showcase-cover-photo-slot";
 import { AddressSuggestInput } from "@/components/address-suggest-input";
 import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
@@ -86,26 +92,6 @@ function tradePointArchiveActionLabels(isManual: boolean): { action: string; con
   return isManual
     ? { action: "Удалить ТТ", confirm: "Удалить ТТ" }
     : { action: "В архив", confirm: "В архив" };
-}
-
-function formatRussianPhoneInput(input: string): string {
-  const digits = input.replace(/\D/g, "");
-  if (!digits) return "";
-  let normalized = digits;
-  if (normalized.startsWith("8")) normalized = `7${normalized.slice(1)}`;
-  const local = normalized.startsWith("7") ? normalized.slice(1) : normalized;
-  const ten = local.slice(0, 10);
-  if (!ten) return "+7 ";
-  const first = ten.slice(0, 3);
-  const rest = ten.slice(3);
-  return rest ? `+7 ${first} ${rest}` : `+7 ${first}`;
-}
-
-function isValidRussianPhone(value: string): boolean {
-  const digits = value.replace(/\D/g, "");
-  if (digits.length === 10) return true;
-  if (digits.length === 11 && (digits.startsWith("7") || digits.startsWith("8"))) return true;
-  return false;
 }
 
 function LocalSuggestInput(props: {
@@ -338,7 +324,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
       return false;
     }
     if (!isValidRussianPhone(addContactPhone)) {
-      setAddError("Введите телефон в формате +7 XXX XXXXXXX.");
+      setAddError(RU_PHONE_INVALID_MESSAGE);
       return false;
     }
     const formattedPhone = formatRussianPhoneInput(addContactPhone);
@@ -450,7 +436,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
       return false;
     }
     if (editContactPhone.trim() && !isValidRussianPhone(editContactPhone)) {
-      toast({ title: "Введите телефон в формате +7 XXX XXXXXXX.", variant: "destructive" });
+      toast({ title: RU_PHONE_INVALID_MESSAGE, variant: "destructive" });
       return false;
     }
     const formattedPhone = editContactPhone.trim() ? formatRussianPhoneInput(editContactPhone) : "";
@@ -773,7 +759,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                   options={dealerPhoneOptions}
                   className="min-h-10"
                   testId="input-dealer-trade-point-contact-phone"
-                  placeholder="+7 XXX XXXXXXX"
+                  placeholder={RU_PHONE_PLACEHOLDER}
                   inputMode="tel"
                 />
               </div>
@@ -944,7 +930,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                   options={dealerPhoneOptions}
                   className="min-h-10"
                   testId="input-dealer-trade-point-contact-phone"
-                  placeholder="+7 XXX XXXXXXX"
+                  placeholder={RU_PHONE_PLACEHOLDER}
                   inputMode="tel"
                 />
               </div>
@@ -1381,7 +1367,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                 options={dealerPhoneOptions}
                 className="min-h-10"
                 testId="input-dealer-trade-point-contact-phone"
-                placeholder="+7 XXX XXXXXXX"
+                placeholder={RU_PHONE_PLACEHOLDER}
                 inputMode="tel"
               />
             </div>
@@ -1502,7 +1488,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                 options={dealerPhoneOptions}
                 className="min-h-10"
                 testId="input-dealer-trade-point-edit-contact-phone"
-                placeholder="+7 XXX XXXXXXX"
+                placeholder={RU_PHONE_PLACEHOLDER}
                 inputMode="tel"
               />
             </div>

@@ -28,6 +28,12 @@ import {
 } from "@/lib/client-contacts";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { cn } from "@/lib/utils";
+import {
+  formatRussianPhoneInput,
+  isValidRussianPhone,
+  RU_PHONE_INVALID_MESSAGE,
+  RU_PHONE_PLACEHOLDER,
+} from "@/lib/phone-format";
 
 function isFilled(v: string | undefined): boolean {
   const t = (v ?? "").trim();
@@ -113,7 +119,7 @@ export function DealerContactsSection({ row, profile, variant = "full" }: Props)
     setDraft({
       fullName: c.fullName,
       role: c.role ?? "",
-      phone: c.phone ?? "",
+      phone: formatRussianPhoneInput(c.phone ?? ""),
       whatsapp: c.whatsapp ?? "",
       telegram: c.telegram ?? "",
       email: c.email ?? "",
@@ -132,6 +138,12 @@ export function DealerContactsSection({ row, profile, variant = "full" }: Props)
       return;
     }
     if (!canEdit) return;
+    const phoneRaw = draft.phone ?? "";
+    if (phoneRaw.trim() && !isValidRussianPhone(phoneRaw)) {
+      setFormErr(RU_PHONE_INVALID_MESSAGE);
+      return;
+    }
+    const phoneOut = phoneRaw.trim() ? formatRussianPhoneInput(phoneRaw) : "";
     if (editingId) {
       updateDealerContact(
         row.id,
@@ -139,7 +151,7 @@ export function DealerContactsSection({ row, profile, variant = "full" }: Props)
         {
           fullName: draft.fullName,
           role: draft.role,
-          phone: draft.phone,
+          phone: phoneOut,
           whatsapp: draft.whatsapp,
           telegram: draft.telegram,
           email: draft.email,
@@ -155,7 +167,7 @@ export function DealerContactsSection({ row, profile, variant = "full" }: Props)
         {
           fullName: draft.fullName,
           role: draft.role,
-          phone: draft.phone,
+          phone: phoneOut,
           whatsapp: draft.whatsapp,
           telegram: draft.telegram,
           email: draft.email,
@@ -397,7 +409,9 @@ export function DealerContactsSection({ row, profile, variant = "full" }: Props)
               <Input
                 className="min-h-10"
                 value={draft.phone}
-                onChange={(e) => setDraft((d) => ({ ...d, phone: e.target.value }))}
+                inputMode="tel"
+                placeholder={RU_PHONE_PLACEHOLDER}
+                onChange={(e) => setDraft((d) => ({ ...d, phone: formatRussianPhoneInput(e.target.value) }))}
                 data-testid="input-dealer-contact-phone"
               />
             </div>
@@ -550,7 +564,9 @@ export function DealerContactsSection({ row, profile, variant = "full" }: Props)
               <Input
                 className="min-h-10"
                 value={draft.phone}
-                onChange={(e) => setDraft((d) => ({ ...d, phone: e.target.value }))}
+                inputMode="tel"
+                placeholder={RU_PHONE_PLACEHOLDER}
+                onChange={(e) => setDraft((d) => ({ ...d, phone: formatRussianPhoneInput(e.target.value) }))}
                 data-testid="input-dealer-contact-phone"
               />
             </div>

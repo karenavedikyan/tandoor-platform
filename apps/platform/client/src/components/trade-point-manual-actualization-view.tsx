@@ -56,6 +56,12 @@ import { ShowcaseCoverPhotoSlot } from "@/components/showcase-cover-photo-slot";
 import { canEditClientNextStep } from "@/lib/client-next-step-data";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { cn } from "@/lib/utils";
+import {
+  formatRussianPhoneInput,
+  isValidRussianPhone,
+  RU_PHONE_INVALID_MESSAGE,
+  RU_PHONE_PLACEHOLDER,
+} from "@/lib/phone-format";
 import { formatDisplayDateTime } from "@/lib/format-display-date";
 import { listActiveTradePointPhotos } from "@/lib/client-base-actualization-photos";
 
@@ -250,7 +256,7 @@ export function TradePointManualActualizationView(props: {
   const [city, setCity] = useState(point.city);
   const [address, setAddress] = useState(point.address);
   const [contactName, setContactName] = useState(point.contactName ?? "");
-  const [contactPhone, setContactPhone] = useState(point.contactPhone ?? "");
+  const [contactPhone, setContactPhone] = useState(() => formatRussianPhoneInput(point.contactPhone ?? ""));
   const [tpComment, setTpComment] = useState(point.tpComment ?? "");
 
   const [hasShowcase, setHasShowcase] = useState<boolean | null>(showcaseRec?.hasShowcase ?? null);
@@ -298,7 +304,7 @@ export function TradePointManualActualizationView(props: {
     setCity(point.city);
     setAddress(point.address);
     setContactName(point.contactName ?? "");
-    setContactPhone(point.contactPhone ?? "");
+    setContactPhone(formatRussianPhoneInput(point.contactPhone ?? ""));
     setTpComment(point.tpComment ?? "");
     setFormatKind(rf("formatKind") || "store");
     setTpStatus(rf("tpStatusKind") || "working");
@@ -401,6 +407,11 @@ export function TradePointManualActualizationView(props: {
 
   const persistMain = useCallback(async (): Promise<boolean> => {
     if (!canEditUi) return false;
+    if (contactPhone.trim() && !isValidRussianPhone(contactPhone)) {
+      toast({ title: RU_PHONE_INVALID_MESSAGE, variant: "destructive" });
+      return false;
+    }
+    const contactPhoneFormatted = contactPhone.trim() ? formatRussianPhoneInput(contactPhone) : "";
     const iso = new Date().toISOString();
     const uid = profile.personaUserId;
     const uname = userLabelFromProfile(profile);
@@ -431,7 +442,7 @@ export function TradePointManualActualizationView(props: {
       format: formatStr,
       status: statusStr,
       contactName: contactName.trim(),
-      contactPhone: contactPhone.trim(),
+      contactPhone: contactPhoneFormatted,
       comment: tpComment.trim(),
     };
     const r = await actx.persist((prev) => {
@@ -946,7 +957,17 @@ export function TradePointManualActualizationView(props: {
             </div>
             <div className="space-y-1">
               <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Телефон точки</Label>
-              <Input className="min-h-9" value={contactPhone} onChange={(e) => { setContactPhone(e.target.value); mainSave.markDirty(); }} disabled={!canEditUi} />
+              <Input
+                className="min-h-9"
+                value={contactPhone}
+                inputMode="tel"
+                placeholder={RU_PHONE_PLACEHOLDER}
+                onChange={(e) => {
+                  setContactPhone(formatRussianPhoneInput(e.target.value));
+                  mainSave.markDirty();
+                }}
+                disabled={!canEditUi}
+              />
             </div>
             {canEditUi ? (
               <div className="sm:col-span-2">

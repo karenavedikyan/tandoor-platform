@@ -65,10 +65,16 @@ import {
 } from "@/lib/client-base-actualization-state";
 import { newActualizationContactId } from "@/lib/client-base-actualization-contacts-helpers";
 import {
-  type DealerCommercialTriSelect,
   commercialTriFromBoolNull,
   commercialTriToBoolNull,
+  type DealerCommercialTriSelect,
 } from "@/lib/dealer-commercial-characteristics";
+import {
+  formatRussianPhoneInput,
+  isValidRussianPhone,
+  RU_PHONE_INVALID_MESSAGE,
+  RU_PHONE_PLACEHOLDER,
+} from "@/lib/phone-format";
 import { cn } from "@/lib/utils";
 
 const REGIONAL_MANAGER_OPTIONS = [
@@ -362,7 +368,7 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
     setInn(baseRow.actualizationInn ?? "");
     setCity(baseRow.city ?? "");
     setAddress(baseRow.releaseAddress ?? "");
-    setPhone(baseRow.contacts?.phone ?? "");
+    setPhone(formatRussianPhoneInput(baseRow.contacts?.phone ?? ""));
     setEmail(baseRow.contacts?.email ?? "");
     setManager(baseRow.manager ?? "");
     setRegionalManager(baseRow.regionalManager ?? "");
@@ -406,6 +412,11 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
       toast({ title: "Заполните название клиента", variant: "destructive" });
       return false;
     }
+    if (phone.trim() && !isValidRussianPhone(phone)) {
+      toast({ title: RU_PHONE_INVALID_MESSAGE, variant: "destructive" });
+      return false;
+    }
+    const phoneFormatted = phone.trim() ? formatRussianPhoneInput(phone) : "";
     const uid = profile.personaUserId;
     const uname = userLabelFromProfile(profile);
     const uoNum = unloadingOrder.trim() ? Math.floor(Number(unloadingOrder.trim())) : NaN;
@@ -414,7 +425,7 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
       inn: inn.trim() || undefined,
       city: city.trim(),
       address: address.trim(),
-      phone: phone.trim(),
+      phone: phoneFormatted,
       email: email.trim(),
       manager: manager.trim(),
       regionalManager: regionalManager.trim(),
@@ -478,7 +489,7 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
             inn: inn.trim(),
             city: city.trim(),
             address: address.trim(),
-            phone: phone.trim(),
+            phone: phoneFormatted,
             email: email.trim(),
             manager: manager.trim(),
             regionalManager: regionalManager.trim(),
@@ -846,8 +857,10 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
                 <Label className="text-xs">Телефон</Label>
                 <Input
                   value={phone}
+                  inputMode="tel"
+                  placeholder={RU_PHONE_PLACEHOLDER}
                   onChange={(e) => {
-                    setPhone(e.target.value);
+                    setPhone(formatRussianPhoneInput(e.target.value));
                     contactsSave.markDirty();
                   }}
                   className="min-h-10"
@@ -1120,6 +1133,12 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
       return;
     }
 
+    if (phone.trim() && !isValidRussianPhone(phone)) {
+      toast({ title: RU_PHONE_INVALID_MESSAGE, variant: "destructive" });
+      return;
+    }
+    const phoneFormatted = phone.trim() ? formatRussianPhoneInput(phone) : "";
+
     saveLockRef.current = true;
     setSaving(true);
     const uoNum = unloadingOrder.trim() ? Math.floor(Number(unloadingOrder.trim())) : NaN;
@@ -1151,7 +1170,7 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
       logisticsComment: logisticsComment.trim() || undefined,
       comment: comment.trim(),
       contactPerson: contactPerson.trim(),
-      phone: phone.trim(),
+      phone: phoneFormatted,
       email: email.trim(),
       hasDoorWarehouse: commercialTriToBoolNull(doorTri),
       doorWarehouseComment: doorComment.trim(),
@@ -1220,7 +1239,7 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
           dealerId: id,
           fullName: contactPerson.trim() || "Контакт",
           role: "lpr",
-          phone: phone.trim(),
+          phone: phoneFormatted,
           email: email.trim(),
           messenger: "",
           comment: "",
@@ -1588,7 +1607,13 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Телефон</Label>
-                <Input value={phone} onChange={(e) => setPhone(e.target.value)} className="min-h-10" />
+                <Input
+                  value={phone}
+                  inputMode="tel"
+                  placeholder={RU_PHONE_PLACEHOLDER}
+                  onChange={(e) => setPhone(formatRussianPhoneInput(e.target.value))}
+                  className="min-h-10"
+                />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Email</Label>
