@@ -35,6 +35,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
+import { useClientBaseActivityTeamState } from "@/hooks/use-client-base-activity-team-state";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { createEmptyActualizationState } from "@/lib/client-base-actualization-state";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
@@ -197,7 +198,6 @@ function ClientBaseActivityDashboardInner(): ReactElement {
   const actx = useClientBaseActualization();
   const { profile } = useReleaseDemoProfile();
   const isMobile = useIsMobile();
-  const state = actx.enabled ? actx.state : createEmptyActualizationState();
 
   const [period, setPeriod] = useState<ActivityPeriodPreset>("7d");
   const [ropTeam, setRopTeam] = useState<string>("__all__");
@@ -209,6 +209,15 @@ function ClientBaseActivityDashboardInner(): ReactElement {
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(true);
   const [detailManagerId, setDetailManagerId] = useState<string | null>(null);
   const managersSectionRef = useRef<HTMLDivElement | null>(null);
+
+  const { activityState, diagnostics, teamLoading, teamError } = useClientBaseActivityTeamState({
+    enabled: actx.enabled,
+    profile,
+    dashboardRopTeamId: ropTeam,
+    contextState: actx.state,
+  });
+
+  const state = actx.enabled ? activityState : createEmptyActualizationState();
 
   const mergedAll = useMemo(
     () => buildDealerBaseRowsWithActualization(state, profile, { includeArchivedDealers: true }),
@@ -358,6 +367,27 @@ function ClientBaseActivityDashboardInner(): ReactElement {
   const hasFilteredActivity = filteredEvents.length > 0;
   const hasExcludedOnly = filteredEvents.length === 0 && filteredExcludedTechnical.length > 0;
 
+  const dataSourcesLine = useMemo(() => {
+    const ids = diagnostics.requestedUserIds;
+    const idsShort =
+      ids.length > 8 ? `${ids.slice(0, 8).join(", ")}… (+${ids.length - 8})` : ids.join(", ") || "—";
+    const modeRu = diagnostics.mode === "team" ? "объединение командных userId" : "текущий пользователь";
+    const fail = diagnostics.failedSnapshots > 0 ? `, ошибок загрузки ${diagnostics.failedSnapshots}` : "";
+    const tech = filteredExcludedTechnical.length;
+    const lu = diagnostics.lastMergedUpdatedAt
+      ? new Date(diagnostics.lastMergedUpdatedAt).toLocaleString("ru-RU")
+      : "—";
+    return `Источники: ${modeRu} · userId: ${idsShort} · снимков state загружено ${diagnostics.loadedSnapshots}/${Math.max(ids.length, 1)}${fail} · manual dealers (сумма по снимкам / после merge): ${diagnostics.sumManualDealersAcrossSources} / ${diagnostics.mergedManualDealers} · manual ТТ (merge): ${diagnostics.mergedManualTradePoints} · технические исключения (в периоде и фильтрах): ${tech} · обновлено (merged updatedAt): ${lu}`;
+  }, [diagnostics, filteredExcludedTechnical.length]);
+
+  const showManagersAccountsHint =
+    diagnostics.mode === "team" &&
+    !teamLoading &&
+    diagnostics.loadedSnapshots > 0 &&
+    diagnostics.sumManualDealersAcrossSources === 0 &&
+    diagnostics.mergedManualDealers === 0 &&
+    diagnostics.mergedManualTradePoints === 0;
+
   const activeManagersCaption = useMemo(() => {
     if (!hasFilteredActivity) return "Нет активности за период";
     const activeRows = managerRows.filter((m) => m.totalActions > 0);
@@ -405,10 +435,32 @@ function ClientBaseActivityDashboardInner(): ReactElement {
           <p className="max-w-3xl text-sm text-muted-foreground">
             Контроль активности менеджеров по заполнению клиентов, торговых точек, юрлиц, фото и витрин.
           </p>
+          {teamLoading ? (
+            <p className="text-xs text-muted-foreground">Загрузка состояния актуализации по менеджерам команды…</p>
+          ) : null}
+          {teamError ? (
+            <p className="text-xs text-primary" role="status">
+              {teamError}
+            </p>
+          ) : null}
+          <p className="max-w-4xl text-[11px] leading-snug text-muted-foreground" data-testid="text-activity-data-sources">
+            {dataSourcesLine}
+          </p>
         </div>
       </div>
 
-      {!hasFilteredActivity && !hasExcludedOnly ? (
+      {showManagersAccountsHint ? (
+        <Card className="rounded-2xl border border-border/80 bg-muted/10 shadow-sm" data-testid="section-activity-managers-empty-hint">
+          <CardContent className="px-4 py-4 sm:px-6">
+            <p className="text-sm text-muted-foreground">
+              Нет данных по менеджерам в объединённом state: не найдено ручных клиентов и ТТ. Убедитесь, что менеджеры
+              сохраняли актуализацию под своими аккаунтами (каждый userId — отдельный снимок на сервере). Под директором
+              дашборд загружает state всех менеджеров команды; пустые снимки не считаются ошибкой.
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
+      {!hasFilteredActivity && !hasExcludedOnly && !teamLoading ? (
         <Card className="rounded-2xl border border-border/80 bg-muted/10 shadow-sm" data-testid="section-activity-empty">
           <CardContent className="flex flex-col items-center gap-3 px-4 py-10 text-center sm:px-6">
             <BarChart3 className="h-12 w-12 text-primary/60" aria-hidden />
@@ -423,7 +475,7 @@ function ClientBaseActivityDashboardInner(): ReactElement {
         </Card>
       ) : null}
 
-      {hasExcludedOnly ? (
+      {hasExcludedOnly && !teamLoading ? (
         <Card className="rounded-2xl border border-border/80 bg-muted/10 shadow-sm" data-testid="section-activity-excluded-only">
           <CardContent className="space-y-2 px-4 py-6 sm:px-6">
             <p className="text-sm font-medium text-foreground">Нет действий менеджеров в рейтинге за период</p>
