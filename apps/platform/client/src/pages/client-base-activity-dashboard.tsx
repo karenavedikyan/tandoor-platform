@@ -17,7 +17,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { BarChart3 } from "lucide-react";
+import { BarChart3, ChevronDown } from "lucide-react";
 import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -57,14 +57,12 @@ import {
   computeManagerCreatedSummary,
   computeProblemLines,
   computeQualityMetrics,
-  computeTopKpis,
   filterEventsForDashboard,
   isActivityUnknownUserId,
   listContributionAddedClientsForManager,
   listContributionAddedTradePointsForManager,
   managerTeamAndRopLabel,
   normalizeText,
-  previousActivityRange,
   type ActivityEvent,
   type ActivityPeriodPreset,
   type ActivityTypeFilter,
@@ -109,6 +107,18 @@ const PERIOD_LABELS: Record<ActivityPeriodPreset, string> = {
 /** Пресеты периода в главном сценарии контроля (без «Вчера»). */
 const MAIN_PERIOD_PRESETS = ["today", "7d", "30d", "all"] as const satisfies readonly ActivityPeriodPreset[];
 
+/** Палитра Tandoor для страницы активности (строго по ТЗ). */
+const C = {
+  text: "#222631",
+  muted: "#8F96B0",
+  border: "#E3E6F3",
+  surface: "#EEEFF6",
+  primary: "#9ACA3C",
+  primaryHover: "#86B832",
+  white: "#FFFFFF",
+  tpStack: "rgba(154, 202, 60, 0.38)",
+} as const;
+
 const TYPE_LABELS: Record<ActivityTypeFilter, string> = {
   all: "Все типы",
   dealers: "Клиенты",
@@ -118,13 +128,6 @@ const TYPE_LABELS: Record<ActivityTypeFilter, string> = {
   showcase: "Витрина",
   archive: "Архив",
 };
-
-function deltaLabel(cur: number, prev: number): string {
-  if (prev <= 0) return cur > 0 ? "новое" : "—";
-  const d = Math.round(((cur - prev) / prev) * 100);
-  if (d === 0) return "0% к пред. периоду";
-  return `${d > 0 ? "+" : ""}${d}% к пред. периоду`;
-}
 
 function formatManagerLastActivity(lastAtMs: number): string {
   if (lastAtMs <= 0) return "—";
@@ -173,58 +176,6 @@ const UNKNOWN_ACTOR_HELP =
 const UNKNOWN_TECH_HELP =
   "Ниже — записи без пользователя, которые не входят в рейтинг (массовый архив без archivedBy, юрлица без updatedBy/createdBy в snapshot и т. п.).";
 
-function KpiCard({
-  title,
-  value,
-  hint,
-  caption,
-  onActivate,
-  className,
-}: {
-  title: string;
-  value: string | number;
-  hint?: string;
-  /** Короткая подпись под числом (до подсказки с дельтой). */
-  caption?: string;
-  onActivate?: () => void;
-  className?: string;
-}): ReactElement {
-  const body = (
-    <>
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
-      <p className="text-xl font-bold tabular-nums text-foreground sm:text-2xl">{value}</p>
-      {caption ? <p className="text-[11px] leading-snug text-muted-foreground">{caption}</p> : null}
-      {hint ? <p className="text-[11px] text-muted-foreground">{hint}</p> : null}
-    </>
-  );
-
-  if (onActivate) {
-    return (
-      <Card
-        className={cn(
-          "rounded-2xl border border-border/80 bg-card shadow-sm transition hover:border-primary/35 hover:shadow-md",
-          className,
-        )}
-      >
-        <button
-          type="button"
-          className="w-full rounded-2xl p-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-          onClick={onActivate}
-          data-testid="kpi-active-managers-trigger"
-        >
-          <CardHeader className="p-3 pb-1 sm:p-4 sm:pb-2">{body}</CardHeader>
-        </button>
-      </Card>
-    );
-  }
-
-  return (
-    <Card className={cn("rounded-2xl border border-border/80 bg-card shadow-sm", className)}>
-      <CardHeader className="p-3 pb-1 sm:p-4 sm:pb-2">{body}</CardHeader>
-    </Card>
-  );
-}
-
 function ChartEmptyPlaceholder({ title, text }: { title: string; text: string }): ReactElement {
   return (
     <div className="flex h-full min-h-[200px] w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border/80 bg-muted/10 px-4 py-6 text-center">
@@ -255,9 +206,14 @@ function ClientBaseActivityDashboardInner(): ReactElement {
   const [city, setCity] = useState<string>("__all__");
   const [typeFilter, setTypeFilter] = useState<ActivityTypeFilter>("all");
   const [onlyActiveManagers, setOnlyActiveManagers] = useState(false);
-  const [createdSummaryQuickFilter, setCreatedSummaryQuickFilter] = useState<"all" | "with_additions">("all");
+  const [leaderboardFilter, setLeaderboardFilter] = useState<"all" | "with_additions" | "no_activity" | "top">("all");
   const [contributionQuickFilter, setContributionQuickFilter] = useState<ContributionQuickFilter>("all");
-  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(true);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [technicalDiagnosticsOpen, setTechnicalDiagnosticsOpen] = useState(false);
+  const [scoreSectionOpen, setScoreSectionOpen] = useState(false);
+  const [pieSectionOpen, setPieSectionOpen] = useState(false);
+  const [idleGroupOpen, setIdleGroupOpen] = useState(false);
+  const [showAllProblems, setShowAllProblems] = useState(false);
   const [detailManagerId, setDetailManagerId] = useState<string | null>(null);
   const [detailTab, setDetailTab] = useState<string>("clients");
   const managersSectionRef = useRef<HTMLDivElement | null>(null);
@@ -310,7 +266,6 @@ function ClientBaseActivityDashboardInner(): ReactElement {
   }, [period]);
 
   const range = useMemo(() => activityPeriodToRange(period), [period]);
-  const prevRange = useMemo(() => previousActivityRange(range), [range]);
 
   const filterOptsBase = useMemo(
     () => ({
@@ -330,22 +285,6 @@ function ClientBaseActivityDashboardInner(): ReactElement {
     [allEvents, range, filterOptsBase],
   );
 
-  const prevKpiBaseEvents = useMemo(
-    () =>
-      prevRange
-        ? filterEventsForDashboard(allEvents, prevRange, "all", {
-            act: state,
-            scopedDealerIds: scopedIds,
-            ropTeamId: ropTeam,
-            managerId,
-            regionalManager,
-            city,
-            dealerById,
-          })
-        : [],
-    [allEvents, prevRange, state, scopedIds, ropTeam, managerId, regionalManager, city, dealerById],
-  );
-
   const filteredEvents = useMemo(
     () => filterEventsForDashboard(allEvents, range, typeFilter, filterOptsBase),
     [allEvents, range, typeFilter, filterOptsBase],
@@ -354,22 +293,6 @@ function ClientBaseActivityDashboardInner(): ReactElement {
   const filteredExcludedTechnical = useMemo(
     () => filterEventsForDashboard(activityBuckets.excludedTechnical, range, typeFilter, filterOptsBase),
     [activityBuckets.excludedTechnical, range, typeFilter, filterOptsBase],
-  );
-
-  const prevFiltered = useMemo(
-    () =>
-      prevRange
-        ? filterEventsForDashboard(allEvents, prevRange, typeFilter, {
-            act: state,
-            scopedDealerIds: scopedIds,
-            ropTeamId: ropTeam,
-            managerId,
-            regionalManager,
-            city,
-            dealerById,
-          })
-        : [],
-    [allEvents, prevRange, typeFilter, state, scopedIds, ropTeam, managerId, regionalManager, city, dealerById],
   );
 
   const managerRows = useMemo(() => aggregateByManager(filteredEvents, roster), [filteredEvents, roster]);
@@ -383,30 +306,6 @@ function ClientBaseActivityDashboardInner(): ReactElement {
     [visibleManagers, contributionQuickFilter],
   );
 
-  const managerRowsAllTypes = useMemo(() => aggregateByManager(kpiBaseEvents, roster), [kpiBaseEvents, roster]);
-
-  const prevManagerRowsAllTypes = useMemo(
-    () => (prevRange ? aggregateByManager(prevKpiBaseEvents, roster) : []),
-    [prevRange, prevKpiBaseEvents, roster],
-  );
-
-  const kpiScope = useMemo(() => ({ scopedDealerIds: scopedIds }), [scopedIds]);
-
-  const kpis = useMemo(
-    () => computeTopKpis(state, profile, range, managerRowsAllTypes, kpiScope, { kpiBaseEvents }),
-    [state, profile, range, managerRowsAllTypes, kpiScope, kpiBaseEvents],
-  );
-  const prevKpis = useMemo(
-    () =>
-      prevRange
-        ? computeTopKpis(state, profile, prevRange, prevManagerRowsAllTypes, kpiScope, {
-            kpiBaseEvents: prevKpiBaseEvents,
-          })
-        : null,
-    [state, profile, prevRange, prevManagerRowsAllTypes, kpiScope, prevKpiBaseEvents],
-  );
-
-  const byDay = useMemo(() => bucketEventsByDay(filteredEvents), [filteredEvents]);
   const quality = useMemo(() => computeQualityMetrics(state, profile, scopedRows), [state, profile, scopedRows]);
   const problems = useMemo(() => computeProblemLines(state, profile, scopedRows), [state, profile, scopedRows]);
 
@@ -427,12 +326,6 @@ function ClientBaseActivityDashboardInner(): ReactElement {
     [activitySources, geoPack, range, roster, managerId],
   );
 
-  const prevCreatedManagerSummaryRows = useMemo(
-    () =>
-      prevRange ? computeManagerCreatedSummary(activitySources, geoPack, prevRange, roster, managerId) : [],
-    [activitySources, geoPack, prevRange, roster, managerId],
-  );
-
   const kpiManualDealersFromSources = useMemo(
     () => createdManagerSummaryRows.reduce((s, r) => s + r.newClients, 0),
     [createdManagerSummaryRows],
@@ -448,27 +341,53 @@ function ClientBaseActivityDashboardInner(): ReactElement {
     [createdManagerSummaryRows],
   );
 
-  const prevKpiManualDealersFromSources = useMemo(
-    () => prevCreatedManagerSummaryRows.reduce((s, r) => s + r.newClients, 0),
-    [prevCreatedManagerSummaryRows],
-  );
-
-  const prevKpiManualTpFromSources = useMemo(
-    () => prevCreatedManagerSummaryRows.reduce((s, r) => s + r.newTradePoints, 0),
-    [prevCreatedManagerSummaryRows],
-  );
-
-  const prevKpiActiveManagersFromCreated = useMemo(
-    () => prevCreatedManagerSummaryRows.filter((r) => r.newClients + r.newTradePoints > 0).length,
-    [prevCreatedManagerSummaryRows],
-  );
-
   const visibleCreatedSummaryRows = useMemo(() => {
-    if (createdSummaryQuickFilter === "with_additions") {
-      return createdManagerSummaryRows.filter((r) => r.newClients + r.newTradePoints > 0);
+    const rows = createdManagerSummaryRows;
+    switch (leaderboardFilter) {
+      case "with_additions":
+        return rows.filter((r) => r.newClients + r.newTradePoints > 0);
+      case "no_activity":
+        return rows.filter((r) => r.newClients + r.newTradePoints === 0);
+      case "top":
+        return rows.filter((r) => r.newClients + r.newTradePoints > 0).slice(0, 10);
+      default:
+        return rows;
     }
-    return createdManagerSummaryRows;
-  }, [createdManagerSummaryRows, createdSummaryQuickFilter]);
+  }, [createdManagerSummaryRows, leaderboardFilter]);
+
+  const leaderMaxManualTotal = useMemo(() => {
+    const withAdds = createdManagerSummaryRows.filter((r) => r.newClients + r.newTradePoints > 0);
+    return Math.max(1, ...withAdds.map((r) => r.newClients + r.newTradePoints));
+  }, [createdManagerSummaryRows]);
+
+  const topLeaderboardBarData = useMemo(
+    () =>
+      createdManagerSummaryRows
+        .filter((r) => r.newClients + r.newTradePoints > 0)
+        .slice(0, 10)
+        .map((r) => ({
+          name: r.displayName.length > 16 ? `${r.displayName.slice(0, 16)}…` : r.displayName,
+          clients: r.newClients,
+          tradePoints: r.newTradePoints,
+          id: r.managerId,
+        }))
+        .reverse(),
+    [createdManagerSummaryRows],
+  );
+
+  const kpiInactiveManagersFromCreated = useMemo(
+    () => createdManagerSummaryRows.filter((r) => r.newClients + r.newTradePoints === 0).length,
+    [createdManagerSummaryRows],
+  );
+
+  const byDayManual = useMemo(() => {
+    const manualEvents = filteredEvents.filter((e) => e.kind === "manual_dealer" || e.kind === "manual_trade_point");
+    return bucketEventsByDay(manualEvents).map((d) => ({
+      day: d.day,
+      clients: d.dealers,
+      tradePoints: d.tradePoints,
+    }));
+  }, [filteredEvents]);
 
   const detailAddedClients = useMemo(() => {
     if (!detailManagerId) return [];
@@ -572,17 +491,14 @@ function ClientBaseActivityDashboardInner(): ReactElement {
     diagnostics.mergedManualDealers === 0 &&
     diagnostics.mergedManualTradePoints === 0;
 
-  const activeManagersCaption = useMemo(() => {
-    if (kpiActiveManagersFromCreated === 0) return "Нет ручных добавлений за период";
-    const withAdds = createdManagerSummaryRows.filter((r) => r.newClients + r.newTradePoints > 0);
-    const known = withAdds.filter((r) => !isActivityUnknownUserId(r.managerId));
-    if (known.length > 0) {
-      const first = known[0]!.displayName;
-      return known.length === 1 ? `Например: ${first}` : `Например: ${first} и др.`;
-    }
-    if (withAdds.some((r) => isActivityUnknownUserId(r.managerId))) return "Есть записи без привязки к менеджеру";
-    return "Нет ручных добавлений за период";
-  }, [kpiActiveManagersFromCreated, createdManagerSummaryRows]);
+  const filterChipTeamLabel = useMemo(
+    () => (ropTeam === "__all__" ? "Все команды" : getRopOptions().find((o) => o.teamId === ropTeam)?.label ?? "Команда"),
+    [ropTeam],
+  );
+  const filterChipManagerLabel = useMemo(
+    () => (managerId === "__all__" ? "Все менеджеры" : roster.find((m) => m.id === managerId)?.name ?? "Менеджер"),
+    [managerId, roster],
+  );
 
   const scrollToManagersSection = (): void => {
     managersSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -607,31 +523,36 @@ function ClientBaseActivityDashboardInner(): ReactElement {
     );
   }
 
-  const primaryFill = "hsl(var(--primary))";
-  const mutedFill = "hsl(var(--muted-foreground) / 0.35)";
+  const primaryFill = C.primary;
+  const mutedFill = C.tpStack;
 
   return (
-    <div className="min-w-0 space-y-4 px-3 pb-10 pt-1 sm:space-y-6 sm:px-0 sm:pb-8 sm:pt-0" data-testid="page-client-base-activity-dashboard">
+    <div
+      className="min-w-0 space-y-4 px-3 pb-10 pt-1 sm:space-y-6 sm:px-0 sm:pb-8 sm:pt-0"
+      data-testid="page-client-base-activity-dashboard"
+      style={{ color: C.text }}
+    >
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <BarChart3 className="h-6 w-6 shrink-0 text-primary" aria-hidden />
-            <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Актуализация базы</h1>
+            <BarChart3 className="h-6 w-6 shrink-0" style={{ color: C.primary }} aria-hidden />
+            <h1 className="text-xl font-semibold tracking-tight sm:text-2xl" style={{ color: C.text }}>
+              Актуализация базы
+            </h1>
           </div>
-          <p className="max-w-3xl text-sm text-muted-foreground">
-            Контроль активности менеджеров по заполнению клиентов, торговых точек, юрлиц, фото и витрин.
+          <p className="max-w-3xl text-sm leading-snug" style={{ color: C.muted }}>
+            Сводка по новым клиентам и торговым точкам команды за период. Рейтинг и детализация по каждому менеджеру.
           </p>
           {teamLoading ? (
-            <p className="text-xs text-muted-foreground">Загрузка состояния актуализации по менеджерам команды…</p>
+            <p className="text-xs" style={{ color: C.muted }}>
+              Загрузка состояния актуализации по менеджерам команды…
+            </p>
           ) : null}
           {teamError ? (
-            <p className="text-xs text-primary" role="status">
+            <p className="text-xs font-medium" style={{ color: C.primary }} role="status">
               {teamError}
             </p>
           ) : null}
-          <p className="max-w-4xl text-[10px] leading-snug text-muted-foreground/90" data-testid="text-activity-data-sources">
-            {dataSourcesLine}
-          </p>
         </div>
       </div>
 
@@ -676,21 +597,53 @@ function ClientBaseActivityDashboardInner(): ReactElement {
       ) : null}
 
       <Collapsible open={isMobile ? mobileFiltersOpen : true} onOpenChange={(o) => isMobile && setMobileFiltersOpen(o)}>
-        <Card className="rounded-2xl border border-border/80 bg-card shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-            <CardTitle className="text-base">Фильтры</CardTitle>
-            <CollapsibleTrigger asChild>
-              <Button type="button" variant="outline" size="sm" className="sm:hidden">
-                {mobileFiltersOpen ? "Свернуть" : "Развернуть"}
-              </Button>
-            </CollapsibleTrigger>
+        <Card className="rounded-2xl border bg-white shadow-sm" style={{ borderColor: C.border }}>
+          <CardHeader className="flex flex-col gap-2 space-y-0 pb-2">
+            <div className="flex flex-row items-center justify-between gap-2">
+              <CardTitle className="text-base font-semibold" style={{ color: C.text }}>
+                Фильтры
+              </CardTitle>
+              <CollapsibleTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 sm:hidden"
+                  style={{ borderColor: C.border, color: C.text }}
+                >
+                  {mobileFiltersOpen ? "Свернуть" : "Развернуть"}
+                </Button>
+              </CollapsibleTrigger>
+            </div>
+            {isMobile && !mobileFiltersOpen ? (
+              <div className="flex flex-wrap gap-1.5">
+                {(
+                  [
+                    [PERIOD_LABELS[period], "chip-period"],
+                    [filterChipTeamLabel, "chip-team"],
+                    [filterChipManagerLabel, "chip-manager"],
+                    [TYPE_LABELS[typeFilter], "chip-type"],
+                  ] as const
+                ).map(([label, key]) => (
+                  <span
+                    key={key}
+                    className="inline-flex max-w-[48%] truncate rounded-full border px-2.5 py-0.5 text-[11px] font-medium"
+                    style={{ borderColor: C.border, color: C.muted, background: C.surface }}
+                  >
+                    {label}
+                  </span>
+                ))}
+              </div>
+            ) : null}
           </CardHeader>
           <CollapsibleContent className="data-[state=closed]:hidden sm:data-[state=closed]:block">
             <CardContent className="grid gap-3 p-3 sm:grid-cols-2 sm:p-4 lg:grid-cols-3 lg:p-4">
               <div className="space-y-1">
-                <Label className="text-xs">Период</Label>
+                <Label className="text-xs" style={{ color: C.muted }}>
+                  Период
+                </Label>
                 <Select value={period} onValueChange={(v) => setPeriod(v as ActivityPeriodPreset)}>
-                  <SelectTrigger className="min-h-10" data-testid="select-activity-period">
+                  <SelectTrigger className="min-h-10 border bg-white" data-testid="select-activity-period" style={{ borderColor: C.border, color: C.text }}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -703,9 +656,11 @@ function ClientBaseActivityDashboardInner(): ReactElement {
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">РОП / команда</Label>
+                <Label className="text-xs" style={{ color: C.muted }}>
+                  РОП / команда
+                </Label>
                 <Select value={ropTeam} onValueChange={setRopTeam}>
-                  <SelectTrigger className="min-h-10" data-testid="select-activity-rop">
+                  <SelectTrigger className="min-h-10 border bg-white" data-testid="select-activity-rop" style={{ borderColor: C.border, color: C.text }}>
                     <SelectValue placeholder="Все команды" />
                   </SelectTrigger>
                   <SelectContent>
@@ -719,9 +674,11 @@ function ClientBaseActivityDashboardInner(): ReactElement {
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Менеджер</Label>
+                <Label className="text-xs" style={{ color: C.muted }}>
+                  Менеджер
+                </Label>
                 <Select value={managerId} onValueChange={setManagerId}>
-                  <SelectTrigger className="min-h-10" data-testid="select-activity-manager">
+                  <SelectTrigger className="min-h-10 border bg-white" data-testid="select-activity-manager" style={{ borderColor: C.border, color: C.text }}>
                     <SelectValue placeholder="Все менеджеры" />
                   </SelectTrigger>
                   <SelectContent>
@@ -735,9 +692,11 @@ function ClientBaseActivityDashboardInner(): ReactElement {
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Региональный менеджер</Label>
+                <Label className="text-xs" style={{ color: C.muted }}>
+                  Региональный менеджер
+                </Label>
                 <Select value={regionalManager} onValueChange={setRegionalManager}>
-                  <SelectTrigger className="min-h-10" data-testid="select-activity-regional-manager">
+                  <SelectTrigger className="min-h-10 border bg-white" data-testid="select-activity-regional-manager" style={{ borderColor: C.border, color: C.text }}>
                     <SelectValue placeholder="Все" />
                   </SelectTrigger>
                   <SelectContent>
@@ -751,9 +710,11 @@ function ClientBaseActivityDashboardInner(): ReactElement {
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Город</Label>
+                <Label className="text-xs" style={{ color: C.muted }}>
+                  Город
+                </Label>
                 <Select value={city} onValueChange={setCity}>
-                  <SelectTrigger className="min-h-10" data-testid="select-activity-city">
+                  <SelectTrigger className="min-h-10 border bg-white" data-testid="select-activity-city" style={{ borderColor: C.border, color: C.text }}>
                     <SelectValue placeholder="Все города" />
                   </SelectTrigger>
                   <SelectContent>
@@ -767,9 +728,11 @@ function ClientBaseActivityDashboardInner(): ReactElement {
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Тип активности</Label>
+                <Label className="text-xs" style={{ color: C.muted }}>
+                  Тип активности
+                </Label>
                 <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as ActivityTypeFilter)}>
-                  <SelectTrigger className="min-h-10" data-testid="select-activity-type">
+                  <SelectTrigger className="min-h-10 border bg-white" data-testid="select-activity-type" style={{ borderColor: C.border, color: C.text }}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -781,8 +744,11 @@ function ClientBaseActivityDashboardInner(): ReactElement {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/20 px-3 py-2 sm:col-span-2 lg:col-span-3">
-                <Label htmlFor="switch-activity-only-active" className="text-sm">
+              <div
+                className="flex items-center justify-between gap-2 rounded-lg border px-3 py-2 sm:col-span-2 lg:col-span-3"
+                style={{ borderColor: C.border, background: C.surface }}
+              >
+                <Label htmlFor="switch-activity-only-active" className="text-sm" style={{ color: C.text }}>
                   Только менеджеры с активностью
                 </Label>
                 <Switch
@@ -797,56 +763,126 @@ function ClientBaseActivityDashboardInner(): ReactElement {
         </Card>
       </Collapsible>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard
-          title="Клиентов добавлено"
-          value={kpiManualDealersFromSources}
-          hint={prevRange ? deltaLabel(kpiManualDealersFromSources, prevKpiManualDealersFromSources) : undefined}
-        />
-        <KpiCard title="Клиентов обновлено" value={kpis.updatedDealers} hint={prevKpis ? deltaLabel(kpis.updatedDealers, prevKpis.updatedDealers) : undefined} />
-        <KpiCard
-          title="ТТ добавлено"
-          value={kpiManualTpFromSources}
-          hint={prevRange ? deltaLabel(kpiManualTpFromSources, prevKpiManualTpFromSources) : undefined}
-        />
-        <KpiCard title="Юрлиц (изменения)" value={kpis.legalTouches} hint={prevKpis ? deltaLabel(kpis.legalTouches, prevKpis.legalTouches) : undefined} />
-        <KpiCard title="Фото загружено" value={kpis.photos} hint={prevKpis ? deltaLabel(kpis.photos, prevKpis.photos) : undefined} />
-        <KpiCard title="Витрин заполнено (ТТ)" value={kpis.showcasesFilled} />
-        <KpiCard title="ТТ с дефицитом" value={kpis.deficitTradePoints} />
-        <KpiCard
-          title="Активных менеджеров"
-          value={kpiActiveManagersFromCreated}
-          caption={activeManagersCaption}
-          onActivate={scrollToManagersSection}
-        />
-      </div>
+      <Collapsible open={technicalDiagnosticsOpen} onOpenChange={setTechnicalDiagnosticsOpen}>
+        <div
+          className="rounded-2xl border bg-white px-3 py-2 shadow-sm sm:px-4"
+          style={{ borderColor: C.border }}
+          data-testid="section-activity-technical-diagnostics"
+        >
+          <CollapsibleTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              className="h-auto w-full justify-between gap-2 px-1 py-2 text-left text-xs font-medium hover:bg-transparent"
+              style={{ color: C.muted }}
+              data-testid="button-activity-technical-diagnostics-toggle"
+            >
+              Техническая диагностика
+              <ChevronDown
+                className={cn("h-4 w-4 shrink-0 transition-transform", technicalDiagnosticsOpen && "rotate-180")}
+                aria-hidden
+              />
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <p className="font-mono text-[10px] leading-relaxed" style={{ color: C.muted }} data-testid="text-activity-data-sources">
+              {dataSourcesLine}
+            </p>
+            <p className="mt-2 text-[10px] leading-snug" style={{ color: C.muted }}>
+              Счётчики рейтинга и KPI «Итоги периода» используют поля{" "}
+              <code className="rounded px-1" style={{ background: C.surface }}>
+                manuallyCreatedDealersById
+              </code>{" "}
+              и{" "}
+              <code className="rounded px-1" style={{ background: C.surface }}>
+                manuallyCreatedTradePointsById
+              </code>{" "}
+              в каждом user state; автор записи — владелец снимка.
+            </p>
+          </CollapsibleContent>
+        </div>
+      </Collapsible>
+
+      <section className="rounded-2xl border bg-white p-3 shadow-sm sm:p-4" style={{ borderColor: C.border }}>
+        <p className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: C.muted }}>
+          Итоги периода
+        </p>
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="rounded-xl border p-3 sm:p-4" style={{ borderColor: C.border, background: C.white }}>
+            <p className="text-[11px] font-medium leading-tight" style={{ color: C.muted }}>
+              Клиентов добавлено
+            </p>
+            <p className="mt-1 text-2xl font-bold tabular-nums sm:text-3xl" style={{ color: C.text }}>
+              {kpiManualDealersFromSources}
+            </p>
+          </div>
+          <div className="rounded-xl border p-3 sm:p-4" style={{ borderColor: C.border, background: C.white }}>
+            <p className="text-[11px] font-medium leading-tight" style={{ color: C.muted }}>
+              ТТ добавлено
+            </p>
+            <p className="mt-1 text-2xl font-bold tabular-nums sm:text-3xl" style={{ color: C.text }}>
+              {kpiManualTpFromSources}
+            </p>
+          </div>
+          <button
+            type="button"
+            className="rounded-xl border p-3 text-left transition hover:opacity-95 sm:p-4"
+            style={{ borderColor: C.border, background: C.surface }}
+            onClick={scrollToManagersSection}
+            data-testid="kpi-active-managers-trigger"
+          >
+            <p className="text-[11px] font-medium leading-tight" style={{ color: C.muted }}>
+              Активных менеджеров
+            </p>
+            <p className="mt-1 text-2xl font-bold tabular-nums sm:text-3xl" style={{ color: C.primary }}>
+              {kpiActiveManagersFromCreated}
+            </p>
+          </button>
+          <div className="rounded-xl border p-3 sm:p-4" style={{ borderColor: C.border, background: C.surface }}>
+            <p className="text-[11px] font-medium leading-tight" style={{ color: C.muted }}>
+              Без активности
+            </p>
+            <p className="mt-1 text-2xl font-bold tabular-nums sm:text-3xl" style={{ color: C.muted }}>
+              {kpiInactiveManagersFromCreated}
+            </p>
+          </div>
+        </div>
+      </section>
 
       <Card
         ref={managersSectionRef}
         data-testid="section-manager-created-summary"
-        className="scroll-mt-4 rounded-2xl border border-border/80 bg-card shadow-sm"
+        className="scroll-mt-4 rounded-2xl border bg-white shadow-sm"
+        style={{ borderColor: C.border }}
       >
         <CardHeader className="space-y-2 pb-2">
-          <CardTitle className="text-base">Кто сколько добавил</CardTitle>
-          <p className="text-xs text-muted-foreground">
-            Счётчик и KPI берутся напрямую из снимков актуализации менеджеров (`manuallyCreatedDealersById` и
-            `manuallyCreatedTradePointsById` в каждом user state). Автор записи — владелец снимка (`userId` источника), без
-            ленты событий и без привязки к scoped dealer base.
+          <CardTitle className="text-lg font-semibold sm:text-xl" style={{ color: C.text }}>
+            Рейтинг менеджеров
+          </CardTitle>
+          <p className="text-sm leading-snug" style={{ color: C.muted }}>
+            Показываем, сколько новых клиентов и торговых точек добавил каждый менеджер за выбранный период.
           </p>
           <div className="flex flex-wrap gap-2">
             {(
               [
                 ["all", "Все"],
                 ["with_additions", "С добавлениями"],
+                ["no_activity", "Без активности"],
+                ["top", "Топ"],
               ] as const
             ).map(([key, label]) => (
               <Button
                 key={key}
                 type="button"
                 size="sm"
-                variant={createdSummaryQuickFilter === key ? "default" : "outline"}
-                className="h-8 text-xs"
-                onClick={() => setCreatedSummaryQuickFilter(key)}
+                variant={leaderboardFilter === key ? "default" : "outline"}
+                className={cn("h-8 text-xs", leaderboardFilter === key && "border-transparent")}
+                style={
+                  leaderboardFilter === key
+                    ? { background: C.primary, color: C.white }
+                    : { borderColor: C.border, color: C.text, background: C.white }
+                }
+                onClick={() => setLeaderboardFilter(key)}
                 data-testid={`button-created-summary-filter-${key}`}
               >
                 {label}
@@ -854,294 +890,431 @@ function ClientBaseActivityDashboardInner(): ReactElement {
             ))}
           </div>
         </CardHeader>
-        <CardContent className="overflow-x-auto p-0 sm:p-4">
-          {isMobile ? (
-            <div className="flex flex-col gap-2 p-3">
-              {visibleCreatedSummaryRows.map((row) => {
-                const unknown = isActivityUnknownUserId(row.managerId);
-                const total = row.newClients + row.newTradePoints;
-                return (
-                  <div
-                    key={row.managerId}
-                    className="rounded-xl border border-border bg-card p-3 shadow-sm"
-                    data-testid={`card-manager-contribution-${row.managerId}`}
+        <CardContent className="space-y-4 overflow-x-auto p-0 sm:p-4">
+          <div className="space-y-4" data-testid="section-manager-leaderboard">
+            {!isMobile && topLeaderboardBarData.length > 0 ? (
+              <div className="hidden h-[220px] w-full min-w-0 px-3 sm:block sm:px-0" data-testid="chart-manager-leaderboard-top">
+                <p className="mb-2 text-xs font-semibold" style={{ color: C.muted }}>
+                  Топ менеджеров по добавлениям
+                </p>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    layout="vertical"
+                    data={topLeaderboardBarData}
+                    margin={{ top: 4, right: 12, left: 4, bottom: 4 }}
                   >
-                    <div className="space-y-1">
-                      {unknown ? (
-                        <Badge variant="outline" className="text-[11px]" title={UNKNOWN_ACTOR_HELP}>
-                          {ACTIVITY_UNKNOWN_DISPLAY}
-                        </Badge>
-                      ) : (
-                        <p className="text-lg font-semibold leading-tight text-foreground">{row.displayName}</p>
-                      )}
-                      <p className="text-xs text-muted-foreground">{row.teamName}</p>
-                    </div>
-                    <p
-                      className="mt-2 text-sm text-foreground"
-                      data-testid={`text-manager-clients-added-${row.managerId}`}
-                    >
-                      Клиентов добавлено: {row.newClients}
-                    </p>
-                    <p className="text-sm text-foreground" data-testid={`text-manager-trade-points-added-${row.managerId}`}>
-                      ТТ добавлено: {row.newTradePoints}
-                    </p>
-                    <p className="text-xs text-muted-foreground">Всего: {total}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Последнее: {formatLastManualAddition(row.lastAddedAtMs, total)}
-                    </p>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      className="mt-2 w-full"
-                      onClick={() => setDetailManagerId(row.managerId)}
-                      data-testid={`button-manager-contribution-open-${row.managerId}`}
-                    >
-                      Смотреть
-                    </Button>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <table className="w-full min-w-[900px] text-sm" data-testid="table-manager-created-summary">
-              <thead>
-                <tr className="border-b bg-muted/40 text-left text-[11px] font-semibold uppercase text-muted-foreground">
-                  <th className="p-2">Менеджер</th>
-                  <th className="p-2">Команда</th>
-                  <th className="p-2 text-right">Новых клиентов</th>
-                  <th className="p-2 text-right">Новых торговых точек</th>
-                  <th className="p-2 text-right">Всего</th>
-                  <th className="p-2 text-right">Последнее добавление</th>
-                  <th className="p-2 text-right">Действие</th>
-                </tr>
-              </thead>
-              <tbody>
+                    <CartesianGrid strokeDasharray="3 3" horizontal stroke={C.border} />
+                    <XAxis type="number" tick={{ fontSize: 10, fill: C.muted }} />
+                    <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 10, fill: C.muted }} />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="clients" stackId="lb" fill={C.primary} name="Клиенты" radius={[0, 0, 0, 0]} />
+                    <Bar dataKey="tradePoints" stackId="lb" fill={C.tpStack} name="ТТ" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            ) : null}
+
+            {isMobile ? (
+              <div className="flex flex-col gap-2 p-3">
                 {visibleCreatedSummaryRows.map((row) => {
                   const unknown = isActivityUnknownUserId(row.managerId);
                   const total = row.newClients + row.newTradePoints;
+                  const rank = createdManagerSummaryRows.findIndex((r) => r.managerId === row.managerId) + 1;
+                  const isTop = rank <= 3 && total > 0;
+                  const isInactive = total === 0;
+                  const progress = Math.min(100, Math.round((total / leaderMaxManualTotal) * 100));
+                  const compact = leaderboardFilter === "all" && isInactive;
                   return (
-                    <tr
+                    <div
                       key={row.managerId}
-                      className="border-b border-border/60 hover:bg-muted/20"
+                      className={cn(
+                        "relative overflow-hidden rounded-xl border p-3 shadow-sm",
+                        compact && "py-2",
+                        isTop && "border-[rgba(154,202,60,0.45)] bg-[rgba(154,202,60,0.1)]",
+                        !isTop &&
+                          !isInactive &&
+                          "relative border-[#E3E6F3] bg-white pl-3 before:absolute before:inset-y-2 before:left-0 before:w-1 before:rounded-full before:bg-[#9ACA3C] before:content-['']",
+                        isInactive && "border-[#E3E6F3] bg-[#EEEFF6]/80",
+                      )}
+                      style={!isTop && !isInactive ? { borderColor: C.border } : isInactive ? { borderColor: C.border } : {}}
                       data-testid={`card-manager-contribution-${row.managerId}`}
                     >
-                      <td className="p-2">
-                        {unknown ? (
-                          <Badge variant="outline" className="text-[10px]" title={UNKNOWN_ACTOR_HELP}>
-                            {ACTIVITY_UNKNOWN_DISPLAY}
-                          </Badge>
-                        ) : (
-                          <span className="font-medium">{row.displayName}</span>
-                        )}
-                      </td>
-                      <td className="p-2 text-xs text-muted-foreground">{row.teamName}</td>
-                      <td className="p-2 text-right tabular-nums" data-testid={`text-manager-clients-added-${row.managerId}`}>
-                        {row.newClients}
-                      </td>
-                      <td className="p-2 text-right tabular-nums" data-testid={`text-manager-trade-points-added-${row.managerId}`}>
-                        {row.newTradePoints}
-                      </td>
-                      <td className="p-2 text-right tabular-nums font-medium">{total}</td>
-                      <td className="p-2 text-right text-xs text-muted-foreground">
-                        {formatLastManualAddition(row.lastAddedAtMs, total)}
-                      </td>
-                      <td className="p-2 text-right">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="h-8 text-xs"
-                          onClick={() => setDetailManagerId(row.managerId)}
-                          data-testid={`button-manager-contribution-open-${row.managerId}`}
-                        >
-                          Смотреть
-                        </Button>
-                      </td>
-                    </tr>
+                      <div data-testid={`card-manager-leader-${row.managerId}`} className="flex gap-3">
+                        <div className="flex w-8 shrink-0 flex-col items-center pt-0.5">
+                          <span className="text-xs font-bold tabular-nums" style={{ color: isInactive ? C.muted : C.text }}>
+                            #{rank}
+                          </span>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              {unknown ? (
+                                <Badge variant="outline" className="text-[10px]" title={UNKNOWN_ACTOR_HELP} style={{ borderColor: C.border, color: C.muted }}>
+                                  {ACTIVITY_UNKNOWN_DISPLAY}
+                                </Badge>
+                              ) : (
+                                <p className="truncate text-base font-semibold leading-tight" style={{ color: isInactive ? C.muted : C.text }}>
+                                  {row.displayName}
+                                </p>
+                              )}
+                              <p className="truncate text-[11px] leading-snug" style={{ color: C.muted }}>
+                                {managerTeamAndRopLabel(row.managerId)}
+                              </p>
+                            </div>
+                            <div className="shrink-0 text-right">
+                              <p className="text-xl font-bold tabular-nums leading-none" style={{ color: isInactive ? C.muted : C.text }}>
+                                {total}
+                              </p>
+                              {isTop ? (
+                                <Badge className="mt-1 border-0 px-1.5 py-0 text-[9px] font-semibold" style={{ background: C.primary, color: C.white }} data-testid={`badge-manager-leader-${row.managerId}`}>
+                                  Лидер
+                                </Badge>
+                              ) : null}
+                            </div>
+                          </div>
+                          <p className="mt-2 text-[11px] tabular-nums" style={{ color: isInactive ? C.muted : C.text }} data-testid={`text-manager-clients-added-${row.managerId}`}>
+                            Клиенты: {row.newClients}
+                          </p>
+                          <p className="text-[11px] tabular-nums" style={{ color: isInactive ? C.muted : C.text }} data-testid={`text-manager-trade-points-added-${row.managerId}`}>
+                            ТТ: {row.newTradePoints}
+                          </p>
+                          {!isInactive ? (
+                            <div className="mt-2 h-1 w-full overflow-hidden rounded-full" style={{ background: C.surface }}>
+                              <div className="h-full rounded-full transition-all" style={{ width: `${progress}%`, background: C.primary }} />
+                            </div>
+                          ) : null}
+                          <p className="mt-2 text-[10px]" style={{ color: C.muted }}>
+                            Последняя активность: {formatLastManualAddition(row.lastAddedAtMs, total)}
+                          </p>
+                          {isInactive ? (
+                            <Button type="button" variant="outline" size="sm" className="mt-2 w-full" disabled style={{ borderColor: C.border, color: C.muted }}>
+                              Нет добавлений
+                            </Button>
+                          ) : (
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="mt-2 w-full border-0 font-medium text-white hover:opacity-95"
+                              style={{ background: C.primary }}
+                              onClick={() => setDetailManagerId(row.managerId)}
+                              data-testid={`button-manager-contribution-open-${row.managerId}`}
+                            >
+                              Смотреть карточки
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   );
                 })}
-              </tbody>
-            </table>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[920px] text-sm" data-testid="table-manager-created-summary">
+                  <thead>
+                    <tr className="border-b text-left text-[11px] font-semibold uppercase" style={{ borderColor: C.border, color: C.muted, background: C.surface }}>
+                      <th className="p-2">#</th>
+                      <th className="p-2">Менеджер</th>
+                      <th className="p-2">Команда</th>
+                      <th className="p-2 text-right">Клиенты</th>
+                      <th className="p-2 text-right">ТТ</th>
+                      <th className="p-2 text-right">Всего</th>
+                      <th className="p-2 text-right">Последняя активность</th>
+                      <th className="p-2 text-right">Действие</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleCreatedSummaryRows.map((row) => {
+                      const unknown = isActivityUnknownUserId(row.managerId);
+                      const total = row.newClients + row.newTradePoints;
+                      const rank = createdManagerSummaryRows.findIndex((r) => r.managerId === row.managerId) + 1;
+                      const isTop = rank <= 3 && total > 0;
+                      const isInactive = total === 0;
+                      return (
+                        <tr
+                          key={row.managerId}
+                          className="border-b transition-colors hover:bg-[#EEEFF6]"
+                          style={{
+                            borderColor: C.border,
+                            background: isTop ? "rgba(154, 202, 60, 0.1)" : undefined,
+                            color: isInactive ? C.muted : C.text,
+                          }}
+                          data-testid={`card-manager-contribution-${row.managerId}`}
+                        >
+                          <td className="p-2 tabular-nums" style={{ color: isInactive ? C.muted : C.muted }}>
+                            {rank}
+                          </td>
+                          <td className="p-2">
+                            <div data-testid={`card-manager-leader-${row.managerId}`}>
+                              {unknown ? (
+                                <Badge variant="outline" className="text-[10px]" title={UNKNOWN_ACTOR_HELP} style={{ borderColor: C.border }}>
+                                  {ACTIVITY_UNKNOWN_DISPLAY}
+                                </Badge>
+                              ) : (
+                                <span className="font-medium">{row.displayName}</span>
+                              )}
+                              {isTop ? (
+                                <Badge className="ml-2 align-middle border-0 px-1.5 py-0 text-[9px]" style={{ background: C.primary, color: C.white }} data-testid={`badge-manager-leader-${row.managerId}`}>
+                                  Лидер
+                                </Badge>
+                              ) : null}
+                            </div>
+                          </td>
+                          <td className="max-w-[200px] p-2 text-xs" style={{ color: C.muted }}>
+                            {managerTeamAndRopLabel(row.managerId)}
+                          </td>
+                          <td className="p-2 text-right tabular-nums" data-testid={`text-manager-clients-added-${row.managerId}`}>
+                            {row.newClients}
+                          </td>
+                          <td className="p-2 text-right tabular-nums" data-testid={`text-manager-trade-points-added-${row.managerId}`}>
+                            {row.newTradePoints}
+                          </td>
+                          <td className="p-2 text-right tabular-nums font-semibold">{total}</td>
+                          <td className="p-2 text-right text-xs" style={{ color: C.muted }}>
+                            {formatLastManualAddition(row.lastAddedAtMs, total)}
+                          </td>
+                          <td className="p-2 text-right">
+                            {isInactive ? (
+                              <Button type="button" variant="outline" size="sm" className="h-8 text-xs" disabled style={{ borderColor: C.border, color: C.muted }}>
+                                Нет добавлений
+                              </Button>
+                            ) : (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-8 border-0 text-xs font-medium text-white hover:opacity-95"
+                                style={{ background: C.primary }}
+                                onClick={() => setDetailManagerId(row.managerId)}
+                                data-testid={`button-manager-contribution-open-${row.managerId}`}
+                              >
+                                Смотреть
+                              </Button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-2xl border bg-white shadow-sm" style={{ borderColor: C.border }}>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base font-semibold" style={{ color: C.text }}>
+            Динамика по дням
+          </CardTitle>
+          <p className="text-xs" style={{ color: C.muted }}>
+            Новые клиенты и торговые точки (ручные записи)
+          </p>
+        </CardHeader>
+        <CardContent className="h-[260px] w-full min-w-0 px-2 sm:px-4" data-testid="chart-activity-by-day">
+          {byDayManual.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={byDayManual} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+                <XAxis dataKey="day" tick={{ fontSize: 10, fill: C.muted }} />
+                <YAxis width={32} tick={{ fontSize: 10, fill: C.muted }} />
+                <Tooltip />
+                <Legend />
+                <Bar dataKey="clients" stackId="day" fill={C.primary} name="Клиенты" />
+                <Bar dataKey="tradePoints" stackId="day" fill={C.tpStack} name="ТТ" />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <ChartEmptyPlaceholder
+              title="Нет данных по дням"
+              text="В выбранном периоде нет ручных клиентов или ТТ с датой по дням."
+            />
           )}
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card className="rounded-2xl border border-border/80 bg-card shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Динамика по дням</CardTitle>
-          </CardHeader>
-          <CardContent className="h-[240px] w-full min-w-0" data-testid="chart-activity-by-day">
-            {byDay.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={byDay} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-border/50" />
-                  <XAxis dataKey="day" tick={{ fontSize: 10 }} />
-                  <YAxis width={28} tick={{ fontSize: 10 }} />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="dealers" stackId="a" fill={primaryFill} name="Клиенты" />
-                  <Bar dataKey="tradePoints" stackId="a" fill="hsl(var(--primary) / 0.65)" name="ТТ" />
-                  <Bar dataKey="legal" stackId="a" fill="hsl(var(--primary) / 0.45)" name="Юрлица" />
-                  <Bar dataKey="photos" stackId="a" fill="hsl(var(--muted-foreground) / 0.4)" name="Фото" />
-                  <Bar dataKey="showcase" stackId="a" fill="hsl(var(--foreground) / 0.25)" name="Витрина" />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <ChartEmptyPlaceholder
-                title="Нет данных по дням"
-                text="Нет событий в выбранном периоде — график появится после действий менеджеров."
-              />
-            )}
-          </CardContent>
-        </Card>
+      <Card className="rounded-2xl border bg-white shadow-sm" style={{ borderColor: C.border }}>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base font-semibold" style={{ color: C.text }}>
+            Клиенты и ТТ по менеджерам
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="h-[260px] w-full min-w-0 px-2 sm:px-4" data-testid="chart-manager-added-clients-trade-points">
+          {managerClientsTpChartData.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart layout="vertical" data={managerClientsTpChartData} margin={{ top: 4, right: 12, left: 4, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal stroke={C.border} />
+                <XAxis type="number" tick={{ fontSize: 10, fill: C.muted }} />
+                <YAxis type="category" dataKey="name" width={128} tick={{ fontSize: 10, fill: C.muted }} />
+                <Tooltip />
+                <Legend />
+                <Bar dataKey="clients" stackId="add" fill={C.primary} name="Клиенты" radius={[0, 0, 0, 0]} />
+                <Bar dataKey="tradePoints" stackId="add" fill={C.tpStack} name="ТТ" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <ChartEmptyPlaceholder title="Нет добавлений" text="Нет ручных клиентов или торговых точек по менеджерам за период." />
+          )}
+        </CardContent>
+      </Card>
 
-        <div className="flex min-h-0 flex-col gap-4">
-          <Card className="rounded-2xl border border-border/80 bg-card shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Клиенты и ТТ по менеджерам (добавлено)</CardTitle>
-            </CardHeader>
-            <CardContent className="h-[240px] w-full min-w-0" data-testid="chart-manager-added-clients-trade-points">
-              {managerClientsTpChartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    layout="vertical"
-                    data={managerClientsTpChartData}
-                    margin={{ top: 4, right: 12, left: 4, bottom: 4 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" horizontal className="stroke-border/50" />
-                    <XAxis type="number" tick={{ fontSize: 10 }} />
-                    <YAxis type="category" dataKey="name" width={128} tick={{ fontSize: 10 }} />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="clients" stackId="add" fill="hsl(142 76% 36%)" name="Клиенты" radius={[0, 0, 0, 0]} />
-                    <Bar
-                      dataKey="tradePoints"
-                      stackId="add"
-                      fill="hsl(var(--muted-foreground) / 0.45)"
-                      name="ТТ"
-                      radius={[0, 4, 4, 0]}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <ChartEmptyPlaceholder
-                  title="Нет добавлений"
-                  text="В выбранном периоде нет ручных клиентов или торговых точек по менеджерам."
-                />
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-2xl border border-border/80 bg-card shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base text-muted-foreground">Score по менеджерам (вторично)</CardTitle>
-            </CardHeader>
-            <CardContent className="h-[200px] w-full min-w-0" data-testid="chart-activity-by-manager">
+      <Collapsible open={scoreSectionOpen} onOpenChange={setScoreSectionOpen}>
+        <Card className="rounded-2xl border bg-white shadow-sm" style={{ borderColor: C.border }}>
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left sm:px-6"
+              style={{ color: C.text }}
+            >
+              <span className="text-sm font-semibold">Score по менеджерам (вторично)</span>
+              <ChevronDown className={cn("h-4 w-4 shrink-0 transition-transform", scoreSectionOpen && "rotate-180")} style={{ color: C.muted }} aria-hidden />
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <CardContent className="h-[200px] w-full min-w-0 px-2 pb-4 sm:px-4" data-testid="chart-activity-by-manager">
               {managerScoreChartData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart layout="vertical" data={managerScoreChartData} margin={{ top: 4, right: 16, left: 4, bottom: 4 }}>
-                    <CartesianGrid strokeDasharray="3 3" horizontal className="stroke-border/50" />
-                    <XAxis type="number" tick={{ fontSize: 10 }} />
-                    <YAxis type="category" dataKey="name" width={128} tick={{ fontSize: 10 }} />
+                    <CartesianGrid strokeDasharray="3 3" horizontal stroke={C.border} />
+                    <XAxis type="number" tick={{ fontSize: 10, fill: C.muted }} />
+                    <YAxis type="category" dataKey="name" width={128} tick={{ fontSize: 10, fill: C.muted }} />
                     <Tooltip />
-                    <Bar dataKey="score" fill={primaryFill} radius={[0, 4, 4, 0]} name="Score" />
+                    <Bar dataKey="score" fill={C.primary} radius={[0, 4, 4, 0]} name="Score" />
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
                 <ChartEmptyPlaceholder title="Нет score" text="Нет действий с ненулевым score в выбранном периоде." />
               )}
             </CardContent>
-          </Card>
-        </div>
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card className="rounded-2xl border border-border/80 bg-card shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Структура действий</CardTitle>
-          </CardHeader>
-          <CardContent className="mx-auto h-[220px] w-full max-w-sm" data-testid="chart-activity-breakdown">
-            {breakdown.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={breakdown} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={48} outerRadius={72} paddingAngle={2}>
-                    {breakdown.map((_, i) => (
-                      <Cell key={i} fill={i % 2 === 0 ? primaryFill : mutedFill} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <ChartEmptyPlaceholder
-                title="Нет структуры действий"
-                text="Нет событий для круговой диаграммы в текущих фильтрах."
-              />
-            )}
-          </CardContent>
+          </CollapsibleContent>
         </Card>
+      </Collapsible>
 
-        <Card className="rounded-2xl border border-border/80 bg-card shadow-sm" data-testid="section-activity-quality">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Качество базы</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            {[
-              { label: "Клиенты с ИНН", v: quality.dealersWithInnPct },
-              { label: "Клиенты с телефоном", v: quality.dealersWithPhonePct },
-              { label: "Клиенты с email", v: quality.dealersWithEmailPct },
-              { label: "Клиенты с юрлицом", v: quality.dealersWithLegalPct },
-              { label: "Клиенты с ТТ", v: quality.dealersWithTpPct },
-              { label: "ТТ с адресом", v: quality.tradePointsWithAddressPct },
-              { label: "ТТ с фото", v: quality.tradePointsWithPhotoPct },
-              { label: "ТТ с заполненной витриной", v: quality.tradePointsShowcaseFilledPct },
-            ].map((row) => (
-              <div key={row.label} className="space-y-1">
-                <div className="flex justify-between gap-2 text-xs">
-                  <span className="text-muted-foreground">{row.label}</span>
-                  <span className="tabular-nums font-medium">{row.v}%</span>
-                </div>
-                <Progress value={row.v} className="h-2" />
-              </div>
-            ))}
-          </CardContent>
+      <Collapsible open={pieSectionOpen} onOpenChange={setPieSectionOpen}>
+        <Card className="rounded-2xl border bg-white shadow-sm" style={{ borderColor: C.border }}>
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left sm:px-6"
+              style={{ color: C.text }}
+            >
+              <span className="text-sm font-semibold">Структура действий (все типы)</span>
+              <ChevronDown className={cn("h-4 w-4 shrink-0 transition-transform", pieSectionOpen && "rotate-180")} style={{ color: C.muted }} aria-hidden />
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <CardContent className="mx-auto h-[220px] w-full max-w-sm px-2 pb-4 sm:px-4" data-testid="chart-activity-breakdown">
+              {breakdown.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={breakdown} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={48} outerRadius={72} paddingAngle={2}>
+                      {breakdown.map((_, i) => (
+                        <Cell key={i} fill={i % 2 === 0 ? C.primary : C.tpStack} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <ChartEmptyPlaceholder title="Нет структуры действий" text="Нет событий для диаграммы в текущих фильтрах." />
+              )}
+            </CardContent>
+          </CollapsibleContent>
         </Card>
-      </div>
+      </Collapsible>
 
-      <Card className="rounded-2xl border border-border/80 bg-card shadow-sm" data-testid="section-activity-problems">
+      <Card className="rounded-2xl border bg-white shadow-sm" style={{ borderColor: C.border }} data-testid="section-activity-quality">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Проблемные зоны</CardTitle>
+          <CardTitle className="text-base font-semibold" style={{ color: C.text }}>
+            Качество базы
+          </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3 text-sm">
-          {idleManagers.length ? (
-            <div>
-              <p className="mb-1 text-xs font-semibold uppercase text-muted-foreground">Менеджеры без активности (7 дней)</p>
-              <ul className="list-inside list-disc text-muted-foreground">
-                {idleManagers.map((m) => (
-                  <li key={m.id}>{m.name}</li>
-                ))}
-              </ul>
+        <CardContent className="space-y-3 text-sm sm:max-w-xl">
+          {[
+            { label: "Клиенты с ИНН", v: quality.dealersWithInnPct },
+            { label: "Клиенты с телефоном", v: quality.dealersWithPhonePct },
+            { label: "Клиенты с email", v: quality.dealersWithEmailPct },
+            { label: "Клиенты с юрлицом", v: quality.dealersWithLegalPct },
+            { label: "Клиенты с ТТ", v: quality.dealersWithTpPct },
+            { label: "ТТ с адресом", v: quality.tradePointsWithAddressPct },
+            { label: "ТТ с фото", v: quality.tradePointsWithPhotoPct },
+            { label: "ТТ с заполненной витриной", v: quality.tradePointsShowcaseFilledPct },
+          ].map((row) => (
+            <div key={row.label} className="space-y-1">
+              <div className="flex justify-between gap-2 text-xs">
+                <span style={{ color: C.muted }}>{row.label}</span>
+                <span className="tabular-nums font-medium" style={{ color: C.text }}>
+                  {row.v}%
+                </span>
+              </div>
+              <Progress value={row.v} className="h-2" />
             </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-2xl border bg-white shadow-sm" style={{ borderColor: C.border }} data-testid="section-activity-problems">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base font-semibold" style={{ color: C.text }}>
+            Проблемные зоны
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4 text-sm">
+          {idleManagers.length ? (
+            <Collapsible open={idleGroupOpen} onOpenChange={setIdleGroupOpen}>
+              <div className="rounded-lg border px-3 py-2" style={{ borderColor: C.border, background: C.surface }}>
+                <CollapsibleTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between gap-2 text-left text-sm font-medium"
+                    style={{ color: C.text }}
+                  >
+                    <span>{idleManagers.length} менеджеров без активности за 7 дней</span>
+                    <ChevronDown className={cn("h-4 w-4 shrink-0 transition-transform", idleGroupOpen && "rotate-180")} style={{ color: C.muted }} aria-hidden />
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <ul className="mt-2 max-h-48 list-inside list-disc space-y-1 overflow-y-auto text-xs" style={{ color: C.muted }}>
+                    {idleManagers.map((m) => (
+                      <li key={m.id}>{m.name}</li>
+                    ))}
+                  </ul>
+                </CollapsibleContent>
+              </div>
+            </Collapsible>
           ) : null}
-          <ul className="max-h-72 space-y-1 overflow-y-auto text-muted-foreground">
-            {problems.slice(0, 40).map((p) => (
-              <li key={p.id} className="text-xs leading-snug">
+          <ul className="space-y-2">
+            {(showAllProblems ? problems : problems.slice(0, 7)).map((p) => (
+              <li key={p.id} className="text-xs leading-snug" style={{ color: C.muted }}>
                 {p.text}
               </li>
             ))}
           </ul>
+          {problems.length > 7 ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              style={{ borderColor: C.border, color: C.primary }}
+              onClick={() => setShowAllProblems((v) => !v)}
+            >
+              {showAllProblems ? "Свернуть" : "Показать все"}
+            </Button>
+          ) : null}
         </CardContent>
       </Card>
 
-      <Card id="section-activity-managers" className="rounded-2xl border border-border/80 bg-card shadow-sm">
+      <Card id="section-activity-managers" className="rounded-2xl border bg-white shadow-sm" style={{ borderColor: C.border }}>
         <CardHeader className="space-y-2 pb-2">
-          <CardTitle className="text-base text-muted-foreground">Расширенная сводка по менеджерам (события и score)</CardTitle>
-          <p className="text-xs text-muted-foreground">
-            Таблица ниже строится из ленты действий (включая обновления). Основной контроль ручных добавлений — блок «Кто
-            сколько добавил» выше.
+          <CardTitle className="text-base font-semibold" style={{ color: C.muted }}>
+            Расширенная сводка (события и score)
+          </CardTitle>
+          <p className="text-xs leading-snug" style={{ color: C.muted }}>
+            Лента всех типов действий. Основной контроль добавлений — блок «Рейтинг менеджеров» выше.
           </p>
           <div className="flex flex-wrap gap-2">
             {(
@@ -1175,7 +1348,7 @@ function ClientBaseActivityDashboardInner(): ReactElement {
                   <div
                     key={m.managerId}
                     className="rounded-xl border border-border bg-card p-3 shadow-sm"
-                    data-testid={`card-manager-contribution-${m.managerId}`}
+                    data-testid={`card-manager-events-${m.managerId}`}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1 space-y-1">
@@ -1216,16 +1389,16 @@ function ClientBaseActivityDashboardInner(): ReactElement {
                           size="sm"
                           className="h-auto px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 hover:text-primary"
                           onClick={() => setDetailManagerId(m.managerId)}
-                          data-testid={`button-manager-contribution-open-${m.managerId}`}
+                          data-testid={`button-manager-events-open-${m.managerId}`}
                         >
                           Открыть
                         </Button>
                       </div>
                     </div>
-                    <p className="mt-2 text-xs text-muted-foreground" data-testid={`text-manager-clients-added-${m.managerId}`}>
+                    <p className="mt-2 text-xs text-muted-foreground" data-testid={`text-manager-events-clients-${m.managerId}`}>
                       Клиенты: {m.createdDealers}
                     </p>
-                    <p className="text-xs text-muted-foreground" data-testid={`text-manager-trade-points-added-${m.managerId}`}>
+                    <p className="text-xs text-muted-foreground" data-testid={`text-manager-events-tps-${m.managerId}`}>
                       ТТ: {m.addedTradePoints}
                     </p>
                     <p className="text-xs text-muted-foreground">
@@ -1260,7 +1433,7 @@ function ClientBaseActivityDashboardInner(): ReactElement {
                     <tr
                       key={m.managerId}
                       className="border-b border-border/60 hover:bg-muted/20"
-                      data-testid={`card-manager-contribution-${m.managerId}`}
+                      data-testid={`card-manager-events-${m.managerId}`}
                     >
                       <td className="p-2">
                         {unknown ? (
@@ -1277,10 +1450,10 @@ function ClientBaseActivityDashboardInner(): ReactElement {
                         )}
                       </td>
                       <td className="max-w-[220px] p-2 text-xs text-muted-foreground">{managerTeamAndRopLabel(m.managerId)}</td>
-                      <td className="p-2 text-right tabular-nums" data-testid={`text-manager-clients-added-${m.managerId}`}>
+                      <td className="p-2 text-right tabular-nums" data-testid={`text-manager-events-clients-${m.managerId}`}>
                         {m.createdDealers}
                       </td>
-                      <td className="p-2 text-right tabular-nums" data-testid={`text-manager-trade-points-added-${m.managerId}`}>
+                      <td className="p-2 text-right tabular-nums" data-testid={`text-manager-events-tps-${m.managerId}`}>
                         {m.addedTradePoints}
                       </td>
                       <td className="p-2 text-right tabular-nums">{m.updatedDealers}</td>
@@ -1311,7 +1484,7 @@ function ClientBaseActivityDashboardInner(): ReactElement {
                           size="sm"
                           className="h-8 text-xs"
                           onClick={() => setDetailManagerId(m.managerId)}
-                          data-testid={`button-manager-contribution-open-${m.managerId}`}
+                          data-testid={`button-manager-events-open-${m.managerId}`}
                         >
                           Открыть
                         </Button>
@@ -1326,16 +1499,22 @@ function ClientBaseActivityDashboardInner(): ReactElement {
       </Card>
 
       <Dialog open={detailManagerId != null} onOpenChange={(o) => !o && setDetailManagerId(null)}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl" data-testid="dialog-manager-created-detail">
+        <DialogContent className="max-h-[85vh] overflow-y-auto border bg-white sm:max-w-2xl" style={{ borderColor: C.border }} data-testid="dialog-manager-created-detail">
           <DialogHeader>
             <DialogTitle>{detailDialogTitle}</DialogTitle>
             {detailManagerId != null && !isActivityUnknownUserId(detailManagerId) ? (
               <>
-                <p className="text-sm text-muted-foreground">{managerTeamAndRopLabel(detailManagerId)}</p>
-                <p className="text-sm text-muted-foreground">{PERIOD_LABELS[period]}</p>
-                <p className="text-sm font-medium text-foreground">
-                  Клиентов: {createdManagerSummaryRows.find((r) => r.managerId === detailManagerId)?.newClients ?? 0} · ТТ:{" "}
-                  {createdManagerSummaryRows.find((r) => r.managerId === detailManagerId)?.newTradePoints ?? 0}
+                <p className="text-sm" style={{ color: C.muted }}>
+                  {managerTeamAndRopLabel(detailManagerId)}
+                </p>
+                <p className="text-sm font-semibold" style={{ color: C.text }}>
+                  Клиенты {createdManagerSummaryRows.find((r) => r.managerId === detailManagerId)?.newClients ?? 0} · ТТ{" "}
+                  {createdManagerSummaryRows.find((r) => r.managerId === detailManagerId)?.newTradePoints ?? 0} · Всего{" "}
+                  {(createdManagerSummaryRows.find((r) => r.managerId === detailManagerId)?.newClients ?? 0) +
+                    (createdManagerSummaryRows.find((r) => r.managerId === detailManagerId)?.newTradePoints ?? 0)}
+                </p>
+                <p className="text-xs" style={{ color: C.muted }}>
+                  {PERIOD_LABELS[period]}
                 </p>
               </>
             ) : null}
@@ -1408,22 +1587,27 @@ function ClientBaseActivityDashboardInner(): ReactElement {
                   detailAddedClients.map((c) => (
                     <div
                       key={c.dealerId}
-                      className="rounded-lg border border-border/80 bg-muted/10 p-3 text-sm"
+                      className="rounded-lg border p-2.5 text-sm"
+                      style={{ borderColor: C.border, background: C.surface }}
                       data-testid={`card-manager-created-client-${c.dealerId}`}
                     >
-                      <p className="font-medium text-foreground">{c.title}</p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="font-medium leading-snug" style={{ color: C.text }}>
+                        {c.title}
+                      </p>
+                      <p className="text-xs" style={{ color: C.muted }}>
                         {c.city}
                         {c.inn && c.inn !== "—" ? ` · ИНН ${c.inn}` : ""}
                       </p>
-                      <p className="text-xs text-muted-foreground">Добавлено: {c.savedAtLabel}</p>
-                      <p className="text-xs text-muted-foreground">ТТ: {c.tradePointCount}</p>
+                      <p className="text-xs" style={{ color: C.muted }}>
+                        Добавлено: {c.savedAtLabel}
+                      </p>
                       <Link
                         href={`/dealers/${encodeURIComponent(c.dealerId)}`}
-                        className="mt-2 inline-block text-xs font-medium text-primary underline-offset-4 hover:underline"
+                        className="mt-2 inline-block text-xs font-semibold underline-offset-4 hover:underline"
+                        style={{ color: C.primary }}
                         data-testid={`link-manager-created-client-${c.dealerId}`}
                       >
-                        Открыть клиента
+                        Открыть карточку
                       </Link>
                     </div>
                   ))
@@ -1436,27 +1620,40 @@ function ClientBaseActivityDashboardInner(): ReactElement {
                   detailAddedTradePoints.map((tp) => (
                     <div
                       key={tp.tradePointId}
-                      className="rounded-lg border border-border/80 bg-muted/10 p-3 text-sm"
+                      className="rounded-lg border p-2.5 text-sm"
+                      style={{ borderColor: C.border, background: C.surface }}
                       data-testid={`card-manager-created-trade-point-${tp.tradePointId}`}
                     >
-                      <p className="font-medium text-foreground">{tp.tpTitle}</p>
-                      <p className="text-xs text-muted-foreground">Клиент: {tp.dealerTitle}</p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="font-medium leading-snug" style={{ color: C.text }}>
+                        {tp.tpTitle}
+                      </p>
+                      <p className="text-xs" style={{ color: C.muted }}>
+                        Клиент: {tp.dealerTitle}
+                      </p>
+                      <p className="text-xs" style={{ color: C.muted }}>
                         {tp.city} · {tp.address}
                       </p>
-                      {tp.phone && tp.phone !== "—" ? <p className="text-xs text-muted-foreground">{tp.phone}</p> : null}
-                      <p className="text-xs text-muted-foreground">Добавлено: {tp.savedAtLabel}</p>
+                      {tp.phone && tp.phone !== "—" ? (
+                        <p className="text-xs" style={{ color: C.muted }}>
+                          {tp.phone}
+                        </p>
+                      ) : null}
+                      <p className="text-xs" style={{ color: C.muted }}>
+                        Добавлено: {tp.savedAtLabel}
+                      </p>
                       <div className="mt-2 flex flex-wrap gap-3">
                         <Link
                           href={`/dealers/${encodeURIComponent(tp.dealerId)}/trade-points/${encodeURIComponent(tp.tradePointId)}`}
-                          className="text-xs font-medium text-primary underline-offset-4 hover:underline"
+                          className="text-xs font-semibold underline-offset-4 hover:underline"
+                          style={{ color: C.primary }}
                           data-testid={`link-manager-created-trade-point-${tp.tradePointId}`}
                         >
-                          Открыть ТТ
+                          Открыть карточку
                         </Link>
                         <Link
                           href={`/dealers/${encodeURIComponent(tp.dealerId)}`}
-                          className="text-xs text-muted-foreground underline-offset-4 hover:underline"
+                          className="text-xs underline-offset-4 hover:underline"
+                          style={{ color: C.muted }}
                         >
                           К клиенту
                         </Link>
