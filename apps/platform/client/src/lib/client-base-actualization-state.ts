@@ -29,6 +29,10 @@ export type ManualDealer = {
   createdAt: string;
   createdBy: string;
   createdByName: string;
+  /** Последнее сохранение карточки (для аудита и метрик). */
+  updatedAt?: string;
+  updatedBy?: string;
+  updatedByName?: string;
   source: ActualizationSource;
 };
 
@@ -51,6 +55,9 @@ export type ManualTradePoint = {
   createdAt: string;
   createdBy: string;
   createdByName: string;
+  updatedAt?: string;
+  updatedBy?: string;
+  updatedByName?: string;
   source: ActualizationSource;
 };
 

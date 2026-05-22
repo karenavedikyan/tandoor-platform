@@ -3,7 +3,7 @@
  * Атрибуция действий — по полям createdBy / updatedBy / archivedBy / uploadedBy и *Name.
  */
 
-import type { ActualizationState } from "@/lib/client-base-actualization-state";
+import type { ActualizationState, LegalEntityActualizationState } from "@/lib/client-base-actualization-state";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import { getDealerRegionalManagerDisplay } from "@/lib/dealer-base-mock-data";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
@@ -148,19 +148,70 @@ function strField(o: Record<string, unknown>, k: string): string {
   return normalizeText(o[k]);
 }
 
-export function collectActivityEvents(state: ActualizationState, dealerRows: DealerRow[]): ActivityEvent[] {
+/** Явный user id в данных юрлица (без подстановки «unknown»). */
+function legalEntityActorRaw(o: Record<string, unknown>, st: LegalEntityActualizationState): string {
+  return normalizeText(o.updatedBy) || normalizeText(o.createdBy) || normalizeText(st.createdById);
+}
+
+/** Fallback на ответственного по строке клиента, если в override нет updatedBy. */
+function actorWithDealerFallback(
+  primary: string | undefined | null,
+  dealerId: string | undefined,
+  dealerById: Map<string, DealerRow>,
+): string {
+  const p = normalizeText(primary);
+  if (p) return p;
+  const dId = normalizeText(dealerId);
+  if (!dId) return "";
+  const row = dealerById.get(dId);
+  return normalizeText(row?.releaseManagerId) || "";
+}
+
+export type ActivityCollection = {
+  /** События, участвующие в score и рейтинге менеджеров. */
+  events: ActivityEvent[];
+  /**
+   * Массовые/служебные записи без автора (типично импорт архива или snapshot юрлиц без createdBy).
+   * Не входят в score; показываются в диалоге «Автор не определён» как пояснение.
+   */
+  excludedTechnical: ActivityEvent[];
+};
+
+/**
+ * Сбор псевдо-событий для дашборда. Архивы и юрлица без archivedBy/updatedBy не попадают в рейтинг —
+ * иначе тысячи строк с `unknown` давали «Автор не определён» с гигантским score (production).
+ */
+export function collectActivityBuckets(state: ActualizationState, dealerRows: DealerRow[]): ActivityCollection {
   const dealerById = new Map(dealerRows.map((r) => [r.id, r]));
-  const out: ActivityEvent[] = [];
+  const events: ActivityEvent[] = [];
+  const excludedTechnical: ActivityEvent[] = [];
 
   for (const d of Object.values(state.manuallyCreatedDealersById)) {
     const t = isoToMs(d.createdAt);
     if (t == null) continue;
-    const name = strField(d.fields as Record<string, unknown>, "name") || d.internalCode || d.id;
-    pushEv(out, {
+    const f = (d.fields ?? {}) as Record<string, unknown>;
+    const name = strField(f, "name") || d.internalCode || d.id;
+    const actorId =
+      normalizeText(d.createdBy) ||
+      strField(f, "managerUserId") ||
+      strField(f, "releaseManagerId") ||
+      actorWithDealerFallback("", d.id, dealerById);
+    if (!actorId) {
+      pushEv(excludedTechnical, {
+        kind: "manual_dealer",
+        atMs: t,
+        userId: "",
+        userName: ACTIVITY_UNKNOWN_DISPLAY,
+        label: `Создал клиента: ${name}`,
+        dealerId: d.id,
+      });
+      continue;
+    }
+    pushEv(events, {
       kind: "manual_dealer",
       atMs: t,
-      userId: d.createdBy,
-      userName: resolveUserName(d.createdBy, d.createdByName, dealerById, { dealerId: d.id }),
+      userId: actorId,
+      userName: resolveUserName(actorId, d.createdByName, dealerById, { dealerId: d.id }),
       label: `Создал клиента: ${name}`,
       dealerId: d.id,
     });
@@ -171,11 +222,23 @@ export function collectActivityEvents(state: ActualizationState, dealerRows: Dea
     if (t == null) continue;
     const row = dealerById.get(ov.dealerId);
     const name = row?.name ?? ov.dealerId;
-    pushEv(out, {
+    const actorId = actorWithDealerFallback(ov.updatedBy, ov.dealerId, dealerById);
+    if (!actorId) {
+      pushEv(excludedTechnical, {
+        kind: "dealer_updated",
+        atMs: t,
+        userId: "",
+        userName: ACTIVITY_UNKNOWN_DISPLAY,
+        label: `Обновил клиента: ${name}`,
+        dealerId: ov.dealerId,
+      });
+      continue;
+    }
+    pushEv(events, {
       kind: "dealer_updated",
       atMs: t,
-      userId: ov.updatedBy,
-      userName: resolveUserName(ov.updatedBy, ov.updatedByName, dealerById, { dealerId: ov.dealerId }),
+      userId: actorId,
+      userName: resolveUserName(actorId, ov.updatedByName, dealerById, { dealerId: ov.dealerId }),
       label: `Обновил клиента: ${name}`,
       dealerId: ov.dealerId,
     });
@@ -184,12 +247,29 @@ export function collectActivityEvents(state: ActualizationState, dealerRows: Dea
   for (const tp of Object.values(state.manuallyCreatedTradePointsById)) {
     const t = isoToMs(tp.createdAt);
     if (t == null) continue;
-    const title = strField(tp.fields as Record<string, unknown>, "name") || strField(tp.fields as Record<string, unknown>, "title") || tp.internalCode || tp.id;
-    pushEv(out, {
+    const title =
+      strField(tp.fields as Record<string, unknown>, "name") ||
+      strField(tp.fields as Record<string, unknown>, "title") ||
+      tp.internalCode ||
+      tp.id;
+    const actorId = normalizeText(tp.createdBy) || actorWithDealerFallback("", tp.dealerId, dealerById);
+    if (!actorId) {
+      pushEv(excludedTechnical, {
+        kind: "manual_trade_point",
+        atMs: t,
+        userId: "",
+        userName: ACTIVITY_UNKNOWN_DISPLAY,
+        label: `Добавил ТТ: ${title}`,
+        dealerId: tp.dealerId,
+        tradePointId: tp.id,
+      });
+      continue;
+    }
+    pushEv(events, {
       kind: "manual_trade_point",
       atMs: t,
-      userId: tp.createdBy,
-      userName: resolveUserName(tp.createdBy, tp.createdByName, dealerById, { dealerId: tp.dealerId }),
+      userId: actorId,
+      userName: resolveUserName(actorId, tp.createdByName, dealerById, { dealerId: tp.dealerId }),
       label: `Добавил ТТ: ${title}`,
       dealerId: tp.dealerId,
       tradePointId: tp.id,
@@ -199,11 +279,24 @@ export function collectActivityEvents(state: ActualizationState, dealerRows: Dea
   for (const ov of Object.values(state.tradePointOverridesById)) {
     const t = isoToMs(ov.updatedAt);
     if (t == null) continue;
-    pushEv(out, {
+    const actorId = actorWithDealerFallback(ov.updatedBy, ov.dealerId, dealerById);
+    if (!actorId) {
+      pushEv(excludedTechnical, {
+        kind: "trade_point_updated",
+        atMs: t,
+        userId: "",
+        userName: ACTIVITY_UNKNOWN_DISPLAY,
+        label: `Обновил торговую точку`,
+        dealerId: ov.dealerId,
+        tradePointId: ov.tradePointId,
+      });
+      continue;
+    }
+    pushEv(events, {
       kind: "trade_point_updated",
       atMs: t,
-      userId: ov.updatedBy,
-      userName: resolveUserName(ov.updatedBy, ov.updatedByName, dealerById, { dealerId: ov.dealerId }),
+      userId: actorId,
+      userName: resolveUserName(actorId, ov.updatedByName, dealerById, { dealerId: ov.dealerId }),
       label: `Обновил торговую точку`,
       dealerId: ov.dealerId,
       tradePointId: ov.tradePointId,
@@ -214,12 +307,25 @@ export function collectActivityEvents(state: ActualizationState, dealerRows: Dea
     const t = isoToMs(ar.archivedAt);
     if (t == null) continue;
     const row = dealerById.get(ar.dealerId);
-    pushEv(out, {
+    const label = `Архивировал клиента: ${row?.name ?? ar.dealerId}`;
+    const uidRaw = normalizeText(ar.archivedBy);
+    if (!uidRaw || normalizeActorUserId(ar.archivedBy) === ACTIVITY_UNKNOWN_USER_ID) {
+      pushEv(excludedTechnical, {
+        kind: "archive_dealer",
+        atMs: t,
+        userId: "",
+        userName: ACTIVITY_UNKNOWN_DISPLAY,
+        label,
+        dealerId: ar.dealerId,
+      });
+      continue;
+    }
+    pushEv(events, {
       kind: "archive_dealer",
       atMs: t,
       userId: ar.archivedBy,
       userName: resolveUserName(ar.archivedBy, ar.archivedByName, dealerById, { dealerId: ar.dealerId }),
-      label: `Архивировал клиента: ${row?.name ?? ar.dealerId}`,
+      label,
       dealerId: ar.dealerId,
     });
   }
@@ -227,7 +333,20 @@ export function collectActivityEvents(state: ActualizationState, dealerRows: Dea
   for (const ar of Object.values(state.archivedTradePointsById)) {
     const t = isoToMs(ar.archivedAt);
     if (t == null) continue;
-    pushEv(out, {
+    const uidRaw = normalizeText(ar.archivedBy);
+    if (!uidRaw || normalizeActorUserId(ar.archivedBy) === ACTIVITY_UNKNOWN_USER_ID) {
+      pushEv(excludedTechnical, {
+        kind: "archive_trade_point",
+        atMs: t,
+        userId: "",
+        userName: ACTIVITY_UNKNOWN_DISPLAY,
+        label: `Архивировал торговую точку`,
+        dealerId: ar.dealerId,
+        tradePointId: ar.tradePointId,
+      });
+      continue;
+    }
+    pushEv(events, {
       kind: "archive_trade_point",
       atMs: t,
       userId: ar.archivedBy,
@@ -241,7 +360,19 @@ export function collectActivityEvents(state: ActualizationState, dealerRows: Dea
   for (const ar of Object.values(state.archivedLegalEntitiesById)) {
     const t = isoToMs(ar.archivedAt);
     if (t == null) continue;
-    pushEv(out, {
+    const uidRaw = normalizeText(ar.archivedBy);
+    if (!uidRaw || normalizeActorUserId(ar.archivedBy) === ACTIVITY_UNKNOWN_USER_ID) {
+      pushEv(excludedTechnical, {
+        kind: "archive_legal",
+        atMs: t,
+        userId: "",
+        userName: ACTIVITY_UNKNOWN_DISPLAY,
+        label: `Архивировал юрлицо`,
+        dealerId: ar.dealerId,
+      });
+      continue;
+    }
+    pushEv(events, {
       kind: "archive_legal",
       atMs: t,
       userId: ar.archivedBy,
@@ -254,7 +385,19 @@ export function collectActivityEvents(state: ActualizationState, dealerRows: Dea
   for (const ar of Object.values(state.archivedDealerContactsById)) {
     const t = isoToMs(ar.archivedAt);
     if (t == null) continue;
-    pushEv(out, {
+    const uidRaw = normalizeText(ar.archivedBy);
+    if (!uidRaw || normalizeActorUserId(ar.archivedBy) === ACTIVITY_UNKNOWN_USER_ID) {
+      pushEv(excludedTechnical, {
+        kind: "archive_contact",
+        atMs: t,
+        userId: "",
+        userName: ACTIVITY_UNKNOWN_DISPLAY,
+        label: `Архивировал контакт клиента`,
+        dealerId: ar.dealerId,
+      });
+      continue;
+    }
+    pushEv(events, {
       kind: "archive_contact",
       atMs: t,
       userId: ar.archivedBy,
@@ -273,13 +416,24 @@ export function collectActivityEvents(state: ActualizationState, dealerRows: Dea
       const t = isoToMs((o.updatedAt as string) || (o.createdAt as string));
       if (t == null) continue;
       const nm = strField(o, "name") || strField(o, "internalCode") || "Юрлицо";
-      const by = normalizeText(o.updatedBy ?? o.createdBy ?? st.createdById) || normalizeText(st.createdById) || "unknown";
+      const actorRaw = legalEntityActorRaw(o, st);
+      if (!actorRaw) {
+        pushEv(excludedTechnical, {
+          kind: "legal_entity",
+          atMs: t,
+          userId: "",
+          userName: ACTIVITY_UNKNOWN_DISPLAY,
+          label: `Юрлицо (нет автора в данных): ${nm}`,
+          dealerId,
+        });
+        continue;
+      }
       const byName = normalizeText(o.updatedByName ?? o.createdByName);
-      pushEv(out, {
+      pushEv(events, {
         kind: "legal_entity",
         atMs: t,
-        userId: by,
-        userName: resolveUserName(by, byName, dealerById, { dealerId }),
+        userId: actorRaw,
+        userName: resolveUserName(actorRaw, byName || undefined, dealerById, { dealerId }),
         label: `Юрлицо: ${nm}`,
         dealerId,
       });
@@ -291,7 +445,18 @@ export function collectActivityEvents(state: ActualizationState, dealerRows: Dea
       if (ph.archivedAt) continue;
       const t = isoToMs(ph.uploadedAt);
       if (t == null) continue;
-      pushEv(out, {
+      if (!normalizeText(ph.uploadedBy)) {
+        pushEv(excludedTechnical, {
+          kind: "photo",
+          atMs: t,
+          userId: "",
+          userName: ACTIVITY_UNKNOWN_DISPLAY,
+          label: ph.entityType === "dealer" ? `Фото клиента (нет uploadedBy)` : `Фото (нет uploadedBy)`,
+          dealerId,
+        });
+        continue;
+      }
+      pushEv(events, {
         kind: "photo",
         atMs: t,
         userId: ph.uploadedBy,
@@ -309,7 +474,19 @@ export function collectActivityEvents(state: ActualizationState, dealerRows: Dea
       if (t == null) continue;
       const dealerForTp =
         state.manuallyCreatedTradePointsById[tpId]?.dealerId ?? state.tradePointShowcaseActualizationById[tpId]?.dealerId;
-      pushEv(out, {
+      if (!normalizeText(ph.uploadedBy)) {
+        pushEv(excludedTechnical, {
+          kind: "photo",
+          atMs: t,
+          userId: "",
+          userName: ACTIVITY_UNKNOWN_DISPLAY,
+          label: `Фото ТТ (нет uploadedBy)`,
+          tradePointId: tpId,
+          dealerId: dealerForTp,
+        });
+        continue;
+      }
+      pushEv(events, {
         kind: "photo",
         atMs: t,
         userId: ph.uploadedBy,
@@ -331,7 +508,19 @@ export function collectActivityEvents(state: ActualizationState, dealerRows: Dea
         sh.entrancePortals != null ||
         sh.interiorPortals != null);
     if (!filled) continue;
-    pushEv(out, {
+    if (!normalizeText(sh.updatedBy)) {
+      pushEv(excludedTechnical, {
+        kind: "showcase",
+        atMs: t,
+        userId: "",
+        userName: ACTIVITY_UNKNOWN_DISPLAY,
+        label: `Витрина ТТ (нет updatedBy)`,
+        dealerId: sh.dealerId,
+        tradePointId: sh.tradePointId,
+      });
+      continue;
+    }
+    pushEv(events, {
       kind: "showcase",
       atMs: t,
       userId: sh.updatedBy,
@@ -347,7 +536,7 @@ export function collectActivityEvents(state: ActualizationState, dealerRows: Dea
     if (t == null) continue;
     const uid = normalizeText(c.updatedBy);
     if (!uid) continue;
-    pushEv(out, {
+    pushEv(events, {
       kind: "contact",
       atMs: t,
       userId: uid,
@@ -362,7 +551,19 @@ export function collectActivityEvents(state: ActualizationState, dealerRows: Dea
     for (const task of tasks) {
       const t = isoToMs(task.createdAt);
       if (t == null) continue;
-      pushEv(out, {
+      if (!normalizeText(task.createdBy)) {
+        pushEv(excludedTechnical, {
+          kind: "matrix_task",
+          atMs: t,
+          userId: "",
+          userName: ACTIVITY_UNKNOWN_DISPLAY,
+          label: `Задача по матрице: ${normalizeText(task.productName) || "без названия"}`,
+          dealerId: task.dealerId,
+          tradePointId: task.tradePointId,
+        });
+        continue;
+      }
+      pushEv(events, {
         kind: "matrix_task",
         atMs: t,
         userId: task.createdBy,
@@ -374,8 +575,14 @@ export function collectActivityEvents(state: ActualizationState, dealerRows: Dea
     }
   }
 
-  out.sort((a, b) => b.atMs - a.atMs);
-  return out;
+  events.sort((a, b) => b.atMs - a.atMs);
+  excludedTechnical.sort((a, b) => b.atMs - a.atMs);
+  return { events, excludedTechnical };
+}
+
+/** События для обратной совместимости; для excludedTechnical см. collectActivityBuckets. */
+export function collectActivityEvents(state: ActualizationState, dealerRows: DealerRow[]): ActivityEvent[] {
+  return collectActivityBuckets(state, dealerRows).events;
 }
 
 export function eventMatchesActivityTypeFilter(ev: ActivityEvent, f: ActivityTypeFilter): boolean {
@@ -616,49 +823,74 @@ export type KpiTop = {
   activeManagers: number;
 };
 
+/** Область строк клиентской базы для KPI (совпадает с фильтрами роли на дашборде). */
+export type ActivityDashboardKpiScope = {
+  scopedDealerIds: Set<string>;
+};
+
 export function computeTopKpis(
   state: ActualizationState,
   profile: ReleaseDemoProfile,
   range: { startMs: number; endMs: number } | null,
   managerAggs: ManagerActivityAgg[],
+  kpiScope: ActivityDashboardKpiScope,
 ): KpiTop {
+  const inScope = (dealerId: string | undefined): boolean => {
+    const id = normalizeText(dealerId);
+    if (!id) return false;
+    return kpiScope.scopedDealerIds.has(id);
+  };
+
   let manualDealers = 0;
   for (const d of Object.values(state.manuallyCreatedDealersById)) {
+    if (!inScope(d.id)) continue;
+    if (state.archivedDealersById[d.id]) continue;
     const t = isoToMs(d.createdAt);
     if (t != null && inActivityRange(t, range)) manualDealers += 1;
   }
   let updatedDealers = 0;
   for (const ov of Object.values(state.dealerOverridesById)) {
+    if (!inScope(ov.dealerId)) continue;
     const t = isoToMs(ov.updatedAt);
     if (t != null && inActivityRange(t, range)) updatedDealers += 1;
   }
   let manualTradePoints = 0;
   for (const tp of Object.values(state.manuallyCreatedTradePointsById)) {
+    if (!inScope(tp.dealerId)) continue;
+    if (state.archivedDealersById[tp.dealerId]) continue;
+    if (state.archivedTradePointsById[tp.id]) continue;
     const t = isoToMs(tp.createdAt);
     if (t != null && inActivityRange(t, range)) manualTradePoints += 1;
   }
   let legalTouches = 0;
-  for (const st of Object.values(state.legalEntityOverridesByDealerId)) {
+  for (const [dealerId, st] of Object.entries(state.legalEntityOverridesByDealerId)) {
+    if (!inScope(dealerId)) continue;
     for (const raw of Object.values(st?.overridesById ?? {})) {
       if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
       const o = raw as Record<string, unknown>;
+      if (!legalEntityActorRaw(o, st)) continue;
       const t = isoToMs((o.updatedAt as string) || (o.createdAt as string));
       if (t != null && inActivityRange(t, range)) legalTouches += 1;
     }
   }
   let photos = 0;
-  for (const list of Object.values(state.dealerPhotosByDealerId)) {
+  for (const [dealerId, list] of Object.entries(state.dealerPhotosByDealerId)) {
+    if (!inScope(dealerId)) continue;
     for (const ph of list ?? []) {
       if (ph.archivedAt) continue;
       const t = isoToMs(ph.uploadedAt);
       if (t != null && inActivityRange(t, range)) photos += 1;
     }
   }
-  for (const list of Object.values(state.tradePointPhotosByTradePointId)) {
+  for (const [tpId, list] of Object.entries(state.tradePointPhotosByTradePointId)) {
     for (const ph of list ?? []) {
       if (ph.archivedAt) continue;
       const t = isoToMs(ph.uploadedAt);
-      if (t != null && inActivityRange(t, range)) photos += 1;
+      if (t == null || !inActivityRange(t, range)) continue;
+      const dealerForTp =
+        state.manuallyCreatedTradePointsById[tpId]?.dealerId ?? state.tradePointShowcaseActualizationById[tpId]?.dealerId;
+      if (!inScope(dealerForTp)) continue;
+      photos += 1;
     }
   }
 
@@ -666,6 +898,7 @@ export function computeTopKpis(
   let showcasesFilled = 0;
   let deficitTradePoints = 0;
   for (const r of tpRows) {
+    if (!inScope(r.dealerId)) continue;
     if (r.showcaseBucket === "has_showcase") {
       const tShow = isoToMs(r.showcaseUpdatedAt);
       if (!range || (tShow != null && inActivityRange(tShow, range))) showcasesFilled += 1;
@@ -675,6 +908,7 @@ export function computeTopKpis(
 
   let openMatrixTasks = 0;
   for (const sh of Object.values(state.tradePointShowcaseActualizationById)) {
+    if (!inScope(sh.dealerId)) continue;
     for (const t of sh.showcaseMatrixTasks ?? []) {
       if (t.status === "new") openMatrixTasks += 1;
     }

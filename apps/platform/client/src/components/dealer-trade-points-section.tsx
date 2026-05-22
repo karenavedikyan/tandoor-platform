@@ -352,6 +352,9 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
           createdAt: existing?.createdAt ?? now,
           createdBy: existing?.createdBy ?? profile.personaUserId,
           createdByName: existing?.createdByName ?? userLabelFromProfile(profile),
+          updatedAt: now,
+          updatedBy: profile.personaUserId,
+          updatedByName: userLabelFromProfile(profile),
           source: "manual_actualization" as const,
         };
         return mergeActualizationState(prev, {
