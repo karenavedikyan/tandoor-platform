@@ -30,7 +30,9 @@ import {
 } from "@/lib/rop-manager-filters";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
+import { useClientBaseManagementMergedState } from "@/hooks/use-client-base-management-merged-state";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
+import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
 import {
   initialRopManagerForProfile,
   managerOptionsForProfile,
@@ -636,21 +638,6 @@ export default function TasksPage() {
   const access = useMemo(() => mapSalesRoleToDealerBaseAccess(profile.role), [profile.role]);
   const actx = useClientBaseActualization();
 
-  const workingDealerRows = useMemo(
-    () =>
-      actx.enabled
-        ? buildDealerBaseRowsWithActualization(actx.state, profile, { includeArchivedDealers: false })
-        : DEALER_BASE_ROWS,
-    [actx.enabled, actx.state, profile],
-  );
-
-  const allowedDealerIds = useMemo(() => {
-    const scoped = roleScopedDealerRows(workingDealerRows, profile);
-    return new Set(scoped.map((d) => d.id));
-  }, [workingDealerRows, profile]);
-
-  const actualizationLoading = actx.enabled && actx.loading;
-
   const [showcaseTick, setShowcaseTick] = useState(0);
   useEffect(() => {
     const onBump = () => setShowcaseTick((n) => n + 1);
@@ -661,12 +648,6 @@ export default function TasksPage() {
       window.removeEventListener(SHOWCASE_MATRIX_CHANGED_EVENT, onBump);
     };
   }, []);
-
-  const showcaseTasks = useMemo(() => {
-    if (actualizationLoading) return [] as MatrixTaskWithContext[];
-    const raw = sortTasks(getAllMatrixTasks()).filter((t) => allowedDealerIds.has(t.dealerId));
-    return getShowcaseOnlyTasks(raw);
-  }, [actualizationLoading, allowedDealerIds, showcaseTick]);
 
   const [query, setQuery] = useState("");
   const [view, setView] = useState<ViewMode>("cards");
@@ -740,6 +721,36 @@ export default function TasksPage() {
     if (mgrFilter === "all") return;
     if (!mgrOptions.some((m) => m.id === mgrFilter)) setMgrFilter("all");
   }, [ropTeam, mgrOptions, mgrFilter]);
+
+  const managementPlane = useClientBaseManagementMergedState({
+    enabled: actx.enabled,
+    profile,
+    dashboardRopTeamId: ropTeam,
+    contextState: actx.state,
+  });
+
+  const workingDealerRows = useMemo(
+    () =>
+      actx.enabled
+        ? buildDealerBaseRowsWithActualization(managementPlane.mergedState, profile, { includeArchivedDealers: false })
+        : DEALER_BASE_ROWS,
+    [actx.enabled, managementPlane.mergedState, profile],
+  );
+
+  const allowedDealerIds = useMemo(() => {
+    const scoped = roleScopedDealerRows(workingDealerRows, profile);
+    return new Set(scoped.map((d) => d.id));
+  }, [workingDealerRows, profile]);
+
+  const actualizationLoading =
+    (actx.enabled && actx.loading) ||
+    (actx.enabled && shouldUseTeamMergedActualizationPlane(profile) && managementPlane.teamFetchLoading);
+
+  const showcaseTasks = useMemo(() => {
+    if (actualizationLoading) return [] as MatrixTaskWithContext[];
+    const raw = sortTasks(getAllMatrixTasks()).filter((t) => allowedDealerIds.has(t.dealerId));
+    return getShowcaseOnlyTasks(raw);
+  }, [actualizationLoading, allowedDealerIds, showcaseTick]);
 
   const filteredByScope = useMemo(() => {
     let list = showcaseTasks;

@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
+import { useClientBaseManagementMergedState } from "@/hooks/use-client-base-management-merged-state";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { DEALER_BASE_ROWS, type DealerRow } from "@/lib/dealer-base-mock-data";
@@ -121,6 +122,14 @@ export default function ClientMapPage() {
   const routeQs = useRouteSearchParams();
   const routeKey = useMemo(() => routeQs.toString(), [routeQs]);
 
+  const managementPlane = useClientBaseManagementMergedState({
+    enabled: actx.enabled,
+    profile,
+    dashboardRopTeamId: ropTeam,
+    contextState: actx.state,
+  });
+  const teamActualizationPlane = managementPlane.mergedState;
+
   useEffect(() => {
     const d = initialRopManagerForProfile(profile, access);
     if (!routeKey) {
@@ -137,7 +146,7 @@ export default function ClientMapPage() {
     let cityV: string[] = [];
     let searchV = "";
     const scoped = roleScopedDealerRows(
-      actx.enabled ? buildDealerBaseRowsWithActualization(actx.state, profile, { includeArchivedDealers: false }) : DEALER_BASE_ROWS,
+      actx.enabled ? buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, { includeArchivedDealers: false }) : DEALER_BASE_ROWS,
       profile,
     );
     const teamRaw = (routeQs.get("team") ?? routeQs.get("rop"))?.trim() ?? "";
@@ -170,7 +179,7 @@ export default function ClientMapPage() {
     setQuick(qv);
     setSelectedCities(cityV);
     setSearch(searchV);
-  }, [profile.personaUserId, profile.role, access, routeKey, routeQs, actx.enabled, actx.state]);
+  }, [profile.personaUserId, profile.role, access, routeKey, routeQs, actx.enabled, teamActualizationPlane]);
 
   const managerCatalogForRop = useMemo(() => getManagersForRopTeam(ropTeam), [ropTeam]);
   const managerOptions = useMemo(() => managerOptionsForProfile(profile, access, ropTeam), [profile, access, ropTeam]);
@@ -178,8 +187,8 @@ export default function ClientMapPage() {
 
   const baseRowsForMap = useMemo(
     () =>
-      actx.enabled ? buildDealerBaseRowsWithActualization(actx.state, profile, { includeArchivedDealers: false }) : DEALER_BASE_ROWS,
-    [actx.enabled, actx.state, profile],
+      actx.enabled ? buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, { includeArchivedDealers: false }) : DEALER_BASE_ROWS,
+    [actx.enabled, teamActualizationPlane, profile],
   );
 
   const scopedRows = useMemo(() => roleScopedDealerRows(baseRowsForMap, profile), [baseRowsForMap, profile]);

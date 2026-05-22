@@ -5,13 +5,17 @@ import { TeamSummaryCard } from "@/components/team-summary-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
+import { useClientBaseManagementMergedState } from "@/hooks/use-client-base-management-merged-state";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { canAccessPath, salesControlHomeHref } from "@/lib/auth-access";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
+import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
 import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
 import {
   dealerNeedsAttention,
+  initialRopManagerForProfile,
+  mapSalesRoleToDealerBaseAccess,
   roleScopedDealerRows,
 } from "@/lib/dealer-base-role-views";
 import { buildBrowserHashAppHref } from "@/lib/hash-route-utils";
@@ -59,21 +63,34 @@ export function MainRoleDashboard() {
   const { user } = useCurrentUser();
   const { profile } = useReleaseDemoProfile();
   const actx = useClientBaseActualization();
+  const dealerBaseAccess = useMemo(() => mapSalesRoleToDealerBaseAccess(profile.role), [profile.role]);
+  const dashboardRopTeamId = useMemo(
+    () => initialRopManagerForProfile(profile, dealerBaseAccess).ropTeam,
+    [profile, dealerBaseAccess],
+  );
+  const managementPlane = useClientBaseManagementMergedState({
+    enabled: actx.enabled,
+    profile,
+    dashboardRopTeamId,
+    contextState: actx.state,
+  });
   const role = (user?.role ?? profile.role) as SalesRole;
 
   const baseRowsForDashboard = useMemo(
     () =>
       actx.enabled
-        ? buildDealerBaseRowsWithActualization(actx.state, profile, { includeArchivedDealers: false })
+        ? buildDealerBaseRowsWithActualization(managementPlane.mergedState, profile, { includeArchivedDealers: false })
         : DEALER_BASE_ROWS,
-    [actx.enabled, actx.state, profile],
+    [actx.enabled, managementPlane.mergedState, profile],
   );
   const scopedClients = useMemo(
     () => roleScopedDealerRows(baseRowsForDashboard, profile),
     [baseRowsForDashboard, profile],
   );
   const dealerIds = useMemo(() => new Set(scopedClients.map((r) => r.id)), [scopedClients]);
-  const dashboardLoading = actx.enabled && actx.loading;
+  const dashboardLoading =
+    (actx.enabled && actx.loading) ||
+    (actx.enabled && shouldUseTeamMergedActualizationPlane(profile) && managementPlane.teamFetchLoading);
   const workingBaseEmpty = !dashboardLoading && scopedClients.length === 0;
 
   const { totalClients, activeClients, attentionClients, openTasks, extraKpiLabel, extraKpiValue } = useMemo(() => {
