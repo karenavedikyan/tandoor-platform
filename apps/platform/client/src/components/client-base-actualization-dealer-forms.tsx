@@ -1086,6 +1086,18 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
     if (profile.role === "team_lead" && self?.teamId) return getTeamManagers(self.teamId);
     return getAllSalesManagers();
   }, [profile]);
+  const dealerAddressOption = useMemo(() => {
+    const line = address.trim();
+    if (!line) return [];
+    return [
+      {
+        value: line,
+        label: line,
+        description: "Адрес из раздела «Адрес и логистика»",
+        testId: "option-dealer-create-use-logistics-address",
+      },
+    ];
+  }, [address]);
 
   const runPersist = useCallback(async () => {
     if (saveLockRef.current) return;
@@ -1635,6 +1647,7 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
                 <AddressSuggestInput
                   value={legalAddress}
                   onChange={(v) => setLegalAddress(v)}
+                  localOptions={dealerAddressOption}
                   disabled={saving}
                   rows={2}
                   className="[&_textarea]:min-h-[52px]"
@@ -1646,6 +1659,7 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
                 <AddressSuggestInput
                   value={legalActualAddress}
                   onChange={(v) => setLegalActualAddress(v)}
+                  localOptions={dealerAddressOption}
                   disabled={saving}
                   rows={2}
                   className="[&_textarea]:min-h-[52px]"

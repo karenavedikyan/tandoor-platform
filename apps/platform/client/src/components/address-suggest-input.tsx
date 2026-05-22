@@ -8,6 +8,7 @@ export type AddressSuggestInputProps = {
   value: string;
   onChange: (next: string) => void;
   onSelect?: (item: DadataAddressSuggestItem) => void;
+  localOptions?: { value: string; label?: string; description?: string; testId?: string }[];
   placeholder?: string;
   disabled?: boolean;
   testId: string;
@@ -21,6 +22,7 @@ export function AddressSuggestInput({
   value,
   onChange,
   onSelect,
+  localOptions = [],
   placeholder,
   disabled,
   testId,
@@ -124,6 +126,17 @@ export function AddressSuggestInput({
     setItems([]);
   };
 
+  const normalizedValue = value.trim().toLowerCase();
+  const visibleLocalOptions = localOptions
+    .map((option, index) => ({ ...option, value: option.value.trim(), testId: option.testId ?? `option-address-suggest-local-${index}` }))
+    .filter((option) => {
+      if (!option.value) return false;
+      if (option.value === value.trim()) return false;
+      if (normalizedValue.length < 1) return true;
+      return option.value.toLowerCase().includes(normalizedValue);
+    });
+  const shouldShowOptions = open || visibleLocalOptions.length > 0;
+
   return (
     <div className={cn("space-y-1.5", className)} ref={rootRef}>
       {label ? (
@@ -142,7 +155,7 @@ export function AddressSuggestInput({
             if (serviceOff && next.trim().length < 3) setServiceOff(false);
           }}
           onFocus={() => {
-            if (items.length > 0 && !disabled) setOpen(true);
+            if ((items.length > 0 || visibleLocalOptions.length > 0) && !disabled) setOpen(true);
           }}
           placeholder={placeholder}
           disabled={disabled}
@@ -150,12 +163,30 @@ export function AddressSuggestInput({
           className="min-h-[72px] w-full min-w-0 resize-y text-sm"
           data-testid={testId}
         />
-        {open && items.length > 0 && !disabled ? (
+        {shouldShowOptions && !disabled ? (
           <ul
             className="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-md border border-border bg-popover p-1 text-sm shadow-md"
             role="listbox"
             data-testid="list-address-suggest-options"
           >
+            {visibleLocalOptions.map((option) => (
+              <li key={`local-${option.value}`}>
+                <button
+                  type="button"
+                  className="w-full rounded px-2 py-1.5 text-left text-xs hover:bg-accent"
+                  data-testid={option.testId}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    onChange(option.value);
+                    setOpen(false);
+                    setItems([]);
+                  }}
+                >
+                  <span className="font-medium text-foreground">{option.label ?? option.value}</span>
+                  {option.description ? <span className="mt-0.5 block text-[11px] text-muted-foreground">{option.description}</span> : null}
+                </button>
+              </li>
+            ))}
             {items.map((item, index) => (
               <li key={`${item.fiasId}-${index}`}>
                 <button
