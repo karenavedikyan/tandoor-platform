@@ -1044,7 +1044,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                         size="sm"
                         className={cn(
                           "h-8 w-full px-2 text-xs font-semibold",
-                          hideSyntheticTpChrome && "bg-emerald-700 text-white hover:bg-emerald-800",
+                          hideSyntheticTpChrome && "bg-primary text-primary-foreground hover:bg-[#86B832]",
                         )}
                         data-testid={openButtonTestId}
                       >
