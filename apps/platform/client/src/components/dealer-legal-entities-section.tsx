@@ -53,6 +53,12 @@ import {
   restoreLegalEntityFromArchive,
 } from "@/lib/client-base-actualization-legal-entities";
 import { cn } from "@/lib/utils";
+import {
+  formatRussianPhoneInput,
+  isValidRussianPhone,
+  RU_PHONE_INVALID_MESSAGE,
+  RU_PHONE_PLACEHOLDER,
+} from "@/lib/phone-format";
 import { formatDisplayDate } from "@/lib/format-display-date";
 
 type Props = {
@@ -418,7 +424,7 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
       const aa = (e.actualAddress ?? "").trim();
       setSameAsLegal(la === aa);
       setDraftPrimaryContact(e.primaryContact ?? "");
-      setDraftPhone(e.phone ?? "");
+      setDraftPhone(formatRussianPhoneInput(e.phone ?? ""));
       setDraftEmail(e.email ?? "");
       setDraftComment(e.comment ?? "");
       setEditingId(id);
@@ -439,7 +445,7 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
             legalAddress: e.legalAddress ?? "",
             actualAddress: e.actualAddress ?? "",
             primaryContact: e.primaryContact ?? "",
-            phone: e.phone ?? "",
+            phone: formatRussianPhoneInput(e.phone ?? ""),
             email: e.email ?? "",
             comment: e.comment ?? "",
           }),
@@ -462,6 +468,12 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
       toast({ title: "Выберите тип юрлица", variant: "destructive" });
       return false;
     }
+
+    if (draftPhone.trim() && !isValidRussianPhone(draftPhone)) {
+      toast({ title: RU_PHONE_INVALID_MESSAGE, variant: "destructive" });
+      return false;
+    }
+    const legalEntityPhoneFormatted = draftPhone.trim() ? formatRussianPhoneInput(draftPhone) : "";
 
     const targetId = editingId ?? newEntityIdRef.current;
     if (!targetId) {
@@ -507,7 +519,7 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
           legalAddress: draftAddress.trim(),
           actualAddress: draftActualAddress.trim(),
           primaryContact: draftPrimaryContact.trim(),
-          phone: draftPhone.trim(),
+          phone: legalEntityPhoneFormatted,
           email: draftEmail.trim(),
           comment: draftComment.trim(),
           internalCode,
@@ -565,7 +577,7 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
           actualAddress: draftActualAddress,
           entityType: draftEntityType,
           primaryContact: draftPrimaryContact,
-          phone: draftPhone,
+          phone: legalEntityPhoneFormatted,
           email: draftEmail,
           status: "additional",
           comment: draftComment,
@@ -585,7 +597,7 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
         actualAddress: draftActualAddress,
         entityType: draftEntityType,
         primaryContact: draftPrimaryContact,
-        phone: draftPhone,
+        phone: legalEntityPhoneFormatted,
         email: draftEmail,
         internalCode: allocateNextLegalEntityCodeLocal(),
         status: "additional",
@@ -1149,8 +1161,10 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
                     <Input
                       id="le-phone"
                       value={draftPhone}
+                      inputMode="tel"
+                      placeholder={RU_PHONE_PLACEHOLDER}
                       onChange={(e) => {
-                        setDraftPhone(e.target.value);
+                        setDraftPhone(formatRussianPhoneInput(e.target.value));
                         markFormEdited();
                       }}
                       disabled={!canMutate}
