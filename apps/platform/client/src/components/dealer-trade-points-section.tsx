@@ -88,6 +88,103 @@ function tradePointArchiveActionLabels(isManual: boolean): { action: string; con
     : { action: "В архив", confirm: "В архив" };
 }
 
+function formatRussianPhoneInput(input: string): string {
+  const digits = input.replace(/\D/g, "");
+  if (!digits) return "";
+  let normalized = digits;
+  if (normalized.startsWith("8")) normalized = `7${normalized.slice(1)}`;
+  const local = normalized.startsWith("7") ? normalized.slice(1) : normalized;
+  const ten = local.slice(0, 10);
+  if (!ten) return "+7 ";
+  const first = ten.slice(0, 3);
+  const rest = ten.slice(3);
+  return rest ? `+7 ${first} ${rest}` : `+7 ${first}`;
+}
+
+function isValidRussianPhone(value: string): boolean {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length === 10) return true;
+  if (digits.length === 11 && (digits.startsWith("7") || digits.startsWith("8"))) return true;
+  return false;
+}
+
+function LocalSuggestInput(props: {
+  value: string;
+  onChange: (next: string) => void;
+  options: { value: string; label?: string; description?: string; testId?: string }[];
+  className?: string;
+  testId: string;
+  placeholder?: string;
+  inputMode?: "none" | "text" | "tel" | "url" | "email" | "numeric" | "decimal" | "search";
+}) {
+  const { value, onChange, options, className, testId, placeholder, inputMode } = props;
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const q = value.trim().toLowerCase();
+  const visible = options
+    .map((option, index) => ({ ...option, value: option.value.trim(), testId: option.testId ?? `${testId}-option-${index}` }))
+    .filter((option) => {
+      if (!option.value) return false;
+      if (option.value === value.trim()) return false;
+      if (!q) return true;
+      return option.value.toLowerCase().includes(q);
+    });
+
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => {
+      const el = rootRef.current;
+      if (!el || !(e.target instanceof Node)) return;
+      if (!el.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+
+  return (
+    <div className="relative" ref={rootRef}>
+      <Input
+        value={value}
+        onChange={(e) => {
+          onChange(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => {
+          if (visible.length > 0) setOpen(true);
+        }}
+        className={className}
+        data-testid={testId}
+        placeholder={placeholder}
+        inputMode={inputMode}
+      />
+      {open && visible.length > 0 ? (
+        <ul
+          className="absolute z-50 mt-1 max-h-44 w-full overflow-y-auto rounded-md border border-border bg-popover p-1 text-sm shadow-md"
+          role="listbox"
+          data-testid={`${testId}-options`}
+        >
+          {visible.map((option) => (
+            <li key={option.value}>
+              <button
+                type="button"
+                className="w-full rounded px-2 py-1.5 text-left text-xs hover:bg-accent"
+                data-testid={option.testId}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  onChange(option.value);
+                  setOpen(false);
+                }}
+              >
+                <span className="font-medium text-foreground">{option.label ?? option.value}</span>
+                {option.description ? <span className="mt-0.5 block text-[11px] text-muted-foreground">{option.description}</span> : null}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) {
   const actx = useClientBaseActualization();
   const useAct = actx.enabled && canEditDealerDuringActualization(profile, row);
@@ -103,6 +200,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
   const [addFormat, setAddFormat] = useState("Розница / салон");
   const [addContactName, setAddContactName] = useState("");
   const [addContactPhone, setAddContactPhone] = useState("");
+  const [addContactEmail, setAddContactEmail] = useState("");
   const [addComment, setAddComment] = useState("");
   const [addError, setAddError] = useState("");
   const [editOpen, setEditOpen] = useState(false);
@@ -113,6 +211,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
   const [editFormat, setEditFormat] = useState("");
   const [editContactName, setEditContactName] = useState("");
   const [editContactPhone, setEditContactPhone] = useState("");
+  const [editContactEmail, setEditContactEmail] = useState("");
   const [editComment, setEditComment] = useState("");
   const [selectedBulkArchiveTpIds, setSelectedBulkArchiveTpIds] = useState<Set<string>>(() => new Set());
   const [bulkArchiveTpDialogOpen, setBulkArchiveTpDialogOpen] = useState(false);
@@ -171,6 +270,42 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
     return openShowcaseTasksCount(row, mergedActive.length);
   }, [hideSyntheticTpChrome, row, mergedActive.length, tpBump]);
 
+  const dealerCityOptions = useMemo(
+    () =>
+      isFilled(row.city)
+        ? [{ value: row.city.trim(), description: "Город из карточки клиента", testId: "option-trade-point-use-dealer-city" }]
+        : [],
+    [row.city],
+  );
+  const dealerAddressOptions = useMemo(
+    () =>
+      isFilled(row.releaseAddress)
+        ? [{ value: row.releaseAddress!.trim(), description: "Адрес из карточки клиента", testId: "option-trade-point-use-dealer-address" }]
+        : [],
+    [row.releaseAddress],
+  );
+  const dealerContactNameOptions = useMemo(
+    () =>
+      isFilled(row.contacts.lpr)
+        ? [{ value: row.contacts.lpr.trim(), description: "ЛПР из карточки клиента", testId: "option-trade-point-use-dealer-contact-name" }]
+        : [],
+    [row.contacts.lpr],
+  );
+  const dealerPhoneOptions = useMemo(
+    () =>
+      isFilled(row.contacts.phone)
+        ? [{ value: formatRussianPhoneInput(row.contacts.phone), description: "Телефон из карточки клиента", testId: "option-trade-point-use-dealer-phone" }]
+        : [],
+    [row.contacts.phone],
+  );
+  const dealerEmailOptions = useMemo(
+    () =>
+      isFilled(row.contacts.email)
+        ? [{ value: row.contacts.email.trim(), description: "Email из карточки клиента", testId: "option-trade-point-use-dealer-email" }]
+        : [],
+    [row.contacts.email],
+  );
+
   const resetAddForm = useCallback(() => {
     setAddName("");
     setAddCity("");
@@ -178,6 +313,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
     setAddFormat("Розница / салон");
     setAddContactName("");
     setAddContactPhone("");
+    setAddContactEmail("");
     setAddComment("");
     setAddError("");
   }, []);
@@ -197,11 +333,16 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
 
   const onAddSave = useCallback(async (): Promise<boolean> => {
     setAddError("");
+    if (!addName.trim() || !addCity.trim() || !addAddress.trim() || !addContactName.trim() || !addContactPhone.trim()) {
+      setAddError("Заполните название, город, адрес, контактное лицо и телефон.");
+      return false;
+    }
+    if (!isValidRussianPhone(addContactPhone)) {
+      setAddError("Введите телефон в формате +7 XXX XXXXXXX.");
+      return false;
+    }
+    const formattedPhone = formatRussianPhoneInput(addContactPhone);
     if (useAct) {
-      if (!addName.trim() || !addCity.trim() || !addAddress.trim() || !addContactName.trim() || !addContactPhone.trim()) {
-        setAddError("Заполните название, город, адрес, контактное лицо и телефон.");
-        return false;
-      }
       const id = draftTpIdRef.current ?? generateStableManualTradePointId(row.id);
       draftTpIdRef.current = id;
       const now = new Date().toISOString();
@@ -218,7 +359,8 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
             address: addAddress.trim(),
             format: addFormat.trim(),
             contactName: addContactName.trim(),
-            contactPhone: addContactPhone.trim(),
+            contactPhone: formattedPhone,
+            email: addContactEmail.trim(),
             comment: addComment.trim(),
           },
           createdAt: existing?.createdAt ?? now,
@@ -254,7 +396,8 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
         city: addCity,
         address: addAddress,
         contactName: addContactName,
-        contactPhone: addContactPhone,
+        contactPhone: formattedPhone,
+        contactEmail: addContactEmail,
         comment: addComment,
       },
       profile,
@@ -276,12 +419,11 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
     addFormat,
     addContactName,
     addContactPhone,
+    addContactEmail,
     addComment,
     profile,
     row.id,
     resetAddForm,
-    useAct,
-    actx,
   ]);
 
   const openEdit = useCallback(
@@ -292,7 +434,8 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
       setEditAddress(tp.address);
       setEditFormat(tp.format);
       setEditContactName(tp.contactName ?? "");
-      setEditContactPhone(tp.contactPhone ?? "");
+      setEditContactPhone(formatRussianPhoneInput(tp.contactPhone ?? ""));
+      setEditContactEmail(tp.contactEmail ?? "");
       setEditComment(tp.tpComment ?? "");
       editTpSave.markDirty();
       setEditOpen(true);
@@ -306,6 +449,11 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
       toast({ title: "Заполните название, город и адрес", variant: "destructive" });
       return false;
     }
+    if (editContactPhone.trim() && !isValidRussianPhone(editContactPhone)) {
+      toast({ title: "Введите телефон в формате +7 XXX XXXXXXX.", variant: "destructive" });
+      return false;
+    }
+    const formattedPhone = editContactPhone.trim() ? formatRussianPhoneInput(editContactPhone) : "";
     const now = new Date().toISOString();
     const fields: Record<string, unknown> = {
       name: editName.trim(),
@@ -313,7 +461,8 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
       address: editAddress.trim(),
       format: editFormat.trim(),
       contactName: editContactName.trim(),
-      contactPhone: editContactPhone.trim(),
+      contactPhone: formattedPhone,
+      email: editContactEmail.trim(),
       comment: editComment.trim(),
     };
     const ov = {
@@ -354,7 +503,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
       variant: "destructive",
     });
     return false;
-  }, [useAct, editId, editName, editCity, editAddress, editFormat, editContactName, editContactPhone, editComment, actx, row.id, profile]);
+  }, [useAct, editId, editName, editCity, editAddress, editFormat, editContactName, editContactPhone, editContactEmail, editComment, actx, row.id, profile]);
 
   const onArchive = useCallback(
     async (tp: DealerTradePoint): Promise<boolean> => {
@@ -567,14 +716,15 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Город</Label>
-                <Input
+                <LocalSuggestInput
                   value={addCity}
-                  onChange={(e) => {
-                    setAddCity(e.target.value);
+                  onChange={(v) => {
+                    setAddCity(v);
                     addTpSave.markDirty();
                   }}
+                  options={dealerCityOptions}
                   className="min-h-10"
-                  data-testid="input-dealer-trade-point-city"
+                  testId="input-dealer-trade-point-city"
                 />
               </div>
               <div className="space-y-1.5">
@@ -589,6 +739,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                   rows={2}
                   className="[&_textarea]:min-h-[52px]"
                   testId="input-dealer-trade-point-address-suggest"
+                  localOptions={dealerAddressOptions}
                 />
               </div>
               <div className="space-y-1.5">
@@ -600,26 +751,44 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Контактное лицо</Label>
-                <Input
+                <LocalSuggestInput
                   value={addContactName}
-                  onChange={(e) => {
-                    setAddContactName(e.target.value);
+                  onChange={(v) => {
+                    setAddContactName(v);
                     addTpSave.markDirty();
                   }}
+                  options={dealerContactNameOptions}
                   className="min-h-10"
-                  data-testid="input-dealer-trade-point-contact-name"
+                  testId="input-dealer-trade-point-contact-name"
                 />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Телефон</Label>
-                <Input
+                <LocalSuggestInput
                   value={addContactPhone}
-                  onChange={(e) => {
-                    setAddContactPhone(e.target.value);
+                  onChange={(v) => {
+                    setAddContactPhone(formatRussianPhoneInput(v));
                     addTpSave.markDirty();
                   }}
+                  options={dealerPhoneOptions}
                   className="min-h-10"
-                  data-testid="input-dealer-trade-point-contact-phone"
+                  testId="input-dealer-trade-point-contact-phone"
+                  placeholder="+7 XXX XXXXXXX"
+                  inputMode="tel"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Email</Label>
+                <LocalSuggestInput
+                  value={addContactEmail}
+                  onChange={(v) => {
+                    setAddContactEmail(v);
+                    addTpSave.markDirty();
+                  }}
+                  options={dealerEmailOptions}
+                  className="min-h-10"
+                  testId="input-dealer-trade-point-contact-email"
+                  inputMode="email"
                 />
               </div>
               <div className="space-y-1.5">
@@ -718,14 +887,15 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Город</Label>
-                <Input
+                <LocalSuggestInput
                   value={addCity}
-                  onChange={(e) => {
-                    setAddCity(e.target.value);
+                  onChange={(v) => {
+                    setAddCity(v);
                     addTpSave.markDirty();
                   }}
+                  options={dealerCityOptions}
                   className="min-h-10"
-                  data-testid="input-dealer-trade-point-city"
+                  testId="input-dealer-trade-point-city"
                 />
               </div>
               <div className="space-y-1.5">
@@ -740,6 +910,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                   rows={2}
                   className="[&_textarea]:min-h-[52px]"
                   testId="input-dealer-trade-point-address-suggest"
+                  localOptions={dealerAddressOptions}
                 />
               </div>
               <div className="space-y-1.5">
@@ -751,26 +922,44 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Контактное лицо</Label>
-                <Input
+                <LocalSuggestInput
                   value={addContactName}
-                  onChange={(e) => {
-                    setAddContactName(e.target.value);
+                  onChange={(v) => {
+                    setAddContactName(v);
                     addTpSave.markDirty();
                   }}
+                  options={dealerContactNameOptions}
                   className="min-h-10"
-                  data-testid="input-dealer-trade-point-contact-name"
+                  testId="input-dealer-trade-point-contact-name"
                 />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Телефон</Label>
-                <Input
+                <LocalSuggestInput
                   value={addContactPhone}
-                  onChange={(e) => {
-                    setAddContactPhone(e.target.value);
+                  onChange={(v) => {
+                    setAddContactPhone(formatRussianPhoneInput(v));
                     addTpSave.markDirty();
                   }}
+                  options={dealerPhoneOptions}
                   className="min-h-10"
-                  data-testid="input-dealer-trade-point-contact-phone"
+                  testId="input-dealer-trade-point-contact-phone"
+                  placeholder="+7 XXX XXXXXXX"
+                  inputMode="tel"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Email</Label>
+                <LocalSuggestInput
+                  value={addContactEmail}
+                  onChange={(v) => {
+                    setAddContactEmail(v);
+                    addTpSave.markDirty();
+                  }}
+                  options={dealerEmailOptions}
+                  className="min-h-10"
+                  testId="input-dealer-trade-point-contact-email"
+                  inputMode="email"
                 />
               </div>
               <div className="space-y-1.5">
@@ -1135,14 +1324,15 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Город</Label>
-              <Input
+              <LocalSuggestInput
                 value={addCity}
-                onChange={(e) => {
-                    setAddCity(e.target.value);
-                    addTpSave.markDirty();
-                  }}
+                onChange={(v) => {
+                  setAddCity(v);
+                  addTpSave.markDirty();
+                }}
+                options={dealerCityOptions}
                 className="min-h-10"
-                data-testid="input-dealer-trade-point-city"
+                testId="input-dealer-trade-point-city"
               />
             </div>
             <div className="space-y-1.5">
@@ -1157,6 +1347,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                 rows={2}
                 className="[&_textarea]:min-h-[52px]"
                 testId="input-dealer-trade-point-address-suggest"
+                localOptions={dealerAddressOptions}
               />
             </div>
             <div className="space-y-1.5">
@@ -1168,26 +1359,44 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Контактное лицо</Label>
-              <Input
+              <LocalSuggestInput
                 value={addContactName}
-                onChange={(e) => {
-                    setAddContactName(e.target.value);
-                    addTpSave.markDirty();
-                  }}
+                onChange={(v) => {
+                  setAddContactName(v);
+                  addTpSave.markDirty();
+                }}
+                options={dealerContactNameOptions}
                 className="min-h-10"
-                data-testid="input-dealer-trade-point-contact-name"
+                testId="input-dealer-trade-point-contact-name"
               />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Телефон</Label>
-              <Input
+              <LocalSuggestInput
                 value={addContactPhone}
-                onChange={(e) => {
-                    setAddContactPhone(e.target.value);
-                    addTpSave.markDirty();
-                  }}
+                onChange={(v) => {
+                  setAddContactPhone(formatRussianPhoneInput(v));
+                  addTpSave.markDirty();
+                }}
+                options={dealerPhoneOptions}
                 className="min-h-10"
-                data-testid="input-dealer-trade-point-contact-phone"
+                testId="input-dealer-trade-point-contact-phone"
+                placeholder="+7 XXX XXXXXXX"
+                inputMode="tel"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Email</Label>
+              <LocalSuggestInput
+                value={addContactEmail}
+                onChange={(v) => {
+                  setAddContactEmail(v);
+                  addTpSave.markDirty();
+                }}
+                options={dealerEmailOptions}
+                className="min-h-10"
+                testId="input-dealer-trade-point-contact-email"
+                inputMode="email"
               />
             </div>
             <div className="space-y-1.5">
@@ -1242,7 +1451,16 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Город</Label>
-              <Input value={editCity} onChange={(e) => { setEditCity(e.target.value); editTpSave.markDirty(); }} className="min-h-10" />
+              <LocalSuggestInput
+                value={editCity}
+                onChange={(v) => {
+                  setEditCity(v);
+                  editTpSave.markDirty();
+                }}
+                options={dealerCityOptions}
+                className="min-h-10"
+                testId="input-dealer-trade-point-edit-city"
+              />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Адрес</Label>
@@ -1257,15 +1475,50 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                 rows={2}
                 className="[&_textarea]:min-h-[52px]"
                 testId="input-dealer-trade-point-address-suggest"
+                localOptions={dealerAddressOptions}
               />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Контактное лицо</Label>
-              <Input value={editContactName} onChange={(e) => { setEditContactName(e.target.value); editTpSave.markDirty(); }} className="min-h-10" />
+              <LocalSuggestInput
+                value={editContactName}
+                onChange={(v) => {
+                  setEditContactName(v);
+                  editTpSave.markDirty();
+                }}
+                options={dealerContactNameOptions}
+                className="min-h-10"
+                testId="input-dealer-trade-point-edit-contact-name"
+              />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Телефон</Label>
-              <Input value={editContactPhone} onChange={(e) => { setEditContactPhone(e.target.value); editTpSave.markDirty(); }} className="min-h-10" />
+              <LocalSuggestInput
+                value={editContactPhone}
+                onChange={(v) => {
+                  setEditContactPhone(formatRussianPhoneInput(v));
+                  editTpSave.markDirty();
+                }}
+                options={dealerPhoneOptions}
+                className="min-h-10"
+                testId="input-dealer-trade-point-edit-contact-phone"
+                placeholder="+7 XXX XXXXXXX"
+                inputMode="tel"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Email</Label>
+              <LocalSuggestInput
+                value={editContactEmail}
+                onChange={(v) => {
+                  setEditContactEmail(v);
+                  editTpSave.markDirty();
+                }}
+                options={dealerEmailOptions}
+                className="min-h-10"
+                testId="input-dealer-trade-point-edit-contact-email"
+                inputMode="email"
+              />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Комментарий</Label>

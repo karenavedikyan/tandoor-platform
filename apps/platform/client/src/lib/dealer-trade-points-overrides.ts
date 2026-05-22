@@ -28,6 +28,7 @@ export type ManualTradePointRecord = {
   address: string;
   contactName?: string;
   contactPhone?: string;
+  contactEmail?: string;
   comment?: string;
   showcaseStatus?: string;
   shipmentDayIds?: string[];
@@ -46,6 +47,7 @@ export type TradePointEditRecord = {
   address?: string;
   contactName?: string;
   contactPhone?: string;
+  contactEmail?: string;
   comment?: string;
   showcaseStatus?: string;
   shipmentDayIds?: string[];
@@ -173,6 +175,7 @@ function defaultTradePointFromManual(m: ManualTradePointRecord, dealer: DealerRo
     productTrainingCompleted: false,
     contactPhone: m.contactPhone?.trim() || undefined,
     contactName: m.contactName?.trim() || undefined,
+    contactEmail: m.contactEmail?.trim() || undefined,
     tpComment: m.comment?.trim() || undefined,
     shipmentDayIds: m.shipmentDayIds,
     tpHasMainWarehouse: m.hasMainWarehouse,
@@ -189,6 +192,7 @@ function applyTradePointEdit(base: DealerTradePoint, edit?: TradePointEditRecord
     address: edit.address ?? base.address,
     contactName: edit.contactName ?? base.contactName,
     contactPhone: edit.contactPhone ?? base.contactPhone,
+    contactEmail: edit.contactEmail ?? base.contactEmail,
     tpComment: edit.comment ?? base.tpComment,
     showcaseStatus: edit.showcaseStatus ?? base.showcaseStatus,
     shipmentDayIds: edit.shipmentDayIds ?? base.shipmentDayIds,
@@ -257,6 +261,7 @@ export function buildVirtualDefaultTradePoint(dealer: DealerRow): DealerTradePoi
   const city = isFilledStr(dealer.city) ? dealer.city.trim() : "—";
   const address = isFilledStr(dealer.releaseAddress) ? dealer.releaseAddress!.trim() : "Адрес не указан";
   const phone = isFilledStr(dealer.contacts?.phone) ? dealer.contacts.phone.trim() : undefined;
+  const email = isFilledStr(dealer.contacts?.email) ? dealer.contacts.email.trim() : undefined;
   const rm = getDealerRegionalManagerDisplay(dealer) || "—";
   return {
     id: virtualDefaultTradePointId(dealer.id),
@@ -281,6 +286,7 @@ export function buildVirtualDefaultTradePoint(dealer: DealerRow): DealerTradePoi
     productTrainingStatus: "not_required",
     productTrainingCompleted: false,
     contactPhone: phone,
+    contactEmail: email,
     contactName: undefined,
     tpComment: undefined,
   };
@@ -356,6 +362,7 @@ export function addManualTradePoint(
     address: string;
     contactName: string;
     contactPhone: string;
+    contactEmail?: string;
     comment?: string;
   },
   profile: ReleaseDemoProfile,
@@ -377,6 +384,7 @@ export function addManualTradePoint(
     address,
     contactName,
     contactPhone,
+    contactEmail: payload.contactEmail?.trim() || undefined,
     comment: payload.comment?.trim() || undefined,
     createdAt: now,
     updatedAt: now,
