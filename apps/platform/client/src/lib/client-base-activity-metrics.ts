@@ -1189,6 +1189,112 @@ export function passesContributionGeoFilters(
   return true;
 }
 
+export type ManagerCreatedSummaryRow = {
+  managerId: string;
+  displayName: string;
+  /** Название команды (без РОП) для колонки «Команда». */
+  teamName: string;
+  newClients: number;
+  newTradePoints: number;
+  total: number;
+  /** Максимальная известная дата добавления (0 = нет дат). */
+  lastAddedAtMs: number;
+};
+
+export function managerTeamNameOnly(managerId: string): string {
+  const u = getSalesUserById(managerId);
+  if (!u?.teamId) return "—";
+  return getTeamById(u.teamId)?.name ?? u.teamId;
+}
+
+/**
+ * Подсчёт **новых** ручных клиентов и ТТ по владельцу user state (снимок менеджера), без score.
+ * Период: «Всё время» — включая записи без даты; иначе только записи с датой в диапазоне.
+ */
+export function computeManagerCreatedSummary(
+  sources: ActivitySourceSnapshot[],
+  mergedAct: ActualizationState,
+  pack: DashboardGeoFilterPack,
+  range: { startMs: number; endMs: number } | null,
+  roster: SalesUser[],
+  managerFilter: string | "__all__",
+): ManagerCreatedSummaryRow[] {
+  const packFull: DashboardGeoFilterPack = { ...pack, act: mergedAct };
+  const byId = new Map<string, ManagerCreatedSummaryRow>();
+
+  const ensure = (id: string): ManagerCreatedSummaryRow => {
+    let r = byId.get(id);
+    if (!r) {
+      const u = getSalesUserById(id);
+      r = {
+        managerId: id,
+        displayName: u?.name ?? id,
+        teamName: managerTeamNameOnly(id),
+        newClients: 0,
+        newTradePoints: 0,
+        total: 0,
+        lastAddedAtMs: 0,
+      };
+      byId.set(id, r);
+    }
+    return r;
+  };
+
+  for (const m of roster) {
+    ensure(m.id);
+  }
+
+  for (const { userId, state: st } of sources) {
+    const owner = normalizeText(userId);
+    if (!owner) continue;
+    if (managerFilter !== "__all__" && owner !== managerFilter) continue;
+    const row = ensure(owner);
+
+    for (const d of Object.values(st.manuallyCreatedDealersById)) {
+      const f = (d.fields ?? {}) as Record<string, unknown>;
+      const cityMan = strField(f, "city");
+      if (!passesContributionGeoFilters(d.id, packFull, cityMan)) continue;
+      if (mergedAct.archivedDealersById[d.id]) continue;
+      const atMs = resolveManualEntityActivityMs(d.createdAt, d.updatedAt, st.updatedAt, { useSnapshotFallback: true });
+      if (!inActivityRange(atMs, range)) continue;
+      row.newClients += 1;
+      row.total += 1;
+      if (atMs !== ACTIVITY_NO_CALENDAR_TIME_MS) {
+        row.lastAddedAtMs = Math.max(row.lastAddedAtMs, atMs);
+      }
+    }
+
+    for (const tp of Object.values(st.manuallyCreatedTradePointsById)) {
+      const f = (tp.fields ?? {}) as Record<string, unknown>;
+      const cityMan = strField(f, "city");
+      if (!passesContributionGeoFilters(tp.dealerId, packFull, cityMan)) continue;
+      if (mergedAct.archivedDealersById[tp.dealerId]) continue;
+      if (mergedAct.archivedTradePointsById[tp.id]) continue;
+      if (st.archivedTradePointsById[tp.id]) continue;
+      const atMs = resolveManualEntityActivityMs(tp.createdAt, tp.updatedAt, st.updatedAt, { useSnapshotFallback: true });
+      if (!inActivityRange(atMs, range)) continue;
+      row.newTradePoints += 1;
+      row.total += 1;
+      if (atMs !== ACTIVITY_NO_CALENDAR_TIME_MS) {
+        row.lastAddedAtMs = Math.max(row.lastAddedAtMs, atMs);
+      }
+    }
+  }
+
+  const rows = Array.from(byId.values()).filter((r) => managerFilter === "__all__" || r.managerId === managerFilter);
+
+  rows.sort((a, b) => {
+    const ta = a.newClients + a.newTradePoints;
+    const tb = b.newClients + b.newTradePoints;
+    if (tb !== ta) return tb - ta;
+    if (b.newClients !== a.newClients) return b.newClients - a.newClients;
+    if (b.newTradePoints !== a.newTradePoints) return b.newTradePoints - a.newTradePoints;
+    return b.lastAddedAtMs - a.lastAddedAtMs;
+  });
+
+  return rows;
+}
+
 export function listContributionAddedClientsForManager(
   managerId: string,
   sources: ActivitySourceSnapshot[],
@@ -1214,7 +1320,7 @@ export function listContributionAddedClientsForManager(
       (tp) => tp.dealerId === d.id && !st.archivedTradePointsById[tp.id],
     ).length;
     const label =
-      atMs === ACTIVITY_NO_CALENDAR_TIME_MS ? "дата не указана" : new Date(atMs).toLocaleString("ru-RU");
+      atMs === ACTIVITY_NO_CALENDAR_TIME_MS ? "Дата не указана" : new Date(atMs).toLocaleString("ru-RU");
     out.push({
       dealerId: d.id,
       title,
@@ -1244,6 +1350,7 @@ export function listContributionAddedTradePointsForManager(
     const f = (tp.fields ?? {}) as Record<string, unknown>;
     const cityMan = strField(f, "city");
     if (!passesContributionGeoFilters(tp.dealerId, pack, cityMan)) continue;
+    if (pack.act.archivedTradePointsById[tp.id]) continue;
     if (st.archivedTradePointsById[tp.id]) continue;
     const atMs = resolveManualEntityActivityMs(tp.createdAt, tp.updatedAt, st.updatedAt, { useSnapshotFallback: true });
     if (!inActivityRange(atMs, range)) continue;
@@ -1254,7 +1361,7 @@ export function listContributionAddedTradePointsForManager(
     const address = strField(f, "address") || "—";
     const phone = strField(f, "contactPhone") || strField(f, "phone") || "—";
     const label =
-      atMs === ACTIVITY_NO_CALENDAR_TIME_MS ? "дата не указана" : new Date(atMs).toLocaleString("ru-RU");
+      atMs === ACTIVITY_NO_CALENDAR_TIME_MS ? "Дата не указана" : new Date(atMs).toLocaleString("ru-RU");
     out.push({
       tradePointId: tp.id,
       dealerId: tp.dealerId,
