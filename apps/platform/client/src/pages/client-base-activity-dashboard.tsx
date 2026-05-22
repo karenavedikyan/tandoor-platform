@@ -3,7 +3,7 @@
  */
 
 import type { ReactElement, ReactNode } from "react";
-import { Component, useEffect, useMemo, useRef, useState } from "react";
+import { Component, Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -44,6 +44,7 @@ import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualiz
 import { roleScopedDealerRows } from "@/lib/dealer-base-role-views";
 import { getDealerRegionalManagerDisplay } from "@/lib/dealer-base-mock-data";
 import { getManagersForRopTeam, getRopOptions, isRopOrManagerAllFilter } from "@/lib/rop-manager-filters";
+import { getSalesUserById, getTeamById } from "@/lib/sales-control-data";
 import { cn } from "@/lib/utils";
 import {
   ACTIVITY_UNKNOWN_DISPLAY,
@@ -119,6 +120,43 @@ const C = {
   tpStack: "rgba(154, 202, 60, 0.38)",
 } as const;
 
+const RATING_MODE_LS_KEY = "tandoor-client-base-activity-rating-mode-v1";
+
+type RatingDisplayMode = "flat" | "rop";
+
+function managerRopTeamId(managerId: string): string {
+  const u = getSalesUserById(managerId);
+  return u?.teamId ?? "__no_rop__";
+}
+
+function ropGroupDisplayTitle(teamId: string): string {
+  if (teamId === "__no_rop__") return "Без РОП";
+  return getTeamById(teamId)?.name ?? getRopOptions().find((o) => o.teamId === teamId)?.label ?? teamId;
+}
+
+function sortCreatedSummaryRows(rows: ManagerCreatedSummaryRow[]): ManagerCreatedSummaryRow[] {
+  return [...rows].sort((a, b) => {
+    const ta = a.newClients + a.newTradePoints;
+    const tb = b.newClients + b.newTradePoints;
+    if (tb !== ta) return tb - ta;
+    if (b.newClients !== a.newClients) return b.newClients - a.newClients;
+    if (b.newTradePoints !== a.newTradePoints) return b.newTradePoints - a.newTradePoints;
+    return b.lastAddedAtMs - a.lastAddedAtMs;
+  });
+}
+
+type RopLeaderboardGroup = {
+  ropId: string;
+  title: string;
+  members: ManagerCreatedSummaryRow[];
+  totalClients: number;
+  totalTp: number;
+  totalSum: number;
+  activeCount: number;
+  idleCount: number;
+  leader: { name: string; total: number } | null;
+};
+
 const TYPE_LABELS: Record<ActivityTypeFilter, string> = {
   all: "Все типы",
   dealers: "Клиенты",
@@ -186,6 +224,127 @@ function ChartEmptyPlaceholder({ title, text }: { title: string; text: string })
   );
 }
 
+type LeaderboardFilterKey = "all" | "with_additions" | "no_activity" | "top";
+
+type ManagerCreatedMobileCardProps = {
+  row: ManagerCreatedSummaryRow;
+  rankLabel: string;
+  globalRank: number;
+  showGlobalRankSubtitle: boolean;
+  showTeamLine: boolean;
+  isGlobalTop: boolean;
+  leaderMaxManualTotal: number;
+  leaderboardFilter: LeaderboardFilterKey;
+  onOpenDetail: (id: string) => void;
+};
+
+function ManagerCreatedMobileCard({
+  row,
+  rankLabel,
+  globalRank,
+  showGlobalRankSubtitle,
+  showTeamLine,
+  isGlobalTop,
+  leaderMaxManualTotal,
+  leaderboardFilter,
+  onOpenDetail,
+}: ManagerCreatedMobileCardProps): ReactElement {
+  const unknown = isActivityUnknownUserId(row.managerId);
+  const total = row.newClients + row.newTradePoints;
+  const isInactive = total === 0;
+  const compact = leaderboardFilter === "all" && isInactive;
+  const progress = Math.min(100, Math.round((total / leaderMaxManualTotal) * 100));
+
+  return (
+    <div
+      className={cn(
+        "relative overflow-hidden rounded-xl border p-3 shadow-sm",
+        compact && "py-2",
+        isGlobalTop && "border-[rgba(154,202,60,0.45)] bg-[rgba(154,202,60,0.1)]",
+        !isGlobalTop &&
+          !isInactive &&
+          "relative border-[#E3E6F3] bg-white pl-3 before:absolute before:inset-y-2 before:left-0 before:w-1 before:rounded-full before:bg-[#9ACA3C] before:content-['']",
+        isInactive && "border-[#E3E6F3] bg-[#EEEFF6]/80",
+      )}
+      style={!isGlobalTop && !isInactive ? { borderColor: C.border } : isInactive ? { borderColor: C.border } : {}}
+      data-testid={`card-manager-contribution-${row.managerId}`}
+    >
+      <div data-testid={`card-manager-leader-${row.managerId}`} className="flex gap-3">
+        <div className="flex w-8 shrink-0 flex-col items-center pt-0.5">
+          <span className="text-xs font-bold tabular-nums" style={{ color: isInactive ? C.muted : C.text }}>
+            {rankLabel}
+          </span>
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              {unknown ? (
+                <Badge variant="outline" className="text-[10px]" title={UNKNOWN_ACTOR_HELP} style={{ borderColor: C.border, color: C.muted }}>
+                  {ACTIVITY_UNKNOWN_DISPLAY}
+                </Badge>
+              ) : (
+                <p className="truncate text-base font-semibold leading-tight" style={{ color: isInactive ? C.muted : C.text }}>
+                  {row.displayName}
+                </p>
+              )}
+              {showTeamLine ? (
+                <p className="truncate text-[11px] leading-snug" style={{ color: C.muted }}>
+                  {managerTeamAndRopLabel(row.managerId)}
+                </p>
+              ) : null}
+              {showGlobalRankSubtitle ? (
+                <p className="mt-0.5 text-[10px] leading-snug" style={{ color: C.muted }}>
+                  {globalRank > 0 ? `В общем рейтинге #${globalRank}` : "В общем рейтинге —"}
+                </p>
+              ) : null}
+            </div>
+            <div className="shrink-0 text-right">
+              <p className="text-xl font-bold tabular-nums leading-none" style={{ color: isInactive ? C.muted : C.text }}>
+                {total}
+              </p>
+              {isGlobalTop ? (
+                <Badge className="mt-1 border-0 px-1.5 py-0 text-[9px] font-semibold" style={{ background: C.primary, color: C.white }} data-testid={`badge-manager-leader-${row.managerId}`}>
+                  Лидер
+                </Badge>
+              ) : null}
+            </div>
+          </div>
+          <p className="mt-2 text-[11px] tabular-nums" style={{ color: isInactive ? C.muted : C.text }} data-testid={`text-manager-clients-added-${row.managerId}`}>
+            Клиенты: {row.newClients}
+          </p>
+          <p className="text-[11px] tabular-nums" style={{ color: isInactive ? C.muted : C.text }} data-testid={`text-manager-trade-points-added-${row.managerId}`}>
+            ТТ: {row.newTradePoints}
+          </p>
+          {!isInactive ? (
+            <div className="mt-2 h-1 w-full overflow-hidden rounded-full" style={{ background: C.surface }}>
+              <div className="h-full rounded-full transition-all" style={{ width: `${progress}%`, background: C.primary }} />
+            </div>
+          ) : null}
+          <p className="mt-2 text-[10px]" style={{ color: C.muted }}>
+            Последняя активность: {formatLastManualAddition(row.lastAddedAtMs, total)}
+          </p>
+          {isInactive ? (
+            <Button type="button" variant="outline" size="sm" className="mt-2 w-full" disabled style={{ borderColor: C.border, color: C.muted }}>
+              Нет добавлений
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              size="sm"
+              className="mt-2 w-full border-0 font-medium text-white hover:opacity-95"
+              style={{ background: C.primary }}
+              onClick={() => onOpenDetail(row.managerId)}
+              data-testid={`button-manager-contribution-open-${row.managerId}`}
+            >
+              Смотреть карточки
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ClientBaseActivityDashboardPage(): ReactElement {
   return (
     <ClientBaseActivityDashboardBoundary>
@@ -217,6 +376,16 @@ function ClientBaseActivityDashboardInner(): ReactElement {
   const [detailManagerId, setDetailManagerId] = useState<string | null>(null);
   const [detailTab, setDetailTab] = useState<string>("clients");
   const managersSectionRef = useRef<HTMLDivElement | null>(null);
+  const [ratingMode, setRatingMode] = useState<RatingDisplayMode>(() => {
+    try {
+      const v = typeof window !== "undefined" ? window.localStorage.getItem(RATING_MODE_LS_KEY) : null;
+      if (v === "rop") return "rop";
+    } catch {
+      /* noop */
+    }
+    return "flat";
+  });
+  const [expandedRopIds, setExpandedRopIds] = useState<Set<string>>(() => new Set());
 
   const { activityState, activitySources, diagnostics, teamLoading, teamError } = useClientBaseActivityTeamState({
     enabled: actx.enabled,
@@ -264,6 +433,18 @@ function ClientBaseActivityDashboardInner(): ReactElement {
   useEffect(() => {
     if (period === "yesterday") setPeriod("7d");
   }, [period]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(RATING_MODE_LS_KEY, ratingMode);
+    } catch {
+      /* noop */
+    }
+  }, [ratingMode]);
+
+  useEffect(() => {
+    if (ratingMode === "flat") setExpandedRopIds(new Set());
+  }, [ratingMode]);
 
   const range = useMemo(() => activityPeriodToRange(period), [period]);
 
@@ -354,6 +535,80 @@ function ClientBaseActivityDashboardInner(): ReactElement {
         return rows;
     }
   }, [createdManagerSummaryRows, leaderboardFilter]);
+
+  const globalRankByManagerId = useMemo(() => {
+    const m = new Map<string, number>();
+    createdManagerSummaryRows.forEach((r, i) => {
+      m.set(r.managerId, i + 1);
+    });
+    return m;
+  }, [createdManagerSummaryRows]);
+
+  const ropModeGroups = useMemo((): RopLeaderboardGroup[] => {
+    if (ratingMode !== "rop") return [];
+    const byTeam = new Map<string, ManagerCreatedSummaryRow[]>();
+    for (const row of visibleCreatedSummaryRows) {
+      const tid = managerRopTeamId(row.managerId);
+      const arr = byTeam.get(tid) ?? [];
+      arr.push(row);
+      byTeam.set(tid, arr);
+    }
+
+    const out: RopLeaderboardGroup[] = [];
+    for (const [ropId, raw] of Array.from(byTeam.entries())) {
+      const members = sortCreatedSummaryRows(raw);
+      let totalClients = 0;
+      let totalTp = 0;
+      let activeCount = 0;
+      let idleCount = 0;
+      for (const m of members) {
+        totalClients += m.newClients;
+        totalTp += m.newTradePoints;
+        const t = m.newClients + m.newTradePoints;
+        if (t > 0) activeCount += 1;
+        else idleCount += 1;
+      }
+      const totalSum = totalClients + totalTp;
+      let leader: { name: string; total: number } | null = null;
+      for (const m of members) {
+        const t = m.newClients + m.newTradePoints;
+        if (!leader || t > leader.total) leader = { name: m.displayName, total: t };
+      }
+      if (!leader || leader.total <= 0) leader = null;
+      out.push({
+        ropId,
+        title: ropGroupDisplayTitle(ropId),
+        members,
+        totalClients,
+        totalTp,
+        totalSum,
+        activeCount,
+        idleCount,
+        leader,
+      });
+    }
+    out.sort((a, b) => {
+      if (b.totalSum !== a.totalSum) return b.totalSum - a.totalSum;
+      if (b.totalClients !== a.totalClients) return b.totalClients - a.totalClients;
+      if (b.totalTp !== a.totalTp) return b.totalTp - a.totalTp;
+      return a.title.localeCompare(b.title, "ru");
+    });
+    return out;
+  }, [ratingMode, visibleCreatedSummaryRows]);
+
+  const maxRopGroupTotal = useMemo(
+    () => Math.max(1, ...ropModeGroups.map((g) => g.totalSum)),
+    [ropModeGroups],
+  );
+
+  const toggleRopGroup = (ropId: string): void => {
+    setExpandedRopIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(ropId)) next.delete(ropId);
+      else next.add(ropId);
+      return next;
+    });
+  };
 
   const leaderMaxManualTotal = useMemo(() => {
     const withAdds = createdManagerSummaryRows.filter((r) => r.newClients + r.newTradePoints > 0);
@@ -857,11 +1112,50 @@ function ClientBaseActivityDashboardInner(): ReactElement {
       >
         <CardHeader className="space-y-2 pb-2">
           <CardTitle className="text-lg font-semibold sm:text-xl" style={{ color: C.text }}>
-            Рейтинг менеджеров
+            {ratingMode === "rop" ? "Рейтинг по РОП" : "Рейтинг менеджеров"}
           </CardTitle>
           <p className="text-sm leading-snug" style={{ color: C.muted }}>
-            Показываем, сколько новых клиентов и торговых точек добавил каждый менеджер за выбранный период.
+            {ratingMode === "rop"
+              ? "Команды сгруппированы по руководителям продаж. Раскройте РОП, чтобы увидеть менеджеров и перейти к добавленным карточкам."
+              : "Показываем, сколько новых клиентов и торговых точек добавил каждый менеджер за выбранный период."}
           </p>
+          <div
+            className="flex flex-wrap gap-2"
+            data-testid="section-manager-rating-mode-toggle"
+            role="group"
+            aria-label="Режим отображения рейтинга"
+          >
+            <Button
+              type="button"
+              size="sm"
+              variant={ratingMode === "flat" ? "default" : "outline"}
+              className={cn("h-8 text-xs", ratingMode === "flat" && "border-transparent")}
+              style={
+                ratingMode === "flat"
+                  ? { background: C.primary, color: C.white }
+                  : { borderColor: C.border, color: C.text, background: C.white }
+              }
+              onClick={() => setRatingMode("flat")}
+              data-testid="button-manager-rating-flat"
+            >
+              Общий рейтинг
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={ratingMode === "rop" ? "default" : "outline"}
+              className={cn("h-8 text-xs", ratingMode === "rop" && "border-transparent")}
+              style={
+                ratingMode === "rop"
+                  ? { background: C.primary, color: C.white }
+                  : { borderColor: C.border, color: C.text, background: C.white }
+              }
+              onClick={() => setRatingMode("rop")}
+              data-testid="button-manager-rating-by-rop"
+            >
+              По РОП
+            </Button>
+          </div>
           <div className="flex flex-wrap gap-2">
             {(
               [
@@ -892,7 +1186,7 @@ function ClientBaseActivityDashboardInner(): ReactElement {
         </CardHeader>
         <CardContent className="space-y-4 overflow-x-auto p-0 sm:p-4">
           <div className="space-y-4" data-testid="section-manager-leaderboard">
-            {!isMobile && topLeaderboardBarData.length > 0 ? (
+            {!isMobile && ratingMode === "flat" && topLeaderboardBarData.length > 0 ? (
               <div className="hidden h-[220px] w-full min-w-0 px-3 sm:block sm:px-0" data-testid="chart-manager-leaderboard-top">
                 <p className="mb-2 text-xs font-semibold" style={{ color: C.muted }}>
                   Топ менеджеров по добавлениям
@@ -915,189 +1209,400 @@ function ClientBaseActivityDashboardInner(): ReactElement {
               </div>
             ) : null}
 
-            {isMobile ? (
-              <div className="flex flex-col gap-2 p-3">
-                {visibleCreatedSummaryRows.map((row) => {
-                  const unknown = isActivityUnknownUserId(row.managerId);
-                  const total = row.newClients + row.newTradePoints;
-                  const rank = createdManagerSummaryRows.findIndex((r) => r.managerId === row.managerId) + 1;
-                  const isTop = rank <= 3 && total > 0;
-                  const isInactive = total === 0;
-                  const progress = Math.min(100, Math.round((total / leaderMaxManualTotal) * 100));
-                  const compact = leaderboardFilter === "all" && isInactive;
-                  return (
-                    <div
-                      key={row.managerId}
-                      className={cn(
-                        "relative overflow-hidden rounded-xl border p-3 shadow-sm",
-                        compact && "py-2",
-                        isTop && "border-[rgba(154,202,60,0.45)] bg-[rgba(154,202,60,0.1)]",
-                        !isTop &&
-                          !isInactive &&
-                          "relative border-[#E3E6F3] bg-white pl-3 before:absolute before:inset-y-2 before:left-0 before:w-1 before:rounded-full before:bg-[#9ACA3C] before:content-['']",
-                        isInactive && "border-[#E3E6F3] bg-[#EEEFF6]/80",
-                      )}
-                      style={!isTop && !isInactive ? { borderColor: C.border } : isInactive ? { borderColor: C.border } : {}}
-                      data-testid={`card-manager-contribution-${row.managerId}`}
-                    >
-                      <div data-testid={`card-manager-leader-${row.managerId}`} className="flex gap-3">
-                        <div className="flex w-8 shrink-0 flex-col items-center pt-0.5">
-                          <span className="text-xs font-bold tabular-nums" style={{ color: isInactive ? C.muted : C.text }}>
-                            #{rank}
-                          </span>
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              {unknown ? (
-                                <Badge variant="outline" className="text-[10px]" title={UNKNOWN_ACTOR_HELP} style={{ borderColor: C.border, color: C.muted }}>
-                                  {ACTIVITY_UNKNOWN_DISPLAY}
-                                </Badge>
+            {ratingMode === "flat" ? (
+              isMobile ? (
+                <div className="flex flex-col gap-2 p-3">
+                  {visibleCreatedSummaryRows.map((row) => {
+                    const total = row.newClients + row.newTradePoints;
+                    const gr = globalRankByManagerId.get(row.managerId) ?? 0;
+                    const isGlobalTop = gr <= 3 && total > 0;
+                    return (
+                      <ManagerCreatedMobileCard
+                        key={row.managerId}
+                        row={row}
+                        rankLabel={`#${gr}`}
+                        globalRank={gr}
+                        showGlobalRankSubtitle={false}
+                        showTeamLine
+                        isGlobalTop={isGlobalTop}
+                        leaderMaxManualTotal={leaderMaxManualTotal}
+                        leaderboardFilter={leaderboardFilter}
+                        onOpenDetail={(id) => setDetailManagerId(id)}
+                      />
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[920px] text-sm" data-testid="table-manager-created-summary">
+                    <thead>
+                      <tr className="border-b text-left text-[11px] font-semibold uppercase" style={{ borderColor: C.border, color: C.muted, background: C.surface }}>
+                        <th className="p-2">#</th>
+                        <th className="p-2">Менеджер</th>
+                        <th className="p-2">Команда</th>
+                        <th className="p-2 text-right">Клиенты</th>
+                        <th className="p-2 text-right">ТТ</th>
+                        <th className="p-2 text-right">Всего</th>
+                        <th className="p-2 text-right">Последняя активность</th>
+                        <th className="p-2 text-right">Действие</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {visibleCreatedSummaryRows.map((row) => {
+                        const unknown = isActivityUnknownUserId(row.managerId);
+                        const total = row.newClients + row.newTradePoints;
+                        const rank = globalRankByManagerId.get(row.managerId) ?? 0;
+                        const isTop = rank <= 3 && total > 0;
+                        const isInactive = total === 0;
+                        return (
+                          <tr
+                            key={row.managerId}
+                            className="border-b transition-colors hover:bg-[#EEEFF6]"
+                            style={{
+                              borderColor: C.border,
+                              background: isTop ? "rgba(154, 202, 60, 0.1)" : undefined,
+                              color: isInactive ? C.muted : C.text,
+                            }}
+                            data-testid={`card-manager-contribution-${row.managerId}`}
+                          >
+                            <td className="p-2 tabular-nums" style={{ color: C.muted }}>
+                              {rank}
+                            </td>
+                            <td className="p-2">
+                              <div data-testid={`card-manager-leader-${row.managerId}`}>
+                                {unknown ? (
+                                  <Badge variant="outline" className="text-[10px]" title={UNKNOWN_ACTOR_HELP} style={{ borderColor: C.border }}>
+                                    {ACTIVITY_UNKNOWN_DISPLAY}
+                                  </Badge>
+                                ) : (
+                                  <span className="font-medium">{row.displayName}</span>
+                                )}
+                                {isTop ? (
+                                  <Badge className="ml-2 align-middle border-0 px-1.5 py-0 text-[9px]" style={{ background: C.primary, color: C.white }} data-testid={`badge-manager-leader-${row.managerId}`}>
+                                    Лидер
+                                  </Badge>
+                                ) : null}
+                              </div>
+                            </td>
+                            <td className="max-w-[200px] p-2 text-xs" style={{ color: C.muted }}>
+                              {managerTeamAndRopLabel(row.managerId)}
+                            </td>
+                            <td className="p-2 text-right tabular-nums" data-testid={`text-manager-clients-added-${row.managerId}`}>
+                              {row.newClients}
+                            </td>
+                            <td className="p-2 text-right tabular-nums" data-testid={`text-manager-trade-points-added-${row.managerId}`}>
+                              {row.newTradePoints}
+                            </td>
+                            <td className="p-2 text-right tabular-nums font-semibold">{total}</td>
+                            <td className="p-2 text-right text-xs" style={{ color: C.muted }}>
+                              {formatLastManualAddition(row.lastAddedAtMs, total)}
+                            </td>
+                            <td className="p-2 text-right">
+                              {isInactive ? (
+                                <Button type="button" variant="outline" size="sm" className="h-8 text-xs" disabled style={{ borderColor: C.border, color: C.muted }}>
+                                  Нет добавлений
+                                </Button>
                               ) : (
-                                <p className="truncate text-base font-semibold leading-tight" style={{ color: isInactive ? C.muted : C.text }}>
-                                  {row.displayName}
-                                </p>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 border-0 text-xs font-medium text-white hover:opacity-95"
+                                  style={{ background: C.primary }}
+                                  onClick={() => setDetailManagerId(row.managerId)}
+                                  data-testid={`button-manager-contribution-open-${row.managerId}`}
+                                >
+                                  Смотреть
+                                </Button>
                               )}
-                              <p className="truncate text-[11px] leading-snug" style={{ color: C.muted }}>
-                                {managerTeamAndRopLabel(row.managerId)}
-                              </p>
-                            </div>
-                            <div className="shrink-0 text-right">
-                              <p className="text-xl font-bold tabular-nums leading-none" style={{ color: isInactive ? C.muted : C.text }}>
-                                {total}
-                              </p>
-                              {isTop ? (
-                                <Badge className="mt-1 border-0 px-1.5 py-0 text-[9px] font-semibold" style={{ background: C.primary, color: C.white }} data-testid={`badge-manager-leader-${row.managerId}`}>
-                                  Лидер
-                                </Badge>
-                              ) : null}
-                            </div>
-                          </div>
-                          <p className="mt-2 text-[11px] tabular-nums" style={{ color: isInactive ? C.muted : C.text }} data-testid={`text-manager-clients-added-${row.managerId}`}>
-                            Клиенты: {row.newClients}
-                          </p>
-                          <p className="text-[11px] tabular-nums" style={{ color: isInactive ? C.muted : C.text }} data-testid={`text-manager-trade-points-added-${row.managerId}`}>
-                            ТТ: {row.newTradePoints}
-                          </p>
-                          {!isInactive ? (
-                            <div className="mt-2 h-1 w-full overflow-hidden rounded-full" style={{ background: C.surface }}>
-                              <div className="h-full rounded-full transition-all" style={{ width: `${progress}%`, background: C.primary }} />
-                            </div>
-                          ) : null}
-                          <p className="mt-2 text-[10px]" style={{ color: C.muted }}>
-                            Последняя активность: {formatLastManualAddition(row.lastAddedAtMs, total)}
-                          </p>
-                          {isInactive ? (
-                            <Button type="button" variant="outline" size="sm" className="mt-2 w-full" disabled style={{ borderColor: C.border, color: C.muted }}>
-                              Нет добавлений
-                            </Button>
-                          ) : (
-                            <Button
-                              type="button"
-                              size="sm"
-                              className="mt-2 w-full border-0 font-medium text-white hover:opacity-95"
-                              style={{ background: C.primary }}
-                              onClick={() => setDetailManagerId(row.managerId)}
-                              data-testid={`button-manager-contribution-open-${row.managerId}`}
-                            >
-                              Смотреть карточки
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[920px] text-sm" data-testid="table-manager-created-summary">
-                  <thead>
-                    <tr className="border-b text-left text-[11px] font-semibold uppercase" style={{ borderColor: C.border, color: C.muted, background: C.surface }}>
-                      <th className="p-2">#</th>
-                      <th className="p-2">Менеджер</th>
-                      <th className="p-2">Команда</th>
-                      <th className="p-2 text-right">Клиенты</th>
-                      <th className="p-2 text-right">ТТ</th>
-                      <th className="p-2 text-right">Всего</th>
-                      <th className="p-2 text-right">Последняя активность</th>
-                      <th className="p-2 text-right">Действие</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {visibleCreatedSummaryRows.map((row) => {
-                      const unknown = isActivityUnknownUserId(row.managerId);
-                      const total = row.newClients + row.newTradePoints;
-                      const rank = createdManagerSummaryRows.findIndex((r) => r.managerId === row.managerId) + 1;
-                      const isTop = rank <= 3 && total > 0;
-                      const isInactive = total === 0;
+              <div data-testid="section-manager-rop-groups">
+                {isMobile ? (
+                  <div className="flex flex-col gap-2 p-3">
+                    {ropModeGroups.map((g, groupIdx) => {
+                      const expanded = expandedRopIds.has(g.ropId);
+                      const isTopTeam = groupIdx < 3 && g.totalSum > 0;
+                      const isMutedTeam = g.totalSum === 0;
+                      const teamProg = Math.min(100, Math.round((g.totalSum / maxRopGroupTotal) * 100));
                       return (
-                        <tr
-                          key={row.managerId}
-                          className="border-b transition-colors hover:bg-[#EEEFF6]"
-                          style={{
-                            borderColor: C.border,
-                            background: isTop ? "rgba(154, 202, 60, 0.1)" : undefined,
-                            color: isInactive ? C.muted : C.text,
+                        <Collapsible
+                          key={g.ropId}
+                          open={expanded}
+                          onOpenChange={(open) => {
+                            setExpandedRopIds((prev) => {
+                              const next = new Set(prev);
+                              if (open) next.add(g.ropId);
+                              else next.delete(g.ropId);
+                              return next;
+                            });
                           }}
-                          data-testid={`card-manager-contribution-${row.managerId}`}
                         >
-                          <td className="p-2 tabular-nums" style={{ color: isInactive ? C.muted : C.muted }}>
-                            {rank}
-                          </td>
-                          <td className="p-2">
-                            <div data-testid={`card-manager-leader-${row.managerId}`}>
-                              {unknown ? (
-                                <Badge variant="outline" className="text-[10px]" title={UNKNOWN_ACTOR_HELP} style={{ borderColor: C.border }}>
-                                  {ACTIVITY_UNKNOWN_DISPLAY}
-                                </Badge>
-                              ) : (
-                                <span className="font-medium">{row.displayName}</span>
-                              )}
-                              {isTop ? (
-                                <Badge className="ml-2 align-middle border-0 px-1.5 py-0 text-[9px]" style={{ background: C.primary, color: C.white }} data-testid={`badge-manager-leader-${row.managerId}`}>
-                                  Лидер
-                                </Badge>
-                              ) : null}
-                            </div>
-                          </td>
-                          <td className="max-w-[200px] p-2 text-xs" style={{ color: C.muted }}>
-                            {managerTeamAndRopLabel(row.managerId)}
-                          </td>
-                          <td className="p-2 text-right tabular-nums" data-testid={`text-manager-clients-added-${row.managerId}`}>
-                            {row.newClients}
-                          </td>
-                          <td className="p-2 text-right tabular-nums" data-testid={`text-manager-trade-points-added-${row.managerId}`}>
-                            {row.newTradePoints}
-                          </td>
-                          <td className="p-2 text-right tabular-nums font-semibold">{total}</td>
-                          <td className="p-2 text-right text-xs" style={{ color: C.muted }}>
-                            {formatLastManualAddition(row.lastAddedAtMs, total)}
-                          </td>
-                          <td className="p-2 text-right">
-                            {isInactive ? (
-                              <Button type="button" variant="outline" size="sm" className="h-8 text-xs" disabled style={{ borderColor: C.border, color: C.muted }}>
-                                Нет добавлений
-                              </Button>
-                            ) : (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="h-8 border-0 text-xs font-medium text-white hover:opacity-95"
-                                style={{ background: C.primary }}
-                                onClick={() => setDetailManagerId(row.managerId)}
-                                data-testid={`button-manager-contribution-open-${row.managerId}`}
-                              >
-                                Смотреть
-                              </Button>
+                          <div
+                            data-testid={`card-manager-rop-group-${g.ropId}`}
+                            className={cn(
+                              "overflow-hidden rounded-xl border shadow-sm",
+                              isTopTeam && "border-[rgba(154,202,60,0.45)] bg-[rgba(154,202,60,0.1)]",
+                              !isTopTeam && !isMutedTeam && "bg-white",
+                              isMutedTeam && "bg-[#EEEFF6]/80",
                             )}
-                          </td>
-                        </tr>
+                            style={{ borderColor: C.border }}
+                          >
+                            <CollapsibleTrigger asChild>
+                              <button
+                                type="button"
+                                className="w-full p-3 text-left transition hover:opacity-95"
+                                data-testid={`button-manager-rop-toggle-${g.ropId}`}
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <p className="min-w-0 flex-1 text-sm font-semibold leading-snug" style={{ color: isMutedTeam ? C.muted : C.text }}>
+                                    {g.title}
+                                  </p>
+                                  <div className="flex shrink-0 items-center gap-1.5">
+                                    <span className="text-2xl font-bold tabular-nums leading-none" style={{ color: isMutedTeam ? C.muted : C.text }}>
+                                      {g.totalSum}
+                                    </span>
+                                    <ChevronDown
+                                      className={cn("h-5 w-5 shrink-0 transition-transform", expanded && "rotate-180")}
+                                      style={{ color: C.muted }}
+                                      aria-hidden
+                                    />
+                                  </div>
+                                </div>
+                                <p className="mt-2 text-[11px] leading-snug" style={{ color: C.muted }}>
+                                  <span data-testid={`text-manager-rop-clients-added-${g.ropId}`}>Клиенты: {g.totalClients}</span>
+                                  <span className="mx-1">·</span>
+                                  <span data-testid={`text-manager-rop-trade-points-added-${g.ropId}`}>ТТ: {g.totalTp}</span>
+                                </p>
+                                <div className="mt-2 flex flex-wrap gap-1.5">
+                                  <span
+                                    className="inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium tabular-nums"
+                                    style={{ borderColor: C.border, color: C.text, background: C.white }}
+                                    data-testid={`text-manager-rop-active-count-${g.ropId}`}
+                                  >
+                                    Активных {g.activeCount}
+                                  </span>
+                                  <span
+                                    className="inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium tabular-nums"
+                                    style={{ borderColor: C.border, color: C.muted, background: C.surface }}
+                                    data-testid={`text-manager-rop-idle-count-${g.ropId}`}
+                                  >
+                                    Без активности {g.idleCount}
+                                  </span>
+                                </div>
+                                {g.totalSum > 0 ? (
+                                  <div className="mt-2 h-1 w-full overflow-hidden rounded-full" style={{ background: C.surface }}>
+                                    <div className="h-full rounded-full transition-all" style={{ width: `${teamProg}%`, background: C.primary }} />
+                                  </div>
+                                ) : null}
+                                <p className="mt-2 text-[11px] leading-snug" style={{ color: C.muted }}>
+                                  Лидер:{" "}
+                                  {g.leader ? (
+                                    <span style={{ color: C.text }}>
+                                      {g.leader.name} · всего {g.leader.total}
+                                    </span>
+                                  ) : (
+                                    "—"
+                                  )}
+                                </p>
+                              </button>
+                            </CollapsibleTrigger>
+                            <CollapsibleContent>
+                              <div className="space-y-2 border-t px-3 pb-3 pt-2" style={{ borderColor: C.border }} data-testid={`section-manager-rop-members-${g.ropId}`}>
+                                {g.members.map((row, idx) => {
+                                  const total = row.newClients + row.newTradePoints;
+                                  const gr = globalRankByManagerId.get(row.managerId) ?? 0;
+                                  const isGlobalTop = gr <= 3 && total > 0;
+                                  return (
+                                    <ManagerCreatedMobileCard
+                                      key={row.managerId}
+                                      row={row}
+                                      rankLabel={`#${idx + 1}`}
+                                      globalRank={gr}
+                                      showGlobalRankSubtitle
+                                      showTeamLine={false}
+                                      isGlobalTop={isGlobalTop}
+                                      leaderMaxManualTotal={leaderMaxManualTotal}
+                                      leaderboardFilter={leaderboardFilter}
+                                      onOpenDetail={(id) => setDetailManagerId(id)}
+                                    />
+                                  );
+                                })}
+                              </div>
+                            </CollapsibleContent>
+                          </div>
+                        </Collapsible>
                       );
                     })}
-                  </tbody>
-                </table>
+                  </div>
+                ) : (
+                  <div className="hidden overflow-x-auto px-3 pb-3 sm:block sm:px-0">
+                    <table className="w-full min-w-[760px] text-sm" data-testid="table-manager-rop-created-summary">
+                      <thead>
+                        <tr className="border-b text-left text-[11px] font-semibold uppercase" style={{ borderColor: C.border, color: C.muted, background: C.surface }}>
+                          <th className="p-2">#</th>
+                          <th className="p-2">Менеджер</th>
+                          <th className="p-2 text-right">Клиенты</th>
+                          <th className="p-2 text-right">ТТ</th>
+                          <th className="p-2 text-right">Всего</th>
+                          <th className="p-2 text-right">Последняя активность</th>
+                          <th className="p-2 text-right">Действие</th>
+                        </tr>
+                      </thead>
+                      {ropModeGroups.map((g, groupIdx) => {
+                        const expanded = expandedRopIds.has(g.ropId);
+                        const isTopTeam = groupIdx < 3 && g.totalSum > 0;
+                        const isMutedTeam = g.totalSum === 0;
+                        const teamProg = Math.min(100, Math.round((g.totalSum / maxRopGroupTotal) * 100));
+                        return (
+                          <Fragment key={g.ropId}>
+                            <tbody>
+                              <tr
+                                data-testid={`card-manager-rop-group-${g.ropId}`}
+                                className="border-b"
+                                style={{
+                                  borderColor: C.border,
+                                  background: isTopTeam ? "rgba(154, 202, 60, 0.1)" : isMutedTeam ? "rgba(238, 239, 246, 0.95)" : C.white,
+                                  color: isMutedTeam ? C.muted : C.text,
+                                }}
+                              >
+                                <td colSpan={7} className="p-0 align-top">
+                                  <button
+                                    type="button"
+                                    className="flex w-full flex-col gap-2 p-3 text-left transition hover:opacity-95"
+                                    data-testid={`button-manager-rop-toggle-${g.ropId}`}
+                                    onClick={() => toggleRopGroup(g.ropId)}
+                                  >
+                                    <div className="flex flex-wrap items-start justify-between gap-2">
+                                      <div className="flex min-w-0 flex-1 items-start gap-2">
+                                        <ChevronDown
+                                          className={cn("mt-0.5 h-4 w-4 shrink-0 transition-transform", expanded && "rotate-180")}
+                                          style={{ color: C.muted }}
+                                          aria-hidden
+                                        />
+                                        <span className="text-sm font-semibold leading-snug">{g.title}</span>
+                                      </div>
+                                      <span className="shrink-0 text-xl font-bold tabular-nums">{g.totalSum}</span>
+                                    </div>
+                                    <div className="flex flex-wrap gap-3 pl-6 text-xs" style={{ color: C.muted }}>
+                                      <span data-testid={`text-manager-rop-clients-added-${g.ropId}`}>Клиенты: {g.totalClients}</span>
+                                      <span data-testid={`text-manager-rop-trade-points-added-${g.ropId}`}>ТТ: {g.totalTp}</span>
+                                      <span data-testid={`text-manager-rop-active-count-${g.ropId}`}>Активных: {g.activeCount}</span>
+                                      <span data-testid={`text-manager-rop-idle-count-${g.ropId}`}>Без активности: {g.idleCount}</span>
+                                    </div>
+                                    {g.totalSum > 0 ? (
+                                      <div className="pl-6">
+                                        <div className="h-1 w-full max-w-md overflow-hidden rounded-full" style={{ background: C.surface }}>
+                                          <div className="h-full rounded-full" style={{ width: `${teamProg}%`, background: C.primary }} />
+                                        </div>
+                                      </div>
+                                    ) : null}
+                                    <p className="pl-6 text-xs leading-snug" style={{ color: C.muted }}>
+                                      Лидер:{" "}
+                                      {g.leader ? (
+                                        <span className="font-medium" style={{ color: C.text }}>
+                                          {g.leader.name} · всего {g.leader.total}
+                                        </span>
+                                      ) : (
+                                        "—"
+                                      )}
+                                    </p>
+                                  </button>
+                                </td>
+                              </tr>
+                            </tbody>
+                            {expanded ? (
+                              <tbody data-testid={`section-manager-rop-members-${g.ropId}`}>
+                                {g.members.map((row, idx) => {
+                                  const unknown = isActivityUnknownUserId(row.managerId);
+                                  const total = row.newClients + row.newTradePoints;
+                                  const gr = globalRankByManagerId.get(row.managerId) ?? 0;
+                                  const isGlobalTop = gr <= 3 && total > 0;
+                                  const isInactive = total === 0;
+                                  return (
+                                    <tr
+                                      key={row.managerId}
+                                      className="border-b transition-colors hover:bg-[#EEEFF6]"
+                                      style={{
+                                        borderColor: C.border,
+                                        background: isGlobalTop ? "rgba(154, 202, 60, 0.08)" : undefined,
+                                        color: isInactive ? C.muted : C.text,
+                                      }}
+                                      data-testid={`card-manager-contribution-${row.managerId}`}
+                                    >
+                                      <td className="p-2 pl-6 tabular-nums" style={{ color: C.muted }}>
+                                        {idx + 1}
+                                      </td>
+                                      <td className="p-2">
+                                        <div data-testid={`card-manager-leader-${row.managerId}`}>
+                                          {unknown ? (
+                                            <Badge variant="outline" className="text-[10px]" title={UNKNOWN_ACTOR_HELP} style={{ borderColor: C.border }}>
+                                              {ACTIVITY_UNKNOWN_DISPLAY}
+                                            </Badge>
+                                          ) : (
+                                            <div className="flex flex-wrap items-center gap-2">
+                                              <div>
+                                                <span className="font-medium">{row.displayName}</span>
+                                                <p className="text-[10px] leading-snug" style={{ color: C.muted }}>
+                                                  {gr > 0 ? `В общем рейтинге #${gr}` : "В общем рейтинге —"}
+                                                </p>
+                                              </div>
+                                              {isGlobalTop ? (
+                                                <Badge className="border-0 px-1.5 py-0 text-[9px]" style={{ background: C.primary, color: C.white }} data-testid={`badge-manager-leader-${row.managerId}`}>
+                                                  Лидер
+                                                </Badge>
+                                              ) : null}
+                                            </div>
+                                          )}
+                                        </div>
+                                      </td>
+                                      <td className="p-2 text-right tabular-nums" data-testid={`text-manager-clients-added-${row.managerId}`}>
+                                        {row.newClients}
+                                      </td>
+                                      <td className="p-2 text-right tabular-nums" data-testid={`text-manager-trade-points-added-${row.managerId}`}>
+                                        {row.newTradePoints}
+                                      </td>
+                                      <td className="p-2 text-right tabular-nums font-semibold">{total}</td>
+                                      <td className="p-2 text-right text-xs" style={{ color: C.muted }}>
+                                        {formatLastManualAddition(row.lastAddedAtMs, total)}
+                                      </td>
+                                      <td className="p-2 text-right">
+                                        {isInactive ? (
+                                          <Button type="button" variant="outline" size="sm" className="h-8 text-xs" disabled style={{ borderColor: C.border, color: C.muted }}>
+                                            Нет добавлений
+                                          </Button>
+                                        ) : (
+                                          <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            className="h-8 border-0 text-xs font-medium text-white hover:opacity-95"
+                                            style={{ background: C.primary }}
+                                            onClick={() => setDetailManagerId(row.managerId)}
+                                            data-testid={`button-manager-contribution-open-${row.managerId}`}
+                                          >
+                                            Смотреть
+                                          </Button>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            ) : null}
+                          </Fragment>
+                        );
+                      })}
+                    </table>
+                  </div>
+                )}
               </div>
             )}
           </div>
