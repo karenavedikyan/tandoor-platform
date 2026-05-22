@@ -1,5 +1,6 @@
 /**
  * Загрузка буферов изображений в Vercel Blob (сервер).
+ * Ошибки сети/SDK обрабатываются вызывающим кодом (`executeClientBaseImageUpload`).
  */
 
 import { put } from "@vercel/blob";

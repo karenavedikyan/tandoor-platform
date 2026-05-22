@@ -35,9 +35,18 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import type { DealerRow, DealerStatus } from "@/lib/dealer-base-mock-data";
-import { DEALER_SHIPMENT_DAY_LABELS, DEALER_SHIPMENT_DAY_ORDER, type DealerShipmentDayId } from "@/lib/dealer-shipment-days";
+import {
+  DEALER_SHIPMENT_DAY_LABELS,
+  DEALER_SHIPMENT_DAY_ORDER,
+  formatShipmentDaysForDisplay,
+  normalizeManualDealerShipmentDayIdsFromFields,
+  sortDealerShipmentDayIds,
+  type DealerShipmentDayId,
+} from "@/lib/dealer-shipment-days";
 import { getDealerUnloadingOrder } from "@/lib/dealer-unloading-order-storage";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
@@ -144,6 +153,75 @@ function ResponsiblePersonCombobox(props: {
         </Command>
       </PopoverContent>
     </Popover>
+  );
+}
+
+function ShipmentDaysMultiSelect(props: {
+  value: DealerShipmentDayId[];
+  onChange: (next: DealerShipmentDayId[]) => void;
+  onMarkDirty: () => void;
+  triggerTestId: string;
+  popoverTestId: string;
+}): ReactElement {
+  const { value, onChange, onMarkDirty, triggerTestId, popoverTestId } = props;
+  const [open, setOpen] = useState(false);
+
+  const summary =
+    value.length === 0
+      ? "Выберите дни"
+      : sortDealerShipmentDayIds(value)
+          .map((d) => DEALER_SHIPMENT_DAY_LABELS[d])
+          .join(", ");
+
+  return (
+    <div className="space-y-2">
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-10 w-full justify-between bg-background px-3 py-2 text-left font-normal"
+            data-testid={triggerTestId}
+          >
+            <span className="min-w-0 flex-1 whitespace-normal break-words text-left text-sm leading-snug">{summary}</span>
+            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" aria-hidden />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-2" align="start" data-testid={popoverTestId}>
+          <div className="max-h-64 space-y-0.5 overflow-y-auto">
+            {DEALER_SHIPMENT_DAY_ORDER.map((d) => (
+              <div
+                key={d}
+                className="flex items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-muted/60"
+                data-testid={`checkbox-dealer-shipment-day-${d}`}
+              >
+                <Checkbox
+                  checked={value.includes(d)}
+                  onCheckedChange={(checked) => {
+                    const on = checked === true;
+                    const next = on
+                      ? sortDealerShipmentDayIds([...value, d])
+                      : value.filter((x) => x !== d);
+                    onChange(next);
+                    onMarkDirty();
+                  }}
+                />
+                <span className="select-none">{DEALER_SHIPMENT_DAY_LABELS[d]}</span>
+              </div>
+            ))}
+          </div>
+        </PopoverContent>
+      </Popover>
+      {value.length > 0 ? (
+        <div className="flex flex-wrap gap-1.5" data-testid="chips-dealer-shipment-days">
+          {sortDealerShipmentDayIds(value).map((d) => (
+            <Badge key={d} variant="secondary" className="max-w-full truncate font-normal">
+              {DEALER_SHIPMENT_DAY_LABELS[d]}
+            </Badge>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -342,7 +420,7 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
   const [manager, setManager] = useState("");
   const [regionalManager, setRegionalManager] = useState("");
   const [ropName, setRopName] = useState("");
-  const [shipmentDayId, setShipmentDayId] = useState<DealerShipmentDayId | "">("");
+  const [shipmentDayIds, setShipmentDayIds] = useState<DealerShipmentDayId[]>([]);
   const [unloadingOrder, setUnloadingOrder] = useState("");
   const [comment, setComment] = useState("");
   const [passportClientKind, setPassportClientKind] = useState("other");
@@ -379,12 +457,7 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
     const f = state.dealerOverridesById[baseRow.id]?.fields as Record<string, unknown> | undefined;
     const mf = state.manuallyCreatedDealersById[baseRow.id]?.fields as Record<string, unknown> | undefined;
     const merged = { ...(mf ?? {}), ...(f ?? {}) };
-    const sd = merged.shipmentDayId ?? f?.shipmentDayId;
-    setShipmentDayId(
-      sd === "monday" || sd === "tuesday" || sd === "wednesday" || sd === "thursday" || sd === "friday" || sd === "saturday"
-        ? (sd as DealerShipmentDayId)
-        : "",
-    );
+    setShipmentDayIds(normalizeManualDealerShipmentDayIdsFromFields(merged));
     const pk = typeof merged.passportClientKind === "string" ? merged.passportClientKind : "";
     setPassportClientKind(pk || "other");
     const ls = typeof merged.passportLifecycleStatus === "string" ? merged.passportLifecycleStatus : "";
@@ -431,7 +504,8 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
       regionalManager: regionalManager.trim(),
       ropName: ropName.trim(),
       comment: comment.trim(),
-      shipmentDayId: shipmentDayId || undefined,
+      shipmentDayIds: shipmentDayIds.length > 0 ? shipmentDayIds : [],
+      shipmentDayLabel: shipmentDayIds.length > 0 ? formatShipmentDaysForDisplay(shipmentDayIds) : undefined,
       unloadingOrder: Number.isFinite(uoNum) && uoNum > 0 ? uoNum : undefined,
       passportClientKind,
       passportLifecycleStatus,
@@ -482,7 +556,6 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
         const m = next.manuallyCreatedDealersById[baseRow.id];
         if (m) {
           const prevF = (m.fields ?? {}) as Record<string, unknown>;
-          const shipmentLabel = shipmentDayId ? DEALER_SHIPMENT_DAY_LABELS[shipmentDayId] : "";
           const mergedFields: Record<string, unknown> = {
             ...prevF,
             name: name.trim(),
@@ -495,8 +568,8 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
             regionalManager: regionalManager.trim(),
             ropName: ropName.trim(),
             comment: comment.trim(),
-            shipmentDayId: shipmentDayId || undefined,
-            shipmentDayLabel: shipmentLabel || undefined,
+            shipmentDayIds: shipmentDayIds.length > 0 ? shipmentDayIds : [],
+            shipmentDayLabel: shipmentDayIds.length > 0 ? formatShipmentDaysForDisplay(shipmentDayIds) : undefined,
             passportClientKind,
             passportLifecycleStatus,
             passportCategoryTier,
@@ -562,7 +635,7 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
     regionalManager,
     ropName,
     comment,
-    shipmentDayId,
+    shipmentDayIds,
     unloadingOrder,
     passportClientKind,
     passportLifecycleStatus,
@@ -768,26 +841,14 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">День отгрузки</Label>
-                <Select
-                  value={shipmentDayId || "__none__"}
-                  onValueChange={(v) => {
-                    setShipmentDayId(v === "__none__" ? "" : (v as DealerShipmentDayId));
-                    logisticsSave.markDirty();
-                  }}
-                >
-                  <SelectTrigger className="min-h-10">
-                    <SelectValue placeholder="Не выбран" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">Не выбран</SelectItem>
-                    {DEALER_SHIPMENT_DAY_ORDER.map((d) => (
-                      <SelectItem key={d} value={d}>
-                        {DEALER_SHIPMENT_DAY_LABELS[d]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label className="text-xs">Дни отгрузки</Label>
+                <ShipmentDaysMultiSelect
+                  value={shipmentDayIds}
+                  onChange={setShipmentDayIds}
+                  onMarkDirty={() => logisticsSave.markDirty()}
+                  triggerTestId="button-dealer-shipment-days-trigger"
+                  popoverTestId="popover-dealer-shipment-days"
+                />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Порядок выгрузки (число)</Label>
@@ -990,7 +1051,7 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
   const [inn, setInn] = useState("");
   const [city, setCity] = useState("");
   const [address, setAddress] = useState("");
-  const [shipmentDayId, setShipmentDayId] = useState<DealerShipmentDayId | "">("");
+  const [shipmentDayIds, setShipmentDayIds] = useState<DealerShipmentDayId[]>([]);
   const [routeLabel, setRouteLabel] = useState("");
   const [unloadingOrder, setUnloadingOrder] = useState("");
   const [managerUserId, setManagerUserId] = useState(profile.personaUserId);
@@ -1058,7 +1119,7 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
     setInn("");
     setCity("");
     setAddress("");
-    setShipmentDayId("");
+    setShipmentDayIds([]);
     setRouteLabel("");
     setUnloadingOrder("");
     setRegionalManager("");
@@ -1142,7 +1203,6 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
     saveLockRef.current = true;
     setSaving(true);
     const uoNum = unloadingOrder.trim() ? Math.floor(Number(unloadingOrder.trim())) : NaN;
-    const shipmentLabel = shipmentDayId ? DEALER_SHIPMENT_DAY_LABELS[shipmentDayId] : "";
     const clientCategory = clientCategoryFromPassportTier(passportCategoryTier);
     const status = dealerStatusFromPassportLifecycle(passportLifecycleStatus);
     const fields: Record<string, unknown> = {
@@ -1159,8 +1219,8 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
       releaseTeamId: mgr.teamId,
       regionalManager: regionalManager.trim(),
       ropName: ropName.trim(),
-      shipmentDayId: shipmentDayId || undefined,
-      shipmentDayLabel: shipmentLabel || undefined,
+      shipmentDayIds: shipmentDayIds.length > 0 ? shipmentDayIds : [],
+      shipmentDayLabel: shipmentDayIds.length > 0 ? formatShipmentDaysForDisplay(shipmentDayIds) : undefined,
       routeLabel: routeLabel.trim() || undefined,
       unloadingOrder: Number.isFinite(uoNum) && uoNum > 0 ? uoNum : undefined,
       passportClientKind,
@@ -1290,7 +1350,7 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
     managerUserId,
     regionalManager,
     ropName,
-    shipmentDayId,
+    shipmentDayIds,
     routeLabel,
     unloadingOrder,
     passportClientKind,
@@ -1518,23 +1578,14 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">День отгрузки</Label>
-                <Select
-                  value={shipmentDayId || "__none__"}
-                  onValueChange={(v) => setShipmentDayId(v === "__none__" ? "" : (v as DealerShipmentDayId))}
-                >
-                  <SelectTrigger className="min-h-10">
-                    <SelectValue placeholder="Не выбран" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">Не выбран</SelectItem>
-                    {DEALER_SHIPMENT_DAY_ORDER.map((d) => (
-                      <SelectItem key={d} value={d}>
-                        {DEALER_SHIPMENT_DAY_LABELS[d]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label className="text-xs">Дни отгрузки</Label>
+                <ShipmentDaysMultiSelect
+                  value={shipmentDayIds}
+                  onChange={setShipmentDayIds}
+                  onMarkDirty={() => {}}
+                  triggerTestId="button-dealer-create-shipment-days-trigger"
+                  popoverTestId="popover-dealer-create-shipment-days"
+                />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Маршрут / направление</Label>

@@ -36,6 +36,7 @@ import {
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
+import { logisticsShipmentDaysTextFromManualFields } from "@/lib/dealer-shipment-days";
 import { getClientCategoryLabel } from "@/lib/client-category";
 import { mergeTradePointsActiveForActualization, mergeDealerRowWithActualization, mergeLegalEntitiesForActualization } from "@/lib/client-base-actualization-data-merge";
 import { commercialTriLabelRu } from "@/lib/dealer-commercial-characteristics";
@@ -363,9 +364,11 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
 
     const hasCity = Boolean(row.city?.trim());
     const hasAddr = Boolean(row.releaseAddress?.trim());
-    const hasLog = hasCity || hasAddr || Boolean(str(f.shipmentDayLabel)) || Boolean(str(f.routeLabel));
+    const shipmentDaysText = logisticsShipmentDaysTextFromManualFields(f);
+    const hasLog = hasCity || hasAddr || Boolean(shipmentDaysText) || Boolean(str(f.routeLabel));
     const logisticsStatus: SectionStatusKind = !hasLog ? "empty" : hasCity && hasAddr ? "complete" : "partial";
-    const logisticsSummary = [row.city?.trim() || undefined, str(f.shipmentDayLabel) || undefined].filter(Boolean).join(" · ") || "Адрес и логистика не заполнены";
+    const logisticsSummary =
+      [row.city?.trim() || undefined, shipmentDaysText || undefined].filter(Boolean).join(" · ") || "Адрес и логистика не заполнены";
 
     const contactsStatus: SectionStatusKind =
       contacts.length === 0 ? "empty" : primary && (primary.phone?.trim() || primary.email?.trim()) ? "complete" : "partial";
@@ -617,7 +620,7 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
             <div className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
             <Field label="Город" value={row.city || "—"} />
             <Field label="Адрес" value={row.releaseAddress?.trim() || "—"} emphasis className="sm:col-span-2" />
-            <Field label="День отгрузки" value={str(f.shipmentDayLabel) || "—"} />
+            <Field label="Дни отгрузки" value={logisticsShipmentDaysTextFromManualFields(f) || "—"} />
             <Field label="Маршрут / направление" value={str(f.routeLabel) || "—"} />
             <Field label="Порядок выгрузки" value={row.distribution > 0 ? String(row.distribution) : "—"} />
             <Field label="Комментарий по логистике" value={str(f.logisticsComment) || "—"} emphasis className="sm:col-span-2" />

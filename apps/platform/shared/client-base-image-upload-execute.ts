@@ -68,6 +68,6 @@ export async function executeClientBaseImageUpload(opts: {
     return { ok: true, url: pair.url, thumbnailUrl: pair.thumbnailUrl };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Ошибка загрузки в хранилище.";
-    return { ok: false, httpStatus: 500, message: msg };
+    return { ok: false, httpStatus: 500, code: "UPLOAD_BLOB_ERROR", message: msg };
   }
 }

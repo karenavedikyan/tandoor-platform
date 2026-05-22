@@ -197,6 +197,8 @@ export type DealerRow = {
   releaseTeamId?: string;
   /** Менеджер (id из sales-control) из Release 1 — для фильтров. */
   releaseManagerId?: string;
+  /** Дни отгрузки (Excel / актуализация); строки — id дня (`monday` … `saturday`). */
+  releaseShipmentDayIds?: string[];
   lastActivity: string;
   nextAction: string;
   distribution: number;
