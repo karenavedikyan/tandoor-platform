@@ -7,7 +7,7 @@ import type { ActualizationState, LegalEntityActualizationState } from "@/lib/cl
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import { getDealerRegionalManagerDisplay } from "@/lib/dealer-base-mock-data";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
-import { getSalesUserById, type SalesUser } from "@/lib/sales-control-data";
+import { getSalesUserById, getTeamById, getTeamLeadForTeam, type SalesUser } from "@/lib/sales-control-data";
 import { mergeLegalEntitiesForActualization, mergeTradePointsForActualization } from "@/lib/client-base-actualization-data-merge";
 import { buildTradePointListForActualization } from "@/lib/trade-point-list-for-actualization";
 
@@ -64,6 +64,36 @@ function isoToMs(iso: string | null | undefined): number | null {
   return Number.isFinite(t) ? t : null;
 }
 
+/**
+ * Событие без календарной даты в записи — учитывается только при пресете периода «Всё время»
+ * (см. inActivityRange).
+ */
+export const ACTIVITY_NO_CALENDAR_TIME_MS = -910010020000 as const;
+
+function firstResolvedActivityMs(...candidates: (string | null | undefined)[]): number | null {
+  for (const c of candidates) {
+    const t = isoToMs(c);
+    if (t != null) return t;
+  }
+  return null;
+}
+
+/** Дата активности ручной записи: поля сущности → updatedAt снимка state (для командной загрузки). */
+export function resolveManualEntityActivityMs(
+  recordCreatedAt: string | null | undefined,
+  recordUpdatedAt: string | null | undefined,
+  snapshotUpdatedAt: string | null | undefined,
+  options: { useSnapshotFallback: boolean },
+): number {
+  const direct = firstResolvedActivityMs(recordCreatedAt, recordUpdatedAt);
+  if (direct != null) return direct;
+  if (options.useSnapshotFallback) {
+    const snap = firstResolvedActivityMs(snapshotUpdatedAt);
+    if (snap != null) return snap;
+  }
+  return ACTIVITY_NO_CALENDAR_TIME_MS;
+}
+
 function startOfLocalDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
@@ -98,6 +128,7 @@ export function previousActivityRange(range: { startMs: number; endMs: number } 
 
 export function inActivityRange(atMs: number, range: { startMs: number; endMs: number } | null): boolean {
   if (!range) return true;
+  if (atMs === ACTIVITY_NO_CALENDAR_TIME_MS) return false;
   return atMs >= range.startMs && atMs < range.endMs;
 }
 
@@ -177,29 +208,49 @@ export type ActivityCollection = {
   excludedTechnical: ActivityEvent[];
 };
 
+export type CollectActivityBucketsOptions = {
+  /**
+   * Владелец снимка state (менеджер): для записей без createdBy/updatedBy подставляем его userId
+   * и цепочку дат до `state.updatedAt`.
+   */
+  activitySourceUserId?: string;
+};
+
 /**
  * Сбор псевдо-событий для дашборда. Архивы и юрлица без archivedBy/updatedBy не попадают в рейтинг —
  * иначе тысячи строк с `unknown` давали «Автор не определён» с гигантским score (production).
  */
-export function collectActivityBuckets(state: ActualizationState, dealerRows: DealerRow[]): ActivityCollection {
+export function collectActivityBuckets(
+  state: ActualizationState,
+  dealerRows: DealerRow[],
+  opts?: CollectActivityBucketsOptions,
+): ActivityCollection {
   const dealerById = new Map(dealerRows.map((r) => [r.id, r]));
   const events: ActivityEvent[] = [];
   const excludedTechnical: ActivityEvent[] = [];
+  const src = normalizeText(opts?.activitySourceUserId);
 
   for (const d of Object.values(state.manuallyCreatedDealersById)) {
-    const t = isoToMs(d.createdAt);
-    if (t == null) continue;
     const f = (d.fields ?? {}) as Record<string, unknown>;
     const name = strField(f, "name") || d.internalCode || d.id;
+    let atMs: number;
+    if (src) {
+      atMs = resolveManualEntityActivityMs(d.createdAt, d.updatedAt, state.updatedAt, { useSnapshotFallback: true });
+    } else {
+      const t = isoToMs(d.createdAt);
+      if (t == null) continue;
+      atMs = t;
+    }
     const actorId =
       normalizeText(d.createdBy) ||
       strField(f, "managerUserId") ||
       strField(f, "releaseManagerId") ||
-      actorWithDealerFallback("", d.id, dealerById);
+      actorWithDealerFallback("", d.id, dealerById) ||
+      src;
     if (!actorId) {
       pushEv(excludedTechnical, {
         kind: "manual_dealer",
-        atMs: t,
+        atMs,
         userId: "",
         userName: ACTIVITY_UNKNOWN_DISPLAY,
         label: `Создал клиента: ${name}`,
@@ -209,7 +260,7 @@ export function collectActivityBuckets(state: ActualizationState, dealerRows: De
     }
     pushEv(events, {
       kind: "manual_dealer",
-      atMs: t,
+      atMs,
       userId: actorId,
       userName: resolveUserName(actorId, d.createdByName, dealerById, { dealerId: d.id }),
       label: `Создал клиента: ${name}`,
@@ -222,7 +273,7 @@ export function collectActivityBuckets(state: ActualizationState, dealerRows: De
     if (t == null) continue;
     const row = dealerById.get(ov.dealerId);
     const name = row?.name ?? ov.dealerId;
-    const actorId = actorWithDealerFallback(ov.updatedBy, ov.dealerId, dealerById);
+    const actorId = actorWithDealerFallback(ov.updatedBy, ov.dealerId, dealerById) || src;
     if (!actorId) {
       pushEv(excludedTechnical, {
         kind: "dealer_updated",
@@ -245,18 +296,24 @@ export function collectActivityBuckets(state: ActualizationState, dealerRows: De
   }
 
   for (const tp of Object.values(state.manuallyCreatedTradePointsById)) {
-    const t = isoToMs(tp.createdAt);
-    if (t == null) continue;
     const title =
       strField(tp.fields as Record<string, unknown>, "name") ||
       strField(tp.fields as Record<string, unknown>, "title") ||
       tp.internalCode ||
       tp.id;
-    const actorId = normalizeText(tp.createdBy) || actorWithDealerFallback("", tp.dealerId, dealerById);
+    let atMs: number;
+    if (src) {
+      atMs = resolveManualEntityActivityMs(tp.createdAt, tp.updatedAt, state.updatedAt, { useSnapshotFallback: true });
+    } else {
+      const t = isoToMs(tp.createdAt);
+      if (t == null) continue;
+      atMs = t;
+    }
+    const actorId = normalizeText(tp.createdBy) || actorWithDealerFallback("", tp.dealerId, dealerById) || src;
     if (!actorId) {
       pushEv(excludedTechnical, {
         kind: "manual_trade_point",
-        atMs: t,
+        atMs,
         userId: "",
         userName: ACTIVITY_UNKNOWN_DISPLAY,
         label: `Добавил ТТ: ${title}`,
@@ -267,7 +324,7 @@ export function collectActivityBuckets(state: ActualizationState, dealerRows: De
     }
     pushEv(events, {
       kind: "manual_trade_point",
-      atMs: t,
+      atMs,
       userId: actorId,
       userName: resolveUserName(actorId, tp.createdByName, dealerById, { dealerId: tp.dealerId }),
       label: `Добавил ТТ: ${title}`,
@@ -279,7 +336,7 @@ export function collectActivityBuckets(state: ActualizationState, dealerRows: De
   for (const ov of Object.values(state.tradePointOverridesById)) {
     const t = isoToMs(ov.updatedAt);
     if (t == null) continue;
-    const actorId = actorWithDealerFallback(ov.updatedBy, ov.dealerId, dealerById);
+    const actorId = actorWithDealerFallback(ov.updatedBy, ov.dealerId, dealerById) || src;
     if (!actorId) {
       pushEv(excludedTechnical, {
         kind: "trade_point_updated",
@@ -416,7 +473,7 @@ export function collectActivityBuckets(state: ActualizationState, dealerRows: De
       const t = isoToMs((o.updatedAt as string) || (o.createdAt as string));
       if (t == null) continue;
       const nm = strField(o, "name") || strField(o, "internalCode") || "Юрлицо";
-      const actorRaw = legalEntityActorRaw(o, st);
+      const actorRaw = legalEntityActorRaw(o, st) || src;
       if (!actorRaw) {
         pushEv(excludedTechnical, {
           kind: "legal_entity",
@@ -445,7 +502,8 @@ export function collectActivityBuckets(state: ActualizationState, dealerRows: De
       if (ph.archivedAt) continue;
       const t = isoToMs(ph.uploadedAt);
       if (t == null) continue;
-      if (!normalizeText(ph.uploadedBy)) {
+      const phActor = normalizeText(ph.uploadedBy) || src;
+      if (!phActor) {
         pushEv(excludedTechnical, {
           kind: "photo",
           atMs: t,
@@ -459,8 +517,8 @@ export function collectActivityBuckets(state: ActualizationState, dealerRows: De
       pushEv(events, {
         kind: "photo",
         atMs: t,
-        userId: ph.uploadedBy,
-        userName: resolveUserName(ph.uploadedBy, ph.uploadedByName, dealerById, { dealerId }),
+        userId: phActor,
+        userName: resolveUserName(phActor, ph.uploadedByName, dealerById, { dealerId }),
         label: ph.entityType === "dealer" ? `Загрузил фото клиента` : `Загрузил фото`,
         dealerId,
       });
@@ -474,7 +532,8 @@ export function collectActivityBuckets(state: ActualizationState, dealerRows: De
       if (t == null) continue;
       const dealerForTp =
         state.manuallyCreatedTradePointsById[tpId]?.dealerId ?? state.tradePointShowcaseActualizationById[tpId]?.dealerId;
-      if (!normalizeText(ph.uploadedBy)) {
+      const phActorTp = normalizeText(ph.uploadedBy) || src;
+      if (!phActorTp) {
         pushEv(excludedTechnical, {
           kind: "photo",
           atMs: t,
@@ -489,8 +548,8 @@ export function collectActivityBuckets(state: ActualizationState, dealerRows: De
       pushEv(events, {
         kind: "photo",
         atMs: t,
-        userId: ph.uploadedBy,
-        userName: resolveUserName(ph.uploadedBy, ph.uploadedByName, dealerById, { dealerId: dealerForTp }),
+        userId: phActorTp,
+        userName: resolveUserName(phActorTp, ph.uploadedByName, dealerById, { dealerId: dealerForTp }),
         label: `Загрузил фото торговой точки`,
         tradePointId: tpId,
         dealerId: dealerForTp,
@@ -508,7 +567,8 @@ export function collectActivityBuckets(state: ActualizationState, dealerRows: De
         sh.entrancePortals != null ||
         sh.interiorPortals != null);
     if (!filled) continue;
-    if (!normalizeText(sh.updatedBy)) {
+    const shActor = normalizeText(sh.updatedBy) || src;
+    if (!shActor) {
       pushEv(excludedTechnical, {
         kind: "showcase",
         atMs: t,
@@ -523,8 +583,8 @@ export function collectActivityBuckets(state: ActualizationState, dealerRows: De
     pushEv(events, {
       kind: "showcase",
       atMs: t,
-      userId: sh.updatedBy,
-      userName: resolveUserName(sh.updatedBy, sh.updatedByName, dealerById, { dealerId: sh.dealerId }),
+      userId: shActor,
+      userName: resolveUserName(shActor, sh.updatedByName, dealerById, { dealerId: sh.dealerId }),
       label: `Заполнил витрину ТТ`,
       dealerId: sh.dealerId,
       tradePointId: sh.tradePointId,
@@ -534,7 +594,7 @@ export function collectActivityBuckets(state: ActualizationState, dealerRows: De
   for (const c of Object.values(state.dealerActualizationContactsById)) {
     const t = isoToMs(c.updatedAt) ?? isoToMs(c.createdAt);
     if (t == null) continue;
-    const uid = normalizeText(c.updatedBy);
+    const uid = normalizeText(c.updatedBy) || src;
     if (!uid) continue;
     pushEv(events, {
       kind: "contact",
@@ -551,7 +611,8 @@ export function collectActivityBuckets(state: ActualizationState, dealerRows: De
     for (const task of tasks) {
       const t = isoToMs(task.createdAt);
       if (t == null) continue;
-      if (!normalizeText(task.createdBy)) {
+      const taskActor = normalizeText(task.createdBy) || src;
+      if (!taskActor) {
         pushEv(excludedTechnical, {
           kind: "matrix_task",
           atMs: t,
@@ -566,8 +627,8 @@ export function collectActivityBuckets(state: ActualizationState, dealerRows: De
       pushEv(events, {
         kind: "matrix_task",
         atMs: t,
-        userId: task.createdBy,
-        userName: resolveUserName(task.createdBy, task.createdByName, dealerById, { dealerId: task.dealerId }),
+        userId: taskActor,
+        userName: resolveUserName(taskActor, task.createdByName, dealerById, { dealerId: task.dealerId }),
         label: `Задача по матрице: ${normalizeText(task.productName) || "без названия"}`,
         dealerId: task.dealerId,
         tradePointId: task.tradePointId,
@@ -575,6 +636,24 @@ export function collectActivityBuckets(state: ActualizationState, dealerRows: De
     }
   }
 
+  events.sort((a, b) => b.atMs - a.atMs);
+  excludedTechnical.sort((a, b) => b.atMs - a.atMs);
+  return { events, excludedTechnical };
+}
+
+export type ActivitySourceSnapshot = { userId: string; state: ActualizationState };
+
+/** Сбор событий по каждому снимку state с атрибуцией владельцу userId (РОП / директор). */
+export function collectActivityBucketsFromSources(sources: ActivitySourceSnapshot[], dealerRows: DealerRow[]): ActivityCollection {
+  const events: ActivityEvent[] = [];
+  const excludedTechnical: ActivityEvent[] = [];
+  for (const { userId, state } of sources) {
+    const uid = normalizeText(userId);
+    if (!uid) continue;
+    const bucket = collectActivityBuckets(state, dealerRows, { activitySourceUserId: uid });
+    events.push(...bucket.events);
+    excludedTechnical.push(...bucket.excludedTechnical);
+  }
   events.sort((a, b) => b.atMs - a.atMs);
   excludedTechnical.sort((a, b) => b.atMs - a.atMs);
   return { events, excludedTechnical };
@@ -734,7 +813,9 @@ export function aggregateByManager(events: ActivityEvent[], roster: SalesUser[])
     a.displayName = ev.userName || a.displayName;
     a.totalActions += 1;
     a.score += bumpScore(ev.kind);
-    a.lastAtMs = Math.max(a.lastAtMs, ev.atMs);
+    if (ev.atMs !== ACTIVITY_NO_CALENDAR_TIME_MS) {
+      a.lastAtMs = Math.max(a.lastAtMs, ev.atMs);
+    }
     switch (ev.kind) {
       case "manual_dealer":
         a.createdDealers += 1;
@@ -773,7 +854,13 @@ export function aggregateByManager(events: ActivityEvent[], roster: SalesUser[])
     }
   }
 
-  return Array.from(byUser.values()).sort((x, y) => y.score - x.score || y.lastAtMs - x.lastAtMs);
+  return Array.from(byUser.values()).sort(
+    (x, y) =>
+      y.createdDealers - x.createdDealers ||
+      y.addedTradePoints - x.addedTradePoints ||
+      y.lastAtMs - x.lastAtMs ||
+      y.score - x.score,
+  );
 }
 
 export function activityStatusForManager(row: ManagerActivityAgg): "active" | "weak" | "none" {
@@ -795,6 +882,7 @@ export type DayBucket = {
 export function bucketEventsByDay(events: ActivityEvent[]): DayBucket[] {
   const map = new Map<string, DayBucket>();
   for (const ev of events) {
+    if (ev.atMs === ACTIVITY_NO_CALENDAR_TIME_MS) continue;
     const d = new Date(ev.atMs);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     let b = map.get(key);
@@ -828,12 +916,18 @@ export type ActivityDashboardKpiScope = {
   scopedDealerIds: Set<string>;
 };
 
+export type ComputeTopKpisOptions = {
+  /** События с типом «все», уже отфильтрованы по периоду и географии дашборда. */
+  kpiBaseEvents?: ActivityEvent[];
+};
+
 export function computeTopKpis(
   state: ActualizationState,
   profile: ReleaseDemoProfile,
   range: { startMs: number; endMs: number } | null,
   managerAggs: ManagerActivityAgg[],
   kpiScope: ActivityDashboardKpiScope,
+  options?: ComputeTopKpisOptions,
 ): KpiTop {
   const inScope = (dealerId: string | undefined): boolean => {
     const id = normalizeText(dealerId);
@@ -842,55 +936,95 @@ export function computeTopKpis(
   };
 
   let manualDealers = 0;
-  for (const d of Object.values(state.manuallyCreatedDealersById)) {
-    if (!inScope(d.id)) continue;
-    if (state.archivedDealersById[d.id]) continue;
-    const t = isoToMs(d.createdAt);
-    if (t != null && inActivityRange(t, range)) manualDealers += 1;
-  }
   let updatedDealers = 0;
-  for (const ov of Object.values(state.dealerOverridesById)) {
-    if (!inScope(ov.dealerId)) continue;
-    const t = isoToMs(ov.updatedAt);
-    if (t != null && inActivityRange(t, range)) updatedDealers += 1;
-  }
   let manualTradePoints = 0;
-  for (const tp of Object.values(state.manuallyCreatedTradePointsById)) {
-    if (!inScope(tp.dealerId)) continue;
-    if (state.archivedDealersById[tp.dealerId]) continue;
-    if (state.archivedTradePointsById[tp.id]) continue;
-    const t = isoToMs(tp.createdAt);
-    if (t != null && inActivityRange(t, range)) manualTradePoints += 1;
-  }
   let legalTouches = 0;
-  for (const [dealerId, st] of Object.entries(state.legalEntityOverridesByDealerId)) {
-    if (!inScope(dealerId)) continue;
-    for (const raw of Object.values(st?.overridesById ?? {})) {
-      if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
-      const o = raw as Record<string, unknown>;
-      if (!legalEntityActorRaw(o, st)) continue;
-      const t = isoToMs((o.updatedAt as string) || (o.createdAt as string));
-      if (t != null && inActivityRange(t, range)) legalTouches += 1;
-    }
-  }
   let photos = 0;
-  for (const [dealerId, list] of Object.entries(state.dealerPhotosByDealerId)) {
-    if (!inScope(dealerId)) continue;
-    for (const ph of list ?? []) {
-      if (ph.archivedAt) continue;
-      const t = isoToMs(ph.uploadedAt);
-      if (t != null && inActivityRange(t, range)) photos += 1;
+
+  const fromEv = options?.kpiBaseEvents;
+  if (fromEv != null) {
+    const md = new Set<string>();
+    const ud = new Set<string>();
+    const mtp = new Set<string>();
+    for (const e of fromEv) {
+      const dealerId = resolvedEventDealerId(e, state) ?? e.dealerId;
+      const did = normalizeText(dealerId);
+      if (!did || !inScope(did)) continue;
+      if (e.kind === "manual_dealer" && !state.archivedDealersById[did]) md.add(did);
+      else if (e.kind === "dealer_updated") ud.add(did);
+      else if (
+        e.kind === "manual_trade_point" &&
+        e.tradePointId &&
+        !state.archivedDealersById[did] &&
+        !state.archivedTradePointsById[e.tradePointId]
+      ) {
+        mtp.add(e.tradePointId);
+      } else if (e.kind === "legal_entity") {
+        legalTouches += 1;
+      } else if (e.kind === "photo") {
+        photos += 1;
+      }
     }
-  }
-  for (const [tpId, list] of Object.entries(state.tradePointPhotosByTradePointId)) {
-    for (const ph of list ?? []) {
-      if (ph.archivedAt) continue;
-      const t = isoToMs(ph.uploadedAt);
-      if (t == null || !inActivityRange(t, range)) continue;
-      const dealerForTp =
-        state.manuallyCreatedTradePointsById[tpId]?.dealerId ?? state.tradePointShowcaseActualizationById[tpId]?.dealerId;
-      if (!inScope(dealerForTp)) continue;
-      photos += 1;
+    manualDealers = md.size;
+    updatedDealers = ud.size;
+    manualTradePoints = mtp.size;
+  } else {
+    for (const d of Object.values(state.manuallyCreatedDealersById)) {
+      if (!inScope(d.id)) continue;
+      if (state.archivedDealersById[d.id]) continue;
+      const t = firstResolvedActivityMs(d.createdAt, d.updatedAt);
+      if (t == null) {
+        if (range != null) continue;
+        manualDealers += 1;
+      } else if (inActivityRange(t, range)) {
+        manualDealers += 1;
+      }
+    }
+    for (const ov of Object.values(state.dealerOverridesById)) {
+      if (!inScope(ov.dealerId)) continue;
+      const t = isoToMs(ov.updatedAt);
+      if (t != null && inActivityRange(t, range)) updatedDealers += 1;
+    }
+    for (const tp of Object.values(state.manuallyCreatedTradePointsById)) {
+      if (!inScope(tp.dealerId)) continue;
+      if (state.archivedDealersById[tp.dealerId]) continue;
+      if (state.archivedTradePointsById[tp.id]) continue;
+      const t = firstResolvedActivityMs(tp.createdAt, tp.updatedAt);
+      if (t == null) {
+        if (range != null) continue;
+        manualTradePoints += 1;
+      } else if (inActivityRange(t, range)) {
+        manualTradePoints += 1;
+      }
+    }
+    for (const [dealerId, st] of Object.entries(state.legalEntityOverridesByDealerId)) {
+      if (!inScope(dealerId)) continue;
+      for (const raw of Object.values(st?.overridesById ?? {})) {
+        if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+        const o = raw as Record<string, unknown>;
+        if (!legalEntityActorRaw(o, st)) continue;
+        const t = isoToMs((o.updatedAt as string) || (o.createdAt as string));
+        if (t != null && inActivityRange(t, range)) legalTouches += 1;
+      }
+    }
+    for (const [dealerId, list] of Object.entries(state.dealerPhotosByDealerId)) {
+      if (!inScope(dealerId)) continue;
+      for (const ph of list ?? []) {
+        if (ph.archivedAt) continue;
+        const t = isoToMs(ph.uploadedAt);
+        if (t != null && inActivityRange(t, range)) photos += 1;
+      }
+    }
+    for (const [tpId, list] of Object.entries(state.tradePointPhotosByTradePointId)) {
+      for (const ph of list ?? []) {
+        if (ph.archivedAt) continue;
+        const t = isoToMs(ph.uploadedAt);
+        if (t == null || !inActivityRange(t, range)) continue;
+        const dealerForTp =
+          state.manuallyCreatedTradePointsById[tpId]?.dealerId ?? state.tradePointShowcaseActualizationById[tpId]?.dealerId;
+        if (!inScope(dealerForTp)) continue;
+        photos += 1;
+      }
     }
   }
 
@@ -914,7 +1048,11 @@ export function computeTopKpis(
     }
   }
 
-  const activeManagers = managerAggs.filter((m) => m.totalActions > 0).length;
+  const meaningfulTouches = (m: ManagerActivityAgg) =>
+    m.updatedDealers + m.updatedTradePoints + m.legalEntities + m.photos + m.showcases + m.contacts;
+  const activeManagers = managerAggs.filter(
+    (m) => m.createdDealers > 0 || m.addedTradePoints > 0 || meaningfulTouches(m) > 0,
+  ).length;
 
   return {
     manualDealers,
@@ -990,6 +1128,157 @@ export function computeQualityMetrics(state: ActualizationState, profile: Releas
     tradePointsWithPhotoPct: pct(tpPhoto, tpTot),
     tradePointsShowcaseFilledPct: pct(tpShow, tpTot),
   };
+}
+
+export type ContributionAddedClientRow = {
+  dealerId: string;
+  title: string;
+  city: string;
+  inn: string;
+  savedAtLabel: string;
+  tradePointCount: number;
+  hasExplicitDate: boolean;
+  activitySortMs: number;
+};
+
+export type ContributionAddedTradePointRow = {
+  tradePointId: string;
+  dealerId: string;
+  tpTitle: string;
+  dealerTitle: string;
+  city: string;
+  address: string;
+  phone: string;
+  savedAtLabel: string;
+  hasExplicitDate: boolean;
+  activitySortMs: number;
+};
+
+/** Фильтры дашборда без выбора конкретного менеджера (для списков в диалоге вкладок). */
+export type DashboardGeoFilterPack = {
+  act: ActualizationState;
+  scopedDealerIds: Set<string>;
+  ropTeamId: string | "__all__";
+  regionalManager: string | "__all__";
+  city: string | "__all__";
+  dealerById: Map<string, DealerRow>;
+};
+
+export function passesContributionGeoFilters(
+  dealerId: string,
+  pack: DashboardGeoFilterPack,
+  manualCityFallback?: string,
+): boolean {
+  if (!pack.scopedDealerIds.has(dealerId)) return false;
+  if (pack.act.archivedDealersById[dealerId]) return false;
+  if (pack.ropTeamId !== "__all__") {
+    const row = pack.dealerById.get(dealerId);
+    if (row && row.releaseTeamId !== pack.ropTeamId) return false;
+  }
+  if (pack.regionalManager !== "__all__") {
+    const row = pack.dealerById.get(dealerId);
+    const rm = row ? getDealerRegionalManagerDisplay(row) : "";
+    if (rm !== pack.regionalManager) return false;
+  }
+  if (pack.city !== "__all__") {
+    const row = pack.dealerById.get(dealerId);
+    const cRow = row?.city;
+    const c = normalizeText(cRow || manualCityFallback);
+    if (c !== pack.city) return false;
+  }
+  return true;
+}
+
+export function listContributionAddedClientsForManager(
+  managerId: string,
+  sources: ActivitySourceSnapshot[],
+  pack: DashboardGeoFilterPack,
+  range: { startMs: number; endMs: number } | null,
+): ContributionAddedClientRow[] {
+  const uid = normalizeText(managerId);
+  const snap = sources.find((s) => normalizeText(s.userId) === uid);
+  if (!snap) return [];
+  const st = snap.state;
+  const out: ContributionAddedClientRow[] = [];
+  for (const d of Object.values(st.manuallyCreatedDealersById)) {
+    const f = (d.fields ?? {}) as Record<string, unknown>;
+    const cityMan = strField(f, "city");
+    if (!passesContributionGeoFilters(d.id, pack, cityMan)) continue;
+    const atMs = resolveManualEntityActivityMs(d.createdAt, d.updatedAt, st.updatedAt, { useSnapshotFallback: true });
+    if (!inActivityRange(atMs, range)) continue;
+    const row = pack.dealerById.get(d.id);
+    const title = strField(f, "name") || row?.name || d.internalCode || d.id;
+    const city = normalizeText(row?.city) || cityMan || "—";
+    const inn = normalizeText(strField(f, "inn")) || normalizeText(row?.actualizationInn) || "—";
+    const tpCount = Object.values(st.manuallyCreatedTradePointsById).filter(
+      (tp) => tp.dealerId === d.id && !st.archivedTradePointsById[tp.id],
+    ).length;
+    const label =
+      atMs === ACTIVITY_NO_CALENDAR_TIME_MS ? "дата не указана" : new Date(atMs).toLocaleString("ru-RU");
+    out.push({
+      dealerId: d.id,
+      title,
+      city,
+      inn,
+      savedAtLabel: label,
+      tradePointCount: tpCount,
+      hasExplicitDate: atMs !== ACTIVITY_NO_CALENDAR_TIME_MS,
+      activitySortMs: atMs === ACTIVITY_NO_CALENDAR_TIME_MS ? 0 : atMs,
+    });
+  }
+  return out.sort((a, b) => b.activitySortMs - a.activitySortMs || a.title.localeCompare(b.title, "ru"));
+}
+
+export function listContributionAddedTradePointsForManager(
+  managerId: string,
+  sources: ActivitySourceSnapshot[],
+  pack: DashboardGeoFilterPack,
+  range: { startMs: number; endMs: number } | null,
+): ContributionAddedTradePointRow[] {
+  const uid = normalizeText(managerId);
+  const snap = sources.find((s) => normalizeText(s.userId) === uid);
+  if (!snap) return [];
+  const st = snap.state;
+  const out: ContributionAddedTradePointRow[] = [];
+  for (const tp of Object.values(st.manuallyCreatedTradePointsById)) {
+    const f = (tp.fields ?? {}) as Record<string, unknown>;
+    const cityMan = strField(f, "city");
+    if (!passesContributionGeoFilters(tp.dealerId, pack, cityMan)) continue;
+    if (st.archivedTradePointsById[tp.id]) continue;
+    const atMs = resolveManualEntityActivityMs(tp.createdAt, tp.updatedAt, st.updatedAt, { useSnapshotFallback: true });
+    if (!inActivityRange(atMs, range)) continue;
+    const row = pack.dealerById.get(tp.dealerId);
+    const tpTitle = strField(f, "name") || strField(f, "title") || tp.internalCode || tp.id;
+    const dealerTitle = row?.name ?? tp.dealerId;
+    const city = normalizeText(row?.city) || cityMan || "—";
+    const address = strField(f, "address") || "—";
+    const phone = strField(f, "contactPhone") || strField(f, "phone") || "—";
+    const label =
+      atMs === ACTIVITY_NO_CALENDAR_TIME_MS ? "дата не указана" : new Date(atMs).toLocaleString("ru-RU");
+    out.push({
+      tradePointId: tp.id,
+      dealerId: tp.dealerId,
+      tpTitle,
+      dealerTitle,
+      city,
+      address,
+      phone,
+      savedAtLabel: label,
+      hasExplicitDate: atMs !== ACTIVITY_NO_CALENDAR_TIME_MS,
+      activitySortMs: atMs === ACTIVITY_NO_CALENDAR_TIME_MS ? 0 : atMs,
+    });
+  }
+  return out.sort((a, b) => b.activitySortMs - a.activitySortMs || a.tpTitle.localeCompare(b.tpTitle, "ru"));
+}
+
+export function managerTeamAndRopLabel(managerId: string): string {
+  const u = getSalesUserById(managerId);
+  if (!u?.teamId) return "—";
+  const team = getTeamById(u.teamId);
+  const tl = getTeamLeadForTeam(u.teamId);
+  const teamPart = team?.name ?? u.teamId;
+  const rop = tl?.name ? `РОП: ${tl.name}` : "";
+  return rop ? `${teamPart} · ${rop}` : teamPart;
 }
 
 export type ProblemLine = { id: string; severity: "info"; text: string };

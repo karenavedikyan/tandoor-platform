@@ -3,7 +3,7 @@
  * РОП / директор — объединение GET /api/actualization/state по userId команды.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchActualizationStateByUserId } from "@/lib/client-base-actualization-api";
 import type { ActualizationState } from "@/lib/client-base-actualization-state";
 import { createEmptyActualizationState } from "@/lib/client-base-actualization-state";
@@ -14,6 +14,7 @@ import {
   mergeActualizationStatesForActivityDashboard,
   resolveActualizationDashboardSourceUserIds,
 } from "@/lib/client-base-actualization-team-state-merge";
+import type { ActivitySourceSnapshot } from "@/lib/client-base-activity-metrics";
 
 export type ActivityDataSourcesDiagnostics = {
   mode: "self" | "team";
@@ -66,6 +67,7 @@ export function useClientBaseActivityTeamState(params: {
   contextState: ActualizationState;
 }): {
   activityState: ActualizationState;
+  activitySources: ActivitySourceSnapshot[];
   diagnostics: ActivityDataSourcesDiagnostics;
   teamLoading: boolean;
   teamError?: string;
@@ -82,6 +84,7 @@ export function useClientBaseActivityTeamState(params: {
   );
   const [teamLoading, setTeamLoading] = useState(isTeamMode && enabled);
   const [teamError, setTeamError] = useState<string | undefined>();
+  const [teamSourceSnapshots, setTeamSourceSnapshots] = useState<ActivitySourceSnapshot[]>([]);
 
   const loadTeam = useCallback(async () => {
     if (!enabled || !isTeamMode) return;
@@ -112,6 +115,7 @@ export function useClientBaseActivityTeamState(params: {
     }
     const merged = mergeActualizationStatesForActivityDashboard(parts);
     setActivityState(merged);
+    setTeamSourceSnapshots(parts);
     setDiagnostics({
       mode: "team",
       requestedUserIds: ids,
@@ -133,6 +137,7 @@ export function useClientBaseActivityTeamState(params: {
     if (enabled) return;
     setActivityState(createEmptyActualizationState());
     setDiagnostics(emptyDiag([]));
+    setTeamSourceSnapshots([]);
     setTeamLoading(false);
     setTeamError(undefined);
   }, [enabled]);
@@ -141,6 +146,7 @@ export function useClientBaseActivityTeamState(params: {
     if (!enabled || isTeamMode) return;
     setActivityState(contextState);
     setDiagnostics(selfDiag(profile, contextState));
+    setTeamSourceSnapshots([]);
     setTeamLoading(false);
     setTeamError(undefined);
   }, [enabled, isTeamMode, contextState, profile]);
@@ -154,5 +160,13 @@ export function useClientBaseActivityTeamState(params: {
     await loadTeam();
   }, [loadTeam]);
 
-  return { activityState, diagnostics, teamLoading, teamError, refreshTeam };
+  const activitySources = useMemo((): ActivitySourceSnapshot[] => {
+    if (!enabled) return [];
+    const uid = profile.personaUserId.trim();
+    if (!uid) return [];
+    if (isTeamMode) return teamSourceSnapshots;
+    return [{ userId: uid, state: contextState }];
+  }, [enabled, isTeamMode, teamSourceSnapshots, contextState, profile.personaUserId]);
+
+  return { activityState, activitySources, diagnostics, teamLoading, teamError, refreshTeam };
 }

@@ -3,7 +3,7 @@
  */
 
 import type { ReactElement, ReactNode } from "react";
-import { Component, useMemo, useRef, useState } from "react";
+import { Component, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -18,12 +18,14 @@ import {
   YAxis,
 } from "recharts";
 import { BarChart3 } from "lucide-react";
+import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -45,23 +47,54 @@ import { getManagersForRopTeam, getRopOptions, isRopOrManagerAllFilter } from "@
 import { cn } from "@/lib/utils";
 import {
   ACTIVITY_UNKNOWN_DISPLAY,
+  ACTIVITY_NO_CALENDAR_TIME_MS,
   activityChartManagerLabel,
   aggregateByManager,
   activityPeriodToRange,
   activityStatusForManager,
   bucketEventsByDay,
-  collectActivityBuckets,
+  collectActivityBucketsFromSources,
   computeProblemLines,
   computeQualityMetrics,
   computeTopKpis,
   filterEventsForDashboard,
   isActivityUnknownUserId,
+  listContributionAddedClientsForManager,
+  listContributionAddedTradePointsForManager,
+  managerTeamAndRopLabel,
   normalizeText,
   previousActivityRange,
   type ActivityEvent,
   type ActivityPeriodPreset,
   type ActivityTypeFilter,
+  type DashboardGeoFilterPack,
+  type ManagerActivityAgg,
 } from "@/lib/client-base-activity-metrics";
+
+type ContributionQuickFilter = "all" | "with_additions" | "no_activity" | "has_clients" | "has_tps";
+
+function meaningfulManagerTouches(m: ManagerActivityAgg): number {
+  return m.updatedDealers + m.updatedTradePoints + m.legalEntities + m.photos + m.showcases + m.contacts;
+}
+
+function passesContributionQuickFilter(m: ManagerActivityAgg, f: ContributionQuickFilter): boolean {
+  const adds = m.createdDealers > 0 || m.addedTradePoints > 0;
+  const touch = meaningfulManagerTouches(m);
+  switch (f) {
+    case "all":
+      return true;
+    case "with_additions":
+      return adds || touch > 0;
+    case "no_activity":
+      return m.totalActions === 0;
+    case "has_clients":
+      return m.createdDealers > 0;
+    case "has_tps":
+      return m.addedTradePoints > 0;
+    default:
+      return true;
+  }
+}
 
 const PERIOD_LABELS: Record<ActivityPeriodPreset, string> = {
   today: "Сегодня",
@@ -86,6 +119,11 @@ function deltaLabel(cur: number, prev: number): string {
   const d = Math.round(((cur - prev) / prev) * 100);
   if (d === 0) return "0% к пред. периоду";
   return `${d > 0 ? "+" : ""}${d}% к пред. периоду`;
+}
+
+function formatManagerLastActivity(lastAtMs: number): string {
+  if (lastAtMs <= 0) return "—";
+  return new Date(lastAtMs).toLocaleString("ru-RU");
 }
 
 type ActivityBoundaryState = { error: Error | null };
@@ -206,11 +244,13 @@ function ClientBaseActivityDashboardInner(): ReactElement {
   const [city, setCity] = useState<string>("__all__");
   const [typeFilter, setTypeFilter] = useState<ActivityTypeFilter>("all");
   const [onlyActiveManagers, setOnlyActiveManagers] = useState(false);
+  const [contributionQuickFilter, setContributionQuickFilter] = useState<ContributionQuickFilter>("all");
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(true);
   const [detailManagerId, setDetailManagerId] = useState<string | null>(null);
+  const [detailTab, setDetailTab] = useState<string>("clients");
   const managersSectionRef = useRef<HTMLDivElement | null>(null);
 
-  const { activityState, diagnostics, teamLoading, teamError } = useClientBaseActivityTeamState({
+  const { activityState, activitySources, diagnostics, teamLoading, teamError } = useClientBaseActivityTeamState({
     enabled: actx.enabled,
     profile,
     dashboardRopTeamId: ropTeam,
@@ -247,7 +287,10 @@ function ClientBaseActivityDashboardInner(): ReactElement {
 
   const roster = useMemo(() => getManagersForRopTeam(isRopOrManagerAllFilter(ropTeam) ? undefined : ropTeam), [ropTeam]);
 
-  const activityBuckets = useMemo(() => collectActivityBuckets(state, mergedAll), [state, mergedAll]);
+  const activityBuckets = useMemo(() => {
+    if (activitySources.length === 0) return { events: [] as ActivityEvent[], excludedTechnical: [] as ActivityEvent[] };
+    return collectActivityBucketsFromSources(activitySources, mergedAll);
+  }, [activitySources, mergedAll]);
   const allEvents = activityBuckets.events;
 
   const range = useMemo(() => activityPeriodToRange(period), [period]);
@@ -264,6 +307,27 @@ function ClientBaseActivityDashboardInner(): ReactElement {
       dealerById,
     }),
     [state, scopedIds, ropTeam, managerId, regionalManager, city, dealerById],
+  );
+
+  const kpiBaseEvents = useMemo(
+    () => filterEventsForDashboard(allEvents, range, "all", filterOptsBase),
+    [allEvents, range, filterOptsBase],
+  );
+
+  const prevKpiBaseEvents = useMemo(
+    () =>
+      prevRange
+        ? filterEventsForDashboard(allEvents, prevRange, "all", {
+            act: state,
+            scopedDealerIds: scopedIds,
+            ropTeamId: ropTeam,
+            managerId,
+            regionalManager,
+            city,
+            dealerById,
+          })
+        : [],
+    [allEvents, prevRange, state, scopedIds, ropTeam, managerId, regionalManager, city, dealerById],
   );
 
   const filteredEvents = useMemo(
@@ -298,21 +362,85 @@ function ClientBaseActivityDashboardInner(): ReactElement {
     [managerRows, onlyActiveManagers],
   );
 
+  const contributionFilteredManagers = useMemo(
+    () => visibleManagers.filter((m) => passesContributionQuickFilter(m, contributionQuickFilter)),
+    [visibleManagers, contributionQuickFilter],
+  );
+
+  const managerRowsAllTypes = useMemo(() => aggregateByManager(kpiBaseEvents, roster), [kpiBaseEvents, roster]);
+
+  const prevManagerRowsAllTypes = useMemo(
+    () => (prevRange ? aggregateByManager(prevKpiBaseEvents, roster) : []),
+    [prevRange, prevKpiBaseEvents, roster],
+  );
+
   const kpiScope = useMemo(() => ({ scopedDealerIds: scopedIds }), [scopedIds]);
 
   const kpis = useMemo(
-    () => computeTopKpis(state, profile, range, managerRows, kpiScope),
-    [state, profile, range, managerRows, kpiScope],
+    () => computeTopKpis(state, profile, range, managerRowsAllTypes, kpiScope, { kpiBaseEvents }),
+    [state, profile, range, managerRowsAllTypes, kpiScope, kpiBaseEvents],
   );
   const prevKpis = useMemo(
     () =>
-      prevRange ? computeTopKpis(state, profile, prevRange, aggregateByManager(prevFiltered, roster), kpiScope) : null,
-    [state, profile, prevRange, prevFiltered, roster, kpiScope],
+      prevRange
+        ? computeTopKpis(state, profile, prevRange, prevManagerRowsAllTypes, kpiScope, {
+            kpiBaseEvents: prevKpiBaseEvents,
+          })
+        : null,
+    [state, profile, prevRange, prevManagerRowsAllTypes, kpiScope, prevKpiBaseEvents],
   );
 
   const byDay = useMemo(() => bucketEventsByDay(filteredEvents), [filteredEvents]);
   const quality = useMemo(() => computeQualityMetrics(state, profile, scopedRows), [state, profile, scopedRows]);
   const problems = useMemo(() => computeProblemLines(state, profile, scopedRows), [state, profile, scopedRows]);
+
+  const geoPack: DashboardGeoFilterPack = useMemo(
+    () => ({
+      act: state,
+      scopedDealerIds: scopedIds,
+      ropTeamId: ropTeam,
+      regionalManager,
+      city,
+      dealerById,
+    }),
+    [state, scopedIds, ropTeam, regionalManager, city, dealerById],
+  );
+
+  const detailAddedClients = useMemo(() => {
+    if (!detailManagerId) return [];
+    return listContributionAddedClientsForManager(detailManagerId, activitySources, geoPack, range);
+  }, [detailManagerId, activitySources, geoPack, range]);
+
+  const detailAddedTradePoints = useMemo(() => {
+    if (!detailManagerId) return [];
+    return listContributionAddedTradePointsForManager(detailManagerId, activitySources, geoPack, range);
+  }, [detailManagerId, activitySources, geoPack, range]);
+
+  const detailUpdateEvents = useMemo(() => {
+    if (!detailManagerId) return [];
+    return filteredEvents.filter(
+      (e) =>
+        e.userId === detailManagerId &&
+        e.kind !== "manual_dealer" &&
+        e.kind !== "manual_trade_point" &&
+        e.kind !== "photo" &&
+        e.kind !== "showcase" &&
+        e.kind !== "matrix_task",
+    );
+  }, [detailManagerId, filteredEvents]);
+
+  const detailMediaEvents = useMemo(() => {
+    if (!detailManagerId) return [];
+    return filteredEvents.filter(
+      (e) =>
+        e.userId === detailManagerId &&
+        (e.kind === "photo" || e.kind === "showcase" || e.kind === "matrix_task"),
+    );
+  }, [detailManagerId, filteredEvents]);
+
+  useEffect(() => {
+    if (detailManagerId) setDetailTab("clients");
+  }, [detailManagerId]);
 
   const breakdown = useMemo(() => {
     let d = 0;
@@ -336,20 +464,36 @@ function ClientBaseActivityDashboardInner(): ReactElement {
     ].filter((x) => x.value > 0);
   }, [filteredEvents]);
 
-  const managerChartData = useMemo(
+  const managerScoreChartData = useMemo(
     () =>
-      visibleManagers
+      contributionFilteredManagers
         .filter((m) => m.score > 0)
         .slice(0, 12)
         .map((m) => ({ name: activityChartManagerLabel(m), score: m.score, id: m.managerId }))
         .reverse(),
-    [visibleManagers],
+    [contributionFilteredManagers],
   );
 
-  const detailEvents = useMemo(() => {
-    if (!detailManagerId) return [];
-    return filteredEvents.filter((e) => e.userId === detailManagerId).slice(0, 80);
-  }, [detailManagerId, filteredEvents]);
+  const managerClientsTpChartData = useMemo(
+    () =>
+      contributionFilteredManagers
+        .filter((m) => m.createdDealers > 0 || m.addedTradePoints > 0)
+        .map((m) => ({
+          name: activityChartManagerLabel(m),
+          clients: m.createdDealers,
+          tradePoints: m.addedTradePoints,
+          id: m.managerId,
+        }))
+        .sort((a, b) => b.clients + b.tradePoints - (a.clients + a.tradePoints))
+        .slice(0, 14)
+        .reverse(),
+    [contributionFilteredManagers],
+  );
+
+  const noCalendarEventCount = useMemo(
+    () => kpiBaseEvents.filter((e) => e.atMs === ACTIVITY_NO_CALENDAR_TIME_MS).length,
+    [kpiBaseEvents],
+  );
 
   const detailExcludedTechnical = useMemo(() => {
     if (!detailManagerId || !isActivityUnknownUserId(detailManagerId)) return [];
@@ -368,17 +512,15 @@ function ClientBaseActivityDashboardInner(): ReactElement {
   const hasExcludedOnly = filteredEvents.length === 0 && filteredExcludedTechnical.length > 0;
 
   const dataSourcesLine = useMemo(() => {
-    const ids = diagnostics.requestedUserIds;
-    const idsShort =
-      ids.length > 8 ? `${ids.slice(0, 8).join(", ")}… (+${ids.length - 8})` : ids.join(", ") || "—";
-    const modeRu = diagnostics.mode === "team" ? "объединение командных userId" : "текущий пользователь";
-    const fail = diagnostics.failedSnapshots > 0 ? `, ошибок загрузки ${diagnostics.failedSnapshots}` : "";
-    const tech = filteredExcludedTechnical.length;
-    const lu = diagnostics.lastMergedUpdatedAt
-      ? new Date(diagnostics.lastMergedUpdatedAt).toLocaleString("ru-RU")
-      : "—";
-    return `Источники: ${modeRu} · userId: ${idsShort} · снимков state загружено ${diagnostics.loadedSnapshots}/${Math.max(ids.length, 1)}${fail} · manual dealers (сумма по снимкам / после merge): ${diagnostics.sumManualDealersAcrossSources} / ${diagnostics.mergedManualDealers} · manual ТТ (merge): ${diagnostics.mergedManualTradePoints} · технические исключения (в периоде и фильтрах): ${tech} · обновлено (merged updatedAt): ${lu}`;
-  }, [diagnostics, filteredExcludedTechnical.length]);
+    const idsN = Math.max(diagnostics.requestedUserIds.length, 1);
+    const periodLabel = PERIOD_LABELS[period];
+    const fail = diagnostics.failedSnapshots > 0 ? ` · ошибок загрузки: ${diagnostics.failedSnapshots}` : "";
+    const noCal =
+      noCalendarEventCount > 0
+        ? ` · событий без даты (только «Всё время»): ${noCalendarEventCount}`
+        : "";
+    return `Источники: user states ${diagnostics.loadedSnapshots}/${idsN}${fail} · manual dealers ${diagnostics.mergedManualDealers} · manual ТТ ${diagnostics.mergedManualTradePoints} · период: ${periodLabel} · техн. исключения в фильтрах: ${filteredExcludedTechnical.length}${noCal}`;
+  }, [diagnostics, period, filteredExcludedTechnical.length, noCalendarEventCount]);
 
   const showManagersAccountsHint =
     diagnostics.mode === "team" &&
@@ -389,18 +531,18 @@ function ClientBaseActivityDashboardInner(): ReactElement {
     diagnostics.mergedManualTradePoints === 0;
 
   const activeManagersCaption = useMemo(() => {
-    if (!hasFilteredActivity) return "Нет активности за период";
-    const activeRows = managerRows.filter((m) => m.totalActions > 0);
-    if (activeRows.length === 0) return "Нет активности за период";
+    if (kpis.activeManagers === 0) return "Нет активности за период";
+    const activeRows = managerRowsAllTypes.filter(
+      (m) => m.createdDealers > 0 || m.addedTradePoints > 0 || meaningfulManagerTouches(m) > 0,
+    );
     const known = activeRows.filter((m) => !isActivityUnknownUserId(m.managerId));
-    const hasUnknown = activeRows.some((m) => isActivityUnknownUserId(m.managerId));
     if (known.length > 0) {
       const first = known[0].displayName;
       return known.length === 1 ? `Например: ${first}` : `Например: ${first} и др.`;
     }
-    if (hasUnknown) return "Есть активность без автора";
+    if (activeRows.some((m) => isActivityUnknownUserId(m.managerId))) return "Есть активность без автора";
     return "Нет активности за период";
-  }, [hasFilteredActivity, managerRows]);
+  }, [kpis.activeManagers, managerRowsAllTypes]);
 
   const scrollToManagersSection = (): void => {
     managersSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -612,7 +754,7 @@ function ClientBaseActivityDashboardInner(): ReactElement {
       </Collapsible>
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard title="Клиентов создано" value={kpis.manualDealers} hint={prevKpis ? deltaLabel(kpis.manualDealers, prevKpis.manualDealers) : undefined} />
+        <KpiCard title="Клиентов добавлено" value={kpis.manualDealers} hint={prevKpis ? deltaLabel(kpis.manualDealers, prevKpis.manualDealers) : undefined} />
         <KpiCard title="Клиентов обновлено" value={kpis.updatedDealers} hint={prevKpis ? deltaLabel(kpis.updatedDealers, prevKpis.updatedDealers) : undefined} />
         <KpiCard title="ТТ добавлено" value={kpis.manualTradePoints} hint={prevKpis ? deltaLabel(kpis.manualTradePoints, prevKpis.manualTradePoints) : undefined} />
         <KpiCard title="Юрлиц (изменения)" value={kpis.legalTouches} hint={prevKpis ? deltaLabel(kpis.legalTouches, prevKpis.legalTouches) : undefined} />
@@ -627,19 +769,41 @@ function ClientBaseActivityDashboardInner(): ReactElement {
         id="section-activity-managers"
         className="scroll-mt-4 rounded-2xl border border-border/80 bg-card shadow-sm"
       >
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Активность по менеджерам</CardTitle>
+        <CardHeader className="space-y-2 pb-2">
+          <CardTitle className="text-base">Сводка по менеджерам</CardTitle>
+          <div className="flex flex-wrap gap-2">
+            {(
+              [
+                ["all", "Все"],
+                ["with_additions", "С добавлениями"],
+                ["no_activity", "Без активности"],
+                ["has_clients", "Есть клиенты"],
+                ["has_tps", "Есть ТТ"],
+              ] as const
+            ).map(([key, label]) => (
+              <Button
+                key={key}
+                type="button"
+                size="sm"
+                variant={contributionQuickFilter === key ? "default" : "outline"}
+                className="h-8 text-xs"
+                onClick={() => setContributionQuickFilter(key)}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
         </CardHeader>
         <CardContent className="overflow-x-auto p-0 sm:p-4">
           {isMobile ? (
             <div className="flex flex-col gap-2 p-3">
-              {visibleManagers.map((m) => {
+              {contributionFilteredManagers.map((m) => {
                 const unknown = isActivityUnknownUserId(m.managerId);
                 return (
                   <div
                     key={m.managerId}
                     className="rounded-xl border border-border bg-card p-3 shadow-sm"
-                    data-testid={`row-activity-manager-${m.managerId}`}
+                    data-testid={`card-manager-contribution-${m.managerId}`}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1 space-y-1">
@@ -655,7 +819,7 @@ function ClientBaseActivityDashboardInner(): ReactElement {
                         ) : (
                           <p className="font-semibold text-foreground">{m.displayName}</p>
                         )}
-                        <p className="text-xs text-muted-foreground">{m.teamLabel}</p>
+                        <p className="text-xs text-muted-foreground">{managerTeamAndRopLabel(m.managerId)}</p>
                       </div>
                       <div className="flex shrink-0 flex-col items-end gap-2">
                         <Badge
@@ -676,44 +840,54 @@ function ClientBaseActivityDashboardInner(): ReactElement {
                           size="sm"
                           className="h-auto px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 hover:text-primary"
                           onClick={() => setDetailManagerId(m.managerId)}
-                          data-testid={`btn-activity-manager-detail-${m.managerId}`}
+                          data-testid={`button-manager-contribution-open-${m.managerId}`}
                         >
-                          Детали
+                          Открыть
                         </Button>
                       </div>
                     </div>
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      Действий: {m.totalActions} · score: {m.score}
+                    <p className="mt-2 text-xs text-muted-foreground" data-testid={`text-manager-clients-added-${m.managerId}`}>
+                      Клиенты: {m.createdDealers}
+                    </p>
+                    <p className="text-xs text-muted-foreground" data-testid={`text-manager-trade-points-added-${m.managerId}`}>
+                      ТТ: {m.addedTradePoints}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Обновления: {m.updatedDealers + m.updatedTradePoints + m.legalEntities}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Последняя активность: {formatManagerLastActivity(m.lastAtMs)}
                     </p>
                   </div>
                 );
               })}
             </div>
           ) : (
-            <table className="w-full min-w-[780px] text-sm" data-testid="table-activity-managers">
+            <table className="w-full min-w-[1100px] text-sm" data-testid="table-manager-contribution">
               <thead>
                 <tr className="border-b bg-muted/40 text-left text-[11px] font-semibold uppercase text-muted-foreground">
                   <th className="p-2">Менеджер</th>
-                  <th className="p-2">Зона</th>
-                  <th className="p-2 text-right">Созд. клиентов</th>
-                  <th className="p-2 text-right">Обн. клиентов</th>
-                  <th className="p-2 text-right">ТТ +</th>
-                  <th className="p-2 text-right">ТТ обн.</th>
-                  <th className="p-2 text-right">Юрлица</th>
+                  <th className="p-2">Команда / РОП</th>
+                  <th className="p-2 text-right">Клиентов добавлено</th>
+                  <th className="p-2 text-right">ТТ добавлено</th>
+                  <th className="p-2 text-right">Клиентов обновлено</th>
+                  <th className="p-2 text-right">Юрлиц</th>
                   <th className="p-2 text-right">Фото</th>
                   <th className="p-2 text-right">Витрины</th>
-                  <th className="p-2 text-right">Архивы</th>
-                  <th className="p-2 text-right">Всего</th>
-                  <th className="p-2 text-right">Score</th>
+                  <th className="p-2 text-right">Последняя активность</th>
                   <th className="p-2">Статус</th>
-                  <th className="p-2 text-right"> </th>
+                  <th className="p-2 text-right">Действие</th>
                 </tr>
               </thead>
               <tbody>
-                {visibleManagers.map((m) => {
+                {contributionFilteredManagers.map((m) => {
                   const unknown = isActivityUnknownUserId(m.managerId);
                   return (
-                    <tr key={m.managerId} className="border-b border-border/60 hover:bg-muted/20" data-testid={`row-activity-manager-${m.managerId}`}>
+                    <tr
+                      key={m.managerId}
+                      className="border-b border-border/60 hover:bg-muted/20"
+                      data-testid={`card-manager-contribution-${m.managerId}`}
+                    >
                       <td className="p-2">
                         {unknown ? (
                           <Badge
@@ -728,17 +902,18 @@ function ClientBaseActivityDashboardInner(): ReactElement {
                           <span className="font-medium">{m.displayName}</span>
                         )}
                       </td>
-                      <td className="p-2 text-muted-foreground">{m.teamLabel}</td>
-                      <td className="p-2 text-right tabular-nums">{m.createdDealers}</td>
+                      <td className="max-w-[220px] p-2 text-xs text-muted-foreground">{managerTeamAndRopLabel(m.managerId)}</td>
+                      <td className="p-2 text-right tabular-nums" data-testid={`text-manager-clients-added-${m.managerId}`}>
+                        {m.createdDealers}
+                      </td>
+                      <td className="p-2 text-right tabular-nums" data-testid={`text-manager-trade-points-added-${m.managerId}`}>
+                        {m.addedTradePoints}
+                      </td>
                       <td className="p-2 text-right tabular-nums">{m.updatedDealers}</td>
-                      <td className="p-2 text-right tabular-nums">{m.addedTradePoints}</td>
-                      <td className="p-2 text-right tabular-nums">{m.updatedTradePoints}</td>
                       <td className="p-2 text-right tabular-nums">{m.legalEntities}</td>
                       <td className="p-2 text-right tabular-nums">{m.photos}</td>
                       <td className="p-2 text-right tabular-nums">{m.showcases}</td>
-                      <td className="p-2 text-right tabular-nums">{m.archives}</td>
-                      <td className="p-2 text-right tabular-nums">{m.totalActions}</td>
-                      <td className="p-2 text-right font-semibold tabular-nums text-primary">{m.score}</td>
+                      <td className="p-2 text-right text-xs text-muted-foreground">{formatManagerLastActivity(m.lastAtMs)}</td>
                       <td className="p-2">
                         <Badge
                           variant="outline"
@@ -754,13 +929,13 @@ function ClientBaseActivityDashboardInner(): ReactElement {
                       <td className="p-2 text-right">
                         <Button
                           type="button"
-                          variant="ghost"
+                          variant="outline"
                           size="sm"
-                          className="h-auto px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 hover:text-primary"
+                          className="h-8 text-xs"
                           onClick={() => setDetailManagerId(m.managerId)}
-                          data-testid={`btn-activity-manager-detail-${m.managerId}`}
+                          data-testid={`button-manager-contribution-open-${m.managerId}`}
                         >
-                          Детали
+                          Открыть
                         </Button>
                       </td>
                     </tr>
@@ -802,29 +977,64 @@ function ClientBaseActivityDashboardInner(): ReactElement {
           </CardContent>
         </Card>
 
-        <Card className="rounded-2xl border border-border/80 bg-card shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Активность по менеджерам (score)</CardTitle>
-          </CardHeader>
-          <CardContent className="h-[240px] w-full min-w-0" data-testid="chart-activity-by-manager">
-            {managerChartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart layout="vertical" data={managerChartData} margin={{ top: 4, right: 16, left: 4, bottom: 4 }}>
-                  <CartesianGrid strokeDasharray="3 3" horizontal className="stroke-border/50" />
-                  <XAxis type="number" tick={{ fontSize: 10 }} />
-                  <YAxis type="category" dataKey="name" width={132} tick={{ fontSize: 10 }} />
-                  <Tooltip />
-                  <Bar dataKey="score" fill={primaryFill} radius={[0, 4, 4, 0]} name="Score" />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <ChartEmptyPlaceholder
-                title="Нет данных по менеджерам"
-                text="Нет действий с ненулевым score в выбранном периоде."
-              />
-            )}
-          </CardContent>
-        </Card>
+        <div className="flex min-h-0 flex-col gap-4">
+          <Card className="rounded-2xl border border-border/80 bg-card shadow-sm">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Клиенты и ТТ по менеджерам (добавлено)</CardTitle>
+            </CardHeader>
+            <CardContent className="h-[240px] w-full min-w-0" data-testid="chart-manager-added-clients-trade-points">
+              {managerClientsTpChartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    layout="vertical"
+                    data={managerClientsTpChartData}
+                    margin={{ top: 4, right: 12, left: 4, bottom: 4 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" horizontal className="stroke-border/50" />
+                    <XAxis type="number" tick={{ fontSize: 10 }} />
+                    <YAxis type="category" dataKey="name" width={128} tick={{ fontSize: 10 }} />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="clients" stackId="add" fill="hsl(142 76% 36%)" name="Клиенты" radius={[0, 0, 0, 0]} />
+                    <Bar
+                      dataKey="tradePoints"
+                      stackId="add"
+                      fill="hsl(var(--muted-foreground) / 0.45)"
+                      name="ТТ"
+                      radius={[0, 4, 4, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <ChartEmptyPlaceholder
+                  title="Нет добавлений"
+                  text="В выбранном периоде нет ручных клиентов или торговых точек по менеджерам."
+                />
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-2xl border border-border/80 bg-card shadow-sm">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base text-muted-foreground">Score по менеджерам (вторично)</CardTitle>
+            </CardHeader>
+            <CardContent className="h-[200px] w-full min-w-0" data-testid="chart-activity-by-manager">
+              {managerScoreChartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart layout="vertical" data={managerScoreChartData} margin={{ top: 4, right: 16, left: 4, bottom: 4 }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal className="stroke-border/50" />
+                    <XAxis type="number" tick={{ fontSize: 10 }} />
+                    <YAxis type="category" dataKey="name" width={128} tick={{ fontSize: 10 }} />
+                    <Tooltip />
+                    <Bar dataKey="score" fill={primaryFill} radius={[0, 4, 4, 0]} name="Score" />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <ChartEmptyPlaceholder title="Нет score" text="Нет действий с ненулевым score в выбранном периоде." />
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -907,9 +1117,14 @@ function ClientBaseActivityDashboardInner(): ReactElement {
       </Card>
 
       <Dialog open={detailManagerId != null} onOpenChange={(o) => !o && setDetailManagerId(null)}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto" data-testid="dialog-activity-manager-detail">
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl" data-testid="dialog-manager-contribution-detail">
           <DialogHeader>
-            <DialogTitle>Детали — {detailDialogTitle}</DialogTitle>
+            <DialogTitle>{detailDialogTitle}</DialogTitle>
+            {detailManagerId != null && !isActivityUnknownUserId(detailManagerId) ? (
+              <p className="text-sm text-muted-foreground">
+                {managerTeamAndRopLabel(detailManagerId)} · {PERIOD_LABELS[period]}
+              </p>
+            ) : null}
           </DialogHeader>
           {detailManagerId != null && isActivityUnknownUserId(detailManagerId) ? (
             <div className="space-y-3">
@@ -926,34 +1141,166 @@ function ClientBaseActivityDashboardInner(): ReactElement {
                   </p>
                 </div>
               ) : null}
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Учтённые в рейтинге</p>
+                <ul className="max-h-52 space-y-2 overflow-y-auto text-sm" data-testid="list-activity-manager-events">
+                  {kpiBaseEvents
+                    .filter((e) => isActivityUnknownUserId(e.userId))
+                    .slice(0, 40)
+                    .map((e: ActivityEvent) => (
+                      <li key={e.id} className="border-b border-border/60 pb-2" data-testid={`row-activity-event-${e.id}`}>
+                        <p className="font-medium text-foreground">{e.label}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {e.atMs === ACTIVITY_NO_CALENDAR_TIME_MS
+                            ? "дата не указана"
+                            : new Date(e.atMs).toLocaleString("ru-RU")}
+                        </p>
+                      </li>
+                    ))}
+                </ul>
+              </div>
+              {detailExcludedTechnical.length > 0 ? (
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Не в рейтинге</p>
+                  <ul className="max-h-52 space-y-2 overflow-y-auto text-sm text-muted-foreground">
+                    {detailExcludedTechnical.slice(0, 40).map((e: ActivityEvent) => (
+                      <li key={e.id} className="border-b border-border/40 pb-2" data-testid={`row-activity-excluded-${e.id}`}>
+                        <p>{e.label}</p>
+                        <p className="text-xs">
+                          {e.atMs === ACTIVITY_NO_CALENDAR_TIME_MS
+                            ? "дата не указана"
+                            : new Date(e.atMs).toLocaleString("ru-RU")}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </div>
-          ) : null}
-          <div className="space-y-1">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              {detailManagerId != null && isActivityUnknownUserId(detailManagerId) ? "Учтённые в рейтинге" : "События"}
-            </p>
-            <ul className="space-y-2 text-sm" data-testid="list-activity-manager-events">
-              {detailEvents.map((e: ActivityEvent) => (
-                <li key={e.id} className="border-b border-border/60 pb-2" data-testid={`row-activity-event-${e.id}`}>
-                  <p className="font-medium text-foreground">{e.label}</p>
-                  <p className="text-xs text-muted-foreground">{new Date(e.atMs).toLocaleString("ru-RU")}</p>
-                </li>
-              ))}
-            </ul>
-          </div>
-          {detailManagerId != null && isActivityUnknownUserId(detailManagerId) && detailExcludedTechnical.length > 0 ? (
-            <div className="space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Не в рейтинге</p>
-              <ul className="max-h-52 space-y-2 overflow-y-auto text-sm text-muted-foreground">
-                {detailExcludedTechnical.slice(0, 40).map((e: ActivityEvent) => (
-                  <li key={e.id} className="border-b border-border/40 pb-2" data-testid={`row-activity-excluded-${e.id}`}>
-                    <p>{e.label}</p>
-                    <p className="text-xs">{new Date(e.atMs).toLocaleString("ru-RU")}</p>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
+          ) : (
+            <Tabs value={detailTab} onValueChange={setDetailTab} className="w-full">
+              <TabsList className="grid w-full grid-cols-2 gap-1 sm:grid-cols-4">
+                <TabsTrigger value="clients" className="text-xs" data-testid="tab-manager-added-clients">
+                  Клиенты добавлены
+                </TabsTrigger>
+                <TabsTrigger value="tps" className="text-xs" data-testid="tab-manager-added-trade-points">
+                  ТТ добавлены
+                </TabsTrigger>
+                <TabsTrigger value="updates" className="text-xs">
+                  Обновления
+                </TabsTrigger>
+                <TabsTrigger value="media" className="text-xs">
+                  Фото / витрины
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="clients" className="mt-3 max-h-[52vh] space-y-2 overflow-y-auto pr-1">
+                {detailAddedClients.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Нет клиентов за период и фильтры.</p>
+                ) : (
+                  detailAddedClients.map((c) => (
+                    <div
+                      key={c.dealerId}
+                      className="rounded-lg border border-border/80 bg-muted/10 p-3 text-sm"
+                      data-testid={`card-manager-added-client-${c.dealerId}`}
+                    >
+                      <p className="font-medium text-foreground">{c.title}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {c.city}
+                        {c.inn && c.inn !== "—" ? ` · ИНН ${c.inn}` : ""}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Сохранено: {c.savedAtLabel}
+                        {!c.hasExplicitDate ? " · дата не указана в записи" : ""}
+                      </p>
+                      <p className="text-xs text-muted-foreground">ТТ: {c.tradePointCount}</p>
+                      <Link
+                        href={`/dealers/${encodeURIComponent(c.dealerId)}`}
+                        className="mt-2 inline-block text-xs font-medium text-primary underline-offset-4 hover:underline"
+                        data-testid={`link-manager-added-client-${c.dealerId}`}
+                      >
+                        Открыть клиента
+                      </Link>
+                    </div>
+                  ))
+                )}
+              </TabsContent>
+              <TabsContent value="tps" className="mt-3 max-h-[52vh] space-y-2 overflow-y-auto pr-1">
+                {detailAddedTradePoints.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Нет торговых точек за период и фильтры.</p>
+                ) : (
+                  detailAddedTradePoints.map((tp) => (
+                    <div
+                      key={tp.tradePointId}
+                      className="rounded-lg border border-border/80 bg-muted/10 p-3 text-sm"
+                      data-testid={`card-manager-added-trade-point-${tp.tradePointId}`}
+                    >
+                      <p className="font-medium text-foreground">{tp.tpTitle}</p>
+                      <p className="text-xs text-muted-foreground">Клиент: {tp.dealerTitle}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {tp.city} · {tp.address}
+                      </p>
+                      {tp.phone && tp.phone !== "—" ? <p className="text-xs text-muted-foreground">{tp.phone}</p> : null}
+                      <p className="text-xs text-muted-foreground">
+                        Сохранено: {tp.savedAtLabel}
+                        {!tp.hasExplicitDate ? " · дата не указана в записи" : ""}
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-3">
+                        <Link
+                          href={`/dealers/${encodeURIComponent(tp.dealerId)}/trade-points/${encodeURIComponent(tp.tradePointId)}`}
+                          className="text-xs font-medium text-primary underline-offset-4 hover:underline"
+                          data-testid={`link-manager-added-trade-point-${tp.tradePointId}`}
+                        >
+                          Открыть ТТ
+                        </Link>
+                        <Link
+                          href={`/dealers/${encodeURIComponent(tp.dealerId)}`}
+                          className="text-xs text-muted-foreground underline-offset-4 hover:underline"
+                        >
+                          К клиенту
+                        </Link>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </TabsContent>
+              <TabsContent value="updates" className="mt-3 max-h-[52vh] space-y-2 overflow-y-auto pr-1">
+                {detailUpdateEvents.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Нет обновлений в выбранных фильтрах.</p>
+                ) : (
+                  <ul className="space-y-2 text-sm" data-testid="list-activity-manager-events">
+                    {detailUpdateEvents.slice(0, 120).map((e: ActivityEvent) => (
+                      <li key={e.id} className="border-b border-border/60 pb-2" data-testid={`row-activity-event-${e.id}`}>
+                        <p className="font-medium text-foreground">{e.label}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {e.atMs === ACTIVITY_NO_CALENDAR_TIME_MS
+                            ? "дата не указана"
+                            : new Date(e.atMs).toLocaleString("ru-RU")}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </TabsContent>
+              <TabsContent value="media" className="mt-3 max-h-[52vh] space-y-2 overflow-y-auto pr-1">
+                {detailMediaEvents.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Нет фото и витрин в выбранных фильтрах.</p>
+                ) : (
+                  <ul className="space-y-2 text-sm">
+                    {detailMediaEvents.slice(0, 120).map((e: ActivityEvent) => (
+                      <li key={e.id} className="border-b border-border/60 pb-2">
+                        <p className="font-medium text-foreground">{e.label}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {e.atMs === ACTIVITY_NO_CALENDAR_TIME_MS
+                            ? "дата не указана"
+                            : new Date(e.atMs).toLocaleString("ru-RU")}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </TabsContent>
+            </Tabs>
+          )}
         </DialogContent>
       </Dialog>
     </div>
