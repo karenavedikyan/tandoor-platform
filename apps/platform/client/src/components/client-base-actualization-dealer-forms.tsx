@@ -951,6 +951,17 @@ export type DealerActualizationCreateDialogProps = {
 
 const DEALER_STATUS_OPTIONS: DealerStatus[] = ["активный", "потенциальный", "приостановлен", "требует внимания"];
 
+function clientCategoryFromPassportTier(tier: string): ClientCategoryId {
+  if (tier === "top150" || tier === "top350" || tier === "top500") return tier;
+  return "uncategorized";
+}
+
+function dealerStatusFromPassportLifecycle(lifecycle: string): DealerStatus {
+  if (lifecycle === "needs_review") return "требует внимания";
+  if (lifecycle === "inactive" || lifecycle === "archived") return "приостановлен";
+  return "активный";
+}
+
 export function DealerActualizationCreateDialog(props: DealerActualizationCreateDialogProps): ReactElement {
   const { open, onOpenChange, profile, mergedDealerRows, onCreated } = props;
   const { persist, state } = useClientBaseActualization();
@@ -964,8 +975,6 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
 
   const [name, setName] = useState("");
   const [inn, setInn] = useState("");
-  const [clientCategory, setClientCategory] = useState<ClientCategoryId>("lead");
-  const [status, setStatus] = useState<DealerStatus>("активный");
   const [city, setCity] = useState("");
   const [address, setAddress] = useState("");
   const [shipmentDayId, setShipmentDayId] = useState<DealerShipmentDayId | "">("");
@@ -1034,8 +1043,6 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
     setManagerUserId(profile.personaUserId);
     setName("");
     setInn("");
-    setClientCategory("lead");
-    setStatus("активный");
     setCity("");
     setAddress("");
     setShipmentDayId("");
@@ -1105,6 +1112,8 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
     setSaving(true);
     const uoNum = unloadingOrder.trim() ? Math.floor(Number(unloadingOrder.trim())) : NaN;
     const shipmentLabel = shipmentDayId ? DEALER_SHIPMENT_DAY_LABELS[shipmentDayId] : "";
+    const clientCategory = clientCategoryFromPassportTier(passportCategoryTier);
+    const status = dealerStatusFromPassportLifecycle(passportLifecycleStatus);
     const fields: Record<string, unknown> = {
       name: name.trim(),
       inn: inn.trim(),
@@ -1247,8 +1256,6 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
     inn,
     city,
     address,
-    clientCategory,
-    status,
     managerUserId,
     regionalManager,
     ropName,
@@ -1403,36 +1410,6 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
               <div className="space-y-1.5">
                 <Label className="text-xs">ИНН</Label>
                 <Input data-testid="input-dealer-create-inn" value={inn} onChange={(e) => setInn(e.target.value)} className="min-h-10" />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Категория клиента</Label>
-                <Select value={clientCategory} onValueChange={(v) => setClientCategory(v as ClientCategoryId)}>
-                  <SelectTrigger className="min-h-10">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categoryOptions.map((c) => (
-                      <SelectItem key={c.value} value={String(c.value)}>
-                        {c.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Статус активности</Label>
-                <Select value={status} onValueChange={(v) => setStatus(v as DealerStatus)}>
-                  <SelectTrigger className="min-h-10">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DEALER_STATUS_OPTIONS.map((s) => (
-                      <SelectItem key={s} value={s}>
-                        {s}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Комментарий</Label>
