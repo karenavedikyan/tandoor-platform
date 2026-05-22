@@ -5,6 +5,17 @@
 
 import busboy from "busboy";
 import type { IncomingMessage } from "node:http";
+import type { Readable } from "node:stream";
+
+/** Поток файла из busboy (Readable + флаг обрезки по лимиту). */
+type BusboyMultipartFileStream = Readable & { truncated?: boolean };
+
+/** Заголовки file-part в multipart/form-data (аргумент `info` у события `file`). */
+interface BusboyMultipartFileInfo {
+  encoding: string;
+  mimeType: string;
+  filename: string;
+}
 
 export type ParsedClientBaseUploadMultipart = {
   image?: Buffer;
@@ -31,7 +42,7 @@ export async function parseClientBaseUploadMultipart(req: IncomingMessage): Prom
       limits: { files: 4, fileSize: MAX_FILE_BYTES },
     });
 
-    bb.on("file", (name, file, info) => {
+    bb.on("file", (name: string, file: BusboyMultipartFileStream, info: BusboyMultipartFileInfo) => {
       const field = name === "image" || name === "thumbnail" ? name : null;
       if (!field) {
         file.resume();
