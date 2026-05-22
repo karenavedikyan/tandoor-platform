@@ -183,7 +183,28 @@ function buildClientShowcaseRow(d: DealerRow, i: number): OperationalClientShowc
   };
 }
 
-const CLIENT_SHOWCASE_ROWS: OperationalClientShowcaseRow[] = DEALER_BASE_ROWS.map((d, i) => buildClientShowcaseRow(d, i));
+export function buildOperationalClientShowcaseRowsFromDealers(dealers: DealerRow[]): OperationalClientShowcaseRow[] {
+  return dealers.map((d, i) => buildClientShowcaseRow(d, i));
+}
+
+/** Срезы операционной аналитики по клиентской базе (синтетика поверх `DealerRow[]`). */
+export type OperationalAnalyticsRowSlices = {
+  clientShowcase: OperationalClientShowcaseRow[];
+  showcaseProfit: OperationalShowcaseProfitabilityRow[];
+  hardware: OperationalHardwareConversionRow[];
+  equipment: OperationalEquipmentRow[];
+};
+
+export function buildOperationalAnalyticsRowSlicesFromDealers(dealers: DealerRow[]): OperationalAnalyticsRowSlices {
+  return {
+    clientShowcase: buildOperationalClientShowcaseRowsFromDealers(dealers),
+    showcaseProfit: buildShowcaseProfitRowsFromDealers(dealers),
+    hardware: buildHardwareRowsFromDealers(dealers),
+    equipment: buildEquipmentRowsFromDealers(dealers),
+  };
+}
+
+const STATIC_OPERATIONAL_ROW_SLICES = buildOperationalAnalyticsRowSlicesFromDealers(DEALER_BASE_ROWS);
 
 function cityNameFromFilter(cityId: string): string | null {
   if (cityId === "all") return null;
@@ -230,9 +251,10 @@ export function filterClientShowcaseRows(
   segment: PartnerSegment,
   filters: OperationalGlobalFilters,
   showcaseStatus: ShowcaseCheckStatus | "all",
+  slices: OperationalAnalyticsRowSlices = STATIC_OPERATIONAL_ROW_SLICES,
 ): OperationalClientShowcaseRow[] {
   const cityName = cityNameFromFilter(filters.cityId);
-  return CLIENT_SHOWCASE_ROWS.filter((row) => {
+  return slices.clientShowcase.filter((row) => {
     if (!row.segments.includes(segment)) return false;
     if (!territoryKeepsDealer(filters.territoryId, row.dealerId)) return false;
     if (cityName && row.city !== cityName) return false;
@@ -268,14 +290,15 @@ function attentionFromDealer(d: DealerRow, idx: number): ShowcaseAttentionZone {
   return "high_profit";
 }
 
-const SHOWCASE_PROFIT_ROWS: OperationalShowcaseProfitabilityRow[] = DEALER_BASE_ROWS.flatMap((d, i) => {
-  const base = (parseInt(d.id, 10) || 1) * 1000;
+function buildShowcaseProfitRowsFromDealers(dealers: DealerRow[]): OperationalShowcaseProfitabilityRow[] {
+  return dealers.flatMap((d, i) => {
+    const base = (parseInt(d.id, 10) || 1) * 1000;
   const totalSales = 200 + (i * 41) % 800;
   const showcaseSales = Math.round(totalSales * (0.15 + ((i * 3) % 35) / 100));
   const share = Math.round((showcaseSales / Math.max(1, totalSales)) * 100);
   const score = 40 + (i * 13) % 55;
   const label = score >= 70 ? "Высокая" : score >= 45 ? "Средняя" : "Низкая";
-  const rows: OperationalShowcaseProfitabilityRow[] = [
+  const out: OperationalShowcaseProfitabilityRow[] = [
     {
       rowKey: `${d.id}`,
       dealerId: d.id,
@@ -293,34 +316,36 @@ const SHOWCASE_PROFIT_ROWS: OperationalShowcaseProfitabilityRow[] = DEALER_BASE_
       attentionZone: attentionFromDealer(d, i),
     },
   ];
-  if (d.tradePoints[1]) {
-    const tp = d.tradePoints[1];
-    rows.push({
-      rowKey: `${d.id}-${tp.id}`,
-      dealerId: d.id,
-      tradePointId: tp.id,
-      clientName: `${d.name} · ${tp.name}`,
-      city: tp.city,
-      clientCategory: d.clientCategory,
-      ourShowcases: 1,
-      competitorShowcases: i % 4,
-      totalSales: Math.round(totalSales * 0.35),
-      showcaseSales: Math.round(showcaseSales * 0.3),
-      profitabilityLabel: score >= 55 ? "Средняя" : "Низкая",
-      profitabilityScore: Math.max(30, score - 12),
-      shareShowcasePercent: Math.min(100, share + 5),
-      attentionZone: i % 2 === 0 ? "many_competitors" : "low_profit",
-    });
-  }
-  return rows;
-});
+    if (d.tradePoints[1]) {
+      const tp = d.tradePoints[1];
+      out.push({
+        rowKey: `${d.id}-${tp.id}`,
+        dealerId: d.id,
+        tradePointId: tp.id,
+        clientName: `${d.name} · ${tp.name}`,
+        city: tp.city,
+        clientCategory: d.clientCategory,
+        ourShowcases: 1,
+        competitorShowcases: i % 4,
+        totalSales: Math.round(totalSales * 0.35),
+        showcaseSales: Math.round(showcaseSales * 0.3),
+        profitabilityLabel: score >= 55 ? "Средняя" : "Низкая",
+        profitabilityScore: Math.max(30, score - 12),
+        shareShowcasePercent: Math.min(100, share + 5),
+        attentionZone: i % 2 === 0 ? "many_competitors" : "low_profit",
+      });
+    }
+    return out;
+  });
+}
 
 export function filterShowcaseProfitabilityRows(
   filters: OperationalGlobalFilters,
   attention: ShowcaseAttentionZone | "all",
+  slices: OperationalAnalyticsRowSlices = STATIC_OPERATIONAL_ROW_SLICES,
 ): OperationalShowcaseProfitabilityRow[] {
   const cityName = cityNameFromFilter(filters.cityId);
-  return SHOWCASE_PROFIT_ROWS.filter((row) => {
+  return slices.showcaseProfit.filter((row) => {
     if (!territoryKeepsDealer(filters.territoryId, row.dealerId)) return false;
     if (cityName && row.city !== cityName) return false;
     if (filters.dealerCategory !== "all" && row.clientCategory !== filters.dealerCategory) return false;
@@ -336,44 +361,47 @@ function matchesSearchShowcase(row: OperationalShowcaseProfitabilityRow, q: stri
   return row.clientName.toLowerCase().includes(s) || row.city.toLowerCase().includes(s);
 }
 
-const HARDWARE_ROWS: OperationalHardwareConversionRow[] = DEALER_BASE_ROWS.map((d, i) => {
-  const mkSales = 40 + (i * 17) % 220;
+function buildHardwareRowsFromDealers(dealers: DealerRow[]): OperationalHardwareConversionRow[] {
+  return dealers.map((d, i) => {
+    const mkSales = 40 + (i * 17) % 220;
   const hw = Math.round(mkSales * (0.08 + ((i * 5) % 25) / 100));
   const conv = mkSales > 0 ? Math.round((hw / mkSales) * 100) : 0;
   let level: HardwareConversionLevel = "medium";
   if (conv >= 22) level = "high";
   else if (conv < 10) level = "low";
-  if (hw === 0) level = "none";
-  return {
-    dealerId: d.id,
-    clientName: d.name,
-    city: d.city,
-    clientCategory: d.clientCategory,
-    mkSales,
-    hardwareSales: hw,
-    conversionPercent: conv,
-    competitorsSummary: i % 5 === 0 ? "" : i % 2 === 0 ? "Две сильные линейки у конкурентов" : "Точечные замены у локальных поставщиков",
-    topCompetitorModels: i % 3 === 0 ? "Серия X, серия Y" : "Серия Z",
-    reasonNotWithUs:
-      i % 4 === 0
-        ? "Ожидание по срокам поставки"
-        : i % 4 === 1
-          ? "Ценовой коридор"
-          : "Нет выделенной зоны фурнитуры",
-    worksUnderStock: i % 3 !== 0,
-    ourEquipment: i % 5 !== 0,
-    conversionLevel: level,
-  };
-});
+    if (hw === 0) level = "none";
+    return {
+      dealerId: d.id,
+      clientName: d.name,
+      city: d.city,
+      clientCategory: d.clientCategory,
+      mkSales,
+      hardwareSales: hw,
+      conversionPercent: conv,
+      competitorsSummary: i % 5 === 0 ? "" : i % 2 === 0 ? "Две сильные линейки у конкурентов" : "Точечные замены у локальных поставщиков",
+      topCompetitorModels: i % 3 === 0 ? "Серия X, серия Y" : "Серия Z",
+      reasonNotWithUs:
+        i % 4 === 0
+          ? "Ожидание по срокам поставки"
+          : i % 4 === 1
+            ? "Ценовой коридор"
+            : "Нет выделенной зоны фурнитуры",
+      worksUnderStock: i % 3 !== 0,
+      ourEquipment: i % 5 !== 0,
+      conversionLevel: level,
+    };
+  });
+}
 
 export function filterHardwareRows(
   filters: OperationalGlobalFilters,
   conv: HardwareConversionLevel | "all",
   hasCompetitors: boolean | null,
   hasOurEquipment: boolean | null,
+  slices: OperationalAnalyticsRowSlices = STATIC_OPERATIONAL_ROW_SLICES,
 ): OperationalHardwareConversionRow[] {
   const cityName = cityNameFromFilter(filters.cityId);
-  return HARDWARE_ROWS.filter((row) => {
+  return slices.hardware.filter((row) => {
     if (!territoryKeepsDealer(filters.territoryId, row.dealerId)) return false;
     if (cityName && row.city !== cityName) return false;
     if (filters.dealerCategory !== "all" && row.clientCategory !== filters.dealerCategory) return false;
@@ -399,24 +427,26 @@ export function kpiHardware(rows: OperationalHardwareConversionRow[]) {
   return { mk, hw, avg, low };
 }
 
-const EQUIPMENT_ROWS: OperationalEquipmentRow[] = DEALER_BASE_ROWS.flatMap((d, i) => {
-  const lines = [
+function buildEquipmentRowsFromDealers(dealers: DealerRow[]): OperationalEquipmentRow[] {
+  return dealers.flatMap((d, i) => {
+    const lines = [
     { nom: "Стенд выкладки МК", qty: 1 + (i % 2), rub: 180_000 + (i % 7) * 22_000 },
     { nom: "Комплект демонстрационных образцов", qty: 2 + (i % 3), rub: 96_000 + (i % 5) * 14_000 },
   ];
-  return lines.map((line, j) => ({
-    equipmentId: `eq-${d.id}-${j + 1}`,
-    dealerId: d.id,
-    clientName: d.name,
-    city: d.city,
-    nomenclature: line.nom,
-    quantity: line.qty,
-    amountRub: line.rub,
-    realizationDate: `${8 + ((i + j) % 20)}.04.2026`,
-    avgMonthlyOrderRub: 420_000 + ((i + j) % 12) * 35_000,
-    contractDocLabel: `Договор поставки №${d.id}-EQ-${j + 1}`,
-  }));
-});
+    return lines.map((line, j) => ({
+      equipmentId: `eq-${d.id}-${j + 1}`,
+      dealerId: d.id,
+      clientName: d.name,
+      city: d.city,
+      nomenclature: line.nom,
+      quantity: line.qty,
+      amountRub: line.rub,
+      realizationDate: `${8 + ((i + j) % 20)}.04.2026`,
+      avgMonthlyOrderRub: 420_000 + ((i + j) % 12) * 35_000,
+      contractDocLabel: `Договор поставки №${d.id}-EQ-${j + 1}`,
+    }));
+  });
+}
 
 export type EquipmentPeriodFilter = "all" | "q1" | "q2";
 
@@ -425,9 +455,10 @@ export function filterEquipmentRows(
   dealerId: string | "all",
   nomenclature: string,
   period: EquipmentPeriodFilter,
+  slices: OperationalAnalyticsRowSlices = STATIC_OPERATIONAL_ROW_SLICES,
 ): OperationalEquipmentRow[] {
   const cityName = cityNameFromFilter(filters.cityId);
-  return EQUIPMENT_ROWS.filter((row) => {
+  return slices.equipment.filter((row) => {
     if (!territoryKeepsDealer(filters.territoryId, row.dealerId)) return false;
     if (cityName && row.city !== cityName) return false;
     if (dealerId !== "all" && row.dealerId !== dealerId) return false;
@@ -464,9 +495,12 @@ export const OPERATIONAL_PRODUCT_LINE_OPTIONS: { value: OperationalProductLineKe
 ];
 
 /** Все клиенты витрин по глобальным фильтрам (без фильтра по сегменту). */
-export function filterClientShowcaseRowsAllSegments(filters: OperationalGlobalFilters): OperationalClientShowcaseRow[] {
+export function filterClientShowcaseRowsAllSegments(
+  filters: OperationalGlobalFilters,
+  slices: OperationalAnalyticsRowSlices = STATIC_OPERATIONAL_ROW_SLICES,
+): OperationalClientShowcaseRow[] {
   const cityName = cityNameFromFilter(filters.cityId);
-  return CLIENT_SHOWCASE_ROWS.filter((row) => {
+  return slices.clientShowcase.filter((row) => {
     if (!territoryKeepsDealer(filters.territoryId, row.dealerId)) return false;
     if (cityName && row.city !== cityName) return false;
     if (filters.dealerCategory !== "all" && row.clientCategory !== filters.dealerCategory) return false;
@@ -500,6 +534,7 @@ export type InfographicClientSegmentCard = {
 
 export function getInfographicClientSegmentCards(
   filters: OperationalGlobalFilters = OPERATIONAL_DEFAULT_GLOBAL_FILTERS,
+  slices: OperationalAnalyticsRowSlices = STATIC_OPERATIONAL_ROW_SLICES,
 ): InfographicClientSegmentCard[] {
   const labels: Record<PartnerSegment, string> = {
     top500: "ТОП 500",
@@ -508,7 +543,7 @@ export function getInfographicClientSegmentCards(
   };
   const order: PartnerSegment[] = ["top500", "fiveHundredPlus", "tandoorClub"];
   return order.map((segment) => {
-    const rows = filterClientShowcaseRows(segment, filters, "all");
+    const rows = filterClientShowcaseRows(segment, filters, "all", slices);
     const k = kpiForClientShowcase(rows);
     return {
       segment,
@@ -535,8 +570,9 @@ export type InfographicProfitabilityBar = {
 export function getInfographicShowcaseProfitabilityBars(
   filters: OperationalGlobalFilters = OPERATIONAL_DEFAULT_GLOBAL_FILTERS,
   limit = 10,
+  slices: OperationalAnalyticsRowSlices = STATIC_OPERATIONAL_ROW_SLICES,
 ): InfographicProfitabilityBar[] {
-  const rows = filterShowcaseProfitabilityRows(filters, "all");
+  const rows = filterShowcaseProfitabilityRows(filters, "all", slices);
   const byDealer = new Map<string, OperationalShowcaseProfitabilityRow>();
   for (const r of rows) {
     if (!r.tradePointId) byDealer.set(r.dealerId, r);
@@ -559,8 +595,9 @@ export function getInfographicShowcaseProfitabilityBars(
 export function getInfographicShowcaseRiskClients(
   filters: OperationalGlobalFilters = OPERATIONAL_DEFAULT_GLOBAL_FILTERS,
   limit = 6,
+  slices: OperationalAnalyticsRowSlices = STATIC_OPERATIONAL_ROW_SLICES,
 ): OperationalShowcaseProfitabilityRow[] {
-  const rows = filterShowcaseProfitabilityRows(filters, "all");
+  const rows = filterShowcaseProfitabilityRows(filters, "all", slices);
   const risky = rows.filter((r) => r.attentionZone !== "high_profit");
   const seen = new Set<string>();
   const out: OperationalShowcaseProfitabilityRow[] = [];
@@ -573,16 +610,20 @@ export function getInfographicShowcaseRiskClients(
   return out;
 }
 
-export function getInfographicHardwareOperationalKpi(filters: OperationalGlobalFilters = OPERATIONAL_DEFAULT_GLOBAL_FILTERS) {
-  const rows = filterHardwareRows(filters, "all", null, null);
+export function getInfographicHardwareOperationalKpi(
+  filters: OperationalGlobalFilters = OPERATIONAL_DEFAULT_GLOBAL_FILTERS,
+  slices: OperationalAnalyticsRowSlices = STATIC_OPERATIONAL_ROW_SLICES,
+) {
+  const rows = filterHardwareRows(filters, "all", null, null, slices);
   return kpiHardware(rows);
 }
 
 export function getInfographicHardwareRiskClients(
   filters: OperationalGlobalFilters = OPERATIONAL_DEFAULT_GLOBAL_FILTERS,
   limit = 5,
+  slices: OperationalAnalyticsRowSlices = STATIC_OPERATIONAL_ROW_SLICES,
 ): OperationalHardwareConversionRow[] {
-  const rows = filterHardwareRows(filters, "all", null, null).filter(
+  const rows = filterHardwareRows(filters, "all", null, null, slices).filter(
     (r) => r.conversionLevel === "low" || r.conversionLevel === "none",
   );
   const seen = new Set<string>();
@@ -600,8 +641,9 @@ export type InfographicEquipmentNomenclatureBar = { name: string; quantity: numb
 
 export function getInfographicEquipmentNomenclatureBars(
   filters: OperationalGlobalFilters = OPERATIONAL_DEFAULT_GLOBAL_FILTERS,
+  slices: OperationalAnalyticsRowSlices = STATIC_OPERATIONAL_ROW_SLICES,
 ): InfographicEquipmentNomenclatureBar[] {
-  const rows = filterEquipmentRows(filters, "all", "", "all");
+  const rows = filterEquipmentRows(filters, "all", "", "all", slices);
   const map = new Map<string, { quantity: number; amountRub: number }>();
   for (const r of rows) {
     const cur = map.get(r.nomenclature) ?? { quantity: 0, amountRub: 0 };
@@ -626,8 +668,9 @@ export type InfographicEquipmentClientCard = {
 export function getInfographicEquipmentTopClients(
   filters: OperationalGlobalFilters = OPERATIONAL_DEFAULT_GLOBAL_FILTERS,
   limit = 6,
+  slices: OperationalAnalyticsRowSlices = STATIC_OPERATIONAL_ROW_SLICES,
 ): InfographicEquipmentClientCard[] {
-  const rows = filterEquipmentRows(filters, "all", "", "all");
+  const rows = filterEquipmentRows(filters, "all", "", "all", slices);
   const byDealer = new Map<string, InfographicEquipmentClientCard>();
   for (const r of rows) {
     const cur =
@@ -671,8 +714,9 @@ function pct(part: number, total: number): number {
 
 export function getInfographicCitySegments(
   filters: OperationalGlobalFilters = OPERATIONAL_DEFAULT_GLOBAL_FILTERS,
+  slices: OperationalAnalyticsRowSlices = STATIC_OPERATIONAL_ROW_SLICES,
 ): InfographicCitySegment[] {
-  const rows = filterClientShowcaseRowsAllSegments(filters);
+  const rows = filterClientShowcaseRowsAllSegments(filters, slices);
   const byCity = new Map<string, OperationalClientShowcaseRow[]>();
   for (const r of rows) {
     const arr = byCity.get(r.city) ?? [];
@@ -726,8 +770,9 @@ export function getInfographicShowcaseModels(
   filters: OperationalGlobalFilters = OPERATIONAL_DEFAULT_GLOBAL_FILTERS,
   line: "mk" | "vh",
   limit = 8,
+  slices: OperationalAnalyticsRowSlices = STATIC_OPERATIONAL_ROW_SLICES,
 ): InfographicShowcaseModelRow[] {
-  const rows = filterClientShowcaseRowsAllSegments(filters);
+  const rows = filterClientShowcaseRowsAllSegments(filters, slices);
   type Agg = { label: string; clients: Set<string>; sales: number; convSum: number; convN: number; units: number };
   const map = new Map<string, Agg>();
   for (const r of rows) {
@@ -770,22 +815,27 @@ export function getInfographicShowcaseModels(
 export function getProfitabilityTradePointIdForDealer(
   dealerId: string,
   filters: OperationalGlobalFilters = OPERATIONAL_DEFAULT_GLOBAL_FILTERS,
+  slices: OperationalAnalyticsRowSlices = STATIC_OPERATIONAL_ROW_SLICES,
 ): string | undefined {
-  const row = filterShowcaseProfitabilityRows(filters, "all").find(
+  const row = filterShowcaseProfitabilityRows(filters, "all", slices).find(
     (r) => r.dealerId === dealerId && r.tradePointId,
   );
   return row?.tradePointId;
 }
 
 /** Первая позиция фурнитуры на витрине клиента — для ссылки в блоке конверсии. */
-export function getHardwareProductIdForDealer(dealerId: string): string | undefined {
-  return CLIENT_SHOWCASE_ROWS.find((r) => r.dealerId === dealerId)?.hardwareModels[0]?.productId;
+export function getHardwareProductIdForDealer(
+  dealerId: string,
+  slices: OperationalAnalyticsRowSlices = STATIC_OPERATIONAL_ROW_SLICES,
+): string | undefined {
+  return slices.clientShowcase.find((r) => r.dealerId === dealerId)?.hardwareModels[0]?.productId;
 }
 
 /** Первая строка оборудования клиента (для диалога «договор»). */
 export function getFirstEquipmentRowForDealer(
   dealerId: string,
   filters: OperationalGlobalFilters = OPERATIONAL_DEFAULT_GLOBAL_FILTERS,
+  slices: OperationalAnalyticsRowSlices = STATIC_OPERATIONAL_ROW_SLICES,
 ): OperationalEquipmentRow | undefined {
-  return filterEquipmentRows(filters, "all", "", "all").find((r) => r.dealerId === dealerId);
+  return filterEquipmentRows(filters, "all", "", "all", slices).find((r) => r.dealerId === dealerId);
 }

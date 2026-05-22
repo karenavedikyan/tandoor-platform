@@ -650,6 +650,19 @@ export function collectActivityBuckets(
 
 export type ActivitySourceSnapshot = { userId: string; state: ActualizationState };
 
+/** Диагностика источников для дашборда активности и team context. */
+export type ActivityDataSourcesDiagnostics = {
+  mode: "self" | "team";
+  requestedUserIds: string[];
+  loadedSnapshots: number;
+  failedSnapshots: number;
+  emptySnapshots: number;
+  sumManualDealersAcrossSources: number;
+  mergedManualDealers: number;
+  mergedManualTradePoints: number;
+  lastMergedUpdatedAt: string | null;
+};
+
 /** Сбор событий по каждому снимку state с атрибуцией владельцу userId (РОП / директор). */
 export function collectActivityBucketsFromSources(sources: ActivitySourceSnapshot[], dealerRows: DealerRow[]): ActivityCollection {
   const events: ActivityEvent[] = [];

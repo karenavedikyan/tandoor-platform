@@ -36,12 +36,18 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
+import { useOptionalClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { useClientBaseActivityTeamState } from "@/hooks/use-client-base-activity-team-state";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { createEmptyActualizationState } from "@/lib/client-base-actualization-state";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
-import { roleScopedDealerRows } from "@/lib/dealer-base-role-views";
+import {
+  initialRopManagerForProfile,
+  mapSalesRoleToDealerBaseAccess,
+  roleScopedDealerRows,
+} from "@/lib/dealer-base-role-views";
+import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
 import { getDealerRegionalManagerDisplay } from "@/lib/dealer-base-mock-data";
 import { getManagersForRopTeam, getRopOptions, isRopOrManagerAllFilter } from "@/lib/rop-manager-filters";
 import { getSalesUserById, getTeamById } from "@/lib/sales-control-data";
@@ -356,10 +362,16 @@ export default function ClientBaseActivityDashboardPage(): ReactElement {
 function ClientBaseActivityDashboardInner(): ReactElement {
   const actx = useClientBaseActualization();
   const { profile } = useReleaseDemoProfile();
+  const teamCtx = useOptionalClientBaseTeamActualization();
+  const access = useMemo(() => mapSalesRoleToDealerBaseAccess(profile.role), [profile.role]);
+  const teamPlane = Boolean(actx.enabled && shouldUseTeamMergedActualizationPlane(profile));
   const isMobile = useIsMobile();
 
   const [period, setPeriod] = useState<ActivityPeriodPreset>("7d");
-  const [ropTeam, setRopTeam] = useState<string>("__all__");
+  const [ropTeam, setRopTeam] = useState<string>(() => {
+    const d = initialRopManagerForProfile(profile, mapSalesRoleToDealerBaseAccess(profile.role)).ropTeam;
+    return d === "all" ? "__all__" : d;
+  });
   const [managerId, setManagerId] = useState<string>("__all__");
   const [regionalManager, setRegionalManager] = useState<string>("__all__");
   const [city, setCity] = useState<string>("__all__");
@@ -386,6 +398,15 @@ function ClientBaseActivityDashboardInner(): ReactElement {
     return "flat";
   });
   const [expandedRopIds, setExpandedRopIds] = useState<Set<string>>(() => new Set());
+
+  useEffect(() => {
+    if (teamPlane && teamCtx) {
+      setRopTeam(isRopOrManagerAllFilter(teamCtx.dashboardRopTeamId) ? "__all__" : teamCtx.dashboardRopTeamId);
+      return;
+    }
+    const d = initialRopManagerForProfile(profile, access).ropTeam;
+    setRopTeam(d === "all" ? "__all__" : d);
+  }, [teamPlane, teamCtx?.dashboardRopTeamId, profile, access]);
 
   const { activityState, activitySources, diagnostics, teamLoading, teamError } = useClientBaseActivityTeamState({
     enabled: actx.enabled,
@@ -914,7 +935,15 @@ function ClientBaseActivityDashboardInner(): ReactElement {
                 <Label className="text-xs" style={{ color: C.muted }}>
                   РОП / команда
                 </Label>
-                <Select value={ropTeam} onValueChange={setRopTeam}>
+                <Select
+                  value={ropTeam}
+                  onValueChange={(v) => {
+                    setRopTeam(v);
+                    if (teamPlane && teamCtx && profile.role === "sales_director") {
+                      teamCtx.publishDashboardRopTeamId(isRopOrManagerAllFilter(v) ? "all" : v);
+                    }
+                  }}
+                >
                   <SelectTrigger className="min-h-10 border bg-white" data-testid="select-activity-rop" style={{ borderColor: C.border, color: C.text }}>
                     <SelectValue placeholder="Все команды" />
                   </SelectTrigger>

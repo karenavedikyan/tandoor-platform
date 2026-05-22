@@ -14,19 +14,11 @@ import {
   mergeActualizationStatesForActivityDashboard,
   resolveActualizationDashboardSourceUserIds,
 } from "@/lib/client-base-actualization-team-state-merge";
-import type { ActivitySourceSnapshot } from "@/lib/client-base-activity-metrics";
+import type { ActivityDataSourcesDiagnostics, ActivitySourceSnapshot } from "@/lib/client-base-activity-metrics";
+import { useOptionalClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
+import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
 
-export type ActivityDataSourcesDiagnostics = {
-  mode: "self" | "team";
-  requestedUserIds: string[];
-  loadedSnapshots: number;
-  failedSnapshots: number;
-  emptySnapshots: number;
-  sumManualDealersAcrossSources: number;
-  mergedManualDealers: number;
-  mergedManualTradePoints: number;
-  lastMergedUpdatedAt: string | null;
-};
+export type { ActivityDataSourcesDiagnostics } from "@/lib/client-base-activity-metrics";
 
 function emptyDiag(ids: string[]): ActivityDataSourcesDiagnostics {
   return {
@@ -74,6 +66,11 @@ export function useClientBaseActivityTeamState(params: {
   refreshTeam: () => Promise<void>;
 } {
   const { enabled, profile, dashboardRopTeamId, contextState } = params;
+  const teamCtx = useOptionalClientBaseTeamActualization();
+  const fromSharedContext = Boolean(
+    teamCtx && enabled && shouldUseTeamMergedActualizationPlane(profile),
+  );
+
   const isTeamMode = profile.role === "sales_director" || profile.role === "team_lead";
 
   const [activityState, setActivityState] = useState<ActualizationState>(() =>
@@ -87,7 +84,7 @@ export function useClientBaseActivityTeamState(params: {
   const [teamSourceSnapshots, setTeamSourceSnapshots] = useState<ActivitySourceSnapshot[]>([]);
 
   const loadTeam = useCallback(async () => {
-    if (!enabled || !isTeamMode) return;
+    if (!enabled || !isTeamMode || fromSharedContext) return;
     setTeamLoading(true);
     setTeamError(undefined);
     const ids = resolveActualizationDashboardSourceUserIds(profile, dashboardRopTeamId);
@@ -131,42 +128,79 @@ export function useClientBaseActivityTeamState(params: {
       setTeamError(`Не удалось загрузить часть state (${failed} из ${ids.length}).`);
     }
     setTeamLoading(false);
-  }, [enabled, isTeamMode, profile, dashboardRopTeamId]);
+  }, [enabled, isTeamMode, fromSharedContext, profile, dashboardRopTeamId]);
 
   useEffect(() => {
+    if (fromSharedContext) return;
     if (enabled) return;
     setActivityState(createEmptyActualizationState());
     setDiagnostics(emptyDiag([]));
     setTeamSourceSnapshots([]);
     setTeamLoading(false);
     setTeamError(undefined);
-  }, [enabled]);
+  }, [fromSharedContext, enabled]);
 
   useEffect(() => {
+    if (fromSharedContext) return;
     if (!enabled || isTeamMode) return;
     setActivityState(contextState);
     setDiagnostics(selfDiag(profile, contextState));
     setTeamSourceSnapshots([]);
     setTeamLoading(false);
     setTeamError(undefined);
-  }, [enabled, isTeamMode, contextState, profile]);
+  }, [fromSharedContext, enabled, isTeamMode, contextState, profile]);
 
   useEffect(() => {
+    if (fromSharedContext) return;
     if (!enabled || !isTeamMode) return;
     void loadTeam();
-  }, [enabled, isTeamMode, loadTeam]);
+  }, [fromSharedContext, enabled, isTeamMode, loadTeam]);
 
   const refreshTeam = useCallback(async () => {
+    if (fromSharedContext && teamCtx) {
+      await teamCtx.refresh();
+      return;
+    }
     await loadTeam();
-  }, [loadTeam]);
+  }, [fromSharedContext, teamCtx, loadTeam]);
 
   const activitySources = useMemo((): ActivitySourceSnapshot[] => {
     if (!enabled) return [];
+    if (fromSharedContext && teamCtx) return teamCtx.activitySourceSnapshots;
     const uid = profile.personaUserId.trim();
     if (!uid) return [];
     if (isTeamMode) return teamSourceSnapshots;
     return [{ userId: uid, state: contextState }];
-  }, [enabled, isTeamMode, teamSourceSnapshots, contextState, profile.personaUserId]);
+  }, [
+    enabled,
+    fromSharedContext,
+    teamCtx,
+    isTeamMode,
+    teamSourceSnapshots,
+    contextState,
+    profile.personaUserId,
+  ]);
 
-  return { activityState, activitySources, diagnostics, teamLoading, teamError, refreshTeam };
+  return useMemo(() => {
+    if (fromSharedContext && teamCtx) {
+      return {
+        activityState: teamCtx.mergedState,
+        activitySources,
+        diagnostics: teamCtx.activityDiagnostics,
+        teamLoading: teamCtx.teamFetchLoading,
+        teamError: teamCtx.teamFetchError,
+        refreshTeam,
+      };
+    }
+    return { activityState, activitySources, diagnostics, teamLoading, teamError, refreshTeam };
+  }, [
+    fromSharedContext,
+    teamCtx,
+    activityState,
+    activitySources,
+    diagnostics,
+    teamLoading,
+    teamError,
+    refreshTeam,
+  ]);
 }

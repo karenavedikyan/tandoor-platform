@@ -1,89 +1,96 @@
 # Управленческая плоскость данных клиентской базы (РОП / директор)
 
-Актуализация после влития **PR #195** (`feat(platform): unify ROP and director client-base data plane`).
+Базовая интеграция: **PR #195** (`feat(platform): unify ROP and director client-base data plane`).  
+Follow-up **класса 2** (единый team-fetch, scope dealer-base ↔ trade-points, операционная аналитика по актуализированным строкам, дашборд активности): отдельный PR поверх #195 / документации #196.
 
 ## Назначение
 
 Для ролей `team_lead` и `sales_director` с включённой актуализацией объединённый `ActualizationState` (merge снимков `/api/actualization/state` по менеджерам в scope) должен питать списки и KPI клиентской базы / ТТ / смежных экранов, чтобы не смешивать «только state текущего пользователя» с данными команды.
 
-**`useClientBaseManagementMergedState`** в коде часто передаётся в переменную `managementPlane`; на страницах ниже в таблице колонка «managementPlane» означает именно этот хук (или прямой эквивалент по смыслу).
+**`useClientBaseManagementMergedState`** в коде часто передаётся в переменную `managementPlane`; фактически это тонкая обёртка над **`useClientBaseTeamActualization()`** (единый React-context с merge и refetch).
 
-## Модули
+## Модули (актуально)
 
 - `apps/platform/client/src/lib/client-base-management-scope.ts` — `fetchMergedTeamActualizationForManagement`, `shouldUseTeamMergedActualizationPlane`, обёртки над merge и строками.
-- `apps/platform/client/src/hooks/use-client-base-management-merged-state.ts` — хук: менеджер → `contextState`; РОП/директор → merge + подстановка живого `contextState` для текущего пользователя; `visibilitychange` → refetch команды.
+- `apps/platform/client/src/context/client-base-team-actualization-context.tsx` — **`ClientBaseTeamActualizationProvider`**: один merge на scope команды, `mergedState`, `activitySourceSnapshots` / `activityDiagnostics`, `publishDashboardRopTeamId`, refetch по `visibilitychange`.
+- `apps/platform/client/src/lib/client-base-management-team-scope-storage.ts` — ключ **`tandoor-client-base-management-team-scope-v1`** (localStorage для директора), событие **`tandoor-management-team-scope-v1`**, чтение `?team=` / `?rop=` на `/dealer-base`, `/trade-points`, `/client-base-activity`.
+- `apps/platform/client/src/hooks/use-client-base-management-merged-state.ts` — совместимость API: делегирует в `useClientBaseTeamActualization`.
+- `apps/platform/client/src/hooks/use-client-base-activity-team-state.ts` — при team plane и наличии провайдера **не** дублирует fetch: берёт `mergedState`, `activitySourceSnapshots` и диагностику из контекста.
 
-## Уже подключено к `useClientBaseManagementMergedState` (после PR #195)
+## Follow-up класс 2: что сделано
 
-| Раздел | Файл | Что считается |
-|--------|------|----------------|
-| Навигация, бейджи | `App.tsx` | Клиенты в рабочей базе, число ТТ (через `resolveSidebarWorkingDealerClientCount`, `countWorkingTradePointsForSidebar`) |
-| Главная | `components/main-role-dashboard.tsx` | KPI клиентов / внимание / задачи по витрине (через `buildDealerBaseRowsWithActualization(managementPlane.mergedState, …)`) |
-| Клиентская база | `pages/dealer-base.tsx` | Строки, KPI, сегменты, витрина, архивные флаги, `DealerActualizationCreateDialog` (дубликаты) |
-| Торговые точки | `pages/trade-points.tsx` | Списки ТТ, сводки, bulk-архив (persist по-прежнему через `actx.persist`) |
-| Задачи по витрине | `pages/tasks.tsx` | `allowedDealerIds` из merge; `dashboardRopTeamId` = `ropTeam` страницы (в т.ч. из URL) |
-| Карта клиентов | `pages/client-map.tsx` | Маркеры и список; `dashboardRopTeamId` = `ropTeam` из UI |
+1. **Один механизм загрузки user states команды** — `ClientBaseTeamActualizationProvider` в `App.tsx` (внутри `ClientBaseActualizationProvider`). `useClientBaseActivityTeamState` в режиме team plane использует этот контекст (`activitySources` = `activitySourceSnapshots` провайдера), отдельный параллельный merge отключён.
 
-Ограничение PR #195 (известный follow-up): **сайдбар** использует `initialRopManagerForProfile` (у директора «все команды»), а не hash-фильтр открытой `/dealer-base` — при смене команды на странице бейдж может расходиться с KPI на `/dealer-base`.
+2. **Синхронизация scope команды** — директор: persist выбранной команды в LS + broadcast; стартовый scope из LS или из URL (`team` / `rop`) на страницах управления; `dealer-base`, `trade-points`, сайдбар и дашборд активности вызывают **`publishDashboardRopTeamId`** при смене фильтра команды (где применимо). РОП: scope зафиксирован своей командой. Менеджер: только свой снимок.
 
----
+3. **Операционная аналитика (безопасный шаг)** — в `analytics-operational-data.ts` введены **`buildOperationalAnalyticsRowSlicesFromDealers`** и опциональный аргумент «срез строк» у фильтров. В **`analytics-operational-panel.tsx`** при включённой актуализации и team plane срезы строятся из **`buildDealerBaseRowsWithActualization(teamCtx.mergedState, …)`**; числовые поля витрины/конверсии по-прежнему **синтетика** поверх строк (как и раньше), но **состав клиентов и ТТ** совпадает с merge ЛК. Селект «Клиент» на вкладке оборудования использует тот же набор id.
 
-## Таблица аудита управленческих вкладок (после PR #195)
+4. **Актуализация базы** — селект «РОП / команда» для директора синхронизирован с контекстом (`dashboardRopTeamId` ↔ UI `__all__`); при смене команды вызывается `publishDashboardRopTeamId`.
 
-Легенда колонки **managementPlane**: «Да» = используется `useClientBaseManagementMergedState`; «Аналог» = отдельный хук/поток, но merge team actualization по тем же `userId`, что и дашборд активности; «Нет» = нет merge клиентской базы.
+## Закрытые риски (класс 2)
 
-| Раздел | Файл / компонент | Что показывает | Источник данных сейчас | managementPlane | Риск рассинхрона | Что делать дальше |
-|--------|------------------|----------------|------------------------|-------------------|------------------|-------------------|
-| Главная РОП/директора | `main-role-dashboard.tsx` | Клиенты, активные, внимание, задачи, план-график | Merge → `buildDealerBaseRowsWithActualization` | **Да** | Низкий (пока грузится команда — скелет загрузки с учётом team fetch) | Follow-up: подпись scope / синхронизация с hash команды, если понадобится |
-| Клиентская база | `dealer-base.tsx` | Списки, KPI, фильтры, витрина | Merge + `actx.persist` для записи | **Да** | Низкий | Follow-up: единый контекст для сайдбара и страницы |
-| Торговые точки | `trade-points.tsx` | ТТ, KPI вкладки | Merge; `dashboardRopTeamId` = **default** (`initialRopManagerForProfile`), не hash страницы | **Да** | Средний: директор на `/trade-points` всегда тянет scope «как у сайдбара», а не выбранную на `/dealer-base` команду | Подключить `dashboardRopTeamId` к URL/hash или общему store — отдельная задача |
-| Задачи по витрине | `tasks.tsx` | Задачи матрицы по дилерам | Merge; `ropTeam` из state/URL | **Да** | Низкий | — |
-| Карта | `client-map.tsx` | Маркеры, список | Merge + фильтры UI | **Да** | Низкий | — |
-| Актуализация базы | `pages/client-base-activity-dashboard.tsx` | События, рейтинги, детализация, KPI по активности | `useClientBaseActivityTeamState` → `activityState` → `buildDealerBaseRowsWithActualization` | **Аналог** (не тот хук; **двойной** GET team state параллельно с `managementPlane` на других вкладках) | Средний: два независимых fetch/merge; возможны расхождения при отличии логики | Объединить источник с `fetchMergedTeamActualizationForManagement` или поднять React context |
-| Хаб план-факт | `pages/sales-control.tsx` | Навигация по контуру | Статический UI | **Нет** | Нет | Не подключать |
-| Панель директора план-факт | `pages/sales-control-director.tsx` | Планы, факт, валовая прибыль, команды | `useSalesControlStoredState` + `lib/sales-control-data` (local) | **Нет** | Нет относительно актуализации ЛК (другой домен данных) | **Класс 3** — планы продаж; не смешивать с client-base без отдельного ТЗ |
-| Панель РОП план-факт | `pages/sales-control-team-lead.tsx` | То же для команды | local `sales-control` store | **Нет** | Нет | **Класс 3** |
-| Панель менеджера план-факт | `pages/sales-control-manager.tsx` | План/факт менеджера | local store | **Нет** | Нет | **Класс 3** |
-| Таблица планов | `pages/sales-control-plans.tsx` | Сводка планов | local store + агрегаты `sales-control-data` | **Нет** | Нет | **Класс 3** |
-| Выполнение по командам | `pages/sales-control-performance.tsx` | KPI выполнения | local store | **Нет** | Нет | **Класс 3** |
-| Аналитика (общая) | `pages/analytics.tsx` | Продажи, территории, топы | `lib/sales-manager-kpi-data` (мок/демо) | **Нет** | Нет связи с актуализацией клиентов | **Класс 3** или **Класс 4**, если позже стыковать с реальными продажами |
-| Аналитика команды | `pages/analytics-workspace.tsx` | Таблицы по вкладкам | `lib/analytics-workspace-data` (seed + localStorage) | **Нет** | Да, с реальной клиентской базой (ручной/мок контур) | **Класс 3** для текущего прототипа; выравнивание — отдельный продуктовый объём |
-| Операционная аналитика | `components/analytics/analytics-operational-panel.tsx` + `lib/analytics-operational-data.ts` | Витрина, оборудование, конверсии по клиентам | **Статический** `DEALER_BASE_ROWS` при инициализации демо-данных | **Нет** | **Высокий** с `/dealer-base` у РОП/директора (нет actualization overrides) | **Класс 2** — подключать merge только после проектирования; не править вслепую |
-| Каталог | `pages/catalog.tsx` | Каталог продукции | Каталогные данные | **Нет** | Нет управленческих агрегатов клиентов | **Класс 3** |
-| Бейджи навигации | `App.tsx` + `lib/dealer-base-sidebar-client-count.ts` | Счётчики клиентов / ТТ | `managementPlane.mergedState` + ожидание team fetch | **Да** | Средний: не следует за hash команды на `/dealer-base` | Follow-up: опционально синхронизировать scope с hash |
+- Двойной GET team state между «Клиентская база» и «Актуализация базы» при team plane.
+- Расхождение снимков активности и merge для РОП/директора при той же логике `userId`.
+- Директор: несовпадение scope между `/dealer-base` и `/trade-points` и счётчиками сайдбара при сохранённом фильтре команды (без отдельного URL — за счёт LS + события).
+- Операционная панель: полностью статический список клиентов из `DEALER_BASE_ROWS` при наличии актуализированного merge.
+
+## Ограничения (намеренно не трогали или отдельный домен)
+
+- **`analytics.tsx`**, **`analytics-workspace.tsx`**, **sales-control** — без management plane; другие датасеты / планы.
+- **`analytics-infographics-panel.tsx`** — по-прежнему вызывает `getInfographic*` со **статическим** срезом по умолчанию (не подключали к merge в этом шаге).
+- Поля **продаж / конверсии / оборудование** в операционных таблицах остаются **детерминированной синтетикой** от индекса строки; они **не** отражают исторический факт продаж из backend — для этого нужны отдельные API.
+- Реальная аналитика продаж и план-факт из учётных систем — вне объёма client-base merge.
+
+## Таблица: раздел | до | после | проверка
+
+| Раздел | До | После | Проверка |
+|--------|----|---------|----------|
+| Team-fetch РОП/директор | Два потока: `useClientBaseManagementMergedState` и `useClientBaseActivityTeamState` | Один `ClientBaseTeamActualizationProvider` + activity hook читает контекст | Открыть `/dealer-base` и `/client-base-activity`: сеть — один набор запросов state на команду (при той же роли и включённой актуализации). |
+| Актуализация базы / снимки для «кто добавил» | Отдельный merge в хуке | `activitySourceSnapshots` из провайдера | KPI «добавлено вручную» / диалоги детализации согласованы с теми же снимками, что и merge. |
+| Scope директора dealer-base ↔ trade-points | Разный default для trade-points и hash dealer-base | Общий LS + `publishDashboardRopTeamId`; URL `team`/`rop` на обеих страницах | Выбрать команду на `/dealer-base` → открыть `/trade-points`: те же клиенты/ТТ в scope; сброс — снова все команды. |
+| Сайдбар счётчики | Не следовали за выбором команды | `useClientBaseTeamActualization` в `AuthenticatedShell` | Смена команды на dealer-base обновляет бейджи без перезагрузки. |
+| Операционная аналитика | Только `DEALER_BASE_ROWS` | При team plane: срезы из `buildDealerBaseRowsWithActualization(mergedState)` | Под РОП/директором с актуализацией списки клиентов в операционных вкладках совпадают с ЛК по составу id; фильтры страницы не сломаны. |
+| Инфографика аналитики | Статический срез | **Без изменений** (как было) | Убедиться, что блоки инфографики не регрессировали (отдельный контур). |
+
+## Таблица аудита управленческих вкладок (текущее состояние)
+
+Легенда **managementPlane**: «Да» = данные merge через `useClientBaseTeamActualization` / `useClientBaseManagementMergedState`; «Частично» = merge для списков клиентов, но часть метрик — синтетика/мок; «Нет» = другой домен.
+
+| Раздел | Файл / компонент | Источник данных | managementPlane | Примечание |
+|--------|------------------|-----------------|-----------------|------------|
+| Навигация | `App.tsx` | merge + счётчики | **Да** | |
+| Главная | `main-role-dashboard.tsx` | merge → строки | **Да** | |
+| Клиентская база | `dealer-base.tsx` | merge + persist | **Да** | Публикация scope команды |
+| Торговые точки | `trade-points.tsx` | merge | **Да** | Тот же scope, что dealer-base (LS / URL) |
+| Задачи | `tasks.tsx` | merge | **Да** | |
+| Карта | `client-map.tsx` | merge | **Да** | |
+| Актуализация базы | `client-base-activity-dashboard.tsx` | merge + `activitySources` из провайдера | **Да** | Селект команды директора → `publishDashboardRopTeamId` |
+| Операционная аналитика | `analytics-operational-panel.tsx` | merge → срезы операционных строк | **Частично** | Состав клиентов из ЛК; «продажи по витрине» в строках — синтетика |
+| План-факт / прочая аналитика | sales-control, `analytics.tsx`, `analytics-workspace.tsx` | local / мок | **Нет** | Класс 3 |
 
 ---
 
 ## Классификация (сводка)
 
-1. **Уже подключено к `useClientBaseManagementMergedState`:** `App.tsx` (бейджи), `main-role-dashboard`, `dealer-base`, `trade-points`, `tasks`, `client-map`.
+1. **Подключено к team actualization / management plane:** `App.tsx`, `main-role-dashboard`, `dealer-base`, `trade-points`, `tasks`, `client-map`, `client-base-activity-dashboard` (через контекст), операционная панель (срезы строк при team plane).
 
-2. **Нужно подключать / выравнивать с merge (follow-up, не сделано в этом PR):**  
-   - `analytics-operational-data` / `analytics-operational-panel` (сейчас база строк — `DEALER_BASE_ROWS` без актуализации).  
-   - `trade-points`: привязка `dashboardRopTeamId` к выбранной команде, если UX требует паритет с `/dealer-base`.  
-   - Общий контекст или dedupe запросов: `client-base-activity-dashboard` ↔ `useClientBaseManagementMergedState`.
+2. **Следующие follow-up (не класс 2):** инфографика (`analytics-infographics-panel`) на актуализированные строки; любая замена синтетических sales-полей на backend.
 
-3. **Не подключать (другой бизнес-смысл или мок без ЛК актуализации):**  
-   - Все экраны **sales-control** (планы, факт, performance, manager) — локальное хранилище планов.  
-   - **`analytics.tsx`**, **`analytics-workspace.tsx`** в текущем виде — демо/ручной контур.  
-   - **`catalog.tsx`** — каталог без клиентских KPI.
+3. **Не подключать без отдельного ТЗ:** sales-control, `analytics.tsx`, `analytics-workspace`, `catalog` — см. выше.
 
-4. **Нужен backend / нельзя свести только к клиентскому merge:**  
-   - Реальная аналитика продаж и план-факт из учётных систем (сейчас в UI — мок/local). Любая интеграция — отдельные API и контракты, не подмена `ActualizationState`.
+4. **Нужен backend:** фактические продажи, план-факт, исторические заказы.
 
 ---
 
 ## Вкладки, которые **не** должны использовать client-base `managementPlane`
 
-- Весь контур **план-факт / sales-control** (пока данные планов и факта живут в отдельном клиентском store, не в актуализации ЛК).
-- **Аналитика** на базе `sales-manager-kpi-data` и **analytics-workspace** на сидированных строках — до смены доменной модели.
+- Весь контур **план-факт / sales-control**.
+- **`analytics.tsx`**, **`analytics-workspace.tsx`** в текущем виде.
 - Страницы без сущностей «клиент / ТТ / актуализация» (каталог, обучение, заказы и т.д.).
 
 ---
 
 ## Проверки сборки
-
-После изменений в репозитории:
 
 ```bash
 cd apps/platform && npm run check
@@ -94,4 +101,4 @@ cd apps/platform && npm run build
 
 ## Связь с дашбордом активности
 
-`use-client-base-activity-team-state` загружает и мержит те же пользовательские снимки, что и `fetchMergedTeamActualizationForManagement`, но **реализован отдельным хуком** и не подменяет снимок текущего пользователя на живой `contextState` так же, как `useClientBaseManagementMergedState`. Имеет смысл в follow-up свести к одному источнику или к общему провайдеру, чтобы не было двойных запросов и расхождений.
+`use-client-base-activity-team-state` при **`shouldUseTeamMergedActualizationPlane(profile)`** и наличии **`ClientBaseTeamActualizationProvider`** использует **`teamCtx.mergedState`**, **`teamCtx.activitySourceSnapshots`** и **`teamCtx.activityDiagnostics`** — без второго независимого merge. Для менеджера и при выключенной актуализации остаётся прежняя логика (self / пусто).

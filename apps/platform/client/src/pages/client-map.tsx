@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/select";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
-import { useClientBaseManagementMergedState } from "@/hooks/use-client-base-management-merged-state";
+import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { DEALER_BASE_ROWS, type DealerRow } from "@/lib/dealer-base-mock-data";
@@ -122,13 +122,14 @@ export default function ClientMapPage() {
   const routeQs = useRouteSearchParams();
   const routeKey = useMemo(() => routeQs.toString(), [routeQs]);
 
-  const managementPlane = useClientBaseManagementMergedState({
-    enabled: actx.enabled,
-    profile,
-    dashboardRopTeamId: ropTeam,
-    contextState: actx.state,
-  });
-  const teamActualizationPlane = managementPlane.mergedState;
+  const teamCtx = useClientBaseTeamActualization();
+  const teamActualizationPlane = teamCtx.mergedState;
+  const { publishDashboardRopTeamId } = teamCtx;
+
+  useEffect(() => {
+    if (access !== "sales_director" && access !== "team_lead") return;
+    publishDashboardRopTeamId(ropTeam);
+  }, [ropTeam, access, publishDashboardRopTeamId]);
 
   useEffect(() => {
     const d = initialRopManagerForProfile(profile, access);

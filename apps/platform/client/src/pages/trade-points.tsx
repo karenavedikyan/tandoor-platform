@@ -49,7 +49,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { DealerBulkDeleteCheckbox } from "@/components/dealer-bulk-delete-checkbox";
 import { ShowcaseCoverPhotoSlot } from "@/components/showcase-cover-photo-slot";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
-import { useClientBaseManagementMergedState } from "@/hooks/use-client-base-management-merged-state";
+import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { mergeActualizationState, createEmptyActualizationState } from "@/lib/client-base-actualization-state";
@@ -70,7 +70,6 @@ import { getClientCategoryLabel, type ClientCategoryId } from "@/lib/client-cate
 import type { DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import { cn } from "@/lib/utils";
 import { useCurrentUser } from "@/hooks/use-current-user";
-import { initialRopManagerForProfile, mapSalesRoleToDealerBaseAccess } from "@/lib/dealer-base-role-views";
 
 /** Плотность отображения списка торговых точек (как «Витрина дилеров»). */
 type TradePointShowcaseDensity = "large" | "grid" | "list" | "table";
@@ -244,18 +243,8 @@ export default function TradePointsPage(): ReactElement {
   const { profile } = useReleaseDemoProfile();
   const { user } = useCurrentUser();
   const isMobile = useIsMobile();
-  const dealerBaseAccess = useMemo(() => mapSalesRoleToDealerBaseAccess(profile.role), [profile.role]);
-  const tradePointsDashboardRopTeamId = useMemo(
-    () => initialRopManagerForProfile(profile, dealerBaseAccess).ropTeam,
-    [profile, dealerBaseAccess],
-  );
-  const managementPlane = useClientBaseManagementMergedState({
-    enabled: actx.enabled,
-    profile,
-    dashboardRopTeamId: tradePointsDashboardRopTeamId,
-    contextState: actx.state,
-  });
-  const actState = actx.enabled ? managementPlane.mergedState : createEmptyActualizationState();
+  const teamCtx = useClientBaseTeamActualization();
+  const actState = actx.enabled ? teamCtx.mergedState : createEmptyActualizationState();
 
   const [tradePointDensity, setTradePointDensity] = useState<TradePointShowcaseDensity>(() => readTradePointDensityFromStorage());
   const [desktopFiltersCollapsed, setDesktopFiltersCollapsed] = useState(() => readFiltersCollapsedFromStorage());
