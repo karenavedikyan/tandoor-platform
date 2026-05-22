@@ -7,7 +7,14 @@ import type { ActualizationState, LegalEntityActualizationState } from "@/lib/cl
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import { getDealerRegionalManagerDisplay } from "@/lib/dealer-base-mock-data";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
-import { getSalesUserById, getTeamById, getTeamLeadForTeam, type SalesUser } from "@/lib/sales-control-data";
+import {
+  getAllSalesManagers,
+  getSalesUserById,
+  getTeamById,
+  getTeamLeadForTeam,
+  type SalesUser,
+} from "@/lib/sales-control-data";
+import { isRopOrManagerAllFilter } from "@/lib/rop-manager-filters";
 import { mergeLegalEntitiesForActualization, mergeTradePointsForActualization } from "@/lib/client-base-actualization-data-merge";
 import { buildTradePointListForActualization } from "@/lib/trade-point-list-for-actualization";
 
@@ -1189,6 +1196,43 @@ export function passesContributionGeoFilters(
   return true;
 }
 
+/**
+ * Фильтры для ручных записей из снимков state: **без** scoped dealer base и **без** архивов —
+ * считаем все id из `manuallyCreated*`, иначе KPI не совпадают с диагностикой merged manual.
+ * РОП/РМ/город применяются только там, где это можно вывести из строки клиента или полей формы.
+ */
+export function passesManualCreatedRecordDashboardFilters(
+  dealerId: string,
+  pack: DashboardGeoFilterPack,
+  manualCityFallback?: string,
+): boolean {
+  if (pack.ropTeamId !== "__all__") {
+    const row = pack.dealerById.get(dealerId);
+    if (row && row.releaseTeamId !== pack.ropTeamId) return false;
+  }
+  if (pack.regionalManager !== "__all__") {
+    const row = pack.dealerById.get(dealerId);
+    if (row) {
+      const rm = getDealerRegionalManagerDisplay(row);
+      if (rm !== pack.regionalManager) return false;
+    }
+  }
+  if (pack.city !== "__all__") {
+    const row = pack.dealerById.get(dealerId);
+    const cRow = row?.city;
+    const c = normalizeText(cRow || manualCityFallback);
+    if (c !== pack.city) return false;
+  }
+  return true;
+}
+
+function activitySourceOwnerAllowedForRopTeam(ownerId: string, ropTeamId: string | "__all__"): boolean {
+  if (isRopOrManagerAllFilter(ropTeamId)) return true;
+  const u = getAllSalesManagers().find((m) => m.id === ownerId);
+  if (!u) return true;
+  return u.teamId === ropTeamId;
+}
+
 export type ManagerCreatedSummaryRow = {
   managerId: string;
   displayName: string;
@@ -1208,18 +1252,17 @@ export function managerTeamNameOnly(managerId: string): string {
 }
 
 /**
- * Подсчёт **новых** ручных клиентов и ТТ по владельцу user state (снимок менеджера), без score.
- * Период: «Всё время» — включая записи без даты; иначе только записи с датой в диапазоне.
+ * Подсчёт **новых** ручных клиентов и ТТ напрямую из `activitySources` (`manuallyCreated*`), без score и без
+ * привязки к scoped dealer base / архивам. Автор записи = `source.userId` (владелец снимка state).
+ * Период: «Всё время» — все записи, в т.ч. без даты; иначе только с датой в диапазоне.
  */
 export function computeManagerCreatedSummary(
   sources: ActivitySourceSnapshot[],
-  mergedAct: ActualizationState,
   pack: DashboardGeoFilterPack,
   range: { startMs: number; endMs: number } | null,
   roster: SalesUser[],
   managerFilter: string | "__all__",
 ): ManagerCreatedSummaryRow[] {
-  const packFull: DashboardGeoFilterPack = { ...pack, act: mergedAct };
   const byId = new Map<string, ManagerCreatedSummaryRow>();
 
   const ensure = (id: string): ManagerCreatedSummaryRow => {
@@ -1247,14 +1290,14 @@ export function computeManagerCreatedSummary(
   for (const { userId, state: st } of sources) {
     const owner = normalizeText(userId);
     if (!owner) continue;
+    if (!activitySourceOwnerAllowedForRopTeam(owner, pack.ropTeamId)) continue;
     if (managerFilter !== "__all__" && owner !== managerFilter) continue;
     const row = ensure(owner);
 
     for (const d of Object.values(st.manuallyCreatedDealersById)) {
       const f = (d.fields ?? {}) as Record<string, unknown>;
       const cityMan = strField(f, "city");
-      if (!passesContributionGeoFilters(d.id, packFull, cityMan)) continue;
-      if (mergedAct.archivedDealersById[d.id]) continue;
+      if (!passesManualCreatedRecordDashboardFilters(d.id, pack, cityMan)) continue;
       const atMs = resolveManualEntityActivityMs(d.createdAt, d.updatedAt, st.updatedAt, { useSnapshotFallback: true });
       if (!inActivityRange(atMs, range)) continue;
       row.newClients += 1;
@@ -1267,10 +1310,7 @@ export function computeManagerCreatedSummary(
     for (const tp of Object.values(st.manuallyCreatedTradePointsById)) {
       const f = (tp.fields ?? {}) as Record<string, unknown>;
       const cityMan = strField(f, "city");
-      if (!passesContributionGeoFilters(tp.dealerId, packFull, cityMan)) continue;
-      if (mergedAct.archivedDealersById[tp.dealerId]) continue;
-      if (mergedAct.archivedTradePointsById[tp.id]) continue;
-      if (st.archivedTradePointsById[tp.id]) continue;
+      if (!passesManualCreatedRecordDashboardFilters(tp.dealerId, pack, cityMan)) continue;
       const atMs = resolveManualEntityActivityMs(tp.createdAt, tp.updatedAt, st.updatedAt, { useSnapshotFallback: true });
       if (!inActivityRange(atMs, range)) continue;
       row.newTradePoints += 1;
@@ -1309,16 +1349,14 @@ export function listContributionAddedClientsForManager(
   for (const d of Object.values(st.manuallyCreatedDealersById)) {
     const f = (d.fields ?? {}) as Record<string, unknown>;
     const cityMan = strField(f, "city");
-    if (!passesContributionGeoFilters(d.id, pack, cityMan)) continue;
+    if (!passesManualCreatedRecordDashboardFilters(d.id, pack, cityMan)) continue;
     const atMs = resolveManualEntityActivityMs(d.createdAt, d.updatedAt, st.updatedAt, { useSnapshotFallback: true });
     if (!inActivityRange(atMs, range)) continue;
     const row = pack.dealerById.get(d.id);
     const title = strField(f, "name") || row?.name || d.internalCode || d.id;
     const city = normalizeText(row?.city) || cityMan || "—";
     const inn = normalizeText(strField(f, "inn")) || normalizeText(row?.actualizationInn) || "—";
-    const tpCount = Object.values(st.manuallyCreatedTradePointsById).filter(
-      (tp) => tp.dealerId === d.id && !st.archivedTradePointsById[tp.id],
-    ).length;
+    const tpCount = Object.values(st.manuallyCreatedTradePointsById).filter((tp) => tp.dealerId === d.id).length;
     const label =
       atMs === ACTIVITY_NO_CALENDAR_TIME_MS ? "Дата не указана" : new Date(atMs).toLocaleString("ru-RU");
     out.push({
@@ -1349,9 +1387,7 @@ export function listContributionAddedTradePointsForManager(
   for (const tp of Object.values(st.manuallyCreatedTradePointsById)) {
     const f = (tp.fields ?? {}) as Record<string, unknown>;
     const cityMan = strField(f, "city");
-    if (!passesContributionGeoFilters(tp.dealerId, pack, cityMan)) continue;
-    if (pack.act.archivedTradePointsById[tp.id]) continue;
-    if (st.archivedTradePointsById[tp.id]) continue;
+    if (!passesManualCreatedRecordDashboardFilters(tp.dealerId, pack, cityMan)) continue;
     const atMs = resolveManualEntityActivityMs(tp.createdAt, tp.updatedAt, st.updatedAt, { useSnapshotFallback: true });
     if (!inActivityRange(atMs, range)) continue;
     const row = pack.dealerById.get(tp.dealerId);

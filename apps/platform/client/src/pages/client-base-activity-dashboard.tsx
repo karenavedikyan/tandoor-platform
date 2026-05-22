@@ -423,14 +423,14 @@ function ClientBaseActivityDashboardInner(): ReactElement {
   );
 
   const createdManagerSummaryRows: ManagerCreatedSummaryRow[] = useMemo(
-    () => computeManagerCreatedSummary(activitySources, state, geoPack, range, roster, managerId),
-    [activitySources, state, geoPack, range, roster, managerId],
+    () => computeManagerCreatedSummary(activitySources, geoPack, range, roster, managerId),
+    [activitySources, geoPack, range, roster, managerId],
   );
 
   const prevCreatedManagerSummaryRows = useMemo(
     () =>
-      prevRange ? computeManagerCreatedSummary(activitySources, state, geoPack, prevRange, roster, managerId) : [],
-    [activitySources, state, geoPack, prevRange, roster, managerId],
+      prevRange ? computeManagerCreatedSummary(activitySources, geoPack, prevRange, roster, managerId) : [],
+    [activitySources, geoPack, prevRange, roster, managerId],
   );
 
   const kpiManualDealersFromSources = useMemo(
@@ -829,8 +829,9 @@ function ClientBaseActivityDashboardInner(): ReactElement {
         <CardHeader className="space-y-2 pb-2">
           <CardTitle className="text-base">Кто сколько добавил</CardTitle>
           <p className="text-xs text-muted-foreground">
-            Новые клиенты и торговые точки из ручных записей актуализации по снимку state каждого менеджера (не обновления
-            карточек).
+            Счётчик и KPI берутся напрямую из снимков актуализации менеджеров (`manuallyCreatedDealersById` и
+            `manuallyCreatedTradePointsById` в каждом user state). Автор записи — владелец снимка (`userId` источника), без
+            ленты событий и без привязки к scoped dealer base.
           </p>
           <div className="flex flex-wrap gap-2">
             {(
@@ -863,7 +864,7 @@ function ClientBaseActivityDashboardInner(): ReactElement {
                   <div
                     key={row.managerId}
                     className="rounded-xl border border-border bg-card p-3 shadow-sm"
-                    data-testid={`card-manager-created-summary-${row.managerId}`}
+                    data-testid={`card-manager-contribution-${row.managerId}`}
                   >
                     <div className="space-y-1">
                       {unknown ? (
@@ -875,9 +876,16 @@ function ClientBaseActivityDashboardInner(): ReactElement {
                       )}
                       <p className="text-xs text-muted-foreground">{row.teamName}</p>
                     </div>
-                    <p className="mt-2 text-sm text-foreground">Клиенты: {row.newClients}</p>
-                    <p className="text-sm text-foreground">ТТ: {row.newTradePoints}</p>
-                    <p className="text-sm font-medium text-foreground">Всего: {total}</p>
+                    <p
+                      className="mt-2 text-sm text-foreground"
+                      data-testid={`text-manager-clients-added-${row.managerId}`}
+                    >
+                      Клиентов добавлено: {row.newClients}
+                    </p>
+                    <p className="text-sm text-foreground" data-testid={`text-manager-trade-points-added-${row.managerId}`}>
+                      ТТ добавлено: {row.newTradePoints}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Всего: {total}</p>
                     <p className="text-xs text-muted-foreground">
                       Последнее: {formatLastManualAddition(row.lastAddedAtMs, total)}
                     </p>
@@ -887,7 +895,7 @@ function ClientBaseActivityDashboardInner(): ReactElement {
                       size="sm"
                       className="mt-2 w-full"
                       onClick={() => setDetailManagerId(row.managerId)}
-                      data-testid={`button-manager-created-open-${row.managerId}`}
+                      data-testid={`button-manager-contribution-open-${row.managerId}`}
                     >
                       Смотреть
                     </Button>
@@ -913,7 +921,11 @@ function ClientBaseActivityDashboardInner(): ReactElement {
                   const unknown = isActivityUnknownUserId(row.managerId);
                   const total = row.newClients + row.newTradePoints;
                   return (
-                    <tr key={row.managerId} className="border-b border-border/60 hover:bg-muted/20">
+                    <tr
+                      key={row.managerId}
+                      className="border-b border-border/60 hover:bg-muted/20"
+                      data-testid={`card-manager-contribution-${row.managerId}`}
+                    >
                       <td className="p-2">
                         {unknown ? (
                           <Badge variant="outline" className="text-[10px]" title={UNKNOWN_ACTOR_HELP}>
@@ -924,8 +936,12 @@ function ClientBaseActivityDashboardInner(): ReactElement {
                         )}
                       </td>
                       <td className="p-2 text-xs text-muted-foreground">{row.teamName}</td>
-                      <td className="p-2 text-right tabular-nums">{row.newClients}</td>
-                      <td className="p-2 text-right tabular-nums">{row.newTradePoints}</td>
+                      <td className="p-2 text-right tabular-nums" data-testid={`text-manager-clients-added-${row.managerId}`}>
+                        {row.newClients}
+                      </td>
+                      <td className="p-2 text-right tabular-nums" data-testid={`text-manager-trade-points-added-${row.managerId}`}>
+                        {row.newTradePoints}
+                      </td>
                       <td className="p-2 text-right tabular-nums font-medium">{total}</td>
                       <td className="p-2 text-right text-xs text-muted-foreground">
                         {formatLastManualAddition(row.lastAddedAtMs, total)}
@@ -937,7 +953,7 @@ function ClientBaseActivityDashboardInner(): ReactElement {
                           size="sm"
                           className="h-8 text-xs"
                           onClick={() => setDetailManagerId(row.managerId)}
-                          data-testid={`button-manager-created-open-${row.managerId}`}
+                          data-testid={`button-manager-contribution-open-${row.managerId}`}
                         >
                           Смотреть
                         </Button>
