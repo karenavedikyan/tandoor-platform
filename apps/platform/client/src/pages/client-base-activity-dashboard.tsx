@@ -54,6 +54,7 @@ import {
   activityStatusForManager,
   bucketEventsByDay,
   collectActivityBucketsFromSources,
+  computeManagerCreatedSummary,
   computeProblemLines,
   computeQualityMetrics,
   computeTopKpis,
@@ -69,6 +70,7 @@ import {
   type ActivityTypeFilter,
   type DashboardGeoFilterPack,
   type ManagerActivityAgg,
+  type ManagerCreatedSummaryRow,
 } from "@/lib/client-base-activity-metrics";
 
 type ContributionQuickFilter = "all" | "with_additions" | "no_activity" | "has_clients" | "has_tps";
@@ -104,6 +106,9 @@ const PERIOD_LABELS: Record<ActivityPeriodPreset, string> = {
   all: "Всё время",
 };
 
+/** Пресеты периода в главном сценарии контроля (без «Вчера»). */
+const MAIN_PERIOD_PRESETS = ["today", "7d", "30d", "all"] as const satisfies readonly ActivityPeriodPreset[];
+
 const TYPE_LABELS: Record<ActivityTypeFilter, string> = {
   all: "Все типы",
   dealers: "Клиенты",
@@ -124,6 +129,12 @@ function deltaLabel(cur: number, prev: number): string {
 function formatManagerLastActivity(lastAtMs: number): string {
   if (lastAtMs <= 0) return "—";
   return new Date(lastAtMs).toLocaleString("ru-RU");
+}
+
+function formatLastManualAddition(lastAddedAtMs: number, totalManual: number): string {
+  if (lastAddedAtMs > 0) return new Date(lastAddedAtMs).toLocaleString("ru-RU");
+  if (totalManual > 0) return "Дата не указана";
+  return "—";
 }
 
 type ActivityBoundaryState = { error: Error | null };
@@ -244,6 +255,7 @@ function ClientBaseActivityDashboardInner(): ReactElement {
   const [city, setCity] = useState<string>("__all__");
   const [typeFilter, setTypeFilter] = useState<ActivityTypeFilter>("all");
   const [onlyActiveManagers, setOnlyActiveManagers] = useState(false);
+  const [createdSummaryQuickFilter, setCreatedSummaryQuickFilter] = useState<"all" | "with_additions">("all");
   const [contributionQuickFilter, setContributionQuickFilter] = useState<ContributionQuickFilter>("all");
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(true);
   const [detailManagerId, setDetailManagerId] = useState<string | null>(null);
@@ -292,6 +304,10 @@ function ClientBaseActivityDashboardInner(): ReactElement {
     return collectActivityBucketsFromSources(activitySources, mergedAll);
   }, [activitySources, mergedAll]);
   const allEvents = activityBuckets.events;
+
+  useEffect(() => {
+    if (period === "yesterday") setPeriod("7d");
+  }, [period]);
 
   const range = useMemo(() => activityPeriodToRange(period), [period]);
   const prevRange = useMemo(() => previousActivityRange(range), [range]);
@@ -406,6 +422,54 @@ function ClientBaseActivityDashboardInner(): ReactElement {
     [state, scopedIds, ropTeam, regionalManager, city, dealerById],
   );
 
+  const createdManagerSummaryRows: ManagerCreatedSummaryRow[] = useMemo(
+    () => computeManagerCreatedSummary(activitySources, state, geoPack, range, roster, managerId),
+    [activitySources, state, geoPack, range, roster, managerId],
+  );
+
+  const prevCreatedManagerSummaryRows = useMemo(
+    () =>
+      prevRange ? computeManagerCreatedSummary(activitySources, state, geoPack, prevRange, roster, managerId) : [],
+    [activitySources, state, geoPack, prevRange, roster, managerId],
+  );
+
+  const kpiManualDealersFromSources = useMemo(
+    () => createdManagerSummaryRows.reduce((s, r) => s + r.newClients, 0),
+    [createdManagerSummaryRows],
+  );
+
+  const kpiManualTpFromSources = useMemo(
+    () => createdManagerSummaryRows.reduce((s, r) => s + r.newTradePoints, 0),
+    [createdManagerSummaryRows],
+  );
+
+  const kpiActiveManagersFromCreated = useMemo(
+    () => createdManagerSummaryRows.filter((r) => r.newClients + r.newTradePoints > 0).length,
+    [createdManagerSummaryRows],
+  );
+
+  const prevKpiManualDealersFromSources = useMemo(
+    () => prevCreatedManagerSummaryRows.reduce((s, r) => s + r.newClients, 0),
+    [prevCreatedManagerSummaryRows],
+  );
+
+  const prevKpiManualTpFromSources = useMemo(
+    () => prevCreatedManagerSummaryRows.reduce((s, r) => s + r.newTradePoints, 0),
+    [prevCreatedManagerSummaryRows],
+  );
+
+  const prevKpiActiveManagersFromCreated = useMemo(
+    () => prevCreatedManagerSummaryRows.filter((r) => r.newClients + r.newTradePoints > 0).length,
+    [prevCreatedManagerSummaryRows],
+  );
+
+  const visibleCreatedSummaryRows = useMemo(() => {
+    if (createdSummaryQuickFilter === "with_additions") {
+      return createdManagerSummaryRows.filter((r) => r.newClients + r.newTradePoints > 0);
+    }
+    return createdManagerSummaryRows;
+  }, [createdManagerSummaryRows, createdSummaryQuickFilter]);
+
   const detailAddedClients = useMemo(() => {
     if (!detailManagerId) return [];
     return listContributionAddedClientsForManager(detailManagerId, activitySources, geoPack, range);
@@ -415,28 +479,6 @@ function ClientBaseActivityDashboardInner(): ReactElement {
     if (!detailManagerId) return [];
     return listContributionAddedTradePointsForManager(detailManagerId, activitySources, geoPack, range);
   }, [detailManagerId, activitySources, geoPack, range]);
-
-  const detailUpdateEvents = useMemo(() => {
-    if (!detailManagerId) return [];
-    return filteredEvents.filter(
-      (e) =>
-        e.userId === detailManagerId &&
-        e.kind !== "manual_dealer" &&
-        e.kind !== "manual_trade_point" &&
-        e.kind !== "photo" &&
-        e.kind !== "showcase" &&
-        e.kind !== "matrix_task",
-    );
-  }, [detailManagerId, filteredEvents]);
-
-  const detailMediaEvents = useMemo(() => {
-    if (!detailManagerId) return [];
-    return filteredEvents.filter(
-      (e) =>
-        e.userId === detailManagerId &&
-        (e.kind === "photo" || e.kind === "showcase" || e.kind === "matrix_task"),
-    );
-  }, [detailManagerId, filteredEvents]);
 
   useEffect(() => {
     if (detailManagerId) setDetailTab("clients");
@@ -476,18 +518,18 @@ function ClientBaseActivityDashboardInner(): ReactElement {
 
   const managerClientsTpChartData = useMemo(
     () =>
-      contributionFilteredManagers
-        .filter((m) => m.createdDealers > 0 || m.addedTradePoints > 0)
+      createdManagerSummaryRows
+        .filter((m) => m.newClients > 0 || m.newTradePoints > 0)
         .map((m) => ({
-          name: activityChartManagerLabel(m),
-          clients: m.createdDealers,
-          tradePoints: m.addedTradePoints,
+          name: m.displayName,
+          clients: m.newClients,
+          tradePoints: m.newTradePoints,
           id: m.managerId,
         }))
         .sort((a, b) => b.clients + b.tradePoints - (a.clients + a.tradePoints))
         .slice(0, 14)
         .reverse(),
-    [contributionFilteredManagers],
+    [createdManagerSummaryRows],
   );
 
   const noCalendarEventCount = useMemo(
@@ -531,18 +573,16 @@ function ClientBaseActivityDashboardInner(): ReactElement {
     diagnostics.mergedManualTradePoints === 0;
 
   const activeManagersCaption = useMemo(() => {
-    if (kpis.activeManagers === 0) return "Нет активности за период";
-    const activeRows = managerRowsAllTypes.filter(
-      (m) => m.createdDealers > 0 || m.addedTradePoints > 0 || meaningfulManagerTouches(m) > 0,
-    );
-    const known = activeRows.filter((m) => !isActivityUnknownUserId(m.managerId));
+    if (kpiActiveManagersFromCreated === 0) return "Нет ручных добавлений за период";
+    const withAdds = createdManagerSummaryRows.filter((r) => r.newClients + r.newTradePoints > 0);
+    const known = withAdds.filter((r) => !isActivityUnknownUserId(r.managerId));
     if (known.length > 0) {
-      const first = known[0].displayName;
+      const first = known[0]!.displayName;
       return known.length === 1 ? `Например: ${first}` : `Например: ${first} и др.`;
     }
-    if (activeRows.some((m) => isActivityUnknownUserId(m.managerId))) return "Есть активность без автора";
-    return "Нет активности за период";
-  }, [kpis.activeManagers, managerRowsAllTypes]);
+    if (withAdds.some((r) => isActivityUnknownUserId(r.managerId))) return "Есть записи без привязки к менеджеру";
+    return "Нет ручных добавлений за период";
+  }, [kpiActiveManagersFromCreated, createdManagerSummaryRows]);
 
   const scrollToManagersSection = (): void => {
     managersSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -551,8 +591,12 @@ function ClientBaseActivityDashboardInner(): ReactElement {
   const detailDialogTitle = useMemo(() => {
     if (!detailManagerId) return "";
     if (isActivityUnknownUserId(detailManagerId)) return ACTIVITY_UNKNOWN_DISPLAY;
-    return visibleManagers.find((m) => m.managerId === detailManagerId)?.displayName ?? "Менеджер";
-  }, [detailManagerId, visibleManagers]);
+    return (
+      createdManagerSummaryRows.find((r) => r.managerId === detailManagerId)?.displayName ??
+      visibleManagers.find((m) => m.managerId === detailManagerId)?.displayName ??
+      "Менеджер"
+    );
+  }, [detailManagerId, createdManagerSummaryRows, visibleManagers]);
 
   if (!actx.enabled) {
     return (
@@ -585,7 +629,7 @@ function ClientBaseActivityDashboardInner(): ReactElement {
               {teamError}
             </p>
           ) : null}
-          <p className="max-w-4xl text-[11px] leading-snug text-muted-foreground" data-testid="text-activity-data-sources">
+          <p className="max-w-4xl text-[10px] leading-snug text-muted-foreground/90" data-testid="text-activity-data-sources">
             {dataSourcesLine}
           </p>
         </div>
@@ -602,7 +646,7 @@ function ClientBaseActivityDashboardInner(): ReactElement {
           </CardContent>
         </Card>
       ) : null}
-      {!hasFilteredActivity && !hasExcludedOnly && !teamLoading ? (
+      {!hasFilteredActivity && !hasExcludedOnly && !teamLoading && kpiManualDealersFromSources + kpiManualTpFromSources === 0 ? (
         <Card className="rounded-2xl border border-border/80 bg-muted/10 shadow-sm" data-testid="section-activity-empty">
           <CardContent className="flex flex-col items-center gap-3 px-4 py-10 text-center sm:px-6">
             <BarChart3 className="h-12 w-12 text-primary/60" aria-hidden />
@@ -650,7 +694,7 @@ function ClientBaseActivityDashboardInner(): ReactElement {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {(Object.keys(PERIOD_LABELS) as ActivityPeriodPreset[]).map((k) => (
+                    {MAIN_PERIOD_PRESETS.map((k) => (
                       <SelectItem key={k} value={k}>
                         {PERIOD_LABELS[k]}
                       </SelectItem>
@@ -754,40 +798,55 @@ function ClientBaseActivityDashboardInner(): ReactElement {
       </Collapsible>
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard title="Клиентов добавлено" value={kpis.manualDealers} hint={prevKpis ? deltaLabel(kpis.manualDealers, prevKpis.manualDealers) : undefined} />
+        <KpiCard
+          title="Клиентов добавлено"
+          value={kpiManualDealersFromSources}
+          hint={prevRange ? deltaLabel(kpiManualDealersFromSources, prevKpiManualDealersFromSources) : undefined}
+        />
         <KpiCard title="Клиентов обновлено" value={kpis.updatedDealers} hint={prevKpis ? deltaLabel(kpis.updatedDealers, prevKpis.updatedDealers) : undefined} />
-        <KpiCard title="ТТ добавлено" value={kpis.manualTradePoints} hint={prevKpis ? deltaLabel(kpis.manualTradePoints, prevKpis.manualTradePoints) : undefined} />
+        <KpiCard
+          title="ТТ добавлено"
+          value={kpiManualTpFromSources}
+          hint={prevRange ? deltaLabel(kpiManualTpFromSources, prevKpiManualTpFromSources) : undefined}
+        />
         <KpiCard title="Юрлиц (изменения)" value={kpis.legalTouches} hint={prevKpis ? deltaLabel(kpis.legalTouches, prevKpis.legalTouches) : undefined} />
         <KpiCard title="Фото загружено" value={kpis.photos} hint={prevKpis ? deltaLabel(kpis.photos, prevKpis.photos) : undefined} />
         <KpiCard title="Витрин заполнено (ТТ)" value={kpis.showcasesFilled} />
         <KpiCard title="ТТ с дефицитом" value={kpis.deficitTradePoints} />
-        <KpiCard title="Активных менеджеров" value={kpis.activeManagers} caption={activeManagersCaption} onActivate={scrollToManagersSection} />
+        <KpiCard
+          title="Активных менеджеров"
+          value={kpiActiveManagersFromCreated}
+          caption={activeManagersCaption}
+          onActivate={scrollToManagersSection}
+        />
       </div>
 
       <Card
         ref={managersSectionRef}
-        id="section-activity-managers"
+        data-testid="section-manager-created-summary"
         className="scroll-mt-4 rounded-2xl border border-border/80 bg-card shadow-sm"
       >
         <CardHeader className="space-y-2 pb-2">
-          <CardTitle className="text-base">Сводка по менеджерам</CardTitle>
+          <CardTitle className="text-base">Кто сколько добавил</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Новые клиенты и торговые точки из ручных записей актуализации по снимку state каждого менеджера (не обновления
+            карточек).
+          </p>
           <div className="flex flex-wrap gap-2">
             {(
               [
                 ["all", "Все"],
                 ["with_additions", "С добавлениями"],
-                ["no_activity", "Без активности"],
-                ["has_clients", "Есть клиенты"],
-                ["has_tps", "Есть ТТ"],
               ] as const
             ).map(([key, label]) => (
               <Button
                 key={key}
                 type="button"
                 size="sm"
-                variant={contributionQuickFilter === key ? "default" : "outline"}
+                variant={createdSummaryQuickFilter === key ? "default" : "outline"}
                 className="h-8 text-xs"
-                onClick={() => setContributionQuickFilter(key)}
+                onClick={() => setCreatedSummaryQuickFilter(key)}
+                data-testid={`button-created-summary-filter-${key}`}
               >
                 {label}
               </Button>
@@ -797,134 +856,79 @@ function ClientBaseActivityDashboardInner(): ReactElement {
         <CardContent className="overflow-x-auto p-0 sm:p-4">
           {isMobile ? (
             <div className="flex flex-col gap-2 p-3">
-              {contributionFilteredManagers.map((m) => {
-                const unknown = isActivityUnknownUserId(m.managerId);
+              {visibleCreatedSummaryRows.map((row) => {
+                const unknown = isActivityUnknownUserId(row.managerId);
+                const total = row.newClients + row.newTradePoints;
                 return (
                   <div
-                    key={m.managerId}
+                    key={row.managerId}
                     className="rounded-xl border border-border bg-card p-3 shadow-sm"
-                    data-testid={`card-manager-contribution-${m.managerId}`}
+                    data-testid={`card-manager-created-summary-${row.managerId}`}
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1 space-y-1">
-                        {unknown ? (
-                          <Badge
-                            variant="outline"
-                            className="border-border/80 bg-muted/30 text-[10px] font-medium text-foreground"
-                            title={UNKNOWN_ACTOR_HELP}
-                            data-testid={`badge-activity-author-unknown-${m.managerId}`}
-                          >
-                            {ACTIVITY_UNKNOWN_DISPLAY}
-                          </Badge>
-                        ) : (
-                          <p className="font-semibold text-foreground">{m.displayName}</p>
-                        )}
-                        <p className="text-xs text-muted-foreground">{managerTeamAndRopLabel(m.managerId)}</p>
-                      </div>
-                      <div className="flex shrink-0 flex-col items-end gap-2">
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "text-[10px]",
-                            activityStatusForManager(m) === "active" && "border-primary/50 bg-primary/10 text-foreground",
-                            activityStatusForManager(m) === "weak" && "border-border text-muted-foreground",
-                            activityStatusForManager(m) === "none" && "border-border text-muted-foreground",
-                          )}
-                          data-testid={`badge-activity-status-${m.managerId}`}
-                        >
-                          {activityStatusForManager(m) === "active" ? "Активно" : activityStatusForManager(m) === "weak" ? "Слабо" : "Нет активности"}
+                    <div className="space-y-1">
+                      {unknown ? (
+                        <Badge variant="outline" className="text-[11px]" title={UNKNOWN_ACTOR_HELP}>
+                          {ACTIVITY_UNKNOWN_DISPLAY}
                         </Badge>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-auto px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 hover:text-primary"
-                          onClick={() => setDetailManagerId(m.managerId)}
-                          data-testid={`button-manager-contribution-open-${m.managerId}`}
-                        >
-                          Открыть
-                        </Button>
-                      </div>
+                      ) : (
+                        <p className="text-lg font-semibold leading-tight text-foreground">{row.displayName}</p>
+                      )}
+                      <p className="text-xs text-muted-foreground">{row.teamName}</p>
                     </div>
-                    <p className="mt-2 text-xs text-muted-foreground" data-testid={`text-manager-clients-added-${m.managerId}`}>
-                      Клиенты: {m.createdDealers}
-                    </p>
-                    <p className="text-xs text-muted-foreground" data-testid={`text-manager-trade-points-added-${m.managerId}`}>
-                      ТТ: {m.addedTradePoints}
-                    </p>
+                    <p className="mt-2 text-sm text-foreground">Клиенты: {row.newClients}</p>
+                    <p className="text-sm text-foreground">ТТ: {row.newTradePoints}</p>
+                    <p className="text-sm font-medium text-foreground">Всего: {total}</p>
                     <p className="text-xs text-muted-foreground">
-                      Обновления: {m.updatedDealers + m.updatedTradePoints + m.legalEntities}
+                      Последнее: {formatLastManualAddition(row.lastAddedAtMs, total)}
                     </p>
-                    <p className="text-xs text-muted-foreground">
-                      Последняя активность: {formatManagerLastActivity(m.lastAtMs)}
-                    </p>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="mt-2 w-full"
+                      onClick={() => setDetailManagerId(row.managerId)}
+                      data-testid={`button-manager-created-open-${row.managerId}`}
+                    >
+                      Смотреть
+                    </Button>
                   </div>
                 );
               })}
             </div>
           ) : (
-            <table className="w-full min-w-[1100px] text-sm" data-testid="table-manager-contribution">
+            <table className="w-full min-w-[900px] text-sm" data-testid="table-manager-created-summary">
               <thead>
                 <tr className="border-b bg-muted/40 text-left text-[11px] font-semibold uppercase text-muted-foreground">
                   <th className="p-2">Менеджер</th>
-                  <th className="p-2">Команда / РОП</th>
-                  <th className="p-2 text-right">Клиентов добавлено</th>
-                  <th className="p-2 text-right">ТТ добавлено</th>
-                  <th className="p-2 text-right">Клиентов обновлено</th>
-                  <th className="p-2 text-right">Юрлиц</th>
-                  <th className="p-2 text-right">Фото</th>
-                  <th className="p-2 text-right">Витрины</th>
-                  <th className="p-2 text-right">Последняя активность</th>
-                  <th className="p-2">Статус</th>
+                  <th className="p-2">Команда</th>
+                  <th className="p-2 text-right">Новых клиентов</th>
+                  <th className="p-2 text-right">Новых торговых точек</th>
+                  <th className="p-2 text-right">Всего</th>
+                  <th className="p-2 text-right">Последнее добавление</th>
                   <th className="p-2 text-right">Действие</th>
                 </tr>
               </thead>
               <tbody>
-                {contributionFilteredManagers.map((m) => {
-                  const unknown = isActivityUnknownUserId(m.managerId);
+                {visibleCreatedSummaryRows.map((row) => {
+                  const unknown = isActivityUnknownUserId(row.managerId);
+                  const total = row.newClients + row.newTradePoints;
                   return (
-                    <tr
-                      key={m.managerId}
-                      className="border-b border-border/60 hover:bg-muted/20"
-                      data-testid={`card-manager-contribution-${m.managerId}`}
-                    >
+                    <tr key={row.managerId} className="border-b border-border/60 hover:bg-muted/20">
                       <td className="p-2">
                         {unknown ? (
-                          <Badge
-                            variant="outline"
-                            className="border-border/80 bg-muted/30 text-[10px] font-medium text-foreground"
-                            title={UNKNOWN_ACTOR_HELP}
-                            data-testid={`badge-activity-author-unknown-${m.managerId}`}
-                          >
+                          <Badge variant="outline" className="text-[10px]" title={UNKNOWN_ACTOR_HELP}>
                             {ACTIVITY_UNKNOWN_DISPLAY}
                           </Badge>
                         ) : (
-                          <span className="font-medium">{m.displayName}</span>
+                          <span className="font-medium">{row.displayName}</span>
                         )}
                       </td>
-                      <td className="max-w-[220px] p-2 text-xs text-muted-foreground">{managerTeamAndRopLabel(m.managerId)}</td>
-                      <td className="p-2 text-right tabular-nums" data-testid={`text-manager-clients-added-${m.managerId}`}>
-                        {m.createdDealers}
-                      </td>
-                      <td className="p-2 text-right tabular-nums" data-testid={`text-manager-trade-points-added-${m.managerId}`}>
-                        {m.addedTradePoints}
-                      </td>
-                      <td className="p-2 text-right tabular-nums">{m.updatedDealers}</td>
-                      <td className="p-2 text-right tabular-nums">{m.legalEntities}</td>
-                      <td className="p-2 text-right tabular-nums">{m.photos}</td>
-                      <td className="p-2 text-right tabular-nums">{m.showcases}</td>
-                      <td className="p-2 text-right text-xs text-muted-foreground">{formatManagerLastActivity(m.lastAtMs)}</td>
-                      <td className="p-2">
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "text-[10px]",
-                            activityStatusForManager(m) === "active" && "border-primary/50 bg-primary/10",
-                          )}
-                          data-testid={`badge-activity-status-${m.managerId}`}
-                        >
-                          {activityStatusForManager(m) === "active" ? "Активно" : activityStatusForManager(m) === "weak" ? "Слабо" : "Нет активности"}
-                        </Badge>
+                      <td className="p-2 text-xs text-muted-foreground">{row.teamName}</td>
+                      <td className="p-2 text-right tabular-nums">{row.newClients}</td>
+                      <td className="p-2 text-right tabular-nums">{row.newTradePoints}</td>
+                      <td className="p-2 text-right tabular-nums font-medium">{total}</td>
+                      <td className="p-2 text-right text-xs text-muted-foreground">
+                        {formatLastManualAddition(row.lastAddedAtMs, total)}
                       </td>
                       <td className="p-2 text-right">
                         <Button
@@ -932,10 +936,10 @@ function ClientBaseActivityDashboardInner(): ReactElement {
                           variant="outline"
                           size="sm"
                           className="h-8 text-xs"
-                          onClick={() => setDetailManagerId(m.managerId)}
-                          data-testid={`button-manager-contribution-open-${m.managerId}`}
+                          onClick={() => setDetailManagerId(row.managerId)}
+                          data-testid={`button-manager-created-open-${row.managerId}`}
                         >
-                          Открыть
+                          Смотреть
                         </Button>
                       </td>
                     </tr>
@@ -1116,14 +1120,208 @@ function ClientBaseActivityDashboardInner(): ReactElement {
         </CardContent>
       </Card>
 
+      <Card id="section-activity-managers" className="rounded-2xl border border-border/80 bg-card shadow-sm">
+        <CardHeader className="space-y-2 pb-2">
+          <CardTitle className="text-base text-muted-foreground">Расширенная сводка по менеджерам (события и score)</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Таблица ниже строится из ленты действий (включая обновления). Основной контроль ручных добавлений — блок «Кто
+            сколько добавил» выше.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {(
+              [
+                ["all", "Все"],
+                ["with_additions", "С добавлениями"],
+                ["no_activity", "Без активности"],
+                ["has_clients", "Есть клиенты"],
+                ["has_tps", "Есть ТТ"],
+              ] as const
+            ).map(([key, label]) => (
+              <Button
+                key={key}
+                type="button"
+                size="sm"
+                variant={contributionQuickFilter === key ? "default" : "outline"}
+                className="h-8 text-xs"
+                onClick={() => setContributionQuickFilter(key)}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
+        </CardHeader>
+        <CardContent className="overflow-x-auto p-0 sm:p-4">
+          {isMobile ? (
+            <div className="flex flex-col gap-2 p-3">
+              {contributionFilteredManagers.map((m) => {
+                const unknown = isActivityUnknownUserId(m.managerId);
+                return (
+                  <div
+                    key={m.managerId}
+                    className="rounded-xl border border-border bg-card p-3 shadow-sm"
+                    data-testid={`card-manager-contribution-${m.managerId}`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1 space-y-1">
+                        {unknown ? (
+                          <Badge
+                            variant="outline"
+                            className="border-border/80 bg-muted/30 text-[10px] font-medium text-foreground"
+                            title={UNKNOWN_ACTOR_HELP}
+                            data-testid={`badge-activity-author-unknown-${m.managerId}`}
+                          >
+                            {ACTIVITY_UNKNOWN_DISPLAY}
+                          </Badge>
+                        ) : (
+                          <p className="font-semibold text-foreground">{m.displayName}</p>
+                        )}
+                        <p className="text-xs text-muted-foreground">{managerTeamAndRopLabel(m.managerId)}</p>
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end gap-2">
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "text-[10px]",
+                            activityStatusForManager(m) === "active" && "border-primary/50 bg-primary/10 text-foreground",
+                            activityStatusForManager(m) === "weak" && "border-border text-muted-foreground",
+                            activityStatusForManager(m) === "none" && "border-border text-muted-foreground",
+                          )}
+                          data-testid={`badge-activity-status-${m.managerId}`}
+                        >
+                          {activityStatusForManager(m) === "active"
+                            ? "Активно"
+                            : activityStatusForManager(m) === "weak"
+                              ? "Слабо"
+                              : "Нет активности"}
+                        </Badge>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-auto px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 hover:text-primary"
+                          onClick={() => setDetailManagerId(m.managerId)}
+                          data-testid={`button-manager-contribution-open-${m.managerId}`}
+                        >
+                          Открыть
+                        </Button>
+                      </div>
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground" data-testid={`text-manager-clients-added-${m.managerId}`}>
+                      Клиенты: {m.createdDealers}
+                    </p>
+                    <p className="text-xs text-muted-foreground" data-testid={`text-manager-trade-points-added-${m.managerId}`}>
+                      ТТ: {m.addedTradePoints}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Обновления: {m.updatedDealers + m.updatedTradePoints + m.legalEntities}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Последняя активность: {formatManagerLastActivity(m.lastAtMs)}</p>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <table className="w-full min-w-[1100px] text-sm" data-testid="table-manager-contribution">
+              <thead>
+                <tr className="border-b bg-muted/40 text-left text-[11px] font-semibold uppercase text-muted-foreground">
+                  <th className="p-2">Менеджер</th>
+                  <th className="p-2">Команда / РОП</th>
+                  <th className="p-2 text-right">Клиентов добавлено</th>
+                  <th className="p-2 text-right">ТТ добавлено</th>
+                  <th className="p-2 text-right">Клиентов обновлено</th>
+                  <th className="p-2 text-right">Юрлиц</th>
+                  <th className="p-2 text-right">Фото</th>
+                  <th className="p-2 text-right">Витрины</th>
+                  <th className="p-2 text-right">Последняя активность</th>
+                  <th className="p-2">Статус</th>
+                  <th className="p-2 text-right">Действие</th>
+                </tr>
+              </thead>
+              <tbody>
+                {contributionFilteredManagers.map((m) => {
+                  const unknown = isActivityUnknownUserId(m.managerId);
+                  return (
+                    <tr
+                      key={m.managerId}
+                      className="border-b border-border/60 hover:bg-muted/20"
+                      data-testid={`card-manager-contribution-${m.managerId}`}
+                    >
+                      <td className="p-2">
+                        {unknown ? (
+                          <Badge
+                            variant="outline"
+                            className="border-border/80 bg-muted/30 text-[10px] font-medium text-foreground"
+                            title={UNKNOWN_ACTOR_HELP}
+                            data-testid={`badge-activity-author-unknown-${m.managerId}`}
+                          >
+                            {ACTIVITY_UNKNOWN_DISPLAY}
+                          </Badge>
+                        ) : (
+                          <span className="font-medium">{m.displayName}</span>
+                        )}
+                      </td>
+                      <td className="max-w-[220px] p-2 text-xs text-muted-foreground">{managerTeamAndRopLabel(m.managerId)}</td>
+                      <td className="p-2 text-right tabular-nums" data-testid={`text-manager-clients-added-${m.managerId}`}>
+                        {m.createdDealers}
+                      </td>
+                      <td className="p-2 text-right tabular-nums" data-testid={`text-manager-trade-points-added-${m.managerId}`}>
+                        {m.addedTradePoints}
+                      </td>
+                      <td className="p-2 text-right tabular-nums">{m.updatedDealers}</td>
+                      <td className="p-2 text-right tabular-nums">{m.legalEntities}</td>
+                      <td className="p-2 text-right tabular-nums">{m.photos}</td>
+                      <td className="p-2 text-right tabular-nums">{m.showcases}</td>
+                      <td className="p-2 text-right text-xs text-muted-foreground">{formatManagerLastActivity(m.lastAtMs)}</td>
+                      <td className="p-2">
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "text-[10px]",
+                            activityStatusForManager(m) === "active" && "border-primary/50 bg-primary/10",
+                          )}
+                          data-testid={`badge-activity-status-${m.managerId}`}
+                        >
+                          {activityStatusForManager(m) === "active"
+                            ? "Активно"
+                            : activityStatusForManager(m) === "weak"
+                              ? "Слабо"
+                              : "Нет активности"}
+                        </Badge>
+                      </td>
+                      <td className="p-2 text-right">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 text-xs"
+                          onClick={() => setDetailManagerId(m.managerId)}
+                          data-testid={`button-manager-contribution-open-${m.managerId}`}
+                        >
+                          Открыть
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </CardContent>
+      </Card>
+
       <Dialog open={detailManagerId != null} onOpenChange={(o) => !o && setDetailManagerId(null)}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl" data-testid="dialog-manager-contribution-detail">
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl" data-testid="dialog-manager-created-detail">
           <DialogHeader>
             <DialogTitle>{detailDialogTitle}</DialogTitle>
             {detailManagerId != null && !isActivityUnknownUserId(detailManagerId) ? (
-              <p className="text-sm text-muted-foreground">
-                {managerTeamAndRopLabel(detailManagerId)} · {PERIOD_LABELS[period]}
-              </p>
+              <>
+                <p className="text-sm text-muted-foreground">{managerTeamAndRopLabel(detailManagerId)}</p>
+                <p className="text-sm text-muted-foreground">{PERIOD_LABELS[period]}</p>
+                <p className="text-sm font-medium text-foreground">
+                  Клиентов: {createdManagerSummaryRows.find((r) => r.managerId === detailManagerId)?.newClients ?? 0} · ТТ:{" "}
+                  {createdManagerSummaryRows.find((r) => r.managerId === detailManagerId)?.newTradePoints ?? 0}
+                </p>
+              </>
             ) : null}
           </DialogHeader>
           {detailManagerId != null && isActivityUnknownUserId(detailManagerId) ? (
@@ -1179,18 +1377,12 @@ function ClientBaseActivityDashboardInner(): ReactElement {
             </div>
           ) : (
             <Tabs value={detailTab} onValueChange={setDetailTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-2 gap-1 sm:grid-cols-4">
-                <TabsTrigger value="clients" className="text-xs" data-testid="tab-manager-added-clients">
-                  Клиенты добавлены
+              <TabsList className="grid w-full grid-cols-2 gap-1">
+                <TabsTrigger value="clients" className="text-xs" data-testid="tab-manager-created-clients">
+                  Клиенты
                 </TabsTrigger>
-                <TabsTrigger value="tps" className="text-xs" data-testid="tab-manager-added-trade-points">
-                  ТТ добавлены
-                </TabsTrigger>
-                <TabsTrigger value="updates" className="text-xs">
-                  Обновления
-                </TabsTrigger>
-                <TabsTrigger value="media" className="text-xs">
-                  Фото / витрины
+                <TabsTrigger value="tps" className="text-xs" data-testid="tab-manager-created-trade-points">
+                  Торговые точки
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="clients" className="mt-3 max-h-[52vh] space-y-2 overflow-y-auto pr-1">
@@ -1201,22 +1393,19 @@ function ClientBaseActivityDashboardInner(): ReactElement {
                     <div
                       key={c.dealerId}
                       className="rounded-lg border border-border/80 bg-muted/10 p-3 text-sm"
-                      data-testid={`card-manager-added-client-${c.dealerId}`}
+                      data-testid={`card-manager-created-client-${c.dealerId}`}
                     >
                       <p className="font-medium text-foreground">{c.title}</p>
                       <p className="text-xs text-muted-foreground">
                         {c.city}
                         {c.inn && c.inn !== "—" ? ` · ИНН ${c.inn}` : ""}
                       </p>
-                      <p className="text-xs text-muted-foreground">
-                        Сохранено: {c.savedAtLabel}
-                        {!c.hasExplicitDate ? " · дата не указана в записи" : ""}
-                      </p>
+                      <p className="text-xs text-muted-foreground">Добавлено: {c.savedAtLabel}</p>
                       <p className="text-xs text-muted-foreground">ТТ: {c.tradePointCount}</p>
                       <Link
                         href={`/dealers/${encodeURIComponent(c.dealerId)}`}
                         className="mt-2 inline-block text-xs font-medium text-primary underline-offset-4 hover:underline"
-                        data-testid={`link-manager-added-client-${c.dealerId}`}
+                        data-testid={`link-manager-created-client-${c.dealerId}`}
                       >
                         Открыть клиента
                       </Link>
@@ -1232,7 +1421,7 @@ function ClientBaseActivityDashboardInner(): ReactElement {
                     <div
                       key={tp.tradePointId}
                       className="rounded-lg border border-border/80 bg-muted/10 p-3 text-sm"
-                      data-testid={`card-manager-added-trade-point-${tp.tradePointId}`}
+                      data-testid={`card-manager-created-trade-point-${tp.tradePointId}`}
                     >
                       <p className="font-medium text-foreground">{tp.tpTitle}</p>
                       <p className="text-xs text-muted-foreground">Клиент: {tp.dealerTitle}</p>
@@ -1240,15 +1429,12 @@ function ClientBaseActivityDashboardInner(): ReactElement {
                         {tp.city} · {tp.address}
                       </p>
                       {tp.phone && tp.phone !== "—" ? <p className="text-xs text-muted-foreground">{tp.phone}</p> : null}
-                      <p className="text-xs text-muted-foreground">
-                        Сохранено: {tp.savedAtLabel}
-                        {!tp.hasExplicitDate ? " · дата не указана в записи" : ""}
-                      </p>
+                      <p className="text-xs text-muted-foreground">Добавлено: {tp.savedAtLabel}</p>
                       <div className="mt-2 flex flex-wrap gap-3">
                         <Link
                           href={`/dealers/${encodeURIComponent(tp.dealerId)}/trade-points/${encodeURIComponent(tp.tradePointId)}`}
                           className="text-xs font-medium text-primary underline-offset-4 hover:underline"
-                          data-testid={`link-manager-added-trade-point-${tp.tradePointId}`}
+                          data-testid={`link-manager-created-trade-point-${tp.tradePointId}`}
                         >
                           Открыть ТТ
                         </Link>
@@ -1261,42 +1447,6 @@ function ClientBaseActivityDashboardInner(): ReactElement {
                       </div>
                     </div>
                   ))
-                )}
-              </TabsContent>
-              <TabsContent value="updates" className="mt-3 max-h-[52vh] space-y-2 overflow-y-auto pr-1">
-                {detailUpdateEvents.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Нет обновлений в выбранных фильтрах.</p>
-                ) : (
-                  <ul className="space-y-2 text-sm" data-testid="list-activity-manager-events">
-                    {detailUpdateEvents.slice(0, 120).map((e: ActivityEvent) => (
-                      <li key={e.id} className="border-b border-border/60 pb-2" data-testid={`row-activity-event-${e.id}`}>
-                        <p className="font-medium text-foreground">{e.label}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {e.atMs === ACTIVITY_NO_CALENDAR_TIME_MS
-                            ? "дата не указана"
-                            : new Date(e.atMs).toLocaleString("ru-RU")}
-                        </p>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </TabsContent>
-              <TabsContent value="media" className="mt-3 max-h-[52vh] space-y-2 overflow-y-auto pr-1">
-                {detailMediaEvents.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Нет фото и витрин в выбранных фильтрах.</p>
-                ) : (
-                  <ul className="space-y-2 text-sm">
-                    {detailMediaEvents.slice(0, 120).map((e: ActivityEvent) => (
-                      <li key={e.id} className="border-b border-border/60 pb-2">
-                        <p className="font-medium text-foreground">{e.label}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {e.atMs === ACTIVITY_NO_CALENDAR_TIME_MS
-                            ? "дата не указана"
-                            : new Date(e.atMs).toLocaleString("ru-RU")}
-                        </p>
-                      </li>
-                    ))}
-                  </ul>
                 )}
               </TabsContent>
             </Tabs>
