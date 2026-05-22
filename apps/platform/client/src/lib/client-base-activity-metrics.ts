@@ -18,6 +18,16 @@ export function normalizeText(value: unknown): string {
   return String(value).trim();
 }
 
+/** Служебный id агрегата, когда в событии нет пользователя / неизвестный actor. */
+export const ACTIVITY_UNKNOWN_USER_ID = "__unset__";
+
+/** Подпись в UI для событий без распознанного автора. */
+export const ACTIVITY_UNKNOWN_DISPLAY = "Автор не определён";
+
+export function isActivityUnknownUserId(id: string): boolean {
+  return id === ACTIVITY_UNKNOWN_USER_ID;
+}
+
 export type ActivityPeriodPreset = "today" | "yesterday" | "7d" | "30d" | "all";
 
 export type ActivityTypeFilter = "all" | "dealers" | "trade_points" | "legal" | "photos" | "showcase" | "archive";
@@ -91,7 +101,18 @@ export function inActivityRange(atMs: number, range: { startMs: number; endMs: n
   return atMs >= range.startMs && atMs < range.endMs;
 }
 
-function resolveUserName(userId: string | undefined | null, explicitName: string | undefined, dealerById: Map<string, DealerRow>): string {
+/**
+ * Имя для дашборда активности.
+ * Порядок: явное *Name из state → справочник sales по userId → менеджер клиента, если releaseManagerId совпал с userId
+ * → сырой userId → менеджер из строки клиента (если userId пуст и известен dealerId) → «Автор не определён».
+ * Архивы и др. попадают сюда без автора, если в форме не записали archivedBy / *Name или id не из справочника.
+ */
+function resolveUserName(
+  userId: string | undefined | null,
+  explicitName: string | undefined,
+  dealerById: Map<string, DealerRow>,
+  ctx?: { dealerId?: string },
+): string {
   const ex = normalizeText(explicitName);
   if (ex && ex !== "—") return ex;
   const uid = normalizeText(userId);
@@ -100,13 +121,25 @@ function resolveUserName(userId: string | undefined | null, explicitName: string
   for (const row of Array.from(dealerById.values())) {
     if (row.releaseManagerId === uid && normalizeText(row.manager)) return normalizeText(row.manager);
   }
-  if (uid) return uid;
-  return "Не определён";
+  if (uid && uid !== "unknown") return uid;
+  const dId = normalizeText(ctx?.dealerId);
+  if (dId) {
+    const row = dealerById.get(dId);
+    const mgr = normalizeText(row?.manager);
+    if (mgr && mgr !== "—") return mgr;
+  }
+  return ACTIVITY_UNKNOWN_DISPLAY;
+}
+
+function normalizeActorUserId(raw: string | undefined | null): string {
+  const u = normalizeText(raw);
+  if (!u || u === "unknown") return ACTIVITY_UNKNOWN_USER_ID;
+  return u;
 }
 
 function pushEv(out: ActivityEvent[], e: Omit<ActivityEvent, "id"> & { id?: string }) {
-  const userId = normalizeText(e.userId) || "__unset__";
-  const userName = normalizeText(e.userName) || "Не определён";
+  const userId = normalizeActorUserId(e.userId);
+  const userName = normalizeText(e.userName) || ACTIVITY_UNKNOWN_DISPLAY;
   const id = e.id ?? `${e.kind}-${e.atMs}-${userId}-${Math.random().toString(36).slice(2, 8)}`;
   out.push({ ...e, id, userId, userName });
 }
@@ -127,7 +160,7 @@ export function collectActivityEvents(state: ActualizationState, dealerRows: Dea
       kind: "manual_dealer",
       atMs: t,
       userId: d.createdBy,
-      userName: resolveUserName(d.createdBy, d.createdByName, dealerById),
+      userName: resolveUserName(d.createdBy, d.createdByName, dealerById, { dealerId: d.id }),
       label: `Создал клиента: ${name}`,
       dealerId: d.id,
     });
@@ -142,7 +175,7 @@ export function collectActivityEvents(state: ActualizationState, dealerRows: Dea
       kind: "dealer_updated",
       atMs: t,
       userId: ov.updatedBy,
-      userName: resolveUserName(ov.updatedBy, ov.updatedByName, dealerById),
+      userName: resolveUserName(ov.updatedBy, ov.updatedByName, dealerById, { dealerId: ov.dealerId }),
       label: `Обновил клиента: ${name}`,
       dealerId: ov.dealerId,
     });
@@ -156,7 +189,7 @@ export function collectActivityEvents(state: ActualizationState, dealerRows: Dea
       kind: "manual_trade_point",
       atMs: t,
       userId: tp.createdBy,
-      userName: resolveUserName(tp.createdBy, tp.createdByName, dealerById),
+      userName: resolveUserName(tp.createdBy, tp.createdByName, dealerById, { dealerId: tp.dealerId }),
       label: `Добавил ТТ: ${title}`,
       dealerId: tp.dealerId,
       tradePointId: tp.id,
@@ -170,7 +203,7 @@ export function collectActivityEvents(state: ActualizationState, dealerRows: Dea
       kind: "trade_point_updated",
       atMs: t,
       userId: ov.updatedBy,
-      userName: resolveUserName(ov.updatedBy, ov.updatedByName, dealerById),
+      userName: resolveUserName(ov.updatedBy, ov.updatedByName, dealerById, { dealerId: ov.dealerId }),
       label: `Обновил торговую точку`,
       dealerId: ov.dealerId,
       tradePointId: ov.tradePointId,
@@ -185,7 +218,7 @@ export function collectActivityEvents(state: ActualizationState, dealerRows: Dea
       kind: "archive_dealer",
       atMs: t,
       userId: ar.archivedBy,
-      userName: resolveUserName(ar.archivedBy, ar.archivedByName, dealerById),
+      userName: resolveUserName(ar.archivedBy, ar.archivedByName, dealerById, { dealerId: ar.dealerId }),
       label: `Архивировал клиента: ${row?.name ?? ar.dealerId}`,
       dealerId: ar.dealerId,
     });
@@ -198,7 +231,7 @@ export function collectActivityEvents(state: ActualizationState, dealerRows: Dea
       kind: "archive_trade_point",
       atMs: t,
       userId: ar.archivedBy,
-      userName: resolveUserName(ar.archivedBy, ar.archivedByName, dealerById),
+      userName: resolveUserName(ar.archivedBy, ar.archivedByName, dealerById, { dealerId: ar.dealerId }),
       label: `Архивировал торговую точку`,
       dealerId: ar.dealerId,
       tradePointId: ar.tradePointId,
@@ -212,7 +245,7 @@ export function collectActivityEvents(state: ActualizationState, dealerRows: Dea
       kind: "archive_legal",
       atMs: t,
       userId: ar.archivedBy,
-      userName: resolveUserName(ar.archivedBy, ar.archivedByName, dealerById),
+      userName: resolveUserName(ar.archivedBy, ar.archivedByName, dealerById, { dealerId: ar.dealerId }),
       label: `Архивировал юрлицо`,
       dealerId: ar.dealerId,
     });
@@ -225,7 +258,7 @@ export function collectActivityEvents(state: ActualizationState, dealerRows: Dea
       kind: "archive_contact",
       atMs: t,
       userId: ar.archivedBy,
-      userName: resolveUserName(ar.archivedBy, ar.archivedByName, dealerById),
+      userName: resolveUserName(ar.archivedBy, ar.archivedByName, dealerById, { dealerId: ar.dealerId }),
       label: `Архивировал контакт клиента`,
       dealerId: ar.dealerId,
     });
@@ -246,7 +279,7 @@ export function collectActivityEvents(state: ActualizationState, dealerRows: Dea
         kind: "legal_entity",
         atMs: t,
         userId: by,
-        userName: resolveUserName(by, byName, dealerById),
+        userName: resolveUserName(by, byName, dealerById, { dealerId }),
         label: `Юрлицо: ${nm}`,
         dealerId,
       });
@@ -262,7 +295,7 @@ export function collectActivityEvents(state: ActualizationState, dealerRows: Dea
         kind: "photo",
         atMs: t,
         userId: ph.uploadedBy,
-        userName: resolveUserName(ph.uploadedBy, ph.uploadedByName, dealerById),
+        userName: resolveUserName(ph.uploadedBy, ph.uploadedByName, dealerById, { dealerId }),
         label: ph.entityType === "dealer" ? `Загрузил фото клиента` : `Загрузил фото`,
         dealerId,
       });
@@ -280,7 +313,7 @@ export function collectActivityEvents(state: ActualizationState, dealerRows: Dea
         kind: "photo",
         atMs: t,
         userId: ph.uploadedBy,
-        userName: resolveUserName(ph.uploadedBy, ph.uploadedByName, dealerById),
+        userName: resolveUserName(ph.uploadedBy, ph.uploadedByName, dealerById, { dealerId: dealerForTp }),
         label: `Загрузил фото торговой точки`,
         tradePointId: tpId,
         dealerId: dealerForTp,
@@ -302,7 +335,7 @@ export function collectActivityEvents(state: ActualizationState, dealerRows: Dea
       kind: "showcase",
       atMs: t,
       userId: sh.updatedBy,
-      userName: resolveUserName(sh.updatedBy, sh.updatedByName, dealerById),
+      userName: resolveUserName(sh.updatedBy, sh.updatedByName, dealerById, { dealerId: sh.dealerId }),
       label: `Заполнил витрину ТТ`,
       dealerId: sh.dealerId,
       tradePointId: sh.tradePointId,
@@ -318,7 +351,7 @@ export function collectActivityEvents(state: ActualizationState, dealerRows: Dea
       kind: "contact",
       atMs: t,
       userId: uid,
-      userName: resolveUserName(uid, c.updatedByName, dealerById),
+      userName: resolveUserName(uid, c.updatedByName, dealerById, { dealerId: c.dealerId }),
       label: `Контакт клиента: ${c.fullName || "без имени"}`,
       dealerId: c.dealerId,
     });
@@ -333,7 +366,7 @@ export function collectActivityEvents(state: ActualizationState, dealerRows: Dea
         kind: "matrix_task",
         atMs: t,
         userId: task.createdBy,
-        userName: resolveUserName(task.createdBy, task.createdByName, dealerById),
+        userName: resolveUserName(task.createdBy, task.createdByName, dealerById, { dealerId: task.dealerId }),
         label: `Задача по матрице: ${normalizeText(task.productName) || "без названия"}`,
         dealerId: task.dealerId,
         tradePointId: task.tradePointId,
@@ -429,6 +462,11 @@ export type ManagerActivityAgg = {
   score: number;
   lastAtMs: number;
 };
+
+/** Подпись для графиков: неизвестный автор — единая формулировка. */
+export function activityChartManagerLabel(row: ManagerActivityAgg): string {
+  return isActivityUnknownUserId(row.managerId) ? ACTIVITY_UNKNOWN_DISPLAY : row.displayName;
+}
 
 const SCORE: Partial<Record<ActivityEventKind, number>> = {
   manual_dealer: 3,

@@ -3,7 +3,7 @@
  */
 
 import type { ReactElement, ReactNode } from "react";
-import { Component, useMemo, useState } from "react";
+import { Component, useMemo, useRef, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -43,6 +43,8 @@ import { getDealerRegionalManagerDisplay } from "@/lib/dealer-base-mock-data";
 import { getManagersForRopTeam, getRopOptions, isRopOrManagerAllFilter } from "@/lib/rop-manager-filters";
 import { cn } from "@/lib/utils";
 import {
+  ACTIVITY_UNKNOWN_DISPLAY,
+  activityChartManagerLabel,
   aggregateByManager,
   activityPeriodToRange,
   activityStatusForManager,
@@ -52,12 +54,12 @@ import {
   computeQualityMetrics,
   computeTopKpis,
   filterEventsForDashboard,
+  isActivityUnknownUserId,
   normalizeText,
   previousActivityRange,
   type ActivityEvent,
   type ActivityPeriodPreset,
   type ActivityTypeFilter,
-  type ManagerActivityAgg,
 } from "@/lib/client-base-activity-metrics";
 
 const PERIOD_LABELS: Record<ActivityPeriodPreset, string> = {
@@ -115,22 +117,57 @@ class ClientBaseActivityDashboardBoundary extends Component<{ children: ReactNod
   }
 }
 
+const UNKNOWN_ACTOR_HELP =
+  "Эти действия записаны без createdBy/updatedBy или пользователь не найден в справочнике. Нужно проверить сохранение actorUserId/actorLabel в формах клиента, торговой точки, юрлица, фото.";
+
 function KpiCard({
   title,
   value,
   hint,
+  caption,
+  onActivate,
+  className,
 }: {
   title: string;
   value: string | number;
   hint?: string;
+  /** Короткая подпись под числом (до подсказки с дельтой). */
+  caption?: string;
+  onActivate?: () => void;
+  className?: string;
 }): ReactElement {
+  const body = (
+    <>
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
+      <p className="text-xl font-bold tabular-nums text-foreground sm:text-2xl">{value}</p>
+      {caption ? <p className="text-[11px] leading-snug text-muted-foreground">{caption}</p> : null}
+      {hint ? <p className="text-[11px] text-muted-foreground">{hint}</p> : null}
+    </>
+  );
+
+  if (onActivate) {
+    return (
+      <Card
+        className={cn(
+          "rounded-2xl border border-border/80 bg-card shadow-sm transition hover:border-primary/35 hover:shadow-md",
+          className,
+        )}
+      >
+        <button
+          type="button"
+          className="w-full rounded-2xl p-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          onClick={onActivate}
+          data-testid="kpi-active-managers-trigger"
+        >
+          <CardHeader className="p-3 pb-1 sm:p-4 sm:pb-2">{body}</CardHeader>
+        </button>
+      </Card>
+    );
+  }
+
   return (
-    <Card className="rounded-2xl border border-border/80 bg-card shadow-sm">
-      <CardHeader className="p-3 pb-1 sm:p-4 sm:pb-2">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
-        <p className="text-xl font-bold tabular-nums text-foreground sm:text-2xl">{value}</p>
-        {hint ? <p className="text-[11px] text-muted-foreground">{hint}</p> : null}
-      </CardHeader>
+    <Card className={cn("rounded-2xl border border-border/80 bg-card shadow-sm", className)}>
+      <CardHeader className="p-3 pb-1 sm:p-4 sm:pb-2">{body}</CardHeader>
     </Card>
   );
 }
@@ -168,6 +205,7 @@ function ClientBaseActivityDashboardInner(): ReactElement {
   const [onlyActiveManagers, setOnlyActiveManagers] = useState(false);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(true);
   const [detailManagerId, setDetailManagerId] = useState<string | null>(null);
+  const managersSectionRef = useRef<HTMLDivElement | null>(null);
 
   const mergedAll = useMemo(
     () => buildDealerBaseRowsWithActualization(state, profile, { includeArchivedDealers: true }),
@@ -275,7 +313,7 @@ function ClientBaseActivityDashboardInner(): ReactElement {
       visibleManagers
         .filter((m) => m.score > 0)
         .slice(0, 12)
-        .map((m) => ({ name: m.displayName, score: m.score, id: m.managerId }))
+        .map((m) => ({ name: activityChartManagerLabel(m), score: m.score, id: m.managerId }))
         .reverse(),
     [visibleManagers],
   );
@@ -294,6 +332,30 @@ function ClientBaseActivityDashboardInner(): ReactElement {
   const idleManagers = useMemo(() => roster.filter((m) => !last7Ids.has(m.id)), [roster, last7Ids]);
 
   const hasFilteredActivity = filteredEvents.length > 0;
+
+  const activeManagersCaption = useMemo(() => {
+    if (!hasFilteredActivity) return "Нет активности за период";
+    const activeRows = managerRows.filter((m) => m.totalActions > 0);
+    if (activeRows.length === 0) return "Нет активности за период";
+    const known = activeRows.filter((m) => !isActivityUnknownUserId(m.managerId));
+    const hasUnknown = activeRows.some((m) => isActivityUnknownUserId(m.managerId));
+    if (known.length > 0) {
+      const first = known[0].displayName;
+      return known.length === 1 ? `Например: ${first}` : `Например: ${first} и др.`;
+    }
+    if (hasUnknown) return "Есть активность без автора";
+    return "Нет активности за период";
+  }, [hasFilteredActivity, managerRows]);
+
+  const scrollToManagersSection = (): void => {
+    managersSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const detailDialogTitle = useMemo(() => {
+    if (!detailManagerId) return "";
+    if (isActivityUnknownUserId(detailManagerId)) return ACTIVITY_UNKNOWN_DISPLAY;
+    return visibleManagers.find((m) => m.managerId === detailManagerId)?.displayName ?? "Менеджер";
+  }, [detailManagerId, visibleManagers]);
 
   if (!actx.enabled) {
     return (
@@ -466,50 +528,77 @@ function ClientBaseActivityDashboardInner(): ReactElement {
         <KpiCard title="Фото загружено" value={kpis.photos} hint={prevKpis ? deltaLabel(kpis.photos, prevKpis.photos) : undefined} />
         <KpiCard title="Витрин заполнено (ТТ)" value={kpis.showcasesFilled} />
         <KpiCard title="ТТ с дефицитом" value={kpis.deficitTradePoints} />
-        <KpiCard title="Активных менеджеров" value={kpis.activeManagers} />
+        <KpiCard title="Активных менеджеров" value={kpis.activeManagers} caption={activeManagersCaption} onActivate={scrollToManagersSection} />
       </div>
 
-      <Card className="rounded-2xl border border-border/80 bg-card shadow-sm">
+      <Card
+        ref={managersSectionRef}
+        id="section-activity-managers"
+        className="scroll-mt-4 rounded-2xl border border-border/80 bg-card shadow-sm"
+      >
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Активность по менеджерам</CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto p-0 sm:p-4">
           {isMobile ? (
             <div className="flex flex-col gap-2 p-3">
-              {visibleManagers.map((m) => (
-                <button
-                  key={m.managerId}
-                  type="button"
-                  className="rounded-xl border border-border bg-card p-3 text-left shadow-sm transition hover:bg-muted/30"
-                  data-testid={`row-activity-manager-${m.managerId}`}
-                  onClick={() => setDetailManagerId(m.managerId)}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p className="font-semibold text-foreground">{m.displayName}</p>
-                      <p className="text-xs text-muted-foreground">{m.teamLabel}</p>
+              {visibleManagers.map((m) => {
+                const unknown = isActivityUnknownUserId(m.managerId);
+                return (
+                  <div
+                    key={m.managerId}
+                    className="rounded-xl border border-border bg-card p-3 shadow-sm"
+                    data-testid={`row-activity-manager-${m.managerId}`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1 space-y-1">
+                        {unknown ? (
+                          <Badge
+                            variant="outline"
+                            className="border-border/80 bg-muted/30 text-[10px] font-medium text-foreground"
+                            data-testid={`badge-activity-author-unknown-${m.managerId}`}
+                          >
+                            {ACTIVITY_UNKNOWN_DISPLAY}
+                          </Badge>
+                        ) : (
+                          <p className="font-semibold text-foreground">{m.displayName}</p>
+                        )}
+                        <p className="text-xs text-muted-foreground">{m.teamLabel}</p>
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end gap-2">
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "text-[10px]",
+                            activityStatusForManager(m) === "active" && "border-primary/50 bg-primary/10 text-foreground",
+                            activityStatusForManager(m) === "weak" && "border-border text-muted-foreground",
+                            activityStatusForManager(m) === "none" && "border-border text-muted-foreground",
+                          )}
+                          data-testid={`badge-activity-status-${m.managerId}`}
+                        >
+                          {activityStatusForManager(m) === "active" ? "Активно" : activityStatusForManager(m) === "weak" ? "Слабо" : "Нет активности"}
+                        </Badge>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-auto px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 hover:text-primary"
+                          onClick={() => setDetailManagerId(m.managerId)}
+                          data-testid={`btn-activity-manager-detail-${m.managerId}`}
+                        >
+                          Детали
+                        </Button>
+                      </div>
                     </div>
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "shrink-0 text-[10px]",
-                        activityStatusForManager(m) === "active" && "border-primary/50 bg-primary/10 text-foreground",
-                        activityStatusForManager(m) === "weak" && "border-border text-muted-foreground",
-                        activityStatusForManager(m) === "none" && "border-border text-muted-foreground",
-                      )}
-                      data-testid={`badge-activity-status-${m.managerId}`}
-                    >
-                      {activityStatusForManager(m) === "active" ? "Активно" : activityStatusForManager(m) === "weak" ? "Слабо" : "Нет активности"}
-                    </Badge>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Действий: {m.totalActions} · score: {m.score}
+                    </p>
                   </div>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Действий: {m.totalActions} · score: {m.score}
-                  </p>
-                </button>
-              ))}
+                );
+              })}
             </div>
           ) : (
-            <table className="w-full min-w-[720px] text-sm" data-testid="table-activity-managers">
+            <table className="w-full min-w-[780px] text-sm" data-testid="table-activity-managers">
               <thead>
                 <tr className="border-b bg-muted/40 text-left text-[11px] font-semibold uppercase text-muted-foreground">
                   <th className="p-2">Менеджер</th>
@@ -525,42 +614,65 @@ function ClientBaseActivityDashboardInner(): ReactElement {
                   <th className="p-2 text-right">Всего</th>
                   <th className="p-2 text-right">Score</th>
                   <th className="p-2">Статус</th>
+                  <th className="p-2 text-right"> </th>
                 </tr>
               </thead>
               <tbody>
-                {visibleManagers.map((m) => (
-                  <tr
-                    key={m.managerId}
-                    className="cursor-pointer border-b border-border/60 hover:bg-muted/20"
-                    data-testid={`row-activity-manager-${m.managerId}`}
-                    onClick={() => setDetailManagerId(m.managerId)}
-                  >
-                    <td className="p-2 font-medium">{m.displayName}</td>
-                    <td className="p-2 text-muted-foreground">{m.teamLabel}</td>
-                    <td className="p-2 text-right tabular-nums">{m.createdDealers}</td>
-                    <td className="p-2 text-right tabular-nums">{m.updatedDealers}</td>
-                    <td className="p-2 text-right tabular-nums">{m.addedTradePoints}</td>
-                    <td className="p-2 text-right tabular-nums">{m.updatedTradePoints}</td>
-                    <td className="p-2 text-right tabular-nums">{m.legalEntities}</td>
-                    <td className="p-2 text-right tabular-nums">{m.photos}</td>
-                    <td className="p-2 text-right tabular-nums">{m.showcases}</td>
-                    <td className="p-2 text-right tabular-nums">{m.archives}</td>
-                    <td className="p-2 text-right tabular-nums">{m.totalActions}</td>
-                    <td className="p-2 text-right font-semibold tabular-nums text-primary">{m.score}</td>
-                    <td className="p-2">
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "text-[10px]",
-                          activityStatusForManager(m) === "active" && "border-primary/50 bg-primary/10",
+                {visibleManagers.map((m) => {
+                  const unknown = isActivityUnknownUserId(m.managerId);
+                  return (
+                    <tr key={m.managerId} className="border-b border-border/60 hover:bg-muted/20" data-testid={`row-activity-manager-${m.managerId}`}>
+                      <td className="p-2">
+                        {unknown ? (
+                          <Badge
+                            variant="outline"
+                            className="border-border/80 bg-muted/30 text-[10px] font-medium text-foreground"
+                            data-testid={`badge-activity-author-unknown-${m.managerId}`}
+                          >
+                            {ACTIVITY_UNKNOWN_DISPLAY}
+                          </Badge>
+                        ) : (
+                          <span className="font-medium">{m.displayName}</span>
                         )}
-                        data-testid={`badge-activity-status-${m.managerId}`}
-                      >
-                        {activityStatusForManager(m) === "active" ? "Активно" : activityStatusForManager(m) === "weak" ? "Слабо" : "Нет активности"}
-                      </Badge>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="p-2 text-muted-foreground">{m.teamLabel}</td>
+                      <td className="p-2 text-right tabular-nums">{m.createdDealers}</td>
+                      <td className="p-2 text-right tabular-nums">{m.updatedDealers}</td>
+                      <td className="p-2 text-right tabular-nums">{m.addedTradePoints}</td>
+                      <td className="p-2 text-right tabular-nums">{m.updatedTradePoints}</td>
+                      <td className="p-2 text-right tabular-nums">{m.legalEntities}</td>
+                      <td className="p-2 text-right tabular-nums">{m.photos}</td>
+                      <td className="p-2 text-right tabular-nums">{m.showcases}</td>
+                      <td className="p-2 text-right tabular-nums">{m.archives}</td>
+                      <td className="p-2 text-right tabular-nums">{m.totalActions}</td>
+                      <td className="p-2 text-right font-semibold tabular-nums text-primary">{m.score}</td>
+                      <td className="p-2">
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "text-[10px]",
+                            activityStatusForManager(m) === "active" && "border-primary/50 bg-primary/10",
+                          )}
+                          data-testid={`badge-activity-status-${m.managerId}`}
+                        >
+                          {activityStatusForManager(m) === "active" ? "Активно" : activityStatusForManager(m) === "weak" ? "Слабо" : "Нет активности"}
+                        </Badge>
+                      </td>
+                      <td className="p-2 text-right">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-auto px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 hover:text-primary"
+                          onClick={() => setDetailManagerId(m.managerId)}
+                          data-testid={`btn-activity-manager-detail-${m.managerId}`}
+                        >
+                          Детали
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
@@ -607,7 +719,7 @@ function ClientBaseActivityDashboardInner(): ReactElement {
                 <BarChart layout="vertical" data={managerChartData} margin={{ top: 4, right: 16, left: 4, bottom: 4 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal className="stroke-border/50" />
                   <XAxis type="number" tick={{ fontSize: 10 }} />
-                  <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 10 }} />
+                  <YAxis type="category" dataKey="name" width={132} tick={{ fontSize: 10 }} />
                   <Tooltip />
                   <Bar dataKey="score" fill={primaryFill} radius={[0, 4, 4, 0]} name="Score" />
                 </BarChart>
@@ -704,8 +816,13 @@ function ClientBaseActivityDashboardInner(): ReactElement {
       <Dialog open={detailManagerId != null} onOpenChange={(o) => !o && setDetailManagerId(null)}>
         <DialogContent className="max-h-[85vh] overflow-y-auto" data-testid="dialog-activity-manager-detail">
           <DialogHeader>
-            <DialogTitle>Детали менеджера</DialogTitle>
+            <DialogTitle>Детали — {detailDialogTitle}</DialogTitle>
           </DialogHeader>
+          {detailManagerId != null && isActivityUnknownUserId(detailManagerId) ? (
+            <p className="rounded-lg border border-border/80 bg-muted/20 p-3 text-sm leading-relaxed text-muted-foreground">
+              {UNKNOWN_ACTOR_HELP}
+            </p>
+          ) : null}
           <ul className="space-y-2 text-sm" data-testid="list-activity-manager-events">
             {detailEvents.map((e: ActivityEvent) => (
               <li key={e.id} className="border-b border-border/60 pb-2" data-testid={`row-activity-event-${e.id}`}>
