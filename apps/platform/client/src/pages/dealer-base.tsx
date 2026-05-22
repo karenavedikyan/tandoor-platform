@@ -77,7 +77,9 @@ import { CityConcentrationBlock } from "@/components/city-concentration-block";
 import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actualization-sync-status";
 import { DealerActualizationCreateDialog } from "@/components/client-base-actualization-dealer-forms";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
+import { useClientBaseManagementMergedState } from "@/hooks/use-client-base-management-merged-state";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
+import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
 import {
   canActualizeClientBase,
   canArchiveDealerDuringActualization,
@@ -1134,6 +1136,13 @@ export default function DealerBase() {
   const routeKey = useMemo(() => routeQs.toString(), [routeQs]);
   const [, setLocation] = useLocation();
   const actx = useClientBaseActualization();
+  const managementPlane = useClientBaseManagementMergedState({
+    enabled: actx.enabled,
+    profile,
+    dashboardRopTeamId: ropTeam,
+    contextState: actx.state,
+  });
+  const teamActualizationPlane = managementPlane.mergedState;
 
   const showActualizationSync = useMemo(() => canActualizeClientBase(profile), [profile]);
 
@@ -1142,10 +1151,10 @@ export default function DealerBase() {
 
   const mergedRowsForDealerBase = useMemo(() => {
     if (!actx.enabled) return DEALER_BASE_ROWS;
-    return buildDealerBaseRowsWithActualization(actx.state, profile, {
+    return buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, {
       includeArchivedDealers: showArchivedDealers,
     });
-  }, [actx.enabled, actx.state, profile, showArchivedDealers]);
+  }, [actx.enabled, teamActualizationPlane, profile, showArchivedDealers]);
 
   useEffect(() => {
     const allowed = workViewsForAccess(access);
@@ -2032,11 +2041,11 @@ export default function DealerBase() {
     if (!actx.enabled || !canActualizeClientBase(profile) || showArchivedDealers) return new Set<string>();
     const s = new Set<string>();
     for (const r of rowsFinalForList) {
-      if (actx.state.archivedDealersById[r.id]) continue;
+      if (teamActualizationPlane.archivedDealersById[r.id]) continue;
       if (canArchiveDealerDuringActualization(profile, r)) s.add(r.id);
     }
     return s;
-  }, [actx.enabled, actx.state.archivedDealersById, profile, rowsFinalForList, showArchivedDealers]);
+  }, [actx.enabled, teamActualizationPlane.archivedDealersById, profile, rowsFinalForList, showArchivedDealers]);
 
   useEffect(() => {
     setSelectedBulkArchiveDealerIds((prev) => {
@@ -2361,6 +2370,30 @@ export default function DealerBase() {
             syncStatus={actx.syncStatus}
             onRetry={() => void actx.refresh()}
           />
+          {actx.enabled && shouldUseTeamMergedActualizationPlane(profile) && managementPlane.teamFetchLoading ? (
+            <Alert className="border-primary/30 bg-primary/5" data-testid="alert-dealer-base-team-state-loading">
+              <Info className="h-4 w-4" />
+              <AlertDescription>
+                Загружаются данные актуализации команды… Счётчики и списки обновятся после получения всех снимков.
+              </AlertDescription>
+            </Alert>
+          ) : null}
+          {actx.enabled && shouldUseTeamMergedActualizationPlane(profile) && managementPlane.teamFetchError ? (
+            <Alert variant="destructive" data-testid="alert-dealer-base-team-state-error">
+              <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <span>{managementPlane.teamFetchError}</span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 border-destructive/40"
+                  onClick={() => void managementPlane.refreshMergedTeam()}
+                >
+                  Повторить загрузку команды
+                </Button>
+              </AlertDescription>
+            </Alert>
+          ) : null}
           {actx.enabled ? (
             <div
               className="flex max-w-md flex-row items-center justify-between gap-3 rounded-xl border border-border/80 bg-muted/15 px-4 py-3"
@@ -2384,7 +2417,11 @@ export default function DealerBase() {
         open={createDealerOpen}
         onOpenChange={setCreateDealerOpen}
         profile={profile}
-        mergedDealerRows={actx.enabled ? actx.mergedDealerRows : DEALER_BASE_ROWS}
+        mergedDealerRows={
+          actx.enabled
+            ? buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, { includeArchivedDealers: false })
+            : DEALER_BASE_ROWS
+        }
         onCreated={(id) => setLocation(`/dealers/${encodeURIComponent(id)}`)}
       />
 
@@ -3295,7 +3332,7 @@ export default function DealerBase() {
                 emptyMessage="Нет клиентов по выбранным фильтрам."
                 shipmentActiveDayId={activeShipmentDayId}
                 shipmentUserId={profile.personaUserId}
-                actualizationState={actx.state}
+                actualizationState={teamActualizationPlane}
                 {...workPlanListProps}
                 archiveBulk={archiveBulkListProps}
               />
@@ -3311,7 +3348,7 @@ export default function DealerBase() {
                 emptyMessage="Нет записей."
                 shipmentActiveDayId={activeShipmentDayId}
                 shipmentUserId={profile.personaUserId}
-                actualizationState={actx.state}
+                actualizationState={teamActualizationPlane}
                 {...workPlanListProps}
                 archiveBulk={archiveBulkListProps}
               />
@@ -3337,7 +3374,7 @@ export default function DealerBase() {
                 emptyMessage="Ничего не найдено."
                 shipmentActiveDayId={activeShipmentDayId}
                 shipmentUserId={profile.personaUserId}
-                actualizationState={actx.state}
+                actualizationState={teamActualizationPlane}
                 {...workPlanListProps}
                 archiveBulk={archiveBulkListProps}
               />
@@ -3363,7 +3400,7 @@ export default function DealerBase() {
                 emptyMessage="Нет клиентов команды по фильтрам."
                 shipmentActiveDayId={activeShipmentDayId}
                 shipmentUserId={profile.personaUserId}
-                actualizationState={actx.state}
+                actualizationState={teamActualizationPlane}
                 {...workPlanListProps}
                 archiveBulk={archiveBulkListProps}
               />

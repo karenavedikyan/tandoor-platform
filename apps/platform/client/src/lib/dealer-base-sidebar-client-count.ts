@@ -22,6 +22,13 @@ export type SidebarDealerClientCountContext = {
   /** Первичная загрузка / refresh актуализации — не показываем устаревшее число. */
   loading: boolean;
   state: ActualizationState;
+  /**
+   * Для РОП/директора: объединённый team state (как на /dealer-base).
+   * Если не передан, для расчёта используется только `state` (слой текущего пользователя).
+   */
+  managementDisplayState?: ActualizationState;
+  /** Пока тянем state менеджеров команды — не показываем частичный счётчик в навигации. */
+  managementTeamFetchLoading?: boolean;
 };
 
 function defaultPickerArgsForNav(profile: ReleaseDemoProfile, access: DealerBaseAccessRole): DealerBasePickerArgs {
@@ -48,9 +55,11 @@ export function resolveSidebarWorkingDealerClientCount(
   ctx: SidebarDealerClientCountContext,
 ): number | null {
   if (ctx.enabled && ctx.loading) return null;
+  if (ctx.enabled && ctx.managementTeamFetchLoading) return null;
+  const actForRows = ctx.managementDisplayState ?? ctx.state;
   const merged = !ctx.enabled
     ? DEALER_BASE_ROWS
-    : buildDealerBaseRowsWithActualization(ctx.state, profile, { includeArchivedDealers: false });
+    : buildDealerBaseRowsWithActualization(actForRows, profile, { includeArchivedDealers: false });
   const access = mapSalesRoleToDealerBaseAccess(profile.role);
   const scoped = roleScopedDealerRows(merged, profile);
   const pickerArgs = defaultPickerArgsForNav(profile, access);

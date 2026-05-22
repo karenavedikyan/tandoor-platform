@@ -17,8 +17,13 @@ import InternalPrototypePlaceholder from "@/pages/internal-prototype-placeholder
 import { INTERNAL_PROTOTYPE_ROUTES } from "@/lib/preview-config";
 import { ClientBaseActualizationProvider, useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { ThemeProvider } from "@/context/theme-provider";
+import { useClientBaseManagementMergedState } from "@/hooks/use-client-base-management-merged-state";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { resolveSidebarWorkingDealerClientCount } from "@/lib/dealer-base-sidebar-client-count";
+import {
+  initialRopManagerForProfile,
+  mapSalesRoleToDealerBaseAccess,
+} from "@/lib/dealer-base-role-views";
 import { countWorkingTradePointsForSidebar } from "@/lib/trade-point-list-for-actualization";
 import type { SalesUser } from "@/lib/sales-control-data";
 
@@ -119,20 +124,40 @@ function AuthenticatedShell({
 }) {
   const { profile } = useReleaseDemoProfile();
   const actx = useClientBaseActualization();
+  const dealerBaseAccess = useMemo(() => mapSalesRoleToDealerBaseAccess(profile.role), [profile.role]);
+  const sidebarDashboardRopTeamId = useMemo(
+    () => initialRopManagerForProfile(profile, dealerBaseAccess).ropTeam,
+    [profile, dealerBaseAccess],
+  );
+  const managementPlane = useClientBaseManagementMergedState({
+    enabled: actx.enabled,
+    profile,
+    dashboardRopTeamId: sidebarDashboardRopTeamId,
+    contextState: actx.state,
+  });
   const dealerNavCount = useMemo(
     () =>
       resolveSidebarWorkingDealerClientCount(profile, {
         enabled: actx.enabled,
         loading: actx.loading,
         state: actx.state,
+        managementDisplayState: managementPlane.mergedState,
+        managementTeamFetchLoading: managementPlane.teamFetchLoading,
       }),
-    [profile, actx.enabled, actx.loading, actx.state],
+    [
+      profile,
+      actx.enabled,
+      actx.loading,
+      actx.state,
+      managementPlane.mergedState,
+      managementPlane.teamFetchLoading,
+    ],
   );
   const tradePointNavCount = useMemo(() => {
     if (!actx.enabled) return undefined;
-    if (actx.loading) return null;
-    return countWorkingTradePointsForSidebar(profile, actx.state);
-  }, [actx.enabled, actx.loading, actx.state, profile]);
+    if (actx.loading || managementPlane.teamFetchLoading) return null;
+    return countWorkingTradePointsForSidebar(profile, managementPlane.mergedState);
+  }, [actx.enabled, actx.loading, managementPlane.mergedState, managementPlane.teamFetchLoading, profile]);
   const navItems = useMemo(
     () => getPilotNavItems(user.role, dealerNavCount, tradePointNavCount),
     [user.role, dealerNavCount, tradePointNavCount],
