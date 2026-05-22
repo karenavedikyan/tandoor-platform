@@ -11,6 +11,13 @@ import { getSalesUserById, type SalesUser } from "@/lib/sales-control-data";
 import { mergeLegalEntitiesForActualization, mergeTradePointsForActualization } from "@/lib/client-base-actualization-data-merge";
 import { buildTradePointListForActualization } from "@/lib/trade-point-list-for-actualization";
 
+/** Безопасная нормализация текста из API/состояния (undefined, не-строки). */
+export function normalizeText(value: unknown): string {
+  if (value == null) return "";
+  if (typeof value === "string") return value.trim();
+  return String(value).trim();
+}
+
 export type ActivityPeriodPreset = "today" | "yesterday" | "7d" | "30d" | "all";
 
 export type ActivityTypeFilter = "all" | "dealers" | "trade_points" | "legal" | "photos" | "showcase" | "archive";
@@ -84,26 +91,28 @@ export function inActivityRange(atMs: number, range: { startMs: number; endMs: n
   return atMs >= range.startMs && atMs < range.endMs;
 }
 
-function resolveUserName(userId: string, explicitName: string | undefined, dealerById: Map<string, DealerRow>): string {
-  const ex = (explicitName ?? "").trim();
+function resolveUserName(userId: string | undefined | null, explicitName: string | undefined, dealerById: Map<string, DealerRow>): string {
+  const ex = normalizeText(explicitName);
   if (ex && ex !== "—") return ex;
-  const u = getSalesUserById(userId);
-  if (u?.name?.trim()) return u.name.trim();
+  const uid = normalizeText(userId);
+  const u = getSalesUserById(uid);
+  if (normalizeText(u?.name)) return normalizeText(u?.name);
   for (const row of Array.from(dealerById.values())) {
-    if (row.releaseManagerId === userId && row.manager?.trim()) return row.manager.trim();
+    if (row.releaseManagerId === uid && normalizeText(row.manager)) return normalizeText(row.manager);
   }
-  if (userId.trim()) return userId.trim();
+  if (uid) return uid;
   return "Не определён";
 }
 
 function pushEv(out: ActivityEvent[], e: Omit<ActivityEvent, "id"> & { id?: string }) {
-  const id = e.id ?? `${e.kind}-${e.atMs}-${e.userId}-${Math.random().toString(36).slice(2, 8)}`;
-  out.push({ ...e, id });
+  const userId = normalizeText(e.userId) || "__unset__";
+  const userName = normalizeText(e.userName) || "Не определён";
+  const id = e.id ?? `${e.kind}-${e.atMs}-${userId}-${Math.random().toString(36).slice(2, 8)}`;
+  out.push({ ...e, id, userId, userName });
 }
 
 function strField(o: Record<string, unknown>, k: string): string {
-  const v = o[k];
-  return typeof v === "string" ? v.trim() : "";
+  return normalizeText(o[k]);
 }
 
 export function collectActivityEvents(state: ActualizationState, dealerRows: DealerRow[]): ActivityEvent[] {
@@ -231,8 +240,8 @@ export function collectActivityEvents(state: ActualizationState, dealerRows: Dea
       const t = isoToMs((o.updatedAt as string) || (o.createdAt as string));
       if (t == null) continue;
       const nm = strField(o, "name") || strField(o, "internalCode") || "Юрлицо";
-      const by = String(o.updatedBy ?? o.createdBy ?? st.createdById ?? "").trim() || st.createdById;
-      const byName = String(o.updatedByName ?? o.createdByName ?? "").trim();
+      const by = normalizeText(o.updatedBy ?? o.createdBy ?? st.createdById) || normalizeText(st.createdById) || "unknown";
+      const byName = normalizeText(o.updatedByName ?? o.createdByName);
       pushEv(out, {
         kind: "legal_entity",
         atMs: t,
@@ -303,7 +312,7 @@ export function collectActivityEvents(state: ActualizationState, dealerRows: Dea
   for (const c of Object.values(state.dealerActualizationContactsById)) {
     const t = isoToMs(c.updatedAt) ?? isoToMs(c.createdAt);
     if (t == null) continue;
-    const uid = (c.updatedBy ?? "").trim();
+    const uid = normalizeText(c.updatedBy);
     if (!uid) continue;
     pushEv(out, {
       kind: "contact",
@@ -325,7 +334,7 @@ export function collectActivityEvents(state: ActualizationState, dealerRows: Dea
         atMs: t,
         userId: task.createdBy,
         userName: resolveUserName(task.createdBy, task.createdByName, dealerById),
-        label: `Задача по матрице: ${task.productName}`,
+        label: `Задача по матрице: ${normalizeText(task.productName) || "без названия"}`,
         dealerId: task.dealerId,
         tradePointId: task.tradePointId,
       });
@@ -675,9 +684,9 @@ export function computeQualityMetrics(state: ActualizationState, profile: Releas
   for (const r of rows) {
     const inn = (r.actualizationInn ?? "").replace(/\D/g, "");
     if (inn.length >= 10) dInn += 1;
-    const ph = (r.contacts?.phone ?? "").trim();
+    const ph = normalizeText(r.contacts?.phone);
     if (ph && ph !== "—") dPhone += 1;
-    const em = (r.contacts?.email ?? "").trim();
+    const em = normalizeText(r.contacts?.email);
     if (em && em.includes("@")) dEmail += 1;
     const le = mergeLegalEntitiesForActualization(r, state).length > 0;
     if (le) dLegal += 1;
@@ -691,10 +700,10 @@ export function computeQualityMetrics(state: ActualizationState, profile: Releas
   let tpPhoto = 0;
   let tpShow = 0;
   for (const r of tpRows) {
-    const a = r.address.trim();
-    const c = r.city.trim();
+    const a = normalizeText(r.address);
+    const c = normalizeText(r.city);
     if (a && a !== "—" && c && c !== "—") tpAddr += 1;
-    const cover = r.point.coverPhotoUrl?.trim() || r.point.coverPhotoThumbnailUrl?.trim();
+    const cover = normalizeText(r.point.coverPhotoUrl) || normalizeText(r.point.coverPhotoThumbnailUrl);
     if (cover) tpPhoto += 1;
     if (r.showcaseBucket === "has_showcase") tpShow += 1;
   }
@@ -729,17 +738,17 @@ export function computeProblemLines(state: ActualizationState, profile: ReleaseD
 
   const tpRows = buildTradePointListForActualization(state, profile, { includeArchivedTradePoints: false });
   for (const r of tpRows.slice(0, 200)) {
-    const a = r.address.trim();
-    const c = r.city.trim();
-    if (!a || a === "—" || !c || c === "—") lines.push({ id: `addr-${r.tradePointId}`, severity: "info", text: `ТТ без адреса: ${r.tradePointName}` });
-    const phone = (r.point.contactPhone ?? "").trim();
-    if (!phone || phone === "—") lines.push({ id: `ph-${r.tradePointId}`, severity: "info", text: `ТТ без контакта: ${r.tradePointName}` });
-    const cover = r.point.coverPhotoUrl?.trim() || r.point.coverPhotoThumbnailUrl?.trim();
-    if (!cover) lines.push({ id: `pic-${r.tradePointId}`, severity: "info", text: `ТТ без фото: ${r.tradePointName}` });
+    const a = normalizeText(r.address);
+    const c = normalizeText(r.city);
+    if (!a || a === "—" || !c || c === "—") lines.push({ id: `addr-${r.tradePointId}`, severity: "info", text: `ТТ без адреса: ${normalizeText(r.tradePointName) || "ТТ"}` });
+    const phone = normalizeText(r.point.contactPhone);
+    if (!phone || phone === "—") lines.push({ id: `ph-${r.tradePointId}`, severity: "info", text: `ТТ без контакта: ${normalizeText(r.tradePointName) || "ТТ"}` });
+    const cover = normalizeText(r.point.coverPhotoUrl) || normalizeText(r.point.coverPhotoThumbnailUrl);
+    if (!cover) lines.push({ id: `pic-${r.tradePointId}`, severity: "info", text: `ТТ без фото: ${normalizeText(r.tradePointName) || "ТТ"}` });
     if (r.hasShowcase === true && r.showcaseBucket !== "has_showcase") {
-      lines.push({ id: `sh-${r.tradePointId}`, severity: "info", text: `ТТ с витриной, но данные не заполнены: ${r.tradePointName}` });
+      lines.push({ id: `sh-${r.tradePointId}`, severity: "info", text: `ТТ с витриной, но данные не заполнены: ${normalizeText(r.tradePointName) || "ТТ"}` });
     }
-    if (r.matrixDeficitCount > 0) lines.push({ id: `def-${r.tradePointId}`, severity: "info", text: `Дефицит матрицы: ${r.tradePointName} (${r.matrixDeficitCount})` });
+    if (r.matrixDeficitCount > 0) lines.push({ id: `def-${r.tradePointId}`, severity: "info", text: `Дефицит матрицы: ${normalizeText(r.tradePointName) || "ТТ"} (${r.matrixDeficitCount})` });
   }
 
   return lines.slice(0, 80);

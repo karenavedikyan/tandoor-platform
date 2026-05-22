@@ -52,6 +52,7 @@ import {
   computeQualityMetrics,
   computeTopKpis,
   filterEventsForDashboard,
+  normalizeText,
   previousActivityRange,
   type ActivityEvent,
   type ActivityPeriodPreset,
@@ -179,7 +180,8 @@ function ClientBaseActivityDashboardInner(): ReactElement {
   const cityOptions = useMemo(() => {
     const s = new Set<string>();
     for (const r of scopedRows) {
-      if (r.city?.trim() && r.city !== "—") s.add(r.city.trim());
+      const c = normalizeText(r.city);
+      if (c && c !== "—") s.add(c);
     }
     return Array.from(s).sort((a, b) => a.localeCompare(b, "ru"));
   }, [scopedRows]);
@@ -187,7 +189,7 @@ function ClientBaseActivityDashboardInner(): ReactElement {
   const rmOptions = useMemo(() => {
     const s = new Set<string>();
     for (const r of scopedRows) {
-      const rm = getDealerRegionalManagerDisplay(r).trim();
+      const rm = normalizeText(getDealerRegionalManagerDisplay(r));
       if (rm && rm !== "—") s.add(rm);
     }
     return Array.from(s).sort((a, b) => a.localeCompare(b, "ru"));
