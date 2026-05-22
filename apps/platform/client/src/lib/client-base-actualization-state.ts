@@ -286,14 +286,15 @@ export function mergeActualizationState(base: ActualizationState, patch: Partial
     version: typeof patch.version === "number" ? patch.version : base.version,
     dealerOverridesById: { ...base.dealerOverridesById, ...(patch.dealerOverridesById ?? {}) },
     manuallyCreatedDealersById: { ...base.manuallyCreatedDealersById, ...(patch.manuallyCreatedDealersById ?? {}) },
-    archivedDealersById: { ...base.archivedDealersById, ...(patch.archivedDealersById ?? {}) },
+    /** Полная замена: иначе удаление ключа (восстановление из архива) не сработает при spread `{ ...base, ...patch }`. */
+    archivedDealersById: patch.archivedDealersById ?? base.archivedDealersById,
     tradePointOverridesById: { ...base.tradePointOverridesById, ...(patch.tradePointOverridesById ?? {}) },
     manuallyCreatedTradePointsById: {
       ...base.manuallyCreatedTradePointsById,
       ...(patch.manuallyCreatedTradePointsById ?? {}),
     },
-    archivedTradePointsById: { ...base.archivedTradePointsById, ...(patch.archivedTradePointsById ?? {}) },
-    archivedLegalEntitiesById: { ...base.archivedLegalEntitiesById, ...(patch.archivedLegalEntitiesById ?? {}) },
+    archivedTradePointsById: patch.archivedTradePointsById ?? base.archivedTradePointsById,
+    archivedLegalEntitiesById: patch.archivedLegalEntitiesById ?? base.archivedLegalEntitiesById,
     legalEntityOverridesByDealerId: {
       ...base.legalEntityOverridesByDealerId,
       ...(patch.legalEntityOverridesByDealerId ?? {}),
@@ -308,10 +309,7 @@ export function mergeActualizationState(base: ActualizationState, patch: Partial
       ...base.dealerActualizationContactsById,
       ...(patch.dealerActualizationContactsById ?? {}),
     },
-    archivedDealerContactsById: {
-      ...base.archivedDealerContactsById,
-      ...(patch.archivedDealerContactsById ?? {}),
-    },
+    archivedDealerContactsById: patch.archivedDealerContactsById ?? base.archivedDealerContactsById,
     tradePointShowcaseActualizationById: {
       ...base.tradePointShowcaseActualizationById,
       ...(patch.tradePointShowcaseActualizationById ?? {}),
