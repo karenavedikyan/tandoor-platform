@@ -220,29 +220,36 @@ export type DealerRow = {
   issues: DealerIssueDetail;
 } & ProductTrainingFields & IndigoTrainingFields;
 
-function isFilledResponsiblePersonName(v: string | undefined | null): boolean {
-  const t = (v ?? "").trim();
+/** Безопасный trim для полей, которые в рантайме могут быть не строкой. */
+function safeText(v: unknown): string {
+  if (v == null) return "";
+  if (typeof v === "string") return v.trim();
+  return String(v).trim();
+}
+
+function isFilledResponsiblePersonName(v: unknown): boolean {
+  const t = safeText(v);
   return t !== "" && t !== "—" && t !== "-";
 }
 
 /** Ответственный менеджер для карточки / списков (без плейсхолдеров «—»). */
 export function getDealerManagerDisplay(row: DealerRow): string {
-  if (isFilledResponsiblePersonName(row.manager)) return row.manager.trim();
-  if (isFilledResponsiblePersonName(row.responsibles?.salesManager)) return row.responsibles.salesManager.trim();
+  if (isFilledResponsiblePersonName(row.manager)) return safeText(row.manager);
+  if (isFilledResponsiblePersonName(row.responsibles?.salesManager)) return safeText(row.responsibles?.salesManager);
   return "";
 }
 
 /** Региональный менеджер; не подставляет РОП. */
 export function getDealerRegionalManagerDisplay(row: DealerRow): string {
-  if (isFilledResponsiblePersonName(row.responsibles?.regionalManager)) return row.responsibles.regionalManager.trim();
-  if (isFilledResponsiblePersonName(row.regionalManager)) return row.regionalManager.trim();
+  if (isFilledResponsiblePersonName(row.responsibles?.regionalManager)) return safeText(row.responsibles?.regionalManager);
+  if (isFilledResponsiblePersonName(row.regionalManager)) return safeText(row.regionalManager);
   return "";
 }
 
 /** РОП / руководитель команды. */
 export function getDealerRopDisplay(row: DealerRow): string {
-  if (isFilledResponsiblePersonName(row.ropName)) return row.ropName.trim();
-  if (isFilledResponsiblePersonName(row.responsibles?.director)) return row.responsibles.director.trim();
+  if (isFilledResponsiblePersonName(row.ropName)) return safeText(row.ropName);
+  if (isFilledResponsiblePersonName(row.responsibles?.director)) return safeText(row.responsibles?.director);
   return "";
 }
 
