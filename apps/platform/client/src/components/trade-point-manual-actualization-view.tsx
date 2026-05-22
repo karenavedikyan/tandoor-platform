@@ -450,7 +450,13 @@ export function TradePointManualActualizationView(props: {
         const rec = prev.manuallyCreatedTradePointsById[point.id];
         if (!rec) return prev;
         const mergedFields = { ...(rec.fields as Record<string, unknown>), ...nextFields };
-        let nextManual = { ...rec, fields: mergedFields };
+        let nextManual = {
+          ...rec,
+          fields: mergedFields,
+          updatedAt: iso,
+          updatedBy: uid,
+          updatedByName: uname,
+        };
         const ic = (nextManual.internalCode ?? "").trim();
         if (!/^TND-TP-\d{6}$/i.test(ic)) {
           nextManual = { ...nextManual, internalCode: nextManualTradePointInternalCode(prev) };

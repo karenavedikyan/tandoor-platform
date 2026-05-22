@@ -591,7 +591,13 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
           next = mergeActualizationState(next, {
             manuallyCreatedDealersById: {
               ...next.manuallyCreatedDealersById,
-              [baseRow.id]: { ...m, fields: mergedFields },
+              [baseRow.id]: {
+                ...m,
+                fields: mergedFields,
+                updatedAt: iso,
+                updatedBy: uid,
+                updatedByName: uname,
+              },
             },
           });
           const m2 = next.manuallyCreatedDealersById[baseRow.id];
@@ -1247,13 +1253,19 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
 
     const r = await persist((prev) => {
       const existing = prev.manuallyCreatedDealersById[id];
+      const nowIso = isoNow();
+      const uid = profile.personaUserId;
+      const uname = userLabelFromProfile(profile);
       const manual: ManualDealer = {
         id,
         internalCode,
         fields,
-        createdAt: existing?.createdAt ?? isoNow(),
-        createdBy: existing?.createdBy ?? profile.personaUserId,
-        createdByName: existing?.createdByName ?? userLabelFromProfile(profile),
+        createdAt: existing?.createdAt ?? nowIso,
+        createdBy: existing?.createdBy ?? uid,
+        createdByName: existing?.createdByName ?? uname,
+        updatedAt: nowIso,
+        updatedBy: uid,
+        updatedByName: uname,
         source: "manual_actualization",
       };
       let next = mergeActualizationState(prev, {

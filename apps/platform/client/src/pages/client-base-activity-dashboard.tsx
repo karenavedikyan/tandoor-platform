@@ -49,7 +49,7 @@ import {
   activityPeriodToRange,
   activityStatusForManager,
   bucketEventsByDay,
-  collectActivityEvents,
+  collectActivityBuckets,
   computeProblemLines,
   computeQualityMetrics,
   computeTopKpis,
@@ -118,7 +118,10 @@ class ClientBaseActivityDashboardBoundary extends Component<{ children: ReactNod
 }
 
 const UNKNOWN_ACTOR_HELP =
-  "Эти действия записаны без createdBy/updatedBy или пользователь не найден в справочнике. Нужно проверить сохранение actorUserId/actorLabel в формах клиента, торговой точки, юрлица, фото.";
+  "Эти события записаны без автора. Проверьте createdBy/updatedBy и имена при сохранении клиента, торговой точки, юрлица и фото (actorUserId / actorLabel в формах).";
+
+const UNKNOWN_TECH_HELP =
+  "Ниже — записи без пользователя, которые не входят в рейтинг (массовый архив без archivedBy, юрлица без updatedBy/createdBy в snapshot и т. п.).";
 
 function KpiCard({
   title,
@@ -235,23 +238,33 @@ function ClientBaseActivityDashboardInner(): ReactElement {
 
   const roster = useMemo(() => getManagersForRopTeam(isRopOrManagerAllFilter(ropTeam) ? undefined : ropTeam), [ropTeam]);
 
-  const allEvents = useMemo(() => collectActivityEvents(state, mergedAll), [state, mergedAll]);
+  const activityBuckets = useMemo(() => collectActivityBuckets(state, mergedAll), [state, mergedAll]);
+  const allEvents = activityBuckets.events;
 
   const range = useMemo(() => activityPeriodToRange(period), [period]);
   const prevRange = useMemo(() => previousActivityRange(range), [range]);
 
+  const filterOptsBase = useMemo(
+    () => ({
+      act: state,
+      scopedDealerIds: scopedIds,
+      ropTeamId: ropTeam,
+      managerId,
+      regionalManager,
+      city,
+      dealerById,
+    }),
+    [state, scopedIds, ropTeam, managerId, regionalManager, city, dealerById],
+  );
+
   const filteredEvents = useMemo(
-    () =>
-      filterEventsForDashboard(allEvents, range, typeFilter, {
-        act: state,
-        scopedDealerIds: scopedIds,
-        ropTeamId: ropTeam,
-        managerId,
-        regionalManager,
-        city,
-        dealerById,
-      }),
-    [allEvents, range, typeFilter, state, scopedIds, ropTeam, managerId, regionalManager, city, dealerById],
+    () => filterEventsForDashboard(allEvents, range, typeFilter, filterOptsBase),
+    [allEvents, range, typeFilter, filterOptsBase],
+  );
+
+  const filteredExcludedTechnical = useMemo(
+    () => filterEventsForDashboard(activityBuckets.excludedTechnical, range, typeFilter, filterOptsBase),
+    [activityBuckets.excludedTechnical, range, typeFilter, filterOptsBase],
   );
 
   const prevFiltered = useMemo(
@@ -276,10 +289,16 @@ function ClientBaseActivityDashboardInner(): ReactElement {
     [managerRows, onlyActiveManagers],
   );
 
-  const kpis = useMemo(() => computeTopKpis(state, profile, range, managerRows), [state, profile, range, managerRows]);
+  const kpiScope = useMemo(() => ({ scopedDealerIds: scopedIds }), [scopedIds]);
+
+  const kpis = useMemo(
+    () => computeTopKpis(state, profile, range, managerRows, kpiScope),
+    [state, profile, range, managerRows, kpiScope],
+  );
   const prevKpis = useMemo(
-    () => (prevRange ? computeTopKpis(state, profile, prevRange, aggregateByManager(prevFiltered, roster)) : null),
-    [state, profile, prevRange, prevFiltered, roster],
+    () =>
+      prevRange ? computeTopKpis(state, profile, prevRange, aggregateByManager(prevFiltered, roster), kpiScope) : null,
+    [state, profile, prevRange, prevFiltered, roster, kpiScope],
   );
 
   const byDay = useMemo(() => bucketEventsByDay(filteredEvents), [filteredEvents]);
@@ -323,6 +342,11 @@ function ClientBaseActivityDashboardInner(): ReactElement {
     return filteredEvents.filter((e) => e.userId === detailManagerId).slice(0, 80);
   }, [detailManagerId, filteredEvents]);
 
+  const detailExcludedTechnical = useMemo(() => {
+    if (!detailManagerId || !isActivityUnknownUserId(detailManagerId)) return [];
+    return filteredExcludedTechnical;
+  }, [detailManagerId, filteredExcludedTechnical]);
+
   const last7Ids = useMemo(() => {
     const pr = activityPeriodToRange("7d");
     if (!pr) return new Set<string>();
@@ -332,6 +356,7 @@ function ClientBaseActivityDashboardInner(): ReactElement {
   const idleManagers = useMemo(() => roster.filter((m) => !last7Ids.has(m.id)), [roster, last7Ids]);
 
   const hasFilteredActivity = filteredEvents.length > 0;
+  const hasExcludedOnly = filteredEvents.length === 0 && filteredExcludedTechnical.length > 0;
 
   const activeManagersCaption = useMemo(() => {
     if (!hasFilteredActivity) return "Нет активности за период";
@@ -383,7 +408,7 @@ function ClientBaseActivityDashboardInner(): ReactElement {
         </div>
       </div>
 
-      {!hasFilteredActivity ? (
+      {!hasFilteredActivity && !hasExcludedOnly ? (
         <Card className="rounded-2xl border border-border/80 bg-muted/10 shadow-sm" data-testid="section-activity-empty">
           <CardContent className="flex flex-col items-center gap-3 px-4 py-10 text-center sm:px-6">
             <BarChart3 className="h-12 w-12 text-primary/60" aria-hidden />
@@ -394,6 +419,20 @@ function ClientBaseActivityDashboardInner(): ReactElement {
                 клиентов, торговые точки, юрлица, фото и витрины, здесь появятся графики и рейтинг.
               </p>
             </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {hasExcludedOnly ? (
+        <Card className="rounded-2xl border border-border/80 bg-muted/10 shadow-sm" data-testid="section-activity-excluded-only">
+          <CardContent className="space-y-2 px-4 py-6 sm:px-6">
+            <p className="text-sm font-medium text-foreground">Нет действий менеджеров в рейтинге за период</p>
+            <p className="text-sm text-muted-foreground">
+              В выбранном периоде и с учётом фильтров есть{" "}
+              <span className="font-medium text-foreground">{filteredExcludedTechnical.length}</span> системных записей
+              без автора (архив без archivedBy, юрлица без updatedBy и т. д.). Они намеренно не входят в score и в
+              таблицу менеджеров. Откройте фильтр типа «Архив» или расширьте период, если ожидаете активность команды.
+            </p>
           </CardContent>
         </Card>
       ) : null}
@@ -556,6 +595,7 @@ function ClientBaseActivityDashboardInner(): ReactElement {
                           <Badge
                             variant="outline"
                             className="border-border/80 bg-muted/30 text-[10px] font-medium text-foreground"
+                            title={UNKNOWN_ACTOR_HELP}
                             data-testid={`badge-activity-author-unknown-${m.managerId}`}
                           >
                             {ACTIVITY_UNKNOWN_DISPLAY}
@@ -627,6 +667,7 @@ function ClientBaseActivityDashboardInner(): ReactElement {
                           <Badge
                             variant="outline"
                             className="border-border/80 bg-muted/30 text-[10px] font-medium text-foreground"
+                            title={UNKNOWN_ACTOR_HELP}
                             data-testid={`badge-activity-author-unknown-${m.managerId}`}
                           >
                             {ACTIVITY_UNKNOWN_DISPLAY}
@@ -819,18 +860,48 @@ function ClientBaseActivityDashboardInner(): ReactElement {
             <DialogTitle>Детали — {detailDialogTitle}</DialogTitle>
           </DialogHeader>
           {detailManagerId != null && isActivityUnknownUserId(detailManagerId) ? (
-            <p className="rounded-lg border border-border/80 bg-muted/20 p-3 text-sm leading-relaxed text-muted-foreground">
-              {UNKNOWN_ACTOR_HELP}
-            </p>
+            <div className="space-y-3">
+              <p className="rounded-lg border border-border/80 bg-muted/20 p-3 text-sm leading-relaxed text-muted-foreground">
+                {UNKNOWN_ACTOR_HELP}
+              </p>
+              {detailExcludedTechnical.length > 0 ? (
+                <div className="rounded-lg border border-border/80 bg-card p-3 text-sm text-muted-foreground">
+                  <p className="font-medium text-foreground">Исключено из рейтинга (системные записи без автора)</p>
+                  <p className="mt-1 leading-relaxed">{UNKNOWN_TECH_HELP}</p>
+                  <p className="mt-2 text-xs tabular-nums text-muted-foreground">
+                    Записей в периоде и фильтрах: {detailExcludedTechnical.length}
+                    {detailExcludedTechnical.length > 40 ? " · ниже первые 40" : ""}
+                  </p>
+                </div>
+              ) : null}
+            </div>
           ) : null}
-          <ul className="space-y-2 text-sm" data-testid="list-activity-manager-events">
-            {detailEvents.map((e: ActivityEvent) => (
-              <li key={e.id} className="border-b border-border/60 pb-2" data-testid={`row-activity-event-${e.id}`}>
-                <p className="font-medium text-foreground">{e.label}</p>
-                <p className="text-xs text-muted-foreground">{new Date(e.atMs).toLocaleString("ru-RU")}</p>
-              </li>
-            ))}
-          </ul>
+          <div className="space-y-1">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {detailManagerId != null && isActivityUnknownUserId(detailManagerId) ? "Учтённые в рейтинге" : "События"}
+            </p>
+            <ul className="space-y-2 text-sm" data-testid="list-activity-manager-events">
+              {detailEvents.map((e: ActivityEvent) => (
+                <li key={e.id} className="border-b border-border/60 pb-2" data-testid={`row-activity-event-${e.id}`}>
+                  <p className="font-medium text-foreground">{e.label}</p>
+                  <p className="text-xs text-muted-foreground">{new Date(e.atMs).toLocaleString("ru-RU")}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+          {detailManagerId != null && isActivityUnknownUserId(detailManagerId) && detailExcludedTechnical.length > 0 ? (
+            <div className="space-y-1">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Не в рейтинге</p>
+              <ul className="max-h-52 space-y-2 overflow-y-auto text-sm text-muted-foreground">
+                {detailExcludedTechnical.slice(0, 40).map((e: ActivityEvent) => (
+                  <li key={e.id} className="border-b border-border/40 pb-2" data-testid={`row-activity-excluded-${e.id}`}>
+                    <p>{e.label}</p>
+                    <p className="text-xs">{new Date(e.atMs).toLocaleString("ru-RU")}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </DialogContent>
       </Dialog>
     </div>
