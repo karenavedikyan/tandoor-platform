@@ -89,8 +89,12 @@ function demoHeaders(userId: string): HeadersInit {
   return { "X-Tandoor-Demo-User-Id": userId, Accept: "application/json" };
 }
 
-export async function loadActualizationState(profile: ReleaseDemoProfile): Promise<ActualizationLoadResult> {
-  const userId = profile.personaUserId.trim();
+/**
+ * Загрузка состояния актуализации для указанного userId (демо: тот же заголовок и query).
+ * Нужен дашборду РОП/директора для объединения state менеджеров команды.
+ */
+export async function fetchActualizationStateByUserId(userIdRaw: string): Promise<ActualizationLoadResult> {
+  const userId = userIdRaw.trim();
   const emptyMeta = (storageMode: ActualizationStorageMode, message?: string): ActualizationApiMeta => ({
     success: false,
     storageMode,
@@ -98,6 +102,14 @@ export async function loadActualizationState(profile: ReleaseDemoProfile): Promi
     updatedAt: null,
     message,
   });
+
+  if (!userId) {
+    return {
+      meta: emptyMeta("server_memory", "Пустой userId."),
+      syncStatus: "error",
+      errorMessage: "Пустой userId.",
+    };
+  }
 
   try {
     const res = await fetch(`/api/actualization/state?userId=${encodeURIComponent(userId)}`, {
@@ -120,12 +132,27 @@ export async function loadActualizationState(profile: ReleaseDemoProfile): Promi
       return {
         meta,
         syncStatus: "error",
-        errorMessage: meta.message ?? "Сервер вернул ошибку при загрузке состояния актуализации.",
+        errorMessage: meta.message ?? "Ошибка загрузки state.",
       };
     }
-    writeLocalCache({ userId, state: meta.state, updatedAt: meta.updatedAt });
     return { meta, syncStatus: "api_ok" };
   } catch {
+    return {
+      meta: emptyMeta("server_memory", "Сеть или API недоступны."),
+      syncStatus: "error",
+      errorMessage: "Сеть или API недоступны.",
+    };
+  }
+}
+
+export async function loadActualizationState(profile: ReleaseDemoProfile): Promise<ActualizationLoadResult> {
+  const userId = profile.personaUserId.trim();
+  const r = await fetchActualizationStateByUserId(userId);
+  if (r.syncStatus === "api_ok" && r.meta.success) {
+    writeLocalCache({ userId, state: r.meta.state, updatedAt: r.meta.updatedAt });
+    return r;
+  }
+  if (r.syncStatus === "error") {
     const cached = readLocalCache(userId);
     if (cached) {
       return {
@@ -141,11 +168,11 @@ export async function loadActualizationState(profile: ReleaseDemoProfile): Promi
       };
     }
     return {
-      meta: emptyMeta("server_memory", "Не удалось загрузить состояние актуализации с сервера."),
-      syncStatus: "error",
-      errorMessage: "Сеть или API недоступны, локального кеша нет.",
+      ...r,
+      errorMessage: r.errorMessage ?? "Сеть или API недоступны, локального кеша нет.",
     };
   }
+  return r;
 }
 
 export async function saveActualizationState(
