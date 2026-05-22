@@ -67,7 +67,7 @@ function charSum(s: string): number {
   return n;
 }
 
-function isShipmentDayId(v: unknown): v is DealerShipmentDayId {
+export function isDealerShipmentDayId(v: unknown): v is DealerShipmentDayId {
   return (
     v === "monday" ||
     v === "tuesday" ||
@@ -78,19 +78,74 @@ function isShipmentDayId(v: unknown): v is DealerShipmentDayId {
   );
 }
 
+export function sortDealerShipmentDayIds(ids: DealerShipmentDayId[]): DealerShipmentDayId[] {
+  const uniq: DealerShipmentDayId[] = [];
+  for (const d of ids) {
+    if (isDealerShipmentDayId(d) && !uniq.includes(d)) uniq.push(d);
+  }
+  return uniq.sort((a, b) => DAY_INDEX[a] - DAY_INDEX[b]);
+}
+
+/** Поля актуализации, в которых могли задать дни отгрузки (в т. ч. пустой массив — сброс). */
+export function dealerFieldsIncludeShipmentKeys(f: Record<string, unknown>): boolean {
+  return "shipmentDayIds" in f || "shipmentDayId" in f || "shipmentDayLabel" in f;
+}
+
+const RU_LABEL_TO_ID: Record<string, DealerShipmentDayId> = Object.fromEntries(
+  DEALER_SHIPMENT_DAY_ORDER.map((d) => [DEALER_SHIPMENT_DAY_LABELS[d].toLowerCase(), d]),
+) as Record<string, DealerShipmentDayId>;
+
+/** Нормализация из manual / override: массив id, одиночный id или подписи через запятую. */
+export function normalizeManualDealerShipmentDayIdsFromFields(f: Record<string, unknown>): DealerShipmentDayId[] {
+  const rawIds = f.shipmentDayIds;
+  if (Array.isArray(rawIds)) {
+    return sortDealerShipmentDayIds(rawIds.filter(isDealerShipmentDayId));
+  }
+  if (isDealerShipmentDayId(f.shipmentDayId)) {
+    return [f.shipmentDayId];
+  }
+  const lab = typeof f.shipmentDayLabel === "string" ? f.shipmentDayLabel.trim() : "";
+  if (lab) {
+    const parts = lab
+      .split(/[,;]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const fromLabels: DealerShipmentDayId[] = [];
+    for (const p of parts) {
+      const id = RU_LABEL_TO_ID[p.toLowerCase()];
+      if (id) fromLabels.push(id);
+    }
+    return sortDealerShipmentDayIds(fromLabels);
+  }
+  return [];
+}
+
+export function formatShipmentDaysForDisplay(ids: DealerShipmentDayId[]): string {
+  return sortDealerShipmentDayIds(ids)
+    .map((d) => DEALER_SHIPMENT_DAY_LABELS[d])
+    .join(", ");
+}
+
+/** Текст для сводок / карточки: из нормализованных id или сырого label. */
+export function logisticsShipmentDaysTextFromManualFields(f: Record<string, unknown>): string {
+  const ids = normalizeManualDealerShipmentDayIdsFromFields(f);
+  if (ids.length > 0) return formatShipmentDaysForDisplay(ids);
+  const lab = typeof f.shipmentDayLabel === "string" ? f.shipmentDayLabel.trim() : "";
+  return lab;
+}
+
 /**
- * Если в строке задано `releaseShipmentDayIds` (данные Excel/API) — используем 1–2 дня.
+ * Если в строке задано `releaseShipmentDayIds` (Excel / актуализация) — используем эти дни.
  * Иначе детерминированно по id, городу и менеджеру (без Math.random).
  */
 export function getDealerShipmentDays(row: DealerRow): DealerShipmentDayId[] {
-  const ext = (row as DealerRow & { releaseShipmentDayIds?: unknown }).releaseShipmentDayIds;
-  if (Array.isArray(ext)) {
-    const picked = ext.filter(isShipmentDayId);
-    const uniq: DealerShipmentDayId[] = [];
-    for (const d of picked) {
-      if (!uniq.includes(d)) uniq.push(d);
+  const ext = row.releaseShipmentDayIds;
+  if (Array.isArray(ext) && ext.length > 0) {
+    const picked = ext.filter(isDealerShipmentDayId);
+    const uniq = sortDealerShipmentDayIds(picked);
+    if (uniq.length >= 1) {
+      return uniq;
     }
-    if (uniq.length >= 1) return uniq.slice(0, 2).sort((a, b) => DAY_INDEX[a] - DAY_INDEX[b]);
   }
 
   const base = charSum(row.id) + charSum(row.city) + charSum(row.releaseManagerId ?? row.manager);

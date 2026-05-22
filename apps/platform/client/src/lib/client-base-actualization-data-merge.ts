@@ -44,7 +44,11 @@ import {
   readCommercialBoolNull,
   readCommercialString,
 } from "@/lib/dealer-commercial-characteristics";
-import { DEALER_SHIPMENT_DAY_LABELS, type DealerShipmentDayId } from "@/lib/dealer-shipment-days";
+import {
+  dealerFieldsIncludeShipmentKeys,
+  formatShipmentDaysForDisplay,
+  normalizeManualDealerShipmentDayIdsFromFields,
+} from "@/lib/dealer-shipment-days";
 
 function str(v: unknown): string | undefined {
   if (typeof v !== "string") return undefined;
@@ -102,20 +106,9 @@ const MANUAL_DEALER_EMPTY_ISSUES: DealerIssueDetail = {
   state: "—",
 };
 
-function isShipmentDayId(v: unknown): v is DealerShipmentDayId {
-  return (
-    v === "monday" ||
-    v === "tuesday" ||
-    v === "wednesday" ||
-    v === "thursday" ||
-    v === "friday" ||
-    v === "saturday"
-  );
-}
-
-/** Слияние полей дилера из dealerOverridesById + unloadingOrder в state. */
 export function mergeDealerRowWithActualization(row: DealerRow, act: ActualizationState): DealerRow {
   const base = getDealerRowWithProfileOverrides(row);
+  const baseNextAction = base.nextAction;
   const ov = act.dealerOverridesById[row.id];
   const f = (ov?.fields ?? {}) as Record<string, unknown>;
   let r: DealerRow = { ...base };
@@ -171,9 +164,17 @@ export function mergeDealerRowWithActualization(row: DealerRow, act: Actualizati
     };
   }
 
-  const shipmentDayId = f.shipmentDayId;
-  if (isShipmentDayId(shipmentDayId)) {
-    r = { ...r, nextAction: `День отгрузки: ${DEALER_SHIPMENT_DAY_LABELS[shipmentDayId]}` };
+  if (dealerFieldsIncludeShipmentKeys(f)) {
+    const shipmentIds = normalizeManualDealerShipmentDayIdsFromFields(f);
+    if (shipmentIds.length > 0) {
+      r = {
+        ...r,
+        releaseShipmentDayIds: shipmentIds,
+        nextAction: `Дни отгрузки: ${formatShipmentDaysForDisplay(shipmentIds)}`,
+      };
+    } else {
+      r = { ...r, releaseShipmentDayIds: undefined, nextAction: baseNextAction };
+    }
   }
 
   const uo = act.unloadingOrderByDealerId?.[row.id];
@@ -537,6 +538,12 @@ export function manualDealerToRow(m: ManualDealer, profile: ReleaseDemoProfile):
   const releaseManagerId = str(f.releaseManagerId) ?? mgrUser?.id ?? profile.personaUserId;
   const releaseTeamId = str(f.releaseTeamId) ?? teamId;
 
+  const shipmentDayIds = normalizeManualDealerShipmentDayIdsFromFields(f);
+  const shipmentDaysLine =
+    shipmentDayIds.length > 0 ? `Дни отгрузки: ${formatShipmentDaysForDisplay(shipmentDayIds)}` : "";
+  const routeLine = str(f.routeLabel) ? `Маршрут: ${String(f.routeLabel)}` : "";
+  const nextActionFromLogistics = [shipmentDaysLine, routeLine].filter(Boolean).join(" · ") || "—";
+
   const clientCategory = normalizeClientCategory(str(f.clientCategory));
   const status = parseDealerStatus(f.status);
   const typeLabel = str(f.clientTypeLabel) ?? getClientCategoryLabel(clientCategory);
@@ -571,11 +578,7 @@ export function manualDealerToRow(m: ManualDealer, profile: ReleaseDemoProfile):
     releaseTeamId,
     releaseManagerId,
     lastActivity: "—",
-    nextAction: str(f.shipmentDayLabel)
-      ? `День отгрузки: ${String(f.shipmentDayLabel)}`
-      : str(f.routeLabel)
-        ? `Маршрут: ${String(f.routeLabel)}`
-        : "—",
+    nextAction: nextActionFromLogistics,
     distribution: num(f.unloadingOrder) ?? 0,
     showcaseStatus: "—",
     hasProblem: false,
@@ -585,6 +588,7 @@ export function manualDealerToRow(m: ManualDealer, profile: ReleaseDemoProfile):
     legalEntity: "",
     holding: "—",
     tradePoints: [],
+    releaseShipmentDayIds: shipmentDayIds.length > 0 ? shipmentDayIds : undefined,
     responsibles: {
       director: rop || "—",
       salesManager: managerName || mgrUser?.name || "—",
