@@ -251,9 +251,11 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
 
   const canEdit = canEditDealerDuringActualization(profile, row);
   const canArchive = canArchiveDealerDuringActualization(profile, row);
+  const isDealerArchived = Boolean(actx.state.archivedDealersById[baseRow.id]);
+  const canArchiveToWorkingList = canArchive && !isDealerArchived;
 
   const softArchive = useCallback(async () => {
-    if (!canArchive) return;
+    if (!canArchiveToWorkingList) return;
     setBusy(true);
     const r = await actx.persist((prev) =>
       mergeActualizationState(prev, {
@@ -277,7 +279,7 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
     } else {
       toast({ title: "Не удалось сохранить", variant: "destructive" });
     }
-  }, [actx, baseRow.id, canArchive, profile, setLocation]);
+  }, [actx, baseRow.id, canArchiveToWorkingList, profile, setLocation]);
 
   const tps = useMemo(() => mergeTradePointsActiveForActualization(row, actx.state), [row, actx.state]);
 
@@ -451,7 +453,7 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
                 Редактировать
               </Button>
             ) : null}
-            {canArchive ? (
+            {canArchiveToWorkingList ? (
               <Button
                 type="button"
                 variant="outline"
@@ -722,7 +724,7 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
             <AlertDialogDescription className="space-y-2 text-sm">
               <p>Клиент будет скрыт из рабочей клиентской базы и не будет отображаться в списке по умолчанию.</p>
               <p>Данные не удаляются физически: анкета актуализации, контакты и торговые точки остаются в сохранённом состоянии.</p>
-              <p>Восстановить клиента можно через «Показать архив» в списке или по прямой ссылке на карточку.</p>
+              <p>Восстановить клиента можно кнопкой «Восстановить клиента» на карточке, через режим «Показать архив» в клиентской базе или по прямой ссылке.</p>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">

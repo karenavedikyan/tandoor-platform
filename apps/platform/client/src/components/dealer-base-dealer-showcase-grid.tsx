@@ -398,6 +398,18 @@ function DealerShowcaseCard({
         {dealerShowcaseStatusLabel(row.status)}
       </Badge>,
     );
+    if (act.archivedDealersById[row.id]) {
+      nodes.push(
+        <Badge
+          key="arch"
+          variant="secondary"
+          className="border-border/70 bg-muted/80 text-[10px] font-medium text-foreground"
+          data-testid={`badge-dealer-archived-${row.id}`}
+        >
+          В архиве
+        </Badge>,
+      );
+    }
     if (stockSig.hasMainWarehouse) {
       nodes.push(
         <Badge key="mw" variant="outline" className={cn("text-[10px]", badgeSoft)} data-testid={`badge-dealer-main-warehouse-${row.id}`}>
@@ -457,6 +469,7 @@ function DealerShowcaseCard({
     }
     return nodes;
   }, [
+    act,
     row.id,
     row.clientCategory,
     row.status,

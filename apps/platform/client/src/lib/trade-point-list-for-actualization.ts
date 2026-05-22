@@ -1,6 +1,7 @@
 /**
  * Единый список торговых точек для актуализации (клиентская база + manual/release).
- * Использует те же merge/scope/archived правила, что и /dealer-base.
+ * Клиенты из `archivedDealersById` не участвуют: их точки не попадают в список.
+ * Архивные ТТ (`archivedTradePointsById`) исключаются, если `includeArchivedTradePoints` не true.
  */
 
 import type { ActualizationState, TradePointShowcaseActualization } from "@/lib/client-base-actualization-state";
@@ -142,10 +143,6 @@ function buildHaystack(parts: (string | null | undefined)[]): string {
     .join(" ");
 }
 
-/**
- * Все ТТ по клиентам, доступным профилю (без архивных клиентов).
- * Архивные ТТ исключаются, если `includeArchivedTradePoints` не true.
- */
 export function buildTradePointListForActualization(
   act: ActualizationState,
   profile: ReleaseDemoProfile,
@@ -157,6 +154,7 @@ export function buildTradePointListForActualization(
   const out: TradePointListRow[] = [];
 
   for (const dealer of scoped) {
+    if (act.archivedDealersById[dealer.id]) continue;
     const merged = mergeTradePointsForActualization(dealer, act);
     for (const entry of merged) {
       if (!includeArchivedTp && entry.isArchived) continue;

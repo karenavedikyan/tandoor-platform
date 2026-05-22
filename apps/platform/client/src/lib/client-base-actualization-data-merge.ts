@@ -621,18 +621,25 @@ export function resolveDealerRowForCard(dealerIdRaw: string, act: ActualizationS
 }
 
 export type BuildDealerBaseRowsOptions = {
-  /** Включить клиентов из `archivedDealersById` в список (для режима «Показать архив»). */
+  /**
+   * `true` — режим «Архив» в клиентской базе: в списке **только** клиенты из `archivedDealersById`.
+   * `false` / не задано — рабочая база: архивные клиенты **скрыты**.
+   */
   includeArchivedDealers?: boolean;
 };
 
-/** Строки для клиентской базы: manual сверху, затем release с merge. По умолчанию без архивированных. */
+/** Строки для клиентской базы: manual сверху, затем release с merge. По умолчанию только рабочие (не архив). */
 export function buildDealerBaseRowsWithActualization(
   act: ActualizationState,
   profile: ReleaseDemoProfile,
   opts?: BuildDealerBaseRowsOptions,
 ): DealerRow[] {
-  const showArchived = opts?.includeArchivedDealers === true;
-  const includeId = (id: string) => showArchived || !act.archivedDealersById[id];
+  const archivedListMode = opts?.includeArchivedDealers === true;
+  const includeId = (id: string) => {
+    const isArchived = Boolean(act.archivedDealersById[id]);
+    if (archivedListMode) return isArchived;
+    return !isArchived;
+  };
 
   const manuals = Object.values(act.manuallyCreatedDealersById)
     .filter((m) => includeId(m.id))

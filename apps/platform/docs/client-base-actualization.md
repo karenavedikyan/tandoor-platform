@@ -49,7 +49,7 @@
 | Правки полей карточки клиента (название, ИНН, город, адрес, телефон, email, ответственные, день отгрузки, порядок выгрузки, комментарий и др.) | `dealerOverridesById[id]`, при необходимости `unloadingOrderByDealerId`, `dealerShipmentDayLabelByDealerId` и связанные override-поля в override-объекте |
 | ИНН для отображения в краткой информации (если вынесено отдельно от mock) | `dealerOverridesById` / поле `inn` в override; на строке списка — `actualizationInn` после merge |
 | Новый клиент, созданный вручную | `manuallyCreatedDealersById[id]` — id **стабилен на время диалога**: `manual-dealer-{yyyyMMddHHmmss}-{shortRandom}`; в записи хранятся `internalCode` (например `MA-MANUAL-000001`), `createdAt`, `createdBy`, `createdByName`, `source: "manual_actualization"`, поля в `fields` (в т. ч. **паспорт:** `passportClientKind`, `passportLifecycleStatus`, `passportCategoryTier`, `territoryZone`, `logisticsComment`, плюс коммерческие характеристики и `external1cCode`) |
-| Архив вручну созданного клиента | `archivedDealersById[dealerId]` — запись о мягком архиве; клиент остаётся в `manuallyCreatedDealersById`, но **скрыт** из списка клиентской базы |
+| Архив клиента (мягкое скрытие из рабочей базы) | `archivedDealersById[dealerId]` — запись о факте архива; данные клиента и ТТ в состоянии **не удаляются**; в списке «Клиентская база» по умолчанию клиент скрыт; режим «Показать архив» показывает **только** архивных |
 | Новая торговая точка | `manuallyCreatedTradePointsById[id]` — id: `manual-tp-{dealerId}-{yyyyMMddHHmmss}-{shortRandom}`, метаданные создания, при повторном сохранении после ошибки — **тот же id** (upsert) |
 | Правки существующей ТТ | `tradePointOverridesById` |
 | Архив / закрытие ТТ | `archivedTradePointsById` (+ в UI точка скрыта из обычного списка) |
@@ -105,7 +105,7 @@
 - **Паспорт и логистика в `fields`:** анкета `dealer-manual-actualization-page.tsx` читает блок «Паспорт клиента» из `manuallyCreatedDealersById[id].fields` (слияние с `dealerOverridesById[id].fields` для правок). При **создании** клиента (`DealerActualizationCreateDialog`) в `fields` должны попадать те же ключи, что и при редактировании: `passportClientKind`, `passportLifecycleStatus`, `passportCategoryTier`, `territoryZone`, `logisticsComment`, а также `name`, `inn`, `clientCategory`, `status`, `city`, `address`, ответственные, день отгрузки, маршрут, порядок выгрузки, комментарий, контакты и коммерческие поля. **Проверка:** «Добавить клиента» → заполнить «Паспорт клиента» и логистику → Сохранить → открыть клиента из списка → значения в аккордеоне «Паспорт клиента» / «Адрес и логистика» → F5 → без потерь.
 - **Строка дилера** (`manualDealerToRow`): не копируется первая строка `DEALER_BASE_ROWS`; витрина, конкуренты, KPI, дистрибуция и связанные поля — нейтральные пустые значения, чтобы детерминированные «пилотные» хелперы не подставляли демо.
 - **Коммерческие признаки** (склады двери/фурнитуры, Tandoor Club, спецусловия, КЭШБЭК, код 1С): хранятся в `manuallyCreatedDealersById` / `dealerOverridesById` в `fields`, мержатся в `DealerRow` (`mergeDealerRowWithActualization`). По умолчанию для ручного клиента все три-state поля — **`null` («не указано»)**. В списке «Клиентская база» бейджи «Tandoor Club», «Спецусловия», «Кешбек агент» и склады показываются **только при явном `true`** (`getDealerProgramSignal` / `getDealerStockSignal` для `manual-dealer-*` не используют эвристики от категории и `dealer-characteristics`).
-- **Карта клиентов** (`pages/client-map.tsx`): при включённой актуализации строки берутся из `buildDealerBaseRowsWithActualization(state, profile, { includeArchivedDealers: false })`, поэтому клиенты из `archivedDealersById` **не попадают на карту** по умолчанию; ручные клиенты — в наборе, если проходят роль и фильтры (координаты — по прежней логике `client-map-data`).
+- **Карта клиентов** (`pages/client-map.tsx`): при включённой актуализации строки берутся из `buildDealerBaseRowsWithActualization(state, profile, { includeArchivedDealers: false })`, поэтому клиенты из `archivedDealersById` **не попадают на карту** по умолчанию; ручные клиенты — в наборе, если проходят роль и фильтры (координаты — по прежней логике `client-map-data`). Параметр `includeArchivedDealers: true` используется только на странице клиентской базы в режиме «Показать архив» и означает **список только архивных** клиентов.
 - **Нет виртуальной ТТ** без явных точек: `mergeTradePointsForActualization` и `getEffectiveDealerTradePoints` не добавляют «Основную торговую точку» с адресом из карточки дилера.
 - **Юрлица из release** не подмешиваются: `mergeLegalEntitiesForActualization` для ручного дилера стартует с пустого списка.
 - **Синтетика по id** отключена в общих модулях: `dealer-card-release-signals`, `dealer-stock-signals`, `dealer-equipment-signals`, `showcase-distribution-data` (план витрины и задачи), `trade-point-matrix-data` (матрица для `manual-tp-`), `training-attention.ts`.
@@ -198,6 +198,15 @@
 | Коммерческие характеристики (форма / анкета) | `section-dealer-commercial-characteristics`, `select-dealer-door-warehouse`, `textarea-dealer-door-warehouse-comment`, `select-dealer-hardware-warehouse`, `textarea-dealer-hardware-warehouse-comment`, `select-dealer-tandoor-club`, `textarea-dealer-tandoor-club-comment`, `select-dealer-special-terms`, `textarea-dealer-special-terms-comment`, `select-dealer-cashback-client`, `textarea-dealer-cashback-client-comment`, `input-dealer-external-1c-code`, `text-dealer-external-1c-code` |
 | Бейджи в списке клиентской базы (программы) | `badge-dealer-special-terms-{id}`, `badge-dealer-tandoor-club-{id}`, `badge-dealer-cashback-client-{id}` (суффикс `id` клиента для уникальности в списке) |
 
+## Архив клиентов и торговых точек
+
+- **Архив клиента** (`archivedDealersById`) — это soft-delete: клиент **скрыт** из рабочей клиентской базы и из списка торговых точек (точки этого клиента не строятся в `buildTradePointListForActualization`, пока клиент в архиве).
+- **Рабочая база** (`includeArchivedDealers` не задан или `false` в `buildDealerBaseRowsWithActualization`) — архивные клиенты в выдачу **не попадают**.
+- **Режим «Показать архив»** на странице клиентской базы — в списке **только** клиенты из `archivedDealersById`; подсказка в UI поясняет, что правки карточки не возвращают клиента в рабочую базу.
+- **Карточка архивного клиента** открывается для просмотра и редактирования: `persist` сохраняет изменения, запись остаётся в `archivedDealersById` — клиент **не возвращается** в общую базу автоматически.
+- **Восстановление** — явное действие «Восстановить клиента» (снятие `dealerId` из `archivedDealersById`). После восстановления снова в рабочем списке появляются **только неархивные** торговые точки клиента (точки, у которых отдельно есть запись в `archivedTradePointsById`, **остаются** архивными и не «откатываются» вместе с клиентом).
+- **Список торговых точек**: переключатель «Показать архивные ТТ» относится к архиву **точек**; точки клиентов, самих находящихся в архиве, в рабочем списке не показываются независимо от этого переключателя.
+
 ## Ручные проверки (acceptance)
 
 1. Под менеджером открыть своего клиента, изменить город / телефон / комментарий, сохранить, обновить страницу — изменения на месте.
@@ -210,6 +219,10 @@
 8. Маркетолог / аналитик — нет кнопок создания/редактирования актуализации.
 9. `cd apps/platform && npm run check` — успех.
 10. `npm run build` — успех.
+11. Архивировать клиента → в обычной базе не отображается → «Показать архив» — только архивные, есть баннер и бейдж «В архиве».
+12. Открыть архивного клиента → видна панель с подсказкой и «Восстановить клиента»; сохранить правку → клиент остаётся в архиве; восстановить → снова в рабочей базе.
+13. При архивном клиенте его ТТ нет в рабочем списке «Торговые точки»; после восстановления клиента неархивные ТТ снова в списке; ТТ, заархивированные отдельно, остаются скрытыми.
+14. Кнопка «В архив» / «Удалить клиента» не показывается (или не применима), если клиент уже в архиве.
 
 ## Безопасность (демо)
 
