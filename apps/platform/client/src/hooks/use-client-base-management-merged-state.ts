@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { mergeActualizationStatesForActivityDashboard } from "@/lib/client-base-actualization-team-state-merge";
-import { createEmptyActualizationState, type ActualizationState } from "@/lib/client-base-actualization-state";
+import { type ActualizationState } from "@/lib/client-base-actualization-state";
 import {
   fetchMergedTeamActualizationForManagement,
   shouldUseTeamMergedActualizationPlane,
