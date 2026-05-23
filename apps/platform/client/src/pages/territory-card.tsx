@@ -6,7 +6,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
+import { useClientBaseActualization } from "@/context/client-base-actualization-context";
+import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
+import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
+import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
+import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
+import { roleScopedDealerRows } from "@/lib/dealer-base-role-views";
 import { cn } from "@/lib/utils";
+import { buildTerritoryCardLivePack } from "@/lib/territory-card-live-data";
 import {
   MATRIX_TASK_PRIORITY_LABEL,
   MATRIX_TASK_STATUS_LABEL,
@@ -14,24 +21,11 @@ import {
   type MatrixTaskWithContext,
 } from "@/lib/trade-point-task-data";
 import { formatCompactRub, formatPercent, formatUnits, planCompletionPercent } from "@/lib/sales-manager-kpi-data";
-import {
-  getTerritoryCities,
-  getTerritoryFocusItems,
-  getTerritoryPlanLines,
-  getTerritoryRisks,
-  getTerritoryShowcases,
-  getTerritorySummary,
-  getTerritoryTasks,
-  getTerritoryTradePoints,
-  type TerritoryCitySummary,
-  type TerritoryPlanLine,
-  type TerritoryRiskItem,
-} from "@/lib/territory-card-data";
-import { getTerritoryTrainingAttentionKpis } from "@/lib/training-attention";
+import type { TerritoryCitySummary, TerritoryPlanLine, TerritoryRiskItem } from "@/lib/territory-card-data";
 
 function riskTone(level: TerritoryRiskItem["level"]) {
-  if (level === "critical") return "border-red-200 bg-red-50 text-red-900";
-  if (level === "attention") return "border-amber-200 bg-amber-50 text-amber-950";
+  if (level === "critical") return "border-primary/50 bg-primary/10 text-foreground";
+  if (level === "attention") return "border-border bg-muted/60 text-foreground";
   return "border-border bg-muted/50 text-foreground";
 }
 
@@ -61,30 +55,63 @@ function cityCompletion(plan: number, fact: number) {
 }
 
 export default function TerritoryCardPage() {
-  const {
-    summary,
-    planLines,
-    cities,
-    focus,
-    tasks,
-    tradePoints,
-    showcases,
-    risks,
-    trainingKpis,
-  } = useMemo(
-    () => ({
-      summary: getTerritorySummary(),
-      planLines: getTerritoryPlanLines(),
-      cities: getTerritoryCities(),
-      focus: getTerritoryFocusItems(),
-      tasks: getTerritoryTasks(10),
-      tradePoints: getTerritoryTradePoints(12),
-      showcases: getTerritoryShowcases(),
-      risks: getTerritoryRisks(),
-      trainingKpis: getTerritoryTrainingAttentionKpis(),
-    }),
-    [],
-  );
+  const { profile } = useReleaseDemoProfile();
+  const actx = useClientBaseActualization();
+  const teamPlane = useClientBaseTeamActualization();
+
+  const mergedLoading =
+    (actx.enabled && actx.loading) ||
+    (actx.enabled && shouldUseTeamMergedActualizationPlane(profile) && teamPlane.teamFetchLoading);
+
+  const livePack = useMemo(() => {
+    if (!actx.enabled) {
+      return null;
+    }
+    const rows = buildDealerBaseRowsWithActualization(teamPlane.mergedState, profile, { includeArchivedDealers: false });
+    const scoped = roleScopedDealerRows(rows, profile);
+    const label =
+      profile.role === "team_lead"
+        ? "Моя команда (активная база)"
+        : "Отдел продаж (активная база)";
+    return buildTerritoryCardLivePack(scoped, label);
+  }, [actx.enabled, teamPlane.mergedState, profile, actx.loading, teamPlane.teamFetchLoading]);
+
+  const summary = livePack?.summary;
+  const planLines = livePack?.planLines ?? [];
+  const cities = livePack?.cities ?? [];
+  const focus = livePack?.focus ?? [];
+  const tasks = livePack?.tasks ?? [];
+  const tradePoints = livePack?.tradePoints ?? [];
+  const showcases = livePack?.showcases ?? [];
+  const risks = livePack?.risks ?? [];
+  const trainingKpis = livePack?.trainingKpis;
+
+  if (!actx.enabled) {
+    return (
+      <div className="min-w-0 max-w-full space-y-6 overflow-x-hidden pb-28" data-testid="page-territory-card">
+        <Card className="border-dashed border-border/80 bg-card">
+          <CardHeader>
+            <CardTitle className="text-lg">Карточка территории</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm text-muted-foreground">
+            <p>Раздел доступен при включённой актуализации клиентской базы.</p>
+            <Button asChild className="min-h-11 font-semibold">
+              <Link href="/main">К главному</Link>
+            </Button>
+          </CardContent>
+        </Card>
+        <FloatingBackButton href="/main" label="К главному" testId="floating-back-to-main" ariaLabel="К главному экрану" />
+      </div>
+    );
+  }
+
+  if (mergedLoading || !livePack || !summary || !trainingKpis) {
+    return (
+      <div className="min-w-0 max-w-full space-y-6 overflow-x-hidden pb-28" data-testid="page-territory-card-loading">
+        <p className="text-sm text-muted-foreground">Загрузка актуальной базы…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-w-0 max-w-full space-y-8 overflow-x-hidden pb-28 sm:space-y-10" data-testid="page-territory-card">
@@ -104,6 +131,9 @@ export default function TerritoryCardPage() {
             <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Карточка территории</h1>
             <p className="max-w-2xl text-sm text-muted-foreground sm:text-base">
               Операционная сводка по клиентам, задачам по витрине и торговым точкам территории.
+            </p>
+            <p className="text-xs font-medium text-primary" data-testid="text-territory-data-source">
+              Источник: актуальная активная база (актуализация, без архива и без демо-заказов).
             </p>
           </div>
           <div className="grid w-full gap-2 sm:w-auto sm:min-w-[220px]">
@@ -125,6 +155,7 @@ export default function TerritoryCardPage() {
 
       <section className="space-y-4" data-testid="section-territory-summary">
         <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Сводка территории</h2>
+        <p className="text-xs text-muted-foreground">Показатели считаются по объединённому state команды и только активным клиентам/точкам.</p>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           <Card className="border-border/70 shadow-xs" data-testid="card-territory-dealers">
             <CardHeader className="pb-2 pt-4">
@@ -225,6 +256,17 @@ export default function TerritoryCardPage() {
 
       <section className="space-y-4" data-testid="section-territory-plan">
         <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Выполнение плана территории</h2>
+        {planLines.length === 0 ? (
+          <Card className="border-dashed border-border/80 bg-muted/10 shadow-xs">
+            <CardContent className="space-y-2 p-5 text-sm text-muted-foreground">
+              <p className="font-medium text-foreground">План-факт пока не настроен</p>
+              <p>
+                Блок скрыт до подключения реальных планов и факта из учётных систем. Сводка выше и списки ниже отражают только
+                клиентскую базу и задачи по витрине.
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
         <div className="grid gap-3 lg:grid-cols-3">
           {planLines.map((line) => (
             <Card key={line.key} className="border-border/70 shadow-xs" data-testid={planCardTestId(line.key)}>
@@ -255,10 +297,16 @@ export default function TerritoryCardPage() {
             </Card>
           ))}
         </div>
+        )}
       </section>
 
       <section className="space-y-4" data-testid="section-territory-cities">
         <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Города и населённые пункты</h2>
+        {cities.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-border/80 bg-muted/10 px-4 py-6 text-sm text-muted-foreground">
+            Нет актуальных данных по городам: в зоне ответственности пока нет активных клиентов.
+          </p>
+        ) : (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {cities.map((c: TerritoryCitySummary) => (
             <Card key={c.id} className="border-border/70 shadow-xs" data-testid={`card-territory-city-${c.id}`}>
@@ -298,6 +346,7 @@ export default function TerritoryCardPage() {
             </Card>
           ))}
         </div>
+        )}
       </section>
 
       <section className="space-y-4" data-testid="section-territory-focus-dealers">

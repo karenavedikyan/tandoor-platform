@@ -344,7 +344,7 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
 
   const deficitTasks = useMemo(() => {
     void bump;
-    return getShowcaseMatrixDeficitTasksForTradePoint(dealer.id, point.id);
+    return getShowcaseMatrixDeficitTasksForTradePoint(dealer, point.id);
   }, [bump, dealer.id, point.id]);
 
   const matrixCompletionPct = useMemo(

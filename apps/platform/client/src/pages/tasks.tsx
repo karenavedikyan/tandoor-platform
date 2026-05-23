@@ -17,6 +17,7 @@ import { FloatingBackButton } from "@/components/navigation/floating-back-button
 import { cn } from "@/lib/utils";
 import {
   getAllMatrixTasks,
+  getShowcaseBackedTasksForDealers,
   MATRIX_TASK_PRIORITY_LABEL,
   MATRIX_TASK_STATUS_LABEL,
   type MatrixTaskWithContext,
@@ -101,14 +102,14 @@ function tasksUrlManagerAllowed(
 
 function statusTone(s: MatrixTaskWithContext["status"]) {
   if (s === "new") return "border-primary/40 bg-primary/10 text-primary";
-  if (s === "in_progress") return "border-amber-200 bg-amber-50 text-amber-950";
-  if (s === "overdue") return "border-red-200 bg-red-50 text-red-900";
-  return "border-emerald-200 bg-emerald-50 text-emerald-900";
+  if (s === "in_progress") return "border-border bg-muted/70 text-foreground";
+  if (s === "overdue") return "border-primary/30 bg-muted text-foreground";
+  return "border-border bg-muted/50 text-muted-foreground";
 }
 
 function priorityTone(p: MatrixTaskWithContext["priority"]) {
-  if (p === "high") return "border-red-200 bg-red-50 text-red-900";
-  if (p === "medium") return "border-amber-200 bg-amber-50 text-amber-950";
+  if (p === "high") return "border-primary/40 bg-primary/10 text-primary";
+  if (p === "medium") return "border-border bg-muted/70 text-foreground";
   return "border-border bg-muted text-muted-foreground";
 }
 
@@ -637,6 +638,8 @@ export default function TasksPage() {
   const { profile } = useReleaseDemoProfile();
   const access = useMemo(() => mapSalesRoleToDealerBaseAccess(profile.role), [profile.role]);
   const actx = useClientBaseActualization();
+  const managementPlane = useClientBaseTeamActualization();
+  const { publishDashboardRopTeamId } = managementPlane;
 
   const [showcaseTick, setShowcaseTick] = useState(0);
   useEffect(() => {
@@ -654,7 +657,12 @@ export default function TasksPage() {
   const [showcaseViewId, setShowcaseViewId] = useState<ShowcaseTasksViewId>("all");
   const [presetClock] = useState(() => new Date());
 
-  const dealerById = useMemo(() => new Map(DEALER_BASE_ROWS.map((d) => [d.id, d])), []);
+  const dealerById = useMemo(() => {
+    const rows = actx.enabled
+      ? buildDealerBaseRowsWithActualization(managementPlane.mergedState, profile, { includeArchivedDealers: false })
+      : DEALER_BASE_ROWS;
+    return new Map(rows.map((d) => [d.id, d]));
+  }, [actx.enabled, managementPlane.mergedState, profile]);
   const [ropTeam, setRopTeam] = useState<string>("all");
   const [mgrFilter, setMgrFilter] = useState<string>("all");
 
@@ -717,9 +725,6 @@ export default function TasksPage() {
     });
   };
 
-  const managementPlane = useClientBaseTeamActualization();
-  const { publishDashboardRopTeamId } = managementPlane;
-
   useEffect(() => {
     if (mgrFilter === "all") return;
     if (!mgrOptions.some((m) => m.id === mgrFilter)) setMgrFilter("all");
@@ -749,9 +754,10 @@ export default function TasksPage() {
 
   const showcaseTasks = useMemo(() => {
     if (actualizationLoading) return [] as MatrixTaskWithContext[];
-    const raw = sortTasks(getAllMatrixTasks()).filter((t) => allowedDealerIds.has(t.dealerId));
+    const rawSource = actx.enabled ? getShowcaseBackedTasksForDealers(workingDealerRows) : getAllMatrixTasks();
+    const raw = sortTasks(rawSource).filter((t) => allowedDealerIds.has(t.dealerId));
     return getShowcaseOnlyTasks(raw);
-  }, [actualizationLoading, allowedDealerIds, showcaseTick]);
+  }, [actualizationLoading, actx.enabled, workingDealerRows, allowedDealerIds, showcaseTick]);
 
   const filteredByScope = useMemo(() => {
     let list = showcaseTasks;

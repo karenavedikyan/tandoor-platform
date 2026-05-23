@@ -107,6 +107,12 @@ export function aggregateManagersForTeam(teamId: string): TeamManagerAggRow[] {
   return aggregateManagers(teamId, rows);
 }
 
+/** Агрегаты по менеджерам команды по переданным строкам (merge актуализации). */
+export function aggregateManagersForTeamFromRows(teamId: string, scopedRows: DealerRow[]): TeamManagerAggRow[] {
+  const rows = scopedRows.filter((r) => r.releaseTeamId === teamId);
+  return aggregateManagers(teamId, rows);
+}
+
 /** Сводка по команде по переданным строкам клиентской базы (актуализация / без архива). */
 export function buildTeamSummaryFromRows(teamId: string, rows: DealerRow[]): TeamSummary {
   const inTeam = rows.filter((r) => r.releaseTeamId === teamId);
