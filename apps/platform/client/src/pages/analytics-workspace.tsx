@@ -9,6 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AnalyticsWorkspaceReleaseOverview } from "@/components/analytics-workspace-release-overview";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
+import { useClientBaseActualization } from "@/context/client-base-actualization-context";
+import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import {
   ANALYTICS_WORKSPACE_TAB_META,
   getRowsForTab,
@@ -38,11 +40,13 @@ function persistTab(tab: AnalyticsWorkspaceTabId, rows: AnalyticsWorkspaceRow[])
 function TabTable({
   tab,
   meta,
+  suppressSeededRows,
 }: {
   tab: AnalyticsWorkspaceTabId;
   meta: (typeof ANALYTICS_WORKSPACE_TAB_META)[number];
+  suppressSeededRows: boolean;
 }) {
-  const [rows, setRows] = useState<AnalyticsWorkspaceRow[]>(() => getRowsForTab(tab));
+  const [rows, setRows] = useState<AnalyticsWorkspaceRow[]>(() => (suppressSeededRows ? [] : getRowsForTab(tab)));
   const [mgr, setMgr] = useState(ALL);
   const [rop, setRop] = useState(ALL);
   const [client, setClient] = useState(ALL);
@@ -50,8 +54,8 @@ function TabTable({
   const [city, setCity] = useState(ALL);
 
   useEffect(() => {
-    setRows(getRowsForTab(tab));
-  }, [tab]);
+    setRows(suppressSeededRows ? [] : getRowsForTab(tab));
+  }, [tab, suppressSeededRows]);
 
   const managers = useMemo(() => {
     const names = uniq(rows.map((r) => r.manager));
@@ -91,6 +95,11 @@ function TabTable({
 
   return (
     <div className="space-y-4">
+      {suppressSeededRows && rows.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-border/80 bg-muted/10 px-4 py-4 text-sm text-muted-foreground">
+          Нет актуальных строк: демо-таблицы отключены. Данные появятся после подключения выгрузки или ручного ввода.
+        </p>
+      ) : null}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <div className="space-y-1.5">
           <Label className="text-xs text-muted-foreground">Город</Label>
@@ -221,8 +230,8 @@ function TabTable({
   );
 }
 
-function SummaryPanel() {
-  const top = getRowsForTab("top500");
+function SummaryPanel({ suppressSeededRows }: { suppressSeededRows: boolean }) {
+  const top = suppressSeededRows ? [] : getRowsForTab("top500");
   const sumRub = top.reduce((s, r) => s + (parseFloat(String(r.v1).replace(/\s/g, "")) || 0), 0);
   const sumVh = top.reduce((s, r) => s + (parseFloat(String(r.v2)) || 0), 0);
   return (
@@ -247,13 +256,17 @@ function SummaryPanel() {
           <CardContent className="text-lg font-semibold tabular-nums">{top.length}</CardContent>
         </Card>
       </div>
-      <TabTable tab="summary" meta={ANALYTICS_WORKSPACE_TAB_META.find((m) => m.id === "summary")!} />
+      <TabTable tab="summary" meta={ANALYTICS_WORKSPACE_TAB_META.find((m) => m.id === "summary")!} suppressSeededRows={suppressSeededRows} />
     </div>
   );
 }
 
 export default function AnalyticsWorkspacePage() {
   const [tab, setTab] = useState<AnalyticsWorkspaceTabId>("top500");
+  const { profile } = useReleaseDemoProfile();
+  const actx = useClientBaseActualization();
+  const suppressSeededRows =
+    actx.enabled && (profile.role === "team_lead" || profile.role === "sales_director");
 
   return (
     <div className="mx-auto max-w-6xl min-w-0 space-y-6 overflow-x-hidden pb-24" data-testid="page-analytics-workspace">
@@ -263,6 +276,11 @@ export default function AnalyticsWorkspacePage() {
         <p className="max-w-3xl text-sm text-muted-foreground">
           Ручной ввод и справочные показатели. Таблицы редактируются локально; фильтры не меняют сохранённые значения.
         </p>
+        {suppressSeededRows ? (
+          <p className="text-xs font-medium text-primary">
+            Для РОПа и директора при включённой актуализации демо-строки в таблицах ниже скрыты до появления реальной выгрузки.
+          </p>
+        ) : null}
         <p className="text-xs text-muted-foreground">
           Классическая аналитика отдела остаётся в разделе{" "}
           <Link href="/analytics" className="font-medium text-primary underline-offset-2 hover:underline">
@@ -304,7 +322,11 @@ export default function AnalyticsWorkspacePage() {
         </div>
         {ANALYTICS_WORKSPACE_TAB_META.map((m) => (
           <TabsContent key={m.id} value={m.id} className="mt-4 min-w-0">
-            {m.id === "summary" ? <SummaryPanel /> : <TabTable tab={m.id} meta={m} />}
+            {m.id === "summary" ? (
+              <SummaryPanel suppressSeededRows={suppressSeededRows} />
+            ) : (
+              <TabTable tab={m.id} meta={m} suppressSeededRows={suppressSeededRows} />
+            )}
           </TabsContent>
         ))}
       </Tabs>

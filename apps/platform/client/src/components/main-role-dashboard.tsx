@@ -11,14 +11,14 @@ import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { canAccessPath, salesControlHomeHref } from "@/lib/auth-access";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
-import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
+import { DEALER_BASE_ROWS, type DealerRow } from "@/lib/dealer-base-mock-data";
 import {
   dealerNeedsAttention,
   roleScopedDealerRows,
 } from "@/lib/dealer-base-role-views";
 import { buildBrowserHashAppHref } from "@/lib/hash-route-utils";
 import { getEffectiveTeamLeadTeamId } from "@/lib/release-demo-profile";
-import { getAllMatrixTasks } from "@/lib/trade-point-task-data";
+import { getAllMatrixTasks, getShowcaseBackedTasksForDealers } from "@/lib/trade-point-task-data";
 import { getRopOptions } from "@/lib/rop-manager-filters";
 import { getShowcaseOnlyTasks } from "@/lib/task-classification";
 import {
@@ -30,9 +30,14 @@ import {
 import { currentMonthPeriodLabel, type PlanExecutionScope } from "@/lib/sales-manager-kpi-data";
 import { buildTeamSummaries, buildTeamSummaryFromRows } from "@/lib/team-summary";
 
-function countOpenTasksForDealers(dealerIds: Set<string>): number {
-  return getShowcaseOnlyTasks(getAllMatrixTasks()).filter((t) => dealerIds.has(t.dealerId) && t.status !== "done")
-    .length;
+function countOpenTasksForDealers(
+  dealerIds: Set<string>,
+  opts: { useShowcaseBackedOnly: boolean; dealersForTasks: DealerRow[] },
+): number {
+  const pool = opts.useShowcaseBackedOnly
+    ? getShowcaseBackedTasksForDealers(opts.dealersForTasks)
+    : getAllMatrixTasks();
+  return getShowcaseOnlyTasks(pool).filter((t) => dealerIds.has(t.dealerId) && t.status !== "done").length;
 }
 
 type MainLink = { href: string; label: string; testId: string };
@@ -64,13 +69,13 @@ export function MainRoleDashboard() {
   const managementPlane = useClientBaseTeamActualization();
   const role = (user?.role ?? profile.role) as SalesRole;
 
-  const baseRowsForDashboard = useMemo(
-    () =>
-      actx.enabled
-        ? buildDealerBaseRowsWithActualization(managementPlane.mergedState, profile, { includeArchivedDealers: false })
-        : DEALER_BASE_ROWS,
-    [actx.enabled, managementPlane.mergedState, profile],
-  );
+  const baseRowsForDashboard = useMemo(() => {
+    if (actx.enabled) {
+      return buildDealerBaseRowsWithActualization(managementPlane.mergedState, profile, { includeArchivedDealers: false });
+    }
+    if (role === "team_lead" || role === "sales_director") return [];
+    return DEALER_BASE_ROWS;
+  }, [actx.enabled, managementPlane.mergedState, profile, role]);
   const scopedClients = useMemo(
     () => roleScopedDealerRows(baseRowsForDashboard, profile),
     [baseRowsForDashboard, profile],
@@ -85,7 +90,10 @@ export function MainRoleDashboard() {
     const total = scopedClients.length;
     const active = scopedClients.filter((r) => r.status === "активный").length;
     const attention = scopedClients.filter(dealerNeedsAttention).length;
-    const tasks = countOpenTasksForDealers(dealerIds);
+    const tasks = countOpenTasksForDealers(dealerIds, {
+      useShowcaseBackedOnly: actx.enabled,
+      dealersForTasks: actx.enabled ? scopedClients : DEALER_BASE_ROWS,
+    });
     if (role === "team_lead") {
       const tid = getEffectiveTeamLeadTeamId(profile);
       const mgrs = getTeamManagers(tid).length;
@@ -117,7 +125,7 @@ export function MainRoleDashboard() {
       extraKpiLabel: null as string | null,
       extraKpiValue: null as string | null,
     };
-  }, [scopedClients, dealerIds, role, profile]);
+  }, [scopedClients, dealerIds, role, profile, actx.enabled]);
 
   const can = (path: string) => Boolean(user && canAccessPath(user.role, path));
 
@@ -254,9 +262,13 @@ export function MainRoleDashboard() {
     role === "sales_manager"
       ? `Показатели по вашим клиентам (${user?.name ?? "менеджер"}) и связанным задачам — те же данные, что в «Клиентской базе» и «Задачах».`
       : role === "team_lead"
-        ? `Показатели по команде РОП (${user?.name ?? "РОП"}) — те же данные, что в «Клиентской базе» и «Задачах» с фильтром команды.`
+        ? `Показатели по команде РОП (${user?.name ?? "РОП"}) — те же данные, что в «Клиентской базе» и «Задачах» с фильтром команды.${
+            actx.enabled ? " Источник KPI: актуальная активная база (актуализация, без архива)." : ""
+          }`
         : role === "sales_director"
-          ? "Показатели по всей клиентской базе и задачам по витрине отдела продаж."
+          ? `Показатели по всей клиентской базе и задачам по витрине отдела продаж.${
+              actx.enabled ? " Источник KPI: актуальная активная база (актуализация, без архива)." : ""
+            }`
           : "";
 
   const kpiClientsLabel =
@@ -360,6 +372,19 @@ export function MainRoleDashboard() {
               <p className="text-sm text-muted-foreground">
                 План-факт и сводки скрыты до появления реальных клиентов. Создайте клиента вручную
                 или верните клиента из архива в «Клиентской базе».
+              </p>
+            </CardContent>
+          </Card>
+        ) : actx.enabled && (role === "team_lead" || role === "sales_director") ? (
+          <Card
+            className="rounded-xl border border-dashed border-border/80 bg-muted/10"
+            data-testid="card-main-plan-placeholder-management"
+          >
+            <CardContent className="space-y-1 p-4">
+              <p className="text-sm font-semibold text-foreground">План-факт в этом блоке не подключён</p>
+              <p className="text-sm text-muted-foreground">
+                Показатели выполнения плана здесь были демонстрационными. Используйте раздел «План-факт продаж»; KPI клиентской базы
+                выше — из актуальной активной базы.
               </p>
             </CardContent>
           </Card>

@@ -11,9 +11,9 @@ import { isManualActualizationDealerId, isManualActualizationTradePointId } from
 export type TrainingAttentionLevel = "none" | "watch" | "recommended" | "priority";
 
 export function trainingAttentionLevelBadgeClass(level: TrainingAttentionLevel): string {
-  if (level === "priority") return "border-red-200 bg-red-50 text-red-900";
-  if (level === "recommended") return "border-amber-200 bg-amber-50 text-amber-950";
-  if (level === "watch") return "border-sky-200 bg-sky-50 text-sky-950";
+  if (level === "priority") return "border-primary/40 bg-primary/10 text-primary";
+  if (level === "recommended") return "border-border bg-muted/70 text-foreground";
+  if (level === "watch") return "border-border bg-muted/50 text-muted-foreground";
   return "border-border bg-muted/60 text-muted-foreground";
 }
 
@@ -252,12 +252,17 @@ export type TerritoryTrainingAttentionKpis = {
 };
 
 export function getTerritoryTrainingAttentionKpis(): TerritoryTrainingAttentionKpis {
+  return getTrainingAttentionKpisForDealers(DEALER_BASE_ROWS);
+}
+
+/** KPI обучения по произвольному набору строк клиентской базы (актуализация / активные клиенты). */
+export function getTrainingAttentionKpisForDealers(dealers: DealerRow[]): TerritoryTrainingAttentionKpis {
   let recommended = 0;
   let priority = 0;
   let indigoCandidates = 0;
   let completed = 0;
 
-  for (const d of DEALER_BASE_ROWS) {
+  for (const d of dealers) {
     if (d.productTrainingCompleted) completed += 1;
     if (d.indigoTrainingCandidate) indigoCandidates += 1;
     const sig = getDealerTrainingAttentionSignal(d);

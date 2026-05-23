@@ -2,8 +2,11 @@ import { useMemo } from "react";
 import { Link } from "wouter";
 import { CityConcentrationBlock } from "@/components/city-concentration-block";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useClientBaseActualization } from "@/context/client-base-actualization-context";
+import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
+import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { buildBrowserHashAppHref, buildHashPath } from "@/lib/hash-route-utils";
 import { buildDealerBaseAllCitiesHref, buildDealerBaseCityDrillHref, getTopCityConcentrationRows } from "@/lib/city-concentration";
 import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
@@ -12,8 +15,9 @@ import { getEffectiveTeamLeadTeamId, releaseDemoRoleLabel, type ReleaseDemoProfi
 import type { TaskCategoryId } from "@/lib/task-classification";
 import { TASK_CATEGORIES, getTaskCategoryCounts, getTaskCategoryLabel } from "@/lib/task-classification";
 import { getTaskPresetCounts, type TaskPresetId } from "@/lib/task-presets";
-import { getAllMatrixTasks } from "@/lib/trade-point-task-data";
-import { aggregateManagersForTeam, buildTeamSummaries, type TeamSummary } from "@/lib/team-summary";
+import { getAllMatrixTasks, getShowcaseBackedTasksForDealers } from "@/lib/trade-point-task-data";
+import { aggregateManagersForTeamFromRows, buildTeamSummaries, buildTeamSummaryFromRows, type TeamSummary } from "@/lib/team-summary";
+import { getRopOptions } from "@/lib/rop-manager-filters";
 import { getSalesUserById, type SalesRole } from "@/lib/sales-control-data";
 import { cn } from "@/lib/utils";
 
@@ -90,10 +94,17 @@ function roleSummaryLine(role: SalesRole): string {
 export function AnalyticsWorkspaceReleaseOverview() {
   const { user } = useCurrentUser();
   const { profile } = useReleaseDemoProfile();
+  const actx = useClientBaseActualization();
+  const teamCtx = useClientBaseTeamActualization();
   const role = (user?.role ?? profile.role) as SalesRole;
   const presetClock = useMemo(() => new Date(), []);
 
-  const scopedRows = useMemo(() => roleScopedDealerRows(DEALER_BASE_ROWS, profile), [profile]);
+  const workingRows = useMemo(() => {
+    if (!actx.enabled) return DEALER_BASE_ROWS;
+    return buildDealerBaseRowsWithActualization(teamCtx.mergedState, profile, { includeArchivedDealers: false });
+  }, [actx.enabled, teamCtx.mergedState, profile]);
+
+  const scopedRows = useMemo(() => roleScopedDealerRows(workingRows, profile), [workingRows, profile]);
   const topCityRows = useMemo(() => getTopCityConcentrationRows(scopedRows, 10), [scopedRows]);
   const dealerIds = useMemo(() => new Set(scopedRows.map((r) => r.id)), [scopedRows]);
 
@@ -110,18 +121,23 @@ export function AnalyticsWorkspaceReleaseOverview() {
   }, [scopedRows]);
 
   const openTasks = useMemo(() => {
-    return getAllMatrixTasks().filter((t) => dealerIds.has(t.dealerId) && t.status !== "done");
-  }, [dealerIds]);
+    const pool = actx.enabled ? getShowcaseBackedTasksForDealers(workingRows) : getAllMatrixTasks();
+    return pool.filter((t) => dealerIds.has(t.dealerId) && t.status !== "done");
+  }, [actx.enabled, workingRows, dealerIds]);
 
   const categoryCounts = useMemo(() => getTaskCategoryCounts(openTasks), [openTasks]);
   const presetCounts = useMemo(() => getTaskPresetCounts(openTasks, presetClock), [openTasks, presetClock]);
 
   const teamSummaries = useMemo(() => {
-    if (role === "sales_director" || role === "analyst" || role === "team_lead") {
-      return buildTeamSummaries(profile);
+    if (!(role === "sales_director" || role === "analyst" || role === "team_lead")) return [] as TeamSummary[];
+    if (actx.enabled) {
+      if (role === "sales_director" || role === "analyst") {
+        return getRopOptions().map((o) => buildTeamSummaryFromRows(o.teamId, scopedRows));
+      }
+      return [buildTeamSummaryFromRows(getEffectiveTeamLeadTeamId(profile), scopedRows)];
     }
-    return [] as TeamSummary[];
-  }, [profile, role]);
+    return buildTeamSummaries(profile);
+  }, [profile, role, actx.enabled, scopedRows]);
 
   const teamRows = useMemo(() => {
     return [...teamSummaries].sort((a, b) => a.teamDisplayName.localeCompare(b.teamDisplayName, "ru"));
@@ -130,7 +146,7 @@ export function AnalyticsWorkspaceReleaseOverview() {
   const managerRows = useMemo(() => {
     if (role !== "team_lead") return [];
     const tid = getEffectiveTeamLeadTeamId(profile);
-    return aggregateManagersForTeam(tid)
+    return aggregateManagersForTeamFromRows(tid, scopedRows)
       .filter((m) => m.total > 0)
       .sort((a, b) => {
         const pa = a.total > 0 ? a.attention / a.total : 0;
@@ -138,7 +154,7 @@ export function AnalyticsWorkspaceReleaseOverview() {
         if (pb !== pa) return pb - pa;
         return b.attention - a.attention;
       });
-  }, [role, profile]);
+  }, [role, profile, scopedRows]);
 
   const topAttentionClients = useMemo(() => {
     return [...scopedRows]
@@ -162,7 +178,7 @@ export function AnalyticsWorkspaceReleaseOverview() {
   const topAttentionManagers = useMemo(() => {
     if (role !== "team_lead") return [];
     const tid = getEffectiveTeamLeadTeamId(profile);
-    return aggregateManagersForTeam(tid)
+    return aggregateManagersForTeamFromRows(tid, scopedRows)
       .filter((m) => m.total > 0)
       .sort((a, b) => {
         const pa = a.attention / a.total;
@@ -171,7 +187,7 @@ export function AnalyticsWorkspaceReleaseOverview() {
         return b.attention - a.attention;
       })
       .slice(0, 5);
-  }, [role, profile]);
+  }, [role, profile, scopedRows]);
 
   const isDept = role === "sales_director" || role === "analyst";
   const isRop = role === "team_lead";
@@ -180,10 +196,10 @@ export function AnalyticsWorkspaceReleaseOverview() {
     const t = clientStats.total;
     if (t <= 0) return [];
     return [
-      { key: "active", pct: (100 * clientStats.active) / t, className: "bg-emerald-500/90" },
-      { key: "potential", pct: (100 * clientStats.potential) / t, className: "bg-sky-500/85" },
-      { key: "top", pct: (100 * clientStats.top) / t, className: "bg-amber-500/85" },
-      { key: "attention", pct: (100 * clientStats.attention) / t, className: "bg-rose-500/85" },
+      { key: "active", pct: (100 * clientStats.active) / t, className: "bg-primary/90" },
+      { key: "potential", pct: (100 * clientStats.potential) / t, className: "bg-primary/55" },
+      { key: "top", pct: (100 * clientStats.top) / t, className: "bg-primary/35" },
+      { key: "attention", pct: (100 * clientStats.attention) / t, className: "bg-muted-foreground/35" },
     ].filter((x) => x.pct > 0);
   }, [clientStats]);
 
@@ -192,6 +208,9 @@ export function AnalyticsWorkspaceReleaseOverview() {
       <section className="min-w-0 space-y-2 rounded-2xl border border-border/80 bg-muted/20 p-4" data-testid="section-analytics-role-summary">
         <p className="text-sm font-semibold text-foreground">{releaseDemoRoleLabel(role)}</p>
         <p className="text-sm text-muted-foreground">{roleSummaryLine(role)}</p>
+        {actx.enabled && (isDept || isRop) ? (
+          <p className="text-xs font-medium text-primary">Источник: актуальная активная база (актуализация, без архива).</p>
+        ) : null}
       </section>
 
       <div className="grid min-w-0 gap-4 md:grid-cols-2">

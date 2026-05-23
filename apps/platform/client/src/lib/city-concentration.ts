@@ -44,7 +44,9 @@ export function buildCityConcentrationRows(rows: DealerRow[]): CityConcentration
     { total: number; active: number; top: number; attention: number; potential: number }
   >();
   for (const r of rows) {
-    const city = r.city?.trim() || "—";
+    const raw = r.city?.trim();
+    const city =
+      !raw || raw === "—" || raw === "-" ? "Без города" : raw;
     const cur = map.get(city) ?? { total: 0, active: 0, top: 0, attention: 0, potential: 0 };
     cur.total += 1;
     if (r.status === "активный") cur.active += 1;

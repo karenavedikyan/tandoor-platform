@@ -1,4 +1,4 @@
-import { DEALER_BASE_ROWS } from "./dealer-base-mock-data";
+import { DEALER_BASE_ROWS, type DealerRow } from "./dealer-base-mock-data";
 import { getDealerTrainingAttentionSignal, TRAINING_PROGRAM_PRODUCT_BASE } from "./training-attention";
 import {
   getAllShowcaseGlobalTaskRows,
@@ -322,8 +322,8 @@ function mapShowcaseGlobalToMatrixTask(g: ShowcaseGlobalTaskRow): MatrixTaskWith
   };
 }
 
-function computeShowcaseMatrixTasks(): MatrixTaskWithContext[] {
-  return getAllShowcaseGlobalTaskRows(DEALER_BASE_ROWS).map(mapShowcaseGlobalToMatrixTask);
+function computeShowcaseMatrixTasksForDealers(dealers: DealerRow[]): MatrixTaskWithContext[] {
+  return getAllShowcaseGlobalTaskRows(dealers).map(mapShowcaseGlobalToMatrixTask);
 }
 
 function dueDateShowcaseMatrixDeficit(dealerId: string, pointId: string, modelId: string): string {
@@ -333,10 +333,10 @@ function dueDateShowcaseMatrixDeficit(dealerId: string, pointId: string, modelId
   return `${String(day).padStart(2, "0")}.${String(month).padStart(2, "0")}.2026`;
 }
 
-function computeShowcaseMatrixDeficitTasks(): MatrixTaskWithContext[] {
+function computeShowcaseMatrixDeficitTasksForDealers(dealers: DealerRow[]): MatrixTaskWithContext[] {
   const storage = loadShowcaseMatrixStorage();
   const out: MatrixTaskWithContext[] = [];
-  for (const dealer of DEALER_BASE_ROWS) {
+  for (const dealer of dealers) {
     for (const point of dealer.tradePoints) {
       if (point.status?.trim() === "Архив") continue;
       const models = getShowcaseMatrixModelsForTradePoint(dealer.id, point.id, dealer.clientCategory);
@@ -379,8 +379,17 @@ function computeShowcaseMatrixDeficitTasks(): MatrixTaskWithContext[] {
   return out;
 }
 
-export function getShowcaseMatrixDeficitTasksForTradePoint(dealerId: string, pointId: string): MatrixTaskWithContext[] {
-  return computeShowcaseMatrixDeficitTasks().filter((t) => t.dealerId === dealerId && t.tradePointId === pointId);
+export function getShowcaseMatrixDeficitTasksForTradePoint(dealer: DealerRow, pointId: string): MatrixTaskWithContext[] {
+  return computeShowcaseMatrixDeficitTasksForDealers([dealer]).filter((t) => t.tradePointId === pointId.trim());
+}
+
+/**
+ * Реальные открытые задачи по витрине: план витрины (sessionStorage) + дефицит матрицы по переданным строкам.
+ * Без синтетической матрицы каталога и без автогенерации тысяч строк на клиента.
+ */
+export function getShowcaseBackedTasksForDealers(dealers: DealerRow[]): MatrixTaskWithContext[] {
+  if (dealers.length === 0) return [];
+  return [...computeShowcaseMatrixTasksForDealers(dealers), ...computeShowcaseMatrixDeficitTasksForDealers(dealers)];
 }
 
 /** Ленивый кэш только матрицы товаров (без задач витрины из sessionStorage). */
@@ -424,7 +433,7 @@ function computeAllMatrixTasks(): MatrixTaskWithContext[] {
       }
     }
   }
-  result.push(...buildProductTrainingTasks());
+  result.push(...buildProductTrainingTasks(DEALER_BASE_ROWS));
   return result;
 }
 
@@ -434,12 +443,16 @@ function computeAllMatrixTasks(): MatrixTaskWithContext[] {
  */
 export function getAllMatrixTasks(): MatrixTaskWithContext[] {
   if (!matrixBaseTasksCache) matrixBaseTasksCache = computeAllMatrixTasks();
-  return [...matrixBaseTasksCache, ...computeShowcaseMatrixTasks(), ...computeShowcaseMatrixDeficitTasks()];
+  return [
+    ...matrixBaseTasksCache,
+    ...computeShowcaseMatrixTasksForDealers(DEALER_BASE_ROWS),
+    ...computeShowcaseMatrixDeficitTasksForDealers(DEALER_BASE_ROWS),
+  ];
 }
 
-function buildProductTrainingTasks(): MatrixTaskWithContext[] {
+function buildProductTrainingTasks(dealers: DealerRow[]): MatrixTaskWithContext[] {
   const out: MatrixTaskWithContext[] = [];
-  for (const dealer of DEALER_BASE_ROWS) {
+  for (const dealer of dealers) {
     const sig = getDealerTrainingAttentionSignal(dealer);
     if (sig.level !== "priority") continue;
     if (dealer.productTrainingCompleted) continue;

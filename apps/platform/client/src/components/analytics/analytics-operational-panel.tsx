@@ -294,8 +294,9 @@ export function AnalyticsOperationalPanel() {
       }
       return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name, "ru"));
     }
+    if (actx.enabled) return [];
     return DEALER_BASE_ROWS.map((d) => ({ id: d.id, name: d.name }));
-  }, [operationalRowSlices]);
+  }, [operationalRowSlices, actx.enabled]);
 
   const [globalFilters, setGlobalFilters] = useState<OperationalGlobalFilters>(OPERATIONAL_DEFAULT_GLOBAL_FILTERS);
 
