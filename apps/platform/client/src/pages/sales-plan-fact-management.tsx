@@ -1,5 +1,6 @@
 import { useMemo } from "react";
-import { FloatingBackButton } from "@/components/navigation/floating-back-button";
+import { Link } from "wouter";
+import { Button } from "@/components/ui/button";
 import { SalesPlanFactManagementCockpit } from "@/components/sales-plan-fact-management-cockpit";
 import { useSalesPlanFactPersistedState } from "@/hooks/use-sales-plan-fact-state";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -19,15 +20,19 @@ export default function SalesPlanFactManagementPage() {
   if (!persona || (role !== "sales_director" && role !== "team_lead" && role !== "sales_manager")) {
     return (
       <div className="mx-auto max-w-lg space-y-4 p-4" data-testid="page-sales-plan-fact-management">
-        <FloatingBackButton href="/main" label="На главную" testId="button-floating-back-sales-plan-fact" />
+        <Button asChild variant="ghost" size="sm" className="h-auto px-0 text-muted-foreground hover:text-foreground">
+          <Link href="/main">← На главную</Link>
+        </Button>
         <p className="text-sm text-muted-foreground">Раздел доступен ролям директор, РОП и менеджер.</p>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto min-w-0 max-w-6xl space-y-4 overflow-x-hidden px-3 pb-24 pt-4 sm:px-4" data-testid="page-sales-plan-fact-management">
-      <FloatingBackButton href="/main" label="На главную" testId="button-floating-back-sales-plan-fact" />
+    <div className="mx-auto min-w-0 max-w-6xl space-y-4 overflow-x-hidden px-3 pb-12 pt-4 sm:px-4" data-testid="page-sales-plan-fact-management">
+      <Button asChild variant="ghost" size="sm" className="h-auto px-0 text-muted-foreground hover:text-foreground">
+        <Link href="/main">← На главную</Link>
+      </Button>
       <SalesPlanFactManagementCockpit
         profile={profile}
         role={role}

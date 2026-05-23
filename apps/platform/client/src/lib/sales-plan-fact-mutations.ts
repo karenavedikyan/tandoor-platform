@@ -107,3 +107,60 @@ export function upsertManagerMetricLine(
   };
   return upsertSalesPlanFactLine(prev, line);
 }
+
+/**
+ * Копирует планы (rollup team/manager) из одного периода в другой для отобранных строк.
+ * Факт обнуляется (null), чтобы копирование не подтягивало прошлый факт.
+ */
+export function copySalesPlanFactPlansBetweenPeriods(
+  prev: SalesPlanFactPersistedState,
+  args: {
+    fromPeriodId: string;
+    toPeriodId: string;
+    actorId: string;
+    /** вызывается только для строк с rollup team|manager и planValue > 0 */
+    includeLine: (l: SalesPlanFactLine) => boolean;
+    teamStatus: SalesPlanFactLineStatus;
+    managerStatus: SalesPlanFactLineStatus;
+  },
+): SalesPlanFactPersistedState {
+  const source = prev.lines.filter(
+    (l) =>
+      l.periodId === args.fromPeriodId &&
+      l.planValue > 0 &&
+      (l.rollup === "team" || l.rollup === "manager") &&
+      args.includeLine(l),
+  );
+  let next = prev;
+  const teamMetrics = new Map<string, Record<string, number>>();
+  for (const l of source) {
+    if (l.rollup !== "team" || l.managerId !== null) continue;
+    const cur = teamMetrics.get(l.teamId) ?? {};
+    cur[l.metricId] = l.planValue;
+    teamMetrics.set(l.teamId, cur);
+  }
+  for (const [teamId, metricPlans] of Array.from(teamMetrics.entries())) {
+    next = upsertTeamPlanMetrics(next, {
+      periodId: args.toPeriodId,
+      teamId,
+      metricPlans,
+      actorId: args.actorId,
+      status: args.teamStatus,
+    });
+  }
+  for (const l of source) {
+    if (l.rollup !== "manager" || !l.managerId) continue;
+    next = upsertManagerMetricLine(next, {
+      periodId: args.toPeriodId,
+      teamId: l.teamId,
+      managerId: l.managerId,
+      metricId: l.metricId,
+      planValue: l.planValue,
+      actualValue: null,
+      status: args.managerStatus,
+      actorId: args.actorId,
+      comment: "",
+    });
+  }
+  return next;
+}

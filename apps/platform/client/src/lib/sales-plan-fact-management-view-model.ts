@@ -11,6 +11,7 @@ import {
   getTeamLeadForTeam,
   getTeamManagers,
   SALES_KPI_METRICS_SORTED,
+  SALES_PLAN_PERIODS,
   SALES_TEAMS,
   formatRub,
   formatSalesMetricValue,
@@ -456,4 +457,45 @@ export function formatPlanFactValue(metricId: string, value: number): string {
 export function topRopsByCompletion(rows: RopAccordionRowModel[], n = 3): RopAccordionRowModel[] {
   const ranked = [...rows].filter((r) => r.completionPct !== null).sort((a, b) => (b.completionPct ?? 0) - (a.completionPct ?? 0));
   return ranked.slice(0, n);
+}
+
+export function getPreviousSalesPeriodId(periodId: string): string | null {
+  const idx = SALES_PLAN_PERIODS.findIndex((p) => p.id === periodId);
+  if (idx <= 0) return null;
+  return SALES_PLAN_PERIODS[idx - 1]?.id ?? null;
+}
+
+/** Есть ли в периоде хотя бы одна сохранённая цель planValue &gt; 0 в текущем scope (команда или менеджер). */
+export function periodHasAnyPositivePlan(
+  state: SalesPlanFactPersistedState,
+  periodId: string,
+  opts: { role: SalesRole; persona: SalesUser; directorTeamFilter: string | null },
+): boolean {
+  for (const l of state.lines) {
+    if (l.periodId !== periodId || l.planValue <= 0) continue;
+    if (l.rollup === "team" && inScopeTeam(l.teamId, opts)) return true;
+    if (l.rollup === "manager" && l.managerId && inScopeManager(l.managerId, opts)) return true;
+  }
+  return false;
+}
+
+/** Краткая подпись для шапки карточки РОПа: без «план 0» как будто это осознанный ноль. */
+export function formatRopAggregatePlanFactLine(plan: number, actual: number | null, completionPct: number | null): string {
+  if (plan <= 0) {
+    return actual === null ? "План не задан · Факт не внесён" : "План не задан · Факт внесён";
+  }
+  if (actual === null) {
+    return `План ${plan.toLocaleString("ru-RU")} · Факт не внесён`;
+  }
+  const pct =
+    completionPct !== null && completionPct !== undefined
+      ? ` · Выполнение ${completionPct}%`
+      : "";
+  return `План ${plan.toLocaleString("ru-RU")} · Факт ${actual.toLocaleString("ru-RU")}${pct}`;
+}
+
+export function formatManagerPlanFactShort(plan: number, actual: number | null): string {
+  const planPart = plan > 0 ? `план ${plan.toLocaleString("ru-RU")}` : "план не задан";
+  const actPart = actual === null ? "факт не внесён" : `факт ${actual.toLocaleString("ru-RU")}`;
+  return `${planPart} · ${actPart}`;
 }

@@ -1,8 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
+import { ChevronDown } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
@@ -33,7 +42,7 @@ import {
 } from "@/lib/sales-control-data";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import type { SalesPlanFactPersistedState } from "@/lib/sales-plan-fact-types";
-import { upsertManagerMetricLine, upsertTeamPlanMetrics } from "@/lib/sales-plan-fact-mutations";
+import { copySalesPlanFactPlansBetweenPeriods, upsertManagerMetricLine, upsertTeamPlanMetrics } from "@/lib/sales-plan-fact-mutations";
 import {
   buildAttentionZones,
   buildCityRows,
@@ -41,11 +50,19 @@ import {
   buildPeriodSummary,
   buildProductRows,
   buildRopRows,
+  formatManagerPlanFactShort,
   formatPlanFactValue,
+  formatRopAggregatePlanFactLine,
+  getPreviousSalesPeriodId,
+  inScopeManager,
+  inScopeTeam,
+  periodHasAnyPositivePlan,
   topRopsByCompletion,
   type SalesPlanFactCockpitMode,
 } from "@/lib/sales-plan-fact-management-view-model";
+import { SalesPlanFactActualEntryDialog, type SalesPlanFactActualInitial } from "@/components/sales-plan-fact-actual-entry-dialog";
 import { SalesPlanFactDetailDrawer, type SalesPlanFactDetailTarget } from "@/components/sales-plan-fact-detail-drawer";
+import { SalesPlanFactPlanWizardDialog, type SalesPlanFactWizardInitial } from "@/components/sales-plan-fact-plan-wizard-dialog";
 
 const MODE_LS_KEY = "tandoor-sales-plan-fact-mgmt-mode-v1";
 
@@ -105,6 +122,12 @@ export function SalesPlanFactManagementCockpit({
   const [directorTeamFilter, setDirectorTeamFilter] = useState<string>("__all__");
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailTarget, setDetailTarget] = useState<SalesPlanFactDetailTarget | null>(null);
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizardInitial, setWizardInitial] = useState<SalesPlanFactWizardInitial | null>(null);
+  const [actualOpen, setActualOpen] = useState(false);
+  const [actualInitial, setActualInitial] = useState<SalesPlanFactActualInitial>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [dataSourceOpen, setDataSourceOpen] = useState(false);
 
   useEffect(() => {
     writeMode(mode);
@@ -124,6 +147,23 @@ export function SalesPlanFactManagementCockpit({
   const productRows = useMemo(() => buildProductRows(state, periodId, opts), [state, periodId, opts]);
   const attention = useMemo(() => buildAttentionZones(state, periodId, opts), [state, periodId, opts]);
   const topRop = useMemo(() => topRopsByCompletion(ropRows, 3), [ropRows]);
+
+  const hasPositivePlanInPeriod = useMemo(
+    () => periodHasAnyPositivePlan(state, periodId, opts),
+    [state, periodId, opts],
+  );
+  const previousPeriodId = useMemo(() => getPreviousSalesPeriodId(periodId), [periodId]);
+  const previousPeriodHasPlans = useMemo(
+    () => (previousPeriodId ? periodHasAnyPositivePlan(state, previousPeriodId, opts) : false),
+    [state, previousPeriodId, opts],
+  );
+
+  const historyLines = useMemo(() => {
+    return [...state.lines]
+      .filter((l) => l.periodId === periodId)
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+      .slice(0, 80);
+  }, [state.lines, periodId]);
 
   const maxCityPlan = useMemo(() => Math.max(1, ...cityRows.map((c) => c.plan)), [cityRows]);
   const maxProductPlan = useMemo(() => Math.max(1, ...productRows.map((c) => c.plan)), [productRows]);
@@ -183,6 +223,49 @@ export function SalesPlanFactManagementCockpit({
       await onPersist(next);
     },
     [onPersist],
+  );
+
+  const openWizard = useCallback((initial: SalesPlanFactWizardInitial | null) => {
+    setWizardInitial(initial);
+    setWizardOpen(true);
+  }, []);
+
+  const openActual = useCallback((initial: SalesPlanFactActualInitial) => {
+    setActualInitial(initial);
+    setActualOpen(true);
+  }, []);
+
+  const handleCopyPreviousPeriod = useCallback(async () => {
+    if (!previousPeriodId || !previousPeriodHasPlans) return;
+    const next = copySalesPlanFactPlansBetweenPeriods(state, {
+      fromPeriodId: previousPeriodId,
+      toPeriodId: periodId,
+      actorId: profile.personaUserId,
+      includeLine: (l) => {
+        if (l.rollup === "team") return inScopeTeam(l.teamId, opts);
+        if (l.rollup === "manager" && l.managerId) return inScopeManager(l.managerId, opts);
+        return false;
+      },
+      teamStatus: "published",
+      managerStatus: "draft",
+    });
+    await persistWrap(next);
+  }, [previousPeriodId, previousPeriodHasPlans, state, periodId, profile.personaUserId, opts, persistWrap]);
+
+  const handleWizardSubmit = useCallback(
+    async (next: SalesPlanFactPersistedState) => {
+      await persistWrap(next);
+      setWizardOpen(false);
+    },
+    [persistWrap],
+  );
+
+  const handleActualSubmit = useCallback(
+    async (next: SalesPlanFactPersistedState) => {
+      await persistWrap(next);
+      setActualOpen(false);
+    },
+    [persistWrap],
   );
 
   const saveTeamPlans = useCallback(async () => {
@@ -258,12 +341,12 @@ export function SalesPlanFactManagementCockpit({
   }, [role, persona, directorTeamFilter]);
 
   return (
-    <div className="mx-auto min-w-0 max-w-6xl space-y-4 overflow-x-hidden pb-24 text-[#222631]" data-testid="section-sales-plan-fact-cockpit">
+    <div className="mx-auto min-w-0 max-w-6xl space-y-4 overflow-x-hidden pb-12 text-[#222631]" data-testid="section-sales-plan-fact-cockpit">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">План-факт продаж</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Управленческий cockpit: план и факт только из сохранённого серверного слоя. Синтетические сиды и sessionStorage-наслоения сюда не подмешиваются.
+            Планируйте продажи, распределяйте KPI по командам и отслеживайте факт за период.
           </p>
         </div>
         <Button asChild variant="outline" size="sm" className="shrink-0 border-border">
@@ -276,16 +359,6 @@ export function SalesPlanFactManagementCockpit({
           <AlertDescription className="text-foreground">{apiError}</AlertDescription>
         </Alert>
       ) : null}
-      {storageMessage ? <p className="text-xs text-muted-foreground">{storageMessage}</p> : null}
-
-      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center" data-testid="section-sales-plan-fact-mode-toggle">
-        {modeButton("overview", "Обзор", "button-sales-plan-fact-mode-overview")}
-        {modeButton("by_rop", "По РОП", "button-sales-plan-fact-mode-rop")}
-        {modeButton("managers", "По менеджерам", "button-sales-plan-fact-mode-managers")}
-        {modeButton("cities", "По городам", "button-sales-plan-fact-mode-cities")}
-        {modeButton("products", "По продуктам", "button-sales-plan-fact-mode-products")}
-        {modeButton("entry", "Ввод", "button-sales-plan-fact-mode-entry")}
-      </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
         <Select value={periodId} onValueChange={setPeriodId}>
@@ -317,9 +390,81 @@ export function SalesPlanFactManagementCockpit({
         ) : null}
       </div>
 
+      <div
+        className="grid w-full min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4"
+        data-testid="section-sales-plan-fact-primary-actions"
+      >
+        <Button
+          type="button"
+          className="min-h-11 w-full bg-primary font-semibold sm:min-h-10"
+          data-testid="button-sales-plan-fact-create-plan"
+          onClick={() => openWizard(null)}
+        >
+          {hasPositivePlanInPeriod ? "Изменить план" : "+ Выставить план"}
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          className="min-h-11 w-full font-semibold sm:min-h-10"
+          data-testid="button-sales-plan-fact-add-actual"
+          onClick={() => openActual({ periodId })}
+        >
+          Внести факт
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className="min-h-11 w-full font-semibold sm:min-h-10"
+          data-testid="button-sales-plan-fact-history"
+          onClick={() => setHistoryOpen(true)}
+        >
+          История
+        </Button>
+      </div>
+
+      {mode === "overview" && !loading && !hasPositivePlanInPeriod ? (
+        <section
+          className="rounded-xl border border-dashed border-muted-foreground/25 bg-muted/20 p-4 sm:p-6"
+          data-testid="section-sales-plan-fact-empty-plan"
+        >
+          <h2 className="text-base font-semibold text-foreground">План на {periodLabel} ещё не выставлен</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Начните с плана по РОПам или сразу распределите KPI по менеджерам.
+          </p>
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+            <Button type="button" className="bg-primary" data-testid="button-sales-plan-fact-empty-create-plan" onClick={() => openWizard(null)}>
+              Выставить план
+            </Button>
+            {previousPeriodId ? (
+              <Button
+                type="button"
+                variant="secondary"
+                data-testid="button-sales-plan-fact-copy-previous-period"
+                disabled={!previousPeriodHasPlans}
+                onClick={() => void handleCopyPreviousPeriod()}
+              >
+                Скопировать прошлый период
+              </Button>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
+
+      <div
+        className="flex w-full min-w-0 gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        data-testid="section-sales-plan-fact-mode-toggle"
+      >
+        {modeButton("overview", "Обзор", "button-sales-plan-fact-mode-overview")}
+        {modeButton("by_rop", "РОПы", "button-sales-plan-fact-mode-rop")}
+        {modeButton("managers", "Менеджеры", "button-sales-plan-fact-mode-managers")}
+        {modeButton("cities", "Города", "button-sales-plan-fact-mode-cities")}
+        {modeButton("products", "Продукты", "button-sales-plan-fact-mode-products")}
+        {modeButton("entry", "Планы и факт", "button-sales-plan-fact-mode-entry")}
+      </div>
+
       {loading ? <p className="text-sm text-muted-foreground">Загрузка…</p> : null}
 
-      {mode === "overview" ? (
+      {mode === "overview" && hasPositivePlanInPeriod ? (
         <>
           <section className="rounded-xl border border-[#E3E6F3] bg-white p-4 shadow-sm" data-testid="section-sales-plan-fact-period-summary">
             <h2 className="text-sm font-semibold text-foreground">Итоги периода · {periodLabel}</h2>
@@ -367,8 +512,8 @@ export function SalesPlanFactManagementCockpit({
                     </div>
                     <Progress value={k.pct === null ? 0 : Math.min(100, k.pct)} className="h-2 bg-[#EEEFF6]" />
                     <p className="text-xs text-muted-foreground">
-                      План {formatPlanFactValue(k.metricId, k.plan)}
-                      {k.actual !== null ? ` · факт ${formatPlanFactValue(k.metricId, k.actual)}` : ""}
+                      {k.plan > 0 ? `План ${formatPlanFactValue(k.metricId, k.plan)}` : "План не задан"}
+                      {k.actual !== null && k.plan > 0 ? ` · факт ${formatPlanFactValue(k.metricId, k.actual)}` : ""}
                     </p>
                   </div>
                 ))}
@@ -395,25 +540,27 @@ export function SalesPlanFactManagementCockpit({
               </CardContent>
             </Card>
           </div>
-
-          <Card className="border-[#E3E6F3]">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Зоны внимания</CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-2 sm:grid-cols-2">
-              {attention.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Критичных сигналов нет.</p>
-              ) : (
-                attention.map((a) => (
-                  <div key={a.id} className="rounded-lg border border-border bg-card p-3">
-                    <p className="text-sm font-medium">{a.title}</p>
-                    <p className="text-xs text-muted-foreground">{a.subtitle}</p>
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
         </>
+      ) : null}
+
+      {mode === "overview" ? (
+        <Card className="border-[#E3E6F3]">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Зоны внимания</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-2 sm:grid-cols-2">
+            {attention.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Критичных сигналов нет.</p>
+            ) : (
+              attention.map((a) => (
+                <div key={a.id} className="rounded-lg border border-border bg-card p-3">
+                  <p className="text-sm font-medium">{a.title}</p>
+                  <p className="text-xs text-muted-foreground">{a.subtitle}</p>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
       ) : null}
 
       {mode === "by_rop" ? (
@@ -430,18 +577,71 @@ export function SalesPlanFactManagementCockpit({
                   className="min-w-0 py-3 hover:no-underline [&[data-state=open]>svg]:rotate-180"
                   data-testid={`button-sales-plan-fact-rop-toggle-${r.teamId}`}
                 >
-                  <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-left sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-                    <span className="truncate font-semibold">{r.ropName}</span>
+                  <div className="flex min-w-0 flex-1 flex-col gap-1 text-left sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                    <div className="flex min-w-0 flex-col gap-1">
+                      <span className="truncate font-semibold">{r.ropName}</span>
+                      <span className="text-xs text-muted-foreground">{getTeamById(r.teamId)?.name ?? r.teamName}</span>
+                    </div>
                     <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
-                      план {r.plan.toLocaleString("ru-RU")} · факт {r.actual === null ? "—" : r.actual.toLocaleString("ru-RU")} ·{" "}
-                      {r.completionPct === null ? "—" : `${r.completionPct}%`}
+                      {formatRopAggregatePlanFactLine(r.plan, r.actual, r.completionPct)}
                     </span>
                   </div>
                 </AccordionTrigger>
                 <AccordionContent className="space-y-2 pb-3" data-testid={`section-sales-plan-fact-rop-members-${r.teamId}`}>
-                  <Button type="button" size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => openDetail({ kind: "rop", teamId: r.teamId })}>
-                    Детали команды
-                  </Button>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="w-full bg-primary sm:w-auto"
+                      data-testid={`button-sales-plan-fact-rop-set-plan-${r.teamId}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openWizard({ scope: "team", teamId: r.teamId });
+                      }}
+                    >
+                      Поставить план команде
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      className="w-full sm:w-auto"
+                      data-testid={`button-sales-plan-fact-rop-distribute-${r.teamId}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openWizard({ scope: "team", teamId: r.teamId });
+                      }}
+                    >
+                      Распределить по менеджерам
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="w-full sm:w-auto"
+                      data-testid={`button-sales-plan-fact-rop-add-actual-${r.teamId}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDetailOpen(false);
+                        openActual({ periodId, teamId: r.teamId });
+                      }}
+                    >
+                      Внести факт
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="w-full sm:w-auto"
+                      data-testid={`button-sales-plan-fact-rop-detail-${r.teamId}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openDetail({ kind: "rop", teamId: r.teamId });
+                      }}
+                    >
+                      Детали
+                    </Button>
+                  </div>
                   <div className="grid gap-2 sm:grid-cols-2">
                     {r.managers.map((m) => (
                       <div
@@ -449,19 +649,69 @@ export function SalesPlanFactManagementCockpit({
                         className="rounded-lg border border-border bg-[#EEEFF6]/40 p-3"
                         data-testid={`card-sales-plan-fact-manager-${m.managerId}`}
                       >
-                        <p className="text-sm font-medium">{m.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          план {m.plan.toLocaleString("ru-RU")} · факт {m.actual === null ? "—" : m.actual.toLocaleString("ru-RU")}
-                        </p>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          className="mt-1 h-auto px-0 text-xs text-primary underline-offset-2 hover:underline"
-                          data-testid={`button-sales-plan-fact-manager-open-${m.managerId}`}
-                          onClick={() => openDetail({ kind: "manager", teamId: r.teamId, managerId: m.managerId })}
-                        >
-                          Открыть
-                        </Button>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-medium">{m.name}</p>
+                          {m.plan <= 0 ? (
+                            <Badge variant="outline" className="border-muted-foreground/40 text-muted-foreground">
+                              План не задан
+                            </Badge>
+                          ) : null}
+                          {m.actual === null ? (
+                            <Badge variant="secondary" className="text-muted-foreground">
+                              Факт не внесён
+                            </Badge>
+                          ) : null}
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">{formatManagerPlanFactShort(m.plan, m.actual)}</p>
+                        {m.plan > 0 && m.actual !== null && m.completionPct !== null ? (
+                          <p className="text-xs font-medium text-foreground">Выполнение {m.completionPct}%</p>
+                        ) : null}
+                        <div className="mt-2 flex flex-col gap-1.5 sm:flex-row sm:flex-wrap">
+                          {m.plan <= 0 ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="default"
+                              className="w-full sm:w-auto"
+                              data-testid={`button-sales-plan-fact-manager-set-plan-${m.managerId}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openWizard({ scope: "manager", teamId: r.teamId, managerId: m.managerId });
+                              }}
+                            >
+                              Задать план
+                            </Button>
+                          ) : (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="secondary"
+                              className="w-full sm:w-auto"
+                              data-testid={`button-sales-plan-fact-manager-open-${m.managerId}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openDetail({ kind: "manager", teamId: r.teamId, managerId: m.managerId });
+                              }}
+                            >
+                              Открыть план
+                            </Button>
+                          )}
+                          {m.actual === null ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="w-full sm:w-auto"
+                              data-testid={`button-sales-plan-fact-manager-add-actual-${m.managerId}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openActual({ periodId, teamId: r.teamId, managerId: m.managerId });
+                              }}
+                            >
+                              Внести факт
+                            </Button>
+                          ) : null}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -476,6 +726,7 @@ export function SalesPlanFactManagementCockpit({
         <section className="grid gap-3 sm:grid-cols-2">
           {scopedManagers.map((m) => {
             const row = ropRows.find((x) => x.teamId === m.teamId)?.managers.find((x) => x.managerId === m.id);
+            const planUnset = !row || row.plan <= 0;
             return (
               <Card
                 key={m.id}
@@ -488,21 +739,58 @@ export function SalesPlanFactManagementCockpit({
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm">
                   <p className="text-muted-foreground">
-                    План суммарно: {row?.plan.toLocaleString("ru-RU") ?? "—"}
+                    План: {planUnset ? "не задан" : row!.plan.toLocaleString("ru-RU")}
                     <br />
                     Факт:{" "}
                     {!row
-                      ? "—"
+                      ? "не внесён"
                       : row.actual === null
                         ? "не внесён"
                         : row.actual.toLocaleString("ru-RU")}
                   </p>
-                  {row?.completionPct !== null && row?.completionPct !== undefined ? (
-                    <Progress value={Math.min(100, row.completionPct)} className="h-2 bg-[#EEEFF6]" />
+                  {!planUnset && row?.actual !== null && row?.completionPct !== null && row?.completionPct !== undefined ? (
+                    <>
+                      <p className="text-xs font-medium">Выполнение {row.completionPct}%</p>
+                      <Progress value={Math.min(100, row.completionPct)} className="h-2 bg-[#EEEFF6]" />
+                    </>
                   ) : null}
-                  <Button type="button" variant="secondary" size="sm" onClick={() => openDetail({ kind: "manager", teamId: m.teamId!, managerId: m.id })} data-testid={`button-sales-plan-fact-manager-open-${m.id}`}>
-                    Детали
-                  </Button>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                    {planUnset ? (
+                      <Button
+                        type="button"
+                        variant="default"
+                        size="sm"
+                        className="w-full sm:w-auto"
+                        data-testid={`button-sales-plan-fact-manager-set-plan-${m.id}`}
+                        onClick={() => openWizard({ scope: "manager", teamId: m.teamId!, managerId: m.id })}
+                      >
+                        Задать план
+                      </Button>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="w-full sm:w-auto"
+                        data-testid={`button-sales-plan-fact-manager-open-${m.id}`}
+                        onClick={() => openDetail({ kind: "manager", teamId: m.teamId!, managerId: m.id })}
+                      >
+                        Открыть план
+                      </Button>
+                    )}
+                    {row?.actual === null ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="w-full sm:w-auto"
+                        data-testid={`button-sales-plan-fact-manager-add-actual-${m.id}`}
+                        onClick={() => openActual({ periodId, teamId: m.teamId!, managerId: m.id })}
+                      >
+                        Внести факт
+                      </Button>
+                    ) : null}
+                  </div>
                 </CardContent>
               </Card>
             );
@@ -517,7 +805,7 @@ export function SalesPlanFactManagementCockpit({
               <div key={c.cityKey} className="min-w-0 space-y-1">
                 <div className="flex justify-between gap-2 text-sm">
                   <span className="min-w-0 truncate">{c.cityName}</span>
-                  <span className="shrink-0 text-xs text-muted-foreground">{c.plan.toLocaleString("ru-RU")}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">{c.plan > 0 ? c.plan.toLocaleString("ru-RU") : "не задан"}</span>
                 </div>
                 <div className="h-2 overflow-hidden rounded-full bg-[#EEEFF6]">
                   <div
@@ -554,7 +842,7 @@ export function SalesPlanFactManagementCockpit({
               <div key={p.productId} className="min-w-0 space-y-1">
                 <div className="flex justify-between gap-2 text-sm">
                   <span className="min-w-0 truncate">{p.productName}</span>
-                  <span className="shrink-0 text-xs text-muted-foreground">{p.plan.toLocaleString("ru-RU")}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">{p.plan > 0 ? p.plan.toLocaleString("ru-RU") : "не задан"}</span>
                 </div>
                 <div className="h-2 overflow-hidden rounded-full bg-[#EEEFF6]">
                   <div
@@ -702,6 +990,68 @@ export function SalesPlanFactManagementCockpit({
         </section>
       ) : null}
 
+      <SalesPlanFactPlanWizardDialog
+        open={wizardOpen}
+        onOpenChange={setWizardOpen}
+        periodId={periodId}
+        state={state}
+        opts={opts}
+        profile={profile}
+        initial={wizardInitial}
+        onSubmit={handleWizardSubmit}
+        saving={saving}
+      />
+      <SalesPlanFactActualEntryDialog
+        open={actualOpen}
+        onOpenChange={setActualOpen}
+        periodId={periodId}
+        state={state}
+        opts={opts}
+        profile={profile}
+        initial={actualInitial}
+        onSubmit={handleActualSubmit}
+        saving={saving}
+      />
+
+      <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
+        <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>История изменений</DialogTitle>
+          </DialogHeader>
+          <ul className="space-y-2 text-sm">
+            {historyLines.length === 0 ? (
+              <li className="text-muted-foreground">Нет сохранённых строк за период.</li>
+            ) : (
+              historyLines.map((l) => (
+                <li key={l.id} className="rounded-md border border-border/70 p-2">
+                  <div className="flex flex-wrap justify-between gap-2">
+                    <span className="font-medium">{l.metricId}</span>
+                    <Badge variant="outline" className="border-muted-foreground/30 text-muted-foreground">
+                      {l.status}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    План {l.planValue > 0 ? l.planValue : "не задан"} · факт {l.actualValue === null ? "—" : l.actualValue}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{new Date(l.updatedAt).toLocaleString("ru-RU")}</p>
+                </li>
+              ))
+            )}
+          </ul>
+        </DialogContent>
+      </Dialog>
+
+      <Collapsible open={dataSourceOpen} onOpenChange={setDataSourceOpen} className="rounded-lg border border-border/60 bg-muted/10 px-3 py-2">
+        <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 text-left text-sm font-medium text-muted-foreground hover:text-foreground">
+          Источник данных
+          <ChevronDown className={cn("h-4 w-4 shrink-0 transition-transform", dataSourceOpen ? "rotate-180" : "")} />
+        </CollapsibleTrigger>
+        <CollapsibleContent className="pt-2 text-xs text-muted-foreground">
+          {storageMessage ??
+            "Persisted-слой через API /api/sales-plan-fact/state. Синтетические сиды из справочников в показатели не подмешиваются."}
+        </CollapsibleContent>
+      </Collapsible>
+
       <SalesPlanFactDetailDrawer
         open={detailOpen}
         onOpenChange={setDetailOpen}
@@ -712,6 +1062,37 @@ export function SalesPlanFactManagementCockpit({
         role={role}
         persona={persona}
         directorTeamFilter={role === "sales_director" ? directorTeamFilter : null}
+        onSetPlan={() => {
+          if (!detailTarget) return;
+          if (detailTarget.kind === "rop") {
+            setWizardInitial({ scope: "team", teamId: detailTarget.teamId });
+            setWizardOpen(true);
+            setDetailOpen(false);
+          }
+          if (detailTarget.kind === "manager") {
+            setWizardInitial({ scope: "manager", teamId: detailTarget.teamId, managerId: detailTarget.managerId });
+            setWizardOpen(true);
+            setDetailOpen(false);
+          }
+        }}
+        onDistribute={() => {
+          if (detailTarget?.kind === "rop") {
+            setWizardInitial({ scope: "team", teamId: detailTarget.teamId });
+            setWizardOpen(true);
+            setDetailOpen(false);
+          }
+        }}
+        onAddActual={() => {
+          if (!detailTarget) return;
+          if (detailTarget.kind === "rop") {
+            openActual({ periodId, teamId: detailTarget.teamId });
+            setDetailOpen(false);
+          }
+          if (detailTarget.kind === "manager") {
+            openActual({ periodId, teamId: detailTarget.teamId, managerId: detailTarget.managerId });
+            setDetailOpen(false);
+          }
+        }}
       />
     </div>
   );
