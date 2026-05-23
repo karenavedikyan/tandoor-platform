@@ -18,7 +18,8 @@ import {
 } from "@/lib/dealer-base-role-views";
 import { buildBrowserHashAppHref } from "@/lib/hash-route-utils";
 import { getEffectiveTeamLeadTeamId } from "@/lib/release-demo-profile";
-import { getAllMatrixTasks, getShowcaseBackedTasksForDealers } from "@/lib/trade-point-task-data";
+import type { ActualizationState } from "@/lib/client-base-actualization-state";
+import { getAllMatrixTasks, getManagementFactualShowcaseTasksForDealers, getShowcaseBackedTasksForDealers } from "@/lib/trade-point-task-data";
 import { getRopOptions } from "@/lib/rop-manager-filters";
 import { getShowcaseOnlyTasks } from "@/lib/task-classification";
 import {
@@ -32,11 +33,18 @@ import { buildTeamSummaries, buildTeamSummaryFromRows } from "@/lib/team-summary
 
 function countOpenTasksForDealers(
   dealerIds: Set<string>,
-  opts: { useShowcaseBackedOnly: boolean; dealersForTasks: DealerRow[] },
+  opts: {
+    mode: "all_matrix" | "showcase_backed" | "management_factual";
+    dealersForTasks: DealerRow[];
+    mergedState?: ActualizationState;
+  },
 ): number {
-  const pool = opts.useShowcaseBackedOnly
-    ? getShowcaseBackedTasksForDealers(opts.dealersForTasks)
-    : getAllMatrixTasks();
+  const pool =
+    opts.mode === "management_factual" && opts.mergedState
+      ? getManagementFactualShowcaseTasksForDealers(opts.dealersForTasks, opts.mergedState)
+      : opts.mode === "showcase_backed"
+        ? getShowcaseBackedTasksForDealers(opts.dealersForTasks)
+        : getAllMatrixTasks();
   return getShowcaseOnlyTasks(pool).filter((t) => dealerIds.has(t.dealerId) && t.status !== "done").length;
 }
 
@@ -86,13 +94,16 @@ export function MainRoleDashboard() {
     (actx.enabled && shouldUseTeamMergedActualizationPlane(profile) && managementPlane.teamFetchLoading);
   const workingBaseEmpty = !dashboardLoading && scopedClients.length === 0;
 
+  const useMgmtFactualTasks = actx.enabled && shouldUseTeamMergedActualizationPlane(profile);
+
   const { totalClients, activeClients, attentionClients, openTasks, extraKpiLabel, extraKpiValue } = useMemo(() => {
     const total = scopedClients.length;
     const active = scopedClients.filter((r) => r.status === "активный").length;
     const attention = scopedClients.filter(dealerNeedsAttention).length;
     const tasks = countOpenTasksForDealers(dealerIds, {
-      useShowcaseBackedOnly: actx.enabled,
+      mode: useMgmtFactualTasks ? "management_factual" : actx.enabled ? "showcase_backed" : "all_matrix",
       dealersForTasks: actx.enabled ? scopedClients : DEALER_BASE_ROWS,
+      mergedState: useMgmtFactualTasks ? managementPlane.mergedState : undefined,
     });
     if (role === "team_lead") {
       const tid = getEffectiveTeamLeadTeamId(profile);
@@ -125,7 +136,7 @@ export function MainRoleDashboard() {
       extraKpiLabel: null as string | null,
       extraKpiValue: null as string | null,
     };
-  }, [scopedClients, dealerIds, role, profile, actx.enabled]);
+  }, [scopedClients, dealerIds, role, profile, actx.enabled, useMgmtFactualTasks, managementPlane.mergedState]);
 
   const can = (path: string) => Boolean(user && canAccessPath(user.role, path));
 
@@ -338,12 +349,29 @@ export function MainRoleDashboard() {
             </Card>
           </MainKpiLink>
           <MainKpiLink href={kpiHrefs.tasks} testId="link-main-kpi-tasks">
-            <Card className="min-w-0 rounded-xl border border-border/80 bg-card shadow-sm" data-testid="card-main-kpi-tasks">
-              <CardContent className="p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{kpiTasksLabel}</p>
-                <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{openTasks}</p>
-              </CardContent>
-            </Card>
+            <div {...(useMgmtFactualTasks ? { "data-testid": "section-management-task-summary" } : {})} className="block min-w-0">
+              <Card className="min-w-0 rounded-xl border border-border/80 bg-card shadow-sm" data-testid="card-main-kpi-tasks">
+                <CardContent className="p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{kpiTasksLabel}</p>
+                  <p
+                    className="mt-1 text-2xl font-semibold tabular-nums text-foreground"
+                    {...(useMgmtFactualTasks ? { "data-testid": "metric-management-tasks-open" } : {})}
+                  >
+                    {openTasks}
+                  </p>
+                  {useMgmtFactualTasks && openTasks === 0 ? (
+                    <p className="mt-2 text-[10px] leading-tight text-muted-foreground" data-testid="text-management-task-empty">
+                      Фактических задач нет. Учитываются только сохранённые задачи актуализации; локальные черновики не входят в сводку.
+                    </p>
+                  ) : null}
+                  {useMgmtFactualTasks ? (
+                    <p className="mt-2 text-[10px] leading-tight text-muted-foreground" data-testid="text-management-task-source-note">
+                      Источник: сохранённые задачи актуализации
+                    </p>
+                  ) : null}
+                </CardContent>
+              </Card>
+            </div>
           </MainKpiLink>
           {extraKpiLabel && extraKpiValue && kpiHrefs.extra ? (
             <MainKpiLink href={kpiHrefs.extra} testId="link-main-kpi-extra">

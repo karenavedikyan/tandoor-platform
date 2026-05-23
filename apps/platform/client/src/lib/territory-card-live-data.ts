@@ -1,8 +1,9 @@
 /**
  * «Карточка территории» для РОП/директора: агрегаты по активной merge-клиентской базе.
  * Режим {@link BuildTerritoryCardLivePackOptions.directorRopFactualUi}: без псевдо-KPI из мок-строк;
- * задачи витрины — только записи плана из sessionStorage; витрина/матрица — только сохранённые данные;
- * зоны внимания — просрочки плана витрины и явные задачи матрицы из актуализации state.
+ * открытые задачи витрины — только **`showcaseMatrixTasks`** из merge актуализации (без sessionStorage-плана и без автогенерации дефицита);
+ * витрина/матрица — только сохранённые данные;
+ * зоны внимания — просрочки из persisted-задач (если есть) и явные новые задачи матрицы из актуализации state.
  */
 
 import { createEmptyActualizationState, type ActualizationState } from "@/lib/client-base-actualization-state";
@@ -11,8 +12,8 @@ import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import { loadShowcaseMatrixStorage, type ShowcaseMatrixEntryStored } from "@/lib/trade-point-showcase-matrix-storage";
 import { getTrainingAttentionKpisForDealers, type TerritoryTrainingAttentionKpis } from "@/lib/training-attention";
 import {
+  getManagementFactualShowcaseTasksForDealers,
   getShowcaseBackedTasksForDealers,
-  getShowcaseDistributionPlanTasksForDealers,
   type MatrixTaskWithContext,
 } from "@/lib/trade-point-task-data";
 import type {
@@ -487,7 +488,7 @@ export function buildTerritoryCardLivePack(
 
   if (directorRopFactualUi) {
     const matrixStorage = loadShowcaseMatrixStorage();
-    const persistedPlanTasks = getShowcaseDistributionPlanTasksForDealers(dealers);
+    const persistedPlanTasks = getManagementFactualShowcaseTasksForDealers(dealers, merged);
     const taskMap = buildTaskCountByDealerId(persistedPlanTasks);
     const factualShowcaseMatrixControlledTpCount = countTradePointsWithPersistedShowcaseOrMatrix(dealers, merged, matrixStorage);
     const cockpitShowcaseControlDetails = buildShowcaseControlDetails(dealers, merged, matrixStorage);

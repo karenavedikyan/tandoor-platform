@@ -7,6 +7,7 @@ import { useClientBaseTeamActualization } from "@/context/client-base-team-actua
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
+import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
 import { buildBrowserHashAppHref, buildHashPath } from "@/lib/hash-route-utils";
 import { buildDealerBaseAllCitiesHref, buildDealerBaseCityDrillHref, getTopCityConcentrationRows } from "@/lib/city-concentration";
 import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
@@ -15,7 +16,12 @@ import { getEffectiveTeamLeadTeamId, releaseDemoRoleLabel, type ReleaseDemoProfi
 import type { TaskCategoryId } from "@/lib/task-classification";
 import { TASK_CATEGORIES, getTaskCategoryCounts, getTaskCategoryLabel } from "@/lib/task-classification";
 import { getTaskPresetCounts, type TaskPresetId } from "@/lib/task-presets";
-import { getAllMatrixTasks, getShowcaseBackedTasksForDealers } from "@/lib/trade-point-task-data";
+import {
+  getAllMatrixTasks,
+  getManagementFactualShowcaseTasksForDealers,
+  getShowcaseBackedTasksForDealers,
+  type MatrixTaskWithContext,
+} from "@/lib/trade-point-task-data";
 import { aggregateManagersForTeamFromRows, buildTeamSummaries, buildTeamSummaryFromRows, type TeamSummary } from "@/lib/team-summary";
 import { getRopOptions } from "@/lib/rop-manager-filters";
 import { getSalesUserById, type SalesRole } from "@/lib/sales-control-data";
@@ -120,10 +126,20 @@ export function AnalyticsWorkspaceReleaseOverview() {
     return { total, active, potential, top, attention };
   }, [scopedRows]);
 
+  const useMgmtFactualTasks =
+    actx.enabled && shouldUseTeamMergedActualizationPlane(profile) && (role === "sales_director" || role === "team_lead");
+
   const openTasks = useMemo(() => {
-    const pool = actx.enabled ? getShowcaseBackedTasksForDealers(workingRows) : getAllMatrixTasks();
+    let pool: MatrixTaskWithContext[];
+    if (useMgmtFactualTasks) {
+      pool = getManagementFactualShowcaseTasksForDealers(workingRows, teamCtx.mergedState);
+    } else if (actx.enabled) {
+      pool = getShowcaseBackedTasksForDealers(workingRows);
+    } else {
+      pool = getAllMatrixTasks();
+    }
     return pool.filter((t) => dealerIds.has(t.dealerId) && t.status !== "done");
-  }, [actx.enabled, workingRows, dealerIds]);
+  }, [useMgmtFactualTasks, actx.enabled, workingRows, teamCtx.mergedState, dealerIds]);
 
   const categoryCounts = useMemo(() => getTaskCategoryCounts(openTasks), [openTasks]);
   const presetCounts = useMemo(() => getTaskPresetCounts(openTasks, presetClock), [openTasks, presetClock]);
@@ -339,58 +355,84 @@ export function AnalyticsWorkspaceReleaseOverview() {
           </CardContent>
         </Card>
 
-        <Card className="min-w-0 overflow-hidden rounded-xl border border-border/80 shadow-sm md:col-span-1" data-testid="card-analytics-task-structure">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Задачи</CardTitle>
-            <CardDescription>Открытые задачи в контуре клиентов с быстрым переходом в список.</CardDescription>
-          </CardHeader>
-          <CardContent className="min-w-0 space-y-4">
-            <div className="flex flex-wrap items-baseline gap-2 text-sm">
-              <span className="text-muted-foreground">Всего открытых:</span>
-              <Link
-                href={buildHashPath("/tasks", { ...taskScope, preset: "all" })}
-                className="text-lg font-semibold tabular-nums text-primary underline-offset-2 hover:underline"
-              >
-                {openTasks.length.toLocaleString("ru-RU")}
-              </Link>
-            </div>
-            <div className="min-w-0 space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">По категориям</p>
-              <div className="min-w-0 divide-y divide-border/60">
-                {TASK_CATEGORIES.map((c) => {
-                  const id = c.id as TaskCategoryId;
-                  const n = categoryCounts[id];
-                  return (
+        <div
+          className="min-w-0 md:col-span-1"
+          data-testid={useMgmtFactualTasks ? "section-management-task-summary" : undefined}
+        >
+          <Card className="min-w-0 overflow-hidden rounded-xl border border-border/80 shadow-sm" data-testid="card-analytics-task-structure">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Задачи</CardTitle>
+              <CardDescription>Открытые задачи в контуре клиентов с быстрым переходом в список.</CardDescription>
+            </CardHeader>
+            <CardContent className="min-w-0 space-y-4">
+              {useMgmtFactualTasks && openTasks.length === 0 ? (
+                <p className="text-sm text-muted-foreground" data-testid="text-management-task-empty">
+                  Открытых фактических задач нет. Для директора и РОП учитываются только сохранённые задачи актуализации.
+                  Локальные черновики и сгенерированные задачи не входят в сводку.
+                </p>
+              ) : null}
+              <div className="flex flex-wrap items-baseline gap-2 text-sm">
+                <span className="text-muted-foreground">Всего открытых:</span>
+                <Link
+                  href={buildHashPath("/tasks", { ...taskScope, preset: "all" })}
+                  className="text-lg font-semibold tabular-nums text-primary underline-offset-2 hover:underline"
+                  {...(useMgmtFactualTasks ? { "data-testid": "metric-management-tasks-open" } : {})}
+                >
+                  {openTasks.length.toLocaleString("ru-RU")}
+                </Link>
+              </div>
+              <div className="min-w-0 space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">По категориям</p>
+                <div className="min-w-0 divide-y divide-border/60">
+                  {TASK_CATEGORIES.map((c) => {
+                    const id = c.id as TaskCategoryId;
+                    const n = categoryCounts[id];
+                    return (
+                      <Link
+                        key={id}
+                        href={buildHashPath("/tasks", { ...taskScope, preset: "all", category: id })}
+                        {...(useMgmtFactualTasks && id === "showcase" ? { "data-testid": "metric-management-tasks-showcase" } : {})}
+                        className="flex min-w-0 items-center justify-between gap-2 py-2 text-sm no-underline outline-none ring-offset-background transition hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <span className="min-w-0 truncate text-foreground">{getTaskCategoryLabel(id)}</span>
+                        <span className="shrink-0 tabular-nums text-muted-foreground">{n}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="min-w-0 space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">По пресетам</p>
+                <div className="min-w-0 divide-y divide-border/60">
+                  {PRESET_ROW_META.map((row) => (
                     <Link
-                      key={id}
-                      href={buildHashPath("/tasks", { ...taskScope, preset: "all", category: id })}
+                      key={row.id}
+                      href={buildHashPath("/tasks", { ...taskScope, preset: row.id, category: "all" })}
+                      data-testid={
+                        useMgmtFactualTasks
+                          ? row.id === "urgent"
+                            ? "metric-management-tasks-hot"
+                            : row.id === "overdue"
+                              ? "metric-management-tasks-overdue"
+                              : row.testId
+                          : row.testId
+                      }
                       className="flex min-w-0 items-center justify-between gap-2 py-2 text-sm no-underline outline-none ring-offset-background transition hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring"
                     >
-                      <span className="min-w-0 truncate text-foreground">{getTaskCategoryLabel(id)}</span>
-                      <span className="shrink-0 tabular-nums text-muted-foreground">{n}</span>
+                      <span className="min-w-0 truncate text-foreground">{row.label}</span>
+                      <span className="shrink-0 tabular-nums text-muted-foreground">{presetCounts[row.id]}</span>
                     </Link>
-                  );
-                })}
+                  ))}
+                </div>
               </div>
-            </div>
-            <div className="min-w-0 space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">По пресетам</p>
-              <div className="min-w-0 divide-y divide-border/60">
-                {PRESET_ROW_META.map((row) => (
-                  <Link
-                    key={row.id}
-                    href={buildHashPath("/tasks", { ...taskScope, preset: row.id, category: "all" })}
-                    data-testid={row.testId}
-                    className="flex min-w-0 items-center justify-between gap-2 py-2 text-sm no-underline outline-none ring-offset-background transition hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <span className="min-w-0 truncate text-foreground">{row.label}</span>
-                    <span className="shrink-0 tabular-nums text-muted-foreground">{presetCounts[row.id]}</span>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+              {useMgmtFactualTasks ? (
+                <p className="text-xs text-muted-foreground" data-testid="text-management-task-source-note">
+                  Источник: сохранённые задачи актуализации
+                </p>
+              ) : null}
+            </CardContent>
+          </Card>
+        </div>
 
         <Card className="min-w-0 overflow-hidden rounded-xl border border-border/80 shadow-sm md:col-span-1" data-testid="card-analytics-focus">
           <CardHeader className="pb-2">

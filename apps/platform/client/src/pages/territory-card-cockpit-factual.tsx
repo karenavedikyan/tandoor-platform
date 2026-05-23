@@ -658,7 +658,7 @@ export function TerritoryCardCockpitFactual({
                 <p className="text-[11px] font-medium text-[#8F96B0]">Открытые задачи</p>
                 <p className="mt-1 text-lg font-semibold tabular-nums text-[#222631]">{openTasksCount}</p>
                 <p className="mt-1 text-[10px] text-[#8F96B0]">
-                  {openTasksCount === 0 ? "Нет открытых задач" : "по плану витрины"}
+                  {openTasksCount === 0 ? "Нет открытых задач" : "сохранённые в актуализации"}
                 </p>
               </button>
               <button
