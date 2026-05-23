@@ -4,6 +4,7 @@ import { buildBrowserHashAppHref } from "@/lib/hash-route-utils";
 import { isRopOrManagerAllFilter } from "@/lib/rop-manager-filters";
 import { getEffectiveTeamLeadTeamId, type ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { getSalesUserById, type SalesRole } from "@/lib/sales-control-data";
+import { normalizeTerritoryCityName } from "@/lib/territory-city-normalize";
 
 export type CityRiskLevel = "critical" | "ok";
 
@@ -46,7 +47,9 @@ export function buildCityConcentrationRows(rows: DealerRow[]): CityConcentration
   for (const r of rows) {
     const raw = r.city?.trim();
     const city =
-      !raw || raw === "—" || raw === "-" ? "Без города" : raw;
+      !raw || raw === "—" || raw === "-"
+        ? "Без города"
+        : normalizeTerritoryCityName(r.city, r.releaseAddress);
     const cur = map.get(city) ?? { total: 0, active: 0, top: 0, attention: 0, potential: 0 };
     cur.total += 1;
     if (r.status === "активный") cur.active += 1;
