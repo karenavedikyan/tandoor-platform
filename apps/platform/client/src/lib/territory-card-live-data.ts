@@ -24,6 +24,7 @@ import type {
   TerritoryShowcaseItem,
   TerritoryTradePointCard,
 } from "@/lib/territory-card-data";
+import { normalizeTerritoryCityName } from "@/lib/territory-city-normalize";
 
 export type BuildTerritoryCardLivePackOptions = {
   /** РОП/директор в production: только фактические счётчики базы и данные из сохранённых сущностей. */
@@ -68,9 +69,13 @@ export type TerritoryCardLivePack = {
 const NO_CITY = "__no_city__";
 
 function bucketCity(dealer: DealerRow): string {
-  const t = dealer.city?.trim();
-  if (!t || t === "—" || t === "-") return NO_CITY;
-  return t;
+  const n = normalizeTerritoryCityName(dealer.city, dealer.releaseAddress);
+  if (n === "Без города") return NO_CITY;
+  return n;
+}
+
+function tradePointCityLabel(tp: DealerRow["tradePoints"][number]): string {
+  return normalizeTerritoryCityName(tp.city, tp.address);
 }
 
 /** Совпадение с `TerritoryCitySummary.name` («Без города» для пустого города). */
@@ -204,7 +209,7 @@ function pickWorstTradePoints(dealers: DealerRow[], limit: number): TerritoryTra
     pointId: p.id,
     dealerId: d.id,
     dealerLabel: d.name,
-    city: p.city?.trim() && p.city.trim() !== "—" ? p.city.trim() : "Без города",
+    city: tradePointCityLabel(p),
     pointLabel: p.name,
     status: p.status,
     matrixPercent: p.distribution.total,
@@ -250,7 +255,7 @@ function pickTradePointsFactualList(dealers: DealerRow[], limit: number): Territ
         pointId: p.id,
         dealerId: d.id,
         dealerLabel: d.name,
-        city: p.city?.trim() && p.city.trim() !== "—" ? p.city.trim() : "Без города",
+        city: tradePointCityLabel(p),
         pointLabel: p.name,
         status: p.status,
         matrixPercent: 0,
@@ -273,7 +278,7 @@ function buildFocus(dealers: DealerRow[]): TerritoryFocusItem[] {
     id: `focus-dealer-${d.id}`,
     title: d.name,
     type: "dealer" as const,
-    description: `${bucketCity(d) === NO_CITY ? "Без города" : d.city?.trim() || "Без города"} · ${d.nextAction}`,
+    description: `${bucketCity(d) === NO_CITY ? "Без города" : bucketCity(d)} · ${d.nextAction}`,
     href: `/dealers/${d.id}`,
   }));
 }
@@ -287,7 +292,7 @@ function buildRisks(dealers: DealerRow[], tasks: MatrixTaskWithContext[]): Terri
       id: `risk-${n}`,
       title: `${d.name}: статус клиента`,
       level: d.hasProblem ? "critical" : "attention",
-      city: bucketCity(d) === NO_CITY ? "Без города" : d.city?.trim() || "Без города",
+      city: bucketCity(d) === NO_CITY ? "Без города" : bucketCity(d),
       dealerId: d.id,
       reason: "Клиент в зоне внимания по данным актуальной базы.",
       nextAction: d.nextAction,
@@ -300,7 +305,7 @@ function buildRisks(dealers: DealerRow[], tasks: MatrixTaskWithContext[]): Terri
       id: `risk-${n}`,
       title: t.title,
       level: "attention",
-      city: d ? (bucketCity(d) === NO_CITY ? "Без города" : d.city?.trim() || "Без города") : "Без города",
+      city: d ? (bucketCity(d) === NO_CITY ? "Без города" : bucketCity(d)) : "Без города",
       dealerId: t.dealerId,
       tradePointId: t.tradePointId,
       reason: "Просрочена задача по витрине / матрице.",
@@ -353,7 +358,7 @@ function buildShowcaseControlDetails(
   const out: TerritoryShowcaseControlDetail[] = [];
   for (const d of dealers) {
     for (const tp of d.tradePoints) {
-      const city = tp.city?.trim() && tp.city.trim() !== "—" ? tp.city.trim() : "Без города";
+      const city = tradePointCityLabel(tp);
       const sh = merged.tradePointShowcaseActualizationById[tp.id];
       if (sh?.updatedAt?.trim()) {
         out.push({
@@ -413,7 +418,7 @@ function buildShowcaseSummaryFromActualization(dealers: DealerRow[], merged: Act
     if (sh.firstPriorityNeed?.trim()) parts.push(sh.firstPriorityNeed.trim());
     if (sh.fillingComment?.trim()) parts.push(sh.fillingComment.trim());
     if (sh.showcaseComment?.trim()) parts.push(sh.showcaseComment.trim());
-    const city = tp.city?.trim() && tp.city.trim() !== "—" ? tp.city.trim() : "Без города";
+    const city = tradePointCityLabel(tp);
     out.push({
       id: `sh-act-${tpId}-${i}`,
       tradePointId: tpId,
@@ -442,7 +447,7 @@ function buildPersistedAttentionRisks(
       id: `risk-plan-${t.taskId}`,
       title: t.title,
       level: "attention",
-      city: d ? (bucketCity(d) === NO_CITY ? "Без города" : d.city?.trim() || "Без города") : "Без города",
+      city: d ? (bucketCity(d) === NO_CITY ? "Без города" : bucketCity(d)) : "Без города",
       dealerId: t.dealerId,
       tradePointId: t.tradePointId,
       reason: "Просрочена задача плана витрины (запись в системе задач витрины).",
@@ -460,7 +465,7 @@ function buildPersistedAttentionRisks(
         id: `risk-mtx-${mt.id}`,
         title: `Матрица витрины: ${mt.productName}`,
         level: "attention",
-        city: d ? (bucketCity(d) === NO_CITY ? "Без города" : d.city?.trim() || "Без города") : "Без города",
+        city: d ? (bucketCity(d) === NO_CITY ? "Без города" : bucketCity(d)) : "Без города",
         dealerId: mt.dealerId,
         tradePointId: mt.tradePointId,
         reason: "Открытая задача из актуализации витрины торговой точки (создана вручную в форме).",

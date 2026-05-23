@@ -18,6 +18,7 @@ Follow-up **класса 2** (единый team-fetch, scope dealer-base ↔ tra
 - `apps/platform/client/src/lib/client-base-management-team-scope-storage.ts` — ключ **`tandoor-client-base-management-team-scope-v1`** (localStorage для директора), событие **`tandoor-management-team-scope-v1`**, чтение `?team=` / `?rop=` на `/dealer-base`, `/trade-points`, `/client-base-activity`.
 - `apps/platform/client/src/hooks/use-client-base-management-merged-state.ts` — совместимость API: делегирует в `useClientBaseTeamActualization`.
 - `apps/platform/client/src/hooks/use-client-base-activity-team-state.ts` — при team plane и наличии провайдера **не** дублирует fetch: берёт `mergedState`, `activitySourceSnapshots` и диагностику из контекста.
+- `apps/platform/client/src/lib/territory-city-normalize.ts` — **`normalizeTerritoryCityName`**: короткое имя НП/района для группировки (карточка территории, `territory-card-live-data`, концентрация по городам); без индекса и полного адреса в подписи города.
 
 ## Follow-up класс 2: что сделано
 
@@ -43,7 +44,7 @@ Follow-up **класса 2** (единый team-fetch, scope dealer-base ↔ tra
 ### Карточка территории
 
 - **`territory-card.tsx`**: при выключенной актуализации для управленческих ролей страница недоступна (нет подстановки статического датасета). При включённой — **`buildTerritoryCardLivePack`** (`territory-card-live-data.ts`) из merge-строк.
-- **Роли с team plane (`shouldUseTeamMergedActualizationPlane`, РОП/директор):** отдельный UI **`TerritoryCardCockpitFactual`** (`territory-card-cockpit-factual.tsx`) — компактный управленческий **cockpit**. Первый экран показывает только **активную фактическую сводку** (те же правила данных, что после #199/#200/#201: без `archivedDealersById` / `archivedTradePointsById` и без ТТ архивных клиентов; без демо/синтетических KPI на главной ленте). Пять KPI (активные клиенты, активные ТТ, задачи витрины из persisted-плана, контроль витрины/матрицы по сохранённым записям, зоны внимания по реальным просрочкам и открытым задачам матрицы из актуализации) **кликабельны**; детали — **bottom sheet** на mobile и **правая панель** на desktop (`data-testid="dialog-territory-detail"`). Города — компактный рейтинг с сортировкой и чипами; drill-down по городу в той же панели. Псевдо-KPI обучения, «клиенты в фокусе», сегменты и план-факт по городам из мок-строк на этом экране **не возвращаются**. Для списков drill-down в пак добавлены **`cockpitDealers`**, **`cockpitPersistedTasksAll`**, **`cockpitShowcaseControlDetails`** и вспомогательные построители в **`territory-card-live-data.ts`**.
+- **Роли с team plane (`shouldUseTeamMergedActualizationPlane`, РОП/директор):** отдельный UI **`TerritoryCardCockpitFactual`** (`territory-card-cockpit-factual.tsx`) — компактный управленческий **cockpit**. Первый экран показывает только **активную фактическую сводку** (те же правила данных, что после #199/#200/#201: без `archivedDealersById` / `archivedTradePointsById` и без ТТ архивных клиентов; без демо/синтетических KPI на главной ленте). Пять KPI (активные клиенты, активные ТТ, задачи витрины из persisted-плана, контроль витрины/матрицы по сохранённым записям, зоны внимания по реальным просрочкам и открытым задачам матрицы из актуализации) **кликабельны**; детали — **bottom sheet** на mobile и **правая панель** на desktop (`data-testid="dialog-territory-detail"`). Города — компактный рейтинг с сортировкой и чипами; drill-down по городу в той же панели; группировка по населённому пункту через **`normalizeTerritoryCityName`** (см. `territory-city-normalize.ts`), без индекса и полного адреса в названии строки. Псевдо-KPI обучения, «клиенты в фокусе», сегменты и план-факт по городам из мок-строк на этом экране **не возвращаются**. Для списков drill-down в пак добавлены **`cockpitDealers`**, **`cockpitPersistedTasksAll`**, **`cockpitShowcaseControlDetails`** и вспомогательные построители в **`territory-card-live-data.ts`**.
 - **Прочие роли при `actx`:** прежняя полная страница **`territory-card.tsx`** с **`getShowcaseBackedTasksForDealers`**, фокус, «худшие» ТТ, KPI обучения, риски по статусам мок-строк и просрочкам showcase-backed задач; переход «К главному» — кнопка в hero (без плавающей кнопки поверх контента). **План-факт:** пока нет backend — блок «План-факт пока не настроен» (пустой `planLines`).
 
 ### Главная директор / РОП
@@ -58,7 +59,7 @@ Follow-up **класса 2** (единый team-fetch, scope dealer-base ↔ tra
 
 ### Города и концентрация
 
-- **`city-concentration.ts`**: пустое значение города, «—», `-` нормализуются в метку **«Без города»** (не отдельный фиктивный город «—» в UI).
+- **`city-concentration.ts`**: пустое значение города, «—», `-` нормализуются в метку **«Без города»** (не отдельный фиктивный город «—» в UI). Для группировки по городам используется **`normalizeTerritoryCityName(city, address)`** (`territory-city-normalize.ts`): из длинных адресов (в т.ч. Крым с индексом и «респ …, г …») извлекается короткое имя населённого пункта или района; сырой адрес и индекс в название города не подставляются.
 
 ### Обучение / зоны внимания (KPI)
 
