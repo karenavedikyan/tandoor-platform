@@ -97,6 +97,7 @@ export function salesControlTeamPeriodKey(periodId: string, teamId: string): str
 export const SALES_KPI_METRICS: SalesKpiMetric[] = [
   { id: "kpi-vh", label: "Продажи ВХ", unit: "units", sortOrder: 10 },
   { id: "kpi-mk", label: "Продажи МК", unit: "units", sortOrder: 20 },
+  { id: "kpi-gross-profit", label: "Валовая прибыль", unit: "money_rub", sortOrder: 25 },
   { id: "kpi-furniture", label: "Фурнитура (оборот)", unit: "money_rub", sortOrder: 30 },
   { id: "kpi-client-activity", label: "Активность по клиентам", unit: "score", sortOrder: 40 },
 ];
