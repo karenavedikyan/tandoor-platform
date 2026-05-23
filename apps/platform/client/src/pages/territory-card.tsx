@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { FloatingBackButton } from "@/components/navigation/floating-back-button";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
@@ -14,6 +13,7 @@ import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-managem
 import { roleScopedDealerRows } from "@/lib/dealer-base-role-views";
 import { cn } from "@/lib/utils";
 import { buildTerritoryCardLivePack } from "@/lib/territory-card-live-data";
+import { TerritoryCardCockpitFactual } from "@/pages/territory-card-cockpit-factual";
 import {
   MATRIX_TASK_PRIORITY_LABEL,
   MATRIX_TASK_STATUS_LABEL,
@@ -81,7 +81,6 @@ export default function TerritoryCardPage() {
     });
   }, [actx.enabled, teamPlane.mergedState, profile, actx.loading, teamPlane.teamFetchLoading, directorRopFactual]);
 
-  const factual = Boolean(livePack?.directorRopFactualUi);
   const summary = livePack?.summary;
   const planLines = livePack?.planLines ?? [];
   const cities = livePack?.cities ?? [];
@@ -106,7 +105,6 @@ export default function TerritoryCardPage() {
             </Button>
           </CardContent>
         </Card>
-        <FloatingBackButton href="/main" label="К главному" testId="floating-back-to-main" ariaLabel="К главному экрану" />
       </div>
     );
   }
@@ -117,6 +115,10 @@ export default function TerritoryCardPage() {
         <p className="text-sm text-muted-foreground">Загрузка актуальной базы…</p>
       </div>
     );
+  }
+
+  if (directorRopFactual) {
+    return <TerritoryCardCockpitFactual livePack={livePack} mergedState={teamPlane.mergedState} />;
   }
 
   return (
@@ -136,9 +138,7 @@ export default function TerritoryCardPage() {
             </div>
             <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Карточка территории</h1>
             <p className="max-w-2xl text-sm text-muted-foreground sm:text-base">
-              {factual
-                ? "Сводка по активной клиентской базе и торговым точкам. Расчётные KPI по витрине и «сигналы» скрыты до появления данных в системе задач и сохранённой актуализации."
-                : "Операционная сводка по клиентам, задачам по витрине и торговым точкам территории."}
+              Операционная сводка по клиентам, задачам по витрине и торговым точкам территории.
             </p>
             <p className="text-xs font-medium text-primary" data-testid="text-territory-data-source">
               Источник: актуальная активная база (актуализация, без архива и без демо-заказов).
@@ -164,37 +164,9 @@ export default function TerritoryCardPage() {
       <section className="space-y-4" data-testid="section-territory-summary">
         <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Сводка территории</h2>
         <p className="text-xs text-muted-foreground">
-          {factual
-            ? "Только фактические счётчики активной базы. Задачи витрины, контроль матрицы и зоны внимания — в блоке ниже, если есть сохранённые записи."
-            : "Показатели считаются по объединённому state команды и только активным клиентам/точкам."}
+          Показатели считаются по объединённому state команды и только активным клиентам/точкам.
         </p>
-        <div
-          className={
-            factual ? "grid gap-3 sm:grid-cols-2" : "grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5"
-          }
-        >
-          {factual ? (
-            <>
-              <Card className="border-border/70 shadow-xs" data-testid="card-territory-dealers-active">
-                <CardHeader className="pb-2 pt-4">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">Активные клиенты</CardTitle>
-                </CardHeader>
-                <CardContent className="pb-4 pt-0">
-                  <p className="text-2xl font-semibold tabular-nums text-foreground">{summary.dealersActive}</p>
-                  <p className="text-xs text-muted-foreground">в зоне ответственности (merge, без архива)</p>
-                </CardContent>
-              </Card>
-              <Card className="border-border/70 shadow-xs" data-testid="card-territory-trade-points-active">
-                <CardHeader className="pb-2 pt-4">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">Активные торговые точки</CardTitle>
-                </CardHeader>
-                <CardContent className="pb-4 pt-0">
-                  <p className="text-2xl font-semibold tabular-nums text-foreground">{summary.tradePointsTotal}</p>
-                  <p className="text-xs text-muted-foreground">по активным клиентам в merge</p>
-                </CardContent>
-              </Card>
-            </>
-          ) : (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             <>
               <Card className="border-border/70 shadow-xs" data-testid="card-territory-dealers">
                 <CardHeader className="pb-2 pt-4">
@@ -241,77 +213,9 @@ export default function TerritoryCardPage() {
                 </CardContent>
               </Card>
             </>
-          )}
         </div>
       </section>
 
-      {factual ? (
-        <section className="space-y-4" data-testid="section-territory-operational-factual">
-          <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Задачи и контроль витрины</h2>
-          <p className="text-xs text-muted-foreground">
-            Цифры ниже появляются только при наличии записей в системе задач витрины (план в sessionStorage), сохранённой
-            актуализации витрины ТТ или явных ячеек контроля матрицы в браузере.
-          </p>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Card className="border-border/70 shadow-xs" data-testid="card-territory-tasks-factual">
-              <CardHeader className="pb-2 pt-4">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Задачи по витрине</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 pb-4 pt-0">
-                {summary.tasksOpen > 0 ? (
-                  <>
-                    <p className="text-2xl font-semibold tabular-nums text-foreground">{summary.tasksOpen}</p>
-                    <p className="text-xs text-muted-foreground">открытых записей плана витрины (не закрыты в системе задач)</p>
-                  </>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Нет актуальных задач по витрине</p>
-                )}
-              </CardContent>
-            </Card>
-            <Card className="border-border/70 shadow-xs" data-testid="card-territory-showcases-factual">
-              <CardHeader className="pb-2 pt-4">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Витрины и матрица</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 pb-4 pt-0">
-                {livePack.factualShowcaseMatrixControlledTpCount > 0 ? (
-                  <>
-                    <p className="text-2xl font-semibold tabular-nums text-foreground">
-                      {livePack.factualShowcaseMatrixControlledTpCount}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      торговых точек с сохранённым контролем витрины (актуализация) или внесённой ячейкой матрицы
-                    </p>
-                  </>
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    Нет сохранённых данных контроля витрины и матрицы для точек в этой зоне ответственности
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-            <Card className="border-border/70 shadow-xs" data-testid="card-territory-attention-factual">
-              <CardHeader className="pb-2 pt-4">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Зоны внимания</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 pb-4 pt-0">
-                {risks.length > 0 ? (
-                  <>
-                    <p className="text-2xl font-semibold tabular-nums text-foreground">{risks.length}</p>
-                    <p className="text-xs text-muted-foreground">просрочки плана витрины или открытые задачи матрицы из актуализации</p>
-                  </>
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    Нет сохранённых зон внимания: нет просроченных задач плана витрины и открытых задач матрицы из форм
-                    актуализации
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </section>
-      ) : null}
-
-      {!factual ? (
       <section className="space-y-4" data-testid="section-territory-training-attention">
         <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Обучение и внимание к персоналу</h2>
         <p className="max-w-3xl text-sm text-muted-foreground">
@@ -361,7 +265,6 @@ export default function TerritoryCardPage() {
           </Button>
         </div>
       </section>
-      ) : null}
 
       <section className="space-y-4" data-testid="section-territory-plan">
         <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Выполнение плана территории</h2>
@@ -370,9 +273,8 @@ export default function TerritoryCardPage() {
             <CardContent className="space-y-2 p-5 text-sm text-muted-foreground">
               <p className="font-medium text-foreground">План-факт пока не настроен</p>
               <p>
-                {factual
-                  ? "Блок скрыт до подключения реальных планов и факта из учётных систем. Сводка территории отражает только состав активной клиентской базы и торговых точек."
-                  : "Блок скрыт до подключения реальных планов и факта из учётных систем. Сводка выше и списки ниже отражают только клиентскую базу и задачи по витрине."}
+                Блок скрыт до подключения реальных планов и факта из учётных систем. Сводка выше и списки ниже отражают
+                только клиентскую базу и задачи по витрине.
               </p>
             </CardContent>
           </Card>
@@ -422,47 +324,33 @@ export default function TerritoryCardPage() {
             <Card key={c.id} className="border-border/70 shadow-xs" data-testid={`card-territory-city-${c.id}`}>
               <CardHeader className="space-y-1 pb-2 pt-4">
                 <CardTitle className="text-lg">{c.name}</CardTitle>
-                {factual ? (
-                  <p className="text-xs text-muted-foreground">
-                    Клиенты: <span className="font-semibold text-foreground">{c.dealersCount}</span> · активные:{" "}
-                    <span className="font-semibold text-foreground">{c.activeDealersCount}</span>
-                  </p>
-                ) : (
-                  <p className="text-xs text-muted-foreground">
-                    Клиенты: <span className="font-semibold text-foreground">{c.dealersCount}</span> · активные:{" "}
-                    <span className="font-semibold text-foreground">{c.activeDealersCount}</span> · ТОП-сегмент:{" "}
-                    <span className="font-semibold text-foreground">{c.topDealersCount}</span> · внимание:{" "}
-                    <span className="font-semibold text-foreground">{c.attentionDealersCount}</span>
-                  </p>
-                )}
+                <p className="text-xs text-muted-foreground">
+                  Клиенты: <span className="font-semibold text-foreground">{c.dealersCount}</span> · активные:{" "}
+                  <span className="font-semibold text-foreground">{c.activeDealersCount}</span> · ТОП-сегмент:{" "}
+                  <span className="font-semibold text-foreground">{c.topDealersCount}</span> · внимание:{" "}
+                  <span className="font-semibold text-foreground">{c.attentionDealersCount}</span>
+                </p>
               </CardHeader>
               <CardContent className="space-y-3 pb-4 text-sm text-muted-foreground">
                 <p>
                   Торговые точки: <span className="font-medium text-foreground">{c.tradePointsCount}</span>
                   {" · "}
                   Задачи по витрине: <span className="font-medium text-foreground">{c.tasksCount}</span>
-                  {factual ? (
-                    <span className="block pt-1 text-xs text-muted-foreground">
-                      (только записи плана витрины из системы задач, без автогенерации по каталогу)
-                    </span>
-                  ) : null}
                 </p>
-                {!factual ? (
-                  <div className="rounded-lg border border-border/60 bg-muted/20 p-3 text-xs leading-relaxed">
-                    <p>
-                      МК: план {formatUnits(c.mkPlanUnits)}, факт {formatUnits(c.mkFactUnits)} (
-                      {formatPercent(cityCompletion(c.mkPlanUnits, c.mkFactUnits))})
-                    </p>
-                    <p className="mt-1">
-                      ВХ: план {formatUnits(c.vhPlanUnits)}, факт {formatUnits(c.vhFactUnits)} (
-                      {formatPercent(cityCompletion(c.vhPlanUnits, c.vhFactUnits))})
-                    </p>
-                    <p className="mt-1">
-                      Фурнитура: план {formatCompactRub(c.hardwarePlanMoney)}, факт {formatCompactRub(c.hardwareFactMoney)} (
-                      {formatPercent(cityCompletion(c.hardwarePlanMoney, c.hardwareFactMoney))})
-                    </p>
-                  </div>
-                ) : null}
+                <div className="rounded-lg border border-border/60 bg-muted/20 p-3 text-xs leading-relaxed">
+                  <p>
+                    МК: план {formatUnits(c.mkPlanUnits)}, факт {formatUnits(c.mkFactUnits)} (
+                    {formatPercent(cityCompletion(c.mkPlanUnits, c.mkFactUnits))})
+                  </p>
+                  <p className="mt-1">
+                    ВХ: план {formatUnits(c.vhPlanUnits)}, факт {formatUnits(c.vhFactUnits)} (
+                    {formatPercent(cityCompletion(c.vhPlanUnits, c.vhFactUnits))})
+                  </p>
+                  <p className="mt-1">
+                    Фурнитура: план {formatCompactRub(c.hardwarePlanMoney)}, факт {formatCompactRub(c.hardwareFactMoney)} (
+                    {formatPercent(cityCompletion(c.hardwarePlanMoney, c.hardwareFactMoney))})
+                  </p>
+                </div>
                 <Button asChild variant="outline" className="w-full min-h-11 border-border font-semibold" data-testid={`button-open-city-dealers-${c.id}`}>
                   <Link href="/dealer-base">Открыть клиентов</Link>
                 </Button>
@@ -473,7 +361,6 @@ export default function TerritoryCardPage() {
         )}
       </section>
 
-      {!factual ? (
       <section className="space-y-4" data-testid="section-territory-focus-dealers">
         <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Клиенты в фокусе</h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -495,20 +382,12 @@ export default function TerritoryCardPage() {
           })}
         </div>
       </section>
-      ) : null}
 
       <section className="space-y-4" data-testid="section-territory-tasks">
         <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Задачи территории</h2>
         <p className="text-sm text-muted-foreground">
-          {factual
-            ? "Список ниже — только открытые записи плана витрины из системы задач (sessionStorage). Автоматически сгенерированные строки по каталогу не показываются."
-            : "Витрины, матрица и сопровождение — через общий список задач по витрине."}
+          Витрины, матрица и сопровождение — через общий список задач по витрине.
         </p>
-        {factual && tasks.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-border/80 bg-muted/10 px-4 py-6 text-sm text-muted-foreground">
-            Нет актуальных задач по витрине
-          </p>
-        ) : null}
         <div className="grid gap-3 sm:grid-cols-2">
           {tasks.map((t: MatrixTaskWithContext) => (
             <Card key={`${t.dealerId}-${t.taskId}`} className="border-border/70 shadow-xs" data-testid={`card-territory-task-${t.taskId}`}>
@@ -540,12 +419,6 @@ export default function TerritoryCardPage() {
 
       <section className="space-y-4" data-testid="section-territory-trade-points">
         <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Торговые точки и витрины</h2>
-        {factual ? (
-          <p className="text-xs text-muted-foreground">
-            Список точек из активной базы. Показатели матрицы и «витрина» из мок-данных скрыты; детали контроля — в карточке точки
-            и в блоке сводки по сохранённой актуализации ниже.
-          </p>
-        ) : null}
         <div className="grid gap-3 sm:grid-cols-2">
           {tradePoints.map((tp) => (
             <Card key={tp.pointId} className="border-border/70 shadow-xs" data-testid={`card-territory-trade-point-${tp.pointId}`}>
@@ -559,16 +432,12 @@ export default function TerritoryCardPage() {
                 <p>
                   Статус: <span className="font-medium text-foreground">{tp.status}</span>
                 </p>
-                {!factual ? (
-                  <>
-                    <p>
-                      Матрица (сводно): <span className="font-medium text-foreground">{tp.matrixPercent}%</span>
-                    </p>
-                    <p className="text-xs leading-relaxed">Витрина: {tp.showcaseLine}</p>
-                    <p className="text-xs">Активность: {tp.lastActivity}</p>
-                    <p className="text-xs leading-relaxed">{tp.issuesShort}</p>
-                  </>
-                ) : null}
+                <p>
+                  Матрица (сводно): <span className="font-medium text-foreground">{tp.matrixPercent}%</span>
+                </p>
+                <p className="text-xs leading-relaxed">Витрина: {tp.showcaseLine}</p>
+                <p className="text-xs">Активность: {tp.lastActivity}</p>
+                <p className="text-xs leading-relaxed">{tp.issuesShort}</p>
                 <Button
                   asChild
                   variant="outline"
@@ -584,11 +453,7 @@ export default function TerritoryCardPage() {
         <div className="rounded-2xl border border-border/70 bg-card p-4 shadow-xs">
           <h3 className="text-sm font-semibold text-foreground">Витрины (сводка)</h3>
           {showcases.length === 0 ? (
-            <p className="mt-3 text-sm text-muted-foreground">
-              {factual
-                ? "Нет строк из сохранённой актуализации витрины по точкам в этой зоне ответственности."
-                : "Нет данных для сводки."}
-            </p>
+            <p className="mt-3 text-sm text-muted-foreground">Нет данных для сводки.</p>
           ) : (
             <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
               {showcases.slice(0, 6).map((s) => (
@@ -604,17 +469,6 @@ export default function TerritoryCardPage() {
 
       <section className="space-y-4" data-testid="section-territory-risks">
         <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Зоны внимания</h2>
-        {factual ? (
-          <p className="text-xs text-muted-foreground">
-            Только просроченные задачи плана витрины (записи в системе задач) и открытые задачи матрицы, явно созданные в
-            актуализации торговой точки. Сигналы по статусу клиента из мок-строк не показываются.
-          </p>
-        ) : null}
-        {factual && risks.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-border/80 bg-muted/10 px-4 py-6 text-sm text-muted-foreground">
-            Нет сохранённых зон внимания по правилам выше.
-          </p>
-        ) : null}
         <div className="grid gap-3 sm:grid-cols-2">
           {risks.map((r: TerritoryRiskItem) => (
             <Card key={r.id} className={cn("border shadow-xs", riskTone(r.level))} data-testid={`card-territory-risk-${r.id}`}>
@@ -662,8 +516,6 @@ export default function TerritoryCardPage() {
           </Button>
         </div>
       </section>
-
-      <FloatingBackButton href="/main" label="К главному" testId="floating-back-to-main" ariaLabel="К главному экрану" />
     </div>
   );
 }

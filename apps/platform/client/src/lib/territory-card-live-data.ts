@@ -8,7 +8,7 @@
 import { createEmptyActualizationState, type ActualizationState } from "@/lib/client-base-actualization-state";
 import { isClientTopTier } from "@/lib/client-category";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import { loadShowcaseMatrixStorage } from "@/lib/trade-point-showcase-matrix-storage";
+import { loadShowcaseMatrixStorage, type ShowcaseMatrixEntryStored } from "@/lib/trade-point-showcase-matrix-storage";
 import { getTrainingAttentionKpisForDealers, type TerritoryTrainingAttentionKpis } from "@/lib/training-attention";
 import {
   getShowcaseBackedTasksForDealers,
@@ -32,6 +32,18 @@ export type BuildTerritoryCardLivePackOptions = {
   mergedActualization?: ActualizationState;
 };
 
+/** Строка контроля витрины/матрицы с метаданными сохранения (cockpit drill-down). */
+export type TerritoryShowcaseControlDetail = {
+  tradePointId: string;
+  dealerId: string;
+  dealerName: string;
+  tpName: string;
+  city: string;
+  source: "actualization" | "matrix";
+  updatedAt: string;
+  updatedByName: string;
+};
+
 export type TerritoryCardLivePack = {
   summary: TerritoryOperationalSummary;
   planLines: TerritoryPlanLine[];
@@ -45,6 +57,12 @@ export type TerritoryCardLivePack = {
   directorRopFactualUi: boolean;
   /** Торговые точки в scope с сохранённой актуализацией витрины или ячейкой матрицы в localStorage (с меткой времени/автора). */
   factualShowcaseMatrixControlledTpCount: number;
+  /** Cockpit: снимок дилеров merge (пустой массив вне factual-режима). */
+  cockpitDealers: DealerRow[];
+  /** Cockpit: все persisted-задачи плана витрины (factual); иначе []. */
+  cockpitPersistedTasksAll: MatrixTaskWithContext[];
+  /** Cockpit: ТТ с сохранённым контролем и метаданными (factual); иначе []. */
+  cockpitShowcaseControlDetails: TerritoryShowcaseControlDetail[];
 };
 
 const NO_CITY = "__no_city__";
@@ -53,6 +71,13 @@ function bucketCity(dealer: DealerRow): string {
   const t = dealer.city?.trim();
   if (!t || t === "—" || t === "-") return NO_CITY;
   return t;
+}
+
+/** Совпадение с `TerritoryCitySummary.name` («Без города» для пустого города). */
+export function dealerBelongsToTerritoryCityDisplayName(dealer: DealerRow, cityDisplayName: string): boolean {
+  const k = bucketCity(dealer);
+  if (cityDisplayName === "Без города") return k === NO_CITY;
+  return k === cityDisplayName;
 }
 
 function slugCity(name: string): string {
@@ -320,6 +345,55 @@ function countTradePointsWithPersistedShowcaseOrMatrix(
   return keys.size;
 }
 
+function buildShowcaseControlDetails(
+  dealers: DealerRow[],
+  merged: ActualizationState,
+  matrixStorage: ReturnType<typeof loadShowcaseMatrixStorage>,
+): TerritoryShowcaseControlDetail[] {
+  const out: TerritoryShowcaseControlDetail[] = [];
+  for (const d of dealers) {
+    for (const tp of d.tradePoints) {
+      const city = tp.city?.trim() && tp.city.trim() !== "—" ? tp.city.trim() : "Без города";
+      const sh = merged.tradePointShowcaseActualizationById[tp.id];
+      if (sh?.updatedAt?.trim()) {
+        out.push({
+          tradePointId: tp.id,
+          dealerId: d.id,
+          dealerName: d.name,
+          tpName: tp.name,
+          city,
+          source: "actualization",
+          updatedAt: sh.updatedAt.trim(),
+          updatedByName: (sh.updatedByName ?? sh.updatedBy ?? "").trim(),
+        });
+        continue;
+      }
+      const prefix = `${d.id}|${tp.id}|`;
+      let matrixHit: ShowcaseMatrixEntryStored | null = null;
+      for (const [entryKey, entry] of Object.entries(matrixStorage.entries)) {
+        if (!entryKey.startsWith(prefix)) continue;
+        if (entry.updatedAt?.trim() || entry.updatedBy?.trim()) {
+          matrixHit = entry;
+          break;
+        }
+      }
+      if (matrixHit) {
+        out.push({
+          tradePointId: tp.id,
+          dealerId: d.id,
+          dealerName: d.name,
+          tpName: tp.name,
+          city,
+          source: "matrix",
+          updatedAt: (matrixHit.updatedAt ?? "").trim(),
+          updatedByName: (matrixHit.updatedByName ?? matrixHit.updatedBy ?? "").trim(),
+        });
+      }
+    }
+  }
+  return out.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
 function buildShowcaseSummaryFromActualization(dealers: DealerRow[], merged: ActualizationState): TerritoryShowcaseItem[] {
   const tpScope = tradePointIdsInScope(dealers);
   const dealerByTp = new Map<string, { dealer: DealerRow; tp: DealerRow["tradePoints"][number] }>();
@@ -411,6 +485,7 @@ export function buildTerritoryCardLivePack(
     const persistedPlanTasks = getShowcaseDistributionPlanTasksForDealers(dealers);
     const taskMap = buildTaskCountByDealerId(persistedPlanTasks);
     const factualShowcaseMatrixControlledTpCount = countTradePointsWithPersistedShowcaseOrMatrix(dealers, merged, matrixStorage);
+    const cockpitShowcaseControlDetails = buildShowcaseControlDetails(dealers, merged, matrixStorage);
 
     const byCity = new Map<string, DealerRow[]>();
     for (const d of dealers) {
@@ -453,6 +528,9 @@ export function buildTerritoryCardLivePack(
       trainingKpis: getTrainingAttentionKpisForDealers(dealers),
       directorRopFactualUi: true,
       factualShowcaseMatrixControlledTpCount,
+      cockpitDealers: dealers,
+      cockpitPersistedTasksAll: persistedPlanTasks,
+      cockpitShowcaseControlDetails,
     };
   }
 
@@ -520,5 +598,8 @@ export function buildTerritoryCardLivePack(
     trainingKpis: getTrainingAttentionKpisForDealers(dealers),
     directorRopFactualUi: false,
     factualShowcaseMatrixControlledTpCount: 0,
+    cockpitDealers: [],
+    cockpitPersistedTasksAll: [],
+    cockpitShowcaseControlDetails: [],
   };
 }
