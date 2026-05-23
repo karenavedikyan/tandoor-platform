@@ -1,6 +1,11 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
+import { useOptionalClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
+import { useClientBaseActualization } from "@/context/client-base-actualization-context";
+import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
+import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
+import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,8 +36,10 @@ import {
   kpiHardware,
   kpiEquipment,
   OPERATIONAL_DEFAULT_GLOBAL_FILTERS,
+  buildOperationalAnalyticsRowSlicesFromDealers,
+  type OperationalAnalyticsRowSlices,
 } from "@/lib/analytics-operational-data";
-import { DEALER_BASE_ROWS, type DealerRow } from "@/lib/dealer-base-mock-data";
+import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
 import { formatCompactRub, formatPercent, formatUnits } from "@/lib/sales-manager-kpi-data";
 import { EquipmentContractDialog } from "@/components/analytics/equipment-contract-dialog";
 import { OperationalHeaderKpi, type OperationalStripMetric } from "@/components/analytics/operational-kpi-strip";
@@ -269,6 +276,27 @@ function PartnerCardsMobile({ rows }: { rows: OperationalClientShowcaseRow[] }) 
 }
 
 export function AnalyticsOperationalPanel() {
+  const actx = useClientBaseActualization();
+  const teamCtx = useOptionalClientBaseTeamActualization();
+  const { profile } = useReleaseDemoProfile();
+
+  const operationalRowSlices = useMemo((): OperationalAnalyticsRowSlices | undefined => {
+    if (!actx.enabled || !teamCtx || !shouldUseTeamMergedActualizationPlane(profile)) return undefined;
+    const dealers = buildDealerBaseRowsWithActualization(teamCtx.mergedState, profile, { includeArchivedDealers: true });
+    return buildOperationalAnalyticsRowSlicesFromDealers(dealers);
+  }, [actx.enabled, teamCtx, teamCtx?.mergedState, profile]);
+
+  const equipmentDealerPickerRows = useMemo((): { id: string; name: string }[] => {
+    if (operationalRowSlices) {
+      const byId = new Map<string, { id: string; name: string }>();
+      for (const r of operationalRowSlices.clientShowcase) {
+        byId.set(r.dealerId, { id: r.dealerId, name: r.clientName });
+      }
+      return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name, "ru"));
+    }
+    return DEALER_BASE_ROWS.map((d) => ({ id: d.id, name: d.name }));
+  }, [operationalRowSlices]);
+
   const [globalFilters, setGlobalFilters] = useState<OperationalGlobalFilters>(OPERATIONAL_DEFAULT_GLOBAL_FILTERS);
 
   const [opTab, setOpTab] = useState<OperationalAnalyticsTab>("top500");
@@ -294,29 +322,46 @@ export function AnalyticsOperationalPanel() {
     setEqPeriod("all");
   }, []);
 
-  const rowsTop500 = useMemo(() => filterClientShowcaseRows("top500", globalFilters, showcaseStatus), [globalFilters, showcaseStatus]);
-  const rows500Plus = useMemo(() => filterClientShowcaseRows("fiveHundredPlus", globalFilters, showcaseStatus), [globalFilters, showcaseStatus]);
-  const rowsClub = useMemo(() => filterClientShowcaseRows("tandoorClub", globalFilters, showcaseStatus), [globalFilters, showcaseStatus]);
+  const slices = operationalRowSlices;
 
-  const profitRows = useMemo(() => filterShowcaseProfitabilityRows(globalFilters, profitAttention), [globalFilters, profitAttention]);
+  const rowsTop500 = useMemo(
+    () => filterClientShowcaseRows("top500", globalFilters, showcaseStatus, slices),
+    [globalFilters, showcaseStatus, slices],
+  );
+  const rows500Plus = useMemo(
+    () => filterClientShowcaseRows("fiveHundredPlus", globalFilters, showcaseStatus, slices),
+    [globalFilters, showcaseStatus, slices],
+  );
+  const rowsClub = useMemo(
+    () => filterClientShowcaseRows("tandoorClub", globalFilters, showcaseStatus, slices),
+    [globalFilters, showcaseStatus, slices],
+  );
 
-  const hwRows = useMemo(() => filterHardwareRows(globalFilters, hwConv, hwCompetitors, hwOurEq), [globalFilters, hwConv, hwCompetitors, hwOurEq]);
+  const profitRows = useMemo(() => filterShowcaseProfitabilityRows(globalFilters, profitAttention, slices), [globalFilters, profitAttention, slices]);
 
-  const eqRows = useMemo(() => filterEquipmentRows(globalFilters, eqDealer, eqNom, eqPeriod), [globalFilters, eqDealer, eqNom, eqPeriod]);
+  const hwRows = useMemo(
+    () => filterHardwareRows(globalFilters, hwConv, hwCompetitors, hwOurEq, slices),
+    [globalFilters, hwConv, hwCompetitors, hwOurEq, slices],
+  );
+
+  const eqRows = useMemo(
+    () => filterEquipmentRows(globalFilters, eqDealer, eqNom, eqPeriod, slices),
+    [globalFilters, eqDealer, eqNom, eqPeriod, slices],
+  );
 
   const hwKpi = useMemo(() => kpiHardware(hwRows), [hwRows]);
   const eqKpi = useMemo(() => kpiEquipment(eqRows), [eqRows]);
 
   const tabCounts = useMemo(
     () => ({
-      top500: filterClientShowcaseRows("top500", globalFilters, showcaseStatus).length,
-      fiveHundredPlus: filterClientShowcaseRows("fiveHundredPlus", globalFilters, showcaseStatus).length,
-      tandoorClub: filterClientShowcaseRows("tandoorClub", globalFilters, showcaseStatus).length,
-      showcaseProfitability: filterShowcaseProfitabilityRows(globalFilters, profitAttention).length,
-      hardwareConversion: filterHardwareRows(globalFilters, hwConv, hwCompetitors, hwOurEq).length,
-      equipment: filterEquipmentRows(globalFilters, eqDealer, eqNom, eqPeriod).length,
+      top500: filterClientShowcaseRows("top500", globalFilters, showcaseStatus, slices).length,
+      fiveHundredPlus: filterClientShowcaseRows("fiveHundredPlus", globalFilters, showcaseStatus, slices).length,
+      tandoorClub: filterClientShowcaseRows("tandoorClub", globalFilters, showcaseStatus, slices).length,
+      showcaseProfitability: filterShowcaseProfitabilityRows(globalFilters, profitAttention, slices).length,
+      hardwareConversion: filterHardwareRows(globalFilters, hwConv, hwCompetitors, hwOurEq, slices).length,
+      equipment: filterEquipmentRows(globalFilters, eqDealer, eqNom, eqPeriod, slices).length,
     }),
-    [globalFilters, showcaseStatus, profitAttention, hwConv, hwCompetitors, hwOurEq, eqDealer, eqNom, eqPeriod],
+    [globalFilters, showcaseStatus, profitAttention, hwConv, hwCompetitors, hwOurEq, eqDealer, eqNom, eqPeriod, slices],
   );
 
   const activeResultCount = useMemo(() => {
@@ -555,7 +600,7 @@ export function AnalyticsOperationalPanel() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Все клиенты</SelectItem>
-                  {DEALER_BASE_ROWS.map((d: DealerRow) => (
+                  {equipmentDealerPickerRows.map((d) => (
                     <SelectItem key={d.id} value={d.id}>
                       {d.name}
                     </SelectItem>

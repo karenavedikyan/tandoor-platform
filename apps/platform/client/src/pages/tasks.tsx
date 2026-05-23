@@ -30,7 +30,7 @@ import {
 } from "@/lib/rop-manager-filters";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
-import { useClientBaseManagementMergedState } from "@/hooks/use-client-base-management-merged-state";
+import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
 import {
@@ -717,17 +717,18 @@ export default function TasksPage() {
     });
   };
 
+  const managementPlane = useClientBaseTeamActualization();
+  const { publishDashboardRopTeamId } = managementPlane;
+
   useEffect(() => {
     if (mgrFilter === "all") return;
     if (!mgrOptions.some((m) => m.id === mgrFilter)) setMgrFilter("all");
   }, [ropTeam, mgrOptions, mgrFilter]);
 
-  const managementPlane = useClientBaseManagementMergedState({
-    enabled: actx.enabled,
-    profile,
-    dashboardRopTeamId: ropTeam,
-    contextState: actx.state,
-  });
+  useEffect(() => {
+    if (access !== "sales_director" && access !== "team_lead") return;
+    publishDashboardRopTeamId(ropTeam);
+  }, [ropTeam, access, publishDashboardRopTeamId]);
 
   const workingDealerRows = useMemo(
     () =>

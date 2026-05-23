@@ -5,7 +5,7 @@ import { TeamSummaryCard } from "@/components/team-summary-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
-import { useClientBaseManagementMergedState } from "@/hooks/use-client-base-management-merged-state";
+import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { canAccessPath, salesControlHomeHref } from "@/lib/auth-access";
@@ -14,8 +14,6 @@ import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-managem
 import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
 import {
   dealerNeedsAttention,
-  initialRopManagerForProfile,
-  mapSalesRoleToDealerBaseAccess,
   roleScopedDealerRows,
 } from "@/lib/dealer-base-role-views";
 import { buildBrowserHashAppHref } from "@/lib/hash-route-utils";
@@ -63,17 +61,7 @@ export function MainRoleDashboard() {
   const { user } = useCurrentUser();
   const { profile } = useReleaseDemoProfile();
   const actx = useClientBaseActualization();
-  const dealerBaseAccess = useMemo(() => mapSalesRoleToDealerBaseAccess(profile.role), [profile.role]);
-  const dashboardRopTeamId = useMemo(
-    () => initialRopManagerForProfile(profile, dealerBaseAccess).ropTeam,
-    [profile, dealerBaseAccess],
-  );
-  const managementPlane = useClientBaseManagementMergedState({
-    enabled: actx.enabled,
-    profile,
-    dashboardRopTeamId,
-    contextState: actx.state,
-  });
+  const managementPlane = useClientBaseTeamActualization();
   const role = (user?.role ?? profile.role) as SalesRole;
 
   const baseRowsForDashboard = useMemo(

@@ -77,7 +77,7 @@ import { CityConcentrationBlock } from "@/components/city-concentration-block";
 import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actualization-sync-status";
 import { DealerActualizationCreateDialog } from "@/components/client-base-actualization-dealer-forms";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
-import { useClientBaseManagementMergedState } from "@/hooks/use-client-base-management-merged-state";
+import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
 import {
@@ -1136,13 +1136,14 @@ export default function DealerBase() {
   const routeKey = useMemo(() => routeQs.toString(), [routeQs]);
   const [, setLocation] = useLocation();
   const actx = useClientBaseActualization();
-  const managementPlane = useClientBaseManagementMergedState({
-    enabled: actx.enabled,
-    profile,
-    dashboardRopTeamId: ropTeam,
-    contextState: actx.state,
-  });
-  const teamActualizationPlane = managementPlane.mergedState;
+  const teamCtx = useClientBaseTeamActualization();
+  const teamActualizationPlane = teamCtx.mergedState;
+  const { publishDashboardRopTeamId } = teamCtx;
+
+  useEffect(() => {
+    if (access !== "sales_director" && access !== "team_lead") return;
+    publishDashboardRopTeamId(ropTeam);
+  }, [ropTeam, access, publishDashboardRopTeamId]);
 
   const showActualizationSync = useMemo(() => canActualizeClientBase(profile), [profile]);
 
@@ -2370,7 +2371,7 @@ export default function DealerBase() {
             syncStatus={actx.syncStatus}
             onRetry={() => void actx.refresh()}
           />
-          {actx.enabled && shouldUseTeamMergedActualizationPlane(profile) && managementPlane.teamFetchLoading ? (
+          {actx.enabled && shouldUseTeamMergedActualizationPlane(profile) && teamCtx.teamFetchLoading ? (
             <Alert className="border-primary/30 bg-primary/5" data-testid="alert-dealer-base-team-state-loading">
               <Info className="h-4 w-4" />
               <AlertDescription>
@@ -2378,16 +2379,16 @@ export default function DealerBase() {
               </AlertDescription>
             </Alert>
           ) : null}
-          {actx.enabled && shouldUseTeamMergedActualizationPlane(profile) && managementPlane.teamFetchError ? (
+          {actx.enabled && shouldUseTeamMergedActualizationPlane(profile) && teamCtx.teamFetchError ? (
             <Alert variant="destructive" data-testid="alert-dealer-base-team-state-error">
               <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <span>{managementPlane.teamFetchError}</span>
+                <span>{teamCtx.teamFetchError}</span>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   className="shrink-0 border-destructive/40"
-                  onClick={() => void managementPlane.refreshMergedTeam()}
+                  onClick={() => void teamCtx.refresh()}
                 >
                   Повторить загрузку команды
                 </Button>
