@@ -282,7 +282,7 @@ export function AnalyticsOperationalPanel() {
 
   const operationalRowSlices = useMemo((): OperationalAnalyticsRowSlices | undefined => {
     if (!actx.enabled || !teamCtx || !shouldUseTeamMergedActualizationPlane(profile)) return undefined;
-    const dealers = buildDealerBaseRowsWithActualization(teamCtx.mergedState, profile, { includeArchivedDealers: true });
+    const dealers = buildDealerBaseRowsWithActualization(teamCtx.mergedState, profile, { includeArchivedDealers: false });
     return buildOperationalAnalyticsRowSlicesFromDealers(dealers);
   }, [actx.enabled, teamCtx, teamCtx?.mergedState, profile]);
 

@@ -23,7 +23,7 @@ Follow-up **класса 2** (единый team-fetch, scope dealer-base ↔ tra
 
 2. **Синхронизация scope команды** — директор: persist выбранной команды в LS + broadcast; стартовый scope из LS или из URL (`team` / `rop`) на страницах управления; `dealer-base`, `trade-points`, сайдбар и дашборд активности вызывают **`publishDashboardRopTeamId`** при смене фильтра команды (где применимо). РОП: scope зафиксирован своей командой. Менеджер: только свой снимок.
 
-3. **Операционная аналитика (безопасный шаг)** — в `analytics-operational-data.ts` введены **`buildOperationalAnalyticsRowSlicesFromDealers`** и опциональный аргумент «срез строк» у фильтров. В **`analytics-operational-panel.tsx`** при включённой актуализации и team plane срезы строятся из **`buildDealerBaseRowsWithActualization(teamCtx.mergedState, …)`**; числовые поля витрины/конверсии по-прежнему **синтетика** поверх строк (как и раньше), но **состав клиентов и ТТ** совпадает с merge ЛК. Селект «Клиент» на вкладке оборудования использует тот же набор id.
+3. **Операционная аналитика (безопасный шаг)** — в `analytics-operational-data.ts` введены **`buildOperationalAnalyticsRowSlicesFromDealers`** и опциональный аргумент «срез строк» у фильтров. В **`analytics-operational-panel.tsx`** при включённой актуализации и team plane срезы строятся из **`buildDealerBaseRowsWithActualization(teamCtx.mergedState, …, { includeArchivedDealers: false })`** (только рабочая база, как в ЛК без «Показать архив»); числовые поля витрины/конверсии по-прежнему **синтетика** поверх строк (как и раньше), но **состав клиентов** совпадает с активным merge ЛК. Селект «Клиент» на вкладке оборудования использует тот же набор id.
 
 4. **Актуализация базы** — селект «РОП / команда» для директора синхронизирован с контекстом (`dashboardRopTeamId` ↔ UI `__all__`); при смене команды вызывается `publishDashboardRopTeamId`.
 
@@ -49,7 +49,7 @@ Follow-up **класса 2** (единый team-fetch, scope dealer-base ↔ tra
 | Актуализация базы / снимки для «кто добавил» | Отдельный merge в хуке | `activitySourceSnapshots` из провайдера | KPI «добавлено вручную» / диалоги детализации согласованы с теми же снимками, что и merge. |
 | Scope директора dealer-base ↔ trade-points | Разный default для trade-points и hash dealer-base | Общий LS + `publishDashboardRopTeamId`; URL `team`/`rop` на обеих страницах | Выбрать команду на `/dealer-base` → открыть `/trade-points`: те же клиенты/ТТ в scope; сброс — снова все команды. |
 | Сайдбар счётчики | Не следовали за выбором команды | `useClientBaseTeamActualization` в `AuthenticatedShell` | Смена команды на dealer-base обновляет бейджи без перезагрузки. |
-| Операционная аналитика | Только `DEALER_BASE_ROWS` | При team plane: срезы из `buildDealerBaseRowsWithActualization(mergedState)` | Под РОП/директором с актуализацией списки клиентов в операционных вкладках совпадают с ЛК по составу id; фильтры страницы не сломаны. |
+| Операционная аналитика | Только `DEALER_BASE_ROWS` | При team plane: срезы из merge **без архивных клиентов** (`includeArchivedDealers: false`) | Под РОП/директором с актуализацией списки клиентов в операционных вкладках совпадают с активной клиентской базой по составу id; фильтры страницы не сломаны. |
 | Инфографика аналитики | Статический срез | **Без изменений** (как было) | Убедиться, что блоки инфографики не регрессировали (отдельный контур). |
 
 ## Таблица аудита управленческих вкладок (текущее состояние)
@@ -65,7 +65,7 @@ Follow-up **класса 2** (единый team-fetch, scope dealer-base ↔ tra
 | Задачи | `tasks.tsx` | merge | **Да** | |
 | Карта | `client-map.tsx` | merge | **Да** | |
 | Актуализация базы | `client-base-activity-dashboard.tsx` | merge + `activitySources` из провайдера | **Да** | Селект команды директора → `publishDashboardRopTeamId` |
-| Операционная аналитика | `analytics-operational-panel.tsx` | merge → срезы операционных строк | **Частично** | Состав клиентов из ЛК; «продажи по витрине» в строках — синтетика |
+| Операционная аналитика | `analytics-operational-panel.tsx` | merge → срезы операционных строк | **Частично** | Состав клиентов — только **активные** из ЛК; «продажи по витрине» в строках — синтетика |
 | План-факт / прочая аналитика | sales-control, `analytics.tsx`, `analytics-workspace.tsx` | local / мок | **Нет** | Класс 3 |
 
 ---
@@ -79,6 +79,17 @@ Follow-up **класса 2** (единый team-fetch, scope dealer-base ↔ tra
 3. **Не подключать без отдельного ТЗ:** sales-control, `analytics.tsx`, `analytics-workspace`, `catalog` — см. выше.
 
 4. **Нужен backend:** фактические продажи, план-факт, исторические заказы.
+
+---
+
+## Активная рабочая база vs архив (управленческие экраны)
+
+- **Рабочая база по умолчанию:** клиент не в `archivedDealersById`; в строке `DealerRow` поля `tradePoints`, `outlets` и `format` считаются только по **неархивным** ТТ (`archivedTradePointsById` и `entry.isArchived` исключаются), см. `applyDealerRowTradePointOutletProjection` в `client-base-actualization-data-merge.ts`.
+- **Режим «архив» в клиентской базе:** только клиенты из `archivedDealersById`; для карточки архивного клиента в проекцию ТТ попадают **все** точки merge (включая помеченные архивом), чтобы не терять контекст карточки.
+- **Торговые точки:** в рабочем режиме список — только неархивные клиенты и неархивные ТТ; при включённом переключателе «архив» — **только архивный срез:** ТТ с флагом архива у **активных** клиентов **и** все ТТ клиентов из `archivedDealersById` (без смешения с рабочим списком), см. `buildTradePointListForActualization` с `archivedTradePointsOnly`.
+- **Сводки по командам:** `buildTeamSummaryFromRows` использует переданные строки (актуализация); на главной и в компактной карточке `/dealer-base` для РОП/директора берётся **активная** портфельная выборка, а не статический `DEALER_BASE_ROWS`.
+- **Сайдбар:** счётчики уже через `includeArchivedDealers: false` и список ТТ без архива — согласованы с рабочей базой.
+- **Актуализация базы:** текущие KPI/гео по `scopedRows` — только активные клиенты; для подписей событий по id используется объединение активных + только архивных строк (`buildDealerBaseRowsUnionForActivityLabels`), чтобы не терять имена после архивации клиента.
 
 ---
 

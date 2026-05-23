@@ -63,6 +63,8 @@
 
 - **Рабочий список:** при выключенном «Показать архив» в «Клиентской базе» показываются только клиенты **без** записи в `archivedDealersById`.
 - **Режим архива:** при включённом «Показать архив» в списке только архивные клиенты; в строке — бейдж «В архиве» (`badge-dealer-archived-{dealerId}`).
+- **KPI «Торговые точки» и поле `outlets`:** в управленческих списках на строке клиента считаются только **неархивные** ТТ (и ТТ клиента в архиве не попадают в рабочий список точек); проекция в `buildDealerBaseRowsWithActualization` через `applyDealerRowTradePointOutletProjection`.
+- **Карточки команд / главная:** сводки команд строятся из актуализированных строк **активной** базы (`buildTeamSummaryFromRows`), а не из полного release-снимка без архива.
 - **Баннер на карточке:** для архивного клиента показываются `badge-dealer-card-archived`, `text-dealer-card-archived-hint` и кнопка `button-dealer-restore-{dealerId}` (при наличии прав).
 - **Восстановление:** `persist` с новым объектом `archivedDealersById` **без** `dealerId` и POST тем же API, что при архивации. Успешный toast «Клиент восстановлен» — только если `persist` вернул `success`; при ошибке сохранения — сообщение об ошибке, без успешного toast.
 - **Редактирование архивного клиента** обновляет overrides, но **не снимает** архив автоматически — в рабочую базу клиент возвращается только после явного восстановления.
@@ -140,7 +142,7 @@
 - **Фото:** `ShowcaseCoverPhotoSlot` с `kind="trade_point"` и размерами `large` / `grid` / `list` / `table`; тексты плейсхолдера «Добавьте фото точки» / «Покажите фасад или витрину».
 - **Контакты:** `lib/dealer-contact-links.ts` — ссылки tel / WhatsApp / mailto в карточках и строках.
 - **Тесты / разметка:** `card-trade-point-large-{id}`, `card-trade-point-grid-{id}`, `row-trade-point-list-{id}`, `row-trade-point-table-{id}`, `cell-trade-point-table-photo-{id}`.
-- **Архив:** подсказка `text-trade-points-archived-dealers-hidden-hint`; точки архивных клиентов не в рабочем списке до восстановления клиента.
+- **Архив:** подсказка `text-trade-points-archived-dealers-hidden-hint`; точки архивных клиентов не в рабочем списке до восстановления клиента. Режим «Показать архив» на странице ТТ: **только архивный срез** — отдельно архивированные ТТ у **активных** клиентов и **все** ТТ клиентов из `archivedDealersById` (без смешения с рабочим списком).
 - **Массовый выбор:** `panel-trade-points-bulk-actions`, чекбоксы во всех режимах плотности.
 
 - **Юрлица:** `components/dealer-legal-entities-section.tsx` — диалог формы, сохранение в `legalEntityOverridesByDealerId`, архив в `archivedLegalEntitiesById`, дубль ИНН, `SectionSaveButton` при актуализации; хелперы в `lib/client-base-actualization-legal-entities.ts`. Тот же блок подключён в **чистой анкете** `components/dealer-manual-actualization-page.tsx` (аккордеон «Юридические лица»), а не только в полной карточке `dealer-card-foundation.tsx`.
@@ -253,7 +255,7 @@
 
 ## Архив клиентов и торговых точек
 
-- **Архив клиента** (`archivedDealersById`) — это soft-delete: клиент **скрыт** из рабочей клиентской базы и из списка торговых точек (точки этого клиента не строятся в `buildTradePointListForActualization`, пока клиент в архиве).
+- **Архив клиента** (`archivedDealersById`) — это soft-delete: клиент **скрыт** из рабочей клиентской базы; в **рабочем** списке торговых точек точки этого клиента не строятся, пока клиент в архиве. В **режиме архива** на странице ТТ они снова доступны в составе архивного среза (см. `buildTradePointListForActualization` с `archivedTradePointsOnly`).
 - **Рабочая база** (`includeArchivedDealers` не задан или `false` в `buildDealerBaseRowsWithActualization`) — архивные клиенты в выдачу **не попадают**.
 - **Режим «Показать архив»** на странице клиентской базы — в списке **только** клиенты из `archivedDealersById`; подсказка в UI поясняет, что правки карточки не возвращают клиента в рабочую базу.
 - **Карточка архивного клиента** открывается для просмотра и редактирования: `persist` сохраняет изменения, запись остаётся в `archivedDealersById` — клиент **не возвращается** в общую базу автоматически.

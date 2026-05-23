@@ -1,7 +1,8 @@
 /**
  * Единый список торговых точек для актуализации (клиентская база + manual/release).
- * Клиенты из `archivedDealersById` не участвуют: их точки не попадают в список.
- * Архивные ТТ (`archivedTradePointsById`) исключаются, если `includeArchivedTradePoints` не true.
+ * Рабочий список: только неархивные клиенты; архивные ТТ скрыты, если не запрошено иное.
+ * Режим `archivedTradePointsOnly`: только архив — ТТ с флагом архива у активных клиентов
+ * плюс все ТТ клиентов из `archivedDealersById` (без смешения с рабочим списком).
  */
 
 import type { ActualizationState, TradePointShowcaseActualization } from "@/lib/client-base-actualization-state";
@@ -68,6 +69,8 @@ export type TradePointListRow = {
 export type BuildTradePointListOptions = {
   /** Показать ТТ с флагом архива в actualization (по умолчанию только рабочие). */
   includeArchivedTradePoints?: boolean;
+  /** Режим «только архив»: в списке исключительно архивные ТТ (рабочие скрыты). */
+  archivedTradePointsOnly?: boolean;
 };
 
 function dealerMergedFields(dealerId: string, act: ActualizationState): Record<string, unknown> {
@@ -148,105 +151,122 @@ export function buildTradePointListForActualization(
   profile: ReleaseDemoProfile,
   options?: BuildTradePointListOptions,
 ): TradePointListRow[] {
+  const archivedOnly = options?.archivedTradePointsOnly === true;
   const includeArchivedTp = options?.includeArchivedTradePoints === true;
-  const dealers = buildDealerBaseRowsWithActualization(act, profile, { includeArchivedDealers: false });
-  const scoped = roleScopedDealerRows(dealers, profile);
-  const out: TradePointListRow[] = [];
+  const byTradePointId = new Map<string, TradePointListRow>();
 
-  for (const dealer of scoped) {
-    if (act.archivedDealersById[dealer.id]) continue;
-    const merged = mergeTradePointsForActualization(dealer, act);
-    for (const entry of merged) {
-      if (!includeArchivedTp && entry.isArchived) continue;
-      const tp = entry.point;
-      const sh = act.tradePointShowcaseActualizationById[tp.id];
-      const { bucket, label: showcaseBucketLabel } = deriveShowcaseBucket(sh);
-      const caps = portalCapsFromShowcase(sh);
-      const selected = sh?.selectedShowcaseModels ?? [];
-      const portalOverfill = computeShowcasePortalOverfill(selected, caps, getProductById);
-      const summary = computePortalSummary(sh);
-      const portalsUnfilled =
-        sh?.hasShowcase === true &&
-        !(
-          sh.totalPortals != null ||
-          sh.tandoorTotalPortals != null ||
-          sh.entrancePortals != null ||
-          sh.interiorPortals != null
-        );
-      const hasFreePortals =
-        (summary.entrancePotential != null && summary.entrancePotential > 0) ||
-        (summary.interiorPotential != null && summary.interiorPotential > 0) ||
-        (summary.freeOrCompetitor != null && summary.freeOrCompetitor > 0);
+  const pushRowForEntry = (dealer: DealerRow, entry: MergedTradePointEntry): void => {
+    const tp = entry.point;
+    const sh = act.tradePointShowcaseActualizationById[tp.id];
+    const { bucket, label: showcaseBucketLabel } = deriveShowcaseBucket(sh);
+    const caps = portalCapsFromShowcase(sh);
+    const selected = sh?.selectedShowcaseModels ?? [];
+    const portalOverfill = computeShowcasePortalOverfill(selected, caps, getProductById);
+    const summary = computePortalSummary(sh);
+    const portalsUnfilled =
+      sh?.hasShowcase === true &&
+      !(
+        sh.totalPortals != null ||
+        sh.tandoorTotalPortals != null ||
+        sh.entrancePortals != null ||
+        sh.interiorPortals != null
+      );
+    const hasFreePortals =
+      (summary.entrancePotential != null && summary.entrancePotential > 0) ||
+      (summary.interiorPotential != null && summary.interiorPotential > 0) ||
+      (summary.freeOrCompetitor != null && summary.freeOrCompetitor > 0);
 
-      const matrixDeficitCount = countShowcaseMatrixDeficitForDealer(dealer, act, sh);
-      const showcaseNewTasksCount = (sh?.showcaseMatrixTasks ?? []).filter((t) => t.status === "new").length;
-      const modelsOnShowcaseCount = selected.length;
-      const portalsTotal = sh?.totalPortals ?? sh?.tandoorTotalPortals ?? null;
+    const matrixDeficitCount = countShowcaseMatrixDeficitForDealer(dealer, act, sh);
+    const showcaseNewTasksCount = (sh?.showcaseMatrixTasks ?? []).filter((t) => t.status === "new").length;
+    const modelsOnShowcaseCount = selected.length;
+    const portalsTotal = sh?.totalPortals ?? sh?.tandoorTotalPortals ?? null;
 
-      const tradePointDisplayCode = getTradePointDisplayCodeForActualization(tp);
-      const dealerClientCode = dealerClientCodeDisplay(dealer, act);
-      const mgr = getDealerManagerDisplay(dealer);
-      const rm = getDealerRegionalManagerDisplay(dealer);
-      const rop = getDealerRopDisplay(dealer);
-      const uo = act.unloadingOrderByDealerId?.[dealer.id];
-      const unloading =
-        typeof uo === "number" && Number.isFinite(uo)
-          ? uo
-          : typeof dealer.distribution === "number"
-            ? dealer.distribution
-            : null;
+    const tradePointDisplayCode = getTradePointDisplayCodeForActualization(tp);
+    const dealerClientCode = dealerClientCodeDisplay(dealer, act);
+    const mgr = getDealerManagerDisplay(dealer);
+    const rm = getDealerRegionalManagerDisplay(dealer);
+    const rop = getDealerRopDisplay(dealer);
+    const uo = act.unloadingOrderByDealerId?.[dealer.id];
+    const unloading =
+      typeof uo === "number" && Number.isFinite(uo)
+        ? uo
+        : typeof dealer.distribution === "number"
+          ? dealer.distribution
+          : null;
 
-      const searchHaystack = buildHaystack([
-        tp.name,
-        tp.city,
-        tp.address,
-        dealer.name,
-        tradePointDisplayCode,
-        dealerClientCode,
-        tp.releaseCode,
-        mgr,
-        rm,
-        rop,
-      ]);
+    const searchHaystack = buildHaystack([
+      tp.name,
+      tp.city,
+      tp.address,
+      dealer.name,
+      tradePointDisplayCode,
+      dealerClientCode,
+      tp.releaseCode,
+      mgr,
+      rm,
+      rop,
+    ]);
 
-      out.push({
-        tradePointId: tp.id,
-        dealerId: dealer.id,
-        dealer,
-        point: tp,
-        entry,
-        tradePointDisplayCode,
-        dealerClientCode,
-        dealerName: dealer.name,
-        tradePointName: tp.name,
-        city: tp.city?.trim() || "—",
-        address: tp.address?.trim() || "—",
-        tradePointFormatLabel: tradePointFormatFromPoint(tp),
-        manager: mgr || "—",
-        regionalManager: rm || "—",
-        rop: rop || "—",
-        clientCategory: dealer.clientCategory,
-        clientCategoryLabel: getClientCategoryLabel(dealer.clientCategory),
-        showcaseBucket: bucket,
-        showcaseBucketLabel,
-        portalsTotal,
-        modelsOnShowcaseCount,
-        matrixDeficitCount,
-        showcaseNewTasksCount,
-        portalOverfill,
-        portalsUnfilled,
-        hasFreePortals,
-        hasShowcase: sh?.hasShowcase ?? null,
-        showcaseUpdatedAt: sh?.updatedAt ?? null,
-        unloadingOrder: unloading,
-        isArchived: entry.isArchived,
-        isVirtual: isVirtualDefaultTradePointId(dealer.id, tp.id),
-        searchHaystack,
-      });
+    const dealerArchived = Boolean(act.archivedDealersById[dealer.id]);
+    byTradePointId.set(tp.id, {
+      tradePointId: tp.id,
+      dealerId: dealer.id,
+      dealer,
+      point: tp,
+      entry,
+      tradePointDisplayCode,
+      dealerClientCode,
+      dealerName: dealer.name,
+      tradePointName: tp.name,
+      city: tp.city?.trim() || "—",
+      address: tp.address?.trim() || "—",
+      tradePointFormatLabel: tradePointFormatFromPoint(tp),
+      manager: mgr || "—",
+      regionalManager: rm || "—",
+      rop: rop || "—",
+      clientCategory: dealer.clientCategory,
+      clientCategoryLabel: getClientCategoryLabel(dealer.clientCategory),
+      showcaseBucket: bucket,
+      showcaseBucketLabel,
+      portalsTotal,
+      modelsOnShowcaseCount,
+      matrixDeficitCount,
+      showcaseNewTasksCount,
+      portalOverfill,
+      portalsUnfilled,
+      hasFreePortals,
+      hasShowcase: sh?.hasShowcase ?? null,
+      showcaseUpdatedAt: sh?.updatedAt ?? null,
+      unloadingOrder: unloading,
+      isArchived: entry.isArchived || dealerArchived,
+      isVirtual: isVirtualDefaultTradePointId(dealer.id, tp.id),
+      searchHaystack,
+    });
+  };
+
+  const collectForDealers = (dealers: DealerRow[], keepEntry: (e: MergedTradePointEntry) => boolean): void => {
+    const scoped = roleScopedDealerRows(dealers, profile);
+    for (const dealer of scoped) {
+      if (!archivedOnly && act.archivedDealersById[dealer.id]) continue;
+      const merged = mergeTradePointsForActualization(dealer, act);
+      for (const entry of merged) {
+        if (!keepEntry(entry)) continue;
+        pushRowForEntry(dealer, entry);
+      }
     }
+  };
+
+  if (archivedOnly) {
+    const activeDealers = buildDealerBaseRowsWithActualization(act, profile, { includeArchivedDealers: false });
+    collectForDealers(activeDealers, (e) => e.isArchived);
+    const archivedDealers = buildDealerBaseRowsWithActualization(act, profile, { includeArchivedDealers: true });
+    collectForDealers(archivedDealers, () => true);
+    return Array.from(byTradePointId.values());
   }
 
-  return out;
+  const dealers = buildDealerBaseRowsWithActualization(act, profile, { includeArchivedDealers: false });
+  collectForDealers(dealers, (e) => includeArchivedTp || !e.isArchived);
+  return Array.from(byTradePointId.values());
 }
 
 /** Число неархивных ТТ в зоне ответственности (для бейджа в меню). */

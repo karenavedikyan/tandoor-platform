@@ -15,6 +15,8 @@ type TeamSummaryCardProps = {
   showCta?: boolean;
   /** Ссылки-переходы по KPI команды (только для полной карточки на главной). */
   showTeamMetricLinks?: boolean;
+  /** Короткая подпись про рабочую базу / архив. */
+  footnote?: string;
 };
 
 const drillLinkClass =
@@ -27,6 +29,7 @@ export function TeamSummaryCard({
   ctaLabel,
   showCta = true,
   showTeamMetricLinks = false,
+  footnote,
 }: TeamSummaryCardProps) {
   const tid = summary.teamId;
   const att = getAttentionLevel(summary.pctAttention);
@@ -157,6 +160,12 @@ export function TeamSummaryCard({
             </p>
           </div>
         )}
+
+        {footnote ? (
+          <p className="text-[11px] leading-snug text-muted-foreground" data-testid={`text-team-summary-footnote-${tid}`}>
+            {footnote}
+          </p>
+        ) : null}
 
         {showCta ? (
           <Button asChild size="sm" className="w-full min-w-0 font-semibold sm:w-auto" data-testid={`button-team-summary-open-${tid}`}>

@@ -106,7 +106,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { buildTeamSummary } from "@/lib/team-summary";
+import { buildTeamSummaryFromRows } from "@/lib/team-summary";
 import { TeamSummaryCard } from "@/components/team-summary-card";
 import { buildCityConcentrationRows, buildDealerBaseAllCitiesHref, buildDealerBaseCityDrillHref } from "@/lib/city-concentration";
 import { buildBrowserHashAppHref, buildHashPath, useRouteSearchParams } from "@/lib/hash-route-utils";
@@ -1174,6 +1174,17 @@ export default function DealerBase() {
     [mergedRowsForDealerBase, profile],
   );
 
+  /** Рабочая портфельная база (без архивных клиентов): KPI команд и карточки менеджеров всегда от неё, не от режима списка «архив». */
+  const mergedRowsActivePortfolio = useMemo(() => {
+    if (!actx.enabled) return DEALER_BASE_ROWS;
+    return buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, { includeArchivedDealers: false });
+  }, [actx.enabled, teamActualizationPlane, profile]);
+
+  const scopedActivePortfolioRows = useMemo(
+    () => roleScopedDealerRows(mergedRowsActivePortfolio, profile),
+    [mergedRowsActivePortfolio, profile],
+  );
+
   useEffect(() => {
     try {
       const raw = localStorage.getItem(DEALER_BASE_FILTERS_COLLAPSED_LS_KEY);
@@ -1463,15 +1474,16 @@ export default function DealerBase() {
   }, [access, profile, ropTeam, firstRopTeamId]);
 
   const teamRowsForModes = useMemo(
-    () => scopedRows.filter((r) => r.releaseTeamId === effectiveTeamIdForTeamModes),
-    [scopedRows, effectiveTeamIdForTeamModes],
+    () => scopedActivePortfolioRows.filter((r) => r.releaseTeamId === effectiveTeamIdForTeamModes),
+    [scopedActivePortfolioRows, effectiveTeamIdForTeamModes],
   );
 
   const teamSummaryForCompactBanner = useMemo(() => {
     if (access !== "sales_director" && access !== "team_lead") return null;
     if (!DEALER_BASE_TEAM_WORK_VIEWS.includes(workView)) return null;
-    return buildTeamSummary(effectiveTeamIdForTeamModes);
-  }, [access, workView, effectiveTeamIdForTeamModes]);
+    const rows = scopedActivePortfolioRows.filter((r) => r.releaseTeamId === effectiveTeamIdForTeamModes);
+    return buildTeamSummaryFromRows(effectiveTeamIdForTeamModes, rows);
+  }, [access, workView, effectiveTeamIdForTeamModes, scopedActivePortfolioRows]);
 
   const teamRopDisplayLabel = useMemo(
     () => getRopOptions().find((o) => o.teamId === effectiveTeamIdForTeamModes)?.label ?? "—",
@@ -1499,6 +1511,12 @@ export default function DealerBase() {
     isRopOrManagerAllFilter(manager);
 
   const resultsContextLine = useMemo(() => {
+    if (actx.enabled && showArchivedDealers) {
+      if ((access === "sales_director" || access === "team_lead") && DEALER_BASE_TEAM_WORK_VIEWS.includes(workView)) {
+        return `Режим архива · команда: ${teamRopDisplayLabel}`;
+      }
+      return "Режим архива: показаны только архивные клиенты.";
+    }
     if ((access === "sales_director" || access === "team_lead") && DEALER_BASE_TEAM_WORK_VIEWS.includes(workView)) {
       return `Показана команда: ${teamRopDisplayLabel}`;
     }
@@ -1521,7 +1539,7 @@ export default function DealerBase() {
       }
     }
     return null;
-  }, [access, workView, manager, selectedManagerLabel, teamRopDisplayLabel]);
+  }, [actx.enabled, showArchivedDealers, access, workView, manager, selectedManagerLabel, teamRopDisplayLabel]);
 
   const managerScopedRows = useMemo(() => {
     if (isRopOrManagerAllFilter(manager)) return pickerFiltered;
@@ -2397,12 +2415,17 @@ export default function DealerBase() {
           ) : null}
           {actx.enabled ? (
             <div
-              className="flex max-w-md flex-row items-center justify-between gap-3 rounded-xl border border-border/80 bg-muted/15 px-4 py-3"
+              className="flex max-w-lg flex-col gap-2 rounded-xl border border-border/80 bg-muted/15 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
               data-testid="section-dealers-archived-toggle"
             >
-              <Label htmlFor="toggle-dealers-show-archived" className="cursor-pointer text-sm font-medium text-foreground">
-                Показать архив
-              </Label>
+              <div className="min-w-0 space-y-1">
+                <Label htmlFor="toggle-dealers-show-archived" className="cursor-pointer text-sm font-medium text-foreground">
+                  Режим архива клиентов
+                </Label>
+                <p className="text-[11px] text-muted-foreground">
+                  Включено — в списке <span className="font-medium text-foreground">только архивные</span> клиенты. Выключено — только активная рабочая база (KPI команд и карточки менеджеров всегда по активной базе).
+                </p>
+              </div>
               <Switch
                 id="toggle-dealers-show-archived"
                 checked={showArchivedDealers}
@@ -3156,6 +3179,11 @@ export default function DealerBase() {
               ctaHref={buildBrowserHashAppHref("/dealer-base", { team: teamSummaryForCompactBanner.teamId })}
               ctaLabel="Открыть команду"
               showCta={false}
+              footnote={
+                actx.enabled
+                  ? "Показаны только активные клиенты и точки команды (архив не учитывается)."
+                  : undefined
+              }
             />
           </div>
         ) : null}
@@ -3168,10 +3196,15 @@ export default function DealerBase() {
                   <CardHeader className="pb-2">
                     <CardTitle className="text-lg">{rop.label}</CardTitle>
                     <p className="text-xs text-muted-foreground">Команда · карточки менеджеров</p>
+                    {actx.enabled ? (
+                      <p className="text-[11px] text-muted-foreground">
+                        Счётчики по активной базе (без архивных клиентов и точек).
+                      </p>
+                    ) : null}
                   </CardHeader>
                   <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     {mgrs.map((m) => {
-                      const rows = mergedRowsForDealerBase.filter(
+                      const rows = mergedRowsActivePortfolio.filter(
                         (r) => r.releaseTeamId === rop.teamId && rowBelongsToManager(r, m),
                       );
                       const st = managerStatsForRows(rows);

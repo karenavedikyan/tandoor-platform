@@ -15,7 +15,10 @@ import {
   type SalesUser,
 } from "@/lib/sales-control-data";
 import { isRopOrManagerAllFilter } from "@/lib/rop-manager-filters";
-import { mergeLegalEntitiesForActualization, mergeTradePointsForActualization } from "@/lib/client-base-actualization-data-merge";
+import {
+  mergeLegalEntitiesForActualization,
+  mergeTradePointsActiveForActualization,
+} from "@/lib/client-base-actualization-data-merge";
 import { buildTradePointListForActualization } from "@/lib/trade-point-list-for-actualization";
 
 /** Безопасная нормализация текста из API/состояния (undefined, не-строки). */
@@ -1048,7 +1051,7 @@ export function computeTopKpis(
     }
   }
 
-  const tpRows = buildTradePointListForActualization(state, profile, { includeArchivedTradePoints: true });
+  const tpRows = buildTradePointListForActualization(state, profile, { includeArchivedTradePoints: false });
   let showcasesFilled = 0;
   let deficitTradePoints = 0;
   for (const r of tpRows) {
@@ -1120,7 +1123,7 @@ export function computeQualityMetrics(state: ActualizationState, profile: Releas
     if (em && em.includes("@")) dEmail += 1;
     const le = mergeLegalEntitiesForActualization(r, state).length > 0;
     if (le) dLegal += 1;
-    const tps = mergeTradePointsForActualization(r, state);
+    const tps = mergeTradePointsActiveForActualization(r, state);
     if (tps.length > 0) dTp += 1;
   }
 
@@ -1449,7 +1452,7 @@ export function computeProblemLines(state: ActualizationState, profile: ReleaseD
   }
 
   for (const r of scoped) {
-    const tps = mergeTradePointsForActualization(r, state);
+    const tps = mergeTradePointsActiveForActualization(r, state);
     if (tps.length === 0) lines.push({ id: `notp-${r.id}`, severity: "info", text: `Клиент без ТТ: ${r.name}` });
   }
 

@@ -2,7 +2,7 @@
  * Слияние данных клиентской базы с ActualizationState (поверх release + localStorage overrides).
  */
 
-import type { DealerRow, DealerStatus, DealerTradePoint } from "@/lib/dealer-base-mock-data";
+import type { DealerRow, DealerFormat, DealerStatus, DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import {
   type DealerTerms,
   type DealerSalesKpis,
@@ -439,6 +439,23 @@ export function mergeTradePointsActiveForActualization(row: DealerRow, act: Actu
   return mergeTradePointsForActualization(row, act).filter((e) => !e.isArchived);
 }
 
+/**
+ * Для списков/KPI рабочей базы: `outlets`, `tradePoints` и `format` отражают только неархивные ТТ.
+ * В режиме списка «только архивные клиенты» оставляем полный merge ТТ (в т.ч. архивные точки) для карточки архива.
+ */
+export function applyDealerRowTradePointOutletProjection(
+  row: DealerRow,
+  act: ActualizationState,
+  archivedDealerListMode: boolean,
+): DealerRow {
+  const merged = mergeTradePointsForActualization(row, act);
+  const slice = archivedDealerListMode ? merged : merged.filter((e) => !e.isArchived);
+  const points = slice.map((e) => e.point);
+  const outlets = points.length;
+  const format: DealerFormat = outlets > 1 ? "сетевой" : "одиночный";
+  return { ...row, tradePoints: points, outlets, format };
+}
+
 /** Юрлица: база из LS+паспорт + overrides/archived из actualization. */
 export function mergeLegalEntitiesForActualization(row: DealerRow, act: ActualizationState): MergedDealerLegalEntity[] {
   const base = isManualActualizationDealerId(row.id) ? [] : getMergedDealerLegalEntities(row);
@@ -645,11 +662,29 @@ export function buildDealerBaseRowsWithActualization(
     return !isArchived;
   };
 
+  const mapBuilt = (baseRow: DealerRow): DealerRow => {
+    const mergedFields = mergeDealerRowWithActualization(baseRow, act);
+    return applyDealerRowTradePointOutletProjection(mergedFields, act, archivedListMode);
+  };
+
   const manuals = Object.values(act.manuallyCreatedDealersById)
     .filter((m) => includeId(m.id))
-    .map((m) => mergeDealerRowWithActualization(manualDealerToRow(m, profile), act));
-  const rest = DEALER_BASE_ROWS.filter((r) => includeId(r.id)).map((r) => mergeDealerRowWithActualization(r, act));
+    .map((m) => mapBuilt(manualDealerToRow(m, profile)));
+  const rest = DEALER_BASE_ROWS.filter((r) => includeId(r.id)).map((r) => mapBuilt(r));
   return [...manuals, ...rest];
+}
+
+/**
+ * Активные строки + архивные-only (для подписей событий активности по id, которые уже в архиве клиентов).
+ */
+export function buildDealerBaseRowsUnionForActivityLabels(act: ActualizationState, profile: ReleaseDemoProfile): DealerRow[] {
+  const active = buildDealerBaseRowsWithActualization(act, profile, { includeArchivedDealers: false });
+  const archivedOnly = buildDealerBaseRowsWithActualization(act, profile, { includeArchivedDealers: true });
+  const byId = new Map(active.map((r) => [r.id, r]));
+  for (const r of archivedOnly) {
+    if (!byId.has(r.id)) byId.set(r.id, r);
+  }
+  return Array.from(byId.values());
 }
 
 /** Карточка торговой точки: дилер из actualization + merge ТТ. */
