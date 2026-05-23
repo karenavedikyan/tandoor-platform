@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
-import { ArrowRight, ChevronRight, Info, MapPinned } from "lucide-react";
+import { ChevronRight, Info, MapPinned } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -43,7 +43,7 @@ export type TerritoryCockpitDetail =
   | { kind: "city"; cityId: string };
 
 type CitySortKey = "dealers" | "tradePoints" | "tasks" | "attention";
-type CityChip = "all" | "tasks" | "noTp" | "top";
+type CityChip = "all" | "tasks" | "noTp" | "withTp" | "top";
 
 function planCardTestId(key: TerritoryPlanLine["key"]) {
   if (key === "mk") return "card-territory-plan-mk";
@@ -124,6 +124,7 @@ export function TerritoryCardCockpitFactual({
     const filtered = sorted.filter(({ c, hasTop }) => {
       if (cityChip === "tasks") return c.tasksCount > 0;
       if (cityChip === "noTp") return c.tradePointsCount === 0;
+      if (cityChip === "withTp") return c.tradePointsCount > 0;
       if (cityChip === "top") return hasTop;
       return true;
     });
@@ -131,6 +132,43 @@ export function TerritoryCardCockpitFactual({
   }, [cities, citySort, cityChip, dealers, risks]);
 
   const visibleCities = isMobile && !cityListExpanded ? citiesEnriched.slice(0, 8) : citiesEnriched;
+
+  const activeClients = summary.dealersActive;
+  const activeTradePoints = summary.tradePointsTotal;
+
+  const structureMetrics = useMemo(() => {
+    const m = Math.max(activeClients, activeTradePoints, 1);
+    const ratio = activeClients > 0 ? activeTradePoints / activeClients : 0;
+    const ratioLabel =
+      activeClients > 0
+        ? ratio.toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        : "—";
+    return { m, ratioLabel };
+  }, [activeClients, activeTradePoints]);
+
+  const topCitiesBar = useMemo(() => {
+    const named = cities
+      .filter((c) => c.name !== "Без города" && c.dealersCount > 0)
+      .sort((a, b) => b.dealersCount - a.dealersCount || a.name.localeCompare(b.name, "ru"));
+    const top = named.slice(0, 5);
+    const maxD = top.reduce((mx, c) => Math.max(mx, c.dealersCount), 0) || 1;
+    const noCity = cities.find((c) => c.name === "Без города" && c.dealersCount > 0);
+    return { top, maxD, showChart: named.length >= 2, noCity };
+  }, [cities]);
+
+  const insightMetrics = useMemo(() => {
+    const citiesNoTp = cities.filter((c) => c.dealersCount > 0 && c.tradePointsCount === 0).length;
+    const citiesWithTp = cities.filter((c) => c.tradePointsCount > 0).length;
+    return { citiesNoTp, citiesWithTp };
+  }, [cities]);
+
+  const maxDealersInList = useMemo(
+    () => cities.reduce((mx, c) => Math.max(mx, c.dealersCount), 0) || 1,
+    [cities],
+  );
+
+  const openTasksCount = summary.tasksOpen;
+  const controlTpCount = livePack.factualShowcaseMatrixControlledTpCount;
 
   const detailTitle = (d: TerritoryCockpitDetail | null): string => {
     if (!d) return "";
@@ -352,15 +390,10 @@ export function TerritoryCardCockpitFactual({
 
   const detailBody = detail ? renderDetailBody(detail) : null;
 
-  const kpiOpen = (kind: TerritoryCockpitDetail["kind"]) => {
-    if (kind === "city") return 0;
-    return detail?.kind === kind ? 1 : 0;
-  };
-
   return (
     <TooltipProvider delayDuration={200}>
       <div
-        className="min-w-0 max-w-full space-y-4 overflow-x-hidden pb-24 lg:flex lg:items-start lg:gap-6 lg:pb-8"
+        className="min-w-0 max-w-full space-y-4 overflow-x-hidden pb-32 lg:flex lg:items-start lg:gap-6 lg:pb-8"
         data-testid="page-territory-card"
       >
         <div className="min-w-0 flex-1 space-y-4" data-testid="section-territory-cockpit">
@@ -472,6 +505,180 @@ export function TerritoryCardCockpitFactual({
             </div>
           </div>
 
+          <div className={cn("grid gap-3", topCitiesBar.showChart && "lg:grid-cols-2")}>
+            <Card className="border-[#E3E6F3] shadow-sm" data-testid="section-territory-structure-infographic">
+              <CardContent className="space-y-3 p-3 sm:p-4">
+                <h2 className="text-sm font-semibold text-[#222631]">Структура территории</h2>
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-[#222631]">
+                  <span>
+                    <span className="font-semibold tabular-nums">{activeClients}</span> клиентов
+                  </span>
+                  <span>
+                    <span className="font-semibold tabular-nums">{activeTradePoints}</span> торговых точек
+                  </span>
+                </div>
+                <p className="text-xs text-[#8F96B0]" data-testid="text-territory-trade-point-ratio">
+                  {structureMetrics.ratioLabel === "—"
+                    ? "ТТ на клиента: нет активных клиентов для расчёта"
+                    : `${structureMetrics.ratioLabel} ТТ на клиента`}
+                </p>
+                <div className="space-y-2">
+                  <div>
+                    <div className="mb-0.5 flex justify-between text-[11px] text-[#8F96B0]">
+                      <span>Клиенты</span>
+                      <span className="tabular-nums text-[#222631]">{activeClients}</span>
+                    </div>
+                    <div className="h-2.5 overflow-hidden rounded-full bg-[#EEEFF6]">
+                      <div
+                        className="h-full rounded-full bg-[#9ACA3C] transition-colors hover:bg-[#86B832]"
+                        style={{ width: `${(activeClients / structureMetrics.m) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <div className="mb-0.5 flex justify-between text-[11px] text-[#8F96B0]">
+                      <span>Торговые точки</span>
+                      <span className="tabular-nums text-[#222631]">{activeTradePoints}</span>
+                    </div>
+                    <div className="h-2.5 overflow-hidden rounded-full bg-[#EEEFF6]">
+                      <div
+                        className="h-full rounded-full bg-[#9ACA3C]/85 transition-colors hover:bg-[#86B832]"
+                        style={{ width: `${(activeTradePoints / structureMetrics.m) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+                <p className="text-[11px] leading-snug text-[#8F96B0]">
+                  {activeTradePoints < activeClients
+                    ? "Есть клиенты без торговых точек"
+                    : "Покрытие торговыми точками заполнено"}
+                </p>
+              </CardContent>
+            </Card>
+
+            {topCitiesBar.showChart ? (
+              <Card className="border-[#E3E6F3] shadow-sm" data-testid="section-territory-top-cities-chart">
+                <CardContent className="space-y-2 p-3 sm:p-4">
+                  <h2 className="text-sm font-semibold text-[#222631]">Топ городов по клиентам</h2>
+                  <ul className="space-y-2">
+                    {topCitiesBar.top.map((c) => {
+                      const w = Math.round((c.dealersCount / topCitiesBar.maxD) * 100);
+                      return (
+                        <li key={c.id}>
+                          <button
+                            type="button"
+                            className="flex w-full min-w-0 items-center gap-2 rounded-lg px-1 py-1.5 text-left text-sm text-[#222631] hover:bg-[#EEEFF6]/80"
+                            data-testid={`row-territory-top-city-${c.id}`}
+                            onClick={() => openDetail({ kind: "city", cityId: c.id })}
+                          >
+                            <span className="w-[7.5rem] shrink-0 truncate font-medium sm:w-36">{c.name}</span>
+                            <span className="min-w-0 flex-1">
+                              <span className="flex h-2 overflow-hidden rounded-full bg-[#EEEFF6]">
+                                <span
+                                  className="rounded-full bg-[#9ACA3C] transition-colors hover:bg-[#86B832]"
+                                  style={{ width: `${w}%` }}
+                                />
+                              </span>
+                            </span>
+                            <span className="shrink-0 tabular-nums text-xs text-[#222631]">
+                              {c.dealersCount}
+                              <span className="text-[#8F96B0]"> · ТТ {c.tradePointsCount}</span>
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  {topCitiesBar.noCity ? (
+                    <button
+                      type="button"
+                      className="flex w-full items-center justify-between border-t border-[#E3E6F3] pt-2 text-left text-xs text-[#8F96B0] hover:text-[#222631]"
+                      data-testid={`row-territory-top-city-${topCitiesBar.noCity.id}`}
+                      onClick={() => openDetail({ kind: "city", cityId: topCitiesBar.noCity!.id })}
+                    >
+                      <span className="truncate font-medium text-[#222631]">Без города</span>
+                      <span className="tabular-nums">
+                        {topCitiesBar.noCity.dealersCount} клиентов · ТТ {topCitiesBar.noCity.tradePointsCount}
+                      </span>
+                    </button>
+                  ) : null}
+                </CardContent>
+              </Card>
+            ) : null}
+          </div>
+
+          <section className="space-y-2" data-testid="section-territory-insights">
+            <h2 className="text-sm font-semibold text-[#222631]">Что проверить</h2>
+            <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+              <button
+                type="button"
+                className={cn(
+                  "rounded-xl border border-[#E3E6F3] bg-[#FFFFFF] p-3 text-left shadow-xs transition-colors hover:border-primary/40 hover:bg-[#EEEFF6]/60",
+                  cityChip === "noTp" && "border-primary/50 ring-1 ring-primary/20",
+                )}
+                data-testid="card-territory-insight-without-trade-points"
+                onClick={() => {
+                  setCityChip("noTp");
+                  setCitySort("dealers");
+                }}
+              >
+                <p className="text-[11px] font-medium text-[#8F96B0]">Клиенты без ТТ</p>
+                <p className="mt-1 text-lg font-semibold tabular-nums text-[#222631]">{insightMetrics.citiesNoTp}</p>
+                <p className="mt-1 text-[10px] text-[#8F96B0]">
+                  {insightMetrics.citiesNoTp === 0 ? "Нет городов только с клиентами без ТТ" : "городов с клиентами и без точек"}
+                </p>
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  "rounded-xl border border-[#E3E6F3] bg-[#FFFFFF] p-3 text-left shadow-xs transition-colors hover:border-primary/40 hover:bg-[#EEEFF6]/60",
+                  cityChip === "withTp" && "border-primary/50 ring-1 ring-primary/20",
+                )}
+                data-testid="card-territory-insight-cities-with-trade-points"
+                onClick={() => {
+                  setCityChip("withTp");
+                  setCitySort("tradePoints");
+                }}
+              >
+                <p className="text-[11px] font-medium text-[#8F96B0]">Города с ТТ</p>
+                <p className="mt-1 text-lg font-semibold tabular-nums text-[#222631]">{insightMetrics.citiesWithTp}</p>
+                <p className="mt-1 text-[10px] text-[#8F96B0]">
+                  {insightMetrics.citiesWithTp === 0 ? "Нет городов с торговыми точками" : "населённых пунктов с точками"}
+                </p>
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  "rounded-xl border border-[#E3E6F3] bg-[#FFFFFF] p-3 text-left shadow-xs transition-colors hover:border-primary/40 hover:bg-[#EEEFF6]/60",
+                  detail?.kind === "kpi-showcase-tasks" && "border-primary/50 ring-1 ring-primary/20",
+                )}
+                data-testid="card-territory-insight-with-tasks"
+                onClick={() => openDetail({ kind: "kpi-showcase-tasks" })}
+              >
+                <p className="text-[11px] font-medium text-[#8F96B0]">Открытые задачи</p>
+                <p className="mt-1 text-lg font-semibold tabular-nums text-[#222631]">{openTasksCount}</p>
+                <p className="mt-1 text-[10px] text-[#8F96B0]">
+                  {openTasksCount === 0 ? "Нет открытых задач" : "по плану витрины"}
+                </p>
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  "rounded-xl border border-[#E3E6F3] bg-[#FFFFFF] p-3 text-left shadow-xs transition-colors hover:border-primary/40 hover:bg-[#EEEFF6]/60",
+                  detail?.kind === "kpi-showcase-control" && "border-primary/50 ring-1 ring-primary/20",
+                )}
+                data-testid="card-territory-insight-showcase-control"
+                onClick={() => openDetail({ kind: "kpi-showcase-control" })}
+              >
+                <p className="text-[11px] font-medium text-[#8F96B0]">Контроль витрины</p>
+                <p className="mt-1 text-lg font-semibold tabular-nums text-[#222631]">{controlTpCount}</p>
+                <p className="mt-1 text-[10px] text-[#8F96B0]">
+                  {controlTpCount === 0 ? "Нет сохранённого контроля" : "ТТ с сохранением"}
+                </p>
+              </button>
+            </div>
+          </section>
+
           {planLines.length === 0 ? (
             <Card className="border-dashed border-[#E3E6F3] bg-[#EEEFF6]/40">
               <CardContent className="space-y-1 p-3 text-xs text-[#8F96B0]">
@@ -535,7 +742,8 @@ export function TerritoryCardCockpitFactual({
               </div>
             </div>
             <p className="text-[11px] text-[#8F96B0]">
-              Задачи в столбце — только записи плана витрины (sessionStorage) по клиентам города.
+              Полный список по выбранным фильтрам и сортировке. Задачи в строке — только записи плана витрины (sessionStorage) по
+              клиентам города.
             </p>
             <div className="flex flex-wrap gap-1">
               <Button
@@ -579,37 +787,44 @@ export function TerritoryCardCockpitFactual({
                 Топ клиентов
               </Button>
             </div>
-            <div className="divide-y divide-[#E3E6F3] rounded-xl border border-[#E3E6F3] bg-[#FFFFFF]">
+            <div className="overflow-hidden rounded-xl border border-[#E3E6F3] bg-[#FFFFFF]">
               {visibleCities.length === 0 ? (
                 <p className="p-4 text-sm text-[#8F96B0]">Нет городов по выбранным фильтрам.</p>
               ) : (
-                visibleCities.map(({ c, attention }) => (
-                  <div
-                    key={c.id}
-                    className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 hover:bg-[#EEEFF6]/60"
-                    data-testid={`row-territory-city-${c.id}`}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-[#222631]">{c.name}</p>
-                      <p className="text-[11px] text-[#8F96B0]">
-                        Клиентов: {c.dealersCount} · ТТ: {c.tradePointsCount}
-                        {c.tasksCount > 0 ? ` · Задачи: ${c.tasksCount}` : ""}
-                        {attention > 0 ? ` · Внимание: ${attention}` : ""}
-                      </p>
+                visibleCities.map(({ c, attention }) => {
+                  const share = maxDealersInList > 0 ? Math.round((c.dealersCount / maxDealersInList) * 100) : 0;
+                  const rowActive = detail?.kind === "city" && detail.cityId === c.id;
+                  return (
+                    <div key={c.id} className="border-b border-[#E3E6F3] last:border-b-0" data-testid={`row-territory-city-${c.id}`}>
+                      <button
+                        type="button"
+                        className={cn(
+                          "group flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[#EEEFF6]/60",
+                          rowActive && "bg-[#EEEFF6]/90",
+                        )}
+                        data-testid={`button-territory-city-open-${c.id}`}
+                        aria-label={`Открыть город ${c.name}`}
+                        onClick={() => openDetail({ kind: "city", cityId: c.id })}
+                      >
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-[#222631]">{c.name}</p>
+                        <div className="mt-1 h-1 overflow-hidden rounded-full bg-[#EEEFF6]">
+                          <div
+                            className="h-full rounded-full bg-[#9ACA3C]/75 transition-colors group-hover:bg-[#86B832]"
+                            style={{ width: `${share}%` }}
+                          />
+                        </div>
+                        <p className="mt-1 text-[11px] text-[#8F96B0]">
+                          Клиентов: {c.dealersCount} · ТТ: {c.tradePointsCount}
+                          {c.tasksCount > 0 ? ` · Задачи: ${c.tasksCount}` : ""}
+                          {attention > 0 ? ` · Внимание: ${attention}` : ""}
+                        </p>
+                      </div>
+                      <ChevronRight className="h-4 w-4 shrink-0 text-[#8F96B0]" aria-hidden />
+                    </button>
                     </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      className="h-8 shrink-0 gap-1 px-2 text-xs font-semibold text-primary"
-                      data-testid={`button-territory-city-open-${c.id}`}
-                      onClick={() => openDetail({ kind: "city", cityId: c.id })}
-                    >
-                      Подробнее
-                      <ArrowRight className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
             {isMobile && citiesEnriched.length > 8 ? (
