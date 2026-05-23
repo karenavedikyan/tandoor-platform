@@ -1,3 +1,4 @@
+import type { ActualizationState, ShowcaseMatrixTask } from "./client-base-actualization-state";
 import { DEALER_BASE_ROWS, type DealerRow } from "./dealer-base-mock-data";
 import { getDealerTrainingAttentionSignal, TRAINING_PROGRAM_PRODUCT_BASE } from "./training-attention";
 import {
@@ -48,7 +49,13 @@ export type MatrixTask = {
   status: MatrixTaskStatus;
   assigneeRole: MatrixTaskAssigneeRole;
   dueDate: string;
-  source: "product_matrix" | "product_training" | "showcase_distribution" | "showcase_matrix_deficit";
+  source:
+    | "product_matrix"
+    | "product_training"
+    | "showcase_distribution"
+    | "showcase_matrix_deficit"
+    /** Задачи, явно сохранённые в `ActualizationState.tradePointShowcaseActualizationById.*.showcaseMatrixTasks` (серверный merge). */
+    | "showcase_actualization_persisted";
   /** Для задач из сигнала обучения — ссылка на программу в разделе «Обучение». */
   trainingProgramId?: string;
   zone: ShowcaseZone;
@@ -399,6 +406,78 @@ export function getShowcaseBackedTasksForDealers(dealers: DealerRow[]): MatrixTa
 export function getShowcaseDistributionPlanTasksForDealers(dealers: DealerRow[]): MatrixTaskWithContext[] {
   if (dealers.length === 0) return [];
   return computeShowcaseMatrixTasksForDealers(dealers);
+}
+
+function formatPersistedShowcaseTaskDueLabel(iso: string): string {
+  const t = iso?.trim();
+  if (!t) return "—";
+  const ms = Date.parse(t);
+  if (!Number.isFinite(ms)) return "—";
+  const dt = new Date(ms);
+  const dd = String(dt.getDate()).padStart(2, "0");
+  const mm = String(dt.getMonth() + 1).padStart(2, "0");
+  const yyyy = dt.getFullYear();
+  return `${dd}.${mm}.${yyyy}`;
+}
+
+function mapShowcaseMatrixTaskToMatrixContext(
+  mt: ShowcaseMatrixTask,
+  dealer: DealerRow,
+  tradePointName: string,
+): MatrixTaskWithContext {
+  const status: MatrixTaskStatus = mt.status === "done" ? "done" : "new";
+  const title =
+    mt.reason === "matrix_required_missing"
+      ? `Обязательная модель матрицы: ${mt.productName}`
+      : `Задача витрины: ${mt.productName}`;
+  return {
+    taskId: mt.id,
+    productId: mt.productId,
+    productName: mt.productName,
+    productArticle: "MATRIX",
+    dealerId: mt.dealerId,
+    tradePointId: mt.tradePointId,
+    tradePointName,
+    type: "add_to_showcase",
+    title,
+    description: "Задача создана в форме актуализации витрины торговой точки и сохранена в базе актуализации.",
+    priority: "high",
+    status,
+    assigneeRole: "manager",
+    dueDate: formatPersistedShowcaseTaskDueLabel(mt.createdAt),
+    source: "showcase_actualization_persisted",
+    zone: "A",
+    portal: "Стенд / зона",
+    targetSamples: 1,
+    actualSamples: status === "done" ? 1 : 0,
+    insightDomain: "showcase",
+    insightLabel: "Актуализация витрины",
+    dealerName: dealer.name,
+  };
+}
+
+/**
+ * Только задачи витрины, сохранённые в merge актуализации (`showcaseMatrixTasks` по точкам).
+ * Без sessionStorage-плана, без автогенерации дефицита по локальной матрице — для РОП/директора на team plane.
+ */
+export function getActualizationPersistedShowcaseMatrixTasksForDealers(
+  dealers: DealerRow[],
+  act: ActualizationState,
+): MatrixTaskWithContext[] {
+  if (dealers.length === 0) return [];
+  const out: MatrixTaskWithContext[] = [];
+  for (const dealer of dealers) {
+    for (const point of dealer.tradePoints) {
+      if (point.status?.trim() === "Архив") continue;
+      if (act.archivedTradePointsById[point.id]) continue;
+      const sh = act.tradePointShowcaseActualizationById[point.id];
+      for (const mt of sh?.showcaseMatrixTasks ?? []) {
+        if (mt.dealerId !== dealer.id || mt.tradePointId !== point.id) continue;
+        out.push(mapShowcaseMatrixTaskToMatrixContext(mt, dealer, point.name?.trim() || point.id));
+      }
+    }
+  }
+  return out;
 }
 
 /** Ленивый кэш только матрицы товаров (без задач витрины из sessionStorage). */

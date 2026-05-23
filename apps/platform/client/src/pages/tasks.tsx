@@ -16,6 +16,7 @@ import {
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
 import { cn } from "@/lib/utils";
 import {
+  getActualizationPersistedShowcaseMatrixTasksForDealers,
   getAllMatrixTasks,
   getShowcaseBackedTasksForDealers,
   MATRIX_TASK_PRIORITY_LABEL,
@@ -348,30 +349,78 @@ function TaskDoorPhoto({
   );
 }
 
-function ShowcaseTasksKpis({ tasks }: { tasks: MatrixTaskWithContext[] }) {
+function ShowcaseTasksKpis({
+  tasks,
+  variant,
+}: {
+  tasks: MatrixTaskWithContext[];
+  variant: "legacy" | "management_factual";
+}) {
   const k = useMemo(() => computeShowcaseTaskKpis(tasks), [tasks]);
-  const tiles = [
-    { label: "Всего витринных", value: k.total, tone: "border-border bg-muted/40 text-foreground" },
-    { label: "Новые", value: k.newCount, tone: "border-primary/40 bg-primary/10 text-primary" },
-    { label: "В работе", value: k.inProgress, tone: "border-amber-200 bg-amber-50 text-amber-950" },
-    { label: "Просроченные", value: k.overdue, tone: "border-red-200 bg-red-50 text-red-900" },
-    { label: "Выполненные", value: k.done, tone: "border-emerald-200 bg-emerald-50 text-emerald-900" },
-    { label: "Нужна помощь РОПа", value: k.needsRop, tone: "border-violet-200 bg-violet-50 text-violet-950" },
+  const sectionTid = variant === "management_factual" ? "section-showcase-tasks-kpi" : "section-tasks-kpis";
+  const tiles: {
+    label: string;
+    value: number;
+    tone: string;
+    testId?: string;
+  }[] = [
+    {
+      label: "Всего витринных",
+      value: k.total,
+      tone: "border-border bg-muted/40 text-foreground",
+      testId: variant === "management_factual" ? "card-showcase-tasks-total" : undefined,
+    },
+    {
+      label: "Новые",
+      value: k.newCount,
+      tone: "border-primary/40 bg-primary/10 text-primary",
+      testId: variant === "management_factual" ? "card-showcase-tasks-new" : undefined,
+    },
+    {
+      label: "В работе",
+      value: k.inProgress,
+      tone: "border-amber-200 bg-amber-50 text-amber-950",
+      testId: variant === "management_factual" ? "card-showcase-tasks-in-progress" : undefined,
+    },
+    {
+      label: "Просроченные",
+      value: k.overdue,
+      tone: "border-red-200 bg-red-50 text-red-900",
+      testId: variant === "management_factual" ? "card-showcase-tasks-overdue" : undefined,
+    },
+    {
+      label: "Выполненные",
+      value: k.done,
+      tone: "border-emerald-200 bg-emerald-50 text-emerald-900",
+      testId: variant === "management_factual" ? "card-showcase-tasks-done" : undefined,
+    },
+    {
+      label: "Нужна помощь РОПа",
+      value: k.needsRop,
+      tone: "border-violet-200 bg-violet-50 text-violet-950",
+      testId: variant === "management_factual" ? "card-showcase-tasks-needs-rop" : undefined,
+    },
   ];
   return (
-    <Card
-      className="rounded-2xl border border-border/80 bg-card shadow-md"
-      data-testid="section-tasks-kpis"
-    >
+    <Card className="rounded-2xl border border-border/80 bg-card shadow-md" data-testid={sectionTid}>
       <CardContent className="space-y-3 pt-5">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           {tiles.map((t) => (
-            <div key={t.label} className={cn("rounded-xl border px-3 py-2.5", t.tone)}>
+            <div
+              key={t.label}
+              className={cn("rounded-xl border px-3 py-2.5", t.tone)}
+              {...(t.testId ? { "data-testid": t.testId } : {})}
+            >
               <p className="text-[11px] font-semibold uppercase tracking-wide opacity-80">{t.label}</p>
               <p className="mt-1 text-2xl font-bold tabular-nums">{t.value}</p>
             </div>
           ))}
         </div>
+        {variant === "management_factual" ? (
+          <p className="text-xs text-muted-foreground" data-testid="text-showcase-tasks-source-note">
+            Источник: сохранённые задачи актуализации
+          </p>
+        ) : null}
       </CardContent>
     </Card>
   );
@@ -415,7 +464,7 @@ function ShowcaseTaskCard({
                 </p>
                 <p className="mt-1 text-xs font-semibold leading-snug text-foreground">{task.dealerName}</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">Менеджер: {manager}</p>
-                {task.source === "showcase_matrix_deficit" ? (
+                {task.source === "showcase_matrix_deficit" || task.source === "showcase_actualization_persisted" ? (
                   <p className="mt-1 text-[11px] text-muted-foreground">Точка: {task.tradePointName}</p>
                 ) : null}
               </div>
@@ -463,7 +512,9 @@ function ShowcaseTaskCard({
             <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs sm:grid-cols-3">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  {task.source === "showcase_matrix_deficit" ? "Модель / зона" : "Категория витрины"}
+                  {task.source === "showcase_matrix_deficit" || task.source === "showcase_actualization_persisted"
+                    ? "Модель / зона"
+                    : "Категория витрины"}
                 </p>
                 <p className="mt-0.5 line-clamp-2 text-xs font-medium text-foreground">{task.productName}</p>
               </div>
@@ -560,7 +611,9 @@ function ShowcaseTaskListRow({
                 <span className="font-medium text-foreground">{task.dealerName}</span>
                 <span className="text-muted-foreground"> · </span>
                 Менеджер: {manager}
-                {task.source === "showcase_matrix_deficit" ? ` · ${task.tradePointName}` : ""}
+                {task.source === "showcase_matrix_deficit" || task.source === "showcase_actualization_persisted"
+                  ? ` · ${task.tradePointName}`
+                  : ""}
               </p>
               <div className="flex flex-wrap items-center gap-1.5">
                 <Badge
@@ -752,12 +805,47 @@ export default function TasksPage() {
     (actx.enabled && actx.loading) ||
     (actx.enabled && shouldUseTeamMergedActualizationPlane(profile) && managementPlane.teamFetchLoading);
 
+  const directorRopFactualShowcaseTasks = actx.enabled && shouldUseTeamMergedActualizationPlane(profile);
+
+  const hasPersistedShowcaseTasksInRoleScope = useMemo(() => {
+    if (!directorRopFactualShowcaseTasks || actualizationLoading) return false;
+    const raw = getActualizationPersistedShowcaseMatrixTasksForDealers(
+      workingDealerRows,
+      managementPlane.mergedState,
+    ).filter((t) => allowedDealerIds.has(t.dealerId));
+    return raw.length > 0;
+  }, [
+    directorRopFactualShowcaseTasks,
+    actualizationLoading,
+    workingDealerRows,
+    managementPlane.mergedState,
+    allowedDealerIds,
+  ]);
+
   const showcaseTasks = useMemo(() => {
     if (actualizationLoading) return [] as MatrixTaskWithContext[];
-    const rawSource = actx.enabled ? getShowcaseBackedTasksForDealers(workingDealerRows) : getAllMatrixTasks();
+    let rawSource: MatrixTaskWithContext[];
+    if (!actx.enabled) {
+      rawSource = getAllMatrixTasks();
+    } else if (directorRopFactualShowcaseTasks) {
+      rawSource = getActualizationPersistedShowcaseMatrixTasksForDealers(
+        workingDealerRows,
+        managementPlane.mergedState,
+      );
+    } else {
+      rawSource = getShowcaseBackedTasksForDealers(workingDealerRows);
+    }
     const raw = sortTasks(rawSource).filter((t) => allowedDealerIds.has(t.dealerId));
     return getShowcaseOnlyTasks(raw);
-  }, [actualizationLoading, actx.enabled, workingDealerRows, allowedDealerIds, showcaseTick]);
+  }, [
+    actualizationLoading,
+    actx.enabled,
+    directorRopFactualShowcaseTasks,
+    workingDealerRows,
+    managementPlane.mergedState,
+    allowedDealerIds,
+    showcaseTick,
+  ]);
 
   const filteredByScope = useMemo(() => {
     let list = showcaseTasks;
@@ -811,10 +899,15 @@ export default function TasksPage() {
     setShowcaseViewId(id);
   }, []);
 
+  const showFullShowcaseTaskUi =
+    !directorRopFactualShowcaseTasks || (!actualizationLoading && hasPersistedShowcaseTasksInRoleScope);
+  const showFactualShowcaseEmpty =
+    directorRopFactualShowcaseTasks && !actualizationLoading && !hasPersistedShowcaseTasksInRoleScope;
+
   return (
     <div
       className="max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom))] min-w-0 max-w-full space-y-4 overflow-x-hidden sm:space-y-6"
-      data-testid="page-tasks"
+      data-testid="page-showcase-tasks"
     >
       <section data-testid="section-tasks-showcase-focus" className="space-y-4 sm:space-y-6">
         <header className="relative overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-lg sm:p-8">
@@ -835,7 +928,41 @@ export default function TasksPage() {
           </div>
         </header>
 
-        <ShowcaseTasksKpis tasks={dealerScoped} />
+        {directorRopFactualShowcaseTasks && actualizationLoading ? (
+          <p className="text-sm text-muted-foreground">Загрузка актуализации команды…</p>
+        ) : null}
+
+        {showFactualShowcaseEmpty ? (
+          <Card
+            className="rounded-2xl border border-border/80 bg-card shadow-md"
+            data-testid="section-showcase-tasks-factual-empty"
+          >
+            <CardContent className="space-y-4 pt-5">
+              <h2 className="text-lg font-semibold text-foreground">Фактические задачи по витрине пока не сформированы</h2>
+              <p className="text-sm text-muted-foreground">
+                На этом экране для директора и РОП показываются только сохранённые задачи из актуализации. Локальные
+                черновики, sessionStorage и сгенерированные демо-задачи не учитываются.
+              </p>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button asChild className="min-h-10 w-full font-semibold sm:w-auto">
+                  <Link href={buildHashPath("/trade-points")} data-testid="button-showcase-tasks-to-trade-points">
+                    К торговым точкам
+                  </Link>
+                </Button>
+                <Button asChild variant="outline" className="min-h-10 w-full sm:w-auto">
+                  <Link href={buildHashPath("/territory-card")}>К карточке территории</Link>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {showFullShowcaseTaskUi ? (
+          <>
+            <ShowcaseTasksKpis
+              tasks={dealerScoped}
+              variant={directorRopFactualShowcaseTasks ? "management_factual" : "legacy"}
+            />
 
         {dealerFilterActive ? (
           <div
@@ -1004,6 +1131,8 @@ export default function TasksPage() {
             ))}
           </div>
         )}
+          </>
+        ) : null}
       </section>
 
       <FloatingBackButton
