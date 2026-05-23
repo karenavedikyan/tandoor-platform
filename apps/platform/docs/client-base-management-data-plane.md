@@ -150,7 +150,7 @@ Follow-up **класса 2** (единый team-fetch, scope dealer-base ↔ tra
 | Операционная аналитика | `analytics-operational-panel.tsx` | merge → срезы без архива; **`omitSyntheticOperationalKpis`** при team plane | **Да** | Состав id — активная база; KPI продаж/конверсии/витрины/оборудования — empty-state до BI |
 | Аналитика (страница) | `analytics.tsx` | при director/ROP + `actx` — empty / без демо | **Да** (ограниченно) | Не подменяет полный демо-экран |
 | Рабочая область аналитики | `analytics-workspace.tsx`, `analytics-workspace-release-overview.tsx` | merge + suppress seeded при `actx`; блок задач РОП/директор — persisted factual | **Частично** | Сводка ТОП 500 без фейковых сумм; таблицы пустые до выгрузки |
-| План-факт / sales-control | sales-control, проч. | local / мок | **Нет** | На главной директора при `actx` — отдельная заглушка план-факта |
+| План-факт / sales-control | legacy страницы — sessionStorage; **`/sales-control/plan-fact`** — **GET/POST `/api/sales-plan-fact/state`** (Postgres или server memory) | **Нет** для legacy; **да (persisted)** для нового cockpit | См. **`apps/platform/docs/sales-plan-fact-management.md`**; главная ссылка «План-факт» ведёт на новый экран. |
 
 ---
 

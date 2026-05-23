@@ -43,9 +43,9 @@ export function defaultHomePathForRole(role: SalesRole): string {
 
 /** План-факт: целевой раздел по роли. */
 export function salesControlHomeHref(role: SalesRole): string {
-  if (role === "sales_director") return "/sales-control/director";
-  if (role === "team_lead") return "/sales-control/team-lead";
-  if (role === "sales_manager") return "/sales-control/manager";
+  if (role === "sales_director" || role === "team_lead" || role === "sales_manager") {
+    return "/sales-control/plan-fact";
+  }
   return "/sales-control";
 }
 
@@ -79,6 +79,7 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
       (x) =>
         x === "/sales-control" ||
         isUnder(x, "/sales-control/manager") ||
+        isUnder(x, "/sales-control/plan-fact") ||
         isUnder(x, "/sales-control/plans") ||
         isUnder(x, "/sales-control/performance"),
     ]);
@@ -102,6 +103,7 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
       (x) =>
         x === "/sales-control" ||
         isUnder(x, "/sales-control/team-lead") ||
+        isUnder(x, "/sales-control/plan-fact") ||
         isUnder(x, "/sales-control/plans") ||
         isUnder(x, "/sales-control/performance"),
     ]);
@@ -126,6 +128,7 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
       (x) =>
         x === "/sales-control" ||
         isUnder(x, "/sales-control/director") ||
+        isUnder(x, "/sales-control/plan-fact") ||
         isUnder(x, "/sales-control/plans") ||
         isUnder(x, "/sales-control/performance"),
     ]);

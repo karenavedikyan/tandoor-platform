@@ -241,7 +241,7 @@ export function MainRoleDashboard() {
       push("/dealer-base", "Клиентская база", "button-main-open-clients");
       push("/client-map", "Карта клиентов", "button-main-open-client-map");
       push("/tasks", "Задачи по витрине", "button-main-open-tasks");
-      push("/sales-control/director", "План-факт продаж", "button-main-open-sales-control");
+      push(planHref, "План-факт продаж", "button-main-open-sales-control");
       push("/sales-control/performance", "Выполнение", "button-main-open-sales-performance");
       push("/catalog", "Каталог", "button-main-open-catalog");
       push("/training", "Обучение", "button-main-open-training");
