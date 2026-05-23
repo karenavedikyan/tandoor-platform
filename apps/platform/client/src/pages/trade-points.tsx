@@ -276,7 +276,11 @@ export default function TradePointsPage(): ReactElement {
   const [bulkArchiveBusy, setBulkArchiveBusy] = useState(false);
 
   const baseRows = useMemo(
-    () => buildTradePointListForActualization(actState, profile, { includeArchivedTradePoints: showArchived }),
+    () =>
+      buildTradePointListForActualization(actState, profile, {
+        includeArchivedTradePoints: showArchived,
+        archivedTradePointsOnly: showArchived,
+      }),
     [actState, profile, showArchived],
   );
 
@@ -674,7 +678,7 @@ export default function TradePointsPage(): ReactElement {
     if (mgrFilter !== "__all__") chips.push({ filterKey: "manager", label: `Менеджер: ${mgrFilter}` });
     if (rmFilter !== "__all__") chips.push({ filterKey: "regionalManager", label: `Рег. менеджер: ${rmFilter}` });
     if (ropFilter !== "__all__") chips.push({ filterKey: "rop", label: `РОП: ${ropFilter}` });
-    if (showArchived) chips.push({ filterKey: "archived", label: "Показаны архивные ТТ" });
+    if (showArchived) chips.push({ filterKey: "archived", label: "Режим архива: только архивные ТТ" });
     if (quickPreset !== "all") {
       const qLabel =
         quickPreset === "unfilled_showcase"
@@ -979,11 +983,13 @@ export default function TradePointsPage(): ReactElement {
       <div className="flex items-center justify-between gap-2 sm:col-span-2 lg:col-span-3">
         <div className="space-y-0.5">
           <Label htmlFor="toggle-archived-tp" className="text-xs">
-            Показать архивные ТТ
+            Режим архива ТТ
           </Label>
-          <p className="text-[11px] text-muted-foreground">По умолчанию скрыты архивные точки и клиенты в архиве не попадают в список.</p>
+          <p className="text-[11px] text-muted-foreground">
+            Включено — в списке <span className="font-medium text-foreground">только архивные</span> торговые точки. Выключено — только рабочие точки активных клиентов.
+          </p>
           <p className="text-[11px] text-muted-foreground" data-testid="text-trade-points-archived-dealers-hidden-hint">
-            Точки архивных клиентов скрыты из рабочего списка. Восстановите клиента, чтобы вернуть его точки в рабочую базу.
+            Точки клиентов в архиве в рабочий список не попадают. Восстановите клиента, чтобы вернуть его точки в рабочую базу.
           </p>
         </div>
         <Switch id="toggle-archived-tp" checked={showArchived} data-testid="toggle-trade-points-show-archived" onCheckedChange={(v) => setShowArchived(v === true)} />
@@ -1260,7 +1266,7 @@ export default function TradePointsPage(): ReactElement {
           className="shrink-0 touch-manipulation"
           onClick={() => setShowArchived((v) => !v)}
         >
-          С архивом
+          Архив ТТ
         </Button>
       </div>
 

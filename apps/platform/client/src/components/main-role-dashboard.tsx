@@ -28,7 +28,7 @@ import {
   type SalesRole,
 } from "@/lib/sales-control-data";
 import { currentMonthPeriodLabel, type PlanExecutionScope } from "@/lib/sales-manager-kpi-data";
-import { buildTeamSummaries } from "@/lib/team-summary";
+import { buildTeamSummaries, buildTeamSummaryFromRows } from "@/lib/team-summary";
 
 function countOpenTasksForDealers(dealerIds: Set<string>): number {
   return getShowcaseOnlyTasks(getAllMatrixTasks()).filter((t) => dealerIds.has(t.dealerId) && t.status !== "done")
@@ -134,7 +134,22 @@ export function MainRoleDashboard() {
 
   const planExecutionPeriodLabel = useMemo(() => currentMonthPeriodLabel(), []);
 
-  const teamSummaries = useMemo(() => buildTeamSummaries(profile), [profile]);
+  const teamSummaries = useMemo(() => {
+    if (!actx.enabled) return buildTeamSummaries(profile);
+    if (role === "sales_director") {
+      return getRopOptions().map((o) =>
+        buildTeamSummaryFromRows(
+          o.teamId,
+          scopedClients.filter((r) => r.releaseTeamId === o.teamId),
+        ),
+      );
+    }
+    if (role === "team_lead") {
+      const tid = getEffectiveTeamLeadTeamId(profile);
+      return [buildTeamSummaryFromRows(tid, scopedClients.filter((r) => r.releaseTeamId === tid))];
+    }
+    return [];
+  }, [actx.enabled, profile, role, scopedClients]);
 
   const kpiHrefs = useMemo(() => {
     const u = getSalesUserById(profile.personaUserId);
@@ -381,6 +396,11 @@ export function MainRoleDashboard() {
                 summary={s}
                 variant="full"
                 showTeamMetricLinks={role === "sales_director" || role === "team_lead"}
+                footnote={
+                  actx.enabled && (role === "sales_director" || role === "team_lead")
+                    ? "Показаны только активные клиенты и точки команды (архив не учитывается)."
+                    : undefined
+                }
                 ctaHref={
                   role === "sales_director"
                     ? buildBrowserHashAppHref("/dealer-base", { team: s.teamId })

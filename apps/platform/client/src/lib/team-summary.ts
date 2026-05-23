@@ -107,22 +107,23 @@ export function aggregateManagersForTeam(teamId: string): TeamManagerAggRow[] {
   return aggregateManagers(teamId, rows);
 }
 
-export function buildTeamSummary(teamId: string): TeamSummary {
-  const rows = rowsForTeam(teamId);
+/** Сводка по команде по переданным строкам клиентской базы (актуализация / без архива). */
+export function buildTeamSummaryFromRows(teamId: string, rows: DealerRow[]): TeamSummary {
+  const inTeam = rows.filter((r) => r.releaseTeamId === teamId);
   const managers = getTeamManagers(teamId);
   const managerCount = Math.max(managers.length, 1);
 
-  const totalClients = rows.length;
-  const activeClients = rows.filter((r) => r.status === "активный").length;
-  const topClients = rows.filter(isDealerTop).length;
-  const potentialClients = rows.filter((r) => r.status === "потенциальный").length;
-  const attentionClients = rows.filter(dealerNeedsAttention).length;
+  const totalClients = inTeam.length;
+  const activeClients = inTeam.filter((r) => r.status === "активный").length;
+  const topClients = inTeam.filter(isDealerTop).length;
+  const potentialClients = inTeam.filter((r) => r.status === "потенциальный").length;
+  const attentionClients = inTeam.filter(dealerNeedsAttention).length;
 
   const avgClientsPerManager = Math.round((totalClients / managerCount) * 10) / 10;
   const pctActive = totalClients > 0 ? Math.round((100 * activeClients) / totalClients) : 0;
   const pctAttention = totalClients > 0 ? Math.round((100 * attentionClients) / totalClients) : 0;
 
-  const aggs = aggregateManagers(teamId, rows);
+  const aggs = aggregateManagers(teamId, inTeam);
   const leaderManagerName = pickLeader(aggs);
   const riskManagerName = pickRisk(aggs);
 
@@ -147,6 +148,10 @@ export function buildTeamSummary(teamId: string): TeamSummary {
     leaderManagerName,
     riskManagerName,
   };
+}
+
+export function buildTeamSummary(teamId: string): TeamSummary {
+  return buildTeamSummaryFromRows(teamId, rowsForTeam(teamId));
 }
 
 export function buildTeamSummaries(profile: ReleaseDemoProfile): TeamSummary[] {

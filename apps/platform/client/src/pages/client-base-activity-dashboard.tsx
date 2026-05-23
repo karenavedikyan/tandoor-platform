@@ -41,7 +41,7 @@ import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { useClientBaseActivityTeamState } from "@/hooks/use-client-base-activity-team-state";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { createEmptyActualizationState } from "@/lib/client-base-actualization-state";
-import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
+import { buildDealerBaseRowsUnionForActivityLabels, buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import {
   initialRopManagerForProfile,
   mapSalesRoleToDealerBaseAccess,
@@ -417,11 +417,15 @@ function ClientBaseActivityDashboardInner(): ReactElement {
 
   const state = actx.enabled ? activityState : createEmptyActualizationState();
 
-  const mergedAll = useMemo(
-    () => buildDealerBaseRowsWithActualization(state, profile, { includeArchivedDealers: true }),
+  const mergedActiveForDashboard = useMemo(
+    () => buildDealerBaseRowsWithActualization(state, profile, { includeArchivedDealers: false }),
     [state, profile],
   );
-  const scopedRows = useMemo(() => roleScopedDealerRows(mergedAll, profile), [mergedAll, profile]);
+  const dealerRowsForActivityLabels = useMemo(
+    () => buildDealerBaseRowsUnionForActivityLabels(state, profile),
+    [state, profile],
+  );
+  const scopedRows = useMemo(() => roleScopedDealerRows(mergedActiveForDashboard, profile), [mergedActiveForDashboard, profile]);
   const dealerById = useMemo(() => new Map(scopedRows.map((r) => [r.id, r])), [scopedRows]);
   const scopedIds = useMemo(() => new Set(scopedRows.map((r) => r.id)), [scopedRows]);
 
@@ -447,8 +451,8 @@ function ClientBaseActivityDashboardInner(): ReactElement {
 
   const activityBuckets = useMemo(() => {
     if (activitySources.length === 0) return { events: [] as ActivityEvent[], excludedTechnical: [] as ActivityEvent[] };
-    return collectActivityBucketsFromSources(activitySources, mergedAll);
-  }, [activitySources, mergedAll]);
+    return collectActivityBucketsFromSources(activitySources, dealerRowsForActivityLabels);
+  }, [activitySources, dealerRowsForActivityLabels]);
   const allEvents = activityBuckets.events;
 
   useEffect(() => {
