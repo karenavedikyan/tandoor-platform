@@ -195,6 +195,37 @@ function salesPlanFactCoerceState(input: unknown): Record<string, unknown> {
   return merged;
 }
 
+/**
+ * Idempotent ensure-table для sales_plan_fact_state.
+ * Кэшируется через module-level promise, чтобы DDL не выполнялся повторно
+ * в рамках того же serverless-инстанса. При ошибке кэш сбрасывается, чтобы
+ * следующий вызов мог попробовать снова.
+ */
+let salesPlanFactEnsureTablePromise: Promise<void> | null = null;
+
+async function ensureSalesPlanFactTable(sql: SqlFn): Promise<void> {
+  if (salesPlanFactEnsureTablePromise) return salesPlanFactEnsureTablePromise;
+  salesPlanFactEnsureTablePromise = (async () => {
+    try {
+      await sql`
+        CREATE TABLE IF NOT EXISTS sales_plan_fact_state (
+          scope_key text PRIMARY KEY,
+          state jsonb NOT NULL,
+          version int NOT NULL DEFAULT 1,
+          updated_at timestamptz NOT NULL DEFAULT now()
+        )
+      `;
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_sales_plan_fact_updated_at ON sales_plan_fact_state (updated_at)
+      `;
+    } catch (e) {
+      salesPlanFactEnsureTablePromise = null;
+      throw e;
+    }
+  })();
+  return salesPlanFactEnsureTablePromise;
+}
+
 function salesPlanFactBuildResponse(
   success: boolean,
   storageMode: "persistent" | "server_memory" | "not_configured",
@@ -269,6 +300,7 @@ async function salesPlanFactHandler(req: VercelRequest, res: VercelResponse): Pr
       }
       try {
         const sql = await createSqlExecutor(dbUrl);
+        await ensureSalesPlanFactTable(sql);
         const rows = await sql`
           SELECT state, updated_at
           FROM sales_plan_fact_state
@@ -341,6 +373,7 @@ async function salesPlanFactHandler(req: VercelRequest, res: VercelResponse): Pr
 
       try {
         const sql = await createSqlExecutor(dbUrl);
+        await ensureSalesPlanFactTable(sql);
         const stateJson = JSON.stringify(next);
         const rows = await sql`
           INSERT INTO sales_plan_fact_state (scope_key, state, version)
