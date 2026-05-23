@@ -392,6 +392,15 @@ export function getShowcaseBackedTasksForDealers(dealers: DealerRow[]): MatrixTa
   return [...computeShowcaseMatrixTasksForDealers(dealers), ...computeShowcaseMatrixDeficitTasksForDealers(dealers)];
 }
 
+/**
+ * Только записи плана витрины из sessionStorage (`source: showcase_distribution`).
+ * Без автогенерации дефицита матрицы по каталогу — для KPI РОП/директора, где нельзя показывать вычисленные «задачи» как факт.
+ */
+export function getShowcaseDistributionPlanTasksForDealers(dealers: DealerRow[]): MatrixTaskWithContext[] {
+  if (dealers.length === 0) return [];
+  return computeShowcaseMatrixTasksForDealers(dealers);
+}
+
 /** Ленивый кэш только матрицы товаров (без задач витрины из sessionStorage). */
 let matrixBaseTasksCache: MatrixTaskWithContext[] | null = null;
 

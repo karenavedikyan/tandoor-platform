@@ -36,12 +36,15 @@ Follow-up **класса 2** (единый team-fetch, scope dealer-base ↔ tra
 ### Задачи по витрине (без раздувания матрицей)
 
 - **`getShowcaseBackedTasksForDealers(dealers)`** (`trade-point-task-data.ts`) — для переданных строк: только **sessionStorage витрины** + **дефицит матрицы по фактическим моделям ТТ** (без генерации десятков тысяч задач из полного каталога по каждой ТТ).
+- **`getShowcaseDistributionPlanTasksForDealers(dealers)`** — только записи плана витрины (`showcase_distribution`, sessionStorage); для KPI карточки территории РОП/директора вместо полного showcase-backed набора.
 - **`getAllMatrixTasks()`** остаётся для режимов **без** включённой актуализации / демо-контуров менеджера, где нужна прежняя совместимость.
 - Страница **`/tasks`**: при `actx.enabled` источник задач — showcase-backed по **working** строкам merge; иначе — прежний полный набор.
 
 ### Карточка территории
 
-- **`territory-card.tsx`**: при выключенной актуализации для управленческих ролей страница недоступна (нет подстановки статического датасета). При включённой — **`buildTerritoryCardLivePack`** (`territory-card-live-data.ts`) из merge-строк: сводка, города, фокус, топ задач, «худшие» ТТ, KPI обучения/внимания через **`getTrainingAttentionKpisForDealers`**, риски из реальных просрочек. **План-факт:** пока нет backend — блок «План-факт пока не настроен» (пустой `planLines`).
+- **`territory-card.tsx`**: при выключенной актуализации для управленческих ролей страница недоступна (нет подстановки статического датасета). При включённой — **`buildTerritoryCardLivePack`** (`territory-card-live-data.ts`) из merge-строк.
+- **Роли с team plane (`shouldUseTeamMergedActualizationPlane`, РОП/директор):** режим **фактического UI** — в «Сводке территории» только **активные клиенты** и **активные торговые точки**; блок **«Задачи и контроль витрины»** показывает числа только при наличии данных: задачи — **`getShowcaseDistributionPlanTasksForDealers`** (только план витрины в sessionStorage, без автогенерации дефицита матрицы); «витрины и матрица» — число ТТ с сохранённой **`tradePointShowcaseActualizationById`** (`updatedAt`) или ячейкой матрицы в **`loadShowcaseMatrixStorage`** с меткой автора/времени; «зоны внимания» — просрочки этих задач и открытые **`showcaseMatrixTasks`** из актуализации. Скрыты псевдо-KPI обучения (`getTrainingAttentionKpisForDealers`), «клиенты в фокусе», сегменты/план-факт по городам из мок-строк, матрица/витрина/активность на карточках списка ТТ. Сводка витрин по списку — только из сохранённой актуализации.
+- **Прочие роли при `actx`:** прежняя сводка с **`getShowcaseBackedTasksForDealers`**, фокус, «худшие» ТТ, KPI обучения, риски по статусам мок-строк и просрочкам showcase-backed задач. **План-факт:** пока нет backend — блок «План-факт пока не настроен» (пустой `planLines`).
 
 ### Главная директор / РОП
 
@@ -113,7 +116,7 @@ Follow-up **класса 2** (единый team-fetch, scope dealer-base ↔ tra
 | Клиентская база | `dealer-base.tsx` | merge + persist | **Да** | Публикация scope команды |
 | Торговые точки | `trade-points.tsx` | merge | **Да** | Тот же scope, что dealer-base |
 | Задачи | `tasks.tsx` | merge + showcase-backed при `actx` | **Да** | |
-| Карточка территории | `territory-card.tsx` | merge + `buildTerritoryCardLivePack` | **Да** | Без актуализации — недоступно для director/ROP |
+| Карточка территории | `territory-card.tsx` | merge + `buildTerritoryCardLivePack` | **Да** | РОП/директор: факт-режим без псевдо-KPI; менеджерский контур — showcase-backed задачи |
 | Карта | `client-map.tsx` | merge | **Да** | |
 | Актуализация базы | `client-base-activity-dashboard.tsx` | merge + `activitySources` из провайдера | **Да** | Селект команды директора → `publishDashboardRopTeamId` |
 | Операционная аналитика | `analytics-operational-panel.tsx` | merge → срезы без архива; **`omitSyntheticOperationalKpis`** при team plane | **Да** | Состав id — активная база; KPI продаж/конверсии/витрины/оборудования — empty-state до BI |
