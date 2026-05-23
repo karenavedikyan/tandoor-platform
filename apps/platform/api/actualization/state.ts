@@ -9,6 +9,9 @@
  * Демо-идентификация: userId из заголовка X-Tandoor-Demo-User-Id или query userId.
  * Это не production security — при внедрении реальной auth scope_key должен
  * вычисляться из сессии на сервере.
+ *
+ * Также обслуживает /api/sales-plan-fact/state через vercel.json rewrite
+ * (объединение в одну serverless-функцию ради лимита Hobby 12 функций).
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
@@ -16,6 +19,8 @@ const JSON_CT = "application/json; charset=utf-8";
 const MAX_BODY_CHARS = 400_000;
 
 const memoryStore = new Map<string, { state: unknown; updatedAt: string }>();
+const salesPlanFactMemoryStore = new Map<string, { state: unknown; updatedAt: string }>();
+const SALES_PLAN_FACT_ORG_SCOPE = "org:default";
 
 function sendJson(res: VercelResponse, status: number, body: Record<string, unknown>): void {
   res.setHeader("Content-Type", JSON_CT);
@@ -161,7 +166,239 @@ function rowUpdatedAtIso(v: unknown): string | null {
   return null;
 }
 
+function isSalesPlanFactRequest(req: VercelRequest): boolean {
+  const url = typeof req.url === "string" ? req.url : "";
+  if (url.includes("/sales-plan-fact/")) return true;
+  const q = req.query?._route;
+  const qv = typeof q === "string" ? q : Array.isArray(q) ? q[0] : "";
+  if (typeof qv === "string" && qv.trim() === "sales-plan-fact") return true;
+  const h = req.headers["x-tandoor-api-route"];
+  const v = Array.isArray(h) ? h[0] : h;
+  return typeof v === "string" && v.trim() === "sales-plan-fact";
+}
+
+function isSalesPlanFactGloballyDisabled(): boolean {
+  const v = process.env.TANDOOR_SALES_PLAN_FACT_STORAGE?.trim().toLowerCase();
+  return v === "disabled" || v === "off" || v === "false";
+}
+
+function salesPlanFactEmptyState(): Record<string, unknown> {
+  return { version: 1, updatedAt: null, updatedBy: null, lines: [] };
+}
+
+function salesPlanFactCoerceState(input: unknown): Record<string, unknown> {
+  const base = salesPlanFactEmptyState();
+  if (!isPlainObject(input)) return base;
+  const merged = { ...base, ...input };
+  if (typeof merged.version !== "number" || !Number.isFinite(merged.version)) merged.version = 1;
+  if (!Array.isArray(merged.lines)) merged.lines = [];
+  return merged;
+}
+
+function salesPlanFactBuildResponse(
+  success: boolean,
+  storageMode: "persistent" | "server_memory" | "not_configured",
+  state: unknown,
+  updatedAt: string | null,
+  message?: string,
+  code?: string,
+): Record<string, unknown> {
+  const o: Record<string, unknown> = { success, storageMode, state, updatedAt };
+  if (message) o.message = message;
+  if (code) o.code = code;
+  return o;
+}
+
+async function salesPlanFactHandler(req: VercelRequest, res: VercelResponse): Promise<void> {
+  try {
+    const globallyDisabled = isSalesPlanFactGloballyDisabled();
+    const dbUrl = globallyDisabled ? null : resolvePostgresUrl();
+
+    if (globallyDisabled) {
+      if (req.method === "GET") {
+        sendJson(
+          res,
+          200,
+          salesPlanFactBuildResponse(
+            true,
+            "not_configured",
+            salesPlanFactEmptyState(),
+            null,
+            "Хранение план-факта отключено (TANDOOR_SALES_PLAN_FACT_STORAGE).",
+          ),
+        );
+        return;
+      }
+      if (req.method === "POST") {
+        sendJson(res, 503, {
+          success: false,
+          storageMode: "not_configured",
+          state: salesPlanFactEmptyState(),
+          updatedAt: null,
+          message: "Запись отключена (TANDOOR_SALES_PLAN_FACT_STORAGE).",
+        });
+        return;
+      }
+      sendJson(res, 405, {
+        success: false,
+        storageMode: "not_configured",
+        state: salesPlanFactEmptyState(),
+        updatedAt: null,
+        message: "Метод не поддерживается.",
+      });
+      return;
+    }
+
+    if (req.method === "GET") {
+      if (!dbUrl) {
+        const row = salesPlanFactMemoryStore.get(SALES_PLAN_FACT_ORG_SCOPE);
+        const state = row?.state ?? salesPlanFactEmptyState();
+        const updatedAt = row?.updatedAt ?? null;
+        sendJson(
+          res,
+          200,
+          salesPlanFactBuildResponse(
+            true,
+            "server_memory",
+            state,
+            updatedAt,
+            "Persistent storage не настроен; данные в памяти сервера (демо).",
+          ),
+        );
+        return;
+      }
+      try {
+        const sql = await createSqlExecutor(dbUrl);
+        const rows = await sql`
+          SELECT state, updated_at
+          FROM sales_plan_fact_state
+          WHERE scope_key = ${SALES_PLAN_FACT_ORG_SCOPE}
+          LIMIT 1
+        `;
+        const first = rows[0];
+        if (!first) {
+          sendJson(
+            res,
+            200,
+            salesPlanFactBuildResponse(true, "persistent", salesPlanFactEmptyState(), null, "Данные в Postgres."),
+          );
+          return;
+        }
+        const st = salesPlanFactCoerceState(first.state);
+        const updatedAt = rowUpdatedAtIso(first.updated_at);
+        sendJson(res, 200, salesPlanFactBuildResponse(true, "persistent", st, updatedAt, "Данные в Postgres."));
+      } catch (e) {
+        const m = e instanceof Error ? e.message : String(e);
+        console.error("[sales-plan-fact-api] GET", m.slice(0, 200));
+        sendJson(
+          res,
+          200,
+          salesPlanFactBuildResponse(
+            false,
+            "persistent",
+            salesPlanFactEmptyState(),
+            null,
+            "Ошибка БД (таблица sales_plan_fact_state).",
+            "SALES_PLAN_FACT_STORAGE_ERROR",
+          ),
+        );
+      }
+      return;
+    }
+
+    if (req.method === "POST") {
+      const userId = getUserId(req) ?? "anonymous";
+      const raw = readJsonBody(req);
+      const rawStr = typeof raw === "string" ? raw : JSON.stringify(raw ?? {});
+      if (rawStr.length > MAX_BODY_CHARS) {
+        sendJson(res, 413, {
+          success: false,
+          storageMode: dbUrl ? "persistent" : "server_memory",
+          state: salesPlanFactEmptyState(),
+          updatedAt: null,
+          message: "Слишком большой JSON.",
+        });
+        return;
+      }
+      const body = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>;
+      const incoming = body.state ?? body;
+      const next = salesPlanFactCoerceState(incoming);
+      const now = new Date().toISOString();
+      next.updatedAt = now;
+      next.updatedBy = userId;
+      const version =
+        typeof next.version === "number" && Number.isFinite(next.version) ? Math.floor(next.version) : 1;
+
+      if (!dbUrl) {
+        salesPlanFactMemoryStore.set(SALES_PLAN_FACT_ORG_SCOPE, { state: next, updatedAt: now });
+        sendJson(
+          res,
+          200,
+          salesPlanFactBuildResponse(true, "server_memory", next, now, "Сохранено в памяти сервера (демо)."),
+        );
+        return;
+      }
+
+      try {
+        const sql = await createSqlExecutor(dbUrl);
+        const stateJson = JSON.stringify(next);
+        const rows = await sql`
+          INSERT INTO sales_plan_fact_state (scope_key, state, version)
+          VALUES (${SALES_PLAN_FACT_ORG_SCOPE}, ${stateJson}::jsonb, ${version})
+          ON CONFLICT (scope_key) DO UPDATE SET
+            state = EXCLUDED.state,
+            version = EXCLUDED.version,
+            updated_at = now()
+          RETURNING state, updated_at
+        `;
+        const first = rows[0];
+        const saved = salesPlanFactCoerceState(first?.state);
+        const updatedAt = rowUpdatedAtIso(first?.updated_at) ?? now;
+        sendJson(res, 200, salesPlanFactBuildResponse(true, "persistent", saved, updatedAt, "Сохранено в Postgres."));
+      } catch (e) {
+        const m = e instanceof Error ? e.message : String(e);
+        console.error("[sales-plan-fact-api] POST", m.slice(0, 200));
+        sendJson(
+          res,
+          200,
+          salesPlanFactBuildResponse(
+            false,
+            "persistent",
+            salesPlanFactEmptyState(),
+            null,
+            "Ошибка БД при сохранении.",
+            "SALES_PLAN_FACT_STORAGE_ERROR",
+          ),
+        );
+      }
+      return;
+    }
+
+    sendJson(res, 405, {
+      success: false,
+      storageMode: dbUrl ? "persistent" : "server_memory",
+      state: salesPlanFactEmptyState(),
+      updatedAt: null,
+      message: "Метод не поддерживается.",
+    });
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    console.error("[sales-plan-fact-api]", m.slice(0, 200));
+    sendJson(res, 500, {
+      success: false,
+      storageMode: "server_memory",
+      state: salesPlanFactEmptyState(),
+      updatedAt: null,
+      message: "Внутренняя ошибка.",
+    });
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
+  if (isSalesPlanFactRequest(req)) {
+    await salesPlanFactHandler(req, res);
+    return;
+  }
   try {
     const globallyDisabled = isActualizationGloballyDisabled();
     const dbUrl = globallyDisabled ? null : resolvePostgresUrl();
