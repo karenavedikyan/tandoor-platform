@@ -16,6 +16,8 @@ Follow-up **класса 2** (единый team-fetch, scope dealer-base ↔ tra
 - `apps/platform/client/src/lib/client-base-management-scope.ts` — `fetchMergedTeamActualizationForManagement`, `shouldUseTeamMergedActualizationPlane`, обёртки над merge и строками.
 - `apps/platform/client/src/lib/dealer-base-management-view-model.ts` — агрегаты для управленческого экрана **`DealerBaseManagementCockpit`**: группы РОП/менеджеров, города (`normalizeTerritoryCityName`), KPI «структура активной базы», списки для drill-down.
 - `apps/platform/client/src/pages/dealer-base-management-cockpit.tsx` — компактный UI `/dealer-base` для РОП/директора при team plane (инфографика, режимы, аккордеон, drawer).
+- `apps/platform/client/src/lib/trade-points-management-view-model.ts` — агрегаты для **`TradePointsManagementCockpit`**: структура ТТ, города (`normalizeTerritoryCityName`), группы РОП/менеджеров, drill-down rows.
+- `apps/platform/client/src/pages/trade-points-management-cockpit.tsx` — компактный UI `/trade-points` для РОП/директора при team plane (инфографика, режимы, аккордеон РОП, рейтинг городов, drawer).
 - `apps/platform/client/src/context/client-base-team-actualization-context.tsx` — **`ClientBaseTeamActualizationProvider`**: один merge на scope команды, `mergedState`, `activitySourceSnapshots` / `activityDiagnostics`, `publishDashboardRopTeamId`, refetch по `visibilitychange`.
 - `apps/platform/client/src/lib/client-base-management-team-scope-storage.ts` — ключ **`tandoor-client-base-management-team-scope-v1`** (localStorage для директора), событие **`tandoor-management-team-scope-v1`**, чтение `?team=` / `?rop=` на `/dealer-base`, `/trade-points`, `/client-base-activity`.
 - `apps/platform/client/src/hooks/use-client-base-management-merged-state.ts` — совместимость API: делегирует в `useClientBaseTeamActualization`.
@@ -51,6 +53,15 @@ Follow-up **класса 2** (единый team-fetch, scope dealer-base ↔ tra
 - **Режимы** «Обзор / По РОП / По городам» и список раскрытых аккордеонов РОП сохраняются в **`localStorage`** (`tandoor-dealer-base-management-mode-v1`, `tandoor-dealer-base-management-open-rops-v1`). Режим «Обзор» сбрасывает раскрытие групп РОП (компактный mobile-first).
 - **Директор:** селект «Команда для загрузки merge» пишет в **`publishDashboardRopTeamId`** (тот же scope, что `trade-points` / сайдбар). РОП: данные только своей команды.
 - **Drill-down:** `data-testid="dialog-client-base-group-detail"` — на desktop фиксированная правая панель, на mobile **`Sheet`** снизу с увеличенным нижним отступом контента; вкладки «Клиенты» / «Торговые точки», быстрые фильтры по клиентам, ссылки в карточку клиента и в карточку ТТ.
+
+### Торговые точки (`/trade-points`) — управленческий cockpit РОП / директора
+
+- При **`actx.enabled`** и **`shouldUseTeamMergedActualizationPlane`** страница **`trade-points.tsx`** рендерит **`TradePointsManagementCockpit`** (`trade-points-management-cockpit.tsx`) вместо длинной сетки карточек ТТ. Менеджеры и прочие роли продолжают видеть прежний список/витрину.
+- **Данные:** **`buildTradePointListForActualization(mergedState, profile, { includeArchivedTradePoints: false })`** (те же `workingRows`, что и у списка без архива) + **`buildDealerBaseRowsWithActualization(..., { includeArchivedDealers: false })`** + **`roleScopedDealerRows`** для вкладок «Клиенты» и согласованных счётчиков клиентов с ТТ. Архивные ТТ, архивные клиенты и ТТ архивных клиентов в расчёты не входят; **демо / мок / синтетические KPI** для этого экрана не подставляются — при пустом merge показывается **empty-state** в блоке структуры.
+- **Агрегации:** `trade-points-management-view-model.ts` — сводка по активным ТТ (`isManagementTradePointRow`: не архив, не виртуальная заглушка), фото и «не заполнена» витрина по тем же полям, что список; города через **`normalizeTerritoryCityName`**; группы РОП через **`teamsForManagementView`** / `resolveDealerRowTeamId` (как в клиентской базе); менеджеры и доля внутри команды.
+- **Режимы** «Обзор / По РОП / По городам» — **`localStorage`** (`tandoor-trade-points-management-mode-v1`, `tandoor-trade-points-management-open-rops-v1`). Режим «Обзор» сбрасывает раскрытие аккордеона РОП.
+- **Scope директора:** селект «Команда для merge» вызывает **`publishDashboardRopTeamId`** (тот же контекст, что **`/dealer-base`** и сайдбар). РОП видит только свою команду.
+- **Drill-down:** `data-testid="dialog-trade-points-management-detail"` — desktop: правая **`aside`**; mobile: **`Sheet`** снизу, контент с **`pb-24`**, нижняя панель быстрых ссылок с **`z-30`** ниже типичной навигации приложения. Внутри: вкладки «Торговые точки» / «Клиенты», фильтры все / без фото / не заполнены / с фото по строкам ТТ, ссылки «Открыть» в карточку ТТ и клиента.
 
 ### Карточка территории
 

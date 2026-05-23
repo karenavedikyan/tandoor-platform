@@ -53,6 +53,9 @@ import { useClientBaseTeamActualization } from "@/context/client-base-team-actua
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { mergeActualizationState, createEmptyActualizationState } from "@/lib/client-base-actualization-state";
+import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
+import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
+import { roleScopedDealerRows } from "@/lib/dealer-base-role-views";
 import {
   canArchiveTradePointDuringActualization,
   canActualizeClientBase,
@@ -70,6 +73,7 @@ import { getClientCategoryLabel, type ClientCategoryId } from "@/lib/client-cate
 import type { DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import { cn } from "@/lib/utils";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { TradePointsManagementCockpit } from "@/pages/trade-points-management-cockpit";
 
 /** Плотность отображения списка торговых точек (как «Витрина дилеров»). */
 type TradePointShowcaseDensity = "large" | "grid" | "list" | "table";
@@ -287,6 +291,19 @@ export default function TradePointsPage(): ReactElement {
   const workingRows = useMemo(
     () => buildTradePointListForActualization(actState, profile, { includeArchivedTradePoints: false }),
     [actState, profile],
+  );
+
+  const mergedRowsActivePortfolioForManagement = useMemo(
+    () =>
+      actx.enabled
+        ? buildDealerBaseRowsWithActualization(actState, profile, { includeArchivedDealers: false })
+        : [],
+    [actx.enabled, actState, profile],
+  );
+
+  const scopedActivePortfolioRowsForManagement = useMemo(
+    () => roleScopedDealerRows(mergedRowsActivePortfolioForManagement, profile),
+    [mergedRowsActivePortfolioForManagement, profile],
   );
 
   const summary = useMemo(() => {
@@ -1109,6 +1126,16 @@ export default function TradePointsPage(): ReactElement {
       </div>
     );
   };
+
+  if (actx.enabled && shouldUseTeamMergedActualizationPlane(profile)) {
+    return (
+      <TradePointsManagementCockpit
+        profile={profile}
+        workingRows={workingRows}
+        dealerRows={scopedActivePortfolioRowsForManagement}
+      />
+    );
+  }
 
   return (
     <div className="min-w-0 max-w-full space-y-4 overflow-x-hidden px-1 sm:space-y-6 sm:px-0" data-testid="page-trade-points">
