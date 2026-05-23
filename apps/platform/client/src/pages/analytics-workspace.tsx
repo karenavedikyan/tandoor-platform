@@ -97,7 +97,7 @@ function TabTable({
     <div className="space-y-4">
       {suppressSeededRows && rows.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border/80 bg-muted/10 px-4 py-4 text-sm text-muted-foreground">
-          Нет актуальных строк: демо-таблицы отключены. Данные появятся после подключения выгрузки или ручного ввода.
+          Нет актуальных строк: демо-таблицы отключены для руководителя при включённой актуализации. Данные появятся после подключения выгрузки или ручного ввода.
         </p>
       ) : null}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -232,6 +232,24 @@ function TabTable({
 
 function SummaryPanel({ suppressSeededRows }: { suppressSeededRows: boolean }) {
   const top = suppressSeededRows ? [] : getRowsForTab("top500");
+  if (suppressSeededRows) {
+    return (
+      <div className="space-y-4">
+        <Card className="rounded-xl border border-dashed border-primary/35 bg-primary/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold text-foreground">Сводка ТОП 500</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm text-muted-foreground">
+            <p>Демонстрационные суммы оборота и объёмы ВХ для руководителя с актуальной базой скрыты.</p>
+            <p className="text-xs font-medium text-primary">
+              Показатели появятся после подключения фактических продаж и выгрузки в этот раздел.
+            </p>
+          </CardContent>
+        </Card>
+        <TabTable tab="summary" meta={ANALYTICS_WORKSPACE_TAB_META.find((m) => m.id === "summary")!} suppressSeededRows />
+      </div>
+    );
+  }
   const sumRub = top.reduce((s, r) => s + (parseFloat(String(r.v1).replace(/\s/g, "")) || 0), 0);
   const sumVh = top.reduce((s, r) => s + (parseFloat(String(r.v2)) || 0), 0);
   return (
@@ -278,7 +296,7 @@ export default function AnalyticsWorkspacePage() {
         </p>
         {suppressSeededRows ? (
           <p className="text-xs font-medium text-primary">
-            Для РОПа и директора при включённой актуализации демо-строки в таблицах ниже скрыты до появления реальной выгрузки.
+            Для РОПа и директора при включённой актуализации демо-строки в таблицах и синтетическая сводка ТОП 500 скрыты до появления реальной выгрузки.
           </p>
         ) : null}
         <p className="text-xs text-muted-foreground">

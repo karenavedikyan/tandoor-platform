@@ -9,9 +9,11 @@ export type OperationalStripMetric = {
 type OperationalHeaderKpiProps = {
   metrics: [OperationalStripMetric, OperationalStripMetric, OperationalStripMetric, OperationalStripMetric];
   className?: string;
+  /** Подзаголовок под описанием блока (например источник данных). */
+  sourceNote?: string;
 };
 
-export function OperationalHeaderKpi({ metrics, className }: OperationalHeaderKpiProps) {
+export function OperationalHeaderKpi({ metrics, className, sourceNote }: OperationalHeaderKpiProps) {
   return (
     <div
       className={cn(
@@ -24,6 +26,7 @@ export function OperationalHeaderKpi({ metrics, className }: OperationalHeaderKp
         <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
           Клиенты, витрины, фурнитура и оборудование в разрезе территории.
         </p>
+        {sourceNote ? <p className="text-xs font-medium leading-relaxed text-primary">{sourceNote}</p> : null}
       </div>
       <div className="grid w-full shrink-0 grid-cols-2 gap-2 sm:w-auto sm:min-w-[min(100%,20rem)] sm:grid-cols-2 lg:min-w-[22rem]">
         {metrics.map((m, i) => (

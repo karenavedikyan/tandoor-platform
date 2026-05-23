@@ -628,8 +628,8 @@ export function AnalyticsInfographicsPanel() {
               <CardContent className="space-y-2 text-sm text-muted-foreground">
                 <p>
                   Конверсия:{" "}
-                  <span className="font-semibold text-foreground">{formatPercent(r.conversionPercent)}</span> · МК{" "}
-                  {formatUnits(r.mkSales)}, фурнитура {formatUnits(r.hardwareSales)}
+                  <span className="font-semibold text-foreground">{formatPercent(r.conversionPercent ?? 0)}</span> · МК{" "}
+                  {formatUnits(r.mkSales ?? 0)}, фурнитура {formatUnits(r.hardwareSales ?? 0)}
                 </p>
                 <p className="text-xs">Конкуренты: {r.competitorsSummary || "—"}</p>
                 <p className="text-xs">Модели у конкурентов: {r.topCompetitorModels}</p>

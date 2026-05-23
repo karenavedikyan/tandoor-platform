@@ -74,29 +74,29 @@ export function getDealerAnalyticsSignalCards(row: DealerRow): DealerAnalyticsSi
   if (profMain) {
     const needsAttention =
       profMain.attentionZone !== "high_profit" ||
-      profMain.profitabilityScore < 55 ||
-      profMain.shareShowcasePercent < 25 ||
-      profMain.competitorShowcases >= 3;
+      (profMain.profitabilityScore != null && profMain.profitabilityScore < 55) ||
+      (profMain.shareShowcasePercent != null && profMain.shareShowcasePercent < 25) ||
+      (profMain.competitorShowcases != null && profMain.competitorShowcases >= 3);
 
     if (needsAttention) {
       const parts: string[] = [];
-      if (profMain.profitabilityScore < 55 || profMain.attentionZone === "low_profit") {
+      if ((profMain.profitabilityScore != null && profMain.profitabilityScore < 55) || profMain.attentionZone === "low_profit") {
         parts.push("низкая рентабельность витрины");
       }
-      if (profMain.competitorShowcases >= 2 || profMain.attentionZone === "many_competitors") {
+      if ((profMain.competitorShowcases != null && profMain.competitorShowcases >= 2) || profMain.attentionZone === "many_competitors") {
         parts.push("витрины конкурентов");
       }
-      if (profMain.shareShowcasePercent < 25 || profMain.attentionZone === "no_showcase_sales") {
+      if ((profMain.shareShowcasePercent != null && profMain.shareShowcasePercent < 25) || profMain.attentionZone === "no_showcase_sales") {
         parts.push("слабая доля продаж с витрины");
       }
       let actionHint = `Рекомендуется: ${parts.length ? parts.join("; ") : "согласовать план по витрине с региональным менеджером"}.`;
-      if (profMain.shareShowcasePercent < 30) {
+      if (profMain.shareShowcasePercent != null && profMain.shareShowcasePercent < 30) {
         actionHint += " Есть модели на витрине с низкой отдачей по продажам.";
       }
       out.push({
         kind: "showcase",
         title: "Витрина и маржа",
-        metric: `Рентабельность: ${profMain.profitabilityLabel} · доля с витрины ${profMain.shareShowcasePercent}% · наши / конкуренты ${profMain.ourShowcases} / ${profMain.competitorShowcases}`,
+        metric: `Рентабельность: ${profMain.profitabilityLabel} · доля с витрины ${profMain.shareShowcasePercent ?? "—"}% · наши / конкуренты ${profMain.ourShowcases} / ${profMain.competitorShowcases ?? "—"}`,
         actionHint,
         tradePointId: profTp?.tradePointId,
       });
@@ -104,7 +104,7 @@ export function getDealerAnalyticsSignalCards(row: DealerRow): DealerAnalyticsSi
   }
 
   const hw = hardwareByDealer.get(dealerId);
-  if (hw && (hw.conversionLevel === "low" || hw.conversionLevel === "none")) {
+  if (hw && hw.conversionPercent != null && (hw.conversionLevel === "low" || hw.conversionLevel === "none")) {
     out.push({
       kind: "hardware",
       title: "Конверсия фурнитуры",
