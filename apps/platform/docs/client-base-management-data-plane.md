@@ -25,7 +25,7 @@ Follow-up **класса 2** (единый team-fetch, scope dealer-base ↔ tra
 
 2. **Синхронизация scope команды** — директор: persist выбранной команды в LS + broadcast; стартовый scope из LS или из URL (`team` / `rop`) на страницах управления; `dealer-base`, `trade-points`, сайдбар и дашборд активности вызывают **`publishDashboardRopTeamId`** при смене фильтра команды (где применимо). РОП: scope зафиксирован своей командой. Менеджер: только свой снимок.
 
-3. **Операционная аналитика** — в `analytics-operational-data.ts` введены **`buildOperationalAnalyticsRowSlicesFromDealers`** и опциональный аргумент «срез строк» у фильтров. В **`analytics-operational-panel.tsx`** при включённой актуализации и team plane срезы строятся из **`buildDealerBaseRowsWithActualization(teamCtx.mergedState, …, { includeArchivedDealers: false })`**; при отсутствии срезов fallback по клиентам для оборудования — **пустой список**, а не все строки `DEALER_BASE_ROWS`. Числовые поля витрины/конверсии в строках по-прежнему **детерминированная синтетика от индекса** (не backend) — это отмечено как ограничение.
+3. **Операционная аналитика** — в `analytics-operational-data.ts` введены **`buildOperationalAnalyticsRowSlicesFromDealers`** и опциональные аргументы «срез строк» / **`omitSyntheticOperationalKpis`**. В **`analytics-operational-panel.tsx`** при включённой актуализации и team plane срезы строятся из **`buildDealerBaseRowsWithActualization(teamCtx.mergedState, …, { includeArchivedDealers: false })`**; при отсутствии срезов fallback по клиентам для оборудования — **пустой список**, а не все строки `DEALER_BASE_ROWS`. Для РОП/директора на merge вызывается **`buildOperationalAnalyticsRowSlicesFromDealers(..., { omitSyntheticOperationalKpis: true })`**: **продажи, конверсия, демо-модели на витрине, синтетическое оборудование** не подставляются — в UI **«Нет актуальных данных»** и поясняющие карточки до подключения BI/учёта. Для остальных ролей / без team plane по-прежнему используется статический срез `DEALER_BASE_ROWS` с демо-числами (демо-контур).
 
 4. **Актуализация базы** — селект «РОП / команда» для директора синхронизирован с контекстом (`dashboardRopTeamId` ↔ UI `__all__`); при смене команды вызывается `publishDashboardRopTeamId`.
 
@@ -71,9 +71,24 @@ Follow-up **класса 2** (единый team-fetch, scope dealer-base ↔ tra
 
 ## Ограничения (намеренно не трогали или отдельный домен)
 
-- Поля **продаж / конверсии / оборудование** в операционных таблицах остаются **детерминированной синтетикой** от индекса строки; они **не** отражают исторический факт из backend — для этого нужны отдельные API.
-- Реальная аналитика продаж и план-факт из учётных систем — вне объёма client-base merge; до появления API блоки показывают **empty-state** или скрыты на директорских/РОП экранах.
-- **`analytics-infographics-panel.tsx`** — по умолчанию может использовать статический срез; не переносили на merge в этом контуре.
+- **`analytics.tsx`**, **sales-control** — без management plane; другие датасеты / планы.
+- Для **РОП/директора** на team merge поля **продаж / конверсии / витрина / оборудование** в операционном блоке **не** заполняются синтетикой от индекса (`omitSyntheticOperationalKpis`); для **менеджера и демо** без merge по-прежнему — детерминированная синтетика на `DEALER_BASE_ROWS` (не факт из backend).
+- Реальная аналитика продаж и план-факт из учётных систем — вне объёма client-base merge; до появления API соответствующие блоки показывают **empty-state** или скрыты на директорских/РОП экранах.
+- **`analytics-infographics-panel.tsx`** — по-прежнему вызывает `getInfographic*` со **статическим** срезом по умолчанию (демо-инфографика там, где доступна полная страница «Аналитика»); в merge-контуре операционной панели типы KPI допускают `null`, инфографика остаётся на `STATIC_OPERATIONAL_ROW_SLICES` — отдельный контур.
+
+## Скрытые до backend показатели (РОП / директор, `omitSyntheticOperationalKpis`)
+
+При `buildOperationalAnalyticsRowSlicesFromDealers(..., { omitSyntheticOperationalKpis: true })` в типах строк допускается `null` для полей, которые раньше считались от индекса строки:
+
+| Область | Поля / блоки | Поведение |
+|--------|----------------|-----------|
+| Витрина клиента | `totalSales`, `showcaseSales`, `conversionPercent`, `unitsOnShowcase`, даты проверки, модели МК/ВХ/фурнитуры из каталога | `null` / пустые массивы; в таблице — «Нет актуальных данных» |
+| Рентабельность витрин | `totalSales`, `showcaseSales`, `shareShowcasePercent`, `profitabilityScore`, `competitorShowcases` | `null`; сохраняются `ourShowcases` (число ТТ в merge) и `attentionZone` по полям `DealerRow` |
+| Конверсия фурнитуры | `mkSales`, `hardwareSales`, `conversionPercent`, тексты конкурентов | `null` / пусто; уровень конверсии `none` |
+| Оборудование | весь срез `equipment` | пустой массив; вкладка с пояснением empty-state |
+| KPI strip / карточки | агрегаты продаж | текстовые empty-state, без нулей как «факта» |
+
+Менеджер и демо-режим без merge по-прежнему используют полный синтетический расчёт на `DEALER_BASE_ROWS`.
 
 ## Таблица: раздел | до | после | проверка
 
@@ -100,23 +115,27 @@ Follow-up **класса 2** (единый team-fetch, scope dealer-base ↔ tra
 | Задачи | `tasks.tsx` | merge + showcase-backed при `actx` | **Да** | |
 | Карточка территории | `territory-card.tsx` | merge + `buildTerritoryCardLivePack` | **Да** | Без актуализации — недоступно для director/ROP |
 | Карта | `client-map.tsx` | merge | **Да** | |
-| Актуализация базы | `client-base-activity-dashboard.tsx` | merge + `activitySources` из провайдера | **Да** | |
-| Операционная аналитика | `analytics-operational-panel.tsx` | merge → срезы | **Частично** | Состав id — активная база; метрики строк — синтетика |
+| Актуализация базы | `client-base-activity-dashboard.tsx` | merge + `activitySources` из провайдера | **Да** | Селект команды директора → `publishDashboardRopTeamId` |
+| Операционная аналитика | `analytics-operational-panel.tsx` | merge → срезы без архива; **`omitSyntheticOperationalKpis`** при team plane | **Да** | Состав id — активная база; KPI продаж/конверсии/витрины/оборудования — empty-state до BI |
 | Аналитика (страница) | `analytics.tsx` | при director/ROP + `actx` — empty / без демо | **Да** (ограниченно) | Не подменяет полный демо-экран |
-| Рабочая область аналитики | `analytics-workspace.tsx`, `analytics-workspace-release-overview.tsx` | merge + suppress seeded при `actx` | **Частично** | |
-| План-факт / sales-control | sales-control, проч. | local / мок | **Нет** | Для director dashboard — отдельная заглушка |
+| Рабочая область аналитики | `analytics-workspace.tsx`, `analytics-workspace-release-overview.tsx` | merge + suppress seeded при `actx` | **Частично** | Сводка ТОП 500 без фейковых сумм; таблицы пустые до выгрузки |
+| План-факт / sales-control | sales-control, проч. | local / мок | **Нет** | На главной директора при `actx` — отдельная заглушка план-факта |
 
 ---
 
 ## Классификация (сводка)
 
-1. **Подключено к team actualization / active merge:** `App.tsx`, `main-role-dashboard`, `dealer-base`, `trade-points`, `tasks`, `territory-card`, `client-map`, `client-base-activity-dashboard`, операционная панель (срезы при team plane), обзор release в analytics-workspace при `actx`, упрощённый `analytics.tsx` для director/ROP.
+1. **Подключено к team actualization / active merge:** `App.tsx`, `main-role-dashboard`, `dealer-base`, `trade-points`, `tasks`, `territory-card`, `client-map`, `client-base-activity-dashboard`, операционная панель (срезы при team plane, **`omitSyntheticOperationalKpis`** для РОП/директора), обзор release в analytics-workspace при `actx`, упрощённый `analytics.tsx` для director/ROP.
 
-2. **Синтетика намеренно остаётся (до backend):** операционные числовые поля строк; инфографика по статическому срезу.
+2. **Инфографика** (`analytics-infographics-panel`) остаётся на статическом срезе; при необходимости отдельный PR — merge + скрытие демо для руководителя.
 
-3. **Удалено или отключено для director/ROP + `actx`:** полный `DEALER_BASE_ROWS` на главной; полный `getAllMatrixTasks` для KPI задач; демо-страница `analytics` целиком; seeded строки в analytics-workspace; синтетический план-факт chart на главной; фиктивный город «—» как отдельная сущность в концентрации.
+3. **Синтетика намеренно остаётся (до backend) там, где нет merge РОП/директора:** демо-операционные числа на `DEALER_BASE_ROWS` для менеджера и демо-контуров.
 
-4. **Нужен backend:** фактические продажи, настоящий план-факт, исторические заказы, реальные открытые задачи вне витрины/sessionStorage.
+4. **Удалено или отключено для director/ROP + `actx`:** полный `DEALER_BASE_ROWS` на главной; полный `getAllMatrixTasks` для KPI задач; демо-страница `analytics` целиком; seeded строки и фейковая сводка ТОП 500 в `analytics-workspace`; синтетические KPI операционного блока (`omitSyntheticOperationalKpis`); синтетический план-факт chart на главной; фиктивный город «—» как отдельная сущность в концентрации.
+
+5. **Не подключать без отдельного ТЗ:** sales-control, полный `analytics.tsx`, каталог — см. выше.
+
+6. **Нужен backend:** фактические продажи, настоящий план-факт, исторические заказы, отгрузки оборудования, конкурентная аналитика по витрине, реальные открытые задачи вне витрины/sessionStorage.
 
 ---
 
@@ -133,8 +152,9 @@ Follow-up **класса 2** (единый team-fetch, scope dealer-base ↔ tra
 
 ## Вкладки, которые **не** должны использовать client-base `managementPlane`
 
-- Весь контур **план-факт / sales-control** (кроме явных empty-state на дашборде директора при `actx`).
-- Страницы без сущностей «клиент / ТТ / актуализация» (каталог, заказы и т.д.) — по роли и маршруту.
+- Весь контур **план-факт / sales-control** (кроме явных empty-state / заглушек на дашборде директора при `actx`).
+- **`analytics.tsx`** (полная демо-страница) для руководителя с `actx` упрощена отдельно; **табличный** `analytics-workspace` при `actx` скрывает демо-строки и фейковую сводку для РОП/директора.
+- Страницы без сущностей «клиент / ТТ / актуализация» (каталог, обучение, заказы и т.д.) — по роли и маршруту.
 
 ---
 

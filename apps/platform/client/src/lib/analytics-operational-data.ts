@@ -40,12 +40,14 @@ export type OperationalClientShowcaseRow = {
   mkModels: ShowcaseModelRef[];
   vhModels: ShowcaseModelRef[];
   hardwareModels: ShowcaseModelRef[];
-  unitsOnShowcase: number;
+  /** null — демо-полотна/штуки скрыты (нет фактической выгрузки по витрине). */
+  unitsOnShowcase: number | null;
   checkDate: string;
   setupDate: string;
-  totalSales: number;
-  showcaseSales: number;
-  conversionPercent: number;
+  /** null — нет фактических продаж в ЛК (не подставляем синтетику). */
+  totalSales: number | null;
+  showcaseSales: number | null;
+  conversionPercent: number | null;
   showcaseCheckStatus: ShowcaseCheckStatus;
 };
 
@@ -59,12 +61,13 @@ export type OperationalShowcaseProfitabilityRow = {
   city: string;
   clientCategory: ClientCategoryId;
   ourShowcases: number;
-  competitorShowcases: number;
-  totalSales: number;
-  showcaseSales: number;
+  /** null — нет фактических данных по конкурентам. */
+  competitorShowcases: number | null;
+  totalSales: number | null;
+  showcaseSales: number | null;
   profitabilityLabel: string;
-  profitabilityScore: number;
-  shareShowcasePercent: number;
+  profitabilityScore: number | null;
+  shareShowcasePercent: number | null;
   attentionZone: ShowcaseAttentionZone;
 };
 
@@ -75,9 +78,9 @@ export type OperationalHardwareConversionRow = {
   clientName: string;
   city: string;
   clientCategory: ClientCategoryId;
-  mkSales: number;
-  hardwareSales: number;
-  conversionPercent: number;
+  mkSales: number | null;
+  hardwareSales: number | null;
+  conversionPercent: number | null;
   competitorsSummary: string;
   topCompetitorModels: string;
   reasonNotWithUs: string;
@@ -156,7 +159,26 @@ function checkStatus(i: number): ShowcaseCheckStatus {
   return "no_data";
 }
 
-function buildClientShowcaseRow(d: DealerRow, i: number): OperationalClientShowcaseRow {
+function buildClientShowcaseRow(d: DealerRow, i: number, omitSynthetic: boolean): OperationalClientShowcaseRow {
+  if (omitSynthetic) {
+    return {
+      dealerId: d.id,
+      clientName: d.name,
+      city: d.city,
+      clientCategory: d.clientCategory,
+      segments: computeDealerSegments(d),
+      mkModels: [],
+      vhModels: [],
+      hardwareModels: [],
+      unitsOnShowcase: null,
+      checkDate: "",
+      setupDate: "",
+      totalSales: null,
+      showcaseSales: null,
+      conversionPercent: null,
+      showcaseCheckStatus: "no_data",
+    };
+  }
   const refs = pickModels(parseInt(d.id, 10) || i, 5);
   const mkModels = refs.filter((r) => r.line === "mk").slice(0, 3);
   const vhModels = refs.filter((r) => r.line === "vh").slice(0, 3);
@@ -183,8 +205,20 @@ function buildClientShowcaseRow(d: DealerRow, i: number): OperationalClientShowc
   };
 }
 
-export function buildOperationalClientShowcaseRowsFromDealers(dealers: DealerRow[]): OperationalClientShowcaseRow[] {
-  return dealers.map((d, i) => buildClientShowcaseRow(d, i));
+export type BuildOperationalAnalyticsSlicesOptions = {
+  /**
+   * Для ЛК РОП/директора с merge актуальной базы: не заполнять синтетические продажи, конверсию,
+   * демо-оборудование и прочие KPI до появления backend-источника.
+   */
+  omitSyntheticOperationalKpis?: boolean;
+};
+
+export function buildOperationalClientShowcaseRowsFromDealers(
+  dealers: DealerRow[],
+  omitSyntheticOperationalKpis?: boolean,
+): OperationalClientShowcaseRow[] {
+  const omit = omitSyntheticOperationalKpis === true;
+  return dealers.map((d, i) => buildClientShowcaseRow(d, i, omit));
 }
 
 /** Срезы операционной аналитики по клиентской базе (синтетика поверх `DealerRow[]`). */
@@ -195,12 +229,16 @@ export type OperationalAnalyticsRowSlices = {
   equipment: OperationalEquipmentRow[];
 };
 
-export function buildOperationalAnalyticsRowSlicesFromDealers(dealers: DealerRow[]): OperationalAnalyticsRowSlices {
+export function buildOperationalAnalyticsRowSlicesFromDealers(
+  dealers: DealerRow[],
+  options?: BuildOperationalAnalyticsSlicesOptions,
+): OperationalAnalyticsRowSlices {
+  const omit = options?.omitSyntheticOperationalKpis === true;
   return {
-    clientShowcase: buildOperationalClientShowcaseRowsFromDealers(dealers),
-    showcaseProfit: buildShowcaseProfitRowsFromDealers(dealers),
-    hardware: buildHardwareRowsFromDealers(dealers),
-    equipment: buildEquipmentRowsFromDealers(dealers),
+    clientShowcase: buildOperationalClientShowcaseRowsFromDealers(dealers, omit),
+    showcaseProfit: buildShowcaseProfitRowsFromDealers(dealers, omit),
+    hardware: buildHardwareRowsFromDealers(dealers, omit),
+    equipment: omit ? [] : buildEquipmentRowsFromDealers(dealers),
   };
 }
 
@@ -233,6 +271,9 @@ function mapProductLineFilter(line: OperationalProductLineKey): "mk" | "vh" | "h
 function rowMatchesProductLine(row: OperationalClientShowcaseRow, line: OperationalProductLineKey): boolean {
   const want = mapProductLineFilter(line);
   if (!want) return true;
+  if (row.totalSales === null) {
+    return true;
+  }
   if (want === "mk") return row.mkModels.length > 0;
   if (want === "vh") return row.vhModels.length > 0;
   return row.hardwareModels.length > 0;
@@ -269,20 +310,28 @@ export function filterClientShowcaseRows(
 export function kpiForClientShowcase(rows: OperationalClientShowcaseRow[]) {
   const clients = rows.length;
   const models = rows.reduce((s, r) => s + r.mkModels.length + r.vhModels.length + r.hardwareModels.length, 0);
-  const showcaseSales = rows.reduce((s, r) => s + r.showcaseSales, 0);
-  const avgConv = clients ? Math.round(rows.reduce((s, r) => s + r.conversionPercent, 0) / clients) : 0;
+  const metricsUnavailable = rows.length > 0 && rows.every((r) => r.totalSales === null);
+  if (metricsUnavailable) {
+    return { clients, models, showcaseSales: null as number | null, avgConv: null as number | null };
+  }
+  const showcaseSales = rows.reduce((s, r) => s + (r.showcaseSales ?? 0), 0);
+  const avgConv = clients ? Math.round(rows.reduce((s, r) => s + (r.conversionPercent ?? 0), 0) / clients) : 0;
   return { clients, models, showcaseSales, avgConv };
 }
 
 export function kpiForProfitabilityRows(rows: OperationalShowcaseProfitabilityRow[]) {
   const clients = new Set(rows.map((r) => r.dealerId)).size;
   const showcaseSlots = rows.reduce((s, r) => s + r.ourShowcases, 0);
-  const showcaseSales = rows.reduce((s, r) => s + r.showcaseSales, 0);
-  const avgShare = rows.length ? Math.round(rows.reduce((s, r) => s + r.shareShowcasePercent, 0) / rows.length) : 0;
+  const metricsUnavailable = rows.length > 0 && rows.every((r) => r.totalSales === null);
+  if (metricsUnavailable) {
+    return { clients, showcaseSlots, showcaseSales: null as number | null, avgShare: null as number | null };
+  }
+  const showcaseSales = rows.reduce((s, r) => s + (r.showcaseSales ?? 0), 0);
+  const avgShare = rows.length ? Math.round(rows.reduce((s, r) => s + (r.shareShowcasePercent ?? 0), 0) / rows.length) : 0;
   return { clients, showcaseSlots, showcaseSales, avgShare };
 }
 
-function attentionFromDealer(d: DealerRow, idx: number): ShowcaseAttentionZone {
+function attentionFromDealerSynthetic(d: DealerRow, idx: number): ShowcaseAttentionZone {
   if (d.hasProblem) return "many_competitors";
   if (d.distribution < 45) return "no_showcase_sales";
   if (d.distribution > 78) return "high_profit";
@@ -290,32 +339,81 @@ function attentionFromDealer(d: DealerRow, idx: number): ShowcaseAttentionZone {
   return "high_profit";
 }
 
-function buildShowcaseProfitRowsFromDealers(dealers: DealerRow[]): OperationalShowcaseProfitabilityRow[] {
+function attentionFromDealerReal(d: DealerRow): ShowcaseAttentionZone {
+  if (d.hasProblem) return "many_competitors";
+  if (d.distribution < 45) return "no_showcase_sales";
+  if (d.distribution > 78) return "high_profit";
+  return "low_profit";
+}
+
+function buildShowcaseProfitRowsFromDealers(dealers: DealerRow[], omitSynthetic?: boolean): OperationalShowcaseProfitabilityRow[] {
+  const omit = omitSynthetic === true;
   return dealers.flatMap((d, i) => {
+    if (omit) {
+      const zone = attentionFromDealerReal(d);
+      const rows: OperationalShowcaseProfitabilityRow[] = [
+        {
+          rowKey: `${d.id}`,
+          dealerId: d.id,
+          tradePointId: undefined,
+          clientName: d.name,
+          city: d.city,
+          clientCategory: d.clientCategory,
+          ourShowcases: d.tradePoints.length,
+          competitorShowcases: null,
+          totalSales: null,
+          showcaseSales: null,
+          profitabilityLabel: "Нет данных",
+          profitabilityScore: null,
+          shareShowcasePercent: null,
+          attentionZone: zone,
+        },
+      ];
+      if (d.tradePoints[1]) {
+        const tp = d.tradePoints[1];
+        rows.push({
+          rowKey: `${d.id}-${tp.id}`,
+          dealerId: d.id,
+          tradePointId: tp.id,
+          clientName: `${d.name} · ${tp.name}`,
+          city: tp.city,
+          clientCategory: d.clientCategory,
+          ourShowcases: 1,
+          competitorShowcases: null,
+          totalSales: null,
+          showcaseSales: null,
+          profitabilityLabel: "Нет данных",
+          profitabilityScore: null,
+          shareShowcasePercent: null,
+          attentionZone: zone,
+        });
+      }
+      return rows;
+    }
     const base = (parseInt(d.id, 10) || 1) * 1000;
-  const totalSales = 200 + (i * 41) % 800;
-  const showcaseSales = Math.round(totalSales * (0.15 + ((i * 3) % 35) / 100));
-  const share = Math.round((showcaseSales / Math.max(1, totalSales)) * 100);
-  const score = 40 + (i * 13) % 55;
-  const label = score >= 70 ? "Высокая" : score >= 45 ? "Средняя" : "Низкая";
-  const out: OperationalShowcaseProfitabilityRow[] = [
-    {
-      rowKey: `${d.id}`,
-      dealerId: d.id,
-      tradePointId: undefined,
-      clientName: d.name,
-      city: d.city,
-      clientCategory: d.clientCategory,
-      ourShowcases: d.tradePoints.length,
-      competitorShowcases: 1 + (i % 5),
-      totalSales,
-      showcaseSales,
-      profitabilityLabel: label,
-      profitabilityScore: score,
-      shareShowcasePercent: share,
-      attentionZone: attentionFromDealer(d, i),
-    },
-  ];
+    const totalSales = 200 + (i * 41) % 800;
+    const showcaseSales = Math.round(totalSales * (0.15 + ((i * 3) % 35) / 100));
+    const share = Math.round((showcaseSales / Math.max(1, totalSales)) * 100);
+    const score = 40 + (i * 13) % 55;
+    const label = score >= 70 ? "Высокая" : score >= 45 ? "Средняя" : "Низкая";
+    const out: OperationalShowcaseProfitabilityRow[] = [
+      {
+        rowKey: `${d.id}`,
+        dealerId: d.id,
+        tradePointId: undefined,
+        clientName: d.name,
+        city: d.city,
+        clientCategory: d.clientCategory,
+        ourShowcases: d.tradePoints.length,
+        competitorShowcases: 1 + (i % 5),
+        totalSales,
+        showcaseSales,
+        profitabilityLabel: label,
+        profitabilityScore: score,
+        shareShowcasePercent: share,
+        attentionZone: attentionFromDealerSynthetic(d, i),
+      },
+    ];
     if (d.tradePoints[1]) {
       const tp = d.tradePoints[1];
       out.push({
@@ -361,14 +459,32 @@ function matchesSearchShowcase(row: OperationalShowcaseProfitabilityRow, q: stri
   return row.clientName.toLowerCase().includes(s) || row.city.toLowerCase().includes(s);
 }
 
-function buildHardwareRowsFromDealers(dealers: DealerRow[]): OperationalHardwareConversionRow[] {
+function buildHardwareRowsFromDealers(dealers: DealerRow[], omitSynthetic?: boolean): OperationalHardwareConversionRow[] {
+  const omit = omitSynthetic === true;
+  if (omit) {
+    return dealers.map((d) => ({
+      dealerId: d.id,
+      clientName: d.name,
+      city: d.city,
+      clientCategory: d.clientCategory,
+      mkSales: null,
+      hardwareSales: null,
+      conversionPercent: null,
+      competitorsSummary: "",
+      topCompetitorModels: "",
+      reasonNotWithUs: "",
+      worksUnderStock: false,
+      ourEquipment: false,
+      conversionLevel: "none",
+    }));
+  }
   return dealers.map((d, i) => {
     const mkSales = 40 + (i * 17) % 220;
-  const hw = Math.round(mkSales * (0.08 + ((i * 5) % 25) / 100));
-  const conv = mkSales > 0 ? Math.round((hw / mkSales) * 100) : 0;
-  let level: HardwareConversionLevel = "medium";
-  if (conv >= 22) level = "high";
-  else if (conv < 10) level = "low";
+    const hw = Math.round(mkSales * (0.08 + ((i * 5) % 25) / 100));
+    const conv = mkSales > 0 ? Math.round((hw / mkSales) * 100) : 0;
+    let level: HardwareConversionLevel = "medium";
+    if (conv >= 22) level = "high";
+    else if (conv < 10) level = "low";
     if (hw === 0) level = "none";
     return {
       dealerId: d.id,
@@ -420,9 +536,13 @@ function matchesSearchHw(row: OperationalHardwareConversionRow, q: string): bool
 }
 
 export function kpiHardware(rows: OperationalHardwareConversionRow[]) {
-  const mk = rows.reduce((s, r) => s + r.mkSales, 0);
-  const hw = rows.reduce((s, r) => s + r.hardwareSales, 0);
-  const avg = rows.length ? Math.round(rows.reduce((s, r) => s + r.conversionPercent, 0) / rows.length) : 0;
+  const metricsUnavailable = rows.length > 0 && rows.every((r) => r.mkSales === null);
+  if (metricsUnavailable) {
+    return { mk: null as number | null, hw: null as number | null, avg: null as number | null, low: null as number | null };
+  }
+  const mk = rows.reduce((s, r) => s + (r.mkSales ?? 0), 0);
+  const hw = rows.reduce((s, r) => s + (r.hardwareSales ?? 0), 0);
+  const avg = rows.length ? Math.round(rows.reduce((s, r) => s + (r.conversionPercent ?? 0), 0) / rows.length) : 0;
   const low = rows.filter((r) => r.conversionLevel === "low" || r.conversionLevel === "none").length;
   return { mk, hw, avg, low };
 }
@@ -550,8 +670,8 @@ export function getInfographicClientSegmentCards(
       label: labels[segment],
       clients: k.clients,
       modelsOnShowcase: k.models,
-      showcaseSales: k.showcaseSales,
-      avgConversionPercent: k.avgConv,
+      showcaseSales: k.showcaseSales ?? 0,
+      avgConversionPercent: k.avgConv ?? 0,
     };
   });
 }
@@ -578,17 +698,17 @@ export function getInfographicShowcaseProfitabilityBars(
     if (!r.tradePointId) byDealer.set(r.dealerId, r);
   }
   return Array.from(byDealer.values())
-    .sort((a, b) => a.profitabilityScore - b.profitabilityScore)
+    .sort((a, b) => (a.profitabilityScore ?? 0) - (b.profitabilityScore ?? 0))
     .slice(0, limit)
     .map((r) => ({
       dealerId: r.dealerId,
       clientName: r.clientName,
       city: r.city,
       profitabilityLabel: r.profitabilityLabel,
-      profitabilityScore: r.profitabilityScore,
-      shareShowcasePercent: r.shareShowcasePercent,
+      profitabilityScore: r.profitabilityScore ?? 0,
+      shareShowcasePercent: r.shareShowcasePercent ?? 0,
       ourShowcases: r.ourShowcases,
-      competitorShowcases: r.competitorShowcases,
+      competitorShowcases: r.competitorShowcases ?? 0,
     }));
 }
 
@@ -613,9 +733,13 @@ export function getInfographicShowcaseRiskClients(
 export function getInfographicHardwareOperationalKpi(
   filters: OperationalGlobalFilters = OPERATIONAL_DEFAULT_GLOBAL_FILTERS,
   slices: OperationalAnalyticsRowSlices = STATIC_OPERATIONAL_ROW_SLICES,
-) {
+): { mk: number; hw: number; avg: number; low: number } {
   const rows = filterHardwareRows(filters, "all", null, null, slices);
-  return kpiHardware(rows);
+  const k = kpiHardware(rows);
+  if (k.mk === null) {
+    return { mk: 0, hw: 0, avg: 0, low: 0 };
+  }
+  return { mk: k.mk!, hw: k.hw!, avg: k.avg!, low: k.low! };
 }
 
 export function getInfographicHardwareRiskClients(
@@ -736,8 +860,8 @@ export function getInfographicCitySegments(
     }
     const other = Math.max(0, n - topTier - pot - lead);
     const seg = (s: PartnerSegment) => list.filter((r: OperationalClientShowcaseRow) => r.segments.includes(s)).length;
-    const showcaseSales = list.reduce((s: number, r: OperationalClientShowcaseRow) => s + r.showcaseSales, 0);
-    const avgConversion = n ? Math.round(list.reduce((s, r) => s + r.conversionPercent, 0) / n) : 0;
+    const showcaseSales = list.reduce((s: number, r: OperationalClientShowcaseRow) => s + (r.showcaseSales ?? 0), 0);
+    const avgConversion = n ? Math.round(list.reduce((s, r) => s + (r.conversionPercent ?? 0), 0) / n) : 0;
     out.push({
       cityId: citySlugForInfographic(cityName),
       cityName,
@@ -790,10 +914,10 @@ export function getInfographicShowcaseModels(
           units: 0,
         } satisfies Agg);
       cur.clients.add(r.dealerId);
-      cur.sales += r.showcaseSales / denom;
-      cur.convSum += r.conversionPercent;
+      cur.sales += (r.showcaseSales ?? 0) / denom;
+      cur.convSum += r.conversionPercent ?? 0;
       cur.convN += 1;
-      cur.units += r.unitsOnShowcase / denom;
+      cur.units += (r.unitsOnShowcase ?? 0) / denom;
       map.set(m.productId, cur);
     }
   }

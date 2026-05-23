@@ -68,9 +68,19 @@ function convLabel(c: HardwareConversionLevel | "all"): string {
   return "Нет конверсии";
 }
 
+const NO_METRICS_SHORT = "Нет актуальных данных";
+
+function clientShowcaseMetricsUnavailable(rows: OperationalClientShowcaseRow[]): boolean {
+  return rows.length > 0 && rows.every((r) => r.totalSales === null);
+}
+
+function profitabilityMetricsUnavailable(rows: OperationalShowcaseProfitabilityRow[]): boolean {
+  return rows.length > 0 && rows.every((r) => r.totalSales === null);
+}
+
 function showcaseStatusBadgeClass(s: ShowcaseCheckStatus) {
-  if (s === "verified") return "border-emerald-200 bg-emerald-50 text-emerald-900";
-  if (s === "needs_check") return "border-amber-200 bg-amber-50 text-amber-950";
+  if (s === "verified") return "border-primary/35 bg-primary/10 text-primary";
+  if (s === "needs_check") return "border-border bg-muted/70 text-foreground";
   return "border-border bg-muted/60 text-muted-foreground";
 }
 
@@ -103,11 +113,13 @@ function ModelChips({ models }: { models: { productId: string; label: string }[]
   );
 }
 
-function OperationalEmptyResults({ onReset }: { onReset: () => void }) {
+function OperationalEmptyResults({ onReset, message }: { onReset: () => void; message?: string }) {
   return (
     <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border/80 bg-muted/15 px-4 py-10 text-center" data-testid="empty-operational-results">
       <p className="text-base font-semibold text-foreground">Ничего не найдено</p>
-      <p className="max-w-md text-sm text-muted-foreground">Попробуйте изменить фильтры или очистить поиск.</p>
+      <p className="max-w-md text-sm text-muted-foreground">
+        {message ?? "Попробуйте изменить фильтры или очистить поиск."}
+      </p>
       <Button type="button" variant="default" size="sm" className="font-semibold" onClick={onReset}>
         Сбросить фильтры
       </Button>
@@ -167,16 +179,34 @@ function PartnerTableDesktop({ rows }: { rows: OperationalClientShowcaseRow[] })
                     <td className="px-3 py-2.5 align-top">
                       <ModelChips models={row.vhModels} />
                     </td>
-                    <td className="px-3 py-2.5 tabular-nums text-foreground">{row.unitsOnShowcase}</td>
-                    <td className="px-3 py-2.5 text-xs text-muted-foreground">{row.checkDate}</td>
-                    <td className="px-3 py-2.5 text-xs text-muted-foreground">{row.setupDate}</td>
-                    <td className="px-3 py-2.5 tabular-nums text-foreground">{row.totalSales}</td>
-                    <td className="px-3 py-2.5 tabular-nums text-foreground">{row.showcaseSales}</td>
+                    <td className="px-3 py-2.5 tabular-nums text-foreground">
+                      {row.unitsOnShowcase === null ? (
+                        <span className="text-xs text-muted-foreground">{NO_METRICS_SHORT}</span>
+                      ) : (
+                        row.unitsOnShowcase
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                      {!row.checkDate ? <span className="text-muted-foreground">{NO_METRICS_SHORT}</span> : row.checkDate}
+                    </td>
+                    <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                      {!row.setupDate ? <span className="text-muted-foreground">{NO_METRICS_SHORT}</span> : row.setupDate}
+                    </td>
+                    <td className="px-3 py-2.5 tabular-nums text-foreground">
+                      {row.totalSales === null ? <span className="text-xs text-muted-foreground">{NO_METRICS_SHORT}</span> : row.totalSales}
+                    </td>
+                    <td className="px-3 py-2.5 tabular-nums text-foreground">
+                      {row.showcaseSales === null ? <span className="text-xs text-muted-foreground">{NO_METRICS_SHORT}</span> : row.showcaseSales}
+                    </td>
                     <td className="px-3 py-2.5">
-                      <div className="flex min-w-[5.5rem] flex-col gap-1">
-                        <span className="text-xs font-semibold tabular-nums text-foreground">{formatPercent(row.conversionPercent)}</span>
-                        <Progress value={Math.min(100, row.conversionPercent)} className="h-1.5" />
-                      </div>
+                      {row.conversionPercent === null ? (
+                        <span className="text-xs text-muted-foreground">{NO_METRICS_SHORT}</span>
+                      ) : (
+                        <div className="flex min-w-[5.5rem] flex-col gap-1">
+                          <span className="text-xs font-semibold tabular-nums text-foreground">{formatPercent(row.conversionPercent)}</span>
+                          <Progress value={Math.min(100, row.conversionPercent)} className="h-1.5" />
+                        </div>
+                      )}
                     </td>
                     <td className="px-3 py-2.5 text-right">
                       <div className="flex flex-wrap justify-end gap-1.5">
@@ -228,24 +258,36 @@ function PartnerCardsMobile({ rows }: { rows: OperationalClientShowcaseRow[] }) 
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div className="rounded-lg border border-border/60 bg-muted/20 px-2 py-1.5">
                   <p className="text-[10px] font-semibold uppercase text-muted-foreground">Полотна</p>
-                  <p className="font-semibold tabular-nums text-foreground">{row.unitsOnShowcase}</p>
+                  <p className="font-semibold tabular-nums text-foreground">
+                    {row.unitsOnShowcase === null ? <span className="text-xs font-normal text-muted-foreground">{NO_METRICS_SHORT}</span> : row.unitsOnShowcase}
+                  </p>
                 </div>
                 <div className="rounded-lg border border-border/60 bg-muted/20 px-2 py-1.5">
                   <p className="text-[10px] font-semibold uppercase text-muted-foreground">Продажи</p>
-                  <p className="font-semibold tabular-nums text-foreground">{row.totalSales}</p>
+                  <p className="font-semibold tabular-nums text-foreground">
+                    {row.totalSales === null ? <span className="text-xs font-normal text-muted-foreground">{NO_METRICS_SHORT}</span> : row.totalSales}
+                  </p>
                 </div>
                 <div className="rounded-lg border border-border/60 bg-muted/20 px-2 py-1.5">
                   <p className="text-[10px] font-semibold uppercase text-muted-foreground">По витринам</p>
-                  <p className="font-semibold tabular-nums text-foreground">{row.showcaseSales}</p>
+                  <p className="font-semibold tabular-nums text-foreground">
+                    {row.showcaseSales === null ? <span className="text-xs font-normal text-muted-foreground">{NO_METRICS_SHORT}</span> : row.showcaseSales}
+                  </p>
                 </div>
                 <div className="rounded-lg border border-border/60 bg-muted/20 px-2 py-1.5">
                   <p className="text-[10px] font-semibold uppercase text-muted-foreground">Конверсия</p>
-                  <p className="font-semibold tabular-nums text-foreground">{formatPercent(row.conversionPercent)}</p>
+                  <p className="font-semibold tabular-nums text-foreground">
+                    {row.conversionPercent === null ? (
+                      <span className="text-xs font-normal text-muted-foreground">{NO_METRICS_SHORT}</span>
+                    ) : (
+                      formatPercent(row.conversionPercent)
+                    )}
+                  </p>
                 </div>
               </div>
-              <Progress value={Math.min(100, row.conversionPercent)} className="h-1.5" />
+              {row.conversionPercent === null ? null : <Progress value={Math.min(100, row.conversionPercent)} className="h-1.5" />}
               <p className="text-[11px] text-muted-foreground">
-                Проверка: {row.checkDate} · Выставлено: {row.setupDate}
+                Проверка: {!row.checkDate ? NO_METRICS_SHORT : row.checkDate} · Выставлено: {!row.setupDate ? NO_METRICS_SHORT : row.setupDate}
               </p>
               <div>
                 <p className="mb-1 text-[11px] font-semibold uppercase text-muted-foreground">МК</p>
@@ -283,8 +325,10 @@ export function AnalyticsOperationalPanel() {
   const operationalRowSlices = useMemo((): OperationalAnalyticsRowSlices | undefined => {
     if (!actx.enabled || !teamCtx || !shouldUseTeamMergedActualizationPlane(profile)) return undefined;
     const dealers = buildDealerBaseRowsWithActualization(teamCtx.mergedState, profile, { includeArchivedDealers: false });
-    return buildOperationalAnalyticsRowSlicesFromDealers(dealers);
+    return buildOperationalAnalyticsRowSlicesFromDealers(dealers, { omitSyntheticOperationalKpis: true });
   }, [actx.enabled, teamCtx, teamCtx?.mergedState, profile]);
+
+  const omitSyntheticKpis = Boolean(operationalRowSlices);
 
   const equipmentDealerPickerRows = useMemo((): { id: string; name: string }[] => {
     if (operationalRowSlices) {
@@ -378,28 +422,60 @@ export function AnalyticsOperationalPanel() {
     if (opTab === "top500" || opTab === "fiveHundredPlus" || opTab === "tandoorClub") {
       const rows = opTab === "top500" ? rowsTop500 : opTab === "fiveHundredPlus" ? rows500Plus : rowsClub;
       const k = kpiForClientShowcase(rows);
+      if (k.showcaseSales === null) {
+        return [
+          { label: "Клиентов в выборке", value: String(k.clients) },
+          { label: "Моделей на витринах", value: String(k.models), hint: "После выгрузки витрины по SKU" },
+          { label: "Продаж по витринам", value: NO_METRICS_SHORT },
+          { label: "Конверсия", value: NO_METRICS_SHORT },
+        ];
+      }
       return [
         { label: "Клиентов в выборке", value: String(k.clients) },
         { label: "Моделей на витринах", value: String(k.models) },
         { label: "Продаж по витринам", value: String(k.showcaseSales) },
-        { label: "Средняя конверсия", value: formatPercent(k.avgConv) },
+        { label: "Средняя конверсия", value: formatPercent(k.avgConv!) },
       ];
     }
     if (opTab === "showcaseProfitability") {
       const k = kpiForProfitabilityRows(profitRows);
+      if (k.showcaseSales === null) {
+        return [
+          { label: "Клиентов в выборке", value: String(k.clients) },
+          { label: "Наших витрин (слотов)", value: String(k.showcaseSlots), hint: "По числу ТТ в актуальной базе" },
+          { label: "Продаж по витринам", value: NO_METRICS_SHORT },
+          { label: "Доля продаж с витрины", value: NO_METRICS_SHORT },
+        ];
+      }
       return [
         { label: "Клиентов в выборке", value: String(k.clients) },
         { label: "Наших витрин (слотов)", value: String(k.showcaseSlots) },
         { label: "Продаж по витринам", value: String(k.showcaseSales) },
-        { label: "Средняя доля витрины", value: formatPercent(k.avgShare) },
+        { label: "Средняя доля витрины", value: formatPercent(k.avgShare!) },
       ];
     }
     if (opTab === "hardwareConversion") {
+      if (hwKpi.mk === null) {
+        return [
+          { label: "Продажи МК", value: NO_METRICS_SHORT },
+          { label: "Продажи фурнитуры", value: NO_METRICS_SHORT },
+          { label: "Конверсия МК → фурнитура", value: NO_METRICS_SHORT },
+          { label: "Сегмент «низкая конверсия»", value: NO_METRICS_SHORT, hint: "Нужны фактические заказы" },
+        ];
+      }
       return [
-        { label: "Продажи МК", value: formatUnits(hwKpi.mk) },
-        { label: "Продажи фурнитуры", value: formatUnits(hwKpi.hw) },
-        { label: "Средняя конверсия", value: formatPercent(hwKpi.avg) },
-        { label: "Низкая конверсия", value: String(hwKpi.low), hint: "клиентов" },
+        { label: "Продажи МК", value: formatUnits(hwKpi.mk!) },
+        { label: "Продажи фурнитуры", value: formatUnits(hwKpi.hw!) },
+        { label: "Средняя конверсия", value: formatPercent(hwKpi.avg!) },
+        { label: "Низкая конверсия", value: String(hwKpi.low!), hint: "клиентов" },
+      ];
+    }
+    if (omitSyntheticKpis) {
+      return [
+        { label: "Оборудование (позиции)", value: NO_METRICS_SHORT },
+        { label: "Сумма реализации", value: NO_METRICS_SHORT },
+        { label: "Клиенты с отгрузками", value: NO_METRICS_SHORT },
+        { label: "Средний заказ / мес.", value: NO_METRICS_SHORT, hint: "Подключите учёт отгрузок" },
       ];
     }
     return [
@@ -408,14 +484,21 @@ export function AnalyticsOperationalPanel() {
       { label: "Клиентов с оборудованием", value: String(eqKpi.clients) },
       { label: "Средняя сумма заказов / мес.", value: formatCompactRub(eqKpi.avgM) },
     ];
-  }, [opTab, rowsTop500, rows500Plus, rowsClub, profitRows, hwKpi, eqKpi]);
+  }, [opTab, rowsTop500, rows500Plus, rowsClub, profitRows, hwKpi, eqKpi, omitSyntheticKpis]);
 
   const tabTriggerClass =
     "shrink-0 rounded-md border border-transparent px-3 py-2 text-xs font-medium transition-all data-[state=active]:border-primary/40 data-[state=active]:bg-primary/12 data-[state=active]:text-primary data-[state=active]:shadow-sm sm:text-sm";
 
   return (
     <div className="min-w-0 space-y-5">
-      <OperationalHeaderKpi metrics={headerMetrics} />
+      <OperationalHeaderKpi
+        metrics={headerMetrics}
+        sourceNote={
+          omitSyntheticKpis
+            ? "Источник списков клиентов: актуальная активная база. Продажи, конверсия, фурнитура и оборудование — только после подключения фактических данных (BI / учёт)."
+            : undefined
+        }
+      />
 
       <OperationalFiltersBar filters={globalFilters} setFilters={setGlobalFilters} resultCount={activeResultCount} onReset={resetAll} />
 
@@ -445,17 +528,35 @@ export function AnalyticsOperationalPanel() {
 
         <TabsContent value="top500" className="mt-4 space-y-4 focus-visible:ring-0">
           <div data-testid="section-operational-top500">
-            <PartnerSegmentBody rows={rowsTop500} showcaseStatus={showcaseStatus} onShowcaseStatus={setShowcaseStatus} onResetFilters={resetAll} />
+            <PartnerSegmentBody
+              rows={rowsTop500}
+              showcaseStatus={showcaseStatus}
+              onShowcaseStatus={setShowcaseStatus}
+              onResetFilters={resetAll}
+              metricsUnavailable={clientShowcaseMetricsUnavailable(rowsTop500)}
+            />
           </div>
         </TabsContent>
         <TabsContent value="fiveHundredPlus" className="mt-4 space-y-4 focus-visible:ring-0">
           <div data-testid="section-operational-500-plus">
-            <PartnerSegmentBody rows={rows500Plus} showcaseStatus={showcaseStatus} onShowcaseStatus={setShowcaseStatus} onResetFilters={resetAll} />
+            <PartnerSegmentBody
+              rows={rows500Plus}
+              showcaseStatus={showcaseStatus}
+              onShowcaseStatus={setShowcaseStatus}
+              onResetFilters={resetAll}
+              metricsUnavailable={clientShowcaseMetricsUnavailable(rows500Plus)}
+            />
           </div>
         </TabsContent>
         <TabsContent value="tandoorClub" className="mt-4 space-y-4 focus-visible:ring-0">
           <div data-testid="section-operational-tandoor-club">
-            <PartnerSegmentBody rows={rowsClub} showcaseStatus={showcaseStatus} onShowcaseStatus={setShowcaseStatus} onResetFilters={resetAll} />
+            <PartnerSegmentBody
+              rows={rowsClub}
+              showcaseStatus={showcaseStatus}
+              onShowcaseStatus={setShowcaseStatus}
+              onResetFilters={resetAll}
+              metricsUnavailable={clientShowcaseMetricsUnavailable(rowsClub)}
+            />
           </div>
         </TabsContent>
 
@@ -480,6 +581,17 @@ export function AnalyticsOperationalPanel() {
               <Link href="/tasks">К задачам</Link>
             </Button>
           </div>
+          {profitabilityMetricsUnavailable(profitRows) && profitRows.length > 0 ? (
+            <Card className="border-dashed border-primary/35 bg-primary/5 shadow-xs ring-1 ring-black/[0.02]">
+              <CardContent className="space-y-2 p-4 text-sm text-muted-foreground">
+                <p className="font-medium text-foreground">Продажи и доля с витрины</p>
+                <p>Демонстрационные суммы и доли скрыты. Остаются клиенты из активной базы и число витрин (ТТ) по данным ЛК.</p>
+                <p className="text-xs font-medium text-primary">
+                  Показатель будет доступен после подключения фактических продаж и маржи по витрине.
+                </p>
+              </CardContent>
+            </Card>
+          ) : null}
           {profitRows.length === 0 ? (
             <OperationalEmptyResults onReset={resetAll} />
           ) : (
@@ -488,40 +600,54 @@ export function AnalyticsOperationalPanel() {
         </TabsContent>
 
         <TabsContent value="hardwareConversion" className="mt-4 space-y-4 focus-visible:ring-0">
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            <Card className="border-border/80 shadow-xs ring-1 ring-black/[0.02]" data-testid="card-operational-kpi-hw-mk">
-              <CardHeader className="pb-1 pt-3">
-                <CardTitle className="text-xs font-medium text-muted-foreground">Продажи МК</CardTitle>
+          {hwKpi.mk === null ? (
+            <Card className="border-dashed border-primary/35 bg-primary/5 shadow-xs ring-1 ring-black/[0.02]">
+              <CardHeader className="pb-2 pt-4">
+                <CardTitle className="text-sm font-semibold text-foreground">Нет фактических данных по конверсии</CardTitle>
               </CardHeader>
-              <CardContent className="pb-3 pt-0">
-                <p className="text-xl font-semibold tabular-nums">{formatUnits(hwKpi.mk)}</p>
+              <CardContent className="space-y-2 pb-4 text-sm text-muted-foreground">
+                <p>Для руководителя с актуальной базой демонстрационные суммы и проценты скрыты.</p>
+                <p className="text-xs font-medium text-primary">
+                  Показатель будет доступен после подключения фактических продаж МК, фурнитуры и воронки из учётной системы.
+                </p>
               </CardContent>
             </Card>
-            <Card className="border-border/80 shadow-xs ring-1 ring-black/[0.02]" data-testid="card-operational-kpi-hw-furn">
-              <CardHeader className="pb-1 pt-3">
-                <CardTitle className="text-xs font-medium text-muted-foreground">Продажи фурнитуры</CardTitle>
-              </CardHeader>
-              <CardContent className="pb-3 pt-0">
-                <p className="text-xl font-semibold tabular-nums">{formatUnits(hwKpi.hw)}</p>
-              </CardContent>
-            </Card>
-            <Card className="border-border/80 shadow-xs ring-1 ring-black/[0.02]" data-testid="card-operational-kpi-hw-avg">
-              <CardHeader className="pb-1 pt-3">
-                <CardTitle className="text-xs font-medium text-muted-foreground">Средняя конверсия</CardTitle>
-              </CardHeader>
-              <CardContent className="pb-3 pt-0">
-                <p className="text-xl font-semibold tabular-nums">{formatPercent(hwKpi.avg)}</p>
-              </CardContent>
-            </Card>
-            <Card className="border-border/80 shadow-xs ring-1 ring-black/[0.02]" data-testid="card-operational-kpi-hw-low">
-              <CardHeader className="pb-1 pt-3">
-                <CardTitle className="text-xs font-medium text-muted-foreground">Низкая конверсия</CardTitle>
-              </CardHeader>
-              <CardContent className="pb-3 pt-0">
-                <p className="text-xl font-semibold tabular-nums">{hwKpi.low}</p>
-              </CardContent>
-            </Card>
-          </div>
+          ) : (
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              <Card className="border-border/80 shadow-xs ring-1 ring-black/[0.02]" data-testid="card-operational-kpi-hw-mk">
+                <CardHeader className="pb-1 pt-3">
+                  <CardTitle className="text-xs font-medium text-muted-foreground">Продажи МК</CardTitle>
+                </CardHeader>
+                <CardContent className="pb-3 pt-0">
+                  <p className="text-xl font-semibold tabular-nums">{formatUnits(hwKpi.mk!)}</p>
+                </CardContent>
+              </Card>
+              <Card className="border-border/80 shadow-xs ring-1 ring-black/[0.02]" data-testid="card-operational-kpi-hw-furn">
+                <CardHeader className="pb-1 pt-3">
+                  <CardTitle className="text-xs font-medium text-muted-foreground">Продажи фурнитуры</CardTitle>
+                </CardHeader>
+                <CardContent className="pb-3 pt-0">
+                  <p className="text-xl font-semibold tabular-nums">{formatUnits(hwKpi.hw!)}</p>
+                </CardContent>
+              </Card>
+              <Card className="border-border/80 shadow-xs ring-1 ring-black/[0.02]" data-testid="card-operational-kpi-hw-avg">
+                <CardHeader className="pb-1 pt-3">
+                  <CardTitle className="text-xs font-medium text-muted-foreground">Средняя конверсия</CardTitle>
+                </CardHeader>
+                <CardContent className="pb-3 pt-0">
+                  <p className="text-xl font-semibold tabular-nums">{formatPercent(hwKpi.avg!)}</p>
+                </CardContent>
+              </Card>
+              <Card className="border-border/80 shadow-xs ring-1 ring-black/[0.02]" data-testid="card-operational-kpi-hw-low">
+                <CardHeader className="pb-1 pt-3">
+                  <CardTitle className="text-xs font-medium text-muted-foreground">Низкая конверсия</CardTitle>
+                </CardHeader>
+                <CardContent className="pb-3 pt-0">
+                  <p className="text-xl font-semibold tabular-nums">{hwKpi.low}</p>
+                </CardContent>
+              </Card>
+            </div>
+          )}
           <div className="flex flex-col gap-3 rounded-lg border border-border/60 bg-muted/15 px-3 py-3 lg:flex-row lg:flex-wrap lg:items-end">
             <div className="min-w-[10rem]">
               <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Конверсия</span>
@@ -558,40 +684,54 @@ export function AnalyticsOperationalPanel() {
         </TabsContent>
 
         <TabsContent value="equipment" className="mt-4 space-y-4 focus-visible:ring-0">
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            <Card className="border-border/80 shadow-xs ring-1 ring-black/[0.02]" data-testid="card-operational-kpi-eq-units">
-              <CardHeader className="pb-1 pt-3">
-                <CardTitle className="text-xs font-medium text-muted-foreground">Единиц оборудования</CardTitle>
+          {omitSyntheticKpis ? (
+            <Card className="border-dashed border-primary/35 bg-primary/5 shadow-xs ring-1 ring-black/[0.02]">
+              <CardHeader className="pb-2 pt-4">
+                <CardTitle className="text-sm font-semibold text-foreground">Нет фактических данных по оборудованию</CardTitle>
               </CardHeader>
-              <CardContent className="pb-3 pt-0">
-                <p className="text-xl font-semibold tabular-nums">{eqKpi.units}</p>
+              <CardContent className="space-y-2 pb-4 text-sm text-muted-foreground">
+                <p>Синтетические отгрузки и суммы для руководителя с актуальной базой отключены.</p>
+                <p className="text-xs font-medium text-primary">
+                  Показатель будет доступен после подключения учёта отгрузок и договоров по оборудованию.
+                </p>
               </CardContent>
             </Card>
-            <Card className="border-border/80 shadow-xs ring-1 ring-black/[0.02]" data-testid="card-operational-kpi-eq-sum">
-              <CardHeader className="pb-1 pt-3">
-                <CardTitle className="text-xs font-medium text-muted-foreground">Сумма реализации</CardTitle>
-              </CardHeader>
-              <CardContent className="pb-3 pt-0">
-                <p className="text-xl font-semibold tabular-nums">{formatCompactRub(eqKpi.sum)}</p>
-              </CardContent>
-            </Card>
-            <Card className="border-border/80 shadow-xs ring-1 ring-black/[0.02]" data-testid="card-operational-kpi-eq-clients">
-              <CardHeader className="pb-1 pt-3">
-                <CardTitle className="text-xs font-medium text-muted-foreground">Клиентов с оборудованием</CardTitle>
-              </CardHeader>
-              <CardContent className="pb-3 pt-0">
-                <p className="text-xl font-semibold tabular-nums">{eqKpi.clients}</p>
-              </CardContent>
-            </Card>
-            <Card className="border-border/80 shadow-xs ring-1 ring-black/[0.02]" data-testid="card-operational-kpi-eq-avg">
-              <CardHeader className="pb-1 pt-3">
-                <CardTitle className="text-xs font-medium text-muted-foreground">Средняя сумма заказов / мес.</CardTitle>
-              </CardHeader>
-              <CardContent className="pb-3 pt-0">
-                <p className="text-xl font-semibold tabular-nums">{formatCompactRub(eqKpi.avgM)}</p>
-              </CardContent>
-            </Card>
-          </div>
+          ) : (
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              <Card className="border-border/80 shadow-xs ring-1 ring-black/[0.02]" data-testid="card-operational-kpi-eq-units">
+                <CardHeader className="pb-1 pt-3">
+                  <CardTitle className="text-xs font-medium text-muted-foreground">Единиц оборудования</CardTitle>
+                </CardHeader>
+                <CardContent className="pb-3 pt-0">
+                  <p className="text-xl font-semibold tabular-nums">{eqKpi.units}</p>
+                </CardContent>
+              </Card>
+              <Card className="border-border/80 shadow-xs ring-1 ring-black/[0.02]" data-testid="card-operational-kpi-eq-sum">
+                <CardHeader className="pb-1 pt-3">
+                  <CardTitle className="text-xs font-medium text-muted-foreground">Сумма реализации</CardTitle>
+                </CardHeader>
+                <CardContent className="pb-3 pt-0">
+                  <p className="text-xl font-semibold tabular-nums">{formatCompactRub(eqKpi.sum)}</p>
+                </CardContent>
+              </Card>
+              <Card className="border-border/80 shadow-xs ring-1 ring-black/[0.02]" data-testid="card-operational-kpi-eq-clients">
+                <CardHeader className="pb-1 pt-3">
+                  <CardTitle className="text-xs font-medium text-muted-foreground">Клиентов с оборудованием</CardTitle>
+                </CardHeader>
+                <CardContent className="pb-3 pt-0">
+                  <p className="text-xl font-semibold tabular-nums">{eqKpi.clients}</p>
+                </CardContent>
+              </Card>
+              <Card className="border-border/80 shadow-xs ring-1 ring-black/[0.02]" data-testid="card-operational-kpi-eq-avg">
+                <CardHeader className="pb-1 pt-3">
+                  <CardTitle className="text-xs font-medium text-muted-foreground">Средняя сумма заказов / мес.</CardTitle>
+                </CardHeader>
+                <CardContent className="pb-3 pt-0">
+                  <p className="text-xl font-semibold tabular-nums">{formatCompactRub(eqKpi.avgM)}</p>
+                </CardContent>
+              </Card>
+            </div>
+          )}
           <div className="flex flex-col gap-3 rounded-lg border border-border/60 bg-muted/15 px-3 py-3 sm:flex-row sm:flex-wrap sm:items-end">
             <div className="min-w-[10rem] flex-1">
               <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Клиент</span>
@@ -628,7 +768,14 @@ export function AnalyticsOperationalPanel() {
             </div>
           </div>
           {eqRows.length === 0 ? (
-            <OperationalEmptyResults onReset={resetAll} />
+            <OperationalEmptyResults
+              onReset={resetAll}
+              message={
+                omitSyntheticKpis
+                  ? "Нет строк оборудования: демо-отгрузки отключены для руководителя. Данные появятся после подключения учёта."
+                  : undefined
+              }
+            />
           ) : (
             <EquipmentTables rows={eqRows} onOpenContract={(id) => setContractId(id)} />
           )}
@@ -645,11 +792,13 @@ function PartnerSegmentBody({
   showcaseStatus,
   onShowcaseStatus,
   onResetFilters,
+  metricsUnavailable,
 }: {
   rows: OperationalClientShowcaseRow[];
   showcaseStatus: ShowcaseCheckStatus | "all";
   onShowcaseStatus: (v: ShowcaseCheckStatus | "all") => void;
   onResetFilters: () => void;
+  metricsUnavailable?: boolean;
 }) {
   return (
     <>
@@ -670,6 +819,17 @@ function PartnerSegmentBody({
           </Select>
         </div>
       </div>
+      {metricsUnavailable && rows.length > 0 ? (
+        <Card className="border-dashed border-primary/35 bg-primary/5 shadow-xs ring-1 ring-black/[0.02]">
+          <CardContent className="space-y-2 p-4 text-sm text-muted-foreground">
+            <p className="font-medium text-foreground">Продажи и конверсия по витрине</p>
+            <p>Синтетические полотна, даты проверки и суммы скрыты. В таблице — только клиенты из актуальной активной базы.</p>
+            <p className="text-xs font-medium text-primary">
+              Показатель будет доступен после подключения фактических продаж и данных по витрине.
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
       {rows.length === 0 ? (
         <OperationalEmptyResults onReset={onResetFilters} />
       ) : (
@@ -710,7 +870,7 @@ function ProfitabilityTables({ rows }: { rows: OperationalShowcaseProfitabilityR
                       key={row.rowKey}
                       className={cn(
                         "border-b border-border/50 transition-colors odd:bg-card even:bg-muted/[0.35] hover:bg-muted/50",
-                        warn ? "bg-amber-50/40" : "",
+                        warn ? "bg-primary/5" : "",
                       )}
                       data-testid={rowTestId}
                     >
@@ -730,16 +890,28 @@ function ProfitabilityTables({ rows }: { rows: OperationalShowcaseProfitabilityR
                             <span className="text-muted-foreground"> наши</span>
                           </span>
                           <span>
-                            <span className="font-semibold text-foreground">{row.competitorShowcases}</span>
-                            <span className="text-muted-foreground"> конкуренты</span>
+                            {row.competitorShowcases === null ? (
+                              <span className="text-muted-foreground">{NO_METRICS_SHORT}</span>
+                            ) : (
+                              <>
+                                <span className="font-semibold text-foreground">{row.competitorShowcases}</span>
+                                <span className="text-muted-foreground"> конкуренты</span>
+                              </>
+                            )}
                           </span>
                         </div>
                       </td>
                       <td className="px-3 py-2.5 text-xs tabular-nums">
-                        <span className="font-medium text-foreground">{row.totalSales}</span>
-                        <span className="text-muted-foreground"> / </span>
-                        <span className="font-medium text-primary">{row.showcaseSales}</span>
-                        <span className="text-muted-foreground"> витр.</span>
+                        {row.totalSales === null ? (
+                          <span className="text-muted-foreground">{NO_METRICS_SHORT}</span>
+                        ) : (
+                          <>
+                            <span className="font-medium text-foreground">{row.totalSales}</span>
+                            <span className="text-muted-foreground"> / </span>
+                            <span className="font-medium text-primary">{row.showcaseSales}</span>
+                            <span className="text-muted-foreground"> витр.</span>
+                          </>
+                        )}
                       </td>
                       <td className="px-3 py-2.5">
                         <Badge variant="outline" className="border-primary/30 bg-primary/10 text-xs font-semibold text-foreground">
@@ -747,10 +919,14 @@ function ProfitabilityTables({ rows }: { rows: OperationalShowcaseProfitabilityR
                         </Badge>
                       </td>
                       <td className="px-3 py-2.5">
-                        <div className="flex min-w-[6rem] flex-col gap-1">
-                          <Progress value={Math.min(100, row.shareShowcasePercent)} className="h-2" />
-                          <span className="text-xs tabular-nums text-muted-foreground">{formatPercent(row.shareShowcasePercent)}</span>
-                        </div>
+                        {row.shareShowcasePercent === null ? (
+                          <span className="text-xs text-muted-foreground">{NO_METRICS_SHORT}</span>
+                        ) : (
+                          <div className="flex min-w-[6rem] flex-col gap-1">
+                            <Progress value={Math.min(100, row.shareShowcasePercent)} className="h-2" />
+                            <span className="text-xs tabular-nums text-muted-foreground">{formatPercent(row.shareShowcasePercent)}</span>
+                          </div>
+                        )}
                       </td>
                       <td className="space-y-1 px-3 py-2.5 text-right">
                         <div className="flex flex-wrap justify-end gap-1.5">
@@ -777,7 +953,11 @@ function ProfitabilityTables({ rows }: { rows: OperationalShowcaseProfitabilityR
           const rowTestId = row.tradePointId ? `row-operational-showcase-${row.dealerId}-${row.tradePointId}` : `row-operational-showcase-${row.dealerId}`;
           const warn = row.attentionZone === "low_profit" || row.attentionZone === "no_showcase_sales" || row.attentionZone === "many_competitors";
           return (
-            <Card key={row.rowKey} className={cn("border-border/80 shadow-xs ring-1 ring-black/[0.02]", warn ? "border-amber-200/80 bg-amber-50/30" : "")} data-testid={rowTestId}>
+            <Card
+              key={row.rowKey}
+              className={cn("border-border/80 shadow-xs ring-1 ring-black/[0.02]", warn ? "border-primary/25 bg-primary/5" : "")}
+              data-testid={rowTestId}
+            >
               <CardHeader className="space-y-2 border-b border-border/50 pb-3 pt-4">
                 <CardTitle className="text-base font-semibold leading-snug">{row.clientName}</CardTitle>
                 <div className="flex flex-wrap gap-1.5">
@@ -797,22 +977,32 @@ function ProfitabilityTables({ rows }: { rows: OperationalShowcaseProfitabilityR
                   <div className="rounded-lg border border-border/60 bg-muted/20 px-2 py-1.5">
                     <p className="text-[10px] font-semibold uppercase text-muted-foreground">Наши / конкуренты</p>
                     <p className="font-semibold tabular-nums text-foreground">
-                      {row.ourShowcases} / {row.competitorShowcases}
+                      {row.ourShowcases} / {row.competitorShowcases === null ? NO_METRICS_SHORT : row.competitorShowcases}
                     </p>
                   </div>
                   <div className="rounded-lg border border-border/60 bg-muted/20 px-2 py-1.5">
                     <p className="text-[10px] font-semibold uppercase text-muted-foreground">Продажи всего</p>
-                    <p className="font-semibold tabular-nums text-foreground">{row.totalSales}</p>
+                    <p className="font-semibold tabular-nums text-foreground">
+                      {row.totalSales === null ? <span className="text-xs font-normal text-muted-foreground">{NO_METRICS_SHORT}</span> : row.totalSales}
+                    </p>
                   </div>
                   <div className="col-span-2 rounded-lg border border-border/60 bg-muted/20 px-2 py-1.5">
                     <p className="text-[10px] font-semibold uppercase text-muted-foreground">По витринам</p>
-                    <p className="font-semibold tabular-nums text-primary">{row.showcaseSales}</p>
+                    <p className="font-semibold tabular-nums text-primary">
+                      {row.showcaseSales === null ? <span className="text-xs font-normal text-muted-foreground">{NO_METRICS_SHORT}</span> : row.showcaseSales}
+                    </p>
                   </div>
                 </div>
                 <div>
                   <p className="mb-1 text-[11px] font-medium text-muted-foreground">Доля витрины</p>
-                  <Progress value={Math.min(100, row.shareShowcasePercent)} className="h-2" />
-                  <p className="mt-1 text-xs tabular-nums text-muted-foreground">{formatPercent(row.shareShowcasePercent)}</p>
+                  {row.shareShowcasePercent === null ? (
+                    <p className="text-xs text-muted-foreground">{NO_METRICS_SHORT}</p>
+                  ) : (
+                    <>
+                      <Progress value={Math.min(100, row.shareShowcasePercent)} className="h-2" />
+                      <p className="mt-1 text-xs tabular-nums text-muted-foreground">{formatPercent(row.shareShowcasePercent)}</p>
+                    </>
+                  )}
                 </div>
                 <div className="flex flex-col gap-2">
                   <Button asChild className="min-h-11 w-full font-semibold" data-testid={`button-operational-open-dealer-${row.dealerId}`}>
@@ -867,15 +1057,25 @@ function HardwareTables({ rows }: { rows: OperationalHardwareConversionRow[] }) 
                       </Badge>
                     </td>
                     <td className="px-3 py-2.5 text-xs tabular-nums">
-                      <span className="font-medium">{row.mkSales}</span>
-                      <span className="text-muted-foreground"> / </span>
-                      <span className="font-medium text-primary">{row.hardwareSales}</span>
+                      {row.mkSales === null ? (
+                        <span className="text-muted-foreground">{NO_METRICS_SHORT}</span>
+                      ) : (
+                        <>
+                          <span className="font-medium">{row.mkSales}</span>
+                          <span className="text-muted-foreground"> / </span>
+                          <span className="font-medium text-primary">{row.hardwareSales}</span>
+                        </>
+                      )}
                     </td>
                     <td className="px-3 py-2.5">
-                      <div className="flex min-w-[5rem] flex-col gap-1">
-                        <span className="text-xs font-semibold tabular-nums">{formatPercent(row.conversionPercent)}</span>
-                        <Progress value={Math.min(100, row.conversionPercent)} className="h-1.5" />
-                      </div>
+                      {row.conversionPercent === null ? (
+                        <span className="text-xs text-muted-foreground">{NO_METRICS_SHORT}</span>
+                      ) : (
+                        <div className="flex min-w-[5rem] flex-col gap-1">
+                          <span className="text-xs font-semibold tabular-nums">{formatPercent(row.conversionPercent)}</span>
+                          <Progress value={Math.min(100, row.conversionPercent)} className="h-1.5" />
+                        </div>
+                      )}
                     </td>
                     <td className="max-w-[11rem] px-3 py-2.5">
                       {row.competitorsSummary ? (
@@ -886,9 +1086,11 @@ function HardwareTables({ rows }: { rows: OperationalHardwareConversionRow[] }) 
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
                     </td>
-                    <td className="max-w-[12rem] px-3 py-2.5 text-xs leading-snug text-muted-foreground">{row.reasonNotWithUs}</td>
+                    <td className="max-w-[12rem] px-3 py-2.5 text-xs leading-snug text-muted-foreground">
+                      {row.mkSales === null ? NO_METRICS_SHORT : row.reasonNotWithUs}
+                    </td>
                     <td className="px-3 py-2.5">
-                      <Badge variant="outline" className={cn("text-[11px]", row.worksUnderStock ? "border-emerald-200 bg-emerald-50" : "")}>
+                      <Badge variant="outline" className={cn("text-[11px]", row.worksUnderStock ? "border-primary/30 bg-primary/10" : "")}>
                         {row.worksUnderStock ? "Под склад" : "Нет"}
                       </Badge>
                     </td>
@@ -932,26 +1134,36 @@ function HardwareTables({ rows }: { rows: OperationalHardwareConversionRow[] }) 
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div className="rounded-lg border border-border/60 bg-muted/20 px-2 py-1.5">
                   <p className="text-[10px] font-semibold uppercase text-muted-foreground">МК</p>
-                  <p className="font-semibold tabular-nums">{row.mkSales}</p>
+                  <p className="font-semibold tabular-nums">
+                    {row.mkSales === null ? <span className="text-xs font-normal text-muted-foreground">{NO_METRICS_SHORT}</span> : row.mkSales}
+                  </p>
                 </div>
                 <div className="rounded-lg border border-border/60 bg-muted/20 px-2 py-1.5">
                   <p className="text-[10px] font-semibold uppercase text-muted-foreground">Фурнитура</p>
-                  <p className="font-semibold tabular-nums text-primary">{row.hardwareSales}</p>
+                  <p className="font-semibold tabular-nums text-primary">
+                    {row.hardwareSales === null ? <span className="text-xs font-normal text-muted-foreground">{NO_METRICS_SHORT}</span> : row.hardwareSales}
+                  </p>
                 </div>
               </div>
               <div>
                 <p className="mb-1 text-[11px] font-medium text-muted-foreground">Конверсия</p>
-                <p className="text-sm font-semibold tabular-nums">{formatPercent(row.conversionPercent)}</p>
-                <Progress value={Math.min(100, row.conversionPercent)} className="mt-1 h-2" />
+                {row.conversionPercent === null ? (
+                  <p className="text-xs text-muted-foreground">{NO_METRICS_SHORT}</p>
+                ) : (
+                  <>
+                    <p className="text-sm font-semibold tabular-nums">{formatPercent(row.conversionPercent)}</p>
+                    <Progress value={Math.min(100, row.conversionPercent)} className="mt-1 h-2" />
+                  </>
+                )}
               </div>
-              {row.competitorsSummary ? (
+              {row.mkSales === null ? null : row.competitorsSummary ? (
                 <Badge variant="secondary" className="w-fit text-[11px] font-normal">
                   {row.competitorsSummary}
                 </Badge>
               ) : null}
-              <p className="text-xs leading-relaxed text-muted-foreground">{row.reasonNotWithUs}</p>
+              <p className="text-xs leading-relaxed text-muted-foreground">{row.mkSales === null ? NO_METRICS_SHORT : row.reasonNotWithUs}</p>
               <div className="flex flex-wrap gap-2">
-                <Badge variant="outline" className={cn("text-[11px]", row.worksUnderStock ? "border-emerald-200 bg-emerald-50" : "")}>
+                <Badge variant="outline" className={cn("text-[11px]", row.worksUnderStock ? "border-primary/30 bg-primary/10" : "")}>
                   Склад: {row.worksUnderStock ? "да" : "нет"}
                 </Badge>
                 <Badge variant="outline" className={cn("text-[11px]", row.ourEquipment ? "border-primary/30 bg-primary/10" : "")}>
