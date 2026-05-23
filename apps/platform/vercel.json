@@ -6,6 +6,10 @@
   "framework": null,
   "rewrites": [
     {
+      "source": "/api/sales-plan-fact/state",
+      "destination": "/api/actualization/state?_route=sales-plan-fact"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
