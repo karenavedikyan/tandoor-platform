@@ -16,7 +16,7 @@ Follow-up **класса 2** (единый team-fetch, scope dealer-base ↔ tra
 - `apps/platform/client/src/lib/client-base-management-scope.ts` — `fetchMergedTeamActualizationForManagement`, `shouldUseTeamMergedActualizationPlane`, обёртки над merge и строками.
 - `apps/platform/client/src/lib/dealer-base-management-view-model.ts` — агрегаты для управленческого экрана **`DealerBaseManagementCockpit`**: группы РОП/менеджеров, города (`normalizeTerritoryCityName`), KPI «структура активной базы», списки для drill-down.
 - `apps/platform/client/src/pages/dealer-base-management-cockpit.tsx` — компактный UI `/dealer-base` для РОП/директора при team plane (инфографика, режимы, аккордеон, drawer).
-- `apps/platform/client/src/lib/trade-point-task-data.ts` — матрица задач, **`getShowcaseBackedTasksForDealers`**, **`getActualizationPersistedShowcaseMatrixTasksForDealers`** (только `showcaseMatrixTasks` из merge для `/tasks` у РОП/директора), **`getAllMatrixTasks`**.
+- `apps/platform/client/src/lib/trade-point-task-data.ts` — матрица задач, **`getShowcaseBackedTasksForDealers`**, **`getActualizationPersistedShowcaseMatrixTasksForDealers`**, общий алиас **`getManagementFactualShowcaseTasksForDealers`** (тот же persisted-набор для всех управленческих сводок РОП/директора на team plane), **`getAllMatrixTasks`**.
 - `apps/platform/client/src/lib/trade-points-management-view-model.ts` — агрегаты для **`TradePointsManagementCockpit`**: структура ТТ, города (`normalizeTerritoryCityName`), группы РОП/менеджеров, drill-down rows.
 - `apps/platform/client/src/pages/trade-points-management-cockpit.tsx` — компактный UI `/trade-points` для РОП/директора при team plane (инфографика, режимы, аккордеон РОП, рейтинг городов, drawer).
 - `apps/platform/client/src/context/client-base-team-actualization-context.tsx` — **`ClientBaseTeamActualizationProvider`**: один merge на scope команды, `mergedState`, `activitySourceSnapshots` / `activityDiagnostics`, `publishDashboardRopTeamId`, refetch по `visibilitychange`.
@@ -41,9 +41,12 @@ Follow-up **класса 2** (единый team-fetch, scope dealer-base ↔ tra
 
 ### Задачи по витрине (без раздувания матрицей)
 
-- **`getShowcaseBackedTasksForDealers(dealers)`** (`trade-point-task-data.ts`) — для переданных строк: **sessionStorage витрины** + **дефицит матрицы по фактическим моделям ТТ** (без генерации десятков тысяч задач из полного каталога по каждой ТТ). Используется **менеджером** и прочими ролями при включённой актуализации (не team plane директора/РОП).
-- **`getActualizationPersistedShowcaseMatrixTasksForDealers(dealers, mergedState)`** — только **`tradePointShowcaseActualizationById[*].showcaseMatrixTasks`**: явно сохранённые в merge актуализации задачи по точкам; архивные ТТ из `archivedTradePointsById` не учитываются. **Страница `/tasks`** при **`actx.enabled`** и **`shouldUseTeamMergedActualizationPlane`** (директор / РОП) строит список и KPI **только** из этой функции; **sessionStorage**, локальный план и автогенерация дефицита для KPI **не** показываются. Если сохранённых задач нет — **`section-showcase-tasks-factual-empty`** с переходами на **`/trade-points`** и **`/territory-card`**; подпись источника: **`text-showcase-tasks-source-note`** («Источник: сохранённые задачи актуализации»). Корневой test id страницы: **`page-showcase-tasks`**.
-- **`getShowcaseDistributionPlanTasksForDealers(dealers)`** — только записи плана витрины (`showcase_distribution`, sessionStorage); для KPI карточки территории РОП/директора вместо полного showcase-backed набора (отдельно от страницы `/tasks`).
+- **`getShowcaseBackedTasksForDealers(dealers)`** (`trade-point-task-data.ts`) — для переданных строк: **sessionStorage витрины** + **дефицит матрицы по фактическим моделям ТТ** (без генерации десятков тысяч задач из полного каталога по каждой ТТ). Используется **менеджером** и прочими ролями при включённой актуализации, а также директором/РОП **вне** team merge plane (если такой сценарий включён). **Не** используется для управленческих KPI директора/РОП при **`actx.enabled`** и **`shouldUseTeamMergedActualizationPlane(profile)`**.
+- **`getActualizationPersistedShowcaseMatrixTasksForDealers(dealers, mergedState)`** — только **`tradePointShowcaseActualizationById[*].showcaseMatrixTasks`**: явно сохранённые в merge актуализации задачи по **активным** ТТ; архивные ТТ из `archivedTradePointsById` не учитываются; ТТ архивных клиентов не попадают в рабочие строки `dealers` при стандартном merge без архива.
+- **`getManagementFactualShowcaseTasksForDealers(dealers, mergedState)`** — тонкий алиас к persisted-функции выше. Единый вход для **главной** (`main-role-dashboard`), **обзора в analytics-workspace** (`analytics-workspace-release-overview`), **страницы `/tasks`**, **пакета карточки территории** (`buildTerritoryCardLivePack` с `directorRopFactualUi`), чтобы счётчики не расходились с sessionStorage/дефицитом.
+- При этом контуре для **всех** управленческих сводок задач **запрещено** подмешивать: **`getShowcaseBackedTasksForDealers`**, **`getAllMatrixTasks()`**, **`getShowcaseDistributionPlanTasksForDealers`**, автогенерацию дефицита и демо-задачи. Если persisted-задач нет — в UI **0** и empty-state / пояснение (**`text-management-task-empty`**), подпись источника (**`text-management-task-source-note`**: «Источник: сохранённые задачи актуализации»). Блок сводки в analytics: **`section-management-task-summary`**; метрики: **`metric-management-tasks-open`**, **`metric-management-tasks-showcase`** (строка категории «Витрина / Дистрибуция»), **`metric-management-tasks-hot`**, **`metric-management-tasks-overdue`**; на главной при team plane обёртка KPI задач — **`section-management-task-summary`**.
+- **Страница `/tasks`** при **`actx.enabled`** и **`shouldUseTeamMergedActualizationPlane`** строит список и KPI из **`getManagementFactualShowcaseTasksForDealers`**. Если сохранённых задач нет — **`section-showcase-tasks-factual-empty`** с переходами на **`/trade-points`** и **`/territory-card`**; на странице также **`text-showcase-tasks-source-note`**. Корневой test id страницы: **`page-showcase-tasks`**.
+- **`getShowcaseDistributionPlanTasksForDealers(dealers)`** — только записи плана витрины (`showcase_distribution`, sessionStorage). Для **cockpit территории** РОП/директора (`directorRopFactualUi`) вместо этого набора используются те же **persisted** задачи через **`getManagementFactualShowcaseTasksForDealers`** (согласовано с `/tasks` и сводками).
 - **`getAllMatrixTasks()`** остаётся для режимов **без** включённой актуализации / демо-контуров менеджера, где нужна прежняя совместимость.
 - Страница **`/tasks`**: при `actx.enabled` и **не** team plane директора/РОП источник — **`getShowcaseBackedTasksForDealers`** по working merge-строкам; без актуализации — прежний полный набор **`getAllMatrixTasks()`**.
 
@@ -73,13 +76,13 @@ Follow-up **класса 2** (единый team-fetch, scope dealer-base ↔ tra
 
 ### Главная директор / РОП
 
-- **`main-role-dashboard.tsx`**: при `actx` и роли директор/РОП **нет** полного дампа `DEALER_BASE_ROWS` в дашборд; открытые задачи — showcase-backed по scoped клиентам. Синтетический **`MainPlanExecutionChart`** для этих ролей при активном merge заменён карточкой-заглушкой «план-факт не подключён». Подпись контекста: **«Источник: актуальная активная база»** где уместно.
+- **`main-role-dashboard.tsx`**: при `actx` и роли директор/РОП **нет** полного дампа `DEALER_BASE_ROWS` в дашборд. При **`shouldUseTeamMergedActualizationPlane`** счётчик открытых задач по витрине — только **`getManagementFactualShowcaseTasksForDealers`** (persisted `showcaseMatrixTasks`); при нуле — пояснение empty-state и подпись источника (test id см. раздел «Задачи» выше). Иначе при `actx` — прежний **showcase-backed** по scoped клиентам. Синтетический **`MainPlanExecutionChart`** для этих ролей при активном merge заменён карточкой-заглушкой «план-факт не подключён». Подпись контекста: **«Источник: актуальная активная база»** где уместно.
 
 ### Аналитика
 
 - **`analytics.tsx`**: для директор/РОП + `actx` — короткий экран без демо-аналитики (вместо полной seeded-страницы).
 - **`analytics-workspace.tsx`**: флаг **`suppressSeededRows`** — таблица/сводка без подмешивания статических строк; пустой баннер при отсутствии данных.
-- **`analytics-workspace-release-overview.tsx`**: `workingRows` из merge при `actx`; команды/менеджеры — **`buildTeamSummaryFromRows`**, **`aggregateManagersForTeamFromRows`**; задачи — showcase-backed vs полная матрица по тому же правилу; строка **«Источник: актуальная активная база»** для dept/ROP.
+- **`analytics-workspace-release-overview.tsx`**: `workingRows` из merge при `actx`; команды/менеджеры — **`buildTeamSummaryFromRows`**, **`aggregateManagersForTeamFromRows`**; блок **«Задачи»** для директора/РОП при **`actx`** и team plane — только **`getManagementFactualShowcaseTasksForDealers`** (без sessionStorage и **`getAllMatrixTasks`**); для аналитика при `actx` — по-прежнему showcase-backed по merge; без актуализации — полная матрица. Строка **«Источник: актуальная активная база»** для dept/ROP; под блоком задач для factual-режима — **«Источник: сохранённые задачи актуализации»**.
 
 ### Города и концентрация
 
@@ -127,7 +130,7 @@ Follow-up **класса 2** (единый team-fetch, scope dealer-base ↔ tra
 | Scope директора dealer-base ↔ trade-points | Разный default для trade-points и hash dealer-base | Общий LS + `publishDashboardRopTeamId`; URL `team`/`rop` на обеих страницах | Выбрать команду на `/dealer-base` → открыть `/trade-points`: те же клиенты/ТТ в scope; сброс — снова все команды. |
 | Сайдбар счётчики | Не следовали за выбором команды | `useClientBaseTeamActualization` в `AuthenticatedShell` | Смена команды на dealer-base обновляет бейджи без перезагрузки. |
 | Операционная аналитика | Только `DEALER_BASE_ROWS` | При team plane: срезы из merge **без архивных клиентов**; пустой fallback вместо всех строк | Под РОП/директором с актуализацией списки клиентов совпадают с активной базой по id. |
-| Задачи / главная / территория | `getAllMatrixTasks()` по всему моку | При `actx` и team plane на **`/tasks`**: только **`getActualizationPersistedShowcaseMatrixTasksForDealers`**; иначе showcase-backed по merge | Директор/РОП на `/tasks` не видят sessionStorage/локальный дефицит как KPI; при отсутствии persisted — empty-state. |
+| Задачи / главная / территория / analytics overview | `getAllMatrixTasks()` / sessionStorage в сводках | При `actx` и team plane: **`getManagementFactualShowcaseTasksForDealers`** на **`/tasks`**, главной, карточке территории (factual), блоке «Задачи» release overview; иначе showcase-backed по merge | Директор/РОП не видят в управленческих сводках цифры из локального плана/генерации; при отсутствии persisted — 0 и empty-state. |
 | Инфографика аналитики | Статический срез | **Без изменений в merge** (отдельный контур) | Регрессии инфографики смотреть отдельно. |
 
 ## Таблица аудита управленческих вкладок (текущее состояние)
@@ -137,23 +140,23 @@ Follow-up **класса 2** (единый team-fetch, scope dealer-base ↔ tra
 | Раздел | Файл / компонент | Источник данных | managementPlane | Примечание |
 |--------|------------------|-----------------|-----------------|------------|
 | Навигация | `App.tsx` | merge + счётчики | **Да** | |
-| Главная | `main-role-dashboard.tsx` | merge → строки; задачи showcase-backed при `actx` | **Да** / **Частично** | План-факт: заглушка для директор/РОП при `actx` |
+| Главная | `main-role-dashboard.tsx` | merge → строки; задачи при team plane — **persisted** factual; иначе при `actx` — showcase-backed | **Да** / **Частично** | План-факт: заглушка для директор/РОП при `actx` |
 | Клиентская база | `dealer-base.tsx` | merge + persist | **Да** | Публикация scope команды |
 | Торговые точки | `trade-points.tsx` | merge | **Да** | Тот же scope, что dealer-base |
-| Задачи | `tasks.tsx` | merge: директор/РОП + team plane → **`getActualizationPersistedShowcaseMatrixTasksForDealers`**; иначе при `actx` — showcase-backed | **Да** | РОП/директор: без локального плана в KPI; менеджер — showcase-backed |
+| Задачи | `tasks.tsx` | merge: директор/РОП + team plane → **`getManagementFactualShowcaseTasksForDealers`**; иначе при `actx` — showcase-backed | **Да** | РОП/директор: без локального плана в KPI; менеджер — showcase-backed |
 | Карточка территории | `territory-card.tsx`, **`territory-card-cockpit-factual.tsx`** (РОП/директор) | merge + `buildTerritoryCardLivePack` | **Да** | РОП/директор: cockpit, только фактическая сводка и drill-down; менеджерский контур — прежняя длинная страница + showcase-backed задачи |
 | Карта | `client-map.tsx` | merge | **Да** | |
 | Актуализация базы | `client-base-activity-dashboard.tsx` | merge + `activitySources` из провайдера | **Да** | Селект команды директора → `publishDashboardRopTeamId` |
 | Операционная аналитика | `analytics-operational-panel.tsx` | merge → срезы без архива; **`omitSyntheticOperationalKpis`** при team plane | **Да** | Состав id — активная база; KPI продаж/конверсии/витрины/оборудования — empty-state до BI |
 | Аналитика (страница) | `analytics.tsx` | при director/ROP + `actx` — empty / без демо | **Да** (ограниченно) | Не подменяет полный демо-экран |
-| Рабочая область аналитики | `analytics-workspace.tsx`, `analytics-workspace-release-overview.tsx` | merge + suppress seeded при `actx` | **Частично** | Сводка ТОП 500 без фейковых сумм; таблицы пустые до выгрузки |
+| Рабочая область аналитики | `analytics-workspace.tsx`, `analytics-workspace-release-overview.tsx` | merge + suppress seeded при `actx`; блок задач РОП/директор — persisted factual | **Частично** | Сводка ТОП 500 без фейковых сумм; таблицы пустые до выгрузки |
 | План-факт / sales-control | sales-control, проч. | local / мок | **Нет** | На главной директора при `actx` — отдельная заглушка план-факта |
 
 ---
 
 ## Классификация (сводка)
 
-1. **Подключено к team actualization / active merge:** `App.tsx`, `main-role-dashboard`, `dealer-base`, `trade-points`, `tasks` (для РОП/директора на `/tasks` — только persisted `showcaseMatrixTasks`), `territory-card`, `client-map`, `client-base-activity-dashboard`, операционная панель (срезы при team plane, **`omitSyntheticOperationalKpis`** для РОП/директора), обзор release в analytics-workspace при `actx`, упрощённый `analytics.tsx` для director/ROP.
+1. **Подключено к team actualization / active merge:** `App.tsx`, `main-role-dashboard` (KPI задач — **`getManagementFactualShowcaseTasksForDealers`** при team plane), `dealer-base`, `trade-points`, `tasks` (для РОП/директора на `/tasks` — только persisted `showcaseMatrixTasks` через тот же helper), `territory-card` / factual cockpit, `client-map`, `client-base-activity-dashboard`, операционная панель (срезы при team plane, **`omitSyntheticOperationalKpis`** для РОП/директора), обзор release в analytics-workspace при `actx` (блок задач — factual для РОП/директора), упрощённый `analytics.tsx` для director/ROP.
 
 2. **Инфографика** (`analytics-infographics-panel`) остаётся на статическом срезе; при необходимости отдельный PR — merge + скрытие демо для руководителя.
 
@@ -203,7 +206,7 @@ cd apps/platform && npm run build
 
 ## Ручная проверка (директор и РОП, актуализация включена)
 
-1. **Главная:** счётчики клиентов/ТТ и задач согласованы с `/dealer-base` и `/tasks` (порядок величин — сотни/тысячи по реальной базе, не «30k+» задач из матрицы). Есть строка про источник данных / план-факт не подключён.
+1. **Главная:** счётчики клиентов/ТТ и задач согласованы с `/dealer-base` и `/tasks` (для РОП/директора на team plane — только persisted задачи витрины, без «сотен» из sessionStorage-дефицита). Есть строка про источник данных / план-факт не подключён.
 2. **`/dealer-base`, `/trade-points`:** только активные клиенты и ТТ; смена команды директора синхронизирует scope.
 3. **`/tasks`:** под менеджером список по-прежнему реагирует на sessionStorage / showcase-backed merge; под директором/РОП на team plane — только сохранённые **`showcaseMatrixTasks`** из актуализации, без KPI из локального плана; при их отсутствии — empty-state.
 4. **Карточка территории:** города без строки «—»; группа «Без города» только при реальных пустых городах; план-факт — пустое состояние, если нет линий.

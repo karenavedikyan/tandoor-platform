@@ -480,6 +480,17 @@ export function getActualizationPersistedShowcaseMatrixTasksForDealers(
   return out;
 }
 
+/**
+ * Управленческий контур директора/РОП (team merge): тот же набор, что {@link getActualizationPersistedShowcaseMatrixTasksForDealers}.
+ * Использовать для сводок на главной, в analytics overview и на `/tasks`, чтобы цифры не расходились с sessionStorage/дефицитом.
+ */
+export function getManagementFactualShowcaseTasksForDealers(
+  dealers: DealerRow[],
+  act: ActualizationState,
+): MatrixTaskWithContext[] {
+  return getActualizationPersistedShowcaseMatrixTasksForDealers(dealers, act);
+}
+
 /** Ленивый кэш только матрицы товаров (без задач витрины из sessionStorage). */
 let matrixBaseTasksCache: MatrixTaskWithContext[] | null = null;
 

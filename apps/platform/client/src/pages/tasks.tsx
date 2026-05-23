@@ -16,8 +16,8 @@ import {
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
 import { cn } from "@/lib/utils";
 import {
-  getActualizationPersistedShowcaseMatrixTasksForDealers,
   getAllMatrixTasks,
+  getManagementFactualShowcaseTasksForDealers,
   getShowcaseBackedTasksForDealers,
   MATRIX_TASK_PRIORITY_LABEL,
   MATRIX_TASK_STATUS_LABEL,
@@ -809,7 +809,7 @@ export default function TasksPage() {
 
   const hasPersistedShowcaseTasksInRoleScope = useMemo(() => {
     if (!directorRopFactualShowcaseTasks || actualizationLoading) return false;
-    const raw = getActualizationPersistedShowcaseMatrixTasksForDealers(
+    const raw = getManagementFactualShowcaseTasksForDealers(
       workingDealerRows,
       managementPlane.mergedState,
     ).filter((t) => allowedDealerIds.has(t.dealerId));
@@ -828,10 +828,7 @@ export default function TasksPage() {
     if (!actx.enabled) {
       rawSource = getAllMatrixTasks();
     } else if (directorRopFactualShowcaseTasks) {
-      rawSource = getActualizationPersistedShowcaseMatrixTasksForDealers(
-        workingDealerRows,
-        managementPlane.mergedState,
-      );
+      rawSource = getManagementFactualShowcaseTasksForDealers(workingDealerRows, managementPlane.mergedState);
     } else {
       rawSource = getShowcaseBackedTasksForDealers(workingDealerRows);
     }
