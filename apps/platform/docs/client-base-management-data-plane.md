@@ -14,6 +14,8 @@ Follow-up **класса 2** (единый team-fetch, scope dealer-base ↔ tra
 ## Модули (актуально)
 
 - `apps/platform/client/src/lib/client-base-management-scope.ts` — `fetchMergedTeamActualizationForManagement`, `shouldUseTeamMergedActualizationPlane`, обёртки над merge и строками.
+- `apps/platform/client/src/lib/dealer-base-management-view-model.ts` — агрегаты для управленческого экрана **`DealerBaseManagementCockpit`**: группы РОП/менеджеров, города (`normalizeTerritoryCityName`), KPI «структура активной базы», списки для drill-down.
+- `apps/platform/client/src/pages/dealer-base-management-cockpit.tsx` — компактный UI `/dealer-base` для РОП/директора при team plane (инфографика, режимы, аккордеон, drawer).
 - `apps/platform/client/src/context/client-base-team-actualization-context.tsx` — **`ClientBaseTeamActualizationProvider`**: один merge на scope команды, `mergedState`, `activitySourceSnapshots` / `activityDiagnostics`, `publishDashboardRopTeamId`, refetch по `visibilitychange`.
 - `apps/platform/client/src/lib/client-base-management-team-scope-storage.ts` — ключ **`tandoor-client-base-management-team-scope-v1`** (localStorage для директора), событие **`tandoor-management-team-scope-v1`**, чтение `?team=` / `?rop=` на `/dealer-base`, `/trade-points`, `/client-base-activity`.
 - `apps/platform/client/src/hooks/use-client-base-management-merged-state.ts` — совместимость API: делегирует в `useClientBaseTeamActualization`.
@@ -40,6 +42,15 @@ Follow-up **класса 2** (единый team-fetch, scope dealer-base ↔ tra
 - **`getShowcaseDistributionPlanTasksForDealers(dealers)`** — только записи плана витрины (`showcase_distribution`, sessionStorage); для KPI карточки территории РОП/директора вместо полного showcase-backed набора.
 - **`getAllMatrixTasks()`** остаётся для режимов **без** включённой актуализации / демо-контуров менеджера, где нужна прежняя совместимость.
 - Страница **`/tasks`**: при `actx.enabled` источник задач — showcase-backed по **working** строкам merge; иначе — прежний полный набор.
+
+### Клиентская база (`/dealer-base`) — управленческий экран РОП / директора
+
+- При **`actx.enabled`** и **`shouldUseTeamMergedActualizationPlane`** страница **`dealer-base.tsx`** рендерит **`DealerBaseManagementCockpit`** (`dealer-base-management-cockpit.tsx`) вместо длинной витрины карточек.
+- **Данные:** те же строки, что и для KPI команд: **`buildDealerBaseRowsWithActualization(mergedState, profile, { includeArchivedDealers: false })`** + **`roleScopedDealerRows`**. Архивные клиенты и ТТ, ТТ архивных клиентов и демо-KPI в этот UI **не входят**.
+- **Агрегации и группировка:** `dealer-base-management-view-model.ts` — команды по `releaseTeamId` (fallback по ФИО РОП из строки), менеджеры по справочнику `getTeamManagers`, города через **`normalizeTerritoryCityName(city, releaseAddress)`**; топ городов по числу **активных** клиентов; «Без города» вынесено отдельной строкой под топом.
+- **Режимы** «Обзор / По РОП / По городам» и список раскрытых аккордеонов РОП сохраняются в **`localStorage`** (`tandoor-dealer-base-management-mode-v1`, `tandoor-dealer-base-management-open-rops-v1`). Режим «Обзор» сбрасывает раскрытие групп РОП (компактный mobile-first).
+- **Директор:** селект «Команда для загрузки merge» пишет в **`publishDashboardRopTeamId`** (тот же scope, что `trade-points` / сайдбар). РОП: данные только своей команды.
+- **Drill-down:** `data-testid="dialog-client-base-group-detail"` — на desktop фиксированная правая панель, на mobile **`Sheet`** снизу с увеличенным нижним отступом контента; вкладки «Клиенты» / «Торговые точки», быстрые фильтры по клиентам, ссылки в карточку клиента и в карточку ТТ.
 
 ### Карточка территории
 

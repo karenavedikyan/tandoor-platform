@@ -80,6 +80,7 @@ import { useClientBaseActualization } from "@/context/client-base-actualization-
 import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
+import { DealerBaseManagementCockpit } from "@/pages/dealer-base-management-cockpit";
 import {
   canActualizeClientBase,
   canArchiveDealerDuringActualization,
@@ -2342,6 +2343,10 @@ export default function DealerBase() {
 
   const canShowBulkDeleteEntry = actx.enabled && canActualizeClientBase(profile) && !showArchivedDealers;
   const bulkDeleteHasTargets = archivableDealerIdsInView.size > 0;
+
+  if (actx.enabled && shouldUseTeamMergedActualizationPlane(profile)) {
+    return <DealerBaseManagementCockpit profile={profile} rows={scopedActivePortfolioRows} />;
+  }
 
   return (
     <div className="min-w-0 max-w-full overflow-x-hidden space-y-6 sm:space-y-8" data-testid="page-dealer-base">
