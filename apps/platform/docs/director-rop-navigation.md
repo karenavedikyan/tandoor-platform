@@ -41,7 +41,7 @@
 
 ## Test id
 
-Группы и аккордеон: `nav-group-client-base`, `button-nav-group-client-base-toggle`, `nav-group-client-base-content`, `text-nav-group-client-base-summary`, `nav-group-in-development`, `button-nav-group-in-development-toggle`, `nav-group-in-development-content`, `text-nav-group-in-development-summary`.
+Группы и аккордеон: `nav-group-client-base`, `button-nav-group-client-base-toggle`, `nav-group-client-base-content`, `nav-group-in-development`, `button-nav-group-in-development-toggle`, `nav-group-in-development-content`. Сводочные `data-testid` вида `text-nav-group-*-summary` **не рендерятся** (счётчики — только на пунктах).
 
 Пункты: `nav-item-client-base-activity`, `nav-item-clients`, `nav-item-trade-points`, `nav-item-sales-plan-fact`, `nav-item-catalog`, `nav-item-training`, `nav-item-client-map`, `nav-item-showcase-tasks`, `nav-item-team-analytics`, `nav-item-communications`, `nav-item-marketing-briefs`.
 

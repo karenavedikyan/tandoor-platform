@@ -190,30 +190,33 @@ function isIconRailActive(href: string, location: string) {
   return pathMatchesNavHref(location, href);
 }
 
-/** Единый стиль строки навигации (Tandoor): ~44px, зелёная полоса слева при active. */
-function navRowClass(isActive: boolean, extraClass?: string) {
+function navLinkClass(
+  item: PilotNavItem,
+  location: string,
+  variant: "sidebar" | "drawer",
+  linkStyle: "legacy" | "pilot",
+  isActiveFromLink?: boolean,
+) {
+  const active = isNavItemActive(item, location, isActiveFromLink);
+  const base =
+    variant === "sidebar"
+      ? "flex w-full min-h-10 items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm font-medium no-underline transition-colors"
+      : "flex w-full min-h-10 items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm font-medium no-underline transition-colors";
+  if (linkStyle === "pilot") {
+    return cn(
+      base,
+      active
+        ? "border-l-[3px] border-[#9ACA3C] bg-white font-semibold text-[#222631] shadow-sm"
+        : "border-l-[3px] border-transparent text-[#8F96B0] hover:bg-[#EEEFF6]/80 hover:text-[#222631]",
+      item.comingSoon && !active && "opacity-95",
+    );
+  }
   return cn(
-    "flex w-full min-h-[44px] max-h-12 shrink-0 items-center justify-between gap-2 rounded-lg px-3 py-0 text-sm font-medium no-underline transition-colors",
-    isActive
-      ? "border-l-[3px] border-[#9ACA3C] bg-[#EEEFF6] font-semibold text-[#222631]"
-      : "border-l-[3px] border-transparent text-[#8F96B0] hover:bg-[#EEEFF6]/90 hover:text-[#222631]",
-    extraClass,
+    base,
+    active
+      ? "border-l-[3px] border-primary bg-primary/12 font-semibold text-foreground shadow-sm"
+      : "border-l-[3px] border-transparent text-muted-foreground hover:bg-muted hover:text-foreground",
   );
-}
-
-function navGroupHeaderClass() {
-  return cn(
-    "flex w-full min-h-[40px] items-center justify-between gap-2 rounded-lg border border-transparent px-3 py-1 text-left transition-colors",
-    "text-[#8F96B0] hover:bg-[#EEEFF6]/55",
-  );
-}
-
-function navBadgeClass() {
-  return "h-6 min-w-6 shrink-0 rounded-md border border-[#E3E6F3] bg-[#EEEFF6] px-1.5 text-xs tabular-nums text-[#222631]";
-}
-
-function navWipBadgeClass() {
-  return "inline-flex h-5 max-w-[min(7rem,40vw)] shrink-0 items-center truncate rounded border border-[#E3E6F3] bg-[#F7F8FC] px-1.5 text-[9px] font-medium leading-none text-[#8F96B0]";
 }
 
 function headerContextLabel(location: string) {
@@ -264,11 +267,6 @@ const NAV_GROUP_TOGGLE_TESTID: Record<string, string> = {
 const NAV_GROUP_CONTENT_TESTID: Record<string, string> = {
   "client-base": "nav-group-client-base-content",
   "in-development": "nav-group-in-development-content",
-};
-
-const NAV_GROUP_SUMMARY_TESTID: Record<string, string> = {
-  "client-base": "text-nav-group-client-base-summary",
-  "in-development": "text-nav-group-in-development-summary",
 };
 
 type PilotOpenGroupsMap = Record<string, boolean>;
@@ -365,41 +363,19 @@ function usePilotGroupedNavOpenState(model: PilotNavigationModel, location: stri
   return { openGroups, toggleGroup };
 }
 
-function pilotNavClientBaseCounts(group: PilotNavGroup): {
-  clients: number | null;
-  tradePoints: number | null;
-  clientsLoading: boolean;
-  tradePointsLoading: boolean;
-} {
-  let clients: number | null = null;
-  let tradePoints: number | null = null;
-  let clientsLoading = false;
-  let tradePointsLoading = false;
-  for (const item of group.items) {
-    const bid = behaviorId(item);
-    if (bid === "nav-dealer-base") {
-      clientsLoading = Boolean(item.badgeLoading);
-      if (item.badge != null) clients = item.badge;
-    }
-    if (bid === "nav-trade-points") {
-      tradePointsLoading = Boolean(item.badgeLoading);
-      if (item.badge != null) tradePoints = item.badge;
-    }
-  }
-  return { clients, tradePoints, clientsLoading, tradePointsLoading };
-}
-
 function NavRowLink({
   item,
   location,
   variant,
   onNavigate,
+  linkStyle,
   pilotWipTag,
 }: {
   item: PilotNavItem;
   location: string;
   variant: "sidebar" | "drawer";
   onNavigate?: () => void;
+  linkStyle: "legacy" | "pilot";
   /** Muted «в разработке» справа (меню директора/РОПа). */
   pilotWipTag?: boolean;
 }) {
@@ -413,17 +389,16 @@ function NavRowLink({
       : variant === "sidebar"
         ? "text-sidebar-clients-count"
         : "text-mobile-sidebar-clients-count";
+  const badgeClass =
+    linkStyle === "pilot"
+      ? "h-6 min-w-6 shrink-0 rounded-md border border-[#E3E6F3] bg-[#EEEFF6] px-1.5 text-xs tabular-nums text-[#222631]"
+      : "h-6 min-w-6 shrink-0 rounded-md border border-border/60 bg-muted px-1.5 text-xs tabular-nums text-foreground";
 
   return (
     <Link
       href={item.href}
       onClick={onNavigate}
-      className={(active) =>
-        navRowClass(
-          isNavItemActive(item, location, active),
-          item.comingSoon && !pilotWipTag ? "opacity-90" : undefined,
-        )
-      }
+      className={(active) => navLinkClass(item, location, variant, linkStyle, active)}
       data-testid={item.testId}
     >
       <span className="flex min-w-0 flex-1 items-center gap-2 truncate text-left">
@@ -438,9 +413,12 @@ function NavRowLink({
         ) : null}
       </span>
       {pilotWipTag ? (
-        <span className={navWipBadgeClass()} aria-label="В разработке">
+        <Badge
+          variant="outline"
+          className="h-5 max-w-[min(7.5rem,42vw)] shrink-0 truncate border-[#E3E6F3] bg-[#EEEFF6] px-1.5 text-[10px] font-medium normal-case text-[#8F96B0]"
+        >
           в разработке
-        </span>
+        </Badge>
       ) : pulse ? (
         <span
           className="h-6 min-w-7 shrink-0 animate-pulse rounded-md bg-muted"
@@ -449,7 +427,7 @@ function NavRowLink({
           data-testid={countTestId}
         />
       ) : item.badge != null ? (
-        <Badge variant="secondary" className={navBadgeClass()} data-testid={countTestId}>
+        <Badge variant="secondary" className={badgeClass} data-testid={countTestId}>
           {item.badge}
         </Badge>
       ) : null}
@@ -471,7 +449,7 @@ function NavLinksList({
   "data-testid": string;
 }) {
   return (
-    <nav className="flex min-w-0 flex-col gap-0" data-testid={navTestId}>
+    <nav className="flex flex-col gap-0.5" data-testid={navTestId}>
       {items.map((item) => (
         <NavRowLink
           key={item.testId}
@@ -479,6 +457,7 @@ function NavLinksList({
           location={location}
           variant={variant}
           onNavigate={onNavigate}
+          linkStyle="legacy"
         />
       ))}
     </nav>
@@ -505,36 +484,17 @@ function PilotNavGroupedList({
   "data-testid": string;
 }) {
   return (
-    <div className="flex min-w-0 flex-col gap-1 overflow-x-hidden" data-testid={navTestId}>
+    <div className="flex min-w-0 flex-col gap-2 overflow-x-hidden" data-testid={navTestId}>
       {groups.map((g, groupIndex) => {
         const isOpen = Boolean(openGroups[g.key]);
-        const counts = g.key === "client-base" ? pilotNavClientBaseCounts(g) : null;
-
-        let summaryLine: string | null = null;
-
-        if (g.key === "client-base") {
-          if (counts?.clientsLoading || counts?.tradePointsLoading) {
-            summaryLine = "Загрузка счётчиков…";
-          } else if (counts && counts.clients != null && counts.tradePoints != null) {
-            summaryLine = `${counts.clients} клиентов · ${counts.tradePoints} ТТ`;
-          } else if (counts && (counts.clients != null || counts.tradePoints != null)) {
-            const c = counts.clients != null ? String(counts.clients) : "—";
-            const t = counts.tradePoints != null ? String(counts.tradePoints) : "—";
-            summaryLine = `${c} клиентов · ${t} ТТ`;
-          } else {
-            summaryLine = "Клиенты и торговые точки";
-          }
-        }
-
-        const inDevSummary = g.key === "in-development" ? `${g.items.length} разделов` : null;
-
+        const groupActive = groupHasActiveItem(g, location);
+        const titleColor = groupActive ? "text-[#222631]" : "text-[#8F96B0]";
         const toggleTestId = NAV_GROUP_TOGGLE_TESTID[g.key] ?? `button-nav-group-${g.key}-toggle`;
         const contentTestId = NAV_GROUP_CONTENT_TESTID[g.key] ?? `nav-group-${g.key}-content`;
-        const summaryTestId = NAV_GROUP_SUMMARY_TESTID[g.key] ?? `text-nav-group-${g.key}-summary`;
 
         const standaloneBlock =
           groupIndex === 0 && standaloneItems.length > 0 ? (
-            <div key={`${g.key}-standalone`} className="flex min-w-0 flex-col gap-0">
+            <div key={`${g.key}-standalone`} className="flex min-w-0 flex-col gap-0.5">
               {standaloneItems.map((item) => (
                 <NavRowLink
                   key={item.testId}
@@ -542,6 +502,7 @@ function PilotNavGroupedList({
                   location={location}
                   variant={variant}
                   onNavigate={onNavigate}
+                  linkStyle="pilot"
                 />
               ))}
             </div>
@@ -549,32 +510,28 @@ function PilotNavGroupedList({
 
         return (
           <Fragment key={g.key}>
-            <div data-testid={g.testId} className="flex min-w-0 flex-col gap-0">
+            <div data-testid={g.testId} className="flex min-w-0 flex-col gap-0.5">
               <button
                 type="button"
                 data-testid={toggleTestId}
                 aria-expanded={isOpen}
                 onClick={() => onToggleGroup(g.key)}
-                className={navGroupHeaderClass()}
+                className="w-full min-w-0 rounded-md px-1 py-1.5 text-left transition-colors hover:bg-[#EEEFF6]/60"
               >
-                <span className="min-w-0 flex-1 truncate text-left text-[10px] font-semibold uppercase tracking-wide">{g.label}</span>
-                <ChevronDown
-                  className={cn("h-4 w-4 shrink-0 text-[#8F96B0] transition-transform", isOpen && "rotate-180")}
-                  aria-hidden
-                />
+                <div className="flex min-w-0 items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className={cn("text-[10px] font-semibold uppercase leading-tight tracking-wide", titleColor)}>{g.label}</p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1.5 pt-0.5">
+                    <ChevronDown
+                      className={cn("h-4 w-4 shrink-0 text-[#8F96B0] transition-transform", isOpen && "rotate-180")}
+                      aria-hidden
+                    />
+                  </div>
+                </div>
               </button>
               {isOpen ? (
-                <div data-testid={contentTestId} className="flex min-w-0 flex-col gap-0">
-                  {g.key === "client-base" && summaryLine != null && summaryLine !== "" ? (
-                    <p data-testid={summaryTestId} className="mb-0.5 px-3 text-[10px] leading-tight text-[#8F96B0]/90">
-                      {summaryLine}
-                    </p>
-                  ) : null}
-                  {g.key === "in-development" && inDevSummary ? (
-                    <p data-testid={summaryTestId} className="mb-0.5 px-3 text-[10px] leading-tight text-[#8F96B0]/80">
-                      {inDevSummary}
-                    </p>
-                  ) : null}
+                <div data-testid={contentTestId} className="flex min-w-0 flex-col gap-0.5">
                   {g.items.map((item) => (
                     <NavRowLink
                       key={item.testId}
@@ -582,6 +539,7 @@ function PilotNavGroupedList({
                       location={location}
                       variant={variant}
                       onNavigate={onNavigate}
+                      linkStyle="pilot"
                       pilotWipTag={g.key === "in-development"}
                     />
                   ))}
@@ -724,7 +682,7 @@ export function AppShell({
                 aria-label={label}
                 className={cn(
                   "flex h-10 w-10 items-center justify-center rounded-lg no-underline transition-colors",
-                  active ? "bg-[#9ACA3C]/18 text-[#222631]" : "text-[#8F96B0] hover:bg-[#EEEFF6]/80 hover:text-[#222631]",
+                  active ? "bg-primary/20 text-primary" : "text-muted-foreground hover:bg-background/80 hover:text-foreground",
                 )}
               >
                 <Icon className="h-5 w-5" aria-hidden />
