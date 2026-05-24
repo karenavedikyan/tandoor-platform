@@ -260,13 +260,15 @@ function flattenNavModel(model: PilotNavigationModel): PilotNavItem[] {
 const PILOT_SIDEBAR_OPEN_GROUPS_LS_KEY = "tandoor-pilot-sidebar-open-groups-v1";
 
 const NAV_GROUP_TOGGLE_TESTID: Record<string, string> = {
-  "client-base": "button-nav-group-client-base-toggle",
   "in-development": "button-nav-group-in-development-toggle",
 };
 
 const NAV_GROUP_CONTENT_TESTID: Record<string, string> = {
-  "client-base": "nav-group-client-base-content",
   "in-development": "nav-group-in-development-content",
+};
+
+const NAV_GROUP_SUMMARY_TESTID: Record<string, string> = {
+  "in-development": "text-nav-group-in-development-summary",
 };
 
 type PilotOpenGroupsMap = Record<string, boolean>;
@@ -301,7 +303,6 @@ function defaultGroupOpenWithoutStorage(groupKey: string, location: string, grou
   const g = groups.find((x) => x.key === groupKey);
   if (!g) return false;
   const active = groupHasActiveItem(g, location);
-  if (groupKey === "client-base") return true;
   if (groupKey === "in-development") return false;
   return active;
 }
@@ -464,8 +465,104 @@ function NavLinksList({
   );
 }
 
+function CollapsiblePilotNavGroup({
+  group,
+  location,
+  variant,
+  onNavigate,
+  openGroups,
+  onToggleGroup,
+}: {
+  group: PilotNavGroup;
+  location: string;
+  variant: "sidebar" | "drawer";
+  onNavigate?: () => void;
+  openGroups: PilotOpenGroupsMap;
+  onToggleGroup: (groupKey: string) => void;
+}) {
+  const isOpen = Boolean(openGroups[group.key]);
+  const groupActive = groupHasActiveItem(group, location);
+  const titleColor = groupActive ? "text-[#222631]" : "text-[#8F96B0]";
+  const toggleTestId = NAV_GROUP_TOGGLE_TESTID[group.key] ?? `button-nav-group-${group.key}-toggle`;
+  const contentTestId = NAV_GROUP_CONTENT_TESTID[group.key] ?? `nav-group-${group.key}-content`;
+  const summaryLine = group.key === "in-development" ? `${group.items.length} разделов` : null;
+  const summaryTestId = NAV_GROUP_SUMMARY_TESTID[group.key] ?? `text-nav-group-${group.key}-summary`;
+
+  return (
+    <div data-testid={group.testId} className="flex min-w-0 flex-col gap-0.5">
+      <button
+        type="button"
+        data-testid={toggleTestId}
+        aria-expanded={isOpen}
+        onClick={() => onToggleGroup(group.key)}
+        className="w-full min-w-0 rounded-md px-1 py-1.5 text-left transition-colors hover:bg-[#EEEFF6]/60"
+      >
+        <div className="flex min-w-0 items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <p className={cn("text-[10px] font-semibold uppercase leading-tight tracking-wide", titleColor)}>{group.label}</p>
+            {summaryLine != null && summaryLine !== "" ? (
+              <p data-testid={summaryTestId} className="mt-0.5 text-[10px] leading-snug text-[#8F96B0]/90">
+                {summaryLine}
+              </p>
+            ) : null}
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5 pt-0.5">
+            <ChevronDown
+              className={cn("h-4 w-4 shrink-0 text-[#8F96B0] transition-transform", isOpen && "rotate-180")}
+              aria-hidden
+            />
+          </div>
+        </div>
+      </button>
+      {isOpen ? (
+        <div data-testid={contentTestId} className="flex min-w-0 flex-col gap-0.5">
+          {group.items.map((item) => (
+            <NavRowLink
+              key={item.testId}
+              item={item}
+              location={location}
+              variant={variant}
+              onNavigate={onNavigate}
+              linkStyle="pilot"
+              pilotWipTag={group.key === "in-development"}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function PilotNavFlatPilotItems({
+  items,
+  location,
+  variant,
+  onNavigate,
+}: {
+  items: PilotNavItem[];
+  location: string;
+  variant: "sidebar" | "drawer";
+  onNavigate?: () => void;
+}) {
+  return (
+    <div className="flex min-w-0 flex-col gap-0.5">
+      {items.map((item) => (
+        <NavRowLink
+          key={item.testId}
+          item={item}
+          location={location}
+          variant={variant}
+          onNavigate={onNavigate}
+          linkStyle="pilot"
+        />
+      ))}
+    </div>
+  );
+}
+
 function PilotNavGroupedList({
   groups,
+  leadingItems = [],
   standaloneItems = [],
   location,
   variant,
@@ -475,6 +572,7 @@ function PilotNavGroupedList({
   "data-testid": navTestId,
 }: {
   groups: PilotNavGroup[];
+  leadingItems?: PilotNavItem[];
   standaloneItems?: PilotNavItem[];
   location: string;
   variant: "sidebar" | "drawer";
@@ -483,15 +581,33 @@ function PilotNavGroupedList({
   onToggleGroup: (groupKey: string) => void;
   "data-testid": string;
 }) {
+  const hasLeading = (leadingItems?.length ?? 0) > 0;
+
+  if (hasLeading) {
+    return (
+      <div className="flex min-w-0 flex-col gap-2 overflow-x-hidden" data-testid={navTestId}>
+        <PilotNavFlatPilotItems items={leadingItems ?? []} location={location} variant={variant} onNavigate={onNavigate} />
+        {standaloneItems.length > 0 ? (
+          <PilotNavFlatPilotItems items={standaloneItems} location={location} variant={variant} onNavigate={onNavigate} />
+        ) : null}
+        {groups.map((g) => (
+          <CollapsiblePilotNavGroup
+            key={g.key}
+            group={g}
+            location={location}
+            variant={variant}
+            onNavigate={onNavigate}
+            openGroups={openGroups}
+            onToggleGroup={onToggleGroup}
+          />
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-w-0 flex-col gap-2 overflow-x-hidden" data-testid={navTestId}>
       {groups.map((g, groupIndex) => {
-        const isOpen = Boolean(openGroups[g.key]);
-        const groupActive = groupHasActiveItem(g, location);
-        const titleColor = groupActive ? "text-[#222631]" : "text-[#8F96B0]";
-        const toggleTestId = NAV_GROUP_TOGGLE_TESTID[g.key] ?? `button-nav-group-${g.key}-toggle`;
-        const contentTestId = NAV_GROUP_CONTENT_TESTID[g.key] ?? `nav-group-${g.key}-content`;
-
         const standaloneBlock =
           groupIndex === 0 && standaloneItems.length > 0 ? (
             <div key={`${g.key}-standalone`} className="flex min-w-0 flex-col gap-0.5">
@@ -510,42 +626,14 @@ function PilotNavGroupedList({
 
         return (
           <Fragment key={g.key}>
-            <div data-testid={g.testId} className="flex min-w-0 flex-col gap-0.5">
-              <button
-                type="button"
-                data-testid={toggleTestId}
-                aria-expanded={isOpen}
-                onClick={() => onToggleGroup(g.key)}
-                className="w-full min-w-0 rounded-md px-1 py-1.5 text-left transition-colors hover:bg-[#EEEFF6]/60"
-              >
-                <div className="flex min-w-0 items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <p className={cn("text-[10px] font-semibold uppercase leading-tight tracking-wide", titleColor)}>{g.label}</p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1.5 pt-0.5">
-                    <ChevronDown
-                      className={cn("h-4 w-4 shrink-0 text-[#8F96B0] transition-transform", isOpen && "rotate-180")}
-                      aria-hidden
-                    />
-                  </div>
-                </div>
-              </button>
-              {isOpen ? (
-                <div data-testid={contentTestId} className="flex min-w-0 flex-col gap-0.5">
-                  {g.items.map((item) => (
-                    <NavRowLink
-                      key={item.testId}
-                      item={item}
-                      location={location}
-                      variant={variant}
-                      onNavigate={onNavigate}
-                      linkStyle="pilot"
-                      pilotWipTag={g.key === "in-development"}
-                    />
-                  ))}
-                </div>
-              ) : null}
-            </div>
+            <CollapsiblePilotNavGroup
+              group={g}
+              location={location}
+              variant={variant}
+              onNavigate={onNavigate}
+              openGroups={openGroups}
+              onToggleGroup={onToggleGroup}
+            />
             {standaloneBlock}
           </Fragment>
         );
@@ -578,6 +666,7 @@ function NavigationPanel({
   }
   return (
     <PilotNavGroupedList
+      leadingItems={model.leadingItems}
       groups={model.groups}
       standaloneItems={model.standaloneItems}
       location={location}
