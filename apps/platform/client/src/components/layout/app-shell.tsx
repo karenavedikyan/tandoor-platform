@@ -26,7 +26,8 @@ import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { TandoorLogo } from "@/components/tandoor-logo";
-import { ThemeToggleDesktop, ThemeToggleMobileBlock } from "@/components/theme-toggle";
+import { ThemeToggleDesktop } from "@/components/theme-toggle";
+import { SidebarNavFooter } from "@/components/layout/sidebar-nav-footer";
 import { cn } from "@/lib/utils";
 import { flattenGroupedPilotNavigation, type PilotNavGroup, type PilotNavItem, type PilotNavigationModel } from "@/lib/auth-access";
 
@@ -189,33 +190,30 @@ function isIconRailActive(href: string, location: string) {
   return pathMatchesNavHref(location, href);
 }
 
-function navLinkClass(
-  item: PilotNavItem,
-  location: string,
-  variant: "sidebar" | "drawer",
-  linkStyle: "legacy" | "pilot",
-  isActiveFromLink?: boolean,
-) {
-  const active = isNavItemActive(item, location, isActiveFromLink);
-  const base =
-    variant === "sidebar"
-      ? "flex w-full min-h-10 items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm font-medium no-underline transition-colors"
-      : "flex w-full min-h-10 items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm font-medium no-underline transition-colors";
-  if (linkStyle === "pilot") {
-    return cn(
-      base,
-      active
-        ? "border-l-[3px] border-[#9ACA3C] bg-white font-semibold text-[#222631] shadow-sm"
-        : "border-l-[3px] border-transparent text-[#8F96B0] hover:bg-[#EEEFF6]/80 hover:text-[#222631]",
-      item.comingSoon && !active && "opacity-95",
-    );
-  }
+/** Единый стиль строки навигации (Tandoor): ~44px, зелёная полоса слева при active. */
+function navRowClass(isActive: boolean, extraClass?: string) {
   return cn(
-    base,
-    active
-      ? "border-l-[3px] border-primary bg-primary/12 font-semibold text-foreground shadow-sm"
-      : "border-l-[3px] border-transparent text-muted-foreground hover:bg-muted hover:text-foreground",
+    "flex w-full min-h-[44px] max-h-12 shrink-0 items-center justify-between gap-2 rounded-lg px-3 py-0 text-sm font-medium no-underline transition-colors",
+    isActive
+      ? "border-l-[3px] border-[#9ACA3C] bg-[#EEEFF6] font-semibold text-[#222631]"
+      : "border-l-[3px] border-transparent text-[#8F96B0] hover:bg-[#EEEFF6]/90 hover:text-[#222631]",
+    extraClass,
   );
+}
+
+function navGroupHeaderClass() {
+  return cn(
+    "flex w-full min-h-[40px] items-center justify-between gap-2 rounded-lg border border-transparent px-3 py-1 text-left transition-colors",
+    "text-[#8F96B0] hover:bg-[#EEEFF6]/55",
+  );
+}
+
+function navBadgeClass() {
+  return "h-6 min-w-6 shrink-0 rounded-md border border-[#E3E6F3] bg-[#EEEFF6] px-1.5 text-xs tabular-nums text-[#222631]";
+}
+
+function navWipBadgeClass() {
+  return "inline-flex h-5 max-w-[min(7rem,40vw)] shrink-0 items-center truncate rounded border border-[#E3E6F3] bg-[#F7F8FC] px-1.5 text-[9px] font-medium leading-none text-[#8F96B0]";
 }
 
 function headerContextLabel(location: string) {
@@ -396,14 +394,12 @@ function NavRowLink({
   location,
   variant,
   onNavigate,
-  linkStyle,
   pilotWipTag,
 }: {
   item: PilotNavItem;
   location: string;
   variant: "sidebar" | "drawer";
   onNavigate?: () => void;
-  linkStyle: "legacy" | "pilot";
   /** Muted «в разработке» справа (меню директора/РОПа). */
   pilotWipTag?: boolean;
 }) {
@@ -417,16 +413,17 @@ function NavRowLink({
       : variant === "sidebar"
         ? "text-sidebar-clients-count"
         : "text-mobile-sidebar-clients-count";
-  const badgeClass =
-    linkStyle === "pilot"
-      ? "h-6 min-w-6 shrink-0 rounded-md border border-[#E3E6F3] bg-[#EEEFF6] px-1.5 text-xs tabular-nums text-[#222631]"
-      : "h-6 min-w-6 shrink-0 rounded-md border border-border/60 bg-muted px-1.5 text-xs tabular-nums text-foreground";
 
   return (
     <Link
       href={item.href}
       onClick={onNavigate}
-      className={(active) => navLinkClass(item, location, variant, linkStyle, active)}
+      className={(active) =>
+        navRowClass(
+          isNavItemActive(item, location, active),
+          item.comingSoon && !pilotWipTag ? "opacity-90" : undefined,
+        )
+      }
       data-testid={item.testId}
     >
       <span className="flex min-w-0 flex-1 items-center gap-2 truncate text-left">
@@ -441,12 +438,9 @@ function NavRowLink({
         ) : null}
       </span>
       {pilotWipTag ? (
-        <Badge
-          variant="outline"
-          className="h-5 max-w-[min(7.5rem,42vw)] shrink-0 truncate border-[#E3E6F3] bg-[#EEEFF6] px-1.5 text-[10px] font-medium normal-case text-[#8F96B0]"
-        >
+        <span className={navWipBadgeClass()} aria-label="В разработке">
           в разработке
-        </Badge>
+        </span>
       ) : pulse ? (
         <span
           className="h-6 min-w-7 shrink-0 animate-pulse rounded-md bg-muted"
@@ -455,7 +449,7 @@ function NavRowLink({
           data-testid={countTestId}
         />
       ) : item.badge != null ? (
-        <Badge variant="secondary" className={badgeClass} data-testid={countTestId}>
+        <Badge variant="secondary" className={navBadgeClass()} data-testid={countTestId}>
           {item.badge}
         </Badge>
       ) : null}
@@ -477,7 +471,7 @@ function NavLinksList({
   "data-testid": string;
 }) {
   return (
-    <nav className="flex flex-col gap-0.5" data-testid={navTestId}>
+    <nav className="flex min-w-0 flex-col gap-0" data-testid={navTestId}>
       {items.map((item) => (
         <NavRowLink
           key={item.testId}
@@ -485,7 +479,6 @@ function NavLinksList({
           location={location}
           variant={variant}
           onNavigate={onNavigate}
-          linkStyle="legacy"
         />
       ))}
     </nav>
@@ -512,11 +505,9 @@ function PilotNavGroupedList({
   "data-testid": string;
 }) {
   return (
-    <div className="flex min-w-0 flex-col gap-2 overflow-x-hidden" data-testid={navTestId}>
+    <div className="flex min-w-0 flex-col gap-1 overflow-x-hidden" data-testid={navTestId}>
       {groups.map((g, groupIndex) => {
         const isOpen = Boolean(openGroups[g.key]);
-        const groupActive = groupHasActiveItem(g, location);
-        const titleColor = groupActive ? "text-[#222631]" : "text-[#8F96B0]";
         const counts = g.key === "client-base" ? pilotNavClientBaseCounts(g) : null;
 
         let summaryLine: string | null = null;
@@ -533,9 +524,9 @@ function PilotNavGroupedList({
           } else {
             summaryLine = "Клиенты и торговые точки";
           }
-        } else if (g.key === "in-development") {
-          summaryLine = `${g.items.length} разделов`;
         }
+
+        const inDevSummary = g.key === "in-development" ? `${g.items.length} разделов` : null;
 
         const toggleTestId = NAV_GROUP_TOGGLE_TESTID[g.key] ?? `button-nav-group-${g.key}-toggle`;
         const contentTestId = NAV_GROUP_CONTENT_TESTID[g.key] ?? `nav-group-${g.key}-content`;
@@ -543,7 +534,7 @@ function PilotNavGroupedList({
 
         const standaloneBlock =
           groupIndex === 0 && standaloneItems.length > 0 ? (
-            <div key={`${g.key}-standalone`} className="flex min-w-0 flex-col gap-0.5">
+            <div key={`${g.key}-standalone`} className="flex min-w-0 flex-col gap-0">
               {standaloneItems.map((item) => (
                 <NavRowLink
                   key={item.testId}
@@ -551,7 +542,6 @@ function PilotNavGroupedList({
                   location={location}
                   variant={variant}
                   onNavigate={onNavigate}
-                  linkStyle="pilot"
                 />
               ))}
             </div>
@@ -559,33 +549,32 @@ function PilotNavGroupedList({
 
         return (
           <Fragment key={g.key}>
-            <div data-testid={g.testId} className="flex min-w-0 flex-col gap-0.5">
+            <div data-testid={g.testId} className="flex min-w-0 flex-col gap-0">
               <button
                 type="button"
                 data-testid={toggleTestId}
                 aria-expanded={isOpen}
                 onClick={() => onToggleGroup(g.key)}
-                className="w-full min-w-0 rounded-md px-1 py-1.5 text-left transition-colors hover:bg-[#EEEFF6]/60"
+                className={navGroupHeaderClass()}
               >
-                <div className="flex min-w-0 items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <p className={cn("text-[10px] font-semibold uppercase leading-tight tracking-wide", titleColor)}>{g.label}</p>
-                    {summaryLine != null && summaryLine !== "" ? (
-                      <p data-testid={summaryTestId} className="mt-0.5 text-[10px] leading-snug text-[#8F96B0]/90">
-                        {summaryLine}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1.5 pt-0.5">
-                    <ChevronDown
-                      className={cn("h-4 w-4 shrink-0 text-[#8F96B0] transition-transform", isOpen && "rotate-180")}
-                      aria-hidden
-                    />
-                  </div>
-                </div>
+                <span className="min-w-0 flex-1 truncate text-left text-[10px] font-semibold uppercase tracking-wide">{g.label}</span>
+                <ChevronDown
+                  className={cn("h-4 w-4 shrink-0 text-[#8F96B0] transition-transform", isOpen && "rotate-180")}
+                  aria-hidden
+                />
               </button>
               {isOpen ? (
-                <div data-testid={contentTestId} className="flex min-w-0 flex-col gap-0.5">
+                <div data-testid={contentTestId} className="flex min-w-0 flex-col gap-0">
+                  {g.key === "client-base" && summaryLine != null && summaryLine !== "" ? (
+                    <p data-testid={summaryTestId} className="mb-0.5 px-3 text-[10px] leading-tight text-[#8F96B0]/90">
+                      {summaryLine}
+                    </p>
+                  ) : null}
+                  {g.key === "in-development" && inDevSummary ? (
+                    <p data-testid={summaryTestId} className="mb-0.5 px-3 text-[10px] leading-tight text-[#8F96B0]/80">
+                      {inDevSummary}
+                    </p>
+                  ) : null}
                   {g.items.map((item) => (
                     <NavRowLink
                       key={item.testId}
@@ -593,7 +582,6 @@ function PilotNavGroupedList({
                       location={location}
                       variant={variant}
                       onNavigate={onNavigate}
-                      linkStyle="pilot"
                       pilotWipTag={g.key === "in-development"}
                     />
                   ))}
@@ -660,6 +648,8 @@ export type AppShellProps = {
   navigation: PilotNavigationModel;
   homeHref: string;
   userName: string;
+  /** Подзаголовок в сайдбаре (например роль). */
+  userSubtitle?: string;
   cityLabel?: string;
   onLogout: () => void;
   /** POC Bitrix24: без боковых панелей и с компактной шапкой. */
@@ -671,6 +661,7 @@ export function AppShell({
   navigation,
   homeHref,
   userName,
+  userSubtitle,
   cityLabel = "—",
   onLogout,
   embeddedBitrix24 = false,
@@ -733,7 +724,7 @@ export function AppShell({
                 aria-label={label}
                 className={cn(
                   "flex h-10 w-10 items-center justify-center rounded-lg no-underline transition-colors",
-                  active ? "bg-primary/20 text-primary" : "text-muted-foreground hover:bg-background/80 hover:text-foreground",
+                  active ? "bg-[#9ACA3C]/18 text-[#222631]" : "text-[#8F96B0] hover:bg-[#EEEFF6]/80 hover:text-[#222631]",
                 )}
               >
                 <Icon className="h-5 w-5" aria-hidden />
@@ -751,7 +742,7 @@ export function AppShell({
         <div className="border-b border-border/60 px-4 pb-4 pt-5">
           <BrandBlock homeHref={homeHref} />
         </div>
-        <div className="flex flex-1 flex-col overflow-y-auto overflow-x-hidden px-3 py-4">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden px-3 py-3">
           <NavigationPanel
             model={navigation}
             location={location}
@@ -761,9 +752,13 @@ export function AppShell({
             onGroupedToggle={pilotGroupedToggle}
           />
         </div>
-        <div className="mt-auto border-t border-border/60 px-4 py-4">
-          <p className="text-[10px] text-muted-foreground">Рабочий кабинет Tandoor</p>
-        </div>
+        <SidebarNavFooter
+          userName={userName}
+          userSubtitle={userSubtitle}
+          onLogout={onLogout}
+          settingsDefaultOpen={false}
+          paddingClass="px-3 pb-3"
+        />
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -829,15 +824,15 @@ export function AppShell({
                 </SheetTrigger>
                 <SheetContent
                   side="left"
-                  className="flex w-[min(100vw-2rem,300px)] flex-col gap-0 overflow-y-auto border-r border-border/70 bg-card p-0"
+                  className="flex h-[100dvh] w-[min(100vw-2rem,300px)] max-w-[100vw] flex-col gap-0 overflow-hidden border-r border-[#E3E6F3] bg-card p-0"
                 >
-                  <div className="border-b border-border/60 px-5 pb-3 pt-4">
+                  <div className="shrink-0 border-b border-[#E3E6F3]/90 px-4 pb-2 pt-3">
                     <BrandBlock homeHref={homeHref} />
                   </div>
-                  <SheetHeader className="px-5 pt-3 text-left">
-                    <SheetTitle className="text-left text-base">Разделы</SheetTitle>
+                  <SheetHeader className="shrink-0 space-y-0 px-4 pb-1 pt-2 text-left">
+                    <SheetTitle className="text-left text-sm font-semibold text-[#222631]">Разделы</SheetTitle>
                   </SheetHeader>
-                  <div className="flex-1 px-5 pb-4 pt-2">
+                  <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 py-1">
                     <NavigationPanel
                       model={navigation}
                       location={location}
@@ -848,14 +843,17 @@ export function AppShell({
                       onGroupedToggle={pilotGroupedToggle}
                     />
                   </div>
-                  <ThemeToggleMobileBlock />
-                  <div className="border-t border-border/60 px-5 pb-4 pt-3">
-                    <p className="mb-2 text-xs text-muted-foreground">{userName}</p>
-                    <Button type="button" variant="outline" className="w-full gap-2" onClick={onLogout}>
-                      <LogOut className="h-4 w-4" aria-hidden />
-                      Выйти
-                    </Button>
-                  </div>
+                  <SidebarNavFooter
+                    userName={userName}
+                    userSubtitle={userSubtitle}
+                    onLogout={() => {
+                      setMobileOpen(false);
+                      onLogout();
+                    }}
+                    settingsDefaultOpen={false}
+                    paddingClass="px-4"
+                    className="shrink-0"
+                  />
                 </SheetContent>
               </Sheet>
               {ctx ? (

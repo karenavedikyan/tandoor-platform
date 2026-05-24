@@ -6,7 +6,7 @@
 2. **Переменные:** палитра задаётся в `client/src/index.css` для `:root` (светлая) и `.dark` (тёмная). Компоненты shadcn используют `hsl(var(--background))`, `bg-card`, `text-muted-foreground` и т.д.
 3. **Без мигания (FOUC):** в `client/index.html` выполняется **inline-скрипт** до загрузки React: читается `localStorage`, выставляется `class` на `html` и `data-tandoor-theme`.
 4. **React-слой:** `ThemeProvider` (`client/src/context/theme-provider.tsx`) синхронизирует выбор с `document.documentElement`, слушает `prefers-color-scheme` при режиме **system** и событие `storage` для других вкладок.
-5. **Переключатель:** `ThemeToggleDesktop` и `ThemeToggleMobileBlock` в `client/src/components/theme-toggle.tsx`; в шапке и в мобильном drawer — `client/src/components/layout/app-shell.tsx`.
+5. **Переключатель:** `ThemeToggleDesktop` в `client/src/components/theme-toggle.tsx` (desktop topbar и embedded Bitrix). В **мобильном drawer** и в **нижней части desktop sidebar** тема и выход — в компактном `SidebarNavFooter` (`client/src/components/layout/sidebar-nav-footer.tsx`), подключаемом из `app-shell.tsx`.
 
 ## localStorage
 
@@ -26,11 +26,9 @@
 
 ## data-testid
 
-- `button-theme-toggle` — кнопка в desktop topbar (и embedded Bitrix header).
-- `menu-theme-options` — контейнер опций (dropdown / блок в drawer).
-- `option-theme-light`, `option-theme-dark`, `option-theme-system`.
-- `icon-theme-light`, `icon-theme-dark`, `icon-theme-system` — на соответствующих контролах.
-- `text-current-theme` — подпись текущего режима в мобильном блоке.
+- `button-theme-toggle` — кнопка в desktop topbar (и embedded Bitrix header); выпадающее меню с `menu-theme-options` и пунктами `option-theme-light`, `option-theme-dark`, `option-theme-system`.
+- **Sidebar / mobile drawer (`SidebarNavFooter`):** `nav-settings-section`, `button-nav-settings-toggle`, `nav-theme-current`, `button-nav-theme-light`, `button-nav-theme-dark`, `button-nav-theme-system`, `button-nav-logout`. Раскрытый блок опций темы также несёт `menu-theme-options`; подпись «Сейчас: …» — `text-current-theme` (вложена в элемент с `nav-theme-current`).
+- `icon-theme-light`, `icon-theme-dark`, `icon-theme-system` — на соответствующих контролах в drawer (и в desktop dropdown через иконку триггера).
 
 ## Чистая актуализация (карточки клиента / ТТ)
 
@@ -40,6 +38,6 @@
 
 1. `cd apps/platform && npm run check && npm run build`.
 2. В шапке (desktop): иконка темы → три варианта; hard refresh — тема не «прыгает».
-3. Мобильная ширина: меню → блок «Тема интерфейса».
+3. Мобильная ширина: меню → секция **«Настройки»** внизу drawer (тема по умолчанию свёрнута; раскрыть для смены темы / выхода).
 4. Режим **system**: сменить ОС light/dark — UI обновляется.
 5. Проверить клиентскую базу, витрину, карточки, модалки, toast, сайдбар в обеих темах.
