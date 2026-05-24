@@ -8,7 +8,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageLoadingFallback } from "@/components/navigation/page-loading";
 import { useMockAuth } from "@/hooks/use-mock-auth";
-import { canAccessPath, defaultHomePathForRole, getPilotNavigation } from "@/lib/auth-access";
+import { canAccessPath, defaultHomePathForRole, getPilotNavigation, salesRoleNavSubtitle } from "@/lib/auth-access";
 import { buildHashPath } from "@/lib/hash-route-utils";
 import { useBitrix24EmbeddedFlag } from "@/lib/bitrix24-integration";
 import NotFound from "@/pages/not-found";
@@ -158,6 +158,7 @@ function AuthenticatedShell({
       navigation={navigation}
       homeHref={shellHomeHref}
       userName={user.name}
+      userSubtitle={salesRoleNavSubtitle(user.role)}
       onLogout={onLogout}
       embeddedBitrix24={embeddedBitrix24}
     >

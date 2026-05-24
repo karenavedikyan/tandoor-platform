@@ -15,9 +15,12 @@ import {
   MapPinned,
   Megaphone,
   Menu,
+  Monitor,
+  Moon,
   PieChart,
   Search,
   Store,
+  Sun,
   Users,
 } from "lucide-react";
 import { Fragment, useCallback, useLayoutEffect, useMemo, useState } from "react";
@@ -26,7 +29,8 @@ import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { TandoorLogo } from "@/components/tandoor-logo";
-import { ThemeToggleDesktop, ThemeToggleMobileBlock } from "@/components/theme-toggle";
+import { ThemeToggleDesktop, themeChoiceLabel } from "@/components/theme-toggle";
+import { useTheme } from "@/context/theme-provider";
 import { cn } from "@/lib/utils";
 import { flattenGroupedPilotNavigation, type PilotNavGroup, type PilotNavItem, type PilotNavigationModel } from "@/lib/auth-access";
 
@@ -46,6 +50,41 @@ const SALES_MANAGER_HREF = "/sales-manager";
 const COMMUNICATIONS_HREF = "/communications";
 const CLIENT_BASE_ACTIVITY_HREF = "/client-base-activity";
 const FEATURE_IN_DEVELOPMENT_HREF = "/feature-in-development";
+
+/** Tandoor nav: единая строка пункта (desktop sidebar + mobile drawer). */
+const NAV_ROW_BASE =
+  "flex h-11 min-h-[44px] w-full max-w-full shrink-0 items-center justify-between gap-2 rounded-lg px-3 text-sm font-medium no-underline transition-colors";
+
+function navRowClass(active: boolean, opts?: { dimmed?: boolean }) {
+  return cn(
+    NAV_ROW_BASE,
+    active
+      ? "border-l-[3px] border-[#9ACA3C] bg-white font-semibold text-[#222631] shadow-sm"
+      : "border-l-[3px] border-transparent bg-transparent text-[#8F96B0] hover:bg-[#EEEFF6] hover:text-[#222631] active:bg-[#EEEFF6]/80",
+    opts?.dimmed && "opacity-90",
+  );
+}
+
+/** Заголовок раскрываемой группы (не выглядит как активный nav item). */
+function navGroupHeaderButtonClass(groupHasActiveChild: boolean) {
+  return cn(
+    "flex w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-transparent bg-transparent px-3 py-2 text-left transition-colors",
+    "hover:bg-[#EEEFF6]/80",
+    groupHasActiveChild ? "text-[#222631]" : "text-[#8F96B0]",
+  );
+}
+
+function navCountBadgeClass() {
+  return "h-6 min-w-6 shrink-0 rounded-md border border-[#E3E6F3] bg-[#EEEFF6] px-1.5 text-xs font-medium tabular-nums leading-none text-[#222631]";
+}
+
+function navWipBadgeClass() {
+  return "max-w-[min(7rem,36vw)] shrink-0 truncate rounded-md border border-[#E3E6F3] bg-[#EEEFF6] px-1.5 py-0.5 text-[10px] font-medium leading-tight text-[#8F96B0]";
+}
+
+function navSkeletonPulseClass() {
+  return "h-6 min-w-7 shrink-0 animate-pulse rounded-md bg-[#EEEFF6]";
+}
 
 const ICON_BY_TESTID: Partial<Record<string, LucideIcon>> = {
   "nav-item-home": Home,
@@ -192,30 +231,12 @@ function isIconRailActive(href: string, location: string) {
 function navLinkClass(
   item: PilotNavItem,
   location: string,
-  variant: "sidebar" | "drawer",
-  linkStyle: "legacy" | "pilot",
+  _variant: "sidebar" | "drawer",
+  _linkStyle: "legacy" | "pilot",
   isActiveFromLink?: boolean,
 ) {
   const active = isNavItemActive(item, location, isActiveFromLink);
-  const base =
-    variant === "sidebar"
-      ? "flex w-full min-h-10 items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm font-medium no-underline transition-colors"
-      : "flex w-full min-h-10 items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm font-medium no-underline transition-colors";
-  if (linkStyle === "pilot") {
-    return cn(
-      base,
-      active
-        ? "border-l-[3px] border-[#9ACA3C] bg-white font-semibold text-[#222631] shadow-sm"
-        : "border-l-[3px] border-transparent text-[#8F96B0] hover:bg-[#EEEFF6]/80 hover:text-[#222631]",
-      item.comingSoon && !active && "opacity-95",
-    );
-  }
-  return cn(
-    base,
-    active
-      ? "border-l-[3px] border-primary bg-primary/12 font-semibold text-foreground shadow-sm"
-      : "border-l-[3px] border-transparent text-muted-foreground hover:bg-muted hover:text-foreground",
-  );
+  return navRowClass(active, { dimmed: Boolean(item.comingSoon && !active) });
 }
 
 function headerContextLabel(location: string) {
@@ -417,10 +438,7 @@ function NavRowLink({
       : variant === "sidebar"
         ? "text-sidebar-clients-count"
         : "text-mobile-sidebar-clients-count";
-  const badgeClass =
-    linkStyle === "pilot"
-      ? "h-6 min-w-6 shrink-0 rounded-md border border-[#E3E6F3] bg-[#EEEFF6] px-1.5 text-xs tabular-nums text-[#222631]"
-      : "h-6 min-w-6 shrink-0 rounded-md border border-border/60 bg-muted px-1.5 text-xs tabular-nums text-foreground";
+  const badgeClass = navCountBadgeClass();
 
   return (
     <Link
@@ -441,23 +459,20 @@ function NavRowLink({
         ) : null}
       </span>
       {pilotWipTag ? (
-        <Badge
-          variant="outline"
-          className="h-5 max-w-[min(7.5rem,42vw)] shrink-0 truncate border-[#E3E6F3] bg-[#EEEFF6] px-1.5 text-[10px] font-medium normal-case text-[#8F96B0]"
-        >
+        <span className={navWipBadgeClass()} aria-label="Раздел в разработке">
           в разработке
-        </Badge>
+        </span>
       ) : pulse ? (
         <span
-          className="h-6 min-w-7 shrink-0 animate-pulse rounded-md bg-muted"
+          className={navSkeletonPulseClass()}
           aria-busy
           aria-label={bid === "nav-trade-points" ? "Загрузка количества точек" : "Загрузка количества клиентов"}
           data-testid={countTestId}
         />
       ) : item.badge != null ? (
-        <Badge variant="secondary" className={badgeClass} data-testid={countTestId}>
+        <span className={badgeClass} data-testid={countTestId}>
           {item.badge}
-        </Badge>
+        </span>
       ) : null}
     </Link>
   );
@@ -477,7 +492,7 @@ function NavLinksList({
   "data-testid": string;
 }) {
   return (
-    <nav className="flex flex-col gap-0.5" data-testid={navTestId}>
+    <nav className="flex min-w-0 flex-col gap-0.5" data-testid={navTestId}>
       {items.map((item) => (
         <NavRowLink
           key={item.testId}
@@ -512,11 +527,10 @@ function PilotNavGroupedList({
   "data-testid": string;
 }) {
   return (
-    <div className="flex min-w-0 flex-col gap-2 overflow-x-hidden" data-testid={navTestId}>
+    <div className="flex min-w-0 flex-col gap-3 overflow-x-hidden" data-testid={navTestId}>
       {groups.map((g, groupIndex) => {
         const isOpen = Boolean(openGroups[g.key]);
         const groupActive = groupHasActiveItem(g, location);
-        const titleColor = groupActive ? "text-[#222631]" : "text-[#8F96B0]";
         const counts = g.key === "client-base" ? pilotNavClientBaseCounts(g) : null;
 
         let summaryLine: string | null = null;
@@ -533,8 +547,6 @@ function PilotNavGroupedList({
           } else {
             summaryLine = "Клиенты и торговые точки";
           }
-        } else if (g.key === "in-development") {
-          summaryLine = `${g.items.length} разделов`;
         }
 
         const toggleTestId = NAV_GROUP_TOGGLE_TESTID[g.key] ?? `button-nav-group-${g.key}-toggle`;
@@ -543,7 +555,7 @@ function PilotNavGroupedList({
 
         const standaloneBlock =
           groupIndex === 0 && standaloneItems.length > 0 ? (
-            <div key={`${g.key}-standalone`} className="flex min-w-0 flex-col gap-0.5">
+            <div key={`${g.key}-standalone`} className="mt-1 flex min-w-0 flex-col gap-0.5">
               {standaloneItems.map((item) => (
                 <NavRowLink
                   key={item.testId}
@@ -565,24 +577,24 @@ function PilotNavGroupedList({
                 data-testid={toggleTestId}
                 aria-expanded={isOpen}
                 onClick={() => onToggleGroup(g.key)}
-                className="w-full min-w-0 rounded-md px-1 py-1.5 text-left transition-colors hover:bg-[#EEEFF6]/60"
+                className={navGroupHeaderButtonClass(groupActive)}
               >
-                <div className="flex min-w-0 items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <p className={cn("text-[10px] font-semibold uppercase leading-tight tracking-wide", titleColor)}>{g.label}</p>
-                    {summaryLine != null && summaryLine !== "" ? (
-                      <p data-testid={summaryTestId} className="mt-0.5 text-[10px] leading-snug text-[#8F96B0]/90">
-                        {summaryLine}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1.5 pt-0.5">
-                    <ChevronDown
-                      className={cn("h-4 w-4 shrink-0 text-[#8F96B0] transition-transform", isOpen && "rotate-180")}
-                      aria-hidden
-                    />
-                  </div>
+                <div className="flex min-w-0 flex-1 flex-col items-start gap-0.5 text-left">
+                  <span className="text-[10px] font-semibold uppercase leading-tight tracking-wide">{g.label}</span>
+                  {summaryLine != null && summaryLine !== "" ? (
+                    <span data-testid={summaryTestId} className="text-[10px] font-normal leading-snug text-[#8F96B0]">
+                      {summaryLine}
+                    </span>
+                  ) : g.key === "in-development" ? (
+                    <span data-testid={summaryTestId} className="sr-only">
+                      Разделы доступны и помечены как в разработке
+                    </span>
+                  ) : null}
                 </div>
+                <ChevronDown
+                  className={cn("h-4 w-4 shrink-0 text-[#8F96B0] transition-transform", isOpen && "rotate-180")}
+                  aria-hidden
+                />
               </button>
               {isOpen ? (
                 <div data-testid={contentTestId} className="flex min-w-0 flex-col gap-0.5">
@@ -644,6 +656,74 @@ function NavigationPanel({
   );
 }
 
+function MobileDrawerFooter({
+  userName,
+  userSubtitle,
+  onLogout,
+}: {
+  userName: string;
+  userSubtitle?: string;
+  onLogout: () => void;
+}) {
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const { theme, setTheme } = useTheme();
+
+  const themeRowClass = (choice: "light" | "dark" | "system") =>
+    cn(
+      "flex h-9 w-full items-center gap-2 rounded-lg px-3 text-left text-sm transition-colors",
+      theme === choice
+        ? "bg-[#EEEFF6] font-medium text-[#222631]"
+        : "text-[#8F96B0] hover:bg-[#EEEFF6]/60 hover:text-[#222631]",
+    );
+
+  return (
+    <div className="shrink-0 border-t border-[#E3E6F3] bg-card" data-testid="nav-settings-section">
+      <div className="px-4 pb-1 pt-3">
+        <p className="truncate text-sm font-medium text-[#222631]">{userName}</p>
+        {userSubtitle ? <p className="mt-0.5 truncate text-xs text-[#8F96B0]">{userSubtitle}</p> : null}
+      </div>
+      <button
+        type="button"
+        data-testid="button-nav-settings-toggle"
+        aria-expanded={settingsOpen}
+        className="flex w-full items-center justify-between gap-2 border-t border-[#E3E6F3]/80 px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-[#8F96B0] transition-colors hover:bg-[#EEEFF6]/60"
+        onClick={() => setSettingsOpen((o) => !o)}
+      >
+        Настройки
+        <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 transition-transform", settingsOpen && "rotate-180")} aria-hidden />
+      </button>
+      {settingsOpen ? (
+        <div className="border-t border-[#E3E6F3]/80 px-2 pb-3 pt-2" data-testid="menu-theme-options">
+          <p className="px-2 pb-1.5 text-[11px] text-[#8F96B0]" data-testid="nav-theme-current">
+            Тема: <span className="text-[#222631]">{themeChoiceLabel(theme)}</span>
+          </p>
+          <button type="button" data-testid="button-nav-theme-light" className={themeRowClass("light")} onClick={() => setTheme("light")}>
+            <Sun className="h-3.5 w-3.5 shrink-0 text-[#8F96B0]" aria-hidden />
+            Светлая
+          </button>
+          <button type="button" data-testid="button-nav-theme-dark" className={themeRowClass("dark")} onClick={() => setTheme("dark")}>
+            <Moon className="h-3.5 w-3.5 shrink-0 text-[#8F96B0]" aria-hidden />
+            Тёмная
+          </button>
+          <button type="button" data-testid="button-nav-theme-system" className={themeRowClass("system")} onClick={() => setTheme("system")}>
+            <Monitor className="h-3.5 w-3.5 shrink-0 text-[#8F96B0]" aria-hidden />
+            Как в системе
+          </button>
+          <button
+            type="button"
+            data-testid="button-nav-logout"
+            className="mt-2 flex h-9 w-full items-center gap-2 rounded-lg px-3 text-left text-sm font-medium text-[#222631] transition-colors hover:bg-[#EEEFF6]/80"
+            onClick={onLogout}
+          >
+            <LogOut className="h-4 w-4 shrink-0 text-[#8F96B0]" aria-hidden />
+            Выйти
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function buildIconRail(navItems: PilotNavItem[]): { href: string; label: string; icon: LucideIcon; key: string }[] {
   const out: { href: string; label: string; icon: LucideIcon; key: string }[] = [];
   for (const item of navItems) {
@@ -660,6 +740,8 @@ export type AppShellProps = {
   navigation: PilotNavigationModel;
   homeHref: string;
   userName: string;
+  /** Подпись под именем в sidebar (например роль). */
+  userSubtitle?: string;
   cityLabel?: string;
   onLogout: () => void;
   /** POC Bitrix24: без боковых панелей и с компактной шапкой. */
@@ -671,6 +753,7 @@ export function AppShell({
   navigation,
   homeHref,
   userName,
+  userSubtitle,
   cityLabel = "—",
   onLogout,
   embeddedBitrix24 = false,
@@ -733,7 +816,7 @@ export function AppShell({
                 aria-label={label}
                 className={cn(
                   "flex h-10 w-10 items-center justify-center rounded-lg no-underline transition-colors",
-                  active ? "bg-primary/20 text-primary" : "text-muted-foreground hover:bg-background/80 hover:text-foreground",
+                  active ? "bg-[#EEEFF6] text-[#86B832]" : "text-[#8F96B0] hover:bg-[#EEEFF6]/80 hover:text-[#222631]",
                 )}
               >
                 <Icon className="h-5 w-5" aria-hidden />
@@ -748,10 +831,10 @@ export function AppShell({
         data-testid="app-shell-sidebar"
         aria-label="Основная навигация"
       >
-        <div className="border-b border-border/60 px-4 pb-4 pt-5">
+        <div className="border-b border-[#E3E6F3]/80 px-4 pb-3 pt-4">
           <BrandBlock homeHref={homeHref} />
         </div>
-        <div className="flex flex-1 flex-col overflow-y-auto overflow-x-hidden px-3 py-4">
+        <div className="flex flex-1 flex-col overflow-y-auto overflow-x-hidden px-3 py-3">
           <NavigationPanel
             model={navigation}
             location={location}
@@ -761,8 +844,10 @@ export function AppShell({
             onGroupedToggle={pilotGroupedToggle}
           />
         </div>
-        <div className="mt-auto border-t border-border/60 px-4 py-4">
-          <p className="text-[10px] text-muted-foreground">Рабочий кабинет Tandoor</p>
+        <div className="mt-auto border-t border-[#E3E6F3] px-4 py-3">
+          <p className="truncate text-xs font-medium text-[#222631]">{userName}</p>
+          {userSubtitle ? <p className="mt-0.5 truncate text-[10px] text-[#8F96B0]">{userSubtitle}</p> : null}
+          <p className="mt-2 text-[10px] leading-tight text-[#8F96B0]">Рабочий кабинет Tandoor</p>
         </div>
       </aside>
 
@@ -829,15 +914,15 @@ export function AppShell({
                 </SheetTrigger>
                 <SheetContent
                   side="left"
-                  className="flex w-[min(100vw-2rem,300px)] flex-col gap-0 overflow-y-auto border-r border-border/70 bg-card p-0"
+                  className="flex w-[min(100vw-2rem,300px)] flex-col gap-0 overflow-hidden border-r border-[#E3E6F3] bg-card p-0"
                 >
-                  <div className="border-b border-border/60 px-5 pb-3 pt-4">
+                  <div className="shrink-0 border-b border-[#E3E6F3]/80 px-4 pb-3 pt-4">
                     <BrandBlock homeHref={homeHref} />
                   </div>
-                  <SheetHeader className="px-5 pt-3 text-left">
-                    <SheetTitle className="text-left text-base">Разделы</SheetTitle>
+                  <SheetHeader className="sr-only shrink-0 px-4 pt-2">
+                    <SheetTitle>Разделы меню</SheetTitle>
                   </SheetHeader>
-                  <div className="flex-1 px-5 pb-4 pt-2">
+                  <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-2 pt-2">
                     <NavigationPanel
                       model={navigation}
                       location={location}
@@ -848,14 +933,14 @@ export function AppShell({
                       onGroupedToggle={pilotGroupedToggle}
                     />
                   </div>
-                  <ThemeToggleMobileBlock />
-                  <div className="border-t border-border/60 px-5 pb-4 pt-3">
-                    <p className="mb-2 text-xs text-muted-foreground">{userName}</p>
-                    <Button type="button" variant="outline" className="w-full gap-2" onClick={onLogout}>
-                      <LogOut className="h-4 w-4" aria-hidden />
-                      Выйти
-                    </Button>
-                  </div>
+                  <MobileDrawerFooter
+                    userName={userName}
+                    userSubtitle={userSubtitle}
+                    onLogout={() => {
+                      setMobileOpen(false);
+                      onLogout();
+                    }}
+                  />
                 </SheetContent>
               </Sheet>
               {ctx ? (

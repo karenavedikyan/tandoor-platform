@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import { useTheme } from "@/context/theme-provider";
 import type { TandoorThemeChoice } from "@/lib/tandoor-theme";
 
-function themeLabel(t: TandoorThemeChoice): string {
+export function themeChoiceLabel(t: TandoorThemeChoice): string {
   if (t === "light") return "Светлая";
   if (t === "dark") return "Тёмная";
   return "Как в системе";
@@ -58,14 +58,14 @@ export function ThemeToggleDesktop({ className }: { className?: string }) {
   );
 }
 
-/** Крупные кнопки для mobile drawer. */
+/** @deprecated Используйте компактный блок настроек в `AppShell` (`MobileDrawerFooter`). Оставлено для совместимости. */
 export function ThemeToggleMobileBlock() {
   const { theme, setTheme } = useTheme();
   return (
     <div className="space-y-3 border-t border-border/60 px-5 py-4" data-testid="menu-theme-options">
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Тема интерфейса</p>
       <p className="text-sm text-foreground" data-testid="text-current-theme">
-        Сейчас: {themeLabel(theme)}
+        Сейчас: {themeChoiceLabel(theme)}
       </p>
       <div className="flex flex-col gap-2">
         <Button

@@ -73,6 +73,24 @@ export function defaultHomePathForRole(role: SalesRole): string {
   }
 }
 
+/** Короткая подпись роли для блока пользователя в боковом меню. */
+export function salesRoleNavSubtitle(role: SalesRole): string {
+  switch (role) {
+    case "sales_director":
+      return "Директор по продажам";
+    case "team_lead":
+      return "Руководитель отдела продаж";
+    case "sales_manager":
+      return "Менеджер по продажам";
+    case "marketer":
+      return "Маркетолог";
+    case "analyst":
+      return "Аналитик";
+    default:
+      return "";
+  }
+}
+
 /** План-факт: целевой раздел по роли. */
 export function salesControlHomeHref(role: SalesRole): string {
   if (role === "sales_director" || role === "team_lead" || role === "sales_manager") {
