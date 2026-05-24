@@ -8,7 +8,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageLoadingFallback } from "@/components/navigation/page-loading";
 import { useMockAuth } from "@/hooks/use-mock-auth";
-import { canAccessPath, defaultHomePathForRole, getPilotNavItems } from "@/lib/auth-access";
+import { canAccessPath, defaultHomePathForRole, getPilotNavigation } from "@/lib/auth-access";
 import { buildHashPath } from "@/lib/hash-route-utils";
 import { useBitrix24EmbeddedFlag } from "@/lib/bitrix24-integration";
 import NotFound from "@/pages/not-found";
@@ -58,6 +58,7 @@ const LazyBitrix24Poc = lazy(() => import("@/pages/bitrix24-poc"));
 const LazyCommunications = lazy(() => import("@/pages/communications"));
 const LazyClientBaseActivityDashboard = lazy(() => import("@/pages/client-base-activity-dashboard"));
 const LazyLogin = lazy(() => import("@/pages/login"));
+const LazyFeatureInDevelopment = lazy(() => import("@/pages/feature-in-development"));
 
 function suspensePage(Lazy: LazyExoticComponent<ComponentType<any>>): ComponentType<any> {
   const Wrapped: ComponentType<any> = (props) => (
@@ -100,6 +101,7 @@ const ReleaseClientsRoute = suspensePage(LazyReleaseClients);
 const Bitrix24PocRoute = suspensePage(LazyBitrix24Poc);
 const CommunicationsRoute = suspensePage(LazyCommunications);
 const ClientBaseActivityDashboardRoute = suspensePage(LazyClientBaseActivityDashboard);
+const FeatureInDevelopmentRoute = suspensePage(LazyFeatureInDevelopment);
 
 function HashRedirect({ to }: { to: string }) {
   const [, setLoc] = useHashLocation();
@@ -146,14 +148,14 @@ function AuthenticatedShell({
     if (actx.loading || teamPlane.teamFetchLoading) return null;
     return countWorkingTradePointsForSidebar(profile, teamPlane.mergedState);
   }, [actx.enabled, actx.loading, teamPlane.mergedState, teamPlane.teamFetchLoading, profile]);
-  const navItems = useMemo(
-    () => getPilotNavItems(user.role, dealerNavCount, tradePointNavCount),
+  const navigation = useMemo(
+    () => getPilotNavigation(user.role, dealerNavCount, tradePointNavCount),
     [user.role, dealerNavCount, tradePointNavCount],
   );
 
   return (
     <AppShell
-      navItems={navItems}
+      navigation={navigation}
       homeHref={shellHomeHref}
       userName={user.name}
       onLogout={onLogout}
@@ -165,6 +167,7 @@ function AuthenticatedShell({
         <Route path="/sales-manager" component={SalesManagerWorkspaceRoute} />
         <Route path="/bitrix24" component={Bitrix24PocRoute} />
         <Route path="/embedded/bitrix24" component={Bitrix24PocRoute} />
+        <Route path="/feature-in-development" component={FeatureInDevelopmentRoute} />
         <Route path="/communications" component={CommunicationsRoute} />
         <Route path="/client-base-activity" component={ClientBaseActivityDashboardRoute} />
         <Route path="/dealer-base" component={DealerBaseRoute} />

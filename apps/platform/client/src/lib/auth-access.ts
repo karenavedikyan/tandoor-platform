@@ -11,7 +11,31 @@ export type PilotNavItem = {
   badge?: number;
   /** Плейсхолдер бейджа (например пока грузится актуализация клиентской базы). */
   badgeLoading?: boolean;
+  /**
+   * Стабильный id для активного состояния и счётчиков (иконки rail), если `testId` — новый (`nav-item-*`).
+   * По умолчанию равен `testId`.
+   */
+  navBehaviorId?: string;
+  /** Пункт ведёт на заглушку «в разработке»; в меню — muted + бейдж «скоро». */
+  comingSoon?: boolean;
+  /** Совпадение с query `feature=` на `/feature-in-development`. */
+  developmentFeature?: string;
 };
+
+export type PilotNavGroup = {
+  key: string;
+  label: string;
+  testId: string;
+  items: PilotNavItem[];
+};
+
+export type PilotNavigationModel =
+  | { layout: "flat"; items: PilotNavItem[] }
+  | { layout: "grouped"; groups: PilotNavGroup[] };
+
+export function pilotFeatureDevelopmentHref(feature: string): string {
+  return `/feature-in-development?feature=${encodeURIComponent(feature)}`;
+}
 
 function normPath(path: string): string {
   const p = path.split("?")[0] || "/";
@@ -88,6 +112,7 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
   if (role === "team_lead") {
     return any([
       (x) => x === "/main" || isUnder(x, "/main"),
+      (x) => isUnder(x, "/territory-card"),
       (x) => isUnder(x, "/analytics-workspace"),
       (x) =>
         isUnder(x, "/dealer-base") ||
@@ -100,6 +125,7 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
       (x) => isUnder(x, "/training"),
       (x) => isUnder(x, "/marketing-briefs"),
       (x) => isUnder(x, "/communications"),
+      (x) => x === "/feature-in-development" || isUnder(x, "/feature-in-development"),
       (x) =>
         x === "/sales-control" ||
         isUnder(x, "/sales-control/team-lead") ||
@@ -125,6 +151,7 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
       (x) => isUnder(x, "/training"),
       (x) => isUnder(x, "/marketing-briefs"),
       (x) => isUnder(x, "/communications"),
+      (x) => x === "/feature-in-development" || isUnder(x, "/feature-in-development"),
       (x) =>
         x === "/sales-control" ||
         isUnder(x, "/sales-control/director") ||
@@ -173,15 +200,12 @@ export function canAccessClientBaseActivityDashboard(role: SalesRole): boolean {
   return role === "sales_director" || role === "team_lead";
 }
 
-export function getPilotNavItems(
+export function getPilotNavigation(
   role: SalesRole,
   dealerBaseClientCount?: number | null,
   tradePointCount?: number | null,
-): PilotNavItem[] {
+): PilotNavigationModel {
   const sch = salesControlHomeHref(role);
-  const items: PilotNavItem[] = [];
-
-  const push = (x: PilotNavItem) => items.push(x);
 
   const dealerNavExtras = (): Pick<PilotNavItem, "badge" | "badgeLoading"> => {
     if (dealerBaseClientCount === undefined) return {};
@@ -196,75 +220,149 @@ export function getPilotNavItems(
     return { badge: tradePointCount };
   };
 
-  if (role === "sales_manager") {
-    push({ href: "/main", label: "Главная", testId: "nav-main" });
-    push({ href: "/dealer-base", label: "Клиенты", testId: "nav-dealer-base", ...dealerNavExtras() });
-    push({ href: "/trade-points", label: "Торговые точки", testId: "nav-trade-points", ...tradePointNavExtras() });
-    push({ href: "/client-map", label: "Карта клиентов", testId: "nav-client-map" });
-    push({ href: "/tasks", label: "Задачи по витрине", testId: "nav-tasks" });
-    push({ href: "/communications", label: "Коммуникации", testId: "nav-communications" });
-    push({ href: "/catalog", label: "Каталог", testId: "nav-catalog" });
-    push({ href: "/training", label: "Обучение", testId: "nav-training" });
-    push({ href: sch, label: "План-факт продаж", testId: "nav-sales-control" });
-    push({ href: "/marketing-briefs", label: "Маркетинговые брифы", testId: "nav-marketing-briefs" });
-    return items;
+  const directorOrRopGroups = (clientLabel: string): PilotNavGroup[] => [
+    {
+      key: "workspace",
+      label: "РАБОЧИЙ СТОЛ",
+      testId: "nav-group-workspace",
+      items: [
+        { href: "/main", label: "Главная", testId: "nav-item-home", navBehaviorId: "nav-main" },
+        { href: "/territory-card", label: "Карточка территории", testId: "nav-item-territory-card", navBehaviorId: "nav-territory-card" },
+      ],
+    },
+    {
+      key: "client-base",
+      label: "КЛИЕНТСКАЯ БАЗА",
+      testId: "nav-group-client-base",
+      items: [
+        {
+          href: "/dealer-base",
+          label: clientLabel,
+          testId: "nav-item-clients",
+          navBehaviorId: "nav-dealer-base",
+          ...dealerNavExtras(),
+        },
+        {
+          href: "/trade-points",
+          label: "Торговые точки",
+          testId: "nav-item-trade-points",
+          navBehaviorId: "nav-trade-points",
+          ...tradePointNavExtras(),
+        },
+        { href: "/client-map", label: "Карта клиентов", testId: "nav-item-client-map", navBehaviorId: "nav-client-map" },
+        {
+          href: "/client-base-activity",
+          label: "Актуализация базы",
+          testId: "nav-item-client-base-activity",
+          navBehaviorId: "nav-client-base-activity",
+        },
+      ],
+    },
+    {
+      key: "sales-kpi",
+      label: "ПРОДАЖИ И KPI",
+      testId: "nav-group-sales-kpi",
+      items: [
+        { href: sch, label: "План-факт продаж", testId: "nav-item-sales-plan-fact", navBehaviorId: "nav-sales-control" },
+        {
+          href: "/analytics-workspace",
+          label: "Аналитика команды",
+          testId: "nav-item-team-analytics",
+          navBehaviorId: "nav-analytics-workspace",
+        },
+        { href: "/tasks", label: "Задачи по витрине", testId: "nav-item-showcase-tasks", navBehaviorId: "nav-tasks" },
+      ],
+    },
+    {
+      key: "tools",
+      label: "ИНСТРУМЕНТЫ",
+      testId: "nav-group-tools",
+      items: [
+        { href: "/catalog", label: "Каталог", testId: "nav-item-catalog", navBehaviorId: "nav-catalog" },
+        { href: "/training", label: "Обучение", testId: "nav-item-training", navBehaviorId: "nav-training" },
+      ],
+    },
+    {
+      key: "in-development",
+      label: "В РАЗРАБОТКЕ",
+      testId: "nav-group-in-development",
+      items: [
+        {
+          href: pilotFeatureDevelopmentHref("communications"),
+          label: "Коммуникации",
+          testId: "nav-item-communications",
+          comingSoon: true,
+          developmentFeature: "communications",
+        },
+        {
+          href: pilotFeatureDevelopmentHref("marketing-briefs"),
+          label: "Маркетинговые брифы",
+          testId: "nav-item-marketing-briefs",
+          comingSoon: true,
+          developmentFeature: "marketing-briefs",
+        },
+      ],
+    },
+  ];
+
+  if (role === "sales_director") {
+    return { layout: "grouped", groups: directorOrRopGroups("Клиенты") };
   }
 
   if (role === "team_lead") {
-    push({ href: "/main", label: "Главная", testId: "nav-main" });
-    push({ href: "/dealer-base", label: "Клиенты команды", testId: "nav-dealer-base", ...dealerNavExtras() });
-    push({ href: "/client-base-activity", label: "Актуализация базы", testId: "nav-client-base-activity" });
-    push({ href: "/trade-points", label: "Торговые точки", testId: "nav-trade-points", ...tradePointNavExtras() });
-    push({ href: "/client-map", label: "Карта клиентов", testId: "nav-client-map" });
-    push({ href: "/tasks", label: "Задачи по витрине", testId: "nav-tasks" });
-    push({ href: "/communications", label: "Коммуникации", testId: "nav-communications" });
-    push({ href: "/analytics-workspace", label: "Аналитика команды", testId: "nav-analytics-workspace" });
-    push({ href: sch, label: "План-факт продаж", testId: "nav-sales-control" });
-    push({ href: "/catalog", label: "Каталог", testId: "nav-catalog" });
-    push({ href: "/training", label: "Обучение", testId: "nav-training" });
-    push({ href: "/marketing-briefs", label: "Маркетинговые брифы", testId: "nav-marketing-briefs" });
-    return items;
+    return { layout: "grouped", groups: directorOrRopGroups("Клиенты") };
   }
 
-  if (role === "sales_director") {
-    push({ href: "/main", label: "Главная", testId: "nav-main" });
-    push({ href: "/territory-card", label: "Карточка территории", testId: "nav-territory-card" });
-    push({ href: "/dealer-base", label: "Клиенты", testId: "nav-dealer-base", ...dealerNavExtras() });
-    push({ href: "/client-base-activity", label: "Актуализация базы", testId: "nav-client-base-activity" });
-    push({ href: "/trade-points", label: "Торговые точки", testId: "nav-trade-points", ...tradePointNavExtras() });
-    push({ href: "/client-map", label: "Карта клиентов", testId: "nav-client-map" });
-    push({ href: "/tasks", label: "Задачи по витрине", testId: "nav-tasks" });
-    push({ href: "/communications", label: "Коммуникации", testId: "nav-communications" });
-    push({ href: "/analytics-workspace", label: "Аналитика команды", testId: "nav-analytics-workspace" });
-    push({ href: sch, label: "План-факт продаж", testId: "nav-sales-control" });
-    push({ href: "/catalog", label: "Каталог", testId: "nav-catalog" });
-    push({ href: "/training", label: "Обучение", testId: "nav-training" });
-    push({ href: "/marketing-briefs", label: "Маркетинговые брифы", testId: "nav-marketing-briefs" });
+  const flat = ((): PilotNavItem[] => {
+    const items: PilotNavItem[] = [];
+    const push = (x: PilotNavItem) => items.push(x);
+    if (role === "sales_manager") {
+      push({ href: "/main", label: "Главная", testId: "nav-main" });
+      push({ href: "/dealer-base", label: "Клиенты", testId: "nav-dealer-base", ...dealerNavExtras() });
+      push({ href: "/trade-points", label: "Торговые точки", testId: "nav-trade-points", ...tradePointNavExtras() });
+      push({ href: "/client-map", label: "Карта клиентов", testId: "nav-client-map" });
+      push({ href: "/tasks", label: "Задачи по витрине", testId: "nav-tasks" });
+      push({ href: "/communications", label: "Коммуникации", testId: "nav-communications" });
+      push({ href: "/catalog", label: "Каталог", testId: "nav-catalog" });
+      push({ href: "/training", label: "Обучение", testId: "nav-training" });
+      push({ href: sch, label: "План-факт продаж", testId: "nav-sales-control" });
+      push({ href: "/marketing-briefs", label: "Маркетинговые брифы", testId: "nav-marketing-briefs" });
+      return items;
+    }
+    if (role === "marketer") {
+      push({ href: "/marketing-briefs", label: "Маркетинговые брифы", testId: "nav-marketing-briefs" });
+      push({ href: "/catalog", label: "Каталог", testId: "nav-catalog" });
+      push({ href: "/training", label: "Обучение", testId: "nav-training" });
+      push({ href: "/communications", label: "Коммуникации", testId: "nav-communications" });
+      push({ href: "/dealer-base", label: "Клиенты (просмотр)", testId: "nav-dealer-base", ...dealerNavExtras() });
+      push({ href: "/trade-points", label: "Торговые точки", testId: "nav-trade-points", ...tradePointNavExtras() });
+      push({ href: "/client-map", label: "Карта клиентов", testId: "nav-client-map" });
+      return items;
+    }
+    if (role === "analyst") {
+      push({ href: "/analytics-workspace", label: "Аналитика команды", testId: "nav-analytics-workspace" });
+      push({ href: "/dealer-base", label: "Клиенты", testId: "nav-dealer-base", ...dealerNavExtras() });
+      push({ href: "/trade-points", label: "Торговые точки", testId: "nav-trade-points", ...tradePointNavExtras() });
+      push({ href: "/client-map", label: "Карта клиентов", testId: "nav-client-map" });
+      push({ href: "/tasks", label: "Задачи по витрине", testId: "nav-tasks" });
+      push({ href: "/communications", label: "Коммуникации", testId: "nav-communications" });
+      push({ href: "/catalog", label: "Каталог", testId: "nav-catalog" });
+      push({ href: "/marketing-briefs", label: "Маркетинговые брифы", testId: "nav-marketing-briefs" });
+      return items;
+    }
     return items;
-  }
+  })();
 
-  if (role === "marketer") {
-    push({ href: "/marketing-briefs", label: "Маркетинговые брифы", testId: "nav-marketing-briefs" });
-    push({ href: "/catalog", label: "Каталог", testId: "nav-catalog" });
-    push({ href: "/training", label: "Обучение", testId: "nav-training" });
-    push({ href: "/communications", label: "Коммуникации", testId: "nav-communications" });
-    push({ href: "/dealer-base", label: "Клиенты (просмотр)", testId: "nav-dealer-base", ...dealerNavExtras() });
-    push({ href: "/trade-points", label: "Торговые точки", testId: "nav-trade-points", ...tradePointNavExtras() });
-    push({ href: "/client-map", label: "Карта клиентов", testId: "nav-client-map" });
-    return items;
-  }
+  return { layout: "flat", items: flat };
+}
 
-  if (role === "analyst") {
-    push({ href: "/analytics-workspace", label: "Аналитика команды", testId: "nav-analytics-workspace" });
-    push({ href: "/dealer-base", label: "Клиенты", testId: "nav-dealer-base", ...dealerNavExtras() });
-    push({ href: "/trade-points", label: "Торговые точки", testId: "nav-trade-points", ...tradePointNavExtras() });
-    push({ href: "/client-map", label: "Карта клиентов", testId: "nav-client-map" });
-    push({ href: "/tasks", label: "Задачи по витрине", testId: "nav-tasks" });
-    push({ href: "/communications", label: "Коммуникации", testId: "nav-communications" });
-    push({ href: "/catalog", label: "Каталог", testId: "nav-catalog" });
-    push({ href: "/marketing-briefs", label: "Маркетинговые брифы", testId: "nav-marketing-briefs" });
-    return items;
-  }
-
-  return items;
+/** Плоский список для обратной совместимости (иконки rail, тесты). */
+export function getPilotNavItems(
+  role: SalesRole,
+  dealerBaseClientCount?: number | null,
+  tradePointCount?: number | null,
+): PilotNavItem[] {
+  const m = getPilotNavigation(role, dealerBaseClientCount, tradePointCount);
+  if (m.layout === "flat") return m.items;
+  return m.groups.flatMap((g) => g.items);
 }
