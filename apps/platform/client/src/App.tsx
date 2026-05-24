@@ -21,7 +21,7 @@ import { ThemeProvider } from "@/context/theme-provider";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { resolveSidebarWorkingDealerClientCount } from "@/lib/dealer-base-sidebar-client-count";
 import { countWorkingTradePointsForSidebar } from "@/lib/trade-point-list-for-actualization";
-import type { SalesUser } from "@/lib/sales-control-data";
+import type { SalesRole, SalesUser } from "@/lib/sales-control-data";
 
 const LazySalesManagerWorkspace = lazy(() => import("@/pages/sales-manager-workspace"));
 const LazyDealerBase = lazy(() => import("@/pages/dealer-base"));
@@ -103,6 +103,24 @@ const CommunicationsRoute = suspensePage(LazyCommunications);
 const ClientBaseActivityDashboardRoute = suspensePage(LazyClientBaseActivityDashboard);
 const FeatureInDevelopmentRoute = suspensePage(LazyFeatureInDevelopment);
 
+
+function pilotNavUserSubtitle(role: SalesRole): string | undefined {
+  switch (role) {
+    case "sales_director":
+      return "Директор по продажам";
+    case "team_lead":
+      return "Руководитель отдела продаж";
+    case "sales_manager":
+      return "Менеджер по продажам";
+    case "marketer":
+      return "Маркетолог";
+    case "analyst":
+      return "Аналитик";
+    default:
+      return undefined;
+  }
+}
+
 function HashRedirect({ to }: { to: string }) {
   const [, setLoc] = useHashLocation();
   useEffect(() => {
@@ -158,6 +176,7 @@ function AuthenticatedShell({
       navigation={navigation}
       homeHref={shellHomeHref}
       userName={user.name}
+      userSubtitle={pilotNavUserSubtitle(user.role)}
       onLogout={onLogout}
       embeddedBitrix24={embeddedBitrix24}
     >
