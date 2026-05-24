@@ -27,7 +27,7 @@ import { Badge } from "@/components/ui/badge";
 import { TandoorLogo } from "@/components/tandoor-logo";
 import { ThemeToggleDesktop, ThemeToggleMobileBlock } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
-import type { PilotNavItem } from "@/lib/auth-access";
+import type { PilotNavGroup, PilotNavItem, PilotNavigationModel } from "@/lib/auth-access";
 
 const MAIN_HREF = "/main";
 const TERRITORY_CARD_HREF = "/territory-card";
@@ -44,8 +44,22 @@ const MARKETING_BRIEFS_HREF = "/marketing-briefs";
 const SALES_MANAGER_HREF = "/sales-manager";
 const COMMUNICATIONS_HREF = "/communications";
 const CLIENT_BASE_ACTIVITY_HREF = "/client-base-activity";
+const FEATURE_IN_DEVELOPMENT_HREF = "/feature-in-development";
 
 const ICON_BY_TESTID: Partial<Record<string, LucideIcon>> = {
+  "nav-item-home": Home,
+  "nav-item-territory-card": MapPinned,
+  "nav-item-clients": Users,
+  "nav-item-trade-points": Store,
+  "nav-item-client-map": Map,
+  "nav-item-client-base-activity": BarChart3,
+  "nav-item-sales-plan-fact": ClipboardList,
+  "nav-item-team-analytics": PieChart,
+  "nav-item-showcase-tasks": ListTodo,
+  "nav-item-catalog": LayoutGrid,
+  "nav-item-training": BookOpen,
+  "nav-item-communications": MessageCircle,
+  "nav-item-marketing-briefs": Megaphone,
   "nav-client-base-activity": BarChart3,
   "nav-main": Home,
   "nav-client-map": Map,
@@ -129,22 +143,38 @@ function isMarketingBriefsPath(path: string) {
   return path === MARKETING_BRIEFS_HREF || path.startsWith(`${MARKETING_BRIEFS_HREF}/`);
 }
 
+function isFeatureInDevelopmentPath(path: string) {
+  const p = path.split("?")[0] ?? path;
+  return p === FEATURE_IN_DEVELOPMENT_HREF;
+}
+
+function behaviorId(item: PilotNavItem): string {
+  return item.navBehaviorId ?? item.testId;
+}
+
 function isNavItemActive(item: PilotNavItem, location: string, isActiveFromLink?: boolean): boolean {
   if (isActiveFromLink !== undefined) return isActiveFromLink;
-  if (item.testId === "nav-main") return isMainPath(location);
-  if (item.testId === "nav-dealer-base") return isClientsSectionPath(location);
-  if (item.testId === "nav-trade-points") return isTradePointsPath(location);
-  if (item.testId === "nav-catalog") return isCatalogPath(location);
-  if (item.testId === "nav-tasks") return isTasksPath(location);
-  if (item.testId === "nav-communications") return isCommunicationsPath(location);
-  if (item.testId === "nav-territory-card") return isTerritoryCardPath(location);
-  if (item.testId === "nav-analytics") return isAnalyticsPath(location);
-  if (item.testId === "nav-training") return isTrainingPath(location);
-  if (item.testId === "nav-sales-control") return isSalesControlPath(location);
-  if (item.testId === "nav-analytics-workspace") return isAnalyticsWorkspacePath(location);
-  if (item.testId === "nav-client-map") return isClientMapPath(location);
-  if (item.testId === "nav-marketing-briefs") return isMarketingBriefsPath(location);
-  if (item.testId === "nav-client-base-activity") return isClientBaseActivityPath(location);
+  if (item.developmentFeature) {
+    const pathOnly = location.split("?")[0] ?? location;
+    if (pathOnly !== FEATURE_IN_DEVELOPMENT_HREF) return false;
+    const q = location.includes("?") ? location.slice(location.indexOf("?") + 1) : "";
+    return new URLSearchParams(q).get("feature") === item.developmentFeature;
+  }
+  const bid = behaviorId(item);
+  if (bid === "nav-main") return isMainPath(location);
+  if (bid === "nav-dealer-base") return isClientsSectionPath(location);
+  if (bid === "nav-trade-points") return isTradePointsPath(location);
+  if (bid === "nav-catalog") return isCatalogPath(location);
+  if (bid === "nav-tasks") return isTasksPath(location);
+  if (bid === "nav-communications") return isCommunicationsPath(location);
+  if (bid === "nav-territory-card") return isTerritoryCardPath(location);
+  if (bid === "nav-analytics") return isAnalyticsPath(location);
+  if (bid === "nav-training") return isTrainingPath(location);
+  if (bid === "nav-sales-control") return isSalesControlPath(location);
+  if (bid === "nav-analytics-workspace") return isAnalyticsWorkspacePath(location);
+  if (bid === "nav-client-map") return isClientMapPath(location);
+  if (bid === "nav-marketing-briefs") return isMarketingBriefsPath(location);
+  if (bid === "nav-client-base-activity") return isClientBaseActivityPath(location);
   return pathMatchesNavHref(location, item.href);
 }
 
@@ -153,12 +183,27 @@ function isIconRailActive(href: string, location: string) {
   return pathMatchesNavHref(location, href);
 }
 
-function navLinkClass(item: PilotNavItem, location: string, variant: "sidebar" | "drawer", isActiveFromLink?: boolean) {
+function navLinkClass(
+  item: PilotNavItem,
+  location: string,
+  variant: "sidebar" | "drawer",
+  linkStyle: "legacy" | "pilot",
+  isActiveFromLink?: boolean,
+) {
   const active = isNavItemActive(item, location, isActiveFromLink);
   const base =
     variant === "sidebar"
       ? "flex w-full min-h-10 items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm font-medium no-underline transition-colors"
       : "flex w-full min-h-10 items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm font-medium no-underline transition-colors";
+  if (linkStyle === "pilot") {
+    return cn(
+      base,
+      active
+        ? "border-l-[3px] border-[#9ACA3C] bg-white font-semibold text-[#222631] shadow-sm"
+        : "border-l-[3px] border-transparent text-[#8F96B0] hover:bg-[#EEEFF6]/80 hover:text-[#222631]",
+      item.comingSoon && !active && "opacity-95",
+    );
+  }
   return cn(
     base,
     active
@@ -170,7 +215,7 @@ function navLinkClass(item: PilotNavItem, location: string, variant: "sidebar" |
 function headerContextLabel(location: string) {
   const pathOnly = location.split("?")[0] ?? location;
   if (pathOnly === "/bitrix24" || pathOnly === "/embedded/bitrix24") return "Bitrix24";
-  if (isClientBaseActivityPath(pathOnly)) return "Актуализация базы";
+  if (isFeatureInDevelopmentPath(pathOnly)) return "В разработке";
   if (isCommunicationsPath(pathOnly)) return "Коммуникации";
   if (isMainPath(location)) return "Главная";
   if (isTradePointsPath(pathOnly)) return "Торговые точки";
@@ -198,6 +243,73 @@ function BrandBlock({ className, homeHref }: { className?: string; homeHref: str
   );
 }
 
+function flattenNavModel(model: PilotNavigationModel): PilotNavItem[] {
+  if (model.layout === "flat") return model.items;
+  return model.groups.flatMap((g) => g.items);
+}
+
+function NavRowLink({
+  item,
+  location,
+  variant,
+  onNavigate,
+  linkStyle,
+}: {
+  item: PilotNavItem;
+  location: string;
+  variant: "sidebar" | "drawer";
+  onNavigate?: () => void;
+  linkStyle: "legacy" | "pilot";
+}) {
+  const bid = behaviorId(item);
+  const pulse = (bid === "nav-dealer-base" || bid === "nav-trade-points") && item.badgeLoading;
+  const countTestId =
+    bid === "nav-trade-points"
+      ? variant === "sidebar"
+        ? "text-sidebar-trade-points-count"
+        : "text-mobile-sidebar-trade-points-count"
+      : variant === "sidebar"
+        ? "text-sidebar-clients-count"
+        : "text-mobile-sidebar-clients-count";
+  const badgeClass =
+    linkStyle === "pilot"
+      ? "h-6 min-w-6 shrink-0 rounded-md border border-[#E3E6F3] bg-[#EEEFF6] px-1.5 text-xs tabular-nums text-[#222631]"
+      : "h-6 min-w-6 shrink-0 rounded-md border border-border/60 bg-muted px-1.5 text-xs tabular-nums text-foreground";
+
+  return (
+    <Link
+      href={item.href}
+      onClick={onNavigate}
+      className={(active) => navLinkClass(item, location, variant, linkStyle, active)}
+      data-testid={item.testId}
+    >
+      <span className="flex min-w-0 flex-1 items-center gap-2 truncate text-left">
+        <span className="truncate">{item.label}</span>
+        {item.comingSoon ? (
+          <Badge
+            variant="outline"
+            className="h-5 shrink-0 border-[#E3E6F3] bg-[#EEEFF6] px-1.5 text-[10px] font-semibold uppercase text-[#8F96B0]"
+          >
+            скоро
+          </Badge>
+        ) : null}
+      </span>
+      {pulse ? (
+        <span
+          className="h-6 min-w-7 shrink-0 animate-pulse rounded-md bg-muted"
+          aria-busy
+          aria-label={bid === "nav-trade-points" ? "Загрузка количества точек" : "Загрузка количества клиентов"}
+          data-testid={countTestId}
+        />
+      ) : item.badge != null ? (
+        <Badge variant="secondary" className={badgeClass} data-testid={countTestId}>
+          {item.badge}
+        </Badge>
+      ) : null}
+    </Link>
+  );
+}
+
 function NavLinksList({
   items,
   location,
@@ -214,56 +326,82 @@ function NavLinksList({
   return (
     <nav className="flex flex-col gap-0.5" data-testid={navTestId}>
       {items.map((item) => (
-        <Link
+        <NavRowLink
           key={item.testId}
-          href={item.href}
-          onClick={onNavigate}
-          className={(active) => navLinkClass(item, location, variant, active)}
-          data-testid={item.testId}
-        >
-          <span className="min-w-0 flex-1 truncate text-left">{item.label}</span>
-          {(item.testId === "nav-dealer-base" || item.testId === "nav-trade-points") && item.badgeLoading ? (
-            <span
-              className="h-6 min-w-7 shrink-0 animate-pulse rounded-md bg-muted"
-              aria-busy
-              aria-label={item.testId === "nav-trade-points" ? "Загрузка количества точек" : "Загрузка количества клиентов"}
-              data-testid={
-                item.testId === "nav-trade-points"
-                  ? variant === "sidebar"
-                    ? "text-sidebar-trade-points-count"
-                    : "text-mobile-sidebar-trade-points-count"
-                  : variant === "sidebar"
-                    ? "text-sidebar-clients-count"
-                    : "text-mobile-sidebar-clients-count"
-              }
-            />
-          ) : item.badge != null ? (
-            <Badge
-              variant="secondary"
-              className="h-6 min-w-6 shrink-0 rounded-md border border-border/60 bg-muted px-1.5 text-xs tabular-nums text-foreground"
-              data-testid={
-                item.testId === "nav-trade-points"
-                  ? variant === "sidebar"
-                    ? "text-sidebar-trade-points-count"
-                    : "text-mobile-sidebar-trade-points-count"
-                  : variant === "sidebar"
-                    ? "text-sidebar-clients-count"
-                    : "text-mobile-sidebar-clients-count"
-              }
-            >
-              {item.badge}
-            </Badge>
-          ) : null}
-        </Link>
+          item={item}
+          location={location}
+          variant={variant}
+          onNavigate={onNavigate}
+          linkStyle="legacy"
+        />
       ))}
     </nav>
+  );
+}
+
+function PilotNavGroupedList({
+  groups,
+  location,
+  variant,
+  onNavigate,
+  "data-testid": navTestId,
+}: {
+  groups: PilotNavGroup[];
+  location: string;
+  variant: "sidebar" | "drawer";
+  onNavigate?: () => void;
+  "data-testid": string;
+}) {
+  return (
+    <div className="flex flex-col gap-3" data-testid={navTestId}>
+      {groups.map((g) => (
+        <div key={g.key} data-testid={g.testId} className="flex flex-col gap-1">
+          <p className="px-1 text-[10px] font-semibold uppercase leading-tight tracking-wide text-[#8F96B0]">{g.label}</p>
+          <div className="flex flex-col gap-0.5">
+            {g.items.map((item) => (
+              <NavRowLink
+                key={item.testId}
+                item={item}
+                location={location}
+                variant={variant}
+                onNavigate={onNavigate}
+                linkStyle="pilot"
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function NavigationPanel({
+  model,
+  location,
+  variant,
+  onNavigate,
+  navTestId,
+}: {
+  model: PilotNavigationModel;
+  location: string;
+  variant: "sidebar" | "drawer";
+  onNavigate?: () => void;
+  navTestId: string;
+}) {
+  if (model.layout === "flat") {
+    return (
+      <NavLinksList items={model.items} location={location} variant={variant} onNavigate={onNavigate} data-testid={navTestId} />
+    );
+  }
+  return (
+    <PilotNavGroupedList groups={model.groups} location={location} variant={variant} onNavigate={onNavigate} data-testid={navTestId} />
   );
 }
 
 function buildIconRail(navItems: PilotNavItem[]): { href: string; label: string; icon: LucideIcon; key: string }[] {
   const out: { href: string; label: string; icon: LucideIcon; key: string }[] = [];
   for (const item of navItems) {
-    const Icon = ICON_BY_TESTID[item.testId];
+    const Icon = ICON_BY_TESTID[item.testId] ?? ICON_BY_TESTID[item.navBehaviorId ?? ""];
     if (!Icon) continue;
     const short = item.label.replace(/\s*\([^)]*\)\s*$/, "").trim();
     out.push({ href: item.href, label: short || item.label, icon: Icon, key: item.testId });
@@ -273,7 +411,7 @@ function buildIconRail(navItems: PilotNavItem[]): { href: string; label: string;
 
 export type AppShellProps = {
   children: ReactNode;
-  navItems: PilotNavItem[];
+  navigation: PilotNavigationModel;
   homeHref: string;
   userName: string;
   cityLabel?: string;
@@ -284,7 +422,7 @@ export type AppShellProps = {
 
 export function AppShell({
   children,
-  navItems,
+  navigation,
   homeHref,
   userName,
   cityLabel = "—",
@@ -294,7 +432,8 @@ export function AppShell({
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const ctx = headerContextLabel(location);
-  const iconRail = useMemo(() => buildIconRail(navItems), [navItems]);
+  const flatNav = useMemo(() => flattenNavModel(navigation), [navigation]);
+  const iconRail = useMemo(() => buildIconRail(flatNav), [flatNav]);
 
   if (embeddedBitrix24) {
     return (
@@ -366,7 +505,7 @@ export function AppShell({
           <BrandBlock homeHref={homeHref} />
         </div>
         <div className="flex flex-1 flex-col overflow-y-auto overflow-x-hidden px-3 py-4">
-          <NavLinksList items={navItems} location={location} variant="sidebar" data-testid="nav-preview-desktop" />
+          <NavigationPanel model={navigation} location={location} variant="sidebar" navTestId="nav-preview-desktop" />
         </div>
         <div className="mt-auto border-t border-border/60 px-4 py-4">
           <p className="text-[10px] text-muted-foreground">Рабочий кабинет Tandoor</p>
@@ -445,12 +584,12 @@ export function AppShell({
                     <SheetTitle className="text-left text-base">Разделы</SheetTitle>
                   </SheetHeader>
                   <div className="flex-1 px-5 pb-4 pt-2">
-                    <NavLinksList
-                      items={navItems}
+                    <NavigationPanel
+                      model={navigation}
                       location={location}
                       variant="drawer"
                       onNavigate={() => setMobileOpen(false)}
-                      data-testid="nav-preview-mobile"
+                      navTestId="nav-preview-mobile"
                     />
                   </div>
                   <ThemeToggleMobileBlock />
