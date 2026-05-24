@@ -20,7 +20,7 @@ import {
   Store,
   Users,
 } from "lucide-react";
-import { useCallback, useLayoutEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useLayoutEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -28,7 +28,7 @@ import { Badge } from "@/components/ui/badge";
 import { TandoorLogo } from "@/components/tandoor-logo";
 import { ThemeToggleDesktop, ThemeToggleMobileBlock } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
-import type { PilotNavGroup, PilotNavItem, PilotNavigationModel } from "@/lib/auth-access";
+import { flattenGroupedPilotNavigation, type PilotNavGroup, type PilotNavItem, type PilotNavigationModel } from "@/lib/auth-access";
 
 const MAIN_HREF = "/main";
 const TERRITORY_CARD_HREF = "/territory-card";
@@ -131,6 +131,11 @@ function isSalesControlPath(path: string) {
   return path === SALES_CONTROL_HREF || path.startsWith(`${SALES_CONTROL_HREF}/`);
 }
 
+function isSalesControlPlanFactPath(path: string) {
+  const p = path.split("?")[0] ?? path;
+  return p === "/sales-control/plan-fact" || p.startsWith("/sales-control/plan-fact/");
+}
+
 function isAnalyticsWorkspacePath(path: string) {
   return path === ANALYTICS_WORKSPACE_HREF || path.startsWith(`${ANALYTICS_WORKSPACE_HREF}/`);
 }
@@ -218,6 +223,8 @@ function headerContextLabel(location: string) {
   if (pathOnly === "/bitrix24" || pathOnly === "/embedded/bitrix24") return "Bitrix24";
   if (isFeatureInDevelopmentPath(pathOnly)) return "В разработке";
   if (isCommunicationsPath(pathOnly)) return "Коммуникации";
+  if (isClientBaseActivityPath(location)) return "Статистика обновления базы";
+  if (isSalesControlPlanFactPath(location)) return "План-факт и KPI";
   if (isMainPath(location)) return "Главная";
   if (isTradePointsPath(pathOnly)) return "Торговые точки";
   if (location.startsWith("/dealers/")) return "Карточка клиента";
@@ -246,32 +253,23 @@ function BrandBlock({ className, homeHref }: { className?: string; homeHref: str
 
 function flattenNavModel(model: PilotNavigationModel): PilotNavItem[] {
   if (model.layout === "flat") return model.items;
-  return model.groups.flatMap((g) => g.items);
+  return flattenGroupedPilotNavigation(model);
 }
 
 const PILOT_SIDEBAR_OPEN_GROUPS_LS_KEY = "tandoor-pilot-sidebar-open-groups-v1";
 
 const NAV_GROUP_TOGGLE_TESTID: Record<string, string> = {
-  workspace: "button-nav-group-workspace-toggle",
   "client-base": "button-nav-group-client-base-toggle",
-  "sales-kpi": "button-nav-group-sales-kpi-toggle",
-  tools: "button-nav-group-tools-toggle",
   "in-development": "button-nav-group-in-development-toggle",
 };
 
 const NAV_GROUP_CONTENT_TESTID: Record<string, string> = {
-  workspace: "nav-group-workspace-content",
   "client-base": "nav-group-client-base-content",
-  "sales-kpi": "nav-group-sales-kpi-content",
-  tools: "nav-group-tools-content",
   "in-development": "nav-group-in-development-content",
 };
 
 const NAV_GROUP_SUMMARY_TESTID: Record<string, string> = {
-  workspace: "text-nav-group-workspace-summary",
   "client-base": "text-nav-group-client-base-summary",
-  "sales-kpi": "text-nav-group-sales-kpi-summary",
-  tools: "text-nav-group-tools-summary",
   "in-development": "text-nav-group-in-development-summary",
 };
 
@@ -303,16 +301,12 @@ function groupHasActiveItem(group: PilotNavGroup, location: string): boolean {
   return group.items.some((item) => isNavItemActive(item, location));
 }
 
-function defaultGroupOpenWithoutStorage(
-  groupKey: string,
-  location: string,
-  groups: PilotNavGroup[],
-): boolean {
-  if (groupKey === "workspace") return true;
+function defaultGroupOpenWithoutStorage(groupKey: string, location: string, groups: PilotNavGroup[]): boolean {
   const g = groups.find((x) => x.key === groupKey);
   if (!g) return false;
   const active = groupHasActiveItem(g, location);
   if (groupKey === "client-base") return true;
+  if (groupKey === "in-development") return false;
   return active;
 }
 
@@ -323,10 +317,6 @@ function computePilotOpenGroupsMerged(
 ): PilotOpenGroupsMap {
   const out: PilotOpenGroupsMap = {};
   for (const g of groups) {
-    if (g.key === "workspace") {
-      out[g.key] = true;
-      continue;
-    }
     if (groupHasActiveItem(g, location)) {
       out[g.key] = true;
       continue;
@@ -359,15 +349,19 @@ function usePilotGroupedNavOpenState(model: PilotNavigationModel, location: stri
 
   const toggleGroup = useCallback(
     (key: string) => {
-      if (key === "workspace") return;
       setOpenGroups((prev) => {
-        if (!prev) return prev;
-        const next = { ...prev, [key]: !prev[key] };
-        writePilotSidebarOpenGroupsToStorage(next);
-        return next;
+        if (!prev || model.layout !== "grouped") return prev;
+        const groupKeys = model.groups.map((g) => g.key);
+        const nextFull = { ...prev, [key]: !prev[key] };
+        const pruned: PilotOpenGroupsMap = {};
+        for (const k of groupKeys) {
+          pruned[k] = Boolean(nextFull[k]);
+        }
+        writePilotSidebarOpenGroupsToStorage(pruned);
+        return pruned;
       });
     },
-    [setOpenGroups],
+    [model],
   );
 
   return { openGroups, toggleGroup };
@@ -403,12 +397,15 @@ function NavRowLink({
   variant,
   onNavigate,
   linkStyle,
+  pilotWipTag,
 }: {
   item: PilotNavItem;
   location: string;
   variant: "sidebar" | "drawer";
   onNavigate?: () => void;
   linkStyle: "legacy" | "pilot";
+  /** Muted «в разработке» справа (меню директора/РОПа). */
+  pilotWipTag?: boolean;
 }) {
   const bid = behaviorId(item);
   const pulse = (bid === "nav-dealer-base" || bid === "nav-trade-points") && item.badgeLoading;
@@ -434,7 +431,7 @@ function NavRowLink({
     >
       <span className="flex min-w-0 flex-1 items-center gap-2 truncate text-left">
         <span className="truncate">{item.label}</span>
-        {item.comingSoon ? (
+        {item.comingSoon && !pilotWipTag ? (
           <Badge
             variant="outline"
             className="h-5 shrink-0 border-[#E3E6F3] bg-[#EEEFF6] px-1.5 text-[10px] font-semibold uppercase text-[#8F96B0]"
@@ -443,7 +440,14 @@ function NavRowLink({
           </Badge>
         ) : null}
       </span>
-      {pulse ? (
+      {pilotWipTag ? (
+        <Badge
+          variant="outline"
+          className="h-5 max-w-[min(7.5rem,42vw)] shrink-0 truncate border-[#E3E6F3] bg-[#EEEFF6] px-1.5 text-[10px] font-medium normal-case text-[#8F96B0]"
+        >
+          в разработке
+        </Badge>
+      ) : pulse ? (
         <span
           className="h-6 min-w-7 shrink-0 animate-pulse rounded-md bg-muted"
           aria-busy
@@ -490,6 +494,7 @@ function NavLinksList({
 
 function PilotNavGroupedList({
   groups,
+  standaloneItems = [],
   location,
   variant,
   onNavigate,
@@ -498,6 +503,7 @@ function PilotNavGroupedList({
   "data-testid": navTestId,
 }: {
   groups: PilotNavGroup[];
+  standaloneItems?: PilotNavItem[];
   location: string;
   variant: "sidebar" | "drawer";
   onNavigate?: () => void;
@@ -506,103 +512,96 @@ function PilotNavGroupedList({
   "data-testid": string;
 }) {
   return (
-    <div className="flex flex-col gap-2" data-testid={navTestId}>
-      {groups.map((g) => {
-        const isWorkspace = g.key === "workspace";
-        const isOpen = isWorkspace ? true : Boolean(openGroups[g.key]);
+    <div className="flex min-w-0 flex-col gap-2 overflow-x-hidden" data-testid={navTestId}>
+      {groups.map((g, groupIndex) => {
+        const isOpen = Boolean(openGroups[g.key]);
         const groupActive = groupHasActiveItem(g, location);
         const titleColor = groupActive ? "text-[#222631]" : "text-[#8F96B0]";
         const counts = g.key === "client-base" ? pilotNavClientBaseCounts(g) : null;
 
-        let summaryLine: string;
-        let headerRightNumbers: string | null = null;
+        let summaryLine: string | null = null;
 
-        if (g.key === "workspace") {
-          summaryLine = "Главная и территория";
-        } else if (g.key === "client-base") {
+        if (g.key === "client-base") {
           if (counts?.clientsLoading || counts?.tradePointsLoading) {
-            summaryLine = "Клиенты · ТТ · карта · актуализация";
+            summaryLine = "Загрузка счётчиков…";
+          } else if (counts && counts.clients != null && counts.tradePoints != null) {
+            summaryLine = `${counts.clients} клиентов · ${counts.tradePoints} ТТ`;
           } else if (counts && (counts.clients != null || counts.tradePoints != null)) {
             const c = counts.clients != null ? String(counts.clients) : "—";
             const t = counts.tradePoints != null ? String(counts.tradePoints) : "—";
             summaryLine = `${c} клиентов · ${t} ТТ`;
-            headerRightNumbers = counts.clients != null && counts.tradePoints != null ? `${counts.clients} / ${counts.tradePoints}` : null;
           } else {
-            summaryLine = "Клиенты · ТТ · карта · актуализация";
+            summaryLine = "Клиенты и торговые точки";
           }
-        } else if (g.key === "sales-kpi") {
-          summaryLine = "План-факт · аналитика · задачи";
-        } else if (g.key === "tools") {
-          summaryLine = "Каталог · обучение";
         } else if (g.key === "in-development") {
-          summaryLine = `${g.items.length} скоро`;
-        } else {
-          summaryLine = "";
+          summaryLine = `${g.items.length} разделов`;
         }
 
-        const toggleTestId = NAV_GROUP_TOGGLE_TESTID[g.key];
-        const contentTestId = NAV_GROUP_CONTENT_TESTID[g.key];
-        const summaryTestId = NAV_GROUP_SUMMARY_TESTID[g.key];
+        const toggleTestId = NAV_GROUP_TOGGLE_TESTID[g.key] ?? `button-nav-group-${g.key}-toggle`;
+        const contentTestId = NAV_GROUP_CONTENT_TESTID[g.key] ?? `nav-group-${g.key}-content`;
+        const summaryTestId = NAV_GROUP_SUMMARY_TESTID[g.key] ?? `text-nav-group-${g.key}-summary`;
+
+        const standaloneBlock =
+          groupIndex === 0 && standaloneItems.length > 0 ? (
+            <div key={`${g.key}-standalone`} className="flex min-w-0 flex-col gap-0.5">
+              {standaloneItems.map((item) => (
+                <NavRowLink
+                  key={item.testId}
+                  item={item}
+                  location={location}
+                  variant={variant}
+                  onNavigate={onNavigate}
+                  linkStyle="pilot"
+                />
+              ))}
+            </div>
+          ) : null;
 
         return (
-          <div key={g.key} data-testid={g.testId} className="flex flex-col gap-0.5">
-            <button
-              type="button"
-              data-testid={toggleTestId}
-              aria-expanded={isOpen}
-              disabled={isWorkspace}
-              onClick={() => onToggleGroup(g.key)}
-              className={cn(
-                "w-full rounded-md px-1 py-1.5 text-left transition-colors",
-                !isWorkspace && "hover:bg-[#EEEFF6]/60",
-                isWorkspace && "cursor-default opacity-100",
-              )}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  <p className={cn("text-[10px] font-semibold uppercase leading-tight tracking-wide", titleColor)}>{g.label}</p>
-                  {summaryLine ? (
-                    <p
-                      data-testid={summaryTestId}
-                      className="mt-0.5 text-[10px] leading-snug text-[#8F96B0]/90"
-                    >
-                      {summaryLine}
-                    </p>
-                  ) : null}
-                </div>
-                <div className="flex shrink-0 items-center gap-1.5 pt-0.5">
-                  {g.key === "client-base" && headerRightNumbers ? (
-                    <span className={cn("text-[10px] font-semibold tabular-nums", titleColor)}>{headerRightNumbers}</span>
-                  ) : null}
-                  {g.key === "client-base" && (counts?.clientsLoading || counts?.tradePointsLoading) ? (
-                    <span className="h-3.5 w-8 shrink-0 animate-pulse rounded bg-muted" aria-busy aria-label="Загрузка счётчиков" />
-                  ) : null}
-                  {!isWorkspace ? (
+          <Fragment key={g.key}>
+            <div data-testid={g.testId} className="flex min-w-0 flex-col gap-0.5">
+              <button
+                type="button"
+                data-testid={toggleTestId}
+                aria-expanded={isOpen}
+                onClick={() => onToggleGroup(g.key)}
+                className="w-full min-w-0 rounded-md px-1 py-1.5 text-left transition-colors hover:bg-[#EEEFF6]/60"
+              >
+                <div className="flex min-w-0 items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className={cn("text-[10px] font-semibold uppercase leading-tight tracking-wide", titleColor)}>{g.label}</p>
+                    {summaryLine != null && summaryLine !== "" ? (
+                      <p data-testid={summaryTestId} className="mt-0.5 text-[10px] leading-snug text-[#8F96B0]/90">
+                        {summaryLine}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1.5 pt-0.5">
                     <ChevronDown
                       className={cn("h-4 w-4 shrink-0 text-[#8F96B0] transition-transform", isOpen && "rotate-180")}
                       aria-hidden
                     />
-                  ) : (
-                    <ChevronDown className="h-4 w-4 shrink-0 rotate-180 text-[#8F96B0]" aria-hidden />
-                  )}
+                  </div>
                 </div>
-              </div>
-            </button>
-            {isOpen ? (
-              <div data-testid={contentTestId} className="flex flex-col gap-0.5 pl-0">
-                {g.items.map((item) => (
-                  <NavRowLink
-                    key={item.testId}
-                    item={item}
-                    location={location}
-                    variant={variant}
-                    onNavigate={onNavigate}
-                    linkStyle="pilot"
-                  />
-                ))}
-              </div>
-            ) : null}
-          </div>
+              </button>
+              {isOpen ? (
+                <div data-testid={contentTestId} className="flex min-w-0 flex-col gap-0.5">
+                  {g.items.map((item) => (
+                    <NavRowLink
+                      key={item.testId}
+                      item={item}
+                      location={location}
+                      variant={variant}
+                      onNavigate={onNavigate}
+                      linkStyle="pilot"
+                      pilotWipTag={g.key === "in-development"}
+                    />
+                  ))}
+                </div>
+              ) : null}
+            </div>
+            {standaloneBlock}
+          </Fragment>
         );
       })}
     </div>
@@ -634,6 +633,7 @@ function NavigationPanel({
   return (
     <PilotNavGroupedList
       groups={model.groups}
+      standaloneItems={model.standaloneItems}
       location={location}
       variant={variant}
       onNavigate={onNavigate}

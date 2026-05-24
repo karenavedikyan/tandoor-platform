@@ -31,7 +31,15 @@ export type PilotNavGroup = {
 
 export type PilotNavigationModel =
   | { layout: "flat"; items: PilotNavItem[] }
-  | { layout: "grouped"; groups: PilotNavGroup[] };
+  | { layout: "grouped"; groups: PilotNavGroup[]; standaloneItems?: PilotNavItem[] };
+
+/** Плоский порядок для grouped: пункты первой группы → `standaloneItems` → остальные группы. */
+export function flattenGroupedPilotNavigation(model: Extract<PilotNavigationModel, { layout: "grouped" }>): PilotNavItem[] {
+  const standalone = model.standaloneItems ?? [];
+  if (model.groups.length === 0) return [...standalone];
+  const [first, ...rest] = model.groups;
+  return [...first.items, ...standalone, ...rest.flatMap((g) => g.items)];
+}
 
 export function pilotFeatureDevelopmentHref(feature: string): string {
   return `/feature-in-development?feature=${encodeURIComponent(feature)}`;
@@ -220,97 +228,77 @@ export function getPilotNavigation(
     return { badge: tradePointCount };
   };
 
-  const directorOrRopGroups = (clientLabel: string): PilotNavGroup[] => [
-    {
-      key: "workspace",
-      label: "РАБОЧИЙ СТОЛ",
-      testId: "nav-group-workspace",
-      items: [
-        { href: "/main", label: "Главная", testId: "nav-item-home", navBehaviorId: "nav-main" },
-        { href: "/territory-card", label: "Карточка территории", testId: "nav-item-territory-card", navBehaviorId: "nav-territory-card" },
-      ],
-    },
-    {
-      key: "client-base",
-      label: "КЛИЕНТСКАЯ БАЗА",
-      testId: "nav-group-client-base",
-      items: [
-        {
-          href: "/dealer-base",
-          label: clientLabel,
-          testId: "nav-item-clients",
-          navBehaviorId: "nav-dealer-base",
-          ...dealerNavExtras(),
-        },
-        {
-          href: "/trade-points",
-          label: "Торговые точки",
-          testId: "nav-item-trade-points",
-          navBehaviorId: "nav-trade-points",
-          ...tradePointNavExtras(),
-        },
-        { href: "/client-map", label: "Карта клиентов", testId: "nav-item-client-map", navBehaviorId: "nav-client-map" },
-        {
-          href: "/client-base-activity",
-          label: "Актуализация базы",
-          testId: "nav-item-client-base-activity",
-          navBehaviorId: "nav-client-base-activity",
-        },
-      ],
-    },
-    {
-      key: "sales-kpi",
-      label: "ПРОДАЖИ И KPI",
-      testId: "nav-group-sales-kpi",
-      items: [
-        { href: sch, label: "План-факт продаж", testId: "nav-item-sales-plan-fact", navBehaviorId: "nav-sales-control" },
-        {
-          href: "/analytics-workspace",
-          label: "Аналитика команды",
-          testId: "nav-item-team-analytics",
-          navBehaviorId: "nav-analytics-workspace",
-        },
-        { href: "/tasks", label: "Задачи по витрине", testId: "nav-item-showcase-tasks", navBehaviorId: "nav-tasks" },
-      ],
-    },
-    {
-      key: "tools",
-      label: "ИНСТРУМЕНТЫ",
-      testId: "nav-group-tools",
-      items: [
-        { href: "/catalog", label: "Каталог", testId: "nav-item-catalog", navBehaviorId: "nav-catalog" },
-        { href: "/training", label: "Обучение", testId: "nav-item-training", navBehaviorId: "nav-training" },
-      ],
-    },
-    {
-      key: "in-development",
-      label: "В РАЗРАБОТКЕ",
-      testId: "nav-group-in-development",
-      items: [
-        {
-          href: pilotFeatureDevelopmentHref("communications"),
-          label: "Коммуникации",
-          testId: "nav-item-communications",
-          comingSoon: true,
-          developmentFeature: "communications",
-        },
-        {
-          href: pilotFeatureDevelopmentHref("marketing-briefs"),
-          label: "Маркетинговые брифы",
-          testId: "nav-item-marketing-briefs",
-          comingSoon: true,
-          developmentFeature: "marketing-briefs",
-        },
-      ],
-    },
-  ];
+  const directorOrRopNavigation = (): Extract<PilotNavigationModel, { layout: "grouped" }> => ({
+    layout: "grouped",
+    groups: [
+      {
+        key: "client-base",
+        label: "КЛИЕНТСКАЯ БАЗА",
+        testId: "nav-group-client-base",
+        items: [
+          {
+            href: "/client-base-activity",
+            label: "Статистика обновления базы",
+            testId: "nav-item-client-base-activity",
+            navBehaviorId: "nav-client-base-activity",
+          },
+          {
+            href: "/dealer-base",
+            label: "Клиенты-дилеры",
+            testId: "nav-item-clients",
+            navBehaviorId: "nav-dealer-base",
+            ...dealerNavExtras(),
+          },
+          {
+            href: "/trade-points",
+            label: "Торговые точки",
+            testId: "nav-item-trade-points",
+            navBehaviorId: "nav-trade-points",
+            ...tradePointNavExtras(),
+          },
+        ],
+      },
+      {
+        key: "in-development",
+        label: "В РАЗРАБОТКЕ",
+        testId: "nav-group-in-development",
+        items: [
+          { href: "/catalog", label: "Каталог", testId: "nav-item-catalog", navBehaviorId: "nav-catalog" },
+          { href: "/training", label: "Обучение", testId: "nav-item-training", navBehaviorId: "nav-training" },
+          { href: "/client-map", label: "Карта клиентов", testId: "nav-item-client-map", navBehaviorId: "nav-client-map" },
+          { href: "/tasks", label: "Задачи по витрине", testId: "nav-item-showcase-tasks", navBehaviorId: "nav-tasks" },
+          {
+            href: "/analytics-workspace",
+            label: "Аналитика команды",
+            testId: "nav-item-team-analytics",
+            navBehaviorId: "nav-analytics-workspace",
+          },
+          { href: "/communications", label: "Коммуникации", testId: "nav-item-communications", navBehaviorId: "nav-communications" },
+          {
+            href: "/marketing-briefs",
+            label: "Маркетинговые брифы",
+            testId: "nav-item-marketing-briefs",
+            navBehaviorId: "nav-marketing-briefs",
+          },
+        ],
+      },
+    ],
+    standaloneItems: [
+      {
+        href: "/sales-control/plan-fact",
+        label: "План-факт и KPI",
+        testId: "nav-item-sales-plan-fact",
+        navBehaviorId: "nav-sales-control",
+      },
+    ],
+  });
 
   if (role === "sales_director") {
-    return { layout: "grouped", groups: directorOrRopGroups("Клиенты") };
+    return directorOrRopNavigation();
   }
 
   if (role === "team_lead") {
-    return { layout: "grouped", groups: directorOrRopGroups("Клиенты") };
+    return directorOrRopNavigation();
   }
 
   const flat = ((): PilotNavItem[] => {
@@ -364,5 +352,5 @@ export function getPilotNavItems(
 ): PilotNavItem[] {
   const m = getPilotNavigation(role, dealerBaseClientCount, tradePointCount);
   if (m.layout === "flat") return m.items;
-  return m.groups.flatMap((g) => g.items);
+  return flattenGroupedPilotNavigation(m);
 }
