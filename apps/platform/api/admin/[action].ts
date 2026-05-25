@@ -1,5 +1,5 @@
 /**
- * Vercel Serverless: `/api/admin/:action` (users-list | … | audit-list | sessions-*-self | profile-get-self | profile-update-self | profile-change-password). In-memory rate limits (Hobby) для отдельных admin-операций: см. handleUsersResetPassword / handleProfileChangePassword. Лимит логина перенесён в таблицу auth_login_failures (см. docs/auth.md).
+ * Vercel Serverless: `/api/admin/:action` (users-list | … | onboarding-status | onboarding-complete | profile-telegram-link-token | profile-get-self | profile-update-self | profile-change-password). In-memory rate limits (Hobby) для отдельных admin-операций: см. handleUsersResetPassword / handleProfileChangePassword. Лимит логина перенесён в таблицу auth_login_failures (см. docs/auth.md).
  *
  * Self-contained: только `@vercel/node`, `@neondatabase/serverless`, `bcryptjs`, `node:crypto`.
  * Контракт совпадает с `server/admin/users-handlers.ts`, `server/admin-routes.ts`, `server/profile-routes.ts`.
@@ -986,7 +986,7 @@ async function handleProfileUpdateSelf(
   }
 
   const body = (req.body ?? {}) as Record<string, unknown>;
-  for (const k of ["email", "role", "status", "password"]) {
+  for (const k of ["role", "status", "password"]) {
     if (Object.prototype.hasOwnProperty.call(body, k)) {
       sendJson(res, 400, {
         success: false,
@@ -999,7 +999,8 @@ async function handleProfileUpdateSelf(
 
   const hasFull = Object.prototype.hasOwnProperty.call(body, "fullName");
   const hasPhone = Object.prototype.hasOwnProperty.call(body, "phone");
-  if (!hasFull && !hasPhone) {
+  const hasEmail = Object.prototype.hasOwnProperty.call(body, "email");
+  if (!hasFull && !hasPhone && !hasEmail) {
     sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Не указано ни одно поле для обновления." });
     return;
   }
@@ -1047,14 +1048,43 @@ async function handleProfileUpdateSelf(
     }
   }
 
+  const emailSelfRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  let emailPresent = false;
+  let emailValue: string | null = null;
+  if (hasEmail) {
+    emailPresent = true;
+    if (typeof body.email !== "string") {
+      sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите корректный email." });
+      return;
+    }
+    const em = body.email.trim().toLowerCase();
+    if (!emailSelfRe.test(em)) {
+      sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите корректный email." });
+      return;
+    }
+    emailValue = em;
+  }
+
+  if (emailPresent && emailValue != null) {
+    const dup = await pool.query<{ id: string }>(
+      `SELECT id FROM users WHERE LOWER(email) = $1 AND id <> $2::uuid LIMIT 1`,
+      [emailValue, me.id],
+    );
+    if (dup.rows[0]) {
+      sendJson(res, 409, { success: false, code: "CONFLICT", message: "Этот email уже занят." });
+      return;
+    }
+  }
+
   const up = await pool.query<DbUserRow>(
     `UPDATE users
-       SET full_name = COALESCE($1, full_name),
-           phone = CASE WHEN $2::boolean THEN $3 ELSE phone END,
+       SET full_name = COALESCE($1::text, full_name),
+           phone = CASE WHEN $2::boolean THEN $3::text ELSE phone END,
+           email = CASE WHEN $4::boolean THEN $5::text ELSE email END,
            updated_at = NOW()
-     WHERE id = $4::uuid
+     WHERE id = $6::uuid
      RETURNING id, email, full_name, phone, role, status, must_change_password, last_login_at, created_at, telegram_user_id`,
-    [fullNameParam, phonePresent, phoneValue ?? null, me.id],
+    [fullNameParam, phonePresent, phoneValue ?? null, emailPresent, emailValue ?? null, me.id],
   );
   const u = up.rows[0];
   if (!u) {
@@ -1065,6 +1095,17 @@ async function handleProfileUpdateSelf(
   const fields: string[] = [];
   if (hasFull) fields.push("fullName");
   if (hasPhone) fields.push("phone");
+  if (hasEmail) fields.push("email");
+
+  if (hasEmail && emailValue != null) {
+    await tryAudit(pool, {
+      actorUserId: me.id,
+      action: "user.email.changed",
+      entityType: "user",
+      entityId: me.id,
+      metadata: { oldEmail: me.email.trim().toLowerCase(), newEmail: emailValue, source: "self" },
+    });
+  }
 
   await tryAudit(pool, {
     actorUserId: me.id,
@@ -1191,6 +1232,137 @@ async function handleProfileChangePassword(
   rateClear(pwdKey);
 
   sendJson(res, 200, { success: true, otherSessionsRevoked });
+}
+
+async function handleOnboardingStatus(
+  res: VercelResponse,
+  pool: PoolLike,
+  headers: Record<string, string | string[] | undefined>,
+): Promise<void> {
+  const me = await resolveCurrentUser(pool, headers);
+  if (!me) {
+    sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+    return;
+  }
+  if (me.status !== "active") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+  if (!roleHasPermission(me.role as UserRole, "profile.read_self")) {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+
+  const ures = await pool.query<{
+    must_change_password: boolean;
+    email: string;
+    phone: string | null;
+    full_name: string;
+    telegram_user_id: string | null;
+    onboarding_completed_at: string | null;
+  }>(
+    `SELECT must_change_password, email, phone, full_name, telegram_user_id, onboarding_completed_at
+     FROM users WHERE id = $1::uuid LIMIT 1`,
+    [me.id],
+  );
+  const row = ures.rows[0];
+  if (!row) {
+    sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Пользователь не найден." });
+    return;
+  }
+
+  const emailLower = row.email.trim().toLowerCase();
+  const profileNeedsUpdate =
+    emailLower.endsWith("@tandoor.local") || row.phone == null || row.phone.trim() === "" || row.full_name.trim() === "";
+
+  const telegramLinked = row.telegram_user_id != null && String(row.telegram_user_id).trim() !== "";
+
+  sendJson(res, 200, {
+    success: true,
+    mustChangePassword: row.must_change_password,
+    profileNeedsUpdate,
+    telegramLinked,
+    completedAt: row.onboarding_completed_at ?? null,
+  });
+}
+
+async function handleOnboardingComplete(
+  res: VercelResponse,
+  pool: PoolLike,
+  headers: Record<string, string | string[] | undefined>,
+): Promise<void> {
+  const me = await resolveCurrentUser(pool, headers);
+  if (!me) {
+    sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+    return;
+  }
+  if (me.status !== "active") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+  if (!roleHasPermission(me.role as UserRole, "profile.update_self")) {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+
+  const up = await pool.query<{ onboarding_completed_at: string | null }>(
+    `UPDATE users SET onboarding_completed_at = NOW(), updated_at = NOW()
+     WHERE id = $1::uuid AND onboarding_completed_at IS NULL
+     RETURNING onboarding_completed_at`,
+    [me.id],
+  );
+  const done = up.rows[0];
+  if (done?.onboarding_completed_at) {
+    await tryAudit(pool, {
+      actorUserId: me.id,
+      action: "user.onboarding.completed",
+      entityType: "user",
+      entityId: me.id,
+      metadata: {},
+    });
+  }
+
+  sendJson(res, 200, { success: true });
+}
+
+async function handleProfileTelegramLinkToken(
+  res: VercelResponse,
+  pool: PoolLike,
+  headers: Record<string, string | string[] | undefined>,
+): Promise<void> {
+  const me = await resolveCurrentUser(pool, headers);
+  if (!me) {
+    sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+    return;
+  }
+  if (me.status !== "active") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+  if (!roleHasPermission(me.role as UserRole, "profile.update_self")) {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+
+  const rawTok = randomBytes(24).toString("base64url");
+  const tokenHash = sha256Hex(rawTok);
+  const ins = await pool.query<{ expires_at: string }>(
+    `INSERT INTO telegram_link_tokens (token_hash, user_id, expires_at)
+     VALUES ($1, $2::uuid, NOW() + interval '15 minutes')
+     RETURNING expires_at`,
+    [tokenHash, me.id],
+  );
+  const row = ins.rows[0];
+  if (!row) {
+    sendJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+    return;
+  }
+
+  sendJson(res, 200, {
+    success: true,
+    botUrl: `https://t.me/Tandoor_ibot?start=link_${rawTok}`,
+    expiresAt: row.expires_at,
+  });
 }
 
 async function handleSessionsCleanupExpired(
@@ -1626,6 +1798,19 @@ async function handleMigrationsRun(
 
     await pool.query(`DELETE FROM sessions WHERE expires_at < NOW() AND revoked_at IS NULL`);
     applied.push("sessions cleanup (initial)");
+
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_completed_at timestamptz`);
+    applied.push("users.onboarding_completed_at");
+
+    await pool.query(
+      `CREATE TABLE IF NOT EXISTS telegram_link_tokens (
+         token_hash text PRIMARY KEY,
+         user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+         expires_at timestamptz NOT NULL,
+         used_at timestamptz
+       )`,
+    );
+    applied.push("telegram_link_tokens table");
 
     sendJson(res, 200, { success: true, applied });
   } catch (err) {
@@ -2115,6 +2300,91 @@ async function handleAdminRecovery(
     return;
   }
 
+  if (textRaw.startsWith("/start")) {
+    const parts = textRaw.split(/\s+/).filter((x) => x.length > 0);
+    const payload = parts[1];
+    if (payload && payload.startsWith("link_")) {
+      const rawTok = payload.slice("link_".length);
+      if (rawTok) {
+        const tokenHash = sha256Hex(rawTok);
+        const tokSel = await pool.query<{ user_id: string; expires_at: string; used_at: string | null }>(
+          `SELECT user_id, expires_at, used_at FROM telegram_link_tokens WHERE token_hash = $1 LIMIT 1`,
+          [tokenHash],
+        );
+        const tok = tokSel.rows[0];
+        const nowMs = Date.now();
+        if (!tok || tok.used_at != null) {
+          if (chatId != null) await tgSendMessage(chatId, "Ссылка недействительна или срок её действия истёк.");
+          sendJson(res, 200, { ok: true });
+          return;
+        }
+        const expMs = Date.parse(tok.expires_at);
+        if (!Number.isFinite(expMs) || expMs <= nowMs) {
+          if (chatId != null) await tgSendMessage(chatId, "Ссылка недействительна или срок её действия истёк.");
+          sendJson(res, 200, { ok: true });
+          return;
+        }
+
+        const userRows = await pool.query<{ id: string; full_name: string; status: string; telegram_user_id: string | null }>(
+          `SELECT id, full_name, status, telegram_user_id FROM users WHERE id = $1::uuid LIMIT 1`,
+          [tok.user_id],
+        );
+        const targ = userRows.rows[0];
+        if (!targ || targ.status !== "active") {
+          if (chatId != null) await tgSendMessage(chatId, "Ссылка недействительна или срок её действия истёк.");
+          sendJson(res, 200, { ok: true });
+          return;
+        }
+
+        const fromStr = String(fromId);
+        if (targ.telegram_user_id != null && String(targ.telegram_user_id) === fromStr) {
+          await pool.query(`UPDATE telegram_link_tokens SET used_at = NOW() WHERE token_hash = $1 AND used_at IS NULL`, [tokenHash]);
+          if (chatId != null) {
+            await tgSendMessage(
+              chatId,
+              `Привет, ${targ.full_name.trim() || "коллега"}. Telegram привязан. Будешь получать уведомления здесь.`,
+            );
+          }
+          sendJson(res, 200, { ok: true });
+          return;
+        }
+
+        const taken = await pool.query<{ id: string }>(
+          `SELECT id FROM users WHERE telegram_user_id = $1::bigint AND id <> $2::uuid LIMIT 1`,
+          [fromStr, targ.id],
+        );
+        if (taken.rows[0]) {
+          if (chatId != null) {
+            await tgSendMessage(chatId, "Этот Telegram уже привязан к другой учётной записи Tandoor.");
+          }
+          sendJson(res, 200, { ok: true });
+          return;
+        }
+
+        const oldId = targ.telegram_user_id;
+        await pool.query(`UPDATE users SET telegram_user_id = $1::bigint, updated_at = NOW() WHERE id = $2::uuid`, [fromStr, targ.id]);
+        await pool.query(`UPDATE telegram_link_tokens SET used_at = NOW() WHERE token_hash = $1`, [tokenHash]);
+
+        await tryAudit(pool, {
+          actorUserId: targ.id,
+          action: "user.telegram_link.changed",
+          entityType: "user",
+          entityId: targ.id,
+          metadata: { oldId: oldId ?? null, newId: fromStr, source: "onboarding" },
+        });
+
+        if (chatId != null) {
+          await tgSendMessage(
+            chatId,
+            `Привет, ${targ.full_name.trim() || "коллега"}. Telegram привязан. Будешь получать уведомления здесь.`,
+          );
+        }
+        sendJson(res, 200, { ok: true });
+        return;
+      }
+    }
+  }
+
   const whitelist = parseTelegramWhitelist();
   if (!whitelist.has(fromId)) {
     await tryAudit(pool, {
@@ -2349,6 +2619,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       await handleProfileChangePassword(req, res, pool, headers);
       return;
     }
+    if (action === "onboarding-status" && req.method === "GET") {
+      await handleOnboardingStatus(res, pool, headers);
+      return;
+    }
+    if (action === "onboarding-complete" && req.method === "POST") {
+      await handleOnboardingComplete(res, pool, headers);
+      return;
+    }
+    if (action === "profile-telegram-link-token" && req.method === "POST") {
+      await handleProfileTelegramLinkToken(res, pool, headers);
+      return;
+    }
     if (action === "admin-recovery" && req.method === "POST") {
       await handleAdminRecovery(req, res, pool, headers);
       return;
@@ -2359,6 +2641,111 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "migrations-run" && req.method === "POST") {
       await handleMigrationsRun(res, pool, headers);
+      return;
+    }
+    if (action === "users-bulk-create" && req.method === "POST") {
+      const me = await resolveCurrentUser(pool, headers);
+      if (!me || me.role !== "admin" || me.status !== "active") {
+        sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+        return;
+      }
+      const body = (req.body ?? {}) as { users?: unknown };
+      const arr = Array.isArray(body.users) ? (body.users as unknown[]) : null;
+      if (!arr) {
+        sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Требуется массив users." });
+        return;
+      }
+      const ALLOWED_ROLES = new Set(["director", "rop", "regional_manager", "manager", "marketer", "analyst"]);
+      const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const results: Array<{ email: string; status: "created" | "skipped" | "error"; id?: string; tempPassword?: string; reason?: string }> = [];
+      for (const raw of arr) {
+        const u = (raw ?? {}) as { email?: unknown; fullName?: unknown; role?: unknown; phone?: unknown };
+        const email = typeof u.email === "string" ? u.email.trim().toLowerCase() : "";
+        const fullName = typeof u.fullName === "string" ? u.fullName.trim().slice(0, 120) : "";
+        const role = typeof u.role === "string" ? u.role.trim() : "";
+        const phone = typeof u.phone === "string" ? u.phone.trim().slice(0, 32) : null;
+        if (!emailRe.test(email) || !fullName || !ALLOWED_ROLES.has(role)) {
+          results.push({ email, status: "error", reason: "VALIDATION" });
+          continue;
+        }
+        const existing = await pool.query(`SELECT id FROM users WHERE email = $1 LIMIT 1`, [email]);
+        if (existing.rowCount && existing.rowCount > 0) {
+          results.push({ email, status: "skipped", reason: "EXISTS" });
+          continue;
+        }
+        // 12-символьный временный пароль (без путающих символов)
+        const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+        let tempPassword = "";
+        const buf = new Uint8Array(12);
+        (globalThis.crypto ?? require("node:crypto").webcrypto).getRandomValues(buf);
+        for (let i = 0; i < 12; i++) tempPassword += alphabet[buf[i] % alphabet.length];
+        const hash = await bcrypt.hash(tempPassword, 10);
+        try {
+          const ins = await pool.query(
+            `INSERT INTO users (email, full_name, role, status, password_hash, must_change_password, phone, created_by)
+             VALUES ($1, $2, $3, 'active', $4, true, $5, $6)
+             RETURNING id`,
+            [email, fullName, role, hash, phone, me.id],
+          );
+          const id = String(ins.rows[0].id);
+          await tryAudit(pool, {
+            actorUserId: me.id,
+            action: "user.bulk_created",
+            entityType: "user",
+            entityId: id,
+            metadata: { email, role, fullName },
+          });
+          results.push({ email, status: "created", id, tempPassword });
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          results.push({ email, status: "error", reason: msg.slice(0, 120) });
+        }
+      }
+      sendJson(res, 200, { success: true, results });
+      return;
+    }
+    if (action === "users-delete" && req.method === "POST") {
+      const me = await resolveCurrentUser(pool, headers);
+      if (!me || me.role !== "admin" || me.status !== "active") {
+        sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+        return;
+      }
+      const body = (req.body ?? {}) as { id?: unknown };
+      const id = typeof body.id === "string" ? body.id.trim() : "";
+      const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRe.test(id)) {
+        sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Некорректный id." });
+        return;
+      }
+      if (id === me.id) {
+        sendJson(res, 400, { success: false, code: "SELF_DELETE", message: "Нельзя удалить самого себя." });
+        return;
+      }
+      const target = await pool.query(`SELECT id, email, role FROM users WHERE id = $1`, [id]);
+      if (target.rowCount === 0) {
+        sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Пользователь не найден." });
+        return;
+      }
+      if (target.rows[0].role === "admin") {
+        sendJson(res, 400, { success: false, code: "CANNOT_DELETE_ADMIN", message: "Нельзя удалить администратора." });
+        return;
+      }
+      const oldEmail = String(target.rows[0].email ?? "");
+      // Чистим все связанные записи вручную на случай отсутствия ON DELETE CASCADE
+      try { await pool.query(`DELETE FROM sessions WHERE user_id = $1`, [id]); } catch {}
+      try { await pool.query(`DELETE FROM password_reset_links WHERE user_id = $1`, [id]); } catch {}
+      try { await pool.query(`DELETE FROM invitations WHERE created_by = $1 OR accepted_by = $1`, [id]); } catch {}
+      try { await pool.query(`DELETE FROM auth_login_failures WHERE email_lower = LOWER($1)`, [oldEmail]); } catch {}
+      try { await pool.query(`UPDATE audit_log SET actor_user_id = NULL WHERE actor_user_id = $1`, [id]); } catch {}
+      await pool.query(`DELETE FROM users WHERE id = $1`, [id]);
+      await tryAudit(pool, {
+        actorUserId: me.id,
+        action: "user.deleted",
+        entityType: "user",
+        entityId: id,
+        metadata: { email: oldEmail },
+      });
+      sendJson(res, 200, { success: true });
       return;
     }
     if (action === "users-update-email" && req.method === "POST") {

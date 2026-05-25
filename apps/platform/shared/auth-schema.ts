@@ -41,6 +41,18 @@ export const authUsers = pgTable("users", {
   passwordChangedAt: timestamp("password_changed_at", { withTimezone: true, mode: "string" }),
   /** Telegram user id для аварийного бота восстановления (только admin). */
   telegramUserId: bigint("telegram_user_id", { mode: "number" }).unique(),
+  /** Первичный онбординг (смена пароля, профиль, Telegram) завершён. */
+  onboardingCompletedAt: timestamp("onboarding_completed_at", { withTimezone: true, mode: "string" }),
+});
+
+/** Одноразовые токены deep-link привязки Telegram из ЛК (см. migrations-run). */
+export const telegramLinkTokens = pgTable("telegram_link_tokens", {
+  tokenHash: text("token_hash").primaryKey(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => authUsers.id, { onDelete: "cascade" }),
+  expiresAt: timestamp("expires_at", { withTimezone: true, mode: "string" }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true, mode: "string" }),
 });
 
 export const passwordResetLinks = pgTable(

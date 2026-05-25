@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { displayUserName, useCurrentUser } from "@/hooks/use-current-user";
+import { useOnboardingUi } from "@/context/onboarding-ui-context";
 import { releaseDemoRoleLabel } from "@/lib/release-demo-profile";
 import { userRoleToSalesRole } from "@/lib/role-mapping";
 import { getSelf, updateSelf, type ProfileSelfDTO } from "@/lib/profile-api";
@@ -47,6 +48,7 @@ function rolesRuLabel(role: string): string {
 
 export default function MyProfilePage() {
   const { user } = useCurrentUser();
+  const { reopenOnboarding } = useOnboardingUi();
   const qc = useQueryClient();
   const [, setLoc] = useHashLocation();
 
@@ -160,6 +162,9 @@ export default function MyProfilePage() {
       <div className="space-y-1">
         <h1 className="text-xl font-semibold text-[#222631]">Мой профиль</h1>
         <p className="text-sm text-[#8F96B0]">Данные учётной записи и контакты.</p>
+        <Button type="button" variant="outline" className="mt-2 font-semibold" onClick={() => reopenOnboarding()}>
+          Открыть онбординг повторно
+        </Button>
       </div>
 
       <Card className="border-[#E3E6F3]">

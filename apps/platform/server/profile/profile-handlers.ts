@@ -166,7 +166,7 @@ export async function updateSelf(req: Request, res: Response): Promise<void> {
   }
 
   const body = (req.body ?? {}) as Record<string, unknown>;
-  for (const k of ["email", "role", "status", "password"]) {
+  for (const k of ["role", "status", "password"]) {
     if (Object.prototype.hasOwnProperty.call(body, k)) {
       applyJson(res, 400, {
         success: false,
@@ -179,7 +179,8 @@ export async function updateSelf(req: Request, res: Response): Promise<void> {
 
   const hasFull = Object.prototype.hasOwnProperty.call(body, "fullName");
   const hasPhone = Object.prototype.hasOwnProperty.call(body, "phone");
-  if (!hasFull && !hasPhone) {
+  const hasEmail = Object.prototype.hasOwnProperty.call(body, "email");
+  if (!hasFull && !hasPhone && !hasEmail) {
     applyJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Не указано ни одно поле для обновления." });
     return;
   }
@@ -227,12 +228,42 @@ export async function updateSelf(req: Request, res: Response): Promise<void> {
     }
   }
 
+  const emailSelfRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  let emailPresent = false;
+  let emailValue: string | null = null;
+  if (hasEmail) {
+    emailPresent = true;
+    if (typeof body.email !== "string") {
+      applyJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите корректный email." });
+      return;
+    }
+    const em = body.email.trim().toLowerCase();
+    if (!emailSelfRe.test(em)) {
+      applyJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите корректный email." });
+      return;
+    }
+    emailValue = em;
+  }
+
+  if (emailPresent && emailValue != null) {
+    const dup = await db
+      .select({ id: authUsers.id })
+      .from(authUsers)
+      .where(and(eq(authUsers.email, emailValue), ne(authUsers.id, auth.userId)))
+      .limit(1);
+    if (dup[0]) {
+      applyJson(res, 409, { success: false, code: "CONFLICT", message: "Этот email уже занят." });
+      return;
+    }
+  }
+
   try {
     const updated = await db
       .update(authUsers)
       .set({
         fullName: hasFull && fullNameParam != null ? fullNameParam : undefined,
         phone: phonePresent ? phoneValue ?? null : undefined,
+        email: emailPresent && emailValue != null ? emailValue : undefined,
         updatedAt: sql`NOW()`,
       })
       .where(eq(authUsers.id, auth.userId))
@@ -257,6 +288,17 @@ export async function updateSelf(req: Request, res: Response): Promise<void> {
     const fields: string[] = [];
     if (hasFull) fields.push("fullName");
     if (hasPhone) fields.push("phone");
+    if (hasEmail) fields.push("email");
+
+    if (hasEmail && emailValue != null) {
+      await tryAudit({
+        actorUserId: auth.userId,
+        action: "user.email.changed",
+        entityType: "user",
+        entityId: auth.userId,
+        metadata: { oldEmail: auth.email.trim().toLowerCase(), newEmail: emailValue, source: "self" },
+      });
+    }
 
     await tryAudit({
       actorUserId: auth.userId,
