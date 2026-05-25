@@ -2017,6 +2017,67 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       await handleMigrationsRun(res, pool, headers);
       return;
     }
+    if (action === "users-bulk-create" && req.method === "POST") {
+      const me = await resolveCurrentUser(pool, headers);
+      if (!me || me.role !== "admin" || me.status !== "active") {
+        sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+        return;
+      }
+      const body = (req.body ?? {}) as { users?: unknown };
+      const arr = Array.isArray(body.users) ? (body.users as unknown[]) : null;
+      if (!arr) {
+        sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Требуется массив users." });
+        return;
+      }
+      const ALLOWED_ROLES = new Set(["director", "rop", "regional_manager", "manager", "marketer", "analyst"]);
+      const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const results: Array<{ email: string; status: "created" | "skipped" | "error"; id?: string; tempPassword?: string; reason?: string }> = [];
+      for (const raw of arr) {
+        const u = (raw ?? {}) as { email?: unknown; fullName?: unknown; role?: unknown; phone?: unknown };
+        const email = typeof u.email === "string" ? u.email.trim().toLowerCase() : "";
+        const fullName = typeof u.fullName === "string" ? u.fullName.trim().slice(0, 120) : "";
+        const role = typeof u.role === "string" ? u.role.trim() : "";
+        const phone = typeof u.phone === "string" ? u.phone.trim().slice(0, 32) : null;
+        if (!emailRe.test(email) || !fullName || !ALLOWED_ROLES.has(role)) {
+          results.push({ email, status: "error", reason: "VALIDATION" });
+          continue;
+        }
+        const existing = await pool.query(`SELECT id FROM users WHERE email = $1 LIMIT 1`, [email]);
+        if (existing.rowCount && existing.rowCount > 0) {
+          results.push({ email, status: "skipped", reason: "EXISTS" });
+          continue;
+        }
+        // 12-символьный временный пароль (без путающих символов)
+        const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+        let tempPassword = "";
+        const buf = new Uint8Array(12);
+        (globalThis.crypto ?? require("node:crypto").webcrypto).getRandomValues(buf);
+        for (let i = 0; i < 12; i++) tempPassword += alphabet[buf[i] % alphabet.length];
+        const hash = await bcrypt.hash(tempPassword, 10);
+        try {
+          const ins = await pool.query(
+            `INSERT INTO users (email, full_name, role, status, password_hash, must_change_password, phone, created_by)
+             VALUES ($1, $2, $3, 'active', $4, true, $5, $6)
+             RETURNING id`,
+            [email, fullName, role, hash, phone, me.id],
+          );
+          const id = String(ins.rows[0].id);
+          await tryAudit(pool, {
+            actorUserId: me.id,
+            action: "user.bulk_created",
+            entityType: "user",
+            entityId: id,
+            metadata: { email, role, fullName },
+          });
+          results.push({ email, status: "created", id, tempPassword });
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          results.push({ email, status: "error", reason: msg.slice(0, 120) });
+        }
+      }
+      sendJson(res, 200, { success: true, results });
+      return;
+    }
     if (action === "users-delete" && req.method === "POST") {
       const me = await resolveCurrentUser(pool, headers);
       if (!me || me.role !== "admin" || me.status !== "active") {
