@@ -6,6 +6,7 @@
 import type { UserRole } from "@shared/auth";
 import type { SalesRole } from "@/lib/sales-control-data";
 import { userRoleToSalesRole } from "@/lib/role-mapping";
+import { userCanManageInvitations } from "@/lib/invitations-api";
 
 export type PilotNavItem = {
   href: string;
@@ -99,6 +100,10 @@ export function defaultHomePathForUserRole(role: UserRole): string {
 }
 
 export function canAccessPathForUser(role: UserRole, path: string): boolean {
+  const p = normPath(path);
+  if (p === "/admin/invitations") {
+    return userCanManageInvitations(role);
+  }
   return canAccessPath(userRoleToSalesRole(role), path);
 }
 
