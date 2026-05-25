@@ -287,7 +287,12 @@ export function OnboardingWizard({ reopenTick }: { reopenTick: number }) {
           </form>
         ) : null}
 
-        {step === 2 ? (
+        {step === 2 ? (() => {
+          const profileBannerOk =
+            fullName.trim().length > 0 &&
+            !email.trim().toLowerCase().endsWith("@tandoor.local") &&
+            phone.trim().length > 0;
+          return (
           <div className="grid gap-4">
             {profileBannerOk ? (
               <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
@@ -326,7 +331,7 @@ export function OnboardingWizard({ reopenTick }: { reopenTick: number }) {
               )}
             </DialogFooter>
           </div>
-        ) : null}
+        );})() : null}
 
         {step === 3 ? (
           <div className="grid gap-4">
