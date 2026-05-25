@@ -58,7 +58,7 @@ SQLite-таблица `users` в `shared/schema.ts` помечена `@deprecate
 | `auth-server-scaffolding-cd7c` | Модули `server/auth/*`, сессии в Postgres, bcryptjs, cookie `tandoor_auth_sess`, заглушки `/api/auth/*` (501), `auth:db-push` — см. раздел PR 02 |
 | `auth-email-password-login-v2-cd7c` | **PR 03 (v2):** серверный login/logout/me; Vercel `api/auth/[action].ts` **self-contained** (без импортов `server/`/`shared/`), Express — `server/auth/handlers.ts`; `auth:seed-admin` |
 | `auth-client-switch-cd7c` | **done — PR 04:** удаление mock-auth, клиент на `/api/auth/*` (TanStack Query `useAuthUser`, `auth-api.ts`, cookie) |
-| `auth-invitations-cd7c` | Поток приглашений, принятие по токену |
+| `auth-invitations-cd7c` | **done — PR 05:** приглашения по email, `/invite/:token`, self-contained `api/invitations/[action].ts`, Express `invitations-handlers.ts` |
 | `auth-rbac-scope-cd7c` | RBAC и `UserScope` на API |
 | `auth-users-admin-cd7c` | Полноценный `/users`, редактирование, фильтры |
 | `auth-profile-cd7c` | Редактирование `/profile`, валидация по `PROFILE_REQUIREMENTS` |
@@ -101,12 +101,48 @@ SQLite-таблица `users` в `shared/schema.ts` помечена `@deprecate
 
 ### Вне объёма PR 04 (как и раньше)
 
-- Приглашения (**PR #05**)
+- Приглашения (перенесено в **PR #05**)
 - RBAC на бизнес-API (**PR #06**)
 - Админка `/users` (**PR #07**)
 - Редактирование `/profile`, смена пароля (**PR #08**)
 - 2FA, Redis rate-limit (**PR #09**)
 - Удаление `SalesRole` и адаптера `role-mapping` (**PR #06 / #07**)
+
+## PR 05 — invitations (приглашения и принятие по токену)
+
+Поток приглашения нового пользователя по email с одноразовой ссылкой и публичным принятием. **Отправка письма с ссылкой не входит в этот PR:** инвайтер получает `acceptUrl` в UI и передаёт его вручную (отдельный промт на email-доставку).
+
+### Эндпоинты `/api/invitations/*`
+
+| Метод и путь | Auth | Назначение |
+|--------------|------|------------|
+| `POST /api/invitations/create` | cookie-сессия | Тело `{ email, role, teamId?, fullName? }`. Ролевая матрица «кто кого может пригласить» — в коде (`INVITER_CAN_INVITE`). Успех: `{ success, invitation: { id, email, role, teamId, expiresAt, acceptUrl } }`. |
+| `GET /api/invitations/list` | cookie-сессия | Список приглашений текущего пользователя как инвайтера, поле `status`: `pending` / `accepted` / `expired`. Поле `createdAt` на клиенте — прокси `expiresAt − 7 суток` (отдельной колонки `created_at` в таблице нет). |
+| `POST /api/invitations/revoke` | cookie-сессия | Тело `{ id }`. Без миграций: отзыв = `expires_at = now()`. Админ может отозвать чужое приглашение. |
+| `GET /api/invitations/preview?token=` | нет | Публичный превью для формы на `/invite/:token`. |
+| `POST /api/invitations/accept` | нет | Тело `{ token, fullName?, password }`. Создание/активация пользователя, сессия как после login, `Set-Cookie`. |
+
+### Кто кого может пригласить (`INVITER_CAN_INVITE`)
+
+| Инвайтер | Роли цели |
+|----------|-----------|
+| `director` | `rop`, `regional_manager`, `manager`, `marketer`, `analyst` |
+| `rop` | `regional_manager`, `manager` |
+| `regional_manager` | `manager` |
+| `manager` | — |
+| `marketer` | — |
+| `analyst` | — |
+| `admin` | `director`, `rop`, `regional_manager`, `manager`, `marketer`, `analyst` |
+
+### Vercel и Express
+
+- **`api/invitations/[action].ts`:** self-contained, только `@vercel/node`, `@neondatabase/serverless`, `bcryptjs`, `node:crypto`; БД через вызываемый `neon(sql)(params)` (HTTP), без Pool WebSocket.
+- **Express:** `server/auth/invitations-handlers.ts` + `server/invitation-routes.ts`, та же логика на Drizzle.
+
+### UI
+
+- Публичная страница `#/invite/:token` (`client/src/pages/invite.tsx`).
+- Управление: `#/admin/invitations` (`client/src/pages/admin-invitations.tsx`), доступ по `canAccessPathForUser` только если у роли непустой `INVITER_CAN_INVITE`.
 
 ## PR 02 — server scaffolding
 
