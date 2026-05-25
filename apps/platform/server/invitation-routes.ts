@@ -8,6 +8,7 @@ import {
   previewInvitation,
   revokeInvitation,
 } from "./auth/invitations-handlers";
+import { enforceCsrfOrigin } from "./security/csrf-origin";
 
 const JSON_CT = "application/json; charset=utf-8";
 
@@ -16,6 +17,10 @@ function applyJson(res: Response, status: number, body: Record<string, unknown>,
   res.setHeader("Cache-Control", "no-store");
   if (setCookie) res.setHeader("Set-Cookie", setCookie);
   res.status(status).json(body);
+}
+
+function rejectCsrf(res: Response): void {
+  applyJson(res, 403, { success: false, code: "CSRF_REJECTED", message: "Недопустимый источник запроса." });
 }
 
 /**
@@ -28,6 +33,10 @@ export function registerInvitationRoutes(app: Express): void {
     requirePermission("invitations.create"),
     async (req: Request, res: Response) => {
       try {
+        if (!enforceCsrfOrigin(req)) {
+          rejectCsrf(res);
+          return;
+        }
         await createInvitation(req, res);
       } catch (e) {
         const m = e instanceof Error ? e.message : String(e);
@@ -54,6 +63,10 @@ export function registerInvitationRoutes(app: Express): void {
 
   app.post("/api/invitations/revoke", requireAuth(), async (req: Request, res: Response) => {
     try {
+      if (!enforceCsrfOrigin(req)) {
+        rejectCsrf(res);
+        return;
+      }
       await revokeInvitation(req, res);
     } catch (e) {
       const m = e instanceof Error ? e.message : String(e);
@@ -64,6 +77,10 @@ export function registerInvitationRoutes(app: Express): void {
 
   app.post("/api/invitations/accept", async (req: Request, res: Response) => {
     try {
+      if (!enforceCsrfOrigin(req)) {
+        rejectCsrf(res);
+        return;
+      }
       await acceptInvitation(req, res);
     } catch (e) {
       const m = e instanceof Error ? e.message : String(e);

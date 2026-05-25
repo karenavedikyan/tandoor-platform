@@ -8,6 +8,7 @@ import {
   passwordResetLinkRedeemHandler,
 } from "./auth/handlers";
 import { requireAuth } from "./auth/require-auth";
+import { enforceCsrfOrigin } from "./security/csrf-origin";
 
 const JSON_CT = "application/json; charset=utf-8";
 
@@ -25,12 +26,22 @@ function applyAuthHttpResult(res: Response, r: AuthHttpResult): void {
   res.status(r.status).json(r.json);
 }
 
+function rejectCsrfJson(res: Response): void {
+  res.setHeader("Content-Type", JSON_CT);
+  res.setHeader("Cache-Control", "no-store");
+  res.status(403).json({ success: false, code: "CSRF_REJECTED", message: "Недопустимый источник запроса." });
+}
+
 /**
  * `/api/auth/*` для локального dev (Express); поведение совпадает с Vercel `api/auth/[action].ts`.
  */
 export function registerAuthRoutes(app: Express): void {
   app.post("/api/auth/login", async (req: Request, res: Response) => {
     try {
+      if (!enforceCsrfOrigin(req)) {
+        rejectCsrfJson(res);
+        return;
+      }
       const result = await loginHandler({
         body: req.body,
         headers: req.headers as Record<string, string | string[] | undefined>,
@@ -49,6 +60,10 @@ export function registerAuthRoutes(app: Express): void {
 
   app.post("/api/auth/logout", async (req: Request, res: Response) => {
     try {
+      if (!enforceCsrfOrigin(req)) {
+        rejectCsrfJson(res);
+        return;
+      }
       const result = await logoutHandler({
         headers: req.headers as Record<string, string | string[] | undefined>,
       });
@@ -66,6 +81,10 @@ export function registerAuthRoutes(app: Express): void {
 
   app.post("/api/auth/logout-all", requireAuth(), async (req: Request, res: Response) => {
     try {
+      if (!enforceCsrfOrigin(req)) {
+        rejectCsrfJson(res);
+        return;
+      }
       if (!req.auth) {
         res.status(401).json({ success: false, code: "UNAUTHENTICATED" });
         return;
@@ -96,6 +115,29 @@ export function registerAuthRoutes(app: Express): void {
     } catch (e) {
       const m = e instanceof Error ? e.message : String(e);
       console.error("[api/auth] me", m.slice(0, 200));
+      res.status(500).json({
+        success: false,
+        code: "INTERNAL_ERROR",
+        message: "Внутренняя ошибка сервера.",
+      });
+    }
+  });
+
+  app.post("/api/auth/password-reset-link-redeem", async (req: Request, res: Response) => {
+    try {
+      if (!enforceCsrfOrigin(req)) {
+        rejectCsrfJson(res);
+        return;
+      }
+      const result = await passwordResetLinkRedeemHandler({
+        body: req.body,
+        headers: req.headers as Record<string, string | string[] | undefined>,
+        socketRemoteAddress: req.socket?.remoteAddress,
+      });
+      applyAuthHttpResult(res, result);
+    } catch (e) {
+      const m = e instanceof Error ? e.message : String(e);
+      console.error("[api/auth] password-reset-link-redeem", m.slice(0, 200));
       res.status(500).json({
         success: false,
         code: "INTERNAL_ERROR",

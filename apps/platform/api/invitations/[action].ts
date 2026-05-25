@@ -162,6 +162,25 @@ function vercelHeaders(req: VercelRequest): Record<string, string | string[] | u
   return (req.headers ?? {}) as Record<string, string | string[] | undefined>;
 }
 
+function enforceCsrfOrigin(req: VercelRequest): boolean {
+  const allowed = new Set<string>(["https://tandoor-platform.vercel.app"]);
+  if (process.env.NODE_ENV !== "production") {
+    allowed.add("http://localhost:5173");
+    allowed.add("http://localhost:3000");
+  }
+  const h = req.headers ?? {};
+  const originRaw =
+    (typeof h.origin === "string" ? h.origin : undefined) ??
+    (typeof h.referer === "string" ? h.referer : undefined);
+  if (!originRaw) return true;
+  try {
+    const u = new URL(originRaw);
+    return allowed.has(u.origin);
+  } catch {
+    return false;
+  }
+}
+
 function sha256Hex(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
 }
@@ -256,11 +275,12 @@ async function tryAudit(
   try {
     await pool.query(
       `INSERT INTO audit_log (actor_user_id, action, entity_type, entity_id, metadata)
-       VALUES ($1::uuid, $2, $3, $4, $5::jsonb)`,
+       VALUES ($1, $2, $3, $4, $5::jsonb)`,
       [input.actorUserId, input.action, input.entityType, input.entityId, JSON.stringify(input.metadata)],
     );
   } catch (e) {
     const m = e instanceof Error ? e.message : String(e);
+    console.warn("[audit-fail]", input.action, m.slice(0, 300));
     console.error("[api/invitations] audit", input.action, m.slice(0, 200));
   }
 }
@@ -872,6 +892,14 @@ function pickAction(req: VercelRequest): string {
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   const action = pickAction(req);
   const headers = vercelHeaders(req);
+  if (req.method === "POST" && !enforceCsrfOrigin(req)) {
+    sendJson(res, 403, {
+      success: false,
+      code: "CSRF_REJECTED",
+      message: "Недопустимый источник запроса.",
+    });
+    return;
+  }
   try {
     const pool = getPool();
     if (!pool) {

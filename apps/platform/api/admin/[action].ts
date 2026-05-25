@@ -1,5 +1,5 @@
 /**
- * Vercel Serverless: `/api/admin/:action` (users-list | … | audit-list | sessions-*-self | profile-get-self | profile-update-self | profile-change-password). In-memory rate limits (Hobby): см. handleUsersResetPassword / handleProfileChangePassword.
+ * Vercel Serverless: `/api/admin/:action` (users-list | … | audit-list | sessions-*-self | profile-get-self | profile-update-self | profile-change-password). In-memory rate limits (Hobby) для отдельных admin-операций: см. handleUsersResetPassword / handleProfileChangePassword. Лимит логина перенесён в таблицу auth_login_failures (см. docs/auth.md).
  *
  * Self-contained: только `@vercel/node`, `@neondatabase/serverless`, `bcryptjs`, `node:crypto`.
  * Контракт совпадает с `server/admin/users-handlers.ts`, `server/admin-routes.ts`, `server/profile-routes.ts`.
@@ -160,6 +160,25 @@ function getPool(): PoolLike | null {
 
 function vercelHeaders(req: VercelRequest): Record<string, string | string[] | undefined> {
   return (req.headers ?? {}) as Record<string, string | string[] | undefined>;
+}
+
+function enforceCsrfOrigin(req: VercelRequest): boolean {
+  const allowed = new Set<string>(["https://tandoor-platform.vercel.app"]);
+  if (process.env.NODE_ENV !== "production") {
+    allowed.add("http://localhost:5173");
+    allowed.add("http://localhost:3000");
+  }
+  const h = req.headers ?? {};
+  const originRaw =
+    (typeof h.origin === "string" ? h.origin : undefined) ??
+    (typeof h.referer === "string" ? h.referer : undefined);
+  if (!originRaw) return true;
+  try {
+    const u = new URL(originRaw);
+    return allowed.has(u.origin);
+  } catch {
+    return false;
+  }
 }
 
 function getClientIp(headers: Record<string, string | string[] | undefined>): string | null {
@@ -327,11 +346,12 @@ async function tryAudit(
   try {
     await pool.query(
       `INSERT INTO audit_log (actor_user_id, action, entity_type, entity_id, metadata)
-       VALUES ($1::uuid, $2, $3, $4, $5::jsonb)`,
+       VALUES ($1, $2, $3, $4, $5::jsonb)`,
       [input.actorUserId, input.action, input.entityType, input.entityId, JSON.stringify(input.metadata)],
     );
   } catch (e) {
     const m = e instanceof Error ? e.message : String(e);
+    console.warn("[audit-fail]", input.action, m.slice(0, 300));
     console.error("[api/admin] audit", input.action, m.slice(0, 200));
   }
 }
@@ -1154,6 +1174,30 @@ async function handleProfileChangePassword(
   sendJson(res, 200, { success: true, otherSessionsRevoked });
 }
 
+async function handleSessionsCleanupExpired(
+  res: VercelResponse,
+  pool: PoolLike,
+  headers: Record<string, string | string[] | undefined>,
+): Promise<void> {
+  const me = await resolveCurrentUser(pool, headers);
+  if (!me) {
+    sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+    return;
+  }
+  if (me.status !== "active") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+  if (me.role !== "admin") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+  const del = await pool.query<{ id: string }>(
+    `DELETE FROM sessions WHERE expires_at < NOW() RETURNING id`,
+  );
+  sendJson(res, 200, { success: true, deleted: del.rows.length });
+}
+
 async function handleMigrationsRun(
   res: VercelResponse,
   pool: PoolLike,
@@ -1234,6 +1278,22 @@ async function handleMigrationsRun(
     await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS password_reset_links_token_hash_uq ON password_reset_links(token_hash)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_prl_user_active ON password_reset_links(user_id) WHERE used_at IS NULL`);
     applied.push("password_reset_links indexes");
+
+    await pool.query(
+      `CREATE TABLE IF NOT EXISTS auth_login_failures (
+         email_lower text PRIMARY KEY,
+         fail_count int NOT NULL DEFAULT 0,
+         locked_until timestamptz,
+         updated_at timestamptz NOT NULL DEFAULT NOW()
+       )`,
+    );
+    applied.push("auth_login_failures table");
+
+    await pool.query(`ALTER TABLE audit_log ALTER COLUMN actor_user_id DROP NOT NULL`);
+    applied.push("audit_log.actor_user_id nullable");
+
+    await pool.query(`DELETE FROM sessions WHERE expires_at < NOW() AND revoked_at IS NULL`);
+    applied.push("sessions cleanup (initial)");
 
     sendJson(res, 200, { success: true, applied });
   } catch (err) {
@@ -1874,6 +1934,14 @@ function pickAction(req: VercelRequest): string {
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   const action = pickAction(req);
   const headers = vercelHeaders(req);
+  if (req.method === "POST" && action !== "admin-recovery" && !enforceCsrfOrigin(req)) {
+    sendJson(res, 403, {
+      success: false,
+      code: "CSRF_REJECTED",
+      message: "Недопустимый источник запроса.",
+    });
+    return;
+  }
   try {
     const pool = getPool();
     if (!pool) {
@@ -1939,6 +2007,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "admin-recovery" && req.method === "POST") {
       await handleAdminRecovery(req, res, pool, headers);
+      return;
+    }
+    if (action === "sessions-cleanup-expired" && req.method === "POST") {
+      await handleSessionsCleanupExpired(res, pool, headers);
       return;
     }
     if (action === "migrations-run" && req.method === "POST") {
