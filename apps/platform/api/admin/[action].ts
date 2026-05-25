@@ -2017,6 +2017,50 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       await handleMigrationsRun(res, pool, headers);
       return;
     }
+    if (action === "users-delete" && req.method === "POST") {
+      const me = await resolveCurrentUser(pool, headers);
+      if (!me || me.role !== "admin" || me.status !== "active") {
+        sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+        return;
+      }
+      const body = (req.body ?? {}) as { id?: unknown };
+      const id = typeof body.id === "string" ? body.id.trim() : "";
+      const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRe.test(id)) {
+        sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Некорректный id." });
+        return;
+      }
+      if (id === me.id) {
+        sendJson(res, 400, { success: false, code: "SELF_DELETE", message: "Нельзя удалить самого себя." });
+        return;
+      }
+      const target = await pool.query(`SELECT id, email, role FROM users WHERE id = $1`, [id]);
+      if (target.rowCount === 0) {
+        sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Пользователь не найден." });
+        return;
+      }
+      if (target.rows[0].role === "admin") {
+        sendJson(res, 400, { success: false, code: "CANNOT_DELETE_ADMIN", message: "Нельзя удалить администратора." });
+        return;
+      }
+      const oldEmail = String(target.rows[0].email ?? "");
+      // Чистим все связанные записи вручную на случай отсутствия ON DELETE CASCADE
+      try { await pool.query(`DELETE FROM sessions WHERE user_id = $1`, [id]); } catch {}
+      try { await pool.query(`DELETE FROM password_reset_links WHERE user_id = $1`, [id]); } catch {}
+      try { await pool.query(`DELETE FROM invitations WHERE created_by = $1 OR accepted_by = $1`, [id]); } catch {}
+      try { await pool.query(`DELETE FROM auth_login_failures WHERE email_lower = LOWER($1)`, [oldEmail]); } catch {}
+      try { await pool.query(`UPDATE audit_log SET actor_user_id = NULL WHERE actor_user_id = $1`, [id]); } catch {}
+      await pool.query(`DELETE FROM users WHERE id = $1`, [id]);
+      await tryAudit(pool, {
+        actorUserId: me.id,
+        action: "user.deleted",
+        entityType: "user",
+        entityId: id,
+        metadata: { email: oldEmail },
+      });
+      sendJson(res, 200, { success: true });
+      return;
+    }
     if (action === "users-update-email" && req.method === "POST") {
       const me = await resolveCurrentUser(pool, headers);
       if (!me || me.role !== "admin" || me.status !== "active") {
