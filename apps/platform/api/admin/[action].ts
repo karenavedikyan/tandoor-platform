@@ -2017,6 +2017,48 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       await handleMigrationsRun(res, pool, headers);
       return;
     }
+    if (action === "users-update-email" && req.method === "POST") {
+      const me = await resolveCurrentUser(pool, headers);
+      if (!me || me.role !== "admin" || me.status !== "active") {
+        sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+        return;
+      }
+      const body = (req.body ?? {}) as { id?: unknown; email?: unknown };
+      const id = typeof body.id === "string" ? body.id.trim() : "";
+      const emailRaw = typeof body.email === "string" ? body.email.trim() : "";
+      const emailLower = emailRaw.toLowerCase();
+      const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!uuidRe.test(id) || !emailRe.test(emailLower)) {
+        sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Некорректные id или email." });
+        return;
+      }
+      const exists = await pool.query(`SELECT id, email FROM users WHERE id = $1`, [id]);
+      if (exists.rowCount === 0) {
+        sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Пользователь не найден." });
+        return;
+      }
+      const oldEmail = String(exists.rows[0].email ?? "");
+      try {
+        await pool.query(`UPDATE users SET email = $1 WHERE id = $2`, [emailLower, id]);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (/duplicate key|unique/i.test(msg)) {
+          sendJson(res, 409, { success: false, code: "CONFLICT", message: "Email уже занят." });
+          return;
+        }
+        throw e;
+      }
+      await tryAudit(pool, {
+        actorUserId: me.id,
+        action: "user.email.changed",
+        entityType: "user",
+        entityId: id,
+        metadata: { oldEmail, newEmail: emailLower },
+      });
+      sendJson(res, 200, { success: true });
+      return;
+    }
     if (action === "auth-unlock-email" && req.method === "POST") {
       const me = await resolveCurrentUser(pool, headers);
       if (!me || me.role !== "admin" || me.status !== "active") {
