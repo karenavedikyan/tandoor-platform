@@ -40,23 +40,7 @@ export type CreateInvitationInput = { email: string; role: UserRole; teamId?: st
 
 export type AcceptInvitationInput = { token: string; fullName: string; password: string };
 
-const INVITER_CAN_INVITE: Record<UserRole, UserRole[]> = {
-  director: ["rop", "regional_manager", "manager", "marketer", "analyst"],
-  rop: ["regional_manager", "manager"],
-  regional_manager: ["manager"],
-  manager: [],
-  marketer: [],
-  analyst: [],
-  admin: ["director", "rop", "regional_manager", "manager", "marketer", "analyst"],
-};
-
-export function userCanManageInvitations(role: UserRole): boolean {
-  return (INVITER_CAN_INVITE[role] ?? []).length > 0;
-}
-
-export function allowedInviteTargetsFor(role: UserRole): UserRole[] {
-  return INVITER_CAN_INVITE[role] ?? [];
-}
+export { userCanManageInvitations, allowedInviteTargetsFor } from "@/lib/auth-rbac";
 
 async function readJson(res: Response): Promise<Record<string, unknown>> {
   try {

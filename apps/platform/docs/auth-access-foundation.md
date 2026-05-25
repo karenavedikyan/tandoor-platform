@@ -59,7 +59,7 @@ SQLite-таблица `users` в `shared/schema.ts` помечена `@deprecate
 | `auth-email-password-login-v2-cd7c` | **PR 03 (v2):** серверный login/logout/me; Vercel `api/auth/[action].ts` **self-contained** (без импортов `server/`/`shared/`), Express — `server/auth/handlers.ts`; `auth:seed-admin` |
 | `auth-client-switch-cd7c` | **done — PR 04:** удаление mock-auth, клиент на `/api/auth/*` (TanStack Query `useAuthUser`, `auth-api.ts`, cookie) |
 | `auth-invitations-cd7c` | **done — PR 05:** приглашения по email, `/invite/:token`, self-contained `api/invitations/[action].ts`, Express `invitations-handlers.ts` |
-| `auth-rbac-scope-cd7c` | RBAC и `UserScope` на API |
+| `auth-rbac-scope-cd7c` | **done — PR 06:** матрица `shared/auth-rbac.ts`, `requirePermission`, inline SYNC в `api/invitations/[action].ts`; `UserScope` на API — следующие PR |
 | `auth-users-admin-cd7c` | Полноценный `/users`, редактирование, фильтры |
 | `auth-profile-cd7c` | Редактирование `/profile`, валидация по `PROFILE_REQUIREMENTS` |
 | `auth-hardening-cd7c` | Redis / распределённый rate-limit, 2FA (in-memory лимит на login — уже в PR 03) |
@@ -79,7 +79,7 @@ SQLite-таблица `users` в `shared/schema.ts` помечена `@deprecate
 
 - **Release-demo bypass** (`lib/release-demo-bypass.ts`): включается через `VITE_RELEASE_DEMO=true`, legacy `VITE_TANDOOR_DEMO_AUTH=1`, query `?demo=1`, либо `localStorage["tandoor-release-demo-bypass"] === "true"`. **Без реальной сессии** доступны только маршруты `/release-one*`. Все остальные разделы требуют успешного `GET /api/auth/me`.
 - **Демо-персона** (`release-demo-profile.ts`, `sessionStorage`): при активной серверной сессии роль/персона для пилотных экранов берутся из `UserRole` пользователя; при bypass без логина — из `sessionStorage`.
-- **Временный адаптер** `lib/role-mapping.ts`: `UserRole` ↔ `SalesRole` для существующих экранов sales-control. **TODO:** убрать в PR #06 / #07.
+- **Временный адаптер** `lib/role-mapping.ts`: `UserRole` ↔ `SalesRole` для существующих экранов sales-control. **TODO:** убрать в PR #07 / последующих.
 
 ### Новые клиентские модули
 
@@ -102,7 +102,7 @@ SQLite-таблица `users` в `shared/schema.ts` помечена `@deprecate
 ### Вне объёма PR 04 (как и раньше)
 
 - Приглашения (перенесено в **PR #05**)
-- RBAC на бизнес-API (**PR #06**)
+- Базовый слой permissions (**PR #06**); применение к остальным бизнес-API — следующие PR
 - Админка `/users` (**PR #07**)
 - Редактирование `/profile`, смена пароля (**PR #08**)
 - 2FA, Redis rate-limit (**PR #09**)
@@ -116,7 +116,7 @@ SQLite-таблица `users` в `shared/schema.ts` помечена `@deprecate
 
 | Метод и путь | Auth | Назначение |
 |--------------|------|------------|
-| `POST /api/invitations/create` | cookie-сессия | Тело `{ email, role, teamId?, fullName? }`. Ролевая матрица «кто кого может пригласить» — в коде (`INVITER_CAN_INVITE`). Успех: `{ success, invitation: { id, email, role, teamId, expiresAt, acceptUrl } }`. |
+| `POST /api/invitations/create` | cookie-сессия | Тело `{ email, role, teamId?, fullName? }`. Ролевая матрица «кто кого может пригласить» — в `shared/auth-rbac.ts` (`INVITER_CAN_INVITE`, функция `canInviteRole`). Успех: `{ success, invitation: { id, email, role, teamId, expiresAt, acceptUrl } }`. |
 | `GET /api/invitations/list` | cookie-сессия | Список приглашений текущего пользователя как инвайтера, поле `status`: `pending` / `accepted` / `expired`. Поле `createdAt` на клиенте — прокси `expiresAt − 7 суток` (отдельной колонки `created_at` в таблице нет). |
 | `POST /api/invitations/revoke` | cookie-сессия | Тело `{ id }`. Без миграций: отзыв = `expires_at = now()`. Админ может отозвать чужое приглашение. |
 | `GET /api/invitations/preview?token=` | нет | Публичный превью для формы на `/invite/:token`. |
@@ -142,7 +142,33 @@ SQLite-таблица `users` в `shared/schema.ts` помечена `@deprecate
 ### UI
 
 - Публичная страница `#/invite/:token` (`client/src/pages/invite.tsx`).
-- Управление: `#/admin/invitations` (`client/src/pages/admin-invitations.tsx`), доступ по `canAccessPathForUser` только если у роли непустой `INVITER_CAN_INVITE`.
+- Управление: `#/admin/invitations` (`client/src/pages/admin-invitations.tsx`), доступ по `canAccessPathForUser` и `userCanManageInvitations` из `client/src/lib/auth-rbac.ts` (permission `invitations.create`).
+
+## PR 06 — RBAC scope guards
+
+Единый слой проверки прав на основе роли. Канонический источник — `apps/platform/shared/auth-rbac.ts` (`Permission` тип, `PERMISSIONS_BY_ROLE`, `roleHasPermission`, `canInviteRole`, `allowedInviteTargetsFor`).
+
+### Где используется
+
+- **Express dev**: middleware `requirePermission(perm)` из `server/auth/require-permission.ts` (`server/invitation-routes.ts`).
+- **Self-contained Vercel** (`api/invitations/[action].ts`): inline-копия матрицы рядом с `INVITER_CAN_INVITE`, помеченная якорным комментарием `// SYNC: shared/auth-rbac.ts`. Self-contained-правило (см. раздел про PR #224/#226) запрещает импорт из `@shared/*`.
+- **Клиент**: `client/src/lib/auth-rbac.ts` — фасад с `userHas(role, perm)` и `userHasAny(role, perms)`. UI-гейты импортируют только отсюда.
+
+### Permissions (текущие)
+
+- `invitations.create`, `invitations.list_own`, `invitations.revoke_own`, `invitations.revoke_any`
+- `users.list`, `users.read_any`, `users.update_role`, `users.update_status`, `users.reset_password` (используются в PR 07)
+- `profile.read_self`, `profile.update_self` (используются в PR 08)
+
+### Что НЕ меняется в этом PR
+
+- Эндпоинты `/api/invitations/*` сохраняют контракт (status-коды, JSON-структура). Меняется только источник проверки.
+- Поведение приглашений идентично PR 05: admin → все business-роли, director/rop/regional_manager → ограниченные подмножества, manager/marketer/analyst → пригласить нельзя.
+- UI-гейты остаются прежними.
+
+### Правило синхронизации матрицы
+
+При изменении прав менять В ОБЕИХ местах: `shared/auth-rbac.ts` И inline-копию в `api/invitations/[action].ts`. Якорный комментарий помогает не забыть. В будущих self-contained Vercel-функциях (когда придётся консолидировать /api/admin/[action].ts из-за Vercel Hobby лимита 12 функций) — тот же приём.
 
 ## PR 02 — server scaffolding
 
@@ -155,7 +181,8 @@ SQLite-таблица `users` в `shared/schema.ts` помечена `@deprecate
 | `password-hash.ts` | Обёртка **bcryptjs** (чистый JS, без нативных бинарей — удобно для Vercel): `hashPassword`, `verifyPassword`, `isStrongEnough`. |
 | `session-service.ts` | CRUD поверх таблицы `sessions` (`shared/auth-schema.ts`): opaque refresh token (256 bit, base64url), в БД — `sha256` в hex, срок жизни 30 суток или `TANDOOR_SESSION_TTL_DAYS`. |
 | `cookie.ts` | `AUTH_COOKIE` = `tandoor_auth_sess`; `buildAuthCookie` / `clearAuthCookie`; `parseAuthRefreshToken` для middleware. **Не** трогает `b24_personal_sess`. |
-| `require-auth.ts` | Express `requireAuth()` — cookie + сессия + **снимок пользователя** из `users` одним запросом в `req.auth`; `requireRole` / `requireAnyOf` — **TODO** до `auth-rbac-scope-cd7c`. |
+| `require-auth.ts` | Express `requireAuth()` — cookie + сессия + **снимок пользователя** из `users` одним запросом в `req.auth`. |
+| `require-permission.ts` | **PR 06:** middleware `requirePermission(perm)` на базе `shared/auth-rbac.ts`. |
 | `handlers.ts` | **PR 03:** логика auth для **Express** (`loginHandler`, `me`, `logout`, `logout-all`). На Vercel см. self-contained `api/auth/[action].ts`. |
 | `auth-user-snapshot.ts` | **PR 03:** выборка полей пользователя по `userId`. |
 | `request-meta.ts` / `rate-limit.ts` | **PR 03:** IP и in-memory rate-limit для login (Express; на Vercel — дубликат Map внутри `[action].ts`). |
@@ -236,7 +263,7 @@ curl -i https://tandoor-platform.vercel.app/api/auth/me
 
 - Смена / сброс пароля, 2FA, приглашения
 - Удаление mock-auth и переключение клиента (PR #04 `auth-client-switch-cd7c`)
-- RBAC на бизнес-API (PR #06)
+- Базовый слой permissions (PR #06); разграничение бизнес-API — следующие PR
 - Админка `/users` (PR #07), профиль (PR #08)
 - Redis rate-limit (PR #09 `auth-hardening-cd7c`)
 
@@ -248,7 +275,7 @@ curl -i https://tandoor-platform.vercel.app/api/auth/me
 - Защита бизнес-API по сессии
 - Приглашения, 2FA
 - Удаление mock-auth и переключение `useCurrentUser` на сервер
-- RBAC и `UserScope` на маршрутах (только заглушки `requireRole` / `requireAnyOf` с TODO)
+- `UserScope` на маршрутах (следующие PR)
 
 ## PR 01 — что **не** входило
 
