@@ -1414,11 +1414,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       const me = await resolveCurrentUser(pool, headers);
       if (!me || me.role !== "admin") { sendJson(res, 403, { success: false }); return; }
       try {
-        const countSql = `SELECT COUNT(*)::int AS n FROM audit_log al WHERE TRUE`;
-        const countRes = await pool.query<{ n: number }>(countSql, []);
-        const listSql = `SELECT al.id, al.action, al.created_at FROM audit_log al ORDER BY al.created_at DESC LIMIT 5 OFFSET 0`;
-        const rows = await pool.query<{ id: string; action: string; created_at: string }>(listSql, []);
-        sendJson(res, 200, { success: true, count: countRes.rows, rowsLen: rows.rows.length, first: rows.rows.slice(0, 3) });
+        const whereSql = "TRUE";
+        const params: unknown[] = [];
+        const pi = 1;
+        const countSql = `SELECT COUNT(*)::int AS n FROM audit_log al WHERE ${whereSql}`;
+        const countRes = await pool.query<{ n: number }>(countSql, params);
+        const total = countRes.rows[0]?.n ?? 0;
+        const listSql = `SELECT al.id, al.action, al.created_at FROM audit_log al WHERE ${whereSql} ORDER BY al.created_at DESC LIMIT $${pi} OFFSET $${pi + 1}`;
+        const listParams = [...params, 5, 0];
+        const rows = await pool.query<{ id: string; action: string; created_at: string }>(listSql, listParams);
+        sendJson(res, 200, { success: true, total, countRows: countRes.rows, rowsLen: rows.rows.length, sample: rows.rows, listSql, listParams });
       } catch (e) {
         const m = e instanceof Error ? e.message : String(e);
         sendJson(res, 500, { success: false, err: m.slice(0, 500) });
