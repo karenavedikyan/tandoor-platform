@@ -5,7 +5,7 @@
 
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
-import * as authSchema from "../../shared/auth-schema";
+import * as authSchema from "@shared/auth-schema";
 
 export type AuthDrizzle = ReturnType<typeof drizzle<typeof authSchema>>;
 
