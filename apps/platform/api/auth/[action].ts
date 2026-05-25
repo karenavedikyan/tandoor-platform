@@ -491,11 +491,19 @@ async function handleLogin(req: VercelRequest, headers: Record<string, string | 
       return { status: 500, json: { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." } };
     }
 
-    const lockRes = await pool.query<{ fail_count: number; locked_until: string | null }>(
-      `SELECT fail_count, locked_until FROM auth_login_failures WHERE email_lower = $1 LIMIT 1`,
-      [rawEmail],
-    );
-    const lockRow = lockRes.rows[0];
+    // Таблица auth_login_failures может ещё не быть создана (до migrations-run) — в этом случае rate-limit пропускаем.
+    let lockRow: { fail_count: number; locked_until: string | null } | undefined;
+    try {
+      const lockRes = await pool.query<{ fail_count: number; locked_until: string | null }>(
+        `SELECT fail_count, locked_until FROM auth_login_failures WHERE email_lower = $1 LIMIT 1`,
+        [rawEmail],
+      );
+      lockRow = lockRes.rows[0];
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!/auth_login_failures.*does not exist|relation .* does not exist/i.test(msg)) throw e;
+      console.warn("[login] auth_login_failures table missing, skipping rate-limit");
+    }
     if (lockRow?.locked_until) {
       const lu = Date.parse(lockRow.locked_until);
       if (Number.isFinite(lu) && lu > Date.now()) {
@@ -528,15 +536,20 @@ async function handleLogin(req: VercelRequest, headers: Record<string, string | 
     if (badCreds) {
       const prevCount = lockRow?.fail_count ?? 0;
       const attempt = prevCount + 1;
-      await pool.query(
-        `INSERT INTO auth_login_failures (email_lower, fail_count, locked_until, updated_at)
-         VALUES ($1, 1, NULL, NOW())
-         ON CONFLICT (email_lower) DO UPDATE SET
-           fail_count = CASE WHEN auth_login_failures.fail_count + 1 >= 5 THEN 0 ELSE auth_login_failures.fail_count + 1 END,
-           locked_until = CASE WHEN auth_login_failures.fail_count + 1 >= 5 THEN NOW() + interval '15 minutes' ELSE auth_login_failures.locked_until END,
-           updated_at = NOW()`,
-        [rawEmail],
-      );
+      try {
+        await pool.query(
+          `INSERT INTO auth_login_failures (email_lower, fail_count, locked_until, updated_at)
+           VALUES ($1, 1, NULL, NOW())
+           ON CONFLICT (email_lower) DO UPDATE SET
+             fail_count = CASE WHEN auth_login_failures.fail_count + 1 >= 5 THEN 0 ELSE auth_login_failures.fail_count + 1 END,
+             locked_until = CASE WHEN auth_login_failures.fail_count + 1 >= 5 THEN NOW() + interval '15 minutes' ELSE auth_login_failures.locked_until END,
+             updated_at = NOW()`,
+          [rawEmail],
+        );
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (!/auth_login_failures.*does not exist|relation .* does not exist/i.test(msg)) throw e;
+      }
       await tryAudit(pool, {
         actorUserId: null,
         action: "auth.login.failed",
@@ -563,7 +576,12 @@ async function handleLogin(req: VercelRequest, headers: Record<string, string | 
       [sessionId, user.id, refreshTokenHash, userAgent, ip, expiresAt],
     );
 
-    await pool.query(`DELETE FROM auth_login_failures WHERE email_lower = $1`, [rawEmail]);
+    try {
+      await pool.query(`DELETE FROM auth_login_failures WHERE email_lower = $1`, [rawEmail]);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!/auth_login_failures.*does not exist|relation .* does not exist/i.test(msg)) throw e;
+    }
 
     let lastLoginAt: string | null = user.last_login_at;
     try {
