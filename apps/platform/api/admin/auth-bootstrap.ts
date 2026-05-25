@@ -21,19 +21,35 @@
  *   GET /api/admin/auth-bootstrap → 200 { ready:true, hasToken:boolean } (без secret)
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { Pool } from "@neondatabase/serverless";
+import { neon } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
 import { timingSafeEqual } from "node:crypto";
 
 const JSON_CT = "application/json; charset=utf-8";
 
-let cachedPool: Pool | null = null;
-function getPool(): Pool | null {
-  if (cachedPool) return cachedPool;
+type SqlExec = ReturnType<typeof neon>;
+
+let cachedSql: SqlExec | null = null;
+function getSql(): SqlExec | null {
+  if (cachedSql) return cachedSql;
   const url = process.env.DATABASE_URL?.trim();
   if (!url) return null;
-  cachedPool = new Pool({ connectionString: url });
-  return cachedPool;
+  cachedSql = neon(url);
+  return cachedSql;
+}
+
+/** Run a raw SQL string (no params). `neon` template tag with no params still works for DDL. */
+async function runRaw(sql: SqlExec, statement: string): Promise<unknown> {
+  // The `neon` tag is a template literal function; for a raw string we wrap with `.query`-like usage:
+  // @ts-expect-error - neon supports `.query(text, params)` (HTTP driver)
+  return await sql.query(statement);
+}
+
+/** Run a parametrised SQL. */
+async function runParams<T = Record<string, unknown>>(sql: SqlExec, statement: string, params: unknown[]): Promise<T[]> {
+  // @ts-expect-error - .query exists on http-based neon driver
+  const res = await sql.query(statement, params);
+  return res as T[];
 }
 
 function sendJson(res: VercelResponse, status: number, body: unknown): void {
@@ -241,8 +257,8 @@ const DDL_STATEMENTS: { name: string; sql: string }[] = [
 const SIMPLE_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 async function handleDbPush(_req: VercelRequest, res: VercelResponse): Promise<void> {
-  const pool = getPool();
-  if (!pool) {
+  const sql = getSql();
+  if (!sql) {
     sendJson(res, 500, { success: false, code: "NO_DB", message: "DATABASE_URL is not set" });
     return;
   }
@@ -250,7 +266,7 @@ async function handleDbPush(_req: VercelRequest, res: VercelResponse): Promise<v
   const errors: { name: string; error: string }[] = [];
   for (const stmt of DDL_STATEMENTS) {
     try {
-      await pool.query(stmt.sql);
+      await runRaw(sql, stmt.sql);
       applied.push(stmt.name);
     } catch (e) {
       const m = e instanceof Error ? e.message : String(e);
@@ -258,10 +274,18 @@ async function handleDbPush(_req: VercelRequest, res: VercelResponse): Promise<v
     }
   }
   // Verify final state — list all tables that exist
-  const verify = await pool.query<{ table_name: string }>(
-    `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('users','sessions','audit_log','invitations','teams','regions','user_team_memberships','user_region_scopes') ORDER BY table_name`,
-  );
-  const tablesPresent = verify.rows.map((r) => r.table_name);
+  let tablesPresent: string[] = [];
+  try {
+    const rows = await runParams<{ table_name: string }>(
+      sql,
+      `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('users','sessions','audit_log','invitations','teams','regions','user_team_memberships','user_region_scopes') ORDER BY table_name`,
+      [],
+    );
+    tablesPresent = rows.map((r) => r.table_name);
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    errors.push({ name: "verify", error: m.slice(0, 300) });
+  }
   sendJson(res, errors.length === 0 ? 200 : 207, {
     success: errors.length === 0,
     applied,
@@ -271,8 +295,8 @@ async function handleDbPush(_req: VercelRequest, res: VercelResponse): Promise<v
 }
 
 async function handleSeedAdmin(req: VercelRequest, res: VercelResponse): Promise<void> {
-  const pool = getPool();
-  if (!pool) {
+  const sql = getSql();
+  if (!sql) {
     sendJson(res, 500, { success: false, code: "NO_DB", message: "DATABASE_URL is not set" });
     return;
   }
@@ -292,7 +316,8 @@ async function handleSeedAdmin(req: VercelRequest, res: VercelResponse): Promise
 
   const passwordHash = await bcrypt.hash(password, 12);
 
-  const upsert = await pool.query<{ id: string; email: string; role: string; status: string }>(
+  const rows = await runParams<{ id: string; email: string; role: string; status: string }>(
+    sql,
     `INSERT INTO users (email, full_name, role, status, password_hash, must_change_password, created_by)
      VALUES ($1, $2, 'admin', 'active', $3, false, NULL)
      ON CONFLICT (email) DO UPDATE SET
@@ -305,7 +330,7 @@ async function handleSeedAdmin(req: VercelRequest, res: VercelResponse): Promise
      RETURNING id, email, role, status`,
     [email, fullName, passwordHash],
   );
-  sendJson(res, 200, { success: true, user: upsert.rows[0] });
+  sendJson(res, 200, { success: true, user: rows[0] });
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
