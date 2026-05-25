@@ -8,8 +8,10 @@ import {
   resetUserPassword,
   updateUserRole,
   updateUserStatus,
+  updateUserTelegram,
 } from "./admin/users-handlers";
 import { listAudit } from "./admin/audit-handlers";
+import { postAdminTelegramRecovery } from "./admin/telegram-recovery";
 
 const JSON_CT = "application/json; charset=utf-8";
 
@@ -20,6 +22,17 @@ function applyJson(res: Response, status: number, body: Record<string, unknown>)
 }
 
 export function registerAdminRoutes(app: Express): void {
+
+  app.post("/api/admin/admin-recovery", async (req: Request, res: Response) => {
+    try {
+      await postAdminTelegramRecovery(req, res);
+    } catch (e) {
+      const m = e instanceof Error ? e.message : String(e);
+      console.error("[api/admin] admin-recovery", m.slice(0, 200));
+      applyJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+    }
+  });
+
   app.get(
     "/api/admin/audit-list",
     requireAuth(),
@@ -105,6 +118,21 @@ export function registerAdminRoutes(app: Express): void {
       } catch (e) {
         const m = e instanceof Error ? e.message : String(e);
         console.error("[api/admin] password-reset-link-create", m.slice(0, 200));
+        applyJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+      }
+    },
+  );
+
+
+  app.post(
+    "/api/admin/users-update",
+    requireAuth(),
+    async (req: Request, res: Response) => {
+      try {
+        await updateUserTelegram(req, res);
+      } catch (e) {
+        const m = e instanceof Error ? e.message : String(e);
+        console.error("[api/admin] users-update", m.slice(0, 200));
         applyJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
       }
     },

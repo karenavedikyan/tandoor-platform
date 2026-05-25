@@ -217,6 +217,53 @@ function rateClear(key: string): void {
   adminRateStore.delete(key);
 }
 
+const tgRecoveryLastIssued = new Map<number, number>();
+
+function timingSafeEqualUtf8(a: string, b: string): boolean {
+  const ba = Buffer.from(a, "utf8");
+  const bb = Buffer.from(b, "utf8");
+  if (ba.length !== bb.length) return false;
+  return timingSafeEqual(ba, bb);
+}
+
+function readRecoverySecretHeader(headers: Record<string, string | string[] | undefined>): string | null {
+  const a = headers["x-recovery-secret"];
+  if (typeof a === "string" && a.trim()) return a.trim();
+  if (Array.isArray(a) && a[0]?.trim()) return a[0]!.trim();
+  const b = headers["x-telegram-bot-api-secret-token"];
+  if (typeof b === "string" && b.trim()) return b.trim();
+  if (Array.isArray(b) && b[0]?.trim()) return b[0]!.trim();
+  return null;
+}
+
+function parseTelegramWhitelist(): Set<number> {
+  const raw = process.env.TG_RECOVERY_WHITELIST?.trim();
+  if (!raw) return new Set();
+  const out = new Set<number>();
+  for (const part of raw.split(",")) {
+    const x = part.trim();
+    if (!x) continue;
+    const n = Number(x);
+    if (Number.isFinite(n)) out.add(n);
+  }
+  return out;
+}
+
+function pickPublicAppOrigin(headers: Record<string, string | string[] | undefined>): string {
+  const envUrl = process.env.PUBLIC_APP_URL?.trim();
+  if (envUrl) {
+    try {
+      const normalized = envUrl.includes("://") ? envUrl : `https://${envUrl}`;
+      const u = new URL(normalized);
+      return `${u.protocol}//${u.host}`;
+    } catch {
+      /* ignore */
+    }
+  }
+  return `https://${pickPublicHost(headers)}`;
+}
+
+
 function sha256Hex(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
 }
@@ -264,6 +311,7 @@ type DbUserRow = {
   must_change_password: boolean;
   last_login_at: string | null;
   created_at: string;
+  telegram_user_id: string | null;
 };
 
 async function tryAudit(
@@ -298,7 +346,13 @@ function adminPublicUserFromRow(r: {
   must_change_password: boolean;
   last_login_at: string | null;
   created_at: string;
+  telegram_user_id: string | null;
 }): Record<string, unknown> {
+  let telegramUserId: number | null = null;
+  if (r.telegram_user_id != null && String(r.telegram_user_id).trim() !== "") {
+    const n = Number(r.telegram_user_id);
+    telegramUserId = Number.isFinite(n) ? n : null;
+  }
   return {
     id: r.id,
     email: r.email,
@@ -309,6 +363,7 @@ function adminPublicUserFromRow(r: {
     mustChangePassword: r.must_change_password,
     lastLoginAt: r.last_login_at,
     createdAt: r.created_at,
+    telegramUserId,
   };
 }
 
@@ -320,7 +375,7 @@ async function resolveCurrentUser(
   if (!token) return null;
   const hashHex = sha256Hex(token);
   const res = await pool.query<DbUserRow & { refresh_token_hash: string }>(
-    `SELECT u.id, u.email, u.full_name, u.phone, u.role, u.status, u.must_change_password, u.last_login_at, u.created_at,
+    `SELECT u.id, u.email, u.full_name, u.phone, u.role, u.status, u.must_change_password, u.last_login_at, u.created_at, u.telegram_user_id,
             s.refresh_token_hash
      FROM sessions s
      INNER JOIN users u ON u.id = s.user_id
@@ -412,7 +467,7 @@ async function handleUsersList(
 
   const limitPh = pi;
   const offsetPh = pi + 1;
-  const listSql = `SELECT id, email, full_name, phone, role, status, must_change_password, last_login_at, created_at
+  const listSql = `SELECT id, email, full_name, phone, role, status, must_change_password, last_login_at, created_at, telegram_user_id
      FROM users ${whereSql} ORDER BY created_at DESC LIMIT $${limitPh} OFFSET $${offsetPh}`;
   const listRes = await pool.query<DbUserRow>(listSql, [...params, limit, offset]);
 
@@ -451,7 +506,7 @@ async function handleUsersGet(
   }
 
   const ures = await pool.query<DbUserRow>(
-    `SELECT id, email, full_name, phone, role, status, must_change_password, last_login_at, created_at
+    `SELECT id, email, full_name, phone, role, status, must_change_password, last_login_at, created_at, telegram_user_id
      FROM users WHERE id = $1::uuid LIMIT 1`,
     [id],
   );
@@ -500,7 +555,7 @@ async function handleUsersUpdateRole(
   }
 
   const cur = await pool.query<DbUserRow>(
-    `SELECT id, email, full_name, phone, role, status, must_change_password, last_login_at, created_at FROM users WHERE id = $1::uuid LIMIT 1`,
+    `SELECT id, email, full_name, phone, role, status, must_change_password, last_login_at, created_at, telegram_user_id FROM users WHERE id = $1::uuid LIMIT 1`,
     [id],
   );
   const row = cur.rows[0];
@@ -516,7 +571,7 @@ async function handleUsersUpdateRole(
   const oldRole = row.role;
   const up = await pool.query<DbUserRow>(
     `UPDATE users SET role = $1, updated_at = NOW() WHERE id = $2::uuid
-     RETURNING id, email, full_name, phone, role, status, must_change_password, last_login_at, created_at`,
+     RETURNING id, email, full_name, phone, role, status, must_change_password, last_login_at, created_at, telegram_user_id`,
     [roleNew, id],
   );
   const u = up.rows[0];
@@ -573,7 +628,7 @@ async function handleUsersUpdateStatus(
   }
 
   const cur = await pool.query<DbUserRow>(
-    `SELECT id, email, full_name, phone, role, status, must_change_password, last_login_at, created_at FROM users WHERE id = $1::uuid LIMIT 1`,
+    `SELECT id, email, full_name, phone, role, status, must_change_password, last_login_at, created_at, telegram_user_id FROM users WHERE id = $1::uuid LIMIT 1`,
     [id],
   );
   const row = cur.rows[0];
@@ -589,7 +644,7 @@ async function handleUsersUpdateStatus(
   const oldStatus = row.status;
   const up = await pool.query<DbUserRow>(
     `UPDATE users SET status = $1, updated_at = NOW() WHERE id = $2::uuid
-     RETURNING id, email, full_name, phone, role, status, must_change_password, last_login_at, created_at`,
+     RETURNING id, email, full_name, phone, role, status, must_change_password, last_login_at, created_at, telegram_user_id`,
     [st, id],
   );
   const u = up.rows[0];
@@ -661,7 +716,7 @@ async function handleUsersResetPassword(
   }
 
   const cur = await pool.query<DbUserRow>(
-    `SELECT id, email, full_name, phone, role, status, must_change_password, last_login_at, created_at FROM users WHERE id = $1::uuid LIMIT 1`,
+    `SELECT id, email, full_name, phone, role, status, must_change_password, last_login_at, created_at, telegram_user_id FROM users WHERE id = $1::uuid LIMIT 1`,
     [id],
   );
   const row = cur.rows[0];
@@ -685,7 +740,7 @@ async function handleUsersResetPassword(
 
   const up = await pool.query<DbUserRow>(
     `UPDATE users SET password_hash = $1, must_change_password = true, updated_at = NOW() WHERE id = $2::uuid
-     RETURNING id, email, full_name, phone, role, status, must_change_password, last_login_at, created_at`,
+     RETURNING id, email, full_name, phone, role, status, must_change_password, last_login_at, created_at, telegram_user_id`,
     [passwordHash, id],
   );
   const u = up.rows[0];
@@ -752,7 +807,7 @@ async function handlePasswordResetLinkCreate(
   }
 
   const cur = await pool.query<DbUserRow>(
-    `SELECT id, email, full_name, phone, role, status, must_change_password, last_login_at, created_at FROM users WHERE id = $1::uuid LIMIT 1`,
+    `SELECT id, email, full_name, phone, role, status, must_change_password, last_login_at, created_at, telegram_user_id FROM users WHERE id = $1::uuid LIMIT 1`,
     [userId],
   );
   const row = cur.rows[0];
@@ -857,7 +912,7 @@ async function handleProfileGetSelf(
     return;
   }
   const ures = await pool.query<DbUserRow>(
-    `SELECT id, email, full_name, phone, role, status, must_change_password, last_login_at, created_at
+    `SELECT id, email, full_name, phone, role, status, must_change_password, last_login_at, created_at, telegram_user_id
      FROM users WHERE id = $1::uuid LIMIT 1`,
     [me.id],
   );
@@ -957,7 +1012,7 @@ async function handleProfileUpdateSelf(
            phone = CASE WHEN $2::boolean THEN $3 ELSE phone END,
            updated_at = NOW()
      WHERE id = $4::uuid
-     RETURNING id, email, full_name, phone, role, status, must_change_password, last_login_at, created_at`,
+     RETURNING id, email, full_name, phone, role, status, must_change_password, last_login_at, created_at, telegram_user_id`,
     [fullNameParam, phonePresent, phoneValue ?? null, me.id],
   );
   const u = up.rows[0];
@@ -1133,6 +1188,9 @@ async function handleMigrationsRun(
 
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_changed_at timestamptz`);
     applied.push("users.password_changed_at column");
+
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_user_id bigint UNIQUE`);
+    applied.push("users.telegram_user_id column");
 
     await pool.query(
       `CREATE TABLE IF NOT EXISTS password_reset_links (
@@ -1510,6 +1568,300 @@ async function handleSessionsRevokeOthersSelf(
   sendJson(res, 200, { success: true, revoked });
 }
 
+
+async function tgSendMessage(chatId: number, text: string): Promise<void> {
+  const token = process.env.TG_BOT_TOKEN?.trim();
+  if (!token) {
+    console.warn("[api/admin] admin-recovery: TG_BOT_TOKEN не задан, сообщение не отправлено");
+    return;
+  }
+  try {
+    const url = `https://api.telegram.org/bot${token}/sendMessage`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, text }),
+    });
+    if (!res.ok) {
+      const t = await res.text().catch(() => "");
+      console.warn("[api/admin] admin-recovery sendMessage", res.status, t.slice(0, 200));
+    }
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    console.warn("[api/admin] admin-recovery sendMessage network", m.slice(0, 200));
+  }
+}
+
+async function handleUsersUpdate(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  headers: Record<string, string | string[] | undefined>,
+): Promise<void> {
+  const me = await resolveCurrentUser(pool, headers);
+  if (!me) {
+    sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+    return;
+  }
+  if (me.status !== "active") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+  if (me.role !== "admin") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+  if (!roleHasPermission(me.role as UserRole, "users.update_role")) {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+
+  const body = req.body as { id?: unknown; telegramUserId?: unknown };
+  const id = typeof body.id === "string" ? body.id.trim() : "";
+  if (!id || !UUID_RE.test(id)) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите корректный идентификатор пользователя." });
+    return;
+  }
+  if (!Object.prototype.hasOwnProperty.call(body, "telegramUserId")) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Не указано поле telegramUserId." });
+    return;
+  }
+
+  const rawTg = body.telegramUserId;
+  let nextTg: string | null = null;
+  if (rawTg === null) {
+    nextTg = null;
+  } else if (typeof rawTg === "number" && Number.isFinite(rawTg) && rawTg > 0) {
+    nextTg = String(Math.trunc(rawTg));
+  } else if (typeof rawTg === "string" && rawTg.trim()) {
+    const n = Number(rawTg.trim());
+    if (!Number.isFinite(n) || n <= 0) {
+      sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Некорректный Telegram user-id." });
+      return;
+    }
+    nextTg = String(Math.trunc(n));
+  } else {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Некорректный Telegram user-id." });
+    return;
+  }
+
+  const cur = await pool.query<DbUserRow & { telegram_user_id: string | null }>(
+    `SELECT id, email, full_name, phone, role, status, must_change_password, last_login_at, created_at, telegram_user_id FROM users WHERE id = $1::uuid LIMIT 1`,
+    [id],
+  );
+  const row = cur.rows[0];
+  if (!row) {
+    sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Пользователь не найден." });
+    return;
+  }
+  if (row.role !== "admin") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Telegram user-id можно задавать только для роли admin." });
+    return;
+  }
+
+  const oldId = row.telegram_user_id;
+
+  if (nextTg != null) {
+    const taken = await pool.query<{ id: string }>(
+      `SELECT id FROM users WHERE telegram_user_id = $1::bigint AND id <> $2::uuid LIMIT 1`,
+      [nextTg, id],
+    );
+    if (taken.rows[0]) {
+      sendJson(res, 409, { success: false, code: "TG_USER_ID_TAKEN", message: "Этот Telegram user-id уже привязан к другому пользователю." });
+      return;
+    }
+  }
+
+  const up = await pool.query<DbUserRow>(
+    `UPDATE users SET telegram_user_id = $1::bigint, updated_at = NOW() WHERE id = $2::uuid
+     RETURNING id, email, full_name, phone, role, status, must_change_password, last_login_at, created_at, telegram_user_id`,
+    [nextTg, id],
+  );
+  const u = up.rows[0];
+  if (!u) {
+    sendJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+    return;
+  }
+
+  await tryAudit(pool, {
+    actorUserId: me.id,
+    action: "user.telegram_link.changed",
+    entityType: "user",
+    entityId: id,
+    metadata: { oldId: oldId ?? null, newId: nextTg },
+  });
+
+  sendJson(res, 200, { success: true, user: adminPublicUserFromRow(u) });
+}
+
+async function handleAdminRecovery(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  headers: Record<string, string | string[] | undefined>,
+): Promise<void> {
+  const expected = process.env.TG_RECOVERY_SECRET?.trim();
+  const got = readRecoverySecretHeader(headers);
+  if (!expected || !got || !timingSafeEqualUtf8(expected, got)) {
+    res.status(401).json({ ok: false });
+    return;
+  }
+
+  const rawBody = req.body;
+  const body = rawBody && typeof rawBody === "object" ? (rawBody as Record<string, unknown>) : {};
+  const msg = body.message as Record<string, unknown> | undefined;
+  const textRaw = msg && typeof msg.text === "string" ? msg.text.trim() : "";
+  const from = msg && typeof msg.from === "object" && msg.from !== null ? (msg.from as Record<string, unknown>) : undefined;
+  const chat = msg && typeof msg.chat === "object" && msg.chat !== null ? (msg.chat as Record<string, unknown>) : undefined;
+  const fromId = from && typeof from.id === "number" && Number.isFinite(from.id) ? from.id : null;
+  const chatId = chat && typeof chat.id === "number" && Number.isFinite(chat.id) ? chat.id : null;
+
+  if (!textRaw || fromId == null) {
+    sendJson(res, 200, { ok: true });
+    return;
+  }
+
+  const whitelist = parseTelegramWhitelist();
+  if (!whitelist.has(fromId)) {
+    await tryAudit(pool, {
+      actorUserId: null,
+      action: "auth.tg_recovery.rejected",
+      entityType: "telegram_user",
+      entityId: String(fromId),
+      metadata: { reason: "not_in_whitelist", tgUserId: fromId },
+    });
+    if (chatId != null) await tgSendMessage(chatId, "Доступ к команде восстановления запрещён.");
+    sendJson(res, 200, { ok: true });
+    return;
+  }
+
+  if (textRaw.startsWith("/start")) {
+    if (chatId != null) {
+      await tgSendMessage(
+        chatId,
+        "Бот восстановления Tandoor. Отправьте команду /reset, чтобы получить одноразовую ссылку для сброса пароля.",
+      );
+    }
+    sendJson(res, 200, { ok: true });
+    return;
+  }
+
+  if (textRaw !== "/reset") {
+    if (chatId != null) await tgSendMessage(chatId, "Доступна только команда /reset.");
+    sendJson(res, 200, { ok: true });
+    return;
+  }
+
+  await tryAudit(pool, {
+    actorUserId: null,
+    action: "auth.tg_recovery.requested",
+    entityType: "telegram_user",
+    entityId: String(fromId),
+    metadata: { tgUserId: fromId },
+  });
+
+  const now = Date.now();
+  const prev = tgRecoveryLastIssued.get(fromId);
+  if (prev != null && now - prev < 10 * 60 * 1000) {
+    await tryAudit(pool, {
+      actorUserId: null,
+      action: "auth.tg_recovery.rejected",
+      entityType: "telegram_user",
+      entityId: String(fromId),
+      metadata: { reason: "rate_limit", tgUserId: fromId },
+    });
+    if (chatId != null) await tgSendMessage(chatId, "Слишком частые запросы. Попробуйте через несколько минут.");
+    sendJson(res, 200, { ok: true });
+    return;
+  }
+
+  const ures = await pool.query<{ id: string; role: string; status: string }>(
+    `SELECT id, role, status FROM users WHERE telegram_user_id = $1::bigint LIMIT 1`,
+    [String(fromId)],
+  );
+  const u = ures.rows[0];
+  if (!u) {
+    await tryAudit(pool, {
+      actorUserId: null,
+      action: "auth.tg_recovery.rejected",
+      entityType: "telegram_user",
+      entityId: String(fromId),
+      metadata: { reason: "no_user", tgUserId: fromId },
+    });
+    if (chatId != null) await tgSendMessage(chatId, "К этому Telegram-аккаунту не привязан пользователь Tandoor.");
+    sendJson(res, 200, { ok: true });
+    return;
+  }
+  if (u.role !== "admin") {
+    await tryAudit(pool, {
+      actorUserId: null,
+      action: "auth.tg_recovery.rejected",
+      entityType: "telegram_user",
+      entityId: String(fromId),
+      metadata: { reason: "not_admin", tgUserId: fromId, userId: u.id },
+    });
+    if (chatId != null) await tgSendMessage(chatId, "Восстановление через Telegram доступно только администраторам.");
+    sendJson(res, 200, { ok: true });
+    return;
+  }
+  if (u.status !== "active") {
+    await tryAudit(pool, {
+      actorUserId: null,
+      action: "auth.tg_recovery.rejected",
+      entityType: "telegram_user",
+      entityId: String(fromId),
+      metadata: { reason: "inactive", tgUserId: fromId, userId: u.id },
+    });
+    if (chatId != null) await tgSendMessage(chatId, "Пользователь неактивен.");
+    sendJson(res, 200, { ok: true });
+    return;
+  }
+
+  const userId = u.id;
+  const token = randomBytes(32).toString("base64url");
+  const tokenHash = sha256Hex(token);
+
+  await pool.query(
+    `UPDATE password_reset_links SET used_at = NOW(), used_ip = 'superseded_by_tg' WHERE user_id = $1::uuid AND used_at IS NULL`,
+    [userId],
+  );
+
+  const ins = await pool.query<{ id: string; expires_at: string }>(
+    `INSERT INTO password_reset_links (user_id, token_hash, created_by, expires_at)
+     VALUES ($1::uuid, $2, $3::uuid, NOW() + interval '1 hour')
+     RETURNING id, expires_at`,
+    [userId, tokenHash, userId],
+  );
+  const linkRow = ins.rows[0];
+  if (!linkRow) {
+    console.warn("[api/admin] admin-recovery: insert failed");
+    sendJson(res, 200, { ok: true });
+    return;
+  }
+
+  await tryAudit(pool, {
+    actorUserId: null,
+    action: "auth.tg_recovery.issued",
+    entityType: "user",
+    entityId: userId,
+    metadata: { tgUserId: fromId, linkId: linkRow.id, expiresAt: linkRow.expires_at },
+  });
+
+  tgRecoveryLastIssued.set(fromId, now);
+
+  const origin = pickPublicAppOrigin(headers);
+  const href = `${origin}/#/reset?token=${encodeURIComponent(token)}`;
+  if (chatId != null) {
+    await tgSendMessage(
+      chatId,
+      `Ссылка для смены пароля (действует 1 час):\n${href}\n\nПерейдите по ссылке и задайте новый пароль. Не пересылайте её.`,
+    );
+  }
+
+  sendJson(res, 200, { ok: true });
+}
+
+
 function pickAction(req: VercelRequest): string {
   const a = req.query?.action;
   if (typeof a === "string" && a.trim()) return a.trim();
@@ -1533,6 +1885,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "users-get" && req.method === "GET") {
       await handleUsersGet(req, res, pool, headers);
+      return;
+    }
+    if (action === "users-update" && req.method === "POST") {
+      await handleUsersUpdate(req, res, pool, headers);
       return;
     }
     if (action === "users-update-role" && req.method === "POST") {
@@ -1577,6 +1933,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "profile-change-password" && req.method === "POST") {
       await handleProfileChangePassword(req, res, pool, headers);
+      return;
+    }
+    if (action === "admin-recovery" && req.method === "POST") {
+      await handleAdminRecovery(req, res, pool, headers);
       return;
     }
     if (action === "migrations-run" && req.method === "POST") {

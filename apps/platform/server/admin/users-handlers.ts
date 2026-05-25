@@ -4,7 +4,7 @@
  */
 
 import type { Request, Response } from "express";
-import { and, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, isNull, ne, or, sql } from "drizzle-orm";
 import type { UserRole, UserStatus } from "@shared/auth";
 import { BUSINESS_ROLES } from "@shared/auth";
 import { canCreatePasswordResetLink, roleHasPermission } from "@shared/auth-rbac";
@@ -32,6 +32,7 @@ function publicAdminUser(r: {
   mustChangePassword: boolean;
   lastLoginAt: string | null;
   createdAt: string;
+  telegramUserId?: number | null;
 }): Record<string, unknown> {
   return {
     id: r.id,
@@ -42,6 +43,7 @@ function publicAdminUser(r: {
     mustChangePassword: r.mustChangePassword,
     lastLoginAt: r.lastLoginAt,
     createdAt: r.createdAt,
+    telegramUserId: r.telegramUserId ?? null,
   };
 }
 
@@ -125,6 +127,7 @@ export async function listUsers(req: Request, res: Response): Promise<void> {
         mustChangePassword: authUsers.mustChangePassword,
         lastLoginAt: authUsers.lastLoginAt,
         createdAt: authUsers.createdAt,
+        telegramUserId: authUsers.telegramUserId,
       })
       .from(authUsers)
       .where(whereClause)
@@ -140,7 +143,7 @@ export async function listUsers(req: Request, res: Response): Promise<void> {
 
     applyJson(res, 200, {
       success: true,
-      users: rows.map((r) => publicAdminUser({ ...r, lastLoginAt: r.lastLoginAt ?? null })),
+      users: rows.map((r) => publicAdminUser({ ...r, lastLoginAt: r.lastLoginAt ?? null, telegramUserId: r.telegramUserId ?? null })),
       total,
     });
   } catch (e) {
@@ -181,6 +184,7 @@ export async function getUser(req: Request, res: Response): Promise<void> {
         mustChangePassword: authUsers.mustChangePassword,
         lastLoginAt: authUsers.lastLoginAt,
         createdAt: authUsers.createdAt,
+        telegramUserId: authUsers.telegramUserId,
       })
       .from(authUsers)
       .where(eq(authUsers.id, id))
@@ -190,7 +194,7 @@ export async function getUser(req: Request, res: Response): Promise<void> {
       applyJson(res, 404, { success: false, code: "NOT_FOUND", message: "Пользователь не найден." });
       return;
     }
-    applyJson(res, 200, { success: true, user: publicAdminUser({ ...r, lastLoginAt: r.lastLoginAt ?? null }) });
+    applyJson(res, 200, { success: true, user: publicAdminUser({ ...r, lastLoginAt: r.lastLoginAt ?? null, telegramUserId: r.telegramUserId ?? null }) });
   } catch (e) {
     const m = e instanceof Error ? e.message : String(e);
     console.error("[api/admin] users-get", m.slice(0, 200));
@@ -640,6 +644,136 @@ export async function createPasswordResetLink(req: Request, res: Response): Prom
   } catch (e) {
     const m = e instanceof Error ? e.message : String(e);
     console.error("[api/admin] password-reset-link-create", m.slice(0, 200));
+    applyJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+  }
+}
+
+
+export async function updateUserTelegram(req: Request, res: Response): Promise<void> {
+  const auth = req.auth as AuthUserSnapshot | undefined;
+  if (!auth) {
+    applyJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+    return;
+  }
+  if (auth.status !== "active" || auth.role !== "admin") {
+    applyJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+  if (!roleHasPermission(auth.role, "users.update_role")) {
+    applyJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+
+  const body = req.body as { id?: unknown; telegramUserId?: unknown };
+  const id = typeof body.id === "string" ? body.id.trim() : "";
+  if (!id || !UUID_RE.test(id)) {
+    applyJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите корректный идентификатор пользователя." });
+    return;
+  }
+  if (!Object.prototype.hasOwnProperty.call(body, "telegramUserId")) {
+    applyJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Не указано поле telegramUserId." });
+    return;
+  }
+
+  const rawTg = body.telegramUserId;
+  let nextTg: number | null = null;
+  if (rawTg === null) {
+    nextTg = null;
+  } else if (typeof rawTg === "number" && Number.isFinite(rawTg) && rawTg > 0) {
+    nextTg = Math.trunc(rawTg);
+  } else if (typeof rawTg === "string" && rawTg.trim()) {
+    const n = Number(rawTg.trim());
+    if (!Number.isFinite(n) || n <= 0) {
+      applyJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Некорректный Telegram user-id." });
+      return;
+    }
+    nextTg = Math.trunc(n);
+  } else {
+    applyJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Некорректный Telegram user-id." });
+    return;
+  }
+
+  const db = getAuthDb();
+  if (!db) {
+    applyJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+    return;
+  }
+
+  try {
+    const cur = await db
+      .select({
+        id: authUsers.id,
+        role: authUsers.role,
+        telegramUserId: authUsers.telegramUserId,
+      })
+      .from(authUsers)
+      .where(eq(authUsers.id, id))
+      .limit(1);
+    const row = cur[0];
+    if (!row) {
+      applyJson(res, 404, { success: false, code: "NOT_FOUND", message: "Пользователь не найден." });
+      return;
+    }
+    if (row.role !== "admin") {
+      applyJson(res, 403, { success: false, code: "FORBIDDEN", message: "Telegram user-id можно задавать только для роли admin." });
+      return;
+    }
+
+    const oldId = row.telegramUserId ?? null;
+
+    if (nextTg != null) {
+      const taken = await db
+        .select({ id: authUsers.id })
+        .from(authUsers)
+        .where(and(eq(authUsers.telegramUserId, nextTg), ne(authUsers.id, id)))
+        .limit(1);
+      if (taken[0]) {
+        applyJson(res, 409, {
+          success: false,
+          code: "TG_USER_ID_TAKEN",
+          message: "Этот Telegram user-id уже привязан к другому пользователю.",
+        });
+        return;
+      }
+    }
+
+    const updated = await db
+      .update(authUsers)
+      .set({
+        telegramUserId: nextTg,
+        updatedAt: sql`NOW()`,
+      })
+      .where(eq(authUsers.id, id))
+      .returning({
+        id: authUsers.id,
+        email: authUsers.email,
+        fullName: authUsers.fullName,
+        role: authUsers.role,
+        status: authUsers.status,
+        mustChangePassword: authUsers.mustChangePassword,
+        lastLoginAt: authUsers.lastLoginAt,
+        createdAt: authUsers.createdAt,
+        telegramUserId: authUsers.telegramUserId,
+      });
+
+    const u = updated[0];
+    if (!u) {
+      applyJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+      return;
+    }
+
+    await tryAudit({
+      actorUserId: auth.userId,
+      action: "user.telegram_link.changed",
+      entityType: "user",
+      entityId: id,
+      metadata: { oldId, newId: nextTg },
+    });
+
+    applyJson(res, 200, { success: true, user: publicAdminUser({ ...u, lastLoginAt: u.lastLoginAt ?? null }) });
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    console.error("[api/admin] users-update", m.slice(0, 200));
     applyJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
   }
 }

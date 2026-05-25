@@ -13,6 +13,7 @@ export type AdminUser = {
   mustChangePassword: boolean;
   lastLoginAt: string | null;
   createdAt: string;
+  telegramUserId: number | null;
 };
 
 export type ListUsersParams = {
@@ -48,6 +49,15 @@ function parseAdminUser(raw: unknown): AdminUser | null {
   const createdAt = typeof r.createdAt === "string" ? r.createdAt : null;
   if (!id || !email || !fullName || !createdAt) return null;
   if (status !== "invited" && status !== "active" && status !== "disabled") return null;
+  const tgRaw = r.telegramUserId;
+  let telegramUserId: number | null = null;
+  if (tgRaw === null) telegramUserId = null;
+  else if (typeof tgRaw === "number" && Number.isFinite(tgRaw)) telegramUserId = tgRaw;
+  else if (typeof tgRaw === "string" && tgRaw.trim()) {
+    const n = Number(tgRaw.trim());
+    telegramUserId = Number.isFinite(n) ? n : null;
+  }
+
   if (mustChangePassword === null) return null;
   return {
     id,
@@ -58,6 +68,7 @@ function parseAdminUser(raw: unknown): AdminUser | null {
     mustChangePassword,
     lastLoginAt,
     createdAt,
+    telegramUserId,
   };
 }
 
@@ -168,4 +179,23 @@ export async function resetUserPassword(
   const user = parseAdminUser(body.user);
   if (!tempPassword || !user) return { ok: false, code: "INVALID_RESPONSE", message: "Некорректный ответ сервера." };
   return { ok: true, tempPassword, user };
+}
+
+export async function updateUserTelegram(
+  id: string,
+  telegramUserId: number | null,
+): Promise<{ ok: true; user: AdminUser } | { ok: false; code: string; message: string }> {
+  const res = await fetch("/api/admin/users-update", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id, telegramUserId }),
+  });
+  const body = await readJson(res);
+  if (!res.ok || body.success !== true) {
+    return { ok: false, ...errFromBody(body, "Не удалось сохранить Telegram user-id.") };
+  }
+  const user = parseAdminUser(body.user);
+  if (!user) return { ok: false, code: "INVALID_RESPONSE", message: "Некорректный ответ сервера." };
+  return { ok: true, user };
 }
