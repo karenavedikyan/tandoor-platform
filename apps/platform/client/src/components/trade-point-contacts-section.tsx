@@ -29,7 +29,7 @@ import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { cn } from "@/lib/utils";
 import {
   formatRussianPhoneInput,
-  isValidRussianPhone,
+  isValidRussianPhoneLoose,
   RU_PHONE_INVALID_MESSAGE,
   RU_PHONE_PLACEHOLDER,
 } from "@/lib/phone-format";
@@ -134,7 +134,7 @@ export function TradePointContactsSection({ row, tradePoint, profile }: Props) {
       return;
     }
     const phoneDraft = draft.phone ?? "";
-    if (phoneDraft.trim() && !isValidRussianPhone(phoneDraft)) {
+    if (phoneDraft.trim() && !isValidRussianPhoneLoose(phoneDraft)) {
       setFormErr(RU_PHONE_INVALID_MESSAGE);
       return;
     }

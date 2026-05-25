@@ -14,7 +14,26 @@ import { hashPassword, verifyPassword } from "../auth/password-hash";
 
 const JSON_CT = "application/json; charset=utf-8";
 
-const PHONE_SELF_RE = /^[+\d\s\-()]+$/;
+const RU_PHONE_RE = /^\+7\d{10}$/;
+const PHONE_SELF_FORMAT_MESSAGE =
+  "Укажите номер в формате +7XXXXXXXXXX (10 цифр после +7).";
+
+/** Толерантная нормализация ввода телефона для самообновления профиля. */
+function normalizeRuPhoneSelf(pt: string): string | null {
+  let digits = pt.replace(/\D/g, "");
+  if (digits.length === 0) return null;
+  if (digits.startsWith("8")) {
+    digits = "7" + digits.slice(1);
+  }
+  if (!digits.startsWith("7")) {
+    digits = "7" + digits;
+  }
+  digits = digits.slice(0, 11);
+  if (digits.length !== 11) return null;
+  const normalized = `+${digits}`;
+  if (!RU_PHONE_RE.test(normalized)) return null;
+  return normalized;
+}
 
 function sha256Hex(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
@@ -191,11 +210,16 @@ export async function updateSelf(req: Request, res: Response): Promise<void> {
       if (!pt) {
         phoneValue = null;
       } else {
-        if (pt.length < 4 || pt.length > 32 || !PHONE_SELF_RE.test(pt)) {
-          applyJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите корректный телефон." });
+        const normalized = normalizeRuPhoneSelf(pt);
+        if (normalized == null) {
+          applyJson(res, 400, {
+            success: false,
+            code: "VALIDATION_ERROR",
+            message: PHONE_SELF_FORMAT_MESSAGE,
+          });
           return;
         }
-        phoneValue = pt;
+        phoneValue = normalized;
       }
     } else {
       applyJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите корректный телефон." });

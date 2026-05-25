@@ -55,7 +55,7 @@ import {
 import { cn } from "@/lib/utils";
 import {
   formatRussianPhoneInput,
-  isValidRussianPhone,
+  isValidRussianPhoneLoose,
   RU_PHONE_INVALID_MESSAGE,
   RU_PHONE_PLACEHOLDER,
 } from "@/lib/phone-format";
@@ -469,7 +469,7 @@ export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLab
       return false;
     }
 
-    if (draftPhone.trim() && !isValidRussianPhone(draftPhone)) {
+    if (draftPhone.trim() && !isValidRussianPhoneLoose(draftPhone)) {
       toast({ title: RU_PHONE_INVALID_MESSAGE, variant: "destructive" });
       return false;
     }

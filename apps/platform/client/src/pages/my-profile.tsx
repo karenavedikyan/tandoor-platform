@@ -29,8 +29,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { listSelfSessions, revokeOtherSelfSessions, revokeSelfSession } from "@/lib/sessions-self-api";
-
-const PHONE_RE = /^[+\d\s\-()]+$/;
+import { PhoneInput } from "@/components/ui/phone-input";
+import { isValidRussianPhone, normalizeToCanonical } from "@/lib/phone-format";
 
 function rolesRuLabel(role: string): string {
   const m: Record<string, string> = {
@@ -72,7 +72,12 @@ export default function MyProfilePage() {
     const d = profileQ.data;
     if (!d) return;
     const fn = d.fullName?.trim() ?? "";
-    const ph = d.phone?.trim() ?? "";
+    const phRaw = d.phone?.trim() ?? "";
+    let ph = "";
+    if (phRaw) {
+      const c = normalizeToCanonical(phRaw);
+      ph = isValidRussianPhone(c) ? c : phRaw;
+    }
     setFullName(fn);
     setPhone(ph);
     setBaseline({ fullName: fn, phone: ph });
@@ -80,7 +85,7 @@ export default function MyProfilePage() {
 
   const dirty = useMemo(() => {
     if (!baseline) return false;
-    return fullName.trim() !== baseline.fullName || phone.trim() !== baseline.phone;
+    return fullName.trim() !== baseline.fullName || phone !== baseline.phone;
   }, [baseline, fullName, phone]);
 
   const validationErr = useMemo(() => {
@@ -88,9 +93,8 @@ export default function MyProfilePage() {
     if (fn.length < 2 || fn.length > 200) {
       return "Укажите ФИО (от 2 до 200 символов).";
     }
-    const ph = phone.trim();
-    if (ph && (ph.length < 4 || ph.length > 32 || !PHONE_RE.test(ph))) {
-      return "Укажите корректный телефон.";
+    if (phone !== "" && !isValidRussianPhone(phone)) {
+      return "Введите 10 цифр номера после +7.";
     }
     return "";
   }, [fullName, phone]);
@@ -112,8 +116,8 @@ export default function MyProfilePage() {
     try {
       const payload: { fullName?: string; phone?: string | null } = {};
       if (baseline && fullName.trim() !== baseline.fullName) payload.fullName = fullName.trim();
-      if (baseline && phone.trim() !== baseline.phone) {
-        payload.phone = phone.trim() ? phone.trim() : null;
+      if (baseline && phone !== baseline.phone) {
+        payload.phone = phone === "" ? null : phone;
       }
       if (Object.keys(payload).length === 0) return;
       await updateSelf(payload);
@@ -213,16 +217,19 @@ export default function MyProfilePage() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="pf-ph">Телефон</Label>
-            <Input
+            <PhoneInput
               id="pf-ph"
               data-testid="input-profile-phone"
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              onChange={setPhone}
               className="min-h-11"
-              placeholder="Необязательно"
               disabled={profileQ.isLoading}
             />
-            <p className="text-xs text-muted-foreground">4–32 символа, допускаются цифры, +, пробелы, скобки и дефис.</p>
+            {phone !== "" && !isValidRussianPhone(phone) ? (
+              <p className="text-sm text-destructive" data-testid="text-profile-phone-error">
+                Введите 10 цифр номера после +7.
+              </p>
+            ) : null}
           </div>
           {submitErr ? <p className="text-sm text-destructive">{submitErr}</p> : null}
           <Button

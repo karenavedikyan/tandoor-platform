@@ -54,11 +54,12 @@ import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actu
 import { EntityActualizationPhotoGallery } from "@/components/entity-actualization-photo-gallery";
 import { ShowcaseCoverPhotoSlot } from "@/components/showcase-cover-photo-slot";
 import { canEditClientNextStep } from "@/lib/client-next-step-data";
-import { displayUserName, useCurrentUser } from "@/hooks/use-current-user";
+import { useCurrentUser } from "@/hooks/use-current-user";
+import { displayUserName } from "@/lib/auth-api";
 import { cn } from "@/lib/utils";
 import {
   formatRussianPhoneInput,
-  isValidRussianPhone,
+  isValidRussianPhoneLoose,
   RU_PHONE_INVALID_MESSAGE,
   RU_PHONE_PLACEHOLDER,
 } from "@/lib/phone-format";
@@ -407,7 +408,7 @@ export function TradePointManualActualizationView(props: {
 
   const persistMain = useCallback(async (): Promise<boolean> => {
     if (!canEditUi) return false;
-    if (contactPhone.trim() && !isValidRussianPhone(contactPhone)) {
+    if (contactPhone.trim() && !isValidRussianPhoneLoose(contactPhone)) {
       toast({ title: RU_PHONE_INVALID_MESSAGE, variant: "destructive" });
       return false;
     }
@@ -1482,7 +1483,7 @@ export function TradePointManualActualizationView(props: {
                   matrixClientCategory={matrixClientCategory}
                   canEdit={canEditUi}
                   actorUserId={user?.id ?? profile.personaUserId}
-                  actorLabel={(displayUserName(user)).trim() || userLabelFromProfile(profile)}
+                  actorLabel={user ? displayUserName(user) : userLabelFromProfile(profile)}
                   selectedShowcaseModels={selectedShowcaseModels}
                   onChangeSelected={setSelectedShowcaseModels}
                   showcaseMatrixTasks={showcaseMatrixTasks}
@@ -1585,7 +1586,7 @@ export function TradePointManualActualizationView(props: {
               tradePointName={point.name}
               canCreate={canEditClientNextStep(profile, dealer)}
               actorUserId={user?.id ?? profile.personaUserId}
-              actorLabel={displayUserName(user) ?? userLabelFromProfile(profile)}
+              actorLabel={user ? displayUserName(user) : userLabelFromProfile(profile)}
               compact
             />
           </AccordionContent>

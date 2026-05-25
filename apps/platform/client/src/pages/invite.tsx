@@ -7,6 +7,7 @@ import { Link, useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import type { UserRole } from "@shared/auth";
@@ -213,9 +214,8 @@ export default function InvitePage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="invite-password">Пароль</Label>
-              <Input
+              <PasswordInput
                 id="invite-password"
-                type="password"
                 autoComplete="new-password"
                 value={password}
                 onChange={(e) => {
@@ -224,13 +224,13 @@ export default function InvitePage() {
                 }}
                 className="min-h-11"
                 data-testid="input-invite-password"
+                toggleTestId="button-toggle-invite-password"
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="invite-password-repeat">Повтор пароля</Label>
-              <Input
+              <PasswordInput
                 id="invite-password-repeat"
-                type="password"
                 autoComplete="new-password"
                 value={passwordRepeat}
                 onChange={(e) => {
@@ -239,6 +239,7 @@ export default function InvitePage() {
                 }}
                 className="min-h-11"
                 data-testid="input-invite-password-repeat"
+                toggleTestId="button-toggle-invite-password-repeat"
               />
             </div>
             {submitError ? (

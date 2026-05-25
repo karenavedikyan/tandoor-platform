@@ -8,6 +8,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { changePasswordSelf } from "@/lib/profile-api";
@@ -96,39 +97,39 @@ export default function ChangePasswordPage() {
           <CardContent className="grid gap-4">
             <div className="space-y-2">
               <Label htmlFor="current-pw">Текущий пароль</Label>
-              <Input
+              <PasswordInput
                 id="current-pw"
                 data-testid="input-current-password"
-                type="password"
                 autoComplete="current-password"
                 value={current}
                 onChange={(e) => setCurrent(e.target.value)}
                 className="min-h-11"
+                toggleTestId="button-toggle-current-password"
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="new-pw">Новый пароль</Label>
-              <Input
+              <PasswordInput
                 id="new-pw"
                 data-testid="input-new-password"
-                type="password"
                 autoComplete="new-password"
                 value={next}
                 onChange={(e) => setNext(e.target.value)}
                 className="min-h-11"
                 minLength={8}
+                toggleTestId="button-toggle-new-password"
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="new-pw2">Повторите новый пароль</Label>
-              <Input
+              <PasswordInput
                 id="new-pw2"
                 data-testid="input-new-password-confirm"
-                type="password"
                 autoComplete="new-password"
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
                 className="min-h-11"
+                toggleTestId="button-toggle-new-password-confirm"
               />
             </div>
             {localErr ? <p className="text-sm text-destructive">{localErr}</p> : null}

@@ -58,7 +58,8 @@ import {
 import { DealerActualizationEditDialog } from "@/components/client-base-actualization-dealer-forms";
 import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actualization-sync-status";
 import { DealerClientNextStepSection } from "@/components/dealer-client-next-step-section";
-import { displayUserName, useCurrentUser } from "@/hooks/use-current-user";
+import { useCurrentUser } from "@/hooks/use-current-user";
+import { displayUserName } from "@/lib/auth-api";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
 import { toast } from "@/hooks/use-toast";
 import { useSectionSaveFeedback } from "@/hooks/use-section-save-feedback";
@@ -79,7 +80,7 @@ import {
 import { cn } from "@/lib/utils";
 import {
   formatRussianPhoneInput,
-  isValidRussianPhone,
+  isValidRussianPhoneLoose,
   RU_PHONE_INVALID_MESSAGE,
   RU_PHONE_PLACEHOLDER,
 } from "@/lib/phone-format";
@@ -651,7 +652,7 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
               row={row}
               profile={profile}
               actorUserId={user?.id ?? profile.personaUserId}
-              actorLabel={displayUserName(user).trim() || userLabelFromProfile(profile)}
+              actorLabel={user ? displayUserName(user) : userLabelFromProfile(profile)}
               embedInAccordion
             />
           </AccordionContent>
@@ -698,7 +699,7 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
               row={row}
               profile={profile}
               actorUserId={user?.id ?? profile.personaUserId}
-              actorLabel={displayUserName(user) ?? userLabelFromProfile(profile)}
+              actorLabel={user ? displayUserName(user) : userLabelFromProfile(profile)}
               onSaved={() => void actx.refresh()}
               allowManualActualizationCard
             />
@@ -709,7 +710,7 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
                 dealerName={row.name}
                 canCreate={canEditClientNextStep(profile, row)}
                 actorUserId={user?.id ?? profile.personaUserId}
-                actorLabel={displayUserName(user) ?? userLabelFromProfile(profile)}
+                actorLabel={user ? displayUserName(user) : userLabelFromProfile(profile)}
                 compact
               />
             </div>
@@ -835,7 +836,7 @@ function DealerContactsActualizationBlock(props: {
       toast({ title: "Укажите ФИО контакта", variant: "destructive" });
       return false;
     }
-    if (phone.trim() && !isValidRussianPhone(phone)) {
+    if (phone.trim() && !isValidRussianPhoneLoose(phone)) {
       toast({ title: RU_PHONE_INVALID_MESSAGE, variant: "destructive" });
       return false;
     }
