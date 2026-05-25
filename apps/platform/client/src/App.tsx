@@ -21,7 +21,7 @@ import { ThemeProvider } from "@/context/theme-provider";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { resolveSidebarWorkingDealerClientCount } from "@/lib/dealer-base-sidebar-client-count";
 import { countWorkingTradePointsForSidebar } from "@/lib/trade-point-list-for-actualization";
-import type { SalesRole, SalesUser } from "@/lib/sales-control-data";
+import type { SalesUser } from "@/lib/sales-control-data";
 
 const LazySalesManagerWorkspace = lazy(() => import("@/pages/sales-manager-workspace"));
 const LazyDealerBase = lazy(() => import("@/pages/dealer-base"));
@@ -57,6 +57,8 @@ const LazyReleaseClients = lazy(() => import("@/pages/release-clients"));
 const LazyBitrix24Poc = lazy(() => import("@/pages/bitrix24-poc"));
 const LazyCommunications = lazy(() => import("@/pages/communications"));
 const LazyClientBaseActivityDashboard = lazy(() => import("@/pages/client-base-activity-dashboard"));
+const LazyUsersAndAccess = lazy(() => import("@/pages/users-and-access"));
+const LazyMyProfile = lazy(() => import("@/pages/my-profile"));
 const LazyLogin = lazy(() => import("@/pages/login"));
 const LazyFeatureInDevelopment = lazy(() => import("@/pages/feature-in-development"));
 
@@ -101,25 +103,9 @@ const ReleaseClientsRoute = suspensePage(LazyReleaseClients);
 const Bitrix24PocRoute = suspensePage(LazyBitrix24Poc);
 const CommunicationsRoute = suspensePage(LazyCommunications);
 const ClientBaseActivityDashboardRoute = suspensePage(LazyClientBaseActivityDashboard);
+const UsersAndAccessRoute = suspensePage(LazyUsersAndAccess);
+const MyProfileRoute = suspensePage(LazyMyProfile);
 const FeatureInDevelopmentRoute = suspensePage(LazyFeatureInDevelopment);
-
-
-function pilotNavUserSubtitle(role: SalesRole): string | undefined {
-  switch (role) {
-    case "sales_director":
-      return "Директор по продажам";
-    case "team_lead":
-      return "Руководитель отдела продаж";
-    case "sales_manager":
-      return "Менеджер по продажам";
-    case "marketer":
-      return "Маркетолог";
-    case "analyst":
-      return "Аналитик";
-    default:
-      return undefined;
-  }
-}
 
 function HashRedirect({ to }: { to: string }) {
   const [, setLoc] = useHashLocation();
@@ -176,7 +162,6 @@ function AuthenticatedShell({
       navigation={navigation}
       homeHref={shellHomeHref}
       userName={user.name}
-      userSubtitle={pilotNavUserSubtitle(user.role)}
       onLogout={onLogout}
       embeddedBitrix24={embeddedBitrix24}
     >
@@ -189,6 +174,8 @@ function AuthenticatedShell({
         <Route path="/feature-in-development" component={FeatureInDevelopmentRoute} />
         <Route path="/communications" component={CommunicationsRoute} />
         <Route path="/client-base-activity" component={ClientBaseActivityDashboardRoute} />
+        <Route path="/users" component={UsersAndAccessRoute} />
+        <Route path="/profile" component={MyProfileRoute} />
         <Route path="/dealer-base" component={DealerBaseRoute} />
         <Route path="/trade-points" component={TradePointsRoute} />
         <Route path="/client-map" component={ClientMapRoute} />

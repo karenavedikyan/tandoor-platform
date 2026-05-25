@@ -18,6 +18,8 @@ import {
   PieChart,
   Search,
   Store,
+  UserCircle,
+  UserCog,
   Users,
 } from "lucide-react";
 import { Fragment, useCallback, useLayoutEffect, useMemo, useState } from "react";
@@ -25,9 +27,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { TandoorLogo } from "@/components/tandoor-logo";
-import { ThemeToggleDesktop } from "@/components/theme-toggle";
-import { SidebarNavFooter } from "@/components/layout/sidebar-nav-footer";
+import { ThemeToggleDesktop, ThemeToggleMobileBlock } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 import { flattenGroupedPilotNavigation, type PilotNavGroup, type PilotNavItem, type PilotNavigationModel } from "@/lib/auth-access";
 
@@ -47,6 +49,8 @@ const SALES_MANAGER_HREF = "/sales-manager";
 const COMMUNICATIONS_HREF = "/communications";
 const CLIENT_BASE_ACTIVITY_HREF = "/client-base-activity";
 const FEATURE_IN_DEVELOPMENT_HREF = "/feature-in-development";
+const USERS_ACCESS_HREF = "/users";
+const PROFILE_HREF = "/profile";
 
 const ICON_BY_TESTID: Partial<Record<string, LucideIcon>> = {
   "nav-item-home": Home,
@@ -75,6 +79,8 @@ const ICON_BY_TESTID: Partial<Record<string, LucideIcon>> = {
   "nav-sales-control": ClipboardList,
   "nav-analytics-workspace": PieChart,
   "nav-marketing-briefs": Megaphone,
+  "nav-item-users-access": UserCog,
+  "nav-users-access": UserCog,
 };
 
 function pathMatchesNavHref(location: string, href: string): boolean {
@@ -155,6 +161,16 @@ function isFeatureInDevelopmentPath(path: string) {
   return p === FEATURE_IN_DEVELOPMENT_HREF;
 }
 
+function isUsersAccessPath(path: string) {
+  const p = path.split("?")[0] ?? path;
+  return p === USERS_ACCESS_HREF;
+}
+
+function isProfilePath(path: string) {
+  const p = path.split("?")[0] ?? path;
+  return p === PROFILE_HREF;
+}
+
 function behaviorId(item: PilotNavItem): string {
   return item.navBehaviorId ?? item.testId;
 }
@@ -182,6 +198,7 @@ function isNavItemActive(item: PilotNavItem, location: string, isActiveFromLink?
   if (bid === "nav-client-map") return isClientMapPath(location);
   if (bid === "nav-marketing-briefs") return isMarketingBriefsPath(location);
   if (bid === "nav-client-base-activity") return isClientBaseActivityPath(location);
+  if (bid === "nav-users-access") return isUsersAccessPath(location);
   return pathMatchesNavHref(location, item.href);
 }
 
@@ -221,6 +238,8 @@ function navLinkClass(
 
 function headerContextLabel(location: string) {
   const pathOnly = location.split("?")[0] ?? location;
+  if (pathOnly === "/users") return "Пользователи и доступ";
+  if (pathOnly === "/profile") return "Мой профиль";
   if (pathOnly === "/bitrix24" || pathOnly === "/embedded/bitrix24") return "Bitrix24";
   if (isFeatureInDevelopmentPath(pathOnly)) return "В разработке";
   if (isCommunicationsPath(pathOnly)) return "Коммуникации";
@@ -260,14 +279,17 @@ function flattenNavModel(model: PilotNavigationModel): PilotNavItem[] {
 const PILOT_SIDEBAR_OPEN_GROUPS_LS_KEY = "tandoor-pilot-sidebar-open-groups-v1";
 
 const NAV_GROUP_TOGGLE_TESTID: Record<string, string> = {
+  "client-base": "button-nav-group-client-base-toggle",
   "in-development": "button-nav-group-in-development-toggle",
 };
 
 const NAV_GROUP_CONTENT_TESTID: Record<string, string> = {
+  "client-base": "nav-group-client-base-content",
   "in-development": "nav-group-in-development-content",
 };
 
 const NAV_GROUP_SUMMARY_TESTID: Record<string, string> = {
+  "client-base": "text-nav-group-client-base-summary",
   "in-development": "text-nav-group-in-development-summary",
 };
 
@@ -303,6 +325,7 @@ function defaultGroupOpenWithoutStorage(groupKey: string, location: string, grou
   const g = groups.find((x) => x.key === groupKey);
   if (!g) return false;
   const active = groupHasActiveItem(g, location);
+  if (groupKey === "client-base") return true;
   if (groupKey === "in-development") return false;
   return active;
 }
@@ -362,6 +385,30 @@ function usePilotGroupedNavOpenState(model: PilotNavigationModel, location: stri
   );
 
   return { openGroups, toggleGroup };
+}
+
+function pilotNavClientBaseCounts(group: PilotNavGroup): {
+  clients: number | null;
+  tradePoints: number | null;
+  clientsLoading: boolean;
+  tradePointsLoading: boolean;
+} {
+  let clients: number | null = null;
+  let tradePoints: number | null = null;
+  let clientsLoading = false;
+  let tradePointsLoading = false;
+  for (const item of group.items) {
+    const bid = behaviorId(item);
+    if (bid === "nav-dealer-base") {
+      clientsLoading = Boolean(item.badgeLoading);
+      if (item.badge != null) clients = item.badge;
+    }
+    if (bid === "nav-trade-points") {
+      tradePointsLoading = Boolean(item.badgeLoading);
+      if (item.badge != null) tradePoints = item.badge;
+    }
+  }
+  return { clients, tradePoints, clientsLoading, tradePointsLoading };
 }
 
 function NavRowLink({
@@ -465,104 +512,8 @@ function NavLinksList({
   );
 }
 
-function CollapsiblePilotNavGroup({
-  group,
-  location,
-  variant,
-  onNavigate,
-  openGroups,
-  onToggleGroup,
-}: {
-  group: PilotNavGroup;
-  location: string;
-  variant: "sidebar" | "drawer";
-  onNavigate?: () => void;
-  openGroups: PilotOpenGroupsMap;
-  onToggleGroup: (groupKey: string) => void;
-}) {
-  const isOpen = Boolean(openGroups[group.key]);
-  const groupActive = groupHasActiveItem(group, location);
-  const titleColor = groupActive ? "text-[#222631]" : "text-[#8F96B0]";
-  const toggleTestId = NAV_GROUP_TOGGLE_TESTID[group.key] ?? `button-nav-group-${group.key}-toggle`;
-  const contentTestId = NAV_GROUP_CONTENT_TESTID[group.key] ?? `nav-group-${group.key}-content`;
-  const summaryLine = group.key === "in-development" ? `${group.items.length} разделов` : null;
-  const summaryTestId = NAV_GROUP_SUMMARY_TESTID[group.key] ?? `text-nav-group-${group.key}-summary`;
-
-  return (
-    <div data-testid={group.testId} className="flex min-w-0 flex-col gap-0.5">
-      <button
-        type="button"
-        data-testid={toggleTestId}
-        aria-expanded={isOpen}
-        onClick={() => onToggleGroup(group.key)}
-        className="w-full min-w-0 rounded-md px-1 py-1.5 text-left transition-colors hover:bg-[#EEEFF6]/60"
-      >
-        <div className="flex min-w-0 items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <p className={cn("text-[10px] font-semibold uppercase leading-tight tracking-wide", titleColor)}>{group.label}</p>
-            {summaryLine != null && summaryLine !== "" ? (
-              <p data-testid={summaryTestId} className="mt-0.5 text-[10px] leading-snug text-[#8F96B0]/90">
-                {summaryLine}
-              </p>
-            ) : null}
-          </div>
-          <div className="flex shrink-0 items-center gap-1.5 pt-0.5">
-            <ChevronDown
-              className={cn("h-4 w-4 shrink-0 text-[#8F96B0] transition-transform", isOpen && "rotate-180")}
-              aria-hidden
-            />
-          </div>
-        </div>
-      </button>
-      {isOpen ? (
-        <div data-testid={contentTestId} className="flex min-w-0 flex-col gap-0.5">
-          {group.items.map((item) => (
-            <NavRowLink
-              key={item.testId}
-              item={item}
-              location={location}
-              variant={variant}
-              onNavigate={onNavigate}
-              linkStyle="pilot"
-              pilotWipTag={group.key === "in-development"}
-            />
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function PilotNavFlatPilotItems({
-  items,
-  location,
-  variant,
-  onNavigate,
-}: {
-  items: PilotNavItem[];
-  location: string;
-  variant: "sidebar" | "drawer";
-  onNavigate?: () => void;
-}) {
-  return (
-    <div className="flex min-w-0 flex-col gap-0.5">
-      {items.map((item) => (
-        <NavRowLink
-          key={item.testId}
-          item={item}
-          location={location}
-          variant={variant}
-          onNavigate={onNavigate}
-          linkStyle="pilot"
-        />
-      ))}
-    </div>
-  );
-}
-
 function PilotNavGroupedList({
   groups,
-  leadingItems = [],
   standaloneItems = [],
   location,
   variant,
@@ -572,7 +523,6 @@ function PilotNavGroupedList({
   "data-testid": navTestId,
 }: {
   groups: PilotNavGroup[];
-  leadingItems?: PilotNavItem[];
   standaloneItems?: PilotNavItem[];
   location: string;
   variant: "sidebar" | "drawer";
@@ -581,33 +531,36 @@ function PilotNavGroupedList({
   onToggleGroup: (groupKey: string) => void;
   "data-testid": string;
 }) {
-  const hasLeading = (leadingItems?.length ?? 0) > 0;
-
-  if (hasLeading) {
-    return (
-      <div className="flex min-w-0 flex-col gap-2 overflow-x-hidden" data-testid={navTestId}>
-        <PilotNavFlatPilotItems items={leadingItems ?? []} location={location} variant={variant} onNavigate={onNavigate} />
-        {standaloneItems.length > 0 ? (
-          <PilotNavFlatPilotItems items={standaloneItems} location={location} variant={variant} onNavigate={onNavigate} />
-        ) : null}
-        {groups.map((g) => (
-          <CollapsiblePilotNavGroup
-            key={g.key}
-            group={g}
-            location={location}
-            variant={variant}
-            onNavigate={onNavigate}
-            openGroups={openGroups}
-            onToggleGroup={onToggleGroup}
-          />
-        ))}
-      </div>
-    );
-  }
-
   return (
     <div className="flex min-w-0 flex-col gap-2 overflow-x-hidden" data-testid={navTestId}>
       {groups.map((g, groupIndex) => {
+        const isOpen = Boolean(openGroups[g.key]);
+        const groupActive = groupHasActiveItem(g, location);
+        const titleColor = groupActive ? "text-[#222631]" : "text-[#8F96B0]";
+        const counts = g.key === "client-base" ? pilotNavClientBaseCounts(g) : null;
+
+        let summaryLine: string | null = null;
+
+        if (g.key === "client-base") {
+          if (counts?.clientsLoading || counts?.tradePointsLoading) {
+            summaryLine = "Загрузка счётчиков…";
+          } else if (counts && counts.clients != null && counts.tradePoints != null) {
+            summaryLine = `${counts.clients} клиентов · ${counts.tradePoints} ТТ`;
+          } else if (counts && (counts.clients != null || counts.tradePoints != null)) {
+            const c = counts.clients != null ? String(counts.clients) : "—";
+            const t = counts.tradePoints != null ? String(counts.tradePoints) : "—";
+            summaryLine = `${c} клиентов · ${t} ТТ`;
+          } else {
+            summaryLine = "Клиенты и торговые точки";
+          }
+        } else if (g.key === "in-development") {
+          summaryLine = `${g.items.length} разделов`;
+        }
+
+        const toggleTestId = NAV_GROUP_TOGGLE_TESTID[g.key] ?? `button-nav-group-${g.key}-toggle`;
+        const contentTestId = NAV_GROUP_CONTENT_TESTID[g.key] ?? `nav-group-${g.key}-content`;
+        const summaryTestId = NAV_GROUP_SUMMARY_TESTID[g.key] ?? `text-nav-group-${g.key}-summary`;
+
         const standaloneBlock =
           groupIndex === 0 && standaloneItems.length > 0 ? (
             <div key={`${g.key}-standalone`} className="flex min-w-0 flex-col gap-0.5">
@@ -626,14 +579,47 @@ function PilotNavGroupedList({
 
         return (
           <Fragment key={g.key}>
-            <CollapsiblePilotNavGroup
-              group={g}
-              location={location}
-              variant={variant}
-              onNavigate={onNavigate}
-              openGroups={openGroups}
-              onToggleGroup={onToggleGroup}
-            />
+            <div data-testid={g.testId} className="flex min-w-0 flex-col gap-0.5">
+              <button
+                type="button"
+                data-testid={toggleTestId}
+                aria-expanded={isOpen}
+                onClick={() => onToggleGroup(g.key)}
+                className="w-full min-w-0 rounded-md px-1 py-1.5 text-left transition-colors hover:bg-[#EEEFF6]/60"
+              >
+                <div className="flex min-w-0 items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className={cn("text-[10px] font-semibold uppercase leading-tight tracking-wide", titleColor)}>{g.label}</p>
+                    {summaryLine != null && summaryLine !== "" ? (
+                      <p data-testid={summaryTestId} className="mt-0.5 text-[10px] leading-snug text-[#8F96B0]/90">
+                        {summaryLine}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1.5 pt-0.5">
+                    <ChevronDown
+                      className={cn("h-4 w-4 shrink-0 text-[#8F96B0] transition-transform", isOpen && "rotate-180")}
+                      aria-hidden
+                    />
+                  </div>
+                </div>
+              </button>
+              {isOpen ? (
+                <div data-testid={contentTestId} className="flex min-w-0 flex-col gap-0.5">
+                  {g.items.map((item) => (
+                    <NavRowLink
+                      key={item.testId}
+                      item={item}
+                      location={location}
+                      variant={variant}
+                      onNavigate={onNavigate}
+                      linkStyle="pilot"
+                      pilotWipTag={g.key === "in-development"}
+                    />
+                  ))}
+                </div>
+              ) : null}
+            </div>
             {standaloneBlock}
           </Fragment>
         );
@@ -666,7 +652,6 @@ function NavigationPanel({
   }
   return (
     <PilotNavGroupedList
-      leadingItems={model.leadingItems}
       groups={model.groups}
       standaloneItems={model.standaloneItems}
       location={location}
@@ -695,8 +680,6 @@ export type AppShellProps = {
   navigation: PilotNavigationModel;
   homeHref: string;
   userName: string;
-  /** Подзаголовок в сайдбаре (например роль). */
-  userSubtitle?: string;
   cityLabel?: string;
   onLogout: () => void;
   /** POC Bitrix24: без боковых панелей и с компактной шапкой. */
@@ -708,7 +691,6 @@ export function AppShell({
   navigation,
   homeHref,
   userName,
-  userSubtitle,
   cityLabel = "—",
   onLogout,
   embeddedBitrix24 = false,
@@ -731,6 +713,22 @@ export function AppShell({
             <BrandBlock homeHref={homeHref} className="max-w-[132px]" />
             <div className="flex shrink-0 items-center gap-2">
               <ThemeToggleDesktop className="h-9 w-9" />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Link
+                    href={PROFILE_HREF}
+                    className={cn(
+                      "flex h-9 w-9 items-center justify-center rounded-md border border-border/80 bg-card text-muted-foreground no-underline transition-colors hover:bg-muted hover:text-foreground",
+                      isProfilePath(location) && "border-primary/40 bg-primary/10 text-primary",
+                    )}
+                    aria-label="Мой профиль"
+                    data-testid="link-embedded-my-profile"
+                  >
+                    <UserCircle className="h-5 w-5" aria-hidden />
+                  </Link>
+                </TooltipTrigger>
+                <TooltipContent>Мой профиль</TooltipContent>
+              </Tooltip>
               <Button
                 type="button"
                 variant="outline"
@@ -789,7 +787,7 @@ export function AppShell({
         <div className="border-b border-border/60 px-4 pb-4 pt-5">
           <BrandBlock homeHref={homeHref} />
         </div>
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden px-3 py-3">
+        <div className="flex flex-1 flex-col overflow-y-auto overflow-x-hidden px-3 py-4">
           <NavigationPanel
             model={navigation}
             location={location}
@@ -799,13 +797,28 @@ export function AppShell({
             onGroupedToggle={pilotGroupedToggle}
           />
         </div>
-        <SidebarNavFooter
-          userName={userName}
-          userSubtitle={userSubtitle}
-          onLogout={onLogout}
-          settingsDefaultOpen={false}
-          paddingClass="px-3 pb-3"
-        />
+        <div className="mt-auto border-t border-border/60 px-3 py-3">
+          <div className="mb-2 flex items-center justify-center gap-2" data-testid="app-shell-sidebar-footer-actions">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Link
+                  href={PROFILE_HREF}
+                  className={cn(
+                    "flex h-9 w-9 items-center justify-center rounded-lg border border-border/80 bg-card text-muted-foreground no-underline transition-colors hover:bg-muted hover:text-foreground",
+                    isProfilePath(location) && "border-primary/40 bg-primary/10 text-primary",
+                  )}
+                  aria-label="Мой профиль"
+                  data-testid="link-sidebar-my-profile"
+                >
+                  <UserCircle className="h-5 w-5" aria-hidden />
+                </Link>
+              </TooltipTrigger>
+              <TooltipContent side="right">Мой профиль</TooltipContent>
+            </Tooltip>
+            <ThemeToggleDesktop className="h-9 w-9" />
+          </div>
+          <p className="text-center text-[10px] text-muted-foreground">Рабочий кабинет Tandoor</p>
+        </div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -871,15 +884,15 @@ export function AppShell({
                 </SheetTrigger>
                 <SheetContent
                   side="left"
-                  className="flex h-[100dvh] w-[min(100vw-2rem,300px)] max-w-[100vw] flex-col gap-0 overflow-hidden border-r border-[#E3E6F3] bg-card p-0"
+                  className="flex w-[min(100vw-2rem,300px)] flex-col gap-0 overflow-y-auto border-r border-border/70 bg-card p-0"
                 >
-                  <div className="shrink-0 border-b border-[#E3E6F3]/90 px-4 pb-2 pt-3">
+                  <div className="border-b border-border/60 px-5 pb-3 pt-4">
                     <BrandBlock homeHref={homeHref} />
                   </div>
-                  <SheetHeader className="shrink-0 space-y-0 px-4 pb-1 pt-2 text-left">
-                    <SheetTitle className="text-left text-sm font-semibold text-[#222631]">Разделы</SheetTitle>
+                  <SheetHeader className="px-5 pt-3 text-left">
+                    <SheetTitle className="text-left text-base">Разделы</SheetTitle>
                   </SheetHeader>
-                  <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 py-1">
+                  <div className="flex-1 px-5 pb-4 pt-2">
                     <NavigationPanel
                       model={navigation}
                       location={location}
@@ -890,17 +903,30 @@ export function AppShell({
                       onGroupedToggle={pilotGroupedToggle}
                     />
                   </div>
-                  <SidebarNavFooter
-                    userName={userName}
-                    userSubtitle={userSubtitle}
-                    onLogout={() => {
-                      setMobileOpen(false);
-                      onLogout();
-                    }}
-                    settingsDefaultOpen={false}
-                    paddingClass="px-4"
-                    className="shrink-0"
-                  />
+                  <ThemeToggleMobileBlock />
+                  <div className="border-t border-border/60 px-5 py-3">
+                    <Link
+                      href={PROFILE_HREF}
+                      onClick={() => setMobileOpen(false)}
+                      className={cn(
+                        "flex w-full items-center gap-2 rounded-lg border border-border/80 bg-card px-3 py-2.5 text-sm font-medium text-foreground no-underline transition-colors hover:bg-muted",
+                        isProfilePath(location) && "border-primary/40 bg-primary/10",
+                      )}
+                      data-testid="link-mobile-my-profile"
+                      aria-label="Мой профиль"
+                      title="Мой профиль"
+                    >
+                      <UserCircle className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                      Мой профиль
+                    </Link>
+                  </div>
+                  <div className="border-t border-border/60 px-5 pb-4 pt-3">
+                    <p className="mb-2 text-xs text-muted-foreground">{userName}</p>
+                    <Button type="button" variant="outline" className="w-full gap-2" onClick={onLogout}>
+                      <LogOut className="h-4 w-4" aria-hidden />
+                      Выйти
+                    </Button>
+                  </div>
                 </SheetContent>
               </Sheet>
               {ctx ? (

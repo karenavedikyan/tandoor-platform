@@ -1,3 +1,7 @@
+/**
+ * PILOT ONLY. Страница входа на временной mock-авторизации; не является безопасным механизмом. Подробности и план: `docs/auth-access-foundation.md`.
+ */
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

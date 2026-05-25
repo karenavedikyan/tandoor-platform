@@ -31,25 +31,11 @@ export type PilotNavGroup = {
 
 export type PilotNavigationModel =
   | { layout: "flat"; items: PilotNavItem[] }
-  | {
-      layout: "grouped";
-      groups: PilotNavGroup[];
-      standaloneItems?: PilotNavItem[];
-      /** Верхний плоский блок рабочих разделов до аккордеонов (директор / РОП). */
-      leadingItems?: PilotNavItem[];
-    };
+  | { layout: "grouped"; groups: PilotNavGroup[]; standaloneItems?: PilotNavItem[] };
 
-/**
- * Плоский порядок для grouped:
- * - если заданы `leadingItems`: `leadingItems` → `standaloneItems` → все пункты групп;
- * - иначе: первая группа → `standaloneItems` → остальные группы.
- */
+/** Плоский порядок для grouped: пункты первой группы → `standaloneItems` → остальные группы. */
 export function flattenGroupedPilotNavigation(model: Extract<PilotNavigationModel, { layout: "grouped" }>): PilotNavItem[] {
   const standalone = model.standaloneItems ?? [];
-  const leading = model.leadingItems ?? [];
-  if (leading.length > 0) {
-    return [...leading, ...standalone, ...model.groups.flatMap((g) => g.items)];
-  }
   if (model.groups.length === 0) return [...standalone];
   const [first, ...rest] = model.groups;
   return [...first.items, ...standalone, ...rest.flatMap((g) => g.items)];
@@ -77,7 +63,7 @@ export function defaultHomePathForRole(role: SalesRole): string {
     case "team_lead":
       return "/dealer-base";
     case "sales_director":
-      return "/territory-card";
+      return "/client-base-activity";
     case "marketer":
       return "/marketing-briefs";
     case "analyst":
@@ -111,6 +97,8 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
   if (p === "/login") return true;
   if (p === "/bitrix24" || p === "/embedded/bitrix24") return true;
   if (p === "/communications") return canAccessCommunications(role);
+  if (p === "/profile") return true;
+  if (p === "/users") return role === "sales_director" || role === "team_lead";
 
   const any = (preds: ((x: string) => boolean)[]) => preds.some((f) => f(p));
 
@@ -244,35 +232,34 @@ export function getPilotNavigation(
 
   const directorOrRopNavigation = (): Extract<PilotNavigationModel, { layout: "grouped" }> => ({
     layout: "grouped",
-    leadingItems: [
-      {
-        href: "/client-base-activity",
-        label: "Статистика обновления базы",
-        testId: "nav-item-client-base-activity",
-        navBehaviorId: "nav-client-base-activity",
-      },
-      {
-        href: "/dealer-base",
-        label: "Клиенты-дилеры",
-        testId: "nav-item-clients",
-        navBehaviorId: "nav-dealer-base",
-        ...dealerNavExtras(),
-      },
-      {
-        href: "/trade-points",
-        label: "Торговые точки",
-        testId: "nav-item-trade-points",
-        navBehaviorId: "nav-trade-points",
-        ...tradePointNavExtras(),
-      },
-      {
-        href: "/sales-control/plan-fact",
-        label: "План-факт и KPI",
-        testId: "nav-item-sales-plan-fact",
-        navBehaviorId: "nav-sales-control",
-      },
-    ],
     groups: [
+      {
+        key: "client-base",
+        label: "КЛИЕНТСКАЯ БАЗА",
+        testId: "nav-group-client-base",
+        items: [
+          {
+            href: "/client-base-activity",
+            label: "Статистика обновления базы",
+            testId: "nav-item-client-base-activity",
+            navBehaviorId: "nav-client-base-activity",
+          },
+          {
+            href: "/dealer-base",
+            label: "Клиенты-дилеры",
+            testId: "nav-item-clients",
+            navBehaviorId: "nav-dealer-base",
+            ...dealerNavExtras(),
+          },
+          {
+            href: "/trade-points",
+            label: "Торговые точки",
+            testId: "nav-item-trade-points",
+            navBehaviorId: "nav-trade-points",
+            ...tradePointNavExtras(),
+          },
+        ],
+      },
       {
         key: "in-development",
         label: "В РАЗРАБОТКЕ",
@@ -296,6 +283,20 @@ export function getPilotNavigation(
             navBehaviorId: "nav-marketing-briefs",
           },
         ],
+      },
+    ],
+    standaloneItems: [
+      {
+        href: "/sales-control/plan-fact",
+        label: "План-факт и KPI",
+        testId: "nav-item-sales-plan-fact",
+        navBehaviorId: "nav-sales-control",
+      },
+      {
+        href: "/users",
+        label: "Пользователи и доступ (foundation)",
+        testId: "nav-item-users-access",
+        navBehaviorId: "nav-users-access",
       },
     ],
   });
@@ -351,7 +352,7 @@ export function getPilotNavigation(
   return { layout: "flat", items: flat };
 }
 
-/** Плоский список для обратной совместимости (иконки rail, тесты). Порядок: см. `flattenGroupedPilotNavigation`. */
+/** Плоский список для обратной совместимости (иконки rail, тесты). */
 export function getPilotNavItems(
   role: SalesRole,
   dealerBaseClientCount?: number | null,
