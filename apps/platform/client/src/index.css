@@ -364,7 +364,7 @@
   color: hsl(var(--foreground));
 }
 
-/* --- Surface hardcodes (lavender card / dark navy fill) ----------------- */
+/* --- Surface hardcodes (lavender card / dark navy fill / foundation alert) ---- */
 .dark .bg-\[\#222631\] {
   background-color: hsl(var(--card));
 }
@@ -376,6 +376,10 @@
 .dark .bg-\[\#EEEFF6\]\/80,
 .dark .bg-\[\#EEEFF6\]\/90 {
   background-color: hsl(var(--card));
+}
+/* Foundation alert (#F7F8FC) — used in /users and /profile skeletons. */
+.dark .bg-\[\#F7F8FC\] {
+  background-color: hsl(var(--muted));
 }
 .dark .hover\:bg-\[\#EEEFF6\]:hover,
 .dark .hover\:bg-\[\#EEEFF6\]\/60:hover,
