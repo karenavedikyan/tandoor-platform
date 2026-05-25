@@ -19,6 +19,7 @@ import { buildHashPath } from "@/lib/hash-route-utils";
 import { useBitrix24EmbeddedFlag } from "@/lib/bitrix24-integration";
 import { isDemoAuthBypassEnabled } from "@/lib/release-demo-bypass";
 import { userRoleToSalesRole } from "@/lib/role-mapping";
+import { userHas } from "@/lib/auth-rbac";
 import type { AuthUserDTO } from "@/lib/auth-api";
 import NotFound from "@/pages/not-found";
 import PreviewUnavailable from "@/pages/preview-unavailable";
@@ -218,12 +219,15 @@ function AuthenticatedShell({
     [salesRole, dealerNavCount, tradePointNavCount, user.role],
   );
 
+  const showAuditLogLink = userHas(user.role, "audit.read");
+
   return (
     <AppShell
       navigation={navigation}
       homeHref={shellHomeHref}
       userName={displayUserName(user)}
       onLogout={() => void onLogout()}
+      showAuditLogLink={showAuditLogLink}
       embeddedBitrix24={embeddedBitrix24}
     >
       <Switch>

@@ -18,9 +18,6 @@ import {
   PieChart,
   Search,
   Store,
-  UserCircle,
-  UserCog,
-  UserPlus,
   Users,
 } from "lucide-react";
 import { Fragment, useCallback, useLayoutEffect, useMemo, useState } from "react";
@@ -28,7 +25,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { TandoorLogo } from "@/components/tandoor-logo";
 import { ThemeToggleDesktop, ThemeToggleMobileBlock } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
@@ -50,8 +46,6 @@ const SALES_MANAGER_HREF = "/sales-manager";
 const COMMUNICATIONS_HREF = "/communications";
 const CLIENT_BASE_ACTIVITY_HREF = "/client-base-activity";
 const FEATURE_IN_DEVELOPMENT_HREF = "/feature-in-development";
-const USERS_ACCESS_HREF = "/users";
-const PROFILE_HREF = "/profile";
 
 const ICON_BY_TESTID: Partial<Record<string, LucideIcon>> = {
   "nav-item-home": Home,
@@ -80,12 +74,6 @@ const ICON_BY_TESTID: Partial<Record<string, LucideIcon>> = {
   "nav-sales-control": ClipboardList,
   "nav-analytics-workspace": PieChart,
   "nav-marketing-briefs": Megaphone,
-  "nav-item-users-access": UserCog,
-  "nav-users-access": UserCog,
-  "nav-item-admin-users": Users,
-  "nav-admin-users": Users,
-  "nav-item-admin-invitations": UserPlus,
-  "nav-admin-invitations": UserPlus,
 };
 
 function pathMatchesNavHref(location: string, href: string): boolean {
@@ -166,16 +154,6 @@ function isFeatureInDevelopmentPath(path: string) {
   return p === FEATURE_IN_DEVELOPMENT_HREF;
 }
 
-function isUsersAccessPath(path: string) {
-  const p = path.split("?")[0] ?? path;
-  return p === USERS_ACCESS_HREF;
-}
-
-function isProfilePath(path: string) {
-  const p = path.split("?")[0] ?? path;
-  return p === PROFILE_HREF;
-}
-
 function behaviorId(item: PilotNavItem): string {
   return item.navBehaviorId ?? item.testId;
 }
@@ -203,7 +181,6 @@ function isNavItemActive(item: PilotNavItem, location: string, isActiveFromLink?
   if (bid === "nav-client-map") return isClientMapPath(location);
   if (bid === "nav-marketing-briefs") return isMarketingBriefsPath(location);
   if (bid === "nav-client-base-activity") return isClientBaseActivityPath(location);
-  if (bid === "nav-users-access") return isUsersAccessPath(location);
   return pathMatchesNavHref(location, item.href);
 }
 
@@ -243,8 +220,6 @@ function navLinkClass(
 
 function headerContextLabel(location: string) {
   const pathOnly = location.split("?")[0] ?? location;
-  if (pathOnly === "/users") return "Пользователи и доступ";
-  if (pathOnly === "/profile") return "Мой профиль";
   if (pathOnly === "/bitrix24" || pathOnly === "/embedded/bitrix24") return "Bitrix24";
   if (isFeatureInDevelopmentPath(pathOnly)) return "В разработке";
   if (isCommunicationsPath(pathOnly)) return "Коммуникации";
@@ -687,6 +662,8 @@ export type AppShellProps = {
   userName: string;
   cityLabel?: string;
   onLogout: () => void;
+  /** Ссылка «Журнал событий» в шапке для ролей с `audit.read`. */
+  showAuditLogLink?: boolean;
   /** POC Bitrix24: без боковых панелей и с компактной шапкой. */
   embeddedBitrix24?: boolean;
 };
@@ -698,6 +675,7 @@ export function AppShell({
   userName,
   cityLabel = "—",
   onLogout,
+  showAuditLogLink = false,
   embeddedBitrix24 = false,
 }: AppShellProps) {
   const [location] = useLocation();
@@ -718,22 +696,13 @@ export function AppShell({
             <BrandBlock homeHref={homeHref} className="max-w-[132px]" />
             <div className="flex shrink-0 items-center gap-2">
               <ThemeToggleDesktop className="h-9 w-9" />
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Link
-                    href={PROFILE_HREF}
-                    className={cn(
-                      "flex h-9 w-9 items-center justify-center rounded-md border border-border/80 bg-card text-muted-foreground no-underline transition-colors hover:bg-muted hover:text-foreground",
-                      isProfilePath(location) && "border-primary/40 bg-primary/10 text-primary",
-                    )}
-                    aria-label="Мой профиль"
-                    data-testid="link-embedded-my-profile"
-                  >
-                    <UserCircle className="h-5 w-5" aria-hidden />
+              {showAuditLogLink ? (
+                <Button asChild variant="outline" size="sm" className="h-9 shrink-0 border-border/80 px-2.5 text-xs">
+                  <Link href="/admin/audit" data-testid="link-app-shell-audit-log-embedded">
+                    Журнал событий
                   </Link>
-                </TooltipTrigger>
-                <TooltipContent>Мой профиль</TooltipContent>
-              </Tooltip>
+                </Button>
+              ) : null}
               <Button
                 type="button"
                 variant="outline"
@@ -802,27 +771,8 @@ export function AppShell({
             onGroupedToggle={pilotGroupedToggle}
           />
         </div>
-        <div className="mt-auto border-t border-border/60 px-3 py-3">
-          <div className="mb-2 flex items-center justify-center gap-2" data-testid="app-shell-sidebar-footer-actions">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Link
-                  href={PROFILE_HREF}
-                  className={cn(
-                    "flex h-9 w-9 items-center justify-center rounded-lg border border-border/80 bg-card text-muted-foreground no-underline transition-colors hover:bg-muted hover:text-foreground",
-                    isProfilePath(location) && "border-primary/40 bg-primary/10 text-primary",
-                  )}
-                  aria-label="Мой профиль"
-                  data-testid="link-sidebar-my-profile"
-                >
-                  <UserCircle className="h-5 w-5" aria-hidden />
-                </Link>
-              </TooltipTrigger>
-              <TooltipContent side="right">Мой профиль</TooltipContent>
-            </Tooltip>
-            <ThemeToggleDesktop className="h-9 w-9" />
-          </div>
-          <p className="text-center text-[10px] text-muted-foreground">Рабочий кабинет Tandoor</p>
+        <div className="mt-auto border-t border-border/60 px-4 py-4">
+          <p className="text-[10px] text-muted-foreground">Рабочий кабинет Tandoor</p>
         </div>
       </aside>
 
@@ -854,6 +804,13 @@ export function AppShell({
             <Button type="button" variant="outline" size="sm" className="max-w-[10rem] truncate border-border/80" data-testid="button-current-city">
               <span data-testid="text-current-city">{cityLabel}</span>
             </Button>
+            {showAuditLogLink ? (
+              <Button asChild variant="outline" size="sm" className="shrink-0 border-border/80">
+                <Link href="/admin/audit" data-testid="link-app-shell-audit-log">
+                  Журнал событий
+                </Link>
+              </Button>
+            ) : null}
             <Button type="button" variant="outline" size="sm" className="max-w-[12rem] truncate border-border/80" data-testid="button-manager-profile">
               {userName}
             </Button>
@@ -909,24 +866,15 @@ export function AppShell({
                     />
                   </div>
                   <ThemeToggleMobileBlock />
-                  <div className="border-t border-border/60 px-5 py-3">
-                    <Link
-                      href={PROFILE_HREF}
-                      onClick={() => setMobileOpen(false)}
-                      className={cn(
-                        "flex w-full items-center gap-2 rounded-lg border border-border/80 bg-card px-3 py-2.5 text-sm font-medium text-foreground no-underline transition-colors hover:bg-muted",
-                        isProfilePath(location) && "border-primary/40 bg-primary/10",
-                      )}
-                      data-testid="link-mobile-my-profile"
-                      aria-label="Мой профиль"
-                      title="Мой профиль"
-                    >
-                      <UserCircle className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                      Мой профиль
-                    </Link>
-                  </div>
                   <div className="border-t border-border/60 px-5 pb-4 pt-3">
                     <p className="mb-2 text-xs text-muted-foreground">{userName}</p>
+                    {showAuditLogLink ? (
+                      <Button asChild variant="outline" className="mb-2 w-full">
+                        <Link href="/admin/audit" data-testid="link-app-shell-audit-log-mobile" onClick={() => setMobileOpen(false)}>
+                          Журнал событий
+                        </Link>
+                      </Button>
+                    ) : null}
                     <Button type="button" variant="outline" className="w-full gap-2" onClick={onLogout}>
                       <LogOut className="h-4 w-4" aria-hidden />
                       Выйти
