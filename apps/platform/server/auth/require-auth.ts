@@ -1,6 +1,6 @@
 import type { Request, RequestHandler } from "express";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import type { UserRole } from "@shared/auth";
+import type { UserRole } from "../../shared/auth";
 import { loadAuthUserSnapshot, type AuthUserSnapshot } from "./auth-user-snapshot";
 import { parseAuthRefreshToken } from "./cookie";
 import { getSessionByRefreshToken } from "./session-service";
