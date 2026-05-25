@@ -12,14 +12,25 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
 type NeonHttp = ReturnType<typeof neon>;
 interface PoolLike {
-  query: <T = Record<string, unknown>>(text: string, params?: unknown[]) => Promise<{ rows: T[] }>;
+  query: <T = Record<string, unknown>>(
+    text: string,
+    params?: unknown[],
+  ) => Promise<{ rows: T[]; rowCount?: number }>;
 }
 function makePoolFromNeon(sql: NeonHttp): PoolLike {
   return {
-    async query<T>(text: string, params?: unknown[]): Promise<{ rows: T[] }> {
+    async query<T>(text: string, params?: unknown[]): Promise<{ rows: T[]; rowCount?: number }> {
       const callable = sql as unknown as (s: string, p?: unknown[]) => Promise<unknown>;
-      const rows = (await callable(text, params ?? [])) as T[];
-      return { rows };
+      const raw = (await callable(text, params ?? [])) as unknown;
+      if (Array.isArray(raw)) {
+        return { rows: raw as T[] };
+      }
+      if (raw && typeof raw === "object" && "rows" in (raw as object)) {
+        const o = raw as { rows: T[]; rowCount?: number; length?: number };
+        const rowCount = typeof o.rowCount === "number" ? o.rowCount : o.length;
+        return { rows: o.rows ?? [], rowCount };
+      }
+      return { rows: [] as T[] };
     },
   };
 }
@@ -119,6 +130,14 @@ function canCreatePasswordResetLink(actor: UserRole, target: UserRole): boolean 
   if (actor === "director") return target !== "admin";
   if (actor === "rop") return target === "regional_manager" || target === "manager";
   return false;
+}
+
+/** Иерархия одобряющих self-service «Забыли пароль?» (SYNC: shared/auth-rbac.ts). */
+function approverRolesFor(role: UserRole): UserRole[] {
+  if (role === "admin") return [];
+  if (role === "director") return ["admin"];
+  if (role === "rop") return ["director"];
+  return ["rop", "director"];
 }
 
 function pickPublicHost(headers: Record<string, string | string[] | undefined>): string {
@@ -1198,6 +1217,301 @@ async function handleSessionsCleanupExpired(
   sendJson(res, 200, { success: true, deleted: del.rows.length });
 }
 
+
+
+const PRR_DIRECTOR_SEES_REQUESTER_ROLES: UserRole[] = ["rop", "regional_manager", "manager", "marketer", "analyst"];
+
+function resetRequestRowVisibleToViewer(
+  me: DbUserRow,
+  row: { approver_user_id: string | null; requester_role: string },
+): boolean {
+  if (me.role === "admin") return true;
+  if (me.role === "rop") return row.approver_user_id === me.id;
+  if (me.role === "director") {
+    return row.approver_user_id === me.id || PRR_DIRECTOR_SEES_REQUESTER_ROLES.includes(row.requester_role as UserRole);
+  }
+  return false;
+}
+
+function parseResetRequestsQuery(req: VercelRequest): { status: string; limit: number } {
+  const q = req.query ?? {};
+  const qs = (v: unknown): string | undefined => {
+    if (typeof v === "string" && v.trim()) return v.trim();
+    if (Array.isArray(v) && typeof v[0] === "string" && v[0].trim()) return v[0]!.trim();
+    return undefined;
+  };
+  const st = qs(q.status) ?? "pending";
+  const limitRaw = qs(q.limit);
+  let limit = Number.parseInt(limitRaw || "50", 10);
+  if (!Number.isFinite(limit) || limit < 1) limit = 50;
+  if (limit > 200) limit = 200;
+  return { status: st, limit };
+}
+
+async function handleResetRequestsList(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  headers: Record<string, string | string[] | undefined>,
+): Promise<void> {
+  const me = await resolveCurrentUser(pool, headers);
+  if (!me) {
+    sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+    return;
+  }
+  if (me.status !== "active") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+  if (me.role !== "admin" && me.role !== "director" && me.role !== "rop") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+  try {
+    await pool.query(
+      `UPDATE password_reset_requests SET status = 'expired', resolved_at = NOW() WHERE status = 'pending' AND expires_at < NOW()`,
+    );
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    console.error("[api/admin] reset-requests-list expire sweep", m.slice(0, 200));
+  }
+  const { status: statusFilter, limit } = parseResetRequestsQuery(req);
+  const allowedStatus = new Set(["pending", "approved", "declined", "expired", "cancelled"]);
+  const st = allowedStatus.has(statusFilter) ? statusFilter : "pending";
+  try {
+    let rows: Array<{
+      id: string;
+      requester_user_id: string;
+      requester_full_name: string;
+      requester_email: string;
+      requester_role: string;
+      status: string;
+      created_at: string;
+      expires_at: string;
+    }>;
+    if (me.role === "admin") {
+      const r = await pool.query(
+        `SELECT r.id, r.requester_user_id, u.full_name AS requester_full_name, u.email AS requester_email, u.role AS requester_role,
+                r.status, r.created_at, r.expires_at
+         FROM password_reset_requests r
+         INNER JOIN users u ON u.id = r.requester_user_id
+         WHERE r.status = $1
+         ORDER BY r.created_at DESC
+         LIMIT $2`,
+        [st, limit],
+      );
+      rows = r.rows as typeof rows;
+    } else if (me.role === "director") {
+      const r = await pool.query(
+        `SELECT r.id, r.requester_user_id, u.full_name AS requester_full_name, u.email AS requester_email, u.role AS requester_role,
+                r.status, r.created_at, r.expires_at
+         FROM password_reset_requests r
+         INNER JOIN users u ON u.id = r.requester_user_id
+         WHERE r.status = $1
+           AND (r.approver_user_id = $2::uuid OR u.role = ANY($3::text[]))
+         ORDER BY r.created_at DESC
+         LIMIT $4`,
+        [st, me.id, PRR_DIRECTOR_SEES_REQUESTER_ROLES, limit],
+      );
+      rows = r.rows as typeof rows;
+    } else {
+      const r = await pool.query(
+        `SELECT r.id, r.requester_user_id, u.full_name AS requester_full_name, u.email AS requester_email, u.role AS requester_role,
+                r.status, r.created_at, r.expires_at
+         FROM password_reset_requests r
+         INNER JOIN users u ON u.id = r.requester_user_id
+         WHERE r.status = $1 AND r.approver_user_id = $2::uuid
+         ORDER BY r.created_at DESC
+         LIMIT $3`,
+        [st, me.id, limit],
+      );
+      rows = r.rows as typeof rows;
+    }
+    sendJson(res, 200, {
+      success: true,
+      items: rows.map((x) => ({
+        id: x.id,
+        requesterId: x.requester_user_id,
+        requesterFullName: x.requester_full_name,
+        requesterEmail: x.requester_email,
+        requesterRole: x.requester_role,
+        status: x.status,
+        createdAt: x.created_at,
+        expiresAt: x.expires_at,
+      })),
+    });
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    console.error("[api/admin] reset-requests-list", m.slice(0, 200));
+    sendJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+  }
+}
+
+async function handleResetRequestApprove(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  headers: Record<string, string | string[] | undefined>,
+): Promise<void> {
+  const me = await resolveCurrentUser(pool, headers);
+  if (!me) {
+    sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+    return;
+  }
+  if (me.status !== "active") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+  if (me.role !== "admin" && me.role !== "director" && me.role !== "rop") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+  const body = (req.body ?? {}) as { id?: unknown; mode?: unknown };
+  const id = typeof body.id === "string" ? body.id.trim() : "";
+  const modeRaw = typeof body.mode === "string" ? body.mode.trim() : "link";
+  if (!id || !UUID_RE.test(id)) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Некорректный идентификатор запроса." });
+    return;
+  }
+  if (modeRaw !== "link") {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Поддерживается только mode=link." });
+    return;
+  }
+  try {
+    const sel = await pool.query<{
+      id: string;
+      requester_user_id: string;
+      approver_user_id: string | null;
+      status: string;
+      expires_at: string;
+      requester_role: string;
+    }>(
+      `SELECT r.id, r.requester_user_id, r.approver_user_id, r.status, r.expires_at, u.role AS requester_role
+       FROM password_reset_requests r
+       INNER JOIN users u ON u.id = r.requester_user_id
+       WHERE r.id = $1::uuid
+       LIMIT 1`,
+      [id],
+    );
+    const row = sel.rows[0];
+    if (!row || !resetRequestRowVisibleToViewer(me, { approver_user_id: row.approver_user_id, requester_role: row.requester_role })) {
+      sendJson(res, 409, { success: false, code: "INVALID_STATE", message: "Запрос недоступен." });
+      return;
+    }
+    const expMs = Date.parse(row.expires_at);
+    const notExpired = Number.isFinite(expMs) && expMs > Date.now();
+    const actorOk = me.role === "admin" || row.approver_user_id === me.id;
+    if (row.status !== "pending" || !notExpired || !actorOk) {
+      sendJson(res, 409, { success: false, code: "INVALID_STATE", message: "Запрос недоступен." });
+      return;
+    }
+    const targetUserId = row.requester_user_id;
+    const token = randomBytes(32).toString("base64url");
+    const tokenHash = sha256Hex(token);
+    await pool.query(
+      `UPDATE password_reset_links SET used_at = NOW(), used_ip = 'superseded' WHERE user_id = $1::uuid AND used_at IS NULL`,
+      [targetUserId],
+    );
+    const ins = await pool.query<{ id: string; expires_at: string }>(
+      `INSERT INTO password_reset_links (user_id, token_hash, created_by, expires_at)
+       VALUES ($1::uuid, $2, $3::uuid, NOW() + interval '60 minutes')
+       RETURNING id, expires_at`,
+      [targetUserId, tokenHash, me.id],
+    );
+    const linkRow = ins.rows[0];
+    if (!linkRow) {
+      sendJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+      return;
+    }
+    await pool.query(
+      `UPDATE password_reset_requests SET status = 'approved', resolved_at = NOW(), reset_link_id = $1::uuid WHERE id = $2::uuid`,
+      [linkRow.id, row.id],
+    );
+    await tryAudit(pool, {
+      actorUserId: me.id,
+      action: "auth.reset_request.approved",
+      entityType: "password_reset_request",
+      entityId: row.id,
+      metadata: { requestId: row.id, requesterId: targetUserId, mode: "link" },
+    });
+    const origin = pickPublicAppOrigin(headers);
+    const url = `${origin}/#/reset?token=${encodeURIComponent(token)}`;
+    sendJson(res, 200, { success: true, url, expiresAt: linkRow.expires_at });
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    console.error("[api/admin] reset-request-approve", m.slice(0, 200));
+    sendJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+  }
+}
+
+async function handleResetRequestDecline(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  headers: Record<string, string | string[] | undefined>,
+): Promise<void> {
+  const me = await resolveCurrentUser(pool, headers);
+  if (!me) {
+    sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+    return;
+  }
+  if (me.status !== "active") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+  if (me.role !== "admin" && me.role !== "director" && me.role !== "rop") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+  const body = (req.body ?? {}) as { id?: unknown; reason?: unknown };
+  const id = typeof body.id === "string" ? body.id.trim() : "";
+  const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 500) : "";
+  if (!id || !UUID_RE.test(id)) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Некорректный идентификатор запроса." });
+    return;
+  }
+  try {
+    const sel = await pool.query<{
+      id: string;
+      status: string;
+      expires_at: string;
+      approver_user_id: string | null;
+      requester_role: string;
+    }>(
+      `SELECT r.id, r.status, r.expires_at, r.approver_user_id, u.role AS requester_role
+       FROM password_reset_requests r
+       INNER JOIN users u ON u.id = r.requester_user_id
+       WHERE r.id = $1::uuid
+       LIMIT 1`,
+      [id],
+    );
+    const row = sel.rows[0];
+    if (!row || !resetRequestRowVisibleToViewer(me, { approver_user_id: row.approver_user_id, requester_role: row.requester_role })) {
+      sendJson(res, 409, { success: false, code: "INVALID_STATE", message: "Запрос недоступен." });
+      return;
+    }
+    const expMs = Date.parse(row.expires_at);
+    const notExpired = Number.isFinite(expMs) && expMs > Date.now();
+    if (row.status !== "pending" || !notExpired) {
+      sendJson(res, 409, { success: false, code: "INVALID_STATE", message: "Запрос недоступен." });
+      return;
+    }
+    await pool.query(`UPDATE password_reset_requests SET status = 'declined', resolved_at = NOW() WHERE id = $1::uuid`, [id]);
+    await tryAudit(pool, {
+      actorUserId: me.id,
+      action: "auth.reset_request.declined",
+      entityType: "password_reset_request",
+      entityId: id,
+      metadata: { requestId: id, reason: reason || undefined },
+    });
+    sendJson(res, 200, { success: true });
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    console.error("[api/admin] reset-request-decline", m.slice(0, 200));
+    sendJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+  }
+}
+
 async function handleMigrationsRun(
   res: VercelResponse,
   pool: PoolLike,
@@ -1288,6 +1602,24 @@ async function handleMigrationsRun(
        )`,
     );
     applied.push("auth_login_failures table");
+
+    await pool.query(
+      `CREATE TABLE IF NOT EXISTS password_reset_requests (
+         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+         requester_user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+         approver_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+         status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','declined','expired','cancelled')),
+         created_at timestamptz NOT NULL DEFAULT NOW(),
+         expires_at timestamptz NOT NULL,
+         resolved_at timestamptz,
+         reset_link_id uuid REFERENCES password_reset_links(id) ON DELETE SET NULL
+       )`,
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_prr_approver_pending ON password_reset_requests(approver_user_id) WHERE status = 'pending'`,
+    );
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_prr_requester ON password_reset_requests(requester_user_id)`);
+    applied.push("password_reset_requests table");
 
     await pool.query(`ALTER TABLE audit_log ALTER COLUMN actor_user_id DROP NOT NULL`);
     applied.push("audit_log.actor_user_id nullable");
@@ -1975,6 +2307,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "password-reset-link-create" && req.method === "POST") {
       await handlePasswordResetLinkCreate(req, res, pool, headers);
+      return;
+    }
+    if (action === "reset-requests-list" && req.method === "GET") {
+      await handleResetRequestsList(req, res, pool, headers);
+      return;
+    }
+    if (action === "reset-request-approve" && req.method === "POST") {
+      await handleResetRequestApprove(req, res, pool, headers);
+      return;
+    }
+    if (action === "reset-request-decline" && req.method === "POST") {
+      await handleResetRequestDecline(req, res, pool, headers);
       return;
     }
     if (action === "audit-list" && req.method === "GET") {
