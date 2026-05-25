@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -29,10 +29,10 @@ import {
 const ALL = "__all__";
 
 function kpiRowTone(pct: number): string {
-  if (pct >= 95) return "bg-emerald-500";
-  if (pct >= 80) return "bg-primary";
-  if (pct >= 60) return "bg-amber-500";
-  return "bg-red-500";
+  if (pct >= 95) return "bg-primary";
+  if (pct >= 80) return "bg-primary/80";
+  if (pct >= 60) return "bg-primary/50";
+  return "bg-destructive";
 }
 
 function formatKpiValue(metric: SalesKpiMetric | undefined, value: number): string {
@@ -50,7 +50,7 @@ function KpiPlanSummaryRow({ row, metric }: KpiSummaryRowProps) {
   const remaining = Math.max(0, row.targetSum - row.actualSum);
   return (
     <div
-      className="space-y-2 rounded-xl border border-border/80 bg-card p-3"
+      className="space-y-2 rounded-xl border border-border bg-card p-3 shadow-sm"
       data-testid={`row-sales-plan-kpi-${row.metricId}`}
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -173,7 +173,7 @@ export default function SalesControlPlansPage() {
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Период</Label>
             <Select value={periodId} onValueChange={setPeriodId}>
-              <SelectTrigger className="min-w-0">
+              <SelectTrigger className="min-w-0 border-border bg-card">
                 <SelectValue placeholder="Период" />
               </SelectTrigger>
               <SelectContent>
@@ -190,7 +190,7 @@ export default function SalesControlPlansPage() {
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">РОП</Label>
                 <Select value={ropTeam} onValueChange={setRopTeam}>
-                  <SelectTrigger className="min-w-0" data-testid="select-sales-plans-rop">
+                  <SelectTrigger className="min-w-0 border-border bg-card" data-testid="select-sales-plans-rop">
                     <SelectValue placeholder="РОП" />
                   </SelectTrigger>
                   <SelectContent>
@@ -206,7 +206,7 @@ export default function SalesControlPlansPage() {
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Менеджер</Label>
                 <Select value={managerFilter} onValueChange={setManagerFilter}>
-                  <SelectTrigger className="min-w-0" data-testid="select-sales-plans-manager">
+                  <SelectTrigger className="min-w-0 border-border bg-card" data-testid="select-sales-plans-manager">
                     <SelectValue placeholder="Менеджер" />
                   </SelectTrigger>
                   <SelectContent>
@@ -224,31 +224,31 @@ export default function SalesControlPlansPage() {
         </div>
       </div>
 
-      <div className="w-full overflow-x-auto rounded-xl border border-border/80">
+      <div className="hidden overflow-x-auto rounded-xl border border-border bg-card shadow-sm md:block">
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead className="min-w-[100px]">Менеджер</TableHead>
-              <TableHead className="min-w-[100px]">Команда</TableHead>
+            <TableRow className="border-b border-border hover:bg-transparent">
+              <TableHead className="min-w-[100px] text-xs font-medium uppercase tracking-wide text-muted-foreground">Менеджер</TableHead>
+              <TableHead className="min-w-[100px] text-xs font-medium uppercase tracking-wide text-muted-foreground">Команда</TableHead>
               {SALES_KPI_METRICS_SORTED.flatMap((m) => [
-                <TableHead key={`${m.id}-t`} className="min-w-[88px] whitespace-nowrap text-right">
+                <TableHead key={`${m.id}-t`} className="min-w-[88px] whitespace-nowrap text-right text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   {m.label} план
                 </TableHead>,
-                <TableHead key={`${m.id}-a`} className="min-w-[88px] whitespace-nowrap text-right">
+                <TableHead key={`${m.id}-a`} className="min-w-[88px] whitespace-nowrap text-right text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   {m.label} факт
                 </TableHead>,
               ])}
-              <TableHead className="min-w-[100px] text-right">ВП план</TableHead>
-              <TableHead className="min-w-[100px] text-right">ВП факт</TableHead>
-              <TableHead className="min-w-[200px]">Комментарий</TableHead>
+              <TableHead className="min-w-[100px] text-right text-xs font-medium uppercase tracking-wide text-muted-foreground">ВП план</TableHead>
+              <TableHead className="min-w-[100px] text-right text-xs font-medium uppercase tracking-wide text-muted-foreground">ВП факт</TableHead>
+              <TableHead className="min-w-[200px] text-xs font-medium uppercase tracking-wide text-muted-foreground">Комментарий</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.map((mgr) => {
               const team = mgr.teamId ? getTeamById(mgr.teamId) : undefined;
               return (
-                <TableRow key={mgr.id} data-testid={`row-sales-manager-${mgr.id}`}>
-                  <TableCell className="font-medium">{mgr.name}</TableCell>
+                <TableRow key={mgr.id} className="min-h-12 border-b border-border hover:bg-muted/40" data-testid={`row-sales-manager-${mgr.id}`}>
+                  <TableCell className="font-medium text-foreground">{mgr.name}</TableCell>
                   <TableCell className="text-muted-foreground">{team?.name ?? "—"}</TableCell>
                   {SALES_KPI_METRICS_SORTED.flatMap((met) => {
                     const t = getTargetValue(periodId, mgr.id, met.id, stored);
@@ -257,7 +257,7 @@ export default function SalesControlPlansPage() {
                       <TableCell key={`${met.id}-t`} className="text-right text-xs tabular-nums text-muted-foreground">
                         {formatSalesMetricValue(met, t)}
                       </TableCell>,
-                      <TableCell key={`${met.id}-a`} className="text-right text-xs tabular-nums">
+                      <TableCell key={`${met.id}-a`} className="text-right text-xs tabular-nums text-foreground">
                         {formatSalesMetricValue(met, a)}
                       </TableCell>,
                     ];
@@ -265,7 +265,7 @@ export default function SalesControlPlansPage() {
                   <TableCell className="text-right text-xs tabular-nums text-muted-foreground">
                     {formatRub(getGrossProfitTarget(periodId, mgr.id, stored))}
                   </TableCell>
-                  <TableCell className="text-right text-xs tabular-nums">{formatRub(getGrossProfitActual(periodId, mgr.id, stored))}</TableCell>
+                  <TableCell className="text-right text-xs tabular-nums text-foreground">{formatRub(getGrossProfitActual(periodId, mgr.id, stored))}</TableCell>
                   <TableCell className="max-w-[240px] truncate text-xs text-muted-foreground">
                     {getPlanComment(periodId, mgr.id, stored)}
                   </TableCell>
@@ -274,6 +274,39 @@ export default function SalesControlPlansPage() {
             })}
           </TableBody>
         </Table>
+      </div>
+
+      <div className="grid gap-3 md:hidden">
+        {rows.map((mgr) => {
+          const team = mgr.teamId ? getTeamById(mgr.teamId) : undefined;
+          return (
+            <div key={mgr.id} className="rounded-xl border border-border bg-card p-4 shadow-sm sm:p-6" data-testid={`row-sales-manager-${mgr.id}`}>
+              <p className="text-sm font-semibold text-foreground">{mgr.name}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{team?.name ?? "—"}</p>
+              <div className="mt-3 space-y-2 border-t border-border pt-3">
+                {SALES_KPI_METRICS_SORTED.map((met) => {
+                  const t = getTargetValue(periodId, mgr.id, met.id, stored);
+                  const a = getActualValue(periodId, mgr.id, met.id, stored);
+                  return (
+                    <div key={met.id} className="flex flex-wrap justify-between gap-2 text-xs">
+                      <span className="text-muted-foreground">{met.label}</span>
+                      <span className="tabular-nums text-foreground">
+                        план {formatSalesMetricValue(met, t)} · факт {formatSalesMetricValue(met, a)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="mt-2 flex flex-wrap justify-between gap-2 text-xs text-muted-foreground">
+                <span>ВП план {formatRub(getGrossProfitTarget(periodId, mgr.id, stored))}</span>
+                <span className="text-foreground">ВП факт {formatRub(getGrossProfitActual(periodId, mgr.id, stored))}</span>
+              </div>
+              {getPlanComment(periodId, mgr.id, stored) ? (
+                <p className="mt-2 text-xs text-muted-foreground">{getPlanComment(periodId, mgr.id, stored)}</p>
+              ) : null}
+            </div>
+          );
+        })}
       </div>
 
       <section className="space-y-3" data-testid="section-sales-plans-kpi">

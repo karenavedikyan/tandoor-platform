@@ -320,9 +320,14 @@ export function SalesPlanFactManagementCockpit({
     <Button
       key={m}
       type="button"
+      variant="ghost"
       size="sm"
-      variant={mode === m ? "default" : "outline"}
-      className={cn("min-h-9 shrink-0 font-semibold", mode === m ? "bg-primary text-primary-foreground hover:bg-[#86B832]" : "border-border")}
+      className={cn(
+        "shrink-0 rounded-md px-3 py-1.5 text-sm font-medium",
+        mode === m
+          ? "bg-primary text-primary-foreground hover:bg-[hsl(var(--figma-primary-hover))] hover:text-primary-foreground"
+          : "bg-muted text-muted-foreground hover:bg-secondary hover:text-secondary-foreground",
+      )}
       data-testid={testId}
       onClick={() => setMode(m)}
     >
@@ -341,7 +346,7 @@ export function SalesPlanFactManagementCockpit({
   }, [role, persona, directorTeamFilter]);
 
   return (
-    <div className="mx-auto min-w-0 max-w-6xl space-y-4 overflow-x-hidden pb-12 text-[#222631]" data-testid="section-sales-plan-fact-cockpit">
+    <div className="mx-auto min-w-0 max-w-6xl space-y-4 overflow-x-hidden pb-12 text-foreground" data-testid="section-sales-plan-fact-cockpit">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">План-факт продаж</h1>
@@ -396,7 +401,7 @@ export function SalesPlanFactManagementCockpit({
       >
         <Button
           type="button"
-          className="min-h-11 w-full bg-primary font-semibold sm:min-h-10"
+          className="min-h-11 w-full bg-primary font-semibold text-primary-foreground hover:bg-[hsl(var(--figma-primary-hover))] sm:min-h-10"
           data-testid="button-sales-plan-fact-create-plan"
           onClick={() => openWizard(null)}
         >
@@ -404,7 +409,7 @@ export function SalesPlanFactManagementCockpit({
         </Button>
         <Button
           type="button"
-          variant="secondary"
+          variant="outline"
           className="min-h-11 w-full font-semibold sm:min-h-10"
           data-testid="button-sales-plan-fact-add-actual"
           onClick={() => openActual({ periodId })}
@@ -432,13 +437,13 @@ export function SalesPlanFactManagementCockpit({
             Начните с плана по РОПам или сразу распределите KPI по менеджерам.
           </p>
           <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-            <Button type="button" className="bg-primary" data-testid="button-sales-plan-fact-empty-create-plan" onClick={() => openWizard(null)}>
+            <Button type="button" className="bg-primary text-primary-foreground hover:bg-[hsl(var(--figma-primary-hover))]" data-testid="button-sales-plan-fact-empty-create-plan" onClick={() => openWizard(null)}>
               Выставить план
             </Button>
             {previousPeriodId ? (
               <Button
                 type="button"
-                variant="secondary"
+                variant="outline"
                 data-testid="button-sales-plan-fact-copy-previous-period"
                 disabled={!previousPeriodHasPlans}
                 onClick={() => void handleCopyPreviousPeriod()}
@@ -466,24 +471,24 @@ export function SalesPlanFactManagementCockpit({
 
       {mode === "overview" && hasPositivePlanInPeriod ? (
         <>
-          <section className="rounded-xl border border-[#E3E6F3] bg-white p-4 shadow-sm" data-testid="section-sales-plan-fact-period-summary">
+          <section className="rounded-xl border border-border bg-card p-4 shadow-sm" data-testid="section-sales-plan-fact-period-summary">
             <h2 className="text-sm font-semibold text-foreground">Итоги периода · {periodLabel}</h2>
             <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <div className="rounded-lg bg-[#EEEFF6] p-3">
+              <div className="rounded-lg bg-muted p-3">
                 <p className="text-xs text-muted-foreground">План суммарно</p>
                 <p className="text-lg font-semibold tabular-nums">{summary.totalPlan.toLocaleString("ru-RU")}</p>
               </div>
-              <div className="rounded-lg bg-[#EEEFF6] p-3">
+              <div className="rounded-lg bg-muted p-3">
                 <p className="text-xs text-muted-foreground">Факт</p>
                 <p className="text-lg font-semibold tabular-nums">
                   {summary.totalActual === null ? "—" : summary.totalActual.toLocaleString("ru-RU")}
                 </p>
               </div>
-              <div className="rounded-lg bg-[#EEEFF6] p-3">
+              <div className="rounded-lg bg-muted p-3">
                 <p className="text-xs text-muted-foreground">Выполнение</p>
                 <p className="text-lg font-semibold tabular-nums">{summary.completionPct === null ? "—" : `${summary.completionPct}%`}</p>
               </div>
-              <div className="rounded-lg bg-[#EEEFF6] p-3">
+              <div className="rounded-lg bg-muted p-3">
                 <p className="text-xs text-muted-foreground">Осталось</p>
                 <p className="text-lg font-semibold tabular-nums">{summary.remaining === null ? "—" : summary.remaining.toLocaleString("ru-RU")}</p>
               </div>
@@ -497,7 +502,7 @@ export function SalesPlanFactManagementCockpit({
           </section>
 
           <div className="grid gap-3 lg:grid-cols-2">
-            <Card className="border-[#E3E6F3]">
+            <Card className="border-border">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">План / факт по KPI</CardTitle>
               </CardHeader>
@@ -510,7 +515,7 @@ export function SalesPlanFactManagementCockpit({
                         {k.actual === null ? "факт не внесён" : `${k.pct ?? 0}%`}
                       </span>
                     </div>
-                    <Progress value={k.pct === null ? 0 : Math.min(100, k.pct)} className="h-2 bg-[#EEEFF6]" />
+                    <Progress value={k.pct === null ? 0 : Math.min(100, k.pct)} className="h-2 bg-muted" />
                     <p className="text-xs text-muted-foreground">
                       {k.plan > 0 ? `План ${formatPlanFactValue(k.metricId, k.plan)}` : "План не задан"}
                       {k.actual !== null && k.plan > 0 ? ` · факт ${formatPlanFactValue(k.metricId, k.actual)}` : ""}
@@ -520,7 +525,7 @@ export function SalesPlanFactManagementCockpit({
               </CardContent>
             </Card>
 
-            <Card className="border-[#E3E6F3]">
+            <Card className="border-border">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">Топ команд по выполнению</CardTitle>
               </CardHeader>
@@ -529,7 +534,7 @@ export function SalesPlanFactManagementCockpit({
                   <p className="text-muted-foreground">Нет данных для рейтинга (нужен факт по всем KPI менеджеров).</p>
                 ) : (
                   topRop.map((r, i) => (
-                    <div key={r.teamId} className="flex items-center justify-between gap-2 rounded-lg border border-border/80 bg-[#EEEFF6]/50 px-3 py-2">
+                    <div key={r.teamId} className="flex items-center justify-between gap-2 rounded-lg border border-border/80 bg-muted/50 px-3 py-2">
                       <span className="min-w-0 truncate">
                         {i + 1}. {r.ropName}
                       </span>
@@ -544,7 +549,7 @@ export function SalesPlanFactManagementCockpit({
       ) : null}
 
       {mode === "overview" ? (
-        <Card className="border-[#E3E6F3]">
+        <Card className="border-border">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Зоны внимания</CardTitle>
           </CardHeader>
@@ -570,7 +575,7 @@ export function SalesPlanFactManagementCockpit({
               <AccordionItem
                 key={r.teamId}
                 value={r.teamId}
-                className="rounded-xl border border-[#E3E6F3] bg-white px-3 shadow-sm"
+                className="rounded-xl border border-border bg-card px-3 shadow-sm"
                 data-testid={`card-sales-plan-fact-rop-${r.teamId}`}
               >
                 <AccordionTrigger
@@ -592,7 +597,8 @@ export function SalesPlanFactManagementCockpit({
                     <Button
                       type="button"
                       size="sm"
-                      className="w-full bg-primary sm:w-auto"
+                      variant="outline"
+                      className="w-full sm:w-auto"
                       data-testid={`button-sales-plan-fact-rop-set-plan-${r.teamId}`}
                       onClick={(e) => {
                         e.stopPropagation();
@@ -604,7 +610,7 @@ export function SalesPlanFactManagementCockpit({
                     <Button
                       type="button"
                       size="sm"
-                      variant="secondary"
+                      variant="outline"
                       className="w-full sm:w-auto"
                       data-testid={`button-sales-plan-fact-rop-distribute-${r.teamId}`}
                       onClick={(e) => {
@@ -646,7 +652,7 @@ export function SalesPlanFactManagementCockpit({
                     {r.managers.map((m) => (
                       <div
                         key={m.managerId}
-                        className="rounded-lg border border-border bg-[#EEEFF6]/40 p-3"
+                        className="rounded-lg border border-border bg-muted/40 p-3"
                         data-testid={`card-sales-plan-fact-manager-${m.managerId}`}
                       >
                         <div className="flex flex-wrap items-center gap-2">
@@ -671,7 +677,7 @@ export function SalesPlanFactManagementCockpit({
                             <Button
                               type="button"
                               size="sm"
-                              variant="default"
+                              variant="outline"
                               className="w-full sm:w-auto"
                               data-testid={`button-sales-plan-fact-manager-set-plan-${m.managerId}`}
                               onClick={(e) => {
@@ -685,7 +691,7 @@ export function SalesPlanFactManagementCockpit({
                             <Button
                               type="button"
                               size="sm"
-                              variant="secondary"
+                              variant="outline"
                               className="w-full sm:w-auto"
                               data-testid={`button-sales-plan-fact-manager-open-${m.managerId}`}
                               onClick={(e) => {
@@ -730,7 +736,7 @@ export function SalesPlanFactManagementCockpit({
             return (
               <Card
                 key={m.id}
-                className="border-[#E3E6F3] transition hover:border-primary/30"
+                className="border-border transition hover:border-primary/30"
                 data-testid={`card-sales-plan-fact-manager-${m.id}`}
               >
                 <CardHeader className="pb-2">
@@ -751,7 +757,7 @@ export function SalesPlanFactManagementCockpit({
                   {!planUnset && row?.actual !== null && row?.completionPct !== null && row?.completionPct !== undefined ? (
                     <>
                       <p className="text-xs font-medium">Выполнение {row.completionPct}%</p>
-                      <Progress value={Math.min(100, row.completionPct)} className="h-2 bg-[#EEEFF6]" />
+                      <Progress value={Math.min(100, row.completionPct)} className="h-2 bg-muted" />
                     </>
                   ) : null}
                   <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
@@ -807,21 +813,21 @@ export function SalesPlanFactManagementCockpit({
                   <span className="min-w-0 truncate">{c.cityName}</span>
                   <span className="shrink-0 text-xs text-muted-foreground">{c.plan > 0 ? c.plan.toLocaleString("ru-RU") : "не задан"}</span>
                 </div>
-                <div className="h-2 overflow-hidden rounded-full bg-[#EEEFF6]">
+                <div className="h-2 overflow-hidden rounded-full bg-muted">
                   <div
-                    className="h-2 rounded-full bg-[#9ACA3C]"
+                    className="h-2 rounded-full bg-primary"
                     style={{ width: `${Math.min(100, (c.plan / maxCityPlan) * 100)}%` }}
                   />
                 </div>
               </div>
             ))}
           </div>
-          <div className="divide-y divide-border rounded-xl border border-[#E3E6F3] bg-white">
+          <div className="divide-y divide-border rounded-xl border border-border bg-card">
             {cityRows.map((c) => (
               <button
                 key={c.cityKey}
                 type="button"
-                className="flex w-full min-w-0 items-center justify-between gap-2 px-3 py-2.5 text-left text-sm hover:bg-[#EEEFF6]/50"
+                className="flex w-full min-w-0 items-center justify-between gap-2 px-3 py-2.5 text-left text-sm hover:bg-muted/50"
                 data-testid={`row-sales-plan-fact-city-${c.cityKey}`}
                 onClick={() => openDetail({ kind: "city", cityKey: c.cityKey })}
               >
@@ -844,21 +850,21 @@ export function SalesPlanFactManagementCockpit({
                   <span className="min-w-0 truncate">{p.productName}</span>
                   <span className="shrink-0 text-xs text-muted-foreground">{p.plan > 0 ? p.plan.toLocaleString("ru-RU") : "не задан"}</span>
                 </div>
-                <div className="h-2 overflow-hidden rounded-full bg-[#EEEFF6]">
+                <div className="h-2 overflow-hidden rounded-full bg-muted">
                   <div
-                    className="h-2 rounded-full bg-[#9ACA3C]"
+                    className="h-2 rounded-full bg-primary"
                     style={{ width: `${Math.min(100, (p.plan / maxProductPlan) * 100)}%` }}
                   />
                 </div>
               </div>
             ))}
           </div>
-          <div className="divide-y divide-border rounded-xl border border-[#E3E6F3] bg-white">
+          <div className="divide-y divide-border rounded-xl border border-border bg-card">
             {productRows.map((p) => (
               <button
                 key={p.productId}
                 type="button"
-                className="flex w-full min-w-0 items-center justify-between gap-2 px-3 py-2.5 text-left text-sm hover:bg-[#EEEFF6]/50"
+                className="flex w-full min-w-0 items-center justify-between gap-2 px-3 py-2.5 text-left text-sm hover:bg-muted/50"
                 data-testid={`row-sales-plan-fact-product-${p.productId}`}
                 onClick={() => openDetail({ kind: "product", productId: p.productId })}
               >
@@ -873,7 +879,7 @@ export function SalesPlanFactManagementCockpit({
       {mode === "entry" ? (
         <section className="space-y-6">
           {role === "sales_director" ? (
-            <Card className="border-[#E3E6F3]">
+            <Card className="border-border">
               <CardHeader>
                 <CardTitle className="text-base">Планы команд (директор)</CardTitle>
               </CardHeader>
@@ -903,7 +909,7 @@ export function SalesPlanFactManagementCockpit({
                   <Button type="button" variant="secondary" data-testid="button-sales-plan-fact-save-draft" disabled={saving} onClick={() => void saveTeamPlans()}>
                     Сохранить планы команд
                   </Button>
-                  <Button type="button" className="bg-[#9ACA3C] text-[#222631] hover:bg-[#86B832]" data-testid="button-sales-plan-fact-submit" disabled={saving} onClick={() => void saveTeamPlans()}>
+                  <Button type="button" variant="outline" data-testid="button-sales-plan-fact-submit" disabled={saving} onClick={() => void saveTeamPlans()}>
                     Выгрузить в persisted
                   </Button>
                 </div>
@@ -911,7 +917,7 @@ export function SalesPlanFactManagementCockpit({
             </Card>
           ) : null}
 
-          <Card className="border-[#E3E6F3]">
+          <Card className="border-border">
             <CardHeader>
               <CardTitle className="text-base">План и факт по менеджерам</CardTitle>
             </CardHeader>
@@ -970,7 +976,7 @@ export function SalesPlanFactManagementCockpit({
                     <Button
                       type="button"
                       size="sm"
-                      className="bg-[#9ACA3C] text-[#222631] hover:bg-[#86B832]"
+                      variant="outline"
                       data-testid="button-sales-plan-fact-submit"
                       disabled={saving}
                       onClick={() => void saveManagerEntry(m.teamId!, m.id, "fact_entered")}
