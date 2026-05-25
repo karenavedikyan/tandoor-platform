@@ -72,6 +72,7 @@ const LazyLogin = lazy(() => import("@/pages/login"));
 const LazyInvite = lazy(() => import("@/pages/invite"));
 const LazyAdminInvitations = lazy(() => import("@/pages/admin-invitations"));
 const LazyAdminUsers = lazy(() => import("@/pages/admin-users"));
+const LazyAdminAudit = lazy(() => import("@/pages/admin-audit"));
 const LazyFeatureInDevelopment = lazy(() => import("@/pages/feature-in-development"));
 
 function suspensePage(Lazy: LazyExoticComponent<ComponentType<any>>): ComponentType<any> {
@@ -122,6 +123,7 @@ const FeatureInDevelopmentRoute = suspensePage(LazyFeatureInDevelopment);
 const InviteRoute = suspensePage(LazyInvite);
 const AdminInvitationsRoute = suspensePage(LazyAdminInvitations);
 const AdminUsersRoute = suspensePage(LazyAdminUsers);
+const AdminAuditRoute = suspensePage(LazyAdminAudit);
 
 function HashRedirect({ to }: { to: string }) {
   const [, setLoc] = useHashLocation();
@@ -235,6 +237,7 @@ function AuthenticatedShell({
         <Route path="/client-base-activity" component={ClientBaseActivityDashboardRoute} />
         <Route path="/admin/users" component={AdminUsersRoute} />
         <Route path="/admin/invitations" component={AdminInvitationsRoute} />
+        <Route path="/admin/audit" component={AdminAuditRoute} />
         <Route path="/users" component={UsersAndAccessRoute} />
         <Route path="/profile/change-password" component={ChangePasswordRoute} />
         <Route path="/profile" component={MyProfileRoute} />

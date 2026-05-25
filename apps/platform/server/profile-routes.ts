@@ -2,6 +2,7 @@ import type { Express, Request, Response } from "express";
 import { requireAuth } from "./auth/require-auth";
 import { requirePermission } from "./auth/require-permission";
 import { changePasswordSelf, getSelf, updateSelf } from "./profile/profile-handlers";
+import { listSelfSessions, revokeOtherSelfSessions, revokeSelfSession } from "./profile/sessions-handlers";
 
 const JSON_CT = "application/json; charset=utf-8";
 
@@ -52,6 +53,51 @@ export function registerProfileRoutes(app: Express): void {
       } catch (e) {
         const m = e instanceof Error ? e.message : String(e);
         console.error("[api/admin] profile-change-password", m.slice(0, 200));
+        applyJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+      }
+    },
+  );
+
+  app.get(
+    "/api/admin/sessions-list-self",
+    requireAuth(),
+    requirePermission("sessions.read_self"),
+    async (req: Request, res: Response) => {
+      try {
+        await listSelfSessions(req, res);
+      } catch (e) {
+        const m = e instanceof Error ? e.message : String(e);
+        console.error("[api/admin] sessions-list-self", m.slice(0, 200));
+        applyJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+      }
+    },
+  );
+
+  app.post(
+    "/api/admin/sessions-revoke-self",
+    requireAuth(),
+    requirePermission("sessions.revoke_self"),
+    async (req: Request, res: Response) => {
+      try {
+        await revokeSelfSession(req, res);
+      } catch (e) {
+        const m = e instanceof Error ? e.message : String(e);
+        console.error("[api/admin] sessions-revoke-self", m.slice(0, 200));
+        applyJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+      }
+    },
+  );
+
+  app.post(
+    "/api/admin/sessions-revoke-others-self",
+    requireAuth(),
+    requirePermission("sessions.revoke_self"),
+    async (req: Request, res: Response) => {
+      try {
+        await revokeOtherSelfSessions(req, res);
+      } catch (e) {
+        const m = e instanceof Error ? e.message : String(e);
+        console.error("[api/admin] sessions-revoke-others-self", m.slice(0, 200));
         applyJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
       }
     },

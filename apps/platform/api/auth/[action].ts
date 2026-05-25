@@ -51,6 +51,82 @@ type UserRole =
 
 type UserStatus = "invited" | "active" | "disabled";
 
+// SYNC: shared/auth-rbac.ts — duplicated inline (self-contained) + audit.read, sessions.read_self, sessions.revoke_self (Prompt 09).
+
+type Permission =
+  | "invitations.create"
+  | "invitations.list_own"
+  | "invitations.revoke_own"
+  | "invitations.revoke_any"
+  | "users.list"
+  | "users.read_any"
+  | "users.update_role"
+  | "users.update_status"
+  | "users.reset_password"
+  | "profile.read_self"
+  | "profile.update_self"
+  | "audit.read"
+  | "sessions.read_self"
+  | "sessions.revoke_self";
+
+const PERMISSIONS_BY_ROLE: Record<UserRole, ReadonlySet<Permission>> = {
+  admin: new Set<Permission>([
+    "invitations.create",
+    "invitations.list_own",
+    "invitations.revoke_own",
+    "invitations.revoke_any",
+    "users.list",
+    "users.read_any",
+    "users.update_role",
+    "users.update_status",
+    "users.reset_password",
+    "profile.read_self",
+    "profile.update_self",
+    "audit.read",
+    "sessions.read_self",
+    "sessions.revoke_self",
+  ]),
+  director: new Set<Permission>([
+    "invitations.create",
+    "invitations.list_own",
+    "invitations.revoke_own",
+    "users.list",
+    "users.read_any",
+    "profile.read_self",
+    "profile.update_self",
+    "audit.read",
+    "sessions.read_self",
+    "sessions.revoke_self",
+  ]),
+  rop: new Set<Permission>([
+    "invitations.create",
+    "invitations.list_own",
+    "invitations.revoke_own",
+    "users.list",
+    "profile.read_self",
+    "profile.update_self",
+    "sessions.read_self",
+    "sessions.revoke_self",
+  ]),
+  regional_manager: new Set<Permission>([
+    "invitations.create",
+    "invitations.list_own",
+    "invitations.revoke_own",
+    "profile.read_self",
+    "profile.update_self",
+    "sessions.read_self",
+    "sessions.revoke_self",
+  ]),
+  manager: new Set<Permission>(["profile.read_self", "profile.update_self", "sessions.read_self", "sessions.revoke_self"]),
+  marketer: new Set<Permission>(["profile.read_self", "profile.update_self", "sessions.read_self", "sessions.revoke_self"]),
+  analyst: new Set<Permission>(["profile.read_self", "profile.update_self", "sessions.read_self", "sessions.revoke_self"]),
+};
+
+function roleHasPermission(role: UserRole, perm: Permission): boolean {
+  const set = PERMISSIONS_BY_ROLE[role];
+  return !!set && set.has(perm);
+}
+
 const AUTH_COOKIE = "tandoor_auth_sess";
 const JSON_CT = "application/json; charset=utf-8";
 const SIMPLE_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

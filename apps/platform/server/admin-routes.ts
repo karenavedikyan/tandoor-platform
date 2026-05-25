@@ -8,6 +8,7 @@ import {
   updateUserRole,
   updateUserStatus,
 } from "./admin/users-handlers";
+import { listAudit } from "./admin/audit-handlers";
 
 const JSON_CT = "application/json; charset=utf-8";
 
@@ -18,6 +19,21 @@ function applyJson(res: Response, status: number, body: Record<string, unknown>)
 }
 
 export function registerAdminRoutes(app: Express): void {
+  app.get(
+    "/api/admin/audit-list",
+    requireAuth(),
+    requirePermission("audit.read"),
+    async (req: Request, res: Response) => {
+      try {
+        await listAudit(req, res);
+      } catch (e) {
+        const m = e instanceof Error ? e.message : String(e);
+        console.error("[api/admin] audit-list", m.slice(0, 200));
+        applyJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+      }
+    },
+  );
+
   app.get(
     "/api/admin/users-list",
     requireAuth(),

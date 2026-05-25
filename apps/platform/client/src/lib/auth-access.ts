@@ -106,6 +106,9 @@ export function canAccessPathForUser(role: UserRole, path: string): boolean {
   if (p === "/admin/invitations") {
     return userCanManageInvitations(role);
   }
+  if (p === "/admin/audit") {
+    return userHas(role, "audit.read");
+  }
   if (p === "/profile" || isUnder(p, "/profile")) {
     return userHas(role, "profile.read_self");
   }
@@ -265,6 +268,14 @@ function buildAdministrationNavGroup(platformUserRole: UserRole | null | undefin
       label: "Приглашения",
       testId: "nav-item-admin-invitations",
       navBehaviorId: "nav-admin-invitations",
+    });
+  }
+  if (userHas(platformUserRole, "audit.read")) {
+    items.push({
+      href: "/admin/audit",
+      label: "Журнал событий",
+      testId: "nav-item-admin-audit",
+      navBehaviorId: "nav-admin-audit",
     });
   }
   if (items.length === 0) return null;
