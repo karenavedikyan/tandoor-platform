@@ -6,6 +6,7 @@
 import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
+  bigint,
   boolean,
   index,
   jsonb,
@@ -37,6 +38,8 @@ export const authUsers = pgTable("users", {
     .default(sql`now()`),
   lastLoginAt: timestamp("last_login_at", { withTimezone: true, mode: "string" }),
   passwordChangedAt: timestamp("password_changed_at", { withTimezone: true, mode: "string" }),
+  /** Telegram user id для аварийного бота восстановления (только admin). */
+  telegramUserId: bigint("telegram_user_id", { mode: "number" }).unique(),
 });
 
 export const passwordResetLinks = pgTable(

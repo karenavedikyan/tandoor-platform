@@ -26,6 +26,7 @@ import {
   resetUserPassword,
   updateUserRole,
   updateUserStatus,
+  updateUserTelegram,
   type AdminUser,
 } from "@/lib/admin-users-api";
 import { createPasswordResetLink } from "@/lib/password-reset-api";
@@ -124,6 +125,11 @@ export default function AdminUsersPage() {
   const canRole = Boolean(user && userHas(user.role, "users.update_role"));
   const canStatus = Boolean(user && userHas(user.role, "users.update_status"));
   const canResetPwd = Boolean(user && userHas(user.role, "users.reset_password"));
+  const canEditAdminTelegram = Boolean(user?.role === "admin" && canRole);
+
+  const [telegramDraftByUserId, setTelegramDraftByUserId] = useState<Record<string, string>>({});
+  const [telegramSavingId, setTelegramSavingId] = useState<string | null>(null);
+  const [telegramErrByUserId, setTelegramErrByUserId] = useState<Record<string, string>>({});
 
   function openResetLink(row: AdminUser) {
     setLinkDialog(row);
@@ -248,25 +254,26 @@ export default function AdminUsersPage() {
               <TableHead>Роль</TableHead>
               <TableHead>Статус</TableHead>
               <TableHead>Последний вход</TableHead>
+              <TableHead className="min-w-[200px]">Telegram user-id</TableHead>
               <TableHead className="w-[220px] text-right">Действия</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {listQ.isLoading ? (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={6} className="h-24 text-center text-sm text-muted-foreground">
+                <TableCell colSpan={7} className="h-24 text-center text-sm text-muted-foreground">
                   Загрузка…
                 </TableCell>
               </TableRow>
             ) : listQ.isError ? (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={6} className="h-24 text-center text-sm text-destructive">
+                <TableCell colSpan={7} className="h-24 text-center text-sm text-destructive">
                   Не удалось загрузить список.
                 </TableCell>
               </TableRow>
             ) : listQ.data && listQ.data.users.length === 0 ? (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={6} className="h-24 text-center text-sm text-muted-foreground">
+                <TableCell colSpan={7} className="h-24 text-center text-sm text-muted-foreground">
                   Пользователи не найдены.
                 </TableCell>
               </TableRow>
@@ -281,6 +288,95 @@ export default function AdminUsersPage() {
                   <TableCell>{userStatusBadge(row.status)}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {row.lastLoginAt ? formatDisplayDateTime(row.lastLoginAt) : "—"}
+                  </TableCell>
+                  <TableCell className="align-top">
+                    {row.role === "admin" && canEditAdminTelegram ? (
+                      <div className="flex max-w-[260px] flex-col gap-1">
+                        <Input
+                          inputMode="numeric"
+                          className="h-9 font-mono text-xs"
+                          placeholder="Не задано"
+                          data-testid={`input-user-telegram-id-${row.id}`}
+                          value={
+                            Object.prototype.hasOwnProperty.call(telegramDraftByUserId, row.id)
+                              ? telegramDraftByUserId[row.id]!
+                              : row.telegramUserId != null
+                                ? String(row.telegramUserId)
+                                : ""
+                          }
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setTelegramDraftByUserId((prev) => ({ ...prev, [row.id]: v }));
+                            setTelegramErrByUserId((prev) => {
+                              if (!prev[row.id]) return prev;
+                              const next = { ...prev };
+                              delete next[row.id];
+                              return next;
+                            });
+                          }}
+                        />
+                        {telegramErrByUserId[row.id] ? (
+                          <p className="text-xs text-destructive">{telegramErrByUserId[row.id]}</p>
+                        ) : null}
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          className="h-8 self-start"
+                          disabled={telegramSavingId === row.id}
+                          onClick={async () => {
+                            const raw = Object.prototype.hasOwnProperty.call(telegramDraftByUserId, row.id)
+                              ? telegramDraftByUserId[row.id]!.trim()
+                              : row.telegramUserId != null
+                                ? String(row.telegramUserId)
+                                : "";
+                            let next: number | null = null;
+                            if (!raw) {
+                              next = null;
+                            } else {
+                              const n = Number(raw);
+                              if (!Number.isFinite(n) || n <= 0 || !Number.isInteger(n)) {
+                                setTelegramErrByUserId((prev) => ({
+                                  ...prev,
+                                  [row.id]: "Укажите целое число больше нуля или оставьте пустым.",
+                                }));
+                                return;
+                              }
+                              next = n;
+                            }
+                            setTelegramSavingId(row.id);
+                            setTelegramErrByUserId((prev) => {
+                              const nextMap = { ...prev };
+                              delete nextMap[row.id];
+                              return nextMap;
+                            });
+                            try {
+                              const r = await updateUserTelegram(row.id, next);
+                              if (!r.ok) {
+                                setTelegramErrByUserId((prev) => ({ ...prev, [row.id]: r.message }));
+                                return;
+                              }
+                              setTelegramDraftByUserId((prev) => {
+                                const nmap = { ...prev };
+                                delete nmap[row.id];
+                                return nmap;
+                              });
+                              await invalidateList();
+                            } finally {
+                              setTelegramSavingId(null);
+                            }
+                          }}
+                        >
+                          {telegramSavingId === row.id ? "Сохранение…" : "Сохранить"}
+                        </Button>
+                      </div>
+                    ) : row.role === "admin" ? (
+                      <span className="font-mono text-xs text-muted-foreground">
+                        {row.telegramUserId != null ? String(row.telegramUserId) : "—"}
+                      </span>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">—</span>
+                    )}
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex flex-wrap justify-end gap-2">
