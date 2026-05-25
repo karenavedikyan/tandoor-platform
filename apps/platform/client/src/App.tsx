@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, type ComponentType, type LazyExoticComponent } from "react";
-import { Switch, Route, Router, useLocation } from "wouter";
+import { Switch, Route, Router, useLocation, Link } from "wouter";
 import { useHashLocation } from "wouter/use-hash-location";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -68,6 +68,8 @@ const LazyClientBaseActivityDashboard = lazy(() => import("@/pages/client-base-a
 const LazyUsersAndAccess = lazy(() => import("@/pages/users-and-access"));
 const LazyMyProfile = lazy(() => import("@/pages/my-profile"));
 const LazyLogin = lazy(() => import("@/pages/login"));
+const LazyInvite = lazy(() => import("@/pages/invite"));
+const LazyAdminInvitations = lazy(() => import("@/pages/admin-invitations"));
 const LazyFeatureInDevelopment = lazy(() => import("@/pages/feature-in-development"));
 
 function suspensePage(Lazy: LazyExoticComponent<ComponentType<any>>): ComponentType<any> {
@@ -114,6 +116,8 @@ const ClientBaseActivityDashboardRoute = suspensePage(LazyClientBaseActivityDash
 const UsersAndAccessRoute = suspensePage(LazyUsersAndAccess);
 const MyProfileRoute = suspensePage(LazyMyProfile);
 const FeatureInDevelopmentRoute = suspensePage(LazyFeatureInDevelopment);
+const InviteRoute = suspensePage(LazyInvite);
+const AdminInvitationsRoute = suspensePage(LazyAdminInvitations);
 
 function HashRedirect({ to }: { to: string }) {
   const [, setLoc] = useHashLocation();
@@ -225,6 +229,7 @@ function AuthenticatedShell({
         <Route path="/feature-in-development" component={FeatureInDevelopmentRoute} />
         <Route path="/communications" component={CommunicationsRoute} />
         <Route path="/client-base-activity" component={ClientBaseActivityDashboardRoute} />
+        <Route path="/admin/invitations" component={AdminInvitationsRoute} />
         <Route path="/users" component={UsersAndAccessRoute} />
         <Route path="/profile" component={MyProfileRoute} />
         <Route path="/dealer-base" component={DealerBaseRoute} />
@@ -298,6 +303,31 @@ function AppRouter() {
     return (
       <Suspense fallback={<PageLoadingFallback />}>
         <LazyLogin />
+      </Suspense>
+    );
+  }
+
+  if (normRoutePath(path).startsWith("/invite/")) {
+    return (
+      <Suspense fallback={<PageLoadingFallback />}>
+        <Switch>
+          <Route path="/invite/:token" component={InviteRoute} />
+          <Route>
+            <div className="flex min-h-screen items-center justify-center bg-background px-4">
+              <Card className="w-full max-w-md">
+                <CardHeader>
+                  <CardTitle className="text-lg">Некорректная ссылка</CardTitle>
+                  <CardDescription>Ожидается полная ссылка приглашения.</CardDescription>
+                </CardHeader>
+                <CardFooter>
+                  <Button asChild className="w-full">
+                    <Link href="/login">На страницу входа</Link>
+                  </Button>
+                </CardFooter>
+              </Card>
+            </div>
+          </Route>
+        </Switch>
       </Suspense>
     );
   }
