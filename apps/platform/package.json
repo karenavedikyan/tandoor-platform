@@ -12,7 +12,6 @@
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
     "auth:db-push": "node scripts/auth-db-push.mjs",
-    "auth:seed-admin": "node scripts/auth-seed-admin.mjs",
     "catalog:import": "node scripts/import-tandoor-public-catalog.mjs",
     "release:import-clients": "node scripts/import-release-clients.mjs",
     "release:import-koteneva": "node scripts/import-koteneva-clients.mjs",
