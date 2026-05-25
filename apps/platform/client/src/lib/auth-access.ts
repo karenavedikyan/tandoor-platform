@@ -6,7 +6,7 @@
 import type { UserRole } from "@shared/auth";
 import type { SalesRole } from "@/lib/sales-control-data";
 import { userRoleToSalesRole } from "@/lib/role-mapping";
-import { userCanManageInvitations } from "@/lib/auth-rbac";
+import { userCanManageInvitations, userHas } from "@/lib/auth-rbac";
 
 export type PilotNavItem = {
   href: string;
@@ -81,8 +81,7 @@ export function defaultHomePathForRole(role: SalesRole): string {
 export function defaultHomePathForUserRole(role: UserRole): string {
   switch (role) {
     case "admin":
-      // TODO(auth-users-admin-cd7c): `/admin/users`
-      return "/sales-control";
+      return "/admin/users";
     case "director":
       return "/sales-control";
     case "rop":
@@ -101,6 +100,9 @@ export function defaultHomePathForUserRole(role: UserRole): string {
 
 export function canAccessPathForUser(role: UserRole, path: string): boolean {
   const p = normPath(path);
+  if (p === "/admin/users") {
+    return userHas(role, "users.list");
+  }
   if (p === "/admin/invitations") {
     return userCanManageInvitations(role);
   }
@@ -242,10 +244,49 @@ export function canAccessClientBaseActivityDashboard(role: SalesRole): boolean {
   return role === "sales_director" || role === "team_lead";
 }
 
+
+function buildAdministrationNavGroup(platformUserRole: UserRole | null | undefined): PilotNavGroup | null {
+  if (!platformUserRole) return null;
+  const items: PilotNavItem[] = [];
+  if (userHas(platformUserRole, "users.list")) {
+    items.push({
+      href: "/admin/users",
+      label: "Пользователи",
+      testId: "nav-item-admin-users",
+      navBehaviorId: "nav-admin-users",
+    });
+  }
+  if (userCanManageInvitations(platformUserRole)) {
+    items.push({
+      href: "/admin/invitations",
+      label: "Приглашения",
+      testId: "nav-item-admin-invitations",
+      navBehaviorId: "nav-admin-invitations",
+    });
+  }
+  if (items.length === 0) return null;
+  return {
+    key: "administration",
+    label: "АДМИНИСТРИРОВАНИЕ",
+    testId: "nav-group-administration",
+    items,
+  };
+}
+
+function withOptionalAdminGroup(
+  platformUserRole: UserRole | null | undefined,
+  model: Extract<PilotNavigationModel, { layout: "grouped" }>,
+): Extract<PilotNavigationModel, { layout: "grouped" }> {
+  const g = buildAdministrationNavGroup(platformUserRole);
+  if (!g) return model;
+  return { ...model, groups: [g, ...model.groups] };
+}
+
 export function getPilotNavigation(
   role: SalesRole,
   dealerBaseClientCount?: number | null,
   tradePointCount?: number | null,
+  platformUserRole?: UserRole | null,
 ): PilotNavigationModel {
   const sch = salesControlHomeHref(role);
 
@@ -328,11 +369,11 @@ export function getPilotNavigation(
   });
 
   if (role === "sales_director") {
-    return directorOrRopNavigation();
+    return withOptionalAdminGroup(platformUserRole, directorOrRopNavigation());
   }
 
   if (role === "team_lead") {
-    return directorOrRopNavigation();
+    return withOptionalAdminGroup(platformUserRole, directorOrRopNavigation());
   }
 
   const flat = ((): PilotNavItem[] => {
@@ -383,8 +424,9 @@ export function getPilotNavItems(
   role: SalesRole,
   dealerBaseClientCount?: number | null,
   tradePointCount?: number | null,
+  platformUserRole?: UserRole | null,
 ): PilotNavItem[] {
-  const m = getPilotNavigation(role, dealerBaseClientCount, tradePointCount);
+  const m = getPilotNavigation(role, dealerBaseClientCount, tradePointCount, platformUserRole);
   if (m.layout === "flat") return m.items;
   return flattenGroupedPilotNavigation(m);
 }
