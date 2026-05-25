@@ -16,3 +16,4 @@ data.db-journal
 data/geocode-city-cache.json
 data/geocode-cache.json
 
+.vercel

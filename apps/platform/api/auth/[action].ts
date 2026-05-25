@@ -656,12 +656,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       }
       const url = process.env.DATABASE_URL;
       if (!url) { sendJson(res, 500, { success: false, code: "NO_DB" }); return; }
-      const { neon } = await import("@neondatabase/serverless");
-      const bcrypt = await import("bcryptjs");
-      const sql = neon(url);
-      const hash = await bcrypt.default.hash(password, 12);
-      const r = await sql`UPDATE users SET password_hash = ${hash}, failed_login_count = 0, locked_until = NULL, must_change_password = false WHERE email = ${email} RETURNING id, email, role, status`;
-      sendJson(res, 200, { success: true, rows: r });
+      try {
+        const { neon } = await import("@neondatabase/serverless");
+        const sql = neon(url);
+        const hash = await bcrypt.hash(password, 12);
+        const r = await sql`UPDATE users SET password_hash = ${hash}, failed_login_count = 0, locked_until = NULL, must_change_password = false WHERE email = ${email} RETURNING id, email, role, status`;
+        sendJson(res, 200, { success: true, rows: r });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        sendJson(res, 500, { success: false, code: "RESET_FAILED", message: msg.slice(0, 300) });
+      }
       return;
     }
     sendJson(res, 404, {
