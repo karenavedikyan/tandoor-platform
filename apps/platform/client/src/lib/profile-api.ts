@@ -74,7 +74,11 @@ export async function getSelf(): Promise<ProfileSelfDTO> {
   return u;
 }
 
-export async function updateSelf(input: { fullName?: string; phone?: string | null }): Promise<ProfileSelfDTO> {
+export async function updateSelf(input: {
+  fullName?: string;
+  phone?: string | null;
+  email?: string;
+}): Promise<ProfileSelfDTO> {
   const res = await fetch("/api/admin/profile-update-self", {
     method: "POST",
     credentials: "same-origin",

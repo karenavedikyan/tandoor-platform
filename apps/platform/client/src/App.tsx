@@ -3,6 +3,7 @@ import { Switch, Route, Router, useLocation, Link } from "wouter";
 import { useHashLocation } from "wouter/use-hash-location";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { OnboardingUiProvider } from "@/context/onboarding-ui-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Toaster } from "@/components/ui/toaster";
@@ -297,10 +298,6 @@ function AuthenticatedApp({ user, logout }: { user: AuthUserDTO; logout: () => P
   const path = loc && loc.length > 0 ? loc : "/";
   const normPath = normRoutePath(path);
 
-  if (user.mustChangePassword && normPath !== "/profile/change-password") {
-    return <HashRedirect to="/profile/change-password" />;
-  }
-
   if (!canAccessPathForUser(user.role, path)) {
     return <HashRedirect to={defaultHomePathForUserRole(user.role)} />;
   }
@@ -404,9 +401,11 @@ function App() {
       <ThemeProvider>
         <TooltipProvider>
           <Toaster />
-          <Router hook={useHashLocation}>
-            <AppRouter />
-          </Router>
+          <OnboardingUiProvider>
+            <Router hook={useHashLocation}>
+              <AppRouter />
+            </Router>
+          </OnboardingUiProvider>
         </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>
