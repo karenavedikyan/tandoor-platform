@@ -71,6 +71,7 @@ const LazyMyProfile = lazy(() => import("@/pages/my-profile"));
 const LazyChangePassword = lazy(() => import("@/pages/change-password"));
 const LazyLogin = lazy(() => import("@/pages/login"));
 const LazyInvite = lazy(() => import("@/pages/invite"));
+const LazyResetPassword = lazy(() => import("@/pages/reset-password"));
 const LazyAdminInvitations = lazy(() => import("@/pages/admin-invitations"));
 const LazyAdminUsers = lazy(() => import("@/pages/admin-users"));
 const LazyAdminAudit = lazy(() => import("@/pages/admin-audit"));
@@ -122,6 +123,7 @@ const MyProfileRoute = suspensePage(LazyMyProfile);
 const ChangePasswordRoute = suspensePage(LazyChangePassword);
 const FeatureInDevelopmentRoute = suspensePage(LazyFeatureInDevelopment);
 const InviteRoute = suspensePage(LazyInvite);
+const ResetPasswordRoute = suspensePage(LazyResetPassword);
 const AdminInvitationsRoute = suspensePage(LazyAdminInvitations);
 const AdminUsersRoute = suspensePage(LazyAdminUsers);
 const AdminAuditRoute = suspensePage(LazyAdminAudit);
@@ -316,6 +318,14 @@ function AppRouter() {
   const { user, isAuthenticated, isLoading, logout } = useCurrentUser();
   const bypass = isDemoAuthBypassEnabled();
   const demoOnly = bypass && isReleaseDemoPath(path) && !isAuthenticated && !isLoading;
+
+  if (normRoutePath(path) === "/reset") {
+    return (
+      <Suspense fallback={<PageLoadingFallback />}>
+        <ResetPasswordRoute />
+      </Suspense>
+    );
+  }
 
   if (path === "/login") {
     return (

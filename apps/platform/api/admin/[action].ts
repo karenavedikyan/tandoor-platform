@@ -113,6 +113,24 @@ function roleHasPermission(role: UserRole, perm: Permission): boolean {
   return !!set && set.has(perm);
 }
 
+/** SYNC: shared/auth-rbac.ts — canCreatePasswordResetLink */
+function canCreatePasswordResetLink(actor: UserRole, target: UserRole): boolean {
+  if (actor === "admin") return target !== "admin";
+  if (actor === "director") return target !== "admin";
+  if (actor === "rop") return target === "regional_manager" || target === "manager";
+  return false;
+}
+
+function pickPublicHost(headers: Record<string, string | string[] | undefined>): string {
+  const xf = headers["x-forwarded-host"];
+  if (typeof xf === "string" && xf.trim()) return xf.trim().split(",")[0]!.trim();
+  if (Array.isArray(xf) && xf[0]?.trim()) return xf[0]!.trim().split(",")[0]!.trim();
+  const h = headers.host;
+  if (typeof h === "string" && h.trim()) return h.trim();
+  if (Array.isArray(h) && h[0]?.trim()) return h[0]!.trim();
+  return "localhost";
+}
+
 const JSON_CT = "application/json; charset=utf-8";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const AUTH_COOKIE = "tandoor_auth_sess";
@@ -695,6 +713,105 @@ async function handleUsersResetPassword(
 
 
 
+async function handlePasswordResetLinkCreate(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  headers: Record<string, string | string[] | undefined>,
+): Promise<void> {
+  const me = await resolveCurrentUser(pool, headers);
+  if (!me) {
+    sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+    return;
+  }
+  if (me.status !== "active") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+
+  const body = req.body as { userId?: unknown };
+  const userId = typeof body.userId === "string" ? body.userId.trim() : "";
+  if (!userId || !UUID_RE.test(userId)) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите корректный идентификатор пользователя." });
+    return;
+  }
+  if (userId === me.id) {
+    sendJson(res, 400, {
+      success: false,
+      code: "SELF_RESET_FORBIDDEN",
+      message: "Нельзя сгенерировать ссылку для собственного аккаунта.",
+    });
+    return;
+  }
+
+  const rlKey = `prl-create:${me.id}`;
+  const rl = rateCheck(rlKey, 10, 60 * 1000);
+  if (!rl.ok) {
+    sendJsonRateLimited(res, rl.retryAfterSec, "Слишком много запросов на создание ссылки. Повторите позже.");
+    return;
+  }
+
+  const cur = await pool.query<DbUserRow>(
+    `SELECT id, email, full_name, phone, role, status, must_change_password, last_login_at, created_at FROM users WHERE id = $1::uuid LIMIT 1`,
+    [userId],
+  );
+  const row = cur.rows[0];
+  if (!row) {
+    sendJson(res, 404, { success: false, code: "USER_NOT_FOUND", message: "Пользователь не найден." });
+    return;
+  }
+  if (row.status !== "active") {
+    sendJson(res, 400, { success: false, code: "USER_INACTIVE", message: "Пользователь неактивен." });
+    return;
+  }
+  if (!canCreatePasswordResetLink(me.role as UserRole, row.role as UserRole)) {
+    sendJson(res, 403, { success: false, code: "PERMISSION_DENIED", message: "Недостаточно прав." });
+    return;
+  }
+
+  const token = randomBytes(32).toString("base64url");
+  const tokenHash = sha256Hex(token);
+
+  await pool.query(
+    `UPDATE password_reset_links SET used_at = NOW(), used_ip = 'superseded' WHERE user_id = $1::uuid AND used_at IS NULL`,
+    [userId],
+  );
+
+  const ins = await pool.query<{ id: string; expires_at: string }>(
+    `INSERT INTO password_reset_links (user_id, token_hash, created_by, expires_at)
+     VALUES ($1::uuid, $2, $3::uuid, NOW() + interval '24 hours')
+     RETURNING id, expires_at`,
+    [userId, tokenHash, me.id],
+  );
+  const linkRow = ins.rows[0];
+  if (!linkRow) {
+    sendJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+    return;
+  }
+
+  await tryAudit(pool, {
+    actorUserId: me.id,
+    action: "auth.reset_link.created",
+    entityType: "user",
+    entityId: userId,
+    metadata: { linkId: linkRow.id, expiresAt: linkRow.expires_at, targetRole: row.role },
+  });
+
+  rateRecord(rlKey, 60 * 1000);
+
+  const host = pickPublicHost(headers);
+  const link = `https://${host}/reset?token=${encodeURIComponent(token)}`;
+
+  sendJson(res, 200, {
+    success: true,
+    token,
+    link,
+    expiresAt: linkRow.expires_at,
+  });
+}
+
+
+
 function currentRefreshTokenHashHex(headers: Record<string, string | string[] | undefined>): string | null {
   const token = parseAuthRefreshToken(typeof headers.cookie === "string" ? headers.cookie : undefined);
   if (!token) return null;
@@ -1014,21 +1131,47 @@ async function handleMigrationsRun(
     await pool.query(`CREATE INDEX IF NOT EXISTS audit_log_entity_idx ON audit_log(entity_type, entity_id)`);
     applied.push("audit_log indexes");
 
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_changed_at timestamptz`);
+    applied.push("users.password_changed_at column");
+
     await pool.query(
       `CREATE TABLE IF NOT EXISTS password_reset_links (
          id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
          user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
          token_hash text NOT NULL,
-         issued_by uuid NULL REFERENCES users(id) ON DELETE SET NULL,
          expires_at timestamptz NOT NULL,
          used_at timestamptz NULL,
-         revoked_at timestamptz NULL,
-         created_at timestamptz NOT NULL DEFAULT NOW()
+         used_ip text,
+         created_at timestamptz NOT NULL DEFAULT NOW(),
+         created_by uuid REFERENCES users(id)
        )`,
     );
     applied.push("password_reset_links table");
+
+    const prlCols = await pool.query<{ column_name: string }>(
+      `SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'password_reset_links'`,
+    );
+    const prlSet = new Set(prlCols.rows.map((r) => r.column_name));
+    if (prlSet.has("issued_by")) {
+      if (!prlSet.has("created_by")) {
+        await pool.query(`ALTER TABLE password_reset_links RENAME COLUMN issued_by TO created_by`);
+      } else {
+        await pool.query(`UPDATE password_reset_links SET created_by = issued_by WHERE created_by IS NULL`);
+        await pool.query(`ALTER TABLE password_reset_links DROP COLUMN issued_by`);
+      }
+    }
+    if (prlSet.has("revoked_at")) {
+      await pool.query(
+        `UPDATE password_reset_links SET used_at = COALESCE(used_at, revoked_at), used_ip = COALESCE(used_ip, 'superseded') WHERE revoked_at IS NOT NULL AND used_at IS NULL`,
+      );
+      await pool.query(`ALTER TABLE password_reset_links DROP COLUMN revoked_at`);
+    }
+    await pool.query(`ALTER TABLE password_reset_links ADD COLUMN IF NOT EXISTS used_ip text`);
+    await pool.query(`ALTER TABLE password_reset_links ADD COLUMN IF NOT EXISTS created_by uuid REFERENCES users(id)`);
+    await pool.query(`UPDATE password_reset_links SET created_by = user_id WHERE created_by IS NULL`);
+    await pool.query(`ALTER TABLE password_reset_links ALTER COLUMN created_by SET NOT NULL`);
     await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS password_reset_links_token_hash_uq ON password_reset_links(token_hash)`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS password_reset_links_user_id_idx ON password_reset_links(user_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_prl_user_active ON password_reset_links(user_id) WHERE used_at IS NULL`);
     applied.push("password_reset_links indexes");
 
     sendJson(res, 200, { success: true, applied });
@@ -1401,6 +1544,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "users-reset-password" && req.method === "POST") {
       await handleUsersResetPassword(req, res, pool, headers);
+      return;
+    }
+    if (action === "password-reset-link-create" && req.method === "POST") {
+      await handlePasswordResetLinkCreate(req, res, pool, headers);
       return;
     }
     if (action === "audit-list" && req.method === "GET") {

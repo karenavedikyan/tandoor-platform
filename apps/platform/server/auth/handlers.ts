@@ -8,13 +8,14 @@
  * Email в БД хранится в **нижнем регистре**; логин сравнивает через `eq(authUsers.email, emailLower)`.
  */
 
-import { eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
+import { createHash } from "node:crypto";
 import type { UserRole, UserStatus } from "@shared/auth";
-import { auditLog, authUsers } from "@shared/auth-schema";
+import { auditLog, authUsers, passwordResetLinks, sessions } from "@shared/auth-schema";
 import type { AuthUserSnapshot } from "./auth-user-snapshot";
 import { buildAuthCookie, clearAuthCookie, parseAuthRefreshToken } from "./cookie";
 import { getAuthDb } from "./db";
-import { verifyPassword } from "./password-hash";
+import { hashPassword, verifyPassword } from "./password-hash";
 import { checkLoginRateLimit, clearLoginRateLimit, recordLoginFailure } from "./rate-limit";
 import { getClientIp } from "./request-meta";
 import { createSession, getSessionByRefreshToken, revokeAllSessionsForUser, revokeSession } from "./session-service";
@@ -95,6 +96,131 @@ function invalidCredentials(): AuthHttpResult {
       code: "INVALID_CREDENTIALS",
       message: "Неверный email или пароль.",
     },
+  };
+}
+
+
+
+function redeemClientIpExpress(
+  headers: Record<string, string | string[] | undefined>,
+  socketRemoteAddress?: string | undefined,
+): string | null {
+  return getClientIp(headers) ?? (socketRemoteAddress?.trim() || null);
+}
+
+function validateRedeemPassword(plain: string): { ok: true; trimmed: string } | { ok: false; message: string } {
+  const t = plain.trim();
+  if (t.length < 12 || t.length > 200) {
+    return { ok: false, message: "Пароль должен быть не короче 12 символов и содержать букву и цифру." };
+  }
+  if (!/\d/.test(t)) {
+    return { ok: false, message: "Пароль должен быть не короче 12 символов и содержать букву и цифру." };
+  }
+  if (!/[a-zA-Z\u0400-\u04FF]/.test(t)) {
+    return { ok: false, message: "Пароль должен быть не короче 12 символов и содержать букву и цифру." };
+  }
+  return { ok: true, trimmed: t };
+}
+
+function sha256Hex(value: string): string {
+  return createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+export async function passwordResetLinkRedeemHandler(input: {
+  body: unknown;
+  headers: Record<string, string | string[] | undefined>;
+  socketRemoteAddress?: string | undefined;
+}): Promise<AuthHttpResult> {
+  const body = input.body as { token?: unknown; newPassword?: unknown };
+  const token = typeof body?.token === "string" ? body.token.trim() : "";
+  const newPassword = typeof body?.newPassword === "string" ? body.newPassword : "";
+  if (!token || token.length < 30 || token.length > 100) {
+    return { status: 400, json: { success: false, code: "INVALID_INPUT", message: "Некорректные данные." } };
+  }
+  const pwv = validateRedeemPassword(newPassword);
+  if (!pwv.ok) {
+    return { status: 400, json: { success: false, code: "PASSWORD_TOO_WEAK", message: pwv.message } };
+  }
+
+  const db = getAuthDb();
+  if (!db) return internalError();
+
+  const tokenHash = sha256Hex(token);
+  const rows = await db
+    .select({
+      id: passwordResetLinks.id,
+      userId: passwordResetLinks.userId,
+      expiresAt: passwordResetLinks.expiresAt,
+      usedAt: passwordResetLinks.usedAt,
+    })
+    .from(passwordResetLinks)
+    .where(eq(passwordResetLinks.tokenHash, tokenHash))
+    .limit(1);
+  const row = rows[0];
+  if (!row) {
+    return { status: 400, json: { success: false, code: "RESET_LINK_INVALID", message: "Ссылка недействительна." } };
+  }
+  if (row.usedAt != null) {
+    await tryAudit({
+      actorUserId: null,
+      action: "auth.reset_link.expired_attempt",
+      entityType: "user",
+      entityId: row.userId,
+      metadata: { linkId: row.id, reason: "used" },
+    });
+    return { status: 400, json: { success: false, code: "RESET_LINK_USED", message: "Ссылка уже использована." } };
+  }
+  const expMs = Date.parse(row.expiresAt);
+  if (!Number.isFinite(expMs) || expMs <= Date.now()) {
+    await tryAudit({
+      actorUserId: null,
+      action: "auth.reset_link.expired_attempt",
+      entityType: "user",
+      entityId: row.userId,
+      metadata: { linkId: row.id, reason: "expired" },
+    });
+    return { status: 400, json: { success: false, code: "RESET_LINK_EXPIRED", message: "Срок действия ссылки истёк." } };
+  }
+
+  const ip = redeemClientIpExpress(input.headers, input.socketRemoteAddress);
+  const ipVal = ip ?? "";
+  const newHash = await hashPassword(pwv.trimmed);
+  try {
+    await db
+      .update(authUsers)
+      .set({
+        passwordHash: newHash,
+        mustChangePassword: false,
+        passwordChangedAt: sql`NOW()`,
+        updatedAt: sql`NOW()`,
+      })
+      .where(eq(authUsers.id, row.userId));
+    await db
+      .update(passwordResetLinks)
+      .set({ usedAt: sql`NOW()`, usedIp: ipVal })
+      .where(eq(passwordResetLinks.id, row.id));
+    await db
+      .update(sessions)
+      .set({ revokedAt: sql`NOW()` })
+      .where(and(eq(sessions.userId, row.userId), isNull(sessions.revokedAt)));
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    console.error("[auth] passwordResetLinkRedeemHandler", m.slice(0, 200));
+    return internalError();
+  }
+
+  await tryAudit({
+    actorUserId: null,
+    action: "auth.reset_link.used",
+    entityType: "user",
+    entityId: row.userId,
+    metadata: { linkId: row.id, ip },
+  });
+
+  return {
+    status: 200,
+    cacheControl: "no-store",
+    json: { success: true, message: "Пароль обновлён. Войдите с новым паролем." },
   };
 }
 

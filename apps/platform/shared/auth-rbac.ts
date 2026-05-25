@@ -137,3 +137,14 @@ export function allowedInviteTargetsFor(inviter: UserRole): UserRole[] {
 export function userCanManageInvitations(role: UserRole): boolean {
   return roleHasPermission(role, "invitations.create");
 }
+
+/**
+ * Может ли актор выписать одноразовую ссылку смены пароля для пользователя с ролью target.
+ * Не учитывает self и статус цели — это проверяет API.
+ */
+export function canCreatePasswordResetLink(actor: UserRole, target: UserRole): boolean {
+  if (actor === "admin") return target !== "admin";
+  if (actor === "director") return target !== "admin";
+  if (actor === "rop") return target === "regional_manager" || target === "manager";
+  return false;
+}

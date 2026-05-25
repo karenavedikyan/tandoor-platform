@@ -18,7 +18,8 @@
     "release:import-koteneva": "node scripts/import-koteneva-clients.mjs",
     "release:import-koteneva:slice1981": "node scripts/import-koteneva-clients.mjs --from-master-slice=1981",
     "release:geocode": "node scripts/geocode-release-client-addresses.mjs",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "test:auth-access": "tsx client/src/lib/__tests__/auth-access.test.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

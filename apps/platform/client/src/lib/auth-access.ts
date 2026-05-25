@@ -5,8 +5,20 @@
 
 import type { UserRole } from "@shared/auth";
 import type { SalesRole } from "@/lib/sales-control-data";
+import { canCreatePasswordResetLink } from "@shared/auth-rbac";
 import { userRoleToSalesRole } from "@/lib/role-mapping";
 import { userCanManageInvitations, userHas } from "@/lib/auth-rbac";
+
+/**
+ * Кнопка «Ссылка для смены пароля»: матрица ролей как на сервере, плюс запрет для собственной строки.
+ */
+export function canCreateResetLink(
+  actor: { id: string; role: UserRole },
+  target: { id: string; role: UserRole },
+): boolean {
+  if (actor.id === target.id) return false;
+  return canCreatePasswordResetLink(actor.role, target.role);
+}
 
 export type PilotNavItem = {
   href: string;

@@ -308,6 +308,124 @@ function getPool(): PoolLike | null {
   return cachedPool;
 }
 
+
+function redeemClientIp(req: VercelRequest, headers: Record<string, string | string[] | undefined>): string | null {
+  const xff = headers["x-forwarded-for"];
+  if (typeof xff === "string" && xff.trim()) {
+    const first = xff.split(",")[0]?.trim();
+    if (first) return first;
+  }
+  if (Array.isArray(xff) && xff[0]?.trim()) {
+    const first = xff[0]!.split(",")[0]?.trim();
+    if (first) return first;
+  }
+  const ra = req.socket?.remoteAddress ?? null;
+  return ra && ra.trim() ? ra.trim() : null;
+}
+
+function validateRedeemPassword(plain: string): { ok: true; trimmed: string } | { ok: false; message: string } {
+  const t = plain.trim();
+  if (t.length < 12 || t.length > 200) {
+    return { ok: false, message: "Пароль должен быть не короче 12 символов и содержать букву и цифру." };
+  }
+  if (!/\d/.test(t)) {
+    return { ok: false, message: "Пароль должен быть не короче 12 символов и содержать букву и цифру." };
+  }
+  if (!/[a-zA-Z\u0400-\u04FF]/.test(t)) {
+    return { ok: false, message: "Пароль должен быть не короче 12 символов и содержать букву и цифру." };
+  }
+  return { ok: true, trimmed: t };
+}
+
+async function handlePasswordResetLinkRedeem(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+): Promise<void> {
+  const headers = vercelHeaders(req);
+  const body = (req.body ?? {}) as { token?: unknown; newPassword?: unknown };
+  const token = typeof body.token === "string" ? body.token.trim() : "";
+  const newPassword = typeof body.newPassword === "string" ? body.newPassword : "";
+  if (!token || token.length < 30 || token.length > 100) {
+    sendJson(res, 400, { success: false, code: "INVALID_INPUT", message: "Некорректные данные." });
+    return;
+  }
+  const pwv = validateRedeemPassword(newPassword);
+  if (!pwv.ok) {
+    sendJson(res, 400, { success: false, code: "PASSWORD_TOO_WEAK", message: pwv.message });
+    return;
+  }
+
+  const tokenHash = sha256Hex(token);
+  const sel = await pool.query<{ id: string; user_id: string; expires_at: string; used_at: string | null }>(
+    `SELECT id, user_id, expires_at, used_at FROM password_reset_links WHERE token_hash = $1 LIMIT 1`,
+    [tokenHash],
+  );
+  const row = sel.rows[0];
+  if (!row) {
+    sendJson(res, 400, { success: false, code: "RESET_LINK_INVALID", message: "Ссылка недействительна." });
+    return;
+  }
+  if (row.used_at != null) {
+    await tryAudit(pool, {
+      actorUserId: null,
+      action: "auth.reset_link.expired_attempt",
+      entityType: "user",
+      entityId: row.user_id,
+      metadata: { linkId: row.id, reason: "used" },
+    });
+    sendJson(res, 400, { success: false, code: "RESET_LINK_USED", message: "Ссылка уже использована." });
+    return;
+  }
+  const expMs = Date.parse(row.expires_at);
+  if (!Number.isFinite(expMs) || expMs <= Date.now()) {
+    await tryAudit(pool, {
+      actorUserId: null,
+      action: "auth.reset_link.expired_attempt",
+      entityType: "user",
+      entityId: row.user_id,
+      metadata: { linkId: row.id, reason: "expired" },
+    });
+    sendJson(res, 400, { success: false, code: "RESET_LINK_EXPIRED", message: "Срок действия ссылки истёк." });
+    return;
+  }
+
+  const ip = redeemClientIp(req, headers);
+  const ipVal = ip ?? "";
+  const newHash = await bcrypt.hash(pwv.trimmed, 12);
+  try {
+    await pool.query(
+      `UPDATE users SET password_hash = $1, must_change_password = false, password_changed_at = NOW(), updated_at = NOW() WHERE id = $2::uuid`,
+      [newHash, row.user_id],
+    );
+    await pool.query(`UPDATE password_reset_links SET used_at = NOW(), used_ip = $1 WHERE id = $2::uuid`, [ipVal, row.id]);
+    await pool.query(
+      `UPDATE sessions SET revoked_at = NOW() WHERE user_id = $1::uuid AND revoked_at IS NULL`,
+      [row.user_id],
+    );
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    console.error("[api/auth] password-reset-link-redeem", m.slice(0, 200));
+    sendJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+    return;
+  }
+
+  await tryAudit(pool, {
+    actorUserId: null,
+    action: "auth.reset_link.used",
+    entityType: "user",
+    entityId: row.user_id,
+    metadata: { linkId: row.id, ip },
+  });
+
+  sendJson(res, 200, {
+    success: true,
+    message: "Пароль обновлён. Войдите с новым паролем.",
+  });
+}
+
+
+
 type DbUserRow = {
   id: string;
   email: string;
@@ -632,6 +750,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "me" && req.method === "GET") {
       applyResult(res, await handleMe(headers));
+      return;
+    }
+    if (action === "password-reset-link-redeem" && req.method === "POST") {
+      const pool = getPool();
+      if (!pool) {
+        sendJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+        return;
+      }
+      await handlePasswordResetLinkRedeem(req, res, pool);
       return;
     }
     sendJson(res, 404, {
