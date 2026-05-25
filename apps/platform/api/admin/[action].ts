@@ -1410,6 +1410,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       await handleMigrationsRun(res, pool, headers);
       return;
     }
+    if (action === "audit-test" && req.method === "POST") {
+      const me = await resolveCurrentUser(pool, headers);
+      if (!me || me.role !== "admin") { sendJson(res, 403, { success: false }); return; }
+      try {
+        const ins = await pool.query<{ id: string }>(
+          `INSERT INTO audit_log (actor_user_id, action, entity_type, entity_id, metadata) VALUES ($1::uuid, $2, $3, $4, $5::jsonb) RETURNING id`,
+          [me.id, "audit.debug.test", "system", "debug", JSON.stringify({ ts: Date.now() })],
+        );
+        sendJson(res, 200, { success: true, inserted: ins.rows });
+      } catch (e) {
+        const m = e instanceof Error ? e.message : String(e);
+        sendJson(res, 500, { success: false, err: m.slice(0, 500) });
+      }
+      return;
+    }
 
     sendJson(res, 404, {
       success: false,
