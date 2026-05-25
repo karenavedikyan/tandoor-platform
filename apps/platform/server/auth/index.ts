@@ -4,6 +4,7 @@ export * from "./session-ttl";
 export * from "./cookie";
 export * from "./session-service";
 export * from "./require-auth";
+export * from "./require-permission";
 export * from "./auth-user-snapshot";
 export * from "./request-meta";
 export * from "./rate-limit";

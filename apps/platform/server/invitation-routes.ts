@@ -1,5 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { requireAuth } from "./auth/require-auth";
+import { requirePermission } from "./auth/require-permission";
 import {
   acceptInvitation,
   createInvitation,
@@ -21,25 +22,35 @@ function applyJson(res: Response, status: number, body: Record<string, unknown>,
  * `/api/invitations/*` для локального dev (Express).
  */
 export function registerInvitationRoutes(app: Express): void {
-  app.post("/api/invitations/create", requireAuth(), async (req: Request, res: Response) => {
-    try {
-      await createInvitation(req, res);
-    } catch (e) {
-      const m = e instanceof Error ? e.message : String(e);
-      console.error("[api/invitations] create", m.slice(0, 200));
-      applyJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
-    }
-  });
+  app.post(
+    "/api/invitations/create",
+    requireAuth(),
+    requirePermission("invitations.create"),
+    async (req: Request, res: Response) => {
+      try {
+        await createInvitation(req, res);
+      } catch (e) {
+        const m = e instanceof Error ? e.message : String(e);
+        console.error("[api/invitations] create", m.slice(0, 200));
+        applyJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+      }
+    },
+  );
 
-  app.get("/api/invitations/list", requireAuth(), async (req: Request, res: Response) => {
-    try {
-      await listInvitations(req, res);
-    } catch (e) {
-      const m = e instanceof Error ? e.message : String(e);
-      console.error("[api/invitations] list", m.slice(0, 200));
-      applyJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
-    }
-  });
+  app.get(
+    "/api/invitations/list",
+    requireAuth(),
+    requirePermission("invitations.list_own"),
+    async (req: Request, res: Response) => {
+      try {
+        await listInvitations(req, res);
+      } catch (e) {
+        const m = e instanceof Error ? e.message : String(e);
+        console.error("[api/invitations] list", m.slice(0, 200));
+        applyJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+      }
+    },
+  );
 
   app.post("/api/invitations/revoke", requireAuth(), async (req: Request, res: Response) => {
     try {

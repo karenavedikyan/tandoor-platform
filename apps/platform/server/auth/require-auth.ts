@@ -1,13 +1,10 @@
 import type { Request, RequestHandler } from "express";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import type { UserRole } from "@shared/auth";
 import { loadAuthUserSnapshot, type AuthUserSnapshot } from "./auth-user-snapshot";
 import { parseAuthRefreshToken } from "./cookie";
 import { getSessionByRefreshToken } from "./session-service";
 
 export type VercelHandler = (req: VercelRequest, res: VercelResponse) => void | Promise<void>;
-
-export type AuthPredicate = (ctx: { userId: string }) => boolean | Promise<boolean>;
 
 export type { AuthUserSnapshot } from "./auth-user-snapshot";
 
@@ -80,20 +77,4 @@ export function withAuth(handler: VercelHandler): VercelHandler {
       res.status(500).json({ success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
     }
   };
-}
-
-/**
- * TODO(auth-rbac-scope-cd7c): проверка ролей на API.
- * Сейчас — заглушка (пропускает запрос без проверки); не использовать для защиты до реализации RBAC.
- */
-export function requireRole(..._roles: UserRole[]): RequestHandler {
-  return (_req, _res, next) => next();
-}
-
-/**
- * TODO(auth-rbac-scope-cd7c): произвольные предикаты доступа.
- * Сейчас — заглушка; не использовать для защиты до реализации RBAC.
- */
-export function requireAnyOf(..._predicates: AuthPredicate[]): RequestHandler {
-  return (_req, _res, next) => next();
 }
