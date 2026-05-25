@@ -1,0 +1,666 @@
+/**
+ * Vercel Serverless: `/api/admin/:action` (users-list | users-get | users-update-role | …).
+ *
+ * Self-contained: только `@vercel/node`, `@neondatabase/serverless`, `bcryptjs`, `node:crypto`.
+ * Контракт совпадает с `server/admin/users-handlers.ts` + Express `server/admin-routes.ts`.
+ */
+
+import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { neon } from "@neondatabase/serverless";
+import bcrypt from "bcryptjs";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+
+type NeonHttp = ReturnType<typeof neon>;
+interface PoolLike {
+  query: <T = Record<string, unknown>>(text: string, params?: unknown[]) => Promise<{ rows: T[] }>;
+}
+function makePoolFromNeon(sql: NeonHttp): PoolLike {
+  return {
+    async query<T>(text: string, params?: unknown[]): Promise<{ rows: T[] }> {
+      const callable = sql as unknown as (s: string, p?: unknown[]) => Promise<unknown>;
+      const rows = (await callable(text, params ?? [])) as T[];
+      return { rows };
+    },
+  };
+}
+
+type UserRole =
+  | "director"
+  | "rop"
+  | "regional_manager"
+  | "manager"
+  | "marketer"
+  | "analyst"
+  | "admin";
+
+type UserStatus = "invited" | "active" | "disabled";
+
+const BUSINESS_ROLES: UserRole[] = ["director", "rop", "regional_manager", "manager", "marketer", "analyst"];
+
+// SYNC: shared/auth-rbac.ts — keep this matrix in sync (self-contained rule, PR #224/#226).
+
+type Permission =
+  | "invitations.create"
+  | "invitations.list_own"
+  | "invitations.revoke_own"
+  | "invitations.revoke_any"
+  | "users.list"
+  | "users.read_any"
+  | "users.update_role"
+  | "users.update_status"
+  | "users.reset_password"
+  | "profile.read_self"
+  | "profile.update_self";
+
+const PERMISSIONS_BY_ROLE: Record<UserRole, ReadonlySet<Permission>> = {
+  admin: new Set<Permission>([
+    "invitations.create",
+    "invitations.list_own",
+    "invitations.revoke_own",
+    "invitations.revoke_any",
+    "users.list",
+    "users.read_any",
+    "users.update_role",
+    "users.update_status",
+    "users.reset_password",
+    "profile.read_self",
+    "profile.update_self",
+  ]),
+  director: new Set<Permission>([
+    "invitations.create",
+    "invitations.list_own",
+    "invitations.revoke_own",
+    "users.list",
+    "users.read_any",
+    "profile.read_self",
+    "profile.update_self",
+  ]),
+  rop: new Set<Permission>([
+    "invitations.create",
+    "invitations.list_own",
+    "invitations.revoke_own",
+    "users.list",
+    "profile.read_self",
+    "profile.update_self",
+  ]),
+  regional_manager: new Set<Permission>([
+    "invitations.create",
+    "invitations.list_own",
+    "invitations.revoke_own",
+    "profile.read_self",
+    "profile.update_self",
+  ]),
+  manager: new Set<Permission>(["profile.read_self", "profile.update_self"]),
+  marketer: new Set<Permission>(["profile.read_self", "profile.update_self"]),
+  analyst: new Set<Permission>(["profile.read_self", "profile.update_self"]),
+};
+
+function roleHasPermission(role: UserRole, perm: Permission): boolean {
+  const set = PERMISSIONS_BY_ROLE[role];
+  return !!set && set.has(perm);
+}
+
+const JSON_CT = "application/json; charset=utf-8";
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const AUTH_COOKIE = "tandoor_auth_sess";
+
+let cachedPool: PoolLike | null | undefined;
+
+function resolveDatabaseUrl(): string | null {
+  const a = process.env.DATABASE_URL?.trim();
+  if (a) return a;
+  const b = process.env.POSTGRES_URL?.trim();
+  if (b) return b;
+  const c = process.env.NEON_DATABASE_URL?.trim();
+  if (c) return c;
+  return null;
+}
+
+function getPool(): PoolLike | null {
+  if (cachedPool !== undefined) return cachedPool;
+  const url = resolveDatabaseUrl();
+  if (!url) {
+    cachedPool = null;
+    return null;
+  }
+  cachedPool = makePoolFromNeon(neon(url));
+  return cachedPool;
+}
+
+function vercelHeaders(req: VercelRequest): Record<string, string | string[] | undefined> {
+  return (req.headers ?? {}) as Record<string, string | string[] | undefined>;
+}
+
+function sha256Hex(value: string): string {
+  return createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+function sha256Buffer(value: string): Buffer {
+  return createHash("sha256").update(value, "utf8").digest();
+}
+
+function timingSafeEqualHex(storedHex: string, plainToken: string): boolean {
+  let stored: Buffer;
+  try {
+    stored = Buffer.from(storedHex, "hex");
+  } catch {
+    return false;
+  }
+  const computed = sha256Buffer(plainToken);
+  if (stored.length !== computed.length) return false;
+  return timingSafeEqual(stored, computed);
+}
+
+function parseAuthRefreshToken(cookieHeader: string | undefined): string | null {
+  if (!cookieHeader?.trim()) return null;
+  for (const p of cookieHeader.split(";")) {
+    const idx = p.indexOf("=");
+    if (idx < 0) continue;
+    const k = p.slice(0, idx).trim();
+    if (k !== AUTH_COOKIE) continue;
+    try {
+      const raw = decodeURIComponent(p.slice(idx + 1).trim());
+      return raw || null;
+    } catch {
+      return p.slice(idx + 1).trim() || null;
+    }
+  }
+  return null;
+}
+
+type DbUserRow = {
+  id: string;
+  email: string;
+  full_name: string;
+  role: string;
+  status: string;
+  must_change_password: boolean;
+  last_login_at: string | null;
+};
+
+async function tryAudit(
+  pool: PoolLike,
+  input: {
+    actorUserId: string | null;
+    action: string;
+    entityType: string;
+    entityId: string;
+    metadata: Record<string, unknown>;
+  },
+): Promise<void> {
+  try {
+    await pool.query(
+      `INSERT INTO audit_log (actor_user_id, action, entity_type, entity_id, metadata)
+       VALUES ($1::uuid, $2, $3, $4, $5::jsonb)`,
+      [input.actorUserId, input.action, input.entityType, input.entityId, JSON.stringify(input.metadata)],
+    );
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    console.error("[api/admin] audit", input.action, m.slice(0, 200));
+  }
+}
+
+function adminPublicUserFromRow(r: {
+  id: string;
+  email: string;
+  full_name: string;
+  role: string;
+  status: string;
+  must_change_password: boolean;
+  last_login_at: string | null;
+  created_at: string;
+}): Record<string, unknown> {
+  return {
+    id: r.id,
+    email: r.email,
+    fullName: r.full_name,
+    role: r.role as UserRole,
+    status: r.status as UserStatus,
+    mustChangePassword: r.must_change_password,
+    lastLoginAt: r.last_login_at,
+    createdAt: r.created_at,
+  };
+}
+
+async function resolveCurrentUser(
+  pool: PoolLike,
+  headers: Record<string, string | string[] | undefined>,
+): Promise<DbUserRow | null> {
+  const token = parseAuthRefreshToken(typeof headers.cookie === "string" ? headers.cookie : undefined);
+  if (!token) return null;
+  const hashHex = sha256Hex(token);
+  const res = await pool.query<DbUserRow & { refresh_token_hash: string }>(
+    `SELECT u.id, u.email, u.full_name, u.role, u.status, u.must_change_password, u.last_login_at,
+            s.refresh_token_hash
+     FROM sessions s
+     INNER JOIN users u ON u.id = s.user_id
+     WHERE s.refresh_token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > NOW()
+     LIMIT 1`,
+    [hashHex],
+  );
+  const row = res.rows[0];
+  if (!row || !timingSafeEqualHex(row.refresh_token_hash, token)) return null;
+  const { refresh_token_hash: _h, ...u } = row;
+  return u;
+}
+
+function sendJson(res: VercelResponse, status: number, body: Record<string, unknown>): void {
+  res.setHeader("Content-Type", JSON_CT);
+  res.setHeader("Cache-Control", "no-store");
+  res.status(status).json(body);
+}
+
+function sanitizeLikeFragment(raw: string): string {
+  return raw.replace(/[%_\\]/g, "");
+}
+
+async function handleUsersList(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  headers: Record<string, string | string[] | undefined>,
+): Promise<void> {
+  const me = await resolveCurrentUser(pool, headers);
+  if (!me) {
+    sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+    return;
+  }
+  if (me.status !== "active") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+  if (!roleHasPermission(me.role as UserRole, "users.list")) {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+
+  const q = req.query ?? {};
+  const qRaw = typeof q.q === "string" ? q.q.trim() : "";
+  const roleRaw = typeof q.role === "string" ? q.role.trim() : "";
+  const statusRaw = typeof q.status === "string" ? q.status.trim() : "";
+  const limitRaw = typeof q.limit === "string" ? q.limit.trim() : "";
+  const offsetRaw = typeof q.offset === "string" ? q.offset.trim() : "";
+
+  let limit = Number.parseInt(limitRaw || "50", 10);
+  if (!Number.isFinite(limit) || limit < 1) limit = 50;
+  if (limit > 200) limit = 200;
+  let offset = Number.parseInt(offsetRaw || "0", 10);
+  if (!Number.isFinite(offset) || offset < 0) offset = 0;
+
+  const conds: string[] = [];
+  const params: unknown[] = [];
+  let pi = 1;
+
+  const qFrag = sanitizeLikeFragment(qRaw);
+  if (qFrag) {
+    conds.push(`(email ILIKE $${pi} OR full_name ILIKE $${pi})`);
+    params.push(`%${qFrag}%`);
+    pi++;
+  }
+  if (roleRaw && BUSINESS_ROLES.includes(roleRaw as UserRole)) {
+    conds.push(`role = $${pi}`);
+    params.push(roleRaw);
+    pi++;
+  }
+  if (statusRaw === "active" || statusRaw === "disabled" || statusRaw === "invited") {
+    conds.push(`status = $${pi}`);
+    params.push(statusRaw);
+    pi++;
+  }
+
+  const whereSql = conds.length > 0 ? `WHERE ${conds.join(" AND ")}` : "";
+
+  const countRes = await pool.query<{ n: number }>(`SELECT COUNT(*)::int AS n FROM users ${whereSql}`, params);
+  const total = countRes.rows[0]?.n ?? 0;
+
+  const limitPh = pi;
+  const offsetPh = pi + 1;
+  const listSql = `SELECT id, email, full_name, role, status, must_change_password, last_login_at, created_at
+     FROM users ${whereSql} ORDER BY created_at DESC LIMIT $${limitPh} OFFSET $${offsetPh}`;
+  const listRes = await pool.query<
+    DbUserRow & {
+      created_at: string;
+    }
+  >(listSql, [...params, limit, offset]);
+
+  sendJson(res, 200, {
+    success: true,
+    users: listRes.rows.map((r) => adminPublicUserFromRow(r)),
+    total,
+  });
+}
+
+async function handleUsersGet(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  headers: Record<string, string | string[] | undefined>,
+): Promise<void> {
+  const me = await resolveCurrentUser(pool, headers);
+  if (!me) {
+    sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+    return;
+  }
+  if (me.status !== "active") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+  if (!roleHasPermission(me.role as UserRole, "users.read_any")) {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+
+  const q = req.query ?? {};
+  const id = typeof q.id === "string" ? q.id.trim() : "";
+  if (!id || !UUID_RE.test(id)) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите корректный идентификатор пользователя." });
+    return;
+  }
+
+  const ures = await pool.query<DbUserRow & { created_at: string }>(
+    `SELECT id, email, full_name, role, status, must_change_password, last_login_at, created_at
+     FROM users WHERE id = $1::uuid LIMIT 1`,
+    [id],
+  );
+  const row = ures.rows[0];
+  if (!row) {
+    sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Пользователь не найден." });
+    return;
+  }
+  sendJson(res, 200, { success: true, user: adminPublicUserFromRow(row) });
+}
+
+async function handleUsersUpdateRole(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  headers: Record<string, string | string[] | undefined>,
+): Promise<void> {
+  const me = await resolveCurrentUser(pool, headers);
+  if (!me) {
+    sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+    return;
+  }
+  if (me.status !== "active") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+  if (!roleHasPermission(me.role as UserRole, "users.update_role")) {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+
+  const body = req.body as { id?: unknown; role?: unknown };
+  const id = typeof body.id === "string" ? body.id.trim() : "";
+  const roleNew = typeof body.role === "string" ? body.role.trim() : "";
+  if (!id || !UUID_RE.test(id)) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите корректный идентификатор пользователя." });
+    return;
+  }
+  if (!BUSINESS_ROLES.includes(roleNew as UserRole)) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Недопустимая роль." });
+    return;
+  }
+  if (id === me.id) {
+    sendJson(res, 400, { success: false, code: "SELF_MODIFICATION", message: "Нельзя менять собственную роль." });
+    return;
+  }
+
+  const cur = await pool.query<DbUserRow & { created_at: string }>(
+    `SELECT id, email, full_name, role, status, must_change_password, last_login_at, created_at FROM users WHERE id = $1::uuid LIMIT 1`,
+    [id],
+  );
+  const row = cur.rows[0];
+  if (!row) {
+    sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Пользователь не найден." });
+    return;
+  }
+  if (row.role === "admin") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Роль admin нельзя изменить через UI." });
+    return;
+  }
+
+  const oldRole = row.role;
+  const up = await pool.query<DbUserRow & { created_at: string }>(
+    `UPDATE users SET role = $1, updated_at = NOW() WHERE id = $2::uuid
+     RETURNING id, email, full_name, role, status, must_change_password, last_login_at, created_at`,
+    [roleNew, id],
+  );
+  const u = up.rows[0];
+  if (!u) {
+    sendJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+    return;
+  }
+
+  await tryAudit(pool, {
+    actorUserId: me.id,
+    action: "auth.user.update_role",
+    entityType: "user",
+    entityId: id,
+    metadata: { targetUserId: id, oldRole, newRole: roleNew },
+  });
+
+  sendJson(res, 200, { success: true, user: adminPublicUserFromRow(u) });
+}
+
+async function handleUsersUpdateStatus(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  headers: Record<string, string | string[] | undefined>,
+): Promise<void> {
+  const me = await resolveCurrentUser(pool, headers);
+  if (!me) {
+    sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+    return;
+  }
+  if (me.status !== "active") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+  if (!roleHasPermission(me.role as UserRole, "users.update_status")) {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+
+  const body = req.body as { id?: unknown; status?: unknown };
+  const id = typeof body.id === "string" ? body.id.trim() : "";
+  const st = typeof body.status === "string" ? body.status.trim() : "";
+  if (!id || !UUID_RE.test(id)) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите корректный идентификатор пользователя." });
+    return;
+  }
+  if (st !== "active" && st !== "disabled") {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Недопустимый статус." });
+    return;
+  }
+  if (id === me.id) {
+    sendJson(res, 400, { success: false, code: "SELF_MODIFICATION", message: "Нельзя менять собственный статус." });
+    return;
+  }
+
+  const cur = await pool.query<DbUserRow & { created_at: string }>(
+    `SELECT id, email, full_name, role, status, must_change_password, last_login_at, created_at FROM users WHERE id = $1::uuid LIMIT 1`,
+    [id],
+  );
+  const row = cur.rows[0];
+  if (!row) {
+    sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Пользователь не найден." });
+    return;
+  }
+  if (row.role === "admin") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Статус admin нельзя изменить через UI." });
+    return;
+  }
+
+  const oldStatus = row.status;
+  const up = await pool.query<DbUserRow & { created_at: string }>(
+    `UPDATE users SET status = $1, updated_at = NOW() WHERE id = $2::uuid
+     RETURNING id, email, full_name, role, status, must_change_password, last_login_at, created_at`,
+    [st, id],
+  );
+  const u = up.rows[0];
+  if (!u) {
+    sendJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+    return;
+  }
+
+  let sessionsRevoked = 0;
+  if (st === "disabled") {
+    const rev = await pool.query<{ id: string }>(
+      `UPDATE sessions SET revoked_at = NOW() WHERE user_id = $1::uuid AND revoked_at IS NULL RETURNING id`,
+      [id],
+    );
+    sessionsRevoked = rev.rows.length;
+  }
+
+  await tryAudit(pool, {
+    actorUserId: me.id,
+    action: "auth.user.update_status",
+    entityType: "user",
+    entityId: id,
+    metadata: { targetUserId: id, oldStatus, newStatus: st, sessionsRevoked },
+  });
+
+  sendJson(res, 200, { success: true, user: adminPublicUserFromRow(u) });
+}
+
+async function handleUsersResetPassword(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  headers: Record<string, string | string[] | undefined>,
+): Promise<void> {
+  const me = await resolveCurrentUser(pool, headers);
+  if (!me) {
+    sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+    return;
+  }
+  if (me.status !== "active") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+  if (!roleHasPermission(me.role as UserRole, "users.reset_password")) {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+
+  const body = req.body as { id?: unknown };
+  const id = typeof body.id === "string" ? body.id.trim() : "";
+  if (!id || !UUID_RE.test(id)) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите корректный идентификатор пользователя." });
+    return;
+  }
+  if (id === me.id) {
+    sendJson(res, 400, {
+      success: false,
+      code: "SELF_MODIFICATION",
+      message: "Нельзя сбросить пароль самому себе через этот интерфейс.",
+    });
+    return;
+  }
+
+  const cur = await pool.query<DbUserRow & { created_at: string }>(
+    `SELECT id, email, full_name, role, status, must_change_password, last_login_at, created_at FROM users WHERE id = $1::uuid LIMIT 1`,
+    [id],
+  );
+  const row = cur.rows[0];
+  if (!row) {
+    sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Пользователь не найден." });
+    return;
+  }
+  if (row.role === "admin") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Пароль admin нельзя сбросить через UI." });
+    return;
+  }
+
+  const tempPassword = randomBytes(12).toString("base64url").slice(0, 14);
+  const passwordHash = await bcrypt.hash(tempPassword, 12);
+
+  const rev = await pool.query<{ id: string }>(
+    `UPDATE sessions SET revoked_at = NOW() WHERE user_id = $1::uuid AND revoked_at IS NULL RETURNING id`,
+    [id],
+  );
+  const sessionsRevoked = rev.rows.length;
+
+  const up = await pool.query<DbUserRow & { created_at: string }>(
+    `UPDATE users SET password_hash = $1, must_change_password = true, updated_at = NOW() WHERE id = $2::uuid
+     RETURNING id, email, full_name, role, status, must_change_password, last_login_at, created_at`,
+    [passwordHash, id],
+  );
+  const u = up.rows[0];
+  if (!u) {
+    sendJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+    return;
+  }
+
+  await tryAudit(pool, {
+    actorUserId: me.id,
+    action: "auth.user.reset_password",
+    entityType: "user",
+    entityId: id,
+    metadata: { targetUserId: id, sessionsRevoked },
+  });
+
+  sendJson(res, 200, {
+    success: true,
+    tempPassword,
+    user: adminPublicUserFromRow(u),
+  });
+}
+
+function pickAction(req: VercelRequest): string {
+  const a = req.query?.action;
+  if (typeof a === "string" && a.trim()) return a.trim();
+  if (Array.isArray(a) && typeof a[0] === "string") return a[0]!.trim();
+  return "";
+}
+
+export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
+  const action = pickAction(req);
+  const headers = vercelHeaders(req);
+  try {
+    const pool = getPool();
+    if (!pool) {
+      sendJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+      return;
+    }
+
+    if (action === "users-list" && req.method === "GET") {
+      await handleUsersList(req, res, pool, headers);
+      return;
+    }
+    if (action === "users-get" && req.method === "GET") {
+      await handleUsersGet(req, res, pool, headers);
+      return;
+    }
+    if (action === "users-update-role" && req.method === "POST") {
+      await handleUsersUpdateRole(req, res, pool, headers);
+      return;
+    }
+    if (action === "users-update-status" && req.method === "POST") {
+      await handleUsersUpdateStatus(req, res, pool, headers);
+      return;
+    }
+    if (action === "users-reset-password" && req.method === "POST") {
+      await handleUsersResetPassword(req, res, pool, headers);
+      return;
+    }
+
+    sendJson(res, 404, {
+      success: false,
+      code: "NOT_FOUND",
+      message: "Неизвестный маршрут admin API.",
+    });
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    console.error("[api/admin]", action, m.slice(0, 200));
+    try {
+      if (!res.headersSent && !res.writableEnded) {
+        sendJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+}

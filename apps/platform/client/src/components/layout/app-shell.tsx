@@ -20,6 +20,7 @@ import {
   Store,
   UserCircle,
   UserCog,
+  UserPlus,
   Users,
 } from "lucide-react";
 import { Fragment, useCallback, useLayoutEffect, useMemo, useState } from "react";
@@ -81,6 +82,10 @@ const ICON_BY_TESTID: Partial<Record<string, LucideIcon>> = {
   "nav-marketing-briefs": Megaphone,
   "nav-item-users-access": UserCog,
   "nav-users-access": UserCog,
+  "nav-item-admin-users": Users,
+  "nav-admin-users": Users,
+  "nav-item-admin-invitations": UserPlus,
+  "nav-admin-invitations": UserPlus,
 };
 
 function pathMatchesNavHref(location: string, href: string): boolean {

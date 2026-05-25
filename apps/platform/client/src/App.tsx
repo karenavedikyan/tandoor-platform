@@ -70,6 +70,7 @@ const LazyMyProfile = lazy(() => import("@/pages/my-profile"));
 const LazyLogin = lazy(() => import("@/pages/login"));
 const LazyInvite = lazy(() => import("@/pages/invite"));
 const LazyAdminInvitations = lazy(() => import("@/pages/admin-invitations"));
+const LazyAdminUsers = lazy(() => import("@/pages/admin-users"));
 const LazyFeatureInDevelopment = lazy(() => import("@/pages/feature-in-development"));
 
 function suspensePage(Lazy: LazyExoticComponent<ComponentType<any>>): ComponentType<any> {
@@ -118,6 +119,7 @@ const MyProfileRoute = suspensePage(LazyMyProfile);
 const FeatureInDevelopmentRoute = suspensePage(LazyFeatureInDevelopment);
 const InviteRoute = suspensePage(LazyInvite);
 const AdminInvitationsRoute = suspensePage(LazyAdminInvitations);
+const AdminUsersRoute = suspensePage(LazyAdminUsers);
 
 function HashRedirect({ to }: { to: string }) {
   const [, setLoc] = useHashLocation();
@@ -208,8 +210,8 @@ function AuthenticatedShell({
     return countWorkingTradePointsForSidebar(profile, teamPlane.mergedState);
   }, [actx.enabled, actx.loading, teamPlane.mergedState, teamPlane.teamFetchLoading, profile]);
   const navigation = useMemo(
-    () => getPilotNavigation(salesRole, dealerNavCount, tradePointNavCount),
-    [salesRole, dealerNavCount, tradePointNavCount],
+    () => getPilotNavigation(salesRole, dealerNavCount, tradePointNavCount, user.role),
+    [salesRole, dealerNavCount, tradePointNavCount, user.role],
   );
 
   return (
@@ -229,6 +231,7 @@ function AuthenticatedShell({
         <Route path="/feature-in-development" component={FeatureInDevelopmentRoute} />
         <Route path="/communications" component={CommunicationsRoute} />
         <Route path="/client-base-activity" component={ClientBaseActivityDashboardRoute} />
+        <Route path="/admin/users" component={AdminUsersRoute} />
         <Route path="/admin/invitations" component={AdminInvitationsRoute} />
         <Route path="/users" component={UsersAndAccessRoute} />
         <Route path="/profile" component={MyProfileRoute} />
