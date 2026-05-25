@@ -6,8 +6,8 @@
  */
 
 import { eq, sql } from "drizzle-orm";
-import type { UserRole, UserStatus } from "@shared/auth";
-import { auditLog, authUsers } from "@shared/auth-schema";
+import type { UserRole, UserStatus } from "../../shared/auth";
+import { auditLog, authUsers } from "../../shared/auth-schema";
 import type { AuthUserSnapshot } from "./auth-user-snapshot";
 import { buildAuthCookie, clearAuthCookie, parseAuthRefreshToken } from "./cookie";
 import { getAuthDb } from "./db";
