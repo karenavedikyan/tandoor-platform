@@ -17,7 +17,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { UserRole, UserStatus } from "@shared/auth";
 import { BUSINESS_ROLES } from "@shared/auth";
 import {
@@ -41,6 +40,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { buildUserHierarchy } from "@/lib/admin-users-hierarchy";
+import { AdminUsersDesktopPanels, AdminUsersMobilePanels } from "@/pages/admin-users-listing";
+
 import { userHas } from "@/lib/auth-rbac";
 import { canCreateResetLink, defaultHomePathForUserRole } from "@/lib/auth-access";
 
@@ -85,7 +87,73 @@ function userStatusBadge(status: UserStatus) {
   );
 }
 
+
+
+function AdminUserActionsDropdown({
+  row,
+  viewer,
+  canRole,
+  canResetPwd,
+  canStatus,
+  onRole,
+  onResetLink,
+  onPwd,
+  onStatus,
+  triggerTestId,
+}: {
+  row: AdminUser;
+  viewer?: { id: string; role: UserRole };
+  canRole: boolean;
+  canResetPwd: boolean;
+  canStatus: boolean;
+  onRole: (u: AdminUser) => void;
+  onResetLink: (u: AdminUser) => void;
+  onPwd: (u: AdminUser) => void;
+  onStatus: (u: AdminUser) => void;
+  triggerTestId?: string;
+}) {
+  const canLink = Boolean(viewer && canCreateResetLink({ id: viewer.id, role: viewer.role }, { id: row.id, role: row.role }));
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button type="button" variant="outline" size="icon" className="h-11 min-h-11 w-11 min-w-11 shrink-0" aria-label="Действия" data-testid={triggerTestId}>
+          <MoreHorizontal className="h-5 w-5" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-[14rem]">
+        {canRole ? (
+          <DropdownMenuItem className="min-h-11 cursor-pointer" onClick={() => onRole(row)}>
+            Сменить роль
+          </DropdownMenuItem>
+        ) : null}
+        {canLink ? (
+          <DropdownMenuItem className="min-h-11 cursor-pointer" data-testid={`button-reset-link-${row.id}`} onClick={() => onResetLink(row)}>
+            Сбросить пароль (ссылка)
+          </DropdownMenuItem>
+        ) : null}
+        {canResetPwd ? (
+          <DropdownMenuItem className="min-h-11 cursor-pointer" onClick={() => onPwd(row)}>
+            Сбросить пароль (временный)
+          </DropdownMenuItem>
+        ) : null}
+        {canStatus && row.status === "disabled" ? (
+          <DropdownMenuItem className="min-h-11 cursor-pointer" onClick={() => onStatus(row)}>
+            Снять блокировку входа
+          </DropdownMenuItem>
+        ) : null}
+        {canStatus && row.status !== "disabled" ? (
+          <DropdownMenuItem className="min-h-11 cursor-pointer" onClick={() => onStatus(row)}>
+            Изменить статус
+          </DropdownMenuItem>
+        ) : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+
 const LIMIT = 50;
+const HIERARCHY_LIMIT = 200;
 
 export default function AdminUsersPage() {
   const { user } = useCurrentUser();
@@ -103,25 +171,37 @@ export default function AdminUsersPage() {
   const [statusFilter, setStatusFilter] = useState<UserStatus | "">("");
   const [offset, setOffset] = useState(0);
 
+  const hierarchyMode = useMemo(
+    () => !qDebounced.trim() && !roleFilter && !statusFilter,
+    [qDebounced, roleFilter, statusFilter],
+  );
+
+  const [expandedRop, setExpandedRop] = useState<Record<string, boolean>>({});
+
   useEffect(() => {
     setOffset(0);
   }, [qDebounced, roleFilter, statusFilter]);
 
   const listQ = useQuery({
-    queryKey: ["admin-users", "list", qDebounced, roleFilter, statusFilter, offset],
+    queryKey: ["admin-users", "list", qDebounced, roleFilter, statusFilter, offset, hierarchyMode],
     queryFn: async () => {
       const r = await listUsers({
-        q: qDebounced.trim() || undefined,
-        role: roleFilter || undefined,
-        status: statusFilter || undefined,
-        limit: LIMIT,
-        offset,
+        q: hierarchyMode ? undefined : qDebounced.trim() || undefined,
+        role: hierarchyMode ? undefined : roleFilter || undefined,
+        status: hierarchyMode ? undefined : statusFilter || undefined,
+        limit: hierarchyMode ? HIERARCHY_LIMIT : LIMIT,
+        offset: hierarchyMode ? 0 : offset,
       });
       if (!r.ok) throw new Error(r.message);
       return r.result;
     },
     enabled: canList,
   });
+
+  const hierarchy = useMemo(() => {
+    if (!hierarchyMode || !listQ.data?.users) return null;
+    return buildUserHierarchy(listQ.data.users);
+  }, [hierarchyMode, listQ.data?.users]);
 
   const [roleDialog, setRoleDialog] = useState<AdminUser | null>(null);
   const [rolePick, setRolePick] = useState<UserRole | "">("");
@@ -207,11 +287,110 @@ export default function AdminUsersPage() {
     await qc.invalidateQueries({ queryKey: ["admin-users"] });
   };
 
+  const telegramInner = (row: AdminUser) => (
+    <>
+      {row.role === "admin" && canEditAdminTelegram ? (
+        <div className="flex max-w-[260px] flex-col gap-1">
+          <Input
+            inputMode="numeric"
+            className="h-9 font-mono text-xs"
+            placeholder="Не задано"
+            data-testid={`input-user-telegram-id-${row.id}`}
+            value={
+              Object.prototype.hasOwnProperty.call(telegramDraftByUserId, row.id)
+                ? telegramDraftByUserId[row.id]!
+                : row.telegramUserId != null
+                  ? String(row.telegramUserId)
+                  : ""
+            }
+            onChange={(e) => {
+              const v = e.target.value;
+              setTelegramDraftByUserId((prev) => ({ ...prev, [row.id]: v }));
+              setTelegramErrByUserId((prev) => {
+                if (!prev[row.id]) return prev;
+                const next = { ...prev };
+                delete next[row.id];
+                return next;
+              });
+            }}
+          />
+          {telegramErrByUserId[row.id] ? <p className="text-xs text-destructive">{telegramErrByUserId[row.id]}</p> : null}
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            className="h-8 self-start"
+            disabled={telegramSavingId === row.id}
+            onClick={async () => {
+              const raw = Object.prototype.hasOwnProperty.call(telegramDraftByUserId, row.id)
+                ? telegramDraftByUserId[row.id]!.trim()
+                : row.telegramUserId != null
+                  ? String(row.telegramUserId)
+                  : "";
+              let next: number | null = null;
+              if (!raw) {
+                next = null;
+              } else {
+                const n = Number(raw);
+                if (!Number.isFinite(n) || n <= 0 || !Number.isInteger(n)) {
+                  setTelegramErrByUserId((prev) => ({
+                    ...prev,
+                    [row.id]: "Укажите целое число больше нуля или оставьте пустым.",
+                  }));
+                  return;
+                }
+                next = n;
+              }
+              setTelegramSavingId(row.id);
+              setTelegramErrByUserId((prev) => {
+                const nextMap = { ...prev };
+                delete nextMap[row.id];
+                return nextMap;
+              });
+              try {
+                const r = await updateUserTelegram(row.id, next);
+                if (!r.ok) {
+                  setTelegramErrByUserId((prev) => ({ ...prev, [row.id]: r.message }));
+                  return;
+                }
+                setTelegramDraftByUserId((prev) => {
+                  const nmap = { ...prev };
+                  delete nmap[row.id];
+                  return nmap;
+                });
+                await invalidateList();
+              } finally {
+                setTelegramSavingId(null);
+              }
+            }}
+          >
+            {telegramSavingId === row.id ? "Сохранение…" : "Сохранить"}
+          </Button>
+        </div>
+      ) : row.role === "admin" ? (
+        <span className="font-mono text-xs text-muted-foreground">{row.telegramUserId != null ? String(row.telegramUserId) : "—"}</span>
+      ) : (
+        <span className="text-sm text-muted-foreground">—</span>
+      )}
+    </>
+  );
+
+
   return (
     <div className="mx-auto max-w-[1200px] space-y-6 pb-24" data-testid="page-admin-users">
       <div className="space-y-1">
-        <h1 className="text-xl font-semibold text-foreground">Пользователи платформы</h1>
-        <p className="text-sm text-muted-foreground">{subtitle}</p>
+        {hierarchyMode ? (
+          <>
+            <h1 className="text-2xl font-semibold text-[hsl(var(--foreground))]">Структура команды</h1>
+            <p className="text-sm text-muted-foreground">Нажмите на стрелку рядом с РОПом, чтобы развернуть его команду</p>
+            <p className="text-sm text-muted-foreground">{subtitle}</p>
+          </>
+        ) : (
+          <>
+            <h1 className="text-xl font-semibold text-[hsl(var(--foreground))]">Пользователи</h1>
+            <p className="text-sm text-muted-foreground">{subtitle}</p>
+          </>
+        )}
       </div>
 
       <Card className="border-card-border shadow-sm">
@@ -266,293 +445,78 @@ export default function AdminUsersPage() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-3 md:hidden">
-        {listQ.isLoading ? (
-          <div className="rounded-lg border border-card-border bg-card p-6 text-center text-sm text-muted-foreground">Загрузка…</div>
-        ) : null}
-        {listQ.isError ? (
-          <div className="rounded-lg border border-destructive/40 bg-card p-6 text-center text-sm text-destructive">Не удалось загрузить список.</div>
-        ) : null}
-        {listQ.data && listQ.data.users.length === 0 ? (
-          <div className="rounded-lg border border-card-border bg-card p-6 text-center text-sm text-muted-foreground">Пользователи не найдены.</div>
-        ) : null}
-        {listQ.data?.users.map((row) => (
-          <div key={row.id} className="rounded-lg border border-card-border bg-card p-4 shadow-sm">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <p className="font-medium text-foreground">{row.fullName}</p>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <p className="mt-1 truncate font-mono text-xs text-muted-foreground">{row.email}</p>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="max-w-sm break-all">
-                    {row.email}
-                  </TooltipContent>
-                </Tooltip>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <span className={cn("inline-flex rounded-full border px-2 py-0.5 text-xs font-medium", roleBadgeClass(row.role))}>
-                    {rolesRu[row.role] ?? row.role}
-                  </span>
-                  {userStatusBadge(row.status)}
-                </div>
-              </div>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button type="button" variant="outline" size="icon" className="h-11 min-h-11 w-11 min-w-11 shrink-0" aria-label="Действия">
-                    <MoreHorizontal className="h-5 w-5" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="min-w-[14rem]">
-                  {canRole ? (
-                    <DropdownMenuItem className="min-h-11 cursor-pointer" onClick={() => openRole(row)}>
-                      Сменить роль
-                    </DropdownMenuItem>
-                  ) : null}
-                  {user && canCreateResetLink({ id: user.id, role: user.role }, { id: row.id, role: row.role }) ? (
-                    <DropdownMenuItem className="min-h-11 cursor-pointer" onClick={() => openResetLink(row)}>
-                      Сбросить пароль (ссылка)
-                    </DropdownMenuItem>
-                  ) : null}
-                  {canResetPwd ? (
-                    <DropdownMenuItem className="min-h-11 cursor-pointer" onClick={() => openPwd(row)}>
-                      Сбросить пароль (временный)
-                    </DropdownMenuItem>
-                  ) : null}
-                  {canStatus && row.status === "disabled" ? (
-                    <DropdownMenuItem className="min-h-11 cursor-pointer" onClick={() => openStatus(row)}>
-                      Снять блокировку входа
-                    </DropdownMenuItem>
-                  ) : null}
-                  {canStatus && row.status !== "disabled" ? (
-                    <DropdownMenuItem className="min-h-11 cursor-pointer" onClick={() => openStatus(row)}>
-                      Изменить статус
-                    </DropdownMenuItem>
-                  ) : null}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </div>
-        ))}
-      </div>
+      <AdminUsersMobilePanels
+        hierarchyMode={hierarchyMode}
+        hierarchy={hierarchy}
+        expandedRop={expandedRop}
+        setExpandedRop={setExpandedRop}
+        listQ={listQ}
+        telegramSlot={telegramInner}
+        actionsSlot={(row, triggerTestId) => (
+          <AdminUserActionsDropdown
+            row={row}
+            viewer={user}
+            canRole={canRole}
+            canResetPwd={canResetPwd}
+            canStatus={canStatus}
+            onRole={openRole}
+            onResetLink={openResetLink}
+            onPwd={openPwd}
+            onStatus={openStatus}
+            triggerTestId={triggerTestId}
+          />
+        )}
+      />
 
-      <div className="hidden overflow-hidden rounded-lg border border-card-border bg-card shadow-sm md:block">
-        <Table>
-          <TableHeader>
-            <TableRow className="hover:bg-transparent">
-              <TableHead>ФИО</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Роль</TableHead>
-              <TableHead>Статус</TableHead>
-              <TableHead>Команда</TableHead>
-              <TableHead>Последний вход</TableHead>
-              <TableHead className="min-w-[200px]">Telegram user-id</TableHead>
-              <TableHead className="w-[72px] text-right">Действия</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {listQ.isLoading ? (
-              <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={8} className="h-24 text-center text-sm text-muted-foreground">
-                  Загрузка…
-                </TableCell>
-              </TableRow>
-            ) : listQ.isError ? (
-              <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={8} className="h-24 text-center text-sm text-destructive">
-                  Не удалось загрузить список.
-                </TableCell>
-              </TableRow>
-            ) : listQ.data && listQ.data.users.length === 0 ? (
-              <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={8} className="h-24 text-center text-sm text-muted-foreground">
-                  Пользователи не найдены.
-                </TableCell>
-              </TableRow>
-            ) : (
-              listQ.data?.users.map((row) => (
-                <TableRow key={row.id} className="hover:bg-muted/40">
-                  <TableCell className="font-medium">{row.fullName}</TableCell>
-                  <TableCell className="max-w-[220px] font-mono text-sm">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className="block truncate">{row.email}</span>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" className="max-w-sm break-all">
-                        {row.email}
-                      </TooltipContent>
-                    </Tooltip>
-                  </TableCell>
-                  <TableCell>
-                    <span className={cn("inline-flex rounded-full border px-2 py-0.5 text-xs font-medium", roleBadgeClass(row.role))}>
-                      {rolesRu[row.role] ?? row.role}
-                    </span>
-                  </TableCell>
-                  <TableCell>{userStatusBadge(row.status)}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">—</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {row.lastLoginAt ? formatDisplayDateTime(row.lastLoginAt) : "—"}
-                  </TableCell>
-                  <TableCell className="align-top">
-                    {row.role === "admin" && canEditAdminTelegram ? (
-                      <div className="flex max-w-[260px] flex-col gap-1">
-                        <Input
-                          inputMode="numeric"
-                          className="h-9 font-mono text-xs"
-                          placeholder="Не задано"
-                          data-testid={`input-user-telegram-id-${row.id}`}
-                          value={
-                            Object.prototype.hasOwnProperty.call(telegramDraftByUserId, row.id)
-                              ? telegramDraftByUserId[row.id]!
-                              : row.telegramUserId != null
-                                ? String(row.telegramUserId)
-                                : ""
-                          }
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            setTelegramDraftByUserId((prev) => ({ ...prev, [row.id]: v }));
-                            setTelegramErrByUserId((prev) => {
-                              if (!prev[row.id]) return prev;
-                              const next = { ...prev };
-                              delete next[row.id];
-                              return next;
-                            });
-                          }}
-                        />
-                        {telegramErrByUserId[row.id] ? (
-                          <p className="text-xs text-destructive">{telegramErrByUserId[row.id]}</p>
-                        ) : null}
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="secondary"
-                          className="h-8 self-start"
-                          disabled={telegramSavingId === row.id}
-                          onClick={async () => {
-                            const raw = Object.prototype.hasOwnProperty.call(telegramDraftByUserId, row.id)
-                              ? telegramDraftByUserId[row.id]!.trim()
-                              : row.telegramUserId != null
-                                ? String(row.telegramUserId)
-                                : "";
-                            let next: number | null = null;
-                            if (!raw) {
-                              next = null;
-                            } else {
-                              const n = Number(raw);
-                              if (!Number.isFinite(n) || n <= 0 || !Number.isInteger(n)) {
-                                setTelegramErrByUserId((prev) => ({
-                                  ...prev,
-                                  [row.id]: "Укажите целое число больше нуля или оставьте пустым.",
-                                }));
-                                return;
-                              }
-                              next = n;
-                            }
-                            setTelegramSavingId(row.id);
-                            setTelegramErrByUserId((prev) => {
-                              const nextMap = { ...prev };
-                              delete nextMap[row.id];
-                              return nextMap;
-                            });
-                            try {
-                              const r = await updateUserTelegram(row.id, next);
-                              if (!r.ok) {
-                                setTelegramErrByUserId((prev) => ({ ...prev, [row.id]: r.message }));
-                                return;
-                              }
-                              setTelegramDraftByUserId((prev) => {
-                                const nmap = { ...prev };
-                                delete nmap[row.id];
-                                return nmap;
-                              });
-                              await invalidateList();
-                            } finally {
-                              setTelegramSavingId(null);
-                            }
-                          }}
-                        >
-                          {telegramSavingId === row.id ? "Сохранение…" : "Сохранить"}
-                        </Button>
-                      </div>
-                    ) : row.role === "admin" ? (
-                      <span className="font-mono text-xs text-muted-foreground">
-                        {row.telegramUserId != null ? String(row.telegramUserId) : "—"}
-                      </span>
-                    ) : (
-                      <span className="text-sm text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="icon"
-                          className="h-11 min-h-11 w-11 min-w-11"
-                          aria-label="Действия"
-                          data-testid={`button-user-actions-${row.id}`}
-                        >
-                          <MoreHorizontal className="h-5 w-5" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="min-w-[14rem]">
-                        {canRole ? (
-                          <DropdownMenuItem className="min-h-11 cursor-pointer" onClick={() => openRole(row)}>
-                            Сменить роль
-                          </DropdownMenuItem>
-                        ) : null}
-                        {user && canCreateResetLink({ id: user.id, role: user.role }, { id: row.id, role: row.role }) ? (
-                          <DropdownMenuItem
-                            className="min-h-11 cursor-pointer"
-                            data-testid={`button-reset-link-${row.id}`}
-                            onClick={() => openResetLink(row)}
-                          >
-                            Сбросить пароль (ссылка)
-                          </DropdownMenuItem>
-                        ) : null}
-                        {canResetPwd ? (
-                          <DropdownMenuItem className="min-h-11 cursor-pointer" onClick={() => openPwd(row)}>
-                            Сбросить пароль (временный)
-                          </DropdownMenuItem>
-                        ) : null}
-                        {canStatus && row.status === "disabled" ? (
-                          <DropdownMenuItem className="min-h-11 cursor-pointer" onClick={() => openStatus(row)}>
-                            Снять блокировку входа
-                          </DropdownMenuItem>
-                        ) : null}
-                        {canStatus && row.status !== "disabled" ? (
-                          <DropdownMenuItem className="min-h-11 cursor-pointer" onClick={() => openStatus(row)}>
-                            Изменить статус
-                          </DropdownMenuItem>
-                        ) : null}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+      <AdminUsersDesktopPanels
+        hierarchyMode={hierarchyMode}
+        hierarchy={hierarchy}
+        expandedRop={expandedRop}
+        setExpandedRop={setExpandedRop}
+        listQ={listQ}
+        telegramSlot={telegramInner}
+        actionsSlot={(row, triggerTestId) => (
+          <AdminUserActionsDropdown
+            row={row}
+            viewer={user}
+            canRole={canRole}
+            canResetPwd={canResetPwd}
+            canStatus={canStatus}
+            onRole={openRole}
+            onResetLink={openResetLink}
+            onPwd={openPwd}
+            onStatus={openStatus}
+            triggerTestId={triggerTestId}
+          />
+        )}
+      />
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      {hierarchyMode && total > HIERARCHY_LIMIT ? (
         <p className="text-sm text-muted-foreground">
-          Показано {listQ.data ? `${offset + 1}–${Math.min(offset + LIMIT, total)}` : "—"} из {total}
+          В режиме структуры показаны первые {HIERARCHY_LIMIT} пользователей из {total}.
         </p>
-        <div className="flex gap-2">
-          <Button type="button" variant="outline" disabled={offset <= 0 || listQ.isLoading} onClick={() => setOffset((o) => Math.max(0, o - LIMIT))}>
-            Назад
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={listQ.isLoading || !listQ.data || offset + LIMIT >= total}
-            onClick={() => setOffset((o) => o + LIMIT)}
-          >
-            Вперёд
-          </Button>
+      ) : null}
+      {!hierarchyMode ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-muted-foreground">
+            Показано {listQ.data ? `${offset + 1}–${Math.min(offset + LIMIT, total)}` : "—"} из {total}
+          </p>
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" disabled={offset <= 0 || listQ.isLoading} onClick={() => setOffset((o) => Math.max(0, o - LIMIT))}>
+              Назад
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={listQ.isLoading || !listQ.data || offset + LIMIT >= total}
+              onClick={() => setOffset((o) => o + LIMIT)}
+            >
+              Вперёд
+            </Button>
+          </div>
         </div>
-      </div>
+      ) : null}
+
 
       <Dialog
         open={Boolean(linkDialog)}
