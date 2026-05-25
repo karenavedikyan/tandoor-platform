@@ -38,17 +38,19 @@ function getSql(): SqlExec | null {
   return cachedSql;
 }
 
-/** Run a raw SQL string (no params). `neon` template tag with no params still works for DDL. */
+/**
+ * Run a raw SQL string (no params).
+ *
+ * `neon(url)` returns a callable: when invoked as an ordinary function with a string + params array,
+ * it executes that SQL over HTTPS (see `NeonQueryFunction` overload in @neondatabase/serverless).
+ */
 async function runRaw(sql: SqlExec, statement: string): Promise<unknown> {
-  // The `neon` tag is a template literal function; for a raw string we wrap with `.query`-like usage:
-  // @ts-expect-error - neon supports `.query(text, params)` (HTTP driver)
-  return await sql.query(statement);
+  return await (sql as unknown as (s: string, p?: unknown[]) => Promise<unknown>)(statement);
 }
 
-/** Run a parametrised SQL. */
+/** Run a parametrised SQL — returns row array (default `fullResults: false`). */
 async function runParams<T = Record<string, unknown>>(sql: SqlExec, statement: string, params: unknown[]): Promise<T[]> {
-  // @ts-expect-error - .query exists on http-based neon driver
-  const res = await sql.query(statement, params);
+  const res = await (sql as unknown as (s: string, p: unknown[]) => Promise<unknown>)(statement, params);
   return res as T[];
 }
 
