@@ -1,127 +1,67 @@
 /**
- * PILOT ONLY. Страница входа на временной mock-авторизации; не является безопасным механизмом. Подробности и план: `docs/auth-access-foundation.md`.
+ * Клиентская страница входа на реальный `POST /api/auth/login` (PR 04, удаление mock-auth).
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { useMockAuth } from "@/hooks/use-mock-auth";
-import { defaultHomePathForRole } from "@/lib/auth-access";
-import { MOCK_AUTH_CREDENTIALS } from "@/lib/mock-auth";
-import { getSalesUserById } from "@/lib/sales-control-data";
-import { releaseDemoRoleLabel } from "@/lib/release-demo-profile";
+import { login } from "@/lib/auth-api";
+import { defaultHomePathForUserRole } from "@/lib/auth-access";
 import { TandoorLogo } from "@/components/tandoor-logo";
-
-type LoginPickerRow = {
-  login: string;
-  name: string;
-  roleLabel: string;
-};
-
-function rowMatchesQuery(row: LoginPickerRow, q: string): boolean {
-  const t = q.trim().toLowerCase();
-  if (!t) return true;
-  const hay = `${row.name} ${row.roleLabel} ${row.login}`.toLowerCase();
-  return t.split(/\s+/).filter(Boolean).every((p) => hay.includes(p));
-}
+import { invalidateAuthUser, useAuthUser } from "@/hooks/use-auth-user";
+import { queryClient } from "@/lib/queryClient";
 
 export default function LoginPage() {
   const [, setLocation] = useLocation();
-  const { login, isAuthenticated, user } = useMockAuth();
-  const [username, setUsername] = useState("");
+  const { user, isLoading } = useAuthUser();
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [loginPickerOpen, setLoginPickerOpen] = useState(false);
-  const blurCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const clearBlurTimer = useCallback(() => {
-    if (blurCloseTimerRef.current) {
-      clearTimeout(blurCloseTimerRef.current);
-      blurCloseTimerRef.current = null;
+  useEffect(() => {
+    if (isLoading) return;
+    if (user?.status === "active") {
+      setLocation(defaultHomePathForUserRole(user.role));
     }
-  }, []);
+  }, [isLoading, user, setLocation]);
 
-  const openLoginPicker = useCallback(() => {
-    clearBlurTimer();
-    setLoginPickerOpen(true);
-  }, [clearBlurTimer]);
-
-  const scheduleCloseLoginPicker = useCallback(() => {
-    clearBlurTimer();
-    blurCloseTimerRef.current = setTimeout(() => {
-      setLoginPickerOpen(false);
-      blurCloseTimerRef.current = null;
-    }, 180);
-  }, [clearBlurTimer]);
-
-  const loginRows = useMemo(
-    () =>
-      MOCK_AUTH_CREDENTIALS.map((c) => {
-        const u = getSalesUserById(c.userId);
-        return {
-          login: c.username,
-          name: u?.name ?? c.userId,
-          roleLabel: u?.role ? releaseDemoRoleLabel(u.role) : "—",
-        };
-      }),
-    [],
-  );
-
-  const filteredLoginRows = useMemo(
-    () => loginRows.filter((row) => rowMatchesQuery(row, username)),
-    [loginRows, username],
-  );
-
-  useEffect(() => {
-    return () => clearBlurTimer();
-  }, [clearBlurTimer]);
-
-  useEffect(() => {
-    if (!loginPickerOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        clearBlurTimer();
-        setLoginPickerOpen(false);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [loginPickerOpen, clearBlurTimer]);
-
-  useEffect(() => {
-    if (isAuthenticated && user) {
-      setLocation(defaultHomePathForRole(user.role));
-    }
-  }, [isAuthenticated, user, setLocation]);
-
-  if (isAuthenticated && user) {
+  if (isLoading || (user?.status === "active")) {
     return (
       <div className="flex min-h-screen items-center justify-center" data-testid="page-login">
-        <p className="text-sm text-muted-foreground">Перенаправление…</p>
+        <p className="text-sm text-muted-foreground">{isLoading ? "Загрузка…" : "Перенаправление…"}</p>
       </div>
     );
   }
 
-  const pickLogin = (loginValue: string) => {
-    clearBlurTimer();
-    setUsername(loginValue);
-    setPassword("");
-    setError("");
-    setLoginPickerOpen(false);
-  };
-
-  const onSubmit = (e: React.FormEvent) => {
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    const r = login(username, password);
-    if (!r.ok) {
-      setError(r.error);
+    const r = await login(email, password);
+    if (r.ok) {
+      await invalidateAuthUser(queryClient);
+      setLocation(defaultHomePathForUserRole(r.user.role));
       return;
     }
-    setLocation(defaultHomePathForRole(r.user.role));
+    if (r.code === "VALIDATION_ERROR" || r.code === "INTERNAL_ERROR" || r.code === "NETWORK_ERROR") {
+      setError(r.message);
+      return;
+    }
+    if (r.code === "INVALID_CREDENTIALS") {
+      setError("Неверный email или пароль.");
+      return;
+    }
+    if (r.code === "RATE_LIMITED") {
+      const extra =
+        r.retryAfterSec != null && Number.isFinite(r.retryAfterSec)
+          ? ` Повторите через ${r.retryAfterSec} с.`
+          : "";
+      setError(`${r.message}${extra}`);
+      return;
+    }
+    setError(r.message);
   };
 
   return (
@@ -135,63 +75,24 @@ export default function LoginPage() {
       <Card className="w-full max-w-md rounded-2xl border border-border/80 shadow-lg">
         <CardHeader>
           <CardTitle className="text-xl">Вход в платформу</CardTitle>
-          <p className="text-sm text-muted-foreground">Вход по учётной записи и роли в команде продаж.</p>
+          <p className="text-sm text-muted-foreground">Введите email и пароль учётной записи.</p>
         </CardHeader>
         <CardContent className="space-y-6">
           <form className="space-y-4" onSubmit={onSubmit}>
             <div className="space-y-2">
-              <Label htmlFor="login-username">Логин</Label>
-              <p className="text-xs text-muted-foreground">Начните вводить ФИО или логин</p>
-              <div className="relative">
-                <Input
-                  id="login-username"
-                  autoComplete="username"
-                  value={username}
-                  onChange={(e) => {
-                    setUsername(e.target.value);
-                    setError("");
-                  }}
-                  onFocus={openLoginPicker}
-                  onBlur={scheduleCloseLoginPicker}
-                  className="min-h-11"
-                  data-testid="input-login-username"
-                  aria-autocomplete="list"
-                  aria-expanded={loginPickerOpen}
-                  aria-controls="dropdown-login-users"
-                />
-                {loginPickerOpen ? (
-                  <div
-                    id="dropdown-login-users"
-                    data-testid="dropdown-login-users"
-                    className="absolute left-0 right-0 top-full z-50 mt-1 max-h-64 overflow-y-auto rounded-lg border border-border bg-popover text-popover-foreground shadow-md"
-                    onMouseDown={(e) => e.preventDefault()}
-                  >
-                    <div className="border-b border-border/60 px-3 py-2 text-xs font-medium text-muted-foreground">
-                      Выберите пользователя
-                    </div>
-                    {filteredLoginRows.length === 0 ? (
-                      <div className="px-3 py-3 text-sm text-muted-foreground">Нет совпадений</div>
-                    ) : (
-                      <ul className="py-1">
-                        {filteredLoginRows.map((row) => (
-                          <li key={row.login}>
-                            <button
-                              type="button"
-                              className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left text-sm hover:bg-muted/80"
-                              data-testid={`option-login-user-${row.login}`}
-                              onClick={() => pickLogin(row.login)}
-                            >
-                              <span className="font-medium text-foreground">{row.name}</span>
-                              <span className="text-xs text-muted-foreground">{row.roleLabel}</span>
-                              <span className="font-mono text-xs text-foreground">{row.login}</span>
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                ) : null}
-              </div>
+              <Label htmlFor="login-email">Email</Label>
+              <Input
+                id="login-email"
+                type="email"
+                autoComplete="username"
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setError("");
+                }}
+                className="min-h-11"
+                data-testid="input-login-email"
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="login-password">Пароль</Label>

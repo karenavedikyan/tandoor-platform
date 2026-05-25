@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { userRoleToSalesRole } from "@/lib/role-mapping";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
@@ -102,7 +103,7 @@ export function AnalyticsWorkspaceReleaseOverview() {
   const { profile } = useReleaseDemoProfile();
   const actx = useClientBaseActualization();
   const teamCtx = useClientBaseTeamActualization();
-  const role = (user?.role ?? profile.role) as SalesRole;
+  const role = (user ? userRoleToSalesRole(user.role) : profile.role) as SalesRole;
   const presetClock = useMemo(() => new Date(), []);
 
   const workingRows = useMemo(() => {

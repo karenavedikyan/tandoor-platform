@@ -1,39 +1,48 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   loadReleaseDemoProfile,
   saveReleaseDemoProfile,
   RELEASE_DEMO_PROFILE_EVENT,
   type ReleaseDemoProfile,
 } from "@/lib/release-demo-profile";
-import { MOCK_AUTH_CHANGED_EVENT } from "@/lib/mock-auth";
+import { useAuthUser } from "@/hooks/use-auth-user";
 
 export function useReleaseDemoProfile(): {
   profile: ReleaseDemoProfile;
   setProfile: (p: ReleaseDemoProfile) => void;
   refresh: () => void;
 } {
-  const [profile, setProfileState] = useState<ReleaseDemoProfile>(() => loadReleaseDemoProfile());
+  const { user } = useAuthUser();
+  const userRef = useRef(user);
+  userRef.current = user;
+
+  const [profile, setProfileState] = useState<ReleaseDemoProfile>(() => loadReleaseDemoProfile(user?.role));
 
   const refresh = useCallback(() => {
-    setProfileState(loadReleaseDemoProfile());
+    setProfileState(loadReleaseDemoProfile(userRef.current?.role));
   }, []);
 
   useEffect(() => {
-    const onExt = () => refresh();
+    setProfileState(loadReleaseDemoProfile(user?.role));
+  }, [user?.role, user?.id]);
+
+  useEffect(() => {
+    const onExt = () => setProfileState(loadReleaseDemoProfile(userRef.current?.role));
     window.addEventListener(RELEASE_DEMO_PROFILE_EVENT, onExt);
-    window.addEventListener(MOCK_AUTH_CHANGED_EVENT, onExt);
     window.addEventListener("storage", onExt);
     return () => {
       window.removeEventListener(RELEASE_DEMO_PROFILE_EVENT, onExt);
-      window.removeEventListener(MOCK_AUTH_CHANGED_EVENT, onExt);
       window.removeEventListener("storage", onExt);
     };
-  }, [refresh]);
-
-  const setProfile = useCallback((p: ReleaseDemoProfile) => {
-    saveReleaseDemoProfile(p);
-    setProfileState(p);
   }, []);
+
+  const setProfile = useCallback(
+    (p: ReleaseDemoProfile) => {
+      saveReleaseDemoProfile(p, !!(user && user.status === "active"));
+      setProfileState(p);
+    },
+    [user],
+  );
 
   return { profile, setProfile, refresh };
 }

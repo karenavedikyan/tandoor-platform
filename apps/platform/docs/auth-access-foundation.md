@@ -57,7 +57,7 @@ SQLite-таблица `users` в `shared/schema.ts` помечена `@deprecate
 |----------------------|------------|
 | `auth-server-scaffolding-cd7c` | Модули `server/auth/*`, сессии в Postgres, bcryptjs, cookie `tandoor_auth_sess`, заглушки `/api/auth/*` (501), `auth:db-push` — см. раздел PR 02 |
 | `auth-email-password-login-v2-cd7c` | **PR 03 (v2):** серверный login/logout/me; Vercel `api/auth/[action].ts` **self-contained** (без импортов `server/`/`shared/`), Express — `server/auth/handlers.ts`; `auth:seed-admin` |
-| `auth-client-switch-cd7c` | **Удаление mock-auth**, переключение клиента на серверные сессии |
+| `auth-client-switch-cd7c` | **done — PR 04:** удаление mock-auth, клиент на `/api/auth/*` (TanStack Query `useAuthUser`, `auth-api.ts`, cookie) |
 | `auth-invitations-cd7c` | Поток приглашений, принятие по токену |
 | `auth-rbac-scope-cd7c` | RBAC и `UserScope` на API |
 | `auth-users-admin-cd7c` | Полноценный `/users`, редактирование, фильтры |
@@ -66,6 +66,47 @@ SQLite-таблица `users` в `shared/schema.ts` помечена `@deprecate
 | `auth-finalize-cd7c` | Чистка legacy SQLite `users`, финальная документация |
 
 
+## PR 04 — client switch (удаление mock-auth)
+
+Клиент платформы переведён на **реальные** `GET/POST /api/auth/*` с `credentials: "same-origin"` (HttpOnly cookie `tandoor_auth_sess`). **Пароль и email в localStorage/sessionStorage не сохраняются** (кроме пилотного профиля release-demo в `sessionStorage`, см. ниже).
+
+### Что удалено
+
+- `apps/platform/client/src/lib/mock-auth.ts` и `apps/platform/client/src/hooks/use-mock-auth.ts` (пилотные пароли, `MOCK_AUTH_CREDENTIALS`, `MOCK_AUTH_CHANGED_EVENT`, `loginWithCredentials`, `SALES_ROLE_PASSWORDS`).
+- Страница `/login`: список демо-логинов, `LoginPicker`, `MOCK_AUTH_CREDENTIALS`.
+
+### Что осталось из пилота
+
+- **Release-demo bypass** (`lib/release-demo-bypass.ts`): включается через `VITE_RELEASE_DEMO=true`, legacy `VITE_TANDOOR_DEMO_AUTH=1`, query `?demo=1`, либо `localStorage["tandoor-release-demo-bypass"] === "true"`. **Без реальной сессии** доступны только маршруты `/release-one*`. Все остальные разделы требуют успешного `GET /api/auth/me`.
+- **Демо-персона** (`release-demo-profile.ts`, `sessionStorage`): при активной серверной сессии роль/персона для пилотных экранов берутся из `UserRole` пользователя; при bypass без логина — из `sessionStorage`.
+- **Временный адаптер** `lib/role-mapping.ts`: `UserRole` ↔ `SalesRole` для существующих экранов sales-control. **TODO:** убрать в PR #06 / #07.
+
+### Новые клиентские модули
+
+| Файл | Назначение |
+|------|------------|
+| `client/src/lib/auth-api.ts` | `login`, `me`, `logout`, `logoutAll`, тип `AuthUserDTO`, `displayUserName` |
+| `client/src/hooks/use-auth-user.ts` | TanStack Query `["auth","me"]`, `invalidateAuthUser` |
+| `client/src/hooks/use-current-user.ts` | `isAuthenticated` = `active`, `logout` + инвалидация + жёсткий переход на `#/login` |
+| `shared/auth.ts` | `UserRole`, `UserStatus` (общие литералы с сервером) |
+
+### Локальный вход в dev
+
+1. `npm run auth:db-push` и `npm run auth:seed-admin` с `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
+2. `npm run dev`, открыть `#/login`, ввести email и пароль администратора.
+
+### Vite proxy
+
+В `vite.config.ts`: `server.proxy["/api"] → http://localhost:5000`, чтобы при отдельном Vite dev (`5173`) запросы `/api/auth/*` шли на Express.
+
+### Вне объёма PR 04 (как и раньше)
+
+- Приглашения (**PR #05**)
+- RBAC на бизнес-API (**PR #06**)
+- Админка `/users` (**PR #07**)
+- Редактирование `/profile`, смена пароля (**PR #08**)
+- 2FA, Redis rate-limit (**PR #09**)
+- Удаление `SalesRole` и адаптера `role-mapping` (**PR #06 / #07**)
 
 ## PR 02 — server scaffolding
 

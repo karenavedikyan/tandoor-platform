@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
+import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { createBitrix24LkTask, listBitrix24Tasks } from "@/lib/bitrix24-integration";
 import {
   getBitrix24UserIdForProfile,
@@ -36,8 +37,6 @@ import {
   newBitrix24TaskLinkId,
   type Bitrix24TaskLink,
 } from "@/lib/bitrix24-task-links";
-import { MOCK_AUTH_CHANGED_EVENT } from "@/lib/mock-auth";
-import { loadReleaseDemoProfile, RELEASE_DEMO_PROFILE_EVENT, type ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { formatDisplayDateTime } from "@/lib/format-display-date";
 import { cn } from "@/lib/utils";
 
@@ -92,17 +91,7 @@ export function Bitrix24TasksPanel({
   const [importErr, setImportErr] = useState("");
   const [onlyOpenImport, setOnlyOpenImport] = useState(true);
   const [showAllImported, setShowAllImported] = useState(false);
-  const [profile, setProfile] = useState<ReleaseDemoProfile>(() => loadReleaseDemoProfile());
-
-  useEffect(() => {
-    const sync = () => setProfile(loadReleaseDemoProfile());
-    window.addEventListener(RELEASE_DEMO_PROFILE_EVENT, sync);
-    window.addEventListener(MOCK_AUTH_CHANGED_EVENT, sync);
-    return () => {
-      window.removeEventListener(RELEASE_DEMO_PROFILE_EVENT, sync);
-      window.removeEventListener(MOCK_AUTH_CHANGED_EVENT, sync);
-    };
-  }, []);
+  const { profile } = useReleaseDemoProfile();
 
   const bitrixUserId = useMemo(() => getBitrix24UserIdForProfile(profile), [profile]);
   const bitrixTasksAllowed = useMemo(() => hasBitrix24UserMapping(profile), [profile]);

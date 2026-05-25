@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { Link, useLocation } from "wouter";
 import { MainRoleDashboard } from "@/components/main-role-dashboard";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { userRoleToSalesRole } from "@/lib/role-mapping";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -216,10 +217,11 @@ export default function SalesManagerWorkspace() {
   const { user } = useCurrentUser();
   const [loc] = useLocation();
   const path = loc && loc.length > 0 ? loc : "/";
+  const pilotRole = user ? userRoleToSalesRole(user.role) : null;
   const isSalesMainDash =
     (path === "/main" || path === "/") &&
-    user &&
-    (user.role === "sales_manager" || user.role === "team_lead" || user.role === "sales_director");
+    pilotRole &&
+    (pilotRole === "sales_manager" || pilotRole === "team_lead" || pilotRole === "sales_director");
 
   if (isSalesMainDash) {
     return <MainRoleDashboard />;
@@ -286,7 +288,7 @@ export default function SalesManagerWorkspace() {
             <Button asChild variant="outline" className="min-h-10 border-border bg-card font-semibold" data-testid="button-sales-manager-open-sales-control">
               <Link href="/sales-control">План-факт продаж</Link>
             </Button>
-            {user && canAccessPath(user.role, "/analytics-workspace") ? (
+            {user && canAccessPath(userRoleToSalesRole(user.role), "/analytics-workspace") ? (
               <Button asChild variant="outline" className="min-h-10 border-border bg-card font-semibold" data-testid="button-sales-manager-open-analytics-workspace">
                 <Link href="/analytics-workspace">Аналитика команды</Link>
               </Button>

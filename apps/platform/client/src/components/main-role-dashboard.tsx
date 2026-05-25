@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
-import { useCurrentUser } from "@/hooks/use-current-user";
+import { displayUserName, useCurrentUser } from "@/hooks/use-current-user";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { canAccessPath, salesControlHomeHref } from "@/lib/auth-access";
+import { userRoleToSalesRole } from "@/lib/role-mapping";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
 import { DEALER_BASE_ROWS, type DealerRow } from "@/lib/dealer-base-mock-data";
@@ -75,7 +76,7 @@ export function MainRoleDashboard() {
   const { profile } = useReleaseDemoProfile();
   const actx = useClientBaseActualization();
   const managementPlane = useClientBaseTeamActualization();
-  const role = (user?.role ?? profile.role) as SalesRole;
+  const role = (user ? userRoleToSalesRole(user.role) : profile.role) as SalesRole;
 
   const baseRowsForDashboard = useMemo(() => {
     if (actx.enabled) {
@@ -138,7 +139,7 @@ export function MainRoleDashboard() {
     };
   }, [scopedClients, dealerIds, role, profile, actx.enabled, useMgmtFactualTasks, managementPlane.mergedState]);
 
-  const can = (path: string) => Boolean(user && canAccessPath(user.role, path));
+  const can = (path: string) => Boolean(user && canAccessPath(userRoleToSalesRole(user.role), path));
 
   const planHref = salesControlHomeHref(role);
 
@@ -271,9 +272,9 @@ export function MainRoleDashboard() {
 
   const contextLine =
     role === "sales_manager"
-      ? `Показатели по вашим клиентам (${user?.name ?? "менеджер"}) и связанным задачам — те же данные, что в «Клиентской базе» и «Задачах».`
+      ? `Показатели по вашим клиентам (${displayUserName(user) ?? "менеджер"}) и связанным задачам — те же данные, что в «Клиентской базе» и «Задачах».`
       : role === "team_lead"
-        ? `Показатели по команде РОП (${user?.name ?? "РОП"}) — те же данные, что в «Клиентской базе» и «Задачах» с фильтром команды.${
+        ? `Показатели по команде РОП (${displayUserName(user) ?? "РОП"}) — те же данные, что в «Клиентской базе» и «Задачах» с фильтром команды.${
             actx.enabled ? " Источник KPI: актуальная активная база (актуализация, без архива)." : ""
           }`
         : role === "sales_director"

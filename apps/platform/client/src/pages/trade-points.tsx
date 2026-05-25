@@ -72,7 +72,7 @@ import { toast } from "@/hooks/use-toast";
 import { getClientCategoryLabel, type ClientCategoryId } from "@/lib/client-category";
 import type { DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import { cn } from "@/lib/utils";
-import { useCurrentUser } from "@/hooks/use-current-user";
+import { displayUserName, useCurrentUser } from "@/hooks/use-current-user";
 import { TradePointsManagementCockpit } from "@/pages/trade-points-management-cockpit";
 
 /** Плотность отображения списка торговых точек (как «Витрина дилеров»). */
@@ -733,7 +733,7 @@ export default function TradePointsPage(): ReactElement {
     const tp = archiveTarget.point;
     const now = new Date().toISOString();
     const uid = user?.id ?? profile.personaUserId;
-    const uname = user?.name?.trim() || userLabelFromProfile(profile);
+    const uname = displayUserName(user).trim() || userLabelFromProfile(profile);
     const r = await actx.persist((prev) =>
       mergeActualizationState(prev, {
         archivedTradePointsById: {
@@ -767,7 +767,7 @@ export default function TradePointsPage(): ReactElement {
     setBulkArchiveBusy(true);
     const now = new Date().toISOString();
     const uid = user?.id ?? profile.personaUserId;
-    const uname = user?.name?.trim() || userLabelFromProfile(profile);
+    const uname = displayUserName(user).trim() || userLabelFromProfile(profile);
     const r = await actx.persist((prev) => {
       const next = { ...prev.archivedTradePointsById };
       for (const key of keys) {

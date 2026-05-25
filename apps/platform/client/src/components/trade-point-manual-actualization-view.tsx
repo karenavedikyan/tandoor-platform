@@ -54,7 +54,7 @@ import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actu
 import { EntityActualizationPhotoGallery } from "@/components/entity-actualization-photo-gallery";
 import { ShowcaseCoverPhotoSlot } from "@/components/showcase-cover-photo-slot";
 import { canEditClientNextStep } from "@/lib/client-next-step-data";
-import { useCurrentUser } from "@/hooks/use-current-user";
+import { displayUserName, useCurrentUser } from "@/hooks/use-current-user";
 import { cn } from "@/lib/utils";
 import {
   formatRussianPhoneInput,
@@ -1482,7 +1482,7 @@ export function TradePointManualActualizationView(props: {
                   matrixClientCategory={matrixClientCategory}
                   canEdit={canEditUi}
                   actorUserId={user?.id ?? profile.personaUserId}
-                  actorLabel={(user?.name ?? "").trim() || userLabelFromProfile(profile)}
+                  actorLabel={(displayUserName(user)).trim() || userLabelFromProfile(profile)}
                   selectedShowcaseModels={selectedShowcaseModels}
                   onChangeSelected={setSelectedShowcaseModels}
                   showcaseMatrixTasks={showcaseMatrixTasks}
@@ -1585,7 +1585,7 @@ export function TradePointManualActualizationView(props: {
               tradePointName={point.name}
               canCreate={canEditClientNextStep(profile, dealer)}
               actorUserId={user?.id ?? profile.personaUserId}
-              actorLabel={user?.name ?? userLabelFromProfile(profile)}
+              actorLabel={displayUserName(user) ?? userLabelFromProfile(profile)}
               compact
             />
           </AccordionContent>

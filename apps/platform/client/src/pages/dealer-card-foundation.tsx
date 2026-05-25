@@ -43,7 +43,7 @@ import { FloatingBackButton } from "@/components/navigation/floating-back-button
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { toast } from "@/hooks/use-toast";
-import { useCurrentUser } from "@/hooks/use-current-user";
+import { displayUserName, useCurrentUser } from "@/hooks/use-current-user";
 import { getDealerAnalyticsSignalCards } from "@/lib/dealer-analytics-signals";
 import { buildHashPath } from "@/lib/hash-route-utils";
 import {
@@ -1068,7 +1068,7 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
   const equipmentSignal = useMemo(() => getDealerEquipmentSignal(row), [row]);
 
   const onPlanShowcaseCheck = useCallback(() => {
-    const label = user?.name ?? userLabelFromProfile(profile);
+    const label = displayUserName(user) ?? userLabelFromProfile(profile);
     const uid = user?.id ?? profile.personaUserId;
     const iso = addCalendarDaysIso(new Date(), 5);
     if (canEditClientNextStep(profile, row)) {
@@ -1528,7 +1528,7 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                         if (raw !== "" && raw !== "—" && raw !== "-" && !(Number.isFinite(n) && n > 0)) {
                           return;
                         }
-                        setDealerUnloadingOrder(row.id, next, profile.personaUserId, user?.name ?? userLabelFromProfile(profile));
+                        setDealerUnloadingOrder(row.id, next, profile.personaUserId, displayUserName(user) ?? userLabelFromProfile(profile));
                         setUnloadDialogOpen(false);
                       }}
                     >
@@ -1585,7 +1585,7 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                           row.id,
                           next,
                           profile.personaUserId,
-                          user?.name ?? userLabelFromProfile(profile),
+                          displayUserName(user) ?? userLabelFromProfile(profile),
                         );
                         setRegionalDialogOpen(false);
                         setRegionalBump((n) => n + 1);
@@ -1779,7 +1779,7 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                               type: "competitor",
                               body: competitorCommentDraft,
                               createdBy: user?.id ?? profile.personaUserId,
-                              createdByName: user?.name ?? userLabelFromProfile(profile),
+                              createdByName: displayUserName(user) ?? userLabelFromProfile(profile),
                             });
                             setCompetitorCommentDraft("");
                           }}
@@ -1797,14 +1797,14 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
               row={row}
               profile={profile}
               actorUserId={user?.id ?? profile.personaUserId}
-              actorLabel={user?.name ?? userLabelFromProfile(profile)}
+              actorLabel={displayUserName(user) ?? userLabelFromProfile(profile)}
             />
 
             <DealerClientNextStepSection
               row={row}
               profile={profile}
               actorUserId={user?.id ?? profile.personaUserId}
-              actorLabel={user?.name ?? userLabelFromProfile(profile)}
+              actorLabel={displayUserName(user) ?? userLabelFromProfile(profile)}
               onSaved={() => setNextStepBump((n) => n + 1)}
             />
 
@@ -1815,7 +1815,7 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                 dealerName={rowView.name}
                 canCreate={canEditClientNextStep(profile, row)}
                 actorUserId={user?.id ?? profile.personaUserId}
-                actorLabel={user?.name ?? userLabelFromProfile(profile)}
+                actorLabel={displayUserName(user) ?? userLabelFromProfile(profile)}
                 compact
               />
             ) : null}
@@ -1920,7 +1920,7 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                             type: "general",
                             body: historyCommentDraft,
                             createdBy: user?.id ?? profile.personaUserId,
-                            createdByName: user?.name ?? userLabelFromProfile(profile),
+                            createdByName: displayUserName(user) ?? userLabelFromProfile(profile),
                           });
                           setHistoryCommentDraft("");
                         }}
@@ -2133,7 +2133,7 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                               type: "problem",
                               body: problemCommentDraft,
                               createdBy: user?.id ?? profile.personaUserId,
-                              createdByName: user?.name ?? userLabelFromProfile(profile),
+                              createdByName: displayUserName(user) ?? userLabelFromProfile(profile),
                             });
                             setProblemCommentDraft("");
                           }}
@@ -2205,7 +2205,7 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                 completed={trainingCompleted}
                 newStaffTrainingNeeded={newStaffTrainingNeeded}
                 onNewStaffTrainingChange={(next) => {
-                  setNewStaffTrainingNeeded(row.id, next, user?.name ?? userLabelFromProfile(profile));
+                  setNewStaffTrainingNeeded(row.id, next, displayUserName(user) ?? userLabelFromProfile(profile));
                 }}
                 onCompletedChange={(next) => {
                   setTrainingCompleted(next);

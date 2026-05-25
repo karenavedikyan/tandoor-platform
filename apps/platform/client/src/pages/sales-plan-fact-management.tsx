@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { SalesPlanFactManagementCockpit } from "@/components/sales-plan-fact-management-cockpit";
 import { useSalesPlanFactPersistedState } from "@/hooks/use-sales-plan-fact-state";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { userRoleToSalesRole } from "@/lib/role-mapping";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
 import { getSalesUserById, type SalesRole } from "@/lib/sales-control-data";
@@ -12,7 +13,7 @@ import { normalizeSalesPlanFactState } from "@/lib/sales-plan-fact-types";
 export default function SalesPlanFactManagementPage() {
   const { user } = useCurrentUser();
   const { profile } = useReleaseDemoProfile();
-  const role = (user?.role ?? profile.role) as SalesRole;
+  const role = (user ? userRoleToSalesRole(user.role) : profile.role) as SalesRole;
   const persona = useMemo(() => getSalesUserById(profile.personaUserId), [profile.personaUserId]);
 
   const { state, loading, saving, error, storageMessage, persist } = useSalesPlanFactPersistedState(profile);

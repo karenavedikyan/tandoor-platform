@@ -1,12 +1,13 @@
 /**
  * Статический маппинг пользователя ЛК → bitrixUserId (MVP).
  * В production значения должны приходить из профиля на backend.
+ *
+ * TODO(auth-users-admin-cd7c): убрать хардкод, брать связку из `/api/users` или профиля.
  */
 
-import { MOCK_AUTH_CREDENTIALS } from "@/lib/mock-auth";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 
-/** Bitrix24 user id по id пользователя из SALES_USERS / mock-auth. */
+/** Bitrix24 user id по id пользователя из SALES_USERS. */
 const BITRIX24_USER_ID_BY_SALES_USER_ID: Record<string, string> = {
   "mgr-avedikyan-ka": "2",
   "mgr-boyko-em": "120931",
@@ -16,7 +17,7 @@ const BITRIX24_USER_ID_BY_SALES_USER_ID: Record<string, string> = {
   "user-tl-kupiansky": "100",
 };
 
-/** Дублирование по логину демо-auth (на случай смены personaUserId при тех же учётках). */
+/** Дублирование по логину демо (исторически из mock-auth). */
 const BITRIX24_USER_ID_BY_USERNAME: Record<string, string> = {
   avedikyan: "2",
   boyko: "120931",
@@ -36,11 +37,6 @@ function normalizeUsername(raw: string): string {
 function bitrixIdForSalesUserId(userId: string): string | null {
   const direct = BITRIX24_USER_ID_BY_SALES_USER_ID[userId];
   if (direct) return direct;
-  const row = MOCK_AUTH_CREDENTIALS.find((c) => c.userId === userId);
-  if (row) {
-    const byLogin = BITRIX24_USER_ID_BY_USERNAME[normalizeUsername(row.username)];
-    if (byLogin) return byLogin;
-  }
   return null;
 }
 
@@ -56,4 +52,9 @@ export function hasBitrix24UserMapping(profile: ReleaseDemoProfile): boolean {
 /** Для админ-таблицы POC: связка по id пользователя ЛК без полного профиля. */
 export function getBitrix24UserIdForSalesUserId(userId: string): string | null {
   return bitrixIdForSalesUserId(userId);
+}
+
+/** Резервный поиск по username (пилот). */
+export function getBitrix24UserIdForUsername(username: string): string | null {
+  return BITRIX24_USER_ID_BY_USERNAME[normalizeUsername(username)] ?? null;
 }

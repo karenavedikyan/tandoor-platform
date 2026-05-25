@@ -1,7 +1,9 @@
 /**
  * Демо-профиль Release 1: роль и персона без backend (sessionStorage).
+ * При выключенном demo-bypass персона выводится из роли серверного пользователя (UserRole → SalesRole).
  */
 
+import type { UserRole } from "@shared/auth";
 import type { SalesRole } from "@/lib/sales-control-data";
 import {
   getAllSalesManagers,
@@ -9,7 +11,8 @@ import {
   getTeamManagers,
   SALES_USERS,
 } from "@/lib/sales-control-data";
-import { isDemoAuthBypassEnabled, loadMockAuthSession } from "@/lib/mock-auth";
+import { isDemoAuthBypassEnabled } from "@/lib/release-demo-bypass";
+import { userRoleToSalesRole } from "@/lib/role-mapping";
 
 export const RELEASE_DEMO_PROFILE_KEY = "tandoor-release-demo-profile-v1";
 export const RELEASE_DEMO_PROFILE_EVENT = "release-demo-profile-changed";
@@ -39,35 +42,36 @@ export function listPersonasForRole(role: SalesRole): { id: string; name: string
   return SALES_USERS.filter((u) => u.role === role).map((u) => ({ id: u.id, name: u.name }));
 }
 
-export function loadReleaseDemoProfile(): ReleaseDemoProfile {
-  if (typeof window === "undefined" || !window.sessionStorage) return { ...DEFAULT };
-  const auth = loadMockAuthSession();
-  if (auth) {
-    const u = getSalesUserById(auth.userId);
-    if (u?.role) {
-      return { role: u.role, personaUserId: u.id };
+export function loadReleaseDemoProfile(serverUserRole?: UserRole | null): ReleaseDemoProfile {
+  if (typeof window === "undefined") return { ...DEFAULT };
+
+  if (serverUserRole) {
+    const sr = userRoleToSalesRole(serverUserRole);
+    return { role: sr, personaUserId: defaultPersonaForRole(sr) };
+  }
+
+  if (isDemoAuthBypassEnabled() && window.sessionStorage) {
+    try {
+      const raw = window.sessionStorage.getItem(RELEASE_DEMO_PROFILE_KEY);
+      if (raw) {
+        const p = JSON.parse(raw) as Partial<ReleaseDemoProfile>;
+        const role = (p.role ?? DEFAULT.role) as SalesRole;
+        let personaUserId = p.personaUserId ?? defaultPersonaForRole(role);
+        const allowed = listPersonasForRole(role).some((x) => x.id === personaUserId);
+        if (!allowed) personaUserId = defaultPersonaForRole(role);
+        return { role, personaUserId };
+      }
+    } catch {
+      return { ...DEFAULT };
     }
   }
-  if (!isDemoAuthBypassEnabled()) {
-    return { ...DEFAULT };
-  }
-  try {
-    const raw = window.sessionStorage.getItem(RELEASE_DEMO_PROFILE_KEY);
-    if (!raw) return { ...DEFAULT };
-    const p = JSON.parse(raw) as Partial<ReleaseDemoProfile>;
-    const role = (p.role ?? DEFAULT.role) as SalesRole;
-    let personaUserId = p.personaUserId ?? defaultPersonaForRole(role);
-    const allowed = listPersonasForRole(role).some((x) => x.id === personaUserId);
-    if (!allowed) personaUserId = defaultPersonaForRole(role);
-    return { role, personaUserId };
-  } catch {
-    return { ...DEFAULT };
-  }
+
+  return { ...DEFAULT };
 }
 
-export function saveReleaseDemoProfile(next: ReleaseDemoProfile): void {
+export function saveReleaseDemoProfile(next: ReleaseDemoProfile, hasActiveServerUser = false): void {
   if (typeof window === "undefined" || !window.sessionStorage) return;
-  if (loadMockAuthSession()) return;
+  if (hasActiveServerUser) return;
   if (!isDemoAuthBypassEnabled()) return;
   window.sessionStorage.setItem(RELEASE_DEMO_PROFILE_KEY, JSON.stringify(next));
   if (next.role === "sales_manager") {

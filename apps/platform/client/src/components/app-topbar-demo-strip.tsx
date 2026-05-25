@@ -1,12 +1,14 @@
 import { ReleaseDemoRoleSwitcher } from "@/components/release-demo-role-switcher";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
+import { useAuthUser } from "@/hooks/use-auth-user";
 import { getSalesUserById } from "@/lib/sales-control-data";
 import { releaseDemoRoleLabel } from "@/lib/release-demo-profile";
-import { isDemoAuthBypassEnabled, loadMockAuthSession } from "@/lib/mock-auth";
+import { isDemoAuthBypassEnabled } from "@/lib/release-demo-bypass";
 
 export function AppTopbarDemoStrip() {
-  if (!isDemoAuthBypassEnabled() || loadMockAuthSession()) return null;
+  const { user, isLoading } = useAuthUser();
   const { profile } = useReleaseDemoProfile();
+  if (!isDemoAuthBypassEnabled() || isLoading || user) return null;
   const u = getSalesUserById(profile.personaUserId);
   return (
     <div className="flex min-w-0 max-w-full flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-3">

@@ -3,14 +3,23 @@ import { Switch, Route, Router, useLocation } from "wouter";
 import { useHashLocation } from "wouter/use-hash-location";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageLoadingFallback } from "@/components/navigation/page-loading";
-import { useMockAuth } from "@/hooks/use-mock-auth";
-import { canAccessPath, defaultHomePathForRole, getPilotNavigation } from "@/lib/auth-access";
+import { useCurrentUser, displayUserName } from "@/hooks/use-current-user";
+import {
+  canAccessPathForUser,
+  defaultHomePathForUserRole,
+  getPilotNavigation,
+} from "@/lib/auth-access";
 import { buildHashPath } from "@/lib/hash-route-utils";
 import { useBitrix24EmbeddedFlag } from "@/lib/bitrix24-integration";
+import { isDemoAuthBypassEnabled } from "@/lib/release-demo-bypass";
+import { userRoleToSalesRole } from "@/lib/role-mapping";
+import type { AuthUserDTO } from "@/lib/auth-api";
 import NotFound from "@/pages/not-found";
 import PreviewUnavailable from "@/pages/preview-unavailable";
 import InternalPrototypePlaceholder from "@/pages/internal-prototype-placeholder";
@@ -21,7 +30,6 @@ import { ThemeProvider } from "@/context/theme-provider";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { resolveSidebarWorkingDealerClientCount } from "@/lib/dealer-base-sidebar-client-count";
 import { countWorkingTradePointsForSidebar } from "@/lib/trade-point-list-for-actualization";
-import type { SalesUser } from "@/lib/sales-control-data";
 
 const LazySalesManagerWorkspace = lazy(() => import("@/pages/sales-manager-workspace"));
 const LazyDealerBase = lazy(() => import("@/pages/dealer-base"));
@@ -115,17 +123,60 @@ function HashRedirect({ to }: { to: string }) {
   return <PageLoadingFallback />;
 }
 
+function normRoutePath(path: string): string {
+  const p = path.split("?")[0] || "/";
+  if (p.length > 1 && p.endsWith("/")) return p.slice(0, -1);
+  return p || "/";
+}
+
+function isReleaseDemoPath(path: string): boolean {
+  const p = normRoutePath(path);
+  return p === "/release-one" || p.startsWith("/release-one/");
+}
+
+function ReleaseDemoRoutes() {
+  return (
+    <Switch>
+      <Route path="/release-one/clients" component={ReleaseClientsRoute} />
+      <Route path="/release-one" component={ReleaseOneRoute} />
+      <Route component={NotFound} />
+    </Switch>
+  );
+}
+
+function AccountDisabledScreen({ onLogout }: { onLogout: () => void }) {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
+      <Card className="w-full max-w-md rounded-2xl border border-border/80 shadow-lg">
+        <CardHeader>
+          <CardTitle className="text-xl">Учётка отключена</CardTitle>
+          <CardDescription>Доступ к платформе для этой учётной записи заблокирован.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">Обратитесь к администратору, если это ошибка.</p>
+        </CardContent>
+        <CardFooter>
+          <Button className="w-full font-semibold" type="button" onClick={() => void onLogout()}>
+            Выйти
+          </Button>
+        </CardFooter>
+      </Card>
+    </div>
+  );
+}
+
 function AuthenticatedShell({
   user,
   shellHomeHref,
   embeddedBitrix24,
   onLogout,
 }: {
-  user: SalesUser;
+  user: AuthUserDTO;
   shellHomeHref: string;
   embeddedBitrix24: boolean;
-  onLogout: () => void;
+  onLogout: () => void | Promise<void>;
 }) {
+  const salesRole = useMemo(() => userRoleToSalesRole(user.role), [user.role]);
   const { profile } = useReleaseDemoProfile();
   const actx = useClientBaseActualization();
   const teamPlane = useClientBaseTeamActualization();
@@ -153,16 +204,16 @@ function AuthenticatedShell({
     return countWorkingTradePointsForSidebar(profile, teamPlane.mergedState);
   }, [actx.enabled, actx.loading, teamPlane.mergedState, teamPlane.teamFetchLoading, profile]);
   const navigation = useMemo(
-    () => getPilotNavigation(user.role, dealerNavCount, tradePointNavCount),
-    [user.role, dealerNavCount, tradePointNavCount],
+    () => getPilotNavigation(salesRole, dealerNavCount, tradePointNavCount),
+    [salesRole, dealerNavCount, tradePointNavCount],
   );
 
   return (
     <AppShell
       navigation={navigation}
       homeHref={shellHomeHref}
-      userName={user.name}
-      onLogout={onLogout}
+      userName={displayUserName(user)}
+      onLogout={() => void onLogout()}
       embeddedBitrix24={embeddedBitrix24}
     >
       <Switch>
@@ -214,37 +265,23 @@ function AuthenticatedShell({
   );
 }
 
-function AuthenticatedApp() {
+function AuthenticatedApp({ user, logout }: { user: AuthUserDTO; logout: () => Promise<void> }) {
   const [loc] = useLocation();
-  const [, setLoc] = useHashLocation();
-  const { isAuthenticated, user, logout } = useMockAuth();
   const embeddedBitrix24 = useBitrix24EmbeddedFlag();
 
   const path = loc && loc.length > 0 ? loc : "/";
 
-  if (!isAuthenticated || !user) {
-    return <HashRedirect to="/login" />;
+  if (!canAccessPathForUser(user.role, path)) {
+    return <HashRedirect to={defaultHomePathForUserRole(user.role)} />;
   }
 
-  if (!canAccessPath(user.role, path)) {
-    return <HashRedirect to={defaultHomePathForRole(user.role)} />;
-  }
-
-  const homeHref = defaultHomePathForRole(user.role);
+  const homeHref = defaultHomePathForUserRole(user.role);
   const shellHomeHref = embeddedBitrix24 ? buildHashPath(homeHref.split("?")[0] ?? homeHref, { embedded: "bitrix24" }) : homeHref;
 
   return (
     <ClientBaseActualizationProvider>
       <ClientBaseTeamActualizationProvider>
-        <AuthenticatedShell
-          user={user}
-          shellHomeHref={shellHomeHref}
-          embeddedBitrix24={embeddedBitrix24}
-          onLogout={() => {
-            logout();
-            setLoc("/login");
-          }}
-        />
+        <AuthenticatedShell user={user} shellHomeHref={shellHomeHref} embeddedBitrix24={embeddedBitrix24} onLogout={logout} />
       </ClientBaseTeamActualizationProvider>
     </ClientBaseActualizationProvider>
   );
@@ -253,6 +290,9 @@ function AuthenticatedApp() {
 function AppRouter() {
   const [loc] = useLocation();
   const path = loc && loc.length > 0 ? loc : "/";
+  const { user, isAuthenticated, isLoading, logout } = useCurrentUser();
+  const bypass = isDemoAuthBypassEnabled();
+  const demoOnly = bypass && isReleaseDemoPath(path) && !isAuthenticated && !isLoading;
 
   if (path === "/login") {
     return (
@@ -262,7 +302,29 @@ function AppRouter() {
     );
   }
 
-  return <AuthenticatedApp />;
+  if (demoOnly) {
+    return (
+      <Suspense fallback={<PageLoadingFallback />}>
+        <ReleaseDemoRoutes />
+      </Suspense>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background text-muted-foreground">Загрузка…</div>
+    );
+  }
+
+  if (user && user.status === "disabled") {
+    return <AccountDisabledScreen onLogout={logout} />;
+  }
+
+  if (!isAuthenticated || !user) {
+    return <HashRedirect to="/login" />;
+  }
+
+  return <AuthenticatedApp user={user} logout={logout} />;
 }
 
 function App() {

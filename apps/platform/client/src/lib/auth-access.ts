@@ -1,8 +1,11 @@
 /**
- * Доступ к маршрутам и пунктам навигации по роли (mock auth, без backend).
+ * Доступ к маршрутам и пунктам навигации (пилот).
+ * До PR #06/#07: `UserRole` с сервера сопоставляется с `SalesRole` через `role-mapping`.
  */
 
+import type { UserRole } from "@shared/auth";
 import type { SalesRole } from "@/lib/sales-control-data";
+import { userRoleToSalesRole } from "@/lib/role-mapping";
 
 export type PilotNavItem = {
   href: string;
@@ -63,7 +66,7 @@ export function defaultHomePathForRole(role: SalesRole): string {
     case "team_lead":
       return "/dealer-base";
     case "sales_director":
-      return "/client-base-activity";
+      return "/territory-card";
     case "marketer":
       return "/marketing-briefs";
     case "analyst":
@@ -71,6 +74,32 @@ export function defaultHomePathForRole(role: SalesRole): string {
     default:
       return "/dealer-base";
   }
+}
+
+/** Домашняя страница после входа по `UserRole` (сервер, PR 04). */
+export function defaultHomePathForUserRole(role: UserRole): string {
+  switch (role) {
+    case "admin":
+      // TODO(auth-users-admin-cd7c): `/admin/users`
+      return "/sales-control";
+    case "director":
+      return "/sales-control";
+    case "rop":
+    case "regional_manager":
+      return "/sales-control/team-lead";
+    case "manager":
+      return "/main";
+    case "marketer":
+      return "/marketing-briefs";
+    case "analyst":
+      return "/analytics-workspace";
+    default:
+      return "/";
+  }
+}
+
+export function canAccessPathForUser(role: UserRole, path: string): boolean {
+  return canAccessPath(userRoleToSalesRole(role), path);
 }
 
 /** План-факт: целевой раздел по роли. */
@@ -97,8 +126,6 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
   if (p === "/login") return true;
   if (p === "/bitrix24" || p === "/embedded/bitrix24") return true;
   if (p === "/communications") return canAccessCommunications(role);
-  if (p === "/profile") return true;
-  if (p === "/users") return role === "sales_director" || role === "team_lead";
 
   const any = (preds: ((x: string) => boolean)[]) => preds.some((f) => f(p));
 
@@ -291,12 +318,6 @@ export function getPilotNavigation(
         label: "План-факт и KPI",
         testId: "nav-item-sales-plan-fact",
         navBehaviorId: "nav-sales-control",
-      },
-      {
-        href: "/users",
-        label: "Пользователи и доступ (foundation)",
-        testId: "nav-item-users-access",
-        navBehaviorId: "nav-users-access",
       },
     ],
   });
