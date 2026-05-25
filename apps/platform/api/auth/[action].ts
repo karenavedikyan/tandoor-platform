@@ -13,9 +13,32 @@
  * Дублированные литералы ролей/статусов (копия `shared/auth.ts` для типизации ответа):
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { Pool } from "@neondatabase/serverless";
+import { neon } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+
+/**
+ * Neon HTTP driver shim that mimics the subset of pg.Pool API used in this file:
+ *   pool.query<T>(text, params?) → { rows: T[] }
+ *
+ * Reason: @vercel/node serverless runtime has no native WebSocket, so the Pool
+ * driver (WebSocket-based) cannot connect ("All attempts to open a WebSocket
+ * to connect to the database failed"). neon() uses HTTPS and works everywhere.
+ * See api/actualization/state.ts for the same pattern.
+ */
+type NeonHttp = ReturnType<typeof neon>;
+interface PoolLike {
+  query: <T = Record<string, unknown>>(text: string, params?: unknown[]) => Promise<{ rows: T[] }>;
+}
+function makePoolFromNeon(sql: NeonHttp): PoolLike {
+  return {
+    async query<T>(text: string, params?: unknown[]): Promise<{ rows: T[] }> {
+      const callable = sql as unknown as (s: string, p?: unknown[]) => Promise<unknown>;
+      const rows = (await callable(text, params ?? [])) as T[];
+      return { rows };
+    },
+  };
+}
 
 type UserRole =
   | "director"
@@ -186,7 +209,7 @@ function clearLoginRateLimit(input: { ip: string | null; emailLower: string }): 
   rateStore.delete(rateKey(input.ip, input.emailLower));
 }
 
-let cachedPool: Pool | null | undefined;
+let cachedPool: PoolLike | null | undefined;
 
 function resolveDatabaseUrl(): string | null {
   const a = process.env.DATABASE_URL?.trim();
@@ -198,14 +221,14 @@ function resolveDatabaseUrl(): string | null {
   return null;
 }
 
-function getPool(): Pool | null {
+function getPool(): PoolLike | null {
   if (cachedPool !== undefined) return cachedPool;
   const url = resolveDatabaseUrl();
   if (!url) {
     cachedPool = null;
     return null;
   }
-  cachedPool = new Pool({ connectionString: url });
+  cachedPool = makePoolFromNeon(neon(url));
   return cachedPool;
 }
 
@@ -221,7 +244,7 @@ type DbUserRow = {
 };
 
 async function tryAudit(
-  pool: Pool,
+  pool: PoolLike,
   input: {
     actorUserId: string | null;
     action: string;
