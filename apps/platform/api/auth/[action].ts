@@ -214,6 +214,25 @@ function vercelHeaders(req: VercelRequest): Record<string, string | string[] | u
   return (req.headers ?? {}) as Record<string, string | string[] | undefined>;
 }
 
+function enforceCsrfOrigin(req: VercelRequest): boolean {
+  const allowed = new Set<string>(["https://tandoor-platform.vercel.app"]);
+  if (process.env.NODE_ENV !== "production") {
+    allowed.add("http://localhost:5173");
+    allowed.add("http://localhost:3000");
+  }
+  const h = req.headers ?? {};
+  const originRaw =
+    (typeof h.origin === "string" ? h.origin : undefined) ??
+    (typeof h.referer === "string" ? h.referer : undefined);
+  if (!originRaw) return true;
+  try {
+    const u = new URL(originRaw);
+    return allowed.has(u.origin);
+  } catch {
+    return false;
+  }
+}
+
 function getClientIp(headers: Record<string, string | string[] | undefined>): string | null {
   const xff = headers["x-forwarded-for"];
   if (typeof xff === "string" && xff.trim()) {
@@ -235,54 +254,6 @@ function readUserAgent(headers: Record<string, string | string[] | undefined>): 
   if (typeof ua === "string") return ua || null;
   if (Array.isArray(ua) && ua[0]) return ua[0]!;
   return null;
-}
-
-const WINDOW_MS = 15 * 60 * 1000;
-const MAX_FAIL = 10;
-type Bucket = { count: number; firstAttemptAt: number };
-const rateStore = new Map<string, Bucket>();
-
-function ratePrune(now: number): void {
-  for (const k of Array.from(rateStore.keys())) {
-    const b = rateStore.get(k);
-    if (b && now - b.firstAttemptAt > WINDOW_MS) rateStore.delete(k);
-  }
-}
-
-function rateKey(ip: string | null, emailLower: string): string {
-  return `${ip ?? "unknown"}:${emailLower}`;
-}
-
-function checkLoginRateLimit(input: { ip: string | null; emailLower: string }): { ok: true } | { ok: false; retryAfterSec: number } {
-  const now = Date.now();
-  ratePrune(now);
-  const key = rateKey(input.ip, input.emailLower);
-  const b = rateStore.get(key);
-  if (!b) return { ok: true };
-  const elapsed = now - b.firstAttemptAt;
-  if (elapsed > WINDOW_MS) {
-    rateStore.delete(key);
-    return { ok: true };
-  }
-  if (b.count < MAX_FAIL) return { ok: true };
-  const retryAfterMs = WINDOW_MS - elapsed;
-  return { ok: false, retryAfterSec: Math.max(1, Math.ceil(retryAfterMs / 1000)) };
-}
-
-function recordLoginFailure(input: { ip: string | null; emailLower: string }): void {
-  const now = Date.now();
-  ratePrune(now);
-  const key = rateKey(input.ip, input.emailLower);
-  const prev = rateStore.get(key);
-  if (!prev || now - prev.firstAttemptAt > WINDOW_MS) {
-    rateStore.set(key, { count: 1, firstAttemptAt: now });
-    return;
-  }
-  prev.count += 1;
-}
-
-function clearLoginRateLimit(input: { ip: string | null; emailLower: string }): void {
-  rateStore.delete(rateKey(input.ip, input.emailLower));
 }
 
 let cachedPool: PoolLike | null | undefined;
@@ -455,6 +426,7 @@ async function tryAudit(
     );
   } catch (e) {
     const m = e instanceof Error ? e.message : String(e);
+    console.warn("[audit-fail]", input.action, m.slice(0, 300));
     console.error("[api/auth] audit", input.action, m.slice(0, 200));
   }
 }
@@ -514,22 +486,30 @@ async function handleLogin(req: VercelRequest, headers: Record<string, string | 
       return { status: 400, json: { success: false, code: "VALIDATION_ERROR", message: "Укажите пароль." } };
     }
 
-    const rl = checkLoginRateLimit({ ip, emailLower: rawEmail });
-    if (!rl.ok) {
-      return {
-        status: 429,
-        json: {
-          success: false,
-          code: "RATE_LIMITED",
-          message: "Слишком много попыток входа. Повторите позже.",
-        },
-        retryAfterSec: rl.retryAfterSec,
-      };
-    }
-
     const pool = getPool();
     if (!pool) {
       return { status: 500, json: { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." } };
+    }
+
+    const lockRes = await pool.query<{ fail_count: number; locked_until: string | null }>(
+      `SELECT fail_count, locked_until FROM auth_login_failures WHERE email_lower = $1 LIMIT 1`,
+      [rawEmail],
+    );
+    const lockRow = lockRes.rows[0];
+    if (lockRow?.locked_until) {
+      const lu = Date.parse(lockRow.locked_until);
+      if (Number.isFinite(lu) && lu > Date.now()) {
+        const retryAfterSec = Math.max(1, Math.ceil((lu - Date.now()) / 1000));
+        return {
+          status: 429,
+          json: {
+            success: false,
+            code: "RATE_LIMITED",
+            message: "Слишком много попыток входа. Повторите позже.",
+          },
+          retryAfterSec,
+        };
+      }
     }
 
     const ures = await pool.query<DbUserRow>(
@@ -546,7 +526,24 @@ async function handleLogin(req: VercelRequest, headers: Record<string, string | 
       !(await verifyPassword(password, user.password_hash));
 
     if (badCreds) {
-      recordLoginFailure({ ip, emailLower: rawEmail });
+      const prevCount = lockRow?.fail_count ?? 0;
+      const attempt = prevCount + 1;
+      await pool.query(
+        `INSERT INTO auth_login_failures (email_lower, fail_count, locked_until, updated_at)
+         VALUES ($1, 1, NULL, NOW())
+         ON CONFLICT (email_lower) DO UPDATE SET
+           fail_count = CASE WHEN auth_login_failures.fail_count + 1 >= 5 THEN 0 ELSE auth_login_failures.fail_count + 1 END,
+           locked_until = CASE WHEN auth_login_failures.fail_count + 1 >= 5 THEN NOW() + interval '15 minutes' ELSE auth_login_failures.locked_until END,
+           updated_at = NOW()`,
+        [rawEmail],
+      );
+      await tryAudit(pool, {
+        actorUserId: null,
+        action: "auth.login.failed",
+        entityType: "email",
+        entityId: rawEmail,
+        metadata: { ip, failCount: attempt },
+      });
       return {
         status: 401,
         json: { success: false, code: "INVALID_CREDENTIALS", message: "Неверный email или пароль." },
@@ -566,7 +563,7 @@ async function handleLogin(req: VercelRequest, headers: Record<string, string | 
       [sessionId, user.id, refreshTokenHash, userAgent, ip, expiresAt],
     );
 
-    clearLoginRateLimit({ ip, emailLower: rawEmail });
+    await pool.query(`DELETE FROM auth_login_failures WHERE email_lower = $1`, [rawEmail]);
 
     let lastLoginAt: string | null = user.last_login_at;
     try {
@@ -735,6 +732,14 @@ function pickAction(req: VercelRequest): string {
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   const action = pickAction(req);
   const headers = vercelHeaders(req);
+  if (req.method === "POST" && !enforceCsrfOrigin(req)) {
+    sendJson(res, 403, {
+      success: false,
+      code: "CSRF_REJECTED",
+      message: "Недопустимый источник запроса.",
+    });
+    return;
+  }
   try {
     if (action === "login" && req.method === "POST") {
       applyResult(res, await handleLogin(req, headers));

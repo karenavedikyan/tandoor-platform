@@ -9,6 +9,7 @@ import {
   bigint,
   boolean,
   index,
+  integer,
   jsonb,
   pgTable,
   primaryKey,
@@ -65,6 +66,16 @@ export const passwordResetLinks = pgTable(
     index("idx_prl_user_active").on(t.userId).where(sql`${t.usedAt} IS NULL`),
   ],
 );
+
+/** Счётчик неудачных логинов и блокировка по email (см. migrations-run в admin API). */
+export const authLoginFailures = pgTable("auth_login_failures", {
+  emailLower: text("email_lower").primaryKey(),
+  failCount: integer("fail_count").notNull().default(0),
+  lockedUntil: timestamp("locked_until", { withTimezone: true, mode: "string" }),
+  updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" })
+    .notNull()
+    .default(sql`now()`),
+});
 
 export const teams = pgTable("teams", {
   id: uuid("id").primaryKey().defaultRandom(),

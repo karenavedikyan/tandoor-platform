@@ -11,12 +11,11 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { createHash } from "node:crypto";
 import type { UserRole, UserStatus } from "@shared/auth";
-import { auditLog, authUsers, passwordResetLinks, sessions } from "@shared/auth-schema";
+import { auditLog, authLoginFailures, authUsers, passwordResetLinks, sessions } from "@shared/auth-schema";
 import type { AuthUserSnapshot } from "./auth-user-snapshot";
 import { buildAuthCookie, clearAuthCookie, parseAuthRefreshToken } from "./cookie";
 import { getAuthDb } from "./db";
 import { hashPassword, verifyPassword } from "./password-hash";
-import { checkLoginRateLimit, clearLoginRateLimit, recordLoginFailure } from "./rate-limit";
 import { getClientIp } from "./request-meta";
 import { createSession, getSessionByRefreshToken, revokeAllSessionsForUser, revokeSession } from "./session-service";
 
@@ -59,10 +58,11 @@ async function tryAudit(input: {
       action: input.action,
       entityType: input.entityType,
       entityId: input.entityId,
-      metadata: input.metadata ?? null,
+      metadata: input.metadata ?? {},
     });
   } catch (e) {
     const m = e instanceof Error ? e.message : String(e);
+    console.warn("[audit-fail]", input.action, m.slice(0, 300));
     console.error("[auth] audit write failed", input.action, m.slice(0, 200));
   }
 }
@@ -241,22 +241,34 @@ export async function loginHandler(input: {
       return validationError("Укажите пароль.");
     }
 
-    const rl = checkLoginRateLimit({ ip, emailLower: rawEmail });
-    if (!rl.ok) {
-      return {
-        status: 429,
-        json: {
-          success: false,
-          code: "RATE_LIMITED",
-          message: "Слишком много попыток входа. Повторите позже.",
-        },
-        retryAfterSec: rl.retryAfterSec,
-      };
-    }
-
     const db = getAuthDb();
     if (!db) {
       return internalError();
+    }
+
+    const lockRows = await db
+      .select({
+        failCount: authLoginFailures.failCount,
+        lockedUntil: authLoginFailures.lockedUntil,
+      })
+      .from(authLoginFailures)
+      .where(eq(authLoginFailures.emailLower, rawEmail))
+      .limit(1);
+    const lockRow = lockRows[0];
+    if (lockRow?.lockedUntil) {
+      const lu = new Date(lockRow.lockedUntil).getTime();
+      if (Number.isFinite(lu) && lu > Date.now()) {
+        const retryAfterSec = Math.max(1, Math.ceil((lu - Date.now()) / 1000));
+        return {
+          status: 429,
+          json: {
+            success: false,
+            code: "RATE_LIMITED",
+            message: "Слишком много попыток входа. Повторите позже.",
+          },
+          retryAfterSec,
+        };
+      }
     }
 
     const rows = await db
@@ -282,14 +294,30 @@ export async function loginHandler(input: {
       !(await verifyPassword(password, user.passwordHash));
 
     if (badCreds) {
-      recordLoginFailure({ ip, emailLower: rawEmail });
+      const prevCount = lockRow?.failCount ?? 0;
+      const attempt = prevCount + 1;
+      await db.execute(sql`
+        INSERT INTO auth_login_failures (email_lower, fail_count, locked_until, updated_at)
+        VALUES (${rawEmail}, 1, NULL, NOW())
+        ON CONFLICT (email_lower) DO UPDATE SET
+          fail_count = CASE WHEN auth_login_failures.fail_count + 1 >= 5 THEN 0 ELSE auth_login_failures.fail_count + 1 END,
+          locked_until = CASE WHEN auth_login_failures.fail_count + 1 >= 5 THEN NOW() + interval '15 minutes' ELSE auth_login_failures.locked_until END,
+          updated_at = NOW()
+      `);
+      await tryAudit({
+        actorUserId: null,
+        action: "auth.login.failed",
+        entityType: "email",
+        entityId: rawEmail,
+        metadata: { ip, failCount: attempt },
+      });
       return invalidCredentials();
     }
 
     const userAgent = readUserAgent(input.headers);
     const sess = await createSession({ userId: user.id, userAgent, ip });
 
-    clearLoginRateLimit({ ip, emailLower: rawEmail });
+    await db.delete(authLoginFailures).where(eq(authLoginFailures.emailLower, rawEmail));
 
     let lastLoginAt: string | null = user.lastLoginAt ?? null;
     try {

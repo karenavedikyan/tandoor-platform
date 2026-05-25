@@ -3,6 +3,7 @@ import { requireAuth } from "./auth/require-auth";
 import { requirePermission } from "./auth/require-permission";
 import { changePasswordSelf, getSelf, updateSelf } from "./profile/profile-handlers";
 import { listSelfSessions, revokeOtherSelfSessions, revokeSelfSession } from "./profile/sessions-handlers";
+import { enforceCsrfOrigin } from "./security/csrf-origin";
 
 const JSON_CT = "application/json; charset=utf-8";
 
@@ -10,6 +11,10 @@ function applyJson(res: Response, status: number, body: Record<string, unknown>)
   res.setHeader("Content-Type", JSON_CT);
   res.setHeader("Cache-Control", "no-store");
   res.status(status).json(body);
+}
+
+function rejectCsrf(res: Response): void {
+  applyJson(res, 403, { success: false, code: "CSRF_REJECTED", message: "Недопустимый источник запроса." });
 }
 
 export function registerProfileRoutes(app: Express): void {
@@ -34,6 +39,10 @@ export function registerProfileRoutes(app: Express): void {
     requirePermission("profile.update_self"),
     async (req: Request, res: Response) => {
       try {
+        if (!enforceCsrfOrigin(req)) {
+          rejectCsrf(res);
+          return;
+        }
         await updateSelf(req, res);
       } catch (e) {
         const m = e instanceof Error ? e.message : String(e);
@@ -49,6 +58,10 @@ export function registerProfileRoutes(app: Express): void {
     requirePermission("profile.update_self"),
     async (req: Request, res: Response) => {
       try {
+        if (!enforceCsrfOrigin(req)) {
+          rejectCsrf(res);
+          return;
+        }
         await changePasswordSelf(req, res);
       } catch (e) {
         const m = e instanceof Error ? e.message : String(e);
@@ -79,6 +92,10 @@ export function registerProfileRoutes(app: Express): void {
     requirePermission("sessions.revoke_self"),
     async (req: Request, res: Response) => {
       try {
+        if (!enforceCsrfOrigin(req)) {
+          rejectCsrf(res);
+          return;
+        }
         await revokeSelfSession(req, res);
       } catch (e) {
         const m = e instanceof Error ? e.message : String(e);
@@ -94,6 +111,10 @@ export function registerProfileRoutes(app: Express): void {
     requirePermission("sessions.revoke_self"),
     async (req: Request, res: Response) => {
       try {
+        if (!enforceCsrfOrigin(req)) {
+          rejectCsrf(res);
+          return;
+        }
         await revokeOtherSelfSessions(req, res);
       } catch (e) {
         const m = e instanceof Error ? e.message : String(e);

@@ -7,5 +7,4 @@ export * from "./require-auth";
 export * from "./require-permission";
 export * from "./auth-user-snapshot";
 export * from "./request-meta";
-export * from "./rate-limit";
 export * from "./handlers";

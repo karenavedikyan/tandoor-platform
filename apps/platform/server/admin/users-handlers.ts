@@ -4,7 +4,7 @@
  */
 
 import type { Request, Response } from "express";
-import { and, desc, eq, ilike, isNull, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, isNull, lt, ne, or, sql } from "drizzle-orm";
 import type { UserRole, UserStatus } from "@shared/auth";
 import { BUSINESS_ROLES } from "@shared/auth";
 import { canCreatePasswordResetLink, roleHasPermission } from "@shared/auth-rbac";
@@ -66,6 +66,7 @@ async function tryAudit(input: {
     });
   } catch (e) {
     const m = e instanceof Error ? e.message : String(e);
+    console.warn("[audit-fail]", input.action, m.slice(0, 300));
     console.error("[api/admin] audit", input.action, m.slice(0, 200));
   }
 }
@@ -774,6 +775,31 @@ export async function updateUserTelegram(req: Request, res: Response): Promise<v
   } catch (e) {
     const m = e instanceof Error ? e.message : String(e);
     console.error("[api/admin] users-update", m.slice(0, 200));
+    applyJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+  }
+}
+
+export async function cleanupExpiredSessions(req: Request, res: Response): Promise<void> {
+  const auth = req.auth as AuthUserSnapshot | undefined;
+  if (!auth) {
+    applyJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+    return;
+  }
+  if (auth.status !== "active" || auth.role !== "admin") {
+    applyJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+  const db = getAuthDb();
+  if (!db) {
+    applyJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+    return;
+  }
+  try {
+    const deleted = await db.delete(sessions).where(lt(sessions.expiresAt, sql`NOW()`)).returning({ id: sessions.id });
+    applyJson(res, 200, { success: true, deleted: deleted.length });
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    console.error("[api/admin] sessions-cleanup-expired", m.slice(0, 200));
     applyJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
   }
 }
