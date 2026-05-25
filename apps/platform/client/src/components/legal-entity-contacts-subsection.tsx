@@ -27,7 +27,7 @@ import {
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import {
   formatRussianPhoneInput,
-  isValidRussianPhone,
+  isValidRussianPhoneLoose,
   RU_PHONE_INVALID_MESSAGE,
   RU_PHONE_PLACEHOLDER,
 } from "@/lib/phone-format";
@@ -120,7 +120,7 @@ export function LegalEntityContactsSubsection({ row, legalEntityId, legalEntityN
     }
     if (entityArchived || !canEdit) return;
     const phoneRaw = draft.phone ?? "";
-    if (phoneRaw.trim() && !isValidRussianPhone(phoneRaw)) {
+    if (phoneRaw.trim() && !isValidRussianPhoneLoose(phoneRaw)) {
       setFormErr(RU_PHONE_INVALID_MESSAGE);
       return;
     }

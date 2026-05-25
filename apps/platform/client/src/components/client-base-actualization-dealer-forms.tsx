@@ -80,7 +80,7 @@ import {
 } from "@/lib/dealer-commercial-characteristics";
 import {
   formatRussianPhoneInput,
-  isValidRussianPhone,
+  isValidRussianPhoneLoose,
   RU_PHONE_INVALID_MESSAGE,
   RU_PHONE_PLACEHOLDER,
 } from "@/lib/phone-format";
@@ -485,7 +485,7 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
       toast({ title: "Заполните название клиента", variant: "destructive" });
       return false;
     }
-    if (phone.trim() && !isValidRussianPhone(phone)) {
+    if (phone.trim() && !isValidRussianPhoneLoose(phone)) {
       toast({ title: RU_PHONE_INVALID_MESSAGE, variant: "destructive" });
       return false;
     }
@@ -1200,7 +1200,7 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
       return;
     }
 
-    if (phone.trim() && !isValidRussianPhone(phone)) {
+    if (phone.trim() && !isValidRussianPhoneLoose(phone)) {
       toast({ title: RU_PHONE_INVALID_MESSAGE, variant: "destructive" });
       return;
     }

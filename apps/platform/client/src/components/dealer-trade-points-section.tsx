@@ -17,7 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import {
   formatRussianPhoneInput,
-  isValidRussianPhone,
+  isValidRussianPhoneLoose,
   RU_PHONE_INVALID_MESSAGE,
   RU_PHONE_PLACEHOLDER,
 } from "@/lib/phone-format";
@@ -323,7 +323,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
       setAddError("Заполните название, город, адрес, контактное лицо и телефон.");
       return false;
     }
-    if (!isValidRussianPhone(addContactPhone)) {
+    if (!isValidRussianPhoneLoose(addContactPhone)) {
       setAddError(RU_PHONE_INVALID_MESSAGE);
       return false;
     }
@@ -438,7 +438,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
       toast({ title: "Заполните название, город и адрес", variant: "destructive" });
       return false;
     }
-    if (editContactPhone.trim() && !isValidRussianPhone(editContactPhone)) {
+    if (editContactPhone.trim() && !isValidRussianPhoneLoose(editContactPhone)) {
       toast({ title: RU_PHONE_INVALID_MESSAGE, variant: "destructive" });
       return false;
     }
