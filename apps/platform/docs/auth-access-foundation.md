@@ -60,7 +60,7 @@ SQLite-таблица `users` в `shared/schema.ts` помечена `@deprecate
 | `auth-client-switch-cd7c` | **done — PR 04:** удаление mock-auth, клиент на `/api/auth/*` (TanStack Query `useAuthUser`, `auth-api.ts`, cookie) |
 | `auth-invitations-cd7c` | **done — PR 05:** приглашения по email, `/invite/:token`, self-contained `api/invitations/[action].ts`, Express `invitations-handlers.ts` |
 | `auth-rbac-scope-cd7c` | **done — PR 06:** матрица `shared/auth-rbac.ts`, `requirePermission`, inline SYNC в `api/invitations/[action].ts`; `UserScope` на API — следующие PR |
-| `auth-users-admin-cd7c` | Полноценный `/users`, редактирование, фильтры |
+| `auth-users-admin-cd7c` | **done — PR 07:** `/admin/users`, self-contained `api/admin/[action].ts`, Express `server/admin/*` |
 | `auth-profile-cd7c` | Редактирование `/profile`, валидация по `PROFILE_REQUIREMENTS` |
 | `auth-hardening-cd7c` | Redis / распределённый rate-limit, 2FA (in-memory лимит на login — уже в PR 03) |
 | `auth-finalize-cd7c` | Чистка legacy SQLite `users`, финальная документация |
@@ -144,6 +144,30 @@ SQLite-таблица `users` в `shared/schema.ts` помечена `@deprecate
 - Публичная страница `#/invite/:token` (`client/src/pages/invite.tsx`).
 - Управление: `#/admin/invitations` (`client/src/pages/admin-invitations.tsx`), доступ по `canAccessPathForUser` и `userCanManageInvitations` из `client/src/lib/auth-rbac.ts` (permission `invitations.create`).
 
+## PR 07 — Admin users
+
+Страница `/admin/users` для управления учётками. Список + фильтры + действия (роль / статус / сброс пароля). Использует permissions из PR 06 — матрица не расширяется.
+
+### Эндпоинты
+
+- `GET /api/admin/users-list` — `users.list`. Query `q`, `role`, `status`, `limit`, `offset`. Возвращает `{ users, total }`.
+- `GET /api/admin/users-get?id=<uuid>` — `users.read_any`. Один user или 404.
+- `POST /api/admin/users-update-role` — `users.update_role`. Body `{ id, role }`. Только business-роли. Запрещены: self-modification, изменение admin.
+- `POST /api/admin/users-update-status` — `users.update_status`. Body `{ id, status: "active" | "disabled" }`. При `disabled` — revoke всех сессий. Запрещены: self-modification, изменение admin.
+- `POST /api/admin/users-reset-password` — `users.reset_password`. Body `{ id }`. Сервер генерирует временный пароль (14 символов base64url), возвращает один раз. `must_change_password = true`, revoke всех сессий. Запрещены: self-reset, reset admin.
+
+Ошибки: `VALIDATION_ERROR`, `FORBIDDEN`, `SELF_MODIFICATION` (400), `NOT_FOUND` (404), `INTERNAL_ERROR` (500).
+
+### Vercel-функция
+
+`/api/admin/[action].ts` — единый self-contained endpoint (динамический сегмент `users-list` | `users-get` | `users-update-role` | `users-update-status` | `users-reset-password`). Inline-копия `PERMISSIONS_BY_ROLE` с якорным комментарием `// SYNC: shared/auth-rbac.ts`. Заняли **12-ю и последнюю** Vercel-функцию Hobby-плана. Все будущие admin-actions (Profile в PR 08, etc.) расширяют эту функцию новыми сегментами без создания новой serverless-функции.
+
+### Audit
+
+- `auth.user.update_role` — metadata `{ targetUserId, oldRole, newRole }`.
+- `auth.user.update_status` — metadata `{ targetUserId, oldStatus, newStatus, sessionsRevoked }`.
+- `auth.user.reset_password` — metadata `{ targetUserId, sessionsRevoked }` (без plaintext).
+
 ## PR 06 — RBAC scope guards
 
 Единый слой проверки прав на основе роли. Канонический источник — `apps/platform/shared/auth-rbac.ts` (`Permission` тип, `PERMISSIONS_BY_ROLE`, `roleHasPermission`, `canInviteRole`, `allowedInviteTargetsFor`).
@@ -151,13 +175,13 @@ SQLite-таблица `users` в `shared/schema.ts` помечена `@deprecate
 ### Где используется
 
 - **Express dev**: middleware `requirePermission(perm)` из `server/auth/require-permission.ts` (`server/invitation-routes.ts`).
-- **Self-contained Vercel** (`api/invitations/[action].ts`): inline-копия матрицы рядом с `INVITER_CAN_INVITE`, помеченная якорным комментарием `// SYNC: shared/auth-rbac.ts`. Self-contained-правило (см. раздел про PR #224/#226) запрещает импорт из `@shared/*`.
+- **Self-contained Vercel** (`api/invitations/[action].ts`, `api/admin/[action].ts`): inline-копия матрицы (в invitations — рядом с `INVITER_CAN_INVITE`), помеченная якорным комментарием `// SYNC: shared/auth-rbac.ts`. Self-contained-правило (см. раздел про PR #224/#226) запрещает импорт из `@shared/*`.
 - **Клиент**: `client/src/lib/auth-rbac.ts` — фасад с `userHas(role, perm)` и `userHasAny(role, perms)`. UI-гейты импортируют только отсюда.
 
 ### Permissions (текущие)
 
 - `invitations.create`, `invitations.list_own`, `invitations.revoke_own`, `invitations.revoke_any`
-- `users.list`, `users.read_any`, `users.update_role`, `users.update_status`, `users.reset_password` (используются в PR 07)
+- `users.list`, `users.read_any`, `users.update_role`, `users.update_status`, `users.reset_password`
 - `profile.read_self`, `profile.update_self` (используются в PR 08)
 
 ### Что НЕ меняется в этом PR
@@ -168,7 +192,7 @@ SQLite-таблица `users` в `shared/schema.ts` помечена `@deprecate
 
 ### Правило синхронизации матрицы
 
-При изменении прав менять В ОБЕИХ местах: `shared/auth-rbac.ts` И inline-копию в `api/invitations/[action].ts`. Якорный комментарий помогает не забыть. В будущих self-contained Vercel-функциях (когда придётся консолидировать /api/admin/[action].ts из-за Vercel Hobby лимита 12 функций) — тот же приём.
+При изменении прав менять **во всех** self-contained копиях: `shared/auth-rbac.ts`, `api/invitations/[action].ts`, `api/admin/[action].ts` (и других, если появятся). Якорный комментарий помогает не забыть.
 
 ## PR 02 — server scaffolding
 
