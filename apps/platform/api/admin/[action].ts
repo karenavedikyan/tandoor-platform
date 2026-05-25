@@ -2017,6 +2017,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       await handleMigrationsRun(res, pool, headers);
       return;
     }
+    if (action === "auth-unlock-email" && req.method === "POST") {
+      const me = await resolveCurrentUser(pool, headers);
+      if (!me || me.role !== "admin" || me.status !== "active") {
+        sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+        return;
+      }
+      const body = (req.body ?? {}) as { email?: unknown };
+      const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+      if (!email) {
+        sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите email." });
+        return;
+      }
+      const del = await pool.query(`DELETE FROM auth_login_failures WHERE email_lower = $1`, [email]);
+      await tryAudit(pool, {
+        actorUserId: me.id,
+        action: "auth.unlock_email",
+        entityType: "email",
+        entityId: email,
+        metadata: { deletedRows: del.rowCount ?? null },
+      });
+      sendJson(res, 200, { success: true, deleted: del.rowCount ?? 0 });
+      return;
+    }
 
     sendJson(res, 404, {
       success: false,
