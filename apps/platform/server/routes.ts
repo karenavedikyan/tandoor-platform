@@ -4,6 +4,7 @@ import type { Server } from "node:http";
 import { registerAuthRoutes } from "./auth-routes";
 import { registerInvitationRoutes } from "./invitation-routes";
 import { registerAdminRoutes } from "./admin-routes";
+import { registerProfileRoutes } from "./profile-routes";
 import { registerBitrix24Routes } from "./bitrix24-routes";
 import { registerDadataRoutes } from "./dadata-routes";
 import { registerUploadRoutes } from "./upload-routes";
@@ -16,6 +17,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   registerAuthRoutes(app);
   registerInvitationRoutes(app);
   registerAdminRoutes(app);
+  registerProfileRoutes(app);
   registerBitrix24Routes(app);
   registerDadataRoutes(app);
   registerUploadRoutes(app);

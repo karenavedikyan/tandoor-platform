@@ -12,6 +12,10 @@ export type AuthUserDTO = {
   status: UserStatus;
   mustChangePassword: boolean;
   lastLoginAt: string | null;
+  /** Может отсутствовать в старых ответах `GET /api/auth/me`. */
+  phone?: string | null;
+  /** Может отсутствовать в старых ответах `GET /api/auth/me`. */
+  createdAt?: string | null;
 };
 
 export function displayUserName(u: AuthUserDTO | undefined): string {

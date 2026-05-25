@@ -67,6 +67,7 @@ const LazyCommunications = lazy(() => import("@/pages/communications"));
 const LazyClientBaseActivityDashboard = lazy(() => import("@/pages/client-base-activity-dashboard"));
 const LazyUsersAndAccess = lazy(() => import("@/pages/users-and-access"));
 const LazyMyProfile = lazy(() => import("@/pages/my-profile"));
+const LazyChangePassword = lazy(() => import("@/pages/change-password"));
 const LazyLogin = lazy(() => import("@/pages/login"));
 const LazyInvite = lazy(() => import("@/pages/invite"));
 const LazyAdminInvitations = lazy(() => import("@/pages/admin-invitations"));
@@ -116,6 +117,7 @@ const CommunicationsRoute = suspensePage(LazyCommunications);
 const ClientBaseActivityDashboardRoute = suspensePage(LazyClientBaseActivityDashboard);
 const UsersAndAccessRoute = suspensePage(LazyUsersAndAccess);
 const MyProfileRoute = suspensePage(LazyMyProfile);
+const ChangePasswordRoute = suspensePage(LazyChangePassword);
 const FeatureInDevelopmentRoute = suspensePage(LazyFeatureInDevelopment);
 const InviteRoute = suspensePage(LazyInvite);
 const AdminInvitationsRoute = suspensePage(LazyAdminInvitations);
@@ -234,6 +236,7 @@ function AuthenticatedShell({
         <Route path="/admin/users" component={AdminUsersRoute} />
         <Route path="/admin/invitations" component={AdminInvitationsRoute} />
         <Route path="/users" component={UsersAndAccessRoute} />
+        <Route path="/profile/change-password" component={ChangePasswordRoute} />
         <Route path="/profile" component={MyProfileRoute} />
         <Route path="/dealer-base" component={DealerBaseRoute} />
         <Route path="/trade-points" component={TradePointsRoute} />
@@ -278,6 +281,11 @@ function AuthenticatedApp({ user, logout }: { user: AuthUserDTO; logout: () => P
   const embeddedBitrix24 = useBitrix24EmbeddedFlag();
 
   const path = loc && loc.length > 0 ? loc : "/";
+  const normPath = normRoutePath(path);
+
+  if (user.mustChangePassword && normPath !== "/profile/change-password") {
+    return <HashRedirect to="/profile/change-password" />;
+  }
 
   if (!canAccessPathForUser(user.role, path)) {
     return <HashRedirect to={defaultHomePathForUserRole(user.role)} />;

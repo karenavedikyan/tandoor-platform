@@ -106,6 +106,9 @@ export function canAccessPathForUser(role: UserRole, path: string): boolean {
   if (p === "/admin/invitations") {
     return userCanManageInvitations(role);
   }
+  if (p === "/profile" || isUnder(p, "/profile")) {
+    return userHas(role, "profile.read_self");
+  }
   return canAccessPath(userRoleToSalesRole(role), path);
 }
 
