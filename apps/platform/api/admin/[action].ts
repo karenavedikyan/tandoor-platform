@@ -1043,7 +1043,9 @@ async function handleAuditList(
   };
 
   const actor = qs(q.actor);
-  const actionLike = qs(q.action);
+  // ВАЖНО: Vercel dynamic route `[action].ts` устанавливает req.query.action = "audit-list".
+  // Поэтому фильтр по action принимаем через `actionLike` (клиент шлёт `?actionLike=...`).
+  const actionLike = qs(q.actionLike);
   const entityType = qs(q.entityType);
   const entityId = qs(q.entityId);
   const fromIso = qs(q.from);
@@ -1408,44 +1410,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "migrations-run" && req.method === "POST") {
       await handleMigrationsRun(res, pool, headers);
-      return;
-    }
-    if (action === "audit-list2" && req.method === "GET") {
-      const me = await resolveCurrentUser(pool, headers);
-      if (!me || me.role !== "admin") { sendJson(res, 403, { success: false }); return; }
-      try {
-        const whereSql = "TRUE";
-        const params: unknown[] = [];
-        const pi = 1;
-        const countSql = `SELECT COUNT(*)::int AS n FROM audit_log al WHERE ${whereSql}`;
-        const countRes = await pool.query<{ n: number }>(countSql, params);
-        const total = countRes.rows[0]?.n ?? 0;
-        const listSql = `SELECT al.id, al.action, al.created_at FROM audit_log al WHERE ${whereSql} ORDER BY al.created_at DESC LIMIT $${pi} OFFSET $${pi + 1}`;
-        const listParams = [...params, 5, 0];
-        const rows = await pool.query<{ id: string; action: string; created_at: string }>(listSql, listParams);
-        sendJson(res, 200, { success: true, total, countRows: countRes.rows, rowsLen: rows.rows.length, sample: rows.rows, listSql, listParams });
-      } catch (e) {
-        const m = e instanceof Error ? e.message : String(e);
-        sendJson(res, 500, { success: false, err: m.slice(0, 500) });
-      }
-      return;
-    }
-    if (action === "audit-test" && req.method === "POST") {
-      const me = await resolveCurrentUser(pool, headers);
-      if (!me || me.role !== "admin") { sendJson(res, 403, { success: false }); return; }
-      try {
-        const ins = await pool.query<{ id: string }>(
-          `INSERT INTO audit_log (actor_user_id, action, entity_type, entity_id, metadata) VALUES ($1::uuid, $2, $3, $4, $5::jsonb) RETURNING id`,
-          [me.id, "audit.debug.test", "system", "debug", JSON.stringify({ ts: Date.now() })],
-        );
-        const c1 = await pool.query<{ n: number }>(`SELECT COUNT(*)::int AS n FROM audit_log`);
-        const c2 = await pool.query<{ n: number }>(`SELECT COUNT(*)::int AS n FROM audit_log al WHERE TRUE`);
-        const r3 = await pool.query<{ id: string; action: string }>(`SELECT al.id, al.action FROM audit_log al ORDER BY al.created_at DESC LIMIT 3`);
-        sendJson(res, 200, { success: true, inserted: ins.rows, countNoAlias: c1.rows, countWithAlias: c2.rows, sample: r3.rows });
-      } catch (e) {
-        const m = e instanceof Error ? e.message : String(e);
-        sendJson(res, 500, { success: false, err: m.slice(0, 500) });
-      }
       return;
     }
 

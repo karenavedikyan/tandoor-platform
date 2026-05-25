@@ -61,7 +61,7 @@ export async function listAudit(query: {
 }): Promise<AuditListResult> {
   const sp = new URLSearchParams();
   if (query.actor) sp.set("actor", query.actor);
-  if (query.action) sp.set("action", query.action);
+  if (query.action) sp.set("actionLike", query.action);
   if (query.entityType) sp.set("entityType", query.entityType);
   if (query.entityId) sp.set("entityId", query.entityId);
   if (query.from) sp.set("from", query.from);
