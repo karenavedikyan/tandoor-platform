@@ -374,8 +374,10 @@ async function resolveCurrentUser(
   const token = parseAuthRefreshToken(typeof headers.cookie === "string" ? headers.cookie : undefined);
   if (!token) return null;
   const hashHex = sha256Hex(token);
-  const res = await pool.query<DbUserRow & { refresh_token_hash: string }>(
-    `SELECT u.id, u.email, u.full_name, u.phone, u.role, u.status, u.must_change_password, u.last_login_at, u.created_at, u.telegram_user_id,
+  // НЕ выбираем telegram_user_id здесь — эта колонка может ещё не быть создана (до migrations-run).
+  // Авторизация не требует telegram_user_id, берём null.
+  const res = await pool.query<Omit<DbUserRow, "telegram_user_id"> & { refresh_token_hash: string }>(
+    `SELECT u.id, u.email, u.full_name, u.phone, u.role, u.status, u.must_change_password, u.last_login_at, u.created_at,
             s.refresh_token_hash
      FROM sessions s
      INNER JOIN users u ON u.id = s.user_id
@@ -386,7 +388,7 @@ async function resolveCurrentUser(
   const row = res.rows[0];
   if (!row || !timingSafeEqualHex(row.refresh_token_hash, token)) return null;
   const { refresh_token_hash: _h, ...u } = row;
-  return u;
+  return { ...u, telegram_user_id: null };
 }
 
 function sendJson(res: VercelResponse, status: number, body: Record<string, unknown>): void {
