@@ -1160,14 +1160,15 @@ async function handleMigrationsRun(
         await pool.query(`ALTER TABLE password_reset_links DROP COLUMN issued_by`);
       }
     }
+    // Сначала добавляем новые колонки, потом уже мигрируем данные из revoked_at в used_at/used_ip.
+    await pool.query(`ALTER TABLE password_reset_links ADD COLUMN IF NOT EXISTS used_ip text`);
+    await pool.query(`ALTER TABLE password_reset_links ADD COLUMN IF NOT EXISTS created_by uuid REFERENCES users(id)`);
     if (prlSet.has("revoked_at")) {
       await pool.query(
         `UPDATE password_reset_links SET used_at = COALESCE(used_at, revoked_at), used_ip = COALESCE(used_ip, 'superseded') WHERE revoked_at IS NOT NULL AND used_at IS NULL`,
       );
       await pool.query(`ALTER TABLE password_reset_links DROP COLUMN revoked_at`);
     }
-    await pool.query(`ALTER TABLE password_reset_links ADD COLUMN IF NOT EXISTS used_ip text`);
-    await pool.query(`ALTER TABLE password_reset_links ADD COLUMN IF NOT EXISTS created_by uuid REFERENCES users(id)`);
     await pool.query(`UPDATE password_reset_links SET created_by = user_id WHERE created_by IS NULL`);
     await pool.query(`ALTER TABLE password_reset_links ALTER COLUMN created_by SET NOT NULL`);
     await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS password_reset_links_token_hash_uq ON password_reset_links(token_hash)`);
