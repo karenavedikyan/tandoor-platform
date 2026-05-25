@@ -1410,6 +1410,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       await handleMigrationsRun(res, pool, headers);
       return;
     }
+    if (action === "audit-list2" && req.method === "GET") {
+      const me = await resolveCurrentUser(pool, headers);
+      if (!me || me.role !== "admin") { sendJson(res, 403, { success: false }); return; }
+      try {
+        const countSql = `SELECT COUNT(*)::int AS n FROM audit_log al WHERE TRUE`;
+        const countRes = await pool.query<{ n: number }>(countSql, []);
+        const listSql = `SELECT al.id, al.action, al.created_at FROM audit_log al ORDER BY al.created_at DESC LIMIT 5 OFFSET 0`;
+        const rows = await pool.query<{ id: string; action: string; created_at: string }>(listSql, []);
+        sendJson(res, 200, { success: true, count: countRes.rows, rowsLen: rows.rows.length, first: rows.rows.slice(0, 3) });
+      } catch (e) {
+        const m = e instanceof Error ? e.message : String(e);
+        sendJson(res, 500, { success: false, err: m.slice(0, 500) });
+      }
+      return;
+    }
     if (action === "audit-test" && req.method === "POST") {
       const me = await resolveCurrentUser(pool, headers);
       if (!me || me.role !== "admin") { sendJson(res, 403, { success: false }); return; }
