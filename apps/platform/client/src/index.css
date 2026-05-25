@@ -324,3 +324,29 @@
     inset: -1px;
   }
 }
+
+/*
+ * Dark-theme contrast override for management cockpits.
+ * Several cockpit screens (territory-card, dealer-base, trade-points,
+ * sales-plan-fact, client-base-activity feature-in-development) historically
+ * use hardcoded light-theme palette values:
+ *   - text-[#222631] — dark primary text (designed for light card bg);
+ *   - text-[#8F96B0] — muted slate (designed for light card bg);
+ *   - bg-[#222631]  — same dark navy used as fill in a few badges.
+ * On the dark theme these hardcoded values collapse into the dark card
+ * background and become unreadable. Instead of rewriting 270+ inline
+ * arbitrary-color classes across 8 files, we remap the exact arbitrary-value
+ * utilities under `.dark` to the theme tokens. Light theme is untouched.
+ */
+.dark .text-\[\#222631\] {
+  color: hsl(var(--foreground));
+}
+.dark .text-\[\#8F96B0\] {
+  color: hsl(var(--muted-foreground));
+}
+.dark .bg-\[\#222631\] {
+  background-color: hsl(var(--card));
+}
+.dark .border-\[\#222631\] {
+  border-color: hsl(var(--border));
+}
