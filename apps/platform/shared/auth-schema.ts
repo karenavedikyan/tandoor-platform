@@ -1,6 +1,6 @@
 /**
- * Drizzle-схема Postgres (Neon) для будущей серверной авторизации.
- * В этом PR только описание таблиц; миграции и `db:push` не выполняются.
+ * Drizzle-схема Postgres (Neon) для серверной авторизации.
+ * Применение к базе — вручную: `npm run auth:db-push` (см. `docs/auth-access-foundation.md`), не из CI.
  */
 
 import { sql } from "drizzle-orm";

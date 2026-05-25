@@ -8,6 +8,7 @@ import path from "node:path";
 const allowlist = [
   "@google/generative-ai",
   "axios",
+  "bcryptjs",
   "cors",
   "date-fns",
   "drizzle-orm",
