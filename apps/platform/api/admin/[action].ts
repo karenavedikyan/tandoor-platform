@@ -1,8 +1,8 @@
 /**
- * Vercel Serverless: `/api/admin/:action` (users-list | users-get | users-update-role | …).
+ * Vercel Serverless: `/api/admin/:action` (users-list | … | profile-get-self | profile-update-self | profile-change-password).
  *
  * Self-contained: только `@vercel/node`, `@neondatabase/serverless`, `bcryptjs`, `node:crypto`.
- * Контракт совпадает с `server/admin/users-handlers.ts` + Express `server/admin-routes.ts`.
+ * Контракт совпадает с `server/admin/users-handlers.ts`, `server/admin-routes.ts`, `server/profile-routes.ts`.
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -172,10 +172,12 @@ type DbUserRow = {
   id: string;
   email: string;
   full_name: string;
+  phone: string | null;
   role: string;
   status: string;
   must_change_password: boolean;
   last_login_at: string | null;
+  created_at: string;
 };
 
 async function tryAudit(
@@ -204,6 +206,7 @@ function adminPublicUserFromRow(r: {
   id: string;
   email: string;
   full_name: string;
+  phone: string | null;
   role: string;
   status: string;
   must_change_password: boolean;
@@ -214,6 +217,7 @@ function adminPublicUserFromRow(r: {
     id: r.id,
     email: r.email,
     fullName: r.full_name,
+    phone: r.phone,
     role: r.role as UserRole,
     status: r.status as UserStatus,
     mustChangePassword: r.must_change_password,
@@ -230,7 +234,7 @@ async function resolveCurrentUser(
   if (!token) return null;
   const hashHex = sha256Hex(token);
   const res = await pool.query<DbUserRow & { refresh_token_hash: string }>(
-    `SELECT u.id, u.email, u.full_name, u.role, u.status, u.must_change_password, u.last_login_at,
+    `SELECT u.id, u.email, u.full_name, u.phone, u.role, u.status, u.must_change_password, u.last_login_at, u.created_at,
             s.refresh_token_hash
      FROM sessions s
      INNER JOIN users u ON u.id = s.user_id
@@ -315,13 +319,9 @@ async function handleUsersList(
 
   const limitPh = pi;
   const offsetPh = pi + 1;
-  const listSql = `SELECT id, email, full_name, role, status, must_change_password, last_login_at, created_at
+  const listSql = `SELECT id, email, full_name, phone, role, status, must_change_password, last_login_at, created_at
      FROM users ${whereSql} ORDER BY created_at DESC LIMIT $${limitPh} OFFSET $${offsetPh}`;
-  const listRes = await pool.query<
-    DbUserRow & {
-      created_at: string;
-    }
-  >(listSql, [...params, limit, offset]);
+  const listRes = await pool.query<DbUserRow>(listSql, [...params, limit, offset]);
 
   sendJson(res, 200, {
     success: true,
@@ -357,8 +357,8 @@ async function handleUsersGet(
     return;
   }
 
-  const ures = await pool.query<DbUserRow & { created_at: string }>(
-    `SELECT id, email, full_name, role, status, must_change_password, last_login_at, created_at
+  const ures = await pool.query<DbUserRow>(
+    `SELECT id, email, full_name, phone, role, status, must_change_password, last_login_at, created_at
      FROM users WHERE id = $1::uuid LIMIT 1`,
     [id],
   );
@@ -406,8 +406,8 @@ async function handleUsersUpdateRole(
     return;
   }
 
-  const cur = await pool.query<DbUserRow & { created_at: string }>(
-    `SELECT id, email, full_name, role, status, must_change_password, last_login_at, created_at FROM users WHERE id = $1::uuid LIMIT 1`,
+  const cur = await pool.query<DbUserRow>(
+    `SELECT id, email, full_name, phone, role, status, must_change_password, last_login_at, created_at FROM users WHERE id = $1::uuid LIMIT 1`,
     [id],
   );
   const row = cur.rows[0];
@@ -421,9 +421,9 @@ async function handleUsersUpdateRole(
   }
 
   const oldRole = row.role;
-  const up = await pool.query<DbUserRow & { created_at: string }>(
+  const up = await pool.query<DbUserRow>(
     `UPDATE users SET role = $1, updated_at = NOW() WHERE id = $2::uuid
-     RETURNING id, email, full_name, role, status, must_change_password, last_login_at, created_at`,
+     RETURNING id, email, full_name, phone, role, status, must_change_password, last_login_at, created_at`,
     [roleNew, id],
   );
   const u = up.rows[0];
@@ -479,8 +479,8 @@ async function handleUsersUpdateStatus(
     return;
   }
 
-  const cur = await pool.query<DbUserRow & { created_at: string }>(
-    `SELECT id, email, full_name, role, status, must_change_password, last_login_at, created_at FROM users WHERE id = $1::uuid LIMIT 1`,
+  const cur = await pool.query<DbUserRow>(
+    `SELECT id, email, full_name, phone, role, status, must_change_password, last_login_at, created_at FROM users WHERE id = $1::uuid LIMIT 1`,
     [id],
   );
   const row = cur.rows[0];
@@ -494,9 +494,9 @@ async function handleUsersUpdateStatus(
   }
 
   const oldStatus = row.status;
-  const up = await pool.query<DbUserRow & { created_at: string }>(
+  const up = await pool.query<DbUserRow>(
     `UPDATE users SET status = $1, updated_at = NOW() WHERE id = $2::uuid
-     RETURNING id, email, full_name, role, status, must_change_password, last_login_at, created_at`,
+     RETURNING id, email, full_name, phone, role, status, must_change_password, last_login_at, created_at`,
     [st, id],
   );
   const u = up.rows[0];
@@ -560,8 +560,8 @@ async function handleUsersResetPassword(
     return;
   }
 
-  const cur = await pool.query<DbUserRow & { created_at: string }>(
-    `SELECT id, email, full_name, role, status, must_change_password, last_login_at, created_at FROM users WHERE id = $1::uuid LIMIT 1`,
+  const cur = await pool.query<DbUserRow>(
+    `SELECT id, email, full_name, phone, role, status, must_change_password, last_login_at, created_at FROM users WHERE id = $1::uuid LIMIT 1`,
     [id],
   );
   const row = cur.rows[0];
@@ -583,9 +583,9 @@ async function handleUsersResetPassword(
   );
   const sessionsRevoked = rev.rows.length;
 
-  const up = await pool.query<DbUserRow & { created_at: string }>(
+  const up = await pool.query<DbUserRow>(
     `UPDATE users SET password_hash = $1, must_change_password = true, updated_at = NOW() WHERE id = $2::uuid
-     RETURNING id, email, full_name, role, status, must_change_password, last_login_at, created_at`,
+     RETURNING id, email, full_name, phone, role, status, must_change_password, last_login_at, created_at`,
     [passwordHash, id],
   );
   const u = up.rows[0];
@@ -607,6 +607,259 @@ async function handleUsersResetPassword(
     tempPassword,
     user: adminPublicUserFromRow(u),
   });
+}
+
+
+
+function currentRefreshTokenHashHex(headers: Record<string, string | string[] | undefined>): string | null {
+  const token = parseAuthRefreshToken(typeof headers.cookie === "string" ? headers.cookie : undefined);
+  if (!token) return null;
+  return sha256Hex(token);
+}
+
+const PHONE_SELF_RE = /^[+\d\s\-()]+$/;
+
+async function handleProfileGetSelf(
+  res: VercelResponse,
+  pool: PoolLike,
+  headers: Record<string, string | string[] | undefined>,
+): Promise<void> {
+  const me = await resolveCurrentUser(pool, headers);
+  if (!me) {
+    sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+    return;
+  }
+  if (me.status !== "active") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+  if (!roleHasPermission(me.role as UserRole, "profile.read_self")) {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+  const ures = await pool.query<DbUserRow>(
+    `SELECT id, email, full_name, phone, role, status, must_change_password, last_login_at, created_at
+     FROM users WHERE id = $1::uuid LIMIT 1`,
+    [me.id],
+  );
+  const row = ures.rows[0];
+  if (!row) {
+    sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Пользователь не найден." });
+    return;
+  }
+  sendJson(res, 200, { success: true, user: adminPublicUserFromRow(row) });
+}
+
+async function handleProfileUpdateSelf(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  headers: Record<string, string | string[] | undefined>,
+): Promise<void> {
+  const me = await resolveCurrentUser(pool, headers);
+  if (!me) {
+    sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+    return;
+  }
+  if (me.status !== "active") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+  if (!roleHasPermission(me.role as UserRole, "profile.update_self")) {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  for (const k of ["email", "role", "status", "password"]) {
+    if (Object.prototype.hasOwnProperty.call(body, k)) {
+      sendJson(res, 400, {
+        success: false,
+        code: "VALIDATION_ERROR",
+        message: "Поле недоступно для самостоятельного изменения.",
+      });
+      return;
+    }
+  }
+
+  const hasFull = Object.prototype.hasOwnProperty.call(body, "fullName");
+  const hasPhone = Object.prototype.hasOwnProperty.call(body, "phone");
+  if (!hasFull && !hasPhone) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Не указано ни одно поле для обновления." });
+    return;
+  }
+
+  let fullNameParam: string | null = null;
+  if (hasFull) {
+    if (typeof body.fullName !== "string") {
+      sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите ФИО (от 2 до 200 символов)." });
+      return;
+    }
+    const t = body.fullName.trim();
+    if (t.length < 2 || t.length > 200) {
+      sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите ФИО (от 2 до 200 символов)." });
+      return;
+    }
+    fullNameParam = t;
+  }
+
+  let phonePresent = false;
+  let phoneValue: string | null | undefined;
+  if (hasPhone) {
+    phonePresent = true;
+    const pv = body.phone;
+    if (pv === null) {
+      phoneValue = null;
+    } else if (typeof pv === "string") {
+      const pt = pv.trim();
+      if (!pt) {
+        phoneValue = null;
+      } else {
+        if (pt.length < 4 || pt.length > 32 || !PHONE_SELF_RE.test(pt)) {
+          sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите корректный телефон." });
+          return;
+        }
+        phoneValue = pt;
+      }
+    } else {
+      sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите корректный телефон." });
+      return;
+    }
+  }
+
+  const up = await pool.query<DbUserRow>(
+    `UPDATE users
+       SET full_name = COALESCE($1, full_name),
+           phone = CASE WHEN $2::boolean THEN $3 ELSE phone END,
+           updated_at = NOW()
+     WHERE id = $4::uuid
+     RETURNING id, email, full_name, phone, role, status, must_change_password, last_login_at, created_at`,
+    [fullNameParam, phonePresent, phoneValue ?? null, me.id],
+  );
+  const u = up.rows[0];
+  if (!u) {
+    sendJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+    return;
+  }
+
+  const fields: string[] = [];
+  if (hasFull) fields.push("fullName");
+  if (hasPhone) fields.push("phone");
+
+  await tryAudit(pool, {
+    actorUserId: me.id,
+    action: "auth.user.update_self",
+    entityType: "user",
+    entityId: me.id,
+    metadata: { fields },
+  });
+
+  sendJson(res, 200, { success: true, user: adminPublicUserFromRow(u) });
+}
+
+async function handleProfileChangePassword(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  headers: Record<string, string | string[] | undefined>,
+): Promise<void> {
+  const me = await resolveCurrentUser(pool, headers);
+  if (!me) {
+    sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+    return;
+  }
+  if (me.status !== "active") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+  if (!roleHasPermission(me.role as UserRole, "profile.update_self")) {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+
+  const cur = await pool.query<{ password_hash: string | null }>(
+    `SELECT password_hash FROM users WHERE id = $1::uuid LIMIT 1`,
+    [me.id],
+  );
+  const ph = cur.rows[0]?.password_hash;
+  if (ph == null || ph === "") {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "У учётной записи не задан пароль." });
+    return;
+  }
+
+  const body = (req.body ?? {}) as { currentPassword?: unknown; newPassword?: unknown };
+  const currentPassword = typeof body.currentPassword === "string" ? body.currentPassword : "";
+  const newPassword = typeof body.newPassword === "string" ? body.newPassword : "";
+  if (!currentPassword.trim()) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите текущий пароль." });
+    return;
+  }
+  const np = newPassword.trim();
+  const cp = currentPassword.trim();
+  if (np.length < 8 || np.length > 200) {
+    sendJson(res, 400, {
+      success: false,
+      code: "WEAK_PASSWORD",
+      message: "Пароль должен быть не короче 8 символов и отличаться от email и текущего пароля.",
+    });
+    return;
+  }
+  if (np === cp) {
+    sendJson(res, 400, {
+      success: false,
+      code: "WEAK_PASSWORD",
+      message: "Пароль должен быть не короче 8 символов и отличаться от email и текущего пароля.",
+    });
+    return;
+  }
+  const em = me.email.trim().toLowerCase();
+  if (np.toLowerCase() === em) {
+    sendJson(res, 400, {
+      success: false,
+      code: "WEAK_PASSWORD",
+      message: "Пароль должен быть не короче 8 символов и отличаться от email и текущего пароля.",
+    });
+    return;
+  }
+
+  const ok = await bcrypt.compare(cp, ph);
+  if (!ok) {
+    sendJson(res, 400, { success: false, code: "INVALID_PASSWORD", message: "Текущий пароль неверен." });
+    return;
+  }
+
+  const newHash = await bcrypt.hash(np, 10);
+  const sessionHash = currentRefreshTokenHashHex(headers);
+  if (!sessionHash) {
+    sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+    return;
+  }
+
+  const rev = await pool.query<{ id: string }>(
+    `UPDATE sessions
+       SET revoked_at = NOW()
+     WHERE user_id = $1::uuid
+       AND revoked_at IS NULL
+       AND refresh_token_hash <> $2
+     RETURNING id`,
+    [me.id, sessionHash],
+  );
+  const otherSessionsRevoked = rev.rows.length;
+
+  await pool.query(`UPDATE users SET password_hash = $1, must_change_password = false, updated_at = NOW() WHERE id = $2::uuid`, [
+    newHash,
+    me.id,
+  ]);
+
+  await tryAudit(pool, {
+    actorUserId: me.id,
+    action: "auth.user.change_password_self",
+    entityType: "user",
+    entityId: me.id,
+    metadata: { otherSessionsRevoked },
+  });
+
+  sendJson(res, 200, { success: true, otherSessionsRevoked });
 }
 
 function pickAction(req: VercelRequest): string {
@@ -644,6 +897,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "users-reset-password" && req.method === "POST") {
       await handleUsersResetPassword(req, res, pool, headers);
+      return;
+    }
+    if (action === "profile-get-self" && req.method === "GET") {
+      await handleProfileGetSelf(res, pool, headers);
+      return;
+    }
+    if (action === "profile-update-self" && req.method === "POST") {
+      await handleProfileUpdateSelf(req, res, pool, headers);
+      return;
+    }
+    if (action === "profile-change-password" && req.method === "POST") {
+      await handleProfileChangePassword(req, res, pool, headers);
       return;
     }
 
