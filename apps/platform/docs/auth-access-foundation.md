@@ -56,13 +56,13 @@ SQLite-таблица `users` в `shared/schema.ts` помечена `@deprecate
 | Этап (рабочее имя PR) | Содержание |
 |----------------------|------------|
 | `auth-server-scaffolding-cd7c` | Модули `server/auth/*`, сессии в Postgres, bcryptjs, cookie `tandoor_auth_sess`, заглушки `/api/auth/*` (501), `auth:db-push` — см. раздел PR 02 |
-| `auth-email-password-login-cd7c` | Вход email/password, проверка хеша, выдача сессий |
+| `auth-email-password-login-v2-cd7c` | **PR 03 (v2):** серверный login/logout/me; Vercel `api/auth/[action].ts` **self-contained** (без импортов `server/`/`shared/`), Express — `server/auth/handlers.ts`; `auth:seed-admin` |
 | `auth-client-switch-cd7c` | **Удаление mock-auth**, переключение клиента на серверные сессии |
 | `auth-invitations-cd7c` | Поток приглашений, принятие по токену |
 | `auth-rbac-scope-cd7c` | RBAC и `UserScope` на API |
 | `auth-users-admin-cd7c` | Полноценный `/users`, редактирование, фильтры |
 | `auth-profile-cd7c` | Редактирование `/profile`, валидация по `PROFILE_REQUIREMENTS` |
-| `auth-hardening-cd7c` | Rate limit, аудит, политики паролей |
+| `auth-hardening-cd7c` | Redis / распределённый rate-limit, 2FA (in-memory лимит на login — уже в PR 03) |
 | `auth-finalize-cd7c` | Чистка legacy SQLite `users`, финальная документация |
 
 
@@ -78,7 +78,10 @@ SQLite-таблица `users` в `shared/schema.ts` помечена `@deprecate
 | `password-hash.ts` | Обёртка **bcryptjs** (чистый JS, без нативных бинарей — удобно для Vercel): `hashPassword`, `verifyPassword`, `isStrongEnough`. |
 | `session-service.ts` | CRUD поверх таблицы `sessions` (`shared/auth-schema.ts`): opaque refresh token (256 bit, base64url), в БД — `sha256` в hex, срок жизни 30 суток или `TANDOOR_SESSION_TTL_DAYS`. |
 | `cookie.ts` | `AUTH_COOKIE` = `tandoor_auth_sess`; `buildAuthCookie` / `clearAuthCookie`; `parseAuthRefreshToken` для middleware. **Не** трогает `b24_personal_sess`. |
-| `require-auth.ts` | Express `requireAuth()`, Vercel `withAuth()` — проверка cookie и сессии; `requireRole` / `requireAnyOf` — **заглушки с TODO** до `auth-rbac-scope-cd7c`. Сверка хеша refresh-токена — **constant-time** (`crypto.timingSafeEqual`) в `getSessionByRefreshToken`. |
+| `require-auth.ts` | Express `requireAuth()` — cookie + сессия + **снимок пользователя** из `users` одним запросом в `req.auth`; `requireRole` / `requireAnyOf` — **TODO** до `auth-rbac-scope-cd7c`. |
+| `handlers.ts` | **PR 03:** логика auth для **Express** (`loginHandler`, `me`, `logout`, `logout-all`). На Vercel см. self-contained `api/auth/[action].ts`. |
+| `auth-user-snapshot.ts` | **PR 03:** выборка полей пользователя по `userId`. |
+| `request-meta.ts` / `rate-limit.ts` | **PR 03:** IP и in-memory rate-limit для login (Express; на Vercel — дубликат Map внутри `[action].ts`). |
 | `db.ts` | Ленивый Drizzle-клиент (Neon HTTP) при наличии `DATABASE_URL` / `POSTGRES_URL` / `NEON_DATABASE_URL`. |
 | `index.ts` | Реэкспорт публичного API. |
 
@@ -88,17 +91,12 @@ SQLite-таблица `users` в `shared/schema.ts` помечена `@deprecate
 - `Secure` — в production и при `TANDOOR_AUTH_COOKIE_SECURE=true` (для локального HTTP без TLS)
 - `Max-Age` — 30 суток или `TANDOOR_SESSION_TTL_DAYS`
 - В значении cookie — **только** opaque refresh token (без email/ФИО в открытом виде)
+- **PR 03:** cookie выставляется на `POST /api/auth/login` и сбрасывается на `POST /api/auth/logout` и `POST /api/auth/logout-all`.
 
-### Эндпоинты `/api/auth/*` (заглушки 501)
+### Эндпоинты `/api/auth/*` (PR 03)
 
-Реализация: `api/auth/[action].ts` (Vercel) и `server/auth-routes.ts` (Express для `npm run dev`). Все ответы **501** с телом `{ success: false, code: "NOT_IMPLEMENTED", message: "Будет включено в PR auth-email-password-login-cd7c" }`:
-
-- `POST /api/auth/login`
-- `POST /api/auth/logout`
-- `POST /api/auth/logout-all`
-- `GET /api/auth/me`
-
-Заглушки **не** выставляют cookie, **не** читают `users`, **не** проверяют пароли. Рабочий вход подключится в **`auth-email-password-login-cd7c`**.
+- **Vercel:** `api/auth/[action].ts` — **self-contained** реализация (см. раздел «Почему api/auth/[action].ts self-contained»).
+- **Express (`npm run dev`):** `server/auth-routes.ts` → `server/auth/handlers.ts` (Drizzle, общие модули `server/auth/*`).
 
 ### Команда `auth:db-push`
 
@@ -115,10 +113,60 @@ npm run auth:db-push
 
 Требуется переменная окружения **`DATABASE_URL`** (Neon). При необходимости задайте **`DATABASE_URL_UNPOOLED`** — скрипт пробросит её в окружение дочернего процесса.
 
+## PR 03 — email/password login (server-side, self-contained Vercel)
+
+Серверный вход по email/password, сессии в Postgres, cookie `tandoor_auth_sess`. Клиент **не** переключается с mock-auth (это PR `auth-client-switch-cd7c`).
+
+### Почему `api/auth/[action].ts` self-contained
+
+Сборщик **@vercel/node** для этого репозитория приводил к **`FUNCTION_INVOCATION_FAILED`** (функция падает до первого JSON), если `api/auth/[action].ts` импортировал **любой** файл из `server/*` или `@shared/*` — см. PR **#224** и revert **#226** (`fbc8a2b`). Локально `npm run check` / `npm run build` проходили, на проде — нет.
+
+Поэтому Vercel-функция **намеренно self-contained**: только `@vercel/node`, `@neondatabase/serverless` (`Pool`), `bcryptjs`, `node:crypto`; SQL через `pool.query` **без Drizzle**; строковые литералы ролей/статусов продублированы в файле.
+
+Та же бизнес-логика для **Express** живёт в `server/auth/handlers.ts` (Drizzle + `server/auth/*`). **При любом изменении** контракта login / logout / me / rate-limit / audit нужно править **оба** места и держать поведение синхронным.
+
+Аналогичный паттерн (self-contained, без импортов проекта): `api/dadata/[action].ts`, `api/uploads/[action].ts`, `api/actualization/state.ts`.
+
+### Эндпоинты и контракт
+
+| Метод и путь | Назначение |
+|--------------|------------|
+| `POST /api/auth/login` | JSON `{ email, password }`. Валидация email (`trim` + lowercase + простой regex), пароль непустой (без `isStrongEnough` на входе). Rate-limit: **10** неудач / **15 мин** на `(ip, emailLower)` → **429** + `Retry-After`. Успех: **200**, `Set-Cookie`, `{ success, user }` без `password_hash`. |
+| `GET /api/auth/me` | Валидная сессия по cookie → **200** + `Cache-Control: no-store`. Иначе **401** `UNAUTHENTICATED`. |
+| `POST /api/auth/logout` | Идемпотентный **200**, всегда очистка cookie; revoke сессии если cookie валидна; audit `auth.logout`. |
+| `POST /api/auth/logout-all` | Без сессии → **401**; иначе revoke всех сессий пользователя, очистка cookie, audit `auth.logout_all`, `Cache-Control: no-store`, **200**. |
+
+Ошибки: `VALIDATION_ERROR` (400), `INVALID_CREDENTIALS` (401, единое сообщение), `RATE_LIMITED` (429), `UNAUTHENTICATED` (401), `INTERNAL_ERROR` (500).
+
+### Bootstrap первого администратора
+
+```bash
+cd apps/platform
+ADMIN_EMAIL="founder@tandoor.example" ADMIN_PASSWORD="…" ADMIN_FULL_NAME="…" DATABASE_URL="…" npm run auth:seed-admin
+```
+
+Скрипт `scripts/auth-seed-admin.mjs` (tsx → `auth-seed-admin.impl.ts`): `isStrongEnough`, upsert admin, **без** сессий и audit. **Не вызывать из CI.**
+
+### Прод-проверка после merge
+
+```bash
+curl -i https://tandoor-platform.vercel.app/api/auth/me
+```
+
+Ожидается **401** `UNAUTHENTICATED`, а **не** `500` / `FUNCTION_INVOCATION_FAILED`. Если **500** FUNCTION_* — срочно разбирать бандлер (как #224).
+
+### PR 03 — что **не** входит
+
+- Смена / сброс пароля, 2FA, приглашения
+- Удаление mock-auth и переключение клиента (PR #04 `auth-client-switch-cd7c`)
+- RBAC на бизнес-API (PR #06)
+- Админка `/users` (PR #07), профиль (PR #08)
+- Redis rate-limit (PR #09 `auth-hardening-cd7c`)
+
 ## PR 02 — что **не** входит
 
-- Реальный email/password login и регистрация пользователей
-- Запись в `users` / `sessions` / `audit_log` из эндпоинтов **501**
+- Публичная регистрация пользователей (реальный login — **PR 03**)
+- Запись в `users` / `sessions` / `audit_log` из заглушек **501** (заменено в **PR 03**)
 - Автоматический `auth:db-push` в CI или при deploy
 - Защита бизнес-API по сессии
 - Приглашения, 2FA
@@ -129,7 +177,7 @@ npm run auth:db-push
 
 - Email/password login и формы регистрации
 - Серверные сессии и cookies сессии
-- Рабочие `/api/auth/*` с настоящей аутентификацией (в PR 02 добавлены только **501-заглушки**)
+- Рабочие `/api/auth/*` с настоящей аутентификацией (501 в PR 02; **PR 03** включает реальный вход)
 - Защита бизнес-API по роли
 - Приглашения и письма
 - 2FA / MFA
@@ -145,4 +193,4 @@ npm run auth:db-push
 
 Стандартный flow (например Vercel). Проверить маршруты: `/client-base-activity`, `/dealer-base`, `/trade-points`, `/sales-control/plan-fact`, `/users` (200 для директора/РОП; для других ролей — редирект на домашний из-за **клиентского** guard), `/profile` (200), при необходимости `/api/sales-plan-fact/state`.
 
-Дополнительно после PR 02: `curl -i -X POST https://tandoor-platform.vercel.app/api/auth/login` → **501** и JSON с `code: "NOT_IMPLEMENTED"`. Автоматический `auth:db-push` при деплое **не** выполняется.
+После PR 03: `curl -i https://tandoor-platform.vercel.app/api/auth/me` → **401** `UNAUTHENTICATED` (ожидаемо без cookie). **`FUNCTION_INVOCATION_FAILED` — не ожидается** (если появился — регресс как #224). Перед смоуком на проде выполните `npm run auth:db-push`; без схемы login может вернуть **500** `INTERNAL_ERROR`. **`auth:seed-admin` не из CI.** Автоматический `auth:db-push` при деплое **не** выполняется.
