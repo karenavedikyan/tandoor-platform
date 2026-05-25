@@ -1418,7 +1418,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
           `INSERT INTO audit_log (actor_user_id, action, entity_type, entity_id, metadata) VALUES ($1::uuid, $2, $3, $4, $5::jsonb) RETURNING id`,
           [me.id, "audit.debug.test", "system", "debug", JSON.stringify({ ts: Date.now() })],
         );
-        sendJson(res, 200, { success: true, inserted: ins.rows });
+        const c1 = await pool.query<{ n: number }>(`SELECT COUNT(*)::int AS n FROM audit_log`);
+        const c2 = await pool.query<{ n: number }>(`SELECT COUNT(*)::int AS n FROM audit_log al WHERE TRUE`);
+        const r3 = await pool.query<{ id: string; action: string }>(`SELECT al.id, al.action FROM audit_log al ORDER BY al.created_at DESC LIMIT 3`);
+        sendJson(res, 200, { success: true, inserted: ins.rows, countNoAlias: c1.rows, countWithAlias: c2.rows, sample: r3.rows });
       } catch (e) {
         const m = e instanceof Error ? e.message : String(e);
         sendJson(res, 500, { success: false, err: m.slice(0, 500) });
