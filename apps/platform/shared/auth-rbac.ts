@@ -26,9 +26,13 @@ export type Permission =
   | "users.update_role"
   | "users.update_status"
   | "users.reset_password"
-  // Profile (Prompt 08 — заготовка)
+  // Profile (Prompt 08)
   | "profile.read_self"
-  | "profile.update_self";
+  | "profile.update_self"
+  // Hardening (Prompt 09)
+  | "audit.read"
+  | "sessions.read_self"
+  | "sessions.revoke_self";
 
 /**
  * Какие роли могут пригласить какую целевую роль.
@@ -63,6 +67,9 @@ const PERMISSIONS_BY_ROLE: Record<UserRole, ReadonlySet<Permission>> = {
     "users.reset_password",
     "profile.read_self",
     "profile.update_self",
+    "audit.read",
+    "sessions.read_self",
+    "sessions.revoke_self",
   ]),
   director: new Set<Permission>([
     "invitations.create",
@@ -72,6 +79,9 @@ const PERMISSIONS_BY_ROLE: Record<UserRole, ReadonlySet<Permission>> = {
     "users.read_any",
     "profile.read_self",
     "profile.update_self",
+    "audit.read",
+    "sessions.read_self",
+    "sessions.revoke_self",
   ]),
   rop: new Set<Permission>([
     "invitations.create",
@@ -80,6 +90,8 @@ const PERMISSIONS_BY_ROLE: Record<UserRole, ReadonlySet<Permission>> = {
     "users.list",
     "profile.read_self",
     "profile.update_self",
+    "sessions.read_self",
+    "sessions.revoke_self",
   ]),
   regional_manager: new Set<Permission>([
     "invitations.create",
@@ -87,10 +99,12 @@ const PERMISSIONS_BY_ROLE: Record<UserRole, ReadonlySet<Permission>> = {
     "invitations.revoke_own",
     "profile.read_self",
     "profile.update_self",
+    "sessions.read_self",
+    "sessions.revoke_self",
   ]),
-  manager: new Set<Permission>(["profile.read_self", "profile.update_self"]),
-  marketer: new Set<Permission>(["profile.read_self", "profile.update_self"]),
-  analyst: new Set<Permission>(["profile.read_self", "profile.update_self"]),
+  manager: new Set<Permission>(["profile.read_self", "profile.update_self", "sessions.read_self", "sessions.revoke_self"]),
+  marketer: new Set<Permission>(["profile.read_self", "profile.update_self", "sessions.read_self", "sessions.revoke_self"]),
+  analyst: new Set<Permission>(["profile.read_self", "profile.update_self", "sessions.read_self", "sessions.revoke_self"]),
 };
 
 /** Базовая проверка: есть ли у роли заданный permission. */

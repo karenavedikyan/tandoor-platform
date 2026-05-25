@@ -19,6 +19,7 @@ import { buildHashPath } from "@/lib/hash-route-utils";
 import { useBitrix24EmbeddedFlag } from "@/lib/bitrix24-integration";
 import { isDemoAuthBypassEnabled } from "@/lib/release-demo-bypass";
 import { userRoleToSalesRole } from "@/lib/role-mapping";
+import { userHas } from "@/lib/auth-rbac";
 import type { AuthUserDTO } from "@/lib/auth-api";
 import NotFound from "@/pages/not-found";
 import PreviewUnavailable from "@/pages/preview-unavailable";
@@ -72,6 +73,7 @@ const LazyLogin = lazy(() => import("@/pages/login"));
 const LazyInvite = lazy(() => import("@/pages/invite"));
 const LazyAdminInvitations = lazy(() => import("@/pages/admin-invitations"));
 const LazyAdminUsers = lazy(() => import("@/pages/admin-users"));
+const LazyAdminAudit = lazy(() => import("@/pages/admin-audit"));
 const LazyFeatureInDevelopment = lazy(() => import("@/pages/feature-in-development"));
 
 function suspensePage(Lazy: LazyExoticComponent<ComponentType<any>>): ComponentType<any> {
@@ -122,6 +124,7 @@ const FeatureInDevelopmentRoute = suspensePage(LazyFeatureInDevelopment);
 const InviteRoute = suspensePage(LazyInvite);
 const AdminInvitationsRoute = suspensePage(LazyAdminInvitations);
 const AdminUsersRoute = suspensePage(LazyAdminUsers);
+const AdminAuditRoute = suspensePage(LazyAdminAudit);
 
 function HashRedirect({ to }: { to: string }) {
   const [, setLoc] = useHashLocation();
@@ -216,12 +219,15 @@ function AuthenticatedShell({
     [salesRole, dealerNavCount, tradePointNavCount, user.role],
   );
 
+  const showAuditLogLink = userHas(user.role, "audit.read");
+
   return (
     <AppShell
       navigation={navigation}
       homeHref={shellHomeHref}
       userName={displayUserName(user)}
       onLogout={() => void onLogout()}
+      showAuditLogLink={showAuditLogLink}
       embeddedBitrix24={embeddedBitrix24}
     >
       <Switch>
@@ -235,6 +241,7 @@ function AuthenticatedShell({
         <Route path="/client-base-activity" component={ClientBaseActivityDashboardRoute} />
         <Route path="/admin/users" component={AdminUsersRoute} />
         <Route path="/admin/invitations" component={AdminInvitationsRoute} />
+        <Route path="/admin/audit" component={AdminAuditRoute} />
         <Route path="/users" component={UsersAndAccessRoute} />
         <Route path="/profile/change-password" component={ChangePasswordRoute} />
         <Route path="/profile" component={MyProfileRoute} />

@@ -48,7 +48,7 @@ const INVITER_CAN_INVITE: Record<UserRole, UserRole[]> = {
 };
 
 
-// SYNC: shared/auth-rbac.ts — keep this matrix in sync (self-contained rule, PR #224/#226).
+// SYNC: shared/auth-rbac.ts — keep this matrix in sync (self-contained rule, PR #224/#226) + audit.read, sessions.read_self, sessions.revoke_self (Prompt 09).
 
 type Permission =
   | "invitations.create"
@@ -61,7 +61,10 @@ type Permission =
   | "users.update_status"
   | "users.reset_password"
   | "profile.read_self"
-  | "profile.update_self";
+  | "profile.update_self"
+  | "audit.read"
+  | "sessions.read_self"
+  | "sessions.revoke_self";
 
 const PERMISSIONS_BY_ROLE: Record<UserRole, ReadonlySet<Permission>> = {
   admin: new Set<Permission>([
@@ -76,6 +79,9 @@ const PERMISSIONS_BY_ROLE: Record<UserRole, ReadonlySet<Permission>> = {
     "users.reset_password",
     "profile.read_self",
     "profile.update_self",
+    "audit.read",
+    "sessions.read_self",
+    "sessions.revoke_self",
   ]),
   director: new Set<Permission>([
     "invitations.create",
@@ -85,6 +91,9 @@ const PERMISSIONS_BY_ROLE: Record<UserRole, ReadonlySet<Permission>> = {
     "users.read_any",
     "profile.read_self",
     "profile.update_self",
+    "audit.read",
+    "sessions.read_self",
+    "sessions.revoke_self",
   ]),
   rop: new Set<Permission>([
     "invitations.create",
@@ -93,6 +102,8 @@ const PERMISSIONS_BY_ROLE: Record<UserRole, ReadonlySet<Permission>> = {
     "users.list",
     "profile.read_self",
     "profile.update_self",
+    "sessions.read_self",
+    "sessions.revoke_self",
   ]),
   regional_manager: new Set<Permission>([
     "invitations.create",
@@ -100,10 +111,12 @@ const PERMISSIONS_BY_ROLE: Record<UserRole, ReadonlySet<Permission>> = {
     "invitations.revoke_own",
     "profile.read_self",
     "profile.update_self",
+    "sessions.read_self",
+    "sessions.revoke_self",
   ]),
-  manager: new Set<Permission>(["profile.read_self", "profile.update_self"]),
-  marketer: new Set<Permission>(["profile.read_self", "profile.update_self"]),
-  analyst: new Set<Permission>(["profile.read_self", "profile.update_self"]),
+  manager: new Set<Permission>(["profile.read_self", "profile.update_self", "sessions.read_self", "sessions.revoke_self"]),
+  marketer: new Set<Permission>(["profile.read_self", "profile.update_self", "sessions.read_self", "sessions.revoke_self"]),
+  analyst: new Set<Permission>(["profile.read_self", "profile.update_self", "sessions.read_self", "sessions.revoke_self"]),
 };
 
 function roleHasPermission(role: UserRole, perm: Permission): boolean {
@@ -301,6 +314,52 @@ function sendJson(res: VercelResponse, status: number, body: Record<string, unkn
   res.status(status).json(body);
 }
 
+function sendJsonRateLimited(res: VercelResponse, retryAfterSec: number, message: string): void {
+  res.setHeader("Content-Type", JSON_CT);
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("Retry-After", String(retryAfterSec));
+  res.status(429).json({ success: false, code: "RATE_LIMITED", message });
+}
+
+type InviteRateBucket = { count: number; firstAttemptAt: number; windowMs: number };
+const inviteRateStore = new Map<string, InviteRateBucket>();
+
+function inviteRatePrune(now: number): void {
+  for (const [k, b] of Array.from(inviteRateStore.entries())) {
+    if (now - b.firstAttemptAt > b.windowMs) inviteRateStore.delete(k);
+  }
+}
+
+function inviteRateCheck(key: string, maxFail: number, windowMs: number): { ok: true } | { ok: false; retryAfterSec: number } {
+  const now = Date.now();
+  inviteRatePrune(now);
+  const b = inviteRateStore.get(key);
+  if (!b) return { ok: true };
+  const elapsed = now - b.firstAttemptAt;
+  if (elapsed > b.windowMs || b.windowMs !== windowMs) {
+    inviteRateStore.delete(key);
+    return { ok: true };
+  }
+  if (b.count < maxFail) return { ok: true };
+  const retryAfterMs = b.windowMs - elapsed;
+  return { ok: false, retryAfterSec: Math.max(1, Math.ceil(retryAfterMs / 1000)) };
+}
+
+function inviteRateRecord(key: string, windowMs: number): void {
+  const now = Date.now();
+  inviteRatePrune(now);
+  const prev = inviteRateStore.get(key);
+  if (!prev || now - prev.firstAttemptAt > prev.windowMs || prev.windowMs !== windowMs) {
+    inviteRateStore.set(key, { count: 1, firstAttemptAt: now, windowMs });
+    return;
+  }
+  inviteRateStore.set(key, { count: prev.count + 1, firstAttemptAt: prev.firstAttemptAt, windowMs });
+}
+
+function inviteRateClear(key: string): void {
+  inviteRateStore.delete(key);
+}
+
 function isStrongEnough(plain: string, emailForCompare?: string): { ok: true } | { ok: false; reason: string } {
   const t = plain.trim();
   if (!t) return { ok: false, reason: "Пароль не может быть пустым." };
@@ -393,6 +452,13 @@ async function handleCreate(
     return;
   }
 
+  const invCreateKey = `invcreate:${me.id}`;
+  const icl = inviteRateCheck(invCreateKey, 50, 60 * 60 * 1000);
+  if (!icl.ok) {
+    sendJsonRateLimited(res, icl.retryAfterSec, "Слишком много операций создания приглашений. Повторите позже.");
+    return;
+  }
+
   const taken = await pool.query<{ id: string }>(`SELECT id FROM users WHERE email = $1 LIMIT 1`, [rawEmail]);
   if (taken.rows.length > 0) {
     sendJson(res, 409, {
@@ -438,6 +504,8 @@ async function handleCreate(
   const host = typeof headers.host === "string" ? headers.host : Array.isArray(headers.host) ? headers.host[0] : "";
   const baseUrl = process.env.PUBLIC_BASE_URL?.trim() || `https://${host || "localhost"}`;
   const acceptUrl = `${baseUrl.replace(/\/$/, "")}/invite/${rawToken}`;
+
+  inviteRateRecord(invCreateKey, 60 * 60 * 1000);
 
   sendJson(res, 200, {
     success: true,
@@ -619,31 +687,43 @@ async function handleAccept(
   pool: PoolLike,
   headers: Record<string, string | string[] | undefined>,
 ): Promise<void> {
+  const acceptIp = getClientIp(headers) ?? "unknown";
+  const acceptKey = `accept:${acceptIp}`;
+  const acceptWin = 10 * 60 * 1000;
+  const arl = inviteRateCheck(acceptKey, 10, acceptWin);
+  if (!arl.ok) {
+    sendJsonRateLimited(res, arl.retryAfterSec, "Слишком много попыток принять приглашение. Повторите позже.");
+    return;
+  }
+
   const body = req.body as { token?: unknown; fullName?: unknown; password?: unknown };
   const token = typeof body.token === "string" ? body.token.trim() : "";
   const password = typeof body.password === "string" ? body.password : "";
   const fullNameRaw = typeof body.fullName === "string" ? body.fullName.trim() : "";
 
   if (!token || token.length < 30 || token.length > 200) {
+    inviteRateRecord(acceptKey, acceptWin);
     sendJson(res, 400, { success: false, code: "INVALID_TOKEN", message: "Некорректная ссылка приглашения." });
     return;
   }
   if (password.length < 8) {
+    inviteRateRecord(acceptKey, acceptWin);
     sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Пароль не короче 8 символов." });
     return;
   }
   const strength = isStrongEnough(password);
   if (!strength.ok) {
+    inviteRateRecord(acceptKey, acceptWin);
     sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: strength.reason });
     return;
   }
   const effectiveFullName = fullNameRaw || null;
   if (!effectiveFullName) {
+    inviteRateRecord(acceptKey, acceptWin);
     sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите ФИО." });
     return;
   }
 
-  const ip = getClientIp(headers);
   const userAgent = readUserAgent(headers);
 
   const hash = sha256Hex(token);
@@ -661,12 +741,14 @@ async function handleAccept(
   );
   const inv = invRes.rows[0];
   if (!inv || !timingSafeEqualHex(inv.token_hash, token)) {
+    inviteRateRecord(acceptKey, acceptWin);
     sendJson(res, 400, { success: false, code: "INVALID_TOKEN", message: "Приглашение не найдено." });
     return;
   }
   const now = Date.now();
   const ex = new Date(inv.expires_at).getTime();
   if (inv.accepted_at != null) {
+    inviteRateRecord(acceptKey, acceptWin);
     sendJson(res, 410, { success: false, code: "ALREADY_ACCEPTED", message: "Приглашение уже использовано." });
     return;
   }
@@ -689,6 +771,7 @@ async function handleAccept(
   if (exUser.rows.length > 0) {
     const u = exUser.rows[0]!;
     if (u.status !== "invited") {
+      inviteRateRecord(acceptKey, acceptWin);
       sendJson(res, 409, {
         success: false,
         code: "EMAIL_TAKEN",
@@ -761,7 +844,7 @@ async function handleAccept(
   await pool.query(
     `INSERT INTO sessions (id, user_id, refresh_token_hash, user_agent, ip, expires_at, revoked_at)
      VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6::timestamptz, NULL)`,
-    [sessionId, userId, refreshTokenHash, userAgent, ip, expiresAt],
+    [sessionId, userId, refreshTokenHash, userAgent, acceptIp, expiresAt],
   );
 
   await tryAudit(pool, {
@@ -769,10 +852,12 @@ async function handleAccept(
     action: "auth.login",
     entityType: "session",
     entityId: sessionId,
-    metadata: { ip, userAgent, via: "invitation_accept" },
+    metadata: { ip: acceptIp, userAgent, via: "invitation_accept" },
   });
 
   const snap2 = { ...snapshot, last_login_at: lastLoginAt };
+
+  inviteRateClear(acceptKey);
 
   sendJson(res, 200, { success: true, user: publicUserFromRow(snap2) }, buildAuthCookie(refreshToken));
 }

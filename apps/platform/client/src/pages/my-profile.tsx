@@ -16,6 +16,19 @@ import { getSelf, updateSelf, type ProfileSelfDTO } from "@/lib/profile-api";
 import { invalidateAuthUser } from "@/hooks/use-auth-user";
 import { formatDisplayDateTime } from "@/lib/format-display-date";
 import { toast } from "@/hooks/use-toast";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { listSelfSessions, revokeOtherSelfSessions, revokeSelfSession } from "@/lib/sessions-self-api";
 
 const PHONE_RE = /^[+\d\s\-()]+$/;
 
@@ -41,6 +54,12 @@ export default function MyProfilePage() {
     queryKey: ["profile-self"],
     queryFn: getSelf,
     enabled: !!user,
+  });
+
+
+  const sessionsQ = useQuery({
+    queryKey: ["self-sessions"],
+    queryFn: listSelfSessions,
   });
 
   const [fullName, setFullName] = useState("");
@@ -106,6 +125,29 @@ export default function MyProfilePage() {
       setSubmitErr(m);
     } finally {
       setSaving(false);
+    }
+  };
+
+
+  const onRevokeSession = async (id: string) => {
+    try {
+      await revokeSelfSession(id);
+      await qc.invalidateQueries({ queryKey: ["self-sessions"] });
+      toast({ title: "Сессия завершена" });
+    } catch (e) {
+      const m = e instanceof Error ? e.message : "Не удалось отозвать сессию.";
+      toast({ title: "Ошибка", description: m, variant: "destructive" });
+    }
+  };
+
+  const onRevokeOthers = async () => {
+    try {
+      const { revoked } = await revokeOtherSelfSessions();
+      await qc.invalidateQueries({ queryKey: ["self-sessions"] });
+      toast({ title: "Сессии завершены", description: `Завершено сессий: ${revoked}.` });
+    } catch (e) {
+      const m = e instanceof Error ? e.message : "Не удалось завершить сессии.";
+      toast({ title: "Ошибка", description: m, variant: "destructive" });
     }
   };
 
@@ -207,8 +249,87 @@ export default function MyProfilePage() {
         </CardContent>
       </Card>
 
-      <p className="text-xs text-muted-foreground">
-        Отображаемое имя в шапке: <strong>{displayUserName(user)}</strong>
+
+      <Card className="border-[#E3E6F3]" data-testid="section-self-sessions">
+        <CardHeader>
+          <CardTitle className="text-base">Активные сессии</CardTitle>
+          <CardDescription>Устройства, с которых выполнен вход в аккаунт.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {sessionsQ.isError ? (
+            <p className="text-sm text-destructive">Не удалось загрузить список сессий.</p>
+          ) : null}
+          <div className="flex flex-wrap gap-2">
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button type="button" variant="outline" data-testid="button-self-sessions-revoke-others">
+                  Завершить остальные сессии
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Завершить остальные сессии</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Будут завершены все сессии, кроме текущего устройства. Продолжить?
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel type="button">Отмена</AlertDialogCancel>
+                  <AlertDialogAction type="button" onClick={() => void onRevokeOthers()}>
+                    Завершить
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Устройство</TableHead>
+                <TableHead>IP</TableHead>
+                <TableHead>Истекает</TableHead>
+                <TableHead className="text-right">Действие</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {(sessionsQ.data ?? []).map((s) => (
+                <TableRow key={s.id} data-testid={`row-self-session-${s.id}`}>
+                  <TableCell className="max-w-[220px] truncate text-xs" title={s.userAgent ?? ""}>
+                    {s.userAgent ? s.userAgent.slice(0, 80) + (s.userAgent.length > 80 ? "…" : "") : "—"}
+                  </TableCell>
+                  <TableCell className="text-xs">{s.ip ?? "—"}</TableCell>
+                  <TableCell className="whitespace-nowrap text-xs">{formatDisplayDateTime(s.expiresAt)}</TableCell>
+                  <TableCell className="text-right">
+                    {s.current ? (
+                      <span className="text-xs text-muted-foreground">текущая</span>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        data-testid={`button-self-session-revoke-${s.id}`}
+                        onClick={() => void onRevokeSession(s.id)}
+                      >
+                        Отозвать
+                      </Button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+              {(sessionsQ.data?.length ?? 0) === 0 && !sessionsQ.isFetching ? (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center text-sm text-muted-foreground">
+                    Нет активных сессий.
+                  </TableCell>
+                </TableRow>
+              ) : null}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+
+      <p className="text-xs text-muted-foreground"> <strong>{displayUserName(user)}</strong>
       </p>
     </div>
   );

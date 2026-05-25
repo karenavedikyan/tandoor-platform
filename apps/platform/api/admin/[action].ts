@@ -1,5 +1,5 @@
 /**
- * Vercel Serverless: `/api/admin/:action` (users-list | … | profile-get-self | profile-update-self | profile-change-password).
+ * Vercel Serverless: `/api/admin/:action` (users-list | … | audit-list | sessions-*-self | profile-get-self | profile-update-self | profile-change-password). In-memory rate limits (Hobby): см. handleUsersResetPassword / handleProfileChangePassword.
  *
  * Self-contained: только `@vercel/node`, `@neondatabase/serverless`, `bcryptjs`, `node:crypto`.
  * Контракт совпадает с `server/admin/users-handlers.ts`, `server/admin-routes.ts`, `server/profile-routes.ts`.
@@ -37,7 +37,7 @@ type UserStatus = "invited" | "active" | "disabled";
 
 const BUSINESS_ROLES: UserRole[] = ["director", "rop", "regional_manager", "manager", "marketer", "analyst"];
 
-// SYNC: shared/auth-rbac.ts — keep this matrix in sync (self-contained rule, PR #224/#226).
+// SYNC: shared/auth-rbac.ts — keep this matrix in sync (self-contained rule, PR #224/#226) + audit.read, sessions.read_self, sessions.revoke_self (Prompt 09).
 
 type Permission =
   | "invitations.create"
@@ -50,7 +50,10 @@ type Permission =
   | "users.update_status"
   | "users.reset_password"
   | "profile.read_self"
-  | "profile.update_self";
+  | "profile.update_self"
+  | "audit.read"
+  | "sessions.read_self"
+  | "sessions.revoke_self";
 
 const PERMISSIONS_BY_ROLE: Record<UserRole, ReadonlySet<Permission>> = {
   admin: new Set<Permission>([
@@ -65,6 +68,9 @@ const PERMISSIONS_BY_ROLE: Record<UserRole, ReadonlySet<Permission>> = {
     "users.reset_password",
     "profile.read_self",
     "profile.update_self",
+    "audit.read",
+    "sessions.read_self",
+    "sessions.revoke_self",
   ]),
   director: new Set<Permission>([
     "invitations.create",
@@ -74,6 +80,9 @@ const PERMISSIONS_BY_ROLE: Record<UserRole, ReadonlySet<Permission>> = {
     "users.read_any",
     "profile.read_self",
     "profile.update_self",
+    "audit.read",
+    "sessions.read_self",
+    "sessions.revoke_self",
   ]),
   rop: new Set<Permission>([
     "invitations.create",
@@ -82,6 +91,8 @@ const PERMISSIONS_BY_ROLE: Record<UserRole, ReadonlySet<Permission>> = {
     "users.list",
     "profile.read_self",
     "profile.update_self",
+    "sessions.read_self",
+    "sessions.revoke_self",
   ]),
   regional_manager: new Set<Permission>([
     "invitations.create",
@@ -89,10 +100,12 @@ const PERMISSIONS_BY_ROLE: Record<UserRole, ReadonlySet<Permission>> = {
     "invitations.revoke_own",
     "profile.read_self",
     "profile.update_self",
+    "sessions.read_self",
+    "sessions.revoke_self",
   ]),
-  manager: new Set<Permission>(["profile.read_self", "profile.update_self"]),
-  marketer: new Set<Permission>(["profile.read_self", "profile.update_self"]),
-  analyst: new Set<Permission>(["profile.read_self", "profile.update_self"]),
+  manager: new Set<Permission>(["profile.read_self", "profile.update_self", "sessions.read_self", "sessions.revoke_self"]),
+  marketer: new Set<Permission>(["profile.read_self", "profile.update_self", "sessions.read_self", "sessions.revoke_self"]),
+  analyst: new Set<Permission>(["profile.read_self", "profile.update_self", "sessions.read_self", "sessions.revoke_self"]),
 };
 
 function roleHasPermission(role: UserRole, perm: Permission): boolean {
@@ -129,6 +142,61 @@ function getPool(): PoolLike | null {
 
 function vercelHeaders(req: VercelRequest): Record<string, string | string[] | undefined> {
   return (req.headers ?? {}) as Record<string, string | string[] | undefined>;
+}
+
+function getClientIp(headers: Record<string, string | string[] | undefined>): string | null {
+  const xff = headers["x-forwarded-for"];
+  if (typeof xff === "string" && xff.trim()) {
+    const first = xff.split(",")[0]?.trim();
+    if (first) return first;
+  }
+  if (Array.isArray(xff) && xff[0]?.trim()) {
+    const first = xff[0]!.split(",")[0]?.trim();
+    if (first) return first;
+  }
+  const xri = headers["x-real-ip"];
+  if (typeof xri === "string" && xri.trim()) return xri.trim();
+  if (Array.isArray(xri) && xri[0]?.trim()) return xri[0]!.trim();
+  return null;
+}
+
+type RateBucket = { count: number; firstAttemptAt: number; windowMs: number };
+const adminRateStore = new Map<string, RateBucket>();
+
+function ratePrune(now: number): void {
+  for (const [k, b] of Array.from(adminRateStore.entries())) {
+    if (now - b.firstAttemptAt > b.windowMs) adminRateStore.delete(k);
+  }
+}
+
+function rateCheck(key: string, maxFail: number, windowMs: number): { ok: true } | { ok: false; retryAfterSec: number } {
+  const now = Date.now();
+  ratePrune(now);
+  const b = adminRateStore.get(key);
+  if (!b) return { ok: true };
+  const elapsed = now - b.firstAttemptAt;
+  if (elapsed > b.windowMs || b.windowMs !== windowMs) {
+    adminRateStore.delete(key);
+    return { ok: true };
+  }
+  if (b.count < maxFail) return { ok: true };
+  const retryAfterMs = b.windowMs - elapsed;
+  return { ok: false, retryAfterSec: Math.max(1, Math.ceil(retryAfterMs / 1000)) };
+}
+
+function rateRecord(key: string, windowMs: number): void {
+  const now = Date.now();
+  ratePrune(now);
+  const prev = adminRateStore.get(key);
+  if (!prev || now - prev.firstAttemptAt > prev.windowMs || prev.windowMs !== windowMs) {
+    adminRateStore.set(key, { count: 1, firstAttemptAt: now, windowMs });
+    return;
+  }
+  adminRateStore.set(key, { count: prev.count + 1, firstAttemptAt: prev.firstAttemptAt, windowMs });
+}
+
+function rateClear(key: string): void {
+  adminRateStore.delete(key);
 }
 
 function sha256Hex(value: string): string {
@@ -252,6 +320,13 @@ function sendJson(res: VercelResponse, status: number, body: Record<string, unkn
   res.setHeader("Content-Type", JSON_CT);
   res.setHeader("Cache-Control", "no-store");
   res.status(status).json(body);
+}
+
+function sendJsonRateLimited(res: VercelResponse, retryAfterSec: number, message: string): void {
+  res.setHeader("Content-Type", JSON_CT);
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("Retry-After", String(retryAfterSec));
+  res.status(429).json({ success: false, code: "RATE_LIMITED", message });
 }
 
 function sanitizeLikeFragment(raw: string): string {
@@ -560,6 +635,13 @@ async function handleUsersResetPassword(
     return;
   }
 
+  const resetRateKey = `reset:${me.id}`;
+  const resetRl = rateCheck(resetRateKey, 20, 60 * 60 * 1000);
+  if (!resetRl.ok) {
+    sendJsonRateLimited(res, resetRl.retryAfterSec, "Слишком много операций сброса пароля. Повторите позже.");
+    return;
+  }
+
   const cur = await pool.query<DbUserRow>(
     `SELECT id, email, full_name, phone, role, status, must_change_password, last_login_at, created_at FROM users WHERE id = $1::uuid LIMIT 1`,
     [id],
@@ -601,6 +683,8 @@ async function handleUsersResetPassword(
     entityId: id,
     metadata: { targetUserId: id, sessionsRevoked },
   });
+
+  rateRecord(resetRateKey, 60 * 60 * 1000);
 
   sendJson(res, 200, {
     success: true,
@@ -822,8 +906,17 @@ async function handleProfileChangePassword(
     return;
   }
 
+  const ip = getClientIp(headers);
+  const pwdKey = `pwd:${ip ?? "unknown"}:${me.id}`;
+  const pwdRl = rateCheck(pwdKey, 5, 15 * 60 * 1000);
+  if (!pwdRl.ok) {
+    sendJsonRateLimited(res, pwdRl.retryAfterSec, "Слишком много попыток смены пароля. Повторите позже.");
+    return;
+  }
+
   const ok = await bcrypt.compare(cp, ph);
   if (!ok) {
+    rateRecord(pwdKey, 15 * 60 * 1000);
     sendJson(res, 400, { success: false, code: "INVALID_PASSWORD", message: "Текущий пароль неверен." });
     return;
   }
@@ -859,7 +952,335 @@ async function handleProfileChangePassword(
     metadata: { otherSessionsRevoked },
   });
 
+  rateClear(pwdKey);
+
   sendJson(res, 200, { success: true, otherSessionsRevoked });
+}
+
+async function handleAuditList(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  headers: Record<string, string | string[] | undefined>,
+): Promise<void> {
+  const me = await resolveCurrentUser(pool, headers);
+  if (!me) {
+    sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+    return;
+  }
+  if (me.status !== "active") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+  if (!roleHasPermission(me.role as UserRole, "audit.read")) {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+
+  const q = req.query ?? {};
+  const qs = (v: unknown): string | undefined => {
+    if (typeof v === "string" && v.trim()) return v.trim();
+    if (Array.isArray(v) && typeof v[0] === "string" && v[0].trim()) return v[0]!.trim();
+    return undefined;
+  };
+
+  const actor = qs(q.actor);
+  const actionLike = qs(q.action);
+  const entityType = qs(q.entityType);
+  const entityId = qs(q.entityId);
+  const fromIso = qs(q.from);
+  const toIso = qs(q.to);
+  const limitRaw = qs(q.limit);
+  const offsetRaw = qs(q.offset);
+
+  if (actor != null && actor !== "" && !UUID_RE.test(actor)) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Некорректный фильтр по актору." });
+    return;
+  }
+
+  let fromMs: number | null = null;
+  let toMs: number | null = null;
+  if (fromIso != null && fromIso !== "") {
+    const t = Date.parse(fromIso);
+    if (!Number.isFinite(t)) {
+      sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Некорректная дата «с»." });
+      return;
+    }
+    fromMs = t;
+  }
+  if (toIso != null && toIso !== "") {
+    const t = Date.parse(toIso);
+    if (!Number.isFinite(t)) {
+      sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Некорректная дата «по»." });
+      return;
+    }
+    toMs = t;
+  }
+
+  let limit = 100;
+  if (limitRaw != null && limitRaw !== "") {
+    const n = Number.parseInt(limitRaw, 10);
+    if (!Number.isFinite(n) || n < 1 || n > 200) {
+      sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Параметр limit должен быть от 1 до 200." });
+      return;
+    }
+    limit = n;
+  }
+
+  let offset = 0;
+  if (offsetRaw != null && offsetRaw !== "") {
+    const n = Number.parseInt(offsetRaw, 10);
+    if (!Number.isFinite(n) || n < 0) {
+      sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Параметр offset должен быть неотрицательным." });
+      return;
+    }
+    offset = n;
+  }
+
+  const whereParts: string[] = [];
+  const params: unknown[] = [];
+  let pi = 1;
+  if (actor != null && actor !== "") {
+    whereParts.push(`al.actor_user_id = $${pi}::uuid`);
+    params.push(actor);
+    pi += 1;
+  }
+  if (actionLike != null && actionLike !== "") {
+    whereParts.push(`al.action ILIKE $${pi}`);
+    params.push(`%${sanitizeLikeFragment(actionLike)}%`);
+    pi += 1;
+  }
+  if (entityType != null && entityType !== "") {
+    whereParts.push(`al.entity_type = $${pi}`);
+    params.push(entityType);
+    pi += 1;
+  }
+  if (entityId != null && entityId !== "") {
+    whereParts.push(`al.entity_id = $${pi}`);
+    params.push(entityId);
+    pi += 1;
+  }
+  if (fromMs != null) {
+    whereParts.push(`al.created_at >= $${pi}::timestamptz`);
+    params.push(new Date(fromMs).toISOString());
+    pi += 1;
+  }
+  if (toMs != null) {
+    whereParts.push(`al.created_at <= $${pi}::timestamptz`);
+    params.push(new Date(toMs).toISOString());
+    pi += 1;
+  }
+
+  const whereSql = whereParts.length ? whereParts.join(" AND ") : "TRUE";
+
+  const countSql = `SELECT COUNT(*)::int AS n FROM audit_log al WHERE ${whereSql}`;
+  const countRes = await pool.query<{ n: number }>(countSql, params);
+  const total = countRes.rows[0]?.n ?? 0;
+
+  const listSql = `
+    SELECT al.id, al.actor_user_id, al.action, al.entity_type, al.entity_id, al.metadata, al.created_at,
+           u.email AS actor_email, u.full_name AS actor_full_name
+      FROM audit_log al
+      LEFT JOIN users u ON u.id = al.actor_user_id
+     WHERE ${whereSql}
+     ORDER BY al.created_at DESC
+     LIMIT $${pi} OFFSET $${pi + 1}`;
+  const listParams = [...params, limit, offset];
+  const rows = await pool.query<{
+    id: string;
+    actor_user_id: string | null;
+    action: string;
+    entity_type: string;
+    entity_id: string;
+    metadata: unknown;
+    created_at: string;
+    actor_email: string | null;
+    actor_full_name: string | null;
+  }>(listSql, listParams);
+
+  const items = rows.rows.map((r) => {
+    let metadata: Record<string, unknown> | null = null;
+    if (r.metadata != null && typeof r.metadata === "object" && !Array.isArray(r.metadata)) {
+      metadata = r.metadata as Record<string, unknown>;
+    } else if (typeof r.metadata === "string") {
+      try {
+        const p = JSON.parse(r.metadata) as unknown;
+        if (p && typeof p === "object" && !Array.isArray(p)) metadata = p as Record<string, unknown>;
+      } catch {
+        metadata = null;
+      }
+    }
+    const actorOut =
+      r.actor_user_id != null && r.actor_email
+        ? { id: r.actor_user_id, email: r.actor_email, fullName: r.actor_full_name }
+        : null;
+    return {
+      id: r.id,
+      action: r.action,
+      entityType: r.entity_type,
+      entityId: r.entity_id,
+      actor: actorOut,
+      metadata,
+      createdAt: r.created_at,
+    };
+  });
+
+  sendJson(res, 200, { success: true, total, items });
+}
+
+async function handleSessionsListSelf(
+  res: VercelResponse,
+  pool: PoolLike,
+  headers: Record<string, string | string[] | undefined>,
+): Promise<void> {
+  const me = await resolveCurrentUser(pool, headers);
+  if (!me) {
+    sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+    return;
+  }
+  if (me.status !== "active") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+  if (!roleHasPermission(me.role as UserRole, "sessions.read_self")) {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+
+  const token = parseAuthRefreshToken(typeof headers.cookie === "string" ? headers.cookie : undefined);
+
+  const rows = await pool.query<{
+    id: string;
+    user_agent: string | null;
+    ip: string | null;
+    expires_at: string;
+    refresh_token_hash: string;
+  }>(
+    `SELECT id, user_agent, ip, expires_at, refresh_token_hash
+       FROM sessions
+      WHERE user_id = $1::uuid AND revoked_at IS NULL AND expires_at > NOW()
+      ORDER BY expires_at DESC`,
+    [me.id],
+  );
+
+  const sessions = rows.rows.map((r) => ({
+    id: r.id,
+    userAgent: r.user_agent,
+    ip: r.ip,
+    expiresAt: r.expires_at,
+    current: !!(token && timingSafeEqualHex(r.refresh_token_hash, token)),
+  }));
+
+  sendJson(res, 200, { success: true, sessions });
+}
+
+async function handleSessionsRevokeSelf(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  headers: Record<string, string | string[] | undefined>,
+): Promise<void> {
+  const me = await resolveCurrentUser(pool, headers);
+  if (!me) {
+    sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+    return;
+  }
+  if (me.status !== "active") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+  if (!roleHasPermission(me.role as UserRole, "sessions.revoke_self")) {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+
+  const body = (req.body ?? {}) as { id?: unknown };
+  const sid = typeof body.id === "string" ? body.id.trim() : "";
+  if (!sid || !UUID_RE.test(sid)) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите корректный идентификатор сессии." });
+    return;
+  }
+
+  const curTok = parseAuthRefreshToken(typeof headers.cookie === "string" ? headers.cookie : undefined);
+  if (!curTok) {
+    sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+    return;
+  }
+
+  const sel = await pool.query<{ id: string; refresh_token_hash: string }>(
+    `SELECT id, refresh_token_hash FROM sessions WHERE id = $1::uuid AND user_id = $2::uuid AND revoked_at IS NULL LIMIT 1`,
+    [sid, me.id],
+  );
+  const row = sel.rows[0];
+  if (!row) {
+    sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Сессия не найдена." });
+    return;
+  }
+  if (timingSafeEqualHex(row.refresh_token_hash, curTok)) {
+    sendJson(res, 400, {
+      success: false,
+      code: "VALIDATION_ERROR",
+      message: "Текущую сессию нельзя отозвать здесь, используйте выход.",
+    });
+    return;
+  }
+
+  await pool.query(`UPDATE sessions SET revoked_at = NOW() WHERE id = $1::uuid`, [sid]);
+
+  await tryAudit(pool, {
+    actorUserId: me.id,
+    action: "auth.session.revoke_self",
+    entityType: "session",
+    entityId: sid,
+    metadata: {},
+  });
+
+  sendJson(res, 200, { success: true });
+}
+
+async function handleSessionsRevokeOthersSelf(
+  res: VercelResponse,
+  pool: PoolLike,
+  headers: Record<string, string | string[] | undefined>,
+): Promise<void> {
+  const me = await resolveCurrentUser(pool, headers);
+  if (!me) {
+    sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+    return;
+  }
+  if (me.status !== "active") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+  if (!roleHasPermission(me.role as UserRole, "sessions.revoke_self")) {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+
+  const curTok = parseAuthRefreshToken(typeof headers.cookie === "string" ? headers.cookie : undefined);
+  if (!curTok) {
+    sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+    return;
+  }
+  const curHash = sha256Hex(curTok);
+
+  const rev = await pool.query<{ id: string }>(
+    `UPDATE sessions SET revoked_at = NOW()
+      WHERE user_id = $1::uuid AND revoked_at IS NULL AND refresh_token_hash <> $2
+      RETURNING id`,
+    [me.id, curHash],
+  );
+  const revoked = rev.rows.length;
+
+  await tryAudit(pool, {
+    actorUserId: me.id,
+    action: "auth.session.revoke_others_self",
+    entityType: "user",
+    entityId: me.id,
+    metadata: { revoked },
+  });
+
+  sendJson(res, 200, { success: true, revoked });
 }
 
 function pickAction(req: VercelRequest): string {
@@ -897,6 +1318,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "users-reset-password" && req.method === "POST") {
       await handleUsersResetPassword(req, res, pool, headers);
+      return;
+    }
+    if (action === "audit-list" && req.method === "GET") {
+      await handleAuditList(req, res, pool, headers);
+      return;
+    }
+    if (action === "sessions-list-self" && req.method === "GET") {
+      await handleSessionsListSelf(res, pool, headers);
+      return;
+    }
+    if (action === "sessions-revoke-self" && req.method === "POST") {
+      await handleSessionsRevokeSelf(req, res, pool, headers);
+      return;
+    }
+    if (action === "sessions-revoke-others-self" && req.method === "POST") {
+      await handleSessionsRevokeOthersSelf(res, pool, headers);
       return;
     }
     if (action === "profile-get-self" && req.method === "GET") {
