@@ -72,6 +72,8 @@ const LazyChangePassword = lazy(() => import("@/pages/change-password"));
 const LazyLogin = lazy(() => import("@/pages/login"));
 const LazyInvite = lazy(() => import("@/pages/invite"));
 const LazyResetPassword = lazy(() => import("@/pages/reset-password"));
+const LazyForgotPassword = lazy(() => import("@/pages/forgot-password"));
+const LazyResetRequests = lazy(() => import("@/pages/reset-requests"));
 const LazyAdminInvitations = lazy(() => import("@/pages/admin-invitations"));
 const LazyAdminUsers = lazy(() => import("@/pages/admin-users"));
 const LazyAdminAudit = lazy(() => import("@/pages/admin-audit"));
@@ -124,6 +126,8 @@ const ChangePasswordRoute = suspensePage(LazyChangePassword);
 const FeatureInDevelopmentRoute = suspensePage(LazyFeatureInDevelopment);
 const InviteRoute = suspensePage(LazyInvite);
 const ResetPasswordRoute = suspensePage(LazyResetPassword);
+const ForgotPasswordRoute = suspensePage(LazyForgotPassword);
+const ResetRequestsRoute = suspensePage(LazyResetRequests);
 const AdminInvitationsRoute = suspensePage(LazyAdminInvitations);
 const AdminUsersRoute = suspensePage(LazyAdminUsers);
 const AdminAuditRoute = suspensePage(LazyAdminAudit);
@@ -244,6 +248,7 @@ function AuthenticatedShell({
         <Route path="/admin/users" component={AdminUsersRoute} />
         <Route path="/admin/invitations" component={AdminInvitationsRoute} />
         <Route path="/admin/audit" component={AdminAuditRoute} />
+        <Route path="/reset-requests" component={ResetRequestsRoute} />
         <Route path="/users" component={UsersAndAccessRoute} />
         <Route path="/profile/change-password" component={ChangePasswordRoute} />
         <Route path="/profile" component={MyProfileRoute} />
@@ -323,6 +328,14 @@ function AppRouter() {
     return (
       <Suspense fallback={<PageLoadingFallback />}>
         <ResetPasswordRoute />
+      </Suspense>
+    );
+  }
+
+  if (normRoutePath(path) === "/forgot") {
+    return (
+      <Suspense fallback={<PageLoadingFallback />}>
+        <ForgotPasswordRoute />
       </Suspense>
     );
   }

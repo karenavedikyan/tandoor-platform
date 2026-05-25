@@ -3,7 +3,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
@@ -115,6 +115,15 @@ export default function LoginPage() {
             <Button type="submit" className="min-h-11 w-full font-semibold" data-testid="button-login-submit">
               Войти
             </Button>
+            <div className="text-center">
+              <Link
+                href="/forgot"
+                className="text-sm text-primary underline-offset-4 hover:underline"
+                data-testid="link-forgot-password"
+              >
+                Забыли пароль?
+              </Link>
+            </div>
           </form>
         </CardContent>
       </Card>

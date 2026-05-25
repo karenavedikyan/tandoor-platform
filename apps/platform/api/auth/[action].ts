@@ -233,6 +233,75 @@ function enforceCsrfOrigin(req: VercelRequest): boolean {
   }
 }
 
+/** Иерархия одобряющих для self-service «Забыли пароль?» (SYNC: shared/auth-rbac.ts при выносе). */
+function approverRolesFor(role: UserRole): UserRole[] {
+  if (role === "admin") return [];
+  if (role === "director") return ["admin"];
+  if (role === "rop") return ["director"];
+  return ["rop", "director"];
+}
+
+const RESET_PUBLIC_RL_WINDOW_MS = 10 * 60 * 1000;
+const RESET_PUBLIC_RL_MAX = 5;
+type ResetPublicRlBucket = { hits: number[] };
+const resetPublicRateBuckets = new Map<string, ResetPublicRlBucket>();
+
+function resetPublicRateConsume(key: string): { ok: true } | { ok: false; retryAfterSec: number } {
+  const now = Date.now();
+  const b = resetPublicRateBuckets.get(key) ?? { hits: [] };
+  b.hits = b.hits.filter((t) => now - t < RESET_PUBLIC_RL_WINDOW_MS);
+  if (b.hits.length >= RESET_PUBLIC_RL_MAX) {
+    const oldest = b.hits[0]!;
+    const retryAfterSec = Math.max(1, Math.ceil((oldest + RESET_PUBLIC_RL_WINDOW_MS - now) / 1000));
+    resetPublicRateBuckets.set(key, b);
+    return { ok: false, retryAfterSec };
+  }
+  b.hits.push(now);
+  resetPublicRateBuckets.set(key, b);
+  return { ok: true };
+}
+
+function resetPublicRateKey(ip: string | null, emailLower: string): string {
+  return `${ip ?? "unknown-ip"}|${emailLower}`;
+}
+
+async function tgSendResetRequestNotice(chatId: number, text: string): Promise<void> {
+  const token = process.env.TG_BOT_TOKEN?.trim();
+  if (!token) return;
+  try {
+    const url = `https://api.telegram.org/bot${token}/sendMessage`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, text }),
+    });
+    if (!res.ok) {
+      const t = await res.text().catch(() => "");
+      console.warn("[api/auth] reset-request tg sendMessage", res.status, t.slice(0, 200));
+    }
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    console.warn("[api/auth] reset-request tg network", m.slice(0, 200));
+  }
+}
+
+function pickAppOriginForLinks(headers: Record<string, string | string[] | undefined>): string {
+  const envUrl = process.env.PUBLIC_APP_URL?.trim();
+  if (envUrl) return envUrl.replace(/\/$/, "");
+  const host = (() => {
+    const xf = headers["x-forwarded-host"];
+    if (typeof xf === "string" && xf.trim()) return xf.trim().split(",")[0]!.trim();
+    if (Array.isArray(xf) && xf[0]?.trim()) return xf[0]!.trim().split(",")[0]!.trim();
+    const h = headers.host;
+    if (typeof h === "string" && h.trim()) return h.trim();
+    if (Array.isArray(h) && h[0]?.trim()) return h[0]!.trim();
+    return "localhost";
+  })();
+  const proto =
+    process.env.NODE_ENV === "production" || process.env.VERCEL === "1" || cookieSecureFlag() ? "https" : "http";
+  return `${proto}://${host}`;
+}
+
 function getClientIp(headers: Record<string, string | string[] | undefined>): string | null {
   const xff = headers["x-forwarded-for"];
   if (typeof xff === "string" && xff.trim()) {
@@ -306,6 +375,150 @@ function validateRedeemPassword(plain: string): { ok: true; trimmed: string } | 
     return { ok: false, message: "Пароль должен быть не короче 12 символов и содержать букву и цифру." };
   }
   return { ok: true, trimmed: t };
+}
+
+
+const UUID_RE_RESET = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function handleResetRequestApprovers(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  headers: Record<string, string | string[] | undefined>,
+): Promise<void> {
+  const body = (req.body ?? {}) as { email?: unknown };
+  const rawEmail = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+  if (!rawEmail || !SIMPLE_EMAIL_RE.test(rawEmail)) {
+    sendJson(res, 200, { success: true, approvers: [] });
+    return;
+  }
+  const ip = getClientIp(headers);
+  const rl = resetPublicRateConsume(resetPublicRateKey(ip, rawEmail));
+  if (!rl.ok) {
+    res.setHeader("Retry-After", String(rl.retryAfterSec));
+    sendJson(res, 429, { success: false, code: "RATE_LIMITED", message: "Слишком много запросов. Повторите позже." });
+    return;
+  }
+  try {
+    const ures = await pool.query<{ id: string; role: string; status: string }>(
+      `SELECT id, role, status FROM users WHERE email = $1 LIMIT 1`,
+      [rawEmail],
+    );
+    const u = ures.rows[0];
+    if (!u || u.role === "admin" || (u.status !== "active" && u.status !== "invited")) {
+      sendJson(res, 200, { success: true, approvers: [] });
+      return;
+    }
+    const roles = approverRolesFor(u.role as UserRole);
+    if (roles.length === 0) {
+      sendJson(res, 200, { success: true, approvers: [] });
+      return;
+    }
+    const approvers = await pool.query<{ id: string; full_name: string; role: string }>(
+      `SELECT id, full_name, role FROM users
+       WHERE role = ANY($1::text[]) AND status = 'active'
+       ORDER BY CASE role WHEN 'director' THEN 1 WHEN 'rop' THEN 2 ELSE 3 END, full_name
+       LIMIT 50`,
+      [roles],
+    );
+    sendJson(res, 200, {
+      success: true,
+      approvers: approvers.rows.map((r) => ({ id: r.id, fullName: r.full_name, role: r.role })),
+    });
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    console.error("[api/auth] reset-request-approvers", m.slice(0, 200));
+    sendJson(res, 200, { success: true, approvers: [] });
+  }
+}
+
+async function handleResetRequestCreate(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  headers: Record<string, string | string[] | undefined>,
+): Promise<void> {
+  const body = (req.body ?? {}) as { email?: unknown; approverId?: unknown };
+  const rawEmail = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+  const approverId = typeof body.approverId === "string" ? body.approverId.trim() : "";
+  if (!rawEmail || !SIMPLE_EMAIL_RE.test(rawEmail) || !approverId || !UUID_RE_RESET.test(approverId)) {
+    sendJson(res, 200, { success: true });
+    return;
+  }
+  const ip = getClientIp(headers);
+  const rl = resetPublicRateConsume(resetPublicRateKey(ip, rawEmail));
+  if (!rl.ok) {
+    res.setHeader("Retry-After", String(rl.retryAfterSec));
+    sendJson(res, 429, { success: false, code: "RATE_LIMITED", message: "Слишком много запросов. Повторите позже." });
+    return;
+  }
+  try {
+    const reqRes = await pool.query<{ id: string; role: string; status: string; full_name: string; email: string }>(
+      `SELECT id, role, status, full_name, email FROM users WHERE email = $1 LIMIT 1`,
+      [rawEmail],
+    );
+    const requester = reqRes.rows[0];
+    if (!requester || (requester.status !== "active" && requester.status !== "invited")) {
+      sendJson(res, 200, { success: true });
+      return;
+    }
+    const allowedRoles = approverRolesFor(requester.role as UserRole);
+    if (allowedRoles.length === 0) {
+      sendJson(res, 200, { success: true });
+      return;
+    }
+    const appRes = await pool.query<{
+      id: string;
+      role: string;
+      status: string;
+      telegram_user_id: string | null;
+    }>(
+      `SELECT id, role, status, telegram_user_id::text AS telegram_user_id FROM users WHERE id = $1::uuid LIMIT 1`,
+      [approverId],
+    );
+    const approver = appRes.rows[0];
+    if (!approver || approver.status !== "active" || !allowedRoles.includes(approver.role as UserRole)) {
+      sendJson(res, 200, { success: true });
+      return;
+    }
+    const dup = await pool.query<{ id: string }>(
+      `SELECT id FROM password_reset_requests
+       WHERE requester_user_id = $1::uuid AND approver_user_id = $2::uuid AND status = 'pending' AND expires_at > NOW()
+       LIMIT 1`,
+      [requester.id, approverId],
+    );
+    if (dup.rows[0]) {
+      sendJson(res, 200, { success: true });
+      return;
+    }
+    await pool.query(
+      `INSERT INTO password_reset_requests (requester_user_id, approver_user_id, expires_at)
+       VALUES ($1::uuid, $2::uuid, NOW() + interval '30 minutes')`,
+      [requester.id, approverId],
+    );
+    await tryAudit(pool, {
+      actorUserId: null,
+      action: "auth.reset_request.created",
+      entityType: "user",
+      entityId: requester.id,
+      metadata: { requesterId: requester.id, approverId },
+    });
+    let tgId: number | null = null;
+    if (approver.telegram_user_id != null && String(approver.telegram_user_id).trim() !== "") {
+      const n = Number(approver.telegram_user_id);
+      if (Number.isFinite(n)) tgId = n;
+    }
+    if (tgId != null) {
+      const origin = pickAppOriginForLinks(headers);
+      const msg = `Новый запрос на сброс пароля от ${requester.full_name} (${requester.email}). Открыть: ${origin}/#/reset-requests`;
+      void tgSendResetRequestNotice(tgId, msg);
+    }
+    sendJson(res, 200, { success: true });
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    console.error("[api/auth] reset-request-create", m.slice(0, 200));
+    sendJson(res, 200, { success: true });
+  }
 }
 
 async function handlePasswordResetLinkRedeem(
@@ -773,6 +986,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "me" && req.method === "GET") {
       applyResult(res, await handleMe(headers));
+      return;
+    }
+    if (action === "reset-request-approvers" && req.method === "POST") {
+      const pool = getPool();
+      if (!pool) {
+        sendJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+        return;
+      }
+      await handleResetRequestApprovers(req, res, pool, headers);
+      return;
+    }
+    if (action === "reset-request-create" && req.method === "POST") {
+      const pool = getPool();
+      if (!pool) {
+        sendJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+        return;
+      }
+      await handleResetRequestCreate(req, res, pool, headers);
       return;
     }
     if (action === "password-reset-link-redeem" && req.method === "POST") {

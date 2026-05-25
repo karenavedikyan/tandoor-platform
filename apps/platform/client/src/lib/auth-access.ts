@@ -112,6 +112,10 @@ export function defaultHomePathForUserRole(role: UserRole): string {
 
 export function canAccessPathForUser(role: UserRole, path: string): boolean {
   const p = normPath(path);
+  if (p === "/forgot") return true;
+  if (p === "/reset-requests") {
+    return role === "admin" || role === "director" || role === "rop";
+  }
   if (p === "/admin/users") {
     return userHas(role, "users.list");
   }
@@ -288,6 +292,14 @@ function buildAdministrationNavGroup(platformUserRole: UserRole | null | undefin
       label: "Журнал событий",
       testId: "nav-item-admin-audit",
       navBehaviorId: "nav-admin-audit",
+    });
+  }
+  if (platformUserRole === "admin" || platformUserRole === "director" || platformUserRole === "rop") {
+    items.push({
+      href: "/reset-requests",
+      label: "Запросы на сброс",
+      testId: "nav-item-reset-requests",
+      navBehaviorId: "nav-reset-requests",
     });
   }
   if (items.length === 0) return null;

@@ -77,6 +77,26 @@ export const authLoginFailures = pgTable("auth_login_failures", {
     .default(sql`now()`),
 });
 
+export const passwordResetRequests = pgTable(
+  "password_reset_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    requesterUserId: uuid("requester_user_id")
+      .notNull()
+      .references(() => authUsers.id, { onDelete: "cascade" }),
+    approverUserId: uuid("approver_user_id").references(() => authUsers.id, { onDelete: "set null" }),
+    status: text("status").notNull().default("pending"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull().default(sql`now()`),
+    expiresAt: timestamp("expires_at", { withTimezone: true, mode: "string" }).notNull(),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true, mode: "string" }),
+    resetLinkId: uuid("reset_link_id").references(() => passwordResetLinks.id, { onDelete: "set null" }),
+  },
+  (t) => [
+    index("idx_prr_approver_pending").on(t.approverUserId).where(sql`${t.status} = 'pending'`),
+    index("idx_prr_requester").on(t.requesterUserId),
+  ],
+);
+
 export const teams = pgTable("teams", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),

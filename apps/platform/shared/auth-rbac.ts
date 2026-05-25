@@ -148,3 +148,12 @@ export function canCreatePasswordResetLink(actor: UserRole, target: UserRole): b
   if (actor === "rop") return target === "regional_manager" || target === "manager";
   return false;
 }
+
+/** Кто может одобрить self-service запрос на сброс пароля для пользователя с ролью `role`. */
+export function approverRolesForPasswordResetRequest(role: UserRole): UserRole[] {
+  if (role === "admin") return [];
+  if (role === "director") return ["admin"];
+  if (role === "rop") return ["director"];
+  return ["rop", "director"];
+}
+
