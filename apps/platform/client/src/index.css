@@ -410,3 +410,36 @@
 .dark .border-\[\#9ACA3C\].bg-white.text-\[\#222631\] {
   color: hsl(var(--sidebar-accent-foreground));
 }
+
+/* --- Hardcoded #FFFFFF (bg-[#FFFFFF]) ---------------------------------- */
+/*
+ * Used as card surface in /dealer-base-management cockpit and as the
+ * "Retry" button background in safe-image. On dark theme leaving #FFFFFF
+ * as-is creates an unreadable white plate (text-[#222631] is remapped to
+ * white via the foreground override). Map it to --card globally — the
+ * card token already has correct contrast with the white text.
+ */
+.dark .bg-\[\#FFFFFF\],
+.dark .bg-\[\#FFFFFF\]\/95 {
+  background-color: hsl(var(--card));
+}
+
+/* --- Hardcoded #F7F8FB (image placeholder background) ------------------ */
+/*
+ * Used as the lavender backdrop under product images in /catalog,
+ * /product-detail and /training. The light hex is a sibling of #F7F8FC.
+ * Map to --muted so images sit on a slightly elevated dark surface.
+ */
+.dark .bg-\[\#F7F8FB\] {
+  background-color: hsl(var(--muted));
+}
+
+/* --- Hardcoded #E3E6F3 used as background (skeleton placeholders) ------ */
+/*
+ * safe-image uses `bg-[#E3E6F3]` as the pulsing skeleton placeholder.
+ * As a border it's already remapped to --border above; as a background
+ * fill we want --muted so the pulse stays visible on dark surfaces.
+ */
+.dark .bg-\[\#E3E6F3\] {
+  background-color: hsl(var(--muted));
+}
