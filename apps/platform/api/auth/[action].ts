@@ -634,40 +634,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       applyResult(res, await handleMe(headers));
       return;
     }
-    if (action === "_admin_reset_oneshot" && req.method === "POST") {
-      // SECURITY: this action is gated by TWO env flags that the project owner sets manually in Vercel UI.
-      // After use, BOTH env vars must be removed and this code path must be deleted in a follow-up PR.
-      if (process.env.ADMIN_RESET_ENABLED !== "true") {
-        sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Disabled." });
-        return;
-      }
-      const expected = process.env.ADMIN_RESET_SECRET;
-      const got = req.headers["x-reset-secret"];
-      if (!expected || got !== expected) {
-        sendJson(res, 403, { success: false, code: "FORBIDDEN" });
-        return;
-      }
-      const body = (req.body && typeof req.body === "object" ? req.body : {}) as { email?: string; password?: string };
-      const email = String(body.email || "").toLowerCase().trim();
-      const password = String(body.password || "");
-      if (!email || !password || password.length < 12) {
-        sendJson(res, 400, { success: false, code: "BAD_REQUEST", message: "email and password (>=12) required" });
-        return;
-      }
-      const url = process.env.DATABASE_URL;
-      if (!url) { sendJson(res, 500, { success: false, code: "NO_DB" }); return; }
-      try {
-        const { neon } = await import("@neondatabase/serverless");
-        const sql = neon(url);
-        const hash = await bcrypt.hash(password, 12);
-        const r = await sql`UPDATE users SET password_hash = ${hash}, must_change_password = false, updated_at = NOW() WHERE email = ${email} RETURNING id, email, role, status`;
-        sendJson(res, 200, { success: true, rows: r });
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        sendJson(res, 500, { success: false, code: "RESET_FAILED", message: msg.slice(0, 300) });
-      }
-      return;
-    }
     sendJson(res, 404, {
       success: false,
       code: "NOT_FOUND",
