@@ -4,9 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
 import { ReleaseDemoRoleSwitcher } from "@/components/release-demo-role-switcher";
-import { isDemoAuthBypassEnabled, loadMockAuthSession } from "@/lib/mock-auth";
+import { useAuthUser } from "@/hooks/use-auth-user";
+import { isDemoAuthBypassEnabled } from "@/lib/release-demo-bypass";
 
 export default function ReleaseOnePage() {
+  const { user } = useAuthUser();
   return (
     <div className="mx-auto max-w-5xl space-y-8 pb-24" data-testid="page-release-one">
       <FloatingBackButton href="/main" label="На главную" testId="button-floating-back-release-one" />
@@ -24,7 +26,7 @@ export default function ReleaseOnePage() {
               подключены учётные системы.
             </p>
           </div>
-          {isDemoAuthBypassEnabled() && !loadMockAuthSession() ? (
+          {isDemoAuthBypassEnabled() && !(user && user.status === "active") ? (
             <div className="max-w-md rounded-xl border border-dashed border-border/80 bg-muted/20 p-3">
               <p className="mb-2 text-xs font-medium text-muted-foreground">Демо-роль (без backend)</p>
               <ReleaseDemoRoleSwitcher variant="stacked" />

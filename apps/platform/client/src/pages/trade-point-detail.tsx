@@ -43,7 +43,7 @@ import { canActualizeClientBase, canArchiveTradePointDuringActualization } from 
 import { CLIENT_BASE_ACTUALIZATION_CLEAN_MODE } from "@/lib/client-base-actualization-config";
 import { resolveActualizationTradePointDetail } from "@/lib/client-base-actualization-data-merge";
 import { TradePointManualActualizationView } from "@/components/trade-point-manual-actualization-view";
-import { useCurrentUser } from "@/hooks/use-current-user";
+import { displayUserName, useCurrentUser } from "@/hooks/use-current-user";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import {
@@ -1243,7 +1243,7 @@ function TradePointDetailContent({
             point={point}
             profile={profile}
             actorUserId={user?.id ?? profile.personaUserId}
-            actorName={user?.name ?? userLabelFromProfile(profile)}
+            actorName={displayUserName(user) ?? userLabelFromProfile(profile)}
             page={{
               matrixSummary,
               showcaseComment,
@@ -1326,7 +1326,7 @@ function TradePointDetailContent({
             tradePointName={point.name}
             canCreate={canCreateBitrix24Task}
             actorUserId={user?.id ?? profile.personaUserId}
-            actorLabel={user?.name ?? userLabelFromProfile(profile)}
+            actorLabel={displayUserName(user) ?? userLabelFromProfile(profile)}
             compact
           />
 
@@ -1401,7 +1401,7 @@ function TradePointDetailContent({
                         addTradePointComment(dealer.id, point.id, {
                           body: commentDraft,
                           createdBy: user?.id ?? profile.personaUserId,
-                          createdByName: user?.name ?? userLabelFromProfile(profile),
+                          createdByName: displayUserName(user) ?? userLabelFromProfile(profile),
                         });
                         setCommentDraft("");
                       }}

@@ -58,7 +58,7 @@ import {
 import { DealerActualizationEditDialog } from "@/components/client-base-actualization-dealer-forms";
 import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actualization-sync-status";
 import { DealerClientNextStepSection } from "@/components/dealer-client-next-step-section";
-import { useCurrentUser } from "@/hooks/use-current-user";
+import { displayUserName, useCurrentUser } from "@/hooks/use-current-user";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
 import { toast } from "@/hooks/use-toast";
 import { useSectionSaveFeedback } from "@/hooks/use-section-save-feedback";
@@ -651,7 +651,7 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
               row={row}
               profile={profile}
               actorUserId={user?.id ?? profile.personaUserId}
-              actorLabel={user?.name?.trim() ? user.name.trim() : userLabelFromProfile(profile)}
+              actorLabel={displayUserName(user).trim() || userLabelFromProfile(profile)}
               embedInAccordion
             />
           </AccordionContent>
@@ -698,7 +698,7 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
               row={row}
               profile={profile}
               actorUserId={user?.id ?? profile.personaUserId}
-              actorLabel={user?.name ?? userLabelFromProfile(profile)}
+              actorLabel={displayUserName(user) ?? userLabelFromProfile(profile)}
               onSaved={() => void actx.refresh()}
               allowManualActualizationCard
             />
@@ -709,7 +709,7 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
                 dealerName={row.name}
                 canCreate={canEditClientNextStep(profile, row)}
                 actorUserId={user?.id ?? profile.personaUserId}
-                actorLabel={user?.name ?? userLabelFromProfile(profile)}
+                actorLabel={displayUserName(user) ?? userLabelFromProfile(profile)}
                 compact
               />
             </div>
