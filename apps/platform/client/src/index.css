@@ -327,26 +327,82 @@
 
 /*
  * Dark-theme contrast override for management cockpits.
- * Several cockpit screens (territory-card, dealer-base, trade-points,
- * sales-plan-fact, client-base-activity feature-in-development) historically
- * use hardcoded light-theme palette values:
- *   - text-[#222631] — dark primary text (designed for light card bg);
- *   - text-[#8F96B0] — muted slate (designed for light card bg);
- *   - bg-[#222631]  — same dark navy used as fill in a few badges.
- * On the dark theme these hardcoded values collapse into the dark card
- * background and become unreadable. Instead of rewriting 270+ inline
- * arbitrary-color classes across 8 files, we remap the exact arbitrary-value
- * utilities under `.dark` to the theme tokens. Light theme is untouched.
+ *
+ * Several screens (territory-card, dealer-base, trade-points,
+ * sales-plan-fact, client-base-activity, feature-in-development, sidebar,
+ * sidebar-nav-footer, safe-image) hardcode the light-theme palette via
+ * Tailwind arbitrary-value classes:
+ *   - text-[#222631]  → dark primary text (for light card bg);
+ *   - text-[#8F96B0]  → muted slate (for light card bg);
+ *   - bg-[#222631]   → dark navy fill in a few badges;
+ *   - bg-[#EEEFF6]   → light lavender card bg (with /40, /50, /60, /70,
+ *                      /80, /90 alpha variants);
+ *   - border-[#E3E6F3] → light card border (with /90 alpha variant);
+ *   - bg-white       → used in the active sidebar item.
+ *
+ * On the dark theme these collapse with the dark card background and become
+ * unreadable. Instead of rewriting 400+ inline arbitrary utility classes
+ * across 8+ files, we remap the exact arbitrary-value utilities (and their
+ * hover/data variants) under `.dark` to existing theme tokens. Light theme
+ * is untouched.
+ *
+ * Constraints:
+ *   - .bg-white is remapped ONLY inside known UI surfaces (sidebar items
+ *     and cockpit cards) — we do NOT remap .bg-white globally to avoid
+ *     breaking avatars, badges, charts, modals.
  */
+
+/* --- Text hardcodes ----------------------------------------------------- */
 .dark .text-\[\#222631\] {
   color: hsl(var(--foreground));
 }
-.dark .text-\[\#8F96B0\] {
+.dark .text-\[\#8F96B0\],
+.dark .text-\[\#8F96B0\]\/90 {
   color: hsl(var(--muted-foreground));
 }
+.dark .hover\:text-\[\#222631\]:hover {
+  color: hsl(var(--foreground));
+}
+
+/* --- Surface hardcodes (lavender card / dark navy fill) ----------------- */
 .dark .bg-\[\#222631\] {
   background-color: hsl(var(--card));
 }
-.dark .border-\[\#222631\] {
+.dark .bg-\[\#EEEFF6\],
+.dark .bg-\[\#EEEFF6\]\/40,
+.dark .bg-\[\#EEEFF6\]\/50,
+.dark .bg-\[\#EEEFF6\]\/60,
+.dark .bg-\[\#EEEFF6\]\/70,
+.dark .bg-\[\#EEEFF6\]\/80,
+.dark .bg-\[\#EEEFF6\]\/90 {
+  background-color: hsl(var(--card));
+}
+.dark .hover\:bg-\[\#EEEFF6\]:hover,
+.dark .hover\:bg-\[\#EEEFF6\]\/60:hover,
+.dark .hover\:bg-\[\#EEEFF6\]\/70:hover,
+.dark .hover\:bg-\[\#EEEFF6\]\/80:hover {
+  background-color: hsl(var(--accent));
+}
+
+/* --- Borders ----------------------------------------------------------- */
+.dark .border-\[\#222631\],
+.dark .border-\[\#E3E6F3\],
+.dark .border-\[\#E3E6F3\]\/90 {
   border-color: hsl(var(--border));
+}
+
+/* --- Active sidebar item: bg-white inside .pilot-active surfaces ------- */
+/*
+ * The pilot sidebar marks the active item with the combo:
+ *   border-l-[3px] border-[#9ACA3C] bg-white font-semibold text-[#222631]
+ * On dark theme `bg-white` stays bright and creates an unreadable white
+ * plate. We scope the override to elements that also carry the green
+ * accent border, so we don't touch avatars / icons / arbitrary white
+ * surfaces elsewhere.
+ */
+.dark .border-\[\#9ACA3C\].bg-white {
+  background-color: hsl(var(--sidebar-accent));
+}
+.dark .border-\[\#9ACA3C\].bg-white.text-\[\#222631\] {
+  color: hsl(var(--sidebar-accent-foreground));
 }
