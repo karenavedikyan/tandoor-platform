@@ -7,6 +7,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -27,11 +28,12 @@ import {
   updateUserStatus,
   type AdminUser,
 } from "@/lib/admin-users-api";
+import { createPasswordResetLink } from "@/lib/password-reset-api";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { formatDisplayDateTime } from "@/lib/format-display-date";
 import { Link } from "wouter";
 import { userHas } from "@/lib/auth-rbac";
-import { defaultHomePathForUserRole } from "@/lib/auth-access";
+import { canCreateResetLink, defaultHomePathForUserRole } from "@/lib/auth-access";
 
 const rolesRu: Record<UserRole, string> = {
   director: "Директор",
@@ -114,9 +116,20 @@ export default function AdminUsersPage() {
   const [pwdWorking, setPwdWorking] = useState(false);
   const [pwdResult, setPwdResult] = useState<{ tempPassword: string } | null>(null);
 
+  const [linkDialog, setLinkDialog] = useState<AdminUser | null>(null);
+  const [linkPayload, setLinkPayload] = useState<{ token: string; link: string; expiresAt: string } | null>(null);
+  const [linkErr, setLinkErr] = useState("");
+  const [linkWorking, setLinkWorking] = useState(false);
+
   const canRole = Boolean(user && userHas(user.role, "users.update_role"));
   const canStatus = Boolean(user && userHas(user.role, "users.update_status"));
   const canResetPwd = Boolean(user && userHas(user.role, "users.reset_password"));
+
+  function openResetLink(row: AdminUser) {
+    setLinkDialog(row);
+    setLinkPayload(null);
+    setLinkErr("");
+  }
 
   const homeHref = user ? defaultHomePathForUserRole(user.role) : "/main";
 
@@ -286,6 +299,18 @@ export default function AdminUsersPage() {
                           Сбросить пароль
                         </Button>
                       ) : null}
+                      {user && canCreateResetLink({ id: user.id, role: user.role }, { id: row.id, role: row.role }) ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="min-h-9"
+                          data-testid={`button-reset-link-${row.id}`}
+                          onClick={() => openResetLink(row)}
+                        >
+                          Ссылка для смены пароля
+                        </Button>
+                      ) : null}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -313,6 +338,96 @@ export default function AdminUsersPage() {
           </Button>
         </div>
       </div>
+
+      <Dialog
+        open={Boolean(linkDialog)}
+        onOpenChange={(o) => {
+          if (!o) {
+            setLinkDialog(null);
+            setLinkPayload(null);
+            setLinkErr("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg" data-testid="dialog-admin-users-reset-link">
+          <DialogHeader>
+            <DialogTitle>Ссылка для смены пароля</DialogTitle>
+            <DialogDescription className="pt-1 text-left">
+              {linkDialog ? (
+                <>
+                  <span className="font-mono text-xs">{linkDialog.email}</span>
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    Эта ссылка показывается один раз. Сохраните её и передайте пользователю.
+                  </p>
+                </>
+              ) : null}
+            </DialogDescription>
+          </DialogHeader>
+          {linkPayload ? (
+            <div className="space-y-3 py-1">
+              <div className="space-y-1">
+                <Label>Ссылка</Label>
+                <Textarea readOnly className="min-h-[72px] font-mono text-xs" value={linkPayload.link} />
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Срок действия:{" "}
+                {(() => {
+                  const d = new Date(linkPayload.expiresAt);
+                  if (!Number.isFinite(d.getTime())) return "—";
+                  const dd = String(d.getDate()).padStart(2, "0");
+                  const mm = String(d.getMonth() + 1).padStart(2, "0");
+                  const yyyy = d.getFullYear();
+                  const hh = String(d.getHours()).padStart(2, "0");
+                  const min = String(d.getMinutes()).padStart(2, "0");
+                  return `${dd}.${mm}.${yyyy}, ${hh}:${min}`;
+                })()}
+              </p>
+              {linkErr ? <p className="text-sm text-destructive">{linkErr}</p> : null}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Нажмите «Создать», чтобы получить ссылку.</p>
+          )}
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              data-testid="button-copy-reset-link"
+              disabled={!linkPayload}
+              onClick={async () => {
+                if (!linkPayload) return;
+                try {
+                  await navigator.clipboard.writeText(linkPayload.link);
+                } catch {
+                  setLinkErr("Не удалось скопировать в буфер обмена.");
+                }
+              }}
+            >
+              Скопировать
+            </Button>
+            <Button
+              type="button"
+              disabled={linkWorking || !linkDialog || Boolean(linkPayload)}
+              onClick={async () => {
+                if (!linkDialog) return;
+                setLinkWorking(true);
+                setLinkErr("");
+                try {
+                  const r = await createPasswordResetLink(linkDialog.id);
+                  if (!r.ok) {
+                    setLinkErr(r.message);
+                    return;
+                  }
+                  setLinkPayload(r.result);
+                } finally {
+                  setLinkWorking(false);
+                }
+              }}
+            >
+              Создать ссылку
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={Boolean(roleDialog)} onOpenChange={(o) => !o && setRoleDialog(null)}>
         <DialogContent className="max-w-md" data-testid="dialog-admin-users-role">

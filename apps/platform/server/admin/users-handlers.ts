@@ -7,12 +7,12 @@ import type { Request, Response } from "express";
 import { and, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
 import type { UserRole, UserStatus } from "@shared/auth";
 import { BUSINESS_ROLES } from "@shared/auth";
-import { roleHasPermission } from "@shared/auth-rbac";
-import { auditLog, authUsers, sessions } from "@shared/auth-schema";
+import { canCreatePasswordResetLink, roleHasPermission } from "@shared/auth-rbac";
+import { auditLog, authUsers, passwordResetLinks, sessions } from "@shared/auth-schema";
 import type { AuthUserSnapshot } from "../auth/auth-user-snapshot";
 import { getAuthDb } from "../auth/db";
 import { hashPassword } from "../auth/password-hash";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 
 const JSON_CT = "application/json; charset=utf-8";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -490,3 +490,157 @@ export async function resetUserPassword(req: Request, res: Response): Promise<vo
     applyJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
   }
 }
+
+
+const prlRateStore = new Map<string, { count: number; firstAt: number }>();
+
+function prlRateCheck(key: string, max: number, windowMs: number): { ok: true } | { ok: false; retryAfterSec: number } {
+  const now = Date.now();
+  const prev = prlRateStore.get(key);
+  if (!prev || now - prev.firstAt > windowMs) {
+    prlRateStore.set(key, { count: 1, firstAt: now });
+    return { ok: true };
+  }
+  if (prev.count < max) {
+    prlRateStore.set(key, { count: prev.count + 1, firstAt: prev.firstAt });
+    return { ok: true };
+  }
+  const retryAfterMs = windowMs - (now - prev.firstAt);
+  return { ok: false, retryAfterSec: Math.max(1, Math.ceil(retryAfterMs / 1000)) };
+}
+
+function prlRateRecord(key: string, windowMs: number): void {
+  const now = Date.now();
+  const prev = prlRateStore.get(key);
+  if (!prev || now - prev.firstAt > windowMs) {
+    prlRateStore.set(key, { count: 1, firstAt: now });
+    return;
+  }
+  prlRateStore.set(key, { count: prev.count + 1, firstAt: prev.firstAt });
+}
+
+function pickPublicHost(headers: Record<string, string | string[] | undefined>): string {
+  const xf = headers["x-forwarded-host"];
+  if (typeof xf === "string" && xf.trim()) return xf.trim().split(",")[0]!.trim();
+  if (Array.isArray(xf) && xf[0]?.trim()) return xf[0]!.trim().split(",")[0]!.trim();
+  const h = headers.host;
+  if (typeof h === "string" && h.trim()) return h.trim();
+  if (Array.isArray(h) && h[0]?.trim()) return h[0]!.trim();
+  return "localhost";
+}
+
+function sha256Hex(value: string): string {
+  return createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+export async function createPasswordResetLink(req: Request, res: Response): Promise<void> {
+  const auth = req.auth as AuthUserSnapshot | undefined;
+  if (!auth) {
+    applyJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+    return;
+  }
+  if (auth.status !== "active") {
+    applyJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+  const body = req.body as { userId?: unknown };
+  const userId = typeof body.userId === "string" ? body.userId.trim() : "";
+  if (!userId || !UUID_RE.test(userId)) {
+    applyJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите корректный идентификатор пользователя." });
+    return;
+  }
+  if (userId === auth.userId) {
+    applyJson(res, 400, {
+      success: false,
+      code: "SELF_RESET_FORBIDDEN",
+      message: "Нельзя сгенерировать ссылку для собственного аккаунта.",
+    });
+    return;
+  }
+
+  const rlKey = `prl-create:${auth.userId}`;
+  const rl = prlRateCheck(rlKey, 10, 60 * 1000);
+  if (!rl.ok) {
+    res.setHeader("Retry-After", String(rl.retryAfterSec));
+    applyJson(res, 429, { success: false, code: "RATE_LIMITED", message: "Слишком много запросов на создание ссылки. Повторите позже." });
+    return;
+  }
+
+  const db = getAuthDb();
+  if (!db) {
+    applyJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+    return;
+  }
+  try {
+    const cur = await db
+      .select({
+        id: authUsers.id,
+        role: authUsers.role,
+        status: authUsers.status,
+      })
+      .from(authUsers)
+      .where(eq(authUsers.id, userId))
+      .limit(1);
+    const row = cur[0];
+    if (!row) {
+      applyJson(res, 404, { success: false, code: "USER_NOT_FOUND", message: "Пользователь не найден." });
+      return;
+    }
+    if (row.status !== "active") {
+      applyJson(res, 400, { success: false, code: "USER_INACTIVE", message: "Пользователь неактивен." });
+      return;
+    }
+    if (!canCreatePasswordResetLink(auth.role, row.role as UserRole)) {
+      applyJson(res, 403, { success: false, code: "PERMISSION_DENIED", message: "Недостаточно прав." });
+      return;
+    }
+
+    const token = randomBytes(32).toString("base64url");
+    const tokenHash = sha256Hex(token);
+
+    await db
+      .update(passwordResetLinks)
+      .set({ usedAt: sql`NOW()`, usedIp: "superseded" })
+      .where(and(eq(passwordResetLinks.userId, userId), isNull(passwordResetLinks.usedAt)));
+
+    const ins = await db
+      .insert(passwordResetLinks)
+      .values({
+        userId,
+        tokenHash,
+        createdBy: auth.userId,
+        expiresAt: sql`(NOW() + interval '24 hours')::timestamptz`,
+      })
+      .returning({ id: passwordResetLinks.id, expiresAt: passwordResetLinks.expiresAt });
+    const linkRow = ins[0];
+    if (!linkRow) {
+      applyJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+      return;
+    }
+
+    await tryAudit({
+      actorUserId: auth.userId,
+      action: "auth.reset_link.created",
+      entityType: "user",
+      entityId: userId,
+      metadata: { linkId: linkRow.id, expiresAt: linkRow.expiresAt, targetRole: row.role },
+    });
+
+    prlRateRecord(rlKey, 60 * 1000);
+
+    const host = pickPublicHost(req.headers as Record<string, string | string[] | undefined>);
+    const link = `https://${host}/reset?token=${encodeURIComponent(token)}`;
+
+    applyJson(res, 200, {
+      success: true,
+      token,
+      link,
+      expiresAt: linkRow.expiresAt,
+    });
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    console.error("[api/admin] password-reset-link-create", m.slice(0, 200));
+    applyJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+  }
+}
+

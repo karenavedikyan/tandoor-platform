@@ -1,6 +1,12 @@
 import type { Express, Request, Response } from "express";
 import type { AuthHttpResult } from "./auth/handlers";
-import { loginHandler, logoutHandler, logoutAllHandler, meHandler } from "./auth/handlers";
+import {
+  loginHandler,
+  logoutHandler,
+  logoutAllHandler,
+  meHandler,
+  passwordResetLinkRedeemHandler,
+} from "./auth/handlers";
 import { requireAuth } from "./auth/require-auth";
 
 const JSON_CT = "application/json; charset=utf-8";

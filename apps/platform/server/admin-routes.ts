@@ -4,6 +4,7 @@ import { requirePermission } from "./auth/require-permission";
 import {
   getUser,
   listUsers,
+  createPasswordResetLink,
   resetUserPassword,
   updateUserRole,
   updateUserStatus,
@@ -89,6 +90,21 @@ export function registerAdminRoutes(app: Express): void {
       } catch (e) {
         const m = e instanceof Error ? e.message : String(e);
         console.error("[api/admin] users-update-status", m.slice(0, 200));
+        applyJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+      }
+    },
+  );
+
+
+  app.post(
+    "/api/admin/password-reset-link-create",
+    requireAuth(),
+    async (req: Request, res: Response) => {
+      try {
+        await createPasswordResetLink(req, res);
+      } catch (e) {
+        const m = e instanceof Error ? e.message : String(e);
+        console.error("[api/admin] password-reset-link-create", m.slice(0, 200));
         applyJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
       }
     },

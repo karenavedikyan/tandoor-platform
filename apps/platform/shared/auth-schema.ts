@@ -7,11 +7,13 @@ import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
   boolean,
+  index,
   jsonb,
   pgTable,
   primaryKey,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -34,7 +36,32 @@ export const authUsers = pgTable("users", {
     .notNull()
     .default(sql`now()`),
   lastLoginAt: timestamp("last_login_at", { withTimezone: true, mode: "string" }),
+  passwordChangedAt: timestamp("password_changed_at", { withTimezone: true, mode: "string" }),
 });
+
+export const passwordResetLinks = pgTable(
+  "password_reset_links",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => authUsers.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => authUsers.id),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .notNull()
+      .default(sql`now()`),
+    expiresAt: timestamp("expires_at", { withTimezone: true, mode: "string" }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true, mode: "string" }),
+    usedIp: text("used_ip"),
+  },
+  (t) => [
+    uniqueIndex("password_reset_links_token_hash_uq").on(t.tokenHash),
+    index("idx_prl_user_active").on(t.userId).where(sql`${t.usedAt} IS NULL`),
+  ],
+);
 
 export const teams = pgTable("teams", {
   id: uuid("id").primaryKey().defaultRandom(),
