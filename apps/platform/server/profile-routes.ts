@@ -2,6 +2,7 @@ import type { Express, Request, Response } from "express";
 import { requireAuth } from "./auth/require-auth";
 import { requirePermission } from "./auth/require-permission";
 import { changePasswordSelf, getSelf, updateSelf } from "./profile/profile-handlers";
+import { getOnboardingStatus, postOnboardingComplete, postProfileTelegramLinkToken } from "./profile/onboarding-handlers";
 import { listSelfSessions, revokeOtherSelfSessions, revokeSelfSession } from "./profile/sessions-handlers";
 import { enforceCsrfOrigin } from "./security/csrf-origin";
 
@@ -66,6 +67,59 @@ export function registerProfileRoutes(app: Express): void {
       } catch (e) {
         const m = e instanceof Error ? e.message : String(e);
         console.error("[api/admin] profile-change-password", m.slice(0, 200));
+        applyJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+      }
+    },
+  );
+
+  app.get(
+    "/api/admin/onboarding-status",
+    requireAuth(),
+    requirePermission("profile.read_self"),
+    async (req: Request, res: Response) => {
+      try {
+        await getOnboardingStatus(req, res);
+      } catch (e) {
+        const m = e instanceof Error ? e.message : String(e);
+        console.error("[api/admin] onboarding-status", m.slice(0, 200));
+        applyJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+      }
+    },
+  );
+
+  app.post(
+    "/api/admin/onboarding-complete",
+    requireAuth(),
+    requirePermission("profile.update_self"),
+    async (req: Request, res: Response) => {
+      try {
+        if (!enforceCsrfOrigin(req)) {
+          rejectCsrf(res);
+          return;
+        }
+        await postOnboardingComplete(req, res);
+      } catch (e) {
+        const m = e instanceof Error ? e.message : String(e);
+        console.error("[api/admin] onboarding-complete", m.slice(0, 200));
+        applyJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+      }
+    },
+  );
+
+  app.post(
+    "/api/admin/profile-telegram-link-token",
+    requireAuth(),
+    requirePermission("profile.update_self"),
+    async (req: Request, res: Response) => {
+      try {
+        if (!enforceCsrfOrigin(req)) {
+          rejectCsrf(res);
+          return;
+        }
+        await postProfileTelegramLinkToken(req, res);
+      } catch (e) {
+        const m = e instanceof Error ? e.message : String(e);
+        console.error("[api/admin] profile-telegram-link-token", m.slice(0, 200));
         applyJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
       }
     },

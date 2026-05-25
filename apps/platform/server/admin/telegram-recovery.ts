@@ -176,6 +176,88 @@ export async function postAdminTelegramRecovery(req: Request, res: Response): Pr
     return;
   }
 
+  if (textRaw.startsWith("/start")) {
+    const parts = textRaw.split(/\s+/).filter((x) => x.length > 0);
+    const payload = parts[1];
+    if (payload && payload.startsWith("link_")) {
+      const rawTok = payload.slice("link_".length);
+      if (rawTok) {
+        const tokenHash = sha256Hex(rawTok);
+        const tokRows = (await sql`
+          SELECT user_id, expires_at, used_at FROM telegram_link_tokens WHERE token_hash = ${tokenHash} LIMIT 1
+        `) as { user_id: string; expires_at: string; used_at: string | null }[];
+        const tok = tokRows[0];
+        const nowMs = Date.now();
+        if (!tok || tok.used_at != null) {
+          if (chatId != null) await tgSendMessage(chatId, "Ссылка недействительна или срок её действия истёк.");
+          applyJson(res, 200, { ok: true });
+          return;
+        }
+        const expMs = Date.parse(tok.expires_at);
+        if (!Number.isFinite(expMs) || expMs <= nowMs) {
+          if (chatId != null) await tgSendMessage(chatId, "Ссылка недействительна или срок её действия истёк.");
+          applyJson(res, 200, { ok: true });
+          return;
+        }
+
+        const userRows = (await sql`
+          SELECT id, full_name, status, telegram_user_id FROM users WHERE id = ${tok.user_id}::uuid LIMIT 1
+        `) as { id: string; full_name: string; status: string; telegram_user_id: string | null }[];
+        const targ = userRows[0];
+        if (!targ || targ.status !== "active") {
+          if (chatId != null) await tgSendMessage(chatId, "Ссылка недействительна или срок её действия истёк.");
+          applyJson(res, 200, { ok: true });
+          return;
+        }
+
+        const fromStr = String(fromId);
+        if (targ.telegram_user_id != null && String(targ.telegram_user_id) === fromStr) {
+          await sql`UPDATE telegram_link_tokens SET used_at = NOW() WHERE token_hash = ${tokenHash} AND used_at IS NULL`;
+          if (chatId != null) {
+            await tgSendMessage(
+              chatId,
+              `Привет, ${targ.full_name.trim() || "коллега"}. Telegram привязан. Будешь получать уведомления здесь.`,
+            );
+          }
+          applyJson(res, 200, { ok: true });
+          return;
+        }
+
+        const taken = (await sql`
+          SELECT id FROM users WHERE telegram_user_id = ${fromId}::bigint AND id <> ${targ.id}::uuid LIMIT 1
+        `) as { id: string }[];
+        if (taken[0]) {
+          if (chatId != null) {
+            await tgSendMessage(chatId, "Этот Telegram уже привязан к другой учётной записи Tandoor.");
+          }
+          applyJson(res, 200, { ok: true });
+          return;
+        }
+
+        const oldId = targ.telegram_user_id;
+        await sql`UPDATE users SET telegram_user_id = ${fromId}::bigint, updated_at = NOW() WHERE id = ${targ.id}::uuid`;
+        await sql`UPDATE telegram_link_tokens SET used_at = NOW() WHERE token_hash = ${tokenHash}`;
+
+        await tryAudit({
+          actorUserId: targ.id,
+          action: "user.telegram_link.changed",
+          entityType: "user",
+          entityId: targ.id,
+          metadata: { oldId: oldId ?? null, newId: fromStr, source: "onboarding" },
+        });
+
+        if (chatId != null) {
+          await tgSendMessage(
+            chatId,
+            `Привет, ${targ.full_name.trim() || "коллега"}. Telegram привязан. Будешь получать уведомления здесь.`,
+          );
+        }
+        applyJson(res, 200, { ok: true });
+        return;
+      }
+    }
+  }
+
   const whitelist = parseTelegramWhitelist();
   if (!whitelist.has(fromId)) {
     await tryAudit({
