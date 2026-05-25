@@ -413,17 +413,7 @@ async function handleLogin(req: VercelRequest, headers: Record<string, string | 
   } catch (e) {
     const m = e instanceof Error ? e.message : String(e);
     console.error("[api/auth] login", m.slice(0, 200));
-    // TEMP DEBUG: expose error detail to client (will be removed after bootstrap)
-    const debug = process.env.BOOTSTRAP_TOKEN ? m.slice(0, 300) : undefined;
-    return {
-      status: 500,
-      json: {
-        success: false,
-        code: "INTERNAL_ERROR",
-        message: "Внутренняя ошибка сервера.",
-        ...(debug ? { debug } : {}),
-      },
-    };
+    return { status: 500, json: { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." } };
   }
 }
 
