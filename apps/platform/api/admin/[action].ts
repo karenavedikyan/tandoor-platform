@@ -957,6 +957,64 @@ async function handleProfileChangePassword(
   sendJson(res, 200, { success: true, otherSessionsRevoked });
 }
 
+async function handleMigrationsRun(
+  res: VercelResponse,
+  pool: PoolLike,
+  headers: Record<string, string | string[] | undefined>,
+): Promise<void> {
+  const me = await resolveCurrentUser(pool, headers);
+  if (!me) {
+    sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+    return;
+  }
+  if (me.role !== "admin" || me.status !== "active") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Только администратор." });
+    return;
+  }
+  const applied: string[] = [];
+  try {
+    await pool.query(
+      `CREATE TABLE IF NOT EXISTS audit_log (
+         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+         actor_user_id uuid NULL REFERENCES users(id) ON DELETE SET NULL,
+         action text NOT NULL,
+         entity_type text NOT NULL,
+         entity_id text NOT NULL,
+         metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+         created_at timestamptz NOT NULL DEFAULT NOW()
+       )`,
+    );
+    applied.push("audit_log table");
+    await pool.query(`CREATE INDEX IF NOT EXISTS audit_log_created_at_idx ON audit_log(created_at DESC)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS audit_log_actor_user_id_idx ON audit_log(actor_user_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS audit_log_action_idx ON audit_log(action)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS audit_log_entity_idx ON audit_log(entity_type, entity_id)`);
+    applied.push("audit_log indexes");
+
+    await pool.query(
+      `CREATE TABLE IF NOT EXISTS password_reset_links (
+         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+         user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+         token_hash text NOT NULL,
+         issued_by uuid NULL REFERENCES users(id) ON DELETE SET NULL,
+         expires_at timestamptz NOT NULL,
+         used_at timestamptz NULL,
+         revoked_at timestamptz NULL,
+         created_at timestamptz NOT NULL DEFAULT NOW()
+       )`,
+    );
+    applied.push("password_reset_links table");
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS password_reset_links_token_hash_uq ON password_reset_links(token_hash)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS password_reset_links_user_id_idx ON password_reset_links(user_id)`);
+    applied.push("password_reset_links indexes");
+
+    sendJson(res, 200, { success: true, applied });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    sendJson(res, 500, { success: false, code: "MIGRATION_FAILED", message: msg.slice(0, 300), appliedSoFar: applied });
+  }
+}
+
 async function handleAuditList(
   req: VercelRequest,
   res: VercelResponse,
@@ -1346,6 +1404,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "profile-change-password" && req.method === "POST") {
       await handleProfileChangePassword(req, res, pool, headers);
+      return;
+    }
+    if (action === "migrations-run" && req.method === "POST") {
+      await handleMigrationsRun(res, pool, headers);
       return;
     }
 
