@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatDistanceToNow } from "date-fns";
+import { ru } from "date-fns/locale";
+import { Inbox } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { TandoorLogo } from "@/components/tandoor-logo";
 import {
   approvePasswordResetRequest,
   declinePasswordResetRequest,
@@ -25,6 +26,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 const rolesRu: Record<UserRole, string> = {
   director: "Директор",
@@ -46,6 +49,62 @@ const statusRu: Record<string, string> = {
 
 function canOpenResetRequests(role: string | undefined): boolean {
   return role === "admin" || role === "director" || role === "rop";
+}
+
+function roleBadgeClass(role: string): string {
+  const r = role as UserRole;
+  if (r === "admin") return "bg-foreground text-background border-transparent";
+  if (r === "director") return "bg-primary/10 text-primary border-primary/30";
+  if (r === "rop") return "bg-blue-100 text-blue-700 border-blue-200";
+  if (r === "manager" || r === "regional_manager") return "bg-secondary text-secondary-foreground border-secondary-border";
+  if (r === "marketer" || r === "analyst") return "bg-muted text-muted-foreground border-border";
+  return "bg-muted text-muted-foreground border-border";
+}
+
+function formatRelativeRu(iso: string): string {
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return "—";
+  return formatDistanceToNow(d, { addSuffix: true, locale: ru });
+}
+
+function RequestRowActions({
+  row,
+  anyBusy,
+  rowBusy,
+  onApprove,
+  onDecline,
+}: {
+  row: PasswordResetRequestItem;
+  anyBusy: boolean;
+  rowBusy: boolean;
+  onApprove: (row: PasswordResetRequestItem) => void;
+  onDecline: (row: PasswordResetRequestItem) => void;
+}) {
+  if (row.status !== "pending") {
+    return <span className="text-xs text-muted-foreground">—</span>;
+  }
+  const disabled = anyBusy;
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Button
+        type="button"
+        className="h-11 min-h-11 rounded-md bg-primary px-4 font-medium text-primary-foreground hover:bg-primary/90"
+        disabled={disabled}
+        onClick={() => onApprove(row)}
+      >
+        {rowBusy ? "Обработка…" : "Выдать ссылку"}
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        className="h-11 min-h-11 rounded-md border border-destructive text-destructive hover:bg-destructive/10"
+        disabled={disabled}
+        onClick={() => onDecline(row)}
+      >
+        Отклонить
+      </Button>
+    </div>
+  );
 }
 
 export default function ResetRequestsPage() {
@@ -134,38 +193,32 @@ export default function ResetRequestsPage() {
   if (!allowed) {
     return (
       <div className="mx-auto max-w-lg p-6" data-testid="page-reset-requests">
-        <Card>
-          <CardHeader>
-            <CardTitle>Недостаточно прав</CardTitle>
-            <CardDescription>Раздел доступен администратору, директору и РОП.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button asChild variant="secondary">
-              <Link href="/main">На главную</Link>
-            </Button>
-          </CardContent>
-        </Card>
+        <div className="rounded-lg border border-card-border bg-card p-6 shadow-sm">
+          <h1 className="text-xl font-semibold">Недостаточно прав</h1>
+          <p className="mt-2 text-sm text-muted-foreground">Раздел доступен администратору, директору и РОП.</p>
+          <Button asChild variant="secondary" className="mt-4 h-11 min-h-11 rounded-md">
+            <Link href="/main">На главную</Link>
+          </Button>
+        </div>
       </div>
     );
   }
 
+
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-4 md:p-8" data-testid="page-reset-requests">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div className="flex items-center gap-3">
-          <TandoorLogo className="h-8 w-auto" />
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Запросы на сброс</h1>
-            <p className="text-sm text-muted-foreground">Одобрение восстановления доступа сотрудникам.</p>
-          </div>
+    <div className="mx-auto max-w-5xl space-y-6 p-4 motion-reduce:transition-none md:p-8" data-testid="page-reset-requests">
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight text-foreground">Запросы на сброс пароля</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Одобрение восстановления доступа сотрудникам.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Label htmlFor="reset-req-status" className="sr-only">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <Label htmlFor="reset-req-status" className="text-sm font-medium sm:sr-only">
             Статус
           </Label>
           <select
             id="reset-req-status"
-            className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+            className="h-11 min-h-11 rounded-md border border-input bg-background px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary md:text-sm"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
           >
@@ -174,22 +227,57 @@ export default function ResetRequestsPage() {
             <option value="declined">Отклонённые</option>
             <option value="expired">Истёкшие</option>
           </select>
-          <Button type="button" variant="outline" size="sm" onClick={() => void refresh()} disabled={loading}>
+          <Button type="button" variant="outline" className="h-11 min-h-11 rounded-md" onClick={() => void refresh()} disabled={loading}>
             Обновить
           </Button>
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Список</CardTitle>
-          <CardDescription>Для ожидающих запросов можно выдать ссылку или отклонить.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
-          {loading ? <p className="text-sm text-muted-foreground">Загрузка…</p> : null}
-          {!loading && items.length === 0 ? <p className="text-sm text-muted-foreground">Нет записей.</p> : null}
-          <div className="overflow-x-auto rounded-md border">
+      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      {loading ? <p className="text-sm text-muted-foreground">Загрузка…</p> : null}
+
+      {!loading && items.length === 0 ? (
+        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-card-border bg-card/40 px-6 py-16 text-center">
+          <Inbox className="h-12 w-12 text-muted-foreground" aria-hidden />
+          <p className="mt-4 text-sm font-medium text-foreground">Запросов нет.</p>
+        </div>
+      ) : null}
+
+      {!loading && items.length > 0 ? (
+        <>
+          <div className="grid gap-3 md:hidden">
+            {items.map((row) => (
+              <div key={row.id} className="rounded-lg border border-card-border bg-card p-4 shadow-sm">
+                <div className="flex flex-col gap-1">
+                  <span className="font-medium text-foreground">{row.requesterFullName}</span>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="truncate text-xs text-muted-foreground">{row.requesterEmail}</span>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-sm break-all">
+                      {row.requesterEmail}
+                    </TooltipContent>
+                  </Tooltip>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <span
+                      className={cn(
+                        "inline-flex rounded-full border px-2 py-0.5 text-xs font-medium",
+                        roleBadgeClass(row.requesterRole),
+                      )}
+                    >
+                      {rolesRu[row.requesterRole as UserRole] ?? row.requesterRole}
+                    </span>
+                    <span className="text-xs text-muted-foreground">{formatRelativeRu(row.createdAt)}</span>
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <RequestRowActions row={row} anyBusy={busyId != null} rowBusy={busyId === row.id} onApprove={onApprove} onDecline={(r) => setDeclineRow(r)} />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="hidden overflow-x-auto rounded-lg border border-card-border md:block">
             <table className="w-full min-w-[720px] text-left text-sm">
               <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
                 <tr>
@@ -204,62 +292,63 @@ export default function ResetRequestsPage() {
               </thead>
               <tbody>
                 {items.map((row) => (
-                  <tr key={row.id} className="border-t">
+                  <tr key={row.id} className="border-t border-border">
                     <td className="px-3 py-2 font-medium">{row.requesterFullName}</td>
-                    <td className="px-3 py-2 text-muted-foreground">{row.requesterEmail}</td>
-                    <td className="px-3 py-2">{rolesRu[row.requesterRole as UserRole] ?? row.requesterRole}</td>
-                    <td className="px-3 py-2">
-                      <Badge variant="secondary">{statusRu[row.status] ?? row.status}</Badge>
+                    <td className="max-w-[220px] px-3 py-2">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="block truncate font-mono text-xs text-muted-foreground">{row.requesterEmail}</span>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="max-w-sm break-all">
+                          {row.requesterEmail}
+                        </TooltipContent>
+                      </Tooltip>
                     </td>
-                    <td className="px-3 py-2 text-muted-foreground">{formatDisplayDateTime(row.createdAt)}</td>
+                    <td className="px-3 py-2">
+                      <span
+                        className={cn(
+                          "inline-flex rounded-full border px-2 py-0.5 text-xs font-medium",
+                          roleBadgeClass(row.requesterRole),
+                        )}
+                      >
+                        {rolesRu[row.requesterRole as UserRole] ?? row.requesterRole}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2">
+                      <Badge variant="secondary" className="font-normal">
+                        {statusRu[row.status] ?? row.status}
+                      </Badge>
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground">{formatRelativeRu(row.createdAt)}</td>
                     <td className="px-3 py-2 text-muted-foreground">{formatDisplayDateTime(row.expiresAt)}</td>
                     <td className="px-3 py-2">
-                      <div className="flex flex-wrap gap-2">
-                        {row.status === "pending" ? (
-                          <>
-                            <Button type="button" size="sm" disabled={busyId === row.id} onClick={() => void onApprove(row)}>
-                              Выдать ссылку
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              disabled={busyId === row.id}
-                              onClick={() => {
-                                setDeclineRow(row);
-                                setDeclineReason("");
-                              }}
-                            >
-                              Отклонить
-                            </Button>
-                          </>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
-                      </div>
+                      <RequestRowActions row={row} anyBusy={busyId != null} rowBusy={busyId === row.id} onApprove={onApprove} onDecline={(r) => setDeclineRow(r)} />
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </CardContent>
-      </Card>
+        </>
+      ) : null}
 
       <AlertDialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Ссылка для сброса пароля</AlertDialogTitle>
             <AlertDialogDescription asChild>
-              <div className="space-y-2 text-left text-sm text-muted-foreground">
-                <p>Действительна до {formatDisplayDateTime(issuedExpires)}.</p>
-                <div className="break-all rounded-md border bg-muted/40 p-2 font-mono text-xs text-foreground">{issuedUrl}</div>
+              <div className="space-y-3 text-left text-sm text-muted-foreground">
+                <p className="text-foreground">
+                  Передайте ссылку сотруднику любым удобным способом. Срок действия — 60 минут. Действительна до{" "}
+                  <span className="font-medium">{formatDisplayDateTime(issuedExpires)}</span>.
+                </p>
+                <div className="break-all rounded-md border border-input bg-muted/40 p-2 font-mono text-xs text-foreground">{issuedUrl}</div>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Закрыть</AlertDialogCancel>
-            <AlertDialogAction type="button" onClick={() => void copyUrl()}>
+            <AlertDialogCancel className="h-11 min-h-11 rounded-md">Закрыть</AlertDialogCancel>
+            <AlertDialogAction type="button" className="h-11 min-h-11 rounded-md bg-primary text-primary-foreground hover:bg-primary/90" onClick={() => void copyUrl()}>
               Скопировать
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -269,18 +358,18 @@ export default function ResetRequestsPage() {
       <AlertDialog open={declineRow != null} onOpenChange={(o) => !o && setDeclineRow(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Отклонить запрос?</AlertDialogTitle>
+            <AlertDialogTitle>Отклонить запрос</AlertDialogTitle>
             <AlertDialogDescription>
               Запрос от {declineRow?.requesterFullName} будет отклонён. Ссылка не будет выдана.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-2 py-2">
             <Label htmlFor="decline-reason">Причина (необязательно)</Label>
-            <Input id="decline-reason" value={declineReason} onChange={(e) => setDeclineReason(e.target.value)} />
+            <Input id="decline-reason" className={cn("h-11 min-h-11 text-base md:text-sm")} value={declineReason} onChange={(e) => setDeclineReason(e.target.value)} />
           </div>
           <AlertDialogFooter>
-            <AlertDialogCancel>Нет</AlertDialogCancel>
-            <AlertDialogAction type="button" onClick={() => void onDeclineConfirm()} disabled={busyId != null}>
+            <AlertDialogCancel className="h-11 min-h-11 rounded-md">Нет</AlertDialogCancel>
+            <AlertDialogAction type="button" className="h-11 min-h-11 rounded-md" onClick={() => void onDeclineConfirm()} disabled={busyId != null}>
               Отклонить
             </AlertDialogAction>
           </AlertDialogFooter>
