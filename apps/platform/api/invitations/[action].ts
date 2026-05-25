@@ -47,6 +47,75 @@ const INVITER_CAN_INVITE: Record<UserRole, UserRole[]> = {
   admin: ["director", "rop", "regional_manager", "manager", "marketer", "analyst"],
 };
 
+
+// SYNC: shared/auth-rbac.ts — keep this matrix in sync (self-contained rule, PR #224/#226).
+
+type Permission =
+  | "invitations.create"
+  | "invitations.list_own"
+  | "invitations.revoke_own"
+  | "invitations.revoke_any"
+  | "users.list"
+  | "users.read_any"
+  | "users.update_role"
+  | "users.update_status"
+  | "users.reset_password"
+  | "profile.read_self"
+  | "profile.update_self";
+
+const PERMISSIONS_BY_ROLE: Record<UserRole, ReadonlySet<Permission>> = {
+  admin: new Set<Permission>([
+    "invitations.create",
+    "invitations.list_own",
+    "invitations.revoke_own",
+    "invitations.revoke_any",
+    "users.list",
+    "users.read_any",
+    "users.update_role",
+    "users.update_status",
+    "users.reset_password",
+    "profile.read_self",
+    "profile.update_self",
+  ]),
+  director: new Set<Permission>([
+    "invitations.create",
+    "invitations.list_own",
+    "invitations.revoke_own",
+    "users.list",
+    "users.read_any",
+    "profile.read_self",
+    "profile.update_self",
+  ]),
+  rop: new Set<Permission>([
+    "invitations.create",
+    "invitations.list_own",
+    "invitations.revoke_own",
+    "users.list",
+    "profile.read_self",
+    "profile.update_self",
+  ]),
+  regional_manager: new Set<Permission>([
+    "invitations.create",
+    "invitations.list_own",
+    "invitations.revoke_own",
+    "profile.read_self",
+    "profile.update_self",
+  ]),
+  manager: new Set<Permission>(["profile.read_self", "profile.update_self"]),
+  marketer: new Set<Permission>(["profile.read_self", "profile.update_self"]),
+  analyst: new Set<Permission>(["profile.read_self", "profile.update_self"]),
+};
+
+function roleHasPermission(role: UserRole, perm: Permission): boolean {
+  const set = PERMISSIONS_BY_ROLE[role];
+  return !!set && set.has(perm);
+}
+
+function canInviteRole(inviter: UserRole, target: UserRole): boolean {
+  if (!roleHasPermission(inviter, "invitations.create")) return false;
+  return (INVITER_CAN_INVITE[inviter] ?? []).includes(target);
+}
+
 const JSON_CT = "application/json; charset=utf-8";
 const SIMPLE_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -232,10 +301,6 @@ function sendJson(res: VercelResponse, status: number, body: Record<string, unkn
   res.status(status).json(body);
 }
 
-function inviterMayInviteRole(inviter: UserRole, target: UserRole): boolean {
-  return (INVITER_CAN_INVITE[inviter] ?? []).includes(target);
-}
-
 function isStrongEnough(plain: string, emailForCompare?: string): { ok: true } | { ok: false; reason: string } {
   const t = plain.trim();
   if (!t) return { ok: false, reason: "Пароль не может быть пустым." };
@@ -285,7 +350,6 @@ async function handleCreate(
     sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
     return;
   }
-
   const body = req.body as {
     email?: unknown;
     role?: unknown;
@@ -312,7 +376,7 @@ async function handleCreate(
     return;
   }
   const targetRole = roleRaw as UserRole;
-  if (!inviterMayInviteRole(me.role as UserRole, targetRole)) {
+  if (!canInviteRole(me.role as UserRole, targetRole)) {
     sendJson(res, 403, {
       success: false,
       code: "FORBIDDEN_ROLE",
@@ -398,6 +462,13 @@ async function handleList(
     sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
     return;
   }
+  if (
+    !roleHasPermission(me.role as UserRole, "invitations.list_own") &&
+    !roleHasPermission(me.role as UserRole, "invitations.revoke_any")
+  ) {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
 
   const rows = await pool.query<{
     id: string;
@@ -464,7 +535,11 @@ async function handleRevoke(
     sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Приглашение не найдено." });
     return;
   }
-  if (me.role !== "admin" && row.invited_by !== me.id) {
+  const own = row.invited_by === me.id;
+  const allowed = own
+    ? roleHasPermission(me.role as UserRole, "invitations.revoke_own")
+    : roleHasPermission(me.role as UserRole, "invitations.revoke_any");
+  if (!allowed) {
     sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
     return;
   }

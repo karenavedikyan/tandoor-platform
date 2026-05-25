@@ -8,6 +8,7 @@ import type { Request, Response } from "express";
 import { and, desc, eq, gt, isNull, sql } from "drizzle-orm";
 import type { UserRole } from "@shared/auth";
 import { BUSINESS_ROLES } from "@shared/auth";
+import { canInviteRole, roleHasPermission } from "@shared/auth-rbac";
 import { auditLog, authUsers, invitations, userTeamMemberships } from "@shared/auth-schema";
 import type { AuthUserSnapshot } from "./auth-user-snapshot";
 import { buildAuthCookie } from "./cookie";
@@ -21,17 +22,6 @@ const JSON_CT = "application/json; charset=utf-8";
 const SIMPLE_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-
-/** Копия правил PR 05 (см. `api/invitations/[action].ts`). */
-const INVITER_CAN_INVITE: Record<UserRole, UserRole[]> = {
-  director: ["rop", "regional_manager", "manager", "marketer", "analyst"],
-  rop: ["regional_manager", "manager"],
-  regional_manager: ["manager"],
-  manager: [],
-  marketer: [],
-  analyst: [],
-  admin: ["director", "rop", "regional_manager", "manager", "marketer", "analyst"],
-};
 
 function sha256Hex(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
@@ -92,10 +82,6 @@ async function tryAudit(input: {
   }
 }
 
-function inviterMayInviteRole(inviter: UserRole, target: UserRole): boolean {
-  return (INVITER_CAN_INVITE[inviter] ?? []).includes(target);
-}
-
 function readUserAgent(headers: Record<string, string | string[] | undefined>): string | null {
   const ua = headers["user-agent"];
   if (typeof ua === "string") return ua || null;
@@ -154,7 +140,7 @@ export async function createInvitation(req: Request, res: Response): Promise<voi
     return;
   }
   const targetRole = roleRaw as UserRole;
-  if (!inviterMayInviteRole(auth.role, targetRole)) {
+  if (!canInviteRole(auth.role, targetRole)) {
     applyJson(res, 403, {
       success: false,
       code: "FORBIDDEN_ROLE",
@@ -315,7 +301,11 @@ export async function revokeInvitation(req: Request, res: Response): Promise<voi
       applyJson(res, 404, { success: false, code: "NOT_FOUND", message: "Приглашение не найдено." });
       return;
     }
-    if (auth.role !== "admin" && row.invitedBy !== auth.userId) {
+    const own = row.invitedBy === auth.userId;
+    const allowed = own
+      ? roleHasPermission(auth.role, "invitations.revoke_own")
+      : roleHasPermission(auth.role, "invitations.revoke_any");
+    if (!allowed) {
       applyJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
       return;
     }

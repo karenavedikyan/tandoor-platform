@@ -6,7 +6,7 @@
 import type { UserRole } from "@shared/auth";
 import type { SalesRole } from "@/lib/sales-control-data";
 import { userRoleToSalesRole } from "@/lib/role-mapping";
-import { userCanManageInvitations } from "@/lib/invitations-api";
+import { userCanManageInvitations } from "@/lib/auth-rbac";
 
 export type PilotNavItem = {
   href: string;

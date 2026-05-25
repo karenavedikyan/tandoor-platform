@@ -49,6 +49,8 @@ export const BUSINESS_ROLES: UserRole[] = [
 /**
  * Какие роли может пригласить данный пользователь.
  * `admin` в системе только через seed; приглашать некого.
+ *
+ * Устаревшая семантика (инвертирована относительно приглашений в `auth-rbac.ts`). Не используется в коде.
  */
 export const INVITABLE_BY: Record<UserRole, UserRole[]> = {
   director: ["admin"],
