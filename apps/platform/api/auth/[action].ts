@@ -660,7 +660,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         const { neon } = await import("@neondatabase/serverless");
         const sql = neon(url);
         const hash = await bcrypt.hash(password, 12);
-        const r = await sql`UPDATE users SET password_hash = ${hash}, failed_login_count = 0, locked_until = NULL, must_change_password = false WHERE email = ${email} RETURNING id, email, role, status`;
+        const r = await sql`UPDATE users SET password_hash = ${hash}, must_change_password = false, updated_at = NOW() WHERE email = ${email} RETURNING id, email, role, status`;
         sendJson(res, 200, { success: true, rows: r });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
