@@ -43,6 +43,7 @@ import { realRopOptions } from "@/lib/real-org-adapter";
 import type { OrgSnapshot } from "@/lib/use-org-snapshot";
 import type { DealerBaseAccessRole } from "@/lib/dealer-base-role-views";
 import { buildHashPath } from "@/lib/hash-route-utils";
+import type { ClientBaseOverview } from "@/lib/client-base-overview-api";
 import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actualization-sync-status";
 import { DealerActualizationCreateDialog } from "@/components/client-base-actualization-dealer-forms";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
@@ -134,11 +135,13 @@ export function DealerBaseManagementCockpit({
   rows,
   profile,
   orgTeamCtx,
+  overview,
   mergedDealerRowsForCreate,
 }: {
   rows: DealerRow[];
   profile: ReleaseDemoProfile;
   orgTeamCtx?: { snap: OrgSnapshot; access: DealerBaseAccessRole } | null;
+  overview?: ClientBaseOverview | null;
   mergedDealerRowsForCreate?: DealerRow[] | null;
 }) {
   const actx = useClientBaseActualization();
@@ -220,6 +223,118 @@ export function DealerBaseManagementCockpit({
     setMode(m);
     if (m === "overview") setOpenRops([]);
   }, []);
+
+  if (overview) {
+    return (
+      <div className="min-w-0 max-w-full space-y-6 overflow-x-hidden pb-28 sm:pb-10" data-testid="page-dealer-base">
+        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Клиентская база</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Управленческий обзор реальной базы из Postgres. Без seed-агрегатов и синтетических KPI.
+            </p>
+          </div>
+          <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row sm:justify-end">
+            {canCreateDealerDuringActualization(profile) && actx.enabled ? (
+              <Button type="button" variant="default" size="sm" className="min-h-10 w-full font-semibold sm:w-auto" data-testid="button-dealer-create" onClick={() => setCreateDealerOpen(true)}>
+                Добавить клиента
+              </Button>
+            ) : null}
+            <Button variant="outline" size="sm" className="min-h-10 w-full sm:w-auto" asChild>
+              <Link href={buildHashPath("/client-map")} data-testid="button-dealer-base-open-client-map">Карта клиентов</Link>
+            </Button>
+          </div>
+        </div>
+        {canActualizeClientBase(profile) ? (
+          <ClientBaseActualizationSyncStatus isLoading={actx.loading} meta={actx.meta} syncStatus={actx.syncStatus} onRetry={() => void actx.refresh()} />
+        ) : null}
+        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" data-testid="section-client-base-structure-infographic">
+          {[
+            ["Активные клиенты", overview.structure.activeClients],
+            ["Торговые точки", overview.structure.tradePoints],
+            ["Потенциальные", overview.structure.potentialClients],
+            ["Внимание", overview.structure.attentionClients],
+          ].map(([label, value]) => (
+            <Card key={String(label)} className="rounded-xl border border-border bg-card text-card-foreground shadow-sm">
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground">{label}</p>
+                <p className="mt-1 text-2xl font-semibold text-foreground tabular-nums">{value}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </section>
+        <section className="grid gap-4 lg:grid-cols-2">
+          <Card className="rounded-xl border border-border bg-card text-card-foreground shadow-sm">
+            <CardContent className="space-y-3 p-4">
+              <h2 className="text-sm font-semibold text-foreground">Топ по активным клиентам</h2>
+              {overview.topActiveClients.length === 0 ? <p className="text-sm text-muted-foreground">Нет данных</p> : null}
+              {overview.topActiveClients.map((c, idx) => (
+                <div key={c.clientId} className="flex items-center gap-2 rounded-lg border border-border bg-card p-2">
+                  <span className="w-5 text-xs text-muted-foreground">{idx + 1}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-foreground">{c.fullName}</p>
+                    <p className="truncate text-xs text-muted-foreground">{c.city || "Без города"} · {c.managerFullName}</p>
+                  </div>
+                  <span className="text-sm font-semibold tabular-nums text-foreground">{c.tradePointsCount}</span>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+          <Card className="rounded-xl border border-border bg-card text-card-foreground shadow-sm">
+            <CardContent className="space-y-3 p-4">
+              <h2 className="text-sm font-semibold text-foreground">Города</h2>
+              {overview.cities.map((c) => (
+                <div key={c.city ?? "without"} className="flex items-center justify-between gap-3 text-sm">
+                  <span className="truncate text-foreground">{c.city ?? "Без города"}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">клиенты {c.clients} · ТТ {c.tradePoints}</span>
+                </div>
+              ))}
+              {overview.withoutCity.clients > 0 || overview.withoutCity.tradePoints > 0 ? (
+                <div className="flex items-center justify-between border-t border-border pt-2 text-sm">
+                  <span className="text-foreground">Без города</span>
+                  <span className="text-xs text-muted-foreground">клиенты {overview.withoutCity.clients} · ТТ {overview.withoutCity.tradePoints}</span>
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+        </section>
+        <section className="space-y-3" data-testid="section-client-base-rop-groups">
+          {overview.ropGroups.map((g) => (
+            <Card key={g.teamId ?? "no-rop"} className="rounded-xl border border-border bg-card text-card-foreground shadow-sm" data-testid={`card-client-base-rop-${g.teamId ?? "no-rop"}`}>
+              <CardContent className="space-y-3 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="font-semibold text-foreground">{g.teamName}</p>
+                    <p className="text-xs text-muted-foreground">{g.ropFullName} · менеджеров {g.managerCount}</p>
+                  </div>
+                  <Button type="button" variant="outline" size="sm" data-testid={`button-client-base-rop-toggle-${g.teamId ?? "no-rop"}`} onClick={() => setDetail({ kind: "rop", teamId: g.teamId ?? "__no_rop__" })}>
+                    Детали команды
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">клиенты {g.clients} · ТТ {g.tradePoints} · потенц. {g.potential} · вним. {g.attention}</p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {g.managers.map((m) => (
+                    <button key={m.userId} type="button" className="rounded-xl border border-border bg-card p-3 text-left hover:bg-primary/10" data-testid={`button-client-base-manager-open-${m.userId}`} onClick={() => setDetail({ kind: "manager", teamId: g.teamId ?? "__no_rop__", managerId: m.userId })}>
+                      <p className="truncate text-sm font-semibold text-foreground" data-testid={`card-client-base-manager-${m.userId}`}>{m.fullName}</p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">активные {m.active} · ТТ {m.tradePoints} · сегм. {m.segment ?? "—"}</p>
+                      <p className="text-[11px] text-muted-foreground">потенц. {m.potential} · вним. {m.attention}</p>
+                    </button>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </section>
+        <DealerActualizationCreateDialog
+          open={createDealerOpen}
+          onOpenChange={setCreateDealerOpen}
+          profile={profile}
+          mergedDealerRows={mergedForCreate}
+          onCreated={(id) => setLocation(`/dealers/${encodeURIComponent(id)}`)}
+        />
+      </div>
+    );
+  }
 
   const modeBtn = (m: DirectorClientBaseMode, label: string, tid: string) => {
     const active = mode === m;

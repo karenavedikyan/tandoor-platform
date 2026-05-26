@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import {
   ChevronDown,
@@ -134,6 +135,7 @@ import { buildTeamSummaryFromRows } from "@/lib/team-summary";
 import { TeamSummaryCard } from "@/components/team-summary-card";
 import { buildCityConcentrationRows, buildDealerBaseAllCitiesHref, buildDealerBaseCityDrillHref } from "@/lib/city-concentration";
 import { buildBrowserHashAppHref, buildHashPath, useRouteSearchParams } from "@/lib/hash-route-utils";
+import { fetchClientBaseOverview } from "@/lib/client-base-overview-api";
 import {
   DEALER_BASE_SEGMENT_DESCRIPTIONS,
   DEALER_BASE_SEGMENT_LABELS,
@@ -1198,6 +1200,13 @@ export default function DealerBase() {
   const teamCtx = useClientBaseTeamActualization();
   const teamActualizationPlane = teamCtx.mergedState;
   const { publishDashboardRopTeamId } = teamCtx;
+  const overviewTeamId = access === "sales_director" && ropTeam !== "all" ? ropTeam : undefined;
+  const overviewManagerId = access === "sales_manager" && me?.id ? me.id : undefined;
+  const overviewQ = useQuery({
+    queryKey: ["client-base-overview", overviewTeamId, overviewManagerId],
+    queryFn: () => fetchClientBaseOverview({ teamId: overviewTeamId, managerUserId: overviewManagerId }),
+    enabled: actx.enabled,
+  });
 
   useEffect(() => {
     if (access !== "sales_director" && access !== "team_lead") return;
@@ -2503,6 +2512,7 @@ export default function DealerBase() {
         profile={profile}
         rows={scopedActivePortfolioRows}
         orgTeamCtx={useReal && snap ? { snap, access } : undefined}
+        overview={overviewQ.data ?? null}
         mergedDealerRowsForCreate={
           useReal && snap && visPayload && !orgSnapQ.isError && !visCodesQ.isError ? mergedRowsActivePortfolio : undefined
         }

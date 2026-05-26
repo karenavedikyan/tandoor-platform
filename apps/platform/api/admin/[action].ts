@@ -2572,6 +2572,228 @@ async function handleActualizationStatsOverview(
   });
 }
 
+async function handleClientBaseOverview(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  headers: Record<string, string | string[] | undefined>,
+): Promise<void> {
+  const me = await resolveCurrentUser(pool, headers);
+  if (!me) {
+    sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+    return;
+  }
+  if (!["admin", "director", "rop", "manager"].includes(me.role) || me.status !== "active") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+
+  const teamIdFilter = queryStringParam(req, "teamId");
+  const managerFilter = queryStringParam(req, "managerUserId");
+  const users = await pool.query<ActualizationStatsUserRow>(
+    `SELECT u.id, u.full_name, u.role, t.id AS team_id, t.name AS team_name, t.rop_user_id, ropu.full_name AS rop_full_name
+       FROM users u
+       LEFT JOIN user_team_memberships m ON m.user_id = u.id
+       LEFT JOIN teams t ON t.id = m.team_id
+       LEFT JOIN users ropu ON ropu.id = t.rop_user_id
+      WHERE u.status = 'active'`,
+  );
+  const usersById = new Map<string, ActualizationStatsUserRow>();
+  for (const u of users.rows) if (!usersById.has(u.id)) usersById.set(u.id, u);
+
+  let allowed = new Set(users.rows.map((u) => u.id));
+  if (me.role === "rop") {
+    allowed = new Set(users.rows.filter((u) => u.rop_user_id === me.id || u.id === me.id).map((u) => u.id));
+    allowed.add(me.id);
+  } else if (me.role === "manager") {
+    allowed = new Set([me.id]);
+  }
+  if (teamIdFilter) {
+    const teamMembers = new Set(users.rows.filter((u) => u.team_id === teamIdFilter).map((u) => u.id));
+    allowed = new Set(Array.from(allowed).filter((id) => teamMembers.has(id)));
+  }
+  if (managerFilter) {
+    if (!allowed.has(managerFilter)) {
+      sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+      return;
+    }
+    allowed = new Set([managerFilter]);
+  }
+
+  const rows = await pool.query<ActualizationDedupeStateRow>(
+    `SELECT scope_key, user_id, role, state, updated_at
+       FROM client_base_actualization_state
+      WHERE scope_key LIKE 'user:%'`,
+  );
+  const statesByUser = new Map<string, Record<string, unknown>[]>();
+  for (const row of rows.rows) {
+    const scopeId = scopeUserId(String(row.scope_key));
+    const owner = row.user_id && UUID_RE.test(row.user_id) ? row.user_id : scopeId ? legacyScopeToUuid(scopeId) : null;
+    if (!owner || !allowed.has(owner)) continue;
+    const arr = statesByUser.get(owner) ?? [];
+    arr.push(coerceActualizationState(row.state));
+    statesByUser.set(owner, arr);
+  }
+
+  const clients: Array<ActualizationStatsItem & { status: string; city: string; updatedAt: string | null }> = [];
+  const tradePoints: ActualizationStatsTp[] = [];
+  for (const userId of Array.from(allowed)) {
+    const merged = mergeActualizationStates(statesByUser.get(userId) ?? [actualizationEmptyState()]);
+    const meta = userMeta(userId, usersById);
+    const manualDealers = stateRecord(merged.manuallyCreatedDealersById);
+    const dealerOverrides = stateRecord(merged.dealerOverridesById);
+    const legalByDealer = stateRecord(merged.legalEntityOverridesByDealerId);
+    const addClient = (id: string, fields: Record<string, unknown>, source: string, fallbackDate?: unknown) => {
+      const updatedAt = stateDate(fields, fallbackDate);
+      clients.push({
+        id,
+        fullName: stateString(fields.name) || stateString(fields.dealerName) || id,
+        managerUserId: userId,
+        managerFullName: meta.fullName,
+        teamId: meta.teamId,
+        teamName: meta.teamName,
+        ropUserId: meta.ropUserId,
+        ropFullName: meta.ropFullName,
+        createdAt: updatedAt,
+        updatedAt,
+        city: stateString(fields.city),
+        status: stateString(fields.status) || "active",
+        inn: stateString(fields.inn),
+        phone: stateString(fields.phone),
+        legalEntity: Boolean(legalByDealer[id]),
+        source,
+      });
+    };
+    for (const [id, raw] of Object.entries(manualDealers)) {
+      const m = stateRecord(raw);
+      addClient(id, stateRecord(m.fields), "manual", m.updatedAt ?? m.createdAt);
+    }
+    for (const [id, raw] of Object.entries(dealerOverrides)) {
+      const ov = stateRecord(raw);
+      const fields = stateRecord(ov.fields);
+      if (!stateString(fields.phone) && !stateString(fields.email) && !stateString(fields.inn) && !stateString(fields.name) && !stateString(fields.dealerName)) continue;
+      addClient(id, fields, "release", ov.updatedAt);
+    }
+    const manualTp = stateRecord(merged.manuallyCreatedTradePointsById);
+    const photos = stateRecord(merged.tradePointPhotosByTradePointId);
+    const showcase = stateRecord(merged.tradePointShowcaseActualizationById);
+    for (const [id, raw] of Object.entries(manualTp)) {
+      const tp = stateRecord(raw);
+      const fields = stateRecord(tp.fields);
+      tradePoints.push({
+        id,
+        name: stateString(fields.name) || id,
+        address: stateString(fields.address),
+        city: stateString(fields.city),
+        clientId: stateString(tp.dealerId),
+        managerUserId: userId,
+        managerFullName: meta.fullName,
+        teamId: meta.teamId,
+        teamName: meta.teamName,
+        ropUserId: meta.ropUserId,
+        ropFullName: meta.ropFullName,
+        createdAt: stateDate(fields, tp.updatedAt ?? tp.createdAt),
+        hasPhoto: Array.isArray(photos[id]) && (photos[id] as unknown[]).length > 0,
+        hasStorefront: Boolean(showcase[id]),
+        source: "manual",
+      });
+    }
+  }
+
+  const clientsById = new Map(clients.map((c) => [c.id, c]));
+  const activeClients = clients.filter((c) => c.status === "active" || !c.status);
+  const potentialClients = clients.filter((c) => c.status === "potential" || c.status === "потенциальный");
+  const staleCutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const attentionClients = clients.filter((c) => c.status === "attention" || c.status === "требует внимания" || (c.updatedAt ? Date.parse(c.updatedAt) < staleCutoff : false));
+  const clientsWithTp = new Set(tradePoints.map((tp) => tp.clientId));
+  const cityMap = new Map<string, { city: string | null; clients: number; tradePoints: number }>();
+  const cityKey = (city: string) => city.trim() || "__without__";
+  for (const c of clients) {
+    const key = cityKey(c.city);
+    const cur = cityMap.get(key) ?? { city: key === "__without__" ? null : c.city, clients: 0, tradePoints: 0 };
+    cur.clients += 1;
+    cityMap.set(key, cur);
+  }
+  for (const tp of tradePoints) {
+    const ownerCity = clientsById.get(tp.clientId)?.city || tp.city;
+    const key = cityKey(ownerCity);
+    const cur = cityMap.get(key) ?? { city: key === "__without__" ? null : ownerCity, clients: 0, tradePoints: 0 };
+    cur.tradePoints += 1;
+    cityMap.set(key, cur);
+  }
+  const cities = Array.from(cityMap.values()).filter((c) => c.city).sort((a, b) => b.clients - a.clients).slice(0, 15);
+  const withoutCity = cityMap.get("__without__") ?? { clients: 0, tradePoints: 0 };
+  const byManager = Array.from(allowed).map((userId) => {
+    const meta = userMeta(userId, usersById);
+    const managerClients = clients.filter((c) => c.managerUserId === userId);
+    const managerTps = tradePoints.filter((tp) => tp.managerUserId === userId);
+    return {
+      userId,
+      fullName: meta.fullName,
+      teamId: meta.teamId,
+      teamName: meta.teamName,
+      ropUserId: meta.ropUserId,
+      ropFullName: meta.ropFullName,
+      active: managerClients.filter((c) => c.status === "active" || !c.status).length,
+      tradePoints: managerTps.length,
+      segment: null,
+      potential: managerClients.filter((c) => c.status === "potential" || c.status === "потенциальный").length,
+      attention: managerClients.filter((c) => attentionClients.some((a) => a.id === c.id)).length,
+    };
+  });
+  const teams = new Map<string, typeof byManager>();
+  for (const m of byManager) {
+    const key = m.teamId ?? "__no_rop__";
+    const arr = teams.get(key) ?? [];
+    arr.push(m);
+    teams.set(key, arr);
+  }
+  const ropGroups = Array.from(teams.entries()).map(([teamId, managers]) => {
+    const sample = managers[0];
+    const groupClients = clients.filter((c) => (c.teamId ?? "__no_rop__") === teamId);
+    const groupTp = tradePoints.filter((tp) => (tp.teamId ?? "__no_rop__") === teamId);
+    return {
+      ropUserId: sample?.ropUserId ?? null,
+      ropFullName: sample?.ropFullName ?? "Без РОП",
+      teamId: teamId === "__no_rop__" ? null : teamId,
+      teamName: sample?.teamName ?? "Без команды",
+      clients: groupClients.filter((c) => c.status === "active" || !c.status).length,
+      tradePoints: groupTp.length,
+      potential: groupClients.filter((c) => c.status === "potential" || c.status === "потенциальный").length,
+      attention: groupClients.filter((c) => attentionClients.some((a) => a.id === c.id)).length,
+      managerCount: managers.length,
+      managersWithEmptyBase: managers.filter((m) => m.active === 0).length,
+      managers,
+    };
+  }).sort((a, b) => b.clients - a.clients);
+
+  sendJson(res, 200, {
+    success: true,
+    generatedAt: new Date().toISOString(),
+    structure: {
+      activeClients: activeClients.length,
+      tradePoints: tradePoints.length,
+      potentialClients: potentialClients.length,
+      attentionClients: attentionClients.length,
+      averageDistributionPct: clients.length ? Math.round((clientsWithTp.size / clients.length) * 100) : 0,
+      avgTpPerClient: activeClients.length ? Number((tradePoints.length / activeClients.length).toFixed(2)) : 0,
+      managersWithClientsWithoutTp: byManager.filter((m) => clients.some((c) => c.managerUserId === m.userId && !clientsWithTp.has(c.id))).length,
+      citiesWithClientsWithoutTp: new Set(clients.filter((c) => !clientsWithTp.has(c.id)).map((c) => c.city || "__without__")).size,
+    },
+    topActiveClients: [...clients].map((c) => ({
+      clientId: c.id,
+      fullName: c.fullName,
+      tradePointsCount: tradePoints.filter((tp) => tp.clientId === c.id).length,
+      managerUserId: c.managerUserId,
+      managerFullName: c.managerFullName,
+      city: c.city,
+    })).sort((a, b) => b.tradePointsCount - a.tradePointsCount).slice(0, 10),
+    cities,
+    withoutCity,
+    ropGroups,
+  });
+}
+
 async function handleMigrateMgrScopes(res: VercelResponse, pool: PoolLike): Promise<void> {
   const migrated: MgrScopeMigrationRow[] = [];
 
@@ -3647,6 +3869,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "actualization-stats-overview" && req.method === "GET") {
       await handleActualizationStatsOverview(req, res, pool, headers);
+      return;
+    }
+    if (action === "client-base-overview" && req.method === "GET") {
+      await handleClientBaseOverview(req, res, pool, headers);
       return;
     }
     if (action === "sessions-list-self" && req.method === "GET") {
