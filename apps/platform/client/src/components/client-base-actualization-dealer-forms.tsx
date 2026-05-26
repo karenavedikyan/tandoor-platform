@@ -60,10 +60,13 @@ import { getClientCategoryOptions } from "@/lib/client-category";
 import type { ClientCategoryId } from "@/lib/client-category";
 import {
   findInnDuplicateInActualization,
+  findDealerCandidatesByName,
+  findExactNameDuplicateInActualization,
   findNameCityDuplicateInActualization,
   generateStableManualDealerId,
   nextManualDealerInternalCode,
   isManualActualizationDealerId,
+  type NameMatchCandidate,
 } from "@/lib/client-base-actualization-stable-ids";
 import { mergeDealerRowWithActualization } from "@/lib/client-base-actualization-data-merge";
 import {
@@ -1095,6 +1098,8 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
   const [innDupMatch, setInnDupMatch] = useState<{ dealerId: string; name: string } | null>(null);
   const [nameCityWarnOpen, setNameCityWarnOpen] = useState(false);
   const [nameCityDup, setNameCityDup] = useState<{ dealerId: string; name: string } | null>(null);
+  const [nameSuggestions, setNameSuggestions] = useState<NameMatchCandidate[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(true);
 
   useEffect(() => {
     if (open && !wasOpenForMintRef.current) {
@@ -1111,6 +1116,8 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
       setInnDupMatch(null);
       setNameCityWarnOpen(false);
       setNameCityDup(null);
+      setNameSuggestions([]);
+      setShowSuggestions(true);
       wasOpenForMintRef.current = false;
       wasOpenForFormRef.current = false;
     }
@@ -1156,7 +1163,30 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
     setPassportCategoryTier("none");
     setTerritoryZone("");
     setLogisticsComment("");
+    setShowSuggestions(true);
   }, [open, profile.personaUserId]);
+
+  useEffect(() => {
+    if (!open) {
+      setNameSuggestions([]);
+      return;
+    }
+    const q = name.trim();
+    if (q.length < 3) {
+      setNameSuggestions([]);
+      return;
+    }
+    setNameSuggestions(
+      findDealerCandidatesByName({
+        nameQuery: q,
+        mergedRows: mergedDealerRows,
+        act: state,
+        managerUserId,
+        excludeDealerId: draftDealerIdRef.current ?? undefined,
+        limit: 6,
+      }),
+    );
+  }, [name, open, mergedDealerRows, managerUserId, state]);
 
   const categoryOptions = useMemo(() => getClientCategoryOptions().filter((o) => o.value !== "all"), []);
 
@@ -1412,17 +1442,24 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
     const id = draftDealerIdRef.current;
     if (!id) return;
 
+    const nc = findNameCityDuplicateInActualization(name, city, mergedDealerRows, state, id);
+    if (nc) {
+      setNameCityDup(nc);
+      setNameCityWarnOpen(true);
+      return;
+    }
+
+    const exactName = findExactNameDuplicateInActualization(name, mergedDealerRows, state, managerUserId, id);
+    if (exactName) {
+      setNameCityDup(exactName);
+      setNameCityWarnOpen(true);
+      return;
+    }
+
     const innDup = findInnDuplicateInActualization(inn, mergedDealerRows, state, id);
     if (inn.trim() && innDup) {
       setInnDupMatch(innDup);
       setInnDupOpen(true);
-      return;
-    }
-
-    const nc = findNameCityDuplicateInActualization(name, city, mergedDealerRows, state, id);
-    if (!inn.trim() && nc) {
-      setNameCityDup(nc);
-      setNameCityWarnOpen(true);
       return;
     }
 
@@ -1469,23 +1506,40 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
       <AlertDialog open={nameCityWarnOpen} onOpenChange={setNameCityWarnOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Похожий клиент уже есть</AlertDialogTitle>
+            <AlertDialogTitle>Этот клиент уже есть в базе</AlertDialogTitle>
             <AlertDialogDescription>
               {nameCityDup
-                ? `Найден клиент с тем же названием и городом: ${nameCityDup.name}. Продолжить создание?`
+                ? `В базе уже есть: ${nameCityDup.name}. Откройте его и продолжите актуализацию там — данные сохранятся в общей карточке. Создавать дубль нельзя без необходимости.`
                 : ""}
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
+          <AlertDialogFooter className="flex-col gap-2 sm:flex-row">
             <AlertDialogCancel>Отмена</AlertDialogCancel>
-            <AlertDialogAction
-              type="button"
-              onClick={() => {
-                setNameCityWarnOpen(false);
-                void runPersist();
-              }}
-            >
-              Продолжить
+            {nameCityDup ? (
+              <Button type="button" variant="default" className="min-h-10 w-full sm:w-auto" asChild>
+                <Link
+                  href={`/dealers/${encodeURIComponent(nameCityDup.dealerId)}`}
+                  onClick={() => {
+                    setNameCityWarnOpen(false);
+                    onOpenChange(false);
+                  }}
+                >
+                  Открыть существующего
+                </Link>
+              </Button>
+            ) : null}
+            <AlertDialogAction asChild>
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-10 w-full sm:w-auto"
+                onClick={() => {
+                  setNameCityWarnOpen(false);
+                  void runPersist();
+                }}
+              >
+                Всё равно создать новую карточку
+              </Button>
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1509,6 +1563,50 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
                   onChange={(e) => setName(e.target.value)}
                   className="min-h-10"
                 />
+                {nameSuggestions.length > 0 && showSuggestions ? (
+                  <div
+                    className="mt-2 rounded-md border border-amber-200 bg-amber-50/50 p-3 dark:border-amber-900/40 dark:bg-amber-950/20"
+                    data-testid="block-dealer-create-name-suggestions"
+                  >
+                    <div className="mb-2 text-xs font-medium text-amber-900 dark:text-amber-200">
+                      Возможно, клиент уже есть в базе:
+                    </div>
+                    <div className="space-y-1.5">
+                      {nameSuggestions.map((c) => (
+                        <div
+                          key={c.dealerId}
+                          className="flex items-start justify-between gap-2 rounded border border-amber-200/60 bg-background/80 p-2 text-xs dark:border-amber-900/30"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate font-medium">{c.name}</div>
+                            <div className="truncate text-muted-foreground">
+                              {c.code ?? "—"} · {c.city || "Без города"} · {c.managerName || "Менеджер не указан"}
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-7 shrink-0 text-xs"
+                            data-testid={`button-suggestion-open-${c.dealerId}`}
+                            asChild
+                          >
+                            <Link href={`/dealers/${encodeURIComponent(c.dealerId)}`} onClick={() => onOpenChange(false)}>
+                              Открыть
+                            </Link>
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowSuggestions(false)}
+                      className="mt-2 text-[11px] text-muted-foreground underline-offset-2 hover:underline"
+                    >
+                      Скрыть подсказки — я уверен(а) что это новый клиент
+                    </button>
+                  </div>
+                ) : null}
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">ИНН</Label>
