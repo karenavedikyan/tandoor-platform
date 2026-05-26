@@ -5,8 +5,10 @@
 import type { ReactElement, ReactNode } from "react";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
+import { useAuthUser } from "@/hooks/use-auth-user";
 import {
   loadActualizationState,
+  resetActualizationAuthCache,
   saveActualizationState,
   type ActualizationApiMeta,
   type ActualizationPersistResult,
@@ -35,6 +37,7 @@ export type ClientBaseActualizationContextValue = {
 const Ctx = createContext<ClientBaseActualizationContextValue | null>(null);
 
 export function ClientBaseActualizationProvider({ children }: { children: ReactNode }): ReactElement {
+  const { user: authUser } = useAuthUser();
   const { profile } = useReleaseDemoProfile();
   const enabled = useMemo(() => canActualizeClientBase(profile), [profile]);
 
@@ -51,6 +54,10 @@ export function ClientBaseActualizationProvider({ children }: { children: ReactN
 
   const stateRef = useRef(state);
   stateRef.current = state;
+
+  useEffect(() => {
+    resetActualizationAuthCache();
+  }, [authUser?.id, authUser?.role]);
 
   const refresh = useCallback(async () => {
     if (!enabled) {
