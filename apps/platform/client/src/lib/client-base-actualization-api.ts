@@ -9,6 +9,7 @@ import {
   mergeActualizationState,
   type ActualizationState,
 } from "@/lib/client-base-actualization-state";
+import { me } from "@/lib/auth-api";
 
 export const ACTUALIZATION_STATE_CACHE_KEY = "tandoor-client-base-actualization-state-cache-v1";
 
@@ -62,6 +63,52 @@ function parseApiEnvelope(j: Record<string, unknown>): ActualizationApiMeta {
 }
 
 type CacheRow = { userId: string; state: ActualizationState; updatedAt: string | null };
+type ActualizationAuthUser = { id: string; role: string };
+
+let authUserCache: { value: ActualizationAuthUser | null; expiresAt: number } | null = null;
+
+function normalizeRoleForActualizationApi(role: string): string {
+  switch (role) {
+    case "director":
+      return "sales_director";
+    case "rop":
+    case "regional_manager":
+      return "team_lead";
+    case "manager":
+    case "marketer":
+    case "analyst":
+    case "admin":
+    case "sales_director":
+    case "team_lead":
+      return role;
+    case "sales_manager":
+      return "manager";
+    default:
+      return role;
+  }
+}
+
+async function resolveAuthUser(): Promise<ActualizationAuthUser | null> {
+  try {
+    const u = await me();
+    if (!u || typeof u.id !== "string" || typeof u.role !== "string") return null;
+    return { id: u.id, role: normalizeRoleForActualizationApi(u.role) };
+  } catch {
+    return null;
+  }
+}
+
+async function getCachedAuthUser(): Promise<ActualizationAuthUser | null> {
+  const now = Date.now();
+  if (authUserCache && authUserCache.expiresAt > now) return authUserCache.value;
+  const value = await resolveAuthUser();
+  authUserCache = { value, expiresAt: now + 60_000 };
+  return value;
+}
+
+export function resetActualizationAuthCache(): void {
+  authUserCache = null;
+}
 
 function readLocalCache(userId: string): CacheRow | null {
   if (typeof window === "undefined" || !window.localStorage) return null;
@@ -85,15 +132,20 @@ function writeLocalCache(row: CacheRow): void {
   }
 }
 
-function demoHeaders(userId: string): HeadersInit {
-  return { "X-Tandoor-Demo-User-Id": userId, Accept: "application/json" };
+function demoHeaders(userId: string, role?: string): HeadersInit {
+  const h: Record<string, string> = { "X-Tandoor-Demo-User-Id": userId, Accept: "application/json" };
+  if (role) h["X-Tandoor-Demo-User-Role"] = role;
+  return h;
 }
 
 /**
  * Загрузка состояния актуализации для указанного userId (демо: тот же заголовок и query).
  * Нужен дашборду РОП/директора для объединения state менеджеров команды.
  */
-export async function fetchActualizationStateByUserId(userIdRaw: string): Promise<ActualizationLoadResult> {
+export async function fetchActualizationStateByUserIdWithRole(
+  userIdRaw: string,
+  role?: string,
+): Promise<ActualizationLoadResult> {
   const userId = userIdRaw.trim();
   const emptyMeta = (storageMode: ActualizationStorageMode, message?: string): ActualizationApiMeta => ({
     success: false,
@@ -112,9 +164,12 @@ export async function fetchActualizationStateByUserId(userIdRaw: string): Promis
   }
 
   try {
-    const res = await fetch(`/api/actualization/state?userId=${encodeURIComponent(userId)}`, {
+    const url = role
+      ? `/api/actualization/state?userId=${encodeURIComponent(userId)}&role=${encodeURIComponent(role)}`
+      : `/api/actualization/state?userId=${encodeURIComponent(userId)}`;
+    const res = await fetch(url, {
       method: "GET",
-      headers: demoHeaders(userId),
+      headers: demoHeaders(userId, role),
       credentials: "same-origin",
     });
     const text = await res.text();
@@ -145,9 +200,15 @@ export async function fetchActualizationStateByUserId(userIdRaw: string): Promis
   }
 }
 
+export async function fetchActualizationStateByUserId(userIdRaw: string): Promise<ActualizationLoadResult> {
+  return fetchActualizationStateByUserIdWithRole(userIdRaw);
+}
+
 export async function loadActualizationState(profile: ReleaseDemoProfile): Promise<ActualizationLoadResult> {
-  const userId = profile.personaUserId.trim();
-  const r = await fetchActualizationStateByUserId(userId);
+  const auth = await getCachedAuthUser();
+  const userId = auth?.id ?? profile.personaUserId.trim();
+  const role = auth?.role;
+  const r = await fetchActualizationStateByUserIdWithRole(userId, role);
   if (r.syncStatus === "api_ok" && r.meta.success) {
     writeLocalCache({ userId, state: r.meta.state, updatedAt: r.meta.updatedAt });
     return r;
@@ -179,7 +240,9 @@ export async function saveActualizationState(
   profile: ReleaseDemoProfile,
   state: ActualizationState,
 ): Promise<ActualizationLoadResult> {
-  const userId = profile.personaUserId.trim();
+  const auth = await getCachedAuthUser();
+  const userId = auth?.id ?? profile.personaUserId.trim();
+  const role = auth?.role;
   const next: ActualizationState = {
     ...state,
     version: ACTUALIZATION_STATE_VERSION,
@@ -188,7 +251,7 @@ export async function saveActualizationState(
   try {
     const res = await fetch("/api/actualization/state", {
       method: "POST",
-      headers: { ...demoHeaders(userId), "Content-Type": "application/json" },
+      headers: { ...demoHeaders(userId, role), "Content-Type": "application/json" },
       credentials: "same-origin",
       body: JSON.stringify({ userId, state: next }),
     });
