@@ -27,6 +27,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { Badge } from "@/components/ui/badge";
 import { TandoorLogo } from "@/components/tandoor-logo";
 import { ThemeToggleDesktop, ThemeToggleMobileBlock } from "@/components/theme-toggle";
+import { SaveStatusBadge } from "@/components/client-base-actualization-save-status-badge";
 import { cn } from "@/lib/utils";
 import { flattenGroupedPilotNavigation, type PilotNavGroup, type PilotNavItem, type PilotNavigationModel } from "@/lib/auth-access";
 
@@ -699,6 +700,7 @@ export function AppShell({
           <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3">
             <BrandBlock homeHref={homeHref} className="max-w-[132px]" />
             <div className="flex shrink-0 items-center gap-2">
+              <SaveStatusBadge />
               <ThemeToggleDesktop className="h-9 w-9" />
               {showAuditLogLink ? (
                 <Button asChild variant="outline" size="sm" className="h-9 shrink-0 border-border/80 px-2.5 text-xs">
@@ -806,6 +808,7 @@ export function AppShell({
             </Button>
           </form>
           <div className="ml-auto flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-2 sm:gap-3">
+            <SaveStatusBadge />
             <ThemeToggleDesktop />
             <Button type="button" variant="outline" size="sm" className="max-w-[10rem] truncate border-border/80" data-testid="button-current-city">
               <span data-testid="text-current-city">{cityLabel}</span>
@@ -894,6 +897,7 @@ export function AppShell({
                 </p>
               ) : null}
             </div>
+            <SaveStatusBadge />
           </div>
         </header>
 
