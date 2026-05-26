@@ -371,6 +371,52 @@ export function meHandler(input: { auth: AuthUserSnapshot }): AuthHttpResult {
   };
 }
 
+export async function myVisibleClientCodesHandler(input: { auth: AuthUserSnapshot }): Promise<AuthHttpResult> {
+  const db = getAuthDb();
+  if (!db) {
+    return { status: 500, json: { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." } };
+  }
+  const role = input.auth.role;
+  if (role === "admin" || role === "director" || role === "analyst" || role === "marketer") {
+    return { status: 200, cacheControl: "no-store", json: { success: true, all: true, codes: null } };
+  }
+  const uid = input.auth.userId;
+  if (role === "rop") {
+    const r = await db.execute<{ client_code: string }>(
+      sql`
+        SELECT DISTINCT ca.client_code AS "client_code"
+        FROM client_assignments ca
+        INNER JOIN teams t ON t.id = ca.team_id
+        WHERE t.rop_user_id = ${uid}::uuid
+      `,
+    );
+    const rows = (r as unknown as { rows?: { client_code: string }[] }).rows ?? (r as unknown as { client_code: string }[]);
+    const arr = Array.isArray(rows) ? rows : [];
+    return {
+      status: 200,
+      cacheControl: "no-store",
+      json: { success: true, all: false, codes: arr.map((x) => x.client_code).filter(Boolean) },
+    };
+  }
+  if (role === "manager" || role === "regional_manager") {
+    const r = await db.execute<{ client_code: string }>(
+      sql`
+        SELECT DISTINCT client_code AS "client_code"
+        FROM client_assignments
+        WHERE responsible_user_id = ${uid}::uuid
+      `,
+    );
+    const rows = (r as unknown as { rows?: { client_code: string }[] }).rows ?? (r as unknown as { client_code: string }[]);
+    const arr = Array.isArray(rows) ? rows : [];
+    return {
+      status: 200,
+      cacheControl: "no-store",
+      json: { success: true, all: false, codes: arr.map((x) => x.client_code).filter(Boolean) },
+    };
+  }
+  return { status: 200, cacheControl: "no-store", json: { success: true, all: false, codes: [] } };
+}
+
 export async function logoutHandler(input: {
   headers: Record<string, string | string[] | undefined>;
 }): Promise<AuthHttpResult> {

@@ -1,5 +1,5 @@
 /**
- * Vercel Serverless: `/api/auth/:action` (login | logout | logout-all | me).
+ * Vercel Serverless: `/api/auth/:action` (login | logout | logout-all | me | my-visible-codes).
  *
  * Self-contained: без импортов client/, server/, shared/. Vercel-tracing/bundler не должен
  * подтягивать пути проекта на этапе загрузки функции, иначе получим FUNCTION_INVOCATION_FAILED
@@ -870,6 +870,69 @@ async function handleMe(headers: Record<string, string | string[] | undefined>):
   };
 }
 
+async function handleMyVisibleCodes(headers: Record<string, string | string[] | undefined>): Promise<AuthResult> {
+  const token = parseAuthRefreshToken(typeof headers.cookie === "string" ? headers.cookie : undefined);
+  if (!token) {
+    return { status: 401, json: { success: false, code: "UNAUTHORIZED" } };
+  }
+  const pool = getPool();
+  if (!pool) {
+    return { status: 500, json: { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." } };
+  }
+  const hashHex = sha256Hex(token);
+  const res = await pool.query<DbUserRow & { refresh_token_hash: string }>(
+    `SELECT u.id, u.email, u.full_name, u.role, u.status, u.must_change_password, u.last_login_at,
+            s.refresh_token_hash
+     FROM sessions s
+     INNER JOIN users u ON u.id = s.user_id
+     WHERE s.refresh_token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > NOW()
+     LIMIT 1`,
+    [hashHex],
+  );
+  const row = res.rows[0];
+  if (!row || !timingSafeEqualHex(row.refresh_token_hash, token)) {
+    return { status: 401, json: { success: false, code: "UNAUTHORIZED" } };
+  }
+  const role = row.role as UserRole;
+  if (role === "admin" || role === "director" || role === "analyst" || role === "marketer") {
+    return {
+      status: 200,
+      cacheControl: "no-store",
+      json: { success: true, all: true, codes: null },
+    };
+  }
+  if (role === "rop") {
+    const q = await pool.query<{ client_code: string }>(
+      `SELECT DISTINCT ca.client_code AS client_code
+       FROM client_assignments ca
+       INNER JOIN teams t ON t.id = ca.team_id
+       WHERE t.rop_user_id = $1::uuid`,
+      [row.id],
+    );
+    return {
+      status: 200,
+      cacheControl: "no-store",
+      json: { success: true, all: false, codes: q.rows.map((r) => r.client_code).filter(Boolean) },
+    };
+  }
+  if (role === "manager" || role === "regional_manager") {
+    const q = await pool.query<{ client_code: string }>(
+      `SELECT DISTINCT client_code FROM client_assignments WHERE responsible_user_id = $1::uuid`,
+      [row.id],
+    );
+    return {
+      status: 200,
+      cacheControl: "no-store",
+      json: { success: true, all: false, codes: q.rows.map((r) => r.client_code).filter(Boolean) },
+    };
+  }
+  return {
+    status: 200,
+    cacheControl: "no-store",
+    json: { success: true, all: false, codes: [] },
+  };
+}
+
 async function handleLogout(headers: Record<string, string | string[] | undefined>): Promise<AuthResult> {
   const ip = getClientIp(headers);
   const userAgent = readUserAgent(headers);
@@ -986,6 +1049,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "me" && req.method === "GET") {
       applyResult(res, await handleMe(headers));
+      return;
+    }
+    if (action === "my-visible-codes" && req.method === "GET") {
+      applyResult(res, await handleMyVisibleCodes(headers));
       return;
     }
     if (action === "reset-request-approvers" && req.method === "POST") {

@@ -5,6 +5,7 @@ import {
   logoutHandler,
   logoutAllHandler,
   meHandler,
+  myVisibleClientCodesHandler,
   passwordResetLinkRedeemHandler,
 } from "./auth/handlers";
 import { requireAuth } from "./auth/require-auth";
@@ -115,6 +116,25 @@ export function registerAuthRoutes(app: Express): void {
     } catch (e) {
       const m = e instanceof Error ? e.message : String(e);
       console.error("[api/auth] me", m.slice(0, 200));
+      res.status(500).json({
+        success: false,
+        code: "INTERNAL_ERROR",
+        message: "Внутренняя ошибка сервера.",
+      });
+    }
+  });
+
+  app.get("/api/auth/my-visible-codes", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      if (!req.auth) {
+        res.status(401).json({ success: false, code: "UNAUTHORIZED" });
+        return;
+      }
+      const result = await myVisibleClientCodesHandler({ auth: req.auth });
+      applyAuthHttpResult(res, result);
+    } catch (e) {
+      const m = e instanceof Error ? e.message : String(e);
+      console.error("[api/auth] my-visible-codes", m.slice(0, 200));
       res.status(500).json({
         success: false,
         code: "INTERNAL_ERROR",

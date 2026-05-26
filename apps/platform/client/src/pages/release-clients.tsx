@@ -19,13 +19,17 @@ import {
 } from "@/lib/client-category";
 import {
   clientStatusLabel,
+  filterReleaseClientsByVisibleCodes,
   filterReleaseClientsForDemoProfile,
   getReleaseClientSummary,
   getReleaseClients,
   searchReleaseClients,
   type ReleaseClient,
 } from "@/lib/release-client-data";
+import { displayUserName } from "@/lib/auth-api";
+import { useAuthUser } from "@/hooks/use-auth-user";
 import { releaseDemoRoleLabel } from "@/lib/release-demo-profile";
+import { useMyVisibleClientCodes } from "@/lib/use-my-visible-client-codes";
 import { getManagersForRopTeam, getRopOptions, isRopOrManagerAllFilter } from "@/lib/rop-manager-filters";
 import { getSalesUserById, SALES_TEAMS } from "@/lib/sales-control-data";
 import { cn } from "@/lib/utils";
@@ -38,8 +42,24 @@ function uniqSorted(vals: string[]): string[] {
   return Array.from(new Set(vals.filter(Boolean))).sort((a, b) => a.localeCompare(b, "ru"));
 }
 
+function platformRoleLabel(role: string): string {
+  const labels: Record<string, string> = {
+    admin: "Администратор",
+    director: "Директор",
+    rop: "РОП",
+    regional_manager: "Региональный менеджер",
+    manager: "Менеджер",
+    marketer: "Маркетолог",
+    analyst: "Аналитик",
+  };
+  return labels[role] ?? role;
+}
+
 export default function ReleaseClientsPage() {
   const { profile } = useReleaseDemoProfile();
+  const { user: me, isLoading: authLoading, isError: authError } = useAuthUser();
+  const isRealUser = Boolean(me?.id);
+  const { data: visible, isLoading: visibleLoading } = useMyVisibleClientCodes({ enabled: isRealUser });
   const [query, setQuery] = useState("");
   const [teamId, setTeamId] = useState<string>(ALL);
   const [managerId, setManagerId] = useState<string>(ALL);
@@ -49,7 +69,16 @@ export default function ReleaseClientsPage() {
   const [priorityOnly, setPriorityOnly] = useState(false);
   const [includeClosed, setIncludeClosed] = useState(false);
 
-  const baseRows = useMemo(() => filterReleaseClientsForDemoProfile(getReleaseClients(), profile), [profile]);
+  const baseRows = useMemo(() => {
+    const all = getReleaseClients();
+    if (authLoading) return [];
+    if (authError) return filterReleaseClientsForDemoProfile(all, profile);
+    if (isRealUser) {
+      if (visibleLoading || !visible) return [];
+      return filterReleaseClientsByVisibleCodes(all, visible.codes);
+    }
+    return filterReleaseClientsForDemoProfile(all, profile);
+  }, [authLoading, authError, isRealUser, visible, visibleLoading, profile]);
 
   const scopeSummary = useMemo(() => getReleaseClientSummary(baseRows), [baseRows]);
 
@@ -109,7 +138,15 @@ export default function ReleaseClientsPage() {
             импорта; в репозитории без файла Excel используется синтетический набор из 2743 строк для проверки интерфейса.
           </p>
           <p className="text-sm text-foreground" data-testid="text-release-clients-context">
-            Вы смотрите клиентов как: {releaseDemoRoleLabel(profile.role)} · {persona?.name ?? "—"}
+            {isRealUser && me ? (
+              <>
+                Вы смотрите клиентов как: {platformRoleLabel(me.role)} · {displayUserName(me)}
+              </>
+            ) : (
+              <>
+                Вы смотрите клиентов как: {releaseDemoRoleLabel(profile.role)} · {persona?.name ?? "—"}
+              </>
+            )}
           </p>
         </div>
       </section>
