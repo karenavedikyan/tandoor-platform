@@ -102,7 +102,11 @@ async function getCachedAuthUser(): Promise<ActualizationAuthUser | null> {
   const now = Date.now();
   if (authUserCache && authUserCache.expiresAt > now) return authUserCache.value;
   const value = await resolveAuthUser();
-  authUserCache = { value, expiresAt: now + 60_000 };
+  if (value) {
+    authUserCache = { value, expiresAt: now + 60_000 };
+  } else {
+    authUserCache = null;
+  }
   return value;
 }
 

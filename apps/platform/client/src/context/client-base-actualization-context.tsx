@@ -72,7 +72,7 @@ export function ClientBaseActualizationProvider({ children }: { children: ReactN
     setErrorMessage(r.errorMessage);
     setState(r.meta.state);
     setLoading(false);
-  }, [enabled, profile]);
+  }, [enabled, profile, authUser?.id, authUser?.role]);
 
   useEffect(() => {
     void refresh();
