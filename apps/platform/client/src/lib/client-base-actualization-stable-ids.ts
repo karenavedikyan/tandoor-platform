@@ -184,6 +184,148 @@ export function findInnDuplicateInActualization(
 
 export type NameCityDuplicateMatch = { dealerId: string; name: string };
 
+/**
+ * Нормализует имя клиента: lower, trim, схлоп пробелов, убрать пунктуацию.
+ * Используется для сравнения «Бабич Элла Юрьевна ИП» == «Бабич, Элла  Юрьевна (ИП)».
+ */
+export function normalizeDealerNameForMatch(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[«»"'`,.()]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export type NameMatchCandidate = {
+  dealerId: string;
+  code: string | null;
+  name: string;
+  city: string;
+  managerName: string;
+  source: "release" | "manual";
+};
+
+function manualDealerManagerId(m: ManualDealer): string {
+  const f = (m.fields ?? {}) as Record<string, unknown>;
+  const releaseManagerId = typeof f.releaseManagerId === "string" ? f.releaseManagerId.trim() : "";
+  const managerUserId = typeof f.managerUserId === "string" ? f.managerUserId.trim() : "";
+  return releaseManagerId || managerUserId || "";
+}
+
+function manualDealerStringField(m: ManualDealer, key: string): string {
+  const f = (m.fields ?? {}) as Record<string, unknown>;
+  const v = f[key];
+  return typeof v === "string" ? v.trim() : "";
+}
+
+function candidatePriority(normalizedName: string, q: string): number | null {
+  if (normalizedName === q) return 0;
+  if (normalizedName.startsWith(q)) return 1;
+  if (normalizedName.includes(q)) return 2;
+  return null;
+}
+
+/**
+ * Поиск похожих клиентов по нормализованному имени в merged-строках (release + manual).
+ * Возвращает ≤ limit совпадений, отсортированных: точное совпадение > prefix > substring.
+ */
+export function findDealerCandidatesByName(args: {
+  nameQuery: string;
+  mergedRows: DealerRow[];
+  act?: ActualizationState;
+  managerUserId?: string;
+  excludeDealerId?: string;
+  limit?: number;
+}): NameMatchCandidate[] {
+  const q = normalizeDealerNameForMatch(args.nameQuery);
+  if (q.length < 3) return [];
+
+  const seen = new Set<string>();
+  const matches: Array<NameMatchCandidate & { priority: number }> = [];
+  const push = (candidate: NameMatchCandidate, priority: number) => {
+    if (args.excludeDealerId && candidate.dealerId === args.excludeDealerId) return;
+    if (seen.has(candidate.dealerId)) return;
+    seen.add(candidate.dealerId);
+    matches.push({ ...candidate, priority });
+  };
+
+  for (const row of args.mergedRows) {
+    if (args.managerUserId && row.releaseManagerId !== args.managerUserId) continue;
+    const priority = candidatePriority(normalizeDealerNameForMatch(row.name), q);
+    if (priority == null) continue;
+    push(
+      {
+        dealerId: row.id,
+        code: row.releaseCode?.trim() || null,
+        name: row.name,
+        city: row.city,
+        managerName: row.manager,
+        source: isManualActualizationDealerId(row.id) ? "manual" : "release",
+      },
+      priority,
+    );
+  }
+
+  if (args.act) {
+    for (const m of Object.values(args.act.manuallyCreatedDealersById)) {
+      if (args.managerUserId && manualDealerManagerId(m) !== args.managerUserId) continue;
+      const name = manualDealerStringField(m, "name") || manualDealerStringField(m, "dealerName");
+      const priority = candidatePriority(normalizeDealerNameForMatch(name), q);
+      if (priority == null) continue;
+      push(
+        {
+          dealerId: m.id,
+          code: getManualDealerDisplayCode(m),
+          name: name || "Клиент",
+          city: manualDealerStringField(m, "city"),
+          managerName: manualDealerStringField(m, "manager"),
+          source: "manual",
+        },
+        priority,
+      );
+    }
+  }
+
+  return matches
+    .sort((a, b) => a.priority - b.priority || a.name.localeCompare(b.name, "ru"))
+    .slice(0, args.limit ?? 6)
+    .map(({ priority: _priority, ...candidate }) => candidate);
+}
+
+/**
+ * Поиск точного дубля по нормализованному имени в скоупе менеджера.
+ * Возвращает первое совпадение или null.
+ */
+export function findExactNameDuplicateInActualization(
+  nameRaw: string,
+  mergedRows: DealerRow[],
+  act: ActualizationState,
+  managerUserId: string,
+  excludeDealerId?: string,
+): NameCityDuplicateMatch | null {
+  const name = normalizeDealerNameForMatch(nameRaw);
+  if (!name) return null;
+
+  for (const row of mergedRows) {
+    if (excludeDealerId && row.id === excludeDealerId) continue;
+    if (row.releaseManagerId !== managerUserId) continue;
+    if (normalizeDealerNameForMatch(row.name) === name) {
+      return { dealerId: row.id, name: row.name };
+    }
+  }
+
+  for (const m of Object.values(act.manuallyCreatedDealersById)) {
+    if (excludeDealerId && m.id === excludeDealerId) continue;
+    if (manualDealerManagerId(m) !== managerUserId) continue;
+    const manualName = manualDealerStringField(m, "name") || manualDealerStringField(m, "dealerName");
+    if (normalizeDealerNameForMatch(manualName) === name) {
+      return { dealerId: m.id, name: manualName || "Клиент" };
+    }
+  }
+
+  return null;
+}
+
 export function findNameCityDuplicateInActualization(
   nameRaw: string,
   cityRaw: string,
