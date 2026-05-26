@@ -69,7 +69,8 @@ export default function MyProfilePage() {
 
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
-  const [baseline, setBaseline] = useState<{ fullName: string; phone: string } | null>(null);
+  const [email, setEmail] = useState("");
+  const [baseline, setBaseline] = useState<{ fullName: string; phone: string; email: string } | null>(null);
   const [submitErr, setSubmitErr] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -77,6 +78,7 @@ export default function MyProfilePage() {
     const d = profileQ.data;
     if (!d) return;
     const fn = d.fullName?.trim() ?? "";
+    const em = (d.email ?? user.email ?? "").trim().toLowerCase();
     const phRaw = d.phone?.trim() ?? "";
     let ph = "";
     if (phRaw) {
@@ -84,14 +86,19 @@ export default function MyProfilePage() {
       ph = isValidRussianPhone(c) ? c : phRaw;
     }
     setFullName(fn);
+    setEmail(em);
     setPhone(ph);
-    setBaseline({ fullName: fn, phone: ph });
-  }, [profileQ.data]);
+    setBaseline({ fullName: fn, phone: ph, email: em });
+  }, [profileQ.data, user.email]);
 
   const dirty = useMemo(() => {
     if (!baseline) return false;
-    return fullName.trim() !== baseline.fullName || phone !== baseline.phone;
-  }, [baseline, fullName, phone]);
+    return (
+      fullName.trim() !== baseline.fullName ||
+      phone !== baseline.phone ||
+      email.trim().toLowerCase() !== baseline.email
+    );
+  }, [baseline, fullName, phone, email]);
 
   const validationErr = useMemo(() => {
     const fn = fullName.trim();
@@ -101,8 +108,12 @@ export default function MyProfilePage() {
     if (phone !== "" && !isValidRussianPhone(phone)) {
       return "Введите 10 цифр номера после +7.";
     }
+    const emRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const emTrim = email.trim();
+    if (!emTrim) return "Укажите email.";
+    if (!emRe.test(emTrim)) return "Укажите корректный email.";
     return "";
-  }, [fullName, phone]);
+  }, [fullName, phone, email]);
 
   if (!user) {
     return null;
@@ -119,13 +130,21 @@ export default function MyProfilePage() {
     }
     setSaving(true);
     try {
-      const payload: { fullName?: string; phone?: string | null } = {};
+      const payload: { fullName?: string; phone?: string | null; email?: string } = {};
       if (baseline && fullName.trim() !== baseline.fullName) payload.fullName = fullName.trim();
       if (baseline && phone !== baseline.phone) {
         payload.phone = phone === "" ? null : phone;
       }
+      if (baseline && email.trim().toLowerCase() !== baseline.email) {
+        payload.email = email.trim().toLowerCase();
+      }
       if (Object.keys(payload).length === 0) return;
-      await updateSelf(payload);
+      const u = await updateSelf(payload);
+      setBaseline({
+        fullName: u.fullName ?? "",
+        phone: u.phone ?? "",
+        email: (u.email ?? "").trim().toLowerCase(),
+      });
       toast({ title: "Профиль обновлён" });
       await invalidateAuthUser(qc);
       await qc.invalidateQueries({ queryKey: ["profile-self"] });
@@ -172,14 +191,10 @@ export default function MyProfilePage() {
       <Card className="rounded-xl border border-border bg-card shadow-sm">
         <CardHeader>
           <CardTitle className="text-base">Данные учётной записи</CardTitle>
-          <CardDescription>Email, роль и статус меняются только администратором.</CardDescription>
+          <CardDescription>Email и контакты вы можете изменить ниже. Роль и статус меняются только администратором.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4 text-sm">
           {profileQ.isError ? <p className="text-destructive">Не удалось загрузить профиль.</p> : null}
-          <div className="space-y-2">
-            <Label htmlFor="pf-email-ro">Email</Label>
-            <Input id="pf-email-ro" readOnly tabIndex={-1} value={p?.email ?? user.email} className={readOnlyInputClass} />
-          </div>
           <div className="space-y-2">
             <Label htmlFor="pf-role-demo-ro">Роль (пилот)</Label>
             <Input id="pf-role-demo-ro" readOnly tabIndex={-1} value={releaseDemoRoleLabel(salesRole)} className={readOnlyInputClass} />
@@ -218,6 +233,27 @@ export default function MyProfilePage() {
           </div>
 
           <div className="space-y-2 border-t border-border pt-4">
+            <Label htmlFor="pf-email">Email</Label>
+            <Input
+              id="pf-email"
+              type="email"
+              autoComplete="email"
+              data-testid="input-profile-email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="min-h-11 border-border bg-card focus-visible:ring-2 focus-visible:ring-primary"
+              disabled={profileQ.isLoading}
+            />
+            {email.trim() !== "" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) ? (
+              <p className="text-sm text-destructive" data-testid="text-profile-email-error">
+                Укажите корректный email.
+              </p>
+            ) : null}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            После смены email используйте новый адрес для входа в систему.
+          </p>
+          <div className="space-y-2">
             <Label htmlFor="pf-fn">ФИО</Label>
             <Input
               id="pf-fn"
