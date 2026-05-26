@@ -130,6 +130,40 @@ function coerceState(input: unknown): Record<string, unknown> {
   return merged;
 }
 
+function mergeActualizationStates(states: Record<string, unknown>[]): Record<string, unknown> {
+  const result = emptyState();
+  let maxUpdatedAt: string | null = null;
+
+  for (const state of states) {
+    const updatedAt = state.updatedAt;
+    if (typeof updatedAt === "string" && (!maxUpdatedAt || updatedAt > maxUpdatedAt)) {
+      maxUpdatedAt = updatedAt;
+    }
+  }
+
+  result.updatedAt = maxUpdatedAt;
+  result.updatedBy = typeof states[0]?.updatedBy === "string" ? states[0].updatedBy : null;
+
+  const base = emptyState();
+  for (const field of Object.keys(base)) {
+    if (field === "version" || field === "updatedAt" || field === "updatedBy") continue;
+    const target = result[field];
+    if (!isPlainObject(target)) continue;
+
+    for (const state of states) {
+      const value = state[field];
+      if (!isPlainObject(value)) continue;
+      for (const id of Object.keys(value)) {
+        if (!(id in target)) {
+          target[id] = value[id];
+        }
+      }
+    }
+  }
+
+  return result;
+}
+
 function buildResponse(
   success: boolean,
   storageMode: "persistent" | "server_memory" | "local_fallback" | "not_configured",
@@ -158,6 +192,43 @@ type SqlFn = (strings: TemplateStringsArray, ...params: unknown[]) => Promise<Re
 async function createSqlExecutor(connectionString: string): Promise<SqlFn> {
   const { neon } = await import("@neondatabase/serverless");
   return neon(connectionString);
+}
+
+async function fetchTeamScopedUserIds(sql: SqlFn, currentUserId: string, role: string | null): Promise<string[]> {
+  if (role === "admin" || role === "sales_director" || role === "marketer" || role === "analyst") {
+    const rows = await sql`
+      SELECT DISTINCT scope_key
+      FROM client_base_actualization_state
+      WHERE scope_key LIKE 'user:%'
+    `;
+    return rows.map((r) => String(r.scope_key).replace(/^user:/, ""));
+  }
+
+  if (role === "team_lead" || role === "manager") {
+    const rows = await sql`
+      SELECT DISTINCT m2.user_id
+      FROM user_team_memberships m1
+      JOIN user_team_memberships m2 ON m1.team_id = m2.team_id
+      WHERE m1.user_id = ${currentUserId}
+    `;
+    const ids = rows.map((r) => String(r.user_id));
+    if (!ids.includes(currentUserId)) ids.push(currentUserId);
+    return ids;
+  }
+
+  return [currentUserId];
+}
+
+async function resolveVisibleUserScopeKeys(sql: SqlFn, currentUserId: string, role: string | null): Promise<string[]> {
+  if (!role) return [`user:${currentUserId}`];
+
+  try {
+    const userIds = await fetchTeamScopedUserIds(sql, currentUserId, role);
+    return userIds.map((id) => `user:${id}`);
+  } catch {
+    // Если таблиц нет (старые миграции) — возвращаем только свой scope.
+    return [`user:${currentUserId}`];
+  }
 }
 
 function rowUpdatedAtIso(v: unknown): string | null {
@@ -481,9 +552,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
     if (req.method === "GET") {
       if (!dbUrl) {
-        const row = memoryStore.get(userId);
-        const state = row?.state ?? emptyState();
-        const updatedAt = row?.updatedAt ?? null;
+        const ownRow = memoryStore.get(userId);
+        const orderedStates: Record<string, unknown>[] = [ownRow ? coerceState(ownRow.state) : emptyState()];
+        let maxUpdatedAt: string | null = null;
+        for (const [storedUserId, row] of memoryStore.entries()) {
+          if (row.updatedAt && (!maxUpdatedAt || row.updatedAt > maxUpdatedAt)) maxUpdatedAt = row.updatedAt;
+          if (storedUserId !== userId) orderedStates.push(coerceState(row.state));
+        }
+        const state = mergeActualizationStates(orderedStates);
+        const updatedAt = ownRow?.updatedAt ?? maxUpdatedAt;
         sendJson(
           res,
           200,
@@ -500,14 +577,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
       try {
         const sql = await createSqlExecutor(dbUrl);
-        const rows = await sql`
-          SELECT state, updated_at
-          FROM client_base_actualization_state
-          WHERE scope_key = ${scopeKey}
-          LIMIT 1
-        `;
-        const first = rows[0];
-        if (!first) {
+        const visibleScopeKeys = await resolveVisibleUserScopeKeys(sql, userId, role);
+        const ownScope = scopeKeyForUser(userId);
+        const orderedScopes = [ownScope, ...visibleScopeKeys.filter((k) => k !== ownScope)];
+        if (orderedScopes.length === 0) {
           sendJson(
             res,
             200,
@@ -515,10 +588,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
           );
           return;
         }
-        const rawState = first.state;
-        const st = coerceState(rawState);
-        const updatedAt = rowUpdatedAtIso(first.updated_at);
-        sendJson(res, 200, buildResponse(true, "persistent", st, updatedAt, MSG_PERSISTENT_OK));
+        const rows = await sql`
+          SELECT scope_key, state, updated_at
+          FROM client_base_actualization_state
+          WHERE scope_key = ANY(${orderedScopes})
+        `;
+        const rowByScope = new Map<string, { state: unknown; updated_at: unknown }>();
+        for (const r of rows) {
+          rowByScope.set(String(r.scope_key), { state: r.state, updated_at: r.updated_at });
+        }
+        const orderedStates: Record<string, unknown>[] = [];
+        let maxUpdatedAt: string | null = null;
+        let ownUpdatedAt: string | null = null;
+        for (const sk of orderedScopes) {
+          const row = rowByScope.get(sk);
+          if (!row) {
+            if (sk === ownScope) orderedStates.push(emptyState());
+            continue;
+          }
+          orderedStates.push(coerceState(row.state));
+          const iso = rowUpdatedAtIso(row.updated_at);
+          if (iso) {
+            if (!maxUpdatedAt || iso > maxUpdatedAt) maxUpdatedAt = iso;
+            if (sk === ownScope) ownUpdatedAt = iso;
+          }
+        }
+        const merged = mergeActualizationStates(orderedStates);
+        const userVisibleUpdatedAt = ownUpdatedAt ?? maxUpdatedAt;
+        sendJson(res, 200, buildResponse(true, "persistent", merged, userVisibleUpdatedAt, MSG_PERSISTENT_OK));
       } catch (e) {
         const m = e instanceof Error ? e.message : String(e);
         console.error("[actualization-api] persistent GET", m.slice(0, 200));
