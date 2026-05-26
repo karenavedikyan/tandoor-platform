@@ -666,6 +666,8 @@ export type AppShellProps = {
   showAuditLogLink?: boolean;
   /** POC Bitrix24: без боковых панелей и с компактной шапкой. */
   embeddedBitrix24?: boolean;
+  /** Жёлтая плашка режима наблюдения (admin impersonation). */
+  impersonationBanner?: ReactNode;
 };
 
 export function AppShell({
@@ -677,6 +679,7 @@ export function AppShell({
   onLogout,
   showAuditLogLink = false,
   embeddedBitrix24 = false,
+  impersonationBanner,
 }: AppShellProps) {
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -691,6 +694,7 @@ export function AppShell({
         className="flex min-h-screen flex-col overflow-x-hidden bg-background text-foreground"
         data-testid="app-shell-embedded-bitrix24"
       >
+        {impersonationBanner}
         <header className="sticky top-0 z-40 border-b border-border/70 bg-card/95 px-3 py-2 shadow-xs backdrop-blur supports-[backdrop-filter]:bg-card/90">
           <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3">
             <BrandBlock homeHref={homeHref} className="max-w-[132px]" />
@@ -723,10 +727,12 @@ export function AppShell({
   }
 
   return (
-    <div
-      className="flex min-h-screen overflow-x-hidden bg-background text-foreground"
-      data-testid="app-shell-desktop"
-    >
+    <>
+      {impersonationBanner}
+      <div
+        className="flex min-h-screen overflow-x-hidden bg-background text-foreground"
+        data-testid="app-shell-desktop"
+      >
       <aside
         className="sticky top-0 z-30 hidden h-screen w-14 shrink-0 flex-col border-r border-border/70 bg-[hsl(var(--muted))] py-4 lg:flex"
         data-testid="app-shell-icon-rail"
@@ -894,5 +900,6 @@ export function AppShell({
         <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 py-5 sm:px-5 sm:py-6 lg:px-8 lg:py-7">{children}</main>
       </div>
     </div>
+    </>
   );
 }

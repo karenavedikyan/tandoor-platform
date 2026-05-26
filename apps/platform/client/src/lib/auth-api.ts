@@ -16,6 +16,11 @@ export type AuthUserDTO = {
   phone?: string | null;
   /** Может отсутствовать в старых ответах `GET /api/auth/me`. */
   createdAt?: string | null;
+  /**
+   * Если сессия создана через admin impersonation — строка «ФИО · email» администратора-наблюдателя.
+   * Иначе `null`.
+   */
+  impersonatedBy?: string | null;
 };
 
 export function displayUserName(u: AuthUserDTO | undefined): string {

@@ -16,12 +16,15 @@ import {
   defaultHomePathForUserRole,
   getPilotNavigation,
 } from "@/lib/auth-access";
-import { buildHashPath } from "@/lib/hash-route-utils";
+import { buildBrowserHashAppHref, buildHashPath } from "@/lib/hash-route-utils";
 import { useBitrix24EmbeddedFlag } from "@/lib/bitrix24-integration";
 import { isDemoAuthBypassEnabled } from "@/lib/release-demo-bypass";
 import { userRoleToSalesRole } from "@/lib/role-mapping";
 import { userHas } from "@/lib/auth-rbac";
 import type { AuthUserDTO } from "@/lib/auth-api";
+import type { UserRole } from "@shared/auth";
+import { useStopImpersonation } from "@/lib/use-impersonation";
+import { useToast } from "@/hooks/use-toast";
 import NotFound from "@/pages/not-found";
 import PreviewUnavailable from "@/pages/preview-unavailable";
 import InternalPrototypePlaceholder from "@/pages/internal-prototype-placeholder";
@@ -185,6 +188,18 @@ function AccountDisabledScreen({ onLogout }: { onLogout: () => void }) {
   );
 }
 
+
+
+const IMPERSONATION_ROLE_LABELS_RU: Record<UserRole, string> = {
+  director: "Директор",
+  rop: "РОП",
+  regional_manager: "Региональный менеджер",
+  manager: "Менеджер",
+  marketer: "Маркетолог",
+  analyst: "Аналитик",
+  admin: "Администратор",
+};
+
 function AuthenticatedShell({
   user,
   shellHomeHref,
@@ -229,6 +244,44 @@ function AuthenticatedShell({
   );
 
   const showAuditLogLink = userHas(user.role, "audit.read");
+  const { toast } = useToast();
+  const stopImpersonation = useStopImpersonation();
+
+  const impersonationBanner =
+    user.impersonatedBy ? (
+      <div className="sticky top-0 z-50 border-b border-amber-300 bg-amber-100 px-4 py-2 text-sm text-amber-900 shadow-sm">
+        <div className="mx-auto flex w-full max-w-[1400px] flex-wrap items-center justify-between gap-3">
+          <p className="min-w-0 flex-1 leading-snug">
+            <span aria-hidden>🛈 </span>
+            Вы наблюдаете за <strong>{displayUserName(user)}</strong> · {IMPERSONATION_ROLE_LABELS_RU[user.role]}. Все действия
+            логируются.
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="shrink-0 border-amber-400 bg-white text-amber-900 hover:bg-amber-50"
+            disabled={stopImpersonation.isPending}
+            onClick={() => {
+              void stopImpersonation
+                .mutateAsync()
+                .then(() => {
+                  window.location.assign(buildBrowserHashAppHref("/admin/users"));
+                })
+                .catch((e: unknown) => {
+                  toast({
+                    variant: "destructive",
+                    title: "Не удалось выйти из режима наблюдения",
+                    description: e instanceof Error ? e.message : "Ошибка запроса",
+                  });
+                });
+            }}
+          >
+            Вернуться в свой аккаунт
+          </Button>
+        </div>
+      </div>
+    ) : null;
 
   return (
     <AppShell
@@ -238,6 +291,7 @@ function AuthenticatedShell({
       onLogout={() => void onLogout()}
       showAuditLogLink={showAuditLogLink}
       embeddedBitrix24={embeddedBitrix24}
+      impersonationBanner={impersonationBanner}
     >
       <Switch>
         <Route path="/" component={SalesManagerWorkspaceRoute} />

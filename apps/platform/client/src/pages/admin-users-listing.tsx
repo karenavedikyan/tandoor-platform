@@ -229,7 +229,7 @@ export function AdminUsersDesktopPanels(props: AdminUsersListingProps) {
             <TableHead>Создан</TableHead>
             <TableHead>Последний вход</TableHead>
             <TableHead className="min-w-[200px]">Telegram user-id</TableHead>
-            <TableHead className="w-[72px] text-right">Действия</TableHead>
+            <TableHead className="min-w-[132px] text-right">Действия</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
