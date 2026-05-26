@@ -4,9 +4,9 @@
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { SALES_TEAMS, SALES_USERS, getSalesUserById } from "@/lib/sales-control-data";
-import { RELEASE_CLIENT_ROWS } from "@/lib/release-client-seed.generated";
-import { RELEASE_CLIENT_ROWS_KOTENEVA } from "@/lib/release-client-seed-koteneva.generated";
+import { SALES_TEAMS, SALES_USERS, getSalesUserById } from "../../client/src/lib/sales-control-data";
+import { RELEASE_CLIENT_ROWS } from "../../client/src/lib/release-client-seed.generated";
+import { RELEASE_CLIENT_ROWS_KOTENEVA } from "../../client/src/lib/release-client-seed-koteneva.generated";
 
 export interface PoolLike {
   query: <T = Record<string, unknown>>(
