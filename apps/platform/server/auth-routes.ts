@@ -1,6 +1,8 @@
 import type { Express, Request, Response } from "express";
 import type { AuthHttpResult } from "./auth/handlers";
 import {
+  impersonateStartHandler,
+  impersonateStopHandler,
   loginHandler,
   logoutHandler,
   logoutAllHandler,
@@ -98,6 +100,54 @@ export function registerAuthRoutes(app: Express): void {
     } catch (e) {
       const m = e instanceof Error ? e.message : String(e);
       console.error("[api/auth] logout-all", m.slice(0, 200));
+      res.status(500).json({
+        success: false,
+        code: "INTERNAL_ERROR",
+        message: "Внутренняя ошибка сервера.",
+      });
+    }
+  });
+
+  app.post("/api/auth/impersonate-start", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      if (!enforceCsrfOrigin(req)) {
+        rejectCsrfJson(res);
+        return;
+      }
+      if (!req.auth) {
+        res.status(401).json({ success: false, code: "UNAUTHENTICATED" });
+        return;
+      }
+      const result = await impersonateStartHandler({
+        auth: req.auth,
+        headers: req.headers as Record<string, string | string[] | undefined>,
+        body: req.body,
+      });
+      applyAuthHttpResult(res, result);
+    } catch (e) {
+      const m = e instanceof Error ? e.message : String(e);
+      console.error("[api/auth] impersonate-start", m.slice(0, 200));
+      res.status(500).json({
+        success: false,
+        code: "INTERNAL_ERROR",
+        message: "Внутренняя ошибка сервера.",
+      });
+    }
+  });
+
+  app.post("/api/auth/impersonate-stop", async (req: Request, res: Response) => {
+    try {
+      if (!enforceCsrfOrigin(req)) {
+        rejectCsrfJson(res);
+        return;
+      }
+      const result = await impersonateStopHandler({
+        headers: req.headers as Record<string, string | string[] | undefined>,
+      });
+      applyAuthHttpResult(res, result);
+    } catch (e) {
+      const m = e instanceof Error ? e.message : String(e);
+      console.error("[api/auth] impersonate-stop", m.slice(0, 200));
       res.status(500).json({
         success: false,
         code: "INTERNAL_ERROR",

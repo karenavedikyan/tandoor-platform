@@ -231,6 +231,7 @@ export const sessions = pgTable("sessions", {
   ip: text("ip"),
   expiresAt: timestamp("expires_at", { withTimezone: true, mode: "string" }).notNull(),
   revokedAt: timestamp("revoked_at", { withTimezone: true, mode: "string" }),
+  impersonatorUserId: uuid("impersonator_user_id").references(() => authUsers.id, { onDelete: "set null" }),
 });
 
 export const auditLog = pgTable("audit_log", {

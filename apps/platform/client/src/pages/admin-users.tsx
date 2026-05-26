@@ -31,7 +31,7 @@ import { createPasswordResetLink } from "@/lib/password-reset-api";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { formatDisplayDateTime } from "@/lib/format-display-date";
 import { Link } from "wouter";
-import { MoreHorizontal } from "lucide-react";
+import { LogIn, MoreHorizontal } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -54,6 +54,8 @@ import { useToast } from "@/hooks/use-toast";
 import { getUserTeamHistory, listTeams, reassignUserTeam } from "@/lib/client-assignments-api";
 
 import { userHas } from "@/lib/auth-rbac";
+import { useStartImpersonation } from "@/lib/use-impersonation";
+import { buildBrowserHashAppHref } from "@/lib/hash-route-utils";
 import { canCreateResetLink, defaultHomePathForUserRole } from "@/lib/auth-access";
 
 const rolesRu: Record<UserRole, string> = {
@@ -254,6 +256,8 @@ export default function AdminUsersPage() {
   const canRole = Boolean(user && userHas(user.role, "users.update_role"));
   const canStatus = Boolean(user && userHas(user.role, "users.update_status"));
   const canResetPwd = Boolean(user && userHas(user.role, "users.reset_password"));
+  const canImpersonate = Boolean(user && userHas(user.role, "users.impersonate"));
+  const startImpersonation = useStartImpersonation();
   const canEditAdminTelegram = Boolean(user?.role === "admin" && canRole);
 
   const [telegramDraftByUserId, setTelegramDraftByUserId] = useState<Record<string, string>>({});
@@ -428,6 +432,70 @@ export default function AdminUsersPage() {
       )}
     </>
   );
+  const userActionsSlot = (row: AdminUser, triggerTestId?: string) => (
+    <div className="flex items-start justify-end gap-1">
+      {canImpersonate && row.role !== "admin" && user && row.id !== user.id ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-11 min-h-11 w-11 min-w-11 shrink-0 border-[#A6CE39]/60 text-[#A6CE39] hover:bg-[#A6CE39]/12"
+              aria-label={`Войти как ${row.fullName?.trim() || row.email}`}
+              disabled={startImpersonation.isPending}
+              onClick={() => {
+                const label = row.fullName?.trim() || row.email;
+                if (
+                  !window.confirm(
+                    `Войти под "${label}"? Сессия 60 минут. Все действия будут залогированы.`,
+                  )
+                ) {
+                  return;
+                }
+                startImpersonation.mutate(row.id, {
+                  onError: (e) => {
+                    toast({
+                      variant: "destructive",
+                      title: "Не удалось войти под пользователем",
+                      description: e instanceof Error ? e.message : "Ошибка запроса",
+                    });
+                  },
+                  onSuccess: () => {
+                    window.location.assign(buildBrowserHashAppHref("/"));
+                  },
+                });
+              }}
+            >
+              <LogIn className="h-5 w-5" aria-hidden />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="left" className="max-w-xs">
+            Войти как {row.fullName?.trim() || row.email} (только для проверки UI)
+          </TooltipContent>
+        </Tooltip>
+      ) : null}
+      <AdminUserActionsDropdown
+        row={row}
+        viewer={user}
+        canRole={canRole}
+        canResetPwd={canResetPwd}
+        canStatus={canStatus}
+        canTeam={canTeamMgmt && row.role !== "admin"}
+        onRole={openRole}
+        onResetLink={openResetLink}
+        onPwd={openPwd}
+        onStatus={openStatus}
+        onTeamChange={(u) => {
+          setTeamMoveDialog(u);
+          setTeamMoveToId("");
+          setTeamMoveReason("");
+        }}
+        onTeamHistory={(u) => setTeamHistoryUser(u)}
+        triggerTestId={triggerTestId}
+      />
+    </div>
+  );
 
 
   return (
@@ -506,27 +574,7 @@ export default function AdminUsersPage() {
         setExpandedRop={setExpandedRop}
         listQ={listQ}
         telegramSlot={telegramInner}
-        actionsSlot={(row, triggerTestId) => (
-          <AdminUserActionsDropdown
-            row={row}
-            viewer={user}
-            canRole={canRole}
-            canResetPwd={canResetPwd}
-            canStatus={canStatus}
-            canTeam={canTeamMgmt && row.role !== "admin"}
-            onRole={openRole}
-            onResetLink={openResetLink}
-            onPwd={openPwd}
-            onStatus={openStatus}
-            onTeamChange={(u) => {
-              setTeamMoveDialog(u);
-              setTeamMoveToId("");
-              setTeamMoveReason("");
-            }}
-            onTeamHistory={(u) => setTeamHistoryUser(u)}
-            triggerTestId={triggerTestId}
-          />
-        )}
+        actionsSlot={userActionsSlot}
       />
 
       <AdminUsersDesktopPanels
@@ -536,27 +584,7 @@ export default function AdminUsersPage() {
         setExpandedRop={setExpandedRop}
         listQ={listQ}
         telegramSlot={telegramInner}
-        actionsSlot={(row, triggerTestId) => (
-          <AdminUserActionsDropdown
-            row={row}
-            viewer={user}
-            canRole={canRole}
-            canResetPwd={canResetPwd}
-            canStatus={canStatus}
-            canTeam={canTeamMgmt && row.role !== "admin"}
-            onRole={openRole}
-            onResetLink={openResetLink}
-            onPwd={openPwd}
-            onStatus={openStatus}
-            onTeamChange={(u) => {
-              setTeamMoveDialog(u);
-              setTeamMoveToId("");
-              setTeamMoveReason("");
-            }}
-            onTeamHistory={(u) => setTeamHistoryUser(u)}
-            triggerTestId={triggerTestId}
-          />
-        )}
+        actionsSlot={userActionsSlot}
       />
 
       {hierarchyMode && total > HIERARCHY_LIMIT ? (
