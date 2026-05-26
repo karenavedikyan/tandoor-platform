@@ -78,7 +78,7 @@ export default function MyProfilePage() {
     const d = profileQ.data;
     if (!d) return;
     const fn = d.fullName?.trim() ?? "";
-    const em = (d.email ?? user.email ?? "").trim().toLowerCase();
+    const em = (d.email ?? user?.email ?? "").trim().toLowerCase();
     const phRaw = d.phone?.trim() ?? "";
     let ph = "";
     if (phRaw) {
@@ -89,7 +89,7 @@ export default function MyProfilePage() {
     setEmail(em);
     setPhone(ph);
     setBaseline({ fullName: fn, phone: ph, email: em });
-  }, [profileQ.data, user.email]);
+  }, [profileQ.data, user?.email]);
 
   const dirty = useMemo(() => {
     if (!baseline) return false;
