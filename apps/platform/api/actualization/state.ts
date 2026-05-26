@@ -70,6 +70,8 @@ function emptyState(): Record<string, unknown> {
     archivedLegalEntitiesById: {},
     legalEntityOverridesByDealerId: {},
     dealerCardViewSettingsByUserId: {},
+    dealerActualizationContactsById: {},
+    dealerActualizationAuditByDealerId: {},
     unloadingOrderByDealerId: {},
     routeOrderByRouteId: {},
     dealerPhotosByDealerId: {},
