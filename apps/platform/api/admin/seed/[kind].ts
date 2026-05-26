@@ -7,8 +7,6 @@
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { SALES_TEAMS, SALES_USERS, getSalesUserById } from "../../../client/src/lib/sales-control-data";
-import { RELEASE_CLIENT_ROWS } from "../../../client/src/lib/release-client-seed.generated";
-import { RELEASE_CLIENT_ROWS_KOTENEVA } from "../../../client/src/lib/release-client-seed-koteneva.generated";
 import {
   enforceCsrfOrigin,
   getPool,
@@ -23,10 +21,14 @@ function normName(s: string): string {
   return s.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-function mergedClientRows(): Array<{ code: string; teamId: string; managerName: string }> {
-  const kotCodes = new Set(RELEASE_CLIENT_ROWS_KOTENEVA.map((r) => r.code).filter(Boolean));
-  const base = RELEASE_CLIENT_ROWS.filter((r) => !r.code || !kotCodes.has(r.code));
-  return [...base, ...RELEASE_CLIENT_ROWS_KOTENEVA].map((r) => ({
+async function loadMergedClientRows(): Promise<Array<{ code: string; teamId: string; managerName: string }>> {
+  const base = await import("../../../client/src/lib/release-client-seed.generated");
+  const kot = await import("../../../client/src/lib/release-client-seed-koteneva.generated");
+  const kotRows = kot.RELEASE_CLIENT_ROWS_KOTENEVA as Array<{ code: string; teamId: string; managerName: string }>;
+  const baseRows = base.RELEASE_CLIENT_ROWS as Array<{ code: string; teamId: string; managerName: string }>;
+  const kotCodes = new Set(kotRows.map((r) => r.code).filter(Boolean));
+  const filtered = baseRows.filter((r) => !r.code || !kotCodes.has(r.code));
+  return [...filtered, ...kotRows].map((r) => ({
     code: r.code,
     teamId: r.teamId,
     managerName: r.managerName,
@@ -141,7 +143,7 @@ async function handleSeedClientsAssignments(
     if (tr.rows[0]) mockTeamToDbTeamId.set(st.id, String(tr.rows[0].id));
   }
 
-  const rows = mergedClientRows();
+  const rows = await loadMergedClientRows();
   const unresolvedClientCodes: string[] = [];
   let clientsSeeded = 0;
   let clientsSkipped = 0;
