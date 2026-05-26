@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { ChevronRight, ExternalLink, Info } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -43,7 +44,7 @@ import { realRopOptions } from "@/lib/real-org-adapter";
 import type { OrgSnapshot } from "@/lib/use-org-snapshot";
 import type { DealerBaseAccessRole } from "@/lib/dealer-base-role-views";
 import { buildHashPath } from "@/lib/hash-route-utils";
-import type { ClientBaseOverview } from "@/lib/client-base-overview-api";
+import { fetchClientBaseManagerDetail, type ClientBaseOverview } from "@/lib/client-base-overview-api";
 import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actualization-sync-status";
 import { DealerActualizationCreateDialog } from "@/components/client-base-actualization-dealer-forms";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
@@ -73,6 +74,8 @@ type DetailKind =
   | { kind: "rop"; teamId: string }
   | { kind: "manager"; teamId: string; managerId: string }
   | { kind: "city"; cityKey: string }
+  | { kind: "rop_overview"; teamId: string }
+  | { kind: "manager_overview"; managerUserId: string; teamId: string }
   | { kind: "kpi-clients" }
   | { kind: "kpi-trade-points" };
 
@@ -107,6 +110,7 @@ function readOpenRops(): string[] {
 
 function detailRows(detail: DetailKind | null, ropGroups: RopGroupModel[], cities: CityRowModel[], allRows: DealerRow[]): DealerRow[] {
   if (!detail) return [];
+  if (detail.kind === "rop_overview" || detail.kind === "manager_overview") return [];
   if (detail.kind === "kpi-clients" || detail.kind === "kpi-trade-points") return allRows;
   if (detail.kind === "city") {
     const c = cities.find((x) => x.cityKey === detail.cityKey);
@@ -122,6 +126,8 @@ function detailRows(detail: DetailKind | null, ropGroups: RopGroupModel[], citie
 
 function detailTitle(detail: DetailKind | null, ropGroups: RopGroupModel[], cities: CityRowModel[]): string {
   if (!detail) return "";
+  if (detail.kind === "rop_overview") return "Детали команды";
+  if (detail.kind === "manager_overview") return "Менеджер";
   if (detail.kind === "kpi-clients") return "Клиенты";
   if (detail.kind === "kpi-trade-points") return "Торговые точки";
   if (detail.kind === "city") return cities.find((c) => c.cityKey === detail.cityKey)?.displayName ?? "Город";
@@ -155,6 +161,7 @@ export function DealerBaseManagementCockpit({
 
   const [mode, setMode] = useState<DirectorClientBaseMode>(() => readMode());
   const [openRops, setOpenRops] = useState<string[]>(() => readOpenRops());
+  const [openOverviewTeamIds, setOpenOverviewTeamIds] = useState<string[]>([]);
   const [detail, setDetail] = useState<DetailKind | null>(null);
   const [detailTab, setDetailTab] = useState<"clients" | "tp">("clients");
   const [clientFilter, setClientFilter] = useState<ClientListFilter>("all");
@@ -211,6 +218,12 @@ export function DealerBaseManagementCockpit({
   const tradePointRows = useMemo(() => flattenTradePointsForRows(detailSourceRows), [detailSourceRows]);
 
   const closeDetail = useCallback(() => setDetail(null), []);
+  const overviewManagerId = detail?.kind === "manager_overview" ? detail.managerUserId : null;
+  const managerDetailQ = useQuery({
+    queryKey: ["client-base-manager-detail", overviewManagerId],
+    queryFn: () => fetchClientBaseManagerDetail(overviewManagerId ?? ""),
+    enabled: Boolean(overview && overviewManagerId),
+  });
 
   const mergedForCreate = useMemo(() => {
     if (mergedDealerRowsForCreate && mergedDealerRowsForCreate.length > 0) return mergedDealerRowsForCreate;
@@ -299,31 +312,60 @@ export function DealerBaseManagementCockpit({
           </Card>
         </section>
         <section className="space-y-3" data-testid="section-client-base-rop-groups">
-          {overview.ropGroups.map((g) => (
-            <Card key={g.teamId ?? "no-rop"} className="rounded-xl border border-border bg-card text-card-foreground shadow-sm" data-testid={`card-client-base-rop-${g.teamId ?? "no-rop"}`}>
-              <CardContent className="space-y-3 p-4">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <p className="font-semibold text-foreground">{g.teamName}</p>
-                    <p className="text-xs text-muted-foreground">{g.ropFullName} · менеджеров {g.managerCount}</p>
-                  </div>
-                  <Button type="button" variant="outline" size="sm" data-testid={`button-client-base-rop-toggle-${g.teamId ?? "no-rop"}`} onClick={() => setDetail({ kind: "rop", teamId: g.teamId ?? "__no_rop__" })}>
-                    Детали команды
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">клиенты {g.clients} · ТТ {g.tradePoints} · потенц. {g.potential} · вним. {g.attention}</p>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {g.managers.map((m) => (
-                    <button key={m.userId} type="button" className="rounded-xl border border-border bg-card p-3 text-left hover:bg-primary/10" data-testid={`button-client-base-manager-open-${m.userId}`} onClick={() => setDetail({ kind: "manager", teamId: g.teamId ?? "__no_rop__", managerId: m.userId })}>
-                      <p className="truncate text-sm font-semibold text-foreground" data-testid={`card-client-base-manager-${m.userId}`}>{m.fullName}</p>
-                      <p className="mt-1 text-[11px] text-muted-foreground">активные {m.active} · ТТ {m.tradePoints} · сегм. {m.segment ?? "—"}</p>
-                      <p className="text-[11px] text-muted-foreground">потенц. {m.potential} · вним. {m.attention}</p>
-                    </button>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+          <Accordion type="multiple" value={openOverviewTeamIds} onValueChange={setOpenOverviewTeamIds} className="space-y-2">
+            {overview.ropGroups.map((g) => {
+              const teamKey = g.teamId ?? "__no_rop__";
+              return (
+                <AccordionItem
+                  key={teamKey}
+                  value={teamKey}
+                  className="rounded-xl border border-border bg-card text-card-foreground shadow-sm"
+                  data-testid={`card-client-base-rop-${teamKey}`}
+                >
+                  <AccordionTrigger className="px-4 py-3 hover:no-underline" data-testid={`button-client-base-rop-toggle-${teamKey}`}>
+                    <div className="flex flex-1 flex-wrap items-start justify-between gap-2 text-left">
+                      <div>
+                        <p className="font-semibold text-foreground">{g.teamName}</p>
+                        <p className="text-xs text-muted-foreground">{g.ropFullName} · менеджеров {g.managerCount}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          data-testid={`button-client-base-rop-details-${teamKey}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDetail({ kind: "rop_overview", teamId: teamKey });
+                          }}
+                        >
+                          Детали команды
+                        </Button>
+                      </div>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="px-4 pb-3 pt-0">
+                    <p className="mb-2 text-xs text-muted-foreground">клиенты {g.clients} · ТТ {g.tradePoints} · потенц. {g.potential} · вним. {g.attention}</p>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {g.managers.map((m) => (
+                        <button
+                          key={m.userId}
+                          type="button"
+                          className="rounded-xl border border-border bg-card p-3 text-left transition-colors hover:bg-primary/10"
+                          data-testid={`button-client-base-manager-open-${m.userId}`}
+                          onClick={() => setDetail({ kind: "manager_overview", managerUserId: m.userId, teamId: teamKey })}
+                        >
+                          <p className="truncate text-sm font-semibold text-foreground" data-testid={`card-client-base-manager-${m.userId}`}>{m.fullName}</p>
+                          <p className="mt-1 text-[11px] text-muted-foreground">активные {m.active} · ТТ {m.tradePoints} · сегм. {m.segment ?? "—"}</p>
+                          <p className="text-[11px] text-muted-foreground">потенц. {m.potential} · вним. {m.attention}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              );
+            })}
+          </Accordion>
         </section>
         <DealerActualizationCreateDialog
           open={createDealerOpen}
@@ -332,6 +374,76 @@ export function DealerBaseManagementCockpit({
           mergedDealerRows={mergedForCreate}
           onCreated={(id) => setLocation(`/dealers/${encodeURIComponent(id)}`)}
         />
+        <Sheet open={Boolean(detail?.kind === "manager_overview" || detail?.kind === "rop_overview")} onOpenChange={(o) => !o && closeDetail()}>
+          <SheetContent side="bottom" className="max-h-[88vh] rounded-t-2xl border-border bg-card p-0">
+            <SheetHeader className="border-b border-border px-4 pb-3 pt-4 text-left">
+              <SheetTitle className="text-base text-foreground">
+                {detail?.kind === "manager_overview"
+                  ? managerDetailQ.data?.manager.fullName ?? "Менеджер"
+                  : detail?.kind === "rop_overview"
+                    ? overview.ropGroups.find((g) => (g.teamId ?? "__no_rop__") === detail.teamId)?.teamName ?? "Команда"
+                    : "Команда"}
+              </SheetTitle>
+              <SheetDescription>
+                {detail?.kind === "manager_overview" && managerDetailQ.data
+                  ? `Команда: ${managerDetailQ.data.manager.ropFullName} · клиентов ${managerDetailQ.data.clients.length} · ТТ ${managerDetailQ.data.tradePoints.length}`
+                  : "Реальные данные из актуализации"}
+              </SheetDescription>
+            </SheetHeader>
+            <div className="max-h-[70vh] overflow-y-auto px-4 pb-24 pt-3" data-testid="dialog-client-base-group-detail">
+              {detail?.kind === "manager_overview" ? (
+                managerDetailQ.isLoading ? (
+                  <div className="space-y-2">
+                    {[0, 1, 2, 3].map((i) => (
+                      <div key={i} className="h-20 animate-pulse rounded-xl border border-border bg-muted/30" />
+                    ))}
+                  </div>
+                ) : managerDetailQ.data?.clients.length ? (
+                  <div className="space-y-2">
+                    {[...managerDetailQ.data.clients]
+                      .sort((a, b) => a.fullName.localeCompare(b.fullName, "ru"))
+                      .map((c) => (
+                        <Card key={c.id} className="rounded-xl border border-border bg-card text-card-foreground">
+                          <CardContent className="space-y-1 p-3">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-semibold text-foreground">{c.fullName}</p>
+                                <p className="text-xs text-muted-foreground">{c.city ?? "—"} · ТТ {c.tradePointsCount}</p>
+                                <p className="text-[11px] text-muted-foreground">ИНН {c.inn ?? "—"} · юрлицо {c.legalEntity ? "есть" : "—"}</p>
+                                <p className="text-[11px] text-muted-foreground">
+                                  статус: {c.status === "active" ? "активный" : c.status === "potential" ? "потенциальный" : "внимание"}
+                                </p>
+                              </div>
+                              <Button asChild variant="outline" size="sm">
+                                <Link href={buildHashPath(`/dealers/${encodeURIComponent(c.dealerProfileId ?? c.id)}`)}>Карточка</Link>
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                  </div>
+                ) : (
+                  <p className="py-6 text-center text-sm text-muted-foreground">У менеджера нет клиентов в базе</p>
+                )
+              ) : null}
+              {detail?.kind === "rop_overview" ? (
+                <div className="space-y-2">
+                  {(overview.ropGroups.find((g) => (g.teamId ?? "__no_rop__") === detail.teamId)?.managers ?? []).map((m) => (
+                    <button
+                      key={m.userId}
+                      type="button"
+                      className="w-full rounded-xl border border-border bg-card p-3 text-left hover:bg-primary/10"
+                      onClick={() => setDetail({ kind: "manager_overview", managerUserId: m.userId, teamId: detail.teamId })}
+                    >
+                      <p className="truncate text-sm font-semibold text-foreground">{m.fullName}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">активные {m.active} · ТТ {m.tradePoints} · потенц. {m.potential} · вним. {m.attention}</p>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </SheetContent>
+        </Sheet>
       </div>
     );
   }
