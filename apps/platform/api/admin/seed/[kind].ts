@@ -2,11 +2,15 @@
  * POST /api/admin/seed/teams           — seed teams + memberships из SALES_TEAMS/SALES_USERS
  * POST /api/admin/seed/clients-assignments — seed client_assignments из RELEASE_CLIENT_ROWS*
  *
- * Объединено в одну serverless-функцию через dynamic route [kind] из-за лимита Hobby (12 функций).
+ * Объединено в одну serverless-функцию через dynamic route [kind] (Hobby 12-fn лимит).
+ * Данные читаются из `_data/*.json` через fs.readFileSync — это намного дешевле,
+ * чем top-level eval 2.2MB JS-литерала (что роняло функцию).
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { SALES_TEAMS, SALES_USERS, getSalesUserById } from "../../../client/src/lib/sales-control-data";
+import { readFileSync, existsSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   enforceCsrfOrigin,
   getPool,
@@ -15,36 +19,59 @@ import {
   vercelHeaders,
 } from "../_handlers/admin-auth";
 
-export const config = { maxDuration: 60 };
+export const config = {
+  maxDuration: 60,
+  includeFiles: "_data/**",
+};
+
+type SalesUser = { id: string; name: string; role: string; teamId?: string | null };
+type SalesTeam = { id: string; name: string; leadId: string };
+type ReleaseRow = { code: string; teamId: string; managerName: string };
+type SalesPayload = { teams: SalesTeam[]; users: SalesUser[] };
+
+function loadJson<T>(filename: string): T {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    join(here, "_data", filename),
+    resolve(process.cwd(), "api/admin/seed/_data", filename),
+    resolve(process.cwd(), "apps/platform/api/admin/seed/_data", filename),
+  ];
+  for (const p of candidates) {
+    if (existsSync(p)) {
+      return JSON.parse(readFileSync(p, "utf8")) as T;
+    }
+  }
+  throw new Error(`Seed data not found: ${filename}`);
+}
 
 function normName(s: string): string {
   return s.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-async function loadMergedClientRows(): Promise<Array<{ code: string; teamId: string; managerName: string }>> {
-  const base = await import("../../../client/src/lib/release-client-seed.generated");
-  const kot = await import("../../../client/src/lib/release-client-seed-koteneva.generated");
-  const kotRows = kot.RELEASE_CLIENT_ROWS_KOTENEVA as Array<{ code: string; teamId: string; managerName: string }>;
-  const baseRows = base.RELEASE_CLIENT_ROWS as Array<{ code: string; teamId: string; managerName: string }>;
-  const kotCodes = new Set(kotRows.map((r) => r.code).filter(Boolean));
-  const filtered = baseRows.filter((r) => !r.code || !kotCodes.has(r.code));
-  return [...filtered, ...kotRows].map((r) => ({
+function loadSales(): SalesPayload {
+  return loadJson<SalesPayload>("sales.json");
+}
+
+function loadMergedClientRows(): ReleaseRow[] {
+  const base = loadJson<ReleaseRow[]>("release.json");
+  const kot = loadJson<ReleaseRow[]>("release-koteneva.json");
+  const kotCodes = new Set(kot.map((r) => r.code).filter(Boolean));
+  const filtered = base.filter((r) => !r.code || !kotCodes.has(r.code));
+  return [...filtered, ...kot].map((r) => ({
     code: r.code,
     teamId: r.teamId,
     managerName: r.managerName,
   }));
 }
 
+function getSalesUserById(users: SalesUser[], id: string): SalesUser | null {
+  return users.find((u) => u.id === id) ?? null;
+}
+
 async function handleSeedTeams(
-  req: VercelRequest,
   res: VercelResponse,
-  pool: ReturnType<typeof getPool>,
-  me: { id: string; role: string; status: string },
+  pool: NonNullable<ReturnType<typeof getPool>>,
 ): Promise<void> {
-  if (!pool) {
-    sendJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
-    return;
-  }
   const unresolvedFullNames: string[] = [];
   let teamsInserted = 0;
   let membershipsInserted = 0;
@@ -57,21 +84,16 @@ async function handleSeedTeams(
     nameToUserId.set(normName(String(u.full_name)), String(u.id));
   }
 
+  const { teams: SALES_TEAMS, users: SALES_USERS } = loadSales();
+
   for (const st of SALES_TEAMS) {
-    const lead = getSalesUserById(st.leadId);
-    if (!lead) {
-      unresolvedFullNames.push(`lead:${st.leadId}`);
-      continue;
-    }
+    const lead = getSalesUserById(SALES_USERS, st.leadId);
+    if (!lead) { unresolvedFullNames.push(`lead:${st.leadId}`); continue; }
     const ropId = nameToUserId.get(normName(lead.name));
-    if (!ropId) {
-      unresolvedFullNames.push(lead.name);
-      continue;
-    }
+    if (!ropId) { unresolvedFullNames.push(lead.name); continue; }
     const ins = await pool.query<{ id: string }>(
       `INSERT INTO teams (name, rop_user_id) VALUES ($1, $2::uuid)
-       ON CONFLICT (name) DO NOTHING
-       RETURNING id`,
+       ON CONFLICT (name) DO NOTHING RETURNING id`,
       [st.name, ropId],
     );
     if (ins.rows.length > 0) teamsInserted += 1;
@@ -90,17 +112,13 @@ async function handleSeedTeams(
     const dbTeamId = mockTeamToUuid.get(su.teamId);
     if (!dbTeamId) continue;
     const uid = nameToUserId.get(normName(su.name));
-    if (!uid) {
-      unresolvedFullNames.push(su.name);
-      continue;
-    }
+    if (!uid) { unresolvedFullNames.push(su.name); continue; }
     const ur = await pool.query<{ role: string }>(`SELECT role FROM users WHERE id = $1::uuid`, [uid]);
     const platformRole = String(ur.rows[0]?.role ?? "manager");
     const ins = await pool.query<{ user_id: string }>(
       `INSERT INTO user_team_memberships (user_id, team_id, role_in_team)
        VALUES ($1::uuid, $2::uuid, $3)
-       ON CONFLICT (user_id, team_id) DO NOTHING
-       RETURNING user_id`,
+       ON CONFLICT (user_id, team_id) DO NOTHING RETURNING user_id`,
       [uid, dbTeamId, platformRole],
     );
     if (ins.rows.length > 0) membershipsInserted += 1;
@@ -115,24 +133,22 @@ async function handleSeedTeams(
 }
 
 async function handleSeedClientsAssignments(
-  req: VercelRequest,
   res: VercelResponse,
-  pool: ReturnType<typeof getPool>,
+  pool: NonNullable<ReturnType<typeof getPool>>,
   me: { id: string; role: string; status: string },
 ): Promise<void> {
-  if (!pool) {
-    sendJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
-    return;
-  }
   const nameToUserId = new Map<string, string>();
-  const allUsers = await pool.query<{ id: string; full_name: string }>(`SELECT id, full_name FROM users WHERE status = 'active'`);
+  const allUsers = await pool.query<{ id: string; full_name: string }>(
+    `SELECT id, full_name FROM users WHERE status = 'active'`,
+  );
   for (const u of allUsers.rows) {
     nameToUserId.set(normName(String(u.full_name)), String(u.id));
   }
 
+  const { teams: SALES_TEAMS, users: SALES_USERS } = loadSales();
   const mockTeamToDbTeamId = new Map<string, string>();
   for (const st of SALES_TEAMS) {
-    const lead = getSalesUserById(st.leadId);
+    const lead = getSalesUserById(SALES_USERS, st.leadId);
     if (!lead) continue;
     const ropUid = nameToUserId.get(normName(lead.name));
     if (!ropUid) continue;
@@ -143,7 +159,7 @@ async function handleSeedClientsAssignments(
     if (tr.rows[0]) mockTeamToDbTeamId.set(st.id, String(tr.rows[0].id));
   }
 
-  const rows = await loadMergedClientRows();
+  const rows = loadMergedClientRows();
   const unresolvedClientCodes: string[] = [];
   let clientsSeeded = 0;
   let clientsSkipped = 0;
@@ -156,17 +172,9 @@ async function handleSeedClientsAssignments(
     let p = 1;
     for (const row of slice) {
       const mgrId = nameToUserId.get(normName(row.managerName));
-      if (!mgrId) {
-        unresolvedClientCodes.push(row.code);
-        clientsSkipped += 1;
-        continue;
-      }
+      if (!mgrId) { unresolvedClientCodes.push(row.code); clientsSkipped += 1; continue; }
       const tid = mockTeamToDbTeamId.get(row.teamId);
-      if (!tid) {
-        unresolvedClientCodes.push(row.code);
-        clientsSkipped += 1;
-        continue;
-      }
+      if (!tid) { unresolvedClientCodes.push(row.code); clientsSkipped += 1; continue; }
       values.push(`($${p++}, $${p++}::uuid, $${p++}::uuid)`);
       params.push(row.code, mgrId, tid);
     }
@@ -189,45 +197,57 @@ async function handleSeedClientsAssignments(
     success: true,
     clientsSeeded,
     clientsSkipped,
-    unresolvedClientCodes,
+    unresolvedClientCodes: unresolvedClientCodes.slice(0, 20),
+    unresolvedCount: unresolvedClientCodes.length,
   });
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
-  if (req.method !== "POST") {
-    sendJson(res, 405, { success: false, code: "METHOD_NOT_ALLOWED", message: "Только POST." });
-    return;
-  }
-  if (!enforceCsrfOrigin(req)) {
-    sendJson(res, 403, { success: false, code: "CSRF_REJECTED", message: "Недопустимый источник запроса." });
-    return;
-  }
-  const pool = getPool();
-  if (!pool) {
-    sendJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
-    return;
-  }
-  const headers = vercelHeaders(req);
-  const me = await resolveCurrentUser(pool, headers);
-  if (!me) {
-    sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
-    return;
-  }
-  if (me.role !== "admin" || me.status !== "active") {
-    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Только администратор." });
-    return;
-  }
+  try {
+    if (req.method !== "POST") {
+      sendJson(res, 405, { success: false, code: "METHOD_NOT_ALLOWED", message: "Только POST." });
+      return;
+    }
+    if (!enforceCsrfOrigin(req)) {
+      sendJson(res, 403, { success: false, code: "CSRF_REJECTED", message: "Недопустимый источник запроса." });
+      return;
+    }
+    const pool = getPool();
+    if (!pool) {
+      sendJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+      return;
+    }
+    const headers = vercelHeaders(req);
+    const me = await resolveCurrentUser(pool, headers);
+    if (!me) {
+      sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+      return;
+    }
+    if (me.role !== "admin" || me.status !== "active") {
+      sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Только администратор." });
+      return;
+    }
 
-  const kindRaw = req.query.kind;
-  const kind = Array.isArray(kindRaw) ? String(kindRaw[0] ?? "") : String(kindRaw ?? "");
+    const kindRaw = req.query.kind;
+    const kind = Array.isArray(kindRaw) ? String(kindRaw[0] ?? "") : String(kindRaw ?? "");
 
-  if (kind === "teams") {
-    await handleSeedTeams(req, res, pool, me);
-    return;
+    if (kind === "teams") {
+      await handleSeedTeams(res, pool);
+      return;
+    }
+    if (kind === "clients-assignments") {
+      await handleSeedClientsAssignments(res, pool, me);
+      return;
+    }
+    sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Неизвестный seed-маршрут." });
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    const stack = e instanceof Error ? e.stack : "";
+    console.error("[seed-api] unhandled", m, stack);
+    sendJson(res, 500, {
+      success: false,
+      code: "INTERNAL_ERROR",
+      message: `seed failed: ${m}`,
+    });
   }
-  if (kind === "clients-assignments") {
-    await handleSeedClientsAssignments(req, res, pool, me);
-    return;
-  }
-  sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Неизвестный seed-маршрут." });
 }
