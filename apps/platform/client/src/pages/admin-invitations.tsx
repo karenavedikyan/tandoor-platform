@@ -4,11 +4,11 @@
 
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Mail } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -29,6 +29,7 @@ import {
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { formatDisplayDateTime } from "@/lib/format-display-date";
 import { Link } from "wouter";
+import { cn } from "@/lib/utils";
 
 const rolesRu: Record<UserRole, string> = {
   director: "Директор",
@@ -43,15 +44,23 @@ const rolesRu: Record<UserRole, string> = {
 function statusBadge(status: Invitation["status"]) {
   if (status === "accepted") {
     return (
-      <Badge variant="default" className="bg-emerald-600 hover:bg-emerald-600">
-        Accepted
-      </Badge>
+      <span className="inline-flex rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+        Принято
+      </span>
     );
   }
   if (status === "expired") {
-    return <Badge variant="secondary">Expired</Badge>;
+    return (
+      <span className="inline-flex rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+        Истекло
+      </span>
+    );
   }
-  return <Badge variant="outline">Pending</Badge>;
+  return (
+    <span className="inline-flex rounded-full border border-amber-500/35 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-950 dark:text-amber-100">
+      Ожидает
+    </span>
+  );
 }
 
 export default function AdminInvitationsPage() {
@@ -129,7 +138,7 @@ export default function AdminInvitationsPage() {
   if (!user || !canManage) {
     return (
       <div className="mx-auto max-w-lg space-y-4 p-6" data-testid="page-invitations">
-        <Card>
+        <Card className="rounded-xl border border-border bg-card shadow-sm">
           <CardHeader>
             <CardTitle>Нет доступа</CardTitle>
             <CardDescription>Раздел доступен только ролям, которые могут приглашать пользователей.</CardDescription>
@@ -144,79 +153,141 @@ export default function AdminInvitationsPage() {
     );
   }
 
+  const listBody = () => {
+    if (listQ.isLoading) {
+      return (
+        <TableRow className="hover:bg-transparent">
+          <TableCell colSpan={5} className="h-24 text-center text-sm text-muted-foreground">
+            Загрузка…
+          </TableCell>
+        </TableRow>
+      );
+    }
+    if (listQ.isError) {
+      return (
+        <TableRow className="hover:bg-transparent">
+          <TableCell colSpan={5} className="h-24 text-center text-sm text-destructive">
+            Не удалось загрузить список.
+          </TableCell>
+        </TableRow>
+      );
+    }
+    if (listQ.data?.length === 0) {
+      return (
+        <TableRow className="hover:bg-transparent">
+          <TableCell colSpan={5} className="h-24 text-center text-sm text-muted-foreground">
+            Пока нет приглашений.
+          </TableCell>
+        </TableRow>
+      );
+    }
+    return listQ.data?.map((row) => (
+      <TableRow key={row.id} className="min-h-12 border-b border-border hover:bg-muted/40">
+        <TableCell className="font-mono text-sm text-foreground">{row.email}</TableCell>
+        <TableCell className="text-foreground">{rolesRu[row.role] ?? row.role}</TableCell>
+        <TableCell>{statusBadge(row.status)}</TableCell>
+        <TableCell className="text-sm text-muted-foreground">{formatDisplayDateTime(row.expiresAt)}</TableCell>
+        <TableCell className="text-right">
+          {row.status === "pending" ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="min-h-9 border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              data-testid={`button-revoke-${row.id}`}
+              onClick={async () => {
+                const r = await revokeInvitation(row.id);
+                if (r.ok) await qc.invalidateQueries({ queryKey: ["invitations", "list"] });
+              }}
+            >
+              Отозвать
+            </Button>
+          ) : (
+            <span className="text-xs text-muted-foreground">—</span>
+          )}
+        </TableCell>
+      </TableRow>
+    ));
+  };
+
   return (
     <div className="mx-auto max-w-[1200px] space-y-6 pb-24" data-testid="page-invitations">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="space-y-1">
-          <h1 className="text-xl font-semibold text-[#222631]">Приглашения</h1>
-          <p className="text-sm text-[#8F96B0]">Создание ссылки и ручная передача приглашённому. Отправка email будет в отдельном этапе.</p>
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-border bg-card shadow-sm">
+            <Mail className="h-5 w-5 text-primary" aria-hidden />
+          </div>
+          <div className="min-w-0 space-y-1">
+            <h1 className="text-2xl font-semibold text-[hsl(var(--foreground))]">Приглашения</h1>
+            <p className="text-sm text-muted-foreground">
+              Создание ссылки и ручная передача приглашённому. Отправка email будет в отдельном этапе.
+            </p>
+          </div>
         </div>
-        <Button type="button" className="min-h-10 font-semibold" onClick={openCreate} data-testid="button-invite-open">
+        <Button
+          type="button"
+          className="min-h-10 shrink-0 bg-primary font-semibold text-primary-foreground hover:bg-[hsl(var(--figma-primary-hover))]"
+          onClick={openCreate}
+          data-testid="button-invite-open"
+        >
           Пригласить
         </Button>
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-[#E3E6F3] bg-card">
+      <div className="hidden overflow-hidden rounded-xl border border-border bg-card shadow-sm md:block">
         <Table>
           <TableHeader>
-            <TableRow className="hover:bg-transparent">
-              <TableHead>Email</TableHead>
-              <TableHead>Роль</TableHead>
-              <TableHead>Статус</TableHead>
-              <TableHead>Истекает</TableHead>
-              <TableHead className="w-[140px] text-right">Действие</TableHead>
+            <TableRow className="border-b border-border hover:bg-transparent">
+              <TableHead className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Email</TableHead>
+              <TableHead className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Роль</TableHead>
+              <TableHead className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Статус</TableHead>
+              <TableHead className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Истекает</TableHead>
+              <TableHead className="w-[140px] text-right text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Действие
+              </TableHead>
             </TableRow>
           </TableHeader>
-          <TableBody>
-            {listQ.isLoading ? (
-              <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={5} className="h-24 text-center text-sm text-muted-foreground">
-                  Загрузка…
-                </TableCell>
-              </TableRow>
-            ) : listQ.isError ? (
-              <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={5} className="h-24 text-center text-sm text-destructive">
-                  Не удалось загрузить список.
-                </TableCell>
-              </TableRow>
-            ) : listQ.data?.length === 0 ? (
-              <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={5} className="h-24 text-center text-sm text-muted-foreground">
-                  Пока нет приглашений.
-                </TableCell>
-              </TableRow>
-            ) : (
-              listQ.data?.map((row) => (
-                <TableRow key={row.id} className="hover:bg-muted/40">
-                  <TableCell className="font-mono text-sm">{row.email}</TableCell>
-                  <TableCell>{rolesRu[row.role] ?? row.role}</TableCell>
-                  <TableCell>{statusBadge(row.status)}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{formatDisplayDateTime(row.expiresAt)}</TableCell>
-                  <TableCell className="text-right">
-                    {row.status === "pending" ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="min-h-9"
-                        data-testid={`button-revoke-${row.id}`}
-                        onClick={async () => {
-                          const r = await revokeInvitation(row.id);
-                          if (r.ok) await qc.invalidateQueries({ queryKey: ["invitations", "list"] });
-                        }}
-                      >
-                        Отозвать
-                      </Button>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
+          <TableBody>{listBody()}</TableBody>
         </Table>
+      </div>
+
+      <div className="grid gap-3 md:hidden">
+        {listQ.isLoading ? (
+          <div className="rounded-xl border border-border bg-card p-6 text-center text-sm text-muted-foreground shadow-sm">Загрузка…</div>
+        ) : null}
+        {listQ.isError ? (
+          <div className="rounded-xl border border-border bg-card p-6 text-center text-sm text-destructive shadow-sm">Не удалось загрузить список.</div>
+        ) : null}
+        {!listQ.isLoading && !listQ.isError && listQ.data?.length === 0 ? (
+          <div className="rounded-xl border border-border bg-card p-6 text-center text-sm text-muted-foreground shadow-sm">Пока нет приглашений.</div>
+        ) : null}
+        {listQ.data?.map((row) => (
+          <div key={row.id} className="rounded-xl border border-border bg-card p-4 shadow-sm sm:p-6">
+            <p className="font-mono text-xs text-foreground break-all">{row.email}</p>
+            <p className="mt-2 text-sm text-foreground">{rolesRu[row.role] ?? row.role}</p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">{statusBadge(row.status)}</div>
+            <p className="mt-2 text-xs text-muted-foreground">Истекает: {formatDisplayDateTime(row.expiresAt)}</p>
+            <div className="mt-3">
+              {row.status === "pending" ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-h-9 w-full border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive sm:w-auto"
+                  data-testid={`button-revoke-${row.id}`}
+                  onClick={async () => {
+                    const r = await revokeInvitation(row.id);
+                    if (r.ok) await qc.invalidateQueries({ queryKey: ["invitations", "list"] });
+                  }}
+                >
+                  Отозвать
+                </Button>
+              ) : (
+                <span className="text-xs text-muted-foreground">—</span>
+              )}
+            </div>
+          </div>
+        ))}
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -233,7 +304,7 @@ export default function AdminInvitationsPage() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="min-h-11"
+                  className="min-h-11 border-border bg-card focus-visible:ring-2 focus-visible:ring-primary"
                   data-testid="input-invite-email"
                   autoComplete="off"
                 />
@@ -242,7 +313,10 @@ export default function AdminInvitationsPage() {
                 <Label htmlFor="invite-role">Роль</Label>
                 <select
                   id="invite-role"
-                  className="flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className={cn(
+                    "flex h-11 w-full rounded-md border border-border bg-card px-3 py-2 text-sm ring-offset-background",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+                  )}
                   value={role}
                   onChange={(e) => setRole(e.target.value as UserRole)}
                   data-testid="select-invite-role"
@@ -260,7 +334,7 @@ export default function AdminInvitationsPage() {
                   id="invite-team"
                   value={teamId}
                   onChange={(e) => setTeamId(e.target.value)}
-                  className="min-h-11 font-mono text-sm"
+                  className="min-h-11 border-border bg-card font-mono text-sm focus-visible:ring-2 focus-visible:ring-primary"
                   placeholder="00000000-0000-0000-0000-000000000000"
                 />
               </div>
@@ -270,13 +344,18 @@ export default function AdminInvitationsPage() {
                   id="invite-fn"
                   value={inviteFullName}
                   onChange={(e) => setInviteFullName(e.target.value)}
-                  className="min-h-11"
+                  className="min-h-11 border-border bg-card focus-visible:ring-2 focus-visible:ring-primary"
                 />
               </div>
               {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
             </div>
             <DialogFooter>
-              <Button type="submit" className="min-h-11 font-semibold" disabled={creating} data-testid="button-invite-submit">
+              <Button
+                type="submit"
+                className="min-h-11 bg-primary font-semibold text-primary-foreground hover:bg-[hsl(var(--figma-primary-hover))] disabled:opacity-60"
+                disabled={creating}
+                data-testid="button-invite-submit"
+              >
                 {creating ? "Создание…" : "Создать ссылку"}
               </Button>
             </DialogFooter>
@@ -290,12 +369,12 @@ export default function AdminInvitationsPage() {
             <DialogTitle>Ссылка готова</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">Передайте ссылку приглашённому любым способом.</p>
-          <div className="rounded-md border border-border bg-muted/40 p-3 font-mono text-xs break-all" data-testid="text-acceptUrl">
+          <div className="rounded-md border border-border bg-muted p-3 font-mono text-xs break-all text-muted-foreground" data-testid="text-acceptUrl">
             {acceptUrl}
           </div>
           <DialogFooter className="gap-2 sm:justify-between">
             <span className="text-xs text-muted-foreground">{copyHint}</span>
-            <Button type="button" variant="secondary" className="min-h-11" onClick={() => void copyUrl()} data-testid="button-copy-accepturl">
+            <Button type="button" variant="outline" className="min-h-11" onClick={() => void copyUrl()} data-testid="button-copy-accepturl">
               Скопировать ссылку
             </Button>
           </DialogFooter>

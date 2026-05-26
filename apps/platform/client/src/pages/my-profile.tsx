@@ -32,6 +32,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { listSelfSessions, revokeOtherSelfSessions, revokeSelfSession } from "@/lib/sessions-self-api";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { isValidRussianPhone, normalizeToCanonical } from "@/lib/phone-format";
+import { cn } from "@/lib/utils";
 
 function rolesRuLabel(role: string): string {
   const m: Record<string, string> = {
@@ -46,6 +47,9 @@ function rolesRuLabel(role: string): string {
   return m[role] ?? role;
 }
 
+const readOnlyInputClass =
+  "min-h-11 cursor-default border-transparent bg-muted text-muted-foreground shadow-none focus-visible:ring-0 focus-visible:ring-offset-0";
+
 export default function MyProfilePage() {
   const { user } = useCurrentUser();
   const { reopenOnboarding } = useOnboardingUi();
@@ -57,7 +61,6 @@ export default function MyProfilePage() {
     queryFn: getSelf,
     enabled: !!user,
   });
-
 
   const sessionsQ = useQuery({
     queryKey: ["self-sessions"],
@@ -134,7 +137,6 @@ export default function MyProfilePage() {
     }
   };
 
-
   const onRevokeSession = async (id: string) => {
     try {
       await revokeSelfSession(id);
@@ -160,63 +162,69 @@ export default function MyProfilePage() {
   return (
     <div className="mx-auto max-w-xl space-y-6 pb-16" data-testid="page-my-profile">
       <div className="space-y-1">
-        <h1 className="text-xl font-semibold text-[#222631]">Мой профиль</h1>
-        <p className="text-sm text-[#8F96B0]">Данные учётной записи и контакты.</p>
+        <h1 className="text-2xl font-semibold text-[hsl(var(--foreground))]">Мой профиль</h1>
+        <p className="text-sm text-muted-foreground">Данные учётной записи и контакты.</p>
         <Button type="button" variant="outline" className="mt-2 font-semibold" onClick={() => reopenOnboarding()}>
           Открыть онбординг повторно
         </Button>
       </div>
 
-      <Card className="border-[#E3E6F3]">
+      <Card className="rounded-xl border border-border bg-card shadow-sm">
         <CardHeader>
           <CardTitle className="text-base">Данные учётной записи</CardTitle>
           <CardDescription>Email, роль и статус меняются только администратором.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4 text-sm">
           {profileQ.isError ? <p className="text-destructive">Не удалось загрузить профиль.</p> : null}
-          <dl className="space-y-3">
-            <div>
-              <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Email</dt>
-              <dd className="mt-0.5 text-foreground">{p?.email ?? user.email}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Роль (пилот)</dt>
-              <dd className="mt-0.5 text-foreground">{releaseDemoRoleLabel(salesRole)}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Роль (платформа)</dt>
-              <dd className="mt-0.5 text-foreground">{rolesRuLabel(user.role)}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Статус</dt>
-              <dd className="mt-0.5 text-foreground">{p?.status ?? user.status}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Идентификатор</dt>
-              <dd className="mt-0.5 font-mono text-xs text-foreground">{user.id}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Дата создания</dt>
-              <dd className="mt-0.5 text-foreground">
-                {p?.createdAt ? formatDisplayDateTime(p.createdAt) : user.createdAt ? formatDisplayDateTime(user.createdAt) : "—"}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Последний вход</dt>
-              <dd className="mt-0.5 text-foreground">
-                {p?.lastLoginAt ? formatDisplayDateTime(p.lastLoginAt) : user.lastLoginAt ? formatDisplayDateTime(user.lastLoginAt) : "—"}
-              </dd>
-            </div>
-          </dl>
+          <div className="space-y-2">
+            <Label htmlFor="pf-email-ro">Email</Label>
+            <Input id="pf-email-ro" readOnly tabIndex={-1} value={p?.email ?? user.email} className={readOnlyInputClass} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="pf-role-demo-ro">Роль (пилот)</Label>
+            <Input id="pf-role-demo-ro" readOnly tabIndex={-1} value={releaseDemoRoleLabel(salesRole)} className={readOnlyInputClass} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="pf-role-platform-ro">Роль (платформа)</Label>
+            <Input id="pf-role-platform-ro" readOnly tabIndex={-1} value={rolesRuLabel(user.role)} className={readOnlyInputClass} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="pf-status-ro">Статус</Label>
+            <Input id="pf-status-ro" readOnly tabIndex={-1} value={p?.status ?? user.status} className={readOnlyInputClass} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="pf-id-ro">Идентификатор</Label>
+            <Input id="pf-id-ro" readOnly tabIndex={-1} value={user.id} className={cn(readOnlyInputClass, "font-mono text-xs")} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="pf-created-ro">Дата создания</Label>
+            <Input
+              id="pf-created-ro"
+              readOnly
+              tabIndex={-1}
+              value={p?.createdAt ? formatDisplayDateTime(p.createdAt) : user.createdAt ? formatDisplayDateTime(user.createdAt) : "—"}
+              className={readOnlyInputClass}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="pf-last-ro">Последний вход</Label>
+            <Input
+              id="pf-last-ro"
+              readOnly
+              tabIndex={-1}
+              value={p?.lastLoginAt ? formatDisplayDateTime(p.lastLoginAt) : user.lastLoginAt ? formatDisplayDateTime(user.lastLoginAt) : "—"}
+              className={readOnlyInputClass}
+            />
+          </div>
 
-          <div className="space-y-2 border-t pt-4">
+          <div className="space-y-2 border-t border-border pt-4">
             <Label htmlFor="pf-fn">ФИО</Label>
             <Input
               id="pf-fn"
               data-testid="input-profile-full-name"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
-              className="min-h-11"
+              className="min-h-11 border-border bg-card focus-visible:ring-2 focus-visible:ring-primary"
               disabled={profileQ.isLoading}
             />
           </div>
@@ -227,7 +235,7 @@ export default function MyProfilePage() {
               data-testid="input-profile-phone"
               value={phone}
               onChange={setPhone}
-              className="min-h-11"
+              className="min-h-11 border-border bg-card focus-visible:ring-2 focus-visible:ring-primary"
               disabled={profileQ.isLoading}
             />
             {phone !== "" && !isValidRussianPhone(phone) ? (
@@ -239,7 +247,7 @@ export default function MyProfilePage() {
           {submitErr ? <p className="text-sm text-destructive">{submitErr}</p> : null}
           <Button
             type="button"
-            className="font-semibold"
+            className="bg-primary font-semibold text-primary-foreground hover:bg-[hsl(var(--figma-primary-hover))] disabled:opacity-60"
             data-testid="button-profile-save"
             disabled={!dirty || !!validationErr || saving || profileQ.isLoading}
             onClick={() => void save()}
@@ -249,7 +257,7 @@ export default function MyProfilePage() {
         </CardContent>
       </Card>
 
-      <Card className="border-[#E3E6F3]">
+      <Card className="rounded-xl border border-border bg-card shadow-sm">
         <CardHeader>
           <CardTitle className="text-base">Безопасность</CardTitle>
           <CardDescription>Смена пароля на отдельной странице.</CardDescription>
@@ -261,8 +269,7 @@ export default function MyProfilePage() {
         </CardContent>
       </Card>
 
-
-      <Card className="border-[#E3E6F3]" data-testid="section-self-sessions">
+      <Card className="rounded-xl border border-border bg-card shadow-sm" data-testid="section-self-sessions">
         <CardHeader>
           <CardTitle className="text-base">Активные сессии</CardTitle>
           <CardDescription>Устройства, с которых выполнен вход в аккаунт.</CardDescription>
@@ -294,54 +301,89 @@ export default function MyProfilePage() {
               </AlertDialogContent>
             </AlertDialog>
           </div>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Устройство</TableHead>
-                <TableHead>IP</TableHead>
-                <TableHead>Истекает</TableHead>
-                <TableHead className="text-right">Действие</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {(sessionsQ.data ?? []).map((s) => (
-                <TableRow key={s.id} data-testid={`row-self-session-${s.id}`}>
-                  <TableCell className="max-w-[220px] truncate text-xs" title={s.userAgent ?? ""}>
-                    {s.userAgent ? s.userAgent.slice(0, 80) + (s.userAgent.length > 80 ? "…" : "") : "—"}
-                  </TableCell>
-                  <TableCell className="text-xs">{s.ip ?? "—"}</TableCell>
-                  <TableCell className="whitespace-nowrap text-xs">{formatDisplayDateTime(s.expiresAt)}</TableCell>
-                  <TableCell className="text-right">
-                    {s.current ? (
-                      <span className="text-xs text-muted-foreground">текущая</span>
-                    ) : (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        data-testid={`button-self-session-revoke-${s.id}`}
-                        onClick={() => void onRevokeSession(s.id)}
-                      >
-                        Отозвать
-                      </Button>
-                    )}
-                  </TableCell>
+
+          <div className="hidden overflow-x-auto rounded-lg border border-border md:block">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-b border-border hover:bg-transparent">
+                  <TableHead className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Устройство</TableHead>
+                  <TableHead className="text-xs font-medium uppercase tracking-wide text-muted-foreground">IP</TableHead>
+                  <TableHead className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Истекает</TableHead>
+                  <TableHead className="text-right text-xs font-medium uppercase tracking-wide text-muted-foreground">Действие</TableHead>
                 </TableRow>
-              ))}
-              {(sessionsQ.data?.length ?? 0) === 0 && !sessionsQ.isFetching ? (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-center text-sm text-muted-foreground">
-                    Нет активных сессий.
-                  </TableCell>
-                </TableRow>
-              ) : null}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {(sessionsQ.data ?? []).map((s) => (
+                  <TableRow key={s.id} className="min-h-12 border-b border-border hover:bg-muted/40" data-testid={`row-self-session-${s.id}`}>
+                    <TableCell className="max-w-[220px] truncate text-xs text-foreground" title={s.userAgent ?? ""}>
+                      {s.userAgent ? s.userAgent.slice(0, 80) + (s.userAgent.length > 80 ? "…" : "") : "—"}
+                    </TableCell>
+                    <TableCell className="text-xs text-foreground">{s.ip ?? "—"}</TableCell>
+                    <TableCell className="whitespace-nowrap text-xs text-muted-foreground">{formatDisplayDateTime(s.expiresAt)}</TableCell>
+                    <TableCell className="text-right">
+                      {s.current ? (
+                        <span className="text-xs text-muted-foreground">текущая</span>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                          data-testid={`button-self-session-revoke-${s.id}`}
+                          onClick={() => void onRevokeSession(s.id)}
+                        >
+                          Отозвать
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {(sessionsQ.data?.length ?? 0) === 0 && !sessionsQ.isFetching ? (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center text-sm text-muted-foreground">
+                      Нет активных сессий.
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+              </TableBody>
+            </Table>
+          </div>
+
+          <div className="grid gap-3 md:hidden">
+            {(sessionsQ.data ?? []).map((s) => (
+              <div key={s.id} className="rounded-xl border border-border bg-card p-4 shadow-sm sm:p-6" data-testid={`row-self-session-${s.id}`}>
+                <p className="text-xs text-foreground break-all" title={s.userAgent ?? ""}>
+                  {s.userAgent ? s.userAgent.slice(0, 120) + (s.userAgent.length > 120 ? "…" : "") : "—"}
+                </p>
+                <p className="mt-2 text-xs text-muted-foreground">IP: {s.ip ?? "—"}</p>
+                <p className="mt-1 text-xs text-muted-foreground">Истекает: {formatDisplayDateTime(s.expiresAt)}</p>
+                <div className="mt-3">
+                  {s.current ? (
+                    <span className="text-xs text-muted-foreground">текущая сессия</span>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="w-full border-destructive/40 text-destructive hover:bg-destructive/10 sm:w-auto"
+                      data-testid={`button-self-session-revoke-${s.id}`}
+                      onClick={() => void onRevokeSession(s.id)}
+                    >
+                      Отозвать
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
+            {(sessionsQ.data?.length ?? 0) === 0 && !sessionsQ.isFetching ? (
+              <div className="rounded-xl border border-border bg-card p-6 text-center text-sm text-muted-foreground shadow-sm">Нет активных сессий.</div>
+            ) : null}
+          </div>
         </CardContent>
       </Card>
 
-
-      <p className="text-xs text-muted-foreground"> <strong>{displayUserName(user)}</strong>
+      <p className="text-xs text-muted-foreground">
+        <strong className="text-foreground">{displayUserName(user)}</strong>
       </p>
     </div>
   );
