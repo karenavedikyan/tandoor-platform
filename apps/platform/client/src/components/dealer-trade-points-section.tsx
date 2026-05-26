@@ -44,6 +44,7 @@ import {
   canEditDealerDuringActualization,
 } from "@/lib/client-base-actualization-permissions";
 import { CLIENT_BASE_ACTUALIZATION_CLEAN_MODE } from "@/lib/client-base-actualization-config";
+import { findSimilarTradePointsInDealer, type TradePointSuggestion } from "@/lib/client-base-actualization-tp-suggest";
 import { toast } from "@/hooks/use-toast";
 import { useSectionSaveFeedback } from "@/hooks/use-section-save-feedback";
 import { SectionSaveButton } from "@/components/section-save-button";
@@ -189,6 +190,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
   const [addContactEmail, setAddContactEmail] = useState("");
   const [addComment, setAddComment] = useState("");
   const [addError, setAddError] = useState("");
+  const [tpSuggestionsDismissed, setTpSuggestionsDismissed] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
@@ -313,9 +315,63 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
     }
     if (!addOpen) {
       draftTpIdRef.current = null;
+      setTpSuggestionsDismissed(false);
     }
     prevAddOpenRef.current = addOpen;
   }, [addOpen, row.id]);
+
+  const tpSuggestions = useMemo<TradePointSuggestion[]>(() => {
+    if (!addOpen) return [];
+    return findSimilarTradePointsInDealer({
+      row,
+      manualTradePoints: Object.values(actx.state.manuallyCreatedTradePointsById ?? {}),
+      inputName: addName,
+      inputAddress: addAddress,
+      inputCity: addCity,
+      excludeTradePointId: draftTpIdRef.current,
+    });
+  }, [addOpen, row, actx.state.manuallyCreatedTradePointsById, addName, addAddress, addCity]);
+
+  const tpSuggestionsBlock =
+    tpSuggestions.length > 0 && !tpSuggestionsDismissed ? (
+      <div
+        className="my-2 rounded-md border border-amber-200 bg-amber-50/60 p-3 dark:border-amber-900/40 dark:bg-amber-950/20"
+        data-testid="block-tp-create-suggestions"
+      >
+        <div className="mb-2 text-xs font-medium text-amber-900 dark:text-amber-200">
+          В карточке уже есть похожие точки:
+        </div>
+        <div className="space-y-1.5">
+          {tpSuggestions.map((s) => (
+            <div
+              key={s.tradePointId}
+              className="rounded border border-amber-200/60 bg-background/80 p-2 text-xs dark:border-amber-900/30"
+            >
+              <div className="font-medium">{s.name}</div>
+              <div className="text-muted-foreground">
+                {[s.city, s.address].filter(Boolean).join(", ") || "Без адреса"}
+              </div>
+              <div className="mt-1 text-[10px] text-amber-800/80 dark:text-amber-200/70">
+                {s.source === "seed" ? "Системная точка" : "Ручная точка"}
+                {s.matchedField === "both"
+                  ? " · похож адрес и название"
+                  : s.matchedField === "address"
+                    ? " · похож адрес"
+                    : " · похоже название"}
+              </div>
+            </div>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={() => setTpSuggestionsDismissed(true)}
+          className="mt-2 text-[11px] text-muted-foreground underline-offset-2 hover:underline"
+          data-testid="button-tp-suggestions-dismiss"
+        >
+          Скрыть подсказки — это другая точка
+        </button>
+      </div>
+    ) : null;
 
   const onAddSave = useCallback(async (): Promise<boolean> => {
     setAddError("");
@@ -734,6 +790,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                   testId="input-dealer-trade-point-city"
                 />
               </div>
+              {tpSuggestionsBlock}
               <div className="space-y-1.5">
                 <Label className="text-xs">Адрес</Label>
                 <AddressSuggestInput
@@ -910,6 +967,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                   testId="input-dealer-trade-point-city"
                 />
               </div>
+              {tpSuggestionsBlock}
               <div className="space-y-1.5">
                 <Label className="text-xs">Адрес</Label>
                 <AddressSuggestInput
@@ -1352,6 +1410,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                 testId="input-dealer-trade-point-city"
               />
             </div>
+            {tpSuggestionsBlock}
             <div className="space-y-1.5">
               <Label className="text-xs">Адрес</Label>
               <AddressSuggestInput
