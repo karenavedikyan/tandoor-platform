@@ -10,14 +10,23 @@ import {
   isClientTopTier,
   type ClientCategoryId,
 } from "@/lib/client-category";
-import { dealerNeedsAttention } from "@/lib/dealer-base-role-views";
+import { dealerNeedsAttention, mapSalesRoleToDealerBaseAccess, type DealerBaseAccessRole } from "@/lib/dealer-base-role-views";
 import { getDealerManagerDisplay, getDealerRopDisplay, type DealerRow } from "@/lib/dealer-base-mock-data";
 import { getRopOptions, managerDisplayMatchesCatalogName, resolveTeamIdFromRopDisplayName } from "@/lib/rop-manager-filters";
 import { getTeamLeadForTeam, getTeamManagers, type SalesUser } from "@/lib/sales-control-data";
 import { normalizeTerritoryCityName } from "@/lib/territory-city-normalize";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { getEffectiveTeamLeadTeamId } from "@/lib/release-demo-profile";
-import { mapSalesRoleToDealerBaseAccess } from "@/lib/dealer-base-role-views";
+import { realEffectiveTeamLeadTeamId, realRopOptions, realTeamManagers } from "@/lib/real-org-adapter";
+import type { OrgSnapshot } from "@/lib/use-org-snapshot";
+
+
+
+
+export function managersCatalogForTeam(teamId: string, orgSnap?: OrgSnapshot | null): SalesUser[] {
+  if (orgSnap) return realTeamManagers(orgSnap, teamId);
+  return getTeamManagers(teamId);
+}
 
 export type DirectorClientBaseMode = "overview" | "by_rop" | "cities";
 
@@ -86,8 +95,8 @@ function bestTopSegmentLabel(rows: DealerRow[]): string {
   return getClientCategoryLabel(pick.clientCategory);
 }
 
-function aggregateManagersForTeam(teamId: string, teamRows: DealerRow[]): ManagerRowModel[] {
-  const managers = getTeamManagers(teamId);
+function aggregateManagersForTeam(teamId: string, teamRows: DealerRow[], orgSnap?: OrgSnapshot | null): ManagerRowModel[] {
+  const managers = managersCatalogForTeam(teamId, orgSnap);
   return managers.map((m) => {
     const rows = teamRows.filter(
       (r) => r.releaseManagerId === m.id || managerDisplayMatchesCatalogName(getDealerManagerDisplay(r), m.name),
@@ -195,7 +204,30 @@ export function topLeaderManagers(rows: DealerRow[], teamIds: string[], limit: n
 export function teamsForManagementView(
   profile: ReleaseDemoProfile,
   dashboardRopTeamId: string,
+  org?: { snap: OrgSnapshot; access: DealerBaseAccessRole } | null,
 ): { teamId: string; ropName: string }[] {
+  if (org) {
+    const { snap, access } = org;
+    if (access === "team_lead") {
+      const tid = realEffectiveTeamLeadTeamId(snap);
+      const t = snap.teams.find((x) => x.id === tid);
+      const ropName = t?.ropName?.trim() ? t.ropName.trim() : (t?.name ?? tid);
+      return [{ teamId: tid, ropName }];
+    }
+    if (access === "sales_manager") {
+      const self = snap.users.find((u) => u.id === snap.me.id);
+      const tid = self?.teamId ?? "";
+      if (!tid) return [];
+      const t = snap.teams.find((x) => x.id === tid);
+      const ropName = t?.ropName?.trim() ? t.ropName.trim() : (t?.name ?? tid);
+      return [{ teamId: tid, ropName }];
+    }
+    const all = realRopOptions(snap).map((o) => ({ teamId: o.teamId, ropName: o.label }));
+    if (dashboardRopTeamId === "all" || !dashboardRopTeamId) return all;
+    const opt = all.find((o) => o.teamId === dashboardRopTeamId);
+    return [{ teamId: dashboardRopTeamId, ropName: opt?.ropName ?? dashboardRopTeamId }];
+  }
+
   const access = mapSalesRoleToDealerBaseAccess(profile.role);
   if (access === "team_lead") {
     const tid = getEffectiveTeamLeadTeamId(profile);
@@ -209,7 +241,11 @@ export function teamsForManagementView(
   return [{ teamId: dashboardRopTeamId, ropName: opt?.label ?? dashboardRopTeamId }];
 }
 
-export function buildRopGroups(rows: DealerRow[], teams: { teamId: string; ropName: string }[]): RopGroupModel[] {
+export function buildRopGroups(
+  rows: DealerRow[],
+  teams: { teamId: string; ropName: string }[],
+  orgSnap?: OrgSnapshot | null,
+): RopGroupModel[] {
   const teamActiveCounts = teams.map((t) => ({
     teamId: t.teamId,
     n: rows.filter((r) => resolveDealerRowTeamId(r) === t.teamId && r.status === "активный").length,
@@ -218,12 +254,12 @@ export function buildRopGroups(rows: DealerRow[], teams: { teamId: string; ropNa
 
   return teams.map((t) => {
     const teamRows = rows.filter((r) => resolveDealerRowTeamId(r) === t.teamId);
-    const managers = aggregateManagersForTeam(t.teamId, teamRows);
+    const managers = aggregateManagersForTeam(t.teamId, teamRows, orgSnap);
     const active = teamRows.filter((r) => r.status === "активный").length;
     const potential = teamRows.filter((r) => r.status === "потенциальный").length;
     const attention = teamRows.filter((r) => dealerNeedsAttention(r)).length;
     const outlets = teamRows.reduce((a, r) => a + r.outlets, 0);
-    const mgrCatalog = getTeamManagers(t.teamId);
+    const mgrCatalog = managersCatalogForTeam(t.teamId, orgSnap);
     const statusLine = buildRopStatusLine(
       teamRows,
       managers,

@@ -2498,7 +2498,16 @@ export default function DealerBase() {
   const bulkDeleteHasTargets = archivableDealerIdsInView.size > 0;
 
   if (actx.enabled && shouldUseTeamMergedActualizationPlane(profile)) {
-    return <DealerBaseManagementCockpit profile={profile} rows={scopedActivePortfolioRows} />;
+    return (
+      <DealerBaseManagementCockpit
+        profile={profile}
+        rows={scopedActivePortfolioRows}
+        orgTeamCtx={useReal && snap ? { snap, access } : undefined}
+        mergedDealerRowsForCreate={
+          useReal && snap && visPayload && !orgSnapQ.isError && !visCodesQ.isError ? mergedRowsActivePortfolio : undefined
+        }
+      />
+    );
   }
 
   return (

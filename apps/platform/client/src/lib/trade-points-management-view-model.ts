@@ -4,10 +4,14 @@
  * — те же правила, что и список /trade-points без архива и без архивных клиентов.
  */
 
-import { resolveDealerRowTeamId, teamsForManagementView } from "@/lib/dealer-base-management-view-model";
+import {
+  managersCatalogForTeam,
+  resolveDealerRowTeamId,
+  teamsForManagementView,
+} from "@/lib/dealer-base-management-view-model";
 import { getDealerManagerDisplay, type DealerRow } from "@/lib/dealer-base-mock-data";
 import { managerDisplayMatchesCatalogName } from "@/lib/rop-manager-filters";
-import { getTeamManagers } from "@/lib/sales-control-data";
+import type { OrgSnapshot } from "@/lib/use-org-snapshot";
 import { normalizeTerritoryCityName } from "@/lib/territory-city-normalize";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import type { TradePointListRow } from "@/lib/trade-point-list-for-actualization";
@@ -164,8 +168,8 @@ export function topCitiesForTpChart(cities: CityTpAgg[], topN: number): {
   return { top, maxTp, noCity };
 }
 
-function aggregateManagersTp(teamId: string, teamRows: TradePointListRow[]): ManagerTpAgg[] {
-  const managers = getTeamManagers(teamId);
+function aggregateManagersTp(teamId: string, teamRows: TradePointListRow[], orgSnap?: OrgSnapshot | null): ManagerTpAgg[] {
+  const managers = managersCatalogForTeam(teamId, orgSnap);
   return managers.map((m) => {
     const rows = teamRows.filter(
       (r) =>
@@ -198,11 +202,15 @@ function pickTopManagerByTp(managers: ManagerTpAgg[]): string {
   return sorted[0]?.name ?? "—";
 }
 
-export function buildRopTpGroups(rows: TradePointListRow[], teams: { teamId: string; ropName: string }[]): RopTpGroup[] {
+export function buildRopTpGroups(
+  rows: TradePointListRow[],
+  teams: { teamId: string; ropName: string }[],
+  orgSnap?: OrgSnapshot | null,
+): RopTpGroup[] {
   const work = rows.filter(isManagementTradePointRow);
   return teams.map((t) => {
     const teamRows = work.filter((r) => resolveDealerRowTeamId(r.dealer) === t.teamId);
-    const managers = aggregateManagersTp(t.teamId, teamRows);
+    const managers = aggregateManagersTp(t.teamId, teamRows, orgSnap);
     const dealerIds = new Set(teamRows.map((r) => r.dealerId));
     const cityKeys = new Set(teamRows.map((r) => normalizeTerritoryCityName(r.city, r.address)));
     let noPhoto = 0;
@@ -211,7 +219,7 @@ export function buildRopTpGroups(rows: TradePointListRow[], teams: { teamId: str
       if (!tradePointHasPhoto(r)) noPhoto += 1;
       if (tradePointShowcaseUnfilled(r)) unfilled += 1;
     }
-    const mgrCatalog = getTeamManagers(t.teamId);
+    const mgrCatalog = managersCatalogForTeam(t.teamId, orgSnap);
     return {
       teamId: t.teamId,
       ropName: t.ropName,

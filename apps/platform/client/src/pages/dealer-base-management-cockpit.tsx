@@ -39,6 +39,9 @@ import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { mapSalesRoleToDealerBaseAccess } from "@/lib/dealer-base-role-views";
 import { getDealerManagerDisplay, type DealerRow } from "@/lib/dealer-base-mock-data";
 import { getRopOptions } from "@/lib/rop-manager-filters";
+import { realRopOptions } from "@/lib/real-org-adapter";
+import type { OrgSnapshot } from "@/lib/use-org-snapshot";
+import type { DealerBaseAccessRole } from "@/lib/dealer-base-role-views";
 import { buildHashPath } from "@/lib/hash-route-utils";
 import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actualization-sync-status";
 import { DealerActualizationCreateDialog } from "@/components/client-base-actualization-dealer-forms";
@@ -127,12 +130,25 @@ function detailTitle(detail: DetailKind | null, ropGroups: RopGroupModel[], citi
   return m?.name ?? "Менеджер";
 }
 
-export function DealerBaseManagementCockpit({ rows, profile }: { rows: DealerRow[]; profile: ReleaseDemoProfile }) {
+export function DealerBaseManagementCockpit({
+  rows,
+  profile,
+  orgTeamCtx,
+  mergedDealerRowsForCreate,
+}: {
+  rows: DealerRow[];
+  profile: ReleaseDemoProfile;
+  orgTeamCtx?: { snap: OrgSnapshot; access: DealerBaseAccessRole } | null;
+  mergedDealerRowsForCreate?: DealerRow[] | null;
+}) {
   const actx = useClientBaseActualization();
   const teamCtx = useClientBaseTeamActualization();
   const isMobile = useIsMobile();
   const [, setLocation] = useLocation();
-  const access = useMemo(() => mapSalesRoleToDealerBaseAccess(profile.role), [profile.role]);
+  const access = useMemo(() => {
+    if (orgTeamCtx) return orgTeamCtx.access;
+    return mapSalesRoleToDealerBaseAccess(profile.role);
+  }, [orgTeamCtx, profile.role]);
 
   const [mode, setMode] = useState<DirectorClientBaseMode>(() => readMode());
   const [openRops, setOpenRops] = useState<string[]>(() => readOpenRops());
@@ -164,12 +180,12 @@ export function DealerBaseManagementCockpit({ rows, profile }: { rows: DealerRow
   }, [detail]);
 
   const teams = useMemo(
-    () => teamsForManagementView(profile, teamCtx.dashboardRopTeamId),
-    [profile, teamCtx.dashboardRopTeamId],
+    () => teamsForManagementView(profile, teamCtx.dashboardRopTeamId, orgTeamCtx ?? null),
+    [profile, teamCtx.dashboardRopTeamId, orgTeamCtx],
   );
   const teamIds = useMemo(() => teams.map((t) => t.teamId), [teams]);
 
-  const ropGroups = useMemo(() => buildRopGroups(rows, teams), [rows, teams]);
+  const ropGroups = useMemo(() => buildRopGroups(rows, teams, orgTeamCtx?.snap), [rows, teams, orgTeamCtx]);
   const cities = useMemo(() => buildCityModels(rows), [rows]);
   const structure = useMemo(() => buildStructureInfographic(rows, teamIds), [rows, teamIds]);
   const cityChart = useMemo(() => topCitiesForChart(cities, 5), [cities]);
@@ -193,13 +209,12 @@ export function DealerBaseManagementCockpit({ rows, profile }: { rows: DealerRow
 
   const closeDetail = useCallback(() => setDetail(null), []);
 
-  const mergedForCreate = useMemo(
-    () =>
-      actx.enabled
-        ? buildDealerBaseRowsWithActualization(teamCtx.mergedState, profile, { includeArchivedDealers: false })
-        : DEALER_BASE_ROWS,
-    [actx.enabled, teamCtx.mergedState, profile],
-  );
+  const mergedForCreate = useMemo(() => {
+    if (mergedDealerRowsForCreate && mergedDealerRowsForCreate.length > 0) return mergedDealerRowsForCreate;
+    return actx.enabled
+      ? buildDealerBaseRowsWithActualization(teamCtx.mergedState, profile, { includeArchivedDealers: false })
+      : DEALER_BASE_ROWS;
+  }, [mergedDealerRowsForCreate, actx.enabled, teamCtx.mergedState, profile]);
 
   const setModeAndPersist = useCallback((m: DirectorClientBaseMode) => {
     setMode(m);
@@ -655,7 +670,7 @@ export function DealerBaseManagementCockpit({ rows, profile }: { rows: DealerRow
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Все команды</SelectItem>
-              {getRopOptions().map((o) => (
+              {(orgTeamCtx ? realRopOptions(orgTeamCtx.snap) : getRopOptions()).map((o) => (
                 <SelectItem key={o.teamId} value={o.teamId}>
                   {o.label}
                 </SelectItem>

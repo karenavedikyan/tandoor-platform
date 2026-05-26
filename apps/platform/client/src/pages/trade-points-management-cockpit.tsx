@@ -39,6 +39,9 @@ import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { mapSalesRoleToDealerBaseAccess } from "@/lib/dealer-base-role-views";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import { getRopOptions } from "@/lib/rop-manager-filters";
+import { realRopOptions } from "@/lib/real-org-adapter";
+import type { OrgSnapshot } from "@/lib/use-org-snapshot";
+import type { DealerBaseAccessRole } from "@/lib/dealer-base-role-views";
 import { buildHashPath } from "@/lib/hash-route-utils";
 import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actualization-sync-status";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
@@ -151,15 +154,20 @@ export function TradePointsManagementCockpit({
   profile,
   workingRows,
   dealerRows,
+  orgTeamCtx,
 }: {
   profile: ReleaseDemoProfile;
   workingRows: TradePointListRow[];
   dealerRows: DealerRow[];
+  orgTeamCtx?: { snap: OrgSnapshot; access: DealerBaseAccessRole } | null;
 }) {
   const actx = useClientBaseActualization();
   const teamCtx = useClientBaseTeamActualization();
   const isMobile = useIsMobile();
-  const access = useMemo(() => mapSalesRoleToDealerBaseAccess(profile.role), [profile.role]);
+  const access = useMemo(() => {
+    if (orgTeamCtx) return orgTeamCtx.access;
+    return mapSalesRoleToDealerBaseAccess(profile.role);
+  }, [orgTeamCtx, profile.role]);
 
   const [mode, setMode] = useState<TradePointsManagementMode>(() => readMode());
   const [openRops, setOpenRops] = useState<string[]>(() => readOpenRops());
@@ -195,14 +203,14 @@ export function TradePointsManagementCockpit({
   }, []);
 
   const teams = useMemo(
-    () => teamsForManagementView(profile, teamCtx.dashboardRopTeamId),
-    [profile, teamCtx.dashboardRopTeamId],
+    () => teamsForManagementView(profile, teamCtx.dashboardRopTeamId, orgTeamCtx ?? null),
+    [profile, teamCtx.dashboardRopTeamId, orgTeamCtx],
   );
 
   const structure = useMemo(() => buildTradePointsStructureSummary(workingRows, dealerRows), [workingRows, dealerRows]);
   const cities = useMemo(() => buildCityTpAggs(workingRows), [workingRows]);
   const cityChart = useMemo(() => topCitiesForTpChart(cities, 5), [cities]);
-  const ropGroups = useMemo(() => buildRopTpGroups(workingRows, teams), [workingRows, teams]);
+  const ropGroups = useMemo(() => buildRopTpGroups(workingRows, teams, orgTeamCtx?.snap), [workingRows, teams, orgTeamCtx]);
   const topRops = useMemo(() => topRopTeamsByTp(ropGroups, 5), [ropGroups]);
   const clientSummaries = useMemo(() => buildClientSummariesFromDealers(dealerRows), [dealerRows]);
 
@@ -740,7 +748,7 @@ export function TradePointsManagementCockpit({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Все команды</SelectItem>
-                {getRopOptions().map((o) => (
+                {(orgTeamCtx ? realRopOptions(orgTeamCtx.snap) : getRopOptions()).map((o) => (
                   <SelectItem key={o.teamId} value={o.teamId}>
                     {o.label}
                   </SelectItem>

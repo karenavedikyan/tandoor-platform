@@ -55,7 +55,11 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { mergeActualizationState, createEmptyActualizationState } from "@/lib/client-base-actualization-state";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
-import { roleScopedDealerRows } from "@/lib/dealer-base-role-views";
+import {
+  mapSalesRoleToDealerBaseAccess,
+  roleScopedDealerRows,
+} from "@/lib/dealer-base-role-views";
+import { roleScopedDealerRowsForReal } from "@/lib/dealer-base-real-scope";
 import {
   canArchiveTradePointDuringActualization,
   canActualizeClientBase,
@@ -72,7 +76,13 @@ import { toast } from "@/hooks/use-toast";
 import { getClientCategoryLabel, type ClientCategoryId } from "@/lib/client-category";
 import type { DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import { cn } from "@/lib/utils";
-import { displayUserName, useCurrentUser } from "@/hooks/use-current-user";
+import { displayUserName } from "@/lib/auth-api";
+import { useAuthUser } from "@/hooks/use-auth-user";
+import { mapUserRoleToDealerBaseAccess } from "@/lib/auth-user-dealer-access";
+import { useOrgSnapshot } from "@/lib/use-org-snapshot";
+import { useMyVisibleClientCodes } from "@/lib/use-my-visible-client-codes";
+import { buildAssignmentsMap, getVisibleReleaseClients } from "@/lib/real-client-base";
+import { buildDealerRowsFromReleaseClients } from "@/lib/dealer-base-mock-data";
 import { TradePointsManagementCockpit } from "@/pages/trade-points-management-cockpit";
 
 /** Плотность отображения списка торговых точек (как «Витрина дилеров»). */
@@ -245,7 +255,26 @@ type ActiveFilterChip = {
 export default function TradePointsPage(): ReactElement {
   const actx = useClientBaseActualization();
   const { profile } = useReleaseDemoProfile();
-  const { user } = useCurrentUser();
+  const { user: me, isLoading: authLoading, isError: authError } = useAuthUser();
+  const user = me ?? undefined;
+  const isRealUser = Boolean(me?.id);
+  const orgSnapQ = useOrgSnapshot({ enabled: isRealUser });
+  const visCodesQ = useMyVisibleClientCodes({ enabled: isRealUser });
+  const snap = orgSnapQ.data ?? null;
+  const visPayload = visCodesQ.data ?? null;
+  const useReal = Boolean(
+    isRealUser &&
+      !authLoading &&
+      !authError &&
+      snap &&
+      visPayload &&
+      !orgSnapQ.isError &&
+      !visCodesQ.isError,
+  );
+  const access = useMemo(() => {
+    if (isRealUser && me?.role) return mapUserRoleToDealerBaseAccess(me.role);
+    return mapSalesRoleToDealerBaseAccess(profile.role);
+  }, [isRealUser, me?.role, profile.role]);
   const isMobile = useIsMobile();
   const teamCtx = useClientBaseTeamActualization();
   const actState = actx.enabled ? teamCtx.mergedState : createEmptyActualizationState();
@@ -279,32 +308,100 @@ export default function TradePointsPage(): ReactElement {
   const [bulkArchiveDialogOpen, setBulkArchiveDialogOpen] = useState(false);
   const [bulkArchiveBusy, setBulkArchiveBusy] = useState(false);
 
-  const baseRows = useMemo(
-    () =>
-      buildTradePointListForActualization(actState, profile, {
-        includeArchivedTradePoints: showArchived,
-        archivedTradePointsOnly: showArchived,
-      }),
-    [actState, profile, showArchived],
-  );
+  const mergedRowsActivePortfolioForManagement = useMemo(() => {
+    if (isRealUser && !authLoading && !authError && snap && visPayload && !orgSnapQ.isError && !visCodesQ.isError) {
+      const clients = getVisibleReleaseClients(
+        snap,
+        visPayload.all,
+        visPayload.codes,
+        buildAssignmentsMap(visPayload.assignments),
+      );
+      const releaseRows = buildDealerRowsFromReleaseClients(clients);
+      if (!actx.enabled) return releaseRows;
+      return buildDealerBaseRowsWithActualization(actState, profile, {
+        includeArchivedDealers: false,
+        releaseDealerRows: releaseRows,
+      });
+    }
+    if (isRealUser && !authLoading && !authError && (!snap || !visPayload)) return [];
+    if (!actx.enabled) return [];
+    return buildDealerBaseRowsWithActualization(actState, profile, { includeArchivedDealers: false });
+  }, [
+    isRealUser,
+    authLoading,
+    authError,
+    snap,
+    visPayload,
+    orgSnapQ.isError,
+    visCodesQ.isError,
+    actx.enabled,
+    actState,
+    profile,
+  ]);
 
-  const workingRows = useMemo(
-    () => buildTradePointListForActualization(actState, profile, { includeArchivedTradePoints: false }),
-    [actState, profile],
-  );
+  const scopedActivePortfolioRowsForManagement = useMemo(() => {
+    if (useReal && snap) return roleScopedDealerRowsForReal(mergedRowsActivePortfolioForManagement, snap, access);
+    return roleScopedDealerRows(mergedRowsActivePortfolioForManagement, profile);
+  }, [useReal, snap, mergedRowsActivePortfolioForManagement, profile, access]);
 
-  const mergedRowsActivePortfolioForManagement = useMemo(
-    () =>
-      actx.enabled
-        ? buildDealerBaseRowsWithActualization(actState, profile, { includeArchivedDealers: false })
-        : [],
-    [actx.enabled, actState, profile],
-  );
+  const tpListRealOpts = useMemo(() => {
+    if (!useReal || !snap) return undefined;
+    const clients = getVisibleReleaseClients(
+      snap,
+      visPayload!.all,
+      visPayload!.codes,
+      buildAssignmentsMap(visPayload!.assignments),
+    );
+    const releaseRows = buildDealerRowsFromReleaseClients(clients);
+    return {
+      releaseDealerRows: releaseRows,
+      orgScope: { snap, access },
+    } as const;
+  }, [useReal, snap, visPayload, access]);
 
-  const scopedActivePortfolioRowsForManagement = useMemo(
-    () => roleScopedDealerRows(mergedRowsActivePortfolioForManagement, profile),
-    [mergedRowsActivePortfolioForManagement, profile],
-  );
+  const baseRows = useMemo(() => {
+    if (isRealUser && !authLoading && !authError && (!snap || !visPayload || orgSnapQ.isError || visCodesQ.isError)) {
+      return [];
+    }
+    return buildTradePointListForActualization(actState, profile, {
+      includeArchivedTradePoints: showArchived,
+      archivedTradePointsOnly: showArchived,
+      ...(tpListRealOpts ?? {}),
+    });
+  }, [
+    isRealUser,
+    authLoading,
+    authError,
+    snap,
+    visPayload,
+    orgSnapQ.isError,
+    visCodesQ.isError,
+    actState,
+    profile,
+    showArchived,
+    tpListRealOpts,
+  ]);
+
+  const workingRows = useMemo(() => {
+    if (isRealUser && !authLoading && !authError && (!snap || !visPayload || orgSnapQ.isError || visCodesQ.isError)) {
+      return [];
+    }
+    return buildTradePointListForActualization(actState, profile, {
+      includeArchivedTradePoints: false,
+      ...(tpListRealOpts ?? {}),
+    });
+  }, [
+    isRealUser,
+    authLoading,
+    authError,
+    snap,
+    visPayload,
+    orgSnapQ.isError,
+    visCodesQ.isError,
+    actState,
+    profile,
+    tpListRealOpts,
+  ]);
 
   const summary = useMemo(() => {
     let filled = 0;
@@ -1133,6 +1230,7 @@ export default function TradePointsPage(): ReactElement {
         profile={profile}
         workingRows={workingRows}
         dealerRows={scopedActivePortfolioRowsForManagement}
+        orgTeamCtx={useReal && snap ? { snap, access } : undefined}
       />
     );
   }
