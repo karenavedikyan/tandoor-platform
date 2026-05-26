@@ -554,6 +554,35 @@ function sanitizeLikeFragment(raw: string): string {
   return raw.replace(/[%_\\]/g, "");
 }
 
+async function ropCanAccessUser(pool: PoolLike, targetUserId: string, ropUserId: string): Promise<boolean> {
+  const allowed = await pool.query<{ ok: boolean }>(
+    `SELECT (
+       $1::uuid = $2::uuid
+       OR EXISTS (
+         SELECT 1
+           FROM user_team_memberships utm
+           JOIN teams t ON t.id = utm.team_id
+          WHERE utm.user_id = $1::uuid AND t.rop_user_id = $2::uuid
+       )
+     ) AS ok`,
+    [targetUserId, ropUserId],
+  );
+  return Boolean(allowed.rows[0]?.ok);
+}
+
+async function denyIfRopCannotAccessUser(
+  res: VercelResponse,
+  pool: PoolLike,
+  me: DbUserRow,
+  targetUserId: string,
+): Promise<boolean> {
+  if (me.role !== "rop") return false;
+  const allowed = await ropCanAccessUser(pool, targetUserId, me.id);
+  if (allowed) return false;
+  sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+  return true;
+}
+
 async function handleUsersList(
   req: VercelRequest,
   res: VercelResponse,
@@ -607,6 +636,20 @@ async function handleUsersList(
     params.push(statusRaw);
     pi++;
   }
+  // Скоуп выдачи для РОПа: только пользователи его команд + он сам.
+  if (me.role === "rop") {
+    conds.push(`(
+      id = $${pi}::uuid
+      OR id IN (
+        SELECT utm.user_id
+          FROM user_team_memberships utm
+          JOIN teams t ON t.id = utm.team_id
+         WHERE t.rop_user_id = $${pi}::uuid
+      )
+    )`);
+    params.push(me.id);
+    pi++;
+  }
 
   const whereSql = conds.length > 0 ? `WHERE ${conds.join(" AND ")}` : "";
 
@@ -652,6 +695,7 @@ async function handleUsersGet(
     sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите корректный идентификатор пользователя." });
     return;
   }
+  if (await denyIfRopCannotAccessUser(res, pool, me, id)) return;
 
   const ures = await pool.query<DbUserRow>(
     `SELECT id, email, full_name, phone, role, status, must_change_password, last_login_at, created_at, telegram_user_id
@@ -693,6 +737,7 @@ async function handleUsersUpdateRole(
     sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите корректный идентификатор пользователя." });
     return;
   }
+  if (await denyIfRopCannotAccessUser(res, pool, me, id)) return;
   if (!BUSINESS_ROLES.includes(roleNew as UserRole)) {
     sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Недопустимая роль." });
     return;
@@ -766,6 +811,7 @@ async function handleUsersUpdateStatus(
     sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите корректный идентификатор пользователя." });
     return;
   }
+  if (await denyIfRopCannotAccessUser(res, pool, me, id)) return;
   if (st !== "active" && st !== "disabled") {
     sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Недопустимый статус." });
     return;
@@ -847,6 +893,7 @@ async function handleUsersResetPassword(
     sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите корректный идентификатор пользователя." });
     return;
   }
+  if (await denyIfRopCannotAccessUser(res, pool, me, id)) return;
   if (id === me.id) {
     sendJson(res, 400, {
       success: false,
@@ -946,6 +993,7 @@ async function handlePasswordResetLinkCreate(
     });
     return;
   }
+  if (await denyIfRopCannotAccessUser(res, pool, me, userId)) return;
 
   const rlKey = `prl-create:${me.id}`;
   const rl = rateCheck(rlKey, 10, 60 * 1000);
