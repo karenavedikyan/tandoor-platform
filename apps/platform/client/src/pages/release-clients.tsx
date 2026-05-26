@@ -27,8 +27,8 @@ import {
   type ReleaseClient,
 } from "@/lib/release-client-data";
 import { displayUserName } from "@/lib/auth-api";
+import { useAuthUser } from "@/hooks/use-auth-user";
 import { releaseDemoRoleLabel } from "@/lib/release-demo-profile";
-import { useAuthMe } from "@/lib/use-auth-me";
 import { useMyVisibleClientCodes } from "@/lib/use-my-visible-client-codes";
 import { getManagersForRopTeam, getRopOptions, isRopOrManagerAllFilter } from "@/lib/rop-manager-filters";
 import { getSalesUserById, SALES_TEAMS } from "@/lib/sales-control-data";
@@ -57,7 +57,7 @@ function platformRoleLabel(role: string): string {
 
 export default function ReleaseClientsPage() {
   const { profile } = useReleaseDemoProfile();
-  const { data: me, isLoading: meLoading, isFetched: meFetched, isError: meError } = useAuthMe();
+  const { user: me, isLoading: authLoading, isError: authError } = useAuthUser();
   const isRealUser = Boolean(me?.id);
   const { data: visible, isLoading: visibleLoading } = useMyVisibleClientCodes({ enabled: isRealUser });
   const [query, setQuery] = useState("");
@@ -71,14 +71,14 @@ export default function ReleaseClientsPage() {
 
   const baseRows = useMemo(() => {
     const all = getReleaseClients();
-    if (!meFetched || meLoading) return [];
-    if (meError) return filterReleaseClientsForDemoProfile(all, profile);
+    if (authLoading) return [];
+    if (authError) return filterReleaseClientsForDemoProfile(all, profile);
     if (isRealUser) {
       if (visibleLoading || !visible) return [];
       return filterReleaseClientsByVisibleCodes(all, visible.codes);
     }
     return filterReleaseClientsForDemoProfile(all, profile);
-  }, [meFetched, meLoading, meError, isRealUser, visible, visibleLoading, profile]);
+  }, [authLoading, authError, isRealUser, visible, visibleLoading, profile]);
 
   const scopeSummary = useMemo(() => getReleaseClientSummary(baseRows), [baseRows]);
 
