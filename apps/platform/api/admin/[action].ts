@@ -17,6 +17,11 @@ import {
   buildManagerMergePlan,
   type ManualMergePlan,
 } from "../../shared/admin/actualization-dedupe.js";
+import {
+  applyContactMigrationPlan,
+  buildContactMigrationPlanForState,
+  type ContactMigrationPlan,
+} from "../../shared/admin/contacts-migration.js";
 
 type NeonHttp = ReturnType<typeof neon>;
 interface PoolLike {
@@ -1811,6 +1816,12 @@ type ActualizationDedupePlanBundle = {
   totals: { managers: number; rowsToMerge: number; skipped: number };
 };
 
+type ContactMigrationPlanBundle = {
+  plans: ContactMigrationPlan[];
+  stateRows: Array<ActualizationDedupeStateRow & { managerScopeUserId: string }>;
+  totals: { managers: number; contactsToMigrate: number; skipped: number };
+};
+
 function scopeUserId(scopeKey: string): string | null {
   return scopeKey.startsWith("user:") ? scopeKey.slice("user:".length) : null;
 }
@@ -1943,6 +1954,118 @@ async function handleActualizationDedupeApply(
       merged: plan.rows.length,
       plan,
     });
+  }
+
+  sendJson(res, 200, { success: true, applied, perManager, plans: bundle.plans, totals: bundle.totals });
+}
+
+async function loadContactMigrationPlanBundle(pool: PoolLike, actorUserId: string): Promise<ContactMigrationPlanBundle> {
+  const stateRes = await pool.query<ActualizationDedupeStateRow>(
+    `SELECT scope_key, user_id, role, state, updated_at
+     FROM client_base_actualization_state
+     WHERE scope_key LIKE 'user:%'`,
+  );
+  const plans: ContactMigrationPlan[] = [];
+  const stateRows: ContactMigrationPlanBundle["stateRows"] = [];
+
+  for (const row of stateRes.rows) {
+    const scopeId = scopeUserId(String(row.scope_key));
+    if (!scopeId) continue;
+    const managerScopeUserId = scopeId.startsWith("mgr-")
+      ? (MGR_TO_UUID_FOR_ACTUALIZATION_DEDUPE[scopeId] ?? row.user_id ?? scopeId)
+      : scopeId;
+    const state = coerceActualizationState(row.state) as unknown as Parameters<typeof buildContactMigrationPlanForState>[0]["state"];
+    const plan = buildContactMigrationPlanForState({ managerScopeUserId, state, actorUserId });
+    plans.push(plan);
+    stateRows.push({ ...row, managerScopeUserId });
+  }
+
+  return {
+    plans,
+    stateRows,
+    totals: {
+      managers: plans.length,
+      contactsToMigrate: plans.reduce((sum, p) => sum + p.rows.length, 0),
+      skipped: plans.reduce((sum, p) => sum + p.skipped.length, 0),
+    },
+  };
+}
+
+async function handleActualizationContactsMigrationDryRun(
+  res: VercelResponse,
+  pool: PoolLike,
+  headers: Record<string, string | string[] | undefined>,
+): Promise<void> {
+  const me = await resolveCurrentUser(pool, headers);
+  if (!me) {
+    sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+    return;
+  }
+  if (me.role !== "admin" || me.status !== "active") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Только администратор." });
+    return;
+  }
+  const bundle = await loadContactMigrationPlanBundle(pool, me.id);
+  sendJson(res, 200, { success: true, plans: bundle.plans, totals: bundle.totals });
+}
+
+async function handleActualizationContactsMigrationApply(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  headers: Record<string, string | string[] | undefined>,
+): Promise<void> {
+  const me = await resolveCurrentUser(pool, headers);
+  if (!me) {
+    sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+    return;
+  }
+  if (me.role !== "admin" || me.status !== "active") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Только администратор." });
+    return;
+  }
+  const body = isPlainObject(req.body) ? req.body : {};
+  if (body.confirm !== true) {
+    sendJson(res, 400, { success: false, code: "CONFIRM_REQUIRED", message: "Требуется confirm: true." });
+    return;
+  }
+
+  const actorName = me.full_name || me.email || "admin";
+  const bundle = await loadContactMigrationPlanBundle(pool, me.id);
+  const planByScope = new Map<string, ContactMigrationPlan>();
+  for (const plan of bundle.plans) {
+    const first = plan.rows[0] ?? null;
+    if (first) planByScope.set(first.managerScopeUserId, plan);
+  }
+
+  let applied = 0;
+  const perManager: Array<{ managerScopeUserId: string; created: number; plan: ContactMigrationPlan }> = [];
+  for (const row of bundle.stateRows) {
+    const plan = planByScope.get(row.managerScopeUserId);
+    if (!plan || plan.rows.length === 0) continue;
+    const current = coerceActualizationState(row.state) as unknown as Parameters<typeof applyContactMigrationPlan>[0];
+    const next = applyContactMigrationPlan(current, plan, me.id, actorName);
+    const scopeKey = `user:${row.managerScopeUserId}`;
+    await pool.query(
+      `INSERT INTO client_base_actualization_state (scope_key, user_id, role, state, version)
+       VALUES ($1, $2, $3, $4::jsonb, 1)
+       ON CONFLICT (scope_key) DO UPDATE SET
+         user_id = EXCLUDED.user_id,
+         role = COALESCE(EXCLUDED.role, client_base_actualization_state.role),
+         state = EXCLUDED.state,
+         version = EXCLUDED.version,
+         updated_at = now()`,
+      [scopeKey, row.managerScopeUserId, row.role, JSON.stringify(next)],
+    );
+    await tryAudit(pool, {
+      actorUserId: me.id,
+      action: "actualization.contacts_migration",
+      entityType: "actualization_state",
+      entityId: row.managerScopeUserId,
+      metadata: { created: plan.rows.length, planRows: plan.rows },
+    });
+    applied += plan.rows.length;
+    perManager.push({ managerScopeUserId: row.managerScopeUserId, created: plan.rows.length, plan });
   }
 
   sendJson(res, 200, { success: true, applied, perManager, plans: bundle.plans, totals: bundle.totals });
@@ -3007,6 +3130,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "actualization-dedupe-apply" && req.method === "POST") {
       await handleActualizationDedupeApply(req, res, pool, headers);
+      return;
+    }
+    if (action === "actualization-contacts-migration-dry-run" && req.method === "POST") {
+      await handleActualizationContactsMigrationDryRun(res, pool, headers);
+      return;
+    }
+    if (action === "actualization-contacts-migration-apply" && req.method === "POST") {
+      await handleActualizationContactsMigrationApply(req, res, pool, headers);
       return;
     }
     if (action === "sessions-list-self" && req.method === "GET") {
