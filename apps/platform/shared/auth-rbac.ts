@@ -26,6 +26,7 @@ export type Permission =
   | "users.update_role"
   | "users.update_status"
   | "users.reset_password"
+  | "users.impersonate"
   // Profile (Prompt 08)
   | "profile.read_self"
   | "profile.update_self"
@@ -65,6 +66,7 @@ const PERMISSIONS_BY_ROLE: Record<UserRole, ReadonlySet<Permission>> = {
     "users.update_role",
     "users.update_status",
     "users.reset_password",
+    "users.impersonate",
     "profile.read_self",
     "profile.update_self",
     "audit.read",
