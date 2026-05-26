@@ -173,6 +173,17 @@ export function filterReleaseClientsForDemoProfile(rows: ReleaseClient[], profil
   return rows;
 }
 
+/**
+ * Фильтрация клиентов по разрешённым клиентским кодам, полученным с бэка
+ * (/api/auth/my-visible-codes). Используется для РЕАЛЬНЫХ залогиненных юзеров.
+ * Если codes === null → видны все (admin/director/analyst/marketer).
+ */
+export function filterReleaseClientsByVisibleCodes(rows: ReleaseClient[], codes: string[] | null): ReleaseClient[] {
+  if (codes === null) return rows;
+  const allow = new Set(codes);
+  return rows.filter((c) => allow.has(c.code));
+}
+
 export function clientStatusLabel(c: ReleaseClient): string {
   if (c.isClosed) return "Закрытый";
   if (!c.isActive) return "Неактивен";
