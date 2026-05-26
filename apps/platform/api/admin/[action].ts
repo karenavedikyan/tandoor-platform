@@ -11,6 +11,7 @@ import bcrypt from "bcryptjs";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { handleTeamsList } from "../../shared/admin/client-assignments-handlers.js";
 import {
+  MGR_TO_UUID_FOR_ACTUALIZATION_DEDUPE,
   UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE,
   applyMergePlanToState,
   buildManagerMergePlan,
@@ -1830,7 +1831,9 @@ async function loadActualizationDedupePlanBundle(pool: PoolLike): Promise<Actual
     if (!scopeId) continue;
     const managerUserId = UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE[scopeId] ?? (scopeId.startsWith("mgr-") ? scopeId : null);
     if (!managerUserId) continue;
-    const managerScopeUserId = scopeId.startsWith("mgr-") ? (row.user_id ?? scopeId) : scopeId;
+    const managerScopeUserId = scopeId.startsWith("mgr-")
+      ? (MGR_TO_UUID_FOR_ACTUALIZATION_DEDUPE[scopeId] ?? row.user_id ?? scopeId)
+      : scopeId;
     const managerFullName = fullNameById.get(managerScopeUserId) ?? managerUserId;
     const state = coerceActualizationState(row.state) as unknown as Parameters<typeof buildManagerMergePlan>[0]["state"];
     const plan = buildManagerMergePlan({
