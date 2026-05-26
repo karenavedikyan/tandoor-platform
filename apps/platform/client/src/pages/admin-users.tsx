@@ -42,6 +42,16 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 import { buildUserHierarchy } from "@/lib/admin-users-hierarchy";
 import { AdminUsersDesktopPanels, AdminUsersMobilePanels } from "@/pages/admin-users-listing";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { useToast } from "@/hooks/use-toast";
+import { getUserTeamHistory, listTeams, reassignUserTeam } from "@/lib/client-assignments-api";
 
 import { userHas } from "@/lib/auth-rbac";
 import { canCreateResetLink, defaultHomePathForUserRole } from "@/lib/auth-access";
@@ -95,10 +105,13 @@ function AdminUserActionsDropdown({
   canRole,
   canResetPwd,
   canStatus,
+  canTeam = false,
   onRole,
   onResetLink,
   onPwd,
   onStatus,
+  onTeamChange,
+  onTeamHistory,
   triggerTestId,
 }: {
   row: AdminUser;
@@ -106,10 +119,13 @@ function AdminUserActionsDropdown({
   canRole: boolean;
   canResetPwd: boolean;
   canStatus: boolean;
+  canTeam?: boolean;
   onRole: (u: AdminUser) => void;
   onResetLink: (u: AdminUser) => void;
   onPwd: (u: AdminUser) => void;
   onStatus: (u: AdminUser) => void;
+  onTeamChange?: (u: AdminUser) => void;
+  onTeamHistory?: (u: AdminUser) => void;
   triggerTestId?: string;
 }) {
   const canLink = Boolean(viewer && canCreateResetLink({ id: viewer.id, role: viewer.role }, { id: row.id, role: row.role }));
@@ -146,6 +162,16 @@ function AdminUserActionsDropdown({
             Изменить статус
           </DropdownMenuItem>
         ) : null}
+        {canTeam && onTeamChange ? (
+          <DropdownMenuItem className="min-h-11 cursor-pointer" onClick={() => onTeamChange(row)}>
+            Сменить команду
+          </DropdownMenuItem>
+        ) : null}
+        {canTeam && onTeamHistory ? (
+          <DropdownMenuItem className="min-h-11 cursor-pointer" onClick={() => onTeamHistory(row)}>
+            История смены команды
+          </DropdownMenuItem>
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -159,6 +185,8 @@ export default function AdminUsersPage() {
   const { user } = useCurrentUser();
   const qc = useQueryClient();
   const canList = Boolean(user && userHas(user.role, "users.list"));
+  const { toast } = useToast();
+  const canTeamMgmt = Boolean(user && (user.role === "admin" || user.role === "director"));
 
   const [qInput, setQInput] = useState("");
   const [qDebounced, setQDebounced] = useState("");
@@ -231,6 +259,32 @@ export default function AdminUsersPage() {
   const [telegramDraftByUserId, setTelegramDraftByUserId] = useState<Record<string, string>>({});
   const [telegramSavingId, setTelegramSavingId] = useState<string | null>(null);
   const [telegramErrByUserId, setTelegramErrByUserId] = useState<Record<string, string>>({});
+  const [teamMoveDialog, setTeamMoveDialog] = useState<AdminUser | null>(null);
+  const [teamMoveToId, setTeamMoveToId] = useState<string>("");
+  const [teamMoveReason, setTeamMoveReason] = useState("");
+  const [teamMoveSaving, setTeamMoveSaving] = useState(false);
+  const [teamHistoryUser, setTeamHistoryUser] = useState<AdminUser | null>(null);
+
+  const teamsForMoveQ = useQuery({
+    queryKey: ["admin-users", "teams-for-move"],
+    queryFn: async () => {
+      const r = await listTeams();
+      if (!r.ok) throw new Error(r.message);
+      return r.teams;
+    },
+    enabled: canList && canTeamMgmt,
+  });
+
+  const teamHistoryQ = useQuery({
+    queryKey: ["admin-users", "team-history", teamHistoryUser?.id],
+    queryFn: async () => {
+      if (!teamHistoryUser) return [];
+      const r = await getUserTeamHistory(teamHistoryUser.id);
+      if (!r.ok) throw new Error(r.message);
+      return r.items;
+    },
+    enabled: Boolean(teamHistoryUser),
+  });
 
   function openResetLink(row: AdminUser) {
     setLinkDialog(row);
@@ -459,10 +513,17 @@ export default function AdminUsersPage() {
             canRole={canRole}
             canResetPwd={canResetPwd}
             canStatus={canStatus}
+            canTeam={canTeamMgmt && row.role !== "admin"}
             onRole={openRole}
             onResetLink={openResetLink}
             onPwd={openPwd}
             onStatus={openStatus}
+            onTeamChange={(u) => {
+              setTeamMoveDialog(u);
+              setTeamMoveToId("");
+              setTeamMoveReason("");
+            }}
+            onTeamHistory={(u) => setTeamHistoryUser(u)}
             triggerTestId={triggerTestId}
           />
         )}
@@ -482,10 +543,17 @@ export default function AdminUsersPage() {
             canRole={canRole}
             canResetPwd={canResetPwd}
             canStatus={canStatus}
+            canTeam={canTeamMgmt && row.role !== "admin"}
             onRole={openRole}
             onResetLink={openResetLink}
             onPwd={openPwd}
             onStatus={openStatus}
+            onTeamChange={(u) => {
+              setTeamMoveDialog(u);
+              setTeamMoveToId("");
+              setTeamMoveReason("");
+            }}
+            onTeamHistory={(u) => setTeamHistoryUser(u)}
             triggerTestId={triggerTestId}
           />
         )}
@@ -607,6 +675,117 @@ export default function AdminUsersPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog
+        open={Boolean(teamMoveDialog)}
+        onOpenChange={(o) => {
+          if (!o) {
+            setTeamMoveDialog(null);
+            setTeamMoveToId("");
+            setTeamMoveReason("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-md" data-testid="dialog-admin-users-team-move">
+          <DialogHeader>
+            <DialogTitle>Сменить команду</DialogTitle>
+            <DialogDescription>
+              {teamMoveDialog ? (
+                <>
+                  <span className="font-mono text-xs">{teamMoveDialog.email}</span>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Пользователь будет переведён в выбранную команду; клиенты переносятся вместе с менеджером.
+                  </p>
+                </>
+              ) : null}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="space-y-2">
+              <Label>Новая команда</Label>
+              <Select value={teamMoveToId || undefined} onValueChange={(v) => setTeamMoveToId(v)}>
+                <SelectTrigger className="min-h-11">
+                  <SelectValue placeholder="Выберите команду" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(teamsForMoveQ.data ?? []).map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="team-move-reason">Причина (необязательно)</Label>
+              <Input id="team-move-reason" value={teamMoveReason} onChange={(e) => setTeamMoveReason(e.target.value)} className="min-h-11" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setTeamMoveDialog(null)}>
+              Отмена
+            </Button>
+            <Button
+              type="button"
+              className="min-h-11 bg-primary text-primary-foreground shadow-sm hover:bg-[#86B832] focus-visible:ring-primary"
+              disabled={!teamMoveDialog || !teamMoveToId || teamMoveSaving}
+              onClick={async () => {
+                if (!teamMoveDialog || !teamMoveToId) return;
+                setTeamMoveSaving(true);
+                try {
+                  const r = await reassignUserTeam({
+                    userId: teamMoveDialog.id,
+                    toTeamId: teamMoveToId,
+                    reason: teamMoveReason.trim() || undefined,
+                    moveClients: true,
+                  });
+                  if (!r.ok) {
+                    toast({ title: r.message, variant: "destructive" });
+                    return;
+                  }
+                  toast({ title: "Команда обновлена" });
+                  setTeamMoveDialog(null);
+                  await invalidateList();
+                  await qc.invalidateQueries({ queryKey: ["client-assignments"] });
+                } finally {
+                  setTeamMoveSaving(false);
+                }
+              }}
+            >
+              {teamMoveSaving ? "Сохранение…" : "Перевести"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Sheet open={Boolean(teamHistoryUser)} onOpenChange={(o) => !o && setTeamHistoryUser(null)}>
+        <SheetContent className="flex w-full flex-col sm:max-w-lg">
+          <SheetHeader>
+            <SheetTitle>История смены команды</SheetTitle>
+            <SheetDescription className="font-mono">{teamHistoryUser?.email}</SheetDescription>
+          </SheetHeader>
+          <div className="mt-4 flex-1 overflow-y-auto text-sm">
+            {teamHistoryQ.isLoading ? (
+              <p className="text-muted-foreground">Загрузка…</p>
+            ) : teamHistoryQ.isError ? (
+              <p className="text-destructive">{(teamHistoryQ.error as Error)?.message}</p>
+            ) : !(teamHistoryQ.data ?? []).length ? (
+              <p className="text-muted-foreground">Нет записей</p>
+            ) : (
+              <ul className="space-y-3">
+                {(teamHistoryQ.data ?? []).map((h) => (
+                  <li key={h.id} className="border-b border-border/60 pb-3 last:border-0">
+                    <div className="font-medium">{formatDisplayDateTime(h.createdAt)}</div>
+                    <div className="text-muted-foreground">Роль в команде: {h.roleInTeam ?? "—"}</div>
+                    <div className="text-muted-foreground">{h.reason ?? "—"}</div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
+
 
       <Dialog open={Boolean(roleDialog)} onOpenChange={(o) => !o && setRoleDialog(null)}>
         <DialogContent className="max-w-md" data-testid="dialog-admin-users-role">
