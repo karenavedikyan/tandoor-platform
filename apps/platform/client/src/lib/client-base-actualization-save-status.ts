@@ -21,7 +21,7 @@ let timeoutId: number | null = null;
 const listeners = new Set<() => void>();
 
 function emit(): void {
-  for (const listener of listeners) listener();
+  listeners.forEach((listener) => listener());
 }
 
 function setStatus(next: SaveStatus): void {
