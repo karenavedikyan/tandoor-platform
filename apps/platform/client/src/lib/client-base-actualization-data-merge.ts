@@ -647,6 +647,8 @@ export type BuildDealerBaseRowsOptions = {
    * `false` / не задано — рабочая база: архивные клиенты **скрыты**.
    */
   includeArchivedDealers?: boolean;
+  /** Подмена статического `DEALER_BASE_ROWS` (например, после фильтра по видимым кодам из БД). */
+  releaseDealerRows?: DealerRow[];
 };
 
 /** Строки для клиентской базы: manual сверху, затем release с merge. По умолчанию только рабочие (не архив). */

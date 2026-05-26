@@ -1,5 +1,5 @@
 /**
- * Vercel Serverless: `/api/auth/:action` (login | logout | logout-all | me | my-visible-codes).
+ * Vercel Serverless: `/api/auth/:action` (login | logout | logout-all | me | my-visible-codes | my-org-snapshot).
  *
  * Self-contained: без импортов client/, server/, shared/. Vercel-tracing/bundler не должен
  * подтягивать пути проекта на этапе загрузки функции, иначе получим FUNCTION_INVOCATION_FAILED
@@ -1105,15 +1105,74 @@ async function handleImpersonateStop(headers: Record<string, string | string[] |
   };
 }
 
-async function handleMyVisibleCodes(headers: Record<string, string | string[] | undefined>): Promise<AuthResult> {
+type VisibleClientsPayload =
+  | { all: true; codes: null; assignments: null }
+  | {
+      all: false;
+      codes: string[];
+      assignments: Array<{ code: string; responsibleUserId: string | null; teamId: string | null }>;
+    };
+
+type ClientAssignmentRow = {
+  client_code: string;
+  responsible_user_id: string | null;
+  team_id: string | null;
+};
+
+async function buildVisibleClientsPayload(pool: PoolLike, row: DbUserRow): Promise<VisibleClientsPayload> {
+  const role = row.role as UserRole;
+  if (role === "admin" || role === "director" || role === "analyst" || role === "marketer") {
+    return { all: true, codes: null, assignments: null };
+  }
+  if (role === "rop") {
+    const q = await pool.query<ClientAssignmentRow>(
+      `SELECT DISTINCT ON (ca.client_code) ca.client_code, ca.responsible_user_id, ca.team_id
+       FROM client_assignments ca
+       INNER JOIN teams t ON t.id = ca.team_id
+       WHERE t.rop_user_id = $1::uuid
+       ORDER BY ca.client_code`,
+      [row.id],
+    );
+    const rows = q.rows;
+    return {
+      all: false,
+      codes: rows.map((r) => r.client_code).filter(Boolean),
+      assignments: rows.map((r) => ({
+        code: r.client_code,
+        responsibleUserId: r.responsible_user_id,
+        teamId: r.team_id,
+      })),
+    };
+  }
+  if (role === "manager" || role === "regional_manager") {
+    const q = await pool.query<ClientAssignmentRow>(
+      `SELECT DISTINCT ON (client_code) client_code, responsible_user_id, team_id
+       FROM client_assignments
+       WHERE responsible_user_id = $1::uuid
+       ORDER BY client_code`,
+      [row.id],
+    );
+    const rows = q.rows;
+    return {
+      all: false,
+      codes: rows.map((r) => r.client_code).filter(Boolean),
+      assignments: rows.map((r) => ({
+        code: r.client_code,
+        responsibleUserId: r.responsible_user_id,
+        teamId: r.team_id,
+      })),
+    };
+  }
+  return { all: false, codes: [], assignments: [] };
+}
+
+async function resolveSessionUserRow(
+  headers: Record<string, string | string[] | undefined>,
+): Promise<{ pool: PoolLike; row: DbUserRow } | null> {
   const token = parseAuthRefreshToken(typeof headers.cookie === "string" ? headers.cookie : undefined);
-  if (!token) {
-    return { status: 401, json: { success: false, code: "UNAUTHORIZED" } };
-  }
+  if (!token) return null;
   const pool = getPool();
-  if (!pool) {
-    return { status: 500, json: { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." } };
-  }
+  if (!pool) return null;
   const hashHex = sha256Hex(token);
   const res = await pool.query<DbUserRow & { refresh_token_hash: string }>(
     `SELECT u.id, u.email, u.full_name, u.role, u.status, u.must_change_password, u.last_login_at,
@@ -1125,46 +1184,192 @@ async function handleMyVisibleCodes(headers: Record<string, string | string[] | 
     [hashHex],
   );
   const row = res.rows[0];
-  if (!row || !timingSafeEqualHex(row.refresh_token_hash, token)) {
+  if (!row || !timingSafeEqualHex(row.refresh_token_hash, token)) return null;
+  return { pool, row };
+}
+
+async function handleMyVisibleCodes(headers: Record<string, string | string[] | undefined>): Promise<AuthResult> {
+  const ctx = await resolveSessionUserRow(headers);
+  if (!ctx) {
     return { status: 401, json: { success: false, code: "UNAUTHORIZED" } };
   }
-  const role = row.role as UserRole;
-  if (role === "admin" || role === "director" || role === "analyst" || role === "marketer") {
-    return {
-      status: 200,
-      cacheControl: "no-store",
-      json: { success: true, all: true, codes: null },
-    };
-  }
-  if (role === "rop") {
-    const q = await pool.query<{ client_code: string }>(
-      `SELECT DISTINCT ca.client_code AS client_code
-       FROM client_assignments ca
-       INNER JOIN teams t ON t.id = ca.team_id
-       WHERE t.rop_user_id = $1::uuid`,
-      [row.id],
-    );
-    return {
-      status: 200,
-      cacheControl: "no-store",
-      json: { success: true, all: false, codes: q.rows.map((r) => r.client_code).filter(Boolean) },
-    };
-  }
-  if (role === "manager" || role === "regional_manager") {
-    const q = await pool.query<{ client_code: string }>(
-      `SELECT DISTINCT client_code FROM client_assignments WHERE responsible_user_id = $1::uuid`,
-      [row.id],
-    );
-    return {
-      status: 200,
-      cacheControl: "no-store",
-      json: { success: true, all: false, codes: q.rows.map((r) => r.client_code).filter(Boolean) },
-    };
-  }
+  const payload = await buildVisibleClientsPayload(ctx.pool, ctx.row);
   return {
     status: 200,
     cacheControl: "no-store",
-    json: { success: true, all: false, codes: [] },
+    json: { success: true, ...payload },
+  };
+}
+
+async function handleMyOrgSnapshot(headers: Record<string, string | string[] | undefined>): Promise<AuthResult> {
+  const ctx = await resolveSessionUserRow(headers);
+  if (!ctx) {
+    return { status: 401, json: { success: false, code: "UNAUTHORIZED" } };
+  }
+  const { pool, row } = ctx;
+  const meId = row.id;
+  const role = row.role as UserRole;
+  const meFullName = (row.full_name ?? "").trim() || row.email;
+
+  const teamsRes = await pool.query<{ id: string; name: string; rop_user_id: string | null; rop_name: string | null }>(
+    `SELECT t.id, t.name, t.rop_user_id, u.full_name AS rop_name
+     FROM teams t
+     LEFT JOIN users u ON u.id = t.rop_user_id
+     ORDER BY t.name`,
+  );
+  const allTeams = teamsRes.rows;
+
+  const usersRes = await pool.query<{
+    id: string;
+    full_name: string | null;
+    role: UserRole;
+    status: UserStatus;
+    team_id: string | null;
+  }>(
+    `SELECT u.id, u.full_name, u.role, u.status, utm.team_id
+     FROM users u
+     LEFT JOIN user_team_memberships utm ON utm.user_id = u.id
+     WHERE u.status IN ('active', 'invited')`,
+  );
+
+  type Agg = { id: string; fullName: string; role: UserRole; status: UserStatus; teamIds: Set<string> };
+  const userAgg = new Map<string, Agg>();
+  for (const r of usersRes.rows) {
+    const fn = (r.full_name ?? "").trim() || "";
+    let agg = userAgg.get(r.id);
+    if (!agg) {
+      agg = { id: r.id, fullName: fn, role: r.role as UserRole, status: r.status as UserStatus, teamIds: new Set() };
+      userAgg.set(r.id, agg);
+    }
+    if (r.team_id) agg.teamIds.add(r.team_id);
+  }
+
+  const ledTeamByRop = new Map<string, string>();
+  for (const t of allTeams) {
+    if (t.rop_user_id) ledTeamByRop.set(t.rop_user_id, t.id);
+  }
+
+  const utmMine = await pool.query<{ team_id: string }>(
+    `SELECT team_id FROM user_team_memberships WHERE user_id = $1::uuid`,
+    [meId],
+  );
+  const myUtmTeamIds = Array.from(new Set(utmMine.rows.map((r) => r.team_id).filter(Boolean)));
+
+  let meTeamId: string | null = null;
+  if (role === "rop") {
+    meTeamId = ledTeamByRop.get(meId) ?? myUtmTeamIds[0] ?? null;
+  } else if (role === "manager" || role === "regional_manager") {
+    meTeamId = myUtmTeamIds[0] ?? null;
+  }
+
+  const vis = await buildVisibleClientsPayload(pool, row);
+
+  const adminRes = await pool.query<{ id: string }>(
+    `SELECT id FROM users WHERE role = 'admin' AND status IN ('active', 'invited')`,
+  );
+  const adminIds = new Set(adminRes.rows.map((r) => r.id));
+
+  function membersOfTeams(teamIds: string[]): Set<string> {
+    const ids = new Set<string>();
+    const tset = new Set(teamIds);
+    for (const agg of Array.from(userAgg.values())) {
+      for (const tid of Array.from(agg.teamIds)) {
+        if (tset.has(tid)) ids.add(agg.id);
+      }
+    }
+    return ids;
+  }
+
+  let visibility: {
+    all: boolean;
+    clientCodes: string[] | null;
+    teamIds: string[];
+    visibleUserIds: string[];
+  };
+
+  let teamsOut: typeof allTeams;
+
+  if (vis.all) {
+    visibility = {
+      all: true,
+      clientCodes: null,
+      teamIds: allTeams.map((t) => t.id),
+      visibleUserIds: Array.from(userAgg.keys()),
+    };
+    teamsOut = allTeams;
+  } else if (role === "rop") {
+    const myLedTeamIds = allTeams.filter((t) => t.rop_user_id === meId).map((t) => t.id);
+    const vu = new Set<string>([meId, ...Array.from(adminIds)]);
+    for (const id of Array.from(membersOfTeams(myLedTeamIds))) vu.add(id);
+    visibility = {
+      all: false,
+      clientCodes: vis.codes,
+      teamIds: myLedTeamIds,
+      visibleUserIds: Array.from(vu),
+    };
+    const allowT = new Set(myLedTeamIds);
+    teamsOut = allTeams.filter((t) => allowT.has(t.id));
+  } else if (role === "manager" || role === "regional_manager") {
+    const tid =
+      meTeamId ??
+      (vis.assignments[0]?.teamId as string | null | undefined) ??
+      null;
+    const teamRow = tid ? allTeams.find((t) => t.id === tid) : undefined;
+    const ropId = teamRow?.rop_user_id ?? null;
+    const vu = new Set<string>([meId, ...Array.from(adminIds)]);
+    if (ropId) vu.add(ropId);
+    const teamIds = tid ? [tid] : [];
+    visibility = {
+      all: false,
+      clientCodes: vis.codes,
+      teamIds,
+      visibleUserIds: Array.from(vu),
+    };
+    teamsOut = tid ? allTeams.filter((t) => t.id === tid) : [];
+  } else {
+    const teamIdSet = new Set<string>();
+    for (const a of vis.assignments) {
+      if (a.teamId) teamIdSet.add(a.teamId);
+    }
+    const vu = new Set<string>([meId, ...Array.from(adminIds)]);
+    for (const a of vis.assignments) {
+      if (a.responsibleUserId) vu.add(a.responsibleUserId);
+    }
+    visibility = {
+      all: false,
+      clientCodes: vis.codes,
+      teamIds: Array.from(teamIdSet),
+      visibleUserIds: Array.from(vu),
+    };
+    teamsOut = allTeams.filter((t) => teamIdSet.has(t.id));
+  }
+
+  const allowUsers = new Set(visibility.visibleUserIds);
+  const usersOut = Array.from(userAgg.values())
+    .filter((u) => allowUsers.has(u.id))
+    .map((u) => ({
+      id: u.id,
+      fullName: u.fullName,
+      role: u.role,
+      status: u.status,
+      teamId: u.teamIds.size > 0 ? Array.from(u.teamIds)[0]! : ledTeamByRop.get(u.id) ?? null,
+    }));
+
+  return {
+    status: 200,
+    cacheControl: "no-store",
+    json: {
+      success: true,
+      me: { id: meId, role, fullName: meFullName, teamId: meTeamId },
+      visibility,
+      teams: teamsOut.map((t) => ({
+        id: t.id,
+        name: t.name,
+        ropUserId: t.rop_user_id,
+        ropName: t.rop_name,
+      })),
+      users: usersOut,
+    },
   };
 }
 
@@ -1296,6 +1501,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "my-visible-codes" && req.method === "GET") {
       applyResult(res, await handleMyVisibleCodes(headers));
+      return;
+    }
+    if (action === "my-org-snapshot" && req.method === "GET") {
+      applyResult(res, await handleMyOrgSnapshot(headers));
       return;
     }
     if (action === "reset-request-approvers" && req.method === "POST") {

@@ -440,10 +440,12 @@ function dedupeDealerIds(rows: DealerRow[]): DealerRow[] {
   return rows;
 }
 
+export function buildDealerRowsFromReleaseClients(clients: ReleaseClient[]): DealerRow[] {
+  return dedupeDealerIds(clients.map(mapReleaseClientToDealerRow));
+}
+
 /** Клиентская база Release 1: строки из импорта Excel (release-client-seed). */
-export const DEALER_BASE_ROWS: DealerRow[] = dedupeDealerIds(
-  getReleaseClients().map(mapReleaseClientToDealerRow),
-);
+export const DEALER_BASE_ROWS: DealerRow[] = buildDealerRowsFromReleaseClients(getReleaseClients());
 
 function padLegacyDealer(n: number): string {
   return String(n).padStart(3, "0");

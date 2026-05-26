@@ -37,16 +37,39 @@ import {
   isClientTopTier,
 } from "@/lib/client-category";
 import { getDealerRegionalManagerEffectiveDisplay } from "@/lib/dealer-regional-manager-overrides";
-import { DEALER_BASE_ROWS, getDealerRopDisplay, type DealerRow, type DealerStatus } from "@/lib/dealer-base-mock-data";
+import {
+  buildDealerRowsFromReleaseClients,
+  DEALER_BASE_ROWS,
+  getDealerRopDisplay,
+  type DealerRow,
+  type DealerStatus,
+} from "@/lib/dealer-base-mock-data";
 import {
   getManagersForRopTeam,
   getRopOptions,
   isRopOrManagerAllFilter,
   managerDisplayMatchesCatalogName,
 } from "@/lib/rop-manager-filters";
+import { useAuthUser } from "@/hooks/use-auth-user";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { loadReleaseDemoProfile, getEffectiveTeamLeadTeamId, type ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { getSalesUserById, getTeamManagers, getAllSalesManagers, type SalesUser } from "@/lib/sales-control-data";
+import { mapUserRoleToDealerBaseAccess } from "@/lib/auth-user-dealer-access";
+import { buildAssignmentsMap, getVisibleReleaseClients } from "@/lib/real-client-base";
+import {
+  realAllSalesManagers,
+  realEffectiveTeamLeadTeamId,
+  realInitialRopManagerDefaults,
+  realManagerOptionsForAccess,
+  realRopOptions,
+  realRopOptionsForAccess,
+  realSalesUserById,
+  realTeamManagers,
+} from "@/lib/real-org-adapter";
+import type { OrgSnapshot } from "@/lib/use-org-snapshot";
+import { useOrgSnapshot } from "@/lib/use-org-snapshot";
+import { useMyVisibleClientCodes } from "@/lib/use-my-visible-client-codes";
+import { roleScopedDealerRowsForReal } from "@/lib/dealer-base-real-scope";
 import {
   buildDayPlanTeamRows,
   dealerNeedsAttention,
@@ -258,11 +281,16 @@ function teamAllowedForProfile(
   teamId: string,
   profile: ReleaseDemoProfile,
   access: DealerBaseAccessRole,
+  realCtx?: { snap: OrgSnapshot; userId: string },
 ): boolean {
-  if (!getRopOptions().some((o) => o.teamId === teamId)) return false;
+  const ropList = realCtx ? realRopOptions(realCtx.snap) : getRopOptions();
+  if (!ropList.some((o) => o.teamId === teamId)) return false;
   if (access === "sales_director") return true;
-  if (access === "team_lead") return teamId === getEffectiveTeamLeadTeamId(profile);
-  const u = getSalesUserById(profile.personaUserId);
+  if (access === "team_lead") {
+    const eff = realCtx ? realEffectiveTeamLeadTeamId(realCtx.snap) : getEffectiveTeamLeadTeamId(profile);
+    return teamId === eff;
+  }
+  const u = realCtx ? realSalesUserById(realCtx.snap, realCtx.userId) : getSalesUserById(profile.personaUserId);
   return Boolean(u?.teamId === teamId);
 }
 
@@ -271,14 +299,19 @@ function managerAllowedForRop(
   ropTeamId: string,
   profile: ReleaseDemoProfile,
   access: DealerBaseAccessRole,
+  realCtx?: { snap: OrgSnapshot; userId: string },
 ): boolean {
   if (access === "sales_manager") {
-    const u = getSalesUserById(profile.personaUserId);
+    const u = realCtx ? realSalesUserById(realCtx.snap, realCtx.userId) : getSalesUserById(profile.personaUserId);
     return Boolean(u?.id === managerId);
   }
-  const pool = access === "sales_director" && isRopOrManagerAllFilter(ropTeamId)
-    ? getAllSalesManagers()
-    : getManagersForRopTeam(ropTeamId);
+  const pool = realCtx
+    ? isRopOrManagerAllFilter(ropTeamId)
+      ? realAllSalesManagers(realCtx.snap)
+      : realTeamManagers(realCtx.snap, ropTeamId)
+    : access === "sales_director" && isRopOrManagerAllFilter(ropTeamId)
+      ? getAllSalesManagers()
+      : getManagersForRopTeam(ropTeamId);
   return pool.some((m) => m.id === managerId);
 }
 
@@ -1097,7 +1130,32 @@ function ruClientNoun(n: number): "клиент" | "клиента" | "клие�
 
 export default function DealerBase() {
   const { profile } = useReleaseDemoProfile();
-  const access = useMemo(() => mapSalesRoleToDealerBaseAccess(profile.role), [profile.role]);
+  const { user: me, isLoading: authLoading, isError: authError } = useAuthUser();
+  const isRealUser = Boolean(me?.id);
+  const orgSnapQ = useOrgSnapshot({ enabled: isRealUser });
+  const visCodesQ = useMyVisibleClientCodes({ enabled: isRealUser });
+  const snap = orgSnapQ.data ?? null;
+  const visPayload = visCodesQ.data ?? null;
+
+  const useReal = Boolean(
+    isRealUser &&
+      !authLoading &&
+      !authError &&
+      snap &&
+      visPayload &&
+      !orgSnapQ.isError &&
+      !visCodesQ.isError,
+  );
+
+  const realCtxForRoute = useMemo(
+    () => (useReal && snap ? { snap, userId: snap.me.id } : undefined),
+    [useReal, snap],
+  );
+
+  const access = useMemo(() => {
+    if (isRealUser && me?.role) return mapUserRoleToDealerBaseAccess(me.role);
+    return mapSalesRoleToDealerBaseAccess(profile.role);
+  }, [isRealUser, me?.role, profile.role]);
 
   const [workView, setWorkView] = useState<DealerBaseWorkView>(() => {
     const p = loadReleaseDemoProfile();
@@ -1152,39 +1210,101 @@ export default function DealerBase() {
   const [showArchivedDealers, setShowArchivedDealers] = useState(false);
 
   const mergedRowsForDealerBase = useMemo(() => {
+    if (isRealUser && !authLoading && !authError && snap && visPayload && !orgSnapQ.isError && !visCodesQ.isError) {
+      const clients = getVisibleReleaseClients(
+        snap,
+        visPayload.all,
+        visPayload.codes,
+        buildAssignmentsMap(visPayload.assignments),
+      );
+      const releaseRows = buildDealerRowsFromReleaseClients(clients);
+      if (!actx.enabled) return releaseRows;
+      return buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, {
+        includeArchivedDealers: showArchivedDealers,
+        releaseDealerRows: releaseRows,
+      });
+    }
+    if (isRealUser && !authLoading && !authError && (!snap || !visPayload)) return [];
     if (!actx.enabled) return DEALER_BASE_ROWS;
     return buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, {
       includeArchivedDealers: showArchivedDealers,
     });
-  }, [actx.enabled, teamActualizationPlane, profile, showArchivedDealers]);
+  }, [
+    isRealUser,
+    authLoading,
+    authError,
+    snap,
+    visPayload,
+    orgSnapQ.isError,
+    visCodesQ.isError,
+    actx.enabled,
+    teamActualizationPlane,
+    profile,
+    showArchivedDealers,
+  ]);
 
   useEffect(() => {
     const allowed = workViewsForAccess(access);
     setWorkView((prev) => (allowed.includes(prev) ? prev : defaultWorkViewForAccess(access)));
   }, [access]);
 
-  const managerCatalogForRop = useMemo(() => getManagersForRopTeam(ropTeam), [ropTeam]);
+  const managerCatalogForRop = useMemo(
+    () => (useReal && snap ? realTeamManagers(snap, ropTeam) : getManagersForRopTeam(ropTeam)),
+    [useReal, snap, ropTeam],
+  );
   const managerOptions = useMemo(
-    () => managerOptionsForProfile(profile, access, ropTeam),
-    [profile, access, ropTeam],
+    () =>
+      useReal && snap
+        ? realManagerOptionsForAccess(snap, access, ropTeam)
+        : managerOptionsForProfile(profile, access, ropTeam),
+    [useReal, snap, profile, access, ropTeam],
   );
-  const ropSelectOptions = useMemo(() => ropOptionsForProfile(profile, access), [profile, access]);
+  const ropSelectOptions = useMemo(
+    () => (useReal && snap ? realRopOptionsForAccess(snap, access) : ropOptionsForProfile(profile, access)),
+    [useReal, snap, profile, access],
+  );
 
-  const scopedRows = useMemo(
-    () => roleScopedDealerRows(mergedRowsForDealerBase, profile),
-    [mergedRowsForDealerBase, profile],
-  );
+  const scopedRows = useMemo(() => {
+    if (useReal && snap) return roleScopedDealerRowsForReal(mergedRowsForDealerBase, snap, access);
+    return roleScopedDealerRows(mergedRowsForDealerBase, profile);
+  }, [useReal, snap, mergedRowsForDealerBase, profile, access]);
 
   /** Рабочая портфельная база (без архивных клиентов): KPI команд и карточки менеджеров всегда от неё, не от режима списка «архив». */
   const mergedRowsActivePortfolio = useMemo(() => {
+    if (isRealUser && !authLoading && !authError && snap && visPayload && !orgSnapQ.isError && !visCodesQ.isError) {
+      const clients = getVisibleReleaseClients(
+        snap,
+        visPayload.all,
+        visPayload.codes,
+        buildAssignmentsMap(visPayload.assignments),
+      );
+      const releaseRows = buildDealerRowsFromReleaseClients(clients);
+      if (!actx.enabled) return releaseRows;
+      return buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, {
+        includeArchivedDealers: false,
+        releaseDealerRows: releaseRows,
+      });
+    }
+    if (isRealUser && !authLoading && !authError && (!snap || !visPayload)) return [];
     if (!actx.enabled) return DEALER_BASE_ROWS;
     return buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, { includeArchivedDealers: false });
-  }, [actx.enabled, teamActualizationPlane, profile]);
+  }, [
+    isRealUser,
+    authLoading,
+    authError,
+    snap,
+    visPayload,
+    orgSnapQ.isError,
+    visCodesQ.isError,
+    actx.enabled,
+    teamActualizationPlane,
+    profile,
+  ]);
 
-  const scopedActivePortfolioRows = useMemo(
-    () => roleScopedDealerRows(mergedRowsActivePortfolio, profile),
-    [mergedRowsActivePortfolio, profile],
-  );
+  const scopedActivePortfolioRows = useMemo(() => {
+    if (useReal && snap) return roleScopedDealerRowsForReal(mergedRowsActivePortfolio, snap, access);
+    return roleScopedDealerRows(mergedRowsActivePortfolio, profile);
+  }, [useReal, snap, mergedRowsActivePortfolio, profile, access]);
 
   useEffect(() => {
     try {
@@ -1245,7 +1365,10 @@ export default function DealerBase() {
     }
   }, []);
 
-  const defaultRopManager = useMemo(() => initialRopManagerForProfile(profile, access), [profile, access]);
+  const defaultRopManager = useMemo(
+    () => (useReal && snap ? realInitialRopManagerDefaults(snap, access) : initialRopManagerForProfile(profile, access)),
+    [useReal, snap, profile, access],
+  );
 
   const pickerArgs = useMemo(
     () => ({
@@ -1344,7 +1467,7 @@ export default function DealerBase() {
   }, [scopedRows, geoRegion, geoDistrict]);
 
   useEffect(() => {
-    const d = initialRopManagerForProfile(profile, access);
+    const d = useReal && snap ? realInitialRopManagerDefaults(snap, access) : initialRopManagerForProfile(profile, access);
     if (!routeKey) {
       setRopTeam(d.ropTeam);
       setManager(d.manager);
@@ -1368,7 +1491,10 @@ export default function DealerBase() {
     let searchV = "";
     let vw: DealerBaseWorkView = defaultWorkViewForAccess(access);
 
-    const scoped = roleScopedDealerRows(mergedRowsForDealerBase, profile);
+    const scoped =
+      useReal && snap
+        ? roleScopedDealerRowsForReal(mergedRowsForDealerBase, snap, access)
+        : roleScopedDealerRows(mergedRowsForDealerBase, profile);
     const catOpts = Array.from(new Set(scoped.map((r) => r.clientCategory)));
 
     const teamRaw = (routeQs.get("team") ?? routeQs.get("rop"))?.trim() ?? "";
@@ -1386,12 +1512,12 @@ export default function DealerBase() {
     const quickRaw = (routeQs.get("quick") ?? "").trim().toLowerCase();
     if (quickRaw && QUICK_FROM_URL[quickRaw]) qv = QUICK_FROM_URL[quickRaw]!;
 
-    if (teamRaw && teamAllowedForProfile(teamRaw, profile, access)) {
+    if (teamRaw && teamAllowedForProfile(teamRaw, profile, access, realCtxForRoute)) {
       rop = teamRaw;
       mgr = "all";
     }
 
-    if (managerRaw && managerAllowedForRop(managerRaw, rop, profile, access)) {
+    if (managerRaw && managerAllowedForRop(managerRaw, rop, profile, access, realCtxForRoute)) {
       mgr = managerRaw;
     }
 
@@ -1401,7 +1527,7 @@ export default function DealerBase() {
       vw = "my_clients";
     } else if (
       teamRaw &&
-      teamAllowedForProfile(teamRaw, profile, access) &&
+      teamAllowedForProfile(teamRaw, profile, access, realCtxForRoute) &&
       !managerRaw &&
       (access === "sales_director" || access === "team_lead")
     ) {
@@ -1461,18 +1587,40 @@ export default function DealerBase() {
     setSearch(searchV);
     setWorkView(vw);
     setProgramFilters(programParsed);
-  }, [profile.personaUserId, profile.role, access, routeKey, routeQs, mergedRowsForDealerBase]);
+  }, [
+    profile.personaUserId,
+    profile.role,
+    access,
+    routeKey,
+    routeQs,
+    mergedRowsForDealerBase,
+    useReal,
+    snap,
+    realCtxForRoute,
+    me?.id,
+  ]);
 
-  const firstRopTeamId = useMemo(() => getRopOptions()[0]?.teamId ?? "", []);
+  const firstRopTeamId = useMemo(
+    () => (useReal && snap ? realRopOptions(snap) : getRopOptions())[0]?.teamId ?? "",
+    [useReal, snap],
+  );
 
   const effectiveTeamIdForTeamModes = useMemo(() => {
+    if (useReal && snap) {
+      if (access === "team_lead") return realEffectiveTeamLeadTeamId(snap);
+      if (access === "sales_manager") {
+        return snap.users.find((u) => u.id === snap.me.id)?.teamId ?? firstRopTeamId;
+      }
+      if (!isRopOrManagerAllFilter(ropTeam)) return ropTeam;
+      return firstRopTeamId;
+    }
     if (access === "team_lead") return getEffectiveTeamLeadTeamId(profile);
     if (access === "sales_manager") {
       return getSalesUserById(profile.personaUserId)?.teamId ?? firstRopTeamId;
     }
     if (!isRopOrManagerAllFilter(ropTeam)) return ropTeam;
     return firstRopTeamId;
-  }, [access, profile, ropTeam, firstRopTeamId]);
+  }, [useReal, snap, access, profile, ropTeam, firstRopTeamId]);
 
   const teamRowsForModes = useMemo(
     () => scopedActivePortfolioRows.filter((r) => r.releaseTeamId === effectiveTeamIdForTeamModes),
@@ -1487,16 +1635,16 @@ export default function DealerBase() {
   }, [access, workView, effectiveTeamIdForTeamModes, scopedActivePortfolioRows]);
 
   const teamRopDisplayLabel = useMemo(
-    () => getRopOptions().find((o) => o.teamId === effectiveTeamIdForTeamModes)?.label ?? "—",
-    [effectiveTeamIdForTeamModes],
+    () => ropSelectOptions.find((o) => o.teamId === effectiveTeamIdForTeamModes)?.label ?? "—",
+    [ropSelectOptions, effectiveTeamIdForTeamModes],
   );
 
   const selectedManagerLabel = useMemo(() => {
     if (isRopOrManagerAllFilter(manager)) return null;
     const fromCat = managerCatalogForRop.find((m) => m.id === manager);
     if (fromCat) return fromCat.name;
-    return getSalesUserById(manager)?.name ?? null;
-  }, [manager, managerCatalogForRop]);
+    return (useReal && snap ? realSalesUserById(snap, manager) : getSalesUserById(manager))?.name ?? null;
+  }, [manager, managerCatalogForRop, useReal, snap]);
 
   const hideManagerFilterInTeamView =
     (access === "sales_director" || access === "team_lead") &&
@@ -1646,16 +1794,21 @@ export default function DealerBase() {
 
   const cap = DEALER_BASE_DISPLAY_LIMIT;
 
+  const managersOfRopTeam = useCallback(
+    (teamId: string) => (useReal && snap ? realTeamManagers(snap, teamId) : getTeamManagers(teamId)),
+    [useReal, snap],
+  );
+
   const onRopChange = useCallback(
     (v: string) => {
       setRopTeam(v);
       setManager((prev) => {
         if (prev === "all") return prev;
-        const allowed = getManagersForRopTeam(v).some((m) => m.id === prev);
+        const allowed = managersOfRopTeam(v).some((m) => m.id === prev);
         return allowed ? prev : "all";
       });
     },
-    [],
+    [managersOfRopTeam],
   );
 
   const handleSelectWorkView = useCallback(
@@ -1728,7 +1881,7 @@ export default function DealerBase() {
     access === "sales_director" && workView === "my_team" && isRopOrManagerAllFilter(ropTeam) ? (
       <p className="text-sm text-muted-foreground">
         Выберите РОПа в фильтре выше, чтобы посмотреть команду. Превью: команда «
-        {getRopOptions().find((o) => o.teamId === effectiveTeamIdForTeamModes)?.label ?? "—"}».
+        {ropSelectOptions.find((o) => o.teamId === effectiveTeamIdForTeamModes)?.label ?? "—"}».
       </p>
     ) : null;
 
@@ -1957,7 +2110,7 @@ export default function DealerBase() {
       });
     }
     if (ropTeam !== defaultRopManager.ropTeam) {
-      const lab = getRopOptions().find((o) => o.teamId === ropTeam)?.label ?? ropTeam;
+      const lab = ropSelectOptions.find((o) => o.teamId === ropTeam)?.label ?? ropTeam;
       chips.push({
         key: "rop",
         label: `РОП: ${lab}`,
@@ -3194,8 +3347,8 @@ export default function DealerBase() {
         ) : null}
         {workView === "teams" ? (
           <div className="space-y-6" data-testid={viewSectionDataTestId("teams")}>
-            {getRopOptions().map((rop) => {
-              const mgrs = getTeamManagers(rop.teamId);
+            {ropSelectOptions.map((rop) => {
+              const mgrs = managersOfRopTeam(rop.teamId);
               return (
                 <Card key={rop.teamId} className="rounded-2xl border border-border/80 bg-card shadow-md">
                   <CardHeader className="pb-2">
@@ -3267,7 +3420,7 @@ export default function DealerBase() {
           <div className="space-y-3" data-testid={viewSectionDataTestId("my_team")}>
             {hintSelectRop}
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {getTeamManagers(effectiveTeamIdForTeamModes).map((m) => {
+              {managersOfRopTeam(effectiveTeamIdForTeamModes).map((m) => {
                 const rows = teamRowsForModes.filter((r) => rowBelongsToManager(r, m));
                 const st = managerStatsForRows(rows);
                 return (

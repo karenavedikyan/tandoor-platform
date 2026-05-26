@@ -507,50 +507,266 @@ export async function impersonateStopHandler(input: {
   };
 }
 
+type VisibleClientsPayloadHttp =
+  | { all: true; codes: null; assignments: null }
+  | {
+      all: false;
+      codes: string[];
+      assignments: Array<{ code: string; responsibleUserId: string | null; teamId: string | null }>;
+    };
+
+type ClientAssignmentRowHttp = {
+  client_code: string;
+  responsible_user_id: string | null;
+  team_id: string | null;
+};
+
+async function buildVisibleClientsPayloadHttp(db: NonNullable<ReturnType<typeof getAuthDb>>, row: AuthUserSnapshot): Promise<VisibleClientsPayloadHttp> {
+  const role = row.role;
+  if (role === "admin" || role === "director" || role === "analyst" || role === "marketer") {
+    return { all: true, codes: null, assignments: null };
+  }
+  const uid = row.userId;
+  if (role === "rop") {
+    const r = await db.execute<ClientAssignmentRowHttp>(
+      sql`
+        SELECT DISTINCT ON (ca.client_code) ca.client_code, ca.responsible_user_id, ca.team_id
+        FROM client_assignments ca
+        INNER JOIN teams t ON t.id = ca.team_id
+        WHERE t.rop_user_id = ${uid}::uuid
+        ORDER BY ca.client_code
+      `,
+    );
+    const rows = (r as unknown as { rows?: ClientAssignmentRowHttp[] }).rows ?? (r as unknown as ClientAssignmentRowHttp[]);
+    const arr = Array.isArray(rows) ? rows : [];
+    return {
+      all: false,
+      codes: arr.map((x) => x.client_code).filter(Boolean),
+      assignments: arr.map((x) => ({
+        code: x.client_code,
+        responsibleUserId: x.responsible_user_id,
+        teamId: x.team_id,
+      })),
+    };
+  }
+  if (role === "manager" || role === "regional_manager") {
+    const r = await db.execute<ClientAssignmentRowHttp>(
+      sql`
+        SELECT DISTINCT ON (client_code) client_code, responsible_user_id, team_id
+        FROM client_assignments
+        WHERE responsible_user_id = ${uid}::uuid
+        ORDER BY client_code
+      `,
+    );
+    const rows = (r as unknown as { rows?: ClientAssignmentRowHttp[] }).rows ?? (r as unknown as ClientAssignmentRowHttp[]);
+    const arr = Array.isArray(rows) ? rows : [];
+    return {
+      all: false,
+      codes: arr.map((x) => x.client_code).filter(Boolean),
+      assignments: arr.map((x) => ({
+        code: x.client_code,
+        responsibleUserId: x.responsible_user_id,
+        teamId: x.team_id,
+      })),
+    };
+  }
+  return { all: false, codes: [], assignments: [] };
+}
+
 export async function myVisibleClientCodesHandler(input: { auth: AuthUserSnapshot }): Promise<AuthHttpResult> {
   const db = getAuthDb();
   if (!db) {
     return { status: 500, json: { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." } };
   }
+  const payload = await buildVisibleClientsPayloadHttp(db, input.auth);
+  return {
+    status: 200,
+    cacheControl: "no-store",
+    json: { success: true, ...payload },
+  };
+}
+
+export async function myOrgSnapshotHandler(input: { auth: AuthUserSnapshot }): Promise<AuthHttpResult> {
+  const db = getAuthDb();
+  if (!db) {
+    return { status: 500, json: { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." } };
+  }
+  const meId = input.auth.userId;
   const role = input.auth.role;
-  if (role === "admin" || role === "director" || role === "analyst" || role === "marketer") {
-    return { status: 200, cacheControl: "no-store", json: { success: true, all: true, codes: null } };
+  const meFullName = (input.auth.fullName ?? "").trim() || input.auth.email;
+
+  const teamsRes = await db.execute<{ id: string; name: string; rop_user_id: string | null; rop_name: string | null }>(
+    sql`
+      SELECT t.id, t.name, t.rop_user_id, u.full_name AS rop_name
+      FROM teams t
+      LEFT JOIN users u ON u.id = t.rop_user_id
+      ORDER BY t.name
+    `,
+  );
+  const allTeams =
+    (teamsRes as unknown as { rows?: { id: string; name: string; rop_user_id: string | null; rop_name: string | null }[] }).rows ??
+    (teamsRes as unknown as { id: string; name: string; rop_user_id: string | null; rop_name: string | null }[]);
+  const teamsArr = Array.isArray(allTeams) ? allTeams : [];
+
+  const usersRes = await db.execute<{
+    id: string;
+    full_name: string | null;
+    role: UserRole;
+    status: UserStatus;
+    team_id: string | null;
+  }>(
+    sql`
+      SELECT u.id, u.full_name, u.role, u.status, utm.team_id
+      FROM users u
+      LEFT JOIN user_team_memberships utm ON utm.user_id = u.id
+      WHERE u.status IN ('active', 'invited')
+    `,
+  );
+  const rawUserRows =
+    (usersRes as unknown as {
+      rows?: { id: string; full_name: string | null; role: UserRole; status: UserStatus; team_id: string | null }[];
+    }).rows ??
+    (usersRes as unknown as { id: string; full_name: string | null; role: UserRole; status: UserStatus; team_id: string | null }[]);
+  const userRows = Array.isArray(rawUserRows) ? rawUserRows : [];
+
+  type Agg = { id: string; fullName: string; role: UserRole; status: UserStatus; teamIds: Set<string> };
+  const userAgg = new Map<string, Agg>();
+  for (const r of userRows) {
+    const fn = (r.full_name ?? "").trim() || "";
+    let agg = userAgg.get(r.id);
+    if (!agg) {
+      agg = { id: r.id, fullName: fn, role: r.role, status: r.status, teamIds: new Set() };
+      userAgg.set(r.id, agg);
+    }
+    if (r.team_id) agg.teamIds.add(r.team_id);
   }
-  const uid = input.auth.userId;
+
+  const ledTeamByRop = new Map<string, string>();
+  for (const t of teamsArr) {
+    if (t.rop_user_id) ledTeamByRop.set(t.rop_user_id, t.id);
+  }
+
+  const utmMine = await db.execute<{ team_id: string }>(
+    sql`SELECT team_id FROM user_team_memberships WHERE user_id = ${meId}::uuid`,
+  );
+  const utmRows = (utmMine as unknown as { rows?: { team_id: string }[] }).rows ?? (utmMine as unknown as { team_id: string }[]);
+  const utmList = Array.isArray(utmRows) ? utmRows : [];
+  const myUtmTeamIds = Array.from(new Set(utmList.map((r) => r.team_id).filter(Boolean)));
+
+  let meTeamId: string | null = null;
   if (role === "rop") {
-    const r = await db.execute<{ client_code: string }>(
-      sql`
-        SELECT DISTINCT ca.client_code AS "client_code"
-        FROM client_assignments ca
-        INNER JOIN teams t ON t.id = ca.team_id
-        WHERE t.rop_user_id = ${uid}::uuid
-      `,
-    );
-    const rows = (r as unknown as { rows?: { client_code: string }[] }).rows ?? (r as unknown as { client_code: string }[]);
-    const arr = Array.isArray(rows) ? rows : [];
-    return {
-      status: 200,
-      cacheControl: "no-store",
-      json: { success: true, all: false, codes: arr.map((x) => x.client_code).filter(Boolean) },
-    };
+    meTeamId = ledTeamByRop.get(meId) ?? myUtmTeamIds[0] ?? null;
+  } else if (role === "manager" || role === "regional_manager") {
+    meTeamId = myUtmTeamIds[0] ?? null;
   }
-  if (role === "manager" || role === "regional_manager") {
-    const r = await db.execute<{ client_code: string }>(
-      sql`
-        SELECT DISTINCT client_code AS "client_code"
-        FROM client_assignments
-        WHERE responsible_user_id = ${uid}::uuid
-      `,
-    );
-    const rows = (r as unknown as { rows?: { client_code: string }[] }).rows ?? (r as unknown as { client_code: string }[]);
-    const arr = Array.isArray(rows) ? rows : [];
-    return {
-      status: 200,
-      cacheControl: "no-store",
-      json: { success: true, all: false, codes: arr.map((x) => x.client_code).filter(Boolean) },
-    };
+
+  const vis = await buildVisibleClientsPayloadHttp(db, input.auth);
+
+  const adminRes = await db.execute<{ id: string }>(
+    sql`SELECT id FROM users WHERE role = 'admin' AND status IN ('active', 'invited')`,
+  );
+  const adminRows = (adminRes as unknown as { rows?: { id: string }[] }).rows ?? (adminRes as unknown as { id: string }[]);
+  const adminList = Array.isArray(adminRows) ? adminRows : [];
+  const adminIds = new Set(adminList.map((r) => r.id));
+
+  function membersOfTeams(teamIds: string[]): Set<string> {
+    const ids = new Set<string>();
+    const tset = new Set(teamIds);
+    for (const agg of Array.from(userAgg.values())) {
+      for (const tid of Array.from(agg.teamIds)) {
+        if (tset.has(tid)) ids.add(agg.id);
+      }
+    }
+    return ids;
   }
-  return { status: 200, cacheControl: "no-store", json: { success: true, all: false, codes: [] } };
+
+  let visibility: {
+    all: boolean;
+    clientCodes: string[] | null;
+    teamIds: string[];
+    visibleUserIds: string[];
+  };
+  let teamsOut: typeof teamsArr;
+
+  if (vis.all) {
+    visibility = {
+      all: true,
+      clientCodes: null,
+      teamIds: teamsArr.map((t) => t.id),
+      visibleUserIds: Array.from(userAgg.keys()),
+    };
+    teamsOut = teamsArr;
+  } else if (role === "rop") {
+    const myLedTeamIds = teamsArr.filter((t) => t.rop_user_id === meId).map((t) => t.id);
+    const vu = new Set<string>([meId, ...Array.from(adminIds)]);
+    for (const id of Array.from(membersOfTeams(myLedTeamIds))) vu.add(id);
+    visibility = {
+      all: false,
+      clientCodes: vis.codes,
+      teamIds: myLedTeamIds,
+      visibleUserIds: Array.from(vu),
+    };
+    const allowT = new Set(myLedTeamIds);
+    teamsOut = teamsArr.filter((t) => allowT.has(t.id));
+  } else if (role === "manager" || role === "regional_manager") {
+    const tid = meTeamId ?? vis.assignments[0]?.teamId ?? null;
+    const teamRow = tid ? teamsArr.find((t) => t.id === tid) : undefined;
+    const ropId = teamRow?.rop_user_id ?? null;
+    const vu = new Set<string>([meId, ...Array.from(adminIds)]);
+    if (ropId) vu.add(ropId);
+    const teamIds = tid ? [tid] : [];
+    visibility = {
+      all: false,
+      clientCodes: vis.codes,
+      teamIds,
+      visibleUserIds: Array.from(vu),
+    };
+    teamsOut = tid ? teamsArr.filter((t) => t.id === tid) : [];
+  } else {
+    const teamIdSet = new Set<string>();
+    for (const a of vis.assignments) {
+      if (a.teamId) teamIdSet.add(a.teamId);
+    }
+    const vu = new Set<string>([meId, ...Array.from(adminIds)]);
+    for (const a of vis.assignments) {
+      if (a.responsibleUserId) vu.add(a.responsibleUserId);
+    }
+    visibility = {
+      all: false,
+      clientCodes: vis.codes,
+      teamIds: Array.from(teamIdSet),
+      visibleUserIds: Array.from(vu),
+    };
+    teamsOut = teamsArr.filter((t) => teamIdSet.has(t.id));
+  }
+
+  const allowUsers = new Set(visibility.visibleUserIds);
+  const usersOut = Array.from(userAgg.values())
+    .filter((u) => allowUsers.has(u.id))
+    .map((u) => ({
+      id: u.id,
+      fullName: u.fullName,
+      role: u.role,
+      status: u.status,
+      teamId: u.teamIds.size > 0 ? Array.from(u.teamIds)[0]! : ledTeamByRop.get(u.id) ?? null,
+    }));
+
+  return {
+    status: 200,
+    cacheControl: "no-store",
+    json: {
+      success: true,
+      me: { id: meId, role, fullName: meFullName, teamId: meTeamId },
+      visibility,
+      teams: teamsOut.map((t) => ({
+        id: t.id,
+        name: t.name,
+        ropUserId: t.rop_user_id,
+        ropName: t.rop_name,
+      })),
+      users: usersOut,
+    },
+  };
 }
 
 export async function logoutHandler(input: {

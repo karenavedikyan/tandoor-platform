@@ -1,11 +1,21 @@
 import { useQuery } from "@tanstack/react-query";
 
+export type ClientAssignmentRow = {
+  code: string;
+  responsibleUserId: string | null;
+  teamId: string | null;
+};
+
 export type MyVisibleCodesResponse =
-  | { success: true; all: true; codes: null }
-  | { success: true; all: false; codes: string[] }
+  | { success: true; all: true; codes: null; assignments: null }
+  | { success: true; all: false; codes: string[]; assignments: ClientAssignmentRow[] }
   | { success: false; code: string; message?: string };
 
-export type MyVisibleCodesResult = { all: boolean; codes: string[] | null };
+export type MyVisibleCodesResult = {
+  all: boolean;
+  codes: string[] | null;
+  assignments: ClientAssignmentRow[] | null;
+};
 
 async function fetchMyVisibleCodes(): Promise<MyVisibleCodesResult> {
   const res = await fetch("/api/auth/my-visible-codes", {
@@ -13,14 +23,18 @@ async function fetchMyVisibleCodes(): Promise<MyVisibleCodesResult> {
     credentials: "same-origin",
   });
   if (res.status === 401) {
-    return { all: false, codes: [] };
+    return { all: false, codes: [], assignments: [] };
   }
   const json = (await res.json()) as MyVisibleCodesResponse;
   if (!json.success) {
-    return { all: false, codes: [] };
+    return { all: false, codes: [], assignments: [] };
   }
-  if (json.all) return { all: true, codes: null };
-  return { all: false, codes: json.codes };
+  if (json.all) return { all: true, codes: null, assignments: null };
+  return {
+    all: false,
+    codes: json.codes,
+    assignments: json.assignments ?? [],
+  };
 }
 
 export function useMyVisibleClientCodes(options?: { enabled?: boolean }) {
