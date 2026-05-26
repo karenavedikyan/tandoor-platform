@@ -10,6 +10,11 @@ import {
   type ActualizationState,
 } from "@/lib/client-base-actualization-state";
 import { me } from "@/lib/auth-api";
+import {
+  markActualizationSaveFailed,
+  markActualizationSaveStarted,
+  markActualizationSaveSucceeded,
+} from "@/lib/client-base-actualization-save-status";
 
 export const ACTUALIZATION_STATE_CACHE_KEY = "tandoor-client-base-actualization-state-cache-v1";
 
@@ -64,8 +69,15 @@ function parseApiEnvelope(j: Record<string, unknown>): ActualizationApiMeta {
 
 type CacheRow = { userId: string; state: ActualizationState; updatedAt: string | null };
 type ActualizationAuthUser = { id: string; role: string };
+type QueuedActualizationSave = { userId: string; role: string | undefined; state: ActualizationState };
 
 let authUserCache: { value: ActualizationAuthUser | null; expiresAt: number } | null = null;
+let queuedSave: QueuedActualizationSave | null = null;
+let onlineFlushRegistered = false;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
 
 function normalizeRoleForActualizationApi(role: string): string {
   switch (role) {
@@ -140,6 +152,72 @@ function demoHeaders(userId: string, role?: string): HeadersInit {
   const h: Record<string, string> = { "X-Tandoor-Demo-User-Id": userId, Accept: "application/json" };
   if (role) h["X-Tandoor-Demo-User-Role"] = role;
   return h;
+}
+
+async function postActualizationStateOnce(
+  userId: string,
+  role: string | undefined,
+  state: ActualizationState,
+): Promise<ActualizationLoadResult> {
+  const res = await fetch("/api/actualization/state", {
+    method: "POST",
+    headers: { ...demoHeaders(userId, role), "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ userId, state }),
+  });
+  const text = await res.text();
+  const json = JSON.parse(text) as Record<string, unknown>;
+  if (!res.ok) throw new Error(String(res.status));
+  const meta = parseApiEnvelope(json);
+  if (!meta.success) {
+    return {
+      meta,
+      syncStatus: "error",
+      errorMessage: meta.message ?? "Сервер вернул ошибку при сохранении состояния актуализации.",
+    };
+  }
+  return { meta, syncStatus: "api_ok" };
+}
+
+async function postActualizationStateWithRetry(
+  userId: string,
+  role: string | undefined,
+  state: ActualizationState,
+): Promise<ActualizationLoadResult> {
+  let lastError = "Сетевая ошибка";
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      const result = await postActualizationStateOnce(userId, role, state);
+      if (result.syncStatus === "api_ok" && result.meta.success) return result;
+      lastError = result.errorMessage ?? result.meta.message ?? "Сервер вернул ошибку при сохранении состояния актуализации.";
+    } catch (e) {
+      lastError = e instanceof Error ? e.message : "Сетевая ошибка";
+    }
+    if (attempt < 3) await delay(5_000);
+  }
+  throw new Error(lastError);
+}
+
+function ensureOnlineFlushListener(): void {
+  if (onlineFlushRegistered || typeof window === "undefined") return;
+  onlineFlushRegistered = true;
+  window.addEventListener("online", () => {
+    const q = queuedSave;
+    if (!q) return;
+    queuedSave = null;
+    markActualizationSaveStarted({ incrementPending: false });
+    void postActualizationStateWithRetry(q.userId, q.role, q.state)
+      .then((result) => {
+        if (result.syncStatus === "api_ok" && result.meta.success) {
+          writeLocalCache({ userId: q.userId, state: result.meta.state, updatedAt: result.meta.updatedAt });
+          markActualizationSaveSucceeded(result.meta.updatedAt);
+        }
+      })
+      .catch((e: unknown) => {
+        queuedSave = q;
+        markActualizationSaveFailed(e instanceof Error ? e.message : "Сетевая ошибка", { offline: !navigator.onLine });
+      });
+  });
 }
 
 /**
@@ -252,29 +330,17 @@ export async function saveActualizationState(
     version: ACTUALIZATION_STATE_VERSION,
     updatedBy: userId,
   };
+  ensureOnlineFlushListener();
+  markActualizationSaveStarted();
   try {
-    const res = await fetch("/api/actualization/state", {
-      method: "POST",
-      headers: { ...demoHeaders(userId, role), "Content-Type": "application/json" },
-      credentials: "same-origin",
-      body: JSON.stringify({ userId, state: next }),
-    });
-    const text = await res.text();
-    const json = JSON.parse(text) as Record<string, unknown>;
-    if (!res.ok) {
-      throw new Error(String(res.status));
-    }
-    const meta = parseApiEnvelope(json);
-    if (!meta.success) {
-      return {
-        meta,
-        syncStatus: "error",
-        errorMessage: meta.message ?? "Сервер вернул ошибку при сохранении состояния актуализации.",
-      };
-    }
-    writeLocalCache({ userId, state: meta.state, updatedAt: meta.updatedAt });
-    return { meta, syncStatus: "api_ok" };
-  } catch {
+    const result = await postActualizationStateWithRetry(userId, role, next);
+    writeLocalCache({ userId, state: result.meta.state, updatedAt: result.meta.updatedAt });
+    markActualizationSaveSucceeded(result.meta.updatedAt);
+    return result;
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : "Сетевая ошибка";
+    queuedSave = { userId, role, state: next };
+    markActualizationSaveFailed(errorMessage, { offline: typeof navigator !== "undefined" && !navigator.onLine });
     writeLocalCache({ userId, state: next, updatedAt: new Date().toISOString() });
     return {
       meta: {
@@ -282,9 +348,10 @@ export async function saveActualizationState(
         storageMode: "local_fallback",
         state: next,
         updatedAt: next.updatedAt,
-        message: "Сохранено только локально (API недоступен). Между устройствами не синхронизируется.",
+        message: `Сохранено только локально (API недоступен). ${errorMessage}`,
       },
       syncStatus: "local_fallback",
+      errorMessage,
     };
   }
 }
