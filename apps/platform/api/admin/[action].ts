@@ -154,6 +154,29 @@ function pickPublicHost(headers: Record<string, string | string[] | undefined>):
 const JSON_CT = "application/json; charset=utf-8";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const AUTH_COOKIE = "tandoor_auth_sess";
+const MGR_TO_UUID: Record<string, string> = {
+  "mgr-boyko-em": "dc3b6ef1-fd83-4b9b-b73f-982efe08af23",
+  "mgr-yakubova-ys": "0481a81d-160b-422e-8257-cf21d134cd42",
+  "mgr-fedorov-dv": "f824e678-951d-45c0-9fa8-b97d27f5ad0d",
+  "mgr-ponkratova-vv": "4615c9b1-5d5f-4832-85ff-60b8da50e567",
+  "mgr-avetisyan-rs": "d80c495f-5229-4ccd-bd2a-14e4301361de",
+  "mgr-sklyarov-dv": "dc958e02-d80e-4615-bb8a-8a46be70daed",
+  "mgr-orlov-dv": "1526ab0b-db39-4957-887b-056b6549ad62",
+  "mgr-agadzhanyan-rs": "9c686222-eebd-46ee-bf6d-d560e8901d04",
+  "mgr-doronina-iv": "eae85849-6fea-4bf6-9eee-81bd175c4391",
+  "mgr-ilyuchenko-an": "e60f1a83-88ae-41f8-8c32-edd91f666e8d",
+  "mgr-miroshnichenko-dn": "c3dca970-b32f-4b23-b3d6-2911250fe81e",
+  "mgr-lysenko-eg": "9e6056c9-9c8c-477b-94fd-45dab490e382",
+  "mgr-kulakova-os": "6f1ed04c-18a8-412d-a4db-efa8ed2258d6",
+  "mgr-koteneva-av": "f2aaf964-37d0-4b8d-b40a-38eb2428fb52",
+  "mgr-netkacheva-ia": "2f85e5b1-0633-45d9-9672-72417cd1daa2",
+  "mgr-petrichenko-ev": "88518eda-2986-48ad-93e3-92f5f554b54f",
+  "mgr-arutyunyan-oa": "3c88c879-81d2-4403-ae2e-67be8e782650",
+  "mgr-osmanov-fm": "7168496a-6d43-4471-86cb-8050e7a4e5a1",
+  "mgr-chernousova-in": "62dcd67c-d66c-40c6-a349-c71e6e8493c4",
+  "mgr-yarysh-si": "f5aad585-f020-4410-a147-36d6ca5d3886",
+  "mgr-avedikyan-ka": "fb589859-1858-4725-ae74-d7a6de92ffbe",
+};
 
 let cachedPool: PoolLike | null | undefined;
 
@@ -442,6 +465,77 @@ function sendJsonRateLimited(res: VercelResponse, retryAfterSec: number, message
   res.setHeader("Cache-Control", "no-store");
   res.setHeader("Retry-After", String(retryAfterSec));
   res.status(429).json({ success: false, code: "RATE_LIMITED", message });
+}
+
+function actualizationEmptyState(): Record<string, unknown> {
+  return {
+    version: 1,
+    updatedAt: null,
+    updatedBy: null,
+    dealerOverridesById: {},
+    manuallyCreatedDealersById: {},
+    tradePointOverridesById: {},
+    manuallyCreatedTradePointsById: {},
+    archivedTradePointsById: {},
+    archivedLegalEntitiesById: {},
+    legalEntityOverridesByDealerId: {},
+    dealerCardViewSettingsByUserId: {},
+    unloadingOrderByDealerId: {},
+    routeOrderByRouteId: {},
+    dealerPhotosByDealerId: {},
+    tradePointPhotosByTradePointId: {},
+  };
+}
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return v != null && typeof v === "object" && !Array.isArray(v);
+}
+
+function coerceActualizationState(input: unknown): Record<string, unknown> {
+  const base = actualizationEmptyState();
+  if (!isPlainObject(input)) return base;
+  const merged = { ...base, ...input };
+  if (typeof merged.version !== "number" || !Number.isFinite(merged.version)) merged.version = 1;
+  for (const k of Object.keys(base)) {
+    if (k === "version" || k === "updatedAt" || k === "updatedBy") continue;
+    if (isPlainObject(merged[k])) continue;
+    merged[k] = base[k];
+  }
+  return merged;
+}
+
+function mergeActualizationStates(states: Record<string, unknown>[]): Record<string, unknown> {
+  const result = actualizationEmptyState();
+  let maxUpdatedAt: string | null = null;
+
+  for (const state of states) {
+    const updatedAt = state.updatedAt;
+    if (typeof updatedAt === "string" && (!maxUpdatedAt || updatedAt > maxUpdatedAt)) {
+      maxUpdatedAt = updatedAt;
+    }
+  }
+
+  result.updatedAt = maxUpdatedAt;
+  result.updatedBy = typeof states[0]?.updatedBy === "string" ? states[0].updatedBy : null;
+
+  const base = actualizationEmptyState();
+  for (const field of Object.keys(base)) {
+    if (field === "version" || field === "updatedAt" || field === "updatedBy") continue;
+    const target = result[field];
+    if (!isPlainObject(target)) continue;
+
+    for (const state of states) {
+      const value = state[field];
+      if (!isPlainObject(value)) continue;
+      for (const id of Object.keys(value)) {
+        if (!(id in target)) {
+          target[id] = value[id];
+        }
+      }
+    }
+  }
+
+  return result;
 }
 
 function sanitizeLikeFragment(raw: string): string {
@@ -1685,7 +1779,68 @@ async function handleResetRequestDecline(
   }
 }
 
+type MgrScopeMigrationAction = "inserted" | "merged" | "skipped";
+type MgrScopeMigrationRow = {
+  mgrId: string;
+  uuid: string;
+  action: MgrScopeMigrationAction;
+};
+type ActualizationStateRow = {
+  state: unknown;
+  updated_at: unknown;
+};
+
+async function handleMigrateMgrScopes(res: VercelResponse, pool: PoolLike): Promise<void> {
+  const migrated: MgrScopeMigrationRow[] = [];
+
+  for (const [mgrId, uuid] of Object.entries(MGR_TO_UUID)) {
+    const mgrScopeKey = `user:${mgrId}`;
+    const uuidScopeKey = `user:${uuid}`;
+    const mgrRows = await pool.query<ActualizationStateRow>(
+      `SELECT state, updated_at FROM client_base_actualization_state WHERE scope_key = $1 LIMIT 1`,
+      [mgrScopeKey],
+    );
+    const mgrRow = mgrRows.rows[0];
+    if (!mgrRow) {
+      migrated.push({ mgrId, uuid, action: "skipped" });
+      continue;
+    }
+
+    const uuidRows = await pool.query<ActualizationStateRow>(
+      `SELECT state, updated_at FROM client_base_actualization_state WHERE scope_key = $1 LIMIT 1`,
+      [uuidScopeKey],
+    );
+    const uuidRow = uuidRows.rows[0];
+    const mgrState = coerceActualizationState(mgrRow.state);
+
+    if (!uuidRow) {
+      await pool.query(
+        `INSERT INTO client_base_actualization_state (scope_key, user_id, role, state, version)
+         VALUES ($1, $2, NULL, $3::jsonb, 1)`,
+        [uuidScopeKey, uuid, JSON.stringify(mgrState)],
+      );
+      await pool.query(`DELETE FROM client_base_actualization_state WHERE scope_key = $1`, [mgrScopeKey]);
+      migrated.push({ mgrId, uuid, action: "inserted" });
+      continue;
+    }
+
+    const uuidState = coerceActualizationState(uuidRow.state);
+    const merged = mergeActualizationStates([mgrState, uuidState]);
+    await pool.query(`UPDATE client_base_actualization_state SET state = $2::jsonb WHERE scope_key = $1`, [
+      uuidScopeKey,
+      JSON.stringify(merged),
+    ]);
+    await pool.query(`DELETE FROM client_base_actualization_state WHERE scope_key = $1`, [mgrScopeKey]);
+    migrated.push({ mgrId, uuid, action: "merged" });
+  }
+
+  const report = { success: true, migrated, total: migrated.length };
+  console.log("[api/admin] migrate-mgr-scopes", report);
+  sendJson(res, 200, report);
+}
+
 async function handleMigrationsRun(
+  req: VercelRequest,
   res: VercelResponse,
   pool: PoolLike,
   headers: Record<string, string | string[] | undefined>,
@@ -1697,6 +1852,10 @@ async function handleMigrationsRun(
   }
   if (me.role !== "admin" || me.status !== "active") {
     sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Только администратор." });
+    return;
+  }
+  if (pickMigrationsRunAction(req) === "migrate-mgr-scopes") {
+    await handleMigrateMgrScopes(res, pool);
     return;
   }
   const applied: string[] = [];
@@ -2591,8 +2750,39 @@ function pickAction(req: VercelRequest): string {
   return "";
 }
 
+function pickPathAction(req: VercelRequest): string {
+  const url = typeof req.url === "string" ? req.url : "";
+  try {
+    const u = new URL(url, "http://localhost");
+    const last = u.pathname.split("/").filter(Boolean).pop();
+    return last?.trim() ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function pickMigrationsRunAction(req: VercelRequest): string {
+  const url = typeof req.url === "string" ? req.url : "";
+  try {
+    const u = new URL(url, "http://localhost");
+    const fromUrl = u.searchParams.getAll("action").find((v) => v.trim() && v.trim() !== "migrations-run");
+    if (fromUrl) return fromUrl.trim();
+  } catch {
+    // Fall through to req.query/body below.
+  }
+
+  const values = Array.isArray(req.query?.action) ? req.query.action : [req.query?.action];
+  const fromQuery = values.find((v) => typeof v === "string" && v.trim() && v.trim() !== "migrations-run");
+  if (typeof fromQuery === "string") return fromQuery.trim();
+
+  const body = isPlainObject(req.body) ? req.body : {};
+  const fromBody = body.action;
+  return typeof fromBody === "string" && fromBody.trim() !== "migrations-run" ? fromBody.trim() : "";
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   const action = pickAction(req);
+  const pathAction = pickPathAction(req);
   const headers = vercelHeaders(req);
   if (req.method === "POST" && action !== "admin-recovery" && !enforceCsrfOrigin(req)) {
     sendJson(res, 403, {
@@ -2697,8 +2887,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       await handleSessionsCleanupExpired(res, pool, headers);
       return;
     }
-    if (action === "migrations-run" && req.method === "POST") {
-      await handleMigrationsRun(res, pool, headers);
+    if ((action === "migrations-run" || pathAction === "migrations-run") && req.method === "POST") {
+      await handleMigrationsRun(req, res, pool, headers);
       return;
     }
     if (action === "users-bulk-create" && req.method === "POST") {
