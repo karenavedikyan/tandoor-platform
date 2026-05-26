@@ -672,16 +672,21 @@ export function buildDealerBaseRowsWithActualization(
   const manuals = Object.values(act.manuallyCreatedDealersById)
     .filter((m) => includeId(m.id))
     .map((m) => mapBuilt(manualDealerToRow(m, profile)));
-  const rest = DEALER_BASE_ROWS.filter((r) => includeId(r.id)).map((r) => mapBuilt(r));
+  const sourceRows = opts?.releaseDealerRows ?? DEALER_BASE_ROWS;
+  const rest = sourceRows.filter((r) => includeId(r.id)).map((r) => mapBuilt(r));
   return [...manuals, ...rest];
 }
 
 /**
  * Активные строки + архивные-only (для подписей событий активности по id, которые уже в архиве клиентов).
  */
-export function buildDealerBaseRowsUnionForActivityLabels(act: ActualizationState, profile: ReleaseDemoProfile): DealerRow[] {
-  const active = buildDealerBaseRowsWithActualization(act, profile, { includeArchivedDealers: false });
-  const archivedOnly = buildDealerBaseRowsWithActualization(act, profile, { includeArchivedDealers: true });
+export function buildDealerBaseRowsUnionForActivityLabels(
+  act: ActualizationState,
+  profile: ReleaseDemoProfile,
+  releaseDealerRows?: DealerRow[],
+): DealerRow[] {
+  const active = buildDealerBaseRowsWithActualization(act, profile, { includeArchivedDealers: false, releaseDealerRows });
+  const archivedOnly = buildDealerBaseRowsWithActualization(act, profile, { includeArchivedDealers: true, releaseDealerRows });
   const byId = new Map(active.map((r) => [r.id, r]));
   for (const r of archivedOnly) {
     if (!byId.has(r.id)) byId.set(r.id, r);
