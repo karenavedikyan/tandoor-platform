@@ -109,15 +109,11 @@ export const passwordResetRequests = pgTable(
   ],
 );
 
-export const teams = pgTable(
-  "teams",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    name: text("name").notNull(),
-    ropUserId: uuid("rop_user_id").references(() => authUsers.id),
-  },
-  (t) => [uniqueIndex("teams_name_unique").on(t.name)],
-);
+export const teams = pgTable("teams", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  ropUserId: uuid("rop_user_id").references(() => authUsers.id),
+});
 
 export const userTeamMemberships = pgTable(
   "user_team_memberships",
@@ -131,63 +127,6 @@ export const userTeamMemberships = pgTable(
     roleInTeam: text("role_in_team").notNull(),
   },
   (t) => [primaryKey({ columns: [t.userId, t.teamId] })],
-);
-
-/** Актуальный ответственный по коду клиента (отдельно от per-user JSON в client_base_actualization_state). */
-export const clientAssignments = pgTable(
-  "client_assignments",
-  {
-    clientCode: text("client_code").primaryKey(),
-    responsibleUserId: uuid("responsible_user_id")
-      .notNull()
-      .references(() => authUsers.id),
-    teamId: uuid("team_id").references(() => teams.id),
-    since: timestamp("since", { withTimezone: true, mode: "string" }).notNull().default(sql`now()`),
-    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" }).notNull().default(sql`now()`),
-  },
-  (t) => [
-    index("idx_client_assignments_user").on(t.responsibleUserId),
-    index("idx_client_assignments_team").on(t.teamId),
-  ],
-);
-
-export const clientAssignmentHistory = pgTable(
-  "client_assignment_history",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    clientCode: text("client_code").notNull(),
-    fromUserId: uuid("from_user_id").references(() => authUsers.id),
-    toUserId: uuid("to_user_id")
-      .notNull()
-      .references(() => authUsers.id),
-    fromTeamId: uuid("from_team_id"),
-    toTeamId: uuid("to_team_id"),
-    actorUserId: uuid("actor_user_id").references(() => authUsers.id),
-    reason: text("reason"),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull().default(sql`now()`),
-  },
-  (t) => [
-    index("idx_cah_client_code").on(t.clientCode),
-    index("idx_cah_to_user").on(t.toUserId),
-    index("idx_cah_created_at").on(t.createdAt),
-  ],
-);
-
-export const userTeamHistory = pgTable(
-  "user_team_history",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => authUsers.id),
-    fromTeamId: uuid("from_team_id").references(() => teams.id),
-    toTeamId: uuid("to_team_id").references(() => teams.id),
-    roleInTeam: text("role_in_team"),
-    actorUserId: uuid("actor_user_id").references(() => authUsers.id),
-    reason: text("reason"),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull().default(sql`now()`),
-  },
-  (t) => [index("idx_uth_user").on(t.userId)],
 );
 
 export const regions = pgTable("regions", {
