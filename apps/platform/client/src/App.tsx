@@ -82,6 +82,7 @@ const LazyAdminInvitations = lazy(() => import("@/pages/admin-invitations"));
 const LazyAdminUsers = lazy(() => import("@/pages/admin-users"));
 const LazyAdminAudit = lazy(() => import("@/pages/admin-audit"));
 const LazyAdminClientAssignments = lazy(() => import("@/pages/admin-client-assignments"));
+const LazyAdminActualizationDedupe = lazy(() => import("@/pages/admin-actualization-dedupe"));
 const LazyFeatureInDevelopment = lazy(() => import("@/pages/feature-in-development"));
 
 function suspensePage(Lazy: LazyExoticComponent<ComponentType<any>>): ComponentType<any> {
@@ -137,6 +138,7 @@ const AdminInvitationsRoute = suspensePage(LazyAdminInvitations);
 const AdminUsersRoute = suspensePage(LazyAdminUsers);
 const AdminAuditRoute = suspensePage(LazyAdminAudit);
 const AdminClientAssignmentsRoute = suspensePage(LazyAdminClientAssignments);
+const AdminActualizationDedupeRoute = suspensePage(LazyAdminActualizationDedupe);
 
 function HashRedirect({ to }: { to: string }) {
   const [, setLoc] = useHashLocation();
@@ -306,6 +308,7 @@ function AuthenticatedShell({
         <Route path="/admin/invitations" component={AdminInvitationsRoute} />
         <Route path="/admin/audit" component={AdminAuditRoute} />
         <Route path="/admin/client-assignments" component={AdminClientAssignmentsRoute} />
+        <Route path="/admin/actualization/dedupe" component={AdminActualizationDedupeRoute} />
         <Route path="/reset-requests" component={ResetRequestsRoute} />
         <Route path="/users" component={UsersAndAccessRoute} />
         <Route path="/profile/change-password" component={ChangePasswordRoute} />

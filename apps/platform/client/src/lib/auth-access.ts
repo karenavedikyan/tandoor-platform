@@ -133,6 +133,9 @@ export function canAccessPathForUser(role: UserRole, path: string): boolean {
   if (p === "/admin/client-assignments") {
     return canManageClientAssignments(role);
   }
+  if (p === "/admin/actualization/dedupe") {
+    return role === "admin";
+  }
   if (p === "/profile" || isUnder(p, "/profile")) {
     return userHas(role, "profile.read_self");
   }
@@ -292,6 +295,14 @@ function buildAdministrationNavGroup(platformUserRole: UserRole | null | undefin
       label: "Назначения клиентов",
       testId: "nav-item-admin-client-assignments",
       navBehaviorId: "nav-admin-client-assignments",
+    });
+  }
+  if (platformUserRole === "admin") {
+    items.push({
+      href: "/admin/actualization/dedupe",
+      label: "Дедуп актуализации",
+      testId: "nav-item-admin-actualization-dedupe",
+      navBehaviorId: "nav-admin-actualization-dedupe",
     });
   }
   if (userCanManageInvitations(platformUserRole)) {

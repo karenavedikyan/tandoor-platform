@@ -10,6 +10,13 @@ import { neon } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { handleTeamsList } from "../../shared/admin/client-assignments-handlers.js";
+import {
+  MGR_TO_UUID_FOR_ACTUALIZATION_DEDUPE,
+  UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE,
+  applyMergePlanToState,
+  buildManagerMergePlan,
+  type ManualMergePlan,
+} from "../../shared/admin/actualization-dedupe.js";
 
 type NeonHttp = ReturnType<typeof neon>;
 interface PoolLike {
@@ -1790,6 +1797,157 @@ type ActualizationStateRow = {
   updated_at: unknown;
 };
 
+type ActualizationDedupeStateRow = {
+  scope_key: string;
+  user_id: string | null;
+  role: string | null;
+  state: unknown;
+  updated_at: unknown;
+};
+
+type ActualizationDedupePlanBundle = {
+  plans: ManualMergePlan[];
+  stateRows: Array<ActualizationDedupeStateRow & { managerUserId: string; managerScopeUserId: string }>;
+  totals: { managers: number; rowsToMerge: number; skipped: number };
+};
+
+function scopeUserId(scopeKey: string): string | null {
+  return scopeKey.startsWith("user:") ? scopeKey.slice("user:".length) : null;
+}
+
+async function loadActualizationDedupePlanBundle(pool: PoolLike): Promise<ActualizationDedupePlanBundle> {
+  const stateRes = await pool.query<ActualizationDedupeStateRow>(
+    `SELECT scope_key, user_id, role, state, updated_at
+     FROM client_base_actualization_state
+     WHERE scope_key LIKE 'user:%'`,
+  );
+  const usersRes = await pool.query<{ id: string; full_name: string }>(`SELECT id, full_name FROM users`);
+  const fullNameById = new Map(usersRes.rows.map((u) => [String(u.id), String(u.full_name)]));
+  const plans: ManualMergePlan[] = [];
+  const stateRows: ActualizationDedupePlanBundle["stateRows"] = [];
+
+  for (const row of stateRes.rows) {
+    const scopeId = scopeUserId(String(row.scope_key));
+    if (!scopeId) continue;
+    const managerUserId = UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE[scopeId] ?? (scopeId.startsWith("mgr-") ? scopeId : null);
+    if (!managerUserId) continue;
+    const managerScopeUserId = scopeId.startsWith("mgr-")
+      ? (MGR_TO_UUID_FOR_ACTUALIZATION_DEDUPE[scopeId] ?? row.user_id ?? scopeId)
+      : scopeId;
+    const managerFullName = fullNameById.get(managerScopeUserId) ?? managerUserId;
+    const state = coerceActualizationState(row.state) as unknown as Parameters<typeof buildManagerMergePlan>[0]["state"];
+    const plan = buildManagerMergePlan({
+      managerUserId,
+      managerScopeUserId,
+      managerFullName,
+      state,
+    });
+    plans.push(plan);
+    stateRows.push({ ...row, managerUserId, managerScopeUserId });
+  }
+
+  return {
+    plans,
+    stateRows,
+    totals: {
+      managers: plans.length,
+      rowsToMerge: plans.reduce((sum, p) => sum + p.rows.length, 0),
+      skipped: plans.reduce((sum, p) => sum + p.skipped.length, 0),
+    },
+  };
+}
+
+async function handleActualizationDedupeDryRun(
+  res: VercelResponse,
+  pool: PoolLike,
+  headers: Record<string, string | string[] | undefined>,
+): Promise<void> {
+  const me = await resolveCurrentUser(pool, headers);
+  if (!me) {
+    sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+    return;
+  }
+  if ((me.role !== "admin" && me.role !== "director") || me.status !== "active") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+  const bundle = await loadActualizationDedupePlanBundle(pool);
+  sendJson(res, 200, { success: true, plans: bundle.plans, totals: bundle.totals });
+}
+
+async function handleActualizationDedupeApply(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  headers: Record<string, string | string[] | undefined>,
+): Promise<void> {
+  const me = await resolveCurrentUser(pool, headers);
+  if (!me) {
+    sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+    return;
+  }
+  if (me.role !== "admin" || me.status !== "active") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Только администратор." });
+    return;
+  }
+  const body = isPlainObject(req.body) ? req.body : {};
+  if (body.confirm !== true) {
+    sendJson(res, 400, { success: false, code: "CONFIRM_REQUIRED", message: "Требуется confirm: true." });
+    return;
+  }
+
+  const bundle = await loadActualizationDedupePlanBundle(pool);
+  const planByScope = new Map<string, ManualMergePlan>();
+  for (const plan of bundle.plans) {
+    const first = plan.rows[0] ?? null;
+    if (first) planByScope.set(first.managerScopeUserId, plan);
+  }
+
+  let applied = 0;
+  const perManager: Array<{ managerUserId: string; managerScopeUserId: string; merged: number; plan: ManualMergePlan }> = [];
+  for (const row of bundle.stateRows) {
+    const plan = planByScope.get(row.managerScopeUserId);
+    if (!plan || plan.rows.length === 0) continue;
+    const current = coerceActualizationState(row.state) as unknown as Parameters<typeof applyMergePlanToState>[0];
+    for (const planRow of plan.rows) {
+      console.info("[actualization-dedupe] merging", {
+        manager: planRow.managerUserId,
+        manualId: planRow.manualDealerId,
+        releaseKey: planRow.releaseDealerId,
+      });
+    }
+    const next = applyMergePlanToState(current, plan, me.id);
+    const scopeKey = `user:${row.managerScopeUserId}`;
+    await pool.query(
+      `INSERT INTO client_base_actualization_state (scope_key, user_id, role, state, version)
+       VALUES ($1, $2, $3, $4::jsonb, 1)
+       ON CONFLICT (scope_key) DO UPDATE SET
+         user_id = EXCLUDED.user_id,
+         role = COALESCE(EXCLUDED.role, client_base_actualization_state.role),
+         state = EXCLUDED.state,
+         version = EXCLUDED.version,
+         updated_at = now()`,
+      [scopeKey, row.managerScopeUserId, row.role, JSON.stringify(next)],
+    );
+    await tryAudit(pool, {
+      actorUserId: me.id,
+      action: "actualization.dedupe",
+      entityType: "actualization_state",
+      entityId: row.managerScopeUserId,
+      metadata: { mergedCount: plan.rows.length, planRows: plan.rows },
+    });
+    applied += plan.rows.length;
+    perManager.push({
+      managerUserId: row.managerUserId,
+      managerScopeUserId: row.managerScopeUserId,
+      merged: plan.rows.length,
+      plan,
+    });
+  }
+
+  sendJson(res, 200, { success: true, applied, perManager, plans: bundle.plans, totals: bundle.totals });
+}
+
 async function handleMigrateMgrScopes(res: VercelResponse, pool: PoolLike): Promise<void> {
   const migrated: MgrScopeMigrationRow[] = [];
 
@@ -2841,6 +2999,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "audit-list" && req.method === "GET") {
       await handleAuditList(req, res, pool, headers);
+      return;
+    }
+    if (action === "actualization-dedupe-dry-run" && req.method === "POST") {
+      await handleActualizationDedupeDryRun(res, pool, headers);
+      return;
+    }
+    if (action === "actualization-dedupe-apply" && req.method === "POST") {
+      await handleActualizationDedupeApply(req, res, pool, headers);
       return;
     }
     if (action === "sessions-list-self" && req.method === "GET") {
