@@ -11,6 +11,8 @@ export type AuthUserSnapshot = {
   status: UserStatus;
   mustChangePassword: boolean;
   lastLoginAt: string | null;
+  /** Подпись админа-наблюдателя, если сессия создана через impersonation. */
+  impersonatedBy?: string | null;
 };
 
 export async function loadAuthUserSnapshot(userId: string): Promise<AuthUserSnapshot | null> {

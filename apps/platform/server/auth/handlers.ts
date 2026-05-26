@@ -11,9 +11,17 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { createHash } from "node:crypto";
 import type { UserRole, UserStatus } from "@shared/auth";
+import { roleHasPermission } from "@shared/auth-rbac";
 import { auditLog, authLoginFailures, authUsers, passwordResetLinks, sessions } from "@shared/auth-schema";
-import type { AuthUserSnapshot } from "./auth-user-snapshot";
-import { buildAuthCookie, clearAuthCookie, parseAuthRefreshToken } from "./cookie";
+import { loadAuthUserSnapshot, type AuthUserSnapshot } from "./auth-user-snapshot";
+import {
+  buildAdminReturnCookie,
+  buildAuthCookie,
+  clearAdminReturnCookie,
+  clearAuthCookie,
+  parseAdminReturnToken,
+  parseAuthRefreshToken,
+} from "./cookie";
 import { getAuthDb } from "./db";
 import { hashPassword, verifyPassword } from "./password-hash";
 import { getClientIp } from "./request-meta";
@@ -40,6 +48,7 @@ function publicUserRow(u: AuthUserSnapshot): Record<string, unknown> {
     status: u.status,
     mustChangePassword: u.mustChangePassword,
     lastLoginAt: u.lastLoginAt,
+    impersonatedBy: u.impersonatedBy ?? null,
   };
 }
 
@@ -371,6 +380,133 @@ export function meHandler(input: { auth: AuthUserSnapshot }): AuthHttpResult {
   };
 }
 
+const UUID_RE_IMP = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export async function impersonateStartHandler(input: {
+  auth: AuthUserSnapshot;
+  headers: Record<string, string | string[] | undefined>;
+  body: unknown;
+}): Promise<AuthHttpResult> {
+  const db = getAuthDb();
+  if (!db) return internalError();
+  const token = parseAuthRefreshToken(
+    typeof input.headers.cookie === "string" ? input.headers.cookie : undefined,
+  );
+  if (!token) return { status: 403, json: { success: false, code: "FORBIDDEN" } };
+  const session = await getSessionByRefreshToken(token);
+  if (!session) return { status: 403, json: { success: false, code: "FORBIDDEN" } };
+  if (session.impersonatorUserId != null) {
+    return {
+      status: 400,
+      json: {
+        success: false,
+        code: "ALREADY_IMPERSONATING",
+        message: "Сначала выйдите из режима наблюдения.",
+      },
+    };
+  }
+  if (!roleHasPermission(input.auth.role, "users.impersonate")) {
+    return { status: 403, json: { success: false, code: "FORBIDDEN" } };
+  }
+  const body = (input.body ?? {}) as { targetUserId?: unknown };
+  const targetUserId = typeof body.targetUserId === "string" ? body.targetUserId.trim() : "";
+  if (!UUID_RE_IMP.test(targetUserId)) {
+    return validationError("Некорректный targetUserId.");
+  }
+  if (targetUserId === input.auth.userId) {
+    return {
+      status: 400,
+      json: { success: false, code: "CANNOT_IMPERSONATE_SELF", message: "Нельзя войти под собственным аккаунтом." },
+    };
+  }
+  const rows = await db.select().from(authUsers).where(eq(authUsers.id, targetUserId)).limit(1);
+  const target = rows[0];
+  if (!target) return { status: 404, json: { success: false, code: "USER_NOT_FOUND" } };
+  if (target.role === "admin") {
+    return { status: 400, json: { success: false, code: "CANNOT_IMPERSONATE_ADMIN" } };
+  }
+  if (target.status !== "active") {
+    return { status: 400, json: { success: false, code: "TARGET_NOT_ACTIVE" } };
+  }
+  const userAgent = readUserAgent(input.headers);
+  const ip = getClientIp(input.headers);
+  const expiresAtIso = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  const sess = await createSession({
+    userId: target.id,
+    userAgent,
+    ip,
+    impersonatorUserId: input.auth.userId,
+    expiresAtIso,
+  });
+  await tryAudit({
+    actorUserId: input.auth.userId,
+    action: "admin.impersonate.start",
+    entityType: "users",
+    entityId: target.id,
+    metadata: {
+      targetEmail: target.email,
+      targetRole: target.role,
+      sessionId: sess.sessionId,
+      ttlMinutes: 60,
+    },
+  });
+  const snap: AuthUserSnapshot = {
+    userId: target.id,
+    email: target.email,
+    fullName: target.fullName,
+    role: target.role as UserRole,
+    status: target.status as UserStatus,
+    mustChangePassword: target.mustChangePassword,
+    lastLoginAt: target.lastLoginAt ?? null,
+  };
+  return {
+    status: 200,
+    cacheControl: "no-store",
+    setCookie: [buildAuthCookie(sess.refreshToken, { maxAgeSec: 60 * 60 }), buildAdminReturnCookie(token)],
+    json: { success: true, user: publicUserRow(snap), expiresAt: sess.expiresAt },
+  };
+}
+
+export async function impersonateStopHandler(input: {
+  headers: Record<string, string | string[] | undefined>;
+}): Promise<AuthHttpResult> {
+  const returnTok = parseAdminReturnToken(
+    typeof input.headers.cookie === "string" ? input.headers.cookie : undefined,
+  );
+  if (!returnTok) return { status: 400, json: { success: false, code: "NOT_IMPERSONATING" } };
+  const curTok = parseAuthRefreshToken(
+    typeof input.headers.cookie === "string" ? input.headers.cookie : undefined,
+  );
+  if (!curTok) return { status: 400, json: { success: false, code: "NOT_IMPERSONATING" } };
+  const curSess = await getSessionByRefreshToken(curTok);
+  if (!curSess || curSess.impersonatorUserId == null) {
+    return { status: 400, json: { success: false, code: "NOT_IMPERSONATING" } };
+  }
+  const adminId = curSess.impersonatorUserId;
+  const admSess = await getSessionByRefreshToken(returnTok);
+  if (!admSess || admSess.userId !== adminId) {
+    return { status: 400, json: { success: false, code: "RETURN_SESSION_INVALID" } };
+  }
+  await revokeSession(curSess.sessionId);
+  const admSnap = await loadAuthUserSnapshot(adminId);
+  if (!admSnap) {
+    return { status: 400, json: { success: false, code: "RETURN_SESSION_INVALID" } };
+  }
+  await tryAudit({
+    actorUserId: adminId,
+    action: "admin.impersonate.stop",
+    entityType: "users",
+    entityId: curSess.userId,
+    metadata: { reason: "manual" },
+  });
+  return {
+    status: 200,
+    cacheControl: "no-store",
+    setCookie: [buildAuthCookie(returnTok), clearAdminReturnCookie()],
+    json: { success: true, user: publicUserRow(admSnap) },
+  };
+}
+
 export async function myVisibleClientCodesHandler(input: { auth: AuthUserSnapshot }): Promise<AuthHttpResult> {
   const db = getAuthDb();
   if (!db) {
@@ -452,7 +588,7 @@ export async function logoutHandler(input: {
 
   return {
     status: 200,
-    setCookie: clearAuthCookie(),
+    setCookie: [clearAuthCookie(), clearAdminReturnCookie()],
     json: { success: true },
   };
 }

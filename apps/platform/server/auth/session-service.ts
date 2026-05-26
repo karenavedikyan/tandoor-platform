@@ -32,6 +32,8 @@ export async function createSession(input: {
   userId: string;
   userAgent?: string | null;
   ip?: string | null;
+  impersonatorUserId?: string | null;
+  expiresAtIso?: string;
 }): Promise<{ sessionId: string; refreshToken: string; expiresAt: string }> {
   const db = getAuthDb();
   if (!db) {
@@ -41,7 +43,7 @@ export async function createSession(input: {
   const refreshTokenHash = sha256Hex(refreshToken);
   const sessionId = randomUUID();
   const ttlSec = sessionTtlSeconds();
-  const expiresAt = new Date(Date.now() + ttlSec * 1000).toISOString();
+  const expiresAt = input.expiresAtIso ?? new Date(Date.now() + ttlSec * 1000).toISOString();
 
   await db.insert(sessions).values({
     id: sessionId,
@@ -51,6 +53,7 @@ export async function createSession(input: {
     ip: input.ip ?? null,
     expiresAt,
     revokedAt: null,
+    impersonatorUserId: input.impersonatorUserId ?? null,
   });
 
   return { sessionId, refreshToken, expiresAt };
@@ -58,7 +61,7 @@ export async function createSession(input: {
 
 export async function getSessionByRefreshToken(
   refreshToken: string,
-): Promise<{ userId: string; sessionId: string; expiresAt: string } | null> {
+): Promise<{ userId: string; sessionId: string; expiresAt: string; impersonatorUserId: string | null } | null> {
   const db = getAuthDb();
   if (!db) return null;
 
@@ -77,7 +80,12 @@ export async function getSessionByRefreshToken(
   const ex = new Date(row.expiresAt).getTime();
   if (!Number.isFinite(ex) || ex <= Date.now()) return null;
 
-  return { userId: row.userId, sessionId: row.id, expiresAt: row.expiresAt };
+  return {
+    userId: row.userId,
+    sessionId: row.id,
+    expiresAt: row.expiresAt,
+    impersonatorUserId: row.impersonatorUserId ?? null,
+  };
 }
 
 export async function revokeSession(sessionId: string): Promise<void> {

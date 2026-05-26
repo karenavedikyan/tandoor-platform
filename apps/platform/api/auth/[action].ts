@@ -63,6 +63,7 @@ type Permission =
   | "users.update_role"
   | "users.update_status"
   | "users.reset_password"
+  | "users.impersonate"
   | "profile.read_self"
   | "profile.update_self"
   | "audit.read"
@@ -80,6 +81,7 @@ const PERMISSIONS_BY_ROLE: Record<UserRole, ReadonlySet<Permission>> = {
     "users.update_role",
     "users.update_status",
     "users.reset_password",
+    "users.impersonate",
     "profile.read_self",
     "profile.update_self",
     "audit.read",
@@ -128,6 +130,10 @@ function roleHasPermission(role: UserRole, perm: Permission): boolean {
 }
 
 const AUTH_COOKIE = "tandoor_auth_sess";
+/** HttpOnly «билет на возврат» при admin impersonation (значение — refresh-токен исходной admin-сессии). */
+const ADMIN_RETURN_COOKIE = "admin_return_sid";
+const IMPERSONATION_TTL_SEC = 60 * 60;
+const UUID_RE_IMP = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const JSON_CT = "application/json; charset=utf-8";
 const SIMPLE_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -155,8 +161,8 @@ function cookieSuffixParts(maxAgeSec: number): string[] {
   return parts;
 }
 
-function buildAuthCookie(refreshToken: string): string {
-  const maxAgeSec = sessionTtlSeconds();
+function buildAuthCookie(refreshToken: string, maxAgeSecOverride?: number): string {
+  const maxAgeSec = maxAgeSecOverride ?? sessionTtlSeconds();
   const v = encodeURIComponent(refreshToken);
   return `${AUTH_COOKIE}=${v}; ${cookieSuffixParts(maxAgeSec).join("; ")}`;
 }
@@ -181,6 +187,33 @@ function parseAuthRefreshToken(cookieHeader: string | undefined): string | null 
   }
   return null;
 }
+
+function parseAdminReturnToken(cookieHeader: string | undefined): string | null {
+  if (!cookieHeader?.trim()) return null;
+  for (const p of cookieHeader.split(";")) {
+    const idx = p.indexOf("=");
+    if (idx < 0) continue;
+    const k = p.slice(0, idx).trim();
+    if (k !== ADMIN_RETURN_COOKIE) continue;
+    try {
+      const raw = decodeURIComponent(p.slice(idx + 1).trim());
+      return raw || null;
+    } catch {
+      return p.slice(idx + 1).trim() || null;
+    }
+  }
+  return null;
+}
+
+function buildAdminReturnCookie(refreshToken: string): string {
+  const v = encodeURIComponent(refreshToken);
+  return `${ADMIN_RETURN_COOKIE}=${v}; ${cookieSuffixParts(IMPERSONATION_TTL_SEC).join("; ")}`;
+}
+
+function clearAdminReturnCookie(): string {
+  return `${ADMIN_RETURN_COOKIE}=; ${cookieSuffixParts(0).join("; ")}`;
+}
+
 
 function sha256Hex(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
@@ -667,7 +700,7 @@ function publicUserFromRow(r: {
 type AuthResult = {
   status: number;
   json: unknown;
-  setCookie?: string;
+  setCookie?: string | string[];
   cacheControl?: "no-store";
   retryAfterSec?: number;
 };
@@ -676,7 +709,12 @@ function applyResult(res: VercelResponse, r: AuthResult): void {
   res.setHeader("Content-Type", JSON_CT);
   if (r.cacheControl) res.setHeader("Cache-Control", r.cacheControl);
   if (r.retryAfterSec !== undefined) res.setHeader("Retry-After", String(r.retryAfterSec));
-  if (r.setCookie) res.setHeader("Set-Cookie", r.setCookie);
+  if (r.setCookie) {
+    const cookies = Array.isArray(r.setCookie) ? r.setCookie : [r.setCookie];
+    for (const c of cookies) {
+      res.appendHeader("Set-Cookie", c);
+    }
+  }
   res.status(r.status).json(r.json);
 }
 
@@ -849,11 +887,20 @@ async function handleMe(headers: Record<string, string | string[] | undefined>):
     return { status: 500, json: { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." } };
   }
   const hashHex = sha256Hex(token);
-  const res = await pool.query<DbUserRow & { refresh_token_hash: string }>(
+  const res = await pool.query<
+    DbUserRow & {
+      refresh_token_hash: string;
+      impersonator_full_name: string | null;
+      impersonator_email: string | null;
+    }
+  >(
     `SELECT u.id, u.email, u.full_name, u.role, u.status, u.must_change_password, u.last_login_at,
-            s.refresh_token_hash
+            s.refresh_token_hash,
+            imp.full_name AS impersonator_full_name,
+            imp.email AS impersonator_email
      FROM sessions s
      INNER JOIN users u ON u.id = s.user_id
+     LEFT JOIN users imp ON imp.id = s.impersonator_user_id
      WHERE s.refresh_token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > NOW()
      LIMIT 1`,
     [hashHex],
@@ -862,11 +909,199 @@ async function handleMe(headers: Record<string, string | string[] | undefined>):
   if (!row || !timingSafeEqualHex(row.refresh_token_hash, token)) {
     return { status: 401, json: { success: false, code: "UNAUTHENTICATED" } };
   }
-  const { refresh_token_hash: _h, ...u } = row;
+  const { refresh_token_hash: _h, impersonator_full_name, impersonator_email, ...u } = row;
+  let impersonatedBy: string | null = null;
+  if (impersonator_full_name && impersonator_email) {
+    impersonatedBy = `${impersonator_full_name} · ${impersonator_email}`;
+  }
+  const userJson = { ...publicUserFromRow(u), impersonatedBy };
   return {
     status: 200,
     cacheControl: "no-store",
-    json: { success: true, user: publicUserFromRow(u) },
+    json: { success: true, user: userJson },
+  };
+}
+
+
+async function handleImpersonateStart(req: VercelRequest, headers: Record<string, string | string[] | undefined>): Promise<AuthResult> {
+  const pool = getPool();
+  if (!pool) {
+    return { status: 500, json: { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." } };
+  }
+  const token = parseAuthRefreshToken(typeof headers.cookie === "string" ? headers.cookie : undefined);
+  if (!token) {
+    return { status: 403, json: { success: false, code: "FORBIDDEN" } };
+  }
+  const hashHex = sha256Hex(token);
+  const cur = await pool.query<
+    DbUserRow & {
+      refresh_token_hash: string;
+      impersonator_user_id: string | null;
+    }
+  >(
+    `SELECT u.id, u.email, u.full_name, u.role, u.status, u.must_change_password, u.last_login_at,
+            u.password_hash, s.refresh_token_hash, s.impersonator_user_id
+     FROM sessions s
+     INNER JOIN users u ON u.id = s.user_id
+     WHERE s.refresh_token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > NOW()
+     LIMIT 1`,
+    [hashHex],
+  );
+  const actor = cur.rows[0];
+  if (!actor || !timingSafeEqualHex(actor.refresh_token_hash, token)) {
+    return { status: 403, json: { success: false, code: "FORBIDDEN" } };
+  }
+  if (actor.impersonator_user_id != null) {
+    return {
+      status: 400,
+      json: {
+        success: false,
+        code: "ALREADY_IMPERSONATING",
+        message: "Сначала выйдите из режима наблюдения.",
+      },
+    };
+  }
+  if (!roleHasPermission(actor.role as UserRole, "users.impersonate")) {
+    return { status: 403, json: { success: false, code: "FORBIDDEN" } };
+  }
+  const body = (req.body ?? {}) as { targetUserId?: unknown } | null;
+  const targetUserId = typeof body?.targetUserId === "string" ? body.targetUserId.trim() : "";
+  if (!UUID_RE_IMP.test(targetUserId)) {
+    return { status: 400, json: { success: false, code: "VALIDATION_ERROR", message: "Некорректный targetUserId." } };
+  }
+  if (targetUserId === actor.id) {
+    return {
+      status: 400,
+      json: { success: false, code: "CANNOT_IMPERSONATE_SELF", message: "Нельзя войти под собственным аккаунтом." },
+    };
+  }
+  const tq = await pool.query<DbUserRow>(
+    `SELECT id, email, full_name, role, status, must_change_password, last_login_at, password_hash
+     FROM users WHERE id = $1::uuid LIMIT 1`,
+    [targetUserId],
+  );
+  const target = tq.rows[0];
+  if (!target) {
+    return { status: 404, json: { success: false, code: "USER_NOT_FOUND" } };
+  }
+  if (target.role === "admin") {
+    return { status: 400, json: { success: false, code: "CANNOT_IMPERSONATE_ADMIN" } };
+  }
+  if (target.status !== "active") {
+    return { status: 400, json: { success: false, code: "TARGET_NOT_ACTIVE" } };
+  }
+  const adminPlainToken = token;
+  const targetRefresh = generateRefreshToken();
+  const targetHash = sha256Hex(targetRefresh);
+  const newSessId = randomUUID();
+  const userAgent = readUserAgent(headers);
+  const ip = getClientIp(headers);
+  const expiresAt = new Date(Date.now() + IMPERSONATION_TTL_SEC * 1000).toISOString();
+  await pool.query(
+    `INSERT INTO sessions (id, user_id, refresh_token_hash, user_agent, ip, expires_at, revoked_at, impersonator_user_id)
+     VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6::timestamptz, NULL, $7::uuid)`,
+    [newSessId, target.id, targetHash, userAgent, ip, expiresAt, actor.id],
+  );
+  await tryAudit(pool, {
+    actorUserId: actor.id,
+    action: "admin.impersonate.start",
+    entityType: "users",
+    entityId: target.id,
+    metadata: {
+      targetEmail: target.email,
+      targetRole: target.role,
+      sessionId: newSessId,
+      ttlMinutes: 60,
+    },
+  });
+  const { password_hash: _ap, refresh_token_hash: _ar, impersonator_user_id: _ai, ...actorPublic } = actor;
+  void _ap;
+  void _ar;
+  void _ai;
+  const { password_hash: _tp, ...targetPublic } = target;
+  void _tp;
+  return {
+    status: 200,
+    cacheControl: "no-store",
+    setCookie: [buildAuthCookie(targetRefresh, IMPERSONATION_TTL_SEC), buildAdminReturnCookie(adminPlainToken)],
+    json: {
+      success: true,
+      user: publicUserFromRow(targetPublic),
+      expiresAt,
+    },
+  };
+}
+
+async function handleImpersonateStop(headers: Record<string, string | string[] | undefined>): Promise<AuthResult> {
+  const returnTok = parseAdminReturnToken(typeof headers.cookie === "string" ? headers.cookie : undefined);
+  if (!returnTok) {
+    return { status: 400, json: { success: false, code: "NOT_IMPERSONATING" } };
+  }
+  const curTok = parseAuthRefreshToken(typeof headers.cookie === "string" ? headers.cookie : undefined);
+  if (!curTok) {
+    return { status: 400, json: { success: false, code: "NOT_IMPERSONATING" } };
+  }
+  const pool = getPool();
+  if (!pool) {
+    return { status: 500, json: { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." } };
+  }
+  const curHash = sha256Hex(curTok);
+  const curSess = await pool.query<{
+    id: string;
+    user_id: string;
+    refresh_token_hash: string;
+    impersonator_user_id: string | null;
+  }>(
+    `SELECT id, user_id, refresh_token_hash, impersonator_user_id
+     FROM sessions
+     WHERE refresh_token_hash = $1 AND revoked_at IS NULL AND expires_at > NOW()
+     LIMIT 1`,
+    [curHash],
+  );
+  const csr = curSess.rows[0];
+  if (!csr || !timingSafeEqualHex(csr.refresh_token_hash, curTok)) {
+    return { status: 400, json: { success: false, code: "RETURN_SESSION_INVALID" } };
+  }
+  if (csr.impersonator_user_id == null) {
+    return { status: 400, json: { success: false, code: "NOT_IMPERSONATING" } };
+  }
+  const adminId = csr.impersonator_user_id;
+  const retHash = sha256Hex(returnTok);
+  const admSess = await pool.query<{ id: string; user_id: string; refresh_token_hash: string }>(
+    `SELECT id, user_id, refresh_token_hash
+     FROM sessions
+     WHERE refresh_token_hash = $1 AND revoked_at IS NULL AND expires_at > NOW()
+     LIMIT 1`,
+    [retHash],
+  );
+  const asr = admSess.rows[0];
+  if (!asr || asr.user_id !== adminId || !timingSafeEqualHex(asr.refresh_token_hash, returnTok)) {
+    return { status: 400, json: { success: false, code: "RETURN_SESSION_INVALID" } };
+  }
+  await pool.query(`UPDATE sessions SET revoked_at = NOW() WHERE id = $1::uuid AND revoked_at IS NULL`, [csr.id]);
+  const adminUser = await pool.query<DbUserRow>(
+    `SELECT id, email, full_name, role, status, must_change_password, last_login_at, password_hash
+     FROM users WHERE id = $1::uuid LIMIT 1`,
+    [adminId],
+  );
+  const adm = adminUser.rows[0];
+  if (!adm) {
+    return { status: 400, json: { success: false, code: "RETURN_SESSION_INVALID" } };
+  }
+  await tryAudit(pool, {
+    actorUserId: adminId,
+    action: "admin.impersonate.stop",
+    entityType: "users",
+    entityId: csr.user_id,
+    metadata: { reason: "manual" },
+  });
+  const { password_hash: _dp, ...admPub } = adm;
+  void _dp;
+  return {
+    status: 200,
+    cacheControl: "no-store",
+    setCookie: [buildAuthCookie(returnTok), clearAdminReturnCookie()],
+    json: { success: true, user: publicUserFromRow(admPub) },
   };
 }
 
@@ -971,7 +1206,7 @@ async function handleLogout(headers: Record<string, string | string[] | undefine
       metadata: { ip, userAgent },
     });
   }
-  return { status: 200, setCookie: clearAuthCookie(), json: { success: true } };
+  return { status: 200, setCookie: [clearAuthCookie(), clearAdminReturnCookie()], json: { success: true } };
 }
 
 async function handleLogoutAll(headers: Record<string, string | string[] | undefined>): Promise<AuthResult> {
@@ -1011,7 +1246,7 @@ async function handleLogoutAll(headers: Record<string, string | string[] | undef
   return {
     status: 200,
     cacheControl: "no-store",
-    setCookie: clearAuthCookie(),
+    setCookie: [clearAuthCookie(), clearAdminReturnCookie()],
     json: { success: true },
   };
 }
@@ -1049,6 +1284,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "me" && req.method === "GET") {
       applyResult(res, await handleMe(headers));
+      return;
+    }
+    if (action === "impersonate-start" && req.method === "POST") {
+      applyResult(res, await handleImpersonateStart(req, headers));
+      return;
+    }
+    if (action === "impersonate-stop" && req.method === "POST") {
+      applyResult(res, await handleImpersonateStop(headers));
       return;
     }
     if (action === "my-visible-codes" && req.method === "GET") {

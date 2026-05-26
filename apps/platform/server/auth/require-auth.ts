@@ -38,7 +38,14 @@ export function requireAuth(): RequestHandler {
         res.status(401).json({ success: false, code: "UNAUTHENTICATED" });
         return;
       }
-      req.auth = snapshot;
+      let impersonatedBy: string | null = null;
+      if (session.impersonatorUserId) {
+        const adm = await loadAuthUserSnapshot(session.impersonatorUserId);
+        if (adm) {
+          impersonatedBy = `${adm.fullName} · ${adm.email}`;
+        }
+      }
+      req.auth = { ...snapshot, impersonatedBy };
       next();
     } catch (e) {
       const m = e instanceof Error ? e.message : String(e);
@@ -69,7 +76,14 @@ export function withAuth(handler: VercelHandler): VercelHandler {
         res.status(401).json({ success: false, code: "UNAUTHENTICATED" });
         return;
       }
-      (req as VercelRequest & { auth?: AuthUserSnapshot }).auth = snapshot;
+      let impersonatedBy: string | null = null;
+      if (session.impersonatorUserId) {
+        const adm = await loadAuthUserSnapshot(session.impersonatorUserId);
+        if (adm) {
+          impersonatedBy = `${adm.fullName} · ${adm.email}`;
+        }
+      }
+      (req as VercelRequest & { auth?: AuthUserSnapshot }).auth = { ...snapshot, impersonatedBy };
       await handler(req, res);
     } catch (e) {
       const m = e instanceof Error ? e.message : String(e);
