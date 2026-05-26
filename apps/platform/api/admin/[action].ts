@@ -1865,6 +1865,11 @@ async function handleMigrationsRun(
     await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS teams_name_unique ON teams(name)`);
     applied.push("teams_name_unique index");
 
+    // Промт 20: impersonation
+    await pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS impersonator_user_id uuid NULL REFERENCES users(id) ON DELETE SET NULL`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_sessions_impersonator ON sessions(impersonator_user_id) WHERE impersonator_user_id IS NOT NULL`);
+    applied.push("sessions.impersonator_user_id");
+
     sendJson(res, 200, { success: true, applied });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
