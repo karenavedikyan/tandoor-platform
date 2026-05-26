@@ -30,6 +30,9 @@ import { displayUserName } from "@/lib/auth-api";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { releaseDemoRoleLabel } from "@/lib/release-demo-profile";
 import { useMyVisibleClientCodes } from "@/lib/use-my-visible-client-codes";
+import { useOrgSnapshot } from "@/lib/use-org-snapshot";
+import { buildAssignmentsMap, getVisibleReleaseClients } from "@/lib/real-client-base";
+import { realAllSalesManagers, realTeamManagers } from "@/lib/real-org-adapter";
 import { getManagersForRopTeam, getRopOptions, isRopOrManagerAllFilter } from "@/lib/rop-manager-filters";
 import { getSalesUserById, SALES_TEAMS } from "@/lib/sales-control-data";
 import { cn } from "@/lib/utils";
@@ -60,6 +63,18 @@ export default function ReleaseClientsPage() {
   const { user: me, isLoading: authLoading, isError: authError } = useAuthUser();
   const isRealUser = Boolean(me?.id);
   const { data: visible, isLoading: visibleLoading } = useMyVisibleClientCodes({ enabled: isRealUser });
+  const orgSnapQ = useOrgSnapshot({ enabled: isRealUser });
+  const snap = orgSnapQ.data ?? null;
+  const useOrgBindings = Boolean(
+    isRealUser &&
+      snap &&
+      visible &&
+      !authLoading &&
+      !authError &&
+      !visibleLoading &&
+      !orgSnapQ.isError,
+  );
+
   const [query, setQuery] = useState("");
   const [teamId, setTeamId] = useState<string>(ALL);
   const [managerId, setManagerId] = useState<string>(ALL);
@@ -75,27 +90,55 @@ export default function ReleaseClientsPage() {
     if (authError) return filterReleaseClientsForDemoProfile(all, profile);
     if (isRealUser) {
       if (visibleLoading || !visible) return [];
+      if (useOrgBindings && snap) {
+        return getVisibleReleaseClients(
+          snap,
+          visible.all,
+          visible.codes,
+          buildAssignmentsMap(visible.assignments),
+        );
+      }
       return filterReleaseClientsByVisibleCodes(all, visible.codes);
     }
     return filterReleaseClientsForDemoProfile(all, profile);
-  }, [authLoading, authError, isRealUser, visible, visibleLoading, profile]);
+  }, [
+    authLoading,
+    authError,
+    isRealUser,
+    visible,
+    visibleLoading,
+    profile,
+    useOrgBindings,
+    snap,
+  ]);
 
   const scopeSummary = useMemo(() => getReleaseClientSummary(baseRows), [baseRows]);
 
   const managerOptions = useMemo(() => {
-    const pool = getManagersForRopTeam(teamId);
+    const pool =
+      useOrgBindings && snap
+        ? isRopOrManagerAllFilter(teamId)
+          ? realAllSalesManagers(snap)
+          : realTeamManagers(snap, teamId)
+        : getManagersForRopTeam(teamId);
     return pool
       .map((m) => ({ id: m.id, label: m.name }))
       .sort((a, b) => a.label.localeCompare(b.label, "ru"));
-  }, [teamId]);
+  }, [teamId, useOrgBindings, snap]);
 
   useEffect(() => {
     if (managerId === ALL) return;
+    const pool =
+      useOrgBindings && snap
+        ? isRopOrManagerAllFilter(teamId)
+          ? realAllSalesManagers(snap)
+          : realTeamManagers(snap, teamId)
+        : getManagersForRopTeam(teamId);
     const ok = isRopOrManagerAllFilter(teamId)
       ? baseRows.some((r) => r.managerId === managerId)
-      : getManagersForRopTeam(teamId).some((m) => m.id === managerId);
+      : pool.some((m) => m.id === managerId);
     if (!ok) setManagerId(ALL);
-  }, [teamId, managerId, baseRows]);
+  }, [teamId, managerId, baseRows, useOrgBindings, snap]);
 
   const cities = useMemo(() => uniqSorted(baseRows.map((r) => r.city)), [baseRows]);
 
