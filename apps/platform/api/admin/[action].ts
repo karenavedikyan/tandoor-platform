@@ -9,6 +9,13 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { neon } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import {
+  handleClientAssignmentHistory,
+  handleClientsAssignmentsList,
+  handleClientsReassign,
+  handleUserTeamHistory,
+  handleUserTeamReassign,
+} from "./client-assignments-handlers";
 
 type NeonHttp = ReturnType<typeof neon>;
 interface PoolLike {
@@ -1812,6 +1819,55 @@ async function handleMigrationsRun(
     );
     applied.push("telegram_link_tokens table");
 
+    await pool.query(
+      `CREATE TABLE IF NOT EXISTS client_assignments (
+         client_code text PRIMARY KEY,
+         responsible_user_id uuid NOT NULL REFERENCES users(id),
+         team_id uuid REFERENCES teams(id),
+         since timestamptz NOT NULL DEFAULT now(),
+         updated_at timestamptz NOT NULL DEFAULT now()
+       )`,
+    );
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_client_assignments_user ON client_assignments(responsible_user_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_client_assignments_team ON client_assignments(team_id)`);
+    applied.push("client_assignments");
+
+    await pool.query(
+      `CREATE TABLE IF NOT EXISTS client_assignment_history (
+         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+         client_code text NOT NULL,
+         from_user_id uuid REFERENCES users(id),
+         to_user_id uuid NOT NULL REFERENCES users(id),
+         from_team_id uuid,
+         to_team_id uuid,
+         actor_user_id uuid REFERENCES users(id),
+         reason text,
+         created_at timestamptz NOT NULL DEFAULT now()
+       )`,
+    );
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_cah_client_code ON client_assignment_history(client_code)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_cah_to_user ON client_assignment_history(to_user_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_cah_created_at ON client_assignment_history(created_at)`);
+    applied.push("client_assignment_history");
+
+    await pool.query(
+      `CREATE TABLE IF NOT EXISTS user_team_history (
+         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+         user_id uuid NOT NULL REFERENCES users(id),
+         from_team_id uuid REFERENCES teams(id),
+         to_team_id uuid REFERENCES teams(id),
+         role_in_team text,
+         actor_user_id uuid REFERENCES users(id),
+         reason text,
+         created_at timestamptz NOT NULL DEFAULT now()
+       )`,
+    );
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_uth_user ON user_team_history(user_id)`);
+    applied.push("user_team_history");
+
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS teams_name_unique ON teams(name)`);
+    applied.push("teams_name_unique index");
+
     sendJson(res, 200, { success: true, applied });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -2790,6 +2846,52 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       sendJson(res, 200, { success: true });
       return;
     }
+    if (action === "clients-reassign" && req.method === "POST") {
+      const me = await resolveCurrentUser(pool, headers);
+      if (!me) {
+        sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+        return;
+      }
+      await handleClientsReassign(req, res, pool, me);
+      return;
+    }
+    if (action === "user-team-reassign" && req.method === "POST") {
+      const me = await resolveCurrentUser(pool, headers);
+      if (!me) {
+        sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+        return;
+      }
+      await handleUserTeamReassign(req, res, pool, me);
+      return;
+    }
+    if (action === "clients-assignments-list" && req.method === "GET") {
+      const me = await resolveCurrentUser(pool, headers);
+      if (!me) {
+        sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+        return;
+      }
+      await handleClientsAssignmentsList(req, res, pool, me);
+      return;
+    }
+    if (action === "client-assignment-history" && req.method === "GET") {
+      const me = await resolveCurrentUser(pool, headers);
+      if (!me) {
+        sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+        return;
+      }
+      await handleClientAssignmentHistory(req, res, pool, me);
+      return;
+    }
+    if (action === "user-team-history" && req.method === "GET") {
+      const me = await resolveCurrentUser(pool, headers);
+      if (!me) {
+        sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+        return;
+      }
+      await handleUserTeamHistory(req, res, pool, me);
+      return;
+    }
+
     if (action === "auth-unlock-email" && req.method === "POST") {
       const me = await resolveCurrentUser(pool, headers);
       if (!me || me.role !== "admin" || me.status !== "active") {
