@@ -15,6 +15,7 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { userHas } from "@/lib/auth-rbac";
 import { defaultHomePathForUserRole } from "@/lib/auth-access";
 import { cn } from "@/lib/utils";
+import { formatDisplayDateTime } from "@/lib/format-datetime";
 
 const LIMIT = 50;
 
@@ -36,7 +37,7 @@ function formatJson(meta: Record<string, unknown> | null): string {
 }
 
 const filterInputClass =
-  "min-h-11 border-border bg-card focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background";
+  "min-h-9 sm:min-h-11 border-border bg-card focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 
 export default function AdminAuditPage() {
   const { user } = useCurrentUser();
@@ -116,7 +117,7 @@ export default function AdminAuditPage() {
           <CardTitle>Фильтры</CardTitle>
           <CardDescription>Укажите критерии и нажмите «Применить».</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <div className="space-y-2">
             <Label htmlFor="audit-action">Действие (частичное совпадение)</Label>
             <Input
@@ -181,10 +182,10 @@ export default function AdminAuditPage() {
               className={filterInputClass}
             />
           </div>
-          <div className="flex items-end md:col-span-2 lg:col-span-3">
+          <div className="flex items-end sm:col-span-2 lg:col-span-3">
             <Button
               type="button"
-              className="bg-primary font-semibold text-primary-foreground hover:bg-[hsl(var(--figma-primary-hover))]"
+              className="h-9 bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-[hsl(var(--figma-primary-hover))] sm:h-11"
               data-testid="button-audit-apply"
               onClick={() => {
                 setOffset(0);
@@ -205,7 +206,7 @@ export default function AdminAuditPage() {
       </Card>
 
       <Card className="rounded-xl border border-border bg-card shadow-sm">
-        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
           <div>
             <CardTitle>Записи</CardTitle>
             <CardDescription>
@@ -213,11 +214,12 @@ export default function AdminAuditPage() {
               {q.isFetching ? " (загрузка…)" : null}
             </CardDescription>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button
               type="button"
               variant="outline"
               size="sm"
+              className="h-8 px-3 text-xs"
               data-testid="button-audit-prev"
               disabled={!canPrev || q.isFetching}
               onClick={() => setOffset((o) => Math.max(0, o - LIMIT))}
@@ -228,6 +230,7 @@ export default function AdminAuditPage() {
               type="button"
               variant="outline"
               size="sm"
+              className="h-8 px-3 text-xs"
               data-testid="button-audit-next"
               disabled={!canNext || q.isFetching}
               onClick={() => setOffset((o) => o + LIMIT)}
@@ -241,39 +244,43 @@ export default function AdminAuditPage() {
             <p className="text-sm text-destructive">{q.error instanceof Error ? q.error.message : "Ошибка загрузки."}</p>
           ) : null}
 
-          <div className="hidden overflow-x-auto rounded-lg border border-border md:block">
+          <div className="hidden overflow-x-auto rounded-lg border border-border sm:block">
             <Table>
               <TableHeader>
-                <TableRow className="border-b border-border hover:bg-transparent">
-                  <TableHead className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Время</TableHead>
-                  <TableHead className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Действие</TableHead>
-                  <TableHead className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Актор</TableHead>
-                  <TableHead className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Тип сущности</TableHead>
-                  <TableHead className="text-xs font-medium uppercase tracking-wide text-muted-foreground">ID сущности</TableHead>
-                  <TableHead className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Метаданные</TableHead>
+                <TableRow className="h-10 border-b border-border hover:bg-transparent">
+                  <TableHead className="px-2 py-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">Время</TableHead>
+                  <TableHead className="px-2 py-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">Действие</TableHead>
+                  <TableHead className="px-2 py-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">Актор</TableHead>
+                  <TableHead className="px-2 py-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">Тип сущности</TableHead>
+                  <TableHead className="px-2 py-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">ID сущности</TableHead>
+                  <TableHead className="px-2 py-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">Метаданные</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {items.map((row) => {
                   const ex = expanded[row.id] ?? false;
                   return (
-                    <TableRow key={row.id} className="min-h-12 border-b border-border hover:bg-muted/40" data-testid={`row-audit-${row.id}`}>
-                      <TableCell className="whitespace-nowrap font-mono text-xs text-foreground">{row.createdAt}</TableCell>
-                      <TableCell className="font-mono text-xs text-foreground">{row.action}</TableCell>
-                      <TableCell className="text-xs text-foreground">
+                    <TableRow key={row.id} className="h-10 border-b border-border hover:bg-muted/40" data-testid={`row-audit-${row.id}`}>
+                      <TableCell className="whitespace-nowrap px-2 py-1.5 font-mono text-xs text-foreground">
+                        {formatDisplayDateTime(row.createdAt)}
+                      </TableCell>
+                      <TableCell className="px-2 py-1.5 font-mono text-xs text-foreground">{row.action}</TableCell>
+                      <TableCell className="px-2 py-1.5 text-xs text-foreground">
                         {row.actor ? row.actor.email : <span className="text-muted-foreground">system</span>}
                       </TableCell>
-                      <TableCell className="text-xs text-foreground">{row.entityType}</TableCell>
-                      <TableCell className="max-w-[140px] truncate font-mono text-xs text-foreground">{row.entityId}</TableCell>
-                      <TableCell className="max-w-[320px] align-top">
-                        <pre
-                          className={cn(
-                            "rounded-md bg-muted p-3 font-mono text-xs text-muted-foreground",
-                            ex ? "max-h-64 overflow-auto" : "max-h-16 overflow-hidden",
-                          )}
-                        >
-                          {formatJson(row.metadata)}
-                        </pre>
+                      <TableCell className="px-2 py-1.5 text-xs text-foreground">{row.entityType}</TableCell>
+                      <TableCell className="max-w-[140px] truncate px-2 py-1.5 font-mono text-xs text-foreground">{row.entityId}</TableCell>
+                      <TableCell className="max-w-[320px] px-2 py-1.5 align-top">
+                        <div className="max-w-[320px] overflow-hidden">
+                          <pre
+                            className={cn(
+                              "rounded-md bg-muted p-2 font-mono text-xs text-muted-foreground whitespace-pre-wrap break-all",
+                              ex ? "max-h-64 overflow-auto" : "max-h-16 overflow-hidden",
+                            )}
+                          >
+                            {formatJson(row.metadata)}
+                          </pre>
+                        </div>
                         <Button
                           type="button"
                           variant="ghost"
@@ -289,7 +296,7 @@ export default function AdminAuditPage() {
                 })}
                 {items.length === 0 && !q.isFetching ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
+                    <TableCell colSpan={6} className="px-2 py-1.5 text-center text-sm text-muted-foreground">
                       Записей нет.
                     </TableCell>
                   </TableRow>
@@ -298,43 +305,44 @@ export default function AdminAuditPage() {
             </Table>
           </div>
 
-          <div className="grid gap-3 md:hidden">
+          <ul className="sm:hidden divide-y divide-border">
             {items.map((row) => {
               const ex = expanded[row.id] ?? false;
               return (
-                <div key={row.id} className="rounded-xl border border-border bg-card p-4 shadow-sm sm:p-6" data-testid={`row-audit-${row.id}`}>
-                  <p className="font-mono text-xs text-muted-foreground">{row.createdAt}</p>
-                  <p className="mt-1 font-mono text-xs text-foreground">{row.action}</p>
-                  <p className="mt-2 text-xs text-foreground">
+                <li key={row.id} className="flex flex-col gap-0.5 px-2 py-2" data-testid={`row-audit-m-${row.id}`}>
+                  <div className="flex justify-between gap-2">
+                    <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
+                      {formatDisplayDateTime(row.createdAt)}
+                    </span>
+                    <span className="min-w-0 truncate text-right font-mono text-[11px] text-foreground">{row.action}</span>
+                  </div>
+                  <p className="truncate text-sm text-foreground">
                     {row.actor ? row.actor.email : <span className="text-muted-foreground">system</span>}
                   </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {row.entityType} · <span className="font-mono text-foreground">{row.entityId}</span>
+                  <p className="truncate text-[11px] text-muted-foreground">
+                    {row.entityType} · <span className="font-mono">{row.entityId}</span>
                   </p>
-                  <pre
-                    className={cn(
-                      "mt-3 rounded-md bg-muted p-3 font-mono text-xs text-muted-foreground",
-                      ex ? "max-h-64 overflow-auto" : "max-h-24 overflow-hidden",
-                    )}
-                  >
-                    {formatJson(row.metadata)}
-                  </pre>
+                  {ex ? (
+                    <pre className="mt-2 max-h-64 overflow-auto rounded-md bg-muted p-2 font-mono text-[11px] whitespace-pre-wrap break-all">
+                      {formatJson(row.metadata)}
+                    </pre>
+                  ) : null}
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="mt-1 h-auto px-0 text-xs text-muted-foreground"
+                    className="mt-0.5 h-auto p-0 text-[11px] text-muted-foreground hover:text-foreground"
                     onClick={() => setExpanded((m) => ({ ...m, [row.id]: !ex }))}
                   >
                     {ex ? "свернуть" : "развернуть"}
                   </Button>
-                </div>
+                </li>
               );
             })}
             {items.length === 0 && !q.isFetching ? (
-              <div className="rounded-xl border border-border bg-card p-6 text-center text-sm text-muted-foreground shadow-sm">Записей нет.</div>
+              <li className="px-2 py-3 text-center text-sm text-muted-foreground">Записей нет.</li>
             ) : null}
-          </div>
+          </ul>
         </CardContent>
       </Card>
     </div>

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ReactElement, ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -30,6 +30,8 @@ import { ThemeToggleDesktop, ThemeToggleMobileBlock } from "@/components/theme-t
 import { SaveStatusBadge } from "@/components/client-base-actualization-save-status-badge";
 import { cn } from "@/lib/utils";
 import { flattenGroupedPilotNavigation, type PilotNavGroup, type PilotNavItem, type PilotNavigationModel } from "@/lib/auth-access";
+import { useClientBaseActualization } from "@/context/client-base-actualization-context";
+import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actualization-sync-status";
 
 const MAIN_HREF = "/main";
 const TERRITORY_CARD_HREF = "/territory-card";
@@ -669,6 +671,53 @@ function buildIconRail(navItems: PilotNavItem[]): { href: string; label: string;
   return out;
 }
 
+function shellPathWithoutQuery(location: string): string {
+  const raw = location.split("?")[0] ?? "/";
+  if (raw.length > 1 && raw.endsWith("/")) return raw.slice(0, -1);
+  return raw || "/";
+}
+
+/** Компактный статус актуализации: только на рабочих маршрутах актуализации (не /admin, не профиль). */
+function isClientBaseActualizationShellBadgeRoute(location: string): boolean {
+  const p = shellPathWithoutQuery(location);
+  if (p.startsWith("/admin")) return false;
+  if (p === "/profile" || p.startsWith("/profile/")) return false;
+  if (p === "/users" || p.startsWith("/users/")) return false;
+  if (p.startsWith("/reset-requests")) return false;
+  const starts = (prefix: string) => p === prefix || p.startsWith(`${prefix}/`);
+  if (p.startsWith("/dealers")) return true;
+  if (starts("/client-base")) return true;
+  if (starts("/dealer-base")) return true;
+  if (starts("/actualization")) return true;
+  if (starts("/manager-workspace")) return true;
+  if (p === "/" || p === "/main" || p === "/sales-manager") return true;
+  if (starts("/tasks")) return true;
+  if (starts("/territory")) return true;
+  if (starts("/territory-card")) return true;
+  if (starts("/trade-points")) return true;
+  if (starts("/client-map")) return true;
+  if (p === "/client-base-activity") return true;
+  if (p === "/dealer-card-foundation") return true;
+  return false;
+}
+
+function ClientBaseActualizationShellBadge({ location }: { location: string }): ReactElement | null {
+  const actx = useClientBaseActualization();
+  if (!actx.enabled) return null;
+  if (!isClientBaseActualizationShellBadgeRoute(location)) return null;
+  return (
+    <div className="mb-4 min-w-0" data-testid="section-app-shell-client-base-actualization-badge">
+      <ClientBaseActualizationSyncStatus
+        compact
+        isLoading={actx.loading}
+        syncStatus={actx.syncStatus}
+        meta={actx.meta}
+        onRetry={() => void actx.refresh()}
+      />
+    </div>
+  );
+}
+
 export type AppShellProps = {
   children: ReactNode;
   navigation: PilotNavigationModel;
@@ -737,7 +786,10 @@ export function AppShell({
             </div>
           </div>
         </header>
-        <main className="mx-auto w-full max-w-3xl flex-1 px-3 py-4 sm:px-4 sm:py-5">{children}</main>
+        <main className="mx-auto w-full max-w-3xl flex-1 px-3 py-4 sm:px-4 sm:py-5">
+          <ClientBaseActualizationShellBadge location={location} />
+          {children}
+        </main>
       </div>
     );
   }
@@ -915,7 +967,10 @@ export function AppShell({
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 py-5 sm:px-5 sm:py-6 lg:px-8 lg:py-7">{children}</main>
+        <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 py-5 sm:px-5 sm:py-6 lg:px-8 lg:py-7">
+          <ClientBaseActualizationShellBadge location={location} />
+          {children}
+        </main>
       </div>
     </div>
     </>
