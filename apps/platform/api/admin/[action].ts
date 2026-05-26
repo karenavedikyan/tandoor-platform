@@ -9,6 +9,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { neon } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { handleTeamsList } from "../../shared/admin/client-assignments-handlers.js";
 
 type NeonHttp = ReturnType<typeof neon>;
 interface PoolLike {
@@ -2842,6 +2843,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       sendJson(res, 200, { success: true });
       return;
     }
+    if (action === "teams-list" && req.method === "GET") {
+      const me = await resolveCurrentUser(pool, headers);
+      if (!me) {
+        sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+        return;
+      }
+      await handleTeamsList(req, res, pool, me);
+      return;
+    }
+
     if (action === "auth-unlock-email" && req.method === "POST") {
       const me = await resolveCurrentUser(pool, headers);
       if (!me || me.role !== "admin" || me.status !== "active") {

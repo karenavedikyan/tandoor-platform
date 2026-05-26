@@ -110,6 +110,11 @@ export function defaultHomePathForUserRole(role: UserRole): string {
   }
 }
 
+export function canManageClientAssignments(role: UserRole | null | undefined): boolean {
+  if (!role) return false;
+  return role === "admin" || role === "director" || role === "rop";
+}
+
 export function canAccessPathForUser(role: UserRole, path: string): boolean {
   const p = normPath(path);
   if (p === "/forgot") return true;
@@ -124,6 +129,9 @@ export function canAccessPathForUser(role: UserRole, path: string): boolean {
   }
   if (p === "/admin/audit") {
     return userHas(role, "audit.read");
+  }
+  if (p === "/admin/client-assignments") {
+    return canManageClientAssignments(role);
   }
   if (p === "/profile" || isUnder(p, "/profile")) {
     return userHas(role, "profile.read_self");
@@ -276,6 +284,14 @@ function buildAdministrationNavGroup(platformUserRole: UserRole | null | undefin
       label: "Пользователи",
       testId: "nav-item-admin-users",
       navBehaviorId: "nav-admin-users",
+    });
+  }
+  if (canManageClientAssignments(platformUserRole)) {
+    items.push({
+      href: "/admin/client-assignments",
+      label: "Назначения клиентов",
+      testId: "nav-item-admin-client-assignments",
+      navBehaviorId: "nav-admin-client-assignments",
     });
   }
   if (userCanManageInvitations(platformUserRole)) {
