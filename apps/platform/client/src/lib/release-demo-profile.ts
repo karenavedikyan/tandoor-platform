@@ -4,6 +4,7 @@
  */
 
 import type { UserRole } from "@shared/auth";
+import { UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE } from "@shared/admin/actualization-dedupe";
 import type { SalesRole } from "@/lib/sales-control-data";
 import {
   getAllSalesManagers,
@@ -42,12 +43,22 @@ export function listPersonasForRole(role: SalesRole): { id: string; name: string
   return SALES_USERS.filter((u) => u.role === role).map((u) => ({ id: u.id, name: u.name }));
 }
 
-export function loadReleaseDemoProfile(serverUserRole?: UserRole | null): ReleaseDemoProfile {
+export function loadReleaseDemoProfile(
+  serverUserRole?: UserRole | null,
+  serverUserId?: string | null,
+): ReleaseDemoProfile {
   if (typeof window === "undefined") return { ...DEFAULT };
 
   if (serverUserRole) {
     const sr = userRoleToSalesRole(serverUserRole);
-    return { role: sr, personaUserId: defaultPersonaForRole(sr) };
+    let personaUserId = defaultPersonaForRole(sr);
+    if (serverUserId) {
+      const mgrId = UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE[serverUserId.trim()];
+      if (mgrId && getSalesUserById(mgrId)?.role === sr) {
+        personaUserId = mgrId;
+      }
+    }
+    return { role: sr, personaUserId };
   }
 
   if (isDemoAuthBypassEnabled() && window.sessionStorage) {
