@@ -15,7 +15,7 @@ import {
   resolveCurrentUser,
   sendJson,
   vercelHeaders,
-} from "../../_shared/admin-auth";
+} from "../_handlers/admin-auth";
 
 export const config = { maxDuration: 60 };
 
