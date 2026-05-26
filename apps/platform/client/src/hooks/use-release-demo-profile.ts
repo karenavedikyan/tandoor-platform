@@ -16,18 +16,20 @@ export function useReleaseDemoProfile(): {
   const userRef = useRef(user);
   userRef.current = user;
 
-  const [profile, setProfileState] = useState<ReleaseDemoProfile>(() => loadReleaseDemoProfile(user?.role));
+  const [profile, setProfileState] = useState<ReleaseDemoProfile>(() =>
+    loadReleaseDemoProfile(user?.role, user?.id ?? null),
+  );
 
   const refresh = useCallback(() => {
-    setProfileState(loadReleaseDemoProfile(userRef.current?.role));
+    setProfileState(loadReleaseDemoProfile(userRef.current?.role, userRef.current?.id ?? null));
   }, []);
 
   useEffect(() => {
-    setProfileState(loadReleaseDemoProfile(user?.role));
+    setProfileState(loadReleaseDemoProfile(user?.role, user?.id ?? null));
   }, [user?.role, user?.id]);
 
   useEffect(() => {
-    const onExt = () => setProfileState(loadReleaseDemoProfile(userRef.current?.role));
+    const onExt = () => setProfileState(loadReleaseDemoProfile(userRef.current?.role, userRef.current?.id ?? null));
     window.addEventListener(RELEASE_DEMO_PROFILE_EVENT, onExt);
     window.addEventListener("storage", onExt);
     return () => {

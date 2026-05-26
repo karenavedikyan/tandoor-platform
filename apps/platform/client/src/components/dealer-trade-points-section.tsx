@@ -574,26 +574,6 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
     "data-diag-manual-tp-state-len": String(manualTpStateForRow.length),
     "data-diag-manual-tp-state-ids": manualTpStateIds,
   };
-  const diagBlock = actx.enabled ? (
-    <div
-      className="rounded border border-amber-400 bg-amber-50 p-2 text-[10px] text-amber-900"
-      data-testid="diag-trade-points-block"
-      style={{ wordBreak: "break-all" }}
-    >
-      <div><strong>DIAG TP</strong></div>
-      <div>row.id: {row.id}</div>
-      <div>useAct: {String(useAct)} · canEdit: {String(canEdit)} · actx.enabled: {String(actx.enabled)}</div>
-      <div>mergedActive: {mergedActive.length} · archived: {mergedArchived.length}</div>
-      <div>hasAnyEver: {String(hasAnyTradePointEver)} · isVirtual: {String(isUsingVirtualDefault)}</div>
-      <div>tpListSlice: {tpListSlice.length} → {tpListSlice.map((e) => e.point.id).join(", ") || "—"}</div>
-      <div>
-        manualTP for row.id in state: {manualTpStateForRow.length}
-      </div>
-      <div>
-        manualTP ids: {manualTpStateForRow.map((m) => m.id).join(", ") || "—"}
-      </div>
-    </div>
-  ) : null;
 
   const archivableTradePointIdsFull = useMemo(() => {
     if (!useAct || !canEdit || showArchived) return new Set<string>();
@@ -702,7 +682,6 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
         className="scroll-mt-28 space-y-2 sm:scroll-mt-32"
         {...diagAttrs}
       >
-        {diagBlock}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <h3 className="text-sm font-semibold text-foreground sm:text-base">Торговые точки</h3>
           {canEdit ? (
@@ -866,7 +845,6 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
         className="scroll-mt-28 space-y-2 sm:scroll-mt-32"
         {...diagAttrs}
       >
-        {diagBlock}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <h3 className="text-sm font-semibold text-foreground sm:text-base">Торговые точки</h3>
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
@@ -1042,7 +1020,6 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
       className="scroll-mt-28 space-y-2 sm:scroll-mt-32"
       {...diagAttrs}
     >
-      {diagBlock}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <h3 className="text-sm font-semibold text-foreground sm:text-base">Торговые точки</h3>
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
