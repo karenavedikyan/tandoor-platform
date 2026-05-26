@@ -555,10 +555,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         const ownRow = memoryStore.get(userId);
         const orderedStates: Record<string, unknown>[] = [ownRow ? coerceState(ownRow.state) : emptyState()];
         let maxUpdatedAt: string | null = null;
-        for (const [storedUserId, row] of memoryStore.entries()) {
+        memoryStore.forEach((row, storedUserId) => {
           if (row.updatedAt && (!maxUpdatedAt || row.updatedAt > maxUpdatedAt)) maxUpdatedAt = row.updatedAt;
           if (storedUserId !== userId) orderedStates.push(coerceState(row.state));
-        }
+        });
         const state = mergeActualizationStates(orderedStates);
         const updatedAt = ownRow?.updatedAt ?? maxUpdatedAt;
         sendJson(
