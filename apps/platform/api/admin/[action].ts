@@ -15,7 +15,7 @@ import {
   handleClientsReassign,
   handleUserTeamHistory,
   handleUserTeamReassign,
-} from "./client-assignments-handlers";
+} from "../_shared/client-assignments-handlers";
 
 type NeonHttp = ReturnType<typeof neon>;
 interface PoolLike {
