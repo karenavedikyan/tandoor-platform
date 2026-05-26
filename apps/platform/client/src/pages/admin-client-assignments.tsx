@@ -35,6 +35,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ResponsiveList, ResponsiveListDesktop, ResponsiveListMobile, ResponsiveListMobileItem } from "@/components/ui/responsive-list";
 import { useToast } from "@/hooks/use-toast";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { formatDisplayDateTime } from "@/lib/format-display-date";
@@ -322,11 +323,12 @@ export default function AdminClientAssignmentsPage() {
               {listQ.isFetching ? "Обновление…" : null} Всего: {total}
             </CardDescription>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button
               type="button"
               variant="outline"
               size="sm"
+              className="h-8 px-3 text-xs"
               disabled={!canPrev || listQ.isFetching}
               onClick={() => setOffset((o) => Math.max(0, o - LIMIT))}
               data-testid="button-client-assignments-prev"
@@ -337,6 +339,7 @@ export default function AdminClientAssignmentsPage() {
               type="button"
               variant="outline"
               size="sm"
+              className="h-8 px-3 text-xs"
               disabled={!canNext || listQ.isFetching}
               onClick={() => setOffset((o) => o + LIMIT)}
               data-testid="button-client-assignments-next"
@@ -354,10 +357,11 @@ export default function AdminClientAssignmentsPage() {
               Загрузка…
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <ResponsiveList>
+              <ResponsiveListDesktop>
               <Table>
                 <TableHeader>
-                  <TableRow>
+                  <TableRow className="h-10">
                     <TableHead className="w-10">
                       <Checkbox
                         checked={allOnPageSelected}
@@ -366,17 +370,17 @@ export default function AdminClientAssignmentsPage() {
                         data-testid="checkbox-client-assignments-select-all"
                       />
                     </TableHead>
-                    <TableHead>Код клиента</TableHead>
-                    <TableHead>Ответственный</TableHead>
-                    <TableHead>Команда</TableHead>
-                    <TableHead>Назначен с</TableHead>
-                    <TableHead className="w-24 text-right">История</TableHead>
+                    <TableHead className="px-2 py-1.5 text-xs">Код клиента</TableHead>
+                    <TableHead className="px-2 py-1.5 text-xs">Ответственный</TableHead>
+                    <TableHead className="px-2 py-1.5 text-xs">Команда</TableHead>
+                    <TableHead className="px-2 py-1.5 text-xs">Назначен с</TableHead>
+                    <TableHead className="w-24 px-2 py-1.5 text-right text-xs">История</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {items.map((row) => (
-                    <TableRow key={row.clientCode}>
-                      <TableCell>
+                    <TableRow key={row.clientCode} className="h-10">
+                      <TableCell className="px-2 py-1.5">
                         <Checkbox
                           checked={Boolean(selected[row.clientCode])}
                           onCheckedChange={(v) => {
@@ -391,7 +395,7 @@ export default function AdminClientAssignmentsPage() {
                           data-testid={`checkbox-client-${row.clientCode}`}
                         />
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="px-2 py-1.5">
                         <button
                           type="button"
                           className={cn("font-mono text-sm text-primary underline-offset-4 hover:underline")}
@@ -401,19 +405,58 @@ export default function AdminClientAssignmentsPage() {
                           {row.clientCode}
                         </button>
                       </TableCell>
-                      <TableCell className="max-w-[200px] truncate">{row.responsibleFullName}</TableCell>
-                      <TableCell className="max-w-[220px] truncate">{row.teamName ?? row.teamId ?? "—"}</TableCell>
-                      <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                      <TableCell className="max-w-[200px] truncate px-2 py-1.5 text-sm">{row.responsibleFullName}</TableCell>
+                      <TableCell className="max-w-[220px] truncate px-2 py-1.5 text-sm">{row.teamName ?? row.teamId ?? "—"}</TableCell>
+                      <TableCell className="whitespace-nowrap px-2 py-1.5 text-xs text-muted-foreground">
                         {formatDisplayDateTime(row.since)}
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="px-2 py-1.5 text-right">
                         <AssignmentHistoryPopover clientCode={row.clientCode} />
                       </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
-            </div>
+              </ResponsiveListDesktop>
+              <ResponsiveListMobile>
+                {items.map((row) => (
+                  <ResponsiveListMobileItem key={row.clientCode}>
+                    <Checkbox
+                      checked={Boolean(selected[row.clientCode])}
+                      onCheckedChange={(v) => {
+                        setSelected((prev) => {
+                          const n = { ...prev };
+                          if (v === true) n[row.clientCode] = true;
+                          else delete n[row.clientCode];
+                          return n;
+                        });
+                      }}
+                      aria-label={`Выбрать ${row.clientCode}`}
+                      data-testid={`checkbox-client-m-${row.clientCode}`}
+                      className="mt-1"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <button
+                          type="button"
+                          className="min-w-0 truncate font-mono text-xs font-semibold text-primary underline-offset-4 hover:underline"
+                          onClick={() => setSheetCode(row.clientCode)}
+                          data-testid={`link-client-code-m-${row.clientCode}`}
+                        >
+                          {row.clientCode}
+                        </button>
+                        <span className="shrink-0 text-[10px] text-muted-foreground">{formatDisplayDateTime(row.since)}</span>
+                      </div>
+                      <div className="mt-1 truncate text-sm font-medium text-foreground">{row.responsibleFullName}</div>
+                      <div className="truncate text-xs text-muted-foreground">{row.teamName ?? row.teamId ?? "—"}</div>
+                    </div>
+                    <div className="shrink-0">
+                      <AssignmentHistoryPopover clientCode={row.clientCode} />
+                    </div>
+                  </ResponsiveListMobileItem>
+                ))}
+              </ResponsiveListMobile>
+            </ResponsiveList>
           )}
         </CardContent>
       </Card>

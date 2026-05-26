@@ -8,6 +8,7 @@ import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ResponsiveList, ResponsiveListDesktop, ResponsiveListMobile, ResponsiveListMobileItem } from "@/components/ui/responsive-list";
 import { useToast } from "@/hooks/use-toast";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { defaultHomePathForUserRole } from "@/lib/auth-access";
@@ -228,41 +229,64 @@ export default function AdminActualizationDedupePage() {
           ) : rows.length === 0 ? (
             <p className="text-sm text-muted-foreground">Кандидатов на слияние не найдено.</p>
           ) : (
-            <div className="overflow-x-auto rounded-lg border border-border">
+            <ResponsiveList>
+              <ResponsiveListDesktop>
+            <div className="rounded-lg border border-border">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>Менеджер</TableHead>
-                    <TableHead>Manual-клиент</TableHead>
-                    <TableHead>Release-клиент</TableHead>
-                    <TableHead className="text-right">ТТ переедет</TableHead>
-                    <TableHead>Юрлицо</TableHead>
-                    <TableHead>Контакты</TableHead>
+                  <TableRow className="h-10">
+                    <TableHead className="px-2 py-1.5 text-xs">Менеджер</TableHead>
+                    <TableHead className="px-2 py-1.5 text-xs">Manual-клиент</TableHead>
+                    <TableHead className="px-2 py-1.5 text-xs">Release-клиент</TableHead>
+                    <TableHead className="px-2 py-1.5 text-right text-xs">ТТ</TableHead>
+                    <TableHead className="px-2 py-1.5 text-xs">Юрлицо</TableHead>
+                    <TableHead className="px-2 py-1.5 text-xs">Контакты</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {rows.map((row) => (
-                    <TableRow key={`${row.managerScopeUserId}:${row.manualDealerId}`}>
-                      <TableCell>
+                    <TableRow key={`${row.managerScopeUserId}:${row.manualDealerId}`} className="h-10">
+                      <TableCell className="px-2 py-1.5">
                         <div className="font-medium">{row.managerFullName}</div>
                         <div className="text-xs text-muted-foreground">{row.managerUserId}</div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="px-2 py-1.5">
                         <div className="font-medium">{row.manualInternalCode || "Без кода"}</div>
                         <div className="text-xs text-muted-foreground">{row.manualName}</div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="px-2 py-1.5">
                         <div className="font-medium">{row.releaseCode}</div>
                         <div className="text-xs text-muted-foreground">{row.releaseName}</div>
                       </TableCell>
-                      <TableCell className="text-right tabular-nums">{row.tradePointsCount}</TableCell>
-                      <TableCell>{row.hasLegalEntities ? "✓" : "—"}</TableCell>
-                      <TableCell>{row.hasContacts ? "✓" : "—"}</TableCell>
+                      <TableCell className="px-2 py-1.5 text-right tabular-nums">{row.tradePointsCount}</TableCell>
+                      <TableCell className="px-2 py-1.5">{row.hasLegalEntities ? "✓" : "—"}</TableCell>
+                      <TableCell className="px-2 py-1.5">{row.hasContacts ? "✓" : "—"}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
             </div>
+              </ResponsiveListDesktop>
+              <ResponsiveListMobile>
+                {rows.map((row) => (
+                  <ResponsiveListMobileItem key={`${row.managerScopeUserId}:${row.manualDealerId}`}>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="min-w-0 truncate font-mono text-xs font-semibold">{row.manualInternalCode || "Без кода"}</span>
+                        <span className="shrink-0 text-[10px] text-muted-foreground">ТТ: {row.tradePointsCount}</span>
+                      </div>
+                      <div className="mt-1 truncate text-sm font-medium text-foreground">{row.manualName}</div>
+                      <div className="truncate text-xs text-muted-foreground">
+                        {row.releaseCode} · {row.managerFullName}
+                      </div>
+                      <div className="mt-1 text-[11px] text-muted-foreground">
+                        Юрлицо: {row.hasLegalEntities ? "да" : "нет"} · Контакты: {row.hasContacts ? "да" : "нет"}
+                      </div>
+                    </div>
+                  </ResponsiveListMobileItem>
+                ))}
+              </ResponsiveListMobile>
+            </ResponsiveList>
           )}
         </CardContent>
       </Card>
@@ -305,32 +329,51 @@ export default function AdminActualizationDedupePage() {
           ) : contactRows.length === 0 ? (
             <p className="text-sm text-muted-foreground">Контактов для миграции не найдено.</p>
           ) : (
-            <div className="overflow-x-auto rounded-lg border border-border">
+            <ResponsiveList>
+              <ResponsiveListDesktop>
+            <div className="rounded-lg border border-border">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>Менеджер</TableHead>
-                    <TableHead>Клиент</TableHead>
-                    <TableHead>Имя контакта</TableHead>
-                    <TableHead>Телефон</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Источник</TableHead>
+                  <TableRow className="h-10">
+                    <TableHead className="px-2 py-1.5 text-xs">Менеджер</TableHead>
+                    <TableHead className="px-2 py-1.5 text-xs">Клиент</TableHead>
+                    <TableHead className="px-2 py-1.5 text-xs">Имя контакта</TableHead>
+                    <TableHead className="px-2 py-1.5 text-xs">Телефон</TableHead>
+                    <TableHead className="px-2 py-1.5 text-xs">Email</TableHead>
+                    <TableHead className="px-2 py-1.5 text-xs">Источник</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {contactRows.map((row) => (
-                    <TableRow key={`${row.managerScopeUserId}:${row.contactId}`}>
-                      <TableCell className="font-mono text-xs">{row.managerScopeUserId}</TableCell>
-                      <TableCell className="font-mono text-xs">{row.dealerId}</TableCell>
-                      <TableCell>{row.fullName}</TableCell>
-                      <TableCell>{row.phone || "—"}</TableCell>
-                      <TableCell>{row.email || "—"}</TableCell>
-                      <TableCell>{row.source === "from_override" ? "override" : "manual"}</TableCell>
+                    <TableRow key={`${row.managerScopeUserId}:${row.contactId}`} className="h-10">
+                      <TableCell className="px-2 py-1.5 font-mono text-xs">{row.managerScopeUserId}</TableCell>
+                      <TableCell className="max-w-[180px] truncate px-2 py-1.5 font-mono text-xs">{row.dealerId}</TableCell>
+                      <TableCell className="max-w-[180px] truncate px-2 py-1.5 text-sm">{row.fullName}</TableCell>
+                      <TableCell className="px-2 py-1.5 text-sm">{row.phone || "—"}</TableCell>
+                      <TableCell className="max-w-[180px] truncate px-2 py-1.5 text-sm">{row.email || "—"}</TableCell>
+                      <TableCell className="px-2 py-1.5 text-sm">{row.source === "from_override" ? "override" : "manual"}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
             </div>
+              </ResponsiveListDesktop>
+              <ResponsiveListMobile>
+                {contactRows.map((row) => (
+                  <ResponsiveListMobileItem key={`${row.managerScopeUserId}:${row.contactId}`}>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="min-w-0 truncate font-mono text-xs font-semibold">{row.dealerId}</span>
+                        <span className="shrink-0 text-[10px] text-muted-foreground">{row.source === "from_override" ? "override" : "manual"}</span>
+                      </div>
+                      <div className="mt-1 truncate text-sm font-medium text-foreground">{row.fullName}</div>
+                      <div className="truncate text-xs text-muted-foreground">{row.phone || "—"} · {row.email || "—"}</div>
+                      <div className="mt-1 truncate font-mono text-[11px] text-muted-foreground">{row.managerScopeUserId}</div>
+                    </div>
+                  </ResponsiveListMobileItem>
+                ))}
+              </ResponsiveListMobile>
+            </ResponsiveList>
           )}
         </CardContent>
       </Card>

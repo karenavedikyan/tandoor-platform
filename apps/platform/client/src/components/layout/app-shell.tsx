@@ -47,6 +47,19 @@ const SALES_MANAGER_HREF = "/sales-manager";
 const COMMUNICATIONS_HREF = "/communications";
 const CLIENT_BASE_ACTIVITY_HREF = "/client-base-activity";
 const FEATURE_IN_DEVELOPMENT_HREF = "/feature-in-development";
+const ACTUALIZATION_SAVE_STATUS_ROUTES = [
+  "/dealers",
+  "/client-base",
+  "/dealer-base",
+  "/actualization",
+  "/manager-workspace",
+  "/sales-manager",
+  "/tasks",
+  "/territory",
+  "/territory-card",
+  "/trade-points",
+  "/client-map",
+];
 
 const ICON_BY_TESTID: Partial<Record<string, LucideIcon>> = {
   "nav-item-home": Home,
@@ -688,6 +701,7 @@ export function AppShell({
   const flatNav = useMemo(() => flattenNavModel(navigation), [navigation]);
   const iconRail = useMemo(() => buildIconRail(flatNav), [flatNav]);
   const { openGroups: pilotGroupedOpen, toggleGroup: pilotGroupedToggle } = usePilotGroupedNavOpenState(navigation, location);
+  const showSaveBadge = ACTUALIZATION_SAVE_STATUS_ROUTES.some((p) => location === p || location.startsWith(`${p}/`));
 
   if (embeddedBitrix24) {
     return (
@@ -700,7 +714,7 @@ export function AppShell({
           <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3">
             <BrandBlock homeHref={homeHref} className="max-w-[132px]" />
             <div className="flex shrink-0 items-center gap-2">
-              <SaveStatusBadge />
+              {showSaveBadge ? <SaveStatusBadge /> : null}
               <ThemeToggleDesktop className="h-9 w-9" />
               {showAuditLogLink ? (
                 <Button asChild variant="outline" size="sm" className="h-9 shrink-0 border-border/80 px-2.5 text-xs">
@@ -808,7 +822,7 @@ export function AppShell({
             </Button>
           </form>
           <div className="ml-auto flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-2 sm:gap-3">
-            <SaveStatusBadge />
+            {showSaveBadge ? <SaveStatusBadge /> : null}
             <ThemeToggleDesktop />
             <Button type="button" variant="outline" size="sm" className="max-w-[10rem] truncate border-border/80" data-testid="button-current-city">
               <span data-testid="text-current-city">{cityLabel}</span>
@@ -897,7 +911,7 @@ export function AppShell({
                 </p>
               ) : null}
             </div>
-            <SaveStatusBadge />
+            {showSaveBadge ? <SaveStatusBadge /> : null}
           </div>
         </header>
 

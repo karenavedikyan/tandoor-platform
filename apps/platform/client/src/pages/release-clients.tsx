@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ResponsiveList, ResponsiveListDesktop, ResponsiveListMobile, ResponsiveListMobileItem } from "@/components/ui/responsive-list";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import {
@@ -348,33 +349,35 @@ export default function ReleaseClientsPage() {
       </div>
 
       <section className="min-w-0 rounded-2xl border border-border/80 bg-card" data-testid="section-release-clients-table">
-        <div className="overflow-x-auto p-2 sm:p-4">
+        <div className="p-2 sm:p-4">
+          <ResponsiveList>
+            <ResponsiveListDesktop>
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead className="whitespace-nowrap">Код</TableHead>
-                <TableHead>Наименование</TableHead>
-                <TableHead className="whitespace-nowrap">Город</TableHead>
-                <TableHead className="whitespace-nowrap">РОП</TableHead>
-                <TableHead>Менеджер</TableHead>
-                <TableHead className="whitespace-nowrap">Категория клиента</TableHead>
-                <TableHead>Адрес</TableHead>
-                <TableHead className="whitespace-nowrap">Статус</TableHead>
+              <TableRow className="h-10">
+                <TableHead className="whitespace-nowrap px-2 py-1.5 text-xs">Код</TableHead>
+                <TableHead className="px-2 py-1.5 text-xs">Наименование</TableHead>
+                <TableHead className="whitespace-nowrap px-2 py-1.5 text-xs">Город</TableHead>
+                <TableHead className="whitespace-nowrap px-2 py-1.5 text-xs">РОП</TableHead>
+                <TableHead className="px-2 py-1.5 text-xs">Менеджер</TableHead>
+                <TableHead className="whitespace-nowrap px-2 py-1.5 text-xs">Категория</TableHead>
+                <TableHead className="px-2 py-1.5 text-xs">Адрес</TableHead>
+                <TableHead className="whitespace-nowrap px-2 py-1.5 text-xs">Статус</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {displayRows.map((c) => (
-                <TableRow key={c.id} data-testid={`row-release-client-${c.id}`}>
-                  <TableCell className="whitespace-nowrap font-mono text-xs">{c.code || "—"}</TableCell>
-                  <TableCell className="max-w-[200px] truncate sm:max-w-xs" title={c.name}>
+                <TableRow key={c.id} className="h-10" data-testid={`row-release-client-${c.id}`}>
+                  <TableCell className="whitespace-nowrap px-2 py-1.5 font-mono text-xs">{c.code || "—"}</TableCell>
+                  <TableCell className="max-w-[220px] truncate px-2 py-1.5 text-sm" title={c.name}>
                     {c.name}
                   </TableCell>
-                  <TableCell className="whitespace-nowrap text-sm">{c.city || "—"}</TableCell>
-                  <TableCell className="whitespace-nowrap text-sm">{c.ropName || teamLabel(c.teamId)}</TableCell>
-                  <TableCell className="max-w-[180px] truncate text-sm" title={c.managerName}>
+                  <TableCell className="whitespace-nowrap px-2 py-1.5 text-sm">{c.city || "—"}</TableCell>
+                  <TableCell className="max-w-[160px] truncate px-2 py-1.5 text-sm">{c.ropName || teamLabel(c.teamId)}</TableCell>
+                  <TableCell className="max-w-[180px] truncate px-2 py-1.5 text-sm" title={c.managerName}>
                     {c.managerName}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="px-2 py-1.5">
                     <Badge
                       variant="outline"
                       className={cn(
@@ -386,14 +389,35 @@ export default function ReleaseClientsPage() {
                       {getClientCategoryLabel(deriveReleaseClientCategory(c))}
                     </Badge>
                   </TableCell>
-                  <TableCell className="max-w-[220px] truncate text-xs text-muted-foreground" title={c.address}>
+                  <TableCell className="max-w-[220px] truncate px-2 py-1.5 text-xs text-muted-foreground" title={c.address}>
                     {c.address || "—"}
                   </TableCell>
-                  <TableCell className="whitespace-nowrap text-sm">{clientStatusLabel(c)}</TableCell>
+                  <TableCell className="whitespace-nowrap px-2 py-1.5 text-xs text-muted-foreground">{clientStatusLabel(c)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
+            </ResponsiveListDesktop>
+            <ResponsiveListMobile>
+              {displayRows.map((c) => (
+                <ResponsiveListMobileItem key={c.id}>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="min-w-0 truncate font-mono text-xs font-semibold text-foreground">{c.code || "—"}</span>
+                      <span className="shrink-0 text-[10px] text-muted-foreground">{clientStatusLabel(c)}</span>
+                    </div>
+                    <div className="mt-1 truncate text-sm font-medium text-foreground" data-testid={`row-release-client-m-${c.id}`}>
+                      {c.name}
+                    </div>
+                    <div className="truncate text-xs text-muted-foreground">
+                      {[c.city || "—", c.managerName || "—"].join(" · ")}
+                    </div>
+                    <div className="mt-1 truncate text-[11px] text-muted-foreground">{c.address || "Без адреса"}</div>
+                  </div>
+                </ResponsiveListMobileItem>
+              ))}
+            </ResponsiveListMobile>
+          </ResponsiveList>
         </div>
       </section>
     </div>
