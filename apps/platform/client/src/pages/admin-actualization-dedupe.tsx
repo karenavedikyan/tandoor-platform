@@ -40,14 +40,44 @@ type DedupeResponse = {
   message?: string;
 };
 
-async function postDedupeAction(action: "actualization-dedupe-dry-run" | "actualization-dedupe-apply", body = {}): Promise<DedupeResponse> {
+type ContactMigrationPlanRow = {
+  managerScopeUserId: string;
+  dealerId: string;
+  contactId: string;
+  fullName: string;
+  phone: string;
+  email: string;
+  source: "from_override" | "from_manual_dealer";
+};
+
+type ContactMigrationPlan = {
+  rows: ContactMigrationPlanRow[];
+  skipped: Array<{ managerScopeUserId: string; dealerId: string; reason: string }>;
+};
+
+type ContactsMigrationResponse = {
+  success: boolean;
+  plans?: ContactMigrationPlan[];
+  totals?: { managers: number; contactsToMigrate: number; skipped: number };
+  applied?: number;
+  message?: string;
+};
+
+async function postAdminAction<T extends DedupeResponse | ContactsMigrationResponse>(
+  action:
+    | "actualization-dedupe-dry-run"
+    | "actualization-dedupe-apply"
+    | "actualization-contacts-migration-dry-run"
+    | "actualization-contacts-migration-apply",
+  body = {},
+): Promise<T> {
   const res = await fetch(`/api/admin/${action}`, {
     method: "POST",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  const json = (await res.json().catch(() => ({}))) as DedupeResponse;
+  const json = (await res.json().catch(() => ({}))) as T;
   if (!res.ok || json.success !== true) {
     throw new Error(json.message ?? "Не удалось выполнить операцию.");
   }
@@ -58,14 +88,24 @@ function flattenPlans(plans: ManualMergePlan[] | undefined): ManualMergePlanRow[
   return (plans ?? []).flatMap((p) => p.rows);
 }
 
+function flattenContactPlans(plans: ContactMigrationPlan[] | undefined): ContactMigrationPlanRow[] {
+  return (plans ?? []).flatMap((p) => p.rows);
+}
+
 export default function AdminActualizationDedupePage() {
   const { user } = useCurrentUser();
   const { toast } = useToast();
   const [plans, setPlans] = useState<ManualMergePlan[] | null>(null);
   const [totals, setTotals] = useState<DedupeResponse["totals"] | null>(null);
   const [loading, setLoading] = useState<"dry" | "apply" | null>(null);
+  const [contactPlans, setContactPlans] = useState<ContactMigrationPlan[] | null>(null);
+  const [contactTotals, setContactTotals] = useState<ContactsMigrationResponse["totals"] | null>(null);
+  const [contactLoading, setContactLoading] = useState<"dry" | "apply" | null>(null);
   const rows = useMemo(() => flattenPlans(plans ?? undefined), [plans]);
+  const contactRows = useMemo(() => flattenContactPlans(contactPlans ?? undefined), [contactPlans]);
   const skippedCount = totals?.skipped ?? plans?.reduce((sum, p) => sum + p.skipped.length, 0) ?? 0;
+  const contactSkippedCount =
+    contactTotals?.skipped ?? contactPlans?.reduce((sum, p) => sum + p.skipped.length, 0) ?? 0;
   const homeHref = user ? defaultHomePathForUserRole(user.role) : "/";
 
   if (!user || user.role !== "admin") {
@@ -89,7 +129,7 @@ export default function AdminActualizationDedupePage() {
   const runDry = async () => {
     setLoading("dry");
     try {
-      const r = await postDedupeAction("actualization-dedupe-dry-run");
+      const r = await postAdminAction<DedupeResponse>("actualization-dedupe-dry-run");
       setPlans(r.plans ?? []);
       setTotals(r.totals ?? null);
       toast({ title: "План построен", description: `К слиянию: ${r.totals?.rowsToMerge ?? 0}.` });
@@ -106,7 +146,7 @@ export default function AdminActualizationDedupePage() {
     if (!window.confirm(`Подтверждаете слияние ${count} клиентов? Действие необратимо.`)) return;
     setLoading("apply");
     try {
-      const r = await postDedupeAction("actualization-dedupe-apply", { confirm: true });
+      const r = await postAdminAction<DedupeResponse>("actualization-dedupe-apply", { confirm: true });
       setPlans(r.plans ?? []);
       setTotals(r.totals ?? null);
       toast({ title: `Применено: ${r.applied ?? 0}` });
@@ -114,6 +154,37 @@ export default function AdminActualizationDedupePage() {
       toast({ title: "Не удалось применить слияние", description: e instanceof Error ? e.message : "Ошибка", variant: "destructive" });
     } finally {
       setLoading(null);
+    }
+  };
+
+  const runContactsDry = async () => {
+    setContactLoading("dry");
+    try {
+      const r = await postAdminAction<ContactsMigrationResponse>("actualization-contacts-migration-dry-run");
+      setContactPlans(r.plans ?? []);
+      setContactTotals(r.totals ?? null);
+      toast({ title: "План миграции контактов построен", description: `К созданию: ${r.totals?.contactsToMigrate ?? 0}.` });
+    } catch (e) {
+      toast({ title: "Не удалось построить план контактов", description: e instanceof Error ? e.message : "Ошибка", variant: "destructive" });
+    } finally {
+      setContactLoading(null);
+    }
+  };
+
+  const runContactsApply = async () => {
+    const count = contactTotals?.contactsToMigrate ?? contactRows.length;
+    if (count <= 0) return;
+    if (!window.confirm(`Подтверждаете создание ${count} primary-контактов?`)) return;
+    setContactLoading("apply");
+    try {
+      const r = await postAdminAction<ContactsMigrationResponse>("actualization-contacts-migration-apply", { confirm: true });
+      setContactPlans(r.plans ?? []);
+      setContactTotals(r.totals ?? null);
+      toast({ title: `Контактов создано: ${r.applied ?? 0}` });
+    } catch (e) {
+      toast({ title: "Не удалось применить миграцию контактов", description: e instanceof Error ? e.message : "Ошибка", variant: "destructive" });
+    } finally {
+      setContactLoading(null);
     }
   };
 
@@ -187,6 +258,74 @@ export default function AdminActualizationDedupePage() {
                       <TableCell className="text-right tabular-nums">{row.tradePointsCount}</TableCell>
                       <TableCell>{row.hasLegalEntities ? "✓" : "—"}</TableCell>
                       <TableCell>{row.hasContacts ? "✓" : "—"}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-xl border border-border bg-card shadow-sm">
+        <CardHeader>
+          <CardTitle>Миграция контактов</CardTitle>
+          <CardDescription>
+            После слияния manual-клиентов в release-карточки телефоны/email остались в overrides, но UI читает их из
+            отдельной таблицы контактов. Эта операция создаёт primary-контакт для каждого клиента с данными в overrides.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={runContactsDry}
+              disabled={contactLoading != null}
+              data-testid="button-actualization-contacts-migration-dry-run"
+            >
+              {contactLoading === "dry" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Построить план миграции контактов (dry-run)
+            </Button>
+            <Button
+              type="button"
+              onClick={runContactsApply}
+              disabled={contactLoading != null || !contactPlans || (contactTotals?.contactsToMigrate ?? contactRows.length) === 0}
+              data-testid="button-actualization-contacts-migration-apply"
+            >
+              {contactLoading === "apply" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Применить миграцию
+            </Button>
+          </div>
+          <div className="text-sm text-muted-foreground">
+            Контактов к созданию: {contactTotals?.contactsToMigrate ?? contactRows.length}. Пропущено: {contactSkippedCount}.
+          </div>
+          {!contactPlans ? (
+            <p className="text-sm text-muted-foreground">Нажмите «Построить план миграции контактов», чтобы увидеть кандидатов.</p>
+          ) : contactRows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Контактов для миграции не найдено.</p>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Менеджер</TableHead>
+                    <TableHead>Клиент</TableHead>
+                    <TableHead>Имя контакта</TableHead>
+                    <TableHead>Телефон</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Источник</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {contactRows.map((row) => (
+                    <TableRow key={`${row.managerScopeUserId}:${row.contactId}`}>
+                      <TableCell className="font-mono text-xs">{row.managerScopeUserId}</TableCell>
+                      <TableCell className="font-mono text-xs">{row.dealerId}</TableCell>
+                      <TableCell>{row.fullName}</TableCell>
+                      <TableCell>{row.phone || "—"}</TableCell>
+                      <TableCell>{row.email || "—"}</TableCell>
+                      <TableCell>{row.source === "from_override" ? "override" : "manual"}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

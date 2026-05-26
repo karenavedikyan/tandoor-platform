@@ -938,33 +938,40 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
     const active = storedDealerContacts.filter(isClientContactActive);
     return active.find((c) => c.isPrimary) ?? active[0];
   }, [storedDealerContacts]);
+  const overrideFields = (actx.state.dealerOverridesById[row.id]?.fields ?? {}) as Record<string, unknown>;
   const quickMainContactLabel = useMemo(() => {
     const n = primaryStoredContact?.fullName?.trim();
     if (n) return n;
     const m = mergedProfView.mainContactName?.trim();
     if (m) return m;
+    const o = typeof overrideFields.contactPerson === "string" ? overrideFields.contactPerson.trim() : "";
+    if (o && o !== "—" && o !== "-") return o;
     const l = row.contacts.lpr?.trim();
     if (l && l !== "—" && l !== "-") return l;
     return "";
-  }, [primaryStoredContact, mergedProfView.mainContactName, row.contacts.lpr]);
+  }, [primaryStoredContact, mergedProfView.mainContactName, overrideFields.contactPerson, row.contacts.lpr]);
   const quickPhoneLabel = useMemo(() => {
     const p = primaryStoredContact?.phone?.trim();
     if (p && p !== "—" && p !== "-") return p;
     const m = mergedProfView.mainContactPhone?.trim();
     if (m && m !== "—" && m !== "-") return m;
+    const o = typeof overrideFields.phone === "string" ? overrideFields.phone.trim() : "";
+    if (o && o !== "—" && o !== "-") return o;
     const r = row.contacts.phone?.trim();
     if (r && r !== "—" && r !== "-") return r;
     return "";
-  }, [primaryStoredContact, mergedProfView.mainContactPhone, row.contacts.phone]);
+  }, [primaryStoredContact, mergedProfView.mainContactPhone, overrideFields.phone, row.contacts.phone]);
   const quickEmailLabel = useMemo(() => {
     const e = primaryStoredContact?.email?.trim();
     if (e && e !== "—" && e !== "-") return e;
     const m = mergedProfView.mainContactEmail?.trim();
     if (m && m !== "—" && m !== "-") return m;
+    const o = typeof overrideFields.email === "string" ? overrideFields.email.trim() : "";
+    if (o && o !== "—" && o !== "-") return o;
     const r = row.contacts.email?.trim();
     if (r && r !== "—" && r !== "-") return r;
     return "";
-  }, [primaryStoredContact, mergedProfView.mainContactEmail, row.contacts.email]);
+  }, [primaryStoredContact, mergedProfView.mainContactEmail, overrideFields.email, row.contacts.email]);
   const quickTelegramLabel = useMemo(() => {
     const t = primaryStoredContact?.telegram?.trim();
     if (t && t !== "—" && t !== "-") return t;
