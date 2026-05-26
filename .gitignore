@@ -10,6 +10,7 @@ logs/
 *.sql
 !apps/platform/docs/sql/client_base_actualization_state.sql
 !apps/platform/docs/sql/sales_plan_fact_state.sql
+!apps/platform/server/migrations/*.sql
 *.dump
 *.sqlite
 *.db
