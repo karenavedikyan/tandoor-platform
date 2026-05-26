@@ -2,12 +2,12 @@
  * Vercel Serverless: POST /api/bitrix24/tasks/(create|list|test).
  *
  * Один маршрут вместо трёх (лимит Hobby 12 функций).
- * Реальные handler-ы лежат в `_handlers/` (Vercel игнорирует папки с подчёркиванием).
+ * Реальные handler-ы лежат в `lib/` (без default export — Vercel не считает их функциями).
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import createHandler from "./_handlers/create";
-import listHandler from "./_handlers/list";
-import testHandler from "./_handlers/test";
+import createHandler from "../../../shared/bitrix24-tasks/create.js";
+import listHandler from "../../../shared/bitrix24-tasks/list.js";
+import testHandler from "../../../shared/bitrix24-tasks/test.js";
 
 const JSON_CT = "application/json; charset=utf-8";
 

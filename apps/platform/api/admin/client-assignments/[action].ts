@@ -18,14 +18,14 @@ import {
   resolveCurrentUser,
   sendJson,
   vercelHeaders,
-} from "../_handlers/admin-auth";
+} from "../../../shared/admin/admin-auth.js";
 import {
   handleClientAssignmentHistory,
   handleClientsAssignmentsList,
   handleClientsReassign,
   handleUserTeamHistory,
   handleUserTeamReassign,
-} from "../_handlers/client-assignments-handlers";
+} from "../../../shared/admin/client-assignments-handlers.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   try {

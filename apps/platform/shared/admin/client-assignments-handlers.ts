@@ -4,7 +4,7 @@
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import type { PoolLike } from "./admin-auth";
+import type { PoolLike } from "./admin-auth.js";
 
 export type SessionUser = {
   id: string;
