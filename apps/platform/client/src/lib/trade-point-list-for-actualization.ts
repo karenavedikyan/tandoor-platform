@@ -10,7 +10,9 @@ import { computePortalSummary } from "@/lib/client-base-actualization-portal-mat
 import { buildDealerBaseRowsWithActualization, mergeTradePointsForActualization } from "@/lib/client-base-actualization-data-merge";
 import { getManualDealerDisplayCode, getTradePointDisplayCodeForActualization } from "@/lib/client-base-actualization-stable-ids";
 import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
-import { roleScopedDealerRows } from "@/lib/dealer-base-role-views";
+import { roleScopedDealerRows, type DealerBaseAccessRole } from "@/lib/dealer-base-role-views";
+import { roleScopedDealerRowsForReal } from "@/lib/dealer-base-real-scope";
+import type { OrgSnapshot } from "@/lib/use-org-snapshot";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { getClientCategoryLabel, type ClientCategoryId } from "@/lib/client-category";
 import {
