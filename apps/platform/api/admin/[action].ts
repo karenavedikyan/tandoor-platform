@@ -1850,11 +1850,13 @@ async function handleMigrationsRun(
          user_id uuid NOT NULL REFERENCES users(id),
          from_team_id uuid,
          to_team_id uuid,
+         role_in_team text,
          actor_user_id uuid REFERENCES users(id),
          reason text,
          created_at timestamptz NOT NULL DEFAULT now()
        )`,
     );
+    await pool.query(`ALTER TABLE user_team_history ADD COLUMN IF NOT EXISTS role_in_team text`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_uth_user ON user_team_history(user_id)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_uth_created_at ON user_team_history(created_at)`);
     applied.push("user_team_history");
