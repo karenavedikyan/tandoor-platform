@@ -13,6 +13,7 @@ import {
   handleClientAssignmentHistory,
   handleClientsAssignmentsList,
   handleClientsReassign,
+  handleTeamsList,
   handleUserTeamHistory,
   handleUserTeamReassign,
 } from "./client-assignments-handlers";
@@ -2844,6 +2845,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         metadata: { oldEmail, newEmail: emailLower },
       });
       sendJson(res, 200, { success: true });
+      return;
+    }
+    if (action === "teams-list" && req.method === "GET") {
+      const me = await resolveCurrentUser(pool, headers);
+      if (!me) {
+        sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+        return;
+      }
+      await handleTeamsList(req, res, pool, me);
       return;
     }
     if (action === "clients-reassign" && req.method === "POST") {

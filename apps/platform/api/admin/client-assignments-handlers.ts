@@ -14,6 +14,10 @@ export type SessionUser = {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+function sanitizeLikeFragment(raw: string): string {
+  return raw.replace(/[%_\\]/g, "");
+}
+
 function sendJson(res: VercelResponse, status: number, body: Record<string, unknown>): void {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   res.setHeader("Cache-Control", "no-store");
@@ -226,6 +230,7 @@ export async function handleUserTeamReassign(
     toTeamId?: unknown;
     reason?: unknown;
     moveClients?: unknown;
+    roleInTeam?: unknown;
   };
   const userId = typeof body.userId === "string" ? body.userId.trim() : "";
   const toTeamIdRaw = body.toTeamId === null ? null : typeof body.toTeamId === "string" ? body.toTeamId.trim() : undefined;
@@ -239,7 +244,8 @@ export async function handleUserTeamReassign(
   }
   const toTeamId = toTeamIdRaw ?? null;
   const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 500) : "";
-  const moveClients = body.moveClients === true;
+  /** По умолчанию переносим клиентов вместе с менеджером; `moveClients: false` отключает. */
+  const moveClients = body.moveClients !== false;
 
   const cur = await pool.query<{ team_id: string }>(
     `SELECT team_id FROM user_team_memberships WHERE user_id = $1::uuid LIMIT 1`,
@@ -249,6 +255,8 @@ export async function handleUserTeamReassign(
 
   const ur = await pool.query<{ role: string }>(`SELECT role FROM users WHERE id = $1::uuid`, [userId]);
   const platformRole = String(ur.rows[0]?.role ?? "manager");
+  const roleInTeamOverride = typeof body.roleInTeam === "string" ? body.roleInTeam.trim().slice(0, 64) : "";
+  const roleInTeam = roleInTeamOverride || platformRole;
 
   let clientsTouched = 0;
 
@@ -264,13 +272,13 @@ export async function handleUserTeamReassign(
   if (toTeamId) {
     await pool.query(
       `INSERT INTO user_team_memberships (user_id, team_id, role_in_team) VALUES ($1::uuid, $2::uuid, $3)`,
-      [userId, toTeamId, platformRole],
+      [userId, toTeamId, roleInTeam],
     );
   }
   await pool.query(
     `INSERT INTO user_team_history (user_id, from_team_id, to_team_id, role_in_team, actor_user_id, reason)
      VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5::uuid, $6)`,
-    [userId, fromTeamId, toTeamId, platformRole, me.id, reason || null],
+    [userId, fromTeamId, toTeamId, roleInTeam, me.id, reason || null],
   );
 
   if (moveClients && toTeamId) {
@@ -315,8 +323,10 @@ export async function handleClientsAssignmentsList(
     if (Array.isArray(v) && typeof v[0] === "string" && v[0].trim()) return v[0]!.trim();
     return undefined;
   };
-  const responsibleUserId = qs(q.responsibleUserId);
+  const userIdFilter = qs(q.userId) ?? qs(q.responsibleUserId);
   const teamId = qs(q.teamId);
+  const searchRaw = qs(q.search) ?? qs(q.q);
+  const searchFrag = searchRaw ? sanitizeLikeFragment(searchRaw) : "";
   const limitRaw = qs(q.limit);
   const offsetRaw = qs(q.offset);
   let limit = 50;
@@ -332,13 +342,17 @@ export async function handleClientsAssignmentsList(
 
   const cond: string[] = ["1=1"];
   const params: unknown[] = [];
-  if (responsibleUserId && UUID_RE.test(responsibleUserId)) {
-    params.push(responsibleUserId);
+  if (userIdFilter && UUID_RE.test(userIdFilter)) {
+    params.push(userIdFilter);
     cond.push(`ca.responsible_user_id = $${params.length}::uuid`);
   }
   if (teamId && UUID_RE.test(teamId)) {
     params.push(teamId);
     cond.push(`ca.team_id = $${params.length}::uuid`);
+  }
+  if (searchFrag) {
+    params.push(`%${searchFrag}%`);
+    cond.push(`ca.client_code ILIKE $${params.length}`);
   }
   if (me.role === "rop") {
     const myTeam = await resolveRopTeamId(pool, me.id);
@@ -367,12 +381,14 @@ export async function handleClientsAssignmentsList(
     responsible_user_id: string;
     responsible_full_name: string;
     team_id: string | null;
+    team_name: string | null;
     since: string;
     updated_at: string;
   }>(
-    `SELECT ca.client_code, ca.responsible_user_id, u.full_name AS responsible_full_name, ca.team_id, ca.since, ca.updated_at
+    `SELECT ca.client_code, ca.responsible_user_id, u.full_name AS responsible_full_name, ca.team_id, t.name AS team_name, ca.since, ca.updated_at
      FROM client_assignments ca
      JOIN users u ON u.id = ca.responsible_user_id
+     LEFT JOIN teams t ON t.id = ca.team_id
      WHERE ${whereSql}
      ORDER BY ca.client_code ASC
      LIMIT $${limPos} OFFSET $${offPos}`,
@@ -386,6 +402,7 @@ export async function handleClientsAssignmentsList(
       responsibleUserId: r.responsible_user_id,
       responsibleFullName: r.responsible_full_name,
       teamId: r.team_id,
+      teamName: r.team_name ?? null,
       since: r.since,
       updatedAt: r.updated_at,
     })),
@@ -419,12 +436,42 @@ export async function handleClientAssignmentHistory(
       return;
     }
   }
-  const rows = await pool.query(
-    `SELECT id, client_code, from_user_id, to_user_id, from_team_id, to_team_id, actor_user_id, reason, created_at
-     FROM client_assignment_history WHERE client_code = $1 ORDER BY created_at DESC LIMIT 200`,
+  const rows = await pool.query<{
+    id: string;
+    client_code: string;
+    from_user_id: string | null;
+    to_user_id: string | null;
+    from_team_id: string | null;
+    to_team_id: string | null;
+    actor_user_id: string | null;
+    actor_full_name: string | null;
+    reason: string | null;
+    created_at: string;
+  }>(
+    `SELECT h.id, h.client_code, h.from_user_id, h.to_user_id, h.from_team_id, h.to_team_id, h.actor_user_id, h.reason, h.created_at,
+            au.full_name AS actor_full_name
+     FROM client_assignment_history h
+     LEFT JOIN users au ON au.id = h.actor_user_id
+     WHERE h.client_code = $1
+     ORDER BY h.created_at DESC
+     LIMIT 200`,
     [code],
   );
-  sendJson(res, 200, { success: true, items: rows.rows });
+  sendJson(res, 200, {
+    success: true,
+    items: rows.rows.map((r) => ({
+      id: r.id,
+      clientCode: r.client_code,
+      fromUserId: r.from_user_id,
+      toUserId: r.to_user_id,
+      fromTeamId: r.from_team_id,
+      toTeamId: r.to_team_id,
+      actorUserId: r.actor_user_id,
+      actorFullName: r.actor_full_name,
+      reason: r.reason,
+      createdAt: r.created_at,
+    })),
+  });
 }
 
 export async function handleUserTeamHistory(
@@ -458,10 +505,53 @@ export async function handleUserTeamHistory(
       return;
     }
   }
-  const rows = await pool.query(
+  const rows = await pool.query<{
+    id: string;
+    user_id: string;
+    from_team_id: string | null;
+    to_team_id: string | null;
+    role_in_team: string | null;
+    actor_user_id: string | null;
+    reason: string | null;
+    created_at: string;
+  }>(
     `SELECT id, user_id, from_team_id, to_team_id, role_in_team, actor_user_id, reason, created_at
      FROM user_team_history WHERE user_id = $1::uuid ORDER BY created_at DESC LIMIT 200`,
     [userId],
   );
-  sendJson(res, 200, { success: true, items: rows.rows });
+  sendJson(res, 200, {
+    success: true,
+    items: rows.rows.map((r) => ({
+      id: r.id,
+      userId: r.user_id,
+      fromTeamId: r.from_team_id,
+      toTeamId: r.to_team_id,
+      roleInTeam: r.role_in_team,
+      actorUserId: r.actor_user_id,
+      reason: r.reason,
+      createdAt: r.created_at,
+    })),
+  });
+}
+
+export async function handleTeamsList(
+  _req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  me: SessionUser,
+): Promise<void> {
+  if (me.status !== "active" || (me.role !== "admin" && me.role !== "director" && me.role !== "rop")) {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+  if (me.role === "rop") {
+    const rows = await pool.query<{ id: string; name: string }>(
+      `SELECT id, name FROM teams WHERE rop_user_id = $1::uuid ORDER BY name ASC`,
+      [me.id],
+    );
+    sendJson(res, 200, { success: true, teams: rows.rows });
+    return;
+  }
+  const rows = await pool.query<{ id: string; name: string }>(`SELECT id, name FROM teams ORDER BY name ASC`);
+  sendJson(res, 200, { success: true, teams: rows.rows });
 }
