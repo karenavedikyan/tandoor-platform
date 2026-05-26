@@ -1822,8 +1822,105 @@ type ContactMigrationPlanBundle = {
   totals: { managers: number; contactsToMigrate: number; skipped: number };
 };
 
+type ActualizationDebugStateRow = {
+  scope_key: string;
+  user_id: string | null;
+  role: string | null;
+  state: unknown;
+  updated_at: unknown;
+};
+
+function queryStringParam(req: VercelRequest, key: string): string {
+  const v = req.query?.[key];
+  if (typeof v === "string") return v.trim();
+  if (Array.isArray(v) && typeof v[0] === "string") return v[0]!.trim();
+  return "";
+}
+
+function actualizationMap(input: unknown): Record<string, unknown> {
+  return isPlainObject(input) ? input : {};
+}
+
+function summarizeActualizationDebugRow(row: ActualizationDebugStateRow): Record<string, unknown> {
+  const state = coerceActualizationState(row.state);
+  const dealerOverridesById = actualizationMap(state.dealerOverridesById);
+  const manuallyCreatedDealersById = actualizationMap(state.manuallyCreatedDealersById);
+  const dealerActualizationContactsById = actualizationMap(state.dealerActualizationContactsById);
+  const contactSample = Object.entries(dealerActualizationContactsById)
+    .slice(0, 3)
+    .map(([id, raw]) => {
+      const c = actualizationMap(raw);
+      return {
+        id,
+        dealerId: typeof c.dealerId === "string" ? c.dealerId : null,
+        fullName: typeof c.fullName === "string" ? c.fullName : null,
+        phone: typeof c.phone === "string" ? c.phone : null,
+        email: typeof c.email === "string" ? c.email : null,
+        isPrimary: typeof c.isPrimary === "boolean" ? c.isPrimary : null,
+      };
+    });
+
+  return {
+    scope_key: row.scope_key,
+    user_id: row.user_id,
+    role: row.role,
+    updated_at: row.updated_at,
+    dealerOverridesById_count: Object.keys(dealerOverridesById).length,
+    manuallyCreatedDealersById_count: Object.keys(manuallyCreatedDealersById).length,
+    dealerActualizationContactsById_count: Object.keys(dealerActualizationContactsById).length,
+    dealerActualizationContactsById_sample: contactSample,
+    dealerOverridesById_keys_sample: Object.keys(dealerOverridesById).slice(0, 10),
+  };
+}
+
 function scopeUserId(scopeKey: string): string | null {
   return scopeKey.startsWith("user:") ? scopeKey.slice("user:".length) : null;
+}
+
+async function handleActualizationDebugState(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  headers: Record<string, string | string[] | undefined>,
+): Promise<void> {
+  const me = await resolveCurrentUser(pool, headers);
+  if (!me) {
+    sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+    return;
+  }
+  if (me.role !== "admin" || me.status !== "active") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Только администратор." });
+    return;
+  }
+
+  const managerScopeUserId = queryStringParam(req, "managerScopeUserId");
+  if (!managerScopeUserId) {
+    sendJson(res, 400, {
+      success: false,
+      code: "VALIDATION_ERROR",
+      message: "Укажите managerScopeUserId.",
+    });
+    return;
+  }
+
+  const exactScopeKey = `user:${managerScopeUserId}`;
+  const rows = await pool.query<ActualizationDebugStateRow>(
+    `SELECT scope_key, user_id, role, state, updated_at
+     FROM client_base_actualization_state
+     WHERE scope_key = $1 OR user_id = $2 OR scope_key LIKE 'user:mgr-%'
+     ORDER BY updated_at DESC`,
+    [exactScopeKey, managerScopeUserId],
+  );
+
+  const filtered = rows.rows.filter((row) => {
+    if (row.scope_key === exactScopeKey) return true;
+    if (row.user_id === managerScopeUserId) return true;
+    const scopeId = scopeUserId(String(row.scope_key));
+    if (!scopeId?.startsWith("mgr-")) return false;
+    return MGR_TO_UUID_FOR_ACTUALIZATION_DEDUPE[scopeId] === managerScopeUserId;
+  });
+  const resultRows = filtered.map(summarizeActualizationDebugRow);
+  sendJson(res, 200, { success: true, rows: resultRows, count: resultRows.length });
 }
 
 async function loadActualizationDedupePlanBundle(pool: PoolLike): Promise<ActualizationDedupePlanBundle> {
@@ -3122,6 +3219,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "audit-list" && req.method === "GET") {
       await handleAuditList(req, res, pool, headers);
+      return;
+    }
+    if (action === "actualization-debug-state" && req.method === "GET") {
+      await handleActualizationDebugState(req, res, pool, headers);
       return;
     }
     if (action === "actualization-dedupe-dry-run" && req.method === "POST") {
