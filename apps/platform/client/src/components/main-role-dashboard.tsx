@@ -66,6 +66,40 @@ function MainKpiLink({ href, testId, children }: { href: string; testId: string;
 }
 
 
+
+function DirectorRopsDrilldownList({ snap }: { snap: OrgSnapshot }) {
+  const rops = useMemo(() => {
+    const ropIds = new Set(snap.teams.map((t) => t.ropUserId).filter(Boolean) as string[]);
+    return snap.users
+      .filter((u) => u.role === "rop" && ropIds.has(u.id))
+      .sort((a, b) => a.fullName.localeCompare(b.fullName, "ru"));
+  }, [snap.teams, snap.users]);
+
+  if (rops.length === 0) return null;
+
+  return (
+    <section className="min-w-0 space-y-2" data-testid="section-main-company-rops">
+      <h2 className="text-sm font-semibold text-foreground">РОПы компании</h2>
+      <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
+        {rops.map((r) => (
+          <li key={r.id}>
+            <Link
+              href={`/main/rop/${r.id}`}
+              className="flex min-h-11 items-center justify-between gap-2 px-4 py-2.5 text-sm font-medium text-foreground no-underline transition hover:bg-muted/60 cursor-pointer"
+              data-testid={`link-main-rop-${r.id}`}
+            >
+              <span className="truncate">{r.fullName}</span>
+              <span className="shrink-0 text-muted-foreground" aria-hidden>
+                →
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function TeamManagersDrilldownList({ snap }: { snap: OrgSnapshot }) {
   const teamUuid = realEffectiveTeamLeadTeamIdFromSnap(snap);
   const managers = useMemo(() => {
@@ -413,6 +447,10 @@ export function MainRoleDashboard() {
 
       {role === "team_lead" && useReal && snap ? (
         <TeamManagersDrilldownList snap={snap} />
+      ) : null}
+
+      {role === "sales_director" && useReal && snap ? (
+        <DirectorRopsDrilldownList snap={snap} />
       ) : null}
 
       <ActualizationRace />
