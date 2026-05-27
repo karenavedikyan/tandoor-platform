@@ -1,7 +1,7 @@
 /**
  * Промт 54-D: drilldown директора — карточка РОПа и команды (read-only).
  */
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Link, Redirect, useRoute } from "wouter";
 import { ArrowLeft, ChevronRight } from "lucide-react";
 import { DealerCardSheet } from "@/components/dealer-card-sheet";
@@ -47,6 +47,7 @@ import { computeMainDashboardScopeMetrics, type MainDashboardScopeMetrics } from
 import { DrilldownList, DrilldownListRow, MainScopeBreakdownKpiGrid } from "@/components/main-dashboard-scope-kpi";
 import { orderManagersWithHeat } from "@/lib/manager-load-heat";
 import { MainFocusTilesSection } from "@/components/main-focus-tiles-section";
+import type { MainFocusTileId } from "@/lib/main-focus-tiles";
 import { MainDashboardCityCoverage } from "@/components/main-dashboard-city-coverage";
 import { MainDashboardFocusClientsPanel } from "@/components/main-dashboard-focus-clients-panel";
 import { buildBrowserHashAppHref } from "@/lib/hash-route-utils";
@@ -93,7 +94,16 @@ export default function MainRopDetailPage() {
   const allowed = useReal && access === "sales_director" && rop != null && isRopUserInSnapshot(snap!, ropId);
 
   const [showArchive, setShowArchive] = useState(false);
+  const [selectedSegment, setSelectedSegment] = useState<MainFocusTileId | null>(null);
+  const focusTableRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<"clients" | "trade_points">("clients");
+
+  const handleFocusTileClick = useCallback((segment: MainFocusTileId) => {
+    setSelectedSegment((prev) => (prev === segment ? null : segment));
+    setTimeout(() => {
+      focusTableRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 50);
+  }, []);
   const [selectedDealer, setSelectedDealer] = useState<DealerRow | null>(null);
   const [selectedTp, setSelectedTp] = useState<{ dealer: DealerRow; point: DealerTradePoint; isArchived: boolean } | null>(
     null,
@@ -145,11 +155,6 @@ export default function MainRopDetailPage() {
     });
     return teamScope(built);
   }, [actx.enabled, allowed, managementPlane.mergedState, profile, teamScope, showArchive, activeClientRows]);
-
-  const ropTeamId = useMemo(() => {
-    if (!snap || !ropId) return "";
-    return teamUuidForRopUserId(snap, ropId) ?? "";
-  }, [snap, ropId]);
 
   const tradePointRows = useMemo((): TradePointListRow[] => {
     if (!actx.enabled || !allowed) return [];
@@ -246,20 +251,9 @@ export default function MainRopDetailPage() {
           title={`Фокус команды ${ropName}`}
           rows={activeClientRows}
           act={managementPlane.mergedState}
-          dealerBaseParams={
-            ropTeamId
-              ? { view: "table_team", team: ropTeamId }
-              : { view: "table_all" }
-          }
+          selectedSegment={selectedSegment}
+          onTileClick={handleFocusTileClick}
           testId="section-main-rop-focus-team"
-        />
-      ) : null}
-
-      {scopeMetrics && actx.enabled ? (
-        <MainDashboardCityCoverage
-          rows={activeClientRows}
-          act={managementPlane.mergedState}
-          testId="section-main-rop-city-coverage"
         />
       ) : null}
 
@@ -275,6 +269,17 @@ export default function MainRopDetailPage() {
             showRopColumn: false,
             snap,
           }}
+          selectedSegment={selectedSegment}
+          onClearSegment={() => setSelectedSegment(null)}
+          panelRef={focusTableRef}
+        />
+      ) : null}
+
+      {scopeMetrics && actx.enabled ? (
+        <MainDashboardCityCoverage
+          rows={activeClientRows}
+          act={managementPlane.mergedState}
+          testId="section-main-rop-city-coverage"
         />
       ) : null}
 

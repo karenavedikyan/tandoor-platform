@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from "react";
+import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import { Home } from "lucide-react";
 import { ActualizationRace } from "@/components/home/actualization-race";
@@ -35,6 +35,7 @@ import { computeMainDashboardScopeMetrics, type MainDashboardScopeMetrics } from
 import { DrilldownList, DrilldownListRow, MainScopeBreakdownKpiGrid } from "@/components/main-dashboard-scope-kpi";
 import { orderManagersWithHeat } from "@/lib/manager-load-heat";
 import { MainFocusTilesSection } from "@/components/main-focus-tiles-section";
+import type { MainFocusTileId } from "@/lib/main-focus-tiles";
 import { MainDashboardCityCoverage } from "@/components/main-dashboard-city-coverage";
 import { MainDashboardFocusClientsPanel } from "@/components/main-dashboard-focus-clients-panel";
 import { getEffectiveTeamLeadTeamId } from "@/lib/release-demo-profile";
@@ -429,6 +430,16 @@ export function MainRoleDashboard() {
     };
   }, [useReal, snap, role]);
 
+  const [selectedSegment, setSelectedSegment] = useState<MainFocusTileId | null>(null);
+  const focusTableRef = useRef<HTMLDivElement>(null);
+
+  const handleFocusTileClick = useCallback((segment: MainFocusTileId) => {
+    setSelectedSegment((prev) => (prev === segment ? null : segment));
+    setTimeout(() => {
+      focusTableRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 50);
+  }, []);
+
   if (role !== "sales_manager" && role !== "team_lead" && role !== "sales_director") {
     return (
       <div className="min-w-0 max-w-full overflow-x-hidden space-y-4" data-testid="page-main">
@@ -460,10 +471,8 @@ export function MainRoleDashboard() {
           title="Фокус команды"
           rows={scopedClients}
           act={managementPlane.mergedState}
-          dealerBaseParams={{
-            view: "table_team",
-            team: getEffectiveTeamLeadTeamId(profile),
-          }}
+          selectedSegment={selectedSegment}
+          onTileClick={handleFocusTileClick}
           testId="section-main-focus-team"
         />
       ) : null}
@@ -473,13 +482,10 @@ export function MainRoleDashboard() {
           title="Фокус компании"
           rows={scopedClients}
           act={managementPlane.mergedState}
-          dealerBaseParams={{ view: "table_all" }}
+          selectedSegment={selectedSegment}
+          onTileClick={handleFocusTileClick}
           testId="section-main-focus-company"
         />
-      ) : null}
-
-      {showScopeBreakdownKpi && actx.enabled && (role === "team_lead" || role === "sales_director") ? (
-        <MainDashboardCityCoverage rows={scopedClients} act={managementPlane.mergedState} />
       ) : null}
 
       {showScopeBreakdownKpi && actx.enabled && (role === "team_lead" || role === "sales_director") ? (
@@ -489,7 +495,14 @@ export function MainRoleDashboard() {
           profile={profile}
           role={role}
           focusList={mainFocusListCtx}
+          selectedSegment={selectedSegment}
+          onClearSegment={() => setSelectedSegment(null)}
+          panelRef={focusTableRef}
         />
+      ) : null}
+
+      {showScopeBreakdownKpi && actx.enabled && (role === "team_lead" || role === "sales_director") ? (
+        <MainDashboardCityCoverage rows={scopedClients} act={managementPlane.mergedState} />
       ) : null}
 
       <section
