@@ -38,6 +38,7 @@ import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { mergeTradePointsActiveForActualization, mergeTradePointsForActualization } from "@/lib/client-base-actualization-data-merge";
 import { mergeActualizationState } from "@/lib/client-base-actualization-state";
+import { makeTrashedTradePointInfo, snapshotTradePointFromRow } from "@/lib/trash-dealer-helper";
 import { generateStableManualTradePointId, nextManualTradePointInternalCode, isManualActualizationTradePointId, getTradePointDisplayCodeForActualization } from "@/lib/client-base-actualization-stable-ids";
 import {
   canArchiveTradePointDuringActualization,
@@ -550,32 +551,38 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
     return false;
   }, [useAct, editId, editName, editCity, editAddress, editFormat, editContactName, editContactPhone, editContactEmail, editComment, actx, row.id, profile]);
 
+  /** Промт 46: удаление ТТ из карточки клиента шлёт в КОРЗИНУ. */
   const onArchive = useCallback(
     async (tp: DealerTradePoint): Promise<boolean> => {
       if (!useAct || !canArchiveTradePointDuringActualization(profile, row, tp)) return false;
-      const now = new Date().toISOString();
-      const info = {
+      const info = makeTrashedTradePointInfo({
         tradePointId: tp.id,
         dealerId: row.id,
-        archivedAt: now,
-        archivedBy: profile.personaUserId,
-        archivedByName: userLabelFromProfile(profile),
-        source: "manual_actualization" as const,
-      };
+        by: { userId: profile.personaUserId, userName: userLabelFromProfile(profile) },
+        snapshot: snapshotTradePointFromRow({
+          name: tp.name,
+          address: tp.address,
+          city: tp.city,
+          tradePointCode: tp.releaseCode ?? null,
+          dealerFullName: row.name,
+        }),
+        source: "client_card_delete",
+      });
       const r = await actx.persist((prev) =>
         mergeActualizationState(prev, {
-          archivedTradePointsById: { ...prev.archivedTradePointsById, [tp.id]: info },
+          trashedTradePointsById: { ...prev.trashedTradePointsById, [tp.id]: info },
         }),
       );
-      if (r.success) toast({ title: "Точка архивирована" });
+      if (r.success)
+        toast({ title: "Точка перемещена в корзину", description: "Хранится 14 дней. Восстановить можно из раздела «Корзина»." });
       else
         toast({
-          title: "Не удалось сохранить. Проверьте соединение и попробуйте ещё раз.",
+          title: "Не удалось переместить в корзину. Проверьте соединение и попробуйте ещё раз.",
           variant: "destructive",
         });
       return r.success;
     },
-    [useAct, actx, row.id, profile],
+    [useAct, actx, row, profile],
   );
 
   const confirmSingleArchiveTradePoint = useCallback(async () => {
@@ -696,6 +703,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
     return n;
   }, [selectedBulkArchiveTpIds, archivableTradePointIdsFull]);
 
+  /** Промт 46: bulk-delete ТТ из карточки клиента — в КОРЗИНУ. */
   const confirmBulkArchiveTradePoints = useCallback(async () => {
     const ids = Array.from(selectedBulkArchiveTpIds).filter((id) => archivableTradePointIdsFull.has(id));
     if (ids.length === 0) {
@@ -703,32 +711,38 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
       return;
     }
     setBulkArchiveTpBusy(true);
-    const now = new Date().toISOString();
     const uid = profile.personaUserId;
     const uname = userLabelFromProfile(profile);
+    const tpById = new Map<string, DealerTradePoint>(mergedActive.map((e) => [e.point.id, e.point]));
     const r = await actx.persist((prev) => {
-      const nextArch = { ...prev.archivedTradePointsById };
+      const nextTrash = { ...prev.trashedTradePointsById };
       for (const id of ids) {
-        nextArch[id] = {
+        const tp = tpById.get(id);
+        nextTrash[id] = makeTrashedTradePointInfo({
           tradePointId: id,
           dealerId: row.id,
-          archivedAt: now,
-          archivedBy: uid,
-          archivedByName: uname,
-          source: "manual_actualization" as const,
-        };
+          by: { userId: uid, userName: uname },
+          snapshot: snapshotTradePointFromRow({
+            name: tp?.name ?? null,
+            address: tp?.address ?? null,
+            city: tp?.city ?? null,
+            tradePointCode: tp?.releaseCode ?? null,
+            dealerFullName: row.name,
+          }),
+          source: "client_bulk_delete",
+        });
       }
-      return mergeActualizationState(prev, { archivedTradePointsById: nextArch });
+      return mergeActualizationState(prev, { trashedTradePointsById: nextTrash });
     });
     setBulkArchiveTpBusy(false);
     if (r.success) {
-      toast({ title: "Торговые точки удалены из рабочей карточки" });
+      toast({ title: "Торговые точки перемещены в корзину", description: "Хранятся 14 дней. Восстановить можно из раздела «Корзина»." });
       setSelectedBulkArchiveTpIds(new Set());
       setBulkArchiveTpDialogOpen(false);
     } else {
-      toast({ title: "Не удалось сохранить", variant: "destructive" });
+      toast({ title: "Не удалось переместить в корзину", variant: "destructive" });
     }
-  }, [selectedBulkArchiveTpIds, archivableTradePointIdsFull, actx, profile, row.id]);
+  }, [selectedBulkArchiveTpIds, archivableTradePointIdsFull, actx, profile, row, mergedActive]);
 
   if (mergedActive.length === 0 && !showArchived && !hasAnyTradePointEver) {
     return (
@@ -1630,11 +1644,9 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
       >
         <AlertDialogContent data-testid="dialog-trade-point-bulk-archive-confirm">
           <AlertDialogHeader>
-            <AlertDialogTitle>Удалить выбранные торговые точки?</AlertDialogTitle>
+            <AlertDialogTitle>Переместить {bulkArchiveTpDialogCount} торговых точек в корзину?</AlertDialogTitle>
             <AlertDialogDescription>
-              Торговые точки будут скрыты из рабочей карточки клиента (архив). Данные не удаляются физически, их можно
-              восстановить из архива.
-              <span className="mt-2 block font-medium text-foreground">Выбрано точек: {bulkArchiveTpDialogCount}</span>
+              Торговые точки будут храниться в корзине 14 дней. Восстановить можно в любой момент на странице «Корзина». Через 14 дней удалятся окончательно.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex-col gap-2 sm:flex-row">
@@ -1651,12 +1663,13 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
             <Button
               type="button"
               variant="destructive"
-              className="min-h-10 w-full font-semibold sm:w-auto"
+              className="min-h-10 w-full gap-1.5 font-semibold sm:w-auto"
               data-testid="button-trade-point-bulk-archive-confirm"
               disabled={bulkArchiveTpBusy || bulkArchiveTpDialogCount === 0}
               onClick={() => void confirmBulkArchiveTradePoints()}
             >
-              {bulkArchiveTpBusy ? "Сохранение…" : "Удалить ТТ"}
+              <Trash2 className="h-4 w-4" aria-hidden />
+              {bulkArchiveTpBusy ? "Перемещение…" : "Переместить в корзину"}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1671,10 +1684,9 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
       >
         <AlertDialogContent data-testid="dialog-trade-point-delete-confirm">
           <AlertDialogHeader>
-            <AlertDialogTitle>Удалить торговую точку?</AlertDialogTitle>
+            <AlertDialogTitle>Переместить торговую точку в корзину?</AlertDialogTitle>
             <AlertDialogDescription>
-              Торговая точка будет скрыта из карточки клиента. Данные не удаляются физически, её можно восстановить из
-              архива.
+              Торговая точка будет храниться в корзине 14 дней. Восстановить можно в любой момент на странице «Корзина». Через 14 дней удалится окончательно.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex-col gap-2 sm:flex-row">
@@ -1691,17 +1703,14 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
             </AlertDialogCancel>
             <Button
               type="button"
-              variant={singleDeleteTarget?.isManual ? "destructive" : "outline"}
-              className="min-h-10 w-full font-semibold sm:w-auto"
+              variant="destructive"
+              className="min-h-10 w-full gap-1.5 font-semibold sm:w-auto"
               data-testid="button-trade-point-delete-confirm"
               disabled={singleDeleteBusy || !singleDeleteTarget}
               onClick={() => void confirmSingleArchiveTradePoint()}
             >
-              {singleDeleteBusy
-                ? "Сохранение…"
-                : singleDeleteTarget
-                  ? tradePointArchiveActionLabels(singleDeleteTarget.isManual).confirm
-                  : ""}
+              <Trash2 className="h-4 w-4" aria-hidden />
+              {singleDeleteBusy ? "Перемещение…" : "Переместить в корзину"}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

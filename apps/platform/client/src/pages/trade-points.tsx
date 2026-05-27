@@ -53,6 +53,7 @@ import { useClientBaseTeamActualization } from "@/context/client-base-team-actua
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { mergeActualizationState, createEmptyActualizationState } from "@/lib/client-base-actualization-state";
+import { makeTrashedTradePointInfo, snapshotTradePointFromRow } from "@/lib/trash-dealer-helper";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
 import {
@@ -824,36 +825,41 @@ export default function TradePointsPage(): ReactElement {
 
   const activeFilterCount = activeFilterChips.length;
 
+  /** Промт 46: single-delete ТТ из /trade-points шлёт в КОРЗИНУ. */
   const confirmArchive = useCallback(async () => {
     if (!archiveTarget || !actx.enabled) return;
     setArchiveBusy(true);
     const tp = archiveTarget.point;
-    const now = new Date().toISOString();
     const uid = user?.id ?? profile.personaUserId;
     const uname = displayUserName(user).trim() || userLabelFromProfile(profile);
+    const info = makeTrashedTradePointInfo({
+      tradePointId: tp.id,
+      dealerId: archiveTarget.dealerId,
+      by: { userId: uid, userName: uname },
+      snapshot: snapshotTradePointFromRow({
+        name: tp.name,
+        address: tp.address,
+        city: tp.city,
+        tradePointCode: tp.releaseCode ?? null,
+        dealerFullName: archiveTarget.dealerName ?? archiveTarget.dealer?.name ?? null,
+      }),
+      source: "client_card_delete",
+    });
     const r = await actx.persist((prev) =>
       mergeActualizationState(prev, {
-        archivedTradePointsById: {
-          ...prev.archivedTradePointsById,
-          [tp.id]: {
-            tradePointId: tp.id,
-            dealerId: archiveTarget.dealerId,
-            archivedAt: now,
-            archivedBy: uid,
-            archivedByName: uname,
-            source: "manual_actualization" as const,
-          },
-        },
+        trashedTradePointsById: { ...prev.trashedTradePointsById, [tp.id]: info },
       }),
     );
     setArchiveBusy(false);
     setArchiveTarget(null);
-    if (r.success) toast({ title: "Торговая точка удалена из рабочей базы" });
-    else toast({ title: "Не удалось сохранить", variant: "destructive" });
+    if (r.success)
+      toast({ title: "Торговая точка перемещена в корзину", description: "Хранится 14 дней. Восстановить можно из раздела «Корзина»." });
+    else toast({ title: "Не удалось переместить в корзину", variant: "destructive" });
   }, [archiveTarget, actx, profile, user]);
 
   const rowsByCompositeKey = useMemo(() => new Map(filteredSorted.map((x) => [rowKey(x), x])), [filteredSorted]);
 
+  /** Промт 46: bulk-delete ТТ на /trade-points шлёт в КОРЗИНУ. */
   const confirmBulkArchive = useCallback(async () => {
     if (!actx.enabled) return;
     const keys = Array.from(selectedBulkTpKeys).filter((k) => archivableTpKeysInView.has(k));
@@ -862,35 +868,39 @@ export default function TradePointsPage(): ReactElement {
       return;
     }
     setBulkArchiveBusy(true);
-    const now = new Date().toISOString();
     const uid = user?.id ?? profile.personaUserId;
     const uname = displayUserName(user).trim() || userLabelFromProfile(profile);
     const r = await actx.persist((prev) => {
-      const next = { ...prev.archivedTradePointsById };
+      const next = { ...prev.trashedTradePointsById };
       for (const key of keys) {
         const row = rowsByCompositeKey.get(key);
         if (!row || row.isArchived || row.isVirtual) continue;
         if (!canEditDealerDuringActualization(profile, row.dealer)) continue;
         if (!canArchiveTradePointDuringActualization(profile, row.dealer, row.point)) continue;
-        next[row.tradePointId] = {
+        next[row.tradePointId] = makeTrashedTradePointInfo({
           tradePointId: row.tradePointId,
           dealerId: row.dealerId,
-          archivedAt: now,
-          archivedBy: uid,
-          archivedByName: uname,
-          source: "manual_actualization" as const,
-        };
+          by: { userId: uid, userName: uname },
+          snapshot: snapshotTradePointFromRow({
+            name: row.point.name,
+            address: row.point.address,
+            city: row.point.city,
+            tradePointCode: row.point.releaseCode ?? null,
+            dealerFullName: row.dealerName ?? row.dealer?.name ?? null,
+          }),
+          source: "client_bulk_delete",
+        });
       }
-      return mergeActualizationState(prev, { archivedTradePointsById: next });
+      return mergeActualizationState(prev, { trashedTradePointsById: next });
     });
     setBulkArchiveBusy(false);
     if (r.success) {
-      toast({ title: "Торговые точки удалены из рабочей базы" });
+      toast({ title: "Торговые точки перемещены в корзину", description: "Хранятся 14 дней. Восстановить можно из раздела «Корзина»." });
       setSelectedBulkTpKeys(new Set());
       setBulkDeleteMode(false);
       setBulkArchiveDialogOpen(false);
     } else {
-      toast({ title: "Не удалось сохранить", variant: "destructive" });
+      toast({ title: "Не удалось переместить в корзину", variant: "destructive" });
     }
   }, [selectedBulkTpKeys, archivableTpKeysInView, actx, profile, user, rowsByCompositeKey]);
 
@@ -2025,14 +2035,13 @@ export default function TradePointsPage(): ReactElement {
       <AlertDialog open={archiveTarget != null} onOpenChange={(o) => !o && !archiveBusy && setArchiveTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Удалить торговую точку?</AlertDialogTitle>
+            <AlertDialogTitle>Переместить торговую точку в корзину?</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-2 text-sm text-muted-foreground">
                 {archiveTarget ? (
-                  <>
-                    <p>Точка «{archiveTarget.tradePointName}» будет скрыта из рабочей базы.</p>
-                    <p>Это архив, а не физическое удаление — данные можно восстановить из архива.</p>
-                  </>
+                  <p>
+                    «{archiveTarget.tradePointName}» будет храниться в корзине 14 дней. Восстановить можно в любой момент на странице «Корзина». Через 14 дней удалится окончательно.
+                  </p>
                 ) : null}
               </div>
             </AlertDialogDescription>
@@ -2040,7 +2049,7 @@ export default function TradePointsPage(): ReactElement {
           <AlertDialogFooter>
             <AlertDialogCancel disabled={archiveBusy}>Отмена</AlertDialogCancel>
             <AlertDialogAction disabled={archiveBusy} onClick={() => void confirmArchive()}>
-              {archiveBusy ? "…" : "Удалить ТТ"}
+              {archiveBusy ? "Перемещение…" : "Переместить в корзину"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -2049,10 +2058,9 @@ export default function TradePointsPage(): ReactElement {
       <AlertDialog open={bulkArchiveDialogOpen} onOpenChange={(o) => !o && !bulkArchiveBusy && setBulkArchiveDialogOpen(false)}>
         <AlertDialogContent data-testid="dialog-trade-points-bulk-archive-confirm">
           <AlertDialogHeader>
-            <AlertDialogTitle>Удалить выбранные торговые точки?</AlertDialogTitle>
-            <AlertDialogDescription className="space-y-2">
-              <span>Точки будут скрыты из рабочей базы.</span>{" "}
-              <span>Данные не удаляются физически, их можно восстановить из архива.</span>
+            <AlertDialogTitle>Переместить выбранные торговые точки в корзину?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Точки будут храниться в корзине 14 дней. Восстановить можно в любой момент на странице «Корзина». Через 14 дней удалятся окончательно.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -2060,7 +2068,7 @@ export default function TradePointsPage(): ReactElement {
               Отмена
             </AlertDialogCancel>
             <AlertDialogAction disabled={bulkArchiveBusy} data-testid="button-trade-points-bulk-archive-confirm" onClick={() => void confirmBulkArchive()}>
-              {bulkArchiveBusy ? "…" : "Удалить ТТ"}
+              {bulkArchiveBusy ? "Перемещение…" : "Переместить в корзину"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
