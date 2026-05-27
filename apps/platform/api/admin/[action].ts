@@ -3962,6 +3962,55 @@ async function handleMigrationsRun(
     }
     applied.push("legal_entities_payment_terms");
 
+    // Промт 66: контакты клиента (Postgres)
+    await pool.query(
+      `CREATE TABLE IF NOT EXISTS client_contacts (
+         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+         client_id TEXT NOT NULL,
+         scope TEXT NOT NULL CHECK (scope IN ('dealer','legal_entity','trade_point')),
+         scope_ref TEXT,
+         full_name TEXT NOT NULL,
+         role TEXT,
+         phone TEXT,
+         whatsapp TEXT,
+         telegram TEXT,
+         email TEXT,
+         comment TEXT,
+         is_primary BOOLEAN NOT NULL DEFAULT false,
+         is_actual BOOLEAN NOT NULL DEFAULT true,
+         source TEXT NOT NULL DEFAULT 'manual',
+         delete_requested_at TIMESTAMPTZ,
+         delete_request_reason TEXT,
+         created_by_user_id UUID,
+         created_by_name TEXT,
+         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+       )`,
+    );
+    await pool.query(`CREATE INDEX IF NOT EXISTS ix_client_contacts_client ON client_contacts(client_id)`);
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS ix_client_contacts_scope ON client_contacts(client_id, scope, scope_ref)`,
+    );
+    await pool.query(
+      `CREATE TABLE IF NOT EXISTS client_contact_events (
+         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+         client_id TEXT NOT NULL,
+         scope TEXT,
+         scope_ref TEXT,
+         body TEXT NOT NULL,
+         actor_user_id UUID,
+         actor_name TEXT,
+         at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+       )`,
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS ix_client_contact_events_client_at ON client_contact_events(client_id, at DESC)`,
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS ix_client_contact_events_scope_at ON client_contact_events(client_id, scope, scope_ref, at DESC)`,
+    );
+    applied.push("client_contacts_v1");
+
     // Промт 20: impersonation
     await pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS impersonator_user_id uuid NULL REFERENCES users(id) ON DELETE SET NULL`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_sessions_impersonator ON sessions(impersonator_user_id) WHERE impersonator_user_id IS NOT NULL`);

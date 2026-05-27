@@ -47,7 +47,7 @@ async function resolveRopTeamId(pool: PoolLike, ropUserId: string): Promise<stri
   return r.rows[0]?.id ?? null;
 }
 
-async function assertClientReadAccess(pool: PoolLike, me: SessionUser, clientId: string): Promise<boolean> {
+export async function assertClientReadAccess(pool: PoolLike, me: SessionUser, clientId: string): Promise<boolean> {
   if (!READ_ROLES.has(me.role)) return false;
   if (me.role === "admin" || me.role === "director" || me.role === "marketer" || me.role === "analyst") return true;
 
@@ -77,7 +77,7 @@ async function assertClientReadAccess(pool: PoolLike, me: SessionUser, clientId:
   return false;
 }
 
-async function assertClientWriteAccess(pool: PoolLike, me: SessionUser, clientId: string): Promise<boolean> {
+export async function assertClientWriteAccess(pool: PoolLike, me: SessionUser, clientId: string): Promise<boolean> {
   if (!WRITE_ROLES.has(me.role) || me.status !== "active") return false;
   return assertClientReadAccess(pool, me, clientId);
 }
