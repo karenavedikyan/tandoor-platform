@@ -223,10 +223,12 @@ export default function SalesManagerWorkspace() {
     pilotRole &&
     (pilotRole === "sales_manager" || pilotRole === "team_lead" || pilotRole === "sales_director");
 
-  if (isSalesMainDash) {
-    return <MainRoleDashboard />;
-  }
-
+  // Промт 51 hotfix: все useMemo обязаны вызываться безусловно, в одинаковом
+  // порядке при каждом рендере. Раньше `if (isSalesMainDash) return …` стоял
+  // ДО useMemo. При асинхронной загрузке `user` сначала `isSalesMainDash=false`
+  // → 11 хуков; потом `user` приходит → `isSalesMainDash=true` → ранний return,
+  // 0 хуков → React error #310 «Rendered fewer hooks than expected» и белый
+  // экран у менеджеров/РОПов. Хуки переставлены ВЫШЕ условного return.
   const kpis = useMemo(() => getWorkspaceKpis(), []);
   const planMetrics = useMemo(() => getSalesPlanMetrics(), []);
   const mom = useMemo(() => getMonthOverMonthComparisons(), []);
@@ -234,14 +236,21 @@ export default function SalesManagerWorkspace() {
   const yearScenarios = useMemo(() => getManagerYearScenarios(), []);
   const yearSummary = useMemo(() => getYearForecastSummary(), []);
   const insights = useMemo(() => getManagerPerformanceInsights(), []);
-  const mkMetric = planMetrics.find((m) => m.category === "mk")!;
-  const vhMetric = planMetrics.find((m) => m.category === "vh")!;
-  const hwMetric = planMetrics.find((m) => m.category === "hardware")!;
 
   const myDealers = useMemo(() => getMyDealers(), []);
   const tasks = useMemo(() => getSalesManagerMatrixTasks().slice(0, 12), []);
   const focusProducts = useMemo(() => getFocusProducts(8), []);
   const attentionPoints = useMemo(() => getTradePointsNeedingAttention(8), []);
+
+  if (isSalesMainDash) {
+    return <MainRoleDashboard />;
+  }
+
+  // Чистые вычисления (не хуки) — оставляем после early return, чтобы не делать
+  // лишний find() при `isSalesMainDash=true`.
+  const mkMetric = planMetrics.find((m) => m.category === "mk")!;
+  const vhMetric = planMetrics.find((m) => m.category === "vh")!;
+  const hwMetric = planMetrics.find((m) => m.category === "hardware")!;
 
   return (
     <div className="space-y-8 pb-24 sm:space-y-10" data-testid="page-sales-manager-workspace">
