@@ -110,7 +110,8 @@ import {
   canCreateDealerDuringActualization,
 } from "@/lib/client-base-actualization-permissions";
 import { isManualActualizationDealerId } from "@/lib/client-base-actualization-stable-ids";
-import { mergeActualizationState, computeTrashExpiresAt, type TrashedDealerInfo } from "@/lib/client-base-actualization-state";
+import { mergeActualizationState, type TrashedDealerInfo } from "@/lib/client-base-actualization-state";
+import { makeTrashedDealerInfo, snapshotDealerFromRow } from "@/lib/trash-dealer-helper";
 import { mergeTradePointsForActualization } from "@/lib/client-base-actualization-data-merge";
 import { getManualDealerDisplayCode } from "@/lib/client-base-actualization-stable-ids";
 import { countShowcaseMatrixDeficitForDealer } from "@/lib/trade-point-list-for-actualization";
@@ -2299,9 +2300,8 @@ export default function DealerBase() {
   }, [selectedBulkArchiveDealerIds, archivableDealerIdsInView]);
 
   /**
-   * Промт 45: bulk-delete теперь шлёт клиентов в КОРЗИНУ (`trashedDealersById`), а не в архив.
-   * Корзина живёт 14 дней, восстановление — на странице /trash. Снапшоты ключевых полей
-   * сохраняем, чтобы карточка корзины оставалась читаемой даже если оригинал стёрся.
+   * Bulk-delete отправляет клиентов в КОРЗИНУ (`trashedDealersById`).
+   * Снапшоты — через хелпер `snapshotDealerFromRow` (Промт 46).
    */
   const confirmBulkArchiveDealers = useCallback(async () => {
     const ids = Array.from(selectedBulkArchiveDealerIds).filter((id) => archivableDealerIdsInView.has(id));
@@ -2310,8 +2310,6 @@ export default function DealerBase() {
       return;
     }
     setBulkArchiveDealerBusy(true);
-    const now = new Date().toISOString();
-    const expiresAt = computeTrashExpiresAt(now);
     const uid = profile.personaUserId;
     const uname = userLabelFromProfile(profile);
     const rowById = new Map<string, DealerRow>(rowsFinalForList.map((r) => [r.id, r]));
@@ -2336,26 +2334,23 @@ export default function DealerBase() {
         }
         return null;
       })();
-      return { fullName, city, inn, dealerCode, legalEntityName };
+      return snapshotDealerFromRow({ fullName, city, inn, dealerCode, legalEntityName });
     };
     const r = await actx.persist((prev) => {
       const nextTrash = { ...prev.trashedDealersById };
       for (const id of ids) {
-        nextTrash[id] = {
+        nextTrash[id] = makeTrashedDealerInfo({
           dealerId: id,
-          trashedAt: now,
-          trashedBy: uid,
-          trashedByName: uname,
-          expiresAt,
-          source: "client_bulk_delete",
+          by: { userId: uid, userName: uname },
           snapshot: snapshotFor(id),
-        };
+          source: "client_bulk_delete",
+        });
       }
       return mergeActualizationState(prev, { trashedDealersById: nextTrash });
     });
     setBulkArchiveDealerBusy(false);
     if (r.success) {
-      toast({ title: "Клиенты перенесены в корзину", description: "Хранятся 14 дней. Восстановить можно из раздела «Корзина»." });
+      toast({ title: "Клиенты перемещены в корзину", description: "Хранятся 14 дней. Восстановить можно из раздела «Корзина»." });
       setSelectedBulkArchiveDealerIds(new Set());
       setBulkDeleteMode(false);
       setBulkArchiveDealerDialogOpen(false);
@@ -3661,10 +3656,9 @@ export default function DealerBase() {
       >
         <AlertDialogContent data-testid="dialog-dealer-bulk-archive-confirm">
           <AlertDialogHeader>
-            <AlertDialogTitle>Переместить в корзину?</AlertDialogTitle>
+            <AlertDialogTitle>Переместить {bulkArchiveDealerDialogCount} клиентов в корзину?</AlertDialogTitle>
             <AlertDialogDescription>
-              Клиенты будут храниться 14 дней в корзине, после чего удаляются окончательно. Восстановить можно из раздела «Корзина».
-              <span className="mt-2 block font-medium text-foreground">Выбрано клиентов: {bulkArchiveDealerDialogCount}</span>
+              Клиенты будут храниться в корзине 14 дней. Восстановить можно в любой момент на странице «Корзина». Через 14 дней удалятся окончательно.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex-col gap-2 sm:flex-row">
