@@ -6,10 +6,27 @@ import type { ActualizationState } from "@/lib/client-base-actualization-state";
 import { getDealerBaseSegment, type DealerBaseSegmentId } from "@/lib/dealer-base-segments";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import {
+  DEALER_CHARACTERISTIC_LABELS,
   getDealerCharacteristicValue,
   type DealerCharacteristicId,
 } from "@/lib/dealer-characteristics";
+import { DEALER_BASE_SEGMENT_LABELS } from "@/lib/dealer-base-segments";
+import { getClientCategoryLabel, type ClientCategoryId } from "@/lib/client-category";
 import { buildBrowserHashAppHref } from "@/lib/hash-route-utils";
+
+/** Категории из URL `category=`, при которых включается фокус-просмотр (ссылки с главной, Промт 58). */
+const FOCUS_VIEW_CATEGORY_IDS: readonly ClientCategoryId[] = [
+  "top150",
+  "top350",
+  "top500",
+  "top500plus",
+  "lead",
+] as const;
+
+export type FocusViewChipMeta = {
+  icon: string;
+  label: string;
+};
 
 export type MainFocusTileId =
   | "top150"
@@ -205,5 +222,81 @@ export function parseDealerCharacteristicFromUrl(raw: string | null | undefined)
   if (!raw) return null;
   const id = raw.trim() as DealerCharacteristicId;
   if (id === "has_tandoor_club" || id === "has_cashback_agent" || id === "has_warehouse") return id;
+  return null;
+}
+
+function segmentChipIcon(seg: DealerBaseSegmentId): string {
+  switch (seg) {
+    case "top150":
+      return "🔥";
+    case "top350":
+      return "⭐";
+    case "top500":
+      return "🎯";
+    case "top500_plus":
+      return "🌐";
+    case "new":
+      return "🆕";
+    default:
+      return "📦";
+  }
+}
+
+function categoryToSegmentId(cat: ClientCategoryId): DealerBaseSegmentId | null {
+  switch (cat) {
+    case "top150":
+      return "top150";
+    case "top350":
+      return "top350";
+    case "top500":
+      return "top500";
+    case "top500plus":
+      return "top500_plus";
+    case "lead":
+      return "new";
+    default:
+      return null;
+  }
+}
+
+/** Режим «Фокус-просмотр» на /dealer-base (префильтр с главной или прямой URL). */
+export function isDealerBaseFocusViewParams(params: URLSearchParams): boolean {
+  if (params.get("focus")?.trim() || params.get("characteristic")?.trim() || params.get("segment")?.trim()) {
+    return true;
+  }
+  const cat = params.get("category")?.trim() as ClientCategoryId | undefined;
+  if (cat && (FOCUS_VIEW_CATEGORY_IDS as readonly string[]).includes(cat)) return true;
+  return false;
+}
+
+/** Иконка и подпись для чипа фокус-просмотра. */
+export function resolveFocusViewChipMeta(params: URLSearchParams): FocusViewChipMeta | null {
+  const focus = parseMainFocusTileId(params.get("focus"));
+  if (focus) {
+    const tile = MAIN_FOCUS_TILES.find((t) => t.id === focus);
+    if (tile) return { icon: tile.icon, label: tile.title };
+  }
+
+  const char = parseDealerCharacteristicFromUrl(params.get("characteristic"));
+  if (char) {
+    const tile = MAIN_FOCUS_TILES.find((t) => t.id === char);
+    if (tile) return { icon: tile.icon, label: tile.title };
+    return { icon: "💰", label: DEALER_CHARACTERISTIC_LABELS[char] };
+  }
+
+  const seg = parseDealerBaseSegmentFromUrl(params.get("segment"));
+  if (seg) {
+    return { icon: segmentChipIcon(seg), label: DEALER_BASE_SEGMENT_LABELS[seg] };
+  }
+
+  const catRaw = params.get("category")?.trim() as ClientCategoryId | undefined;
+  if (catRaw && (FOCUS_VIEW_CATEGORY_IDS as readonly string[]).includes(catRaw)) {
+    const segFromCat = categoryToSegmentId(catRaw);
+    if (segFromCat) {
+      return { icon: segmentChipIcon(segFromCat), label: DEALER_BASE_SEGMENT_LABELS[segFromCat] };
+    }
+    return { icon: "🎯", label: getClientCategoryLabel(catRaw) };
+  }
+
   return null;
 }
