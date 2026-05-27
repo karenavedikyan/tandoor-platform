@@ -97,6 +97,7 @@ import {
   type ClientCategorySelection,
   type QuickFilter,
 } from "@/lib/dealer-base-picker-filters";
+import { ArchiveInArchiveBadge, archivedEntityRowClassName, isDealerArchivedInActualization } from "@/components/archive-record-visual";
 import { CityConcentrationBlock } from "@/components/city-concentration-block";
 import { DealerActualizationCreateDialog } from "@/components/client-base-actualization-dealer-forms";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
@@ -405,16 +406,8 @@ type DealerRowRendererBaseProps = {
 };
 
 function archivedDealerListBadge(row: DealerRow, act: ActualizationState): ReactNode {
-  if (!act.archivedDealersById[row.id]) return null;
-  return (
-    <Badge
-      variant="secondary"
-      className="border-border/70 bg-muted/80 px-1.5 py-0 text-[10px] font-medium text-foreground"
-      data-testid={`badge-dealer-archived-${row.id}`}
-    >
-      В архиве
-    </Badge>
-  );
+  if (!isDealerArchivedInActualization(row.id, act)) return null;
+  return <ArchiveInArchiveBadge testId={`badge-dealer-archived-${row.id}`} />;
 }
 
 function ClientCompactGridBlock({
@@ -456,6 +449,7 @@ function ClientCompactGridBlock({
         const programSig = getDealerProgramSignal(row);
         const codeStr = showcaseClientCode(row, actualizationState);
         const metaLine = [row.city?.trim() || "—", codeStr, getClientCategoryLabel(row.clientCategory)].join(" · ");
+        const rowArchived = isDealerArchivedInActualization(row.id, actualizationState);
 
         const extraBadges: ReactNode[] = [];
         if (stockSig.hasMainWarehouse) {
@@ -500,7 +494,10 @@ function ClientCompactGridBlock({
         return (
           <Card
             key={row.id}
-            className="overflow-hidden rounded-xl border border-border border-l-4 border-l-primary bg-card shadow-sm"
+            className={cn(
+              "overflow-hidden rounded-xl border border-border border-l-4 border-l-primary bg-card shadow-sm",
+              archivedEntityRowClassName(rowArchived),
+            )}
             data-testid={`card-dealer-compact-${row.id}`}
           >
             <CardContent
@@ -666,10 +663,14 @@ function ClientListRowsBlock({
         const showcaseHint = dealerShowcaseAggregateHint(row, actualizationState);
         const codeStr = showcaseClientCode(row, actualizationState);
         const innLine = innCell(row);
+        const rowArchived = isDealerArchivedInActualization(row.id, actualizationState);
         return (
           <div
             key={row.id}
-            className="flex min-w-0 items-stretch gap-1.5 p-2 sm:gap-2 sm:p-2.5"
+            className={cn(
+              "flex min-w-0 items-stretch gap-1.5 p-2 sm:gap-2 sm:p-2.5",
+              archivedEntityRowClassName(rowArchived),
+            )}
             data-testid={`row-dealer-showcase-list-${row.id}`}
           >
             <div className="flex shrink-0 flex-col items-start gap-1 pt-0.5">
@@ -896,8 +897,13 @@ function DealerBaseDataTable({
                 ? getDealerShipmentStatus(row, shipmentActiveDayId, shipmentUserId, workPlanState)
                 : null;
             const stockShort = [stockSig.hasMainWarehouse ? "Д" : "", stockSig.hasHardwareWarehouse ? "Ф" : ""].filter(Boolean).join("+") || "—";
+            const rowArchived = isDealerArchivedInActualization(row.id, actualizationState);
             return (
-              <tr key={row.id} className="border-b border-border/80 last:border-0" data-testid={`row-dealer-table-${row.id}`}>
+              <tr
+                key={row.id}
+                className={cn("border-b border-border/80 last:border-0", archivedEntityRowClassName(rowArchived))}
+                data-testid={`row-dealer-table-${row.id}`}
+              >
                 {showWorkPlanSelect && wp && onToggleWorkPlanSelect ? (
                   <td className="px-2 py-1.5 align-middle">
                     <Checkbox
@@ -1713,9 +1719,18 @@ export default function DealerBase() {
     [teamRowsForModes, pickerArgs],
   );
 
-  const cityRowsDept = useMemo(() => buildCityConcentrationRows(pickerFiltered), [pickerFiltered]);
-  const cityRowsTeam = useMemo(() => buildCityConcentrationRows(teamTablePickerRows), [teamTablePickerRows]);
-  const cityRowsManager = useMemo(() => buildCityConcentrationRows(managerScopedRows), [managerScopedRows]);
+  const cityRowsDept = useMemo(
+    () => buildCityConcentrationRows(pickerFiltered, actx.enabled ? teamActualizationPlane : undefined),
+    [pickerFiltered, actx.enabled, teamActualizationPlane],
+  );
+  const cityRowsTeam = useMemo(
+    () => buildCityConcentrationRows(teamTablePickerRows, actx.enabled ? teamActualizationPlane : undefined),
+    [teamTablePickerRows, actx.enabled, teamActualizationPlane],
+  );
+  const cityRowsManager = useMemo(
+    () => buildCityConcentrationRows(managerScopedRows, actx.enabled ? teamActualizationPlane : undefined),
+    [managerScopedRows, actx.enabled, teamActualizationPlane],
+  );
 
   const allCitiesHref = useMemo(() => buildDealerBaseAllCitiesHref(profile.role, profile), [profile]);
   const cityRowHref = useCallback(

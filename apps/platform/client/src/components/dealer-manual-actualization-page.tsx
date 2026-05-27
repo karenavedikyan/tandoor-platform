@@ -16,6 +16,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { ArchiveInArchiveBadge } from "@/components/archive-record-visual";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,6 +36,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
+import { useDealerCardReadOnly } from "@/lib/dealer-card-read-only-context";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import { logisticsShipmentDaysTextFromManualFields } from "@/lib/dealer-shipment-days";
@@ -87,7 +89,6 @@ import {
   RU_PHONE_PLACEHOLDER,
 } from "@/lib/phone-format";
 import { formatDisplayDate, formatDisplayDateTime } from "@/lib/format-display-date";
-import { useDealerCardReadOnly } from "@/lib/dealer-card-read-only-context";
 
 const PASSPORT_KIND_LABELS: Record<string, string> = {
   ip: "ИП",
@@ -206,9 +207,7 @@ export function DealerManualActualizationPage(props: {
   readOnly?: boolean;
   embeddedInSheet?: boolean;
 }): ReactElement {
-  const { baseRow, profile, readOnly: readOnlyProp, embeddedInSheet = false } = props;
-  const readOnlyFromSheet = useDealerCardReadOnly();
-  const isReadOnly = readOnlyProp === true || readOnlyFromSheet;
+  const { baseRow, profile, readOnly: readOnlyProp, embeddedInSheet } = props;
   const actx = useClientBaseActualization();
   const { user } = useCurrentUser();
   const [, setLocation] = useLocation();
@@ -261,13 +260,14 @@ export function DealerManualActualizationPage(props: {
     });
   }, [actx, baseRow.id, contacts.length, manual, profile]);
 
-  const canEdit = canEditDealerDuringActualization(profile, row);
-  const canEditUi = canEdit && !isReadOnly;
+  const readOnlyFromCtx = useDealerCardReadOnly();
+  const readOnly = readOnlyProp === true || readOnlyFromCtx;
+  const canEdit = canEditDealerDuringActualization(profile, row) && !readOnly;
   const canArchive = canArchiveDealerDuringActualization(profile, row);
   const isDealerArchived = Boolean(actx.state.archivedDealersById[baseRow.id]);
   const isDealerTrashed = Boolean(actx.state.trashedDealersById?.[baseRow.id]);
   /** Промт 46: «Удалить» с этой страницы тоже идёт в Корзину. */
-  const canTrash = canArchive && !isDealerArchived && !isDealerTrashed && !isReadOnly;
+  const canTrash = canArchive && !isDealerArchived && !isDealerTrashed;
   const canArchiveToWorkingList = canTrash;
 
   const softArchive = useCallback(async () => {
@@ -455,16 +455,15 @@ export function DealerManualActualizationPage(props: {
   return (
     <div className="min-w-0 max-w-full overflow-x-hidden bg-muted/15 pb-8 pt-1 sm:pb-10" data-testid="page-dealer-manual-actualization">
       <div className="mx-auto w-full max-w-5xl space-y-3 px-3 sm:space-y-4 sm:px-4 lg:px-6">
+        {!embeddedInSheet ? (
         <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
-          {embeddedInSheet ? null : (
-            <Button asChild variant="ghost" size="sm" className="h-8 w-fit justify-start gap-1.5 px-2 text-xs font-medium text-muted-foreground hover:text-foreground">
-              <Link href="/dealer-base">
-                <span aria-hidden>←</span> Назад к клиентской базе
-              </Link>
-            </Button>
-          )}
-          <div className="flex flex-wrap items-center gap-1.5 sm:ml-auto">
-            {canEditUi ? (
+          <Button asChild variant="ghost" size="sm" className="h-8 w-fit justify-start gap-1.5 px-2 text-xs font-medium text-muted-foreground hover:text-foreground">
+            <Link href="/dealer-base">
+              <span aria-hidden>←</span> Назад к клиентской базе
+            </Link>
+          </Button>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {canEdit ? (
               <Button
                 type="button"
                 variant="default"
@@ -491,6 +490,7 @@ export function DealerManualActualizationPage(props: {
             ) : null}
           </div>
         </div>
+        ) : null}
 
         <ClientBaseActualizationSyncStatus
           compact
@@ -500,14 +500,24 @@ export function DealerManualActualizationPage(props: {
           onRetry={() => void actx.refresh()}
         />
 
-        <section className="overflow-hidden rounded-xl border border-border border-l-[3px] border-l-primary bg-card shadow-sm">
+        <section
+          className={cn(
+            "overflow-hidden rounded-xl border border-border border-l-[3px] border-l-primary bg-card shadow-sm",
+            isDealerArchived && "bg-muted/30",
+          )}
+        >
           <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-stretch sm:gap-4 sm:px-5 sm:py-4">
             <div data-testid="dealer-manual-hero-visual" className="w-full shrink-0 sm:max-w-[15rem]">
-              <ShowcaseCoverPhotoSlot kind="dealer" dealer={row} profile={profile} size="hero" rounded="lg" readOnly={isReadOnly} />
+              <ShowcaseCoverPhotoSlot kind="dealer" dealer={row} profile={profile} size="hero" rounded="lg" />
             </div>
             <div className="min-w-0 flex-1 space-y-2">
               <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
-                <h1 className="text-base font-semibold leading-tight tracking-tight text-foreground sm:text-lg">{row.name}</h1>
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <h1 className="text-base font-semibold leading-tight tracking-tight text-foreground sm:text-lg">{row.name}</h1>
+                  {isDealerArchived ? (
+                    <ArchiveInArchiveBadge size="header" testId="badge-dealer-manual-header-archived" />
+                  ) : null}
+                </div>
                 <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0">
                   <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Код</span>
                   <span
@@ -559,7 +569,7 @@ export function DealerManualActualizationPage(props: {
               <Field label="Категория" value={tier ? (TIER_LABELS[tier] ?? tier) : getClientCategoryLabel(row.clientCategory)} />
               <Field label="Общий комментарий" value={row.comment?.trim() || str(f.comment) || "—"} emphasis className="sm:col-span-2" />
             </div>
-            {canEditUi ? (
+            {canEdit ? (
               <Button type="button" variant="outline" size="sm" className="mt-2 h-8 px-3 text-xs font-medium" onClick={() => setEditOpen(true)}>
                 Редактировать
               </Button>
@@ -591,7 +601,7 @@ export function DealerManualActualizationPage(props: {
               <Field label="Комментарий (КЭШБЭК)" value={row.cashbackComment?.trim() || "—"} emphasis className="sm:col-span-2" />
               <Field label="Код клиента в 1С" value={row.external1cCode?.trim() || "—"} emphasis className="sm:col-span-2" />
             </div>
-            {canEditUi ? (
+            {canEdit ? (
               <Button type="button" variant="outline" size="sm" className="mt-2 h-8 px-3 text-xs font-medium" onClick={() => setEditOpen(true)}>
                 Редактировать
               </Button>
@@ -623,7 +633,7 @@ export function DealerManualActualizationPage(props: {
               }
             />
             </div>
-            {canEditUi ? (
+            {canEdit ? (
               <Button type="button" variant="outline" size="sm" className="mt-2 h-8 px-3 text-xs font-medium" onClick={() => setEditOpen(true)}>
                 Редактировать
               </Button>
@@ -646,7 +656,7 @@ export function DealerManualActualizationPage(props: {
             <Field label="Порядок выгрузки" value={row.distribution > 0 ? String(row.distribution) : "—"} />
             <Field label="Комментарий по логистике" value={str(f.logisticsComment) || "—"} emphasis className="sm:col-span-2" />
             </div>
-            {canEditUi ? (
+            {canEdit ? (
               <Button type="button" variant="outline" size="sm" className="mt-2 h-8 px-3 text-xs font-medium" onClick={() => setEditOpen(true)}>
                 Редактировать
               </Button>
@@ -661,7 +671,7 @@ export function DealerManualActualizationPage(props: {
         >
           <AccordionSectionTrigger title="Контакты клиента" summary={sectionMeta.contacts.summary} status={sectionMeta.contacts.status} />
           <AccordionContent className="border-t border-border/35 px-3 pb-2.5 pt-1.5 sm:px-3.5">
-            <DealerContactsActualizationBlock dealerId={baseRow.id} profile={profile} canEdit={canEditUi} />
+            <DealerContactsActualizationBlock dealerId={baseRow.id} profile={profile} canEdit={canEdit} />
           </AccordionContent>
         </AccordionItem>
 
@@ -674,7 +684,6 @@ export function DealerManualActualizationPage(props: {
               actorUserId={user?.id ?? profile.personaUserId}
               actorLabel={user ? displayUserName(user) : userLabelFromProfile(profile)}
               embedInAccordion
-              readOnly={isReadOnly}
             />
           </AccordionContent>
         </AccordionItem>
@@ -691,7 +700,7 @@ export function DealerManualActualizationPage(props: {
               entityId={baseRow.id}
               entityName={baseRow.name}
               entitySeed={baseRow.id || baseRow.actualizationInn || undefined}
-              canEdit={canEditUi}
+              canEdit={canEdit}
               profile={profile}
             />
           </AccordionContent>
@@ -712,7 +721,7 @@ export function DealerManualActualizationPage(props: {
               Требуют заполнения витрины: <span className="font-semibold text-foreground">{needShowcase}</span>
             </p>
             {tps.length === 0 ? <p className="text-muted-foreground">Торговые точки не добавлены</p> : null}
-            <DealerTradePointsSection row={row} profile={profile} sectionDomId="dealer-section-points" readOnly={isReadOnly} />
+            <DealerTradePointsSection row={row} profile={profile} sectionDomId="dealer-section-points" />
           </AccordionContent>
         </AccordionItem>
 
@@ -730,14 +739,13 @@ export function DealerManualActualizationPage(props: {
               actorLabel={user ? displayUserName(user) : userLabelFromProfile(profile)}
               onSaved={() => void actx.refresh()}
               allowManualActualizationCard
-              readOnly={isReadOnly}
             />
             <div data-testid="section-dealer-bitrix-tasks">
               <Bitrix24TasksPanel
                 scope="dealer"
                 dealerId={row.id}
                 dealerName={row.name}
-                canCreate={!isReadOnly && canEditClientNextStep(profile, row)}
+                canCreate={canEditClientNextStep(profile, row)}
                 actorUserId={user?.id ?? profile.personaUserId}
                 actorLabel={user ? displayUserName(user) : userLabelFromProfile(profile)}
                 compact
@@ -748,11 +756,8 @@ export function DealerManualActualizationPage(props: {
         </Accordion>
       </div>
 
-      {!isReadOnly ? (
-        <DealerActualizationEditDialog open={editOpen} onOpenChange={setEditOpen} baseRow={baseRow} profile={profile} />
-      ) : null}
+      <DealerActualizationEditDialog open={editOpen} onOpenChange={setEditOpen} baseRow={baseRow} profile={profile} />
 
-      {!isReadOnly ? (
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent data-testid="dialog-dealer-delete-confirm">
           <AlertDialogHeader>
@@ -779,7 +784,6 @@ export function DealerManualActualizationPage(props: {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      ) : null}
     </div>
   );
 }

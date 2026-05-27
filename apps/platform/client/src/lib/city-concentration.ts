@@ -1,3 +1,5 @@
+import { buildCityArchiveCountsMap } from "@/lib/archive-record-visual";
+import type { ActualizationState } from "@/lib/client-base-actualization-state";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import { dealerNeedsAttention, isDealerTop } from "@/lib/dealer-base-role-views";
 import { buildBrowserHashAppHref } from "@/lib/hash-route-utils";
@@ -11,6 +13,8 @@ export type CityRiskLevel = "critical" | "ok";
 export type CityConcentrationRow = {
   city: string;
   total: number;
+  /** Сумма ТТ (outlets) по клиентам города в переданном наборе. */
+  tradePoints: number;
   active: number;
   top: number;
   attention: number;
@@ -19,6 +23,8 @@ export type CityConcentrationRow = {
   pctAttention: number;
   /** Доля от города с максимумом клиентов в переданном наборе (0..1). */
   intensity: number;
+  archivedClients?: number;
+  archivedTradePoints?: number;
 };
 
 /** Стабильный идентификатор для data-testid (без пробелов и спецсимволов). */
@@ -39,10 +45,10 @@ export function getCityRiskLevel(row: CityConcentrationRow): CityRiskLevel {
   return row.pctAttention > 50 ? "critical" : "ok";
 }
 
-export function buildCityConcentrationRows(rows: DealerRow[]): CityConcentrationRow[] {
+export function buildCityConcentrationRows(rows: DealerRow[], act?: ActualizationState): CityConcentrationRow[] {
   const map = new Map<
     string,
-    { total: number; active: number; top: number; attention: number; potential: number }
+    { total: number; tradePoints: number; active: number; top: number; attention: number; potential: number }
   >();
   for (const r of rows) {
     const raw = r.city?.trim();
@@ -50,8 +56,9 @@ export function buildCityConcentrationRows(rows: DealerRow[]): CityConcentration
       !raw || raw === "—" || raw === "-"
         ? "Без города"
         : normalizeTerritoryCityName(r.city, r.releaseAddress);
-    const cur = map.get(city) ?? { total: 0, active: 0, top: 0, attention: 0, potential: 0 };
+    const cur = map.get(city) ?? { total: 0, tradePoints: 0, active: 0, top: 0, attention: 0, potential: 0 };
     cur.total += 1;
+    cur.tradePoints += r.outlets;
     if (r.status === "активный") cur.active += 1;
     if (isDealerTop(r)) cur.top += 1;
     if (dealerNeedsAttention(r)) cur.attention += 1;
@@ -65,6 +72,7 @@ export function buildCityConcentrationRows(rows: DealerRow[]): CityConcentration
       return {
         city,
         total: m.total,
+        tradePoints: m.tradePoints,
         active: m.active,
         top: m.top,
         attention: m.attention,
@@ -80,11 +88,28 @@ export function buildCityConcentrationRows(rows: DealerRow[]): CityConcentration
   for (const r of sorted) {
     r.intensity = r.total / maxTotal;
   }
+
+  if (act) {
+    const archiveByCity = buildCityArchiveCountsMap(rows, act);
+    for (const r of sorted) {
+      const key = r.city === "Без города" ? "__no_city__" : r.city;
+      const arch = archiveByCity.get(key);
+      if (arch) {
+        (r as CityConcentrationRow).archivedClients = arch.archivedClients;
+        (r as CityConcentrationRow).archivedTradePoints = arch.archivedTradePoints;
+      }
+    }
+  }
+
   return sorted;
 }
 
-export function getTopCityConcentrationRows(rows: DealerRow[], limit: number): CityConcentrationRow[] {
-  return buildCityConcentrationRows(rows).slice(0, Math.max(0, limit));
+export function getTopCityConcentrationRows(
+  rows: DealerRow[],
+  limit: number,
+  act?: ActualizationState,
+): CityConcentrationRow[] {
+  return buildCityConcentrationRows(rows, act).slice(0, Math.max(0, limit));
 }
 
 /** Ссылка на режим «все города» в клиентской базе. */

@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { Building2, Mail, MessageCircle, Phone } from "lucide-react";
+import { ArchiveInArchiveBadge, archivedEntityRowClassName, isDealerArchivedInActualization } from "@/components/archive-record-visual";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -398,17 +399,8 @@ function DealerShowcaseCard({
         {dealerShowcaseStatusLabel(row.status)}
       </Badge>,
     );
-    if (act.archivedDealersById[row.id]) {
-      nodes.push(
-        <Badge
-          key="arch"
-          variant="secondary"
-          className="border-border/70 bg-muted/80 text-[10px] font-medium text-foreground"
-          data-testid={`badge-dealer-archived-${row.id}`}
-        >
-          В архиве
-        </Badge>,
-      );
+    if (isDealerArchivedInActualization(row.id, act)) {
+      nodes.push(<ArchiveInArchiveBadge key="arch" testId={`badge-dealer-archived-${row.id}`} />);
     }
     if (stockSig.hasMainWarehouse) {
       nodes.push(
@@ -485,9 +477,14 @@ function DealerShowcaseCard({
   const visibleSecondaryBadges = secondaryBadges.slice(0, badgeCap);
   const secondaryBadgeRest = secondaryBadges.length - visibleSecondaryBadges.length;
 
+  const dealerArchived = isDealerArchivedInActualization(row.id, act);
+
   return (
     <Card
-      className="overflow-hidden rounded-xl border border-border border-l-4 border-l-primary bg-card shadow-sm"
+      className={cn(
+        "overflow-hidden rounded-xl border border-border border-l-4 border-l-primary bg-card shadow-sm",
+        archivedEntityRowClassName(dealerArchived),
+      )}
       data-testid={`card-dealer-showcase-${row.id}`}
     >
       <CardContent className="space-y-3 p-3 text-foreground sm:p-4" data-testid={`section-dealer-showcase-card-large-${row.id}`}>

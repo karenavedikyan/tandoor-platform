@@ -34,7 +34,17 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  archiveCountDotSuffix,
+  archiveCountParenSuffix,
+  ArchiveInArchiveBadge,
+  archivedEntityRowClassName,
+  buildCityArchiveCountsMap,
+  computeManagerArchiveCounts,
+  isDealerArchivedInActualization,
+} from "@/lib/archive-record-visual";
 import { cn } from "@/lib/utils";
+import { managerDisplayMatchesCatalogName } from "@/lib/rop-manager-filters";
 import { useIsMobile } from "@/hooks/use-mobile";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { mapSalesRoleToDealerBaseAccess } from "@/lib/dealer-base-role-views";
@@ -56,6 +66,7 @@ import {
   buildCityModels,
   buildRopGroups,
   buildStructureInfographic,
+  resolveDealerRowTeamId,
   dealerMatchesClientListFilter,
   flattenTradePointsForRows,
   topCitiesForChart,
@@ -196,6 +207,41 @@ export function DealerBaseManagementCockpit({
   const teamIds = useMemo(() => teams.map((t) => t.teamId), [teams]);
 
   const ropGroups = useMemo(() => buildRopGroups(rows, teams, orgTeamCtx?.snap), [rows, teams, orgTeamCtx]);
+  const archivedPortfolioRows = useMemo(() => {
+    if (!actx.enabled) return [] as DealerRow[];
+    return buildDealerBaseRowsWithActualization(teamCtx.mergedState, profile, { includeArchivedDealers: true });
+  }, [actx.enabled, teamCtx.mergedState, profile]);
+
+  const rowsForCityArchive = useMemo(() => {
+    if (!actx.enabled) return rows;
+    const byId = new Map<string, DealerRow>();
+    for (const r of rows) byId.set(r.id, r);
+    for (const r of archivedPortfolioRows) {
+      if (!byId.has(r.id)) byId.set(r.id, r);
+    }
+    return Array.from(byId.values());
+  }, [rows, archivedPortfolioRows, actx.enabled]);
+
+  const cityArchiveByKey = useMemo(
+    () => (actx.enabled ? buildCityArchiveCountsMap(rowsForCityArchive, teamCtx.mergedState) : new Map()),
+    [actx.enabled, rowsForCityArchive, teamCtx.mergedState],
+  );
+
+  const managerArchiveById = useMemo(() => {
+    const map = new Map<string, { archivedClients: number; archivedTradePoints: number }>();
+    if (!actx.enabled) return map;
+    const act = teamCtx.mergedState;
+    for (const g of ropGroups) {
+      for (const m of g.managers) {
+        const match = (r: DealerRow) =>
+          resolveDealerRowTeamId(r) === g.teamId &&
+          (r.releaseManagerId === m.managerId || managerDisplayMatchesCatalogName(getDealerManagerDisplay(r), m.name));
+        map.set(m.managerId, computeManagerArchiveCounts(m.rows, archivedPortfolioRows, act, match));
+      }
+    }
+    return map;
+  }, [actx.enabled, ropGroups, archivedPortfolioRows, teamCtx.mergedState]);
+
   const cities = useMemo(() => buildCityModels(rows), [rows]);
   const structure = useMemo(() => buildStructureInfographic(rows, teamIds), [rows, teamIds]);
   const cityChart = useMemo(() => topCitiesForChart(cities, 5), [cities]);
@@ -288,7 +334,17 @@ export function DealerBaseManagementCockpit({
                     >
                       <span className="truncate text-foreground">{c.city ?? "Без города"}</span>
                       <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                        клиенты {c.clients} · ТТ {c.tradePoints}
+                        клиенты <span className="text-foreground">{c.clients}</span>
+                        {archiveCountParenSuffix(
+                          cityArchiveByKey.get((c.city ?? "Без города") === "Без города" ? "__no_city__" : (c.city ?? "Без города"))
+                            ?.archivedClients ?? 0,
+                        )}
+                        {" · "}
+                        ТТ <span className="text-foreground">{c.tradePoints}</span>
+                        {archiveCountParenSuffix(
+                          cityArchiveByKey.get((c.city ?? "Без города") === "Без города" ? "__no_city__" : (c.city ?? "Без города"))
+                            ?.archivedTradePoints ?? 0,
+                        )}
                       </span>
                     </div>
                   ))}
@@ -362,7 +418,23 @@ export function DealerBaseManagementCockpit({
                             {m.fullName}
                           </p>
                           <p className="mt-1 text-[11px] text-muted-foreground">
-                            активные {m.active} · ТТ {m.tradePoints} · сегм. {m.segment ?? "—"}
+                            {(() => {
+                              const local = ropGroups
+                                .flatMap((rg) => rg.managers)
+                                .find((x) => x.name === m.fullName);
+                              const arch = local ? managerArchiveById.get(local.managerId) : undefined;
+                              return (
+                                <>
+                                  активные <span className="text-foreground">{m.active}</span>
+                                  {archiveCountDotSuffix(arch?.archivedClients ?? 0)}
+                                  {" · "}
+                                  ТТ <span className="text-foreground">{m.tradePoints}</span>
+                                  {archiveCountDotSuffix(arch?.archivedTradePoints ?? 0)}
+                                  {" · "}
+                                  сегм. {m.segment ?? "—"}
+                                </>
+                              );
+                            })()}
                           </p>
                           <p className="text-[11px] text-muted-foreground">
                             потенц. {m.potential} · вним. {m.attention}
@@ -498,9 +570,16 @@ export function DealerBaseManagementCockpit({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredClients.map((r) => (
-              <TableRow key={r.id} className="border-[#E3E6F3]">
-                <TableCell className="max-w-[200px] truncate font-medium text-[#222631]">{r.name}</TableCell>
+            {filteredClients.map((r) => {
+              const archived = actx.enabled && isDealerArchivedInActualization(r.id, teamCtx.mergedState);
+              return (
+              <TableRow key={r.id} className={cn("border-[#E3E6F3]", archivedEntityRowClassName(archived))}>
+                <TableCell className="max-w-[200px] truncate font-medium text-[#222631]">
+                  <span className="inline-flex max-w-full flex-wrap items-center gap-1">
+                    {r.name}
+                    {archived ? <ArchiveInArchiveBadge testId={`badge-dealer-archived-${r.id}`} /> : null}
+                  </span>
+                </TableCell>
                 <TableCell className="text-sm text-[#8F96B0]">{r.city}</TableCell>
                 <TableCell className="text-sm text-[#8F96B0]">{getDealerManagerDisplay(r)}</TableCell>
                 <TableCell className="text-right tabular-nums text-[#222631]">{r.outlets}</TableCell>
@@ -510,16 +589,22 @@ export function DealerBaseManagementCockpit({
                   </Button>
                 </TableCell>
               </TableRow>
-            ))}
+            );
+            })}
           </TableBody>
         </Table>
       );
     }
     return (
       <ul className="space-y-2">
-        {filteredClients.map((r) => (
-          <li key={r.id} className="rounded-xl border border-[#E3E6F3] bg-[#FFFFFF] p-3">
-            <p className="font-medium text-[#222631]">{r.name}</p>
+        {filteredClients.map((r) => {
+          const archived = actx.enabled && isDealerArchivedInActualization(r.id, teamCtx.mergedState);
+          return (
+          <li key={r.id} className={cn("rounded-xl border border-[#E3E6F3] bg-[#FFFFFF] p-3", archivedEntityRowClassName(archived))}>
+            <p className="inline-flex max-w-full flex-wrap items-center gap-1 font-medium text-[#222631]">
+              {r.name}
+              {archived ? <ArchiveInArchiveBadge testId={`badge-dealer-archived-${r.id}`} /> : null}
+            </p>
             <p className="text-xs text-[#8F96B0]">
               {r.city} · {getDealerManagerDisplay(r)} · ТТ {r.outlets}
             </p>
@@ -527,7 +612,8 @@ export function DealerBaseManagementCockpit({
               <Link href={buildHashPath(`/dealers/${encodeURIComponent(r.id)}`)}>Открыть карточку</Link>
             </Button>
           </li>
-        ))}
+        );
+        })}
       </ul>
     );
   };
@@ -746,9 +832,12 @@ export function DealerBaseManagementCockpit({
                           <span className="rounded-full bg-[#9ACA3C]" style={{ width: `${w}%` }} />
                         </span>
                       </span>
-                      <span className="shrink-0 text-xs tabular-nums text-[#222631]">
-                        {c.activeClients}
-                        <span className="text-[#8F96B0]"> · ТТ {c.tradePoints}</span>
+                      <span className="shrink-0 text-xs tabular-nums text-[#8F96B0]">
+                        клиенты <span className="text-[#222631]">{c.activeClients}</span>
+                        {archiveCountParenSuffix(cityArchiveByKey.get(c.cityKey)?.archivedClients ?? 0)}
+                        {" · "}
+                        ТТ <span className="text-[#222631]">{c.tradePoints}</span>
+                        {archiveCountParenSuffix(cityArchiveByKey.get(c.cityKey)?.archivedTradePoints ?? 0)}
                       </span>
                     </button>
                     </div>
@@ -766,7 +855,11 @@ export function DealerBaseManagementCockpit({
               >
                 <span className="font-medium text-[#222631]">Без города</span>
                 <span className="tabular-nums">
-                  {cityChart.noCity.activeClients} клиентов · ТТ {cityChart.noCity.tradePoints}
+                  клиенты <span className="text-[#222631]">{cityChart.noCity.activeClients}</span>
+                  {archiveCountParenSuffix(cityArchiveByKey.get(cityChart.noCity.cityKey)?.archivedClients ?? 0)}
+                  {" · "}
+                  ТТ <span className="text-[#222631]">{cityChart.noCity.tradePoints}</span>
+                  {archiveCountParenSuffix(cityArchiveByKey.get(cityChart.noCity.cityKey)?.archivedTradePoints ?? 0)}
                 </span>
               </button>
               </div>
@@ -828,7 +921,13 @@ export function DealerBaseManagementCockpit({
                           <ChevronRight className="h-4 w-4 shrink-0 text-[#8F96B0]" aria-hidden />
                         </div>
                         <p className="mt-1 text-[11px] text-[#8F96B0]">
-                          активные {m.active} · ТТ {m.outlets} · сегм. {m.topSegmentLabel}
+                          активные <span className="text-[#222631]">{m.active}</span>
+                          {archiveCountDotSuffix(managerArchiveById.get(m.managerId)?.archivedClients ?? 0)}
+                          {" · "}
+                          ТТ <span className="text-[#222631]">{m.outlets}</span>
+                          {archiveCountDotSuffix(managerArchiveById.get(m.managerId)?.archivedTradePoints ?? 0)}
+                          {" · "}
+                          сегм. {m.topSegmentLabel}
                         </p>
                         <p className="mt-0.5 text-[11px] text-[#8F96B0]">
                           потенц. {m.potential} · вним. {m.attention}
