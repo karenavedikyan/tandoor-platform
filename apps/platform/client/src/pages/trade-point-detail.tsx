@@ -1,7 +1,7 @@
-import type { ComponentProps, ComponentType, ReactNode } from "react";
+import type { ComponentProps, ComponentType, ReactElement, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
-import { Camera, ChevronDown, ChevronRight, ChevronUp, MapPin, Store, BookOpen } from "lucide-react";
+import { Camera, ChevronDown, ChevronRight, ChevronUp, MapPin, Store, BookOpen, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -1508,5 +1508,35 @@ export function TradePointDetailPage() {
     return <TradePointNotFound dealerId={rawDealer} />;
   }
 
-  return <TradePointDetailContent dealer={result.dealer} point={result.point} tpMeta={result.entry} />;
+  const isTrashed = actx.enabled && Boolean(actx.state.trashedTradePointsById?.[result.point.id]);
+
+  return (
+    <>
+      {isTrashed ? <TrashedTradePointBanner /> : null}
+      <TradePointDetailContent dealer={result.dealer} point={result.point} tpMeta={result.entry} />
+    </>
+  );
+}
+
+function TrashedTradePointBanner(): ReactElement {
+  return (
+    <div className="border-b border-border bg-destructive/10 px-3 py-3 sm:px-4" data-testid="banner-trade-point-trashed-region">
+      <div className="mx-auto flex max-w-5xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+        <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
+          <Badge variant="outline" className="w-fit shrink-0 border-destructive/40 text-xs font-medium text-destructive" data-testid="badge-trade-point-trashed">
+            <Trash2 className="mr-1 h-3 w-3" aria-hidden />
+            В корзине
+          </Badge>
+          <p className="min-w-0 text-sm leading-snug text-foreground" data-testid="text-trade-point-trashed-hint">
+            Торговая точка перемещена в корзину. Хранится 14 дней, восстановить можно из раздела «Корзина».
+          </p>
+        </div>
+        <Button asChild type="button" variant="outline" className="h-10 shrink-0 px-4 text-sm font-semibold sm:min-w-[12rem]">
+          <Link href={buildHashPath("/trash")} data-testid="button-trade-point-trashed-open-trash">
+            Открыть корзину
+          </Link>
+        </Button>
+      </div>
+    </div>
+  );
 }
