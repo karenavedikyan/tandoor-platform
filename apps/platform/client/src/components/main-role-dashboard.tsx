@@ -33,6 +33,7 @@ import {
 import { buildBrowserHashAppHref } from "@/lib/hash-route-utils";
 import { computeMainDashboardScopeMetrics, type MainDashboardScopeMetrics } from "@/lib/main-dashboard-scope-metrics";
 import { DrilldownListRow, MainScopeBreakdownKpiGrid } from "@/components/main-dashboard-scope-kpi";
+import { MainFocusTilesSection } from "@/components/main-focus-tiles-section";
 import { getEffectiveTeamLeadTeamId } from "@/lib/release-demo-profile";
 import type { ActualizationState } from "@/lib/client-base-actualization-state";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
@@ -430,6 +431,29 @@ export function MainRoleDashboard() {
             tradePointsHref={buildBrowserHashAppHref("/trade-points")}
           />
         </section>
+      ) : null}
+
+      {showScopeBreakdownKpi && role === "team_lead" ? (
+        <MainFocusTilesSection
+          title="Фокус команды"
+          rows={scopedClients}
+          act={managementPlane.mergedState}
+          dealerBaseParams={{
+            view: "table_team",
+            team: getEffectiveTeamLeadTeamId(profile),
+          }}
+          testId="section-main-focus-team"
+        />
+      ) : null}
+
+      {showScopeBreakdownKpi && role === "sales_director" ? (
+        <MainFocusTilesSection
+          title="Фокус компании"
+          rows={scopedClients}
+          act={managementPlane.mergedState}
+          dealerBaseParams={{ view: "table_all" }}
+          testId="section-main-focus-company"
+        />
       ) : null}
 
       <section

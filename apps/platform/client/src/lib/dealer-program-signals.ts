@@ -3,7 +3,7 @@
  * - Спецусловия (индивидуальные коммерческие условия)
  * - Франшиза (редактируемая характеристика + фолбэк)
  * - Tandoor Club (программа лояльности)
- * - Мотивация / кешбек агента (агентское вознаграждение)
+ * - Тандор Бонус (агентское вознаграждение)
  *
  * Источники:
  * 1) Поля `row.terms.*` (если в данных уже отмечено явное участие).
@@ -42,7 +42,7 @@ export const DEALER_PROGRAM_FILTER_LABELS: Record<DealerProgramFilterId, string>
   special_conditions: "Спецусловия",
   franchise: "Франшиза",
   tandoor_club: "Tandoor Club",
-  cashback_agent: "Кешбек агент",
+  cashback_agent: "Тандор Бонус",
 };
 
 export const DEALER_PROGRAM_FILTER_BADGE_TESTID: Record<DealerProgramFilterId, string> = {
@@ -128,7 +128,7 @@ function fallbackTandoorClub(row: DealerRow): boolean {
 }
 
 /**
- * Кешбек агента / мотивация — выплачивается активным агентам в TOP-сегменте и отдельной части активных «500+».
+ * Тандор Бонус / мотивация — выплачивается активным агентам в TOP-сегменте и отдельной части активных «500+».
  */
 function fallbackCashbackAgent(row: DealerRow): boolean {
   if (row.status !== "активный") return false;
