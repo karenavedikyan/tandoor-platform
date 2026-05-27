@@ -49,6 +49,7 @@ type Props = {
   onSaved: () => void;
   /** Карточка ручного клиента в актуализации: показать блок без витрины release. */
   allowManualActualizationCard?: boolean;
+  readOnly?: boolean;
 };
 
 export function DealerClientNextStepSection({
@@ -58,13 +59,14 @@ export function DealerClientNextStepSection({
   actorLabel,
   onSaved,
   allowManualActualizationCard,
+  readOnly = false,
 }: Props) {
   const canView = allowManualActualizationCard
     ? canActualizeClientBase(profile)
     : canViewShowcaseDistribution(profile, row);
   if (!canView) return null;
 
-  const canEdit = canEditClientNextStep(profile, row);
+  const canEdit = canEditClientNextStep(profile, row) && !readOnly;
   const nextStepSave = useSectionSaveFeedback();
   const [tick, setTick] = useState(0);
   const [actionType, setActionType] = useState<ClientNextStepActionType>("visit");

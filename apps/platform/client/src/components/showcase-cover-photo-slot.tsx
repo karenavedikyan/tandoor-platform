@@ -40,6 +40,7 @@ export type ShowcaseCoverPhotoSlotProps = {
   className?: string;
   /** Скругление превью */
   rounded?: "md" | "lg" | "xl";
+  readOnly?: boolean;
 };
 
 function dealerDisplaySrc(row: DealerRow): string {
@@ -54,7 +55,7 @@ function tradePointDisplaySrc(tp: DealerTradePoint): string {
 }
 
 export function ShowcaseCoverPhotoSlot(props: ShowcaseCoverPhotoSlotProps): ReactElement {
-  const { kind, dealer, tradePoint, profile, size, className, rounded = "lg" } = props;
+  const { kind, dealer, tradePoint, profile, size, className, rounded = "lg", readOnly = false } = props;
   const actx = useClientBaseActualization();
   const [open, setOpen] = useState(false);
 
@@ -72,7 +73,7 @@ export function ShowcaseCoverPhotoSlot(props: ShowcaseCoverPhotoSlotProps): Reac
     kind === "dealer"
       ? canEditDealerDuringActualization(profile, dealer)
       : canEditTradePointDuringActualization(profile, dealer, tp!);
-  const canEditGallery = baseCanEdit && actx.enabled;
+  const canEditGallery = baseCanEdit && actx.enabled && !readOnly;
 
   const entityId = kind === "dealer" ? dealer.id : tp!.id;
   const dialogTitle = kind === "dealer" ? "Фото клиента" : "Фото торговой точки";

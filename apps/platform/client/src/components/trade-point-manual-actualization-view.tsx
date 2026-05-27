@@ -65,6 +65,7 @@ import {
 } from "@/lib/phone-format";
 import { formatDisplayDateTime } from "@/lib/format-display-date";
 import { listActiveTradePointPhotos } from "@/lib/client-base-actualization-photos";
+import { useTradePointReadOnly } from "@/lib/trade-point-read-only-context";
 
 function numOrNull(v: string): number | null {
   const t = v.trim();
@@ -235,15 +236,19 @@ export function TradePointManualActualizationView(props: {
   dealer: DealerRow;
   point: DealerTradePoint;
   profile: ReleaseDemoProfile;
+  readOnly?: boolean;
+  embeddedInSheet?: boolean;
   /** Точка в архиве — поля только для чтения */
   isArchived?: boolean;
   onRequestArchive?: () => void;
 }): ReactElement {
-  const { dealer, point, profile, isArchived = false, onRequestArchive } = props;
+  const { dealer, point, profile, readOnly: readOnlyProp, embeddedInSheet = false, isArchived = false, onRequestArchive } = props;
+  const readOnlyFromSheet = useTradePointReadOnly();
+  const isReadOnly = readOnlyProp === true || readOnlyFromSheet;
   const actx = useClientBaseActualization();
   const { user } = useCurrentUser();
   const canEditBase = canEditDealerDuringActualization(profile, dealer);
-  const canEditUi = canEditBase && !isArchived;
+  const canEditUi = canEditBase && !isArchived && !isReadOnly;
 
   const manualRec = actx.state.manuallyCreatedTradePointsById[point.id];
   const fields = (manualRec?.fields ?? {}) as Record<string, unknown>;
@@ -740,7 +745,10 @@ export function TradePointManualActualizationView(props: {
   ]);
 
   const canShowArchive =
-    Boolean(onRequestArchive) && canArchiveTradePointDuringActualization(profile, dealer, point) && !isArchived;
+    !isReadOnly &&
+    Boolean(onRequestArchive) &&
+    canArchiveTradePointDuringActualization(profile, dealer, point) &&
+    !isArchived;
 
   return (
     <div
@@ -749,17 +757,19 @@ export function TradePointManualActualizationView(props: {
     >
       <div className="mx-auto w-full max-w-5xl space-y-3 px-3 sm:space-y-4 sm:px-4 lg:px-6">
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-          <Button
-            asChild
-            variant="ghost"
-            size="sm"
-            className="h-8 w-fit justify-start gap-1.5 px-2 text-xs font-medium text-muted-foreground hover:text-foreground"
-          >
-            <Link href="/dealer-base">
-              <span aria-hidden>←</span> Назад
-            </Link>
-          </Button>
-          <div className="flex flex-wrap items-center gap-1.5">
+          {embeddedInSheet ? null : (
+            <Button
+              asChild
+              variant="ghost"
+              size="sm"
+              className="h-8 w-fit justify-start gap-1.5 px-2 text-xs font-medium text-muted-foreground hover:text-foreground"
+            >
+              <Link href="/dealer-base">
+                <span aria-hidden>←</span> Назад
+              </Link>
+            </Button>
+          )}
+          <div className="flex flex-wrap items-center gap-1.5 sm:ml-auto">
             <Button asChild variant="outline" size="sm" className="h-8 px-2.5 text-xs font-medium">
               <Link href={`/dealers/${dealer.id}`}>К клиенту</Link>
             </Button>
@@ -806,6 +816,7 @@ export function TradePointManualActualizationView(props: {
                 dealer={dealer}
                 tradePoint={point}
                 profile={profile}
+                readOnly={isReadOnly}
                 size="hero"
                 rounded="xl"
                 className="w-full"

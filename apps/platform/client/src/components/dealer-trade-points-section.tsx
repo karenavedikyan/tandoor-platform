@@ -65,6 +65,7 @@ type Props = {
   /** Для навигации по карточке дилера (IntersectionObserver). */
   sectionDomId?: string;
   profile: ReleaseDemoProfile;
+  readOnly?: boolean;
 };
 
 function isFilled(v: string | undefined): boolean {
