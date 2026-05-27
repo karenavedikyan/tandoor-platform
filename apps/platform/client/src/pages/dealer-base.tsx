@@ -214,6 +214,8 @@ import {
 } from "@/lib/main-focus-tiles";
 import { DealerBaseFocusViewBanner } from "@/components/dealer-base-focus-view-banner";
 import { DealerFocusHierarchy } from "@/components/dealer-focus-hierarchy";
+import { useMainDashboardCityFilterOptional } from "@/context/main-dashboard-city-filter-context";
+import { dealerRowMatchesCityFilter } from "@/lib/main-dashboard-city-stats";
 import { SHOWCASE_STORAGE_EVENT } from "@/lib/showcase-distribution-data";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DealerBulkDeleteCheckbox } from "@/components/dealer-bulk-delete-checkbox";
@@ -847,7 +849,7 @@ function sortDealerRowsForTable(rows: DealerRow[], key: TableSortKey, dir: "asc"
   });
 }
 
-function DealerBaseDataTable({
+export function DealerBaseDataTable({
   rows,
   empty,
   profile,
@@ -1267,6 +1269,7 @@ export default function DealerBase() {
 
   const routeQs = useRouteSearchParams();
   const routeKey = useMemo(() => routeQs.toString(), [routeQs]);
+  const mainCityFilter = useMainDashboardCityFilterOptional();
   const [, setLocation] = useLocation();
   const actx = useClientBaseActualization();
   const teamCtx = useClientBaseTeamActualization();
@@ -2107,6 +2110,12 @@ export default function DealerBase() {
     return rows;
   }, [rowsAfterPrograms, urlCharacteristicId, urlFocusId, teamActualizationPlane, characteristicsBump]);
 
+  const rowsAfterCityFilter = useMemo(() => {
+    const city = mainCityFilter?.selectedCity;
+    if (!city) return rowsAfterUrlFocus;
+    return rowsAfterUrlFocus.filter((r) => dealerRowMatchesCityFilter(r, city));
+  }, [rowsAfterUrlFocus, mainCityFilter?.selectedCity]);
+
   const programCounts = useMemo(() => {
     let special = 0;
     let franchise = 0;
@@ -2307,9 +2316,9 @@ export default function DealerBase() {
   }, [profile.role, defaultRopManager]);
 
   const rowsFinalForList = useMemo(() => {
-    if (stockListFilter === "all") return rowsAfterUrlFocus;
-    return rowsAfterUrlFocus.filter((r) => dealerRowMatchesStockFilter(r, stockListFilter));
-  }, [rowsAfterUrlFocus, stockListFilter]);
+    if (stockListFilter === "all") return rowsAfterCityFilter;
+    return rowsAfterCityFilter.filter((r) => dealerRowMatchesStockFilter(r, stockListFilter));
+  }, [rowsAfterCityFilter, stockListFilter]);
 
   const isFocusView = useMemo(() => isDealerBaseFocusViewParams(routeQs), [routeQs, routeKey]);
 
@@ -3350,7 +3359,17 @@ export default function DealerBase() {
 
       <section className="min-w-0" data-testid="section-dealer-base-results">
         {isFocusView && focusChipMeta ? (
-          <DealerBaseFocusViewBanner meta={focusChipMeta} clientCount={rowsFinalForList.length} />
+          <DealerBaseFocusViewBanner
+            meta={
+              mainCityFilter?.selectedCity
+                ? {
+                    icon: "📍",
+                    label: `${focusChipMeta.label} · ${mainCityFilter.selectedCity}`,
+                  }
+                : focusChipMeta
+            }
+            clientCount={rowsFinalForList.length}
+          />
         ) : null}
         {showArchivedDealers && actx.enabled ? (
           <Alert className="mb-3 border-primary/30 bg-primary/5" data-testid="text-dealer-base-archive-mode-hint">

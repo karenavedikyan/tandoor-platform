@@ -31,6 +31,7 @@ import InternalPrototypePlaceholder from "@/pages/internal-prototype-placeholder
 import { INTERNAL_PROTOTYPE_ROUTES } from "@/lib/preview-config";
 import { ClientBaseActualizationProvider, useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { ClientBaseTeamActualizationProvider, useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
+import { MainDashboardCityFilterProvider } from "@/context/main-dashboard-city-filter-context";
 import { ProfileShell } from "@/components/profile/profile-shell";
 import { ThemeProvider } from "@/context/theme-provider";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
@@ -406,7 +407,9 @@ function AuthenticatedApp({ user, logout }: { user: AuthUserDTO; logout: () => P
   return (
     <ClientBaseActualizationProvider>
       <ClientBaseTeamActualizationProvider>
-        <AuthenticatedShell user={user} shellHomeHref={shellHomeHref} embeddedBitrix24={embeddedBitrix24} onLogout={logout} />
+        <MainDashboardCityFilterProvider>
+          <AuthenticatedShell user={user} shellHomeHref={shellHomeHref} embeddedBitrix24={embeddedBitrix24} onLogout={logout} />
+        </MainDashboardCityFilterProvider>
       </ClientBaseTeamActualizationProvider>
     </ClientBaseActualizationProvider>
   );

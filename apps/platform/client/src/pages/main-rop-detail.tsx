@@ -47,6 +47,8 @@ import { computeMainDashboardScopeMetrics, type MainDashboardScopeMetrics } from
 import { DrilldownList, DrilldownListRow, MainScopeBreakdownKpiGrid } from "@/components/main-dashboard-scope-kpi";
 import { orderManagersWithHeat } from "@/lib/manager-load-heat";
 import { MainFocusTilesSection } from "@/components/main-focus-tiles-section";
+import { MainDashboardCityCoverage } from "@/components/main-dashboard-city-coverage";
+import { MainDashboardFocusClientsPanel } from "@/components/main-dashboard-focus-clients-panel";
 import { buildBrowserHashAppHref } from "@/lib/hash-route-utils";
 import { buildTradePointListForActualization, type TradePointListRow } from "@/lib/trade-point-list-for-actualization";
 import { useOrgSnapshot } from "@/lib/use-org-snapshot";
@@ -250,6 +252,29 @@ export default function MainRopDetailPage() {
               : { view: "table_all" }
           }
           testId="section-main-rop-focus-team"
+        />
+      ) : null}
+
+      {scopeMetrics && actx.enabled ? (
+        <MainDashboardCityCoverage
+          rows={activeClientRows}
+          act={managementPlane.mergedState}
+          testId="section-main-rop-city-coverage"
+        />
+      ) : null}
+
+      {scopeMetrics && actx.enabled && snap ? (
+        <MainDashboardFocusClientsPanel
+          rows={activeClientRows}
+          act={managementPlane.mergedState}
+          profile={profile}
+          role="sales_director"
+          focusList={{
+            enabled: true,
+            showManagerColumn: true,
+            showRopColumn: false,
+            snap,
+          }}
         />
       ) : null}
 

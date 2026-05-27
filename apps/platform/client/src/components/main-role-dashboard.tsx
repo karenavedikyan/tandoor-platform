@@ -35,6 +35,8 @@ import { computeMainDashboardScopeMetrics, type MainDashboardScopeMetrics } from
 import { DrilldownList, DrilldownListRow, MainScopeBreakdownKpiGrid } from "@/components/main-dashboard-scope-kpi";
 import { orderManagersWithHeat } from "@/lib/manager-load-heat";
 import { MainFocusTilesSection } from "@/components/main-focus-tiles-section";
+import { MainDashboardCityCoverage } from "@/components/main-dashboard-city-coverage";
+import { MainDashboardFocusClientsPanel } from "@/components/main-dashboard-focus-clients-panel";
 import { getEffectiveTeamLeadTeamId } from "@/lib/release-demo-profile";
 import type { ActualizationState } from "@/lib/client-base-actualization-state";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
@@ -417,6 +419,16 @@ export function MainRoleDashboard() {
   const showScopeBreakdownKpi =
     (role === "team_lead" || role === "sales_director") && showArchiveKpi && scopeMetrics != null;
 
+  const mainFocusListCtx = useMemo(() => {
+    if (!useReal || !snap || role === "sales_manager") return undefined;
+    return {
+      enabled: true,
+      showManagerColumn: role === "team_lead" || role === "sales_director",
+      showRopColumn: role === "sales_director",
+      snap,
+    };
+  }, [useReal, snap, role]);
+
   if (role !== "sales_manager" && role !== "team_lead" && role !== "sales_director") {
     return (
       <div className="min-w-0 max-w-full overflow-x-hidden space-y-4" data-testid="page-main">
@@ -463,6 +475,20 @@ export function MainRoleDashboard() {
           act={managementPlane.mergedState}
           dealerBaseParams={{ view: "table_all" }}
           testId="section-main-focus-company"
+        />
+      ) : null}
+
+      {showScopeBreakdownKpi && actx.enabled && (role === "team_lead" || role === "sales_director") ? (
+        <MainDashboardCityCoverage rows={scopedClients} act={managementPlane.mergedState} />
+      ) : null}
+
+      {showScopeBreakdownKpi && actx.enabled && (role === "team_lead" || role === "sales_director") ? (
+        <MainDashboardFocusClientsPanel
+          rows={scopedClients}
+          act={managementPlane.mergedState}
+          profile={profile}
+          role={role}
+          focusList={mainFocusListCtx}
         />
       ) : null}
 
