@@ -45,13 +45,12 @@ import type { OrgSnapshot } from "@/lib/use-org-snapshot";
 import type { DealerBaseAccessRole } from "@/lib/dealer-base-role-views";
 import { buildHashPath } from "@/lib/hash-route-utils";
 import { fetchClientBaseManagerDetail, type ClientBaseOverview } from "@/lib/client-base-overview-api";
-import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actualization-sync-status";
 import { DealerActualizationCreateDialog } from "@/components/client-base-actualization-dealer-forms";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
-import { canActualizeClientBase, canCreateDealerDuringActualization } from "@/lib/client-base-actualization-permissions";
+import { canCreateDealerDuringActualization } from "@/lib/client-base-actualization-permissions";
 import {
   buildCityModels,
   buildRopGroups,
@@ -258,60 +257,54 @@ export function DealerBaseManagementCockpit({
             </Button>
           </div>
         </div>
-        {canActualizeClientBase(profile) ? (
-          <ClientBaseActualizationSyncStatus isLoading={actx.loading} meta={actx.meta} syncStatus={actx.syncStatus} onRetry={() => void actx.refresh()} />
-        ) : null}
-        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" data-testid="section-client-base-structure-infographic">
-          {[
-            ["Активные клиенты", overview.structure.activeClients],
-            ["Торговые точки", overview.structure.tradePoints],
-            ["Потенциальные", overview.structure.potentialClients],
-            ["Внимание", overview.structure.attentionClients],
-          ].map(([label, value]) => (
-            <Card key={String(label)} className="rounded-xl border border-border bg-card text-card-foreground shadow-sm">
-              <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground">{label}</p>
-                <p className="mt-1 text-2xl font-semibold text-foreground tabular-nums">{value}</p>
-              </CardContent>
-            </Card>
-          ))}
+        <section data-testid="section-client-base-structure-infographic">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {([
+              ["Активные клиенты", overview.structure.activeClients],
+              ["Торговые точки", overview.structure.tradePoints],
+              ["Потенциальные", overview.structure.potentialClients],
+              ["Внимание", overview.structure.attentionClients],
+            ] as Array<[string, number]>).map(([label, value]) => (
+              <div key={label} className="rounded-xl border border-border bg-card px-3 py-2.5 text-card-foreground">
+                <p className="text-[11px] leading-tight text-muted-foreground">{label}</p>
+                <p className="mt-0.5 text-lg font-semibold text-foreground tabular-nums sm:text-xl">{value}</p>
+              </div>
+            ))}
+          </div>
         </section>
-        <section className="grid gap-4 lg:grid-cols-2">
-          <Card className="rounded-xl border border-border bg-card text-card-foreground shadow-sm">
-            <CardContent className="space-y-3 p-4">
-              <h2 className="text-sm font-semibold text-foreground">Топ по активным клиентам</h2>
-              {overview.topActiveClients.length === 0 ? <p className="text-sm text-muted-foreground">Нет данных</p> : null}
-              {overview.topActiveClients.map((c, idx) => (
-                <div key={c.clientId} className="flex items-center gap-2 rounded-lg border border-border bg-card p-2">
-                  <span className="w-5 text-xs text-muted-foreground">{idx + 1}</span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-foreground">{c.fullName}</p>
-                    <p className="truncate text-xs text-muted-foreground">{c.city || "Без города"} · {c.managerFullName}</p>
-                  </div>
-                  <span className="text-sm font-semibold tabular-nums text-foreground">{c.tradePointsCount}</span>
+        <section>
+          <Card className="rounded-xl border border-border bg-card text-card-foreground">
+            <CardContent className="space-y-2 p-3">
+              <h3 className="text-sm font-semibold text-foreground">Города</h3>
+              {overview.cities.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Нет городов с клиентами.</p>
+              ) : (
+                <div className="grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2">
+                  {overview.cities.slice(0, 5).map((c) => (
+                    <div
+                      key={c.city ?? "__without__"}
+                      className="flex items-baseline justify-between gap-3 px-1 py-1 text-sm"
+                    >
+                      <span className="truncate text-foreground">{c.city ?? "Без города"}</span>
+                      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                        клиенты {c.clients} · ТТ {c.tradePoints}
+                      </span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </CardContent>
-          </Card>
-          <Card className="rounded-xl border border-border bg-card text-card-foreground shadow-sm">
-            <CardContent className="space-y-3 p-4">
-              <h2 className="text-sm font-semibold text-foreground">Города</h2>
-              {overview.cities.map((c) => (
-                <div key={c.city ?? "without"} className="flex items-center justify-between gap-3 text-sm">
-                  <span className="truncate text-foreground">{c.city ?? "Без города"}</span>
-                  <span className="shrink-0 text-xs text-muted-foreground">клиенты {c.clients} · ТТ {c.tradePoints}</span>
-                </div>
-              ))}
+              )}
+              {overview.cities.length > 5 ? (
+                <p className="text-[11px] text-muted-foreground">+ ещё {overview.cities.length - 5} городов</p>
+              ) : null}
               {overview.withoutCity.clients > 0 || overview.withoutCity.tradePoints > 0 ? (
-                <div className="flex items-center justify-between border-t border-border pt-2 text-sm">
-                  <span className="text-foreground">Без города</span>
-                  <span className="text-xs text-muted-foreground">клиенты {overview.withoutCity.clients} · ТТ {overview.withoutCity.tradePoints}</span>
-                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Без города: клиенты {overview.withoutCity.clients} · ТТ {overview.withoutCity.tradePoints}
+                </p>
               ) : null}
             </CardContent>
           </Card>
         </section>
-        <section className="space-y-3" data-testid="section-client-base-rop-groups">
+        <section className="space-y-2" data-testid="section-client-base-rop-groups">
           <Accordion type="multiple" value={openOverviewTeamIds} onValueChange={setOpenOverviewTeamIds} className="space-y-2">
             {overview.ropGroups.map((g) => {
               const teamKey = g.teamId ?? "__no_rop__";
@@ -319,45 +312,60 @@ export function DealerBaseManagementCockpit({
                 <AccordionItem
                   key={teamKey}
                   value={teamKey}
-                  className="rounded-xl border border-border bg-card text-card-foreground shadow-sm"
+                  className="rounded-xl border border-border bg-card text-card-foreground"
                   data-testid={`card-client-base-rop-${teamKey}`}
                 >
-                  <AccordionTrigger className="px-4 py-3 hover:no-underline" data-testid={`button-client-base-rop-toggle-${teamKey}`}>
-                    <div className="flex flex-1 flex-wrap items-start justify-between gap-2 text-left">
-                      <div>
-                        <p className="font-semibold text-foreground">{g.teamName}</p>
-                        <p className="text-xs text-muted-foreground">{g.ropFullName} · менеджеров {g.managerCount}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          data-testid={`button-client-base-rop-details-${teamKey}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDetail({ kind: "rop_overview", teamId: teamKey });
-                          }}
-                        >
-                          Детали команды
-                        </Button>
-                      </div>
+                  <AccordionTrigger
+                    className="px-3 py-2 hover:no-underline"
+                    data-testid={`button-client-base-rop-toggle-${teamKey}`}
+                  >
+                    <div className="flex min-w-0 flex-1 flex-col items-start gap-0.5 text-left">
+                      <span className="truncate text-sm font-semibold text-foreground">{g.teamName}</span>
+                      <span className="text-[11px] text-muted-foreground">
+                        {g.ropFullName} · менеджеров {g.managerCount} · клиенты {g.clients} · ТТ {g.tradePoints}
+                      </span>
                     </div>
                   </AccordionTrigger>
-                  <AccordionContent className="px-4 pb-3 pt-0">
-                    <p className="mb-2 text-xs text-muted-foreground">клиенты {g.clients} · ТТ {g.tradePoints} · потенц. {g.potential} · вним. {g.attention}</p>
+                  <AccordionContent className="px-3 pb-3 pt-0">
+                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                      <p className="text-[11px] text-muted-foreground">
+                        потенц. {g.potential} · вним. {g.attention}
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="ml-auto h-8 text-xs"
+                        data-testid={`button-client-base-rop-details-${teamKey}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDetail({ kind: "rop_overview", teamId: teamKey });
+                        }}
+                      >
+                        Детали команды
+                      </Button>
+                    </div>
                     <div className="grid gap-2 sm:grid-cols-2">
                       {g.managers.map((m) => (
                         <button
                           key={m.userId}
                           type="button"
-                          className="rounded-xl border border-border bg-card p-3 text-left transition-colors hover:bg-primary/10"
+                          className="rounded-xl border border-border bg-card p-3 text-left text-card-foreground transition-colors hover:bg-muted/40"
                           data-testid={`button-client-base-manager-open-${m.userId}`}
                           onClick={() => setDetail({ kind: "manager_overview", managerUserId: m.userId, teamId: teamKey })}
                         >
-                          <p className="truncate text-sm font-semibold text-foreground" data-testid={`card-client-base-manager-${m.userId}`}>{m.fullName}</p>
-                          <p className="mt-1 text-[11px] text-muted-foreground">активные {m.active} · ТТ {m.tradePoints} · сегм. {m.segment ?? "—"}</p>
-                          <p className="text-[11px] text-muted-foreground">потенц. {m.potential} · вним. {m.attention}</p>
+                          <p
+                            className="truncate text-sm font-semibold text-foreground"
+                            data-testid={`card-client-base-manager-${m.userId}`}
+                          >
+                            {m.fullName}
+                          </p>
+                          <p className="mt-1 text-[11px] text-muted-foreground">
+                            активные {m.active} · ТТ {m.tradePoints} · сегм. {m.segment ?? "—"}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground">
+                            потенц. {m.potential} · вним. {m.attention}
+                          </p>
                         </button>
                       ))}
                     </div>
@@ -861,16 +869,10 @@ export function DealerBaseManagementCockpit({
         </div>
       </div>
 
-      {canActualizeClientBase(profile) ? (
+      {teamCtx.teamFetchLoading || teamCtx.teamFetchError ? (
         <div className="space-y-3">
-          <ClientBaseActualizationSyncStatus
-            isLoading={actx.loading}
-            meta={actx.meta}
-            syncStatus={actx.syncStatus}
-            onRetry={() => void actx.refresh()}
-          />
           {teamCtx.teamFetchLoading ? (
-            <Alert className="border-primary/30 bg-[#EEEFF6]/60" data-testid="alert-dealer-base-team-state-loading">
+            <Alert className="border-primary/30 bg-primary/5" data-testid="alert-dealer-base-team-state-loading">
               <Info className="h-4 w-4 text-primary" />
               <AlertDescription>Загружаются данные актуализации команды…</AlertDescription>
             </Alert>
