@@ -136,12 +136,15 @@ function periodIsoRange7d(): { fromIso: string; toIso: string } {
 }
 
 export function ActualizationRace() {
-  const { user } = useAuthUser();
-  const actx = useClientBaseActualization();
-  const role = resolveRaceRole(user?.role);
-  const [expanded, setExpanded] = useState(false);
+  // ---------- Hooks: безусловно, в одинаковом порядке на каждом рендере ----------
+  const { user } = useAuthUser();                          // 1
+  const actx = useClientBaseActualization();               // 2
+  const [expanded, setExpanded] = useState(false);         // 3
 
-  const overviewQ = useQuery({
+  const role = resolveRaceRole(user?.role);
+  const meId = user?.id ?? null;
+
+  const overviewQ = useQuery({                             // 4
     queryKey: ["actualization-race", "overview-30d"],
     queryFn: () =>
       fetchActualizationStatsOverview({
@@ -151,6 +154,31 @@ export function ActualizationRace() {
     // Hold network while user has no role yet.
     enabled: Boolean(role),
   });
+
+  // Промт 52 hotfix React #310: все хуки обязаны вызываться безусловно, в одном
+  // и том же порядке на каждом рендере. Раньше `range7`, `overview7Q`, `streakRows`
+  // объявлялись ТОЛЬКО в ветке manager (после условных return и
+  // `if (role === "admin" | "director" | "rop") return ...`). На рендере admin/director/rop
+  // эти хуки не вызывались → React выбрасывал «Rendered fewer hooks than expected» (#310)
+  // → белый экран у менеджеров. Перенесены наверх, ДО всех условных return.
+  const range7 = useMemo(() => periodIsoRange7d(), []);    // 5
+  const overview7Q = useQuery({                            // 6
+    queryKey: ["actualization-race-7d"],
+    queryFn: () => fetchActualizationStatsOverview(range7),
+  });
+  const streakRows = useMemo(() => {                       // 7
+    const out: { userId: string | null; updatedAt: string | null }[] = [];
+    const overrides = actx.state.dealerOverridesById ?? {};
+    for (const v of Object.values(overrides)) {
+      out.push({ userId: meId, updatedAt: v.updatedAt ?? null });
+    }
+    const manuals = actx.state.manuallyCreatedDealersById ?? {};
+    for (const v of Object.values(manuals)) {
+      out.push({ userId: meId, updatedAt: (v.updatedAt ?? v.createdAt) ?? null });
+    }
+    return out;
+  }, [actx.state, meId]);
+  // -------------------- End of unconditional hooks --------------------
 
   if (!role) return null;
   if (overviewQ.isLoading) {
@@ -359,7 +387,8 @@ export function ActualizationRace() {
 
   // ===== MANAGER =====
   // role === "manager"
-  const meId = user?.id ?? null;
+  // Промт 52: meId, range7, overview7Q, streakRows объявлены наверху функции,
+  // ДО всех условных return — иначе ломается порядок хуков (React #310).
   const myTeamId = (() => {
     if (!meId) return null;
     const me = overview.managersFeed.find((m) => m.userId === meId);
@@ -378,12 +407,7 @@ export function ActualizationRace() {
   // «До соседа сверху»: считаем разницу в клиентах (clientsTotal). Если нет — fallback на 0.
   const dealersDiff = neighbour && meFeed ? Math.max(0, neighbour.clientsTotal - meFeed.clientsTotal) : 0;
 
-  // Период за 7д для «Добавлено» — отдельный fetch для свежести.
-  const range7 = useMemo(() => periodIsoRange7d(), []);
-  const overview7Q = useQuery({
-    queryKey: ["actualization-race-7d"],
-    queryFn: () => fetchActualizationStatsOverview(range7),
-  });
+  // Период за 7д для «Добавлено» — данные тянутся через overview7Q (объявлен наверху).
   const added7 = (() => {
     if (!overview7Q.data || !meId) return 0;
     const m = overview7Q.data.managersFeed.find((x) => x.userId === meId);
@@ -392,19 +416,7 @@ export function ActualizationRace() {
     return m.clientsTotal;
   })();
 
-  // Streak — fallback на dealerOverrides из своего state (не из overview).
-  const streakRows = useMemo(() => {
-    const out: { userId: string | null; updatedAt: string | null }[] = [];
-    const overrides = actx.state.dealerOverridesById ?? {};
-    for (const v of Object.values(overrides)) {
-      out.push({ userId: meId, updatedAt: v.updatedAt ?? null });
-    }
-    const manuals = actx.state.manuallyCreatedDealersById ?? {};
-    for (const v of Object.values(manuals)) {
-      out.push({ userId: meId, updatedAt: (v.updatedAt ?? v.createdAt) ?? null });
-    }
-    return out;
-  }, [actx.state, meId]);
+  // Streak — считаем по streakRows (собран наверху из actx.state).
   const streak = meId ? computeStreak(meId, streakRows) : 0;
 
   return (
