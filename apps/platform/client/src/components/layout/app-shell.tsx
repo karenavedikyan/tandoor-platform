@@ -21,7 +21,7 @@ import {
   UserRound,
   Users,
 } from "lucide-react";
-import { Fragment, useCallback, useLayoutEffect, useMemo, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -33,7 +33,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { TandoorLogo } from "@/components/tandoor-logo";
-import { ThemeToggleDesktop, ThemeToggleMobileBlock } from "@/components/theme-toggle";
+import { ThemeToggleDesktop, ThemeToggleSidebarCompact } from "@/components/theme-toggle";
 import { SaveStatusBadge } from "@/components/client-base-actualization-save-status-badge";
 import { cn } from "@/lib/utils";
 import { flattenGroupedPilotNavigation, type PilotNavGroup, type PilotNavItem, type PilotNavigationModel } from "@/lib/auth-access";
@@ -282,23 +282,14 @@ function flattenNavModel(model: PilotNavigationModel): PilotNavItem[] {
 const PILOT_SIDEBAR_OPEN_GROUPS_LS_KEY = "tandoor-pilot-sidebar-open-groups-v1";
 
 const NAV_GROUP_TOGGLE_TESTID: Record<string, string> = {
-  primary: "button-nav-group-primary-toggle",
-  "client-base": "button-nav-group-client-base-toggle",
-  commerce: "button-nav-group-commerce-toggle",
   "in-development": "button-nav-group-in-development-toggle",
 };
 
 const NAV_GROUP_CONTENT_TESTID: Record<string, string> = {
-  primary: "nav-group-primary-content",
-  "client-base": "nav-group-client-base-content",
-  commerce: "nav-group-commerce-content",
   "in-development": "nav-group-in-development-content",
 };
 
 const NAV_GROUP_SUMMARY_TESTID: Record<string, string> = {
-  primary: "text-nav-group-primary-summary",
-  "client-base": "text-nav-group-client-base-summary",
-  commerce: "text-nav-group-commerce-summary",
   "in-development": "text-nav-group-in-development-summary",
 };
 
@@ -334,12 +325,8 @@ function defaultGroupOpenWithoutStorage(groupKey: string, location: string, grou
   const g = groups.find((x) => x.key === groupKey);
   if (!g) return false;
   const active = groupHasActiveItem(g, location);
-  // Промт 47: ГЛАВНОЕ / КЛИЕНТСКАЯ БАЗА / КОММЕРЦИЯ раскрыты по умолчанию,
-  // В РАЗРАБОТКЕ сворачивается до клика.
-  if (groupKey === "primary") return true;
-  if (groupKey === "client-base") return true;
-  if (groupKey === "commerce") return true;
-  if (groupKey === "in-development") return false;
+  // Промт 55: «В разработке» свёрнут по умолчанию.
+  if (groupKey === "in-development") return active;
   return active;
 }
 
@@ -398,30 +385,6 @@ function usePilotGroupedNavOpenState(model: PilotNavigationModel, location: stri
   );
 
   return { openGroups, toggleGroup };
-}
-
-function pilotNavClientBaseCounts(group: PilotNavGroup): {
-  clients: number | null;
-  tradePoints: number | null;
-  clientsLoading: boolean;
-  tradePointsLoading: boolean;
-} {
-  let clients: number | null = null;
-  let tradePoints: number | null = null;
-  let clientsLoading = false;
-  let tradePointsLoading = false;
-  for (const item of group.items) {
-    const bid = behaviorId(item);
-    if (bid === "nav-dealer-base") {
-      clientsLoading = Boolean(item.badgeLoading);
-      if (item.badge != null) clients = item.badge;
-    }
-    if (bid === "nav-trade-points") {
-      tradePointsLoading = Boolean(item.badgeLoading);
-      if (item.badge != null) tradePoints = item.badge;
-    }
-  }
-  return { clients, tradePoints, clientsLoading, tradePointsLoading };
 }
 
 function NavRowLink({
@@ -527,6 +490,7 @@ function NavLinksList({
 
 function PilotNavGroupedList({
   groups,
+  leadingItems = [],
   standaloneItems = [],
   location,
   variant,
@@ -536,6 +500,7 @@ function PilotNavGroupedList({
   "data-testid": navTestId,
 }: {
   groups: PilotNavGroup[];
+  leadingItems?: PilotNavItem[];
   standaloneItems?: PilotNavItem[];
   location: string;
   variant: "sidebar" | "drawer";
@@ -544,97 +509,77 @@ function PilotNavGroupedList({
   onToggleGroup: (groupKey: string) => void;
   "data-testid": string;
 }) {
+  const flatLeading = [...leadingItems, ...standaloneItems];
+
   return (
     <div className="flex min-w-0 flex-col gap-2 overflow-x-hidden" data-testid={navTestId}>
-      {groups.map((g, groupIndex) => {
+      {flatLeading.length > 0 ? (
+        <div className="flex min-w-0 flex-col gap-0.5" data-testid="nav-leading-items">
+          {flatLeading.map((item) => (
+            <NavRowLink
+              key={item.testId}
+              item={item}
+              location={location}
+              variant={variant}
+              onNavigate={onNavigate}
+              linkStyle="pilot"
+            />
+          ))}
+        </div>
+      ) : null}
+
+      {groups.map((g) => {
         const isOpen = Boolean(openGroups[g.key]);
         const groupActive = groupHasActiveItem(g, location);
         const titleColor = groupActive ? "text-[#222631]" : "text-[#8F96B0]";
-        const counts = g.key === "client-base" ? pilotNavClientBaseCounts(g) : null;
-
-        let summaryLine: string | null = null;
-
-        if (g.key === "client-base") {
-          if (counts?.clientsLoading || counts?.tradePointsLoading) {
-            summaryLine = "Загрузка счётчиков…";
-          } else if (counts && counts.clients != null && counts.tradePoints != null) {
-            summaryLine = `${counts.clients} клиентов · ${counts.tradePoints} ТТ`;
-          } else if (counts && (counts.clients != null || counts.tradePoints != null)) {
-            const c = counts.clients != null ? String(counts.clients) : "—";
-            const t = counts.tradePoints != null ? String(counts.tradePoints) : "—";
-            summaryLine = `${c} клиентов · ${t} ТТ`;
-          } else {
-            summaryLine = "Клиенты и торговые точки";
-          }
-        } else if (g.key === "in-development") {
-          summaryLine = `${g.items.length} разделов`;
-        }
+        const summaryLine = g.key === "in-development" ? `${g.items.length} разделов` : null;
 
         const toggleTestId = NAV_GROUP_TOGGLE_TESTID[g.key] ?? `button-nav-group-${g.key}-toggle`;
         const contentTestId = NAV_GROUP_CONTENT_TESTID[g.key] ?? `nav-group-${g.key}-content`;
         const summaryTestId = NAV_GROUP_SUMMARY_TESTID[g.key] ?? `text-nav-group-${g.key}-summary`;
 
-        const standaloneBlock =
-          groupIndex === 0 && standaloneItems.length > 0 ? (
-            <div key={`${g.key}-standalone`} className="flex min-w-0 flex-col gap-0.5">
-              {standaloneItems.map((item) => (
-                <NavRowLink
-                  key={item.testId}
-                  item={item}
-                  location={location}
-                  variant={variant}
-                  onNavigate={onNavigate}
-                  linkStyle="pilot"
-                />
-              ))}
-            </div>
-          ) : null;
-
         return (
-          <Fragment key={g.key}>
-            <div data-testid={g.testId} className="flex min-w-0 flex-col gap-0.5">
-              <button
-                type="button"
-                data-testid={toggleTestId}
-                aria-expanded={isOpen}
-                onClick={() => onToggleGroup(g.key)}
-                className="w-full min-w-0 rounded-md px-1 py-1.5 text-left transition-colors hover:bg-[#EEEFF6]/60"
-              >
-                <div className="flex min-w-0 items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <p className={cn("text-[10px] font-semibold uppercase leading-tight tracking-wide", titleColor)}>{g.label}</p>
-                    {summaryLine != null && summaryLine !== "" ? (
-                      <p data-testid={summaryTestId} className="mt-0.5 text-[10px] leading-snug text-[#8F96B0]/90">
-                        {summaryLine}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1.5 pt-0.5">
-                    <ChevronDown
-                      className={cn("h-4 w-4 shrink-0 text-[#8F96B0] transition-transform", isOpen && "rotate-180")}
-                      aria-hidden
-                    />
-                  </div>
+          <div key={g.key} data-testid={g.testId} className="flex min-w-0 flex-col gap-0.5">
+            <button
+              type="button"
+              data-testid={toggleTestId}
+              aria-expanded={isOpen}
+              onClick={() => onToggleGroup(g.key)}
+              className="w-full min-w-0 rounded-md px-1 py-1.5 text-left transition-colors hover:bg-[#EEEFF6]/60"
+            >
+              <div className="flex min-w-0 items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className={cn("text-[10px] font-semibold uppercase leading-tight tracking-wide", titleColor)}>{g.label}</p>
+                  {summaryLine != null && summaryLine !== "" ? (
+                    <p data-testid={summaryTestId} className="mt-0.5 text-[10px] leading-snug text-[#8F96B0]/90">
+                      {summaryLine}
+                    </p>
+                  ) : null}
                 </div>
-              </button>
-              {isOpen ? (
-                <div data-testid={contentTestId} className="flex min-w-0 flex-col gap-0.5">
-                  {g.items.map((item) => (
-                    <NavRowLink
-                      key={item.testId}
-                      item={item}
-                      location={location}
-                      variant={variant}
-                      onNavigate={onNavigate}
-                      linkStyle="pilot"
-                      pilotWipTag={g.key === "in-development"}
-                    />
-                  ))}
+                <div className="flex shrink-0 items-center gap-1.5 pt-0.5">
+                  <ChevronDown
+                    className={cn("h-4 w-4 shrink-0 text-[#8F96B0] transition-transform", isOpen && "rotate-180")}
+                    aria-hidden
+                  />
                 </div>
-              ) : null}
-            </div>
-            {standaloneBlock}
-          </Fragment>
+              </div>
+            </button>
+            {isOpen ? (
+              <div data-testid={contentTestId} className="flex min-w-0 flex-col gap-0.5">
+                {g.items.map((item) => (
+                  <NavRowLink
+                    key={item.testId}
+                    item={item}
+                    location={location}
+                    variant={variant}
+                    onNavigate={onNavigate}
+                    linkStyle="pilot"
+                    pilotWipTag={g.key === "in-development"}
+                  />
+                ))}
+              </div>
+            ) : null}
+          </div>
         );
       })}
     </div>
@@ -666,6 +611,7 @@ function NavigationPanel({
   return (
     <PilotNavGroupedList
       groups={model.groups}
+      leadingItems={model.leadingItems}
       standaloneItems={model.standaloneItems}
       location={location}
       variant={variant}
@@ -960,7 +906,7 @@ export function AppShell({
                       onGroupedToggle={pilotGroupedToggle}
                     />
                   </div>
-                  <ThemeToggleMobileBlock />
+                  <ThemeToggleSidebarCompact />
                   <div className="border-t border-border/60 px-5 pb-4 pt-3">
                     <p className="mb-2 text-xs text-muted-foreground">{userName}</p>
                     <Button asChild variant="outline" className="mb-2 w-full gap-2">
