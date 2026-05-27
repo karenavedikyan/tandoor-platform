@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import type { ActualizationApiMeta, ActualizationSyncStatus } from "@/lib/client-base-actualization-api";
 import { formatDisplayDateTime } from "@/lib/format-display-date";
 import { cn } from "@/lib/utils";
+import { useAuthUser } from "@/hooks/use-auth-user";
 
 export type ClientBaseActualizationSyncStatusProps = {
   syncStatus: ActualizationSyncStatus;
@@ -43,10 +44,13 @@ function storageModeShort(meta: ActualizationApiMeta): string | null {
 
 export function ClientBaseActualizationSyncStatus(props: ClientBaseActualizationSyncStatusProps): ReactElement {
   const { syncStatus, meta, isLoading, onRetry, compact } = props;
+  const { user } = useAuthUser();
+  const showStorageLabel = user?.role === "admin" || user?.role === "director";
   const label = statusLabel(props);
   const showOffline = syncStatus === "local_fallback";
   const showRetry = syncStatus === "error" && onRetry;
-  const storageShort = storageModeShort(meta);
+  // Промт 47: технический ярлычок «Postgres / Память сервера» оставляем только для admin/director.
+  const storageShort = showStorageLabel ? storageModeShort(meta) : null;
   const savedAtLabel = meta.updatedAt?.trim() ? formatDisplayDateTime(meta.updatedAt) : null;
 
   if (compact) {

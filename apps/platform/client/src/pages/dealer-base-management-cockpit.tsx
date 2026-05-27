@@ -244,7 +244,7 @@ export function DealerBaseManagementCockpit({
           <div className="min-w-0">
             <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Клиентская база</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Управленческий обзор реальной базы из Postgres. Без seed-агрегатов и синтетических KPI.
+              Управленческий обзор клиентской базы.
             </p>
           </div>
           <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row sm:justify-end">
