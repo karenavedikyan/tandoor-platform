@@ -46,6 +46,7 @@ import {
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { ArchiveInArchiveBadge, archivedEntityRowClassName } from "@/components/archive-record-visual";
 import { DealerBulkDeleteCheckbox } from "@/components/dealer-bulk-delete-checkbox";
 import { ShowcaseCoverPhotoSlot } from "@/components/showcase-cover-photo-slot";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
@@ -1716,7 +1717,7 @@ export default function TradePointsPage(): ReactElement {
                   <tr
                     key={k}
                     data-testid={`row-trade-point-table-${r.tradePointId}`}
-                    className={cn(bulkRowSelected && "bg-primary/[0.06]")}
+                    className={cn(archivedEntityRowClassName(r.isArchived), bulkRowSelected && "bg-primary/[0.06]")}
                   >
                     {bulkDeleteMode && canShowBulkTradePointControls ? (
                       <td className="p-2 align-middle">{renderBulkRowControl(r, { dense: true })}</td>
@@ -1799,7 +1800,11 @@ export default function TradePointsPage(): ReactElement {
                 <li
                   key={k}
                   data-testid={`row-trade-point-list-${r.tradePointId}`}
-                  className={cn("flex min-w-0 gap-2 p-2.5 sm:gap-3 sm:p-3", bulkRowSelected && "bg-primary/[0.06]")}
+                  className={cn(
+                    "flex min-w-0 gap-2 p-2.5 sm:gap-3 sm:p-3",
+                    archivedEntityRowClassName(r.isArchived),
+                    bulkRowSelected && "bg-primary/[0.06]",
+                  )}
                 >
                   {bulkDeleteMode && canShowBulkTradePointControls ? (
                     <div className="flex shrink-0 items-start pt-0.5">{renderBulkRowControl(r, { dense: true })}</div>
@@ -1831,11 +1836,7 @@ export default function TradePointsPage(): ReactElement {
                           Деф. {r.matrixDeficitCount}
                         </Badge>
                       ) : null}
-                      {r.isArchived ? (
-                        <Badge variant="secondary" className="text-[10px]">
-                          В архиве
-                        </Badge>
-                      ) : null}
+{r.isArchived ? <ArchiveInArchiveBadge testId={`badge-trade-point-archived-${r.tradePointId}`} /> : null}
                     </div>
                     {cleanContactDisplay(r.point.contactName) ? (
                       <p className="line-clamp-1 text-[11px] text-muted-foreground">{cleanContactDisplay(r.point.contactName)}</p>
@@ -1880,6 +1881,7 @@ export default function TradePointsPage(): ReactElement {
                 data-testid={`card-trade-point-grid-${r.tradePointId}`}
                 className={cn(
                   "flex min-h-0 flex-col overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm",
+                  archivedEntityRowClassName(r.isArchived),
                   bulkCardSelected && "ring-2 ring-primary/35 ring-offset-2 ring-offset-background",
                 )}
               >
@@ -1926,6 +1928,7 @@ export default function TradePointsPage(): ReactElement {
                 data-testid={`card-trade-point-large-${r.tradePointId}`}
                 className={cn(
                   "overflow-hidden rounded-2xl border border-border/80 border-l-4 border-l-primary/55 bg-card shadow-md",
+                  archivedEntityRowClassName(r.isArchived),
                   bulkCardSelected && "ring-2 ring-primary/35 ring-offset-2 ring-offset-background",
                 )}
               >
@@ -1953,9 +1956,7 @@ export default function TradePointsPage(): ReactElement {
                             </Badge>
                           ) : null}
                           {r.isArchived ? (
-                            <Badge variant="secondary" className="text-[10px]">
-                              В архиве
-                            </Badge>
+                            <ArchiveInArchiveBadge testId={`badge-trade-point-archived-${r.tradePointId}`} />
                           ) : null}
                         </div>
                       </div>

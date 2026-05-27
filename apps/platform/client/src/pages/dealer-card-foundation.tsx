@@ -21,6 +21,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { ArchiveInArchiveBadge } from "@/components/archive-record-visual";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -856,6 +857,8 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
    * (`trashedDealersById`), а не в Архив. Архив остаётся как legacy (restore-banner ниже).
    * Условие активации: actx включён, клиент не в архиве и не в корзине, есть права.
    */
+  const isArchivedDealerCard = actx.enabled && Boolean(actx.state.archivedDealersById[baseRow.id]);
+
   const canTrashDealer =
     actx.enabled && !actx.state.archivedDealersById[baseRow.id] && !isDealerTrashed && canArchiveDealerDuringActualization(profile, row);
 
@@ -1222,7 +1225,11 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
               data-testid="section-dealer-overview"
               className="scroll-mt-28 space-y-3 sm:scroll-mt-32 lg:scroll-mt-32"
             >
-              <SurfaceCard className="overflow-hidden border border-border border-l-4 border-l-primary p-3 sm:p-4">
+              <SurfaceCard
+                className={cn(
+                  "overflow-hidden border border-border border-l-4 border-l-primary p-3 sm:p-4",
+                  isArchivedDealerCard && "bg-muted/30",
+                )}>
                 <CardContent className="space-y-3 p-0 sm:space-y-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
                     <ShowcaseCoverPhotoSlot kind="dealer" dealer={row} profile={profile} size="hero" rounded="xl" className="w-full shrink-0 sm:max-w-[15rem]" />
@@ -1262,7 +1269,12 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                       </Badge>
                     ) : null}
                   </div>
-                  <h1 className="line-clamp-2 text-lg font-semibold tracking-tight text-foreground sm:text-xl">{rowView.name}</h1>
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <h1 className="line-clamp-2 text-lg font-semibold tracking-tight text-foreground sm:text-xl">{rowView.name}</h1>
+                    {isArchivedDealerCard ? (
+                      <ArchiveInArchiveBadge size="header" testId="badge-dealer-card-header-archived" />
+                    ) : null}
+                  </div>
                     </div>
                   </div>
 

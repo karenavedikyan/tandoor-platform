@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { ArchiveInArchiveBadge } from "@/components/archive-record-visual";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -22,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
+import { useTradePointReadOnly } from "@/lib/trade-point-read-only-context";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import {
@@ -65,7 +67,6 @@ import {
 } from "@/lib/phone-format";
 import { formatDisplayDateTime } from "@/lib/format-display-date";
 import { listActiveTradePointPhotos } from "@/lib/client-base-actualization-photos";
-import { useTradePointReadOnly } from "@/lib/trade-point-read-only-context";
 
 function numOrNull(v: string): number | null {
   const t = v.trim();
@@ -236,19 +237,19 @@ export function TradePointManualActualizationView(props: {
   dealer: DealerRow;
   point: DealerTradePoint;
   profile: ReleaseDemoProfile;
-  readOnly?: boolean;
-  embeddedInSheet?: boolean;
   /** Точка в архиве — поля только для чтения */
   isArchived?: boolean;
   onRequestArchive?: () => void;
+  readOnly?: boolean;
+  embeddedInSheet?: boolean;
 }): ReactElement {
-  const { dealer, point, profile, readOnly: readOnlyProp, embeddedInSheet = false, isArchived = false, onRequestArchive } = props;
-  const readOnlyFromSheet = useTradePointReadOnly();
-  const isReadOnly = readOnlyProp === true || readOnlyFromSheet;
+  const { dealer, point, profile, isArchived = false, onRequestArchive, readOnly: readOnlyProp, embeddedInSheet } = props;
   const actx = useClientBaseActualization();
+  const readOnlyFromCtx = useTradePointReadOnly();
+  const readOnly = readOnlyProp === true || readOnlyFromCtx;
   const { user } = useCurrentUser();
   const canEditBase = canEditDealerDuringActualization(profile, dealer);
-  const canEditUi = canEditBase && !isArchived && !isReadOnly;
+  const canEditUi = canEditBase && !isArchived && !readOnly;
 
   const manualRec = actx.state.manuallyCreatedTradePointsById[point.id];
   const fields = (manualRec?.fields ?? {}) as Record<string, unknown>;
@@ -745,10 +746,7 @@ export function TradePointManualActualizationView(props: {
   ]);
 
   const canShowArchive =
-    !isReadOnly &&
-    Boolean(onRequestArchive) &&
-    canArchiveTradePointDuringActualization(profile, dealer, point) &&
-    !isArchived;
+    Boolean(onRequestArchive) && canArchiveTradePointDuringActualization(profile, dealer, point) && !isArchived;
 
   return (
     <div
@@ -757,19 +755,17 @@ export function TradePointManualActualizationView(props: {
     >
       <div className="mx-auto w-full max-w-5xl space-y-3 px-3 sm:space-y-4 sm:px-4 lg:px-6">
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-          {embeddedInSheet ? null : (
-            <Button
-              asChild
-              variant="ghost"
-              size="sm"
-              className="h-8 w-fit justify-start gap-1.5 px-2 text-xs font-medium text-muted-foreground hover:text-foreground"
-            >
-              <Link href="/dealer-base">
-                <span aria-hidden>←</span> Назад
-              </Link>
-            </Button>
-          )}
-          <div className="flex flex-wrap items-center gap-1.5 sm:ml-auto">
+          <Button
+            asChild
+            variant="ghost"
+            size="sm"
+            className="h-8 w-fit justify-start gap-1.5 px-2 text-xs font-medium text-muted-foreground hover:text-foreground"
+          >
+            <Link href="/dealer-base">
+              <span aria-hidden>←</span> Назад
+            </Link>
+          </Button>
+          <div className="flex flex-wrap items-center gap-1.5">
             <Button asChild variant="outline" size="sm" className="h-8 px-2.5 text-xs font-medium">
               <Link href={`/dealers/${dealer.id}`}>К клиенту</Link>
             </Button>
@@ -808,7 +804,12 @@ export function TradePointManualActualizationView(props: {
           onRetry={() => void actx.refresh()}
         />
 
-        <section className="overflow-hidden rounded-xl border border-border border-l-[3px] border-l-primary bg-card shadow-sm">
+        <section
+          className={cn(
+            "overflow-hidden rounded-xl border border-border border-l-[3px] border-l-primary bg-card shadow-sm",
+            isArchived && "bg-muted/30",
+          )}
+        >
           <div className="flex flex-col gap-3 px-3.5 py-3 sm:flex-row sm:items-start sm:gap-4 sm:px-4 sm:py-4">
             <div className="w-full shrink-0 sm:max-w-[15rem]" data-testid="trade-point-manual-hero-visual">
               <ShowcaseCoverPhotoSlot
@@ -816,7 +817,6 @@ export function TradePointManualActualizationView(props: {
                 dealer={dealer}
                 tradePoint={point}
                 profile={profile}
-                readOnly={isReadOnly}
                 size="hero"
                 rounded="xl"
                 className="w-full"
@@ -825,9 +825,14 @@ export function TradePointManualActualizationView(props: {
             <div className="min-w-0 flex-1 space-y-2">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                 <div className="min-w-0">
-                  <h1 className="line-clamp-2 text-base font-semibold leading-snug tracking-tight text-foreground sm:text-lg">
-                    {name.trim() || point.name}
-                  </h1>
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <h1 className="line-clamp-2 text-base font-semibold leading-snug tracking-tight text-foreground sm:text-lg">
+                      {name.trim() || point.name}
+                    </h1>
+                    {isArchived ? (
+                      <ArchiveInArchiveBadge size="header" testId="badge-trade-point-manual-header-archived" />
+                    ) : null}
+                  </div>
                   <p className="mt-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Торговая точка</p>
                 </div>
                 <div className="shrink-0 text-left sm:text-right">
@@ -859,11 +864,7 @@ export function TradePointManualActualizationView(props: {
               </div>
 
               <div className="flex flex-wrap gap-1.5 border-t border-border/40 pt-2.5">
-                {isArchived ? (
-                  <Badge variant="secondary" className="h-[1.125rem] px-1.5 py-0 text-[10px] font-normal leading-none">
-                    В архиве
-                  </Badge>
-                ) : null}
+                {isArchived ? <ArchiveInArchiveBadge testId={`badge-trade-point-archived-status-${point.id}`} /> : null}
                 {hasShowcase === null ? (
                   <Badge
                     variant="outline"
