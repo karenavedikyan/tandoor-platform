@@ -4011,6 +4011,19 @@ async function handleMigrationsRun(
     );
     applied.push("client_contacts_v1");
 
+    // Промт 66.1: одноразовая чистка тестовых контактов (верификация Промта 66)
+    await pool.query(
+      `DELETE FROM client_contacts
+       WHERE client_id = 'client-ma-ma121186'
+         AND delete_request_reason = 'ADMIN CLEANUP test data (Промт 66 verification)'`,
+    );
+    await pool.query(
+      `DELETE FROM client_contact_events
+       WHERE client_id = 'client-ma-ma121186'
+         AND body LIKE 'Запрошено снятие контакта%ADMIN CLEANUP test data (Промт 66 verification)%'`,
+    );
+    applied.push("client_contacts_cleanup_admin_test_v1");
+
     // Промт 20: impersonation
     await pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS impersonator_user_id uuid NULL REFERENCES users(id) ON DELETE SET NULL`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_sessions_impersonator ON sessions(impersonator_user_id) WHERE impersonator_user_id IS NOT NULL`);
