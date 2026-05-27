@@ -24,7 +24,9 @@
     "test:trash-protection": "tsx client/src/lib/__tests__/trash-protection.test.ts",
     "test:trash-purge": "tsx client/src/lib/__tests__/trash-purge.test.ts",
     "test:trash-merge": "tsx client/src/lib/__tests__/trash-merge.test.ts",
-    "test:trash": "npm run test:trash-protection && npm run test:trash-purge && npm run test:trash-merge"
+    "test:trash-helper": "tsx client/src/lib/__tests__/trash-dealer-helper.test.ts",
+    "test:data-merge-trash": "tsx client/src/lib/__tests__/data-merge-trash.test.ts",
+    "test:trash": "npm run test:trash-protection && npm run test:trash-purge && npm run test:trash-merge && npm run test:trash-helper && npm run test:data-merge-trash"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
