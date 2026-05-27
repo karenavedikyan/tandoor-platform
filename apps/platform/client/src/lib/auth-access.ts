@@ -380,20 +380,44 @@ export function getPilotNavigation(
     return { badge: trashCount };
   };
 
-  const directorOrRopNavigation = (): Extract<PilotNavigationModel, { layout: "grouped" }> => ({
+  /**
+   * Промт 47: единая IA для director / team_lead / sales_manager.
+   *   ГЛАВНОЕ            — Главная + Корзина
+   *   КЛИЕНТСКАЯ БАЗА    — Клиенты-дилеры, Торговые точки, Статистика обновления
+   *   КОММЕРЦИЯ           — План-факт и KPI
+   *   В РАЗРАБОТКЕ (collapsed) — Каталог, Обучение, Карта клиентов, Задачи, Аналитика команды, Коммуникации, Брифы
+   *
+   * Админка (Пользователи, Назначения, Приглашения, Журнал событий, Запросы на сброс,
+   * Дедуп актуализации) убрана из сайдбара и доступна только через /profile sub-nav.
+   *
+   * `platformUserRole` оставлен в сигнатуре функции для совместимости, но в сайдбаре
+   * не используется — администрирование сидит в profile shell.
+   */
+  const unifiedSalesNavigation = (
+    homeHref: string,
+  ): Extract<PilotNavigationModel, { layout: "grouped" }> => ({
     layout: "grouped",
     groups: [
+      {
+        key: "primary",
+        label: "ГЛАВНОЕ",
+        testId: "nav-group-primary",
+        items: [
+          { href: homeHref, label: "Главная", testId: "nav-item-home", navBehaviorId: "nav-main" },
+          {
+            href: "/trash",
+            label: "Корзина",
+            testId: "nav-item-trash",
+            navBehaviorId: "nav-trash",
+            ...trashNavExtras(),
+          },
+        ],
+      },
       {
         key: "client-base",
         label: "КЛИЕНТСКАЯ БАЗА",
         testId: "nav-group-client-base",
         items: [
-          {
-            href: "/client-base-activity",
-            label: "Статистика обновления базы",
-            testId: "nav-item-client-base-activity",
-            navBehaviorId: "nav-client-base-activity",
-          },
           {
             href: "/dealer-base",
             label: "Клиенты-дилеры",
@@ -407,6 +431,25 @@ export function getPilotNavigation(
             testId: "nav-item-trade-points",
             navBehaviorId: "nav-trade-points",
             ...tradePointNavExtras(),
+          },
+          {
+            href: "/client-base-activity",
+            label: "Статистика обновления",
+            testId: "nav-item-client-base-activity",
+            navBehaviorId: "nav-client-base-activity",
+          },
+        ],
+      },
+      {
+        key: "commerce",
+        label: "КОММЕРЦИЯ",
+        testId: "nav-group-commerce",
+        items: [
+          {
+            href: "/sales-control/plan-fact",
+            label: "План-факт и KPI",
+            testId: "nav-item-sales-plan-fact",
+            navBehaviorId: "nav-sales-control",
           },
         ],
       },
@@ -435,49 +478,21 @@ export function getPilotNavigation(
         ],
       },
     ],
-    standaloneItems: [
-      {
-        href: "/sales-control/plan-fact",
-        label: "План-факт и KPI",
-        testId: "nav-item-sales-plan-fact",
-        navBehaviorId: "nav-sales-control",
-      },
-      {
-        href: "/trash",
-        label: "Корзина",
-        testId: "nav-item-trash",
-        navBehaviorId: "nav-trash",
-        ...trashNavExtras(),
-      },
-    ],
   });
 
-  if (role === "sales_director") {
-    return withOptionalAdminGroup(platformUserRole, directorOrRopNavigation());
+  if (role === "sales_director" || role === "team_lead") {
+    void platformUserRole;
+    return unifiedSalesNavigation("/main");
   }
 
-  if (role === "team_lead") {
-    return withOptionalAdminGroup(platformUserRole, directorOrRopNavigation());
+  if (role === "sales_manager") {
+    void platformUserRole;
+    return unifiedSalesNavigation("/main");
   }
 
   const flat = ((): PilotNavItem[] => {
     const items: PilotNavItem[] = [];
     const push = (x: PilotNavItem) => items.push(x);
-    if (role === "sales_manager") {
-      push({ href: "/main", label: "Главная", testId: "nav-main" });
-      push({ href: "/client-base-activity", label: "Статистика обновления базы", testId: "nav-item-client-base-activity" });
-      push({ href: "/dealer-base", label: "Клиенты", testId: "nav-dealer-base", ...dealerNavExtras() });
-      push({ href: "/trade-points", label: "Торговые точки", testId: "nav-trade-points", ...tradePointNavExtras() });
-      push({ href: "/client-map", label: "Карта клиентов", testId: "nav-client-map" });
-      push({ href: "/tasks", label: "Задачи по витрине", testId: "nav-tasks" });
-      push({ href: "/communications", label: "Коммуникации", testId: "nav-communications" });
-      push({ href: "/catalog", label: "Каталог", testId: "nav-catalog" });
-      push({ href: "/training", label: "Обучение", testId: "nav-training" });
-      push({ href: sch, label: "План-факт продаж", testId: "nav-sales-control" });
-      push({ href: "/marketing-briefs", label: "Маркетинговые брифы", testId: "nav-marketing-briefs" });
-      push({ href: "/trash", label: "Корзина", testId: "nav-trash", ...trashNavExtras() });
-      return items;
-    }
     if (role === "marketer") {
       push({ href: "/marketing-briefs", label: "Маркетинговые брифы", testId: "nav-marketing-briefs" });
       push({ href: "/catalog", label: "Каталог", testId: "nav-catalog" });

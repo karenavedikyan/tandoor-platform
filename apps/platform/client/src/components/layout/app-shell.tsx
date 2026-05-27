@@ -18,6 +18,7 @@ import {
   PieChart,
   Search,
   Store,
+  UserRound,
   Users,
 } from "lucide-react";
 import { Fragment, useCallback, useLayoutEffect, useMemo, useState } from "react";
@@ -25,6 +26,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { TandoorLogo } from "@/components/tandoor-logo";
 import { ThemeToggleDesktop, ThemeToggleMobileBlock } from "@/components/theme-toggle";
 import { SaveStatusBadge } from "@/components/client-base-actualization-save-status-badge";
@@ -275,17 +282,23 @@ function flattenNavModel(model: PilotNavigationModel): PilotNavItem[] {
 const PILOT_SIDEBAR_OPEN_GROUPS_LS_KEY = "tandoor-pilot-sidebar-open-groups-v1";
 
 const NAV_GROUP_TOGGLE_TESTID: Record<string, string> = {
+  primary: "button-nav-group-primary-toggle",
   "client-base": "button-nav-group-client-base-toggle",
+  commerce: "button-nav-group-commerce-toggle",
   "in-development": "button-nav-group-in-development-toggle",
 };
 
 const NAV_GROUP_CONTENT_TESTID: Record<string, string> = {
+  primary: "nav-group-primary-content",
   "client-base": "nav-group-client-base-content",
+  commerce: "nav-group-commerce-content",
   "in-development": "nav-group-in-development-content",
 };
 
 const NAV_GROUP_SUMMARY_TESTID: Record<string, string> = {
+  primary: "text-nav-group-primary-summary",
   "client-base": "text-nav-group-client-base-summary",
+  commerce: "text-nav-group-commerce-summary",
   "in-development": "text-nav-group-in-development-summary",
 };
 
@@ -321,7 +334,11 @@ function defaultGroupOpenWithoutStorage(groupKey: string, location: string, grou
   const g = groups.find((x) => x.key === groupKey);
   if (!g) return false;
   const active = groupHasActiveItem(g, location);
+  // Промт 47: ГЛАВНОЕ / КЛИЕНТСКАЯ БАЗА / КОММЕРЦИЯ раскрыты по умолчанию,
+  // В РАЗРАБОТКЕ сворачивается до клика.
+  if (groupKey === "primary") return true;
   if (groupKey === "client-base") return true;
+  if (groupKey === "commerce") return true;
   if (groupKey === "in-development") return false;
   return active;
 }
@@ -765,13 +782,6 @@ export function AppShell({
             <div className="flex shrink-0 items-center gap-2">
               {showSaveBadge ? <SaveStatusBadge /> : null}
               <ThemeToggleDesktop className="h-9 w-9" />
-              {showAuditLogLink ? (
-                <Button asChild variant="outline" size="sm" className="h-9 shrink-0 border-border/80 px-2.5 text-xs">
-                  <Link href="/admin/audit" data-testid="link-app-shell-audit-log-embedded">
-                    Журнал событий
-                  </Link>
-                </Button>
-              ) : null}
               <Button
                 type="button"
                 variant="outline"
@@ -879,27 +889,37 @@ export function AppShell({
             <Button type="button" variant="outline" size="sm" className="max-w-[10rem] truncate border-border/80" data-testid="button-current-city">
               <span data-testid="text-current-city">{cityLabel}</span>
             </Button>
-            {showAuditLogLink ? (
-              <Button asChild variant="outline" size="sm" className="shrink-0 border-border/80">
-                <Link href="/admin/audit" data-testid="link-app-shell-audit-log">
-                  Журнал событий
-                </Link>
-              </Button>
-            ) : null}
-            <Button type="button" variant="outline" size="sm" className="max-w-[12rem] truncate border-border/80" data-testid="button-manager-profile">
-              {userName}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="shrink-0 gap-1 border-border/80"
-              data-testid="button-auth-logout"
-              onClick={onLogout}
-            >
-              <LogOut className="h-4 w-4" aria-hidden />
-              Выход
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="max-w-[12rem] truncate border-border/80"
+                  data-testid="button-manager-profile"
+                >
+                  {userName}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuItem asChild>
+                  <Link href="/profile" data-testid="link-app-shell-profile">
+                    <UserRound className="mr-2 h-4 w-4" aria-hidden />
+                    Профиль
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    onLogout();
+                  }}
+                  data-testid="button-app-shell-logout"
+                >
+                  <LogOut className="mr-2 h-4 w-4" aria-hidden />
+                  Выход
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </header>
 
@@ -943,13 +963,12 @@ export function AppShell({
                   <ThemeToggleMobileBlock />
                   <div className="border-t border-border/60 px-5 pb-4 pt-3">
                     <p className="mb-2 text-xs text-muted-foreground">{userName}</p>
-                    {showAuditLogLink ? (
-                      <Button asChild variant="outline" className="mb-2 w-full">
-                        <Link href="/admin/audit" data-testid="link-app-shell-audit-log-mobile" onClick={() => setMobileOpen(false)}>
-                          Журнал событий
-                        </Link>
-                      </Button>
-                    ) : null}
+                    <Button asChild variant="outline" className="mb-2 w-full gap-2">
+                      <Link href="/profile" data-testid="link-app-shell-profile-mobile" onClick={() => setMobileOpen(false)}>
+                        <UserRound className="h-4 w-4" aria-hidden />
+                        Профиль
+                      </Link>
+                    </Button>
                     <Button type="button" variant="outline" className="w-full gap-2" onClick={onLogout}>
                       <LogOut className="h-4 w-4" aria-hidden />
                       Выйти
