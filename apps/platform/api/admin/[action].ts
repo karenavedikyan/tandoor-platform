@@ -3942,14 +3942,24 @@ async function handleMigrationsRun(
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_legal_entities_client_id ON legal_entities(client_id)`);
     await pool.query(
       `CREATE TABLE IF NOT EXISTS trade_point_legal_entity_links (
-         trade_point_id TEXT PRIMARY KEY,
-         legal_entity_id UUID REFERENCES legal_entities(id) ON DELETE SET NULL,
-         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+         trade_point_id TEXT NOT NULL,
+         legal_entity_id UUID NOT NULL REFERENCES legal_entities(id) ON DELETE CASCADE,
+         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+         PRIMARY KEY (trade_point_id, legal_entity_id)
        )`,
     );
     await pool.query(
       `CREATE INDEX IF NOT EXISTS idx_tp_le_links_legal_entity ON trade_point_legal_entity_links(legal_entity_id)`,
     );
+    try {
+      await pool.query(`ALTER TABLE trade_point_legal_entity_links DROP CONSTRAINT IF EXISTS trade_point_legal_entity_links_pkey`);
+      await pool.query(
+        `ALTER TABLE trade_point_legal_entity_links ADD PRIMARY KEY (trade_point_id, legal_entity_id)`,
+      );
+      applied.push("trade_point_legal_entity_links_composite_pk");
+    } catch {
+      /* уже composite PK */
+    }
     applied.push("legal_entities_payment_terms");
 
     // Промт 20: impersonation
