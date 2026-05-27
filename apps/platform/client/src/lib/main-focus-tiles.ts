@@ -48,6 +48,10 @@ export type MainFocusTileDef = {
   subtitle: string;
 };
 
+export function getMainFocusTileDef(tileId: MainFocusTileId): MainFocusTileDef | undefined {
+  return MAIN_FOCUS_TILES.find((t) => t.id === tileId);
+}
+
 export const MAIN_FOCUS_TILES: readonly MainFocusTileDef[] = [
   { id: "top150", icon: "🔥", title: "TOP 150", subtitle: "из 150 в фокусе" },
   { id: "top350", icon: "⭐", title: "TOP 350", subtitle: "из 350" },
