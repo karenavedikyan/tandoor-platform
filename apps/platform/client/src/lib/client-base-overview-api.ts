@@ -44,6 +44,34 @@ export type ClientBaseOverview = {
   }>;
 };
 
+export type ClientBaseManagerDetail = {
+  success: true;
+  manager: { userId: string; fullName: string; teamId: string | null; ropFullName: string };
+  clients: Array<{
+    id: string;
+    fullName: string;
+    inn: string | null;
+    phone: string | null;
+    legalEntity: boolean;
+    city: string | null;
+    status: "active" | "potential" | "attention";
+    tradePointIds: string[];
+    tradePointsCount: number;
+    updatedAt: string | null;
+    dealerProfileId: string | null;
+  }>;
+  tradePoints: Array<{
+    id: string;
+    name: string;
+    address: string;
+    city: string;
+    clientId: string;
+    hasPhoto: boolean;
+    hasStorefront: boolean;
+    updatedAt: string | null;
+  }>;
+};
+
 export async function fetchClientBaseOverview(params: {
   teamId?: string;
   managerUserId?: string;
@@ -59,6 +87,18 @@ export async function fetchClientBaseOverview(params: {
   const json = (await res.json()) as ClientBaseOverview | { success?: false; message?: string };
   if (!res.ok || json.success !== true) {
     throw new Error("message" in json && typeof json.message === "string" ? json.message : "Не удалось загрузить клиентскую базу.");
+  }
+  return json;
+}
+
+export async function fetchClientBaseManagerDetail(managerUserId: string): Promise<ClientBaseManagerDetail> {
+  const res = await fetch(`/api/admin/client-base-manager-detail?managerUserId=${encodeURIComponent(managerUserId)}`, {
+    method: "GET",
+    credentials: "same-origin",
+  });
+  const json = (await res.json()) as ClientBaseManagerDetail | { success?: false; message?: string };
+  if (!res.ok || json.success !== true) {
+    throw new Error("message" in json && typeof json.message === "string" ? json.message : "Не удалось загрузить менеджера.");
   }
   return json;
 }
