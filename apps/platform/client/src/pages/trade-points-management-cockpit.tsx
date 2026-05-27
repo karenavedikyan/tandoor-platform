@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { ChevronRight, Info } from "lucide-react";
+import { Info } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,6 +18,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
@@ -43,11 +45,13 @@ import { realRopOptions } from "@/lib/real-org-adapter";
 import type { OrgSnapshot } from "@/lib/use-org-snapshot";
 import type { DealerBaseAccessRole } from "@/lib/dealer-base-role-views";
 import { buildHashPath } from "@/lib/hash-route-utils";
-import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actualization-sync-status";
-import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
-import { canActualizeClientBase } from "@/lib/client-base-actualization-permissions";
 import { teamsForManagementView } from "@/lib/dealer-base-management-view-model";
+import {
+  fetchTradePointsManagerDetail,
+  fetchTradePointsOverview,
+  type TradePointsOverview,
+} from "@/lib/trade-points-overview-api";
 import type { TradePointListRow } from "@/lib/trade-point-list-for-actualization";
 import {
   buildCityTpAggs,
@@ -85,7 +89,15 @@ type DetailKind =
   | { kind: "manager"; teamId: string; managerId: string }
   | { kind: "city"; cityKey: string }
   | { kind: "clients-no-tp" }
-  | { kind: "clients-with-tp" };
+  | { kind: "clients-with-tp" }
+  | { kind: "rop_overview"; teamId: string }
+  | { kind: "manager_overview"; managerUserId: string; teamId: string };
+
+const TP_STATUS_LABEL: Record<"active" | "potential" | "attention", string> = {
+  active: "активный",
+  potential: "потенциальный",
+  attention: "внимание",
+};
 
 function safeCityTestId(key: string): string {
   return key.replace(/[^a-zA-Z0-9_-]/g, "_");
@@ -141,6 +153,8 @@ function detailTitle(detail: DetailKind | null, ropGroups: RopTpGroup[], cities:
   if (detail.kind === "clients-with-tp") return "Клиенты с торговыми точками";
   if (detail.kind === "city") return cities.find((c) => c.cityKey === detail.cityKey)?.displayName ?? "Город";
   if (detail.kind === "rop") return ropGroups.find((g) => g.teamId === detail.teamId)?.ropName ?? "Команда";
+  if (detail.kind === "rop_overview") return ropGroups.find((g) => g.teamId === detail.teamId)?.ropName ?? "Команда";
+  if (detail.kind === "manager_overview") return "Менеджер";
   const g = ropGroups.find((x) => x.teamId === detail.teamId);
   return g?.managers.find((m) => m.managerId === detail.managerId)?.name ?? "Менеджер";
 }
@@ -161,7 +175,6 @@ export function TradePointsManagementCockpit({
   dealerRows: DealerRow[];
   orgTeamCtx?: { snap: OrgSnapshot; access: DealerBaseAccessRole } | null;
 }) {
-  const actx = useClientBaseActualization();
   const teamCtx = useClientBaseTeamActualization();
   const isMobile = useIsMobile();
   const access = useMemo(() => {
@@ -201,6 +214,19 @@ export function TradePointsManagementCockpit({
     setMode(m);
     if (m === "overview") setOpenRops([]);
   }, []);
+
+  const overviewQ = useQuery({
+    queryKey: ["trade-points-overview"],
+    queryFn: fetchTradePointsOverview,
+  });
+  const overview: TradePointsOverview | null = overviewQ.data ?? null;
+
+  const overviewManagerUserId = detail?.kind === "manager_overview" ? detail.managerUserId : null;
+  const managerDetailQ = useQuery({
+    queryKey: ["trade-points-manager-detail", overviewManagerUserId],
+    queryFn: () => fetchTradePointsManagerDetail(overviewManagerUserId ?? ""),
+    enabled: Boolean(overviewManagerUserId),
+  });
 
   const teams = useMemo(
     () => teamsForManagementView(profile, teamCtx.dashboardRopTeamId, orgTeamCtx ?? null),
@@ -691,6 +717,453 @@ export function TradePointsManagementCockpit({
     </section>
   );
 
+  if (overview) {
+    const closeSheet = () => setDetail(null);
+    const inSheet = detail?.kind === "manager_overview" || detail?.kind === "rop_overview";
+    const ropForSheet =
+      detail?.kind === "rop_overview" || detail?.kind === "manager_overview"
+        ? overview.ropGroups.find((g) => (g.teamId ?? "__no_rop__") === detail.teamId) ?? null
+        : null;
+    const overviewKpis: Array<[string, number]> = [
+      ["Активные ТТ", overview.structure.activeTradePoints],
+      ["Клиентов с ТТ", overview.structure.clientsWithTp],
+      ["Городов", overview.structure.cities],
+      ["Без фото", overview.structure.withoutPhoto],
+      ["Не заполнены", overview.structure.notFilled],
+      ["С фото", overview.structure.withPhoto],
+    ];
+    return (
+      <div
+        className="min-w-0 max-w-full space-y-6 overflow-x-hidden pb-28 sm:pb-10"
+        data-testid="page-trade-points"
+      >
+        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Торговые точки</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Управленческий обзор реальных торговых точек из Postgres. Без моков и демо-агрегатов.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" asChild>
+              <Link href={buildHashPath("/dealer-base")}>Клиентская база</Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link href={buildHashPath("/client-map")}>Карта</Link>
+            </Button>
+          </div>
+        </div>
+
+        {teamCtx.teamFetchLoading || teamCtx.teamFetchError ? (
+          <div className="space-y-3">
+            {teamCtx.teamFetchLoading ? (
+              <Alert className="border-primary/30 bg-primary/5" data-testid="alert-trade-points-team-state-loading">
+                <Info className="h-4 w-4 text-primary" />
+                <AlertDescription>Загружаются данные актуализации команды…</AlertDescription>
+              </Alert>
+            ) : null}
+            {teamCtx.teamFetchError ? (
+              <Alert variant="destructive" data-testid="alert-trade-points-team-state-error">
+                <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <span>{teamCtx.teamFetchError}</span>
+                  <Button type="button" variant="outline" size="sm" onClick={() => void teamCtx.refresh()}>
+                    Повторить
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            ) : null}
+          </div>
+        ) : null}
+
+        {access === "sales_director" ? (
+          <div className="max-w-md">
+            <p className="mb-1 text-xs font-medium text-muted-foreground">Команда для merge</p>
+            <Select value={teamCtx.dashboardRopTeamId} onValueChange={(v) => teamCtx.publishDashboardRopTeamId(v)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Команда" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Все команды</SelectItem>
+                {(orgTeamCtx ? realRopOptions(orgTeamCtx.snap) : getRopOptions()).map((o) => (
+                  <SelectItem key={o.teamId} value={o.teamId}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
+
+        <section data-testid="section-trade-points-kpi">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+            {overviewKpis.map(([label, value]) => (
+              <div
+                key={label}
+                className="rounded-xl border border-border bg-card px-3 py-2.5 text-card-foreground"
+              >
+                <p className="text-[11px] leading-tight text-muted-foreground">{label}</p>
+                <p className="mt-0.5 text-lg font-semibold text-foreground tabular-nums sm:text-xl">{value}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <div className="space-y-2" data-testid="section-trade-points-mode-toggle">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Режим</p>
+          <div className="flex gap-2">
+            {(["overview", "by_rop", "cities"] as TradePointsManagementMode[]).map((m) => {
+              const active = mode === m;
+              const label = m === "overview" ? "Обзор" : m === "by_rop" ? "По РОП" : "По городам";
+              return (
+                <Button
+                  key={m}
+                  type="button"
+                  variant={active ? "default" : "outline"}
+                  size="sm"
+                  className="h-9 flex-1 text-xs font-semibold sm:flex-none sm:px-4"
+                  data-testid={`button-trade-points-mode-${m === "by_rop" ? "rop" : m}`}
+                  onClick={() => setModeAndPersist(m)}
+                >
+                  {label}
+                </Button>
+              );
+            })}
+          </div>
+        </div>
+
+        {mode === "overview" && overview.topRopTeams.length > 0 ? (
+          <Card className="rounded-xl border border-border bg-card text-card-foreground">
+            <CardContent className="space-y-1 p-3">
+              <h3 className="text-sm font-semibold text-foreground">Топ команд по ТТ</h3>
+              {overview.topRopTeams.map((g, i) => {
+                const key = (g.teamId ?? "__no_rop__") + ":" + i;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    className="flex w-full items-center gap-2 rounded-lg px-1 py-1 text-left text-sm hover:bg-muted/40"
+                    onClick={() => setDetail({ kind: "rop_overview", teamId: g.teamId ?? "__no_rop__" })}
+                  >
+                    <span className="w-5 shrink-0 text-xs text-muted-foreground">{i + 1}.</span>
+                    <span className="min-w-0 flex-1 truncate font-medium text-foreground">{g.teamName}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                      ТТ {g.tradePoints} · клиентов {g.clientsWithTp}
+                    </span>
+                  </button>
+                );
+              })}
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {mode === "overview" || mode === "cities" ? (
+          <Card className="rounded-xl border border-border bg-card text-card-foreground">
+            <CardContent className="space-y-2 p-3">
+              <h3 className="text-sm font-semibold text-foreground">Города</h3>
+              {overview.cities.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Нет городов с торговыми точками.</p>
+              ) : (
+                <div className="grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2">
+                  {overview.cities.slice(0, 5).map((c) => (
+                    <button
+                      key={c.cityKey}
+                      type="button"
+                      className="flex items-baseline justify-between gap-3 rounded-lg px-1 py-1 text-left text-sm hover:bg-muted/40"
+                      onClick={() => setDetail({ kind: "city", cityKey: c.cityKey })}
+                    >
+                      <span className="truncate font-medium text-foreground">{c.cityName}</span>
+                      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                        ТТ {c.tradePointsCount} · клиенты {c.clientsCount}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {overview.cities.length > 5 ? (
+                <p className="text-[11px] text-muted-foreground">+ ещё {overview.cities.length - 5} городов</p>
+              ) : null}
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {mode === "overview" || mode === "by_rop" ? (
+          <section className="space-y-2" data-testid="section-trade-points-rop-groups">
+            {overview.ropGroups.length === 0 ? (
+              <Card className="rounded-xl border border-border bg-card text-card-foreground">
+                <CardContent className="p-4 text-sm text-muted-foreground">
+                  Нет активных торговых точек в текущем merge.
+                </CardContent>
+              </Card>
+            ) : (
+              <Accordion type="multiple" value={openRops} onValueChange={(v) => setOpenRops(v)} className="space-y-2">
+                {overview.ropGroups.map((g) => {
+                  const teamKey = g.teamId ?? "__no_rop__";
+                  return (
+                    <AccordionItem
+                      key={teamKey}
+                      value={teamKey}
+                      className="rounded-xl border border-border bg-card text-card-foreground"
+                      data-testid={`card-trade-points-rop-${teamKey}`}
+                    >
+                      <AccordionTrigger
+                        className="px-3 py-2 hover:no-underline"
+                        data-testid={`button-trade-points-rop-toggle-${teamKey}`}
+                      >
+                        <div className="flex min-w-0 flex-1 flex-col items-start gap-0.5 text-left">
+                          <span className="truncate text-sm font-semibold text-foreground">{g.teamName}</span>
+                          <span className="text-[11px] text-muted-foreground">
+                            {g.ropFullName} · менеджеров {g.managerCount} · ТТ {g.tradePoints} · без фото {g.withoutPhoto}
+                          </span>
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent className="px-3 pb-3 pt-0">
+                        <div className="mb-2 flex flex-wrap items-center gap-2">
+                          <p className="text-[11px] text-muted-foreground">
+                            клиентов с ТТ {g.clientsWithTp} · городов {g.cities} · не заполнено {g.notFilled}
+                          </p>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="ml-auto h-8 text-xs"
+                            data-testid={`button-trade-points-rop-details-${teamKey}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDetail({ kind: "rop_overview", teamId: teamKey });
+                            }}
+                          >
+                            Детали команды
+                          </Button>
+                        </div>
+                        {g.managers.length === 0 ? (
+                          <p className="text-xs text-muted-foreground">В команде нет менеджеров.</p>
+                        ) : (
+                          <div
+                            className="grid gap-2 sm:grid-cols-2"
+                            data-testid={`section-trade-points-rop-members-${teamKey}`}
+                          >
+                            {g.managers.map((m) => (
+                              <button
+                                key={m.userId}
+                                type="button"
+                                className="rounded-xl border border-border bg-card p-3 text-left text-card-foreground transition-colors hover:bg-muted/40"
+                                data-testid={`button-trade-points-manager-open-${m.userId}`}
+                                onClick={() =>
+                                  setDetail({ kind: "manager_overview", managerUserId: m.userId, teamId: teamKey })
+                                }
+                              >
+                                <p
+                                  className="truncate text-sm font-semibold text-foreground"
+                                  data-testid={`card-trade-points-manager-${m.userId}`}
+                                >
+                                  {m.fullName}
+                                </p>
+                                <p className="mt-1 text-[11px] text-muted-foreground">
+                                  ТТ {m.tradePoints} · клиентов с ТТ {m.clientsWithTp} · городов {m.cities}
+                                </p>
+                                <p className="text-[11px] text-muted-foreground">
+                                  без фото {m.withoutPhoto} · не заполнено {m.notFilled}
+                                </p>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </AccordionContent>
+                    </AccordionItem>
+                  );
+                })}
+              </Accordion>
+            )}
+          </section>
+        ) : null}
+
+        <Sheet open={inSheet} onOpenChange={(o) => !o && closeSheet()}>
+          <SheetContent
+            side="bottom"
+            className="max-h-[88vh] rounded-t-2xl border-border bg-card p-0"
+            data-testid="dialog-trade-points-management-detail"
+          >
+            <SheetHeader className="border-b border-border px-4 pb-3 pt-4 text-left">
+              <SheetTitle className="text-base text-foreground">
+                {detail?.kind === "manager_overview"
+                  ? managerDetailQ.data?.manager.fullName ?? "Менеджер"
+                  : ropForSheet?.teamName ?? "Команда"}
+              </SheetTitle>
+              <SheetDescription>
+                {detail?.kind === "manager_overview" && managerDetailQ.data
+                  ? `Команда: ${managerDetailQ.data.manager.ropFullName} · ТТ ${managerDetailQ.data.tradePoints.length} · клиентов с ТТ ${managerDetailQ.data.clients.length}`
+                  : detail?.kind === "rop_overview" && ropForSheet
+                    ? `${ropForSheet.ropFullName} · менеджеров ${ropForSheet.managerCount} · ТТ ${ropForSheet.tradePoints}`
+                    : "Реальные данные актуализации"}
+              </SheetDescription>
+            </SheetHeader>
+            <div className="max-h-[70vh] overflow-y-auto px-4 pb-24 pt-3">
+              {detail?.kind === "manager_overview" ? (
+                managerDetailQ.isLoading ? (
+                  <div className="space-y-2">
+                    {[0, 1, 2, 3].map((i) => (
+                      <Skeleton key={i} className="h-20 w-full rounded-xl" />
+                    ))}
+                  </div>
+                ) : managerDetailQ.isError ? (
+                  <Alert variant="destructive">
+                    <AlertDescription>Не удалось загрузить торговые точки менеджера.</AlertDescription>
+                  </Alert>
+                ) : managerDetailQ.data ? (
+                  <Tabs value={detailTab} onValueChange={(v) => setDetailTab(v as "points" | "clients")}>
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="points" className="text-xs" data-testid="tab-trade-points-manager-overview-points">
+                        Точки ({managerDetailQ.data.tradePoints.length})
+                      </TabsTrigger>
+                      <TabsTrigger
+                        value="clients"
+                        className="text-xs"
+                        data-testid="tab-trade-points-manager-overview-clients"
+                      >
+                        Клиенты ({managerDetailQ.data.clients.length})
+                      </TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="points" className="mt-3 space-y-2">
+                      {managerDetailQ.data.tradePoints.length === 0 ? (
+                        <p className="py-6 text-center text-sm text-muted-foreground">У менеджера нет ТТ</p>
+                      ) : (
+                        managerDetailQ.data.tradePoints.map((tp) => (
+                          <Card
+                            key={tp.id}
+                            className="rounded-xl border border-border bg-card text-card-foreground"
+                            data-testid={`card-trade-points-manager-tp-${tp.id}`}
+                          >
+                            <CardContent className="space-y-1 p-3">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-semibold text-foreground">
+                                    {tp.name ?? tp.address ?? "ТТ"}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {tp.city ?? "—"}
+                                    {tp.address ? ` · ${tp.address}` : ""}
+                                  </p>
+                                  <p className="text-[11px] text-muted-foreground">
+                                    клиент: {tp.clientFullName} ({TP_STATUS_LABEL[tp.clientStatus]})
+                                  </p>
+                                  <p className="text-[11px] text-muted-foreground">
+                                    {tp.hasPhoto ? "с фото" : "без фото"}
+                                    {tp.notFilled ? " · не заполнено" : ""}
+                                  </p>
+                                </div>
+                                <Button asChild variant="outline" size="sm">
+                                  <Link
+                                    href={buildHashPath(
+                                      `/dealers/${encodeURIComponent(tp.dealerProfileId ?? tp.clientId)}`,
+                                    )}
+                                  >
+                                    Клиент
+                                  </Link>
+                                </Button>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))
+                      )}
+                    </TabsContent>
+                    <TabsContent value="clients" className="mt-3 space-y-2">
+                      {managerDetailQ.data.clients.length === 0 ? (
+                        <p className="py-6 text-center text-sm text-muted-foreground">У менеджера нет клиентов</p>
+                      ) : (
+                        managerDetailQ.data.clients.map((c) => (
+                          <Card
+                            key={c.id}
+                            className="rounded-xl border border-border bg-card text-card-foreground"
+                            data-testid={`card-trade-points-manager-client-${c.id}`}
+                          >
+                            <CardContent className="p-3">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-semibold text-foreground">{c.fullName}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {c.city ?? "—"} · ТТ {c.tradePointsCount}
+                                  </p>
+                                  <p className="text-[11px] text-muted-foreground">
+                                    статус: {TP_STATUS_LABEL[c.status]}
+                                  </p>
+                                </div>
+                                <Button asChild variant="outline" size="sm">
+                                  <Link
+                                    href={buildHashPath(`/dealers/${encodeURIComponent(c.dealerProfileId ?? c.id)}`)}
+                                  >
+                                    Карточка
+                                  </Link>
+                                </Button>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))
+                      )}
+                    </TabsContent>
+                  </Tabs>
+                ) : null
+              ) : detail?.kind === "rop_overview" && ropForSheet ? (
+                ropForSheet.managers.length === 0 ? (
+                  <p className="py-6 text-center text-sm text-muted-foreground">В команде нет менеджеров.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {ropForSheet.managers.map((m) => (
+                      <button
+                        key={m.userId}
+                        type="button"
+                        className="w-full rounded-xl border border-border bg-card p-3 text-left text-card-foreground hover:bg-muted/40"
+                        data-testid={`button-trade-points-rop-sheet-manager-${m.userId}`}
+                        onClick={() =>
+                          setDetail({
+                            kind: "manager_overview",
+                            managerUserId: m.userId,
+                            teamId: detail.teamId,
+                          })
+                        }
+                      >
+                        <p className="truncate text-sm font-semibold text-foreground">{m.fullName}</p>
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          ТТ {m.tradePoints} · клиентов с ТТ {m.clientsWithTp} · городов {m.cities}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">
+                          без фото {m.withoutPhoto} · не заполнено {m.notFilled}
+                        </p>
+                        <p className="mt-2 text-xs text-primary">Открыть →</p>
+                      </button>
+                    ))}
+                  </div>
+                )
+              ) : null}
+            </div>
+          </SheetContent>
+        </Sheet>
+      </div>
+    );
+  }
+
+  if (overviewQ.isLoading) {
+    return (
+      <div
+        className="min-w-0 max-w-full space-y-6 overflow-x-hidden pb-28 sm:pb-10"
+        data-testid="page-trade-points"
+      >
+        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Торговые точки</h1>
+            <p className="mt-1 text-sm text-muted-foreground">Загружаем реальные данные…</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-16 rounded-xl" />
+          ))}
+        </div>
+        <Skeleton className="h-32 rounded-xl" />
+        <Skeleton className="h-40 rounded-xl" />
+      </div>
+    );
+  }
+
   return (
     <div
       className="min-w-0 max-w-full space-y-6 overflow-x-hidden pb-28 sm:pb-10"
@@ -712,22 +1185,22 @@ export function TradePointsManagementCockpit({
           </div>
         </div>
 
-        {canActualizeClientBase(profile) ? (
+        {overviewQ.isError ? (
+          <Alert variant="destructive" data-testid="alert-trade-points-overview-error">
+            <AlertDescription>Не удалось получить актуальные данные. Показаны демонстрационные срезы.</AlertDescription>
+          </Alert>
+        ) : null}
+
+        {teamCtx.teamFetchLoading || teamCtx.teamFetchError ? (
           <div className="space-y-3">
-            <ClientBaseActualizationSyncStatus
-              isLoading={actx.loading}
-              meta={actx.meta}
-              syncStatus={actx.syncStatus}
-              onRetry={() => void actx.refresh()}
-            />
             {teamCtx.teamFetchLoading ? (
-              <Alert className="border-primary/30 bg-[#EEEFF6]/60" data-testid="alert-trade-points-team-state-loading">
+              <Alert className="border-primary/30 bg-primary/5" data-testid="alert-trade-points-team-state-loading">
                 <Info className="h-4 w-4 text-primary" />
                 <AlertDescription>Загружаются данные актуализации команды…</AlertDescription>
               </Alert>
             ) : null}
             {teamCtx.teamFetchError ? (
-              <Alert className="border-[#E3E6F3] bg-[#EEEFF6]/60" data-testid="alert-trade-points-team-state-error">
+              <Alert variant="destructive" data-testid="alert-trade-points-team-state-error">
                 <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <span>{teamCtx.teamFetchError}</span>
                   <Button type="button" variant="outline" size="sm" onClick={() => void teamCtx.refresh()}>
