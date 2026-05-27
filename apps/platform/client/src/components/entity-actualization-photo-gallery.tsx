@@ -18,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ClientAvatar } from "@/components/ui/client-avatar";
 import { SafeImage } from "@/components/safe-image";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -59,6 +60,10 @@ const TP_KINDS: ActualizationEntityPhotoKind[] = ["facade", "showcase", "interio
 export type EntityActualizationPhotoGalleryProps = {
   entityType: "dealer" | "trade_point";
   entityId: string;
+  /** Имя клиента / название точки — для показа инициалов в фолбэк-аватаре, если фото нет. */
+  entityName?: string;
+  /** Стабильный сид для цвета фолбэк-аватара (обычно id владельца). */
+  entitySeed?: string;
   canEdit: boolean;
   profile: ReleaseDemoProfile;
   className?: string;
@@ -66,7 +71,7 @@ export type EntityActualizationPhotoGalleryProps = {
 };
 
 export function EntityActualizationPhotoGallery(props: EntityActualizationPhotoGalleryProps): ReactElement {
-  const { entityType, entityId, canEdit, profile, className, compact } = props;
+  const { entityType, entityId, entityName, entitySeed, canEdit, profile, className, compact } = props;
   const actx = useClientBaseActualization();
   const { user } = useCurrentUser();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -222,11 +227,21 @@ export function EntityActualizationPhotoGallery(props: EntityActualizationPhotoG
       ) : null}
 
       {photos.length === 0 ? (
-        <div
-          className="whitespace-pre-line rounded-lg border border-dashed border-border bg-card px-3 py-6 text-center text-sm text-muted-foreground"
-          data-testid={`entity-photo-empty-${entityType}-${entityId}`}
-        >
-          {emptyHint}
+        <div className="space-y-3" data-testid={`entity-photo-empty-${entityType}-${entityId}`}>
+          {entityType === "dealer" && entityName && entityName.trim() ? (
+            <div className="flex justify-center">
+              <ClientAvatar
+                name={entityName}
+                seed={entitySeed ?? entityName}
+                size={140}
+                shape="square"
+                className="rounded-2xl"
+              />
+            </div>
+          ) : null}
+          <div className="whitespace-pre-line rounded-lg border border-dashed border-border bg-card px-3 py-6 text-center text-sm text-muted-foreground">
+            {emptyHint}
+          </div>
         </div>
       ) : (
         <div className={cn("grid gap-3", compact ? "grid-cols-1" : "sm:grid-cols-2 lg:grid-cols-3")}>

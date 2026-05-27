@@ -4,6 +4,7 @@ import type { ReactElement } from "react";
 import { useState } from "react";
 import { Camera, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ClientAvatar } from "@/components/ui/client-avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SafeImage } from "@/components/safe-image";
 import { EntityActualizationPhotoGallery } from "@/components/entity-actualization-photo-gallery";
@@ -104,6 +105,21 @@ export function ShowcaseCoverPhotoSlot(props: ShowcaseCoverPhotoSlotProps): Reac
   const placeholderSubtitle =
     kind === "dealer" ? "Сделайте клиента узнаваемым" : "Покажите фасад или витрину";
 
+  // Размеры фолбэк-аватара клиента по слоту. Аватар центрируется в frame; frame
+  // остаётся с фоном `bg-card`, что хорошо выглядит и в темной теме.
+  const dealerAvatarSizeBySlot: Record<ShowcaseCoverPhotoSlotSize, number> = {
+    hero: 160,
+    large: 144,
+    grid: 112,
+    list: 56,
+    branch: 48,
+    table: 32,
+  };
+  const dealerAvatarShape: "circle" | "square" =
+    size === "hero" || size === "large" || size === "grid" ? "square" : "circle";
+  const dealerAvatarRoundClass =
+    dealerAvatarShape === "square" ? "rounded-2xl" : undefined;
+
   return (
     <>
       <div className={cn("group", frameClass[size], className)} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
@@ -111,6 +127,22 @@ export function ShowcaseCoverPhotoSlot(props: ShowcaseCoverPhotoSlotProps): Reac
           {hasImage ? (
             <div className="absolute inset-0" data-testid={imageTestId}>
               <SafeImage src={displaySrc} alt="" className="absolute inset-0 h-full w-full" objectFit="cover" />
+            </div>
+          ) : kind === "dealer" ? (
+            <div
+              className={cn(
+                "absolute inset-0 flex items-center justify-center bg-card p-1",
+                !canEditGallery && "opacity-90",
+              )}
+              data-testid={placeholderTestId}
+            >
+              <ClientAvatar
+                name={dealer.name}
+                seed={dealer.id || dealer.actualizationInn || dealer.name}
+                size={dealerAvatarSizeBySlot[size]}
+                shape={dealerAvatarShape}
+                className={dealerAvatarRoundClass}
+              />
             </div>
           ) : (
             <div
@@ -198,6 +230,8 @@ export function ShowcaseCoverPhotoSlot(props: ShowcaseCoverPhotoSlotProps): Reac
           <EntityActualizationPhotoGallery
             entityType={kind === "dealer" ? "dealer" : "trade_point"}
             entityId={entityId}
+            entityName={kind === "dealer" ? dealer.name : tp!.name}
+            entitySeed={kind === "dealer" ? dealer.id || dealer.actualizationInn || undefined : tp!.id}
             canEdit={canEditGallery}
             profile={profile}
             compact

@@ -130,7 +130,7 @@ async function handleImage(req: VercelRequest, res: VercelResponse): Promise<voi
 
   let parsed: { image?: Buffer; imageMime?: string; thumbnail?: Buffer; thumbMime?: string };
   try {
-    const { parseClientBaseUploadMultipart } = await import("../../shared/parse-upload-multipart-memory");
+    const { parseClientBaseUploadMultipart } = await import("../../shared/parse-upload-multipart-memory.js");
     const rawReq = req as unknown as IncomingMessage;
     parsed = await parseClientBaseUploadMultipart(rawReq);
   } catch (e) {
@@ -152,7 +152,7 @@ async function handleImage(req: VercelRequest, res: VercelResponse): Promise<voi
   let result: ClientBaseImageUploadExecuteResult;
   try {
     const { executeClientBaseImageUpload, sanitizeUploadUserIdFromHeader } = await import(
-      "../../shared/client-base-image-upload-execute"
+      "../../shared/client-base-image-upload-execute.js"
     );
     result = await executeClientBaseImageUpload({
       token,
