@@ -31,8 +31,9 @@
     "test:category-tier-edit": "tsx client/src/__tests__/client-category-tier-edit.test.ts",
     "test:streak": "tsx client/src/lib/__tests__/actualization-streak.test.ts",
     "test:scope-isolation": "tsx api/actualization/__tests__/scope-isolation.test.ts",
+    "test:manager-only-state": "tsx api/actualization/__tests__/manager-only-state.test.ts",
     "test:race-hooks-order": "tsx client/src/components/home/__tests__/actualization-race-hooks-order.test.ts",
-    "test:manager-only-state": "tsx api/actualization/__tests__/manager-only-state.test.ts"
+    "test:real-client-base": "tsx client/src/lib/__tests__/real-client-base.test.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

@@ -19,24 +19,28 @@ export function buildAssignmentsMap(
 }
 
 /**
- * Клиенты из сида, видимые текущему пользователю, с подстановкой UUID ответственного и команды из client_assignments.
+ * Клиенты из сида, видимые текущему пользователю.
+ *
+ * Промт 53: НЕ подставляем UUID `responsibleUserId`/`teamId` из `client_assignments`
+ * поверх каталожных `mgr-*` / `team-*` идентификаторов. Downstream-фильтры
+ * (`roleScopedDealerRows`, `applyDealerBasePickerFilters`) сравнивают
+ * `releaseManagerId === u.id` (`mgr-kulakova-os`) и `releaseTeamId === tid`
+ * (`team-skalaban`). Подстановка UUID ломала эти сравнения и приводила к
+ * пустому списку (0/3 клиентов вместо 244). Если в будущем понадобится
+ * отражать переназначения из БД — для этого нужен полноценный маппер
+ * UUID → catalog-key через `OrgSnapshot`, который сейчас отсутствует.
+ *
+ * Параметр `_assignments` оставлен в сигнатуре для совместимости с
+ * call-sites (`dealer-base.tsx`, `release-clients.tsx`, `trade-points.tsx`);
+ * внутри функции он больше не используется. `snap` тоже остаётся
+ * параметром-плейсхолдером для будущей интеграции через OrgSnapshot.
  */
 export function getVisibleReleaseClients(
-  snap: OrgSnapshot,
+  _snap: OrgSnapshot,
   all: boolean,
   codes: string[] | null,
-  assignments: ReadonlyMap<string, { responsibleUserId: string | null; teamId: string | null }> | null,
+  _assignments: ReadonlyMap<string, { responsibleUserId: string | null; teamId: string | null }> | null,
 ): ReleaseClient[] {
   const allRows = getReleaseClients();
-  const filtered = all || codes === null ? allRows : allRows.filter((c) => codes.includes(c.code));
-  if (!assignments || assignments.size === 0) return filtered;
-  return filtered.map((c) => {
-    const a = assignments.get(c.code);
-    if (!a) return c;
-    return {
-      ...c,
-      managerId: a.responsibleUserId ?? c.managerId,
-      teamId: a.teamId ?? c.teamId,
-    };
-  });
+  return all || codes === null ? allRows : allRows.filter((c) => codes.includes(c.code));
 }
