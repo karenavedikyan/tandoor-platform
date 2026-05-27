@@ -13,6 +13,7 @@ import {
   type ActualizationApiMeta,
   type ActualizationPersistResult,
   type ActualizationSyncStatus,
+  type ActualizationUnTrashDirective,
 } from "@/lib/client-base-actualization-api";
 import { canActualizeClientBase } from "@/lib/client-base-actualization-permissions";
 import { createEmptyActualizationState, type ActualizationState } from "@/lib/client-base-actualization-state";
@@ -28,8 +29,17 @@ export type ClientBaseActualizationContextValue = {
   syncStatus: ActualizationSyncStatus;
   errorMessage?: string;
   refresh: () => Promise<void>;
-  /** Обновить state и отправить на сервер. */
-  persist: (updater: (prev: ActualizationState) => ActualizationState) => Promise<ActualizationPersistResult>;
+  /**
+   * Обновить state и отправить на сервер.
+   * `extra.unTrash` — явное «Восстановить из корзины» или «Удалить навсегда»: серверная
+   * защита B1 без этого флага восстанавливает удалённую запись `trashedDealersById` /
+   * `trashedTradePointsById` из prev. Когда ключ есть в `unTrash`, действие считается
+   * легитимным и запись действительно удаляется.
+   */
+  persist: (
+    updater: (prev: ActualizationState) => ActualizationState,
+    extra?: { unTrash?: ActualizationUnTrashDirective },
+  ) => Promise<ActualizationPersistResult>;
   /** Строки клиентской базы с учётом актуализации (для списков). */
   mergedDealerRows: DealerRow[];
 };
@@ -79,11 +89,14 @@ export function ClientBaseActualizationProvider({ children }: { children: ReactN
   }, [refresh]);
 
   const persist = useCallback(
-    async (updater: (prev: ActualizationState) => ActualizationState): Promise<ActualizationPersistResult> => {
+    async (
+      updater: (prev: ActualizationState) => ActualizationState,
+      extra?: { unTrash?: ActualizationUnTrashDirective },
+    ): Promise<ActualizationPersistResult> => {
       if (!enabled) return { success: false, syncStatus: "error", storageMode: "not_configured" };
       const next = updater(stateRef.current);
       setState(next);
-      const r = await saveActualizationState(profile, next);
+      const r = await saveActualizationState(profile, next, extra);
       setMeta(r.meta);
       setSyncStatus(r.syncStatus);
       setErrorMessage(r.errorMessage);

@@ -80,6 +80,55 @@ export type ArchivedDealerInfo = {
   source: ActualizationSource;
 };
 
+/** Корзина клиента — хранится 14 дней, затем чистится cron'ом. Отдельная сущность от архива. */
+export type TrashedDealerSource =
+  | "client_bulk_delete"
+  | "client_card_delete"
+  | "manual_actualization";
+
+export type TrashedDealerInfo = {
+  dealerId: string;
+  trashedAt: string;
+  trashedBy: string;
+  trashedByName: string;
+  expiresAt: string;
+  source: TrashedDealerSource;
+  /**
+   * Снимок ключевых полей на момент удаления — чтобы корзина оставалась читаемой,
+   * даже если исходная запись пропала из state.
+   */
+  snapshot: {
+    fullName: string | null;
+    city: string | null;
+    inn: string | null;
+    dealerCode: string | null;
+    legalEntityName: string | null;
+  };
+};
+
+/** Корзина торговой точки. Симметрично TrashedDealerInfo. */
+export type TrashedTradePointSource =
+  | "client_bulk_delete"
+  | "client_card_delete"
+  | "manual_actualization";
+
+export type TrashedTradePointInfo = {
+  tradePointId: string;
+  dealerId: string;
+  trashedAt: string;
+  trashedBy: string;
+  trashedByName: string;
+  expiresAt: string;
+  source: TrashedTradePointSource;
+  snapshot: {
+    name: string | null;
+    address: string | null;
+    city: string | null;
+    tradePointCode: string | null;
+    dealerFullName: string | null;
+  };
+};
+
 export type ArchivedLegalEntityInfo = {
   legalEntityId: string;
   dealerId: string;
@@ -251,7 +300,21 @@ export type ActualizationState = {
   dealerPhotosByDealerId: Record<string, ActualizationEntityPhoto[]>;
   /** Фото торговых точек: tradePointId → список. */
   tradePointPhotosByTradePointId: Record<string, ActualizationEntityPhoto[]>;
+  /** Корзина клиентов (отдельно от архива). Хранится 14 дней. */
+  trashedDealersById: Record<string, TrashedDealerInfo>;
+  /** Корзина торговых точек. */
+  trashedTradePointsById: Record<string, TrashedTradePointInfo>;
 };
+
+/** TTL корзины в миллисекундах (14 дней). */
+export const TRASH_RETENTION_MS = 14 * 24 * 60 * 60 * 1000;
+
+/** Вычисляет ISO-дату истечения корзины относительно момента удаления. */
+export function computeTrashExpiresAt(trashedAtIso: string): string {
+  const t = Date.parse(trashedAtIso);
+  const base = Number.isFinite(t) ? t : Date.now();
+  return new Date(base + TRASH_RETENTION_MS).toISOString();
+}
 
 export function createEmptyActualizationState(): ActualizationState {
   return {
@@ -275,6 +338,8 @@ export function createEmptyActualizationState(): ActualizationState {
     dealerActualizationAuditByDealerId: {},
     dealerPhotosByDealerId: {},
     tradePointPhotosByTradePointId: {},
+    trashedDealersById: {},
+    trashedTradePointsById: {},
   };
 }
 
@@ -323,5 +388,11 @@ export function mergeActualizationState(base: ActualizationState, patch: Partial
       ...base.tradePointPhotosByTradePointId,
       ...(patch.tradePointPhotosByTradePointId ?? {}),
     },
+    /**
+     * Полная замена — иначе удаление ключа (восстановление из корзины) не сработает.
+     * Симметрично archivedDealersById.
+     */
+    trashedDealersById: patch.trashedDealersById ?? base.trashedDealersById,
+    trashedTradePointsById: patch.trashedTradePointsById ?? base.trashedTradePointsById,
   };
 }

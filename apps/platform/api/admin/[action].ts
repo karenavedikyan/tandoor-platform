@@ -2031,6 +2031,71 @@ function scopeUserId(scopeKey: string): string | null {
   return scopeKey.startsWith("user:") ? scopeKey.slice("user:".length) : null;
 }
 
+/**
+ * Промт 45 F1. Диагностика actualization state по `dealerId`: возвращает все scope-ы,
+ * где этот dealerId встречается в `archivedDealersById | manuallyCreatedDealersById |
+ * dealerOverridesById | trashedDealersById`. Доступ — только admin / director.
+ */
+async function handleActualizationStateTrace(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  headers: Record<string, string | string[] | undefined>,
+): Promise<void> {
+  const me = await resolveCurrentUser(pool, headers);
+  if (!me) {
+    sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+    return;
+  }
+  if ((me.role !== "admin" && me.role !== "director") || me.status !== "active") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Доступ только для admin / director." });
+    return;
+  }
+  const dealerId = queryStringParam(req, "dealerId");
+  if (!dealerId) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите dealerId." });
+    return;
+  }
+  const rows = await pool.query<ActualizationDebugStateRow>(
+    `SELECT scope_key, user_id, role, state, updated_at
+       FROM client_base_actualization_state
+      WHERE scope_key LIKE 'user:%'
+      ORDER BY updated_at DESC`,
+  );
+  const occurrences: Array<Record<string, unknown>> = [];
+  for (const row of rows.rows) {
+    const st = coerceActualizationState(row.state);
+    const archived = stateRecord(st.archivedDealersById)[dealerId];
+    const manual = stateRecord(st.manuallyCreatedDealersById)[dealerId];
+    const override = stateRecord(st.dealerOverridesById)[dealerId];
+    const trashed = stateRecord(st.trashedDealersById)[dealerId];
+    if (!archived && !manual && !override && !trashed) continue;
+    const archivedRec = stateRecord(archived);
+    const trashedRec = stateRecord(trashed);
+    occurrences.push({
+      scopeKey: row.scope_key,
+      userId: row.user_id,
+      role: row.role,
+      stateUpdatedAt:
+        row.updated_at instanceof Date
+          ? row.updated_at.toISOString()
+          : typeof row.updated_at === "string"
+            ? row.updated_at
+            : null,
+      isArchived: Boolean(archived),
+      archivedAt: stateString(archivedRec.archivedAt) || null,
+      archivedBy: stateString(archivedRec.archivedBy) || null,
+      isTrashed: Boolean(trashed),
+      trashedAt: stateString(trashedRec.trashedAt) || null,
+      trashedBy: stateString(trashedRec.trashedBy) || null,
+      expiresAt: stateString(trashedRec.expiresAt) || null,
+      isManuallyCreated: Boolean(manual),
+      hasOverride: Boolean(override),
+    });
+  }
+  sendJson(res, 200, { success: true, dealerId, occurrences });
+}
+
 async function handleActualizationDebugState(
   req: VercelRequest,
   res: VercelResponse,
@@ -4396,6 +4461,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "actualization-debug-state" && req.method === "GET") {
       await handleActualizationDebugState(req, res, pool, headers);
+      return;
+    }
+    if (action === "actualization-state-trace" && req.method === "GET") {
+      await handleActualizationStateTrace(req, res, pool, headers);
       return;
     }
     if (action === "actualization-dedupe-dry-run" && req.method === "POST") {

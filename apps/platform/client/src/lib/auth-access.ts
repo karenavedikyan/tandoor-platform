@@ -177,6 +177,7 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
       (x) => isUnder(x, "/catalog"),
       (x) => isUnder(x, "/training"),
       (x) => isUnder(x, "/marketing-briefs"),
+      (x) => x === "/trash",
       (x) =>
         x === "/sales-control" ||
         isUnder(x, "/sales-control/manager") ||
@@ -202,6 +203,7 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
       (x) => isUnder(x, "/training"),
       (x) => isUnder(x, "/marketing-briefs"),
       (x) => isUnder(x, "/communications"),
+      (x) => x === "/trash",
       (x) => x === "/feature-in-development" || isUnder(x, "/feature-in-development"),
       (x) =>
         x === "/sales-control" ||
@@ -228,6 +230,7 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
       (x) => isUnder(x, "/training"),
       (x) => isUnder(x, "/marketing-briefs"),
       (x) => isUnder(x, "/communications"),
+      (x) => x === "/trash",
       (x) => x === "/feature-in-development" || isUnder(x, "/feature-in-development"),
       (x) =>
         x === "/sales-control" ||
@@ -430,6 +433,12 @@ export function getPilotNavigation(
         testId: "nav-item-sales-plan-fact",
         navBehaviorId: "nav-sales-control",
       },
+      {
+        href: "/trash",
+        label: "Корзина",
+        testId: "nav-item-trash",
+        navBehaviorId: "nav-trash",
+      },
     ],
   });
 
@@ -455,6 +464,7 @@ export function getPilotNavigation(
       push({ href: "/training", label: "Обучение", testId: "nav-training" });
       push({ href: sch, label: "План-факт продаж", testId: "nav-sales-control" });
       push({ href: "/marketing-briefs", label: "Маркетинговые брифы", testId: "nav-marketing-briefs" });
+      push({ href: "/trash", label: "Корзина", testId: "nav-trash" });
       return items;
     }
     if (role === "marketer") {

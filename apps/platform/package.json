@@ -20,7 +20,11 @@
     "release:geocode": "node scripts/geocode-release-client-addresses.mjs",
     "db:push": "drizzle-kit push",
     "test:auth-access": "tsx client/src/lib/__tests__/auth-access.test.ts",
-    "test:auth-e2e": "tsx scripts/auth-e2e-smoke.ts"
+    "test:auth-e2e": "tsx scripts/auth-e2e-smoke.ts",
+    "test:trash-protection": "tsx client/src/lib/__tests__/trash-protection.test.ts",
+    "test:trash-purge": "tsx client/src/lib/__tests__/trash-purge.test.ts",
+    "test:trash-merge": "tsx client/src/lib/__tests__/trash-merge.test.ts",
+    "test:trash": "npm run test:trash-protection && npm run test:trash-purge && npm run test:trash-merge"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

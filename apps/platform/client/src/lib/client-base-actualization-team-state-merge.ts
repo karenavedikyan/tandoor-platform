@@ -20,6 +20,8 @@ import {
   type ManualTradePoint,
   type TradePointActualizationOverride,
   type TradePointShowcaseActualization,
+  type TrashedDealerInfo,
+  type TrashedTradePointInfo,
 } from "@/lib/client-base-actualization-state";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import {
@@ -108,6 +110,14 @@ function pickNewerArchiveDealer(a: ArchivedDealerInfo, b: ArchivedDealerInfo): A
 
 function pickNewerArchiveTp(a: ArchivedTradePointInfo, b: ArchivedTradePointInfo): ArchivedTradePointInfo {
   return isoMs(a.archivedAt) >= isoMs(b.archivedAt) ? a : b;
+}
+
+function pickNewerTrashedDealer(a: TrashedDealerInfo, b: TrashedDealerInfo): TrashedDealerInfo {
+  return isoMs(a.trashedAt) >= isoMs(b.trashedAt) ? a : b;
+}
+
+function pickNewerTrashedTp(a: TrashedTradePointInfo, b: TrashedTradePointInfo): TrashedTradePointInfo {
+  return isoMs(a.trashedAt) >= isoMs(b.trashedAt) ? a : b;
 }
 
 function pickNewerArchiveLegal(a: ArchivedLegalEntityInfo, b: ArchivedLegalEntityInfo): ArchivedLegalEntityInfo {
@@ -250,6 +260,8 @@ export function mergeActualizationStatesForActivityDashboard(sources: { userId: 
       dealerCardViewSettingsByUserId: { ...out.dealerCardViewSettingsByUserId, ...state.dealerCardViewSettingsByUserId },
       unloadingOrderByDealerId: { ...out.unloadingOrderByDealerId, ...state.unloadingOrderByDealerId },
       routeOrderByRouteId: { ...out.routeOrderByRouteId, ...state.routeOrderByRouteId },
+      trashedDealersById: mergeRecMap(out.trashedDealersById, state.trashedDealersById ?? {}, pickNewerTrashedDealer),
+      trashedTradePointsById: mergeRecMap(out.trashedTradePointsById, state.trashedTradePointsById ?? {}, pickNewerTrashedTp),
     };
   }
 

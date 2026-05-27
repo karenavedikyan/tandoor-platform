@@ -69,7 +69,19 @@ function parseApiEnvelope(j: Record<string, unknown>): ActualizationApiMeta {
 
 type CacheRow = { userId: string; state: ActualizationState; updatedAt: string | null };
 type ActualizationAuthUser = { id: string; role: string };
-type QueuedActualizationSave = { userId: string; role: string | undefined; state: ActualizationState };
+
+/** Опциональная директива «явное восстановление/окончательное удаление» для корзины (Промт 45 B1). */
+export type ActualizationUnTrashDirective = {
+  dealers?: string[];
+  tradePoints?: string[];
+};
+
+type QueuedActualizationSave = {
+  userId: string;
+  role: string | undefined;
+  state: ActualizationState;
+  unTrash?: ActualizationUnTrashDirective;
+};
 
 let authUserCache: { value: ActualizationAuthUser | null; expiresAt: number } | null = null;
 let queuedSave: QueuedActualizationSave | null = null;
@@ -158,12 +170,20 @@ async function postActualizationStateOnce(
   userId: string,
   role: string | undefined,
   state: ActualizationState,
+  unTrash?: ActualizationUnTrashDirective,
 ): Promise<ActualizationLoadResult> {
+  const payload: Record<string, unknown> = { userId, state };
+  if (unTrash && (unTrash.dealers?.length || unTrash.tradePoints?.length)) {
+    payload.unTrash = {
+      dealers: unTrash.dealers ?? [],
+      tradePoints: unTrash.tradePoints ?? [],
+    };
+  }
   const res = await fetch("/api/actualization/state", {
     method: "POST",
     headers: { ...demoHeaders(userId, role), "Content-Type": "application/json" },
     credentials: "same-origin",
-    body: JSON.stringify({ userId, state }),
+    body: JSON.stringify(payload),
   });
   const text = await res.text();
   const json = JSON.parse(text) as Record<string, unknown>;
@@ -183,11 +203,12 @@ async function postActualizationStateWithRetry(
   userId: string,
   role: string | undefined,
   state: ActualizationState,
+  unTrash?: ActualizationUnTrashDirective,
 ): Promise<ActualizationLoadResult> {
   let lastError = "Сетевая ошибка";
   for (let attempt = 0; attempt < 4; attempt++) {
     try {
-      const result = await postActualizationStateOnce(userId, role, state);
+      const result = await postActualizationStateOnce(userId, role, state, unTrash);
       if (result.syncStatus === "api_ok" && result.meta.success) return result;
       lastError = result.errorMessage ?? result.meta.message ?? "Сервер вернул ошибку при сохранении состояния актуализации.";
     } catch (e) {
@@ -206,7 +227,7 @@ function ensureOnlineFlushListener(): void {
     if (!q) return;
     queuedSave = null;
     markActualizationSaveStarted({ incrementPending: false });
-    void postActualizationStateWithRetry(q.userId, q.role, q.state)
+    void postActualizationStateWithRetry(q.userId, q.role, q.state, q.unTrash)
       .then((result) => {
         if (result.syncStatus === "api_ok" && result.meta.success) {
           writeLocalCache({ userId: q.userId, state: result.meta.state, updatedAt: result.meta.updatedAt });
@@ -321,6 +342,7 @@ export async function loadActualizationState(profile: ReleaseDemoProfile): Promi
 export async function saveActualizationState(
   profile: ReleaseDemoProfile,
   state: ActualizationState,
+  extra?: { unTrash?: ActualizationUnTrashDirective },
 ): Promise<ActualizationLoadResult> {
   const auth = await getCachedAuthUser();
   const userId = auth?.id ?? profile.personaUserId.trim();
@@ -330,16 +352,17 @@ export async function saveActualizationState(
     version: ACTUALIZATION_STATE_VERSION,
     updatedBy: userId,
   };
+  const unTrash = extra?.unTrash;
   ensureOnlineFlushListener();
   markActualizationSaveStarted();
   try {
-    const result = await postActualizationStateWithRetry(userId, role, next);
+    const result = await postActualizationStateWithRetry(userId, role, next, unTrash);
     writeLocalCache({ userId, state: result.meta.state, updatedAt: result.meta.updatedAt });
     markActualizationSaveSucceeded(result.meta.updatedAt);
     return result;
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : "Сетевая ошибка";
-    queuedSave = { userId, role, state: next };
+    queuedSave = { userId, role, state: next, unTrash };
     markActualizationSaveFailed(errorMessage, { offline: typeof navigator !== "undefined" && !navigator.onLine });
     writeLocalCache({ userId, state: next, updatedAt: new Date().toISOString() });
     return {

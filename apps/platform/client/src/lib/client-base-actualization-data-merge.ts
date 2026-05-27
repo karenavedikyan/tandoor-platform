@@ -647,21 +647,30 @@ export type BuildDealerBaseRowsOptions = {
    * `false` / не задано — рабочая база: архивные клиенты **скрыты**.
    */
   includeArchivedDealers?: boolean;
+  /**
+   * `true` — режим «Корзина» в клиентской базе: в списке **только** клиенты из
+   * `trashedDealersById`. По умолчанию (Промт 45) корзинные клиенты НЕ видны
+   * ни в рабочем, ни в архивном списке — корзина живёт на отдельной странице.
+   */
+  includeTrashedDealers?: boolean;
   /** Подмена статического `DEALER_BASE_ROWS` (например, после фильтра по видимым кодам из БД). */
   releaseDealerRows?: DealerRow[];
 };
 
-/** Строки для клиентской базы: manual сверху, затем release с merge. По умолчанию только рабочие (не архив). */
+/** Строки для клиентской базы: manual сверху, затем release с merge. По умолчанию только рабочие (не архив, не корзина). */
 export function buildDealerBaseRowsWithActualization(
   act: ActualizationState,
   profile: ReleaseDemoProfile,
   opts?: BuildDealerBaseRowsOptions,
 ): DealerRow[] {
   const archivedListMode = opts?.includeArchivedDealers === true;
+  const trashedListMode = opts?.includeTrashedDealers === true;
   const includeId = (id: string) => {
     const isArchived = Boolean(act.archivedDealersById[id]);
-    if (archivedListMode) return isArchived;
-    return !isArchived;
+    const isTrashed = Boolean(act.trashedDealersById?.[id]);
+    if (trashedListMode) return isTrashed;
+    if (archivedListMode) return isArchived && !isTrashed;
+    return !isArchived && !isTrashed;
   };
 
   const mapBuilt = (baseRow: DealerRow): DealerRow => {

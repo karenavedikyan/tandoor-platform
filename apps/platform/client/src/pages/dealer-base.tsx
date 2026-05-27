@@ -110,7 +110,7 @@ import {
   canCreateDealerDuringActualization,
 } from "@/lib/client-base-actualization-permissions";
 import { isManualActualizationDealerId } from "@/lib/client-base-actualization-stable-ids";
-import { mergeActualizationState } from "@/lib/client-base-actualization-state";
+import { mergeActualizationState, computeTrashExpiresAt, type TrashedDealerInfo } from "@/lib/client-base-actualization-state";
 import { mergeTradePointsForActualization } from "@/lib/client-base-actualization-data-merge";
 import { getManualDealerDisplayCode } from "@/lib/client-base-actualization-stable-ids";
 import { countShowcaseMatrixDeficitForDealer } from "@/lib/trade-point-list-for-actualization";
@@ -2223,10 +2223,18 @@ export default function DealerBase() {
     const s = new Set<string>();
     for (const r of rowsFinalForList) {
       if (teamActualizationPlane.archivedDealersById[r.id]) continue;
+      if (teamActualizationPlane.trashedDealersById?.[r.id]) continue;
       if (canArchiveDealerDuringActualization(profile, r)) s.add(r.id);
     }
     return s;
-  }, [actx.enabled, teamActualizationPlane.archivedDealersById, profile, rowsFinalForList, showArchivedDealers]);
+  }, [
+    actx.enabled,
+    teamActualizationPlane.archivedDealersById,
+    teamActualizationPlane.trashedDealersById,
+    profile,
+    rowsFinalForList,
+    showArchivedDealers,
+  ]);
 
   useEffect(() => {
     setSelectedBulkArchiveDealerIds((prev) => {
@@ -2290,6 +2298,11 @@ export default function DealerBase() {
     return n;
   }, [selectedBulkArchiveDealerIds, archivableDealerIdsInView]);
 
+  /**
+   * Промт 45: bulk-delete теперь шлёт клиентов в КОРЗИНУ (`trashedDealersById`), а не в архив.
+   * Корзина живёт 14 дней, восстановление — на странице /trash. Снапшоты ключевых полей
+   * сохраняем, чтобы карточка корзины оставалась читаемой даже если оригинал стёрся.
+   */
   const confirmBulkArchiveDealers = useCallback(async () => {
     const ids = Array.from(selectedBulkArchiveDealerIds).filter((id) => archivableDealerIdsInView.has(id));
     if (ids.length === 0) {
@@ -2298,32 +2311,58 @@ export default function DealerBase() {
     }
     setBulkArchiveDealerBusy(true);
     const now = new Date().toISOString();
+    const expiresAt = computeTrashExpiresAt(now);
     const uid = profile.personaUserId;
     const uname = userLabelFromProfile(profile);
+    const rowById = new Map<string, DealerRow>(rowsFinalForList.map((r) => [r.id, r]));
+    const snapshotFor = (id: string): TrashedDealerInfo["snapshot"] => {
+      const row = rowById.get(id);
+      const manual = actx.state.manuallyCreatedDealersById?.[id];
+      const manualFields = (manual?.fields ?? {}) as Record<string, unknown>;
+      const fullName = row?.name ?? (typeof manualFields.name === "string" ? (manualFields.name as string) : null);
+      const city = row?.city ?? (typeof manualFields.city === "string" ? (manualFields.city as string) : null);
+      const inn = row?.actualizationInn ?? (typeof manualFields.inn === "string" ? (manualFields.inn as string) : null);
+      const dealerCode = row?.releaseCode ?? manual?.internalCode ?? null;
+      const legalEntityName = (() => {
+        const le = actx.state.legalEntityOverridesByDealerId?.[id];
+        if (!le) return null;
+        const ov = le.overridesById as Record<string, unknown> | undefined;
+        if (!ov) return null;
+        const first = Object.values(ov)[0];
+        if (first && typeof first === "object" && first !== null) {
+          const f = first as Record<string, unknown>;
+          if (typeof f.name === "string") return f.name as string;
+          if (typeof f.fullName === "string") return f.fullName as string;
+        }
+        return null;
+      })();
+      return { fullName, city, inn, dealerCode, legalEntityName };
+    };
     const r = await actx.persist((prev) => {
-      const nextArch = { ...prev.archivedDealersById };
+      const nextTrash = { ...prev.trashedDealersById };
       for (const id of ids) {
-        const source = isManualActualizationDealerId(id) ? ("manual_actualization" as const) : ("client_soft_archive" as const);
-        nextArch[id] = {
+        nextTrash[id] = {
           dealerId: id,
-          archivedAt: now,
-          archivedBy: uid,
-          archivedByName: uname,
-          source,
+          trashedAt: now,
+          trashedBy: uid,
+          trashedByName: uname,
+          expiresAt,
+          source: "client_bulk_delete",
+          snapshot: snapshotFor(id),
         };
       }
-      return mergeActualizationState(prev, { archivedDealersById: nextArch });
+      return mergeActualizationState(prev, { trashedDealersById: nextTrash });
     });
     setBulkArchiveDealerBusy(false);
     if (r.success) {
-      toast({ title: "Клиенты удалены из рабочей базы" });
+      toast({ title: "Клиенты перенесены в корзину", description: "Хранятся 14 дней. Восстановить можно из раздела «Корзина»." });
       setSelectedBulkArchiveDealerIds(new Set());
       setBulkDeleteMode(false);
       setBulkArchiveDealerDialogOpen(false);
     } else {
       toast({ title: "Не удалось сохранить", variant: "destructive" });
     }
-  }, [selectedBulkArchiveDealerIds, archivableDealerIdsInView, actx, profile]);
+  }, [selectedBulkArchiveDealerIds, archivableDealerIdsInView, actx, profile, rowsFinalForList]);
 
   const selectedWpRows = useMemo(
     () => rowsFinalForList.filter((r) => selectedWpIds.has(r.id)),
@@ -3622,9 +3661,9 @@ export default function DealerBase() {
       >
         <AlertDialogContent data-testid="dialog-dealer-bulk-archive-confirm">
           <AlertDialogHeader>
-            <AlertDialogTitle>Удалить выбранных клиентов?</AlertDialogTitle>
+            <AlertDialogTitle>Переместить в корзину?</AlertDialogTitle>
             <AlertDialogDescription>
-              Клиенты будут скрыты из рабочей базы. Данные не удаляются физически, их можно восстановить из архива.
+              Клиенты будут храниться 14 дней в корзине, после чего удаляются окончательно. Восстановить можно из раздела «Корзина».
               <span className="mt-2 block font-medium text-foreground">Выбрано клиентов: {bulkArchiveDealerDialogCount}</span>
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -3647,7 +3686,7 @@ export default function DealerBase() {
               disabled={bulkArchiveDealerBusy || bulkArchiveDealerDialogCount === 0}
               onClick={() => void confirmBulkArchiveDealers()}
             >
-              {bulkArchiveDealerBusy ? "Сохранение…" : "Удалить / в архив"}
+              {bulkArchiveDealerBusy ? "Сохранение…" : "Переместить в корзину"}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
