@@ -3518,7 +3518,10 @@ export default function DealerBase() {
                   {g.rows.slice(0, 40).map((row) => (
                     <div
                       key={row.id}
-                      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 px-3 py-2 text-sm"
+                      className={cn(
+                        "flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 px-3 py-2 text-sm",
+                        archivedEntityRowClassName(isDealerArchivedInActualization(row.id, teamActualizationPlane)),
+                      )}
                       data-testid={`row-dealer-${row.id}`}
                     >
                       <span className="min-w-0 font-medium">{row.name}</span>
