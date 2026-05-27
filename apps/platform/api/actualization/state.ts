@@ -64,6 +64,7 @@ function emptyState(): Record<string, unknown> {
     updatedBy: null,
     dealerOverridesById: {},
     manuallyCreatedDealersById: {},
+    archivedDealersById: {},
     tradePointOverridesById: {},
     manuallyCreatedTradePointsById: {},
     archivedTradePointsById: {},
@@ -76,6 +77,9 @@ function emptyState(): Record<string, unknown> {
     routeOrderByRouteId: {},
     dealerPhotosByDealerId: {},
     tradePointPhotosByTradePointId: {},
+    // Корзина — отдельная сущность от архива. Хранится 14 дней, чистится cron'ом.
+    trashedDealersById: {},
+    trashedTradePointsById: {},
   };
 }
 
