@@ -5,6 +5,7 @@
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
+import { Trash2 } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import {
@@ -45,6 +46,7 @@ import {
   type ActualizationState,
   type DealerActualizationContact,
 } from "@/lib/client-base-actualization-state";
+import { makeTrashedDealerInfo, snapshotDealerFromRow } from "@/lib/trash-dealer-helper";
 import { computePortalSummary } from "@/lib/client-base-actualization-portal-math";
 import {
   getPrimaryActualizationContact,
@@ -254,34 +256,40 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
   const canEdit = canEditDealerDuringActualization(profile, row);
   const canArchive = canArchiveDealerDuringActualization(profile, row);
   const isDealerArchived = Boolean(actx.state.archivedDealersById[baseRow.id]);
-  const canArchiveToWorkingList = canArchive && !isDealerArchived;
+  const isDealerTrashed = Boolean(actx.state.trashedDealersById?.[baseRow.id]);
+  /** Промт 46: «Удалить» с этой страницы тоже идёт в Корзину. */
+  const canTrash = canArchive && !isDealerArchived && !isDealerTrashed;
+  const canArchiveToWorkingList = canTrash;
 
   const softArchive = useCallback(async () => {
-    if (!canArchiveToWorkingList) return;
+    if (!canTrash) return;
     setBusy(true);
+    const info = makeTrashedDealerInfo({
+      dealerId: baseRow.id,
+      by: { userId: profile.personaUserId, userName: userLabelFromProfile(profile) },
+      snapshot: snapshotDealerFromRow({
+        fullName: row.name,
+        city: row.city,
+        inn: row.actualizationInn,
+        dealerCode: row.releaseCode,
+        legalEntityName: null,
+      }),
+      source: "manual_actualization",
+    });
     const r = await actx.persist((prev) =>
       mergeActualizationState(prev, {
-        archivedDealersById: {
-          ...prev.archivedDealersById,
-          [baseRow.id]: {
-            dealerId: baseRow.id,
-            archivedAt: new Date().toISOString(),
-            archivedBy: profile.personaUserId,
-            archivedByName: userLabelFromProfile(profile),
-            source: "manual_actualization",
-          },
-        },
+        trashedDealersById: { ...prev.trashedDealersById, [baseRow.id]: info },
       }),
     );
     setBusy(false);
     if (r.success) {
-      toast({ title: "Клиент удалён из рабочей базы" });
+      toast({ title: "Клиент перемещён в корзину", description: "Хранится 14 дней. Восстановить можно из раздела «Корзина»." });
       setDeleteOpen(false);
       setLocation("/dealer-base");
     } else {
-      toast({ title: "Не удалось сохранить", variant: "destructive" });
+      toast({ title: "Не удалось переместить в корзину", variant: "destructive" });
     }
-  }, [actx, baseRow.id, canArchiveToWorkingList, profile, setLocation]);
+  }, [actx, baseRow.id, canTrash, profile, row, setLocation]);
 
   const tps = useMemo(() => mergeTradePointsActiveForActualization(row, actx.state), [row, actx.state]);
 
@@ -462,11 +470,12 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
                 type="button"
                 variant="outline"
                 size="sm"
-                className="h-8 border-border bg-card px-3 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                className="h-8 gap-1.5 border-destructive/40 bg-card px-3 text-xs font-medium text-destructive hover:bg-destructive/10"
                 data-testid={`button-dealer-delete-${baseRow.id}`}
                 onClick={() => setDeleteOpen(true)}
               >
-                Удалить клиента
+                <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                Удалить
               </Button>
             ) : null}
           </div>
@@ -731,19 +740,25 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent data-testid="dialog-dealer-delete-confirm">
           <AlertDialogHeader>
-            <AlertDialogTitle>Удалить клиента?</AlertDialogTitle>
-            <AlertDialogDescription className="space-y-2 text-sm">
-              <p>Клиент будет скрыт из рабочей клиентской базы и не будет отображаться в списке по умолчанию.</p>
-              <p>Данные не удаляются физически: анкета актуализации, контакты и торговые точки остаются в сохранённом состоянии.</p>
-              <p>Восстановить клиента можно кнопкой «Восстановить клиента» на карточке, через режим «Показать архив» в клиентской базе или по прямой ссылке.</p>
+            <AlertDialogTitle>Переместить клиента в корзину?</AlertDialogTitle>
+            <AlertDialogDescription className="text-sm">
+              Клиент будет храниться в корзине 14 дней. Восстановить можно в любой момент на странице «Корзина». Через 14 дней удалится окончательно.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
             <Button type="button" variant="outline" data-testid="button-dealer-delete-cancel" disabled={busy} onClick={() => setDeleteOpen(false)}>
               Отмена
             </Button>
-            <Button type="button" variant="destructive" data-testid="button-dealer-delete-confirm" disabled={busy} onClick={() => void softArchive()}>
-              {busy ? "Сохранение…" : "Удалить клиента"}
+            <Button
+              type="button"
+              variant="destructive"
+              className="gap-1.5"
+              data-testid="button-dealer-delete-confirm"
+              disabled={busy}
+              onClick={() => void softArchive()}
+            >
+              <Trash2 className="h-4 w-4" aria-hidden />
+              {busy ? "Перемещение…" : "Переместить в корзину"}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
