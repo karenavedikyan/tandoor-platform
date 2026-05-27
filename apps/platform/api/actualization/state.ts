@@ -14,7 +14,7 @@
  * (объединение в одну serverless-функцию ради лимита Hobby 12 функций).
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { applyTrashProtection, type UnTrashDirective } from "../../shared/actualization-trash.js";
+import { applyTrashProtection, purgeExpiredTrash, type UnTrashDirective } from "../../shared/actualization-trash.js";
 
 const JSON_CT = "application/json; charset=utf-8";
 const MAX_BODY_CHARS = 400_000;
@@ -253,6 +253,121 @@ function isSalesPlanFactRequest(req: VercelRequest): boolean {
   const h = req.headers["x-tandoor-api-route"];
   const v = Array.isArray(h) ? h[0] : h;
   return typeof v === "string" && v.trim() === "sales-plan-fact";
+}
+
+function isPurgeTrashRequest(req: VercelRequest): boolean {
+  const url = typeof req.url === "string" ? req.url : "";
+  if (url.includes("/cron/purge-trash") || url.includes("purge-trash")) {
+    const q = req.query?._route;
+    const qv = typeof q === "string" ? q : Array.isArray(q) ? q[0] : "";
+    if (typeof qv === "string" && qv.trim() === "purge-trash") return true;
+  }
+  const q = req.query?._route;
+  const qv = typeof q === "string" ? q : Array.isArray(q) ? q[0] : "";
+  if (typeof qv === "string" && qv.trim() === "purge-trash") return true;
+  const h = req.headers["x-tandoor-api-route"];
+  const v = Array.isArray(h) ? h[0] : h;
+  return typeof v === "string" && v.trim() === "purge-trash";
+}
+
+function isCronAuthorized(req: VercelRequest): boolean {
+  // Vercel cron автоматически шлёт заголовок x-vercel-cron: 1.
+  const cronH = req.headers["x-vercel-cron"];
+  const cronV = Array.isArray(cronH) ? cronH[0] : cronH;
+  if (typeof cronV === "string" && cronV.trim() === "1") return true;
+
+  // Если задана env CRON_SECRET — также принимаем Authorization: Bearer <secret>.
+  const secret = process.env.CRON_SECRET?.trim();
+  if (secret) {
+    const auth = req.headers["authorization"];
+    const av = Array.isArray(auth) ? auth[0] : auth;
+    if (typeof av === "string" && av.trim() === `Bearer ${secret}`) return true;
+  }
+  return false;
+}
+
+async function purgeTrashHandler(req: VercelRequest, res: VercelResponse): Promise<void> {
+  // Поддерживаем POST и GET — Vercel cron шлёт GET с x-vercel-cron: 1.
+  if (req.method !== "POST" && req.method !== "GET") {
+    sendJson(res, 405, { success: false, message: "Метод не поддерживается. Используйте POST или GET." });
+    return;
+  }
+  if (!isCronAuthorized(req)) {
+    sendJson(res, 401, { success: false, code: "UNAUTHORIZED", message: "Требуется заголовок x-vercel-cron или Bearer CRON_SECRET." });
+    return;
+  }
+
+  const dbUrl = resolvePostgresUrl();
+  const t0 = Date.now();
+  if (!dbUrl) {
+    sendJson(res, 200, {
+      success: true,
+      scannedScopes: 0,
+      purgedDealers: 0,
+      purgedTradePoints: 0,
+      durationMs: Date.now() - t0,
+      note: "no_db",
+    });
+    return;
+  }
+
+  try {
+    const sql = await createSqlExecutor(dbUrl);
+    const rows = await sql`
+      SELECT scope_key, state
+      FROM client_base_actualization_state
+    `;
+    const now = Date.now();
+    let scannedScopes = 0;
+    let purgedDealers = 0;
+    let purgedTradePoints = 0;
+
+    for (const row of rows) {
+      scannedScopes += 1;
+      const stateRaw = row.state;
+      if (!isPlainObject(stateRaw)) continue;
+      const stateCopy: Record<string, unknown> = { ...stateRaw };
+      const r = purgeExpiredTrash(stateCopy, now);
+      if (r.changed) {
+        purgedDealers += r.purgedDealers;
+        purgedTradePoints += r.purgedTradePoints;
+        const updated = JSON.stringify(stateCopy);
+        await sql`
+          UPDATE client_base_actualization_state
+          SET state = ${updated}::jsonb,
+              updated_at = now()
+          WHERE scope_key = ${String(row.scope_key)}
+        `;
+      }
+    }
+
+    const durationMs = Date.now() - t0;
+    console.warn(
+      "[actualization-api] purge-trash scanned=" +
+        scannedScopes +
+        " purged_dealers=" +
+        purgedDealers +
+        " purged_tps=" +
+        purgedTradePoints +
+        " ms=" +
+        durationMs,
+    );
+    sendJson(res, 200, {
+      success: true,
+      scannedScopes,
+      purgedDealers,
+      purgedTradePoints,
+      durationMs,
+    });
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    console.error("[actualization-api] purge-trash error", m.slice(0, 200));
+    sendJson(res, 500, {
+      success: false,
+      code: "PURGE_TRASH_ERROR",
+      message: "Ошибка при очистке корзины: " + m.slice(0, 200),
+    });
+  }
 }
 
 function isSalesPlanFactGloballyDisabled(): boolean {
@@ -506,6 +621,10 @@ async function salesPlanFactHandler(req: VercelRequest, res: VercelResponse): Pr
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
+  if (isPurgeTrashRequest(req)) {
+    await purgeTrashHandler(req, res);
+    return;
+  }
   if (isSalesPlanFactRequest(req)) {
     await salesPlanFactHandler(req, res);
     return;

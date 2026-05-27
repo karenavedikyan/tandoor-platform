@@ -10,8 +10,18 @@
       "destination": "/api/actualization/state?_route=sales-plan-fact"
     },
     {
+      "source": "/api/cron/purge-trash",
+      "destination": "/api/actualization/state?_route=purge-trash"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/purge-trash",
+      "schedule": "0 3 * * *"
     }
   ]
 }
