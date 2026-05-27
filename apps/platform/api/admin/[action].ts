@@ -4035,6 +4035,23 @@ async function handleMigrationsRun(
     );
     applied.push("client_contacts_cleanup_admin_test_event_v1");
 
+    // Промт 66.3: scope-таймлайны — тестовые события request-delete (верификация Промта 66)
+    await pool.query(
+      `DELETE FROM client_contact_events
+       WHERE client_id = 'client-ma-ma121186'
+         AND scope IS NOT NULL
+         AND body IN (
+           'Запрошено снятие контакта: Иванов Иван (главный)',
+           'Запрошено снятие контакта: Петров Пётр',
+           'Запрошено снятие контакта: Сидоров Семён',
+           'Запрошено снятие контакта: Юр.контакт 1',
+           'Запрошено снятие контакта: Кассир ТТ-1',
+           'Запрошено снятие контакта: Зам.кассир ТТ-1',
+           'Запрошено снятие контакта: Управ. ТТ-2'
+         )`,
+    );
+    applied.push("client_contacts_cleanup_admin_test_scope_events_v1");
+
     // Промт 20: impersonation
     await pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS impersonator_user_id uuid NULL REFERENCES users(id) ON DELETE SET NULL`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_sessions_impersonator ON sessions(impersonator_user_id) WHERE impersonator_user_id IS NOT NULL`);
