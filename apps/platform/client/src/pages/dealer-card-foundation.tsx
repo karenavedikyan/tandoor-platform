@@ -1,7 +1,7 @@
 import type { ComponentProps, ComponentType, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useParams } from "wouter";
-import { AlertTriangle, BookOpen, Handshake, MapPin, PieChart, TrendingUp } from "lucide-react";
+import { AlertTriangle, BookOpen, Handshake, MapPin, PieChart, Trash2, TrendingUp } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -156,6 +156,7 @@ import { isManualActualizationDealerId } from "@/lib/client-base-actualization-s
 import { CLIENT_BASE_ACTUALIZATION_CLEAN_MODE } from "@/lib/client-base-actualization-config";
 import { canActualizeClientBase, canArchiveDealerDuringActualization, canEditDealerDuringActualization } from "@/lib/client-base-actualization-permissions";
 import { mergeActualizationState } from "@/lib/client-base-actualization-state";
+import { makeTrashedDealerInfo, snapshotDealerFromRow } from "@/lib/trash-dealer-helper";
 import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actualization-sync-status";
 import { ShowcaseCoverPhotoSlot } from "@/components/showcase-cover-photo-slot";
 import { DealerActualizationEditDialog } from "@/components/client-base-actualization-dealer-forms";
@@ -849,41 +850,51 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
   );
 
   const isManualDealerRow = isManualActualizationDealerId(baseRow.id);
-  /** Release-карточка: manual-клиенты уходят на DealerManualActualizationPage, здесь всегда false. */
-  const canSoftArchiveDealer = actx.enabled && !actx.state.archivedDealersById[baseRow.id] && canArchiveDealerDuringActualization(profile, row);
+  const isDealerTrashed = Boolean(actx.state.trashedDealersById?.[baseRow.id]);
+  /**
+   * Промт 46: пользовательская кнопка «Удалить» теперь шлёт клиента в Корзину
+   * (`trashedDealersById`), а не в Архив. Архив остаётся как legacy (restore-banner ниже).
+   * Условие активации: actx включён, клиент не в архиве и не в корзине, есть права.
+   */
+  const canTrashDealer =
+    actx.enabled && !actx.state.archivedDealersById[baseRow.id] && !isDealerTrashed && canArchiveDealerDuringActualization(profile, row);
 
-  const softArchiveDealer = useCallback(async () => {
-    if (!canSoftArchiveDealer) return;
+  const trashDealer = useCallback(async () => {
+    if (!canTrashDealer) return;
     setDealerArchiveBusy(true);
-    const source = isManualDealerRow ? ("manual_actualization" as const) : ("client_soft_archive" as const);
+    const info = makeTrashedDealerInfo({
+      dealerId: baseRow.id,
+      by: { userId: profile.personaUserId, userName: userLabelFromProfile(profile) },
+      snapshot: snapshotDealerFromRow({
+        fullName: row.name,
+        city: row.city,
+        inn: row.actualizationInn,
+        dealerCode: row.releaseCode,
+        legalEntityName: null,
+      }),
+      source: isManualDealerRow ? "manual_actualization" : "client_card_delete",
+    });
     const r = await actx.persist((prev) =>
       mergeActualizationState(prev, {
-        archivedDealersById: {
-          ...prev.archivedDealersById,
-          [baseRow.id]: {
-            dealerId: baseRow.id,
-            archivedAt: new Date().toISOString(),
-            archivedBy: profile.personaUserId,
-            archivedByName: userLabelFromProfile(profile),
-            source,
-          },
-        },
+        trashedDealersById: { ...prev.trashedDealersById, [baseRow.id]: info },
       }),
     );
     setDealerArchiveBusy(false);
     if (r.success) {
-      toast({
-        title: isManualDealerRow ? "Клиент удалён из рабочей базы" : "Клиент перенесён в архив",
-      });
+      toast({ title: "Клиент перемещён в корзину", description: "Хранится 14 дней. Восстановить можно из раздела «Корзина»." });
       setDealerDeleteDialogOpen(false);
       setLocation("/dealer-base");
     } else {
       toast({
-        title: "Не удалось сохранить. Проверьте соединение и попробуйте ещё раз.",
+        title: "Не удалось переместить в корзину. Проверьте соединение и попробуйте ещё раз.",
         variant: "destructive",
       });
     }
-  }, [actx, baseRow.id, canSoftArchiveDealer, isManualDealerRow, profile, setLocation]);
+  }, [actx, baseRow.id, canTrashDealer, isManualDealerRow, profile, row, setLocation]);
+
+  // Алиас сохранён для совместимости с существующими использованиями переменной.
+  const canSoftArchiveDealer = canTrashDealer;
+  const softArchiveDealer = trashDealer;
 
   const businessCategoryLabel = getClientCategoryLabel(row.clientCategory);
   const rowView = row;
@@ -1448,14 +1459,15 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                         variant="outline"
                         size="sm"
                         className={cn(
-                          "min-h-10 w-full font-semibold sm:w-auto",
-                          "border-amber-300/80 bg-amber-50/80 text-amber-950 hover:bg-amber-100/90",
+                          "min-h-10 w-full gap-1.5 font-semibold sm:w-auto",
+                          "border-destructive/40 text-destructive hover:bg-destructive/10",
                         )}
                         data-testid={`button-dealer-delete-${baseRow.id}`}
                         disabled={dealerArchiveBusy}
                         onClick={() => setDealerDeleteDialogOpen(true)}
                       >
-                        В архив
+                        <Trash2 className="h-4 w-4" aria-hidden />
+                        Удалить
                       </Button>
                     ) : null}
                     {canActualizeClientBase(profile) ? (
@@ -2289,11 +2301,9 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
       <AlertDialog open={dealerDeleteDialogOpen} onOpenChange={setDealerDeleteDialogOpen}>
         <AlertDialogContent data-testid="dialog-dealer-delete-confirm">
           <AlertDialogHeader>
-            <AlertDialogTitle>В архив?</AlertDialogTitle>
-            <AlertDialogDescription className="space-y-2 text-sm">
-              <p>Клиент будет скрыт из рабочей клиентской базы и не будет отображаться в списке по умолчанию.</p>
-              <p>Данные не удаляются физически: карточка, контакты и актуализация сохраняются в состоянии.</p>
-              <p>При необходимости клиента можно восстановить: кнопка «Восстановить клиента» на карточке, режим «Показать архив» в клиентской базе или прямая ссылка.</p>
+            <AlertDialogTitle>Переместить клиента в корзину?</AlertDialogTitle>
+            <AlertDialogDescription className="text-sm">
+              Клиент будет храниться в корзине 14 дней. Восстановить можно в любой момент на странице «Корзина». Через 14 дней удалится окончательно.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
@@ -2309,13 +2319,14 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
             </Button>
             <Button
               type="button"
-              variant="default"
-              className="w-full font-semibold sm:w-auto"
+              variant="destructive"
+              className="w-full gap-1.5 font-semibold sm:w-auto"
               data-testid="button-dealer-delete-confirm"
               disabled={dealerArchiveBusy}
               onClick={() => void softArchiveDealer()}
             >
-              {dealerArchiveBusy ? "Сохранение…" : "В архив"}
+              <Trash2 className="h-4 w-4" aria-hidden />
+              {dealerArchiveBusy ? "Перемещение…" : "Переместить в корзину"}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -2401,6 +2412,7 @@ export function DealerCardPage() {
   }
 
   const isArchivedDealer = actx.enabled && Boolean(actx.state.archivedDealersById[id]);
+  const isTrashedDealer = actx.enabled && Boolean(actx.state.trashedDealersById?.[id]);
 
   const useCleanActualizationAnketa =
     actx.enabled &&
@@ -2415,9 +2427,33 @@ export function DealerCardPage() {
 
   return (
     <>
-      {isArchivedDealer ? <ArchivedDealerCardBanner dealerId={id} profile={profile} row={baseRow} /> : null}
+      {isTrashedDealer ? <TrashedDealerCardBanner /> : null}
+      {isArchivedDealer && !isTrashedDealer ? <ArchivedDealerCardBanner dealerId={id} profile={profile} row={baseRow} /> : null}
       {mainContent}
     </>
+  );
+}
+
+function TrashedDealerCardBanner(): React.ReactElement {
+  return (
+    <div className="border-b border-border bg-destructive/10 px-3 py-3 sm:px-4" data-testid="banner-dealer-card-trashed-region">
+      <div className="mx-auto flex max-w-5xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+        <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
+          <Badge variant="outline" className="w-fit shrink-0 border-destructive/40 text-xs font-medium text-destructive" data-testid="badge-dealer-card-trashed">
+            <Trash2 className="mr-1 h-3 w-3" aria-hidden />
+            В корзине
+          </Badge>
+          <p className="min-w-0 text-sm leading-snug text-foreground" data-testid="text-dealer-card-trashed-hint">
+            Клиент перемещён в корзину. Хранится 14 дней, восстановить можно из раздела «Корзина».
+          </p>
+        </div>
+        <Button asChild type="button" variant="outline" className="h-10 shrink-0 px-4 text-sm font-semibold sm:min-w-[12rem]">
+          <Link href={buildHashPath("/trash")} data-testid="button-dealer-card-trashed-open-trash">
+            Открыть корзину
+          </Link>
+        </Button>
+      </div>
+    </div>
   );
 }
 
