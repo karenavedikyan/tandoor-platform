@@ -9,6 +9,7 @@
  */
 import assert from "node:assert/strict";
 import { buildAssignmentsMap, getVisibleReleaseClients } from "../real-client-base";
+import { realInitialRopManagerDefaults } from "../real-org-adapter";
 import { getReleaseClients } from "../release-client-data";
 import type { OrgSnapshot } from "../use-org-snapshot";
 
@@ -23,7 +24,6 @@ const snap = {
 {
   const rows = getVisibleReleaseClients(snap, true, null, null);
   assert.ok(rows.length > 0, "должны вернуть непустой список клиентов");
-  // Берём первого клиента Кулаковой и проверяем формат id.
   const kulakova = rows.find((c) => c.managerId === "mgr-kulakova-os");
   assert.ok(kulakova, "должен найтись хотя бы один клиент с managerId='mgr-kulakova-os'");
   assert.equal(kulakova!.teamId, "team-skalaban", "teamId остаётся каталожным ключом");
@@ -48,7 +48,7 @@ const snap = {
   const fakeAssignments = buildAssignmentsMap([
     {
       code: kulakovaClient!.code,
-      responsibleUserId: "6f1ed04c-18a8-412d-a4db-efa8ed2258d6", // UUID Кулаковой из БД
+      responsibleUserId: "6f1ed04c-18a8-412d-a4db-efa8ed2258d6",
       teamId: "uuid-team-skalaban",
     },
   ]);
@@ -58,4 +58,15 @@ const snap = {
   assert.equal(after.teamId, "team-skalaban", "teamId НЕ перетёрт UUID-ом");
 }
 
-console.log("real-client-base: ok (3 cases)");
+// 4. HOTFIX 54-pre-A: sales_manager в real — picker defaults all/all (не UUID).
+{
+  const mgrSnap = {
+    me: { id: "dc958e02-d80e-4615-bb8a-8a46be70daed", role: "manager", fullName: "Скляров Д.В.", teamId: "e5387f40-c693-44e6-ab17-e61a3ed0bd95" },
+    visibility: { all: false, clientCodes: [], teamIds: [], visibleUserIds: [] },
+    teams: [],
+    users: [],
+  } as unknown as OrgSnapshot;
+  assert.deepEqual(realInitialRopManagerDefaults(mgrSnap, "sales_manager"), { ropTeam: "all", manager: "all" });
+}
+
+console.log("real-client-base: ok (4 cases)");

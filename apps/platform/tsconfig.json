@@ -10,7 +10,8 @@
     "node_modules",
     "build",
     "dist",
-    "**/*.test.ts"
+    "**/*.test.ts",
+    "scripts/test-manager-dealer-base-not-empty.ts"
   ],
   "compilerOptions": {
     "incremental": true,

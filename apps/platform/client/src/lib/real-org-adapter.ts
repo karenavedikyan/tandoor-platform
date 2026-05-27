@@ -85,15 +85,13 @@ export function realManagerOptionsForAccess(
 }
 
 export function realInitialRopManagerDefaults(
-  snap: OrgSnapshot,
+  _snap: OrgSnapshot,
   access: DealerBaseAccessRole,
 ): { ropTeam: string; manager: string } {
   if (access === "sales_director") return { ropTeam: "all", manager: "all" };
-  if (access === "team_lead") {
-    const tid = realEffectiveTeamLeadTeamId(snap);
-    return { ropTeam: tid, manager: "all" };
-  }
-  const self = snap.users.find((x) => x.id === snap.me.id);
-  const tid = self?.teamId ?? "";
-  return { ropTeam: tid, manager: snap.me.id };
+  // Real-режим: scope уже сужен в roleScopedDealerRowsForReal; picker сравнивает
+  // catalog team/mgr-id, а не UUID из org snapshot — дефолт «all», иначе 0 строк.
+  if (access === "team_lead") return { ropTeam: "all", manager: "all" };
+  if (access === "sales_manager") return { ropTeam: "all", manager: "all" };
+  return { ropTeam: "all", manager: "all" };
 }
