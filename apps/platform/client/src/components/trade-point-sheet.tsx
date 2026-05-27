@@ -9,7 +9,8 @@ import { TradePointManualActualizationView } from "@/components/trade-point-manu
 import { TradePointReadOnlyProvider } from "@/lib/trade-point-read-only-context";
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { TradePointLegalEntityLink } from "@/components/trade-point-legal-entity-link";
+import { TradePointLegalEntitiesSection } from "@/components/trade-point-legal-entities-section";
+import { canEditDealerTradePoints } from "@/lib/dealer-trade-points-overrides";
 
 export interface TradePointSheetProps {
   open: boolean;
@@ -33,6 +34,7 @@ export function TradePointSheet({
   isArchived,
 }: TradePointSheetProps): ReactNode {
   const isReadOnly = readOnly === true;
+  const canEditTp = !isReadOnly && canEditDealerTradePoints(profile, dealer);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -49,7 +51,7 @@ export function TradePointSheet({
             {isArchived ? <ArchiveInArchiveBadge size="header" testId="badge-trade-point-sheet-header-archived" /> : null}
           </div>
           <SheetDescription className="sr-only">Карточка торговой точки</SheetDescription>
-          <TradePointLegalEntityLink dealerId={dealer.id} tradePointId={point.id} />
+          <TradePointLegalEntitiesSection dealerId={dealer.id} tradePointId={point.id} canEdit={canEditTp} />
           {isReadOnly ? (
             <p className="text-xs text-muted-foreground" data-testid="text-trade-point-readonly-hint">
               Только просмотр

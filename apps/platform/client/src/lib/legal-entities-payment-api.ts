@@ -92,21 +92,34 @@ export async function deleteLegalEntity(id: string): Promise<void> {
   }
 }
 
-export type TradePointLegalEntityLink = {
-  tradePointId: string;
-  legalEntity: LegalEntityDto;
-};
-
-export async function fetchTradePointLegalEntityLink(tradePointId: string): Promise<TradePointLegalEntityLink | null> {
+export async function fetchTradePointLegalEntityLinks(tradePointId: string): Promise<LegalEntityDto[]> {
   const res = await fetch(
     `/api/legal-entities/trade-point-link?tradePointId=${encodeURIComponent(tradePointId)}`,
     { credentials: "include", cache: "no-store" },
   );
-  const data = await parseJson<ApiOk<{ link: TradePointLegalEntityLink | null }> | ApiErr>(res);
+  const data = await parseJson<ApiOk<{ tradePointId: string; items: LegalEntityDto[] }> | ApiErr>(res);
   if (!res.ok || !data.success) {
-    return null;
+    return [];
   }
-  return data.link;
+  return data.items;
+}
+
+export async function upsertTradePointLegalEntityLinks(
+  tradePointId: string,
+  clientId: string,
+  legalEntityIds: string[],
+): Promise<LegalEntityDto[]> {
+  const res = await fetch("/api/legal-entities/trade-point-link", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tradePointId, clientId, legalEntityIds }),
+  });
+  const data = await parseJson<ApiOk<{ tradePointId: string; items: LegalEntityDto[] }> | ApiErr>(res);
+  if (!res.ok || !data.success) {
+    throw new Error(!data.success ? data.message ?? "Не удалось сохранить привязки" : `HTTP ${res.status}`);
+  }
+  return data.items;
 }
 
 export const PAYMENT_FORM_OPTIONS: { value: LegalEntityPaymentForm | ""; label: string }[] = [

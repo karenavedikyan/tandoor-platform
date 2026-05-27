@@ -4,7 +4,7 @@
  *   POST /api/legal-entities/create  { clientId, ...fields }
  *   PATCH /api/legal-entities/patch?id=
  *   DELETE /api/legal-entities/delete?id=
- *   GET  /api/legal-entities/trade-point-link?tradePointId=
+ *   GET|POST /api/legal-entities/trade-point-link
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -21,6 +21,7 @@ import {
   handleLegalEntitiesList,
   handleLegalEntitiesPatch,
   handleTradePointLegalEntityLinkGet,
+  handleTradePointLegalEntityLinkUpsert,
   parseLegalEntityBodyPaymentForm,
 } from "../../shared/legal-entities-handlers.js";
 
@@ -89,6 +90,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
     if (action === "trade-point-link" && req.method === "GET") {
       await handleTradePointLegalEntityLinkGet(req, res, pool, me);
+      return;
+    }
+
+    if (action === "trade-point-link" && req.method === "POST") {
+      await handleTradePointLegalEntityLinkUpsert(req, res, pool, me);
       return;
     }
 

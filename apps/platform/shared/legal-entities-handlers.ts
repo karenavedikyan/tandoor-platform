@@ -231,6 +231,22 @@ export async function handleLegalEntitiesDelete(
   sendJson(res, 200, { success: true });
 }
 
+async function fetchLegalEntitiesForTradePoint(
+  pool: PoolLike,
+  tradePointId: string,
+): Promise<{ clientId: string | null; items: ReturnType<typeof mapLegalEntityRow>[] }> {
+  const r = await pool.query<Record<string, unknown>>(
+    `SELECT le.* FROM trade_point_legal_entity_links l
+     INNER JOIN legal_entities le ON le.id = l.legal_entity_id
+     WHERE l.trade_point_id = $1
+     ORDER BY le.name NULLS LAST, le.created_at ASC`,
+    [tradePointId],
+  );
+  const items = r.rows.map(mapLegalEntityRow);
+  const clientId = items[0]?.clientId ?? null;
+  return { clientId, items };
+}
+
 export async function handleTradePointLegalEntityLinkGet(
   req: VercelRequest,
   res: VercelResponse,
@@ -242,27 +258,75 @@ export async function handleTradePointLegalEntityLinkGet(
     sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите tradePointId." });
     return;
   }
-  const link = await pool.query<{ legal_entity_id: string | null }>(
-    `SELECT legal_entity_id FROM trade_point_legal_entity_links WHERE trade_point_id = $1 LIMIT 1`,
-    [tradePointId],
-  );
-  const leId = link.rows[0]?.legal_entity_id;
-  if (!leId) {
-    sendJson(res, 200, { success: true, link: null });
-    return;
-  }
-  const le = await pool.query<Record<string, unknown>>(`SELECT * FROM legal_entities WHERE id = $1::uuid LIMIT 1`, [leId]);
-  const row = le.rows[0];
-  if (!row) {
-    sendJson(res, 200, { success: true, link: null });
-    return;
-  }
-  const entity = mapLegalEntityRow(row);
-  if (!(await assertClientReadAccess(pool, me, entity.clientId))) {
+  const { clientId, items } = await fetchLegalEntitiesForTradePoint(pool, tradePointId);
+  if (clientId && !(await assertClientReadAccess(pool, me, clientId))) {
     sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
     return;
   }
-  sendJson(res, 200, { success: true, link: { tradePointId, legalEntity: entity } });
+  sendJson(res, 200, { success: true, tradePointId, items });
+}
+
+export async function handleTradePointLegalEntityLinkUpsert(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  me: SessionUser,
+): Promise<void> {
+  const body = (req.body ?? {}) as { tradePointId?: unknown; legalEntityIds?: unknown; clientId?: unknown };
+  const tradePointId = typeof body.tradePointId === "string" ? body.tradePointId.trim() : "";
+  if (!tradePointId || tradePointId.length > 128) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите tradePointId." });
+    return;
+  }
+  const clientId = typeof body.clientId === "string" ? sanitizeClientId(body.clientId) : null;
+  if (!clientId) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите clientId." });
+    return;
+  }
+  if (!(await assertClientWriteAccess(pool, me, clientId))) {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+
+  const rawIds = Array.isArray(body.legalEntityIds) ? body.legalEntityIds : [];
+  const legalEntityIds = rawIds
+    .filter((id): id is string => typeof id === "string" && UUID_RE.test(id.trim()))
+    .map((id) => id.trim());
+  const uniqueIds = Array.from(new Set(legalEntityIds));
+
+  if (uniqueIds.length > 0) {
+    const check = await pool.query<{ id: string; client_id: string }>(
+      `SELECT id, client_id FROM legal_entities WHERE id = ANY($1::uuid[])`,
+      [uniqueIds],
+    );
+    if (check.rows.length !== uniqueIds.length) {
+      sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Некорректный legalEntityId." });
+      return;
+    }
+    for (const row of check.rows) {
+      if (row.client_id !== clientId) {
+        sendJson(res, 400, {
+          success: false,
+          code: "VALIDATION_ERROR",
+          message: "Юрлицо принадлежит другому клиенту.",
+        });
+        return;
+      }
+    }
+  }
+
+  await pool.query(`DELETE FROM trade_point_legal_entity_links WHERE trade_point_id = $1`, [tradePointId]);
+  for (const leId of uniqueIds) {
+    await pool.query(
+      `INSERT INTO trade_point_legal_entity_links (trade_point_id, legal_entity_id, updated_at)
+       VALUES ($1, $2::uuid, NOW())
+       ON CONFLICT (trade_point_id, legal_entity_id) DO UPDATE SET updated_at = NOW()`,
+      [tradePointId, leId],
+    );
+  }
+
+  const { items } = await fetchLegalEntitiesForTradePoint(pool, tradePointId);
+  sendJson(res, 200, { success: true, tradePointId, items });
 }
 
 export function parseLegalEntityBodyPaymentForm(body: Record<string, unknown>): LegalEntityCreatePayload {
