@@ -209,6 +209,9 @@ export function buildTradePointListForActualization(
       rop,
     ]);
 
+    // Корзина: ТТ корзинного клиента или сама ТТ в корзине — не показываем (Промт 45).
+    if (act.trashedDealersById?.[dealer.id]) return;
+    if (act.trashedTradePointsById?.[tp.id]) return;
     const dealerArchived = Boolean(act.archivedDealersById[dealer.id]);
     byTradePointId.set(tp.id, {
       tradePointId: tp.id,
@@ -249,6 +252,8 @@ export function buildTradePointListForActualization(
   const collectForDealers = (dealers: DealerRow[], keepEntry: (e: MergedTradePointEntry) => boolean): void => {
     const scoped = roleScopedDealerRows(dealers, profile);
     for (const dealer of scoped) {
+      // Корзинных клиентов не показываем нигде (в рабочем и архивном списке).
+      if (act.trashedDealersById?.[dealer.id]) continue;
       if (!archivedOnly && act.archivedDealersById[dealer.id]) continue;
       const merged = mergeTradePointsForActualization(dealer, act);
       for (const entry of merged) {
