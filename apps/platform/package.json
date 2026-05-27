@@ -33,7 +33,12 @@
     "test:scope-isolation": "tsx api/actualization/__tests__/scope-isolation.test.ts",
     "test:manager-only-state": "tsx api/actualization/__tests__/manager-only-state.test.ts",
     "test:race-hooks-order": "tsx client/src/components/home/__tests__/actualization-race-hooks-order.test.ts",
-    "test:real-client-base": "tsx client/src/lib/__tests__/real-client-base.test.ts"
+    "test:real-client-base": "tsx client/src/lib/__tests__/real-client-base.test.ts",
+    "test:real-org-adapter-defaults": "tsx client/src/lib/__tests__/real-org-adapter-defaults.test.ts",
+    "test:dealer-base-picker-filters": "tsx client/src/lib/__tests__/dealer-base-picker-filters.test.ts",
+    "test:dealer-base-real-picker-hotfix": "tsx client/src/lib/__tests__/dealer-base-real-picker-hotfix.test.ts",
+    "test:dealer-base-hotfix": "npm run test:real-org-adapter-defaults && npm run test:dealer-base-picker-filters && npm run test:dealer-base-real-picker-hotfix && npm run test:real-client-base",
+    "test:manager-dealer-base-e2e": "tsx scripts/test-manager-dealer-base-not-empty.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
