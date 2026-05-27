@@ -208,3 +208,25 @@ export function clientCategoryMatchesFilter(
   if (categoryFilter === "__top_tier__") return isClientTopTier(rowCategory);
   return rowCategory === categoryFilter;
 }
+
+/**
+ * Маппинг значения Select-а «Категория (ТОП)» из паспорта клиента в `ClientCategoryId`.
+ *
+ * Допустимые значения тира: `top150 | top350 | top500 | other | none`.
+ * `other` и `none` оба → `uncategorized`, потому что в текущем UI-варианте Select-а нет
+ * варианта «ТОП-500+». Если когда-нибудь добавим — расширить маппинг здесь.
+ *
+ * Используется в:
+ *   - `client-base-actualization-dealer-forms.tsx` (create-flow и edit-flow):
+ *     при сохранении dealer override / manual записать в `fields.clientCategory`
+ *     вместе с `passportCategoryTier`, чтобы list/KPI сразу подхватили.
+ *   - `client-base-actualization-data-merge.ts`: fallback на merge, если в override
+ *     лежит только `passportCategoryTier` без `clientCategory` (старые записи).
+ */
+export function clientCategoryFromPassportTier(
+  tier: string | undefined | null,
+): ClientCategoryId {
+  const t = (tier ?? "").trim();
+  if (t === "top150" || t === "top350" || t === "top500") return t;
+  return "uncategorized";
+}

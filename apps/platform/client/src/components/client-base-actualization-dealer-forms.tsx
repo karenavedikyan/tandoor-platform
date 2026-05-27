@@ -56,7 +56,11 @@ import { toast } from "@/hooks/use-toast";
 import { useSectionSaveFeedback } from "@/hooks/use-section-save-feedback";
 import { SectionSaveButton } from "@/components/section-save-button";
 import { AddressSuggestInput } from "@/components/address-suggest-input";
-import { getClientCategoryOptions } from "@/lib/client-category";
+import {
+  clientCategoryFromPassportTier,
+  getClientCategoryLabel,
+  getClientCategoryOptions,
+} from "@/lib/client-category";
 import type { ClientCategoryId } from "@/lib/client-category";
 import {
   findInnDuplicateInActualization,
@@ -496,6 +500,10 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
     const uid = profile.personaUserId;
     const uname = userLabelFromProfile(profile);
     const uoNum = unloadingOrder.trim() ? Math.floor(Number(unloadingOrder.trim())) : NaN;
+    // Промт 48: edit-flow обязан писать clientCategory вместе с passportCategoryTier — иначе
+    // /dealer-base не переключит сегмент (getDealerBaseSegment смотрит ровно на clientCategory).
+    const clientCategory = clientCategoryFromPassportTier(passportCategoryTier);
+    const clientTypeLabel = getClientCategoryLabel(clientCategory);
     const fields: Record<string, unknown> = {
       dealerName: name.trim(),
       inn: inn.trim() || undefined,
@@ -513,6 +521,8 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
       passportClientKind,
       passportLifecycleStatus,
       passportCategoryTier,
+      clientCategory,
+      clientTypeLabel,
       territoryZone: territoryZone.trim() || undefined,
       logisticsComment: logisticsComment.trim() || undefined,
       hasDoorWarehouse: commercialTriToBoolNull(doorTri),
@@ -576,6 +586,9 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
             passportClientKind,
             passportLifecycleStatus,
             passportCategoryTier,
+            // Промт 48: симметрично с override-веткой выше — manual-dealer тоже пишет clientCategory.
+            clientCategory,
+            clientTypeLabel,
             territoryZone: territoryZone.trim(),
             logisticsComment: logisticsComment.trim(),
             unloadingOrder: Number.isFinite(uoNum) && uoNum > 0 ? uoNum : undefined,
@@ -1033,11 +1046,6 @@ export type DealerActualizationCreateDialogProps = {
 };
 
 const DEALER_STATUS_OPTIONS: DealerStatus[] = ["активный", "потенциальный", "приостановлен", "требует внимания"];
-
-function clientCategoryFromPassportTier(tier: string): ClientCategoryId {
-  if (tier === "top150" || tier === "top350" || tier === "top500") return tier;
-  return "uncategorized";
-}
 
 function dealerStatusFromPassportLifecycle(lifecycle: string): DealerStatus {
   if (lifecycle === "needs_review") return "требует внимания";

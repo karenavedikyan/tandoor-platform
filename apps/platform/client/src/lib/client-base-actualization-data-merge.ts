@@ -38,7 +38,12 @@ import {
   isManualActualizationDealerId,
 } from "@/lib/client-base-actualization-stable-ids";
 import { isLegalEntityArchivedInActualization } from "@/lib/client-base-actualization-legal-entities";
-import { normalizeClientCategory, getClientCategoryLabel } from "@/lib/client-category";
+import {
+  clientCategoryFromPassportTier,
+  getClientCategoryLabel,
+  normalizeClientCategory,
+  type ClientCategoryId,
+} from "@/lib/client-category";
 import { getDealerCoverDisplayUrls, getTradePointCoverDisplayUrls } from "@/lib/client-base-actualization-photos";
 import {
   readCommercialBoolNull,
@@ -183,12 +188,25 @@ export function mergeDealerRowWithActualization(row: DealerRow, act: Actualizati
     r = { ...r, distribution: uoNum };
   }
 
+  // Промт 48: подстраховка для исторических override-записей и любых будущих точек,
+  // где в `fields` сохранён только `passportCategoryTier` без `clientCategory`. Без этого
+  // fallback'а смена «Категория (ТОП)» в карточке клиента не переключала сегмент в /dealer-base.
   const catRaw = str(f.clientCategory);
+  const tierRaw = str(f.passportCategoryTier);
+  let effectiveCategory: ClientCategoryId | null = null;
   if (catRaw) {
-    r = { ...r, clientCategory: normalizeClientCategory(catRaw) };
+    effectiveCategory = normalizeClientCategory(catRaw);
+  } else if (tierRaw) {
+    effectiveCategory = clientCategoryFromPassportTier(tierRaw);
   }
-  const typeLbl = str(f.clientTypeLabel);
-  if (typeLbl) r = { ...r, clientTypeLabel: typeLbl };
+  if (effectiveCategory) {
+    r = { ...r, clientCategory: effectiveCategory };
+    const labelRaw = str(f.clientTypeLabel);
+    r = { ...r, clientTypeLabel: labelRaw ?? getClientCategoryLabel(effectiveCategory) };
+  } else {
+    const typeLbl = str(f.clientTypeLabel);
+    if (typeLbl) r = { ...r, clientTypeLabel: typeLbl };
+  }
 
   const stRaw = str(f.status);
   if (stRaw && ["активный", "потенциальный", "приостановлен", "требует внимания"].includes(stRaw)) {
@@ -561,7 +579,15 @@ export function manualDealerToRow(m: ManualDealer, profile: ReleaseDemoProfile):
   const routeLine = str(f.routeLabel) ? `Маршрут: ${String(f.routeLabel)}` : "";
   const nextActionFromLogistics = [shipmentDaysLine, routeLine].filter(Boolean).join(" · ") || "—";
 
-  const clientCategory = normalizeClientCategory(str(f.clientCategory));
+  // Промт 48: тот же fallback, что и в override-проходе выше — даём manual-дилеру
+  // выводить категорию из passportCategoryTier, если clientCategory в fields нет.
+  const rawCat = str(f.clientCategory);
+  const rawTier = str(f.passportCategoryTier);
+  const clientCategory = rawCat
+    ? normalizeClientCategory(rawCat)
+    : rawTier
+      ? clientCategoryFromPassportTier(rawTier)
+      : normalizeClientCategory(undefined);
   const status = parseDealerStatus(f.status);
   const typeLabel = str(f.clientTypeLabel) ?? getClientCategoryLabel(clientCategory);
 
