@@ -45,6 +45,7 @@ import type { OrgSnapshot } from "@/lib/use-org-snapshot";
 import type { DealerBaseAccessRole } from "@/lib/dealer-base-role-views";
 import { buildHashPath } from "@/lib/hash-route-utils";
 import { fetchClientBaseManagerDetail, type ClientBaseOverview } from "@/lib/client-base-overview-api";
+import { ClientAvatar } from "@/components/ui/client-avatar";
 import { DealerActualizationCreateDialog } from "@/components/client-base-actualization-dealer-forms";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
@@ -414,13 +415,21 @@ export function DealerBaseManagementCockpit({
                         <Card key={c.id} className="rounded-xl border border-border bg-card text-card-foreground">
                           <CardContent className="space-y-1 p-3">
                             <div className="flex items-start justify-between gap-2">
-                              <div className="min-w-0">
-                                <p className="truncate text-sm font-semibold text-foreground">{c.fullName}</p>
-                                <p className="text-xs text-muted-foreground">{c.city ?? "—"} · ТТ {c.tradePointsCount}</p>
-                                <p className="text-[11px] text-muted-foreground">ИНН {c.inn ?? "—"} · юрлицо {c.legalEntity ? "есть" : "—"}</p>
-                                <p className="text-[11px] text-muted-foreground">
-                                  статус: {c.status === "active" ? "активный" : c.status === "potential" ? "потенциальный" : "внимание"}
-                                </p>
+                              <div className="flex min-w-0 items-start gap-3">
+                                <ClientAvatar
+                                  name={c.fullName}
+                                  seed={c.id || c.inn || c.fullName}
+                                  size={32}
+                                  shape="circle"
+                                />
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-semibold text-foreground">{c.fullName}</p>
+                                  <p className="text-xs text-muted-foreground">{c.city ?? "—"} · ТТ {c.tradePointsCount}</p>
+                                  <p className="text-[11px] text-muted-foreground">ИНН {c.inn ?? "—"} · юрлицо {c.legalEntity ? "есть" : "—"}</p>
+                                  <p className="text-[11px] text-muted-foreground">
+                                    статус: {c.status === "active" ? "активный" : c.status === "potential" ? "потенциальный" : "внимание"}
+                                  </p>
+                                </div>
                               </div>
                               <Button asChild variant="outline" size="sm">
                                 <Link href={buildHashPath(`/dealers/${encodeURIComponent(c.dealerProfileId ?? c.id)}`)}>Карточка</Link>
