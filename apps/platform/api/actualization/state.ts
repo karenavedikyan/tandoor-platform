@@ -194,15 +194,65 @@ const MSG_FEATURE_DISABLED = "Серверное хранение актуали
 const MSG_STORAGE_ERROR =
   "Ошибка обращения к базе данных. Проверьте подключение и миграцию таблицы client_base_actualization_state.";
 
-type SqlFn = (strings: TemplateStringsArray, ...params: unknown[]) => Promise<Record<string, unknown>[]>;
+export type SqlFn = (strings: TemplateStringsArray, ...params: unknown[]) => Promise<Record<string, unknown>[]>;
 
 async function createSqlExecutor(connectionString: string): Promise<SqlFn> {
   const { neon } = await import("@neondatabase/serverless");
   return neon(connectionString);
 }
 
-async function fetchTeamScopedUserIds(sql: SqlFn, currentUserId: string, role: string | null): Promise<string[]> {
-  if (role === "admin" || role === "sales_director" || role === "marketer" || role === "analyst") {
+/**
+ * Промт 49: каноническая роль для RBAC GET /api/actualization/state.
+ *
+ * В разных слоях (client X-Tandoor-Role, sales-role, UserRole) одна и та же
+ * сущность приходит под разными именами. Нормализуем перед использованием.
+ *
+ * - admin                           → admin
+ * - director / sales_director       → director
+ * - rop / team_lead                 → rop
+ * - manager / sales_manager         → manager
+ * - analyst                          → analyst
+ * - marketer                         → marketer
+ * - "" / null / undefined / прочее  → unknown
+ */
+export type CanonicalRole =
+  | "admin"
+  | "director"
+  | "rop"
+  | "manager"
+  | "analyst"
+  | "marketer"
+  | "unknown";
+
+export function canonicalizeRole(role: string | null | undefined): CanonicalRole {
+  const r = (role ?? "").trim().toLowerCase();
+  if (!r) return "unknown";
+  if (r === "admin") return "admin";
+  if (r === "director" || r === "sales_director") return "director";
+  if (r === "rop" || r === "team_lead") return "rop";
+  if (r === "manager" || r === "sales_manager") return "manager";
+  if (r === "analyst") return "analyst";
+  if (r === "marketer") return "marketer";
+  return "unknown";
+}
+
+/**
+ * Промт 49: возвращает список userId, чьи scope-keys видны при чтении состояния.
+ *
+ * Главный фикс: `manager` БОЛЬШЕ НЕ попадает в team-ветку. Менеджер видит ровно
+ * свой scope. РОП (rop / team_lead) видит scope всех участников своей команды.
+ * Директор/админ/аналитик/маркетолог — все scope.
+ *
+ * `unknown` (роль не передана) — самый узкий scope: только current user.
+ */
+export async function fetchTeamScopedUserIds(
+  sql: SqlFn,
+  currentUserId: string,
+  role: string | null,
+): Promise<string[]> {
+  const canonical = canonicalizeRole(role);
+
+  if (canonical === "admin" || canonical === "director" || canonical === "analyst" || canonical === "marketer") {
     const rows = await sql`
       SELECT DISTINCT scope_key
       FROM client_base_actualization_state
@@ -211,7 +261,7 @@ async function fetchTeamScopedUserIds(sql: SqlFn, currentUserId: string, role: s
     return rows.map((r) => String(r.scope_key).replace(/^user:/, ""));
   }
 
-  if (role === "team_lead" || role === "manager") {
+  if (canonical === "rop") {
     const rows = await sql`
       SELECT DISTINCT m2.user_id
       FROM user_team_memberships m1
@@ -223,10 +273,15 @@ async function fetchTeamScopedUserIds(sql: SqlFn, currentUserId: string, role: s
     return ids;
   }
 
+  // manager / unknown → строго свой scope. Никакой утечки данных коллег.
   return [currentUserId];
 }
 
-async function resolveVisibleUserScopeKeys(sql: SqlFn, currentUserId: string, role: string | null): Promise<string[]> {
+export async function resolveVisibleUserScopeKeys(
+  sql: SqlFn,
+  currentUserId: string,
+  role: string | null,
+): Promise<string[]> {
   if (!role) return [`user:${currentUserId}`];
 
   try {
