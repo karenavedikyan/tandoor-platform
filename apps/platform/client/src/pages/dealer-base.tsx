@@ -98,7 +98,6 @@ import {
   type QuickFilter,
 } from "@/lib/dealer-base-picker-filters";
 import { CityConcentrationBlock } from "@/components/city-concentration-block";
-import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actualization-sync-status";
 import { DealerActualizationCreateDialog } from "@/components/client-base-actualization-dealer-forms";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
@@ -2560,12 +2559,6 @@ export default function DealerBase() {
 
       {showActualizationSync ? (
         <div className="space-y-3">
-          <ClientBaseActualizationSyncStatus
-            isLoading={actx.loading}
-            meta={actx.meta}
-            syncStatus={actx.syncStatus}
-            onRetry={() => void actx.refresh()}
-          />
           {actx.enabled && shouldUseTeamMergedActualizationPlane(profile) && teamCtx.teamFetchLoading ? (
             <Alert className="border-primary/30 bg-primary/5" data-testid="alert-dealer-base-team-state-loading">
               <Info className="h-4 w-4" />
