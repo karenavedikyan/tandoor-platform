@@ -15,6 +15,10 @@
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { applyTrashProtection, purgeExpiredTrash, type UnTrashDirective } from "../../shared/actualization-trash.js";
+import {
+  sanitizeStateForNonManagerRole,
+  shouldSanitizeStateForRole,
+} from "../../shared/admin/manager-only-state-fields.js";
 
 const JSON_CT = "application/json; charset=utf-8";
 const MAX_BODY_CHARS = 400_000;
@@ -369,7 +373,7 @@ async function purgeTrashHandler(req: VercelRequest, res: VercelResponse): Promi
   try {
     const sql = await createSqlExecutor(dbUrl);
     const rows = await sql`
-      SELECT scope_key, state
+      SELECT scope_key, state, role
       FROM client_base_actualization_state
     `;
     const now = Date.now();
@@ -381,6 +385,10 @@ async function purgeTrashHandler(req: VercelRequest, res: VercelResponse): Promi
       scannedScopes += 1;
       const stateRaw = row.state;
       if (!isPlainObject(stateRaw)) continue;
+      // Промт 50: trashedDealersById / trashedTradePointsById у не-manager scope
+      // быть не должно. Пропускаем строку — нечего чистить.
+      const rowRoleForPurge = canonicalizeRole(typeof row.role === "string" ? row.role : null);
+      if (shouldSanitizeStateForRole(rowRoleForPurge)) continue;
       const stateCopy: Record<string, unknown> = { ...stateRaw };
       const r = purgeExpiredTrash(stateCopy, now);
       if (r.changed) {
@@ -770,13 +778,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
           return;
         }
         const rows = await sql`
-          SELECT scope_key, state, updated_at
+          SELECT scope_key, state, updated_at, role
           FROM client_base_actualization_state
           WHERE scope_key = ANY(${orderedScopes})
         `;
-        const rowByScope = new Map<string, { state: unknown; updated_at: unknown }>();
+        const rowByScope = new Map<string, { state: unknown; updated_at: unknown; role: unknown }>();
         for (const r of rows) {
-          rowByScope.set(String(r.scope_key), { state: r.state, updated_at: r.updated_at });
+          rowByScope.set(String(r.scope_key), { state: r.state, updated_at: r.updated_at, role: r.role });
         }
         const orderedStates: Record<string, unknown>[] = [];
         let maxUpdatedAt: string | null = null;
@@ -787,7 +795,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
             if (sk === ownScope) orderedStates.push(emptyState());
             continue;
           }
-          orderedStates.push(coerceState(row.state));
+          // Промт 50: на читаем строку — если её роль не manager, обнуляем
+          // 14 manager-only полей перед попаданием в merge. Это страховка для
+          // строк, написанных до SQL-миграции (см. scripts/migrate-2026-05-27-manager-only-state.mjs).
+          const rowState = coerceState(row.state);
+          const rowRole = canonicalizeRole(typeof row.role === "string" ? row.role : null);
+          const safeState = shouldSanitizeStateForRole(rowRole) ? sanitizeStateForNonManagerRole(rowState) : rowState;
+          orderedStates.push(safeState);
           const iso = rowUpdatedAtIso(row.updated_at);
           if (iso) {
             if (!maxUpdatedAt || iso > maxUpdatedAt) maxUpdatedAt = iso;
@@ -838,10 +852,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       }
       const incoming = body.state ?? body.patch ?? body;
       const next = coerceState(incoming);
+
+      // Промт 50: 14 manager-only полей не должны попадать в state не-manager scope.
+      // Применяем симметрично на записи: для admin/director/rop/analyst/marketer/unknown
+      // обнуляем эти поля до того, как они пойдут в INSERT и в applyTrashProtection.
+      const canonicalForWrite = canonicalizeRole(role);
+      const writeShouldSanitize = shouldSanitizeStateForRole(canonicalForWrite);
+      const sanitizedNext = writeShouldSanitize ? sanitizeStateForNonManagerRole(next) : next;
+      if (writeShouldSanitize) {
+        console.warn(
+          "[actualization-api] POST sanitized non-manager state scope=" + scopeKey + " role=" + canonicalForWrite,
+        );
+      }
+
       const now = new Date().toISOString();
-      next.updatedAt = now;
-      next.updatedBy = userId;
-      const version = typeof next.version === "number" && Number.isFinite(next.version) ? Math.floor(next.version) : 1;
+      sanitizedNext.updatedAt = now;
+      sanitizedNext.updatedBy = userId;
+      const version =
+        typeof sanitizedNext.version === "number" && Number.isFinite(sanitizedNext.version)
+          ? Math.floor(sanitizedNext.version)
+          : 1;
 
       // Защита корзины (Промт 45 B1): если ключ trashedDealersById / trashedTradePointsById
       // присутствовал в prev state, но отсутствует в next state — восстанавливаем его,
@@ -861,7 +891,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       if (!dbUrl) {
         const prev = memoryStore.get(userId)?.state;
         const prevState = isPlainObject(prev) ? coerceState(prev) : null;
-        const guard = applyTrashProtection(prevState, next, unTrash);
+        const guard = applyTrashProtection(prevState, sanitizedNext, unTrash);
         if (guard.protectedDealers > 0 || guard.protectedTradePoints > 0) {
           console.warn(
             "[actualization-api] POST scope=" +
@@ -872,14 +902,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
               guard.protectedTradePoints,
           );
         }
-        memoryStore.set(userId, { state: next, updatedAt: now });
+        memoryStore.set(userId, { state: sanitizedNext, updatedAt: now });
         sendJson(
           res,
           200,
           buildResponse(
             true,
             "server_memory",
-            next,
+            sanitizedNext,
             now,
             `${MSG_PERSISTENT_NOT_CONFIGURED} ${MSG_SERVER_MEMORY_FALLBACK}`,
           ),
@@ -896,7 +926,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
           `;
           const prevRaw = prevRows[0]?.state;
           const prevState = isPlainObject(prevRaw) ? coerceState(prevRaw) : null;
-          const guard = applyTrashProtection(prevState, next, unTrash);
+          const guard = applyTrashProtection(prevState, sanitizedNext, unTrash);
           if (guard.protectedDealers > 0 || guard.protectedTradePoints > 0) {
             console.warn(
               "[actualization-api] POST scope=" +
@@ -912,7 +942,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
           const m = e instanceof Error ? e.message : String(e);
           console.warn("[actualization-api] trash protection read failed", m.slice(0, 200));
         }
-        const stateJson = JSON.stringify(next);
+        const stateJson = JSON.stringify(sanitizedNext);
         const rows = await sql`
           INSERT INTO client_base_actualization_state (scope_key, user_id, role, state, version)
           VALUES (${scopeKey}, ${userId}, ${role}, ${stateJson}::jsonb, ${version})
