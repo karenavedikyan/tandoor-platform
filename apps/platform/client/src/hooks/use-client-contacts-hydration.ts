@@ -34,7 +34,8 @@ async function runAutoMigration(dealerId: string): Promise<void> {
   }
 
   const existing = await fetchClientContactsList(dealerId);
-  if (existing && existing.items.length > 0) {
+  const activeExisting = (existing?.items ?? []).filter((c) => c.isActual && !c.deleteRequestedAt);
+  if (activeExisting.length > 0) {
     localStorage.setItem(flagKey, "1");
     return;
   }

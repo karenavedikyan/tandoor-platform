@@ -68,7 +68,13 @@ async function insertEvent(
 }
 
 async function countContacts(pool: PoolLike, clientId: string): Promise<number> {
-  const r = await pool.query<{ n: string }>(`SELECT COUNT(*)::text AS n FROM client_contacts WHERE client_id = $1`, [clientId]);
+  const r = await pool.query<{ n: string }>(
+    `SELECT COUNT(*)::text AS n FROM client_contacts
+     WHERE client_id = $1
+       AND delete_requested_at IS NULL
+       AND is_actual = true`,
+    [clientId],
+  );
   return Number(r.rows[0]?.n ?? 0);
 }
 
