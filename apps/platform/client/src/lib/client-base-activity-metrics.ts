@@ -973,13 +973,15 @@ export function computeTopKpis(
       const dealerId = resolvedEventDealerId(e, state) ?? e.dealerId;
       const did = normalizeText(dealerId);
       if (!did || !inScope(did)) continue;
-      if (e.kind === "manual_dealer" && !state.archivedDealersById[did]) md.add(did);
+      if (e.kind === "manual_dealer" && !state.archivedDealersById[did] && !state.trashedDealersById?.[did]) md.add(did);
       else if (e.kind === "dealer_updated") ud.add(did);
       else if (
         e.kind === "manual_trade_point" &&
         e.tradePointId &&
         !state.archivedDealersById[did] &&
-        !state.archivedTradePointsById[e.tradePointId]
+        !state.archivedTradePointsById[e.tradePointId] &&
+        !state.trashedDealersById?.[did] &&
+        !state.trashedTradePointsById?.[e.tradePointId]
       ) {
         mtp.add(e.tradePointId);
       } else if (e.kind === "legal_entity") {
@@ -995,6 +997,7 @@ export function computeTopKpis(
     for (const d of Object.values(state.manuallyCreatedDealersById)) {
       if (!inScope(d.id)) continue;
       if (state.archivedDealersById[d.id]) continue;
+      if (state.trashedDealersById?.[d.id]) continue;
       const t = firstResolvedActivityMs(d.createdAt, d.updatedAt);
       if (t == null) {
         if (range != null) continue;
@@ -1012,6 +1015,8 @@ export function computeTopKpis(
       if (!inScope(tp.dealerId)) continue;
       if (state.archivedDealersById[tp.dealerId]) continue;
       if (state.archivedTradePointsById[tp.id]) continue;
+      if (state.trashedDealersById?.[tp.dealerId]) continue;
+      if (state.trashedTradePointsById?.[tp.id]) continue;
       const t = firstResolvedActivityMs(tp.createdAt, tp.updatedAt);
       if (t == null) {
         if (range != null) continue;
@@ -1194,6 +1199,7 @@ export function passesContributionGeoFilters(
 ): boolean {
   if (!pack.scopedDealerIds.has(dealerId)) return false;
   if (pack.act.archivedDealersById[dealerId]) return false;
+  if (pack.act.trashedDealersById?.[dealerId]) return false;
   if (pack.ropTeamId !== "__all__") {
     const row = pack.dealerById.get(dealerId);
     if (row && row.releaseTeamId !== pack.ropTeamId) return false;
