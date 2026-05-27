@@ -665,7 +665,14 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
         >
           <AccordionSectionTrigger title="Фото клиента" summary={sectionMeta.photos.summary} status={sectionMeta.photos.status} />
           <AccordionContent className="border-t border-border/35 px-3 pb-2.5 pt-1.5 sm:px-3.5">
-            <EntityActualizationPhotoGallery entityType="dealer" entityId={baseRow.id} canEdit={canEdit} profile={profile} />
+            <EntityActualizationPhotoGallery
+              entityType="dealer"
+              entityId={baseRow.id}
+              entityName={baseRow.name}
+              entitySeed={baseRow.id || baseRow.actualizationInn || undefined}
+              canEdit={canEdit}
+              profile={profile}
+            />
           </AccordionContent>
         </AccordionItem>
 

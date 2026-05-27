@@ -230,6 +230,8 @@ export function ShowcaseCoverPhotoSlot(props: ShowcaseCoverPhotoSlotProps): Reac
           <EntityActualizationPhotoGallery
             entityType={kind === "dealer" ? "dealer" : "trade_point"}
             entityId={entityId}
+            entityName={kind === "dealer" ? dealer.name : tp!.name}
+            entitySeed={kind === "dealer" ? dealer.id || dealer.actualizationInn || undefined : tp!.id}
             canEdit={canEditGallery}
             profile={profile}
             compact
