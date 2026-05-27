@@ -198,7 +198,19 @@ import {
   getDealerProgramSignal,
   type DealerProgramFilterId,
 } from "@/lib/dealer-program-signals";
-import { DEALER_CHARACTERISTICS_EVENT } from "@/lib/dealer-characteristics";
+import {
+  DEALER_CHARACTERISTICS_EVENT,
+  getDealerCharacteristicValue,
+  type DealerCharacteristicId,
+} from "@/lib/dealer-characteristics";
+import {
+  dealerRowMatchesFocusTile,
+  MAIN_FOCUS_TILES,
+  parseDealerBaseSegmentFromUrl,
+  parseDealerCharacteristicFromUrl,
+  parseMainFocusTileId,
+  type MainFocusTileId,
+} from "@/lib/main-focus-tiles";
 import { SHOWCASE_STORAGE_EVENT } from "@/lib/showcase-distribution-data";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DealerBulkDeleteCheckbox } from "@/components/dealer-bulk-delete-checkbox";
@@ -1492,6 +1504,8 @@ export default function DealerBase() {
       setSearch("");
       setWorkView(defaultWorkViewForAccess(access));
       setProgramFilters([]);
+      setUrlFocusId(null);
+      setUrlCharacteristicId(null);
       setGeoRegion("");
       setGeoDistrict("");
       setGeoLocality("");
@@ -1601,6 +1615,19 @@ export default function DealerBase() {
     setCategories(catV);
     setSearch(searchV);
     setWorkView(vw);
+
+    const segmentRaw = routeQs.get("segment")?.trim() ?? "";
+    const segmentParsed = parseDealerBaseSegmentFromUrl(segmentRaw || null);
+    if (segmentParsed) {
+      setSegmentList([segmentParsed]);
+    }
+
+    const focusParsed = parseMainFocusTileId(routeQs.get("focus"));
+    setUrlFocusId(focusParsed);
+
+    const charParsed = parseDealerCharacteristicFromUrl(routeQs.get("characteristic"));
+    setUrlCharacteristicId(charParsed);
+
     setProgramFilters(programParsed);
   }, [
     profile.personaUserId,
@@ -1941,6 +1968,8 @@ export default function DealerBase() {
   const [trafficBump, setTrafficBump] = useState(0);
   const nextStepsStorage = useMemo(() => loadClientNextStepsStorage(), [trafficBump]);
   const [characteristicsBump, setCharacteristicsBump] = useState(0);
+  const [urlFocusId, setUrlFocusId] = useState<MainFocusTileId | null>(null);
+  const [urlCharacteristicId, setUrlCharacteristicId] = useState<DealerCharacteristicId | null>(null);
   const [activeRouteSlotForBulk, setActiveRouteSlotForBulk] = useState<ShipmentRouteSlotId>("slot1");
   const [shipmentRouteCityFilter, setShipmentRouteCityFilter] = useState<null | {
     slotId: ShipmentRouteSlotId;
@@ -2013,6 +2042,17 @@ export default function DealerBase() {
     return rowsAfterShipmentDay.filter((r) => dealerRowMatchesProgramFilters(r, programFilters));
   }, [rowsAfterShipmentDay, programFilters, characteristicsBump]);
 
+  const rowsAfterUrlFocus = useMemo(() => {
+    let rows = rowsAfterPrograms;
+    if (urlCharacteristicId) {
+      rows = rows.filter((r) => getDealerCharacteristicValue(r.id, urlCharacteristicId) === "yes");
+    }
+    if (urlFocusId) {
+      rows = rows.filter((r) => dealerRowMatchesFocusTile(r, urlFocusId, teamActualizationPlane));
+    }
+    return rows;
+  }, [rowsAfterPrograms, urlCharacteristicId, urlFocusId, teamActualizationPlane, characteristicsBump]);
+
   const programCounts = useMemo(() => {
     let special = 0;
     let franchise = 0;
@@ -2082,6 +2122,22 @@ export default function DealerBase() {
           onRemove: () => setSegmentList((prev) => prev.filter((x) => x !== seg)),
         });
       }
+    }
+    if (urlCharacteristicId) {
+      const charTile = MAIN_FOCUS_TILES.find((t) => t.id === urlCharacteristicId);
+      chips.push({
+        key: `characteristic-${urlCharacteristicId}`,
+        label: charTile ? charTile.title : urlCharacteristicId,
+        onRemove: () => setUrlCharacteristicId(null),
+      });
+    }
+    if (urlFocusId) {
+      const focusTile = MAIN_FOCUS_TILES.find((t) => t.id === urlFocusId);
+      chips.push({
+        key: `focus-${urlFocusId}`,
+        label: focusTile ? focusTile.title : urlFocusId,
+        onRemove: () => setUrlFocusId(null),
+      });
     }
     if (stockListFilter !== "all") {
       chips.push({
@@ -2161,6 +2217,8 @@ export default function DealerBase() {
     workPlanFilter,
     defaultWorkPlanFilterValue,
     segmentList,
+    urlCharacteristicId,
+    urlFocusId,
     stockListFilter,
     geoRegion,
     geoDistrict,
@@ -2182,6 +2240,8 @@ export default function DealerBase() {
     setProgramFilters([]);
     setWorkPlanFilter(profile.role === "marketer" || profile.role === "analyst" ? "all" : "active");
     setSegmentList([]);
+    setUrlFocusId(null);
+    setUrlCharacteristicId(null);
     setStockListFilter("all");
     setCities([]);
     setCategories([]);
@@ -2193,9 +2253,9 @@ export default function DealerBase() {
   }, [profile.role, defaultRopManager]);
 
   const rowsFinalForList = useMemo(() => {
-    if (stockListFilter === "all") return rowsAfterPrograms;
-    return rowsAfterPrograms.filter((r) => dealerRowMatchesStockFilter(r, stockListFilter));
-  }, [rowsAfterPrograms, stockListFilter]);
+    if (stockListFilter === "all") return rowsAfterUrlFocus;
+    return rowsAfterUrlFocus.filter((r) => dealerRowMatchesStockFilter(r, stockListFilter));
+  }, [rowsAfterUrlFocus, stockListFilter]);
 
   const stockFilterSummary = useMemo(() => {
     let main = 0;

@@ -436,7 +436,7 @@ function DealerShowcaseCard({
           className={cn("text-[10px]", badgeSoft)}
           data-testid={`${DEALER_PROGRAM_FILTER_BADGE_TESTID.cashback_agent}-${row.id}`}
         >
-          Кэшбэк
+          Тандор Бонус
         </Badge>,
       );
     }

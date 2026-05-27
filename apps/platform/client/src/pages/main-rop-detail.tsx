@@ -45,6 +45,7 @@ import {
 import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import { computeMainDashboardScopeMetrics, type MainDashboardScopeMetrics } from "@/lib/main-dashboard-scope-metrics";
 import { DrilldownListRow, MainScopeBreakdownKpiGrid } from "@/components/main-dashboard-scope-kpi";
+import { MainFocusTilesSection } from "@/components/main-focus-tiles-section";
 import { buildBrowserHashAppHref } from "@/lib/hash-route-utils";
 import { buildTradePointListForActualization, type TradePointListRow } from "@/lib/trade-point-list-for-actualization";
 import { useOrgSnapshot } from "@/lib/use-org-snapshot";
@@ -117,13 +118,27 @@ export default function MainRopDetailPage() {
     return computeMainDashboardScopeMetrics(managementPlane.mergedState, profile, teamScope);
   }, [actx.enabled, allowed, managementPlane.mergedState, profile, teamScope]);
 
-  const clientRows = useMemo(() => {
+  const activeClientRows = useMemo(() => {
     if (!actx.enabled || !allowed) return [];
     const built = buildDealerBaseRowsWithActualization(managementPlane.mergedState, profile, {
-      includeArchivedDealers: showArchive,
+      includeArchivedDealers: false,
     });
     return teamScope(built);
-  }, [actx.enabled, allowed, managementPlane.mergedState, profile, teamScope, showArchive]);
+  }, [actx.enabled, allowed, managementPlane.mergedState, profile, teamScope]);
+
+  const clientRows = useMemo(() => {
+    if (!actx.enabled || !allowed) return [];
+    if (!showArchive) return activeClientRows;
+    const built = buildDealerBaseRowsWithActualization(managementPlane.mergedState, profile, {
+      includeArchivedDealers: true,
+    });
+    return teamScope(built);
+  }, [actx.enabled, allowed, managementPlane.mergedState, profile, teamScope, showArchive, activeClientRows]);
+
+  const ropTeamId = useMemo(() => {
+    if (!snap || !ropId) return "";
+    return teamUuidForRopUserId(snap, ropId) ?? "";
+  }, [snap, ropId]);
 
   const tradePointRows = useMemo((): TradePointListRow[] => {
     if (!actx.enabled || !allowed) return [];
@@ -213,6 +228,20 @@ export default function MainRopDetailPage() {
             tradePointsHref={buildBrowserHashAppHref("/trade-points")}
           />
         </section>
+      ) : null}
+
+      {scopeMetrics ? (
+        <MainFocusTilesSection
+          title={`Фокус команды ${ropName}`}
+          rows={activeClientRows}
+          act={managementPlane.mergedState}
+          dealerBaseParams={
+            ropTeamId
+              ? { view: "table_team", team: ropTeamId }
+              : { view: "table_all" }
+          }
+          testId="section-main-rop-focus-team"
+        />
       ) : null}
 
       <section className="min-w-0 space-y-2" data-testid="section-main-rop-managers">
