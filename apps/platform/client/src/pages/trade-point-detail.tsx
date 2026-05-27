@@ -94,6 +94,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { Bitrix24TasksPanel } from "@/components/bitrix24-tasks-panel";
 import { TradePointPhotoBlock } from "@/components/trade-point-photo-block";
+import { TradePointLegalEntityLink } from "@/components/trade-point-legal-entity-link";
 import { ShowcaseCoverPhotoSlot } from "@/components/showcase-cover-photo-slot";
 import { TradePointShowcaseMatrixSection } from "@/components/trade-point-showcase-matrix-section";
 import {
@@ -1155,6 +1156,7 @@ function TradePointDetailContent({
                 <div className="min-w-0 flex-1 space-y-1">
                   <h2 className="line-clamp-2 text-lg font-semibold leading-snug text-foreground">{point.name}</h2>
                   <p className="line-clamp-2 text-sm text-muted-foreground sm:line-clamp-1">{[point.city, point.address?.trim()].filter(Boolean).join(" · ")}</p>
+                  <TradePointLegalEntityLink dealerId={dealer.id} tradePointId={point.id} />
                 </div>
               </div>
             </SurfaceCard>
