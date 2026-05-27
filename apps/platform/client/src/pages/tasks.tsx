@@ -935,10 +935,9 @@ export default function TasksPage() {
             data-testid="section-showcase-tasks-factual-empty"
           >
             <CardContent className="space-y-4 pt-5">
-              <h2 className="text-lg font-semibold text-foreground">Фактические задачи по витрине пока не сформированы</h2>
+              <h2 className="text-lg font-semibold text-foreground">Задачи по витрине пока не сформированы</h2>
               <p className="text-sm text-muted-foreground">
-                На этом экране для директора и РОП показываются только сохранённые задачи из актуализации. Локальные
-                черновики, sessionStorage и сгенерированные демо-задачи не учитываются.
+                Задачи по витрине появятся здесь, как только их добавят менеджеры.
               </p>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <Button asChild className="min-h-10 w-full font-semibold sm:w-auto">

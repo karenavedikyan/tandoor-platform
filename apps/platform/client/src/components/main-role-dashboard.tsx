@@ -1,12 +1,14 @@
 import { useMemo, type ReactNode } from "react";
 import { Link } from "wouter";
-import { MainPlanExecutionChart } from "@/components/main-plan-execution-chart";
-import { TeamSummaryCard } from "@/components/team-summary-card";
+import { Home } from "lucide-react";
+import { ActualizationRace } from "@/components/home/actualization-race";
+import { PlanFactSummary } from "@/components/home/plan-fact-summary";
+import { PageHeader, DataFreshness } from "@/components/ui-platform";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
-import { displayUserName, useCurrentUser } from "@/hooks/use-current-user";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { canAccessPath, salesControlHomeHref } from "@/lib/auth-access";
 import { userRoleToSalesRole } from "@/lib/role-mapping";
@@ -23,14 +25,7 @@ import type { ActualizationState } from "@/lib/client-base-actualization-state";
 import { getAllMatrixTasks, getManagementFactualShowcaseTasksForDealers, getShowcaseBackedTasksForDealers } from "@/lib/trade-point-task-data";
 import { getRopOptions } from "@/lib/rop-manager-filters";
 import { getShowcaseOnlyTasks } from "@/lib/task-classification";
-import {
-  getAllSalesManagers,
-  getSalesUserById,
-  getTeamManagers,
-  type SalesRole,
-} from "@/lib/sales-control-data";
-import { currentMonthPeriodLabel, type PlanExecutionScope } from "@/lib/sales-manager-kpi-data";
-import { buildTeamSummaries, buildTeamSummaryFromRows } from "@/lib/team-summary";
+import { getSalesUserById, getTeamManagers, type SalesRole } from "@/lib/sales-control-data";
 
 function countOpenTasksForDealers(
   dealerIds: Set<string>,
@@ -143,34 +138,6 @@ export function MainRoleDashboard() {
 
   const planHref = salesControlHomeHref(role);
 
-  const planExecutionScope: PlanExecutionScope =
-    role === "sales_manager" ? "manager" : role === "team_lead" ? "team" : "all";
-
-  const planExecutionManagerCount = useMemo(() => {
-    if (role === "sales_manager") return 1;
-    if (role === "team_lead") return getTeamManagers(getEffectiveTeamLeadTeamId(profile)).length || 1;
-    return getAllSalesManagers().length || 1;
-  }, [role, profile]);
-
-  const planExecutionPeriodLabel = useMemo(() => currentMonthPeriodLabel(), []);
-
-  const teamSummaries = useMemo(() => {
-    if (!actx.enabled) return buildTeamSummaries(profile);
-    if (role === "sales_director") {
-      return getRopOptions().map((o) =>
-        buildTeamSummaryFromRows(
-          o.teamId,
-          scopedClients.filter((r) => r.releaseTeamId === o.teamId),
-        ),
-      );
-    }
-    if (role === "team_lead") {
-      const tid = getEffectiveTeamLeadTeamId(profile);
-      return [buildTeamSummaryFromRows(tid, scopedClients.filter((r) => r.releaseTeamId === tid))];
-    }
-    return [];
-  }, [actx.enabled, profile, role, scopedClients]);
-
   const kpiHrefs = useMemo(() => {
     const u = getSalesUserById(profile.personaUserId);
     if (role === "sales_manager") {
@@ -257,31 +224,14 @@ export function MainRoleDashboard() {
   }, [role, user, planHref]);
 
   const headline =
-    role === "sales_director"
-      ? "Главная руководителя продаж"
-      : "Главная";
+    role === "sales_director" ? "Главная руководителя" : role === "team_lead" ? "Главная РОПа" : "Моя главная";
 
   const subline =
     role === "sales_manager"
-      ? "Рабочий стол менеджера: мои клиенты, задачи, обучение и план-факт."
+      ? "Мои клиенты, задачи и план месяца."
       : role === "team_lead"
-        ? "Рабочий стол РОПа: команда, клиенты, задачи и выполнение плана."
-        : role === "sales_director"
-          ? "Сводка по отделу продаж: команды, клиенты, задачи, план-факт."
-          : "Главная страница платформы.";
-
-  const contextLine =
-    role === "sales_manager"
-      ? `Показатели по вашим клиентам (${displayUserName(user) ?? "менеджер"}) и связанным задачам — те же данные, что в «Клиентской базе» и «Задачах».`
-      : role === "team_lead"
-        ? `Показатели по команде РОП (${displayUserName(user) ?? "РОП"}) — те же данные, что в «Клиентской базе» и «Задачах» с фильтром команды.${
-            actx.enabled ? " Источник KPI: актуальная активная база (актуализация, без архива)." : ""
-          }`
-        : role === "sales_director"
-          ? `Показатели по всей клиентской базе и задачам по витрине отдела продаж.${
-              actx.enabled ? " Источник KPI: актуальная активная база (актуализация, без архива)." : ""
-            }`
-          : "";
+        ? "Моя команда, клиенты и выполнение плана."
+        : "Команды, клиенты, задачи и план-факт.";
 
   const kpiClientsLabel =
     role === "sales_manager"
@@ -307,165 +257,93 @@ export function MainRoleDashboard() {
 
   return (
     <div className="min-w-0 max-w-full overflow-x-hidden space-y-6 pb-10 sm:space-y-8" data-testid="page-main">
-      <section className="space-y-4" data-testid="section-main-role-dashboard">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">{headline}</h1>
-          <p className="mt-1 max-w-3xl text-sm text-muted-foreground sm:text-base">{subline}</p>
-          {contextLine ? (
-            <p className="mt-2 max-w-3xl text-sm text-muted-foreground" data-testid="text-main-role-context">
-              {contextLine}
-            </p>
-          ) : null}
-        </div>
+      <PageHeader title={headline} description={subline} icon={Home} />
+      <DataFreshness updatedAt={actx.meta?.updatedAt ?? null} sourceLabel="Postgres" />
 
-        <div
-          className={
-            extraKpiLabel
-              ? "grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5"
-              : "grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-4"
-          }
-        >
-          <MainKpiLink href={kpiHrefs.clients} testId="link-main-kpi-clients">
-            <Card className="min-w-0 rounded-xl border border-border/80 bg-card shadow-sm" data-testid="card-main-kpi-clients">
-              <CardContent className="p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{kpiClientsLabel}</p>
-                <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{totalClients}</p>
-              </CardContent>
-            </Card>
-          </MainKpiLink>
-          <MainKpiLink href={kpiHrefs.active} testId="link-main-kpi-active">
-            <Card className="min-w-0 rounded-xl border border-border/80 bg-card shadow-sm" data-testid="card-main-kpi-active">
-              <CardContent className="p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Активные клиенты</p>
-                <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{activeClients}</p>
-              </CardContent>
-            </Card>
-          </MainKpiLink>
-          <MainKpiLink href={kpiHrefs.attention} testId="link-main-kpi-attention">
-            <Card className="min-w-0 rounded-xl border border-border/80 bg-card shadow-sm" data-testid="card-main-kpi-attention">
-              <CardContent className="p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Требуют внимания</p>
-                <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{attentionClients}</p>
-              </CardContent>
-            </Card>
-          </MainKpiLink>
-          <MainKpiLink href={kpiHrefs.tasks} testId="link-main-kpi-tasks">
-            <div {...(useMgmtFactualTasks ? { "data-testid": "section-management-task-summary" } : {})} className="block min-w-0">
-              <Card className="min-w-0 rounded-xl border border-border/80 bg-card shadow-sm" data-testid="card-main-kpi-tasks">
-                <CardContent className="p-4">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{kpiTasksLabel}</p>
-                  <p
-                    className="mt-1 text-2xl font-semibold tabular-nums text-foreground"
-                    {...(useMgmtFactualTasks ? { "data-testid": "metric-management-tasks-open" } : {})}
-                  >
-                    {openTasks}
-                  </p>
-                  {useMgmtFactualTasks && openTasks === 0 ? (
-                    <p className="mt-2 text-[10px] leading-tight text-muted-foreground" data-testid="text-management-task-empty">
-                      Фактических задач нет. Учитываются только сохранённые задачи актуализации; локальные черновики не входят в сводку.
-                    </p>
-                  ) : null}
-                  {useMgmtFactualTasks ? (
-                    <p className="mt-2 text-[10px] leading-tight text-muted-foreground" data-testid="text-management-task-source-note">
-                      Источник: сохранённые задачи актуализации
-                    </p>
-                  ) : null}
-                </CardContent>
-              </Card>
-            </div>
-          </MainKpiLink>
-          {extraKpiLabel && extraKpiValue && kpiHrefs.extra ? (
-            <MainKpiLink href={kpiHrefs.extra} testId="link-main-kpi-extra">
-              <Card
-                className="min-w-0 rounded-xl border border-border/80 bg-card shadow-sm sm:col-span-1"
-                data-testid={role === "team_lead" ? "card-main-kpi-managers" : "card-main-kpi-teams"}
-              >
-                <CardContent className="p-4">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{extraKpiLabel}</p>
-                  <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{extraKpiValue}</p>
-                </CardContent>
-              </Card>
-            </MainKpiLink>
-          ) : null}
-        </div>
-
-        {workingBaseEmpty ? (
-          <Card
-            className="rounded-xl border border-dashed border-border/80 bg-card"
-            data-testid="card-main-empty-working-base"
-          >
-            <CardContent className="space-y-1 p-4">
-              <p className="text-sm font-semibold text-foreground">
-                Рабочая база пуста после актуализации.
-              </p>
-              <p className="text-sm text-muted-foreground">
-                План-факт и сводки скрыты до появления реальных клиентов. Создайте клиента вручную
-                или верните клиента из архива в «Клиентской базе».
-              </p>
+      {/* KPI grid (Промт 47 F1: те же KPI, нормализованная сетка 5/4 cols). */}
+      <section
+        className={
+          extraKpiLabel
+            ? "grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-5"
+            : "grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-4"
+        }
+        data-testid="section-main-role-dashboard"
+      >
+        <MainKpiLink href={kpiHrefs.clients} testId="link-main-kpi-clients">
+          <Card className="min-w-0 rounded-xl border border-border bg-card" data-testid="card-main-kpi-clients">
+            <CardContent className="p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{kpiClientsLabel}</p>
+              <p className="mt-0.5 text-xl font-semibold tabular-nums text-foreground">{totalClients}</p>
             </CardContent>
           </Card>
-        ) : actx.enabled && (role === "team_lead" || role === "sales_director") ? (
-          <Card
-            className="rounded-xl border border-dashed border-border/80 bg-muted/10"
-            data-testid="card-main-plan-placeholder-management"
-          >
-            <CardContent className="space-y-1 p-4">
-              <p className="text-sm font-semibold text-foreground">План-факт в этом блоке не подключён</p>
-              <p className="text-sm text-muted-foreground">
-                Показатели выполнения плана здесь были демонстрационными. Используйте раздел «План-факт продаж»; KPI клиентской базы
-                выше — из актуальной активной базы.
-              </p>
+        </MainKpiLink>
+        <MainKpiLink href={kpiHrefs.active} testId="link-main-kpi-active">
+          <Card className="min-w-0 rounded-xl border border-border bg-card" data-testid="card-main-kpi-active">
+            <CardContent className="p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Активные клиенты</p>
+              <p className="mt-0.5 text-xl font-semibold tabular-nums text-foreground">{activeClients}</p>
             </CardContent>
           </Card>
-        ) : (
-          <MainPlanExecutionChart
-            scope={planExecutionScope}
-            managerCount={planExecutionManagerCount}
-            periodLabel={planExecutionPeriodLabel}
-          />
-        )}
-
-        <div className="flex min-w-0 flex-wrap gap-2">
-          {links.map((l) => (
-            <MainLinkButton key={l.href + l.label} {...l} />
-          ))}
-        </div>
+        </MainKpiLink>
+        <MainKpiLink href={kpiHrefs.attention} testId="link-main-kpi-attention">
+          <Card className="min-w-0 rounded-xl border border-border bg-card" data-testid="card-main-kpi-attention">
+            <CardContent className="p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Требуют внимания</p>
+              <p className="mt-0.5 text-xl font-semibold tabular-nums text-foreground">{attentionClients}</p>
+            </CardContent>
+          </Card>
+        </MainKpiLink>
+        <MainKpiLink href={kpiHrefs.tasks} testId="link-main-kpi-tasks">
+          <div
+            {...(useMgmtFactualTasks ? { "data-testid": "section-management-task-summary" } : {})}
+            className="block min-w-0"
+          >
+            <Card className="min-w-0 rounded-xl border border-border bg-card" data-testid="card-main-kpi-tasks">
+              <CardContent className="p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{kpiTasksLabel}</p>
+                <p
+                  className="mt-0.5 text-xl font-semibold tabular-nums text-foreground"
+                  {...(useMgmtFactualTasks ? { "data-testid": "metric-management-tasks-open" } : {})}
+                >
+                  {openTasks}
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        </MainKpiLink>
+        {extraKpiLabel && extraKpiValue && kpiHrefs.extra ? (
+          <MainKpiLink href={kpiHrefs.extra} testId="link-main-kpi-extra">
+            <Card
+              className="min-w-0 rounded-xl border border-border bg-card sm:col-span-1"
+              data-testid={role === "team_lead" ? "card-main-kpi-managers" : "card-main-kpi-teams"}
+            >
+              <CardContent className="p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{extraKpiLabel}</p>
+                <p className="mt-0.5 text-xl font-semibold tabular-nums text-foreground">{extraKpiValue}</p>
+              </CardContent>
+            </Card>
+          </MainKpiLink>
+        ) : null}
       </section>
 
-      {(role === "sales_director" || role === "team_lead") && teamSummaries.length > 0 && !workingBaseEmpty ? (
-        <section className="space-y-3 border-t border-border pt-6" data-testid="section-main-team-summaries">
-          <h2 className="text-lg font-semibold text-foreground">
-            {role === "sales_director" ? "Команды РОПов" : "Моя команда"}
-          </h2>
-          <div
-            className={
-              role === "sales_director"
-                ? "grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
-                : "grid min-w-0 grid-cols-1 gap-4"
-            }
-          >
-            {teamSummaries.map((s) => (
-              <TeamSummaryCard
-                key={s.teamId}
-                summary={s}
-                variant="full"
-                showTeamMetricLinks={role === "sales_director" || role === "team_lead"}
-                footnote={
-                  actx.enabled && (role === "sales_director" || role === "team_lead")
-                    ? "Показаны только активные клиенты и точки команды (архив не учитывается)."
-                    : undefined
-                }
-                ctaHref={
-                  role === "sales_director"
-                    ? buildBrowserHashAppHref("/dealer-base", { team: s.teamId })
-                    : buildBrowserHashAppHref("/dealer-base", { team: s.teamId, view: "table_team" })
-                }
-                ctaLabel={role === "sales_director" ? "Открыть команду" : "К клиентам команды"}
-              />
-            ))}
-          </div>
-        </section>
-      ) : null}
+      {/* Промт 47 D: соревновательный блок «Гонка актуализации». */}
+      <ActualizationRace />
+
+      {/* Промт 47 E: компактная плитка плана-факта. */}
+      <PlanFactSummary />
+
+      {/* Промт 47 F1: ровно 3 quick-link кнопки. Остальные ссылки — в сайдбаре. */}
+      <div className="flex min-w-0 flex-wrap gap-2" data-testid="section-main-quick-links">
+        <Button asChild className="min-h-10 font-semibold" data-testid="button-main-quick-dealer-base">
+          <Link href="/dealer-base">Клиентская база</Link>
+        </Button>
+        <Button asChild variant="outline" className="min-h-10 font-semibold" data-testid="button-main-quick-trade-points">
+          <Link href="/trade-points">Торговые точки</Link>
+        </Button>
+        <Button asChild variant="outline" className="min-h-10 font-semibold" data-testid="button-main-quick-plan-fact">
+          <Link href={planHref}>План-факт</Link>
+        </Button>
+      </div>
     </div>
   );
 }

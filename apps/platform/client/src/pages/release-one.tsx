@@ -22,8 +22,7 @@ export default function ReleaseOnePage() {
             <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Первый рабочий релиз</h1>
             <p className="mt-2 max-w-3xl text-sm text-muted-foreground sm:text-base">
               Release 1 — набор функций без интеграции с 1С: команда может вести планы и факты, обучение, каталог, ручную аналитику и
-              маркетинговые брифы в одном интерфейсе. Данные демо и правки хранятся локально в браузере (sessionStorage), пока не
-              подключены учётные системы.
+              маркетинговые брифы в одном интерфейсе.
             </p>
           </div>
           {isDemoAuthBypassEnabled() && !(user && user.status === "active") ? (

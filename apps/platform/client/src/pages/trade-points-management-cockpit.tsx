@@ -742,7 +742,7 @@ export function TradePointsManagementCockpit({
           <div className="min-w-0">
             <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Торговые точки</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Управленческий обзор реальных торговых точек из Postgres. Без моков и демо-агрегатов.
+              Управленческий обзор торговых точек.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">

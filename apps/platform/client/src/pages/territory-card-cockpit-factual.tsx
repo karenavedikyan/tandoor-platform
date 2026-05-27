@@ -424,9 +424,7 @@ export function TerritoryCardCockpitFactual({
                     </button>
                   </TooltipTrigger>
                   <TooltipContent className="max-w-xs text-xs" side="bottom">
-                    Показатели и списки строятся только по merge актуализации команды. Задачи витрины — записи плана в
-                    sessionStorage; контроль витрины/матрицы — сохранённые формы и localStorage; зоны внимания — просрочки
-                    плана и открытые задачи матрицы из актуализации. Без синтетики каталога.
+                    Показатели и списки строятся по актуализации команды: задачи витрины, контроль матрицы и зоны внимания.
                   </TooltipContent>
                 </Tooltip>
               </div>
@@ -742,8 +740,7 @@ export function TerritoryCardCockpitFactual({
               </div>
             </div>
             <p className="text-[11px] text-[#8F96B0]">
-              Полный список по выбранным фильтрам и сортировке. Задачи в строке — только записи плана витрины (sessionStorage) по
-              клиентам города.
+              Полный список по выбранным фильтрам и сортировке. Задачи в строке — записи плана витрины по клиентам города.
             </p>
             <div className="flex flex-wrap gap-1">
               <Button

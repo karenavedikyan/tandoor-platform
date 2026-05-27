@@ -27,9 +27,7 @@ export default function SalesControlHub() {
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">План-факт продаж</h1>
             <p className="mt-2 max-w-2xl text-sm text-muted-foreground sm:text-base">
-              Контур планирования и контроля выполнения: планы по KPI и валовой прибыли, факт менеджеров и сводка для руководства.
-              <span className="font-medium text-foreground"> Новый управленческий cockpit</span> хранит план и факт на сервере (Postgres или in-memory API), без подмешивания демо-сидов как «факта».
-              Классические экраны ниже по-прежнему используют sessionStorage для черновиков.
+              План и факт продаж по командам, менеджерам и продуктам.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
