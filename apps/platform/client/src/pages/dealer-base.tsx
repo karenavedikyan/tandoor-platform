@@ -41,7 +41,6 @@ import { getDealerRegionalManagerEffectiveDisplay } from "@/lib/dealer-regional-
 import {
   buildDealerRowsFromReleaseClients,
   DEALER_BASE_ROWS,
-  getDealerRopDisplay,
   type DealerRow,
   type DealerStatus,
 } from "@/lib/dealer-base-mock-data";
@@ -205,12 +204,16 @@ import {
 } from "@/lib/dealer-characteristics";
 import {
   dealerRowMatchesFocusTile,
+  isDealerBaseFocusViewParams,
   MAIN_FOCUS_TILES,
   parseDealerBaseSegmentFromUrl,
   parseDealerCharacteristicFromUrl,
   parseMainFocusTileId,
+  resolveFocusViewChipMeta,
   type MainFocusTileId,
 } from "@/lib/main-focus-tiles";
+import { DealerBaseFocusViewBanner } from "@/components/dealer-base-focus-view-banner";
+import { DealerFocusHierarchy } from "@/components/dealer-focus-hierarchy";
 import { SHOWCASE_STORAGE_EVENT } from "@/lib/showcase-distribution-data";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DealerBulkDeleteCheckbox } from "@/components/dealer-bulk-delete-checkbox";
@@ -401,6 +404,13 @@ type DealerListArchiveBulkProps = {
 
 type DealerBaseNextStepsStorage = ReturnType<typeof loadClientNextStepsStorage>;
 
+export type DealerFocusViewListCtx = {
+  enabled: boolean;
+  showManagerColumn: boolean;
+  showRopColumn: boolean;
+  snap: OrgSnapshot | null;
+};
+
 type DealerRowRendererBaseProps = {
   rows: DealerRow[];
   empty: string;
@@ -415,6 +425,7 @@ type DealerRowRendererBaseProps = {
   shipmentUserId?: string;
   archiveBulk?: DealerListArchiveBulkProps;
   nextStepsStorage: DealerBaseNextStepsStorage;
+  focusList?: DealerFocusViewListCtx;
 };
 
 function archivedDealerListBadge(row: DealerRow, act: ActualizationState): ReactNode {
@@ -436,6 +447,7 @@ function ClientCompactGridBlock({
   shipmentUserId,
   archiveBulk,
   nextStepsStorage: _nextStepsStorage,
+  focusList,
 }: DealerRowRendererBaseProps) {
   const wp = workPlanUserId && workPlanState;
   void _nextStepsStorage;
@@ -554,6 +566,15 @@ function ClientCompactGridBlock({
               <ShowcaseCoverPhotoSlot kind="dealer" dealer={row} profile={profile} size="grid" rounded="lg" className="w-full shrink-0" />
               <div className="min-w-0 space-y-1">
                 <p className="line-clamp-2 text-sm font-semibold leading-tight text-foreground">{row.name}</p>
+                {focusList?.enabled ? (
+                  <DealerFocusHierarchy
+                    row={row}
+                    snap={focusList.snap}
+                    showManager={focusList.showManagerColumn}
+                    showRop={focusList.showRopColumn}
+                    variant="mobile"
+                  />
+                ) : null}
                 <p className="line-clamp-2 text-[11px] leading-snug text-muted-foreground min-[380px]:line-clamp-1">{metaLine}</p>
                 <div className="flex flex-wrap gap-1">
                   <Badge
@@ -641,6 +662,7 @@ function ClientListRowsBlock({
   shipmentUserId,
   archiveBulk,
   nextStepsStorage,
+  focusList,
 }: DealerRowRendererBaseProps) {
   const wp = workPlanUserId && workPlanState;
   void shipmentActiveDayId;
@@ -656,6 +678,7 @@ function ClientListRowsBlock({
 
   const badgeOutline = "border-primary/35 bg-card text-foreground";
   const badgeSoft = "border-primary/30 bg-primary/10 text-foreground";
+  const showFocusHierarchyMobile = Boolean(focusList?.enabled);
 
   const iconBtnClass =
     "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-card text-foreground hover:bg-primary/10";
@@ -715,6 +738,15 @@ function ClientListRowsBlock({
               <ShowcaseCoverPhotoSlot kind="dealer" dealer={row} profile={profile} size="list" rounded="md" className="shrink-0" />
               <div className="min-w-0 flex-1">
                 <p className="line-clamp-2 text-sm font-semibold leading-snug text-foreground">{row.name}</p>
+                {showFocusHierarchyMobile ? (
+                  <DealerFocusHierarchy
+                    row={row}
+                    snap={focusList!.snap}
+                    showManager={focusList!.showManagerColumn}
+                    showRop={focusList!.showRopColumn}
+                    variant="mobile"
+                  />
+                ) : null}
                 <p className="line-clamp-1 text-[11px] text-muted-foreground">{row.city}</p>
                 <p className="mt-0.5 line-clamp-1 text-[10px] text-muted-foreground">
                   {[innLine !== "—" ? `ИНН ${innLine}` : null, `Код ${codeStr}`].filter(Boolean).join(" · ")}
@@ -829,8 +861,11 @@ function DealerBaseDataTable({
   shipmentUserId,
   archiveBulk,
   nextStepsStorage,
+  focusList,
 }: DealerRowRendererBaseProps) {
   const wp = workPlanUserId && workPlanState;
+  const showFocusManagerCol = Boolean(focusList?.enabled && focusList.showManagerColumn);
+  const showFocusRopCol = Boolean(focusList?.enabled && focusList.showRopColumn);
   const [sortKey, setSortKey] = useState<TableSortKey>("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
@@ -886,8 +921,8 @@ function DealerBaseDataTable({
             <th className="px-2 py-2">ИНН</th>
             {sortableTh("city", "Город")}
             {sortableTh("category", "Категория")}
-            <th className="px-2 py-2">РОП</th>
-            {sortableTh("manager", "Менеджер")}
+            {showFocusRopCol ? <th className="px-2 py-2">РОП</th> : null}
+            {showFocusManagerCol ? sortableTh("manager", "Менеджер") : null}
             <th className="px-2 py-2">Склад</th>
             <th className="px-2 py-2">Tandoor Club</th>
             <th className="px-2 py-2">Cashback</th>
@@ -970,12 +1005,28 @@ function DealerBaseDataTable({
                 <td className="max-w-[7rem] px-2 py-1.5 text-xs" data-testid={`text-dealer-client-category-${row.id}`}>
                   <span className="line-clamp-2">{getClientCategoryLabel(row.clientCategory)}</span>
                 </td>
-                <td className="max-w-[7rem] truncate px-2 py-1.5 text-xs" title={getDealerRopDisplay(row) || ""}>
-                  {getDealerRopDisplay(row) || "—"}
-                </td>
-                <td className="max-w-[7rem] truncate px-2 py-1.5 text-xs" title={row.manager}>
-                  {row.manager}
-                </td>
+                {showFocusRopCol ? (
+                  <td className="max-w-[7rem] px-2 py-1.5 text-xs">
+                    <DealerFocusHierarchy
+                      row={row}
+                      snap={focusList?.snap ?? null}
+                      showManager={false}
+                      showRop
+                      variant="table-rop"
+                    />
+                  </td>
+                ) : null}
+                {showFocusManagerCol ? (
+                  <td className="max-w-[7rem] px-2 py-1.5 text-xs">
+                    <DealerFocusHierarchy
+                      row={row}
+                      snap={focusList?.snap ?? null}
+                      showManager
+                      showRop={false}
+                      variant="table-manager"
+                    />
+                  </td>
+                ) : null}
                 <td className="whitespace-nowrap px-2 py-1.5 text-xs">{stockShort}</td>
                 <td className="whitespace-nowrap px-2 py-1.5 text-xs">{programSig.hasTandoorClub ? "Да" : "—"}</td>
                 <td className="whitespace-nowrap px-2 py-1.5 text-xs">{programSig.hasCashbackAgent ? "Да" : "—"}</td>
@@ -1017,6 +1068,7 @@ function DealerBaseSegmentGroups({
   shipmentUserId,
   archiveBulk,
   actualizationState,
+  focusList,
 }: {
   rows: DealerRow[];
   showcaseDensity: DealerShowcaseDensity;
@@ -1035,6 +1087,7 @@ function DealerBaseSegmentGroups({
   shipmentUserId?: string;
   archiveBulk?: DealerListArchiveBulkProps;
   actualizationState: ActualizationState;
+  focusList?: DealerFocusViewListCtx;
 }) {
   const buckets = useMemo(() => partitionDealersBySegment(rows), [rows]);
 
@@ -1053,6 +1106,7 @@ function DealerBaseSegmentGroups({
       shipmentUserId,
       archiveBulk,
       nextStepsStorage,
+      focusList,
     };
     const effectiveDensity: DealerShowcaseDensity =
       showcaseDensity === "table" && narrowViewport ? "list" : showcaseDensity;
@@ -2257,6 +2311,23 @@ export default function DealerBase() {
     return rowsAfterUrlFocus.filter((r) => dealerRowMatchesStockFilter(r, stockListFilter));
   }, [rowsAfterUrlFocus, stockListFilter]);
 
+  const isFocusView = useMemo(() => isDealerBaseFocusViewParams(routeQs), [routeQs, routeKey]);
+
+  const focusChipMeta = useMemo(
+    () => (isFocusView ? resolveFocusViewChipMeta(routeQs) : null),
+    [isFocusView, routeQs, routeKey],
+  );
+
+  const focusListCtx = useMemo((): DealerFocusViewListCtx | undefined => {
+    if (!isFocusView) return undefined;
+    return {
+      enabled: true,
+      showManagerColumn: access === "team_lead" || access === "sales_director",
+      showRopColumn: access === "sales_director",
+      snap: useReal ? snap : null,
+    };
+  }, [isFocusView, access, useReal, snap]);
+
   const stockFilterSummary = useMemo(() => {
     let main = 0;
     let hw = 0;
@@ -3278,6 +3349,9 @@ export default function DealerBase() {
       ) : null}
 
       <section className="min-w-0" data-testid="section-dealer-base-results">
+        {isFocusView && focusChipMeta ? (
+          <DealerBaseFocusViewBanner meta={focusChipMeta} clientCount={rowsFinalForList.length} />
+        ) : null}
         {showArchivedDealers && actx.enabled ? (
           <Alert className="mb-3 border-primary/30 bg-primary/5" data-testid="text-dealer-base-archive-mode-hint">
             <Info className="h-4 w-4 text-primary" aria-hidden />
@@ -3649,6 +3723,7 @@ export default function DealerBase() {
                 shipmentActiveDayId={activeShipmentDayId}
                 shipmentUserId={profile.personaUserId}
                 actualizationState={teamActualizationPlane}
+                focusList={focusListCtx}
                 {...workPlanListProps}
                 archiveBulk={archiveBulkListProps}
               />
@@ -3665,6 +3740,7 @@ export default function DealerBase() {
                 shipmentActiveDayId={activeShipmentDayId}
                 shipmentUserId={profile.personaUserId}
                 actualizationState={teamActualizationPlane}
+                focusList={focusListCtx}
                 {...workPlanListProps}
                 archiveBulk={archiveBulkListProps}
               />
@@ -3691,6 +3767,7 @@ export default function DealerBase() {
                 shipmentActiveDayId={activeShipmentDayId}
                 shipmentUserId={profile.personaUserId}
                 actualizationState={teamActualizationPlane}
+                focusList={focusListCtx}
                 {...workPlanListProps}
                 archiveBulk={archiveBulkListProps}
               />
@@ -3717,6 +3794,7 @@ export default function DealerBase() {
                 shipmentActiveDayId={activeShipmentDayId}
                 shipmentUserId={profile.personaUserId}
                 actualizationState={teamActualizationPlane}
+                focusList={focusListCtx}
                 {...workPlanListProps}
                 archiveBulk={archiveBulkListProps}
               />
