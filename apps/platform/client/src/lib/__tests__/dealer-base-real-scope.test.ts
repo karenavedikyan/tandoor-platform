@@ -5,7 +5,7 @@
  */
 import assert from "node:assert/strict";
 import { buildDealerRowsFromReleaseClients } from "../dealer-base-mock-data";
-import { roleScopedDealerRowsForReal, catalogTeamIdForRealTeamLead, realRowsForManagerByUUID } from "../dealer-base-real-scope";
+import { roleScopedDealerRowsForReal, catalogTeamIdForRealTeamLead, realRowsForManagerByUUID, realRowsForRopTeam } from "../dealer-base-real-scope";
 import { getReleaseClients } from "../release-client-data";
 import { createEmptyActualizationState } from "../client-base-actualization-state";
 import { computeMainDashboardScopeMetrics } from "../main-dashboard-scope-metrics";
@@ -96,6 +96,16 @@ for (const { ropId, teamUuid, catalogTeam, min } of ropCases) {
   assert.ok(scoped.length >= 40, `Скляров clients >= 40, got ${scoped.length}`);
   const viaOption = roleScopedDealerRowsForReal(allRows, snap, "sales_manager", { managerUserId: MGR_SKLYAROV });
   assert.equal(viaOption.length, scoped.length);
+}
+
+
+// Команда Купянского по UUID РОПа (drilldown директора)
+{
+  const snap = ropSnap(ROP_KUPIANSKY, TEAM_KUPIANSKY_UUID);
+  const teamScoped = realRowsForRopTeam(allRows, snap, ROP_KUPIANSKY);
+  const viaOption = roleScopedDealerRowsForReal(allRows, snap, "sales_director", { ropUserId: ROP_KUPIANSKY });
+  assert.equal(teamScoped.length, viaOption.length);
+  assert.ok(teamScoped.length >= 640, `Kupiansky team >= 640, got ${teamScoped.length}`);
 }
 
 console.log("dealer-base-real-scope: ok");

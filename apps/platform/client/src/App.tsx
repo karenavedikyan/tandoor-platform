@@ -39,6 +39,7 @@ import { countWorkingTradePointsForSidebar } from "@/lib/trade-point-list-for-ac
 
 const LazySalesManagerWorkspace = lazy(() => import("@/pages/sales-manager-workspace"));
 const LazyMainManagerDetail = lazy(() => import("@/pages/main-manager-detail"));
+const LazyMainRopDetail = lazy(() => import("@/pages/main-rop-detail"));
 const LazyDealerBase = lazy(() => import("@/pages/dealer-base"));
 const LazyTradePoints = lazy(() => import("@/pages/trade-points"));
 const LazyClientMap = lazy(() => import("@/pages/client-map"));
@@ -99,6 +100,7 @@ function suspensePage(Lazy: LazyExoticComponent<ComponentType<any>>): ComponentT
 
 const SalesManagerWorkspaceRoute = suspensePage(LazySalesManagerWorkspace);
 const MainManagerDetailRoute = suspensePage(LazyMainManagerDetail);
+const MainRopDetailRoute = suspensePage(LazyMainRopDetail);
 const DealerBaseRoute = suspensePage(LazyDealerBase);
 const TradePointsRoute = suspensePage(LazyTradePoints);
 const ClientMapRoute = suspensePage(LazyClientMap);
@@ -330,6 +332,7 @@ function AuthenticatedShell({
     >
       <Switch>
         <Route path="/" component={SalesManagerWorkspaceRoute} />
+        <Route path="/main/rop/:ropId" component={MainRopDetailRoute} />
         <Route path="/main/manager/:managerId" component={MainManagerDetailRoute} />
         <Route path="/main" component={SalesManagerWorkspaceRoute} />
         <Route path="/sales-manager" component={SalesManagerWorkspaceRoute} />
