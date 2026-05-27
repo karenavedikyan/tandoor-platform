@@ -47,14 +47,18 @@ export type PilotNavGroup = {
 
 export type PilotNavigationModel =
   | { layout: "flat"; items: PilotNavItem[] }
-  | { layout: "grouped"; groups: PilotNavGroup[]; standaloneItems?: PilotNavItem[] };
+  | {
+      layout: "grouped";
+      groups: PilotNavGroup[];
+      leadingItems?: PilotNavItem[];
+      standaloneItems?: PilotNavItem[];
+    };
 
-/** Плоский порядок для grouped: пункты первой группы → `standaloneItems` → остальные группы. */
+/** Плоский порядок для grouped: `leadingItems` → `standaloneItems` → все группы. */
 export function flattenGroupedPilotNavigation(model: Extract<PilotNavigationModel, { layout: "grouped" }>): PilotNavItem[] {
+  const leading = model.leadingItems ?? [];
   const standalone = model.standaloneItems ?? [];
-  if (model.groups.length === 0) return [...standalone];
-  const [first, ...rest] = model.groups;
-  return [...first.items, ...standalone, ...rest.flatMap((g) => g.items)];
+  return [...leading, ...standalone, ...model.groups.flatMap((g) => g.items)];
 }
 
 export function pilotFeatureDevelopmentHref(feature: string): string {
@@ -380,82 +384,51 @@ export function getPilotNavigation(
     return { badge: trashCount };
   };
 
-  /**
-   * Промт 47: единая IA для director / team_lead / sales_manager.
-   *   ГЛАВНОЕ            — Главная + Корзина
-   *   КЛИЕНТСКАЯ БАЗА    — Клиенты-дилеры, Торговые точки, Статистика обновления
-   *   КОММЕРЦИЯ           — План-факт и KPI
-   *   В РАЗРАБОТКЕ (collapsed) — Каталог, Обучение, Карта клиентов, Задачи, Аналитика команды, Коммуникации, Брифы
-   *
-   * Админка (Пользователи, Назначения, Приглашения, Журнал событий, Запросы на сброс,
-   * Дедуп актуализации) убрана из сайдбара и доступна только через /profile sub-nav.
-   *
-   * `platformUserRole` оставлен в сигнатуре функции для совместимости, но в сайдбаре
-   * не используется — администрирование сидит в profile shell.
-   */
+  /** Промт 55: плоский список рабочих разделов + аккордеон «В разработке». */
   const unifiedSalesNavigation = (
     homeHref: string,
   ): Extract<PilotNavigationModel, { layout: "grouped" }> => ({
     layout: "grouped",
+    leadingItems: [
+      { href: homeHref, label: "Главная", testId: "nav-item-home", navBehaviorId: "nav-main" },
+      {
+        href: "/client-base-activity",
+        label: "Статистика обновления",
+        testId: "nav-item-client-base-activity",
+        navBehaviorId: "nav-client-base-activity",
+      },
+      {
+        href: "/dealer-base",
+        label: "Клиенты-дилеры",
+        testId: "nav-item-clients",
+        navBehaviorId: "nav-dealer-base",
+        ...dealerNavExtras(),
+      },
+      {
+        href: "/trade-points",
+        label: "Торговые точки",
+        testId: "nav-item-trade-points",
+        navBehaviorId: "nav-trade-points",
+        ...tradePointNavExtras(),
+      },
+      {
+        href: "/sales-control/plan-fact",
+        label: "План-факт и KPI",
+        testId: "nav-item-sales-plan-fact",
+        navBehaviorId: "nav-sales-control",
+      },
+      {
+        href: "/trash",
+        label: "Корзина",
+        testId: "nav-item-trash",
+        navBehaviorId: "nav-trash",
+        ...trashNavExtras(),
+      },
+    ],
     groups: [
       {
-        key: "primary",
-        label: "ГЛАВНОЕ",
-        testId: "nav-group-primary",
-        items: [
-          { href: homeHref, label: "Главная", testId: "nav-item-home", navBehaviorId: "nav-main" },
-          {
-            href: "/trash",
-            label: "Корзина",
-            testId: "nav-item-trash",
-            navBehaviorId: "nav-trash",
-            ...trashNavExtras(),
-          },
-        ],
-      },
-      {
-        key: "client-base",
-        label: "КЛИЕНТСКАЯ БАЗА",
-        testId: "nav-group-client-base",
-        items: [
-          {
-            href: "/dealer-base",
-            label: "Клиенты-дилеры",
-            testId: "nav-item-clients",
-            navBehaviorId: "nav-dealer-base",
-            ...dealerNavExtras(),
-          },
-          {
-            href: "/trade-points",
-            label: "Торговые точки",
-            testId: "nav-item-trade-points",
-            navBehaviorId: "nav-trade-points",
-            ...tradePointNavExtras(),
-          },
-          {
-            href: "/client-base-activity",
-            label: "Статистика обновления",
-            testId: "nav-item-client-base-activity",
-            navBehaviorId: "nav-client-base-activity",
-          },
-        ],
-      },
-      {
-        key: "commerce",
-        label: "КОММЕРЦИЯ",
-        testId: "nav-group-commerce",
-        items: [
-          {
-            href: "/sales-control/plan-fact",
-            label: "План-факт и KPI",
-            testId: "nav-item-sales-plan-fact",
-            navBehaviorId: "nav-sales-control",
-          },
-        ],
-      },
-      {
         key: "in-development",
-        label: "В РАЗРАБОТКЕ",
+        label: "В разработке",
         testId: "nav-group-in-development",
         items: [
           { href: "/catalog", label: "Каталог", testId: "nav-item-catalog", navBehaviorId: "nav-catalog" },
