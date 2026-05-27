@@ -68,6 +68,7 @@ type Props = {
   actorLabel: string;
   /** Родитель (Accordion) уже показывает заголовок «Юридические лица» — скрыть дублирующий h3. */
   embedInAccordion?: boolean;
+  readOnly?: boolean;
 };
 
 const STATUS_LABELS: Record<DealerLegalEntityStatus, string> = {
@@ -230,16 +231,24 @@ function DirtyFieldWrap({
   );
 }
 
-export function DealerLegalEntitiesSection({ row, profile, actorUserId, actorLabel, embedInAccordion = false }: Props) {
+export function DealerLegalEntitiesSection({
+  row,
+  profile,
+  actorUserId,
+  actorLabel,
+  embedInAccordion = false,
+  readOnly = false,
+}: Props) {
   const actx = useClientBaseActualization();
   const useAct = actx.enabled && canManageLegalEntitiesDuringActualization(profile, row);
   /** В актуализации — зона как у карточки; без актуализации — прежний LS-режим. */
   const canMutate = useMemo(() => {
+    if (readOnly) return false;
     if (actx.enabled) {
       return canActualizeClientBase(profile) && canEditDealerDuringActualization(profile, row);
     }
     return canEditDealerLegalEntities(profile, row);
-  }, [actx.enabled, profile, row]);
+  }, [actx.enabled, profile, row, readOnly]);
 
   const [tick, setTick] = useState(0);
   const [showArchived, setShowArchived] = useState(false);

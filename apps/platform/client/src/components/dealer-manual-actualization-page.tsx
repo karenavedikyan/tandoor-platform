@@ -87,6 +87,7 @@ import {
   RU_PHONE_PLACEHOLDER,
 } from "@/lib/phone-format";
 import { formatDisplayDate, formatDisplayDateTime } from "@/lib/format-display-date";
+import { useDealerCardReadOnly } from "@/lib/dealer-card-read-only-context";
 
 const PASSPORT_KIND_LABELS: Record<string, string> = {
   ip: "ИП",
@@ -199,8 +200,15 @@ function HeroCell({ label, value, testId }: { label: string; value: string | und
   );
 }
 
-export function DealerManualActualizationPage(props: { baseRow: DealerRow; profile: ReleaseDemoProfile }): ReactElement {
-  const { baseRow, profile } = props;
+export function DealerManualActualizationPage(props: {
+  baseRow: DealerRow;
+  profile: ReleaseDemoProfile;
+  readOnly?: boolean;
+  embeddedInSheet?: boolean;
+}): ReactElement {
+  const { baseRow, profile, readOnly: readOnlyProp, embeddedInSheet = false } = props;
+  const readOnlyFromSheet = useDealerCardReadOnly();
+  const isReadOnly = readOnlyProp === true || readOnlyFromSheet;
   const actx = useClientBaseActualization();
   const { user } = useCurrentUser();
   const [, setLocation] = useLocation();
@@ -254,11 +262,12 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
   }, [actx, baseRow.id, contacts.length, manual, profile]);
 
   const canEdit = canEditDealerDuringActualization(profile, row);
+  const canEditUi = canEdit && !isReadOnly;
   const canArchive = canArchiveDealerDuringActualization(profile, row);
   const isDealerArchived = Boolean(actx.state.archivedDealersById[baseRow.id]);
   const isDealerTrashed = Boolean(actx.state.trashedDealersById?.[baseRow.id]);
   /** Промт 46: «Удалить» с этой страницы тоже идёт в Корзину. */
-  const canTrash = canArchive && !isDealerArchived && !isDealerTrashed;
+  const canTrash = canArchive && !isDealerArchived && !isDealerTrashed && !isReadOnly;
   const canArchiveToWorkingList = canTrash;
 
   const softArchive = useCallback(async () => {
@@ -447,13 +456,15 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
     <div className="min-w-0 max-w-full overflow-x-hidden bg-muted/15 pb-8 pt-1 sm:pb-10" data-testid="page-dealer-manual-actualization">
       <div className="mx-auto w-full max-w-5xl space-y-3 px-3 sm:space-y-4 sm:px-4 lg:px-6">
         <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
-          <Button asChild variant="ghost" size="sm" className="h-8 w-fit justify-start gap-1.5 px-2 text-xs font-medium text-muted-foreground hover:text-foreground">
-            <Link href="/dealer-base">
-              <span aria-hidden>←</span> Назад к клиентской базе
-            </Link>
-          </Button>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {canEdit ? (
+          {embeddedInSheet ? null : (
+            <Button asChild variant="ghost" size="sm" className="h-8 w-fit justify-start gap-1.5 px-2 text-xs font-medium text-muted-foreground hover:text-foreground">
+              <Link href="/dealer-base">
+                <span aria-hidden>←</span> Назад к клиентской базе
+              </Link>
+            </Button>
+          )}
+          <div className="flex flex-wrap items-center gap-1.5 sm:ml-auto">
+            {canEditUi ? (
               <Button
                 type="button"
                 variant="default"
@@ -492,7 +503,7 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
         <section className="overflow-hidden rounded-xl border border-border border-l-[3px] border-l-primary bg-card shadow-sm">
           <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-stretch sm:gap-4 sm:px-5 sm:py-4">
             <div data-testid="dealer-manual-hero-visual" className="w-full shrink-0 sm:max-w-[15rem]">
-              <ShowcaseCoverPhotoSlot kind="dealer" dealer={row} profile={profile} size="hero" rounded="lg" />
+              <ShowcaseCoverPhotoSlot kind="dealer" dealer={row} profile={profile} size="hero" rounded="lg" readOnly={isReadOnly} />
             </div>
             <div className="min-w-0 flex-1 space-y-2">
               <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
@@ -548,7 +559,7 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
               <Field label="Категория" value={tier ? (TIER_LABELS[tier] ?? tier) : getClientCategoryLabel(row.clientCategory)} />
               <Field label="Общий комментарий" value={row.comment?.trim() || str(f.comment) || "—"} emphasis className="sm:col-span-2" />
             </div>
-            {canEdit ? (
+            {canEditUi ? (
               <Button type="button" variant="outline" size="sm" className="mt-2 h-8 px-3 text-xs font-medium" onClick={() => setEditOpen(true)}>
                 Редактировать
               </Button>
@@ -580,7 +591,7 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
               <Field label="Комментарий (КЭШБЭК)" value={row.cashbackComment?.trim() || "—"} emphasis className="sm:col-span-2" />
               <Field label="Код клиента в 1С" value={row.external1cCode?.trim() || "—"} emphasis className="sm:col-span-2" />
             </div>
-            {canEdit ? (
+            {canEditUi ? (
               <Button type="button" variant="outline" size="sm" className="mt-2 h-8 px-3 text-xs font-medium" onClick={() => setEditOpen(true)}>
                 Редактировать
               </Button>
@@ -612,7 +623,7 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
               }
             />
             </div>
-            {canEdit ? (
+            {canEditUi ? (
               <Button type="button" variant="outline" size="sm" className="mt-2 h-8 px-3 text-xs font-medium" onClick={() => setEditOpen(true)}>
                 Редактировать
               </Button>
@@ -635,7 +646,7 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
             <Field label="Порядок выгрузки" value={row.distribution > 0 ? String(row.distribution) : "—"} />
             <Field label="Комментарий по логистике" value={str(f.logisticsComment) || "—"} emphasis className="sm:col-span-2" />
             </div>
-            {canEdit ? (
+            {canEditUi ? (
               <Button type="button" variant="outline" size="sm" className="mt-2 h-8 px-3 text-xs font-medium" onClick={() => setEditOpen(true)}>
                 Редактировать
               </Button>
@@ -650,7 +661,7 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
         >
           <AccordionSectionTrigger title="Контакты клиента" summary={sectionMeta.contacts.summary} status={sectionMeta.contacts.status} />
           <AccordionContent className="border-t border-border/35 px-3 pb-2.5 pt-1.5 sm:px-3.5">
-            <DealerContactsActualizationBlock dealerId={baseRow.id} profile={profile} canEdit={canEdit} />
+            <DealerContactsActualizationBlock dealerId={baseRow.id} profile={profile} canEdit={canEditUi} />
           </AccordionContent>
         </AccordionItem>
 
@@ -663,6 +674,7 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
               actorUserId={user?.id ?? profile.personaUserId}
               actorLabel={user ? displayUserName(user) : userLabelFromProfile(profile)}
               embedInAccordion
+              readOnly={isReadOnly}
             />
           </AccordionContent>
         </AccordionItem>
@@ -679,7 +691,7 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
               entityId={baseRow.id}
               entityName={baseRow.name}
               entitySeed={baseRow.id || baseRow.actualizationInn || undefined}
-              canEdit={canEdit}
+              canEdit={canEditUi}
               profile={profile}
             />
           </AccordionContent>
@@ -700,7 +712,7 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
               Требуют заполнения витрины: <span className="font-semibold text-foreground">{needShowcase}</span>
             </p>
             {tps.length === 0 ? <p className="text-muted-foreground">Торговые точки не добавлены</p> : null}
-            <DealerTradePointsSection row={row} profile={profile} sectionDomId="dealer-section-points" />
+            <DealerTradePointsSection row={row} profile={profile} sectionDomId="dealer-section-points" readOnly={isReadOnly} />
           </AccordionContent>
         </AccordionItem>
 
@@ -718,13 +730,14 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
               actorLabel={user ? displayUserName(user) : userLabelFromProfile(profile)}
               onSaved={() => void actx.refresh()}
               allowManualActualizationCard
+              readOnly={isReadOnly}
             />
             <div data-testid="section-dealer-bitrix-tasks">
               <Bitrix24TasksPanel
                 scope="dealer"
                 dealerId={row.id}
                 dealerName={row.name}
-                canCreate={canEditClientNextStep(profile, row)}
+                canCreate={!isReadOnly && canEditClientNextStep(profile, row)}
                 actorUserId={user?.id ?? profile.personaUserId}
                 actorLabel={user ? displayUserName(user) : userLabelFromProfile(profile)}
                 compact
@@ -735,8 +748,11 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
         </Accordion>
       </div>
 
-      <DealerActualizationEditDialog open={editOpen} onOpenChange={setEditOpen} baseRow={baseRow} profile={profile} />
+      {!isReadOnly ? (
+        <DealerActualizationEditDialog open={editOpen} onOpenChange={setEditOpen} baseRow={baseRow} profile={profile} />
+      ) : null}
 
+      {!isReadOnly ? (
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent data-testid="dialog-dealer-delete-confirm">
           <AlertDialogHeader>
@@ -763,6 +779,7 @@ export function DealerManualActualizationPage(props: { baseRow: DealerRow; profi
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      ) : null}
     </div>
   );
 }
