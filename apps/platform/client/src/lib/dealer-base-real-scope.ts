@@ -2,17 +2,58 @@ import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import type { DealerBaseAccessRole } from "@/lib/dealer-base-role-views";
 import { managerDisplayMatchesCatalogName } from "@/lib/rop-manager-filters";
 import type { OrgSnapshot } from "@/lib/use-org-snapshot";
+import { UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE } from "@shared/admin/actualization-dedupe";
 
-function realEffectiveTeamLeadTeamIdFromSnap(snap: OrgSnapshot): string {
+/** РОП (UUID) → catalog teamId в release-сиде. */
+const ROP_UUID_TO_CATALOG_TEAM: Record<string, string> = {
+  "ccffcf6e-2505-4eee-b257-ac65b60bb779": "team-kupiansky",
+  "3f67f770-f5cd-4257-a4b2-1cefa65fbfaa": "team-skalaban",
+  "c36f625f-730e-4ae3-b118-bdb005d10b81": "team-sapozhkov",
+};
+
+export function realEffectiveTeamLeadTeamIdFromSnap(snap: OrgSnapshot): string {
   const t = snap.teams.find((tt) => tt.ropUserId === snap.me.id);
   return t?.id ?? "";
+}
+
+/** Catalog teamId (`team-kupiansky`) для РОПа в real-режиме. */
+export function catalogTeamIdForRealTeamLead(snap: OrgSnapshot): string | null {
+  const teamUuid = realEffectiveTeamLeadTeamIdFromSnap(snap);
+  if (!teamUuid) return null;
+  const team = snap.teams.find((t) => t.id === teamUuid);
+  if (team?.ropUserId) {
+    const mapped = ROP_UUID_TO_CATALOG_TEAM[team.ropUserId];
+    if (mapped) return mapped;
+  }
+  if (teamUuid.startsWith("team-")) return teamUuid;
+  return null;
+}
+
+function catalogManagerIdsForTeamUuid(snap: OrgSnapshot, teamUuid: string): Set<string> {
+  const ids = new Set<string>();
+  for (const u of snap.users) {
+    if (u.teamId !== teamUuid) continue;
+    if (u.role !== "manager" && u.role !== "regional_manager") continue;
+    const cat = UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE[u.id];
+    if (cat) ids.add(cat);
+  }
+  return ids;
+}
+
+function rowBelongsToRealTeam(row: DealerRow, snap: OrgSnapshot, teamUuid: string, catalogTeam: string | null): boolean {
+  if (catalogTeam && row.releaseTeamId === catalogTeam) return true;
+  const mgrIds = catalogManagerIdsForTeamUuid(snap, teamUuid);
+  if (mgrIds.size > 0 && row.releaseManagerId && mgrIds.has(row.releaseManagerId)) return true;
+  return false;
 }
 
 export function roleScopedDealerRowsForReal(rows: DealerRow[], snap: OrgSnapshot, access: DealerBaseAccessRole): DealerRow[] {
   if (access === "sales_director") return rows;
   if (access === "team_lead") {
-    const tid = realEffectiveTeamLeadTeamIdFromSnap(snap);
-    return rows.filter((r) => r.releaseTeamId === tid);
+    const teamUuid = realEffectiveTeamLeadTeamIdFromSnap(snap);
+    if (!teamUuid) return [];
+    const catalogTeam = catalogTeamIdForRealTeamLead(snap);
+    return rows.filter((r) => rowBelongsToRealTeam(r, snap, teamUuid, catalogTeam));
   }
   const selfName = snap.users.find((u) => u.id === snap.me.id)?.fullName?.trim() ?? "";
   return rows.filter((r) => {

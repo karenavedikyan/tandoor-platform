@@ -1,0 +1,85 @@
+/**
+ * Запуск: `npm run test:rop-real-scope` из каталога apps/platform.
+ *
+ * Промт 54-A: roleScopedDealerRowsForReal для РОПов/директора по catalog team.
+ */
+import assert from "node:assert/strict";
+import { buildDealerRowsFromReleaseClients } from "../dealer-base-mock-data";
+import { roleScopedDealerRowsForReal, catalogTeamIdForRealTeamLead } from "../dealer-base-real-scope";
+import { getReleaseClients } from "../release-client-data";
+import { createEmptyActualizationState } from "../client-base-actualization-state";
+import { computeMainDashboardScopeMetrics } from "../main-dashboard-scope-metrics";
+import type { OrgSnapshot } from "../use-org-snapshot";
+import type { ReleaseDemoProfile } from "../release-demo-profile";
+
+const ROP_KUPIANSKY = "ccffcf6e-2505-4eee-b257-ac65b60bb779";
+const ROP_SKALABAN = "3f67f770-f5cd-4257-a4b2-1cefa65fbfaa";
+const ROP_SAPOZHKOV = "c36f625f-730e-4ae3-b118-bdb005d10b81";
+const TEAM_KUPIANSKY_UUID = "e5387f40-c693-44e6-ab17-e61a3ed0bd95";
+
+const profile = { personaUserId: "demo", role: "team_lead" } as ReleaseDemoProfile;
+const emptyAct = createEmptyActualizationState();
+const allRows = buildDealerRowsFromReleaseClients(getReleaseClients());
+
+function seedCountByTeam(catalogTeamId: string): number {
+  return getReleaseClients().filter((c) => c.teamId === catalogTeamId).length;
+}
+
+function ropSnap(ropUserId: string, teamUuid: string): OrgSnapshot {
+  return {
+    me: { id: ropUserId, role: "rop", fullName: "РОП", teamId: teamUuid },
+    visibility: { all: true, clientCodes: null, teamIds: [], visibleUserIds: [] },
+    teams: [{ id: teamUuid, name: "Команда", ropUserId, ropName: "РОП" }],
+    users: [],
+  } as unknown as OrgSnapshot;
+}
+
+function directorSnap(): OrgSnapshot {
+  return {
+    me: { id: "director-uuid", role: "director", fullName: "Директор", teamId: null },
+    visibility: { all: true, clientCodes: null, teamIds: [], visibleUserIds: [] },
+    teams: [],
+    users: [],
+  } as unknown as OrgSnapshot;
+}
+
+// catalogTeamIdForRealTeamLead
+{
+  const snap = ropSnap(ROP_KUPIANSKY, TEAM_KUPIANSKY_UUID);
+  assert.equal(catalogTeamIdForRealTeamLead(snap), "team-kupiansky");
+}
+
+// РОПы: scope ≈ сид по команде
+const ropCases: Array<{ ropId: string; teamUuid: string; catalogTeam: string; min: number }> = [
+  { ropId: ROP_KUPIANSKY, teamUuid: TEAM_KUPIANSKY_UUID, catalogTeam: "team-kupiansky", min: 640 },
+  { ropId: ROP_SKALABAN, teamUuid: "team-uuid-skalaban", catalogTeam: "team-skalaban", min: 1230 },
+  { ropId: ROP_SAPOZHKOV, teamUuid: "team-uuid-sapozhkov", catalogTeam: "team-sapozhkov", min: 840 },
+];
+
+for (const { ropId, teamUuid, catalogTeam, min } of ropCases) {
+  const snap = ropSnap(ropId, teamUuid);
+  const scoped = roleScopedDealerRowsForReal(allRows, snap, "team_lead");
+  const expected = seedCountByTeam(catalogTeam);
+  assert.equal(scoped.length, expected, `${catalogTeam}: scoped=${scoped.length} expected seed=${expected}`);
+  assert.ok(scoped.length >= min, `${catalogTeam} >= ${min}`);
+}
+
+// Директор: все клиенты сида
+{
+  const snap = directorSnap();
+  const scoped = roleScopedDealerRowsForReal(allRows, snap, "sales_director");
+  assert.equal(scoped.length, allRows.length);
+  assert.ok(scoped.length >= 2700, "директор: >= 2700 клиентов");
+}
+
+// Метрики архива на пустом state — 0 архивных
+{
+  const snap = ropSnap(ROP_KUPIANSKY, TEAM_KUPIANSKY_UUID);
+  const metrics = computeMainDashboardScopeMetrics(emptyAct, profile, (rows) =>
+    roleScopedDealerRowsForReal(rows, snap, "team_lead"),
+  );
+  assert.equal(metrics.archivedClients, 0);
+  assert.ok(metrics.activeClients >= 640);
+}
+
+console.log("dealer-base-real-scope: ok");

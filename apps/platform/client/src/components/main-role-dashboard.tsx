@@ -8,24 +8,30 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
+import { useAuthUser } from "@/hooks/use-auth-user";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
+import { mapUserRoleToDealerBaseAccess } from "@/lib/auth-user-dealer-access";
 import { canAccessPath, salesControlHomeHref } from "@/lib/auth-access";
 import { userRoleToSalesRole } from "@/lib/role-mapping";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
+import { roleScopedDealerRowsForReal } from "@/lib/dealer-base-real-scope";
 import { DEALER_BASE_ROWS, type DealerRow } from "@/lib/dealer-base-mock-data";
 import {
   dealerNeedsAttention,
+  mapSalesRoleToDealerBaseAccess,
   roleScopedDealerRows,
 } from "@/lib/dealer-base-role-views";
 import { buildBrowserHashAppHref } from "@/lib/hash-route-utils";
+import { computeMainDashboardScopeMetrics } from "@/lib/main-dashboard-scope-metrics";
 import { getEffectiveTeamLeadTeamId } from "@/lib/release-demo-profile";
 import type { ActualizationState } from "@/lib/client-base-actualization-state";
 import { getAllMatrixTasks, getManagementFactualShowcaseTasksForDealers, getShowcaseBackedTasksForDealers } from "@/lib/trade-point-task-data";
 import { getRopOptions } from "@/lib/rop-manager-filters";
 import { getShowcaseOnlyTasks } from "@/lib/task-classification";
 import { getSalesUserById, getTeamManagers, type SalesRole } from "@/lib/sales-control-data";
+import { useOrgSnapshot } from "@/lib/use-org-snapshot";
 
 function countOpenTasksForDealers(
   dealerIds: Set<string>,
@@ -58,20 +64,33 @@ function MainKpiLink({ href, testId, children }: { href: string; testId: string;
   );
 }
 
-function MainLinkButton({ href, label, testId }: MainLink) {
-  return (
-    <Button asChild variant="secondary" className="min-h-10 min-w-0 shrink font-semibold" data-testid={testId}>
-      <Link href={href}>{label}</Link>
-    </Button>
-  );
-}
-
 export function MainRoleDashboard() {
   const { user } = useCurrentUser();
+  const { user: me, isLoading: authLoading, isError: authError } = useAuthUser();
   const { profile } = useReleaseDemoProfile();
   const actx = useClientBaseActualization();
   const managementPlane = useClientBaseTeamActualization();
   const role = (user ? userRoleToSalesRole(user.role) : profile.role) as SalesRole;
+
+  const isRealUser = Boolean(me?.id);
+  const orgSnapQ = useOrgSnapshot({ enabled: isRealUser });
+  const snap = orgSnapQ.data ?? null;
+  const useReal = Boolean(isRealUser && !authLoading && !authError && snap && !orgSnapQ.isError);
+
+  const access = useMemo(() => {
+    if (isRealUser && me?.role) return mapUserRoleToDealerBaseAccess(me.role);
+    return mapSalesRoleToDealerBaseAccess(profile.role);
+  }, [isRealUser, me?.role, profile.role]);
+
+  const scopeRows = useMemo(() => {
+    return (rows: DealerRow[]) =>
+      useReal && snap ? roleScopedDealerRowsForReal(rows, snap, access) : roleScopedDealerRows(rows, profile);
+  }, [useReal, snap, access, profile]);
+
+  const scopeMetrics = useMemo(() => {
+    if (!actx.enabled) return null;
+    return computeMainDashboardScopeMetrics(managementPlane.mergedState, profile, scopeRows);
+  }, [actx.enabled, managementPlane.mergedState, profile, scopeRows]);
 
   const baseRowsForDashboard = useMemo(() => {
     if (actx.enabled) {
@@ -80,10 +99,8 @@ export function MainRoleDashboard() {
     if (role === "team_lead" || role === "sales_director") return [];
     return DEALER_BASE_ROWS;
   }, [actx.enabled, managementPlane.mergedState, profile, role]);
-  const scopedClients = useMemo(
-    () => roleScopedDealerRows(baseRowsForDashboard, profile),
-    [baseRowsForDashboard, profile],
-  );
+
+  const scopedClients = useMemo(() => scopeRows(baseRowsForDashboard), [baseRowsForDashboard, scopeRows]);
   const dealerIds = useMemo(() => new Set(scopedClients.map((r) => r.id)), [scopedClients]);
   const dashboardLoading =
     (actx.enabled && actx.loading) ||
@@ -91,9 +108,13 @@ export function MainRoleDashboard() {
   const workingBaseEmpty = !dashboardLoading && scopedClients.length === 0;
 
   const useMgmtFactualTasks = actx.enabled && shouldUseTeamMergedActualizationPlane(profile);
+  const showArchiveKpi = actx.enabled && !dashboardLoading;
+  const archivedClients = scopeMetrics?.archivedClients ?? 0;
+  const activeTradePoints = scopeMetrics?.activeTradePoints ?? 0;
+  const archivedTradePoints = scopeMetrics?.archivedTradePoints ?? 0;
 
   const { totalClients, activeClients, attentionClients, openTasks, extraKpiLabel, extraKpiValue } = useMemo(() => {
-    const total = scopedClients.length;
+    const total = scopeMetrics?.activeClients ?? scopedClients.length;
     const active = scopedClients.filter((r) => r.status === "активный").length;
     const attention = scopedClients.filter(dealerNeedsAttention).length;
     const tasks = countOpenTasksForDealers(dealerIds, {
@@ -132,7 +153,16 @@ export function MainRoleDashboard() {
       extraKpiLabel: null as string | null,
       extraKpiValue: null as string | null,
     };
-  }, [scopedClients, dealerIds, role, profile, actx.enabled, useMgmtFactualTasks, managementPlane.mergedState]);
+  }, [
+    scopedClients,
+    scopeMetrics?.activeClients,
+    dealerIds,
+    role,
+    profile,
+    actx.enabled,
+    useMgmtFactualTasks,
+    managementPlane.mergedState,
+  ]);
 
   const can = (path: string) => Boolean(user && canAccessPath(userRoleToSalesRole(user.role), path));
 
@@ -237,7 +267,7 @@ export function MainRoleDashboard() {
     role === "sales_manager"
       ? "Мои клиенты"
       : role === "team_lead"
-        ? "Клиентов команды"
+        ? "Клиентов по команде"
         : "Всего клиентов";
 
   const kpiTasksLabel =
@@ -246,6 +276,14 @@ export function MainRoleDashboard() {
       : role === "team_lead"
         ? "Открытые задачи по витрине (команда)"
         : "Витрины (открытые)";
+
+  const archiveClientsSubline = showArchiveKpi ? `${archivedClients} в архиве` : null;
+  const tradePointsSubline =
+    showArchiveKpi && (role === "sales_manager" || role === "team_lead" || role === "sales_director")
+      ? role === "sales_manager"
+        ? `ТТ: ${activeTradePoints}${archivedTradePoints > 0 ? ` · ${archivedTradePoints} в архиве` : ""}`
+        : `Активные ТТ: ${activeTradePoints} · в архиве: ${archivedTradePoints}`
+      : null;
 
   if (role !== "sales_manager" && role !== "team_lead" && role !== "sales_director") {
     return (
@@ -260,7 +298,6 @@ export function MainRoleDashboard() {
       <PageHeader title={headline} description={subline} icon={Home} />
       <DataFreshness updatedAt={actx.meta?.updatedAt ?? null} sourceLabel="Postgres" />
 
-      {/* KPI grid (Промт 47 F1: те же KPI, нормализованная сетка 5/4 cols). */}
       <section
         className={
           extraKpiLabel
@@ -273,7 +310,19 @@ export function MainRoleDashboard() {
           <Card className="min-w-0 rounded-xl border border-border bg-card" data-testid="card-main-kpi-clients">
             <CardContent className="p-3">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{kpiClientsLabel}</p>
-              <p className="mt-0.5 text-xl font-semibold tabular-nums text-foreground">{totalClients}</p>
+              <p className="mt-0.5 text-xl font-semibold tabular-nums text-foreground" data-testid="metric-main-total-clients">
+                {totalClients}
+              </p>
+              {archiveClientsSubline ? (
+                <p className="mt-1 text-xs text-muted-foreground tabular-nums" data-testid="metric-main-archived-clients">
+                  {archiveClientsSubline}
+                </p>
+              ) : null}
+              {tradePointsSubline ? (
+                <p className="mt-0.5 text-xs text-muted-foreground tabular-nums" data-testid="metric-main-trade-points">
+                  {tradePointsSubline}
+                </p>
+              ) : null}
             </CardContent>
           </Card>
         </MainKpiLink>
@@ -326,13 +375,10 @@ export function MainRoleDashboard() {
         ) : null}
       </section>
 
-      {/* Промт 47 D: соревновательный блок «Гонка актуализации». */}
       <ActualizationRace />
 
-      {/* Промт 47 E: компактная плитка плана-факта. */}
       <PlanFactSummary />
 
-      {/* Промт 47 F1: ровно 3 quick-link кнопки. Остальные ссылки — в сайдбаре. */}
       <div className="flex min-w-0 flex-wrap gap-2" data-testid="section-main-quick-links">
         <Button asChild className="min-h-10 font-semibold" data-testid="button-main-quick-dealer-base">
           <Link href="/dealer-base">Клиентская база</Link>
