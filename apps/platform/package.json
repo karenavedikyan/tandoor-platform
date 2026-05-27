@@ -13,6 +13,7 @@
     "check": "tsc",
     "auth:db-push": "node scripts/auth-db-push.mjs",
     "auth:seed-admin": "node scripts/auth-seed-admin.mjs",
+    "migrate:manager-only-state": "node scripts/migrate-2026-05-27-manager-only-state.mjs",
     "catalog:import": "node scripts/import-tandoor-public-catalog.mjs",
     "release:import-clients": "node scripts/import-release-clients.mjs",
     "release:import-koteneva": "node scripts/import-koteneva-clients.mjs",
@@ -29,7 +30,8 @@
     "test:trash": "npm run test:trash-protection && npm run test:trash-purge && npm run test:trash-merge && npm run test:trash-helper && npm run test:data-merge-trash",
     "test:category-tier-edit": "tsx client/src/__tests__/client-category-tier-edit.test.ts",
     "test:streak": "tsx client/src/lib/__tests__/actualization-streak.test.ts",
-    "test:scope-isolation": "tsx api/actualization/__tests__/scope-isolation.test.ts"
+    "test:scope-isolation": "tsx api/actualization/__tests__/scope-isolation.test.ts",
+    "test:manager-only-state": "tsx api/actualization/__tests__/manager-only-state.test.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
