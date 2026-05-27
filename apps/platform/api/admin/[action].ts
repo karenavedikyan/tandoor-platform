@@ -2638,8 +2638,28 @@ async function handleActualizationStatsOverview(
       clientsWithoutInn: problemSlice(clients.filter((c) => !c.inn).map((c) => ({ clientId: c.id, fullName: c.fullName, managerUserId: c.managerUserId, managerFullName: c.managerFullName }))),
       clientsWithoutPhone: problemSlice(clients.filter((c) => !c.phone).map((c) => ({ clientId: c.id, fullName: c.fullName, managerUserId: c.managerUserId, managerFullName: c.managerFullName }))),
       clientsWithoutLegalEntity: problemSlice(clients.filter((c) => !c.legalEntity).map((c) => ({ clientId: c.id, fullName: c.fullName, managerUserId: c.managerUserId, managerFullName: c.managerFullName }))),
-      tradePointsWithoutAddress: problemSlice(tradePoints.filter((tp) => !tp.address)),
-      tradePointsWithoutPhoto: problemSlice(tradePoints.filter((tp) => !tp.hasPhoto)),
+      tradePointsWithoutAddress: problemSlice(
+        tradePoints
+          .filter((tp) => !tp.address)
+          .map((tp) => ({
+            id: tp.id,
+            name: tp.name,
+            managerFullName: tp.managerFullName,
+            clientId: tp.clientId ?? null,
+            dealerProfileId: tp.clientId ?? null,
+          })),
+      ),
+      tradePointsWithoutPhoto: problemSlice(
+        tradePoints
+          .filter((tp) => !tp.hasPhoto)
+          .map((tp) => ({
+            id: tp.id,
+            name: tp.name,
+            managerFullName: tp.managerFullName,
+            clientId: tp.clientId ?? null,
+            dealerProfileId: tp.clientId ?? null,
+          })),
+      ),
     },
     managersFeed,
   });
@@ -3071,6 +3091,266 @@ function collectTradePointsForUser(
     });
   }
   return { tradePoints, clientsById };
+}
+
+/**
+ * Промт 44 A1. Активность менеджера за период.
+ *
+ * Возвращает per-period stats и полный список клиентов / ТТ менеджера (сортированных по updatedAt desc).
+ * Согласно спецификации C8.1 — clients/tradePoints возвращаем полностью; stats считаем по периоду
+ * (так Sheet рендерится без отдельной выгрузки). UI решает, как фильтровать визуально.
+ */
+async function handleManagerActivityDetail(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  headers: Record<string, string | string[] | undefined>,
+): Promise<void> {
+  const me = await resolveCurrentUser(pool, headers);
+  if (!me) {
+    sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+    return;
+  }
+  if (!["admin", "director", "rop", "manager"].includes(me.role) || me.status !== "active") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+  const managerUserId = queryStringParam(req, "managerUserId");
+  if (!managerUserId || !UUID_RE.test(managerUserId)) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите managerUserId." });
+    return;
+  }
+  if (me.role === "manager" && managerUserId !== me.id) {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+  if (me.role === "rop" && (await denyIfRopCannotAccessUser(res, pool, me, managerUserId))) return;
+
+  const now = new Date();
+  const from = parseIsoOr(queryStringParam(req, "fromIso"), new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000));
+  const to = parseIsoOr(queryStringParam(req, "toIso"), now);
+
+  const users = await pool.query<ActualizationStatsUserRow>(
+    `SELECT u.id, u.full_name, u.role, t.id AS team_id, t.name AS team_name, t.rop_user_id, ropu.full_name AS rop_full_name
+       FROM users u
+       LEFT JOIN user_team_memberships m ON m.user_id = u.id
+       LEFT JOIN teams t ON t.id = m.team_id
+       LEFT JOIN users ropu ON ropu.id = t.rop_user_id
+      WHERE u.status = 'active'`,
+  );
+  const usersById = new Map<string, ActualizationStatsUserRow>();
+  for (const u of users.rows) if (!usersById.has(u.id)) usersById.set(u.id, u);
+  const meta = userMeta(managerUserId, usersById);
+
+  const rows = await pool.query<ActualizationDedupeStateRow>(
+    `SELECT scope_key, user_id, role, state, updated_at
+       FROM client_base_actualization_state
+      WHERE scope_key LIKE 'user:%'`,
+  );
+  const states: Record<string, unknown>[] = [];
+  for (const row of rows.rows) {
+    const scopeId = scopeUserId(String(row.scope_key));
+    const owner = row.user_id && UUID_RE.test(row.user_id) ? row.user_id : scopeId ? legacyScopeToUuid(scopeId) : null;
+    if (owner === managerUserId) states.push(coerceActualizationState(row.state));
+  }
+  const merged = mergeActualizationStates(states.length > 0 ? states : [actualizationEmptyState()]);
+
+  const legalByDealer = stateRecord(merged.legalEntityOverridesByDealerId);
+  const photos = stateRecord(merged.tradePointPhotosByTradePointId);
+
+  type DealerCollected = {
+    id: string;
+    fullName: string;
+    inn: string | null;
+    phone: string | null;
+    legalEntity: boolean;
+    city: string | null;
+    status: "active" | "potential" | "attention";
+    addedAtIso: string | null;
+    updatedAtIso: string | null;
+  };
+
+  const clientById = new Map<string, DealerCollected>();
+  const addClient = (id: string, fields: Record<string, unknown>, addedAtIso: string | null, updatedAtIso: string | null): void => {
+    const status = normalizeClientBaseStatus(stateString(fields.status));
+    if (status === "archived") return;
+    const prev = clientById.get(id);
+    if (prev) {
+      // Если запись уже есть — обновляем «свежими» полями, обновляем дату updatedAt.
+      const merged: DealerCollected = {
+        ...prev,
+        fullName: stateString(fields.name) || stateString(fields.dealerName) || prev.fullName,
+        inn: stateString(fields.inn) || prev.inn,
+        phone: stateString(fields.phone) || prev.phone,
+        city: stateString(fields.city) || prev.city,
+        legalEntity: prev.legalEntity || Boolean(legalByDealer[id]),
+        status,
+        updatedAtIso:
+          updatedAtIso && (!prev.updatedAtIso || updatedAtIso > prev.updatedAtIso) ? updatedAtIso : prev.updatedAtIso,
+        addedAtIso:
+          prev.addedAtIso ?? addedAtIso ?? null,
+      };
+      clientById.set(id, merged);
+      return;
+    }
+    clientById.set(id, {
+      id,
+      fullName: stateString(fields.name) || stateString(fields.dealerName) || id,
+      inn: stateString(fields.inn) || null,
+      phone: stateString(fields.phone) || null,
+      legalEntity: Boolean(legalByDealer[id]),
+      city: stateString(fields.city) || null,
+      status,
+      addedAtIso,
+      updatedAtIso,
+    });
+  };
+  for (const [id, raw] of Object.entries(stateRecord(merged.manuallyCreatedDealersById))) {
+    const m = stateRecord(raw);
+    const fields = stateRecord(m.fields);
+    const added = stateDate(fields, m.createdAt);
+    const updated = stateDate(fields, m.updatedAt ?? m.createdAt) ?? added;
+    addClient(id, fields, added, updated);
+  }
+  for (const [id, raw] of Object.entries(stateRecord(merged.dealerOverridesById))) {
+    const ov = stateRecord(raw);
+    const fields = stateRecord(ov.fields);
+    if (
+      !stateString(fields.phone) &&
+      !stateString(fields.email) &&
+      !stateString(fields.inn) &&
+      !stateString(fields.name) &&
+      !stateString(fields.dealerName)
+    ) {
+      continue;
+    }
+    const updated = stateDate(fields, ov.updatedAt);
+    addClient(id, fields, null, updated);
+  }
+
+  type TpCollected = {
+    id: string;
+    name: string | null;
+    address: string | null;
+    city: string | null;
+    hasPhoto: boolean;
+    notFilled: boolean;
+    clientId: string;
+    addedAtIso: string | null;
+    updatedAtIso: string | null;
+  };
+  const tpById = new Map<string, TpCollected>();
+  for (const [id, raw] of Object.entries(stateRecord(merged.manuallyCreatedTradePointsById))) {
+    const tp = stateRecord(raw);
+    const fields = stateRecord(tp.fields);
+    const clientId = stateString(tp.dealerId);
+    if (!clientId || !clientById.has(clientId)) continue;
+    const address = stateString(fields.address) || null;
+    const city = stateString(fields.city) || null;
+    const photoArr = Array.isArray(photos[id]) ? (photos[id] as unknown[]) : [];
+    const photoUrl = stateString(fields.photoUrl);
+    const hasPhotoFlag = fields.hasPhoto === true;
+    const added = stateDate(fields, tp.createdAt);
+    const updated = stateDate(fields, tp.updatedAt ?? tp.createdAt) ?? added;
+    tpById.set(id, {
+      id,
+      name: stateString(fields.name) || null,
+      address,
+      city,
+      hasPhoto: photoArr.length > 0 || photoUrl.length > 0 || hasPhotoFlag,
+      notFilled: !address || !city,
+      clientId,
+      addedAtIso: added,
+      updatedAtIso: updated,
+    });
+  }
+
+  const tpCountByClient = new Map<string, number>();
+  tpById.forEach((tp) => {
+    tpCountByClient.set(tp.clientId, (tpCountByClient.get(tp.clientId) ?? 0) + 1);
+  });
+
+  const clientsArr = Array.from(clientById.values()).map((c) => ({
+    id: c.id,
+    fullName: c.fullName,
+    inn: c.inn,
+    phone: c.phone,
+    legalEntity: c.legalEntity,
+    city: c.city,
+    status: c.status,
+    tradePointsCount: tpCountByClient.get(c.id) ?? 0,
+    dealerProfileId: c.id,
+    addedAtIso: c.addedAtIso,
+    updatedAtIso: c.updatedAtIso,
+    problems: {
+      noInn: !c.inn,
+      noPhone: !c.phone,
+      noLegalEntity: !c.legalEntity,
+      noTradePoint: (tpCountByClient.get(c.id) ?? 0) === 0,
+    },
+  }));
+  clientsArr.sort((a, b) => {
+    const ua = a.updatedAtIso ?? a.addedAtIso ?? "";
+    const ub = b.updatedAtIso ?? b.addedAtIso ?? "";
+    return ub.localeCompare(ua);
+  });
+
+  const tpsArr = Array.from(tpById.values()).map((tp) => {
+    const owner = clientById.get(tp.clientId);
+    return {
+      id: tp.id,
+      name: tp.name,
+      address: tp.address,
+      city: tp.city,
+      hasPhoto: tp.hasPhoto,
+      notFilled: tp.notFilled,
+      clientId: tp.clientId,
+      clientFullName: owner?.fullName ?? tp.clientId,
+      clientDealerProfileId: tp.clientId,
+      addedAtIso: tp.addedAtIso,
+      updatedAtIso: tp.updatedAtIso,
+      problems: { noAddress: !tp.address, noPhoto: !tp.hasPhoto },
+    };
+  });
+  tpsArr.sort((a, b) => {
+    const ua = a.updatedAtIso ?? a.addedAtIso ?? "";
+    const ub = b.updatedAtIso ?? b.addedAtIso ?? "";
+    return ub.localeCompare(ua);
+  });
+
+  const clientsAdded = clientsArr.filter((c) => c.addedAtIso && inPeriod(c.addedAtIso, from, to)).length;
+  const clientsUpdated = clientsArr.filter((c) => c.updatedAtIso && inPeriod(c.updatedAtIso, from, to)).length;
+  const tradePointsAdded = tpsArr.filter((tp) => tp.addedAtIso && inPeriod(tp.addedAtIso, from, to)).length;
+  const tradePointsUpdated = tpsArr.filter((tp) => tp.updatedAtIso && inPeriod(tp.updatedAtIso, from, to)).length;
+  const allTimestamps = [
+    ...clientsArr.map((c) => c.updatedAtIso ?? c.addedAtIso),
+    ...tpsArr.map((tp) => tp.updatedAtIso ?? tp.addedAtIso),
+  ].filter((iso): iso is string => !!iso);
+  const lastActivityIso = allTimestamps.length > 0 ? allTimestamps.sort().pop() ?? null : null;
+  const updatesInPeriod = clientsUpdated + tradePointsUpdated;
+  const score = clientsAdded * 5 + tradePointsAdded * 2 + Math.min(updatesInPeriod, 50);
+
+  sendJson(res, 200, {
+    success: true,
+    manager: {
+      userId: managerUserId,
+      fullName: meta.fullName,
+      teamId: meta.teamId,
+      teamName: meta.teamName,
+      ropFullName: meta.ropFullName,
+    },
+    period: { fromIso: from.toISOString(), toIso: to.toISOString() },
+    stats: {
+      clientsAdded,
+      clientsUpdated,
+      tradePointsAdded,
+      tradePointsUpdated,
+      lastActivityIso,
+      score,
+    },
+    clients: clientsArr,
+    tradePoints: tpsArr,
+  });
 }
 
 async function handleTradePointsOverview(
@@ -4493,6 +4773,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "client-base-manager-detail" && req.method === "GET") {
       await handleClientBaseManagerDetail(req, res, pool, headers);
+      return;
+    }
+    if (action === "manager-activity-detail" && req.method === "GET") {
+      await handleManagerActivityDetail(req, res, pool, headers);
       return;
     }
     if (action === "trade-points-overview" && req.method === "GET") {

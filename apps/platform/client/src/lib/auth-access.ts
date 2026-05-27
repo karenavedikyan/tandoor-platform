@@ -178,6 +178,7 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
       (x) => isUnder(x, "/training"),
       (x) => isUnder(x, "/marketing-briefs"),
       (x) => x === "/trash",
+      (x) => x === "/client-base-activity",
       (x) =>
         x === "/sales-control" ||
         isUnder(x, "/sales-control/manager") ||
@@ -455,6 +456,7 @@ export function getPilotNavigation(
     const push = (x: PilotNavItem) => items.push(x);
     if (role === "sales_manager") {
       push({ href: "/main", label: "Главная", testId: "nav-main" });
+      push({ href: "/client-base-activity", label: "Статистика обновления базы", testId: "nav-item-client-base-activity" });
       push({ href: "/dealer-base", label: "Клиенты", testId: "nav-dealer-base", ...dealerNavExtras() });
       push({ href: "/trade-points", label: "Торговые точки", testId: "nav-trade-points", ...tradePointNavExtras() });
       push({ href: "/client-map", label: "Карта клиентов", testId: "nav-client-map" });
