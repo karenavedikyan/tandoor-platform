@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, type ComponentType, type LazyExoticComponent } from "react";
+import { lazy, Suspense, useEffect, useMemo, type ComponentType, type LazyExoticComponent, type ReactElement } from "react";
 import { Switch, Route, Router, useLocation, Link } from "wouter";
 import { useHashLocation } from "wouter/use-hash-location";
 import { queryClient } from "./lib/queryClient";
@@ -31,6 +31,7 @@ import InternalPrototypePlaceholder from "@/pages/internal-prototype-placeholder
 import { INTERNAL_PROTOTYPE_ROUTES } from "@/lib/preview-config";
 import { ClientBaseActualizationProvider, useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { ClientBaseTeamActualizationProvider, useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
+import { ProfileShell } from "@/components/profile/profile-shell";
 import { ThemeProvider } from "@/context/theme-provider";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { resolveSidebarTrashCount, resolveSidebarWorkingDealerClientCount } from "@/lib/dealer-base-sidebar-client-count";
@@ -129,18 +130,28 @@ const CommunicationsRoute = suspensePage(LazyCommunications);
 const ClientBaseActivityDashboardRoute = suspensePage(LazyClientBaseActivityDashboard);
 const TrashBinRoute = suspensePage(LazyTrashBin);
 const UsersAndAccessRoute = suspensePage(LazyUsersAndAccess);
-const MyProfileRoute = suspensePage(LazyMyProfile);
-const ChangePasswordRoute = suspensePage(LazyChangePassword);
+// Промт 47: страницы профиля и админки оборачиваем в общий ProfileShell.
+const wrapProfileShell = (Comp: ComponentType<unknown>): ComponentType<unknown> => {
+  return function ProfileShellWrapped(): ReactElement {
+    return (
+      <ProfileShell>
+        <Comp />
+      </ProfileShell>
+    );
+  };
+};
+const MyProfileRoute = wrapProfileShell(suspensePage(LazyMyProfile));
+const ChangePasswordRoute = wrapProfileShell(suspensePage(LazyChangePassword));
 const FeatureInDevelopmentRoute = suspensePage(LazyFeatureInDevelopment);
 const InviteRoute = suspensePage(LazyInvite);
 const ResetPasswordRoute = suspensePage(LazyResetPassword);
 const ForgotPasswordRoute = suspensePage(LazyForgotPassword);
-const ResetRequestsRoute = suspensePage(LazyResetRequests);
-const AdminInvitationsRoute = suspensePage(LazyAdminInvitations);
-const AdminUsersRoute = suspensePage(LazyAdminUsers);
-const AdminAuditRoute = suspensePage(LazyAdminAudit);
-const AdminClientAssignmentsRoute = suspensePage(LazyAdminClientAssignments);
-const AdminActualizationDedupeRoute = suspensePage(LazyAdminActualizationDedupe);
+const ResetRequestsRoute = wrapProfileShell(suspensePage(LazyResetRequests));
+const AdminInvitationsRoute = wrapProfileShell(suspensePage(LazyAdminInvitations));
+const AdminUsersRoute = wrapProfileShell(suspensePage(LazyAdminUsers));
+const AdminAuditRoute = wrapProfileShell(suspensePage(LazyAdminAudit));
+const AdminClientAssignmentsRoute = wrapProfileShell(suspensePage(LazyAdminClientAssignments));
+const AdminActualizationDedupeRoute = wrapProfileShell(suspensePage(LazyAdminActualizationDedupe));
 
 function HashRedirect({ to }: { to: string }) {
   const [, setLoc] = useHashLocation();
