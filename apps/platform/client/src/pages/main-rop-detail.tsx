@@ -43,7 +43,9 @@ import {
   teamUuidForRopUserId,
 } from "@/lib/dealer-base-real-scope";
 import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
-import { computeMainDashboardScopeMetrics } from "@/lib/main-dashboard-scope-metrics";
+import { computeMainDashboardScopeMetrics, type MainDashboardScopeMetrics } from "@/lib/main-dashboard-scope-metrics";
+import { DrilldownListRow, MainScopeBreakdownKpiGrid } from "@/components/main-dashboard-scope-kpi";
+import { buildBrowserHashAppHref } from "@/lib/hash-route-utils";
 import { buildTradePointListForActualization, type TradePointListRow } from "@/lib/trade-point-list-for-actualization";
 import { useOrgSnapshot } from "@/lib/use-org-snapshot";
 
@@ -203,53 +205,28 @@ export default function MainRopDetailPage() {
         </CardContent>
       </Card>
 
-      <section className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-4" data-testid="section-main-rop-kpi">
-        <Card className="rounded-xl border border-border">
-          <CardContent className="p-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Клиенты вне архива</p>
-            <p className="mt-0.5 text-xl font-semibold tabular-nums" data-testid="metric-rop-active-clients">
-              {scopeMetrics?.activeClients ?? "—"}
-            </p>
-            {scopeMetrics && scopeMetrics.archivedClients > 0 ? (
-              <p className="mt-1 text-xs text-muted-foreground tabular-nums">{scopeMetrics.archivedClients} в архиве</p>
-            ) : null}
-          </CardContent>
-        </Card>
-        <Card className="rounded-xl border border-border">
-          <CardContent className="p-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Торговые точки вне архива</p>
-            <p className="mt-0.5 text-xl font-semibold tabular-nums" data-testid="metric-rop-active-tp">
-              {scopeMetrics?.activeTradePoints ?? "—"}
-            </p>
-            {scopeMetrics && scopeMetrics.archivedTradePoints > 0 ? (
-              <p className="mt-1 text-xs text-muted-foreground tabular-nums">{scopeMetrics.archivedTradePoints} в архиве</p>
-            ) : null}
-          </CardContent>
-        </Card>
-      </section>
+      {scopeMetrics ? (
+        <section className="grid min-w-0 grid-cols-2 gap-3" data-testid="section-main-rop-kpi">
+          <MainScopeBreakdownKpiGrid
+            metrics={scopeMetrics}
+            clientsHref={buildBrowserHashAppHref("/dealer-base")}
+            tradePointsHref={buildBrowserHashAppHref("/trade-points")}
+          />
+        </section>
+      ) : null}
 
       <section className="min-w-0 space-y-2" data-testid="section-main-rop-managers">
         <h2 className="text-sm font-semibold text-foreground">Менеджеры команды</h2>
         <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
-          {teamManagers.map((m) => {
-            const mini = managerMiniMetrics.get(m.id);
-            return (
-              <li key={m.id}>
-                <Link
-                  href={`/main/manager/${m.id}`}
-                  className="flex min-h-11 flex-col gap-0.5 px-4 py-2.5 no-underline transition hover:bg-muted/60 cursor-pointer sm:flex-row sm:items-center sm:justify-between"
-                  data-testid={`link-main-rop-manager-${m.id}`}
-                >
-                  <span className="truncate text-sm font-medium text-foreground">{m.fullName}</span>
-                  <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
-                    {mini
-                      ? `Клиенты: ${mini.activeClients}${mini.archivedClients > 0 ? ` / ${mini.archivedClients} арх.` : ""} · ТТ: ${mini.activeTradePoints}`
-                      : "—"}
-                  </span>
-                </Link>
-              </li>
-            );
-          })}
+          {teamManagers.map((m) => (
+            <DrilldownListRow
+              key={m.id}
+              href={`/main/manager/${m.id}`}
+              testId={`link-main-rop-manager-${m.id}`}
+              title={m.fullName}
+              metrics={managerMiniMetrics.get(m.id) ?? null}
+            />
+          ))}
         </ul>
       </section>
 

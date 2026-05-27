@@ -16,7 +16,13 @@ import { canAccessPath, salesControlHomeHref } from "@/lib/auth-access";
 import { userRoleToSalesRole } from "@/lib/role-mapping";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
-import { realEffectiveTeamLeadTeamIdFromSnap, roleScopedDealerRowsForReal } from "@/lib/dealer-base-real-scope";
+import {
+  realEffectiveTeamLeadTeamIdFromSnap,
+  realRowsForManagerByUUID,
+  realRowsForRopTeam,
+  roleScopedDealerRowsForReal,
+  teamUuidForRopUserId,
+} from "@/lib/dealer-base-real-scope";
 import type { OrgSnapshot } from "@/lib/use-org-snapshot";
 import { DEALER_BASE_ROWS, type DealerRow } from "@/lib/dealer-base-mock-data";
 import {
@@ -25,9 +31,11 @@ import {
   roleScopedDealerRows,
 } from "@/lib/dealer-base-role-views";
 import { buildBrowserHashAppHref } from "@/lib/hash-route-utils";
-import { computeMainDashboardScopeMetrics } from "@/lib/main-dashboard-scope-metrics";
+import { computeMainDashboardScopeMetrics, type MainDashboardScopeMetrics } from "@/lib/main-dashboard-scope-metrics";
+import { DrilldownListRow, MainScopeBreakdownKpiGrid } from "@/components/main-dashboard-scope-kpi";
 import { getEffectiveTeamLeadTeamId } from "@/lib/release-demo-profile";
 import type { ActualizationState } from "@/lib/client-base-actualization-state";
+import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { getAllMatrixTasks, getManagementFactualShowcaseTasksForDealers, getShowcaseBackedTasksForDealers } from "@/lib/trade-point-task-data";
 import { getRopOptions } from "@/lib/rop-manager-filters";
 import { getShowcaseOnlyTasks } from "@/lib/task-classification";
@@ -67,7 +75,23 @@ function MainKpiLink({ href, testId, children }: { href: string; testId: string;
 
 
 
-function DirectorRopsDrilldownList({ snap }: { snap: OrgSnapshot }) {
+function teamNameForRopUser(snap: OrgSnapshot, ropUserId: string): string | null {
+  const teamUuid = teamUuidForRopUserId(snap, ropUserId);
+  if (!teamUuid) return null;
+  return snap.teams.find((t) => t.id === teamUuid)?.name?.trim() ?? null;
+}
+
+function DirectorRopsDrilldownList({
+  snap,
+  profile,
+  actState,
+  metricsEnabled,
+}: {
+  snap: OrgSnapshot;
+  profile: ReleaseDemoProfile;
+  actState: ActualizationState;
+  metricsEnabled: boolean;
+}) {
   const rops = useMemo(() => {
     const ropIds = new Set(snap.teams.map((t) => t.ropUserId).filter(Boolean) as string[]);
     return snap.users
@@ -75,32 +99,51 @@ function DirectorRopsDrilldownList({ snap }: { snap: OrgSnapshot }) {
       .sort((a, b) => a.fullName.localeCompare(b.fullName, "ru"));
   }, [snap.teams, snap.users]);
 
+  const metricsByRopId = useMemo(() => {
+    const map = new Map<string, MainDashboardScopeMetrics>();
+    if (!metricsEnabled) return map;
+    for (const r of rops) {
+      const scope = (rows: Parameters<typeof realRowsForRopTeam>[0]) => realRowsForRopTeam(rows, snap, r.id);
+      map.set(r.id, computeMainDashboardScopeMetrics(actState, profile, scope));
+    }
+    return map;
+  }, [rops, snap, actState, profile, metricsEnabled]);
+
   if (rops.length === 0) return null;
 
   return (
     <section className="min-w-0 space-y-2" data-testid="section-main-company-rops">
       <h2 className="text-sm font-semibold text-foreground">РОПы компании</h2>
       <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
-        {rops.map((r) => (
-          <li key={r.id}>
-            <Link
+        {rops.map((r) => {
+          const teamName = teamNameForRopUser(snap, r.id);
+          return (
+            <DrilldownListRow
+              key={r.id}
               href={`/main/rop/${r.id}`}
-              className="flex min-h-11 items-center justify-between gap-2 px-4 py-2.5 text-sm font-medium text-foreground no-underline transition hover:bg-muted/60 cursor-pointer"
-              data-testid={`link-main-rop-${r.id}`}
-            >
-              <span className="truncate">{r.fullName}</span>
-              <span className="shrink-0 text-muted-foreground" aria-hidden>
-                →
-              </span>
-            </Link>
-          </li>
-        ))}
+              testId={`link-main-rop-${r.id}`}
+              title={r.fullName}
+              subtitle={teamName ? `Команда: ${teamName}` : null}
+              metrics={metricsByRopId.get(r.id) ?? null}
+            />
+          );
+        })}
       </ul>
     </section>
   );
 }
 
-function TeamManagersDrilldownList({ snap }: { snap: OrgSnapshot }) {
+function TeamManagersDrilldownList({
+  snap,
+  profile,
+  actState,
+  metricsEnabled,
+}: {
+  snap: OrgSnapshot;
+  profile: ReleaseDemoProfile;
+  actState: ActualizationState;
+  metricsEnabled: boolean;
+}) {
   const teamUuid = realEffectiveTeamLeadTeamIdFromSnap(snap);
   const managers = useMemo(() => {
     if (!teamUuid) return [];
@@ -109,6 +152,16 @@ function TeamManagersDrilldownList({ snap }: { snap: OrgSnapshot }) {
       .sort((a, b) => a.fullName.localeCompare(b.fullName, "ru"));
   }, [snap.users, teamUuid]);
 
+  const metricsByManagerId = useMemo(() => {
+    const map = new Map<string, MainDashboardScopeMetrics>();
+    if (!metricsEnabled) return map;
+    for (const m of managers) {
+      const scope = (rows: Parameters<typeof realRowsForManagerByUUID>[0]) => realRowsForManagerByUUID(rows, snap, m.id);
+      map.set(m.id, computeMainDashboardScopeMetrics(actState, profile, scope));
+    }
+    return map;
+  }, [managers, snap, actState, profile, metricsEnabled]);
+
   if (managers.length === 0) return null;
 
   return (
@@ -116,18 +169,13 @@ function TeamManagersDrilldownList({ snap }: { snap: OrgSnapshot }) {
       <h2 className="text-sm font-semibold text-foreground">Менеджеры команды</h2>
       <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
         {managers.map((m) => (
-          <li key={m.id}>
-            <Link
-              href={`/main/manager/${m.id}`}
-              className="flex min-h-11 items-center justify-between gap-2 px-4 py-2.5 text-sm font-medium text-foreground no-underline transition hover:bg-muted/60 cursor-pointer"
-              data-testid={`link-main-manager-${m.id}`}
-            >
-              <span className="truncate">{m.fullName}</span>
-              <span className="shrink-0 text-muted-foreground" aria-hidden>
-                →
-              </span>
-            </Link>
-          </li>
+          <DrilldownListRow
+            key={m.id}
+            href={`/main/manager/${m.id}`}
+            testId={`link-main-manager-${m.id}`}
+            title={m.fullName}
+            metrics={metricsByManagerId.get(m.id) ?? null}
+          />
         ))}
       </ul>
     </section>
@@ -355,6 +403,9 @@ export function MainRoleDashboard() {
         : `Активные ТТ: ${activeTradePoints} · в архиве: ${archivedTradePoints}`
       : null;
 
+  const showScopeBreakdownKpi =
+    (role === "team_lead" || role === "sales_director") && showArchiveKpi && scopeMetrics != null;
+
   if (role !== "sales_manager" && role !== "team_lead" && role !== "sales_director") {
     return (
       <div className="min-w-0 max-w-full overflow-x-hidden space-y-4" data-testid="page-main">
@@ -368,6 +419,19 @@ export function MainRoleDashboard() {
       <PageHeader title={headline} description={subline} icon={Home} />
       <DataFreshness updatedAt={actx.meta?.updatedAt ?? null} sourceLabel="Postgres" />
 
+      {showScopeBreakdownKpi && scopeMetrics ? (
+        <section
+          className="grid min-w-0 grid-cols-2 gap-3"
+          data-testid="section-main-scope-breakdown-kpi"
+        >
+          <MainScopeBreakdownKpiGrid
+            metrics={scopeMetrics}
+            clientsHref={kpiHrefs.clients}
+            tradePointsHref={buildBrowserHashAppHref("/trade-points")}
+          />
+        </section>
+      ) : null}
+
       <section
         className={
           extraKpiLabel
@@ -376,26 +440,28 @@ export function MainRoleDashboard() {
         }
         data-testid="section-main-role-dashboard"
       >
-        <MainKpiLink href={kpiHrefs.clients} testId="link-main-kpi-clients">
-          <Card className="min-w-0 rounded-xl border border-border bg-card" data-testid="card-main-kpi-clients">
-            <CardContent className="p-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{kpiClientsLabel}</p>
-              <p className="mt-0.5 text-xl font-semibold tabular-nums text-foreground" data-testid="metric-main-total-clients">
-                {totalClients}
-              </p>
-              {archiveClientsSubline ? (
-                <p className="mt-1 text-xs text-muted-foreground tabular-nums" data-testid="metric-main-archived-clients">
-                  {archiveClientsSubline}
+        {!showScopeBreakdownKpi ? (
+          <MainKpiLink href={kpiHrefs.clients} testId="link-main-kpi-clients">
+            <Card className="min-w-0 rounded-xl border border-border bg-card" data-testid="card-main-kpi-clients">
+              <CardContent className="p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{kpiClientsLabel}</p>
+                <p className="mt-0.5 text-xl font-semibold tabular-nums text-foreground" data-testid="metric-main-total-clients">
+                  {totalClients}
                 </p>
-              ) : null}
-              {tradePointsSubline ? (
-                <p className="mt-0.5 text-xs text-muted-foreground tabular-nums" data-testid="metric-main-trade-points">
-                  {tradePointsSubline}
-                </p>
-              ) : null}
-            </CardContent>
-          </Card>
-        </MainKpiLink>
+                {archiveClientsSubline ? (
+                  <p className="mt-1 text-xs text-muted-foreground tabular-nums" data-testid="metric-main-archived-clients">
+                    {archiveClientsSubline}
+                  </p>
+                ) : null}
+                {tradePointsSubline ? (
+                  <p className="mt-0.5 text-xs text-muted-foreground tabular-nums" data-testid="metric-main-trade-points">
+                    {tradePointsSubline}
+                  </p>
+                ) : null}
+              </CardContent>
+            </Card>
+          </MainKpiLink>
+        ) : null}
         <MainKpiLink href={kpiHrefs.active} testId="link-main-kpi-active">
           <Card className="min-w-0 rounded-xl border border-border bg-card" data-testid="card-main-kpi-active">
             <CardContent className="p-3">
@@ -446,11 +512,21 @@ export function MainRoleDashboard() {
       </section>
 
       {role === "team_lead" && useReal && snap ? (
-        <TeamManagersDrilldownList snap={snap} />
+        <TeamManagersDrilldownList
+          snap={snap}
+          profile={profile}
+          actState={managementPlane.mergedState}
+          metricsEnabled={actx.enabled}
+        />
       ) : null}
 
       {role === "sales_director" && useReal && snap ? (
-        <DirectorRopsDrilldownList snap={snap} />
+        <DirectorRopsDrilldownList
+          snap={snap}
+          profile={profile}
+          actState={managementPlane.mergedState}
+          metricsEnabled={actx.enabled}
+        />
       ) : null}
 
       <ActualizationRace />
