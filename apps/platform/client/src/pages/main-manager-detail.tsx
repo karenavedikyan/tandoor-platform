@@ -3,7 +3,12 @@
  */
 import { useMemo, useState } from "react";
 import { Link, Redirect, useRoute } from "wouter";
-import { ArrowLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, ChevronRight, X } from "lucide-react";
+import { MainDashboardCityCoverage } from "@/components/main-dashboard-city-coverage";
+import {
+  MainDashboardCityFilterProvider,
+  useMainDashboardCityFilter,
+} from "@/context/main-dashboard-city-filter-context";
 import { DealerCardSheet } from "@/components/dealer-card-sheet";
 import { TradePointSheet } from "@/components/trade-point-sheet";
 import { ClientAvatar } from "@/components/ui/client-avatar";
@@ -41,6 +46,7 @@ import {
   ropUserForManager,
 } from "@/lib/dealer-base-real-scope";
 import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
+import { dealerRowMatchesCityFilter } from "@/lib/main-dashboard-city-stats";
 import { computeMainDashboardScopeMetrics } from "@/lib/main-dashboard-scope-metrics";
 import { buildTradePointListForActualization, type TradePointListRow } from "@/lib/trade-point-list-for-actualization";
 import { useOrgSnapshot } from "@/lib/use-org-snapshot";
@@ -49,7 +55,38 @@ function countTradePointsForDealer(row: DealerRow, act: ReturnType<typeof useCli
   return mergeTradePointsForActualization(row, act).filter((e) => !e.isArchived).length;
 }
 
+function ManagerCityFilterChip() {
+  const { selectedCity, clearCity } = useMainDashboardCityFilter();
+  if (!selectedCity) return null;
+
+  return (
+    <div
+      className="inline-flex min-w-0 items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground shadow-sm"
+      data-testid="chip-main-manager-city"
+    >
+      <span>Город: {selectedCity}</span>
+      <button
+        type="button"
+        className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted-foreground outline-none transition hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+        data-testid="button-main-manager-city-clear"
+        aria-label={`Снять фильтр по городу ${selectedCity}`}
+        onClick={clearCity}
+      >
+        <X className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
+
 export default function MainManagerDetailPage() {
+  return (
+    <MainDashboardCityFilterProvider>
+      <MainManagerDetailContent />
+    </MainDashboardCityFilterProvider>
+  );
+}
+
+function MainManagerDetailContent() {
   const [, params] = useRoute("/main/manager/:managerId");
   const managerId = params?.managerId?.trim() ?? "";
 
@@ -89,6 +126,7 @@ export default function MainManagerDetailPage() {
     return false;
   }, [useReal, snap, manager, managerId, access]);
 
+  const { selectedCity } = useMainDashboardCityFilter();
   const [showArchive, setShowArchive] = useState(false);
   const [activeTab, setActiveTab] = useState<"clients" | "trade_points">("clients");
   const [selectedDealer, setSelectedDealer] = useState<DealerRow | null>(null);
@@ -106,6 +144,14 @@ export default function MainManagerDetailPage() {
     return computeMainDashboardScopeMetrics(managementPlane.mergedState, profile, managerScope);
   }, [actx.enabled, allowed, managementPlane.mergedState, profile, managerScope]);
 
+  const activeClientRows = useMemo(() => {
+    if (!actx.enabled || !allowed) return [];
+    const built = buildDealerBaseRowsWithActualization(managementPlane.mergedState, profile, {
+      includeArchivedDealers: false,
+    });
+    return managerScope(built);
+  }, [actx.enabled, allowed, managementPlane.mergedState, profile, managerScope]);
+
   const clientRows = useMemo(() => {
     if (!actx.enabled || !allowed) return [];
     const built = buildDealerBaseRowsWithActualization(managementPlane.mergedState, profile, {
@@ -113,6 +159,11 @@ export default function MainManagerDetailPage() {
     });
     return managerScope(built);
   }, [actx.enabled, allowed, managementPlane.mergedState, profile, managerScope, showArchive]);
+
+  const displayedClientRows = useMemo(() => {
+    if (!selectedCity) return clientRows;
+    return clientRows.filter((r) => dealerRowMatchesCityFilter(r, selectedCity));
+  }, [clientRows, selectedCity]);
 
   const tradePointRows = useMemo((): TradePointListRow[] => {
     if (!actx.enabled || !allowed) return [];
@@ -123,6 +174,14 @@ export default function MainManagerDetailPage() {
     });
     return list.filter((r) => dealerIds.has(r.dealerId));
   }, [actx.enabled, allowed, managementPlane.mergedState, profile, clientRows, showArchive]);
+
+  const displayedTradePointRows = useMemo(() => {
+    if (!selectedCity) return tradePointRows;
+    const dealerIds = new Set(displayedClientRows.map((r) => r.id));
+    return tradePointRows.filter((r) => dealerIds.has(r.dealerId));
+  }, [tradePointRows, selectedCity, displayedClientRows]);
+
+  const showCityCoverage = actx.enabled && allowed && activeClientRows.length > 0;
 
   const loading =
     authLoading ||
@@ -230,6 +289,16 @@ export default function MainManagerDetailPage() {
         </Card>
       </section>
 
+      {showCityCoverage ? (
+        <MainDashboardCityCoverage
+          rows={activeClientRows}
+          act={managementPlane.mergedState}
+          testId="section-main-manager-city-coverage"
+        />
+      ) : null}
+
+      <ManagerCityFilterChip />
+
       {hasArchive ? (
         <div className="flex items-center gap-2" data-testid="section-main-manager-archive-toggle">
           <Switch
@@ -267,14 +336,18 @@ export default function MainManagerDetailPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {clientRows.length === 0 ? (
+                {displayedClientRows.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
-                      {showArchive ? "Нет архивных клиентов" : "Нет клиентов"}
+                      {selectedCity
+                        ? "Нет клиентов в выбранном городе"
+                        : showArchive
+                          ? "Нет архивных клиентов"
+                          : "Нет клиентов"}
                     </TableCell>
                   </TableRow>
                 ) : (
-                  clientRows.map((row) => (
+                  displayedClientRows.map((row) => (
                     <TableRow
                       key={row.id}
                       className="cursor-pointer hover:bg-muted/50"
@@ -308,14 +381,18 @@ export default function MainManagerDetailPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {tradePointRows.length === 0 ? (
+                {displayedTradePointRows.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={4} className="py-8 text-center text-sm text-muted-foreground">
-                      {showArchive ? "Нет архивных торговых точек" : "Нет торговых точек"}
+                      {selectedCity
+                        ? "Нет торговых точек в выбранном городе"
+                        : showArchive
+                          ? "Нет архивных торговых точек"
+                          : "Нет торговых точек"}
                     </TableCell>
                   </TableRow>
                 ) : (
-                  tradePointRows.map((row) => (
+                  displayedTradePointRows.map((row) => (
                     <TableRow
                       key={row.tradePointId}
                       className="cursor-pointer hover:bg-muted/50"
