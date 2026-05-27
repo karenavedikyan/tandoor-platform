@@ -4024,6 +4024,17 @@ async function handleMigrationsRun(
     );
     applied.push("client_contacts_cleanup_admin_test_v1");
 
+    // Промт 66.2: тестовое событие dealerTimeline из верификации Промта 66
+    await pool.query(
+      `DELETE FROM client_contact_events
+       WHERE client_id = 'client-ma-ma121186'
+         AND scope IS NULL
+         AND body = 'Добавлен контакт'
+         AND actor_name = 'admin'
+         AND at::text LIKE '2026-05-20%'`,
+    );
+    applied.push("client_contacts_cleanup_admin_test_event_v1");
+
     // Промт 20: impersonation
     await pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS impersonator_user_id uuid NULL REFERENCES users(id) ON DELETE SET NULL`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_sessions_impersonator ON sessions(impersonator_user_id) WHERE impersonator_user_id IS NOT NULL`);
