@@ -3920,6 +3920,38 @@ async function handleMigrationsRun(
     await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS teams_name_unique ON teams(name)`);
     applied.push("teams_name_unique index");
 
+    // Промт 64: юрлица и платёжные реквизиты
+    await pool.query(
+      `CREATE TABLE IF NOT EXISTS legal_entities (
+         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+         client_id TEXT NOT NULL,
+         name TEXT,
+         inn TEXT,
+         kpp TEXT,
+         ogrn TEXT,
+         legal_address TEXT,
+         payment_form TEXT,
+         payment_delay_days INTEGER,
+         credit_limit_rub NUMERIC(14, 2),
+         edo_enabled BOOLEAN,
+         edo_operator TEXT,
+         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+       )`,
+    );
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_legal_entities_client_id ON legal_entities(client_id)`);
+    await pool.query(
+      `CREATE TABLE IF NOT EXISTS trade_point_legal_entity_links (
+         trade_point_id TEXT PRIMARY KEY,
+         legal_entity_id UUID REFERENCES legal_entities(id) ON DELETE SET NULL,
+         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+       )`,
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_tp_le_links_legal_entity ON trade_point_legal_entity_links(legal_entity_id)`,
+    );
+    applied.push("legal_entities_payment_terms");
+
     // Промт 20: impersonation
     await pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS impersonator_user_id uuid NULL REFERENCES users(id) ON DELETE SET NULL`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_sessions_impersonator ON sessions(impersonator_user_id) WHERE impersonator_user_id IS NOT NULL`);

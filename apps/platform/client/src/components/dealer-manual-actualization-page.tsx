@@ -71,6 +71,7 @@ import { SectionSaveButton } from "@/components/section-save-button";
 import { Bitrix24TasksPanel } from "@/components/bitrix24-tasks-panel";
 import { DealerTradePointsSection } from "@/components/dealer-trade-points-section";
 import { DealerLegalEntitiesSection } from "@/components/dealer-legal-entities-section";
+import { DealerLegalEntityRequisitesSection } from "@/components/dealer-legal-entity-requisites-section";
 import { EntityActualizationPhotoGallery } from "@/components/entity-actualization-photo-gallery";
 import { ShowcaseCoverPhotoSlot } from "@/components/showcase-cover-photo-slot";
 import { listActiveDealerPhotos } from "@/lib/client-base-actualization-photos";
@@ -114,7 +115,18 @@ const TIER_LABELS: Record<string, string> = {
   none: "Без категории",
 };
 
-const CLEAN_CARD_SECTION_IDS = ["passport", "commercial", "responsibles", "logistics", "contacts", "legal", "photos", "tps", "next"] as const;
+const CLEAN_CARD_SECTION_IDS = [
+  "passport",
+  "commercial",
+  "responsibles",
+  "logistics",
+  "contacts",
+  "legal",
+  "payment_requisites",
+  "photos",
+  "tps",
+  "next",
+] as const;
 
 function cleanCardSectionsLsKey(dealerId: string): string {
   return `tandoor-dealer-clean-card-sections-v1-${dealerId}`;
@@ -685,6 +697,16 @@ export function DealerManualActualizationPage(props: {
               actorLabel={user ? displayUserName(user) : userLabelFromProfile(profile)}
               embedInAccordion
             />
+          </AccordionContent>
+        </AccordionItem>
+
+        <AccordionItem
+          value="payment_requisites"
+          className="overflow-hidden rounded-lg border border-border/50 bg-card !border-b-0 shadow-sm"
+        >
+          <AccordionSectionTrigger title="Реквизиты" summary="Платёжные условия по юрлицам" status="partial" />
+          <AccordionContent className="border-t border-border/35 px-3 pb-2.5 pt-1 text-sm sm:px-3.5">
+            <DealerLegalEntityRequisitesSection row={row} profile={profile} readOnly={!canEdit} />
           </AccordionContent>
         </AccordionItem>
 
