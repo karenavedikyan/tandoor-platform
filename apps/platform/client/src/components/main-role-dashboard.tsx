@@ -16,7 +16,8 @@ import { canAccessPath, salesControlHomeHref } from "@/lib/auth-access";
 import { userRoleToSalesRole } from "@/lib/role-mapping";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
-import { roleScopedDealerRowsForReal } from "@/lib/dealer-base-real-scope";
+import { realEffectiveTeamLeadTeamIdFromSnap, roleScopedDealerRowsForReal } from "@/lib/dealer-base-real-scope";
+import type { OrgSnapshot } from "@/lib/use-org-snapshot";
 import { DEALER_BASE_ROWS, type DealerRow } from "@/lib/dealer-base-mock-data";
 import {
   dealerNeedsAttention,
@@ -61,6 +62,41 @@ function MainKpiLink({ href, testId, children }: { href: string; testId: string;
     >
       {children}
     </a>
+  );
+}
+
+
+function TeamManagersDrilldownList({ snap }: { snap: OrgSnapshot }) {
+  const teamUuid = realEffectiveTeamLeadTeamIdFromSnap(snap);
+  const managers = useMemo(() => {
+    if (!teamUuid) return [];
+    return snap.users
+      .filter((u) => u.teamId === teamUuid && (u.role === "manager" || u.role === "regional_manager"))
+      .sort((a, b) => a.fullName.localeCompare(b.fullName, "ru"));
+  }, [snap.users, teamUuid]);
+
+  if (managers.length === 0) return null;
+
+  return (
+    <section className="min-w-0 space-y-2" data-testid="section-main-team-managers">
+      <h2 className="text-sm font-semibold text-foreground">Менеджеры команды</h2>
+      <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
+        {managers.map((m) => (
+          <li key={m.id}>
+            <Link
+              href={`/main/manager/${m.id}`}
+              className="flex min-h-11 items-center justify-between gap-2 px-4 py-2.5 text-sm font-medium text-foreground no-underline transition hover:bg-muted/60 cursor-pointer"
+              data-testid={`link-main-manager-${m.id}`}
+            >
+              <span className="truncate">{m.fullName}</span>
+              <span className="shrink-0 text-muted-foreground" aria-hidden>
+                →
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -374,6 +410,10 @@ export function MainRoleDashboard() {
           </MainKpiLink>
         ) : null}
       </section>
+
+      {role === "team_lead" && useReal && snap ? (
+        <TeamManagersDrilldownList snap={snap} />
+      ) : null}
 
       <ActualizationRace />
 
