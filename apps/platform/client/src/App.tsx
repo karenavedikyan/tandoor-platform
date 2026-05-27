@@ -33,7 +33,7 @@ import { ClientBaseActualizationProvider, useClientBaseActualization } from "@/c
 import { ClientBaseTeamActualizationProvider, useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
 import { ThemeProvider } from "@/context/theme-provider";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
-import { resolveSidebarWorkingDealerClientCount } from "@/lib/dealer-base-sidebar-client-count";
+import { resolveSidebarTrashCount, resolveSidebarWorkingDealerClientCount } from "@/lib/dealer-base-sidebar-client-count";
 import { countWorkingTradePointsForSidebar } from "@/lib/trade-point-list-for-actualization";
 
 const LazySalesManagerWorkspace = lazy(() => import("@/pages/sales-manager-workspace"));
@@ -242,9 +242,27 @@ function AuthenticatedShell({
     if (actx.loading || teamPlane.teamFetchLoading) return null;
     return countWorkingTradePointsForSidebar(profile, teamPlane.mergedState);
   }, [actx.enabled, actx.loading, teamPlane.mergedState, teamPlane.teamFetchLoading, profile]);
+  const trashNavCount = useMemo(
+    () =>
+      resolveSidebarTrashCount(profile, {
+        enabled: actx.enabled,
+        loading: actx.loading,
+        state: actx.state,
+        managementDisplayState: teamPlane.mergedState,
+        managementTeamFetchLoading: teamPlane.teamFetchLoading,
+      }),
+    [
+      profile,
+      actx.enabled,
+      actx.loading,
+      actx.state,
+      teamPlane.mergedState,
+      teamPlane.teamFetchLoading,
+    ],
+  );
   const navigation = useMemo(
-    () => getPilotNavigation(salesRole, dealerNavCount, tradePointNavCount, user.role),
-    [salesRole, dealerNavCount, tradePointNavCount, user.role],
+    () => getPilotNavigation(salesRole, dealerNavCount, tradePointNavCount, user.role, trashNavCount),
+    [salesRole, dealerNavCount, tradePointNavCount, user.role, trashNavCount],
   );
 
   const showAuditLogLink = userHas(user.role, "audit.read");

@@ -65,3 +65,24 @@ export function resolveSidebarWorkingDealerClientCount(
   const pickerArgs = defaultPickerArgsForNav(profile, access);
   return applyDealerBasePickerFilters(scoped, pickerArgs).length;
 }
+
+/**
+ * Промт 46: счётчик содержимого Корзины для бейджа nav-item «Корзина».
+ * Видимость:
+ *   - если есть `managementDisplayState` (rop/director/admin) — считаем по нему;
+ *   - иначе (manager) — по `ctx.state` (свой scope).
+ *
+ * Возвращает `null` пока актуализация / team merge ещё грузятся (как и обычный счётчик).
+ */
+export function resolveSidebarTrashCount(
+  _profile: ReleaseDemoProfile,
+  ctx: SidebarDealerClientCountContext,
+): number | null {
+  if (!ctx.enabled) return null;
+  if (ctx.loading) return null;
+  if (ctx.managementTeamFetchLoading) return null;
+  const act = ctx.managementDisplayState ?? ctx.state;
+  const dealers = act.trashedDealersById ?? {};
+  const tps = act.trashedTradePointsById ?? {};
+  return Object.keys(dealers).length + Object.keys(tps).length;
+}

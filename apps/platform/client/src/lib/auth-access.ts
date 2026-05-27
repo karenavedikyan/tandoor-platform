@@ -356,6 +356,7 @@ export function getPilotNavigation(
   dealerBaseClientCount?: number | null,
   tradePointCount?: number | null,
   platformUserRole?: UserRole | null,
+  trashCount?: number | null,
 ): PilotNavigationModel {
   const sch = salesControlHomeHref(role);
 
@@ -370,6 +371,13 @@ export function getPilotNavigation(
     if (tradePointCount === null) return { badgeLoading: true };
     if (tradePointCount <= 0) return {};
     return { badge: tradePointCount };
+  };
+
+  const trashNavExtras = (): Pick<PilotNavItem, "badge" | "badgeLoading"> => {
+    if (trashCount === undefined) return {};
+    if (trashCount === null) return { badgeLoading: true };
+    if (trashCount <= 0) return {};
+    return { badge: trashCount };
   };
 
   const directorOrRopNavigation = (): Extract<PilotNavigationModel, { layout: "grouped" }> => ({
@@ -439,6 +447,7 @@ export function getPilotNavigation(
         label: "Корзина",
         testId: "nav-item-trash",
         navBehaviorId: "nav-trash",
+        ...trashNavExtras(),
       },
     ],
   });
@@ -466,7 +475,7 @@ export function getPilotNavigation(
       push({ href: "/training", label: "Обучение", testId: "nav-training" });
       push({ href: sch, label: "План-факт продаж", testId: "nav-sales-control" });
       push({ href: "/marketing-briefs", label: "Маркетинговые брифы", testId: "nav-marketing-briefs" });
-      push({ href: "/trash", label: "Корзина", testId: "nav-trash" });
+      push({ href: "/trash", label: "Корзина", testId: "nav-trash", ...trashNavExtras() });
       return items;
     }
     if (role === "marketer") {
