@@ -155,14 +155,14 @@ async function runPersonal(
   }
   try {
     if (action === "recent-personal") {
-      const mod = await import("../../../server/bitrix24-chat-recent-personal-execute");
+      const mod = await import("../../../server/bitrix24-chat-recent-personal-execute.js");
       const { status, body, setCookies } = await mod.runBitrix24ChatRecentPersonal(cookieHeader(req));
       applySetCookies(res, setCookies);
       sendJson(res, status, body);
       return;
     }
     if (action === "messages-personal") {
-      const mod = await import("../../../server/bitrix24-chat-messages-personal-execute");
+      const mod = await import("../../../server/bitrix24-chat-messages-personal-execute.js");
       const body = readJsonBody(req);
       const { status, body: out, setCookies } = await mod.runBitrix24ChatMessagesPersonal(
         body ?? {},
@@ -173,7 +173,7 @@ async function runPersonal(
       return;
     }
     // send-personal
-    const mod = await import("../../../server/bitrix24-chat-send-personal-execute");
+    const mod = await import("../../../server/bitrix24-chat-send-personal-execute.js");
     const body = readJsonBody(req);
     const { status, body: out, setCookies } = await mod.runBitrix24ChatSendPersonal(
       body ?? {},
@@ -204,25 +204,25 @@ async function runShared(
   try {
     const body = readJsonBody(req) ?? {};
     if (action === "recent") {
-      const mod = await import("../../../server/bitrix24-chat-recent-execute");
+      const mod = await import("../../../server/bitrix24-chat-recent-execute.js");
       const { status, body: out } = await mod.runBitrix24ChatRecent(body);
       sendJson(res, status, out);
       return;
     }
     if (action === "messages") {
-      const mod = await import("../../../server/bitrix24-chat-messages-execute");
+      const mod = await import("../../../server/bitrix24-chat-messages-execute.js");
       const { status, body: out } = await mod.runBitrix24ChatMessages(body);
       sendJson(res, status, out);
       return;
     }
     if (action === "send") {
-      const mod = await import("../../../server/bitrix24-chat-send-execute");
+      const mod = await import("../../../server/bitrix24-chat-send-execute.js");
       const { status, body: out } = await mod.runBitrix24ChatSend(body);
       sendJson(res, status, out);
       return;
     }
     // diagnostics
-    const mod = await import("../../../server/bitrix24-chat-diagnostics-execute");
+    const mod = await import("../../../server/bitrix24-chat-diagnostics-execute.js");
     const { status, body: out } = await mod.runBitrix24ChatDiagnostics(body);
     sendJson(res, status, out);
   } catch (e) {
