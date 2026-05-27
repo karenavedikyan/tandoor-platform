@@ -5,7 +5,7 @@
  */
 import assert from "node:assert/strict";
 import { buildDealerRowsFromReleaseClients } from "../dealer-base-mock-data";
-import { roleScopedDealerRowsForReal, catalogTeamIdForRealTeamLead } from "../dealer-base-real-scope";
+import { roleScopedDealerRowsForReal, catalogTeamIdForRealTeamLead, realRowsForManagerByUUID } from "../dealer-base-real-scope";
 import { getReleaseClients } from "../release-client-data";
 import { createEmptyActualizationState } from "../client-base-actualization-state";
 import { computeMainDashboardScopeMetrics } from "../main-dashboard-scope-metrics";
@@ -80,6 +80,22 @@ for (const { ropId, teamUuid, catalogTeam, min } of ropCases) {
   );
   assert.equal(metrics.archivedClients, 0);
   assert.ok(metrics.activeClients >= 640);
+}
+
+
+// Менеджер Скляров (Купянский): scope по UUID
+{
+  const MGR_SKLYAROV = "dc958e02-d80e-4615-bb8a-8a46be70daed";
+  const snap = {
+    me: { id: ROP_KUPIANSKY, role: "rop", fullName: "Купянский", teamId: TEAM_KUPIANSKY_UUID },
+    visibility: { all: true, clientCodes: null, teamIds: [], visibleUserIds: [] },
+    teams: [{ id: TEAM_KUPIANSKY_UUID, name: "Купянский", ropUserId: ROP_KUPIANSKY, ropName: "Купянский" }],
+    users: [{ id: MGR_SKLYAROV, fullName: "Скляров", role: "manager", teamId: TEAM_KUPIANSKY_UUID, status: "active" }],
+  } as unknown as OrgSnapshot;
+  const scoped = realRowsForManagerByUUID(allRows, snap, MGR_SKLYAROV);
+  assert.ok(scoped.length >= 40, `Скляров clients >= 40, got ${scoped.length}`);
+  const viaOption = roleScopedDealerRowsForReal(allRows, snap, "sales_manager", { managerUserId: MGR_SKLYAROV });
+  assert.equal(viaOption.length, scoped.length);
 }
 
 console.log("dealer-base-real-scope: ok");

@@ -11,6 +11,11 @@ const ROP_UUID_TO_CATALOG_TEAM: Record<string, string> = {
   "c36f625f-730e-4ae3-b118-bdb005d10b81": "team-sapozhkov",
 };
 
+export type RoleScopedDealerRowsForRealOptions = {
+  /** UUID менеджера — портфель менеджера (drilldown РОПа на /main/manager/:id). */
+  managerUserId?: string;
+};
+
 export function realEffectiveTeamLeadTeamIdFromSnap(snap: OrgSnapshot): string {
   const t = snap.teams.find((tt) => tt.ropUserId === snap.me.id);
   return t?.id ?? "";
@@ -47,7 +52,36 @@ function rowBelongsToRealTeam(row: DealerRow, snap: OrgSnapshot, teamUuid: strin
   return false;
 }
 
-export function roleScopedDealerRowsForReal(rows: DealerRow[], snap: OrgSnapshot, access: DealerBaseAccessRole): DealerRow[] {
+/** Строки клиентской базы, закреплённые за менеджером по UUID (catalog id + ФИО). */
+export function realRowsForManagerByUUID(rows: DealerRow[], snap: OrgSnapshot, managerUserId: string): DealerRow[] {
+  const catalogMgr = UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE[managerUserId];
+  const managerName = snap.users.find((u) => u.id === managerUserId)?.fullName?.trim() ?? "";
+  return rows.filter((r) => {
+    if (catalogMgr && r.releaseManagerId === catalogMgr) return true;
+    if (r.releaseManagerId === managerUserId) return true;
+    if (managerName) return managerDisplayMatchesCatalogName(r.manager, managerName);
+    return false;
+  });
+}
+
+export function managerBelongsToRopTeam(snap: OrgSnapshot, managerUserId: string): boolean {
+  const teamUuid = realEffectiveTeamLeadTeamIdFromSnap(snap);
+  if (!teamUuid) return false;
+  const manager = snap.users.find((u) => u.id === managerUserId);
+  if (!manager) return false;
+  if (manager.teamId !== teamUuid) return false;
+  return manager.role === "manager" || manager.role === "regional_manager";
+}
+
+export function roleScopedDealerRowsForReal(
+  rows: DealerRow[],
+  snap: OrgSnapshot,
+  access: DealerBaseAccessRole,
+  options?: RoleScopedDealerRowsForRealOptions,
+): DealerRow[] {
+  if (options?.managerUserId) {
+    return realRowsForManagerByUUID(rows, snap, options.managerUserId);
+  }
   if (access === "sales_director") return rows;
   if (access === "team_lead") {
     const teamUuid = realEffectiveTeamLeadTeamIdFromSnap(snap);

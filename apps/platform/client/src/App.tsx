@@ -38,6 +38,7 @@ import { resolveSidebarTrashCount, resolveSidebarWorkingDealerClientCount } from
 import { countWorkingTradePointsForSidebar } from "@/lib/trade-point-list-for-actualization";
 
 const LazySalesManagerWorkspace = lazy(() => import("@/pages/sales-manager-workspace"));
+const LazyMainManagerDetail = lazy(() => import("@/pages/main-manager-detail"));
 const LazyDealerBase = lazy(() => import("@/pages/dealer-base"));
 const LazyTradePoints = lazy(() => import("@/pages/trade-points"));
 const LazyClientMap = lazy(() => import("@/pages/client-map"));
@@ -97,6 +98,7 @@ function suspensePage(Lazy: LazyExoticComponent<ComponentType<any>>): ComponentT
 }
 
 const SalesManagerWorkspaceRoute = suspensePage(LazySalesManagerWorkspace);
+const MainManagerDetailRoute = suspensePage(LazyMainManagerDetail);
 const DealerBaseRoute = suspensePage(LazyDealerBase);
 const TradePointsRoute = suspensePage(LazyTradePoints);
 const ClientMapRoute = suspensePage(LazyClientMap);
@@ -328,6 +330,7 @@ function AuthenticatedShell({
     >
       <Switch>
         <Route path="/" component={SalesManagerWorkspaceRoute} />
+        <Route path="/main/manager/:managerId" component={MainManagerDetailRoute} />
         <Route path="/main" component={SalesManagerWorkspaceRoute} />
         <Route path="/sales-manager" component={SalesManagerWorkspaceRoute} />
         <Route path="/bitrix24" component={Bitrix24PocRoute} />
