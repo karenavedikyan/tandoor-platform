@@ -1,6 +1,13 @@
 import type { ReactNode } from "react";
 import { Link } from "wouter";
 import type { MainDashboardScopeMetrics } from "@/lib/main-dashboard-scope-metrics";
+import {
+  managerHeatAriaLabel,
+  managerHeatBarClass,
+  managerHeatTooltipLabel,
+  type ManagerHeatLevel,
+} from "@/lib/manager-load-heat";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -137,6 +144,21 @@ export function DrilldownScopeKpiPills({ metrics }: { metrics: MainDashboardScop
   );
 }
 
+function ManagerHeatStrip({ level }: { level: ManagerHeatLevel }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className={cn("w-1 shrink-0 self-stretch rounded-l-xl", managerHeatBarClass(level))}
+          aria-label={managerHeatAriaLabel(level)}
+          data-testid={`manager-heat-bar-${level}`}
+        />
+      </TooltipTrigger>
+      <TooltipContent side="right">{managerHeatTooltipLabel(level)}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 export function DrilldownListRow({
   href,
   testId,
@@ -144,6 +166,7 @@ export function DrilldownListRow({
   subtitle,
   metrics,
   children,
+  heatLevel,
 }: {
   href: string;
   testId: string;
@@ -151,12 +174,18 @@ export function DrilldownListRow({
   subtitle?: string | null;
   metrics?: MainDashboardScopeMetrics | null;
   children?: ReactNode;
+  /** Цветная полоса нагрузки (только списки менеджеров). */
+  heatLevel?: ManagerHeatLevel | null;
 }) {
   return (
-    <li>
+    <li className="flex min-w-0">
+      {heatLevel ? <ManagerHeatStrip level={heatLevel} /> : null}
       <Link
         href={href}
-        className="flex min-w-0 flex-col gap-2 px-4 py-3 no-underline transition hover:bg-muted/60 cursor-pointer sm:flex-row sm:items-center sm:justify-between sm:gap-3"
+        className={cn(
+          "flex min-w-0 flex-1 flex-col gap-2 py-3 no-underline transition hover:bg-muted/60 cursor-pointer sm:flex-row sm:items-center sm:justify-between sm:gap-3",
+          heatLevel ? "px-4 pr-4" : "px-4",
+        )}
         data-testid={testId}
       >
         <div className="min-w-0 flex-1">
@@ -173,5 +202,19 @@ export function DrilldownListRow({
         </div>
       </Link>
     </li>
+  );
+}
+
+/** Обёртка списка drilldown с tooltip для heat-полос. */
+export function DrilldownList({ children, testId }: { children: ReactNode; testId?: string }) {
+  return (
+    <TooltipProvider delayDuration={200}>
+      <ul
+        className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card"
+        data-testid={testId}
+      >
+        {children}
+      </ul>
+    </TooltipProvider>
   );
 }

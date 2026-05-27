@@ -32,7 +32,8 @@ import {
 } from "@/lib/dealer-base-role-views";
 import { buildBrowserHashAppHref } from "@/lib/hash-route-utils";
 import { computeMainDashboardScopeMetrics, type MainDashboardScopeMetrics } from "@/lib/main-dashboard-scope-metrics";
-import { DrilldownListRow, MainScopeBreakdownKpiGrid } from "@/components/main-dashboard-scope-kpi";
+import { DrilldownList, DrilldownListRow, MainScopeBreakdownKpiGrid } from "@/components/main-dashboard-scope-kpi";
+import { orderManagersWithHeat } from "@/lib/manager-load-heat";
 import { MainFocusTilesSection } from "@/components/main-focus-tiles-section";
 import { getEffectiveTeamLeadTeamId } from "@/lib/release-demo-profile";
 import type { ActualizationState } from "@/lib/client-base-actualization-state";
@@ -146,29 +147,37 @@ function TeamManagersDrilldownList({
   metricsEnabled: boolean;
 }) {
   const teamUuid = realEffectiveTeamLeadTeamIdFromSnap(snap);
-  const managers = useMemo(() => {
+  const managersRaw = useMemo(() => {
     if (!teamUuid) return [];
-    return snap.users
-      .filter((u) => u.teamId === teamUuid && (u.role === "manager" || u.role === "regional_manager"))
-      .sort((a, b) => a.fullName.localeCompare(b.fullName, "ru"));
+    return snap.users.filter(
+      (u) => u.teamId === teamUuid && (u.role === "manager" || u.role === "regional_manager"),
+    );
   }, [snap.users, teamUuid]);
 
   const metricsByManagerId = useMemo(() => {
     const map = new Map<string, MainDashboardScopeMetrics>();
     if (!metricsEnabled) return map;
-    for (const m of managers) {
+    for (const m of managersRaw) {
       const scope = (rows: Parameters<typeof realRowsForManagerByUUID>[0]) => realRowsForManagerByUUID(rows, snap, m.id);
       map.set(m.id, computeMainDashboardScopeMetrics(actState, profile, scope));
     }
     return map;
-  }, [managers, snap, actState, profile, metricsEnabled]);
+  }, [managersRaw, snap, actState, profile, metricsEnabled]);
+
+  const { managers, heatMap } = useMemo(() => {
+    if (!metricsEnabled || managersRaw.length === 0) {
+      const sorted = [...managersRaw].sort((a, b) => a.fullName.localeCompare(b.fullName, "ru"));
+      return { managers: sorted, heatMap: {} as Record<string, never> };
+    }
+    return orderManagersWithHeat(managersRaw, metricsByManagerId);
+  }, [managersRaw, metricsByManagerId, metricsEnabled]);
 
   if (managers.length === 0) return null;
 
   return (
     <section className="min-w-0 space-y-2" data-testid="section-main-team-managers">
       <h2 className="text-sm font-semibold text-foreground">Менеджеры команды</h2>
-      <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
+      <DrilldownList>
         {managers.map((m) => (
           <DrilldownListRow
             key={m.id}
@@ -176,9 +185,10 @@ function TeamManagersDrilldownList({
             testId={`link-main-manager-${m.id}`}
             title={m.fullName}
             metrics={metricsByManagerId.get(m.id) ?? null}
+            heatLevel={metricsEnabled ? (heatMap[m.id] ?? null) : null}
           />
         ))}
-      </ul>
+      </DrilldownList>
     </section>
   );
 }

@@ -44,7 +44,8 @@ import {
 } from "@/lib/dealer-base-real-scope";
 import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import { computeMainDashboardScopeMetrics, type MainDashboardScopeMetrics } from "@/lib/main-dashboard-scope-metrics";
-import { DrilldownListRow, MainScopeBreakdownKpiGrid } from "@/components/main-dashboard-scope-kpi";
+import { DrilldownList, DrilldownListRow, MainScopeBreakdownKpiGrid } from "@/components/main-dashboard-scope-kpi";
+import { orderManagersWithHeat } from "@/lib/manager-load-heat";
 import { MainFocusTilesSection } from "@/components/main-focus-tiles-section";
 import { buildBrowserHashAppHref } from "@/lib/hash-route-utils";
 import { buildTradePointListForActualization, type TradePointListRow } from "@/lib/trade-point-list-for-actualization";
@@ -101,17 +102,25 @@ export default function MainRopDetailPage() {
     [snap, ropId],
   );
 
-  const teamManagers = useMemo(() => (snap && ropId ? managersForRopTeam(snap, ropId) : []), [snap, ropId]);
+  const teamManagersRaw = useMemo(() => (snap && ropId ? managersForRopTeam(snap, ropId) : []), [snap, ropId]);
 
   const managerMiniMetrics = useMemo(() => {
     if (!actx.enabled || !allowed || !snap) return new Map<string, ReturnType<typeof computeMainDashboardScopeMetrics>>();
     const map = new Map<string, ReturnType<typeof computeMainDashboardScopeMetrics>>();
-    for (const m of teamManagers) {
+    for (const m of teamManagersRaw) {
       const scope = (rows: DealerRow[]) => realRowsForManagerByUUID(rows, snap, m.id);
       map.set(m.id, computeMainDashboardScopeMetrics(managementPlane.mergedState, profile, scope));
     }
     return map;
-  }, [actx.enabled, allowed, snap, teamManagers, managementPlane.mergedState, profile]);
+  }, [actx.enabled, allowed, snap, teamManagersRaw, managementPlane.mergedState, profile]);
+
+  const { teamManagers, managerHeatMap } = useMemo(() => {
+    if (!actx.enabled || teamManagersRaw.length === 0) {
+      return { teamManagers: teamManagersRaw, managerHeatMap: {} as Record<string, never> };
+    }
+    const { managers, heatMap } = orderManagersWithHeat(teamManagersRaw, managerMiniMetrics);
+    return { teamManagers: managers, managerHeatMap: heatMap };
+  }, [actx.enabled, teamManagersRaw, managerMiniMetrics]);
 
   const scopeMetrics = useMemo(() => {
     if (!actx.enabled || !allowed) return null;
@@ -246,7 +255,7 @@ export default function MainRopDetailPage() {
 
       <section className="min-w-0 space-y-2" data-testid="section-main-rop-managers">
         <h2 className="text-sm font-semibold text-foreground">Менеджеры команды</h2>
-        <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
+        <DrilldownList>
           {teamManagers.map((m) => (
             <DrilldownListRow
               key={m.id}
@@ -254,9 +263,10 @@ export default function MainRopDetailPage() {
               testId={`link-main-rop-manager-${m.id}`}
               title={m.fullName}
               metrics={managerMiniMetrics.get(m.id) ?? null}
+              heatLevel={actx.enabled ? (managerHeatMap[m.id] ?? null) : null}
             />
           ))}
-        </ul>
+        </DrilldownList>
       </section>
 
       {hasArchive ? (
