@@ -14,6 +14,7 @@
  * (объединение в одну serverless-функцию ради лимита Hobby 12 функций).
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { applyTrashProtection, type UnTrashDirective } from "../../shared/actualization-trash.js";
 
 const JSON_CT = "application/json; charset=utf-8";
 const MAX_BODY_CHARS = 400_000;
@@ -668,7 +669,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       next.updatedBy = userId;
       const version = typeof next.version === "number" && Number.isFinite(next.version) ? Math.floor(next.version) : 1;
 
+      // Защита корзины (Промт 45 B1): если ключ trashedDealersById / trashedTradePointsById
+      // присутствовал в prev state, но отсутствует в next state — восстанавливаем его,
+      // если только клиент явно не указал ключ в body.unTrash.dealers / body.unTrash.tradePoints.
+      const unTrashRaw = isPlainObject(body.unTrash) ? body.unTrash : null;
+      const unTrash: UnTrashDirective | null = unTrashRaw
+        ? {
+            dealers: Array.isArray(unTrashRaw.dealers)
+              ? unTrashRaw.dealers.filter((x): x is string => typeof x === "string")
+              : undefined,
+            tradePoints: Array.isArray(unTrashRaw.tradePoints)
+              ? unTrashRaw.tradePoints.filter((x): x is string => typeof x === "string")
+              : undefined,
+          }
+        : null;
+
       if (!dbUrl) {
+        const prev = memoryStore.get(userId)?.state;
+        const prevState = isPlainObject(prev) ? coerceState(prev) : null;
+        const guard = applyTrashProtection(prevState, next, unTrash);
+        if (guard.protectedDealers > 0 || guard.protectedTradePoints > 0) {
+          console.warn(
+            "[actualization-api] POST scope=" +
+              scopeKey +
+              " trash_protected_dealers=" +
+              guard.protectedDealers +
+              " trash_protected_tps=" +
+              guard.protectedTradePoints,
+          );
+        }
         memoryStore.set(userId, { state: next, updatedAt: now });
         sendJson(
           res,
@@ -686,6 +715,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
       try {
         const sql = await createSqlExecutor(dbUrl);
+        // Защита корзины: читаем prev state перед записью.
+        try {
+          const prevRows = await sql`
+            SELECT state FROM client_base_actualization_state WHERE scope_key = ${scopeKey} LIMIT 1
+          `;
+          const prevRaw = prevRows[0]?.state;
+          const prevState = isPlainObject(prevRaw) ? coerceState(prevRaw) : null;
+          const guard = applyTrashProtection(prevState, next, unTrash);
+          if (guard.protectedDealers > 0 || guard.protectedTradePoints > 0) {
+            console.warn(
+              "[actualization-api] POST scope=" +
+                scopeKey +
+                " trash_protected_dealers=" +
+                guard.protectedDealers +
+                " trash_protected_tps=" +
+                guard.protectedTradePoints,
+            );
+          }
+        } catch (e) {
+          // Не валим запись из-за защиты — только логируем.
+          const m = e instanceof Error ? e.message : String(e);
+          console.warn("[actualization-api] trash protection read failed", m.slice(0, 200));
+        }
         const stateJson = JSON.stringify(next);
         const rows = await sql`
           INSERT INTO client_base_actualization_state (scope_key, user_id, role, state, version)
