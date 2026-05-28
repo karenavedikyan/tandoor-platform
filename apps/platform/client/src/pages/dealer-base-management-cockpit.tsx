@@ -64,6 +64,7 @@ import {
   buildCityModels,
   buildDbAwareManagerMatcher,
   buildRopGroups,
+  resolveManagementCatalogTeamId,
   buildStructureInfographic,
   dealerMatchesClientListFilter,
   flattenTradePointsForRows,
@@ -218,6 +219,51 @@ export function DealerBaseManagementCockpit({
     () => buildRopGroups(rows, teams, orgTeamCtx?.snap, responsibleByCode, userIdToCatalogMgrId),
     [rows, teams, orgTeamCtx, responsibleByCode, userIdToCatalogMgrId],
   );
+
+  useEffect(() => {
+    const DIAG_KEY = "tandoor-diag-rop-drilldown-v1";
+    try {
+      if (typeof sessionStorage === "undefined" || sessionStorage.getItem(DIAG_KEY)) return;
+      if (!orgTeamCtx?.snap || rows.length === 0) return;
+      sessionStorage.setItem(DIAG_KEY, "1");
+      console.log("[diag rop-drill]", {
+        teamsCount: teams.length,
+        teams: teams.map((t) => ({
+          teamId: t.teamId,
+          catalogTeamId: resolveManagementCatalogTeamId(t.teamId, orgTeamCtx.snap),
+          ropName: t.ropName,
+        })),
+        rowsCount: rows.length,
+        rowsSample: rows.slice(0, 5).map((r) => ({
+          id: r.id,
+          releaseCode: r.releaseCode,
+          releaseTeamId: r.releaseTeamId,
+          releaseManagerId: r.releaseManagerId,
+          manager: r.manager,
+          ropName: r.ropName,
+          status: r.status,
+        })),
+        responsibleByCodeSize: Object.keys(responsibleByCode).length,
+        responsibleByCodeSample: Object.entries(responsibleByCode).slice(0, 5),
+        teamsInBuildRopGroups: ropGroups.map((g) => ({
+          teamId: g.teamId,
+          ropName: g.ropName,
+          rowsInTeam: g.rows.length,
+          active: g.active,
+          outlets: g.outlets,
+          managers: g.managers.map((m) => ({
+            managerId: m.managerId,
+            name: m.name,
+            active: m.active,
+            outlets: m.outlets,
+            rowCount: m.rows.length,
+          })),
+        })),
+      });
+    } catch (e) {
+      console.warn("[diag rop-drill] failed", e);
+    }
+  }, [teams, rows, responsibleByCode, ropGroups, orgTeamCtx?.snap]);
   const archivedPortfolioRows = useMemo(() => {
     if (!actx.enabled) return [] as DealerRow[];
     return buildDealerBaseRowsWithActualization(teamCtx.mergedState, profile, { includeArchivedDealers: true });
@@ -244,10 +290,11 @@ export function DealerBaseManagementCockpit({
     const act = teamCtx.mergedState;
     for (const g of ropGroups) {
       for (const m of g.managers) {
+        const catalogTeamId = resolveManagementCatalogTeamId(g.teamId, orgTeamCtx?.snap ?? null);
         const match = buildDbAwareManagerMatcher(
           m.managerId,
           m.name,
-          g.teamId,
+          catalogTeamId,
           responsibleByCode,
           userIdToCatalogMgrId,
         );

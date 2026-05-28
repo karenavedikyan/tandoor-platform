@@ -7,6 +7,7 @@
 import {
   managersCatalogForTeam,
   resolveDealerRowTeamId,
+  resolveManagementCatalogTeamId,
   teamsForManagementView,
 } from "@/lib/dealer-base-management-view-model";
 import { getDealerManagerDisplay, type DealerRow } from "@/lib/dealer-base-mock-data";
@@ -209,8 +210,9 @@ export function buildRopTpGroups(
 ): RopTpGroup[] {
   const work = rows.filter(isManagementTradePointRow);
   return teams.map((t) => {
-    const teamRows = work.filter((r) => resolveDealerRowTeamId(r.dealer) === t.teamId);
-    const managers = aggregateManagersTp(t.teamId, teamRows, orgSnap);
+    const catalogTeamId = resolveManagementCatalogTeamId(t.teamId, orgSnap);
+    const teamRows = work.filter((r) => resolveDealerRowTeamId(r.dealer) === catalogTeamId);
+    const managers = aggregateManagersTp(catalogTeamId, teamRows, orgSnap);
     const dealerIds = new Set(teamRows.map((r) => r.dealerId));
     const cityKeys = new Set(teamRows.map((r) => normalizeTerritoryCityName(r.city, r.address)));
     let noPhoto = 0;

@@ -32,6 +32,12 @@ import {
 } from "@/lib/dealer-base-role-views";
 import { buildBrowserHashAppHref } from "@/lib/hash-route-utils";
 import { computeMainDashboardScopeMetrics, type MainDashboardScopeMetrics } from "@/lib/main-dashboard-scope-metrics";
+import {
+  buildDbAwareManagerMatcher,
+  catalogManagerIdFromUserRef,
+  resolveManagementCatalogTeamId,
+} from "@/lib/dealer-base-management-view-model";
+import { useMyClientCodes } from "@/hooks/use-my-client-codes";
 import { DrilldownList, DrilldownListRow, MainScopeBreakdownKpiGrid } from "@/components/main-dashboard-scope-kpi";
 import { orderManagersWithHeat } from "@/lib/manager-load-heat";
 import { MainFocusTilesSection } from "@/components/main-focus-tiles-section";
@@ -150,6 +156,12 @@ function TeamManagersDrilldownList({
   metricsEnabled: boolean;
 }) {
   const teamUuid = realEffectiveTeamLeadTeamIdFromSnap(snap);
+  const catalogTeamId = useMemo(
+    () => (teamUuid ? resolveManagementCatalogTeamId(teamUuid, snap) : null),
+    [teamUuid, snap],
+  );
+  const myCodesQ = useMyClientCodes({ enabled: metricsEnabled });
+  const responsibleByCode = myCodesQ.data?.responsibleByCode ?? {};
   const managersRaw = useMemo(() => {
     if (!teamUuid) return [];
     return snap.users.filter(
@@ -160,12 +172,23 @@ function TeamManagersDrilldownList({
   const metricsByManagerId = useMemo(() => {
     const map = new Map<string, MainDashboardScopeMetrics>();
     if (!metricsEnabled) return map;
+    const useDbMatcher = catalogTeamId && Object.keys(responsibleByCode).length > 0;
     for (const m of managersRaw) {
-      const scope = (rows: Parameters<typeof realRowsForManagerByUUID>[0]) => realRowsForManagerByUUID(rows, snap, m.id);
+      const scope = useDbMatcher
+        ? (rows: Parameters<typeof realRowsForManagerByUUID>[0]) =>
+            rows.filter(
+              buildDbAwareManagerMatcher(
+                catalogManagerIdFromUserRef(m.id),
+                m.fullName,
+                catalogTeamId,
+                responsibleByCode,
+              ),
+            )
+        : (rows: Parameters<typeof realRowsForManagerByUUID>[0]) => realRowsForManagerByUUID(rows, snap, m.id);
       map.set(m.id, computeMainDashboardScopeMetrics(actState, profile, scope));
     }
     return map;
-  }, [managersRaw, snap, actState, profile, metricsEnabled]);
+  }, [managersRaw, snap, actState, profile, metricsEnabled, catalogTeamId, responsibleByCode]);
 
   const { managers, heatMap } = useMemo(() => {
     if (!metricsEnabled || managersRaw.length === 0) {

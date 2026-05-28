@@ -44,6 +44,13 @@ import {
 } from "@/lib/dealer-base-real-scope";
 import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import { computeMainDashboardScopeMetrics, type MainDashboardScopeMetrics } from "@/lib/main-dashboard-scope-metrics";
+import {
+  buildDbAwareManagerMatcher,
+  catalogManagerIdFromUserRef,
+  resolveManagementCatalogTeamId,
+} from "@/lib/dealer-base-management-view-model";
+import { catalogTeamIdForRopUserId } from "@/lib/dealer-base-real-scope";
+import { useMyClientCodes } from "@/hooks/use-my-client-codes";
 import { DrilldownList, DrilldownListRow, MainScopeBreakdownKpiGrid } from "@/components/main-dashboard-scope-kpi";
 import { orderManagersWithHeat } from "@/lib/manager-load-heat";
 import { MainFocusTilesSection } from "@/components/main-focus-tiles-section";
@@ -116,15 +123,42 @@ export default function MainRopDetailPage() {
 
   const teamManagersRaw = useMemo(() => (snap && ropId ? managersForRopTeam(snap, ropId) : []), [snap, ropId]);
 
+  const catalogTeamId = useMemo(
+    () => (snap && ropId ? catalogTeamIdForRopUserId(snap, ropId) ?? resolveManagementCatalogTeamId(ropId, snap) : null),
+    [snap, ropId],
+  );
+  const myCodesQ = useMyClientCodes({ enabled: actx.enabled && allowed });
+  const responsibleByCode = myCodesQ.data?.responsibleByCode ?? {};
+
   const managerMiniMetrics = useMemo(() => {
     if (!actx.enabled || !allowed || !snap) return new Map<string, ReturnType<typeof computeMainDashboardScopeMetrics>>();
     const map = new Map<string, ReturnType<typeof computeMainDashboardScopeMetrics>>();
+    const useDbMatcher = catalogTeamId && Object.keys(responsibleByCode).length > 0;
     for (const m of teamManagersRaw) {
-      const scope = (rows: DealerRow[]) => realRowsForManagerByUUID(rows, snap, m.id);
+      const scope = useDbMatcher
+        ? (rows: DealerRow[]) =>
+            rows.filter(
+              buildDbAwareManagerMatcher(
+                catalogManagerIdFromUserRef(m.id),
+                m.fullName,
+                catalogTeamId,
+                responsibleByCode,
+              ),
+            )
+        : (rows: DealerRow[]) => realRowsForManagerByUUID(rows, snap, m.id);
       map.set(m.id, computeMainDashboardScopeMetrics(managementPlane.mergedState, profile, scope));
     }
     return map;
-  }, [actx.enabled, allowed, snap, teamManagersRaw, managementPlane.mergedState, profile]);
+  }, [
+    actx.enabled,
+    allowed,
+    snap,
+    teamManagersRaw,
+    managementPlane.mergedState,
+    profile,
+    catalogTeamId,
+    responsibleByCode,
+  ]);
 
   const { teamManagers, managerHeatMap } = useMemo(() => {
     if (!actx.enabled || teamManagersRaw.length === 0) {

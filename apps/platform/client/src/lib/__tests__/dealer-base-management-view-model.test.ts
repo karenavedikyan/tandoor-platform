@@ -137,4 +137,39 @@ const teamRows = [
   assert.ok(yakIds.has("client-reassigned"));
 }
 
+// Промт 80: org snapshot team UUID vs catalog releaseTeamId в строках
+{
+  const KUPIANSKY_UUID = "e5387f40-c693-44e6-ab17-e61a3ed0bd95";
+  const ROP_UUID = "ccffcf6e-2505-4eee-b257-ac65b60bb779";
+  const BOYKO_UUID = "dc3b6ef1-fd83-4b9b-b73f-982efe08af23";
+  const snap = {
+    me: { id: ROP_UUID },
+    teams: [{ id: KUPIANSKY_UUID, name: "Купянский", ropUserId: ROP_UUID, ropName: "Купянский Родион" }],
+    users: [
+      {
+        id: BOYKO_UUID,
+        fullName: "Бойко Екатерина Михайловна",
+        role: "manager",
+        teamId: KUPIANSKY_UUID,
+      },
+    ],
+  } as import("@/lib/use-org-snapshot").OrgSnapshot;
+  const portfolioRows = [
+    row("c-ma-1", {
+      releaseCode: "MA-BOYKO-1",
+      releaseTeamId: TEAM,
+      releaseManagerId: MGR_YAKUBOVA,
+      manager: "Якубова",
+    }),
+  ];
+  const teamsFromView = [{ teamId: KUPIANSKY_UUID, ropName: "Купянский Родион" }];
+  const responsibleByCode: Record<string, string> = { "MA-BOYKO-1": BOYKO_UUID };
+  const groups = buildRopGroups(portfolioRows, teamsFromView, snap, responsibleByCode, userIdToCatalogMgrId);
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0]!.rows.length, 1, "teamRows: UUID teamId → catalog team-kupiansky");
+  const boyko = groups[0]!.managers.find((m) => m.managerId === MGR_BOYKO);
+  assert.ok(boyko);
+  assert.equal(boyko!.active, 1, "responsibleByCode assigns client to Boyko");
+}
+
 console.log("dealer-base-management-view-model.test.ts: OK");
