@@ -1,10 +1,13 @@
 /**
- * Комментарии по торговой точке (localStorage, без backend).
+ * Комментарии по торговой точке.
+ * Чтение: Postgres (кеш) → fallback localStorage. Запись: LS + API.
  */
 
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import { canEditClientNextStep } from "@/lib/client-next-step-data";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
+import { apiCreateComment } from "@/lib/client-comments-api";
+import { refreshDbCommentsForClient, resolveTradePointComments } from "@/lib/client-comments-db-cache";
 
 export const TRADE_POINT_COMMENTS_STORAGE_KEY = "tandoor-trade-point-comments-v1";
 export const TRADE_POINT_COMMENTS_EVENT = "tandoor-trade-point-comments-changed";
@@ -53,10 +56,12 @@ export function saveTradePointCommentsState(state: TradePointCommentsState): voi
 export function getTradePointComments(
   dealerId: string,
   tradePointId: string,
-  state: TradePointCommentsState = loadTradePointCommentsState(),
+  state?: TradePointCommentsState,
 ): TradePointComment[] {
-  const key = tradePointCommentsKey(dealerId, tradePointId);
-  return [...(state.commentsByTradePoint[key] ?? [])].sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
+  const list = state
+    ? [...(state.commentsByTradePoint[tradePointCommentsKey(dealerId, tradePointId)] ?? [])]
+    : resolveTradePointComments(dealerId, tradePointId);
+  return list.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
 }
 
 export function canEditTradePointComments(profile: ReleaseDemoProfile, dealer: DealerRow): boolean {
@@ -73,8 +78,9 @@ export function addTradePointComment(
   const state = loadTradePointCommentsState();
   const key = tradePointCommentsKey(dealerId, tradePointId);
   const prev = state.commentsByTradePoint[key] ?? [];
+  const optimisticId = `tpc-${key}-${Date.now()}`;
   const entry: TradePointComment = {
-    id: `tpc-${key}-${Date.now()}`,
+    id: optimisticId,
     body,
     createdAt: new Date().toISOString(),
     createdBy: payload.createdBy,
@@ -82,4 +88,15 @@ export function addTradePointComment(
   };
   state.commentsByTradePoint[key] = [entry, ...prev].slice(0, 80);
   saveTradePointCommentsState(state);
+
+  void apiCreateComment({
+    clientId: dealerId,
+    scope: "trade_point",
+    scopeRef: tradePointId,
+    body,
+    createdByUserId: payload.createdBy,
+    createdByName: payload.createdByName,
+  }).then((r) => {
+    if (r.ok) void refreshDbCommentsForClient(dealerId);
+  });
 }

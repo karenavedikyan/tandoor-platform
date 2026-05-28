@@ -1,10 +1,13 @@
 /**
- * Комментарии по карточке клиента (localStorage, без backend).
+ * Комментарии по карточке клиента.
+ * Чтение: Postgres (кеш) → fallback localStorage. Запись: LS + API.
  */
 
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import { canEditClientNextStep } from "@/lib/client-next-step-data";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
+import { apiCreateComment } from "@/lib/client-comments-api";
+import { refreshDbCommentsForClient, resolveDealerCommentsForClient } from "@/lib/client-comments-db-cache";
 
 export const DEALER_CARD_COMMENTS_STORAGE_KEY = "tandoor-dealer-card-comments-v1";
 export const DEALER_CARD_COMMENTS_EVENT = "tandoor-dealer-card-comments-changed";
@@ -49,8 +52,9 @@ export function saveDealerCardCommentsState(state: DealerCardCommentsState): voi
   window.dispatchEvent(new CustomEvent(DEALER_CARD_COMMENTS_EVENT));
 }
 
-export function getDealerComments(dealerId: string, state: DealerCardCommentsState = loadDealerCardCommentsState()): DealerCardComment[] {
-  return [...(state.commentsByDealer[dealerId] ?? [])].sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
+export function getDealerComments(dealerId: string, state?: DealerCardCommentsState): DealerCardComment[] {
+  const list = state ? [...(state.commentsByDealer[dealerId] ?? [])] : resolveDealerCommentsForClient(dealerId);
+  return list.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
 }
 
 export function canEditDealerCardComments(profile: ReleaseDemoProfile, dealer: DealerRow): boolean {
@@ -82,8 +86,9 @@ export function addDealerComment(
   if (!body) return;
   const state = loadDealerCardCommentsState();
   const prev = state.commentsByDealer[dealerId] ?? [];
+  const optimisticId = `dcc-${dealerId}-${Date.now()}`;
   const entry: DealerCardComment = {
-    id: `dcc-${dealerId}-${Date.now()}`,
+    id: optimisticId,
     type: payload.type,
     body,
     createdAt: new Date().toISOString(),
@@ -92,10 +97,21 @@ export function addDealerComment(
   };
   state.commentsByDealer[dealerId] = [entry, ...prev].slice(0, 120);
   saveDealerCardCommentsState(state);
+
+  void apiCreateComment({
+    clientId: dealerId,
+    scope: "dealer",
+    type: payload.type,
+    body,
+    createdByUserId: payload.createdBy,
+    createdByName: payload.createdByName,
+  }).then((r) => {
+    if (r.ok) void refreshDbCommentsForClient(dealerId);
+  });
 }
 
 /** События для ленты «История активности». */
-export function getDealerCommentsHistoryEvents(dealerId: string, state: DealerCardCommentsState = loadDealerCardCommentsState()): {
+export function getDealerCommentsHistoryEvents(dealerId: string, state?: DealerCardCommentsState): {
   id: string;
   meta: string;
   body: string;
