@@ -5,6 +5,7 @@ import {
   BarChart3,
   BookOpen,
   ChevronDown,
+  Circle,
   ClipboardList,
   Home,
   LayoutGrid,
@@ -15,6 +16,8 @@ import {
   MapPinned,
   Megaphone,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
   PieChart,
   Search,
   Store,
@@ -39,6 +42,9 @@ import { cn } from "@/lib/utils";
 import { flattenGroupedPilotNavigation, type PilotNavGroup, type PilotNavItem, type PilotNavigationModel } from "@/lib/auth-access";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actualization-sync-status";
+import { SidebarNavFooter } from "@/components/layout/sidebar-nav-footer";
+
+const SIDEBAR_COLLAPSED_LS_KEY = "tandoor-shell-sidebar-collapsed-v1";
 
 const MAIN_HREF = "/main";
 const TERRITORY_CARD_HREF = "/territory-card";
@@ -207,11 +213,6 @@ function isNavItemActive(item: PilotNavItem, location: string, isActiveFromLink?
   return pathMatchesNavHref(location, item.href);
 }
 
-function isIconRailActive(href: string, location: string) {
-  if (href === MAIN_HREF) return isMainPath(location);
-  return pathMatchesNavHref(location, href);
-}
-
 function navLinkClass(
   item: PilotNavItem,
   location: string,
@@ -228,7 +229,7 @@ function navLinkClass(
     return cn(
       base,
       active
-        ? "border-l-[3px] border-[#9ACA3C] bg-white font-semibold text-[#222631] shadow-sm"
+        ? "border-l-[3px] border-[#9ACA3C] bg-white font-semibold text-[#222631] shadow-[0_1px_2px_rgba(154,202,60,0.15)] dark:bg-card dark:text-foreground"
         : "border-l-[3px] border-transparent text-[#8F96B0] hover:bg-[#EEEFF6]/80 hover:text-[#222631]",
       item.comingSoon && !active && "opacity-95",
     );
@@ -586,6 +587,82 @@ function PilotNavGroupedList({
   );
 }
 
+function CollapsedNavList({ items, location }: { items: PilotNavItem[]; location: string }) {
+  return (
+    <nav className="flex flex-col items-center gap-1" data-testid="nav-preview-desktop-collapsed">
+      {items.map((item) => {
+        const Icon = ICON_BY_TESTID[item.testId] ?? ICON_BY_TESTID[item.navBehaviorId ?? ""] ?? Circle;
+        const active = isNavItemActive(item, location);
+        const hasBadge = item.badge != null || item.badgeLoading;
+        const shortLabel = item.label.replace(/\s*\([^)]*\)\s*$/, "").trim() || item.label;
+        return (
+          <Link
+            key={item.testId}
+            href={item.href}
+            title={shortLabel}
+            aria-label={shortLabel}
+            className={cn(
+              "relative flex h-10 w-10 items-center justify-center rounded-lg no-underline transition-colors",
+              active
+                ? "bg-white text-[#222631] shadow-[0_1px_2px_rgba(154,202,60,0.15)] ring-1 ring-[#9ACA3C]/25 dark:bg-card dark:text-foreground"
+                : "text-[#8F96B0] hover:bg-[#EEEFF6]/80 hover:text-[#222631]",
+            )}
+            data-testid={item.testId}
+          >
+            <Icon className="h-5 w-5 shrink-0" aria-hidden />
+            {hasBadge ? (
+              <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-[#9ACA3C]" aria-hidden />
+            ) : null}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
+function useShellSidebarCollapsedState() {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [collapseAllowed, setCollapseAllowed] = useState(false);
+
+  useLayoutEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(min-width: 1280px)");
+    const syncFromStorage = () => {
+      const isXl = mq.matches;
+      setCollapseAllowed(isXl);
+      if (!isXl) {
+        setSidebarCollapsed(false);
+        return;
+      }
+      try {
+        const raw = window.localStorage.getItem(SIDEBAR_COLLAPSED_LS_KEY);
+        setSidebarCollapsed(raw === "1");
+      } catch {
+        setSidebarCollapsed(false);
+      }
+    };
+    syncFromStorage();
+    mq.addEventListener("change", syncFromStorage);
+    return () => mq.removeEventListener("change", syncFromStorage);
+  }, []);
+
+  const toggleSidebar = useCallback(() => {
+    if (!collapseAllowed) return;
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem(SIDEBAR_COLLAPSED_LS_KEY, next ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, [collapseAllowed]);
+
+  const effectiveCollapsed = collapseAllowed && sidebarCollapsed;
+  return { effectiveCollapsed, toggleSidebar, collapseAllowed };
+}
+
 function NavigationPanel({
   model,
   location,
@@ -621,17 +698,6 @@ function NavigationPanel({
       data-testid={navTestId}
     />
   );
-}
-
-function buildIconRail(navItems: PilotNavItem[]): { href: string; label: string; icon: LucideIcon; key: string }[] {
-  const out: { href: string; label: string; icon: LucideIcon; key: string }[] = [];
-  for (const item of navItems) {
-    const Icon = ICON_BY_TESTID[item.testId] ?? ICON_BY_TESTID[item.navBehaviorId ?? ""];
-    if (!Icon) continue;
-    const short = item.label.replace(/\s*\([^)]*\)\s*$/, "").trim();
-    out.push({ href: item.href, label: short || item.label, icon: Icon, key: item.testId });
-  }
-  return out;
 }
 
 function shellPathWithoutQuery(location: string): string {
@@ -711,7 +777,7 @@ export function AppShell({
   const [mobileOpen, setMobileOpen] = useState(false);
   const ctx = headerContextLabel(location);
   const flatNav = useMemo(() => flattenNavModel(navigation), [navigation]);
-  const iconRail = useMemo(() => buildIconRail(flatNav), [flatNav]);
+  const { effectiveCollapsed: sidebarCollapsed, toggleSidebar, collapseAllowed } = useShellSidebarCollapsedState();
   const { openGroups: pilotGroupedOpen, toggleGroup: pilotGroupedToggle } = usePilotGroupedNavOpenState(navigation, location);
   const showSaveBadge = ACTUALIZATION_SAVE_STATUS_ROUTES.some((p) => location === p || location.startsWith(`${p}/`));
 
@@ -758,59 +824,86 @@ export function AppShell({
         data-testid="app-shell-desktop"
       >
       <aside
-        className="sticky top-0 z-30 hidden h-screen w-14 shrink-0 flex-col border-r border-border/70 bg-[hsl(var(--muted))] py-4 lg:flex"
-        data-testid="app-shell-icon-rail"
-        aria-label="Быстрые разделы"
-      >
-        <div className="flex flex-1 flex-col items-center gap-2 px-1">
-          {iconRail.map(({ href, label, icon: Icon, key }) => {
-            const active = isIconRailActive(href, location);
-            return (
-              <Link
-                key={key}
-                href={href}
-                title={label}
-                aria-label={label}
-                className={cn(
-                  "flex h-10 w-10 items-center justify-center rounded-lg no-underline transition-colors",
-                  active ? "bg-primary/20 text-primary" : "text-muted-foreground hover:bg-background/80 hover:text-foreground",
-                )}
-              >
-                <Icon className="h-5 w-5" aria-hidden />
-              </Link>
-            );
-          })}
-        </div>
-      </aside>
-
-      <aside
-        className="sticky top-0 z-30 hidden h-screen w-[256px] shrink-0 flex-col border-r border-border/70 bg-card shadow-sm lg:flex"
+        className={cn(
+          "sticky top-0 z-30 hidden h-screen shrink-0 flex-col border-r border-border/70 bg-card shadow-sm transition-[width] duration-200 ease-out lg:flex",
+          sidebarCollapsed ? "w-[68px]" : "w-[260px]",
+        )}
         data-testid="app-shell-sidebar"
         aria-label="Основная навигация"
+        aria-expanded={!sidebarCollapsed}
       >
-        <div className="border-b border-border/60 px-4 pb-4 pt-5">
-          <BrandBlock homeHref={homeHref} />
+        <div className="flex items-center justify-between gap-2 border-b border-border/60 px-3 pb-4 pt-5">
+          {sidebarCollapsed ? (
+            <Link href={homeHref} className="flex shrink-0 items-center justify-center no-underline" aria-label="На главную">
+              <TandoorLogo className="h-8 w-8 max-w-[36px] object-contain" data-testid="brand-logo-tandoor-collapsed" />
+            </Link>
+          ) : (
+            <BrandBlock homeHref={homeHref} className="min-w-0 flex-1" />
+          )}
+          {collapseAllowed ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="hidden h-7 w-7 shrink-0 xl:inline-flex"
+              onClick={toggleSidebar}
+              data-testid="button-shell-sidebar-toggle"
+              aria-label={sidebarCollapsed ? "Развернуть меню" : "Свернуть меню"}
+            >
+              {sidebarCollapsed ? (
+                <PanelLeftOpen className="h-4 w-4" aria-hidden />
+              ) : (
+                <PanelLeftClose className="h-4 w-4" aria-hidden />
+              )}
+            </Button>
+          ) : null}
         </div>
-        <div className="flex flex-1 flex-col overflow-y-auto overflow-x-hidden px-3 py-4">
-          <NavigationPanel
-            model={navigation}
-            location={location}
-            variant="sidebar"
-            navTestId="nav-preview-desktop"
-            groupedOpen={pilotGroupedOpen}
-            onGroupedToggle={pilotGroupedToggle}
+        <div className="flex flex-1 flex-col overflow-y-auto overflow-x-hidden px-3 py-4 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#E3E6F3] [&::-webkit-scrollbar-track]:bg-transparent">
+          {sidebarCollapsed ? (
+            <CollapsedNavList items={flatNav} location={location} />
+          ) : (
+            <NavigationPanel
+              model={navigation}
+              location={location}
+              variant="sidebar"
+              navTestId="nav-preview-desktop"
+              groupedOpen={pilotGroupedOpen}
+              onGroupedToggle={pilotGroupedToggle}
+            />
+          )}
+        </div>
+        {sidebarCollapsed ? (
+          <div className="mt-auto border-t border-border/60 px-2 py-3">
+            <div className="flex justify-center">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-10 w-10"
+                onClick={onLogout}
+                aria-label="Выйти"
+                data-testid="button-shell-collapsed-logout"
+              >
+                <LogOut className="h-4 w-4 text-[#8F96B0]" aria-hidden />
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <SidebarNavFooter
+            userName={userName}
+            userSubtitle={cityLabel !== "—" ? cityLabel : undefined}
+            onLogout={onLogout}
+            paddingClass="px-3 pb-4"
           />
-        </div>
-        <div className="mt-auto border-t border-border/60 px-4 py-4">
-          <p className="text-[10px] text-muted-foreground">Рабочий кабинет Tandoor</p>
-        </div>
+        )}
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header
-          className="sticky top-0 z-40 hidden min-h-[56px] w-full items-center gap-4 border-b border-border/70 bg-card px-4 py-2 shadow-xs lg:flex"
+          className="sticky top-0 z-40 hidden min-h-[56px] w-full border-b border-border/70 bg-card shadow-xs lg:flex"
           data-testid="app-shell-topbar"
         >
+          <div className="mx-auto flex w-full max-w-[1600px] min-w-0 items-center gap-4 px-4 py-2">
           <form
             className="flex min-w-0 max-w-xl flex-1 items-center gap-2"
             onSubmit={(e) => {
@@ -866,6 +959,7 @@ export function AppShell({
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+          </div>
           </div>
         </header>
 
@@ -932,7 +1026,7 @@ export function AppShell({
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 py-5 sm:px-5 sm:py-6 lg:px-8 lg:py-7">
+        <main className="mx-auto w-full min-w-0 max-w-[1400px] flex-1 px-4 py-5 sm:px-5 sm:py-6 lg:px-8 lg:py-7">
           <ClientBaseActualizationShellBadge location={location} />
           {children}
         </main>
