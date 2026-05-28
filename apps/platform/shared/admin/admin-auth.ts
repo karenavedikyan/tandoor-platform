@@ -6,33 +6,14 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { neon } from "@neondatabase/serverless";
 import { createHash, timingSafeEqual } from "node:crypto";
+import {
+  makePoolFromNeon,
+  type NeonHttp,
+  type PoolLike,
+} from "../../server/db/neon-client.js";
 
-export type NeonHttp = ReturnType<typeof neon>;
-
-export interface PoolLike {
-  query: <T = Record<string, unknown>>(
-    text: string,
-    params?: unknown[],
-  ) => Promise<{ rows: T[]; rowCount?: number }>;
-}
-
-export function makePoolFromNeon(sql: NeonHttp): PoolLike {
-  return {
-    async query<T>(text: string, params?: unknown[]): Promise<{ rows: T[]; rowCount?: number }> {
-      const callable = sql as unknown as (s: string, p?: unknown[]) => Promise<unknown>;
-      const raw = (await callable(text, params ?? [])) as unknown;
-      if (Array.isArray(raw)) {
-        return { rows: raw as T[] };
-      }
-      if (raw && typeof raw === "object" && "rows" in (raw as object)) {
-        const o = raw as { rows: T[]; rowCount?: number; length?: number };
-        const rowCount = typeof o.rowCount === "number" ? o.rowCount : o.length;
-        return { rows: o.rows ?? [], rowCount };
-      }
-      return { rows: [] as T[] };
-    },
-  };
-}
+export type { NeonHttp, PoolLike };
+export { makePoolFromNeon };
 
 let cachedPool: PoolLike | null | undefined;
 

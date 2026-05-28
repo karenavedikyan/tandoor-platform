@@ -48,6 +48,22 @@ type RestoreSuccess = {
   result: RestoreResultPayload;
 };
 
+type ProxyHealthResult = {
+  ok: true;
+  configured: boolean;
+  proxyReachable: boolean;
+  pgReachable: boolean;
+  shadowWriteEnabled: boolean;
+  durationMs: number;
+  counts?: Array<{
+    table: string;
+    neon: number | null;
+    yandex: number | null;
+    delta: number | null;
+    error?: string;
+  }>;
+};
+
 type DumpSuccess = {
   ok: true;
   blobUrl: string;
@@ -167,6 +183,9 @@ export default function AdminMigrationPage() {
   const [restoreSuccess, setRestoreSuccess] = useState<RestoreSuccess | null>(null);
   const [restoreError, setRestoreError] = useState<MigrationError | null>(null);
   const [restoreErrorsOpen, setRestoreErrorsOpen] = useState(false);
+  const [proxyHealth, setProxyHealth] = useState<ProxyHealthResult | null>(null);
+  const [proxyHealthLoading, setProxyHealthLoading] = useState(false);
+  const [compareLoading, setCompareLoading] = useState(false);
 
   const homeHref = user ? defaultHomePathForUserRole(user.role) : "/main";
 
@@ -310,6 +329,36 @@ export default function AdminMigrationPage() {
       });
     } finally {
       setRunning(false);
+    }
+  };
+
+  const fetchProxyHealth = async (compare: boolean) => {
+    if (compare) setCompareLoading(true);
+    else setProxyHealthLoading(true);
+    try {
+      const url = compare
+        ? "/api/admin/db-migrate/proxy-health?compare=1"
+        : "/api/admin/db-migrate/proxy-health";
+      const r = await fetch(url, { credentials: "include" });
+      const data = (await r.json()) as ProxyHealthResult & { error?: string };
+      if (!r.ok || data.ok !== true) {
+        toast({
+          variant: "destructive",
+          title: "Проверка прокси",
+          description: data.error ?? `HTTP ${r.status}`,
+        });
+        return;
+      }
+      setProxyHealth(data);
+    } catch (e) {
+      toast({
+        variant: "destructive",
+        title: "Проверка прокси",
+        description: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setProxyHealthLoading(false);
+      setCompareLoading(false);
     }
   };
 
@@ -602,6 +651,119 @@ export default function AdminMigrationPage() {
             <p className="text-sm text-muted-foreground" role="status">
               Не закрывайте вкладку до завершения операции.
             </p>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      <Card
+        className={cn(
+          "rounded-xl border shadow-sm",
+          proxyHealth?.proxyReachable && proxyHealth.shadowWriteEnabled
+            ? "border-emerald-200 bg-emerald-50/50 dark:border-emerald-900 dark:bg-emerald-950/30"
+            : "border-border bg-card",
+        )}
+        data-testid="migration-shadow-write"
+      >
+        <CardHeader className="space-y-1">
+          <CardTitle className="text-lg sm:text-xl">Этап 3 — Shadow-write активен</CardTitle>
+          <CardDescription className="text-sm leading-relaxed">
+            Запись идёт параллельно в Neon (primary) и Yandex (shadow). Через ~7 дней переключим чтения на Yandex.
+            Секрет миграции для этой проверки не нужен — только сессия admin.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span
+              className={cn(
+                "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
+                proxyHealth?.shadowWriteEnabled
+                  ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-900/50 dark:text-emerald-100"
+                  : "bg-muted text-muted-foreground",
+              )}
+            >
+              Shadow-write: {proxyHealth?.shadowWriteEnabled === false ? "Выключен" : proxyHealth ? "Включён" : "—"}
+            </span>
+            {proxyHealth ? (
+              <span
+                className={cn(
+                  "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
+                  proxyHealth.proxyReachable && proxyHealth.pgReachable
+                    ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-900/50 dark:text-emerald-100"
+                    : "bg-destructive/15 text-destructive",
+                )}
+              >
+                Прокси: {proxyHealth.proxyReachable && proxyHealth.pgReachable ? "OK" : "Недоступен"}
+              </span>
+            ) : null}
+          </div>
+
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11"
+              disabled={proxyHealthLoading || compareLoading}
+              onClick={() => void fetchProxyHealth(false)}
+              data-testid="button-migration-proxy-health"
+            >
+              {proxyHealthLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+                  Проверка…
+                </>
+              ) : (
+                "Проверить связь"
+              )}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              className="min-h-11"
+              disabled={proxyHealthLoading || compareLoading}
+              onClick={() => void fetchProxyHealth(true)}
+              data-testid="button-migration-compare-counts"
+            >
+              {compareLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+                  Сравнение…
+                </>
+              ) : (
+                "Сравнить счётчики"
+              )}
+            </Button>
+          </div>
+
+          {proxyHealth?.counts && proxyHealth.counts.length > 0 ? (
+            <div className="overflow-x-auto rounded-md border border-border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Таблица</TableHead>
+                    <TableHead className="text-right">Neon</TableHead>
+                    <TableHead className="text-right">Yandex</TableHead>
+                    <TableHead className="text-right">Δ</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {proxyHealth.counts.map((row) => (
+                    <TableRow key={row.table}>
+                      <TableCell className="font-mono text-xs">{row.table}</TableCell>
+                      <TableCell className="text-right tabular-nums">{row.neon ?? "—"}</TableCell>
+                      <TableCell className="text-right tabular-nums">{row.yandex ?? "—"}</TableCell>
+                      <TableCell
+                        className={cn(
+                          "text-right tabular-nums",
+                          row.delta !== null && row.delta !== 0 ? "text-amber-700 dark:text-amber-300" : "",
+                        )}
+                      >
+                        {row.delta ?? "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           ) : null}
         </CardContent>
       </Card>

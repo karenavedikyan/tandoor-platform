@@ -6,6 +6,7 @@
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
 import * as authSchema from "@shared/auth-schema";
+import { wrapNeonWithShadow } from "../db/neon-client.js";
 
 export type AuthDrizzle = ReturnType<typeof drizzle<typeof authSchema>>;
 
@@ -28,7 +29,8 @@ export function getAuthDb(): AuthDrizzle | null {
     cached = null;
     return null;
   }
-  const client = neon(url);
-  cached = drizzle(client, { schema: authSchema });
+  // wrapNeonWithShadow сохраняет callable-API neon; типы drizzle ожидают узкий NeonQueryFunction
+  const client = wrapNeonWithShadow(neon(url), "auth.drizzle");
+  cached = drizzle(client as ReturnType<typeof neon>, { schema: authSchema }) as AuthDrizzle;
   return cached;
 }
