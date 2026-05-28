@@ -7,6 +7,8 @@ import type { DealerRow } from "../dealer-base-mock-data";
 import {
   aggregateManagersForTeam,
   buildDbAwareManagerMatcher,
+  buildRopGroups,
+  findManagerInRopGroups,
 } from "../dealer-base-management-view-model";
 
 const TEAM = "team-kupiansky";
@@ -94,6 +96,26 @@ const teamRows = [
   const responsibleByCode = new Map<string, string>([["CL-OTHER", UUID_YAKUBOVA]]);
   const matchBoyko = buildDbAwareManagerMatcher(MGR_BOYKO, "Бойко", TEAM, responsibleByCode, userIdToCatalogMgrId);
   assert.equal(matchBoyko(r), true);
+}
+
+// buildRopGroups + findManagerInRopGroups: те же id клиентов, что у aggregateManagersForTeam
+{
+  const responsibleByCode = new Map<string, string>([
+    ["CL-001", UUID_YAKUBOVA],
+    ["CL-002", UUID_YAKUBOVA],
+  ]);
+  const teams = [{ teamId: TEAM, ropName: "Купянский" }];
+  const groups = buildRopGroups(teamRows, teams, null, responsibleByCode, userIdToCatalogMgrId);
+  const boyko = findManagerInRopGroups(groups, { managerCatalogId: MGR_BOYKO, teamId: TEAM });
+  const yakubova = findManagerInRopGroups(groups, { managerCatalogId: MGR_YAKUBOVA, teamId: TEAM });
+  assert.ok(boyko);
+  assert.ok(yakubova);
+  assert.equal(boyko!.manager.rows.length, 1);
+  assert.equal(boyko!.manager.rows[0]!.id, "manual-1");
+  assert.equal(yakubova!.manager.rows.length, 2);
+  const yakIds = new Set(yakubova!.manager.rows.map((r) => r.id));
+  assert.ok(yakIds.has("client-seed-boyko"));
+  assert.ok(yakIds.has("client-reassigned"));
 }
 
 console.log("dealer-base-management-view-model.test.ts: OK");

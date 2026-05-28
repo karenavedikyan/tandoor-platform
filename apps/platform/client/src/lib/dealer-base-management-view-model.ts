@@ -378,3 +378,57 @@ export function flattenTradePointsForRows(rows: DealerRow[]): TradePointListRow[
   }
   return out;
 }
+
+/** Строка клиента для модалки manager_overview на /clients (из DealerRow + db-aware matcher). */
+export type ManagerOverviewClientRow = {
+  id: string;
+  fullName: string;
+  inn: string | null;
+  city: string | null;
+  legalEntity: boolean;
+  status: "active" | "potential" | "attention";
+  tradePointsCount: number;
+  dealerProfileId: string;
+};
+
+export function dealerRowToManagerOverviewClient(row: DealerRow): ManagerOverviewClientRow {
+  const inn = row.actualizationInn?.trim();
+  const le = row.legalEntity?.trim();
+  let status: ManagerOverviewClientRow["status"] = "active";
+  if (row.status === "потенциальный") status = "potential";
+  else if (dealerNeedsAttention(row)) status = "attention";
+  return {
+    id: row.id,
+    fullName: row.name,
+    inn: inn || null,
+    city: row.city?.trim() || null,
+    legalEntity: Boolean(le && le !== "—"),
+    status,
+    tradePointsCount: row.outlets,
+    dealerProfileId: row.id,
+  };
+}
+
+export function mapManagerOverviewClients(rows: DealerRow[]): ManagerOverviewClientRow[] {
+  return [...rows]
+    .map(dealerRowToManagerOverviewClient)
+    .sort((a, b) => a.fullName.localeCompare(b.fullName, "ru"));
+}
+
+/** Найти менеджера в ropGroups по catalog managerId (и опционально teamId). */
+export function findManagerInRopGroups(
+  ropGroups: RopGroupModel[],
+  opts: { managerCatalogId: string; teamId?: string },
+): { manager: ManagerRowModel; group: RopGroupModel } | null {
+  const { managerCatalogId, teamId } = opts;
+  if (teamId) {
+    const group = ropGroups.find((g) => g.teamId === teamId);
+    const manager = group?.managers.find((m) => m.managerId === managerCatalogId);
+    if (group && manager) return { manager, group };
+  }
+  for (const group of ropGroups) {
+    const manager = group.managers.find((m) => m.managerId === managerCatalogId);
+    if (manager) return { manager, group };
+  }
+  return null;
+}
