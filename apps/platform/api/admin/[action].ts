@@ -4101,6 +4101,31 @@ async function handleMigrationsRun(
     );
     applied.push("dealer_work_plan_v1");
 
+    // Промт 69: комментарии клиента и торговых точек
+    await pool.query(
+      `CREATE TABLE IF NOT EXISTS client_comments (
+         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+         client_id TEXT NOT NULL,
+         scope TEXT NOT NULL CHECK (scope IN ('dealer','trade_point')),
+         scope_ref TEXT,
+         type TEXT NOT NULL DEFAULT 'general',
+         body TEXT NOT NULL,
+         is_deleted BOOLEAN NOT NULL DEFAULT false,
+         created_by_user_id UUID,
+         created_by_name TEXT,
+         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+       )`,
+    );
+    await pool.query(`CREATE INDEX IF NOT EXISTS ix_client_comments_client ON client_comments(client_id)`);
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS ix_client_comments_scope ON client_comments(client_id, scope, scope_ref)`,
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS ix_client_comments_tp ON client_comments(scope_ref) WHERE scope = 'trade_point'`,
+    );
+    applied.push("client_comments_v1");
+
     // Промт 20: impersonation
     await pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS impersonator_user_id uuid NULL REFERENCES users(id) ON DELETE SET NULL`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_sessions_impersonator ON sessions(impersonator_user_id) WHERE impersonator_user_id IS NOT NULL`);
