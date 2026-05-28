@@ -1,0 +1,101 @@
+import { gzipSync } from "node:zlib";
+import { describe, expect, it, vi } from "vitest";
+import {
+  buildInsertQuery,
+  groupRowsByTable,
+  parseJsonlGzip,
+  quoteIdent,
+  serializeCellValue,
+  type JsonlEntry,
+} from "../restore-yandex.js";
+
+function makeJsonlGzip(lines: Array<{ table: string; row: Record<string, unknown> }>): Buffer {
+  const body = lines.map((l) => JSON.stringify(l)).join("\n");
+  return gzipSync(Buffer.from(body, "utf8"));
+}
+
+describe("parseJsonlGzip", () => {
+  it("parses gzipped JSONL into table/row entries", () => {
+    const buf = makeJsonlGzip([
+      { table: "users", row: { id: "u1", email: "a@b.c" } },
+      { table: "sessions", row: { id: "s1" } },
+    ]);
+    const entries = parseJsonlGzip(buf);
+    expect(entries).toHaveLength(2);
+    expect(entries[0]).toMatchObject({ table: "users", row: { id: "u1", email: "a@b.c" } });
+    expect(entries[1]?.table).toBe("sessions");
+  });
+
+  it("throws on invalid line shape", () => {
+    const buf = gzipSync(Buffer.from(JSON.stringify({ nope: true }), "utf8"));
+    expect(() => parseJsonlGzip(buf)).toThrow(/missing table/i);
+  });
+});
+
+describe("groupRowsByTable", () => {
+  it("groups entries preserving per-table order", () => {
+    const entries: JsonlEntry[] = [
+      { table: "b", row: { id: 1 }, lineIndex: 1 },
+      { table: "a", row: { id: 2 }, lineIndex: 2 },
+      { table: "b", row: { id: 3 }, lineIndex: 3 },
+    ];
+    const grouped = groupRowsByTable(entries);
+    expect(Array.from(grouped.keys())).toEqual(["b", "a"]);
+    expect(grouped.get("b")?.map((e) => e.row.id)).toEqual([1, 3]);
+  });
+});
+
+describe("buildInsertQuery", () => {
+  it("builds parameterized INSERT with ON CONFLICT on id", () => {
+    const { text } = buildInsertQuery("users", ["id", "email"], ["id"]);
+    expect(text).toContain(`INSERT INTO ${quoteIdent("users")}`);
+    expect(text).toContain("ON CONFLICT");
+    expect(text).toContain("$1, $2");
+    expect(text).toContain(quoteIdent("id"));
+  });
+});
+
+describe("serializeCellValue", () => {
+  it("stringifies jsonb objects and ISO-dates", () => {
+    expect(serializeCellValue({ a: 1 }, true)).toBe('{"a":1}');
+    expect(serializeCellValue(new Date("2026-05-28T00:00:00.000Z"), false)).toBe("2026-05-28T00:00:00.000Z");
+  });
+});
+
+describe("row insert error isolation", () => {
+  it("records error for one bad row without failing others", async () => {
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [] })
+      .mockRejectedValueOnce(new Error("invalid input syntax"))
+      .mockResolvedValueOnce({ rows: [] });
+
+    const client = { query };
+    const errors: Array<{ table: string; rowIndex: number; error: string }> = [];
+    const columnMeta = [
+      { name: "id", isJson: false },
+      { name: "email", isJson: false },
+    ];
+    const entries: JsonlEntry[] = [
+      { table: "users", row: { id: "ok", email: "a@b.c" }, lineIndex: 1 },
+      { table: "users", row: { id: "bad", email: null }, lineIndex: 2 },
+      { table: "users", row: { id: "ok2", email: "c@d.e" }, lineIndex: 3 },
+    ];
+
+    const { text } = buildInsertQuery("users", ["id", "email"], ["id"]);
+    for (const entry of entries) {
+      const columns = ["id", "email"];
+      const values = columns.map((c) => serializeCellValue(entry.row[c], false));
+      try {
+        await client.query(text, values);
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        errors.push({ table: entry.table, rowIndex: entry.lineIndex, error: message });
+      }
+    }
+
+    expect(query).toHaveBeenCalledTimes(3);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatchObject({ rowIndex: 2, error: "invalid input syntax" });
+  });
+});
