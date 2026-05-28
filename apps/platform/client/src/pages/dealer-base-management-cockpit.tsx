@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { ChevronRight, ExternalLink, Info } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -53,7 +52,7 @@ import { realRopOptions } from "@/lib/real-org-adapter";
 import type { OrgSnapshot } from "@/lib/use-org-snapshot";
 import type { DealerBaseAccessRole } from "@/lib/dealer-base-role-views";
 import { buildHashPath } from "@/lib/hash-route-utils";
-import { fetchClientBaseManagerDetail, type ClientBaseOverview } from "@/lib/client-base-overview-api";
+import type { ClientBaseOverview } from "@/lib/client-base-overview-api";
 import { ClientAvatar } from "@/components/ui/client-avatar";
 import { DealerActualizationCreateDialog } from "@/components/client-base-actualization-dealer-forms";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
@@ -67,7 +66,9 @@ import {
   buildRopGroups,
   buildStructureInfographic,
   dealerMatchesClientListFilter,
+  findManagerInRopGroups,
   flattenTradePointsForRows,
+  mapManagerOverviewClients,
   topCitiesForChart,
   teamsForManagementView,
   type CityRowModel,
@@ -279,12 +280,21 @@ export function DealerBaseManagementCockpit({
   const tradePointRows = useMemo(() => flattenTradePointsForRows(detailSourceRows), [detailSourceRows]);
 
   const closeDetail = useCallback(() => setDetail(null), []);
-  const overviewManagerId = detail?.kind === "manager_overview" ? detail.managerUserId : null;
-  const managerDetailQ = useQuery({
-    queryKey: ["client-base-manager-detail", overviewManagerId],
-    queryFn: () => fetchClientBaseManagerDetail(overviewManagerId ?? ""),
-    enabled: Boolean(overview && overviewManagerId),
-  });
+
+  const managerOverviewBundle = useMemo(() => {
+    if (detail?.kind !== "manager_overview") return null;
+    const catalogId =
+      UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE[detail.managerUserId] ?? detail.managerUserId;
+    const teamHint = detail.teamId !== "__no_rop__" ? detail.teamId : undefined;
+    const found = findManagerInRopGroups(ropGroups, { managerCatalogId: catalogId, teamId: teamHint });
+    if (!found) return null;
+    return {
+      managerName: found.manager.name,
+      ropName: found.group.ropName,
+      clients: mapManagerOverviewClients(found.manager.rows),
+      tradePointsCount: found.manager.outlets,
+    };
+  }, [detail, ropGroups]);
 
   const mergedForCreate = useMemo(() => {
     if (mergedDealerRowsForCreate && mergedDealerRowsForCreate.length > 0) return mergedDealerRowsForCreate;
@@ -475,56 +485,50 @@ export function DealerBaseManagementCockpit({
             <SheetHeader className="border-b border-border px-4 pb-3 pt-4 text-left">
               <SheetTitle className="text-base text-foreground">
                 {detail?.kind === "manager_overview"
-                  ? managerDetailQ.data?.manager.fullName ?? "Менеджер"
+                  ? managerOverviewBundle?.managerName ?? "Менеджер"
                   : detail?.kind === "rop_overview"
                     ? overview.ropGroups.find((g) => (g.teamId ?? "__no_rop__") === detail.teamId)?.teamName ?? "Команда"
                     : "Команда"}
               </SheetTitle>
               <SheetDescription>
-                {detail?.kind === "manager_overview" && managerDetailQ.data
-                  ? `Команда: ${managerDetailQ.data.manager.ropFullName} · клиентов ${managerDetailQ.data.clients.length} · ТТ ${managerDetailQ.data.tradePoints.length}`
-                  : "Реальные данные из актуализации"}
+                {detail?.kind === "manager_overview" && managerOverviewBundle
+                  ? `Команда: ${managerOverviewBundle.ropName} · клиентов ${managerOverviewBundle.clients.length} · ТТ ${managerOverviewBundle.tradePointsCount}`
+                  : detail?.kind === "manager_overview"
+                    ? "Клиенты по данным базы (назначения и seed)"
+                    : "Реальные данные из актуализации"}
               </SheetDescription>
             </SheetHeader>
             <div className="max-h-[70vh] overflow-y-auto px-4 pb-24 pt-3" data-testid="dialog-client-base-group-detail">
               {detail?.kind === "manager_overview" ? (
-                managerDetailQ.isLoading ? (
+                managerOverviewBundle?.clients.length ? (
                   <div className="space-y-2">
-                    {[0, 1, 2, 3].map((i) => (
-                      <div key={i} className="h-20 animate-pulse rounded-xl border border-border bg-muted/30" />
-                    ))}
-                  </div>
-                ) : managerDetailQ.data?.clients.length ? (
-                  <div className="space-y-2">
-                    {[...managerDetailQ.data.clients]
-                      .sort((a, b) => a.fullName.localeCompare(b.fullName, "ru"))
-                      .map((c) => (
-                        <Card key={c.id} className="rounded-xl border border-border bg-card text-card-foreground">
-                          <CardContent className="space-y-1 p-3">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex min-w-0 items-start gap-3">
-                                <ClientAvatar
-                                  name={c.fullName}
-                                  seed={c.id || c.inn || c.fullName}
-                                  size={32}
-                                  shape="circle"
-                                />
-                                <div className="min-w-0">
-                                  <p className="truncate text-sm font-semibold text-foreground">{c.fullName}</p>
-                                  <p className="text-xs text-muted-foreground">{c.city ?? "—"} · ТТ {c.tradePointsCount}</p>
-                                  <p className="text-[11px] text-muted-foreground">ИНН {c.inn ?? "—"} · юрлицо {c.legalEntity ? "есть" : "—"}</p>
-                                  <p className="text-[11px] text-muted-foreground">
-                                    статус: {c.status === "active" ? "активный" : c.status === "potential" ? "потенциальный" : "внимание"}
-                                  </p>
-                                </div>
+                    {managerOverviewBundle.clients.map((c) => (
+                      <Card key={c.id} className="rounded-xl border border-border bg-card text-card-foreground">
+                        <CardContent className="space-y-1 p-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex min-w-0 items-start gap-3">
+                              <ClientAvatar
+                                name={c.fullName}
+                                seed={c.id || c.inn || c.fullName}
+                                size={32}
+                                shape="circle"
+                              />
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-semibold text-foreground">{c.fullName}</p>
+                                <p className="text-xs text-muted-foreground">{c.city ?? "—"} · ТТ {c.tradePointsCount}</p>
+                                <p className="text-[11px] text-muted-foreground">ИНН {c.inn ?? "—"} · юрлицо {c.legalEntity ? "есть" : "—"}</p>
+                                <p className="text-[11px] text-muted-foreground">
+                                  статус: {c.status === "active" ? "активный" : c.status === "potential" ? "потенциальный" : "внимание"}
+                                </p>
                               </div>
-                              <Button asChild variant="outline" size="sm">
-                                <Link href={buildHashPath(`/dealers/${encodeURIComponent(c.dealerProfileId ?? c.id)}`)}>Карточка</Link>
-                              </Button>
                             </div>
-                          </CardContent>
-                        </Card>
-                      ))}
+                            <Button asChild variant="outline" size="sm">
+                              <Link href={buildHashPath(`/dealers/${encodeURIComponent(c.dealerProfileId)}`)}>Карточка</Link>
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
                   </div>
                 ) : (
                   <p className="py-6 text-center text-sm text-muted-foreground">У менеджера нет клиентов в базе</p>
