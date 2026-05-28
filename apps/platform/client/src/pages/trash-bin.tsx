@@ -13,6 +13,8 @@
  */
 
 import { useMemo, useState, type ReactElement } from "react";
+import { getReleaseClients } from "@/lib/release-client-data";
+import type { ArchivedDealerInfo } from "@/lib/client-base-actualization-state";
 import { Link } from "wouter";
 import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -43,7 +45,8 @@ import { buildHashPath } from "@/lib/hash-route-utils";
 
 type ConfirmKind =
   | { kind: "force-delete-dealer"; dealerId: string; name: string }
-  | { kind: "force-delete-tp"; tradePointId: string; name: string };
+  | { kind: "force-delete-tp"; tradePointId: string; name: string }
+  | { kind: "restore-all-archived"; count: number };
 
 function compareByExpires(a: TrashedDealerInfo | TrashedTradePointInfo, b: TrashedDealerInfo | TrashedTradePointInfo): number {
   return Date.parse(a.expiresAt) - Date.parse(b.expiresAt);
@@ -70,6 +73,35 @@ export function TrashBinPage(): ReactElement {
     const map = stateForRead.trashedTradePointsById ?? {};
     return Object.values(map).sort(compareByExpires);
   }, [stateForRead.trashedTradePointsById]);
+
+  const archivedDealers = useMemo(() => {
+    const map = stateForRead.archivedDealersById ?? {};
+    return Object.values(map).sort((a, b) => Date.parse(b.archivedAt) - Date.parse(a.archivedAt));
+  }, [stateForRead.archivedDealersById]);
+
+  const releaseNameByDealerId = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const c of getReleaseClients()) {
+      const name = c.name?.trim();
+      if (name) m.set(c.id, name);
+    }
+    return m;
+  }, []);
+
+  const fieldName = (fields: Record<string, unknown> | undefined): string => {
+    const n = fields?.name;
+    return typeof n === "string" ? n.trim() : "";
+  };
+
+  const resolveArchivedDealerName = (dealerId: string): string => {
+    const manual = stateForRead.manuallyCreatedDealersById?.[dealerId];
+    const manualName = fieldName(manual?.fields);
+    if (manualName) return manualName;
+    const override = stateForRead.dealerOverridesById?.[dealerId];
+    const overrideName = fieldName(override?.fields);
+    if (overrideName) return overrideName;
+    return releaseNameByDealerId.get(dealerId) ?? dealerId;
+  };
 
   const earliestExpires = useMemo(() => {
     const all = [...trashedDealers, ...trashedTps];
@@ -170,6 +202,42 @@ export function TrashBinPage(): ReactElement {
     }
   };
 
+  const onRestoreAllArchived = async (count: number): Promise<void> => {
+    if (busy || count === 0) return;
+    setBusy("restore-all-archived");
+    try {
+      const r = await actx.persist((prev) => mergeActualizationState(prev, { archivedDealersById: {} }));
+      if (r.success) {
+        toast({ title: `Восстановлено ${count} клиентов. Они снова в активной базе.` });
+        void teamPlane.refresh();
+      } else {
+        toast({ title: "Не удалось восстановить", variant: "destructive" });
+      }
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const onRestoreOneArchived = async (dealerId: string): Promise<void> => {
+    if (busy) return;
+    setBusy(`restore-archived:${dealerId}`);
+    try {
+      const r = await actx.persist((prev) => {
+        const next = { ...prev.archivedDealersById };
+        delete next[dealerId];
+        return mergeActualizationState(prev, { archivedDealersById: next });
+      });
+      if (r.success) {
+        toast({ title: "Клиент восстановлен в активную базу" });
+        void teamPlane.refresh();
+      } else {
+        toast({ title: "Не удалось восстановить", variant: "destructive" });
+      }
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const onRunPurge = async (): Promise<void> => {
     if (purgeBusy) return;
     setPurgeBusy(true);
@@ -250,6 +318,64 @@ export function TrashBinPage(): ReactElement {
           ) : (
             <p className="text-[11px] text-muted-foreground">В корзине пусто.</p>
           )}
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-xl border border-border bg-card text-card-foreground" data-testid="section-trash-archived-clients">
+        <CardContent className="space-y-3 p-4">
+          <h2 className="text-base font-semibold text-foreground">Архив клиентов</h2>
+          <p className="text-sm text-muted-foreground">
+            В архиве сейчас {archivedDealers.length} клиентов. Архивные клиенты не отображаются в активной базе. Если
+            архив получился случайно (массовое архивирование, миграция и т.п.) — нажмите «Восстановить всех», чтобы все
+            клиенты вернулись в активную базу.
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            disabled={archivedDealers.length === 0 || busy === "restore-all-archived"}
+            onClick={() => setConfirmFD({ kind: "restore-all-archived", count: archivedDealers.length })}
+            data-testid="button-trash-restore-all-archived"
+          >
+            {busy === "restore-all-archived"
+              ? "Восстановление…"
+              : `Восстановить всех (${archivedDealers.length})`}
+          </Button>
+          {archivedDealers.length > 0 ? (
+            <details className="group rounded-lg border border-border/80 bg-muted/10">
+              <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-foreground">
+                Список архивных клиентов ({archivedDealers.length})
+              </summary>
+              <ul className="max-h-[min(24rem,50vh)] space-y-2 overflow-y-auto border-t border-border/60 p-3">
+                {archivedDealers.slice(0, 200).map((t: ArchivedDealerInfo) => (
+                  <li
+                    key={t.dealerId}
+                    className="flex flex-col gap-2 rounded-lg border border-border/60 bg-card p-2 sm:flex-row sm:items-center sm:justify-between"
+                    data-testid={`row-trash-archived-${t.dealerId}`}
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-foreground">{resolveArchivedDealerName(t.dealerId)}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {t.dealerId} · архивировал {t.archivedByName} · {formatDisplayDateTime(t.archivedAt)}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={busy === `restore-archived:${t.dealerId}`}
+                      onClick={() => void onRestoreOneArchived(t.dealerId)}
+                      data-testid={`button-trash-archived-restore-${t.dealerId}`}
+                    >
+                      Восстановить
+                    </Button>
+                  </li>
+                ))}
+                {archivedDealers.length > 200 ? (
+                  <li className="text-center text-xs text-muted-foreground">и ещё {archivedDealers.length - 200}</li>
+                ) : null}
+              </ul>
+            </details>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -389,13 +515,19 @@ export function TrashBinPage(): ReactElement {
       <AlertDialog open={confirmFD !== null} onOpenChange={(o) => !o && setConfirmFD(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Удалить навсегда?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {confirmFD?.kind === "restore-all-archived"
+                ? `Восстановить ${confirmFD.count} клиентов из архива?`
+                : "Удалить навсегда?"}
+            </AlertDialogTitle>
             <AlertDialogDescription>
               {confirmFD?.kind === "force-delete-dealer"
                 ? `Клиент «${confirmFD.name}» будет удалён окончательно. Восстановить будет невозможно.`
                 : confirmFD?.kind === "force-delete-tp"
                   ? `Торговая точка «${confirmFD.name}» будет удалена окончательно. Восстановить будет невозможно.`
-                  : ""}
+                  : confirmFD?.kind === "restore-all-archived"
+                    ? `Все клиенты вернутся в активную базу. Это действие не удаляет данные карточек, контакты, изменения — только снимает пометку «архив». Восстановить?`
+                    : ""}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
@@ -407,14 +539,15 @@ export function TrashBinPage(): ReactElement {
             <AlertDialogAction asChild>
               <Button
                 type="button"
-                variant="destructive"
+                variant={confirmFD?.kind === "restore-all-archived" ? "default" : "destructive"}
                 onClick={() => {
                   if (confirmFD?.kind === "force-delete-dealer") void onForceDeleteDealer(confirmFD.dealerId);
                   else if (confirmFD?.kind === "force-delete-tp") void onForceDeleteTp(confirmFD.tradePointId);
+                  else if (confirmFD?.kind === "restore-all-archived") void onRestoreAllArchived(confirmFD.count);
                   setConfirmFD(null);
                 }}
               >
-                Удалить навсегда
+                {confirmFD?.kind === "restore-all-archived" ? "Восстановить всех" : "Удалить навсегда"}
               </Button>
             </AlertDialogAction>
           </AlertDialogFooter>
