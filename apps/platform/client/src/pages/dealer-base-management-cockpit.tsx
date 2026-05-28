@@ -45,6 +45,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
+import { getEffectiveTeamLeadTeamId } from "@/lib/release-demo-profile";
 import { mapSalesRoleToDealerBaseAccess } from "@/lib/dealer-base-role-views";
 import { getDealerManagerDisplay, type DealerRow } from "@/lib/dealer-base-mock-data";
 import { getRopOptions } from "@/lib/rop-manager-filters";
@@ -79,6 +80,11 @@ import {
 import { useMyClientCodes } from "@/hooks/use-my-client-codes";
 import { UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE } from "@shared/admin/actualization-dedupe";
 import { useLocation } from "wouter";
+import { ManagerTeamCard } from "@/components/dealer-base/manager-team-card";
+import {
+  computeManagerHeatMap,
+  sortManagersByHeat,
+} from "@/lib/manager-load-heat";
 
 const MODE_LS_KEY = "tandoor-dealer-base-management-mode-v1";
 const OPEN_ROPS_LS_KEY = "tandoor-dealer-base-management-open-rops-v1";
@@ -108,6 +114,19 @@ function readMode(): DirectorClientBaseMode {
     /* ignore */
   }
   return "overview";
+}
+
+function isOwnTeamForUser(
+  teamId: string,
+  profile: ReleaseDemoProfile,
+  access: DealerBaseAccessRole,
+  orgSnap?: OrgSnapshot | null,
+): boolean {
+  if (access !== "team_lead") return false;
+  const ownTeam = getEffectiveTeamLeadTeamId(profile);
+  const catalogOwn = orgSnap ? resolveManagementCatalogTeamId(ownTeam, orgSnap) : ownTeam;
+  const catalogTeam = orgSnap ? resolveManagementCatalogTeamId(teamId, orgSnap) : teamId;
+  return catalogOwn === catalogTeam || ownTeam === teamId;
 }
 
 function readOpenRops(): string[] {
@@ -220,6 +239,20 @@ export function DealerBaseManagementCockpit({
     () => buildRopGroups(rows, teams, orgTeamCtx?.snap, responsibleByCode, userIdToCatalogMgrId),
     [rows, teams, orgTeamCtx, responsibleByCode, userIdToCatalogMgrId],
   );
+
+  const ownTeamIds = useMemo(
+    () =>
+      ropGroups
+        .filter((g) => isOwnTeamForUser(g.teamId, profile, access, orgTeamCtx?.snap))
+        .map((g) => g.teamId),
+    [ropGroups, profile, access, orgTeamCtx?.snap],
+  );
+
+  useEffect(() => {
+    if (ownTeamIds.length > 0 && openOverviewTeamIds.length === 0) {
+      setOpenOverviewTeamIds(ownTeamIds);
+    }
+  }, [ownTeamIds.join("|")]); // eslint-disable-line react-hooks/exhaustive-deps -- re-init when teams load
 
   useEffect(() => {
     const DIAG_KEY = "tandoor-diag-rop-drilldown-v1";
@@ -541,41 +574,34 @@ export function DealerBaseManagementCockpit({
                         Детали команды
                       </Button>
                     </div>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      {g.managers.map((m) => {
-                        const arch = managerArchiveById.get(m.managerId);
-                        return (
-                        <button
-                          key={m.managerId}
-                          type="button"
-                          className="rounded-xl border border-border bg-card p-3 text-left text-card-foreground transition-colors hover:bg-muted/40"
-                          data-testid={`button-client-base-manager-open-${m.managerId}`}
-                          onClick={() =>
-                            setDetail({ kind: "manager_overview", managerCatalogId: m.managerId, teamId: teamKey })
-                          }
+                    {(() => {
+                      const heatEntries = g.managers.map((m) => ({
+                        id: m.managerId,
+                        clientsActive: m.active,
+                        tradePointsActive: m.outlets,
+                      }));
+                      const heatMap = computeManagerHeatMap(heatEntries);
+                      const sortedManagers = sortManagersByHeat(
+                        g.managers.map((m) => ({ ...m, id: m.managerId, fullName: m.name })),
+                        heatMap,
+                        heatEntries,
+                      );
+                      return (
+                        <div
+                          className="grid grid-cols-1 gap-3 lg:grid-cols-2"
+                          data-testid={`grid-managers-${teamKey}`}
                         >
-                          <p
-                            className="truncate text-sm font-semibold text-foreground"
-                            data-testid={`card-client-base-manager-${m.managerId}`}
-                          >
-                            {m.name}
-                          </p>
-                          <p className="mt-1 text-[11px] text-muted-foreground">
-                            активные <span className="text-foreground">{m.active}</span>
-                            {archiveCountDotSuffix(arch?.archivedClients ?? 0)}
-                            {" · "}
-                            ТТ <span className="text-foreground">{m.outlets}</span>
-                            {archiveCountDotSuffix(arch?.archivedTradePoints ?? 0)}
-                            {" · "}
-                            сегм. {m.topSegmentLabel}
-                          </p>
-                          <p className="text-[11px] text-muted-foreground">
-                            потенц. {m.potential} · вним. {m.attention}
-                          </p>
-                        </button>
-                        );
-                      })}
-                    </div>
+                          {sortedManagers.map((m) => (
+                            <ManagerTeamCard
+                              key={m.managerId}
+                              manager={m}
+                              ropName={g.ropName}
+                              heatLevel={heatMap[m.managerId] ?? "medium"}
+                            />
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </AccordionContent>
                 </AccordionItem>
               );
