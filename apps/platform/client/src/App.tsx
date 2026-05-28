@@ -44,6 +44,7 @@ const LazyMainManagerDetail = lazy(() => import("@/pages/main-manager-detail"));
 const LazyMainRopDetail = lazy(() => import("@/pages/main-rop-detail"));
 const LazyDealerBase = lazy(() => import("@/pages/dealer-base"));
 const LazyDealerBaseCityDetail = lazy(() => import("@/pages/dealer-base-city-detail"));
+const LazyDealerBaseManagerDetail = lazy(() => import("@/pages/dealer-base-manager-detail"));
 const LazyTradePoints = lazy(() => import("@/pages/trade-points"));
 const LazyClientMap = lazy(() => import("@/pages/client-map"));
 const LazyDealerCardFoundation = lazy(() => import("@/pages/dealer-card-foundation"));
@@ -107,6 +108,7 @@ const MainManagerDetailRoute = suspensePage(LazyMainManagerDetail);
 const MainRopDetailRoute = suspensePage(LazyMainRopDetail);
 const DealerBaseRoute = suspensePage(LazyDealerBase);
 const DealerBaseCityDetailRoute = suspensePage(LazyDealerBaseCityDetail);
+const DealerBaseManagerDetailRoute = suspensePage(LazyDealerBaseManagerDetail);
 const TradePointsRoute = suspensePage(LazyTradePoints);
 const ClientMapRoute = suspensePage(LazyClientMap);
 const DealerCardFoundationRoute = suspensePage(LazyDealerCardFoundation);
@@ -360,6 +362,7 @@ function AuthenticatedShell({
         <Route path="/profile/change-password" component={ChangePasswordRoute} />
         <Route path="/profile" component={MyProfileRoute} />
         <Route path="/dealer-base/city/:cityKey" component={DealerBaseCityDetailRoute} />
+        <Route path="/dealer-base/manager/:managerId" component={DealerBaseManagerDetailRoute} />
         <Route path="/dealer-base" component={DealerBaseRoute} />
         <Route path="/trade-points" component={TradePointsRoute} />
         <Route path="/client-map" component={ClientMapRoute} />
