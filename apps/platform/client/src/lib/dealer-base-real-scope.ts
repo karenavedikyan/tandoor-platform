@@ -29,16 +29,24 @@ export function assignmentsScopeIsActive(scope: AssignmentsScope | undefined): b
   return scope.ownCodes.size > 0 || scope.teamCodes.size > 0;
 }
 
+function rowMatchesAssignmentCodes(r: DealerRow, codes: Set<string>): boolean {
+  const catalog = r.releaseCode?.trim();
+  if (catalog && codes.has(catalog)) return true;
+  return codes.has(r.id);
+}
+
 function rowsForAssignmentsScope(
   rows: DealerRow[],
   access: DealerBaseAccessRole,
   scope: AssignmentsScope,
 ): DealerRow[] {
   if (access === "sales_director") return rows;
+  const matchesOwn = (r: DealerRow) => rowMatchesAssignmentCodes(r, scope.ownCodes);
+  const matchesTeam = (r: DealerRow) => rowMatchesAssignmentCodes(r, scope.teamCodes);
   if (access === "team_lead") {
-    return rows.filter((r) => scope.teamCodes.has(r.id) || scope.ownCodes.has(r.id));
+    return rows.filter((r) => matchesTeam(r) || matchesOwn(r));
   }
-  return rows.filter((r) => scope.ownCodes.has(r.id));
+  return rows.filter(matchesOwn);
 }
 
 export function realEffectiveTeamLeadTeamIdFromSnap(snap: OrgSnapshot): string {
