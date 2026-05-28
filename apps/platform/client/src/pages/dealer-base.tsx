@@ -1418,6 +1418,92 @@ export default function DealerBase() {
     return roleScopedDealerRows(mergedRowsActivePortfolio, profile);
   }, [useReal, snap, mergedRowsActivePortfolio, profile, access, assignmentsScope]);
 
+  const diag702LoggedRef = useRef(false);
+  useEffect(() => {
+    if (diag702LoggedRef.current) return;
+    if (!useReal || !snap || !visPayload || !myCodesQ.data) return;
+    if (access !== "sales_manager") return;
+    if (mergedRowsForDealerBase.length === 0 && !assignmentsScopeIsActive(assignmentsScope)) return;
+    diag702LoggedRef.current = true;
+
+    const ownCodesArr = Array.from(myCodesQ.data.ownCodes);
+    const teamCodesArr = Array.from(myCodesQ.data.teamCodes);
+
+    console.info("[diag:70.2] dealer-base scope shrink", {
+      meId: snap.me.id,
+      meRole: me?.role,
+      access,
+
+      visAll: visPayload.all ?? null,
+      visCodesLen: visPayload.codes?.length ?? null,
+      visCodesSample: visPayload.codes?.slice(0, 5) ?? null,
+
+      myCodesOwnLen: myCodesQ.data.ownCodes.size,
+      myCodesTeamLen: myCodesQ.data.teamCodes.size,
+      myCodesOwnSample: ownCodesArr.slice(0, 5),
+
+      actxEnabled: actx.enabled,
+      showArchivedDealers,
+      assignmentsScopeActive: assignmentsScopeIsActive(assignmentsScope),
+      assignmentsOwnSize: assignmentsScope?.ownCodes.size ?? null,
+      assignmentsTeamSize: assignmentsScope?.teamCodes.size ?? null,
+
+      mergedRowsForDealerBaseLen: mergedRowsForDealerBase.length,
+      mergedRowsForDealerBaseSample: mergedRowsForDealerBase.slice(0, 3).map((r) => ({
+        id: r.id,
+        releaseCode: r.releaseCode,
+        name: r.name,
+        city: r.city,
+        manager: r.manager,
+      })),
+
+      mergedRowsActivePortfolioLen: mergedRowsActivePortfolio.length,
+
+      scopedRowsLen: scopedRows.length,
+      scopedRowsSample: scopedRows.slice(0, 5).map((r) => ({
+        id: r.id,
+        releaseCode: r.releaseCode,
+        name: r.name,
+      })),
+
+      scopedActivePortfolioRowsLen: scopedActivePortfolioRows.length,
+
+      intersectVisVsMyCodes: (() => {
+        if (!visPayload.codes) return null;
+        const vis = new Set(visPayload.codes);
+        let cnt = 0;
+        myCodesQ.data!.ownCodes.forEach((c) => {
+          if (vis.has(c)) cnt++;
+        });
+        return cnt;
+      })(),
+
+      intersectMergedReleaseCodesVsMyOwn: (() => {
+        const own = myCodesQ.data!.ownCodes;
+        let cnt = 0;
+        for (const r of mergedRowsForDealerBase) {
+          const c = r.releaseCode?.trim();
+          if (c && own.has(c)) cnt++;
+        }
+        return cnt;
+      })(),
+    });
+  }, [
+    useReal,
+    snap,
+    visPayload,
+    myCodesQ.data,
+    access,
+    mergedRowsForDealerBase,
+    mergedRowsActivePortfolio,
+    scopedRows,
+    scopedActivePortfolioRows,
+    assignmentsScope,
+    showArchivedDealers,
+    me?.role,
+    actx.enabled,
+  ]);
+
   useEffect(() => {
     try {
       const raw = localStorage.getItem(DEALER_BASE_FILTERS_COLLAPSED_LS_KEY);
