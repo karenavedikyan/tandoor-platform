@@ -55,10 +55,10 @@ const teamRows = [
 
 // С БД: CL-002 переназначен на Якубову — не дублируется у Бойко
 {
-  const responsibleByCode = new Map<string, string>([
-    ["CL-001", UUID_YAKUBOVA],
-    ["CL-002", UUID_YAKUBOVA],
-  ]);
+  const responsibleByCode: Record<string, string> = {
+    "CL-001": UUID_YAKUBOVA,
+    "CL-002": UUID_YAKUBOVA,
+  };
   const managers = aggregateManagersForTeam(TEAM, teamRows, null, responsibleByCode, userIdToCatalogMgrId);
   const boyko = managers.find((m) => m.managerId === MGR_BOYKO);
   const yakubova = managers.find((m) => m.managerId === MGR_YAKUBOVA);
@@ -78,7 +78,7 @@ const teamRows = [
 {
   const unknownUuid = "00000000-0000-4000-8000-000000000099";
   const r = row("client-unknown-mgr", { releaseCode: "CL-UNK", releaseManagerId: MGR_BOYKO });
-  const responsibleByCode = new Map<string, string>([["CL-UNK", unknownUuid]]);
+  const responsibleByCode: Record<string, string> = { "CL-UNK": unknownUuid };
   const matchBoyko = buildDbAwareManagerMatcher(MGR_BOYKO, "Бойко", TEAM, responsibleByCode, userIdToCatalogMgrId);
   const matchYakubova = buildDbAwareManagerMatcher(MGR_YAKUBOVA, "Якубова", TEAM, responsibleByCode, userIdToCatalogMgrId);
   assert.equal(matchBoyko(r), false);
@@ -93,17 +93,36 @@ const teamRows = [
 // БД: нет записи для code — fallback на seed (Бойко)
 {
   const r = row("client-seed-only", { releaseCode: "CL-SEED", releaseManagerId: MGR_BOYKO });
-  const responsibleByCode = new Map<string, string>([["CL-OTHER", UUID_YAKUBOVA]]);
+  const responsibleByCode: Record<string, string> = { "CL-OTHER": UUID_YAKUBOVA };
   const matchBoyko = buildDbAwareManagerMatcher(MGR_BOYKO, "Бойко", TEAM, responsibleByCode, userIdToCatalogMgrId);
   assert.equal(matchBoyko(r), true);
 }
 
+// org snapshot: manager SalesUser.id = UUID, responsibleByCode → catalog mgr
+{
+  const boykoUuid = Object.entries(UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE).find(([, v]) => v === MGR_BOYKO)?.[0];
+  assert.ok(boykoUuid);
+  const r = row("client-boyko-uuid-mgr", { releaseCode: "MA-BOYKO-1", releaseManagerId: "" });
+  const responsibleByCode: Record<string, string> = { "MA-BOYKO-1": boykoUuid! };
+  const snap = {
+    me: { id: boykoUuid },
+    teams: [{ id: TEAM, name: "Купянский", ropUserId: "rop-1", ropName: "Купянский" }],
+    users: [
+      { id: boykoUuid, fullName: "Бойко Екатерина Михайловна", role: "manager", teamId: TEAM },
+    ],
+  } as import("@/lib/use-org-snapshot").OrgSnapshot;
+  const managers = aggregateManagersForTeam(TEAM, [r], snap, responsibleByCode, userIdToCatalogMgrId);
+  const boyko = managers.find((m) => m.managerId === MGR_BOYKO);
+  assert.ok(boyko);
+  assert.equal(boyko!.active, 1);
+}
+
 // buildRopGroups + findManagerInRopGroups: те же id клиентов, что у aggregateManagersForTeam
 {
-  const responsibleByCode = new Map<string, string>([
-    ["CL-001", UUID_YAKUBOVA],
-    ["CL-002", UUID_YAKUBOVA],
-  ]);
+  const responsibleByCode: Record<string, string> = {
+    "CL-001": UUID_YAKUBOVA,
+    "CL-002": UUID_YAKUBOVA,
+  };
   const teams = [{ teamId: TEAM, ropName: "Купянский" }];
   const groups = buildRopGroups(teamRows, teams, null, responsibleByCode, userIdToCatalogMgrId);
   const boyko = findManagerInRopGroups(groups, { managerCatalogId: MGR_BOYKO, teamId: TEAM });

@@ -207,12 +207,12 @@ export function DealerBaseManagementCockpit({
   );
   const teamIds = useMemo(() => teams.map((t) => t.teamId), [teams]);
 
-  const myCodesQ = useMyClientCodes({ enabled: Boolean(orgTeamCtx?.snap) });
+  const myCodesQ = useMyClientCodes();
   const userIdToCatalogMgrId = useMemo(
     () => new Map(Object.entries(UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE)),
     [],
   );
-  const responsibleByCode = myCodesQ.data?.responsibleByCode;
+  const responsibleByCode = myCodesQ.data?.responsibleByCode ?? {};
 
   const ropGroups = useMemo(
     () => buildRopGroups(rows, teams, orgTeamCtx?.snap, responsibleByCode, userIdToCatalogMgrId),

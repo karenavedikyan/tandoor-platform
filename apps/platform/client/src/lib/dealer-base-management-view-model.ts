@@ -19,6 +19,26 @@ import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { getEffectiveTeamLeadTeamId } from "@/lib/release-demo-profile";
 import { realEffectiveTeamLeadTeamId, realRopOptions, realTeamManagers } from "@/lib/real-org-adapter";
 import type { OrgSnapshot } from "@/lib/use-org-snapshot";
+import { UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE } from "@shared/admin/actualization-dedupe";
+
+export type ResponsibleByCodeMap = Record<string, string> | Map<string, string>;
+
+function lookupResponsibleByCode(map: ResponsibleByCodeMap | undefined, code: string): string | undefined {
+  if (!map || !code) return undefined;
+  if (map instanceof Map) return map.get(code);
+  return map[code];
+}
+
+function hasResponsibleByCode(map: ResponsibleByCodeMap | undefined, code: string): boolean {
+  if (!map || !code) return false;
+  if (map instanceof Map) return map.has(code);
+  return Object.prototype.hasOwnProperty.call(map, code);
+}
+
+/** Catalog managerId (`mgr-*`) из UUID org snapshot или уже catalog id. */
+export function catalogManagerIdFromUserRef(userRef: string): string {
+  return UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE[userRef] ?? userRef;
+}
 
 
 
@@ -80,22 +100,25 @@ export function buildDbAwareManagerMatcher(
   managerCatalogId: string,
   managerCatalogName: string,
   teamId: string,
-  responsibleByCode?: Map<string, string>,
+  responsibleByCode?: ResponsibleByCodeMap,
   userIdToCatalogMgrId?: Map<string, string>,
 ): (r: DealerRow) => boolean {
+  const catalogMgrId = catalogManagerIdFromUserRef(managerCatalogId);
   return (r: DealerRow) => {
     if (resolveDealerRowTeamId(r) !== teamId) return false;
-    if (responsibleByCode && userIdToCatalogMgrId) {
+    if (responsibleByCode) {
       const code = dealerRowClientCodeForAssignments(r);
-      if (responsibleByCode.has(code)) {
-        const dbUid = responsibleByCode.get(code);
-        if (!dbUid) return false;
-        const catId = userIdToCatalogMgrId.get(dbUid);
-        return catId === managerCatalogId;
+      if (hasResponsibleByCode(responsibleByCode, code)) {
+        const uuid = lookupResponsibleByCode(responsibleByCode, code);
+        if (uuid) {
+          const catalogMgr = UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE[uuid] ?? uuid;
+          return catalogMgr === catalogMgrId;
+        }
+        return false;
       }
     }
     return (
-      r.releaseManagerId === managerCatalogId ||
+      r.releaseManagerId === catalogMgrId ||
       managerDisplayMatchesCatalogName(getDealerManagerDisplay(r), managerCatalogName)
     );
   };
@@ -131,19 +154,21 @@ export function aggregateManagersForTeam(
   teamId: string,
   teamRows: DealerRow[],
   orgSnap?: OrgSnapshot | null,
-  responsibleByCode?: Map<string, string>,
-  userIdToCatalogMgrId?: Map<string, string>,
+  responsibleByCode?: ResponsibleByCodeMap,
+  _userIdToCatalogMgrId?: Map<string, string>,
 ): ManagerRowModel[] {
+  void _userIdToCatalogMgrId;
   const managers = managersCatalogForTeam(teamId, orgSnap);
   return managers.map((m) => {
-    const match = buildDbAwareManagerMatcher(m.id, m.name, teamId, responsibleByCode, userIdToCatalogMgrId);
+    const mgrCatalogId = catalogManagerIdFromUserRef(m.id);
+    const match = buildDbAwareManagerMatcher(mgrCatalogId, m.name, teamId, responsibleByCode);
     const rows = teamRows.filter(match);
     const active = rows.filter((r) => r.status === "активный").length;
     const potential = rows.filter((r) => r.status === "потенциальный").length;
     const attention = rows.filter((r) => dealerNeedsAttention(r)).length;
     const outlets = rows.reduce((a, r) => a + r.outlets, 0);
     return {
-      managerId: m.id,
+      managerId: mgrCatalogId,
       name: m.name,
       teamId,
       active,
@@ -282,7 +307,7 @@ export function buildRopGroups(
   rows: DealerRow[],
   teams: { teamId: string; ropName: string }[],
   orgSnap?: OrgSnapshot | null,
-  responsibleByCode?: Map<string, string>,
+  responsibleByCode?: ResponsibleByCodeMap,
   userIdToCatalogMgrId?: Map<string, string>,
 ): RopGroupModel[] {
   const teamActiveCounts = teams.map((t) => ({
