@@ -34,6 +34,18 @@ type DumpSuccess = {
   durationMs: number;
 };
 
+type MigrationError =
+  | { kind: "http-error"; status: number; statusText: string; body: string; durationMs: number }
+  | { kind: "non-json"; status: number; bodyPreview: string; durationMs: number }
+  | {
+      kind: "network-or-abort";
+      errorName: string;
+      errorMessage: string;
+      httpStatus: number | null;
+      rawBodySoFar: string;
+      durationMs: number;
+    };
+
 function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) return "—";
   if (bytes >= 1_000_000_000) return `${(bytes / 1_000_000_000).toFixed(2)} GB`;
@@ -59,13 +71,28 @@ function writeStoredSecret(value: string): void {
   }
 }
 
+function parseDumpSuccess(parsed: unknown): DumpSuccess | null {
+  if (!parsed || typeof parsed !== "object") return null;
+  const data = parsed as Partial<DumpSuccess>;
+  if (data.ok !== true) return null;
+  return {
+    ok: true,
+    blobUrl: String(data.blobUrl ?? ""),
+    filename: String(data.filename ?? ""),
+    sizeBytes: Number(data.sizeBytes ?? 0),
+    rowCounts:
+      data.rowCounts && typeof data.rowCounts === "object" ? (data.rowCounts as Record<string, number>) : {},
+    durationMs: Number(data.durationMs ?? 0),
+  };
+}
+
 export default function AdminMigrationPage() {
   const { user } = useCurrentUser();
   const { toast } = useToast();
   const [secret, setSecret] = useState("");
   const [running, setRunning] = useState(false);
   const [success, setSuccess] = useState<DumpSuccess | null>(null);
-  const [errorText, setErrorText] = useState<string | null>(null);
+  const [error, setError] = useState<MigrationError | null>(null);
 
   const homeHref = user ? defaultHomePathForUserRole(user.role) : "/main";
 
@@ -82,6 +109,18 @@ export default function AdminMigrationPage() {
     if (!success?.rowCounts) return [];
     return Object.entries(success.rowCounts).sort((a, b) => b[1] - a[1]);
   }, [success]);
+
+  const copyToClipboard = useCallback(
+    async (text: string, description: string) => {
+      try {
+        await navigator.clipboard.writeText(text);
+        toast({ title: "Скопировано", description });
+      } catch {
+        toast({ variant: "destructive", title: "Не удалось скопировать" });
+      }
+    },
+    [toast],
+  );
 
   if (!user || user.role !== "admin") {
     return (
@@ -106,51 +145,85 @@ export default function AdminMigrationPage() {
     if (!trimmed) return;
     setRunning(true);
     setSuccess(null);
-    setErrorText(null);
+    setError(null);
+
+    const startedAt = Date.now();
+    let httpStatus: number | null = null;
+    let httpStatusText = "";
+    let rawBody = "";
+
     try {
-      const res = await fetch("/api/admin/db-migrate/dump", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-migration-secret": trimmed,
-        },
-        credentials: "include",
-        signal: AbortSignal.timeout(DUMP_TIMEOUT_MS),
-      });
-      const body: unknown = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setErrorText(`HTTP ${res.status}\n${JSON.stringify(body, null, 2)}`);
-        return;
+      const controller = new AbortController();
+      const timeout = setTimeout(
+        () => controller.abort(new DOMException("client-timeout-360s", "TimeoutError")),
+        DUMP_TIMEOUT_MS,
+      );
+      try {
+        const r = await fetch("/api/admin/db-migrate/dump", {
+          method: "POST",
+          headers: {
+            "x-migration-secret": trimmed,
+            "Content-Type": "application/json",
+          },
+          credentials: "include",
+          signal: controller.signal,
+        });
+        httpStatus = r.status;
+        httpStatusText = r.statusText;
+        rawBody = await r.text();
+
+        if (!r.ok) {
+          setError({
+            kind: "http-error",
+            status: httpStatus,
+            statusText: httpStatusText,
+            body: rawBody.slice(0, 4000),
+            durationMs: Date.now() - startedAt,
+          });
+          return;
+        }
+
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(rawBody);
+        } catch {
+          setError({
+            kind: "non-json",
+            status: httpStatus,
+            bodyPreview: rawBody.slice(0, 4000),
+            durationMs: Date.now() - startedAt,
+          });
+          return;
+        }
+
+        const result = parseDumpSuccess(parsed);
+        if (!result) {
+          setError({
+            kind: "http-error",
+            status: httpStatus,
+            statusText: httpStatusText,
+            body: rawBody.slice(0, 4000),
+            durationMs: Date.now() - startedAt,
+          });
+          return;
+        }
+
+        setSuccess(result);
+      } finally {
+        clearTimeout(timeout);
       }
-      const data = body as Partial<DumpSuccess>;
-      if (data.ok !== true) {
-        setErrorText(`HTTP ${res.status}\n${JSON.stringify(body, null, 2)}`);
-        return;
-      }
-      setSuccess({
-        ok: true,
-        blobUrl: String(data.blobUrl ?? ""),
-        filename: String(data.filename ?? ""),
-        sizeBytes: Number(data.sizeBytes ?? 0),
-        rowCounts:
-          data.rowCounts && typeof data.rowCounts === "object" ? (data.rowCounts as Record<string, number>) : {},
-        durationMs: Number(data.durationMs ?? 0),
+    } catch (e: unknown) {
+      const err = e as { name?: string; message?: string };
+      setError({
+        kind: "network-or-abort",
+        errorName: err?.name || "Unknown",
+        errorMessage: err?.message || String(e),
+        httpStatus,
+        rawBodySoFar: rawBody.slice(0, 2000),
+        durationMs: Date.now() - startedAt,
       });
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      setErrorText(message);
     } finally {
       setRunning(false);
-    }
-  };
-
-  const copyBlobUrl = async () => {
-    if (!success?.blobUrl) return;
-    try {
-      await navigator.clipboard.writeText(success.blobUrl);
-      toast({ title: "Скопировано", description: "URL бэкапа в буфере обмена." });
-    } catch {
-      toast({ variant: "destructive", title: "Не удалось скопировать" });
     }
   };
 
@@ -250,7 +323,7 @@ export default function AdminMigrationPage() {
                 variant="outline"
                 size="sm"
                 className="min-h-10 border-emerald-300 bg-white dark:border-emerald-800 dark:bg-transparent"
-                onClick={() => void copyBlobUrl()}
+                onClick={() => void copyToClipboard(success.blobUrl, "URL бэкапа в буфере обмена.")}
                 data-testid="button-migration-copy-blob-url"
               >
                 <Copy className="mr-2 h-4 w-4" aria-hidden />
@@ -283,20 +356,68 @@ export default function AdminMigrationPage() {
         </Card>
       ) : null}
 
-      {errorText ? (
+      {error ? (
         <Card
-          className={cn(
-            "rounded-xl border border-destructive/40 bg-destructive/10 shadow-sm",
-          )}
+          className={cn("rounded-xl border border-destructive/40 bg-destructive/10 shadow-sm")}
           data-testid="migration-dump-error"
         >
           <CardHeader>
             <CardTitle className="text-lg text-destructive">Ошибка бэкапа</CardTitle>
           </CardHeader>
-          <CardContent>
-            <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-all rounded-md border border-destructive/30 bg-background/80 p-3 font-mono text-xs text-destructive">
-              {errorText}
-            </pre>
+          <CardContent className="space-y-3 text-sm">
+            <div>
+              Тип: <code className="rounded bg-background/80 px-1 py-0.5 font-mono text-xs">{error.kind}</code>
+            </div>
+            <div>Длительность: {(error.durationMs / 1000).toFixed(1)} сек</div>
+
+            {error.kind === "http-error" ? (
+              <>
+                <div>
+                  HTTP {error.status} {error.statusText}
+                </div>
+                <pre className="max-h-[300px] overflow-auto whitespace-pre-wrap break-all rounded-md border border-destructive/30 bg-background/80 p-3 font-mono text-xs text-destructive">
+                  {error.body}
+                </pre>
+              </>
+            ) : null}
+
+            {error.kind === "non-json" ? (
+              <>
+                <div>HTTP {error.status} (ответ не JSON)</div>
+                <pre className="max-h-[300px] overflow-auto whitespace-pre-wrap break-all rounded-md border border-destructive/30 bg-background/80 p-3 font-mono text-xs text-destructive">
+                  {error.bodyPreview}
+                </pre>
+              </>
+            ) : null}
+
+            {error.kind === "network-or-abort" ? (
+              <>
+                <div>
+                  {error.errorName}: {error.errorMessage}
+                </div>
+                {error.httpStatus !== null ? <div>HTTP до прерывания: {error.httpStatus}</div> : null}
+                {error.rawBodySoFar ? (
+                  <>
+                    <div>Полученный частичный ответ:</div>
+                    <pre className="max-h-[200px] overflow-auto whitespace-pre-wrap break-all rounded-md border border-destructive/30 bg-background/80 p-3 font-mono text-xs text-destructive">
+                      {error.rawBodySoFar}
+                    </pre>
+                  </>
+                ) : null}
+              </>
+            ) : null}
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="min-h-10"
+              onClick={() => void copyToClipboard(JSON.stringify(error, null, 2), "Диагностика ошибки в буфере обмена.")}
+              data-testid="button-migration-copy-error"
+            >
+              <Copy className="mr-2 h-4 w-4" aria-hidden />
+              Скопировать всё
+            </Button>
           </CardContent>
         </Card>
       ) : null}
