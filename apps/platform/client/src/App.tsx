@@ -92,6 +92,7 @@ const LazyAdminAudit = lazy(() => import("@/pages/admin-audit"));
 const LazyAdminClientAssignments = lazy(() => import("@/pages/admin-client-assignments"));
 const LazyAdminActualizationDedupe = lazy(() => import("@/pages/admin-actualization-dedupe"));
 const LazyAdminMigration = lazy(() => import("@/pages/admin/migration"));
+const LazyAdminTpCountDiag = lazy(() => import("@/pages/admin-tp-count-diag"));
 const LazyFeatureInDevelopment = lazy(() => import("@/pages/feature-in-development"));
 
 function suspensePage(Lazy: LazyExoticComponent<ComponentType<any>>): ComponentType<any> {
@@ -164,6 +165,7 @@ const AdminAuditRoute = wrapProfileShell(suspensePage(LazyAdminAudit));
 const AdminClientAssignmentsRoute = wrapProfileShell(suspensePage(LazyAdminClientAssignments));
 const AdminActualizationDedupeRoute = wrapProfileShell(suspensePage(LazyAdminActualizationDedupe));
 const AdminMigrationRoute = wrapProfileShell(suspensePage(LazyAdminMigration));
+const AdminTpCountDiagRoute = wrapProfileShell(suspensePage(LazyAdminTpCountDiag));
 
 function HashRedirect({ to }: { to: string }) {
   const [, setLoc] = useHashLocation();
@@ -357,6 +359,7 @@ function AuthenticatedShell({
         <Route path="/admin/client-assignments" component={AdminClientAssignmentsRoute} />
         <Route path="/admin/actualization/dedupe" component={AdminActualizationDedupeRoute} />
         <Route path="/admin/migration" component={AdminMigrationRoute} />
+        <Route path="/admin/tp-count-diag" component={AdminTpCountDiagRoute} />
         <Route path="/reset-requests" component={ResetRequestsRoute} />
         <Route path="/users" component={UsersAndAccessRoute} />
         <Route path="/profile/change-password" component={ChangePasswordRoute} />

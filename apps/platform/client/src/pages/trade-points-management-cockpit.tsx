@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { ChevronRight, Info, Store, Users } from "lucide-react";
@@ -32,7 +32,10 @@ import {
   overviewCityCards,
   sortManagersByTpLoad,
 } from "@/lib/trade-points-overview-view-model";
-import type { TradePointListRow } from "@/lib/trade-point-list-for-actualization";
+import {
+  countWorkingTradePointsForSidebar,
+  type TradePointListRow,
+} from "@/lib/trade-point-list-for-actualization";
 
 function isOwnTeamForUser(
   teamId: string | null | undefined,
@@ -88,6 +91,24 @@ export function TradePointsManagementCockpit({
   const cityCards = useMemo(() => (overview ? overviewCityCards(overview) : []), [overview]);
 
   const structure = overview?.structure;
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !overview?.structure) return;
+    const sidebarCount = countWorkingTradePointsForSidebar(profile, teamCtx.mergedState);
+    const serverCount = overview.structure.activeTradePoints;
+    if (sidebarCount !== serverCount) {
+      console.warn("[tp-count-mismatch]", {
+        sidebarCount,
+        serverCount,
+        diff: sidebarCount - serverCount,
+        ropGroups: overview.ropGroups.map((g) => ({
+          team: g.teamName,
+          tp: g.tradePoints,
+          mgrs: g.managers.length,
+        })),
+      });
+    }
+  }, [overview, profile, teamCtx.mergedState]);
 
   if (overviewQ.isLoading) {
     return (

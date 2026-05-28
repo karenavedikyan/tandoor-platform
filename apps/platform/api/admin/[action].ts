@@ -3565,6 +3565,134 @@ async function handleTradePointsOverview(
   });
 }
 
+/** Сумма TP-объектов по всем state-записям пользователя без merge/dedup между записями. */
+function countRawTpObjectsAcrossStates(states: Record<string, unknown>[]): number {
+  let sum = 0;
+  for (const st of states) {
+    const s = coerceActualizationState(st);
+    const tps = stateRecord(s.manuallyCreatedTradePointsById);
+    sum += Object.keys(tps).length;
+  }
+  return sum;
+}
+
+/** Read-only диагностика расхождения числа ТТ (промт 87). */
+async function handleTpCountDiag(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  headers: Record<string, string | string[] | undefined>,
+): Promise<void> {
+  const me = await resolveCurrentUser(pool, headers);
+  if (!me) {
+    sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+    return;
+  }
+  if (!["admin", "director", "rop"].includes(me.role) || me.status !== "active") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+
+  const filterUserId = queryStringParam(req, "userId");
+  if (filterUserId && !UUID_RE.test(filterUserId)) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Некорректный userId." });
+    return;
+  }
+
+  const users = await pool.query<ActualizationStatsUserRow>(
+    `SELECT u.id, u.full_name, u.role, t.id AS team_id, t.name AS team_name, t.rop_user_id, ropu.full_name AS rop_full_name
+       FROM users u
+       LEFT JOIN user_team_memberships m ON m.user_id = u.id
+       LEFT JOIN teams t ON t.id = m.team_id
+       LEFT JOIN users ropu ON ropu.id = t.rop_user_id
+      WHERE u.status = 'active'`,
+  );
+  const usersById = new Map<string, ActualizationStatsUserRow>();
+  for (const u of users.rows) if (!usersById.has(u.id)) usersById.set(u.id, u);
+
+  let allowed = new Set(users.rows.map((u) => u.id));
+  if (me.role === "rop") {
+    allowed = new Set(users.rows.filter((u) => u.rop_user_id === me.id || u.id === me.id).map((u) => u.id));
+    allowed.add(me.id);
+  }
+
+  if (filterUserId) {
+    if (!allowed.has(filterUserId)) {
+      sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав для userId." });
+      return;
+    }
+    allowed = new Set([filterUserId]);
+  }
+
+  const rows = await pool.query<ActualizationDedupeStateRow>(
+    `SELECT scope_key, user_id, role, state, updated_at
+       FROM client_base_actualization_state
+      WHERE scope_key LIKE 'user:%'`,
+  );
+  const statesByUser = new Map<string, Record<string, unknown>[]>();
+  for (const row of rows.rows) {
+    const scopeId = scopeUserId(String(row.scope_key));
+    const owner = row.user_id && UUID_RE.test(row.user_id) ? row.user_id : scopeId ? legacyScopeToUuid(scopeId) : null;
+    if (!owner || !allowed.has(owner)) continue;
+    const arr = statesByUser.get(owner) ?? [];
+    arr.push(coerceActualizationState(row.state));
+    statesByUser.set(owner, arr);
+  }
+
+  const perUser: Array<{
+    userId: string;
+    fullName: string;
+    teamId: string | null;
+    rawStateRecords: number;
+    rawTpCountAcrossStates: number;
+    uniqueTpAfterCollect: number;
+    uniqueClients: number;
+    withoutPhoto: number;
+    notFilled: number;
+  }> = [];
+
+  const globalTpById = new Map<string, TradePointAggRow>();
+
+  for (const userId of Array.from(allowed)) {
+    const states = statesByUser.get(userId) ?? [];
+    const rawTpCountAcrossStates = countRawTpObjectsAcrossStates(states);
+    const { tradePoints, clientsById } = collectTradePointsForUser(userId, states);
+    const meta = userMeta(userId, usersById);
+    for (const tp of tradePoints) {
+      if (!globalTpById.has(tp.id)) globalTpById.set(tp.id, tp);
+    }
+    perUser.push({
+      userId,
+      fullName: meta.fullName,
+      teamId: meta.teamId,
+      rawStateRecords: states.length,
+      rawTpCountAcrossStates,
+      uniqueTpAfterCollect: tradePoints.length,
+      uniqueClients: clientsById.size,
+      withoutPhoto: tradePoints.filter((tp) => !tp.hasPhoto).length,
+      notFilled: tradePoints.filter((tp) => tp.notFilled).length,
+    });
+  }
+
+  perUser.sort((a, b) => a.fullName.localeCompare(b.fullName, "ru"));
+
+  const totals = {
+    sumRawAcrossStates: perUser.reduce((s, u) => s + u.rawTpCountAcrossStates, 0),
+    sumUniqueAfterCollect: perUser.reduce((s, u) => s + u.uniqueTpAfterCollect, 0),
+    globalUniqueTpById: globalTpById.size,
+  };
+
+  sendJson(res, 200, {
+    success: true,
+    actorRole: me.role,
+    actorUserId: me.id,
+    allowedUserCount: allowed.size,
+    filterUserId: filterUserId || null,
+    perUser,
+    totals,
+  });
+}
+
 async function handleTradePointsManagerDetail(
   req: VercelRequest,
   res: VercelResponse,
@@ -4969,6 +5097,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "trade-points-overview" && req.method === "GET") {
       await handleTradePointsOverview(req, res, pool, headers);
+      return;
+    }
+    if (action === "tp-count-diag" && req.method === "GET") {
+      await handleTpCountDiag(req, res, pool, headers);
       return;
     }
     if (action === "trade-points-manager-detail" && req.method === "GET") {
