@@ -30,7 +30,8 @@ const META: Record<ClientCategoryId, ClientCategoryMeta> = {
     label: "ТОП 150",
     shortLabel: "ТОП 150",
     description: "Клиенты сегмента ТОП 150",
-    badgeClassName: "border-amber-500/50 bg-amber-500/10 text-amber-950",
+    badgeClassName:
+      "border-amber-500/50 bg-amber-500/15 text-amber-900 dark:border-amber-400/60 dark:bg-amber-400/20 dark:text-amber-100",
     order: 10,
   },
   top350: {
@@ -38,7 +39,8 @@ const META: Record<ClientCategoryId, ClientCategoryMeta> = {
     label: "ТОП 350",
     shortLabel: "ТОП 350",
     description: "Клиенты сегмента ТОП 350",
-    badgeClassName: "border-amber-500/45 bg-amber-500/8 text-amber-950",
+    badgeClassName:
+      "border-amber-500/45 bg-amber-500/12 text-amber-900 dark:border-amber-400/55 dark:bg-amber-400/18 dark:text-amber-100",
     order: 20,
   },
   top500: {
@@ -46,7 +48,8 @@ const META: Record<ClientCategoryId, ClientCategoryMeta> = {
     label: "ТОП 500",
     shortLabel: "ТОП 500",
     description: "Клиенты сегмента ТОП 500",
-    badgeClassName: "border-orange-500/50 bg-orange-500/10 text-orange-950",
+    badgeClassName:
+      "border-orange-500/50 bg-orange-500/15 text-orange-900 dark:border-orange-400/60 dark:bg-orange-400/20 dark:text-orange-100",
     order: 30,
   },
   top500plus: {
@@ -54,7 +57,8 @@ const META: Record<ClientCategoryId, ClientCategoryMeta> = {
     label: "ТОП 500+",
     shortLabel: "ТОП 500+",
     description: "Клиенты сегмента ТОП 500+",
-    badgeClassName: "border-orange-600/50 bg-orange-600/10 text-orange-950",
+    badgeClassName:
+      "border-orange-600/55 bg-orange-600/15 text-orange-900 dark:border-orange-400/65 dark:bg-orange-400/22 dark:text-orange-100",
     order: 40,
   },
   potential: {
@@ -62,7 +66,8 @@ const META: Record<ClientCategoryId, ClientCategoryMeta> = {
     label: "Потенциальный",
     shortLabel: "Потенциал",
     description: "Потенциальный клиент (по данным Excel / правилам сегмента)",
-    badgeClassName: "border-sky-500/50 bg-sky-500/10 text-sky-950",
+    badgeClassName:
+      "border-sky-500/50 bg-sky-500/15 text-sky-900 dark:border-sky-400/60 dark:bg-sky-400/20 dark:text-sky-100",
     order: 50,
   },
   lead: {
@@ -70,7 +75,8 @@ const META: Record<ClientCategoryId, ClientCategoryMeta> = {
     label: "Лид",
     shortLabel: "Лид",
     description: "Новый клиент (только если явно указано в данных)",
-    badgeClassName: "border-violet-500/50 bg-violet-500/10 text-violet-950",
+    badgeClassName:
+      "border-violet-500/50 bg-violet-500/15 text-violet-900 dark:border-violet-400/60 dark:bg-violet-400/20 dark:text-violet-100",
     order: 60,
   },
   no_sales: {
@@ -78,7 +84,8 @@ const META: Record<ClientCategoryId, ClientCategoryMeta> = {
     label: "Б/П",
     shortLabel: "Б/П",
     description: "Без продаж в течение квартала — только при явной метке в данных",
-    badgeClassName: "border-slate-500/50 bg-slate-500/10 text-slate-900",
+    badgeClassName:
+      "border-slate-500/50 bg-slate-500/15 text-slate-800 dark:border-slate-400/60 dark:bg-slate-400/20 dark:text-slate-100",
     order: 70,
   },
   uncategorized: {
