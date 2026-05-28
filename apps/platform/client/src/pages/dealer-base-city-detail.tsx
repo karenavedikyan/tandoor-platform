@@ -3,7 +3,7 @@
  */
 import { useMemo, useState } from "react";
 import { Link, Redirect, useRoute } from "wouter";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -34,6 +34,7 @@ import { roleScopedDealerRows } from "@/lib/dealer-base-role-views";
 import {
   buildCityDetailModel,
   cityDetailRowMatchesSegment,
+  resolveDealerRowManagerCatalogId,
   type CityDetailSegmentKey,
 } from "@/lib/dealer-base-city-detail-view-model";
 import { flattenTradePointsForRows } from "@/lib/dealer-base-management-view-model";
@@ -130,18 +131,27 @@ export default function DealerBaseCityDetailPage() {
   );
 
   const [segmentFilter, setSegmentFilter] = useState<CityDetailSegmentKey | null>(null);
+  const [managerFilter, setManagerFilter] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"clients" | "trade_points" | "managers">("clients");
 
-  const filteredClients = useMemo(() => {
+  const segmentFilteredRows = useMemo(() => {
     if (!detail) return [];
     return detail.dealerRows.filter((r) => cityDetailRowMatchesSegment(r, segmentFilter));
   }, [detail, segmentFilter]);
 
+  const filteredClients = useMemo(() => {
+    let rows = segmentFilteredRows;
+    if (managerFilter) {
+      rows = rows.filter((r) => resolveDealerRowManagerCatalogId(r) === managerFilter);
+    }
+    return rows;
+  }, [segmentFilteredRows, managerFilter]);
+
   const tradePointRows = useMemo(() => {
     if (!detail) return [];
-    const ids = new Set(filteredClients.map((r) => r.id));
+    const ids = new Set(segmentFilteredRows.map((r) => r.id));
     return flattenTradePointsForRows(detail.dealerRows).filter((tp) => ids.has(tp.dealerId));
-  }, [detail, filteredClients]);
+  }, [detail, segmentFilteredRows]);
 
   const loading =
     authLoading ||
@@ -307,8 +317,30 @@ export default function DealerBaseCityDetailPage() {
           </TabsList>
 
           <TabsContent value="clients" className="mt-3">
+            {managerFilter ? (
+              <div className="mb-2 flex flex-wrap items-center gap-2" data-testid="badge-city-manager-filter">
+                <span className="text-xs text-muted-foreground">Менеджер:</span>
+                <Badge variant="outline" className="gap-1.5 border-[#9ACA3C]/60 bg-[#9ACA3C]/10 text-foreground">
+                  {detail.byManager.find((m) => m.managerCatalogId === managerFilter)?.managerName ?? managerFilter}
+                  <button
+                    type="button"
+                    onClick={() => setManagerFilter(null)}
+                    className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full hover:bg-foreground/10"
+                    aria-label="Сбросить фильтр менеджера"
+                    data-testid="button-clear-city-manager-filter"
+                  >
+                    <X className="h-3 w-3" aria-hidden />
+                  </button>
+                </Badge>
+                <span className="text-xs tabular-nums text-muted-foreground">{filteredClients.length} клиентов</span>
+              </div>
+            ) : null}
             {filteredClients.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">Нет клиентов в выбранном сегменте.</p>
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                {managerFilter
+                  ? "Нет клиентов у выбранного менеджера в этом городе."
+                  : "Нет клиентов в выбранном сегменте."}
+              </p>
             ) : (
               <div className="overflow-x-auto rounded-xl border border-border bg-card">
                 <Table>
@@ -410,15 +442,20 @@ export default function DealerBaseCityDetailPage() {
                         активные {m.activeClients} · ТТ {m.tradePoints}
                       </p>
                     </div>
-                    <Button variant="outline" size="sm" className="shrink-0" asChild>
-                      <Link
-                        href={buildHashPath(
-                          `/dealer-base?city=${encodeURIComponent(detail.displayName)}&manager=${encodeURIComponent(m.managerCatalogId)}`,
-                        )}
-                        data-testid={`button-city-manager-clients-${m.managerCatalogId.replace(/[^a-zA-Z0-9_-]/g, "_")}`}
-                      >
-                        Клиенты
-                      </Link>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0"
+                      data-testid={`button-city-manager-clients-${m.managerCatalogId.replace(/[^a-zA-Z0-9_-]/g, "_")}`}
+                      onClick={() => {
+                        setManagerFilter(m.managerCatalogId);
+                        setActiveTab("clients");
+                        document
+                          .querySelector('[data-testid="tab-city-clients"]')
+                          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                      }}
+                    >
+                      Клиенты
                     </Button>
                   </CardContent>
                 </Card>

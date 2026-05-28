@@ -152,6 +152,12 @@ function buildCitySegments(cityRows: DealerRow[]): CityDetailModel["segments"] {
   }));
 }
 
+/** Catalog manager id для строки — та же логика, что в `buildCityByManager`. */
+export function resolveDealerRowManagerCatalogId(row: DealerRow): string {
+  const managerName = getDealerManagerDisplay(row);
+  return row.releaseManagerId ? catalogManagerIdFromUserRef(row.releaseManagerId) : `name:${managerName}`;
+}
+
 function buildCityByManager(cityRows: DealerRow[]): CityDetailModel["byManager"] {
   const map = new Map<
     string,
@@ -166,9 +172,7 @@ function buildCityByManager(cityRows: DealerRow[]): CityDetailModel["byManager"]
 
   for (const row of cityRows) {
     const managerName = getDealerManagerDisplay(row);
-    const managerCatalogId = row.releaseManagerId
-      ? catalogManagerIdFromUserRef(row.releaseManagerId)
-      : `name:${managerName}`;
+    const managerCatalogId = resolveDealerRowManagerCatalogId(row);
     const groupKey = `${managerCatalogId}::${managerName}`;
     let group = map.get(groupKey);
     if (!group) {
