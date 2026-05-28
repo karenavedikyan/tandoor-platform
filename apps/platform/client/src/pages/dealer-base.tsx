@@ -69,6 +69,8 @@ import {
 import type { OrgSnapshot } from "@/lib/use-org-snapshot";
 import { useOrgSnapshot } from "@/lib/use-org-snapshot";
 import { useMyVisibleClientCodes } from "@/lib/use-my-visible-client-codes";
+import { useMyClientCodes } from "@/hooks/use-my-client-codes";
+import { assignmentsScopeIsActive, type AssignmentsScope } from "@/lib/dealer-base-real-scope";
 import { roleScopedDealerRowsForReal } from "@/lib/dealer-base-real-scope";
 import {
   buildDayPlanTeamRows,
@@ -1211,8 +1213,17 @@ export default function DealerBase() {
   const isRealUser = Boolean(me?.id);
   const orgSnapQ = useOrgSnapshot({ enabled: isRealUser });
   const visCodesQ = useMyVisibleClientCodes({ enabled: isRealUser });
+  const myCodesQ = useMyClientCodes({ enabled: isRealUser });
   const snap = orgSnapQ.data ?? null;
   const visPayload = visCodesQ.data ?? null;
+
+  const assignmentsScope = useMemo((): AssignmentsScope | undefined => {
+    if (!myCodesQ.data) return undefined;
+    return {
+      ownCodes: myCodesQ.data.ownCodes,
+      teamCodes: myCodesQ.data.teamCodes,
+    };
+  }, [myCodesQ.data]);
 
   const useReal = Boolean(
     isRealUser &&
@@ -1350,9 +1361,17 @@ export default function DealerBase() {
   );
 
   const scopedRows = useMemo(() => {
-    if (useReal && snap) return roleScopedDealerRowsForReal(mergedRowsForDealerBase, snap, access);
+    if (useReal && snap) {
+      return roleScopedDealerRowsForReal(
+        mergedRowsForDealerBase,
+        snap,
+        access,
+        undefined,
+        assignmentsScopeIsActive(assignmentsScope) ? assignmentsScope : undefined,
+      );
+    }
     return roleScopedDealerRows(mergedRowsForDealerBase, profile);
-  }, [useReal, snap, mergedRowsForDealerBase, profile, access]);
+  }, [useReal, snap, mergedRowsForDealerBase, profile, access, assignmentsScope]);
 
   /** Рабочая портфельная база (без архивных клиентов): KPI команд и карточки менеджеров всегда от неё, не от режима списка «архив». */
   const mergedRowsActivePortfolio = useMemo(() => {
@@ -1387,9 +1406,17 @@ export default function DealerBase() {
   ]);
 
   const scopedActivePortfolioRows = useMemo(() => {
-    if (useReal && snap) return roleScopedDealerRowsForReal(mergedRowsActivePortfolio, snap, access);
+    if (useReal && snap) {
+      return roleScopedDealerRowsForReal(
+        mergedRowsActivePortfolio,
+        snap,
+        access,
+        undefined,
+        assignmentsScopeIsActive(assignmentsScope) ? assignmentsScope : undefined,
+      );
+    }
     return roleScopedDealerRows(mergedRowsActivePortfolio, profile);
-  }, [useReal, snap, mergedRowsActivePortfolio, profile, access]);
+  }, [useReal, snap, mergedRowsActivePortfolio, profile, access, assignmentsScope]);
 
   useEffect(() => {
     try {
@@ -1580,7 +1607,13 @@ export default function DealerBase() {
 
     const scoped =
       useReal && snap
-        ? roleScopedDealerRowsForReal(mergedRowsForDealerBase, snap, access)
+        ? roleScopedDealerRowsForReal(
+            mergedRowsForDealerBase,
+            snap,
+            access,
+            undefined,
+            assignmentsScopeIsActive(assignmentsScope) ? assignmentsScope : undefined,
+          )
         : roleScopedDealerRows(mergedRowsForDealerBase, profile);
     const catOpts = Array.from(new Set(scoped.map((r) => r.clientCategory)));
 
@@ -1698,6 +1731,7 @@ export default function DealerBase() {
     snap,
     realCtxForRoute,
     me?.id,
+    assignmentsScope,
   ]);
 
   const firstRopTeamId = useMemo(

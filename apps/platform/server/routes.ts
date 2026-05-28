@@ -8,6 +8,7 @@ import { registerProfileRoutes } from "./profile-routes";
 import { registerBitrix24Routes } from "./bitrix24-routes";
 import { registerDadataRoutes } from "./dadata-routes";
 import { registerUploadRoutes } from "./upload-routes";
+import { registerClientsRoutes } from "./clients-routes";
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   // prefix all routes with /api
@@ -21,6 +22,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   registerBitrix24Routes(app);
   registerDadataRoutes(app);
   registerUploadRoutes(app);
+  registerClientsRoutes(app);
 
   return httpServer;
 }
