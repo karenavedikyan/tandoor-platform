@@ -15,6 +15,7 @@ import {
   apiPatchContact,
   apiRequestDeleteContact,
   apiSetPrimaryContact,
+  fetchClientContactsList,
   scopeApiFields,
 } from "@/lib/client-contacts-api";
 import { refreshDbContactsForDealer, resolveContactsStateForDealer } from "@/lib/client-contacts-db-cache";
@@ -494,4 +495,84 @@ export function copyContactToScopes(
     }),
   );
   return { ok: true };
+}
+
+export type UpsertPrimaryDealerContactFromEditFormParams = {
+  dealerId: string;
+  name: string;
+  /** Если name пустое при создании — fallback (например row.name). */
+  nameFallback?: string;
+  phone: string;
+  email: string;
+  comment: string;
+  profile: ReleaseDemoProfile;
+};
+
+function contactFieldToNull(value: string): string | null {
+  const t = value.trim();
+  return t || null;
+}
+
+/**
+ * Синхронизирует primary-контакт дилера в Postgres после сохранения блока «Контакты и заметка».
+ * @returns false при сетевой/серверной ошибке list/create/patch; true если синхронизация не нужна или успешна.
+ */
+export async function upsertPrimaryDealerContactFromEditForm(
+  params: UpsertPrimaryDealerContactFromEditFormParams,
+): Promise<boolean> {
+  const { dealerId, profile, name, nameFallback, phone, email, comment } = params;
+  const list = await fetchClientContactsList(dealerId);
+  if (list === null) return false;
+
+  const primary = list.items.find((r) => r.scope === "dealer" && r.isPrimary) ?? null;
+  const phoneVal = contactFieldToNull(phone);
+  const emailVal = contactFieldToNull(email);
+  const commentVal = contactFieldToNull(comment);
+  const nameTrim = name.trim();
+  const fallbackName = nameFallback?.trim() ?? "";
+
+  if (!primary) {
+    const fullName = nameTrim || fallbackName;
+    if (!fullName) return true;
+    return apiCreateContact({
+      clientId: dealerId,
+      ...scopeApiFields("dealer", dealerId),
+      fullName,
+      ...(phoneVal ? { phone: phoneVal } : {}),
+      ...(emailVal ? { email: emailVal } : {}),
+      ...(commentVal ? { comment: commentVal } : {}),
+      isPrimary: true,
+      isActual: true,
+      ...apiActorFields(profile),
+    });
+  }
+
+  const patch: Record<string, unknown> = { id: primary.id };
+  let hasChange = false;
+
+  if (nameTrim && nameTrim !== primary.fullName) {
+    patch.fullName = nameTrim;
+    hasChange = true;
+  }
+
+  const curPhone = primary.phone?.trim() || null;
+  if (phoneVal !== curPhone) {
+    patch.phone = phoneVal;
+    hasChange = true;
+  }
+
+  const curEmail = primary.email?.trim() || null;
+  if (emailVal !== curEmail) {
+    patch.email = emailVal;
+    hasChange = true;
+  }
+
+  const curComment = primary.comment?.trim() || null;
+  if (commentVal !== curComment) {
+    patch.comment = commentVal;
+    hasChange = true;
+  }
+
+  if (!hasChange) return true;
+  return apiPatchContact(patch);
 }
