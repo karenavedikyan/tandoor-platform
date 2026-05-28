@@ -25,6 +25,7 @@ import { getProductById } from "@/lib/catalog-data";
 import type { MergedTradePointEntry } from "@/lib/dealer-trade-points-overrides";
 import { isVirtualDefaultTradePointId } from "@/lib/dealer-trade-points-overrides";
 import { getDealerManagerDisplay, getDealerRegionalManagerDisplay, getDealerRopDisplay } from "@/lib/dealer-base-mock-data";
+import { IGNORE_CLIENT_ARCHIVE_IN_UI } from "@/lib/archive-record-visual";
 
 export type TradePointShowcaseBucket =
   | "not_filled"
@@ -212,7 +213,7 @@ export function buildTradePointListForActualization(
     // Корзина: ТТ корзинного клиента или сама ТТ в корзине — не показываем (Промт 45).
     if (act.trashedDealersById?.[dealer.id]) return;
     if (act.trashedTradePointsById?.[tp.id]) return;
-    const dealerArchived = Boolean(act.archivedDealersById[dealer.id]);
+    const dealerArchived = IGNORE_CLIENT_ARCHIVE_IN_UI ? false : Boolean(act.archivedDealersById[dealer.id]);
     byTradePointId.set(tp.id, {
       tradePointId: tp.id,
       dealerId: dealer.id,
@@ -254,7 +255,7 @@ export function buildTradePointListForActualization(
     for (const dealer of scoped) {
       // Корзинных клиентов не показываем нигде (в рабочем и архивном списке).
       if (act.trashedDealersById?.[dealer.id]) continue;
-      if (!archivedOnly && act.archivedDealersById[dealer.id]) continue;
+      if (!IGNORE_CLIENT_ARCHIVE_IN_UI && !archivedOnly && act.archivedDealersById[dealer.id]) continue;
       const merged = mergeTradePointsForActualization(dealer, act);
       for (const entry of merged) {
         if (!keepEntry(entry)) continue;
@@ -263,12 +264,15 @@ export function buildTradePointListForActualization(
     }
   };
 
-  if (archivedOnly) {
+  if (archivedOnly && !IGNORE_CLIENT_ARCHIVE_IN_UI) {
     const activeDealers = buildDealerBaseRowsWithActualization(act, profile, { includeArchivedDealers: false });
     collectForDealers(activeDealers, (e) => e.isArchived);
     const archivedDealers = buildDealerBaseRowsWithActualization(act, profile, { includeArchivedDealers: true });
     collectForDealers(archivedDealers, () => true);
     return Array.from(byTradePointId.values());
+  }
+  if (archivedOnly && IGNORE_CLIENT_ARCHIVE_IN_UI) {
+    return [];
   }
 
   const dealers = buildDealerBaseRowsWithActualization(act, profile, { includeArchivedDealers: false });

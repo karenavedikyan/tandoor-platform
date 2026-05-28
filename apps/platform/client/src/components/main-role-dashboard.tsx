@@ -240,10 +240,8 @@ export function MainRoleDashboard() {
   const workingBaseEmpty = !dashboardLoading && scopedClients.length === 0;
 
   const useMgmtFactualTasks = actx.enabled && shouldUseTeamMergedActualizationPlane(profile);
-  const showArchiveKpi = actx.enabled && !dashboardLoading;
-  const archivedClients = scopeMetrics?.archivedClients ?? 0;
+  const showScopeKpi = actx.enabled && !dashboardLoading;
   const activeTradePoints = scopeMetrics?.activeTradePoints ?? 0;
-  const archivedTradePoints = scopeMetrics?.archivedTradePoints ?? 0;
 
   const { totalClients, activeClients, attentionClients, openTasks, extraKpiLabel, extraKpiValue } = useMemo(() => {
     const total = scopeMetrics?.activeClients ?? scopedClients.length;
@@ -409,16 +407,13 @@ export function MainRoleDashboard() {
         ? "Открытые задачи по витрине (команда)"
         : "Витрины (открытые)";
 
-  const archiveClientsSubline = showArchiveKpi ? `${archivedClients} в архиве` : null;
   const tradePointsSubline =
-    showArchiveKpi && (role === "sales_manager" || role === "team_lead" || role === "sales_director")
-      ? role === "sales_manager"
-        ? `ТТ: ${activeTradePoints}${archivedTradePoints > 0 ? ` · ${archivedTradePoints} в архиве` : ""}`
-        : `Активные ТТ: ${activeTradePoints} · в архиве: ${archivedTradePoints}`
+    showScopeKpi && (role === "sales_manager" || role === "team_lead" || role === "sales_director")
+      ? `ТТ: ${activeTradePoints}`
       : null;
 
   const showScopeBreakdownKpi =
-    (role === "team_lead" || role === "sales_director") && showArchiveKpi && scopeMetrics != null;
+    (role === "team_lead" || role === "sales_director") && showScopeKpi && scopeMetrics != null;
 
   const mainFocusListCtx = useMemo(() => {
     if (!useReal || !snap || role === "sales_manager") return undefined;
@@ -521,11 +516,6 @@ export function MainRoleDashboard() {
                 <p className="mt-0.5 text-xl font-semibold tabular-nums text-foreground" data-testid="metric-main-total-clients">
                   {totalClients}
                 </p>
-                {archiveClientsSubline ? (
-                  <p className="mt-1 text-xs text-muted-foreground tabular-nums" data-testid="metric-main-archived-clients">
-                    {archiveClientsSubline}
-                  </p>
-                ) : null}
                 {tradePointsSubline ? (
                   <p className="mt-0.5 text-xs text-muted-foreground tabular-nums" data-testid="metric-main-trade-points">
                     {tradePointsSubline}

@@ -6,8 +6,14 @@ import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import { normalizeTerritoryCityName } from "@/lib/territory-city-normalize";
 import { cn } from "@/lib/utils";
 
-export function isDealerArchivedInActualization(dealerId: string, act: ActualizationState): boolean {
-  return Boolean(act.archivedDealersById[dealerId]);
+/**
+ * Промт 79: JSON-ключи архива в state сохраняются для отката, но UI/KPI их игнорируют.
+ */
+export const IGNORE_CLIENT_ARCHIVE_IN_UI = true;
+
+export function isDealerArchivedInActualization(_dealerId: string, _act: ActualizationState): boolean {
+  if (IGNORE_CLIENT_ARCHIVE_IN_UI) return false;
+  return Boolean(_act.archivedDealersById[_dealerId]);
 }
 
 /** Muted row surface for archived clients / trade points in tables and lists. */
@@ -44,13 +50,13 @@ export function ArchiveInArchiveBadge({
 
 /** Gray inline suffix: ` · 12 архив` — only when count > 0. */
 export function archiveCountDotSuffix(count: number): ReactNode {
-  if (count <= 0) return null;
+  if (IGNORE_CLIENT_ARCHIVE_IN_UI || count <= 0) return null;
   return createElement("span", { className: "text-xs text-muted-foreground" }, ` · ${count} архив`);
 }
 
 /** Gray inline suffix: ` (3 архив)` — only when count > 0. */
 export function archiveCountParenSuffix(count: number): ReactNode {
-  if (count <= 0) return null;
+  if (IGNORE_CLIENT_ARCHIVE_IN_UI || count <= 0) return null;
   return createElement("span", { className: "text-xs text-muted-foreground" }, ` (${count} архив)`);
 }
 
@@ -73,7 +79,7 @@ export function buildCityArchiveCountsMap(
   act: ActualizationState | undefined,
 ): Map<string, CityArchiveCounts> {
   const map = new Map<string, CityArchiveCounts>();
-  if (!act) return map;
+  if (IGNORE_CLIENT_ARCHIVE_IN_UI || !act) return map;
 
   const bump = (cityKey: string, clients: number, tps: number) => {
     const cur = map.get(cityKey) ?? { archivedClients: 0, archivedTradePoints: 0 };
@@ -95,18 +101,20 @@ export function buildCityArchiveCountsMap(
   return map;
 }
 
-export function countArchivedDealersInRows(rows: DealerRow[], act: ActualizationState): number {
+export function countArchivedDealersInRows(_rows: DealerRow[], _act: ActualizationState): number {
+  if (IGNORE_CLIENT_ARCHIVE_IN_UI) return 0;
   let n = 0;
-  for (const r of rows) {
-    if (isDealerArchivedInActualization(r.id, act)) n += 1;
+  for (const r of _rows) {
+    if (isDealerArchivedInActualization(r.id, _act)) n += 1;
   }
   return n;
 }
 
-export function countArchivedTradePointsInRows(rows: DealerRow[], act: ActualizationState): number {
+export function countArchivedTradePointsInRows(_rows: DealerRow[], _act: ActualizationState): number {
+  if (IGNORE_CLIENT_ARCHIVE_IN_UI) return 0;
   let n = 0;
-  for (const r of rows) {
-    for (const entry of mergeTradePointsForActualization(r, act)) {
+  for (const r of _rows) {
+    for (const entry of mergeTradePointsForActualization(r, _act)) {
       if (entry.isArchived) n += 1;
     }
   }
@@ -122,6 +130,9 @@ export function computeManagerArchiveCounts(
   act: ActualizationState,
   matchManager: (row: DealerRow) => boolean,
 ): ManagerArchiveCounts {
+  if (IGNORE_CLIENT_ARCHIVE_IN_UI) {
+    return { archivedClients: 0, archivedTradePoints: 0 };
+  }
   const archivedClients = archivedOnlyRows.filter(matchManager).length;
   const dealerById = new Map<string, DealerRow>();
   for (const r of activeRows) {

@@ -38,6 +38,7 @@ import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { mergeTradePointsActiveForActualization, mergeTradePointsForActualization } from "@/lib/client-base-actualization-data-merge";
 import { mergeActualizationState } from "@/lib/client-base-actualization-state";
+import { IGNORE_CLIENT_ARCHIVE_IN_UI } from "@/lib/archive-record-visual";
 import { makeTrashedTradePointInfo, snapshotTradePointFromRow } from "@/lib/trash-dealer-helper";
 import { generateStableManualTradePointId, nextManualTradePointInternalCode, isManualActualizationTradePointId, getTradePointDisplayCodeForActualization } from "@/lib/client-base-actualization-stable-ids";
 import {
@@ -1096,7 +1097,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <h3 className="text-sm font-semibold text-foreground sm:text-base">Торговые точки</h3>
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
-          {hasArchived ? (
+          {hasArchived && !IGNORE_CLIENT_ARCHIVE_IN_UI ? (
             <Button
               type="button"
               variant="ghost"
@@ -1195,7 +1196,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
               data-testid="button-trade-point-bulk-archive"
               onClick={() => setBulkArchiveTpDialogOpen(true)}
             >
-              Удалить / в архив
+              Удалить
             </Button>
           </div>
         </div>
@@ -1304,7 +1305,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                         <span className="font-semibold tabular-nums text-foreground">{showcaseOpen}</span>
                       </p>
                     ) : null}
-                    {useAct && canEdit && !isVirtual && isArchived ? (
+                    {useAct && canEdit && !isVirtual && isArchived && !IGNORE_CLIENT_ARCHIVE_IN_UI ? (
                       <Button
                         type="button"
                         variant="outline"
@@ -1685,9 +1686,9 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
       >
         <AlertDialogContent data-testid="dialog-trade-point-delete-confirm">
           <AlertDialogHeader>
-            <AlertDialogTitle>Переместить торговую точку в корзину?</AlertDialogTitle>
+            <AlertDialogTitle>Удалить торговую точку?</AlertDialogTitle>
             <AlertDialogDescription>
-              Торговая точка будет храниться в корзине 14 дней. Восстановить можно в любой момент на странице «Корзина». Через 14 дней удалится окончательно.
+              Торговая точка уйдёт в корзину на 30 дней. Восстановить можно из раздела «Корзина».
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex-col gap-2 sm:flex-row">
@@ -1711,7 +1712,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
               onClick={() => void confirmSingleArchiveTradePoint()}
             >
               <Trash2 className="h-4 w-4" aria-hidden />
-              {singleDeleteBusy ? "Перемещение…" : "Переместить в корзину"}
+              {singleDeleteBusy ? "Удаление…" : "Удалить"}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

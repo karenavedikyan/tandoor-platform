@@ -13,36 +13,32 @@ export type MainDashboardScopeMetrics = {
   archivedTradePoints: number;
 };
 
-function countTradePointsForRows(rows: DealerRow[], act: ActualizationState): { active: number; archived: number } {
-  let active = 0;
-  let archived = 0;
+function countTradePointsForRows(rows: DealerRow[], act: ActualizationState): number {
+  let n = 0;
   for (const row of rows) {
     for (const entry of mergeTradePointsForActualization(row, act)) {
-      if (entry.isArchived) archived += 1;
-      else active += 1;
+      if (!entry.isArchived) n += 1;
     }
   }
-  return { active, archived };
+  return n;
 }
 
 /**
- * KPI /main: активные и архивные клиенты и ТТ в заданном scope (после roleScoped*).
+ * KPI /main: активные клиенты и ТТ в заданном scope (после roleScoped*).
+ * Промт 79: архив в JSON state игнорируется — «активные» = все не в корзине.
  */
 export function computeMainDashboardScopeMetrics(
   act: ActualizationState,
   profile: ReleaseDemoProfile,
   scopeRows: (rows: DealerRow[]) => DealerRow[],
 ): MainDashboardScopeMetrics {
-  const activeBuilt = buildDealerBaseRowsWithActualization(act, profile, { includeArchivedDealers: false });
-  const archivedBuilt = buildDealerBaseRowsWithActualization(act, profile, { includeArchivedDealers: true });
-  const scopedActive = scopeRows(activeBuilt);
-  const scopedArchivedOnly = scopeRows(archivedBuilt);
-  const tpOnActiveClients = countTradePointsForRows(scopedActive, act);
-  const tpOnArchivedClients = countTradePointsForRows(scopedArchivedOnly, act);
+  const built = buildDealerBaseRowsWithActualization(act, profile, { includeArchivedDealers: false });
+  const scoped = scopeRows(built);
+  const activeTradePoints = countTradePointsForRows(scoped, act);
   return {
-    activeClients: scopedActive.length,
-    archivedClients: scopedArchivedOnly.length,
-    activeTradePoints: tpOnActiveClients.active,
-    archivedTradePoints: tpOnActiveClients.archived + tpOnArchivedClients.active + tpOnArchivedClients.archived,
+    activeClients: scoped.length,
+    archivedClients: 0,
+    activeTradePoints,
+    archivedTradePoints: 0,
   };
 }

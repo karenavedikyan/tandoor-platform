@@ -11,46 +11,20 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 
-function shareOfTotal(part: number, total: number): string {
-  if (total <= 0) return "—";
-  return `${Math.round((part / total) * 100)}% от базы`;
-}
-
 type ScopeMetricCardProps = {
   label: string;
   value: number;
   footnote: string;
-  muted?: boolean;
   href?: string;
   testId: string;
 };
 
-function ScopeMetricCard({ label, value, footnote, muted, href, testId }: ScopeMetricCardProps) {
+function ScopeMetricCard({ label, value, footnote, href, testId }: ScopeMetricCardProps) {
   const card = (
-    <Card
-      className={cn(
-        "min-w-0 rounded-xl border bg-card",
-        muted ? "border-border/60 bg-muted/25" : "border-border",
-      )}
-      data-testid={testId}
-    >
+    <Card className="min-w-0 rounded-xl border border-border bg-card" data-testid={testId}>
       <CardContent className="p-3">
-        <p
-          className={cn(
-            "text-[11px] font-semibold uppercase tracking-wide",
-            muted ? "text-muted-foreground/80" : "text-muted-foreground",
-          )}
-        >
-          {label}
-        </p>
-        <p
-          className={cn(
-            "mt-0.5 text-xl font-semibold tabular-nums",
-            muted ? "text-muted-foreground" : "text-foreground",
-          )}
-        >
-          {value}
-        </p>
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
+        <p className="mt-0.5 text-xl font-semibold tabular-nums text-foreground">{value}</p>
         <p className="mt-1 text-xs text-muted-foreground tabular-nums">{footnote}</p>
       </CardContent>
     </Card>
@@ -74,42 +48,23 @@ export type MainScopeBreakdownKpiGridProps = {
   tradePointsHref: string;
 };
 
-/** 2×2 KPI: активные/архив клиенты и ТТ (директор, РОП). */
+/** KPI: активные клиенты и ТТ (директор, РОП). Промт 79: без карточек архива. */
 export function MainScopeBreakdownKpiGrid({ metrics, clientsHref, tradePointsHref }: MainScopeBreakdownKpiGridProps) {
-  const totalClients = metrics.activeClients + metrics.archivedClients;
-  const totalTp = metrics.activeTradePoints + metrics.archivedTradePoints;
-
   return (
     <>
       <ScopeMetricCard
         label="Активные клиенты"
         value={metrics.activeClients}
-        footnote={totalClients > 0 ? `из ${totalClients} всего` : "—"}
+        footnote="Рабочая база"
         href={clientsHref}
         testId="card-main-kpi-active-clients"
       />
       <ScopeMetricCard
-        label="Клиенты в архиве"
-        value={metrics.archivedClients}
-        footnote={shareOfTotal(metrics.archivedClients, totalClients)}
-        muted
-        href={clientsHref}
-        testId="card-main-kpi-archived-clients"
-      />
-      <ScopeMetricCard
         label="Активные ТТ"
         value={metrics.activeTradePoints}
-        footnote={totalTp > 0 ? `из ${totalTp} всего` : "—"}
+        footnote="Рабочая база"
         href={tradePointsHref}
         testId="card-main-kpi-active-tp"
-      />
-      <ScopeMetricCard
-        label="ТТ в архиве"
-        value={metrics.archivedTradePoints}
-        footnote={shareOfTotal(metrics.archivedTradePoints, totalTp)}
-        muted
-        href={tradePointsHref}
-        testId="card-main-kpi-archived-tp"
       />
     </>
   );
@@ -118,19 +73,16 @@ export function MainScopeBreakdownKpiGrid({ metrics, clientsHref, tradePointsHre
 export function DrilldownScopeKpiPill({
   kind,
   active,
-  archived,
 }: {
   kind: "clients" | "tradePoints";
   active: number;
-  archived: number;
+  /** @deprecated Промт 79: архив не отображается */
+  archived?: number;
 }) {
-  const prefix = kind === "clients" ? "Клиенты" : "ТТ";
+  const label = kind === "clients" ? "клиенты" : "ТТ";
   return (
-    <span className="inline-flex max-w-full shrink-0 items-center rounded-md border border-border bg-muted/40 px-2 py-1 text-[11px] tabular-nums sm:text-xs">
-      <span className="text-foreground">{prefix} </span>
-      <span className="font-medium text-foreground">{active}</span>
-      <span className="text-muted-foreground"> · архив </span>
-      <span className="text-muted-foreground">{archived}</span>
+    <span className="inline-flex max-w-full shrink-0 items-center rounded-md border border-border bg-muted/40 px-2 py-1 text-[11px] tabular-nums sm:text-xs text-foreground">
+      {label} {active}
     </span>
   );
 }
@@ -138,8 +90,11 @@ export function DrilldownScopeKpiPill({
 export function DrilldownScopeKpiPills({ metrics }: { metrics: MainDashboardScopeMetrics }) {
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:justify-end">
-      <DrilldownScopeKpiPill kind="clients" active={metrics.activeClients} archived={metrics.archivedClients} />
-      <DrilldownScopeKpiPill kind="tradePoints" active={metrics.activeTradePoints} archived={metrics.archivedTradePoints} />
+      <DrilldownScopeKpiPill kind="clients" active={metrics.activeClients} />
+      <span className="text-muted-foreground text-xs" aria-hidden>
+        ·
+      </span>
+      <DrilldownScopeKpiPill kind="tradePoints" active={metrics.activeTradePoints} />
     </div>
   );
 }

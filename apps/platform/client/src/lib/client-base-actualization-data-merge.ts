@@ -38,6 +38,7 @@ import {
   isManualActualizationDealerId,
 } from "@/lib/client-base-actualization-stable-ids";
 import { isLegalEntityArchivedInActualization } from "@/lib/client-base-actualization-legal-entities";
+import { IGNORE_CLIENT_ARCHIVE_IN_UI } from "@/lib/archive-record-visual";
 import {
   clientCategoryFromPassportTier,
   getClientCategoryLabel,
@@ -394,11 +395,13 @@ export function mergeTradePointsForActualization(row: DealerRow, act: Actualizat
     }
   }
 
-  for (const arch of Object.values(act.archivedTradePointsById)) {
-    if (arch.dealerId !== row.id) continue;
-    const prev = byId.get(arch.tradePointId);
-    if (prev) {
-      byId.set(arch.tradePointId, { ...prev, isArchived: true, point: { ...prev.point, status: "Архив" } });
+  if (!IGNORE_CLIENT_ARCHIVE_IN_UI) {
+    for (const arch of Object.values(act.archivedTradePointsById)) {
+      if (arch.dealerId !== row.id) continue;
+      const prev = byId.get(arch.tradePointId);
+      if (prev) {
+        byId.set(arch.tradePointId, { ...prev, isArchived: true, point: { ...prev.point, status: "Архив" } });
+      }
     }
   }
 
@@ -689,10 +692,13 @@ export function buildDealerBaseRowsWithActualization(
   profile: ReleaseDemoProfile,
   opts?: BuildDealerBaseRowsOptions,
 ): DealerRow[] {
-  const archivedListMode = opts?.includeArchivedDealers === true;
   const trashedListMode = opts?.includeTrashedDealers === true;
+  if (IGNORE_CLIENT_ARCHIVE_IN_UI && opts?.includeArchivedDealers === true && !trashedListMode) {
+    return [];
+  }
+  const archivedListMode = !IGNORE_CLIENT_ARCHIVE_IN_UI && opts?.includeArchivedDealers === true;
   const includeId = (id: string) => {
-    const isArchived = Boolean(act.archivedDealersById[id]);
+    const isArchived = IGNORE_CLIENT_ARCHIVE_IN_UI ? false : Boolean(act.archivedDealersById[id]);
     const isTrashed = Boolean(act.trashedDealersById?.[id]);
     if (trashedListMode) return isTrashed;
     if (archivedListMode) return isArchived && !isTrashed;

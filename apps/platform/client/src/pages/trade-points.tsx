@@ -51,6 +51,7 @@ import { MultiSelect } from "@/components/ui/multi-select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ArchiveInArchiveBadge, archivedEntityRowClassName } from "@/components/archive-record-visual";
+import { IGNORE_CLIENT_ARCHIVE_IN_UI } from "@/lib/archive-record-visual";
 import { DealerBulkDeleteCheckbox } from "@/components/dealer-bulk-delete-checkbox";
 import { ShowcaseCoverPhotoSlot } from "@/components/showcase-cover-photo-slot";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
@@ -905,10 +906,9 @@ export default function TradePointsPage(): ReactElement {
     if (!canShowBulkTradePointControls || bulkDeleteMode || showArchived) return undefined;
     return {
       canMoveRow: (r) => canArchiveRow(r),
-      onArchive: (r) => void handleRowArchiveTp(r),
       onTrash: (r) => void handleRowTrashTp(r),
     };
-  }, [canShowBulkTradePointControls, bulkDeleteMode, showArchived, canArchiveRow, handleRowArchiveTp, handleRowTrashTp]);
+  }, [canShowBulkTradePointControls, bulkDeleteMode, showArchived, canArchiveRow, handleRowTrashTp]);
 
   const rowsByCompositeKey = useMemo(() => new Map(filteredSorted.map((x) => [rowKey(x), x])), [filteredSorted]);
 
@@ -1198,20 +1198,22 @@ export default function TradePointsPage(): ReactElement {
           </SelectContent>
         </Select>
       </div>
-      <div className="flex items-center justify-between gap-2 sm:col-span-2 lg:col-span-3">
-        <div className="space-y-0.5">
-          <Label htmlFor="toggle-archived-tp" className="text-xs">
-            Режим архива ТТ
-          </Label>
-          <p className="text-[11px] text-muted-foreground">
-            Включено — в списке <span className="font-medium text-foreground">только архивные</span> торговые точки. Выключено — только рабочие точки активных клиентов.
-          </p>
-          <p className="text-[11px] text-muted-foreground" data-testid="text-trade-points-archived-dealers-hidden-hint">
-            Точки клиентов в архиве в рабочий список не попадают. Восстановите клиента, чтобы вернуть его точки в рабочую базу.
-          </p>
+      {!IGNORE_CLIENT_ARCHIVE_IN_UI ? (
+        <div className="flex items-center justify-between gap-2 sm:col-span-2 lg:col-span-3">
+          <div className="space-y-0.5">
+            <Label htmlFor="toggle-archived-tp" className="text-xs">
+              Режим архива ТТ
+            </Label>
+            <p className="text-[11px] text-muted-foreground">
+              Включено — в списке <span className="font-medium text-foreground">только архивные</span> торговые точки. Выключено — только рабочие точки активных клиентов.
+            </p>
+            <p className="text-[11px] text-muted-foreground" data-testid="text-trade-points-archived-dealers-hidden-hint">
+              Точки клиентов в архиве в рабочий список не попадают. Восстановите клиента, чтобы вернуть его точки в рабочую базу.
+            </p>
+          </div>
+          <Switch id="toggle-archived-tp" checked={showArchived} data-testid="toggle-trade-points-show-archived" onCheckedChange={(v) => setShowArchived(v === true)} />
         </div>
-        <Switch id="toggle-archived-tp" checked={showArchived} data-testid="toggle-trade-points-show-archived" onCheckedChange={(v) => setShowArchived(v === true)} />
-      </div>
+      ) : null}
       <div className="flex flex-wrap items-end gap-2 sm:col-span-2 lg:col-span-3">
         <div className="space-y-1">
           <Label className="text-xs">Сортировка</Label>

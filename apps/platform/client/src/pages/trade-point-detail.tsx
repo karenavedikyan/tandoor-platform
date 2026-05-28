@@ -73,8 +73,9 @@ import {
   clientContactScopeKeyTradePoint,
   getClientContactScopeHistoryEvents,
 } from "@/lib/client-contacts";
+import { mergeActualizationState } from "@/lib/client-base-actualization-state";
+import { makeTrashedTradePointInfo, snapshotTradePointFromRow } from "@/lib/trash-dealer-helper";
 import {
-  archiveTradePoint,
   canEditDealerTradePoints,
   DEALER_TRADE_POINTS_EVENT,
   getMergedDealerTradePoints,
@@ -786,10 +787,39 @@ function TradePointDetailContent({
     setEditing(false);
   }, [point]);
 
-  const handleConfirmArchive = useCallback(() => {
-    archiveTradePoint(dealer.id, point.id, profile);
+  const handleConfirmDelete = useCallback(async () => {
+    if (actx.enabled) {
+      const info = makeTrashedTradePointInfo({
+        tradePointId: point.id,
+        dealerId: dealer.id,
+        by: { userId: profile.personaUserId, userName: userLabelFromProfile(profile) },
+        snapshot: snapshotTradePointFromRow({
+          name: point.name,
+          address: point.address,
+          city: point.city,
+          tradePointCode: point.releaseCode ?? null,
+          dealerFullName: dealer.name,
+        }),
+        source: "client_card_delete",
+      });
+      const r = await actx.persist((prev) =>
+        mergeActualizationState(prev, {
+          trashedTradePointsById: { ...prev.trashedTradePointsById, [point.id]: info },
+        }),
+      );
+      setArchiveOpen(false);
+      if (r.success) {
+        toast({
+          title: "Торговая точка перемещена в корзину",
+          description: "Восстановить можно из раздела «Корзина».",
+        });
+      } else {
+        toast({ title: "Не удалось удалить", variant: "destructive" });
+      }
+      return;
+    }
     setArchiveOpen(false);
-  }, [dealer.id, point.id, profile]);
+  }, [actx, dealer.id, dealer.name, point, profile]);
 
   const breadcrumbDealerLabel = dealer.name;
 
@@ -808,9 +838,11 @@ function TradePointDetailContent({
         <Dialog open={archiveOpen} onOpenChange={setArchiveOpen}>
           <DialogContent className="sm:max-w-md" data-testid="dialog-trade-point-archive-confirm">
             <DialogHeader>
-              <DialogTitle className="text-base">Архивировать точку?</DialogTitle>
+              <DialogTitle className="text-base">Удалить торговую точку?</DialogTitle>
             </DialogHeader>
-            <p className="text-sm text-muted-foreground">Точка будет скрыта из списка активных. Удаление не выполняется.</p>
+            <p className="text-sm text-muted-foreground">
+              Торговая точка уйдёт в корзину на 30 дней. Восстановить можно из раздела «Корзина».
+            </p>
             <DialogFooter className="gap-2 sm:justify-end">
               <Button type="button" variant="outline" className="min-h-9" onClick={() => setArchiveOpen(false)}>
                 Отмена
@@ -819,10 +851,10 @@ function TradePointDetailContent({
                 type="button"
                 variant="destructive"
                 className="min-h-9 font-semibold"
-                data-testid="button-trade-point-archive-confirm"
-                onClick={handleConfirmArchive}
+                data-testid="button-trade-point-delete-confirm"
+                onClick={() => void handleConfirmDelete()}
               >
-                В архив
+                Удалить
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -914,16 +946,16 @@ function TradePointDetailContent({
             >
               Редактировать точку
             </Button>
-            {!tpMeta.isArchived ? (
+            {!tpMeta.isArchived && actx.enabled ? (
               <Button
                 type="button"
                 variant="secondary"
                 size="sm"
-                className="min-h-9 w-full font-semibold sm:w-auto"
-                data-testid={`button-trade-point-archive-${point.id}`}
+                className="min-h-9 w-full font-semibold text-destructive sm:w-auto"
+                data-testid={`button-trade-point-delete-${point.id}`}
                 onClick={() => setArchiveOpen(true)}
               >
-                Архивировать точку
+                Удалить
               </Button>
             ) : null}
           </div>
@@ -1112,17 +1144,25 @@ function TradePointDetailContent({
       ) : null}
 
       <Dialog open={archiveOpen} onOpenChange={setArchiveOpen}>
-        <DialogContent className="sm:max-w-md" data-testid="dialog-trade-point-archive-confirm">
+        <DialogContent className="sm:max-w-md" data-testid="dialog-trade-point-delete-confirm">
           <DialogHeader>
-            <DialogTitle className="text-base">Архивировать точку?</DialogTitle>
+            <DialogTitle className="text-base">Удалить торговую точку?</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">Точка будет скрыта из списка активных. Удаление не выполняется.</p>
+          <p className="text-sm text-muted-foreground">
+            Торговая точка уйдёт в корзину на 30 дней. Восстановить можно из раздела «Корзина».
+          </p>
           <DialogFooter className="gap-2 sm:justify-end">
             <Button type="button" variant="outline" className="min-h-9" onClick={() => setArchiveOpen(false)}>
               Отмена
             </Button>
-            <Button type="button" variant="destructive" className="min-h-9 font-semibold" data-testid="button-trade-point-archive-confirm" onClick={handleConfirmArchive}>
-              В архив
+            <Button
+              type="button"
+              variant="destructive"
+              className="min-h-9 font-semibold"
+              data-testid="button-trade-point-delete-confirm"
+              onClick={() => void handleConfirmDelete()}
+            >
+              Удалить
             </Button>
           </DialogFooter>
         </DialogContent>
