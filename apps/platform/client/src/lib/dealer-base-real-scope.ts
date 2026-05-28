@@ -18,6 +18,29 @@ export type RoleScopedDealerRowsForRealOptions = {
   ropUserId?: string;
 };
 
+/** Закрепления из `client_assignments` (Промт 70). */
+export type AssignmentsScope = {
+  ownCodes: Set<string>;
+  teamCodes: Set<string>;
+};
+
+export function assignmentsScopeIsActive(scope: AssignmentsScope | undefined): boolean {
+  if (!scope) return false;
+  return scope.ownCodes.size > 0 || scope.teamCodes.size > 0;
+}
+
+function rowsForAssignmentsScope(
+  rows: DealerRow[],
+  access: DealerBaseAccessRole,
+  scope: AssignmentsScope,
+): DealerRow[] {
+  if (access === "sales_director") return rows;
+  if (access === "team_lead") {
+    return rows.filter((r) => scope.teamCodes.has(r.id) || scope.ownCodes.has(r.id));
+  }
+  return rows.filter((r) => scope.ownCodes.has(r.id));
+}
+
 export function realEffectiveTeamLeadTeamIdFromSnap(snap: OrgSnapshot): string {
   const t = snap.teams.find((tt) => tt.ropUserId === snap.me.id);
   return t?.id ?? "";
@@ -127,12 +150,16 @@ export function roleScopedDealerRowsForReal(
   snap: OrgSnapshot,
   access: DealerBaseAccessRole,
   options?: RoleScopedDealerRowsForRealOptions,
+  assignmentsScope?: AssignmentsScope,
 ): DealerRow[] {
   if (options?.managerUserId) {
     return realRowsForManagerByUUID(rows, snap, options.managerUserId);
   }
   if (options?.ropUserId) {
     return realRowsForRopTeam(rows, snap, options.ropUserId);
+  }
+  if (assignmentsScopeIsActive(assignmentsScope)) {
+    return rowsForAssignmentsScope(rows, access, assignmentsScope!);
   }
   if (access === "sales_director") return rows;
   if (access === "team_lead") {
