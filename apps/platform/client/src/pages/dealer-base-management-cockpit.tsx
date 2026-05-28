@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
-import { ChevronRight, ExternalLink, Info } from "lucide-react";
+import { ChevronRight, ExternalLink, Info, Store, Users } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -179,6 +179,7 @@ export function DealerBaseManagementCockpit({
   const [detailTab, setDetailTab] = useState<"clients" | "tp">("clients");
   const [clientFilter, setClientFilter] = useState<ClientListFilter>("all");
   const [createDealerOpen, setCreateDealerOpen] = useState(false);
+  const [citiesExpanded, setCitiesExpanded] = useState(false);
 
   useEffect(() => {
     try {
@@ -412,39 +413,89 @@ export function DealerBaseManagementCockpit({
             ))}
           </div>
         </section>
-        <section>
+        <section data-testid="section-client-base-cities">
           <Card className="rounded-xl border border-border bg-card text-card-foreground">
-            <CardContent className="space-y-2 p-3">
-              <h3 className="text-sm font-semibold text-foreground">Города</h3>
+            <CardContent className="space-y-3 p-3 sm:p-4">
+              <div className="flex items-baseline justify-between gap-3">
+                <h3 className="text-sm font-semibold text-foreground">Города</h3>
+                <p className="text-[11px] tabular-nums text-muted-foreground">
+                  всего <span className="text-foreground">{overviewTopCities.length}</span>
+                </p>
+              </div>
               {overviewTopCities.length === 0 ? (
                 <p className="text-xs text-muted-foreground">Нет городов с клиентами.</p>
               ) : (
-                <div className="grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2">
-                  {overviewTopCities.slice(0, 5).map((c) => (
-                    <div
-                      key={c.cityKey}
-                      className="flex items-baseline justify-between gap-3 px-1 py-1 text-sm"
+                <>
+                  <div
+                    className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+                    data-testid="grid-cities"
+                  >
+                    {(citiesExpanded ? overviewTopCities : overviewTopCities.slice(0, 8)).map((c) => {
+                      const arch = cityArchiveByKey.get(c.cityKey);
+                      return (
+                        <Link
+                          key={c.cityKey}
+                          href={buildHashPath(`/dealer-base/city/${encodeURIComponent(c.cityKey)}`)}
+                          data-testid={`card-city-${c.cityKey}`}
+                          className="group flex flex-col gap-2 rounded-xl border border-border bg-background/60 p-3 no-underline transition-all hover:border-[#9ACA3C]/60 hover:bg-background hover:shadow-[0_2px_8px_rgba(154,202,60,0.08)]"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="line-clamp-2 text-sm font-semibold text-foreground group-hover:text-[#9ACA3C]">
+                              {c.displayName}
+                            </span>
+                            <ChevronRight
+                              className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-[#9ACA3C]"
+                              aria-hidden
+                            />
+                          </div>
+                          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                            <span className="inline-flex items-baseline gap-1">
+                              <Users className="h-3 w-3" aria-hidden />
+                              <span className="text-base font-semibold tabular-nums text-foreground">{c.activeClients}</span>
+                              <span>клиентов</span>
+                            </span>
+                            <span className="inline-flex items-baseline gap-1">
+                              <Store className="h-3 w-3" aria-hidden />
+                              <span className="text-base font-semibold tabular-nums text-foreground">{c.tradePoints}</span>
+                              <span>ТТ</span>
+                            </span>
+                          </div>
+                          {arch && (arch.archivedClients > 0 || arch.archivedTradePoints > 0) ? (
+                            <p className="text-[10px] text-muted-foreground/80">
+                              архив: {arch.archivedClients} · {arch.archivedTradePoints}
+                            </p>
+                          ) : null}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                  {overviewTopCities.length > 8 ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 w-full text-xs sm:w-auto"
+                      data-testid="button-cities-toggle-all"
+                      onClick={() => setCitiesExpanded((v) => !v)}
                     >
-                      <span className="truncate text-foreground">{c.displayName}</span>
-                      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                        клиенты <span className="text-foreground">{c.activeClients}</span>
-                        {archiveCountParenSuffix(cityArchiveByKey.get(c.cityKey)?.archivedClients ?? 0)}
-                        {" · "}
-                        ТТ <span className="text-foreground">{c.tradePoints}</span>
-                        {archiveCountParenSuffix(cityArchiveByKey.get(c.cityKey)?.archivedTradePoints ?? 0)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                      {citiesExpanded
+                        ? "Свернуть"
+                        : `Показать все (+ ещё ${overviewTopCities.length - 8})`}
+                    </Button>
+                  ) : null}
+                </>
               )}
-              {overviewTopCities.length > 5 ? (
-                <p className="text-[11px] text-muted-foreground">+ ещё {overviewTopCities.length - 5} городов</p>
-              ) : null}
               {overviewWithoutCity &&
               (overviewWithoutCity.activeClients > 0 || overviewWithoutCity.tradePoints > 0) ? (
-                <p className="text-[11px] text-muted-foreground">
-                  Без города: клиенты {overviewWithoutCity.activeClients} · ТТ {overviewWithoutCity.tradePoints}
-                </p>
+                <div
+                  className="rounded-lg border border-dashed border-border/70 bg-background/40 px-3 py-2 text-xs text-muted-foreground"
+                  data-testid="card-city-no-city"
+                >
+                  Без города: клиенты{" "}
+                  <span className="font-semibold text-foreground">{overviewWithoutCity.activeClients}</span>
+                  {" · "}ТТ{" "}
+                  <span className="font-semibold text-foreground">{overviewWithoutCity.tradePoints}</span>
+                </div>
               ) : null}
             </CardContent>
           </Card>
