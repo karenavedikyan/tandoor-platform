@@ -66,7 +66,6 @@ import {
   buildRopGroups,
   buildStructureInfographic,
   dealerMatchesClientListFilter,
-  findManagerInRopGroups,
   flattenTradePointsForRows,
   mapManagerOverviewClients,
   topCitiesForChart,
@@ -88,7 +87,7 @@ type DetailKind =
   | { kind: "manager"; teamId: string; managerId: string }
   | { kind: "city"; cityKey: string }
   | { kind: "rop_overview"; teamId: string }
-  | { kind: "manager_overview"; managerUserId: string; teamId: string }
+  | { kind: "manager_overview"; managerCatalogId: string; teamId: string }
   | { kind: "kpi-clients" }
   | { kind: "kpi-trade-points" };
 
@@ -281,19 +280,41 @@ export function DealerBaseManagementCockpit({
 
   const closeDetail = useCallback(() => setDetail(null), []);
 
-  const managerOverviewBundle = useMemo(() => {
+  const selectedManager = useMemo(() => {
     if (detail?.kind !== "manager_overview") return null;
-    const catalogId =
-      UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE[detail.managerUserId] ?? detail.managerUserId;
-    const teamHint = detail.teamId !== "__no_rop__" ? detail.teamId : undefined;
-    const found = findManagerInRopGroups(ropGroups, { managerCatalogId: catalogId, teamId: teamHint });
-    if (!found) return null;
-    return {
-      managerName: found.manager.name,
-      ropName: found.group.ropName,
-      clients: mapManagerOverviewClients(found.manager.rows),
-      tradePointsCount: found.manager.outlets,
-    };
+    const inTeam = ropGroups
+      .find((x) => x.teamId === detail.teamId)
+      ?.managers.find((m) => m.managerId === detail.managerCatalogId);
+    if (inTeam) return inTeam;
+    return ropGroups.flatMap((x) => x.managers).find((m) => m.managerId === detail.managerCatalogId) ?? null;
+  }, [detail, ropGroups]);
+
+  const selectedManagerClients = useMemo(() => {
+    if (!selectedManager) return [];
+    return mapManagerOverviewClients(selectedManager.rows);
+  }, [selectedManager]);
+
+  const selectedManagerRopName = useMemo(() => {
+    if (!selectedManager) return "—";
+    return ropGroups.find((g) => g.teamId === selectedManager.teamId)?.ropName ?? "—";
+  }, [selectedManager, ropGroups]);
+
+  const overviewTopCities = useMemo(
+    () =>
+      cities
+        .filter((c) => c.displayName !== "Без города" && c.activeClients > 0)
+        .sort((a, b) => b.activeClients - a.activeClients || a.displayName.localeCompare(b.displayName, "ru")),
+    [cities],
+  );
+
+  const overviewWithoutCity = useMemo(
+    () => cities.find((c) => c.displayName === "Без города"),
+    [cities],
+  );
+
+  const overviewRopGroupForDetail = useMemo(() => {
+    if (detail?.kind !== "rop_overview") return null;
+    return ropGroups.find((g) => g.teamId === detail.teamId) ?? null;
   }, [detail, ropGroups]);
 
   const mergedForCreate = useMemo(() => {
@@ -332,10 +353,10 @@ export function DealerBaseManagementCockpit({
         <section data-testid="section-client-base-structure-infographic">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {([
-              ["Активные клиенты", overview.structure.activeClients],
-              ["Торговые точки", overview.structure.tradePoints],
-              ["Потенциальные", overview.structure.potentialClients],
-              ["Внимание", overview.structure.attentionClients],
+              ["Активные клиенты", structure.active],
+              ["Торговые точки", structure.outlets],
+              ["Потенциальные", structure.potential],
+              ["Внимание", structure.attention],
             ] as Array<[string, number]>).map(([label, value]) => (
               <div key={label} className="rounded-xl border border-border bg-card px-3 py-2.5 text-card-foreground">
                 <p className="text-[11px] leading-tight text-muted-foreground">{label}</p>
@@ -348,39 +369,34 @@ export function DealerBaseManagementCockpit({
           <Card className="rounded-xl border border-border bg-card text-card-foreground">
             <CardContent className="space-y-2 p-3">
               <h3 className="text-sm font-semibold text-foreground">Города</h3>
-              {overview.cities.length === 0 ? (
+              {overviewTopCities.length === 0 ? (
                 <p className="text-xs text-muted-foreground">Нет городов с клиентами.</p>
               ) : (
                 <div className="grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2">
-                  {overview.cities.slice(0, 5).map((c) => (
+                  {overviewTopCities.slice(0, 5).map((c) => (
                     <div
-                      key={c.city ?? "__without__"}
+                      key={c.cityKey}
                       className="flex items-baseline justify-between gap-3 px-1 py-1 text-sm"
                     >
-                      <span className="truncate text-foreground">{c.city ?? "Без города"}</span>
+                      <span className="truncate text-foreground">{c.displayName}</span>
                       <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                        клиенты <span className="text-foreground">{c.clients}</span>
-                        {archiveCountParenSuffix(
-                          cityArchiveByKey.get((c.city ?? "Без города") === "Без города" ? "__no_city__" : (c.city ?? "Без города"))
-                            ?.archivedClients ?? 0,
-                        )}
+                        клиенты <span className="text-foreground">{c.activeClients}</span>
+                        {archiveCountParenSuffix(cityArchiveByKey.get(c.cityKey)?.archivedClients ?? 0)}
                         {" · "}
                         ТТ <span className="text-foreground">{c.tradePoints}</span>
-                        {archiveCountParenSuffix(
-                          cityArchiveByKey.get((c.city ?? "Без города") === "Без города" ? "__no_city__" : (c.city ?? "Без города"))
-                            ?.archivedTradePoints ?? 0,
-                        )}
+                        {archiveCountParenSuffix(cityArchiveByKey.get(c.cityKey)?.archivedTradePoints ?? 0)}
                       </span>
                     </div>
                   ))}
                 </div>
               )}
-              {overview.cities.length > 5 ? (
-                <p className="text-[11px] text-muted-foreground">+ ещё {overview.cities.length - 5} городов</p>
+              {overviewTopCities.length > 5 ? (
+                <p className="text-[11px] text-muted-foreground">+ ещё {overviewTopCities.length - 5} городов</p>
               ) : null}
-              {overview.withoutCity.clients > 0 || overview.withoutCity.tradePoints > 0 ? (
+              {overviewWithoutCity &&
+              (overviewWithoutCity.activeClients > 0 || overviewWithoutCity.tradePoints > 0) ? (
                 <p className="text-[11px] text-muted-foreground">
-                  Без города: клиенты {overview.withoutCity.clients} · ТТ {overview.withoutCity.tradePoints}
+                  Без города: клиенты {overviewWithoutCity.activeClients} · ТТ {overviewWithoutCity.tradePoints}
                 </p>
               ) : null}
             </CardContent>
@@ -388,7 +404,7 @@ export function DealerBaseManagementCockpit({
         </section>
         <section className="space-y-2" data-testid="section-client-base-rop-groups">
           <Accordion type="multiple" value={openOverviewTeamIds} onValueChange={setOpenOverviewTeamIds} className="space-y-2">
-            {overview.ropGroups.map((g) => {
+            {ropGroups.map((g) => {
               const teamKey = g.teamId ?? "__no_rop__";
               return (
                 <AccordionItem
@@ -402,9 +418,9 @@ export function DealerBaseManagementCockpit({
                     data-testid={`button-client-base-rop-toggle-${teamKey}`}
                   >
                     <div className="flex min-w-0 flex-1 flex-col items-start gap-0.5 text-left">
-                      <span className="truncate text-sm font-semibold text-foreground">{g.teamName}</span>
+                      <span className="truncate text-sm font-semibold text-foreground">{g.ropName}</span>
                       <span className="text-[11px] text-muted-foreground">
-                        {g.ropFullName} · менеджеров {g.managerCount} · клиенты {g.clients} · ТТ {g.tradePoints}
+                        менеджеров {g.managers.length} · клиенты {g.active} · ТТ {g.outlets}
                       </span>
                     </div>
                   </AccordionTrigger>
@@ -428,44 +444,39 @@ export function DealerBaseManagementCockpit({
                       </Button>
                     </div>
                     <div className="grid gap-2 sm:grid-cols-2">
-                      {g.managers.map((m) => (
+                      {g.managers.map((m) => {
+                        const arch = managerArchiveById.get(m.managerId);
+                        return (
                         <button
-                          key={m.userId}
+                          key={m.managerId}
                           type="button"
                           className="rounded-xl border border-border bg-card p-3 text-left text-card-foreground transition-colors hover:bg-muted/40"
-                          data-testid={`button-client-base-manager-open-${m.userId}`}
-                          onClick={() => setDetail({ kind: "manager_overview", managerUserId: m.userId, teamId: teamKey })}
+                          data-testid={`button-client-base-manager-open-${m.managerId}`}
+                          onClick={() =>
+                            setDetail({ kind: "manager_overview", managerCatalogId: m.managerId, teamId: teamKey })
+                          }
                         >
                           <p
                             className="truncate text-sm font-semibold text-foreground"
-                            data-testid={`card-client-base-manager-${m.userId}`}
+                            data-testid={`card-client-base-manager-${m.managerId}`}
                           >
-                            {m.fullName}
+                            {m.name}
                           </p>
                           <p className="mt-1 text-[11px] text-muted-foreground">
-                            {(() => {
-                              const local = ropGroups
-                                .flatMap((rg) => rg.managers)
-                                .find((x) => x.name === m.fullName);
-                              const arch = local ? managerArchiveById.get(local.managerId) : undefined;
-                              return (
-                                <>
-                                  активные <span className="text-foreground">{m.active}</span>
-                                  {archiveCountDotSuffix(arch?.archivedClients ?? 0)}
-                                  {" · "}
-                                  ТТ <span className="text-foreground">{m.tradePoints}</span>
-                                  {archiveCountDotSuffix(arch?.archivedTradePoints ?? 0)}
-                                  {" · "}
-                                  сегм. {m.segment ?? "—"}
-                                </>
-                              );
-                            })()}
+                            активные <span className="text-foreground">{m.active}</span>
+                            {archiveCountDotSuffix(arch?.archivedClients ?? 0)}
+                            {" · "}
+                            ТТ <span className="text-foreground">{m.outlets}</span>
+                            {archiveCountDotSuffix(arch?.archivedTradePoints ?? 0)}
+                            {" · "}
+                            сегм. {m.topSegmentLabel}
                           </p>
                           <p className="text-[11px] text-muted-foreground">
                             потенц. {m.potential} · вним. {m.attention}
                           </p>
                         </button>
-                      ))}
+                        );
+                      })}
                     </div>
                   </AccordionContent>
                 </AccordionItem>
@@ -485,14 +496,14 @@ export function DealerBaseManagementCockpit({
             <SheetHeader className="border-b border-border px-4 pb-3 pt-4 text-left">
               <SheetTitle className="text-base text-foreground">
                 {detail?.kind === "manager_overview"
-                  ? managerOverviewBundle?.managerName ?? "Менеджер"
+                  ? selectedManager?.name ?? "Менеджер"
                   : detail?.kind === "rop_overview"
-                    ? overview.ropGroups.find((g) => (g.teamId ?? "__no_rop__") === detail.teamId)?.teamName ?? "Команда"
+                    ? overviewRopGroupForDetail?.ropName ?? "Команда"
                     : "Команда"}
               </SheetTitle>
               <SheetDescription>
-                {detail?.kind === "manager_overview" && managerOverviewBundle
-                  ? `Команда: ${managerOverviewBundle.ropName} · клиентов ${managerOverviewBundle.clients.length} · ТТ ${managerOverviewBundle.tradePointsCount}`
+                {detail?.kind === "manager_overview" && selectedManager
+                  ? `Команда: ${selectedManagerRopName} · клиентов ${selectedManagerClients.length} · ТТ ${selectedManager.outlets}`
                   : detail?.kind === "manager_overview"
                     ? "Клиенты по данным базы (назначения и seed)"
                     : "Реальные данные из актуализации"}
@@ -500,9 +511,9 @@ export function DealerBaseManagementCockpit({
             </SheetHeader>
             <div className="max-h-[70vh] overflow-y-auto px-4 pb-24 pt-3" data-testid="dialog-client-base-group-detail">
               {detail?.kind === "manager_overview" ? (
-                managerOverviewBundle?.clients.length ? (
+                selectedManagerClients.length ? (
                   <div className="space-y-2">
-                    {managerOverviewBundle.clients.map((c) => (
+                    {selectedManagerClients.map((c) => (
                       <Card key={c.id} className="rounded-xl border border-border bg-card text-card-foreground">
                         <CardContent className="space-y-1 p-3">
                           <div className="flex items-start justify-between gap-2">
@@ -536,15 +547,19 @@ export function DealerBaseManagementCockpit({
               ) : null}
               {detail?.kind === "rop_overview" ? (
                 <div className="space-y-2">
-                  {(overview.ropGroups.find((g) => (g.teamId ?? "__no_rop__") === detail.teamId)?.managers ?? []).map((m) => (
+                  {(overviewRopGroupForDetail?.managers ?? []).map((m) => (
                     <button
-                      key={m.userId}
+                      key={m.managerId}
                       type="button"
                       className="w-full rounded-xl border border-border bg-card p-3 text-left hover:bg-primary/10"
-                      onClick={() => setDetail({ kind: "manager_overview", managerUserId: m.userId, teamId: detail.teamId })}
+                      onClick={() =>
+                        setDetail({ kind: "manager_overview", managerCatalogId: m.managerId, teamId: detail.teamId })
+                      }
                     >
-                      <p className="truncate text-sm font-semibold text-foreground">{m.fullName}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">активные {m.active} · ТТ {m.tradePoints} · потенц. {m.potential} · вним. {m.attention}</p>
+                      <p className="truncate text-sm font-semibold text-foreground">{m.name}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        активные {m.active} · ТТ {m.outlets} · потенц. {m.potential} · вним. {m.attention}
+                      </p>
                     </button>
                   ))}
                 </div>
