@@ -4,7 +4,10 @@
 import assert from "node:assert/strict";
 import { UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE } from "@shared/admin/actualization-dedupe";
 import type { DealerRow } from "../dealer-base-mock-data";
-import { aggregateManagersForTeam } from "../dealer-base-management-view-model";
+import {
+  aggregateManagersForTeam,
+  buildDbAwareManagerMatcher,
+} from "../dealer-base-management-view-model";
 
 const TEAM = "team-kupiansky";
 const MGR_BOYKO = "mgr-boyko-em";
@@ -67,6 +70,30 @@ const teamRows = [
   assert.ok(yakCodes.has("CL-002"));
   const union = new Set([...boyko!.rows, ...yakubova!.rows].map((r) => r.id));
   assert.equal(union.size, 3);
+}
+
+// БД: UUID не в каталоге — ни один менеджер команды не получает клиента (без fallback на seed)
+{
+  const unknownUuid = "00000000-0000-4000-8000-000000000099";
+  const r = row("client-unknown-mgr", { releaseCode: "CL-UNK", releaseManagerId: MGR_BOYKO });
+  const responsibleByCode = new Map<string, string>([["CL-UNK", unknownUuid]]);
+  const matchBoyko = buildDbAwareManagerMatcher(MGR_BOYKO, "Бойко", TEAM, responsibleByCode, userIdToCatalogMgrId);
+  const matchYakubova = buildDbAwareManagerMatcher(MGR_YAKUBOVA, "Якубова", TEAM, responsibleByCode, userIdToCatalogMgrId);
+  assert.equal(matchBoyko(r), false);
+  assert.equal(matchYakubova(r), false);
+  const managers = aggregateManagersForTeam(TEAM, [r], null, responsibleByCode, userIdToCatalogMgrId);
+  const boyko = managers.find((m) => m.managerId === MGR_BOYKO);
+  const yakubova = managers.find((m) => m.managerId === MGR_YAKUBOVA);
+  assert.equal(boyko?.rows.length ?? 0, 0);
+  assert.equal(yakubova?.rows.length ?? 0, 0);
+}
+
+// БД: нет записи для code — fallback на seed (Бойко)
+{
+  const r = row("client-seed-only", { releaseCode: "CL-SEED", releaseManagerId: MGR_BOYKO });
+  const responsibleByCode = new Map<string, string>([["CL-OTHER", UUID_YAKUBOVA]]);
+  const matchBoyko = buildDbAwareManagerMatcher(MGR_BOYKO, "Бойко", TEAM, responsibleByCode, userIdToCatalogMgrId);
+  assert.equal(matchBoyko(r), true);
 }
 
 console.log("dealer-base-management-view-model.test.ts: OK");
