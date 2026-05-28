@@ -13,6 +13,7 @@ import type { OrgSnapshot } from "../use-org-snapshot";
 function row(id: string, partial: Partial<DealerRow> = {}): DealerRow {
   return {
     id,
+    releaseCode: partial.releaseCode ?? id,
     name: partial.name ?? id,
     city: partial.city ?? "Город",
     manager: partial.manager ?? "",
@@ -104,6 +105,31 @@ const scope: AssignmentsScope = {
     assignmentsScopeIsActive({ ownCodes: new Set(), teamCodes: new Set() }),
     false,
   );
+}
+
+// Промт 70.1: scope матчит catalog code (releaseCode), не slug id.
+{
+  const codeRows = [
+    row("client-ma-ma036881", { releaseCode: "MA-MA036881" }),
+    row("client-000000027", { releaseCode: "000000027" }),
+    row("client-some-other", { releaseCode: "MA-OTHER" }),
+  ];
+  const codeScope: AssignmentsScope = {
+    ownCodes: new Set(["MA-MA036881", "000000027"]),
+    teamCodes: new Set(),
+  };
+  const out = roleScopedDealerRowsForReal(codeRows, managerSnap, "sales_manager", undefined, codeScope);
+  assert.deepEqual(
+    out.map((r) => r.releaseCode).sort(),
+    ["000000027", "MA-MA036881"],
+    "matches by releaseCode when id differs from client_assignments.client_code",
+  );
+  assert.equal(out.length, 2);
+  const byIdOnly = roleScopedDealerRowsForReal(codeRows, managerSnap, "sales_manager", undefined, {
+    ownCodes: new Set(["client-ma-ma036881"]),
+    teamCodes: new Set(),
+  });
+  assert.equal(byIdOnly.length, 1, "id-only scope still works as fallback");
 }
 
 console.log("dealer-base-real-scope-assignments: ok");
