@@ -1,11 +1,24 @@
 /**
- * Юридические лица дилера (localStorage, без backend).
+ * Юридические лица дилера.
+ * Чтение: Postgres (кеш) → fallback localStorage. Запись: API.
  */
 
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import { getPassportLegalEntities } from "@/lib/dealer-card-release-signals";
 import { canEditClientNextStep } from "@/lib/client-next-step-data";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
+import {
+  apiArchiveLegalEntity,
+  apiCreateFull,
+  apiDeleteLegalEntity,
+  apiPatchFull,
+} from "@/lib/dealer-legal-entities-api";
+import {
+  refreshDbLegalEntitiesForDealer,
+  replaceLegalEntityIdInCache,
+  resolveLegalEntitiesStateForDealer,
+  upsertOptimisticLegalEntity,
+} from "@/lib/dealer-legal-entities-db-cache";
 
 export const DEALER_LEGAL_ENTITIES_STORAGE_KEY = "tandoor-dealer-legal-entities-v1";
 export const DEALER_LEGAL_ENTITIES_EVENT = "tandoor-dealer-legal-entities-changed";
@@ -54,31 +67,13 @@ function emptyState(): DealerLegalEntitiesState {
   return { entitiesByDealer: {}, historyByDealer: {} };
 }
 
-function isoNow(): string {
-  return new Date().toISOString();
-}
-
-function formatMetaRu(iso: string, name: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso.trim());
-  if (!m) return `${iso.trim()} · ${name}`;
-  return `${m[3]}.${m[2]}.${m[1]} · ${name}`;
-}
-
-function pushHistory(
-  state: DealerLegalEntitiesState,
-  dealerId: string,
-  body: string,
-  updatedByName: string,
-): void {
-  const at = isoNow();
-  const ev: DealerLegalEntityHistoryEntry = {
-    id: `leh-${dealerId}-${Date.now()}`,
-    at,
-    meta: formatMetaRu(at, updatedByName),
-    body,
-  };
-  const prev = state.historyByDealer[dealerId] ?? [];
-  state.historyByDealer[dealerId] = [ev, ...prev].slice(0, 120);
+function scanMaxLegalEntityCode(list: DealerLegalEntity[]): number {
+  let max = 0;
+  for (const e of list) {
+    const m = /^TND-LE-(\d{1,9})$/i.exec(e.internalCode?.trim() ?? "");
+    if (m) max = Math.max(max, parseInt(m[1]!, 10));
+  }
+  return max;
 }
 
 export function loadDealerLegalEntitiesState(): DealerLegalEntitiesState {
@@ -107,28 +102,25 @@ export function allocateNextLegalEntityCodeLocal(): string {
   const st = loadDealerLegalEntitiesState();
   let max = 0;
   for (const list of Object.values(st.entitiesByDealer)) {
-    for (const e of list) {
-      const m = /^TND-LE-(\d{1,9})$/i.exec(e.internalCode?.trim() ?? "");
-      if (m) max = Math.max(max, parseInt(m[1]!, 10));
-    }
+    max = Math.max(max, scanMaxLegalEntityCode(list));
   }
   const n = max + 1;
   return `TND-LE-${String(n).padStart(6, "0")}`;
 }
 
-export function getDealerLegalEntities(
-  dealerId: string,
-  state: DealerLegalEntitiesState = loadDealerLegalEntitiesState(),
-): DealerLegalEntity[] {
-  return [...(state.entitiesByDealer[dealerId] ?? [])];
+function resolveState(dealerId: string, state?: DealerLegalEntitiesState): DealerLegalEntitiesState {
+  return resolveLegalEntitiesStateForDealer(dealerId, state);
+}
+
+export function getDealerLegalEntities(dealerId: string, state?: DealerLegalEntitiesState): DealerLegalEntity[] {
+  const st = state ?? resolveState(dealerId);
+  return [...(st.entitiesByDealer[dealerId] ?? [])];
 }
 
 /** Объединяет юрлица из localStorage и справочные названия из релиза (паспорт). */
-export function getMergedDealerLegalEntities(
-  row: DealerRow,
-  state: DealerLegalEntitiesState = loadDealerLegalEntitiesState(),
-): MergedDealerLegalEntity[] {
-  const stored = getDealerLegalEntities(row.id, state);
+export function getMergedDealerLegalEntities(row: DealerRow, state?: DealerLegalEntitiesState): MergedDealerLegalEntity[] {
+  const st = state ?? resolveState(row.id);
+  const stored = getDealerLegalEntities(row.id, st);
   const storedNames = new Set(stored.map((e) => e.name.trim().toLowerCase()));
   const passport = getPassportLegalEntities(row);
   const seeds: MergedDealerLegalEntity[] = passport
@@ -152,9 +144,17 @@ export function canEditDealerLegalEntities(profile: ReleaseDemoProfile, dealer: 
 
 export function getDealerLegalEntityHistoryEvents(
   dealerId: string,
-  state: DealerLegalEntitiesState = loadDealerLegalEntitiesState(),
+  state?: DealerLegalEntitiesState,
 ): DealerLegalEntityHistoryEntry[] {
-  return [...(state.historyByDealer[dealerId] ?? [])].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+  const st = state ?? resolveState(dealerId);
+  return [...(st.historyByDealer[dealerId] ?? [])].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+}
+
+function fireAndRefresh(dealerId: string, run: () => Promise<{ ok: boolean; id?: string } | boolean>): void {
+  void Promise.resolve(run()).then((result) => {
+    const ok = typeof result === "boolean" ? result : result.ok;
+    if (ok) void refreshDbLegalEntitiesForDealer(dealerId);
+  });
 }
 
 export function addDealerLegalEntity(
@@ -179,34 +179,54 @@ export function addDealerLegalEntity(
 ): string | undefined {
   const name = payload.name.trim();
   if (!name) return undefined;
-  const state = loadDealerLegalEntitiesState();
-  const now = isoNow();
-  const id = `le-${dealerId}-${Date.now()}`;
-  const entity: DealerLegalEntity = {
-    id,
-    internalCode: payload.internalCode?.trim() || allocateNextLegalEntityCodeLocal(),
-    entityType: payload.entityType?.trim() || undefined,
+
+  const now = new Date().toISOString();
+  const optimisticId = `le-${dealerId}-${Date.now()}`;
+  const internalCode = payload.internalCode?.trim() || allocateNextLegalEntityCodeLocal();
+  upsertOptimisticLegalEntity(dealerId, {
+    id: optimisticId,
+    internalCode,
+    entityType: payload.entityType,
     name,
-    inn: payload.inn?.trim() || undefined,
-    kpp: payload.kpp?.trim() || undefined,
-    ogrn: payload.ogrn?.trim() || undefined,
-    legalAddress: payload.legalAddress?.trim() || undefined,
-    actualAddress: payload.actualAddress?.trim() || undefined,
-    primaryContact: payload.primaryContact?.trim() || undefined,
-    phone: payload.phone?.trim() || undefined,
-    email: payload.email?.trim() || undefined,
+    inn: payload.inn,
+    kpp: payload.kpp,
+    ogrn: payload.ogrn,
+    legalAddress: payload.legalAddress,
+    actualAddress: payload.actualAddress,
+    primaryContact: payload.primaryContact,
+    phone: payload.phone,
+    email: payload.email,
     status: payload.status,
-    comment: payload.comment?.trim() || undefined,
+    comment: payload.comment,
     createdAt: now,
     updatedAt: now,
     updatedBy: payload.updatedBy,
     updatedByName: payload.updatedByName,
-  };
-  const prev = state.entitiesByDealer[dealerId] ?? [];
-  state.entitiesByDealer[dealerId] = [entity, ...prev];
-  pushHistory(state, dealerId, `Добавлено юрлицо: ${name}`, payload.updatedByName);
-  saveDealerLegalEntitiesState(state);
-  return id;
+  });
+
+  void apiCreateFull({
+    clientId: dealerId,
+    name,
+    inn: payload.inn,
+    kpp: payload.kpp,
+    ogrn: payload.ogrn,
+    legalAddress: payload.legalAddress,
+    actualAddress: payload.actualAddress,
+    entityType: payload.entityType,
+    primaryContact: payload.primaryContact,
+    phone: payload.phone,
+    email: payload.email,
+    internalCode,
+    status: payload.status,
+    comment: payload.comment,
+    updatedByUserId: payload.updatedBy,
+    updatedByName: payload.updatedByName,
+  }).then((r) => {
+    if (r.ok && r.id) replaceLegalEntityIdInCache(dealerId, optimisticId, r.id);
+    if (r.ok) void refreshDbLegalEntitiesForDealer(dealerId);
+  });
+
+  return optimisticId;
 }
 
 export function updateDealerLegalEntity(
@@ -234,56 +254,22 @@ export function updateDealerLegalEntity(
   updatedByName: string,
 ): void {
   if (entityId.startsWith("passport:")) return;
-  const state = loadDealerLegalEntitiesState();
-  const list = state.entitiesByDealer[dealerId] ?? [];
-  const idx = list.findIndex((e) => e.id === entityId);
-  if (idx < 0) return;
-  const cur = list[idx]!;
-  const now = isoNow();
-  const next: DealerLegalEntity = {
-    ...cur,
-    name: patch.name != null ? patch.name.trim() : cur.name,
-    inn: patch.inn !== undefined ? patch.inn.trim() || undefined : cur.inn,
-    kpp: patch.kpp !== undefined ? patch.kpp.trim() || undefined : cur.kpp,
-    ogrn: patch.ogrn !== undefined ? patch.ogrn.trim() || undefined : cur.ogrn,
-    legalAddress: patch.legalAddress !== undefined ? patch.legalAddress.trim() || undefined : cur.legalAddress,
-    actualAddress: patch.actualAddress !== undefined ? patch.actualAddress.trim() || undefined : cur.actualAddress,
-    entityType: patch.entityType !== undefined ? patch.entityType.trim() || undefined : cur.entityType,
-    primaryContact: patch.primaryContact !== undefined ? patch.primaryContact.trim() || undefined : cur.primaryContact,
-    phone: patch.phone !== undefined ? patch.phone.trim() || undefined : cur.phone,
-    email: patch.email !== undefined ? patch.email.trim() || undefined : cur.email,
-    internalCode: patch.internalCode !== undefined ? patch.internalCode.trim() || undefined : cur.internalCode,
-    status: patch.status ?? cur.status,
-    comment: patch.comment !== undefined ? patch.comment.trim() || undefined : cur.comment,
-    updatedAt: now,
-    updatedBy,
-    updatedByName,
-  };
-  list[idx] = next;
-  state.entitiesByDealer[dealerId] = list;
-  pushHistory(state, dealerId, `Обновлено юрлицо: ${next.name}`, updatedByName);
-  saveDealerLegalEntitiesState(state);
+  fireAndRefresh(dealerId, () =>
+    apiPatchFull(entityId, {
+      ...patch,
+      updatedByUserId: updatedBy,
+      updatedByName,
+    }),
+  );
 }
 
 export function archiveDealerLegalEntity(dealerId: string, entityId: string, updatedBy: string, updatedByName: string): void {
   if (entityId.startsWith("passport:")) return;
-  const state = loadDealerLegalEntitiesState();
-  const list = [...(state.entitiesByDealer[dealerId] ?? [])];
-  const idx = list.findIndex((e) => e.id === entityId);
-  if (idx < 0) return;
-  const cur = list[idx]!;
-  const now = isoNow();
-  list[idx] = { ...cur, status: "archived", updatedAt: now, updatedBy, updatedByName };
-  state.entitiesByDealer[dealerId] = list;
-  pushHistory(state, dealerId, `Юрлицо архивировано: ${cur.name}`, updatedByName);
-  saveDealerLegalEntitiesState(state);
+  fireAndRefresh(dealerId, () => apiArchiveLegalEntity(entityId, updatedBy, updatedByName));
 }
 
 /** Полное удаление записи из хранилища (без события в истории — используйте архив для аудита). */
 export function deleteDealerLegalEntity(dealerId: string, entityId: string): void {
   if (entityId.startsWith("passport:")) return;
-  const state = loadDealerLegalEntitiesState();
-  const list = state.entitiesByDealer[dealerId] ?? [];
-  state.entitiesByDealer[dealerId] = list.filter((e) => e.id !== entityId);
-  saveDealerLegalEntitiesState(state);
+  fireAndRefresh(dealerId, () => apiDeleteLegalEntity(entityId));
 }

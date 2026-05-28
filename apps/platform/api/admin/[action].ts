@@ -4052,6 +4052,35 @@ async function handleMigrationsRun(
     );
     applied.push("client_contacts_cleanup_admin_test_scope_events_v1");
 
+    // Промт 67: юрлица из актуализации (расширение legal_entities + таймлайн)
+    await pool.query(`ALTER TABLE legal_entities ADD COLUMN IF NOT EXISTS internal_code TEXT`);
+    await pool.query(`ALTER TABLE legal_entities ADD COLUMN IF NOT EXISTS entity_type TEXT`);
+    await pool.query(`ALTER TABLE legal_entities ADD COLUMN IF NOT EXISTS actual_address TEXT`);
+    await pool.query(`ALTER TABLE legal_entities ADD COLUMN IF NOT EXISTS primary_contact TEXT`);
+    await pool.query(`ALTER TABLE legal_entities ADD COLUMN IF NOT EXISTS phone TEXT`);
+    await pool.query(`ALTER TABLE legal_entities ADD COLUMN IF NOT EXISTS email TEXT`);
+    await pool.query(`ALTER TABLE legal_entities ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'additional'`);
+    await pool.query(`ALTER TABLE legal_entities ADD COLUMN IF NOT EXISTS comment TEXT`);
+    await pool.query(`ALTER TABLE legal_entities ADD COLUMN IF NOT EXISTS updated_by_user_id UUID`);
+    await pool.query(`ALTER TABLE legal_entities ADD COLUMN IF NOT EXISTS updated_by_name TEXT`);
+    await pool.query(`ALTER TABLE legal_entities ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'manual'`);
+    await pool.query(`ALTER TABLE legal_entities ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT false`);
+    await pool.query(
+      `CREATE TABLE IF NOT EXISTS legal_entity_events (
+         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+         client_id TEXT NOT NULL,
+         legal_entity_id UUID,
+         at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+         meta TEXT,
+         body TEXT NOT NULL,
+         actor_user_id UUID,
+         actor_name TEXT
+       )`,
+    );
+    await pool.query(`CREATE INDEX IF NOT EXISTS ix_legal_entity_events_client ON legal_entity_events(client_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS ix_legal_entity_events_le ON legal_entity_events(legal_entity_id)`);
+    applied.push("dealer_legal_entities_v1");
+
     // Промт 20: impersonation
     await pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS impersonator_user_id uuid NULL REFERENCES users(id) ON DELETE SET NULL`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_sessions_impersonator ON sessions(impersonator_user_id) WHERE impersonator_user_id IS NOT NULL`);

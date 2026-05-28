@@ -43,6 +43,7 @@ import { DealerShowcaseMatrixSummarySection } from "@/components/dealer-showcase
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { useClientContactsHydration } from "@/hooks/use-client-contacts-hydration";
+import { useDealerLegalEntitiesHydration } from "@/hooks/use-dealer-legal-entities-hydration";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { toast } from "@/hooks/use-toast";
 import { displayUserName, useCurrentUser } from "@/hooks/use-current-user";
@@ -749,6 +750,7 @@ function DealerSectionNav({ active }: { active: SectionId }) {
 function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
   const { profile } = useReleaseDemoProfile();
   useClientContactsHydration(baseRow.id);
+  useDealerLegalEntitiesHydration(baseRow.id);
   const actx = useClientBaseActualization();
   const { user } = useCurrentUser();
   const [, setLocation] = useLocation();

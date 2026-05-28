@@ -1,10 +1,17 @@
 /**
- * Legal entities API (Промт 64):
+ * Legal entities API (Промт 64 + 67):
  *   GET  /api/legal-entities/list?clientId=
  *   POST /api/legal-entities/create  { clientId, ...fields }
  *   PATCH /api/legal-entities/patch?id=
  *   DELETE /api/legal-entities/delete?id=
  *   GET|POST /api/legal-entities/trade-point-link
+ *   GET  /api/legal-entities/list-full?clientId=
+ *   GET  /api/legal-entities/history?clientId=
+ *   POST /api/legal-entities/create-full
+ *   PATCH /api/legal-entities/patch-full?id=
+ *   POST /api/legal-entities/archive
+ *   POST /api/legal-entities/set-main
+ *   POST /api/legal-entities/bulk-import
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -24,6 +31,15 @@ import {
   handleTradePointLegalEntityLinkUpsert,
   parseLegalEntityBodyPaymentForm,
 } from "../../shared/legal-entities-handlers.js";
+import {
+  handleLegalEntitiesArchive,
+  handleLegalEntitiesBulkImport,
+  handleLegalEntitiesCreateFull,
+  handleLegalEntitiesHistory,
+  handleLegalEntitiesListFull,
+  handleLegalEntitiesPatchFull,
+  handleLegalEntitiesSetMain,
+} from "../../shared/legal-entities-full-handlers.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -95,6 +111,58 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
     if (action === "trade-point-link" && req.method === "POST") {
       await handleTradePointLegalEntityLinkUpsert(req, res, pool, me);
+      return;
+    }
+
+    if (action === "list-full" && req.method === "GET") {
+      await handleLegalEntitiesListFull(req, res, pool, me);
+      return;
+    }
+
+    if (action === "history" && req.method === "GET") {
+      await handleLegalEntitiesHistory(req, res, pool, me);
+      return;
+    }
+
+    if (action === "create-full" && req.method === "POST") {
+      await handleLegalEntitiesCreateFull(req, res, pool, me);
+      return;
+    }
+
+    if (action === "patch-full" && req.method === "PATCH") {
+      const id = typeof req.query.id === "string" ? req.query.id.trim() : "";
+      if (!UUID_RE.test(id)) {
+        sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите id." });
+        return;
+      }
+      await handleLegalEntitiesPatchFull(req, res, pool, me, id);
+      return;
+    }
+
+    if (action === "archive" && req.method === "POST") {
+      const body = (req.body ?? {}) as { id?: unknown };
+      const id = typeof body.id === "string" ? body.id.trim() : "";
+      if (!UUID_RE.test(id)) {
+        sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите id." });
+        return;
+      }
+      await handleLegalEntitiesArchive(res, pool, me, id, body as { updatedByName?: unknown; updatedByUserId?: unknown });
+      return;
+    }
+
+    if (action === "set-main" && req.method === "POST") {
+      const body = (req.body ?? {}) as { id?: unknown };
+      const id = typeof body.id === "string" ? body.id.trim() : "";
+      if (!UUID_RE.test(id)) {
+        sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите id." });
+        return;
+      }
+      await handleLegalEntitiesSetMain(res, pool, me, id);
+      return;
+    }
+
+    if (action === "bulk-import" && req.method === "POST") {
+      await handleLegalEntitiesBulkImport(req, res, pool, me);
       return;
     }
 
