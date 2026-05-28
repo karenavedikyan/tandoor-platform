@@ -554,6 +554,12 @@ function sanitizeLikeFragment(raw: string): string {
   return raw.replace(/[%_\\]/g, "");
 }
 
+/** Нормализация client_code для сопоставления с client_assignments (как releaseCode/id на фронте). */
+function normalizeAssignmentClientCode(code: unknown): string {
+  if (code == null) return "";
+  return String(code).trim();
+}
+
 async function ropCanAccessUser(pool: PoolLike, targetUserId: string, ropUserId: string): Promise<boolean> {
   const allowed = await pool.query<{ ok: boolean }>(
     `SELECT (
@@ -2941,6 +2947,47 @@ async function handleClientBaseManagerDetail(
   for (const u of users.rows) if (!usersById.has(u.id)) usersById.set(u.id, u);
   const meta = userMeta(managerUserId, usersById);
 
+  const assignmentRows = await pool.query<{ client_code: string }>(
+    `SELECT DISTINCT client_code
+       FROM client_assignments
+      WHERE responsible_user_id = $1::uuid
+        AND client_code IS NOT NULL`,
+    [managerUserId],
+  );
+  const owned = new Set<string>();
+  for (const row of assignmentRows.rows) {
+    const code = normalizeAssignmentClientCode(row.client_code);
+    if (code) owned.add(code);
+  }
+
+  if (owned.size === 0) {
+    sendJson(res, 200, {
+      success: true,
+      manager: {
+        userId: managerUserId,
+        fullName: meta.fullName,
+        teamId: meta.teamId,
+        ropFullName: meta.ropFullName,
+      },
+      clients: [],
+      tradePoints: [],
+    });
+    return;
+  }
+
+  let teamUserIds: string[];
+  if (meta.teamId) {
+    const members = await pool.query<{ user_id: string }>(
+      `SELECT user_id FROM user_team_memberships WHERE team_id = $1::uuid`,
+      [meta.teamId],
+    );
+    teamUserIds = members.rows.map((r) => r.user_id).filter((id) => UUID_RE.test(id));
+    if (!teamUserIds.includes(managerUserId)) teamUserIds.push(managerUserId);
+  } else {
+    teamUserIds = [managerUserId];
+  }
+  const teamUserIdSet = new Set(teamUserIds);
+
   const rows = await pool.query<ActualizationDedupeStateRow>(
     `SELECT scope_key, user_id, role, state, updated_at
        FROM client_base_actualization_state
@@ -2950,7 +2997,7 @@ async function handleClientBaseManagerDetail(
   for (const row of rows.rows) {
     const scopeId = scopeUserId(String(row.scope_key));
     const owner = row.user_id && UUID_RE.test(row.user_id) ? row.user_id : scopeId ? legacyScopeToUuid(scopeId) : null;
-    if (owner === managerUserId) states.push(coerceActualizationState(row.state));
+    if (owner && teamUserIdSet.has(owner)) states.push(coerceActualizationState(row.state));
   }
   const merged = mergeActualizationStates(states.length > 0 ? states : [actualizationEmptyState()]);
   const clients: Array<Record<string, unknown>> = [];
@@ -3005,6 +3052,17 @@ async function handleClientBaseManagerDetail(
       updatedAt: stateDate(fields, tp.updatedAt ?? tp.createdAt),
     });
   }
+
+  const filteredClients = clients.filter((c) => {
+    const id = normalizeAssignmentClientCode(c.id);
+    if (id && owned.has(id)) return true;
+    const inn = normalizeAssignmentClientCode(c.inn);
+    if (inn && owned.has(inn)) return true;
+    return false;
+  });
+  const filteredClientIds = new Set(filteredClients.map((c) => String(c.id)));
+  const filteredTradePoints = tradePoints.filter((tp) => filteredClientIds.has(String(tp.clientId)));
+
   sendJson(res, 200, {
     success: true,
     manager: {
@@ -3013,8 +3071,8 @@ async function handleClientBaseManagerDetail(
       teamId: meta.teamId,
       ropFullName: meta.ropFullName,
     },
-    clients: clients.sort((a, b) => String(a.fullName).localeCompare(String(b.fullName), "ru")),
-    tradePoints,
+    clients: filteredClients.sort((a, b) => String(a.fullName).localeCompare(String(b.fullName), "ru")),
+    tradePoints: filteredTradePoints,
   });
 }
 
