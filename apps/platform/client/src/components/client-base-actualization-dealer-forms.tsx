@@ -4,6 +4,7 @@
 
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -73,6 +74,8 @@ import {
   type NameMatchCandidate,
 } from "@/lib/client-base-actualization-stable-ids";
 import { mergeDealerRowWithActualization } from "@/lib/client-base-actualization-data-merge";
+import { upsertPrimaryDealerContactFromEditForm } from "@/lib/client-contacts";
+import { refreshDbContactsForDealer } from "@/lib/client-contacts-db-cache";
 import {
   mergeActualizationState,
   type DealerActualizationOverride,
@@ -413,6 +416,7 @@ export type DealerActualizationEditDialogProps = {
 export function DealerActualizationEditDialog(props: DealerActualizationEditDialogProps): ReactElement {
   const { open, onOpenChange, baseRow, profile } = props;
   const { persist, state } = useClientBaseActualization();
+  const queryClient = useQueryClient();
   const passportSave = useSectionSaveFeedback();
   const responsiblesSave = useSectionSaveFeedback();
   const logisticsSave = useSectionSaveFeedback();
@@ -978,7 +982,27 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
                 phase={contactsSave.phase}
                 onSave={() =>
                   void contactsSave.runSave(async () => {
-                    return persistAll();
+                    const ok = await persistAll();
+                    if (!ok) return false;
+                    const phoneFormatted = phone.trim() ? formatRussianPhoneInput(phone) : "";
+                    const syncOk = await upsertPrimaryDealerContactFromEditForm({
+                      dealerId: baseRow.id,
+                      name: name.trim(),
+                      nameFallback: baseRow.name,
+                      phone: phoneFormatted,
+                      email: email.trim(),
+                      comment: comment.trim(),
+                      profile,
+                    });
+                    if (!syncOk) {
+                      toast({
+                        title: "Сохранено локально, контакт синхронизируется при следующем входе",
+                      });
+                    } else {
+                      await queryClient.invalidateQueries({ queryKey: ["client-contacts", baseRow.id] });
+                      void refreshDbContactsForDealer(baseRow.id);
+                    }
+                    return true;
                   })
                 }
               />

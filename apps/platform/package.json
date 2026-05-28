@@ -37,7 +37,8 @@
     "test:rop-real-scope": "tsx client/src/lib/__tests__/dealer-base-real-scope.test.ts",
     "test:dealer-base-clients-selfheal": "tsx client/src/lib/__tests__/dealer-base-clients-selfheal.test.ts",
     "test:assignments-scope": "tsx client/src/lib/__tests__/dealer-base-real-scope-assignments.test.ts",
-    "test:management-view-model": "tsx client/src/lib/__tests__/dealer-base-management-view-model.test.ts"
+    "test:management-view-model": "tsx client/src/lib/__tests__/dealer-base-management-view-model.test.ts",
+    "test:dealer-edit-contact-sync": "tsx client/src/lib/__tests__/dealer-edit-contact-sync.test.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
