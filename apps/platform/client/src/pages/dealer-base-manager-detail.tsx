@@ -50,7 +50,9 @@ import {
   type ManagerHeatLevel,
 } from "@/lib/manager-load-heat";
 import { getClientCategoryBadgeClass, getClientCategoryLabel } from "@/lib/client-category";
+import { ManagerTradePointsTab } from "@/components/trade-points/manager-trade-points-tab";
 import { buildHashPath } from "@/lib/hash-route-utils";
+import { resolveManagerApiUserId } from "@/lib/trade-points-overview-view-model";
 import { cn } from "@/lib/utils";
 import { useOrgSnapshot } from "@/lib/use-org-snapshot";
 import { UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE } from "@shared/admin/actualization-dedupe";
@@ -172,7 +174,9 @@ export default function DealerBaseManagerDetailPage() {
   }, [managerCtx, heatLevel]);
 
   const [segmentFilter, setSegmentFilter] = useState<DealerBaseSegmentKey | null>(null);
-  const [activeTab, setActiveTab] = useState<"clients" | "cities" | "attention">("clients");
+  const [activeTab, setActiveTab] = useState<"clients" | "cities" | "trade_points" | "attention">("clients");
+
+  const managerApiUserId = useMemo(() => resolveManagerApiUserId(managerId), [managerId]);
 
   const filteredClients = useMemo(() => {
     if (!dashboard) return [];
@@ -356,12 +360,15 @@ export default function DealerBaseManagerDetailPage() {
 
       <section data-testid="section-manager-detail-tabs">
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
-          <TabsList className="grid h-auto w-full grid-cols-3 gap-1 p-1">
+          <TabsList className="grid h-auto w-full grid-cols-2 gap-1 p-1 sm:grid-cols-4">
             <TabsTrigger value="clients" className="text-xs sm:text-sm" data-testid="tab-manager-clients">
               Клиенты ({filteredClients.length})
             </TabsTrigger>
             <TabsTrigger value="cities" className="text-xs sm:text-sm" data-testid="tab-manager-cities">
               Города ({dashboard.cities.length})
+            </TabsTrigger>
+            <TabsTrigger value="trade_points" className="text-xs sm:text-sm" data-testid="tab-manager-trade-points">
+              Торговые точки
             </TabsTrigger>
             <TabsTrigger value="attention" className="text-xs sm:text-sm" data-testid="tab-manager-attention">
               Внимание ({dashboard.attentionRows.length})
@@ -453,6 +460,10 @@ export default function DealerBaseManagerDetailPage() {
                 ))}
               </div>
             )}
+          </TabsContent>
+
+          <TabsContent value="trade_points" className="mt-3">
+            <ManagerTradePointsTab managerUserId={managerApiUserId} />
           </TabsContent>
 
           <TabsContent value="attention" className="mt-3">
