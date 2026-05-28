@@ -20,6 +20,10 @@ import {
   Table2,
   Trash2,
 } from "lucide-react";
+import {
+  TradePointRowQuickMoveActions,
+  type TradePointListRowQuickMoveProps,
+} from "@/components/trade-point-row-quick-move-actions";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -300,14 +304,12 @@ export default function TradePointsPage(): ReactElement {
   const [quickPreset, setQuickPreset] = useState<QuickPreset>("all");
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
-  const [archiveTarget, setArchiveTarget] = useState<TradePointListRow | null>(null);
-  const [archiveBusy, setArchiveBusy] = useState(false);
-
   const [bulkDeleteMode, setBulkDeleteMode] = useState(false);
   /** В bulk-режиме: показать также ТТ без права архива (по умолчанию скрыты). */
   const [showIneligibleInBulkMode, setShowIneligibleInBulkMode] = useState(false);
   const [selectedBulkTpKeys, setSelectedBulkTpKeys] = useState<Set<string>>(() => new Set());
   const [bulkArchiveDialogOpen, setBulkArchiveDialogOpen] = useState(false);
+  const [bulkSoftArchiveDialogOpen, setBulkSoftArchiveDialogOpen] = useState(false);
   const [bulkArchiveBusy, setBulkArchiveBusy] = useState(false);
 
   const mergedRowsActivePortfolioForManagement = useMemo(() => {
@@ -826,37 +828,87 @@ export default function TradePointsPage(): ReactElement {
 
   const activeFilterCount = activeFilterChips.length;
 
-  /** Промт 46: single-delete ТТ из /trade-points шлёт в КОРЗИНУ. */
-  const confirmArchive = useCallback(async () => {
-    if (!archiveTarget || !actx.enabled) return;
-    setArchiveBusy(true);
-    const tp = archiveTarget.point;
-    const uid = user?.id ?? profile.personaUserId;
-    const uname = displayUserName(user).trim() || userLabelFromProfile(profile);
-    const info = makeTrashedTradePointInfo({
-      tradePointId: tp.id,
-      dealerId: archiveTarget.dealerId,
-      by: { userId: uid, userName: uname },
-      snapshot: snapshotTradePointFromRow({
-        name: tp.name,
-        address: tp.address,
-        city: tp.city,
-        tradePointCode: tp.releaseCode ?? null,
-        dealerFullName: archiveTarget.dealerName ?? archiveTarget.dealer?.name ?? null,
-      }),
-      source: "client_card_delete",
-    });
-    const r = await actx.persist((prev) =>
-      mergeActualizationState(prev, {
-        trashedTradePointsById: { ...prev.trashedTradePointsById, [tp.id]: info },
-      }),
-    );
-    setArchiveBusy(false);
-    setArchiveTarget(null);
-    if (r.success)
-      toast({ title: "Торговая точка перемещена в корзину", description: "Хранится 14 дней. Восстановить можно из раздела «Корзина»." });
-    else toast({ title: "Не удалось переместить в корзину", variant: "destructive" });
-  }, [archiveTarget, actx, profile, user]);
+  const trashActor = useMemo(
+    () => ({
+      userId: user?.id ?? profile.personaUserId,
+      userName: displayUserName(user).trim() || userLabelFromProfile(profile),
+    }),
+    [user, profile],
+  );
+
+  const handleRowArchiveTp = useCallback(
+    async (row: TradePointListRow) => {
+      if (!actx.enabled) return;
+      const now = new Date().toISOString();
+      const r = await actx.persist((prev) =>
+        mergeActualizationState(prev, {
+          archivedTradePointsById: {
+            ...prev.archivedTradePointsById,
+            [row.tradePointId]: {
+              tradePointId: row.tradePointId,
+              dealerId: row.dealerId,
+              archivedAt: now,
+              archivedBy: trashActor.userId,
+              archivedByName: trashActor.userName,
+              source: "manual_actualization",
+            },
+          },
+        }),
+      );
+      if (r.success) {
+        toast({
+          title: "Торговая точка перемещена в Архив",
+          description: "Восстановить можно из раздела «Корзина» → Архив.",
+        });
+      } else {
+        toast({ title: "Не удалось сохранить", variant: "destructive" });
+      }
+    },
+    [actx, trashActor],
+  );
+
+  const handleRowTrashTp = useCallback(
+    async (row: TradePointListRow) => {
+      if (!actx.enabled) return;
+      const tp = row.point;
+      const info = makeTrashedTradePointInfo({
+        tradePointId: tp.id,
+        dealerId: row.dealerId,
+        by: trashActor,
+        snapshot: snapshotTradePointFromRow({
+          name: tp.name,
+          address: tp.address,
+          city: tp.city,
+          tradePointCode: tp.releaseCode ?? null,
+          dealerFullName: row.dealerName ?? row.dealer?.name ?? null,
+        }),
+        source: "client_card_delete",
+      });
+      const r = await actx.persist((prev) =>
+        mergeActualizationState(prev, {
+          trashedTradePointsById: { ...prev.trashedTradePointsById, [tp.id]: info },
+        }),
+      );
+      if (r.success) {
+        toast({
+          title: "Торговая точка перемещена в Корзину",
+          description: "Хранится 14 дней. Восстановить можно из раздела «Корзина».",
+        });
+      } else {
+        toast({ title: "Не удалось переместить в корзину", variant: "destructive" });
+      }
+    },
+    [actx, trashActor],
+  );
+
+  const tpRowQuickMoveProps = useMemo((): TradePointListRowQuickMoveProps | undefined => {
+    if (!canShowBulkTradePointControls || bulkDeleteMode || showArchived) return undefined;
+    return {
+      canMoveRow: (r) => canArchiveRow(r),
+      onArchive: (r) => void handleRowArchiveTp(r),
+      onTrash: (r) => void handleRowTrashTp(r),
+    };
+  }, [canShowBulkTradePointControls, bulkDeleteMode, showArchived, canArchiveRow, handleRowArchiveTp, handleRowTrashTp]);
 
   const rowsByCompositeKey = useMemo(() => new Map(filteredSorted.map((x) => [rowKey(x), x])), [filteredSorted]);
 
@@ -904,6 +956,47 @@ export default function TradePointsPage(): ReactElement {
       toast({ title: "Не удалось переместить в корзину", variant: "destructive" });
     }
   }, [selectedBulkTpKeys, archivableTpKeysInView, actx, profile, user, rowsByCompositeKey]);
+
+  const confirmBulkSoftArchiveTps = useCallback(async () => {
+    if (!actx.enabled) return;
+    const keys = Array.from(selectedBulkTpKeys).filter((k) => archivableTpKeysInView.has(k));
+    if (keys.length === 0) {
+      setBulkSoftArchiveDialogOpen(false);
+      return;
+    }
+    setBulkArchiveBusy(true);
+    const now = new Date().toISOString();
+    const r = await actx.persist((prev) => {
+      const next = { ...prev.archivedTradePointsById };
+      for (const key of keys) {
+        const row = rowsByCompositeKey.get(key);
+        if (!row || row.isArchived || row.isVirtual) continue;
+        if (!canEditDealerDuringActualization(profile, row.dealer)) continue;
+        if (!canArchiveTradePointDuringActualization(profile, row.dealer, row.point)) continue;
+        next[row.tradePointId] = {
+          tradePointId: row.tradePointId,
+          dealerId: row.dealerId,
+          archivedAt: now,
+          archivedBy: trashActor.userId,
+          archivedByName: trashActor.userName,
+          source: "manual_actualization",
+        };
+      }
+      return mergeActualizationState(prev, { archivedTradePointsById: next });
+    });
+    setBulkArchiveBusy(false);
+    if (r.success) {
+      toast({
+        title: `Перемещено в Архив: ${keys.length}`,
+        description: "Архив доступен через переключатель «Архив ТТ» или в разделе «Корзина».",
+      });
+      setSelectedBulkTpKeys(new Set());
+      setBulkDeleteMode(false);
+      setBulkSoftArchiveDialogOpen(false);
+    } else {
+      toast({ title: "Не удалось сохранить", variant: "destructive" });
+    }
+  }, [selectedBulkTpKeys, archivableTpKeysInView, actx, profile, rowsByCompositeKey, trashActor]);
 
   const tpHref = (r: TradePointListRow) => `/dealers/${encodeURIComponent(r.dealerId)}/trade-points/${encodeURIComponent(r.tradePointId)}`;
   const dealerHref = (r: TradePointListRow) => `/dealers/${encodeURIComponent(r.dealerId)}`;
@@ -1424,8 +1517,8 @@ export default function TradePointsPage(): ReactElement {
                 }}
               >
                 <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
-                <span className="hidden sm:inline">Выбрать для удаления</span>
-                <span className="sm:hidden">Удалить ТТ</span>
+                <span className="hidden sm:inline">Выбрать для перемещения</span>
+                <span className="sm:hidden">Выбрать ТТ</span>
               </Button>
             ) : (
               <Button
@@ -1496,13 +1589,25 @@ export default function TradePointsPage(): ReactElement {
                 </Button>
                 <Button
                   type="button"
+                  variant="default"
+                  size="default"
+                  className="min-h-11 w-full text-base font-bold sm:min-h-10 sm:w-auto"
+                  data-testid="button-trade-points-bulk-soft-archive"
+                  disabled={bulkSelectedVisibleCount === 0}
+                  onClick={() => setBulkSoftArchiveDialogOpen(true)}
+                >
+                  Переместить в Архив ({bulkSelectedVisibleCount})
+                </Button>
+                <Button
+                  type="button"
                   variant="outline"
                   size="default"
                   className="min-h-11 w-full border-primary/40 bg-primary/10 text-base font-bold text-foreground hover:bg-primary/15 sm:min-h-10 sm:w-auto"
                   data-testid="button-trade-points-bulk-archive"
+                  disabled={bulkSelectedVisibleCount === 0}
                   onClick={() => setBulkArchiveDialogOpen(true)}
                 >
-                  Удалить / в архив
+                  Переместить в Корзину ({bulkSelectedVisibleCount})
                 </Button>
               </div>
             </div>
@@ -1768,18 +1873,8 @@ export default function TradePointsPage(): ReactElement {
                           <Link href={dealerHref(r)}>К клиенту</Link>
                         </Button>
                         {!bulkDeleteMode && !canArchiveRow(r) ? renderArchiveHint(r) : null}
-                        {!bulkDeleteMode && canArchiveRow(r) ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="h-8 w-8 shrink-0 border-border p-0 text-muted-foreground hover:bg-muted"
-                            data-testid={`button-trade-point-list-delete-${r.tradePointId}`}
-                            title="В архив"
-                            onClick={() => setArchiveTarget(r)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" aria-hidden />
-                          </Button>
+                        {tpRowQuickMoveProps ? (
+                          <TradePointRowQuickMoveActions row={r} rowQuickMove={tpRowQuickMoveProps} />
                         ) : null}
                       </div>
                     </td>
@@ -1851,18 +1946,8 @@ export default function TradePointsPage(): ReactElement {
                       <Link href={dealerHref(r)}>К клиенту</Link>
                     </Button>
                     {!bulkDeleteMode && !canArchiveRow(r) ? renderArchiveHint(r) : null}
-                    {!bulkDeleteMode && canArchiveRow(r) ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="h-8 w-8 shrink-0 border-border p-0 text-muted-foreground hover:bg-muted"
-                        data-testid={`button-trade-point-list-delete-${r.tradePointId}`}
-                        title="В архив"
-                        onClick={() => setArchiveTarget(r)}
-                      >
-                        <Trash2 className="h-4 w-4" aria-hidden />
-                      </Button>
+                    {tpRowQuickMoveProps ? (
+                      <TradePointRowQuickMoveActions row={r} rowQuickMove={tpRowQuickMoveProps} />
                     ) : null}
                   </div>
                 </li>
@@ -1907,6 +1992,10 @@ export default function TradePointsPage(): ReactElement {
                   </div>
                   <div className="mt-auto flex flex-wrap items-center gap-1 border-t border-border/60 pt-1.5">
                     {renderTpContactIcons(r, "compact")}
+                    {!bulkDeleteMode && !canArchiveRow(r) ? renderArchiveHint(r) : null}
+                    {tpRowQuickMoveProps ? (
+                      <TradePointRowQuickMoveActions row={r} rowQuickMove={tpRowQuickMoveProps} archiveTestIdPrefix="trade-point-grid" />
+                    ) : null}
                     <Button asChild size="sm" variant="secondary" className="ml-auto h-7 shrink-0 px-2 text-[11px] font-semibold">
                       <Link href={tpHref(r)}>Открыть</Link>
                     </Button>
@@ -2009,17 +2098,8 @@ export default function TradePointsPage(): ReactElement {
                           <Link href={dealerHref(r)}>К клиенту</Link>
                         </Button>
                         {!bulkDeleteMode && !canArchiveRow(r) ? renderArchiveHint(r) : null}
-                        {!bulkDeleteMode && canArchiveRow(r) ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="border-border text-muted-foreground hover:bg-muted"
-                            data-testid={`button-trade-point-list-delete-${r.tradePointId}`}
-                            onClick={() => setArchiveTarget(r)}
-                          >
-                            В архив
-                          </Button>
+                        {tpRowQuickMoveProps ? (
+                          <TradePointRowQuickMoveActions row={r} rowQuickMove={tpRowQuickMoveProps} archiveTestIdPrefix="trade-point-large" />
                         ) : null}
                       </div>
                     </div>
@@ -2033,24 +2113,24 @@ export default function TradePointsPage(): ReactElement {
 
       {filteredSorted.length === 0 ? <p className="text-sm text-muted-foreground">Нет торговых точек по выбранным фильтрам.</p> : null}
 
-      <AlertDialog open={archiveTarget != null} onOpenChange={(o) => !o && !archiveBusy && setArchiveTarget(null)}>
-        <AlertDialogContent>
+      <AlertDialog open={bulkSoftArchiveDialogOpen} onOpenChange={(o) => !o && !bulkArchiveBusy && setBulkSoftArchiveDialogOpen(false)}>
+        <AlertDialogContent data-testid="dialog-trade-points-bulk-soft-archive-confirm">
           <AlertDialogHeader>
-            <AlertDialogTitle>Переместить торговую точку в корзину?</AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="space-y-2 text-sm text-muted-foreground">
-                {archiveTarget ? (
-                  <p>
-                    «{archiveTarget.tradePointName}» будет храниться в корзине 14 дней. Восстановить можно в любой момент на странице «Корзина». Через 14 дней удалится окончательно.
-                  </p>
-                ) : null}
-              </div>
+            <AlertDialogTitle>Переместить {bulkSelectedVisibleCount} ТТ в Архив?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Торговые точки исчезнут из активной базы и появятся в Архиве. Восстановить их обратно можно в любой момент (раздел Корзина → Архив).
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={archiveBusy}>Отмена</AlertDialogCancel>
-            <AlertDialogAction disabled={archiveBusy} onClick={() => void confirmArchive()}>
-              {archiveBusy ? "Перемещение…" : "Переместить в корзину"}
+            <AlertDialogCancel disabled={bulkArchiveBusy} data-testid="button-trade-points-bulk-soft-archive-cancel">
+              Отмена
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={bulkArchiveBusy || bulkSelectedVisibleCount === 0}
+              data-testid="button-trade-points-bulk-soft-archive-confirm"
+              onClick={() => void confirmBulkSoftArchiveTps()}
+            >
+              {bulkArchiveBusy ? "Сохранение…" : "Переместить в Архив"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

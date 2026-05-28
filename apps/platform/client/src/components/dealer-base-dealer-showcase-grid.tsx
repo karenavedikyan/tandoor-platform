@@ -34,6 +34,10 @@ import type { DealerShipmentDayId } from "@/lib/dealer-shipment-days";
 import { getDealerShipmentStatus } from "@/lib/dealer-shipment-days";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DealerBulkDeleteCheckbox } from "@/components/dealer-bulk-delete-checkbox";
+import {
+  DealerRowQuickMoveActions,
+  type DealerListRowQuickMoveProps,
+} from "@/components/dealer-row-quick-move-actions";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import {
   cleanContactDisplay as cleanContact,
@@ -66,6 +70,7 @@ export type DealerShowcaseGridProps = {
   shipmentActiveDayId?: DealerShipmentDayId | null;
   shipmentUserId?: string;
   archiveBulk?: ArchiveBulk;
+  rowQuickMove?: DealerListRowQuickMoveProps;
 };
 
 function dealerClientCode(row: DealerRow, act: ActualizationState): string {
@@ -336,6 +341,7 @@ function DealerShowcaseCard({
   shipmentActiveDayId,
   shipmentUserId,
   archiveBulk,
+  rowQuickMove,
 }: {
   row: DealerRow;
   act: ActualizationState;
@@ -348,6 +354,7 @@ function DealerShowcaseCard({
   shipmentActiveDayId?: DealerShipmentDayId | null;
   shipmentUserId?: string;
   archiveBulk?: ArchiveBulk;
+  rowQuickMove?: DealerListRowQuickMoveProps;
 }) {
   const wp = workPlanUserId && workPlanState;
   const hidden = wp ? isDealerHiddenForUser(workPlanUserId, row.id, workPlanState) : false;
@@ -558,6 +565,11 @@ function DealerShowcaseCard({
           </div>
 
           <div className="flex w-full shrink-0 flex-col gap-2 md:w-auto md:min-w-[11rem]">
+            {rowQuickMove ? (
+              <div className="flex items-center justify-end gap-0.5 md:justify-start">
+                <DealerRowQuickMoveActions row={row} rowQuickMove={rowQuickMove} />
+              </div>
+            ) : null}
             <Button
               asChild
               size="sm"
@@ -644,6 +656,7 @@ export function DealerBaseDealerShowcaseGrid(props: DealerShowcaseGridProps) {
     shipmentActiveDayId,
     shipmentUserId,
     archiveBulk,
+    rowQuickMove,
   } = props;
 
   if (rows.length === 0) {
@@ -672,6 +685,7 @@ export function DealerBaseDealerShowcaseGrid(props: DealerShowcaseGridProps) {
             shipmentActiveDayId={shipmentActiveDayId}
             shipmentUserId={shipmentUserId}
             archiveBulk={archiveBulk}
+            rowQuickMove={rowQuickMove}
           />
         ))}
       </div>
