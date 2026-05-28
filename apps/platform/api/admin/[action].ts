@@ -22,31 +22,7 @@ import {
   buildContactMigrationPlanForState,
   type ContactMigrationPlan,
 } from "../../shared/admin/contacts-migration.js";
-
-type NeonHttp = ReturnType<typeof neon>;
-interface PoolLike {
-  query: <T = Record<string, unknown>>(
-    text: string,
-    params?: unknown[],
-  ) => Promise<{ rows: T[]; rowCount?: number }>;
-}
-function makePoolFromNeon(sql: NeonHttp): PoolLike {
-  return {
-    async query<T>(text: string, params?: unknown[]): Promise<{ rows: T[]; rowCount?: number }> {
-      const callable = sql as unknown as (s: string, p?: unknown[]) => Promise<unknown>;
-      const raw = (await callable(text, params ?? [])) as unknown;
-      if (Array.isArray(raw)) {
-        return { rows: raw as T[] };
-      }
-      if (raw && typeof raw === "object" && "rows" in (raw as object)) {
-        const o = raw as { rows: T[]; rowCount?: number; length?: number };
-        const rowCount = typeof o.rowCount === "number" ? o.rowCount : o.length;
-        return { rows: o.rows ?? [], rowCount };
-      }
-      return { rows: [] as T[] };
-    },
-  };
-}
+import { makePoolFromNeon, type PoolLike } from "../../server/db/neon-client.js";
 
 type UserRole =
   | "director"

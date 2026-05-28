@@ -202,7 +202,8 @@ export type SqlFn = (strings: TemplateStringsArray, ...params: unknown[]) => Pro
 
 async function createSqlExecutor(connectionString: string): Promise<SqlFn> {
   const { neon } = await import("@neondatabase/serverless");
-  return neon(connectionString);
+  const { wrapNeonWithShadow } = await import("../../server/db/neon-client.js");
+  return wrapNeonWithShadow(neon(connectionString), "actualization") as SqlFn;
 }
 
 /**

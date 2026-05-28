@@ -9,20 +9,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { neon } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-
-type NeonHttp = ReturnType<typeof neon>;
-interface PoolLike {
-  query: <T = Record<string, unknown>>(text: string, params?: unknown[]) => Promise<{ rows: T[] }>;
-}
-function makePoolFromNeon(sql: NeonHttp): PoolLike {
-  return {
-    async query<T>(text: string, params?: unknown[]): Promise<{ rows: T[] }> {
-      const callable = sql as unknown as (s: string, p?: unknown[]) => Promise<unknown>;
-      const rows = (await callable(text, params ?? [])) as T[];
-      return { rows };
-    },
-  };
-}
+import { makePoolFromNeon, type PoolLike } from "../../server/db/neon-client.js";
 
 type UserRole =
   | "director"
