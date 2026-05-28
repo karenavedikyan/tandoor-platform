@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { EntityListFilters } from "@/components/entity-list/entity-list-filters";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -26,6 +26,11 @@ import {
   type TradePointsManagerDetailTp,
 } from "@/lib/trade-points-overview-api";
 import type { TradePointDetailFilter } from "@/lib/trade-points-management-view-model";
+import {
+  buildCityOptionsFromRows,
+  countActiveEntityListFilters,
+  matchesSearch,
+} from "@/lib/entity-list-filtering";
 
 const FILTER_LABELS: Record<TradePointDetailFilter, string> = {
   all: "Все",
@@ -82,7 +87,8 @@ type Props = {
 
 export function ManagerTradePointsTab({ managerUserId }: Props) {
   const [tpFilter, setTpFilter] = useState<TradePointDetailFilter>("all");
-  const [search, setSearch] = useState("");
+  const [searchQ, setSearchQ] = useState("");
+  const [cityF, setCityF] = useState("all");
 
   const detailQ = useQuery({
     queryKey: ["trade-points-manager-detail", managerUserId],
@@ -106,16 +112,28 @@ export function ManagerTradePointsTab({ managerUserId }: Props) {
     return set.size;
   }, [data]);
 
-  const filtered = useMemo(() => {
+  const segmentFiltered = useMemo(() => {
     if (!data) return [];
-    const q = search.trim().toLowerCase();
-    return data.tradePoints.filter((tp) => {
-      if (!tpMatchesFilter(tp, tpFilter)) return false;
-      if (!q) return true;
-      const hay = [tp.name, tp.address, tp.city, tp.clientFullName].filter(Boolean).join(" ").toLowerCase();
-      return hay.includes(q);
-    });
-  }, [data, tpFilter, search]);
+    return data.tradePoints.filter((tp) => tpMatchesFilter(tp, tpFilter));
+  }, [data, tpFilter]);
+
+  const cityOptions = useMemo(() => buildCityOptionsFromRows(segmentFiltered), [segmentFiltered]);
+
+  const filtered = useMemo(() => {
+    let rows = segmentFiltered;
+    if (cityF !== "all") rows = rows.filter((tp) => (tp.city ?? "").trim() === cityF);
+    if (searchQ.trim()) {
+      rows = rows.filter((tp) => matchesSearch(searchQ, [tp.name, tp.address, tp.city, tp.clientFullName]));
+    }
+    return rows;
+  }, [segmentFiltered, cityF, searchQ]);
+
+  const listFilterActiveCount = countActiveEntityListFilters([cityF]);
+
+  const resetListFilters = () => {
+    setSearchQ("");
+    setCityF("all");
+  };
 
   if (detailQ.isLoading) {
     return (
@@ -195,14 +213,22 @@ export function ManagerTradePointsTab({ managerUserId }: Props) {
         ))}
       </div>
 
-      <Input
-        type="search"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        placeholder="Поиск по названию, адресу, городу, клиенту…"
-        className="h-9"
-        data-testid="input-manager-tp-search"
-        aria-label="Поиск торговых точек"
+      <EntityListFilters
+        search={searchQ}
+        onSearchChange={setSearchQ}
+        searchPlaceholder="Поиск по названию, адресу, городу, клиенту…"
+        resultCount={filtered.length}
+        activeCount={listFilterActiveCount}
+        onReset={resetListFilters}
+        filters={[
+          {
+            key: "city",
+            label: "Город",
+            value: cityF,
+            onChange: setCityF,
+            options: cityOptions,
+          },
+        ]}
       />
 
       {total === 0 ? (
@@ -232,7 +258,20 @@ export function ManagerTradePointsTab({ managerUserId }: Props) {
                     <TableCell className="hidden max-w-[160px] truncate text-sm text-muted-foreground sm:table-cell">
                       {tp.address ?? "—"}
                     </TableCell>
-                    <TableCell className="hidden text-sm text-muted-foreground md:table-cell">{tp.city ?? "—"}</TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      {tp.city ? (
+                        <button
+                          type="button"
+                          className="text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                          onClick={() => setCityF(tp.city!.trim())}
+                          data-testid={`link-manager-tp-city-${tp.id}`}
+                        >
+                          {tp.city}
+                        </button>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
                     <TableCell className="max-w-[140px] truncate text-sm">
                       <span className="block truncate">{tp.clientFullName}</span>
                       <span className={cn("text-[11px]", TP_STATUS_CLASS[tp.clientStatus])}>
@@ -240,9 +279,21 @@ export function ManagerTradePointsTab({ managerUserId }: Props) {
                       </span>
                     </TableCell>
                     <TableCell>
-                      <span className={cn("inline-flex rounded-md border px-1.5 py-0.5 text-[10px] font-medium", badge.className)}>
+                      <button
+                        type="button"
+                        className={cn(
+                          "inline-flex rounded-md border px-1.5 py-0.5 text-[10px] font-medium transition-opacity hover:opacity-90",
+                          badge.className,
+                        )}
+                        onClick={() => {
+                          if (tp.notFilled) setTpFilter("unfilled");
+                          else if (!tp.hasPhoto) setTpFilter("no_photo");
+                          else setTpFilter("with_photo");
+                        }}
+                        data-testid={`link-manager-tp-state-${tp.id}`}
+                      >
                         {badge.label}
-                      </span>
+                      </button>
                     </TableCell>
                     <TableCell>
                       <Button variant="ghost" size="sm" className="h-8 text-primary" asChild>

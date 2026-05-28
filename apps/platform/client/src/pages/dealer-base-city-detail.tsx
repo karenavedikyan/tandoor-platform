@@ -3,7 +3,7 @@
  */
 import { useMemo, useState } from "react";
 import { Link, Redirect, useRoute } from "wouter";
-import { ChevronLeft, X } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -39,6 +39,14 @@ import {
 } from "@/lib/dealer-base-city-detail-view-model";
 import { flattenTradePointsForRows } from "@/lib/dealer-base-management-view-model";
 import { getClientCategoryBadgeClass, getClientCategoryLabel } from "@/lib/client-category";
+import { EntityListFilters } from "@/components/entity-list/entity-list-filters";
+import {
+  buildCategoryOptionsFromRows,
+  buildManagerNameOptionsFromRows,
+  buildManagerOptionsFromCityManagers,
+  countActiveEntityListFilters,
+  matchesSearch,
+} from "@/lib/entity-list-filtering";
 import { buildHashPath } from "@/lib/hash-route-utils";
 import { cn } from "@/lib/utils";
 import { useOrgSnapshot } from "@/lib/use-org-snapshot";
@@ -131,27 +139,71 @@ export default function DealerBaseCityDetailPage() {
   );
 
   const [segmentFilter, setSegmentFilter] = useState<CityDetailSegmentKey | null>(null);
-  const [managerFilter, setManagerFilter] = useState<string | null>(null);
+  const [managerF, setManagerF] = useState("all");
   const [activeTab, setActiveTab] = useState<"clients" | "trade_points" | "managers">("clients");
+  const [searchQ, setSearchQ] = useState("");
+  const [categoryF, setCategoryF] = useState("all");
+  const [tpSearchQ, setTpSearchQ] = useState("");
+  const [tpManagerF, setTpManagerF] = useState("all");
 
   const segmentFilteredRows = useMemo(() => {
     if (!detail) return [];
     return detail.dealerRows.filter((r) => cityDetailRowMatchesSegment(r, segmentFilter));
   }, [detail, segmentFilter]);
 
+  const categoryOptions = useMemo(
+    () => buildCategoryOptionsFromRows(segmentFilteredRows, getClientCategoryLabel),
+    [segmentFilteredRows],
+  );
+  const managerOptions = useMemo(
+    () => buildManagerOptionsFromCityManagers(detail?.byManager ?? []),
+    [detail?.byManager],
+  );
+
   const filteredClients = useMemo(() => {
     let rows = segmentFilteredRows;
-    if (managerFilter) {
-      rows = rows.filter((r) => resolveDealerRowManagerCatalogId(r) === managerFilter);
+    if (managerF !== "all") {
+      rows = rows.filter((r) => resolveDealerRowManagerCatalogId(r) === managerF);
     }
+    if (categoryF !== "all") rows = rows.filter((r) => r.clientCategory === categoryF);
+    if (searchQ.trim()) rows = rows.filter((r) => matchesSearch(searchQ, [r.name]));
     return rows;
-  }, [segmentFilteredRows, managerFilter]);
+  }, [segmentFilteredRows, managerF, categoryF, searchQ]);
 
-  const tradePointRows = useMemo(() => {
+  const clientsListFilterActiveCount = countActiveEntityListFilters([categoryF, managerF]);
+
+  const resetClientsListFilters = () => {
+    setSearchQ("");
+    setCategoryF("all");
+    setManagerF("all");
+  };
+
+  const tradePointRowsBase = useMemo(() => {
     if (!detail) return [];
     const ids = new Set(segmentFilteredRows.map((r) => r.id));
     return flattenTradePointsForRows(detail.dealerRows).filter((tp) => ids.has(tp.dealerId));
   }, [detail, segmentFilteredRows]);
+
+  const tpManagerOptions = useMemo(
+    () => buildManagerNameOptionsFromRows(tradePointRowsBase),
+    [tradePointRowsBase],
+  );
+
+  const tradePointRows = useMemo(() => {
+    let rows = tradePointRowsBase;
+    if (tpManagerF !== "all") rows = rows.filter((tp) => (tp.manager ?? "").trim() === tpManagerF);
+    if (tpSearchQ.trim()) {
+      rows = rows.filter((tp) => matchesSearch(tpSearchQ, [tp.name, tp.dealerName, tp.manager]));
+    }
+    return rows;
+  }, [tradePointRowsBase, tpManagerF, tpSearchQ]);
+
+  const tpListFilterActiveCount = countActiveEntityListFilters([tpManagerF]);
+
+  const resetTpListFilters = () => {
+    setTpSearchQ("");
+    setTpManagerF("all");
+  };
 
   const loading =
     authLoading ||
@@ -317,29 +369,36 @@ export default function DealerBaseCityDetailPage() {
           </TabsList>
 
           <TabsContent value="clients" className="mt-3">
-            {managerFilter ? (
-              <div className="mb-2 flex flex-wrap items-center gap-2" data-testid="badge-city-manager-filter">
-                <span className="text-xs text-muted-foreground">Менеджер:</span>
-                <Badge variant="outline" className="gap-1.5 border-[#9ACA3C]/60 bg-[#9ACA3C]/10 text-foreground">
-                  {detail.byManager.find((m) => m.managerCatalogId === managerFilter)?.managerName ?? managerFilter}
-                  <button
-                    type="button"
-                    onClick={() => setManagerFilter(null)}
-                    className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full hover:bg-foreground/10"
-                    aria-label="Сбросить фильтр менеджера"
-                    data-testid="button-clear-city-manager-filter"
-                  >
-                    <X className="h-3 w-3" aria-hidden />
-                  </button>
-                </Badge>
-                <span className="text-xs tabular-nums text-muted-foreground">{filteredClients.length} клиентов</span>
-              </div>
-            ) : null}
+            <EntityListFilters
+              className="mb-3"
+              search={searchQ}
+              onSearchChange={setSearchQ}
+              searchPlaceholder="Поиск по названию клиента…"
+              resultCount={filteredClients.length}
+              activeCount={clientsListFilterActiveCount}
+              onReset={resetClientsListFilters}
+              filters={[
+                {
+                  key: "category",
+                  label: "Категория",
+                  value: categoryF,
+                  onChange: setCategoryF,
+                  options: categoryOptions,
+                },
+                {
+                  key: "manager",
+                  label: "Менеджер",
+                  value: managerF,
+                  onChange: setManagerF,
+                  options: managerOptions,
+                },
+              ]}
+            />
             {filteredClients.length === 0 ? (
               <p className="py-8 text-center text-sm text-muted-foreground">
-                {managerFilter
-                  ? "Нет клиентов у выбранного менеджера в этом городе."
-                  : "Нет клиентов в выбранном сегменте."}
+                {segmentFilteredRows.length === 0
+                  ? "Нет клиентов в выбранном сегменте."
+                  : "Нет клиентов по выбранным фильтрам."}
               </p>
             ) : (
               <div className="overflow-x-auto rounded-xl border border-border bg-card">
@@ -361,16 +420,31 @@ export default function DealerBaseCityDetailPage() {
                         <TableRow key={r.id}>
                           <TableCell className="max-w-[200px] truncate font-medium">{r.name}</TableCell>
                           <TableCell>
-                            <span
+                            <button
+                              type="button"
                               className={cn(
-                                "inline-flex rounded-md border px-1.5 py-0.5 text-[10px] font-medium",
+                                "inline-flex rounded-md border px-1.5 py-0.5 text-[10px] font-medium transition-opacity hover:opacity-90",
                                 getClientCategoryBadgeClass(r.clientCategory),
                               )}
+                              onClick={() => setCategoryF(r.clientCategory)}
+                              data-testid={`link-city-client-category-${r.id}`}
                             >
                               {getClientCategoryLabel(r.clientCategory)}
-                            </span>
+                            </button>
                           </TableCell>
-                          <TableCell className="text-sm text-muted-foreground">{getDealerManagerDisplay(r)}</TableCell>
+                          <TableCell>
+                            <button
+                              type="button"
+                              className="text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                              onClick={() => {
+                                const id = resolveDealerRowManagerCatalogId(r);
+                                if (id) setManagerF(id);
+                              }}
+                              data-testid={`link-city-client-manager-${r.id}`}
+                            >
+                              {getDealerManagerDisplay(r)}
+                            </button>
+                          </TableCell>
                           <TableCell className="text-right tabular-nums">{r.outlets}</TableCell>
                           <TableCell>
                             <Button variant="ghost" size="sm" className="h-8 text-primary" asChild>
@@ -386,8 +460,28 @@ export default function DealerBaseCityDetailPage() {
           </TabsContent>
 
           <TabsContent value="trade_points" className="mt-3">
-            {tradePointRows.length === 0 ? (
+            <EntityListFilters
+              className="mb-3"
+              search={tpSearchQ}
+              onSearchChange={setTpSearchQ}
+              searchPlaceholder="Поиск по точке, клиенту, менеджеру…"
+              resultCount={tradePointRows.length}
+              activeCount={tpListFilterActiveCount}
+              onReset={resetTpListFilters}
+              filters={[
+                {
+                  key: "manager",
+                  label: "Менеджер",
+                  value: tpManagerF,
+                  onChange: setTpManagerF,
+                  options: tpManagerOptions,
+                },
+              ]}
+            />
+            {tradePointRowsBase.length === 0 ? (
               <p className="py-8 text-center text-sm text-muted-foreground">Нет торговых точек.</p>
+            ) : tradePointRows.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">Нет точек по выбранным фильтрам.</p>
             ) : (
               <div className="overflow-x-auto rounded-xl border border-border bg-card">
                 <Table>
@@ -448,7 +542,7 @@ export default function DealerBaseCityDetailPage() {
                       className="shrink-0"
                       data-testid={`button-city-manager-clients-${m.managerCatalogId.replace(/[^a-zA-Z0-9_-]/g, "_")}`}
                       onClick={() => {
-                        setManagerFilter(m.managerCatalogId);
+                        setManagerF(m.managerCatalogId);
                         setActiveTab("clients");
                         document
                           .querySelector('[data-testid="tab-city-clients"]')
