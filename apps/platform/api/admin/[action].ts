@@ -2000,6 +2000,8 @@ function summarizeActualizationDebugRow(row: ActualizationDebugStateRow): Record
   const dealerOverridesById = actualizationMap(state.dealerOverridesById);
   const manuallyCreatedDealersById = actualizationMap(state.manuallyCreatedDealersById);
   const dealerActualizationContactsById = actualizationMap(state.dealerActualizationContactsById);
+  const archivedDealersById = actualizationMap(state.archivedDealersById);
+  const trashedDealersById = actualizationMap(state.trashedDealersById);
   const contactSample = Object.entries(dealerActualizationContactsById)
     .slice(0, 3)
     .map(([id, raw]) => {
@@ -2024,6 +2026,10 @@ function summarizeActualizationDebugRow(row: ActualizationDebugStateRow): Record
     dealerActualizationContactsById_count: Object.keys(dealerActualizationContactsById).length,
     dealerActualizationContactsById_sample: contactSample,
     dealerOverridesById_keys_sample: Object.keys(dealerOverridesById).slice(0, 10),
+    archivedDealersById_count: Object.keys(archivedDealersById).length,
+    archivedDealersById_sample: Object.keys(archivedDealersById).slice(0, 10),
+    trashedDealersById_count: Object.keys(trashedDealersById).length,
+    trashedDealersById_sample: Object.keys(trashedDealersById).slice(0, 10),
   };
 }
 

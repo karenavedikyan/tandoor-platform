@@ -1418,76 +1418,131 @@ export default function DealerBase() {
     return roleScopedDealerRows(mergedRowsActivePortfolio, profile);
   }, [useReal, snap, mergedRowsActivePortfolio, profile, access, assignmentsScope]);
 
-  const diag702LoggedRef = useRef(false);
   useEffect(() => {
-    if (diag702LoggedRef.current) return;
-    if (!useReal || !snap || !visPayload || !myCodesQ.data) return;
-    if (access !== "sales_manager") return;
-    if (mergedRowsForDealerBase.length === 0 && !assignmentsScopeIsActive(assignmentsScope)) return;
-    diag702LoggedRef.current = true;
+    const DIAG_SCOPE_SHRINK_KEY = "tandoor-diag-scope-shrink-v2";
+    try {
+      if (typeof sessionStorage !== "undefined" && sessionStorage.getItem(DIAG_SCOPE_SHRINK_KEY)) return;
+      if (!useReal || !snap || !visPayload || !myCodesQ.data) return;
+      if (access !== "sales_manager") return;
+      if (me?.role !== "manager" && me?.role !== "regional_manager") return;
+      if (mergedRowsForDealerBase.length === 0 && !assignmentsScopeIsActive(assignmentsScope)) return;
 
-    const ownCodesArr = Array.from(myCodesQ.data.ownCodes);
-    const teamCodesArr = Array.from(myCodesQ.data.teamCodes);
+      const ownCodesArr = Array.from(myCodesQ.data.ownCodes);
+      const visibleClients = getVisibleReleaseClients(
+        snap,
+        visPayload.all,
+        visPayload.codes,
+        buildAssignmentsMap(visPayload.assignments),
+      );
+      const releaseRowsFromVisibleLen = visibleClients.length;
+      const dealerRowsBeforeActualization = buildDealerRowsFromReleaseClients(visibleClients);
+      const dealerRowsBeforeActualizationLen = dealerRowsBeforeActualization.length;
 
-    console.info("[diag:70.2] dealer-base scope shrink", {
-      meId: snap.me.id,
-      meRole: me?.role,
-      access,
+      const act = teamActualizationPlane;
+      const archivedDealersById = act.archivedDealersById ?? {};
+      const trashedDealersById = act.trashedDealersById ?? {};
+      const archivedKeys = Object.keys(archivedDealersById);
+      const trashedKeys = Object.keys(trashedDealersById);
+      const myCodesOwn = myCodesQ.data.ownCodes;
 
-      visAll: visPayload.all ?? null,
-      visCodesLen: visPayload.codes?.length ?? null,
-      visCodesSample: visPayload.codes?.slice(0, 5) ?? null,
+      let myCodesArchivedHitCount = 0;
+      let myCodesNotArchivedHitCount = 0;
+      for (const r of dealerRowsBeforeActualization) {
+        const code = r.releaseCode?.trim();
+        if (!code || !myCodesOwn.has(code)) continue;
+        if (archivedDealersById[r.id]) myCodesArchivedHitCount++;
+        else myCodesNotArchivedHitCount++;
+      }
 
-      myCodesOwnLen: myCodesQ.data.ownCodes.size,
-      myCodesTeamLen: myCodesQ.data.teamCodes.size,
-      myCodesOwnSample: ownCodesArr.slice(0, 5),
+      let manualDealersInMergedLen = 0;
+      for (const r of mergedRowsForDealerBase) {
+        if (r.id.startsWith("manual-dealer-")) manualDealersInMergedLen++;
+      }
 
-      actxEnabled: actx.enabled,
-      showArchivedDealers,
-      assignmentsScopeActive: assignmentsScopeIsActive(assignmentsScope),
-      assignmentsOwnSize: assignmentsScope?.ownCodes.size ?? null,
-      assignmentsTeamSize: assignmentsScope?.teamCodes.size ?? null,
+      const payload = {
+        meId: snap.me.id,
+        meRole: me?.role,
+        access,
 
-      mergedRowsForDealerBaseLen: mergedRowsForDealerBase.length,
-      mergedRowsForDealerBaseSample: mergedRowsForDealerBase.slice(0, 3).map((r) => ({
-        id: r.id,
-        releaseCode: r.releaseCode,
-        name: r.name,
-        city: r.city,
-        manager: r.manager,
-      })),
+        visAll: visPayload.all ?? null,
+        visCodesLen: visPayload.codes?.length ?? null,
+        visCodesSample: visPayload.codes?.slice(0, 5) ?? null,
 
-      mergedRowsActivePortfolioLen: mergedRowsActivePortfolio.length,
+        myCodesOwnLen: myCodesQ.data.ownCodes.size,
+        myCodesTeamLen: myCodesQ.data.teamCodes.size,
+        myCodesOwnSample: ownCodesArr.slice(0, 5),
 
-      scopedRowsLen: scopedRows.length,
-      scopedRowsSample: scopedRows.slice(0, 5).map((r) => ({
-        id: r.id,
-        releaseCode: r.releaseCode,
-        name: r.name,
-      })),
+        releaseRowsFromVisibleLen,
+        dealerRowsBeforeActualizationLen,
 
-      scopedActivePortfolioRowsLen: scopedActivePortfolioRows.length,
+        actxEnabled: actx.enabled,
+        showArchivedDealers,
+        assignmentsScopeActive: assignmentsScopeIsActive(assignmentsScope),
+        assignmentsOwnSize: assignmentsScope?.ownCodes.size ?? null,
+        assignmentsTeamSize: assignmentsScope?.teamCodes.size ?? null,
 
-      intersectVisVsMyCodes: (() => {
-        if (!visPayload.codes) return null;
-        const vis = new Set(visPayload.codes);
-        let cnt = 0;
-        myCodesQ.data!.ownCodes.forEach((c) => {
-          if (vis.has(c)) cnt++;
-        });
-        return cnt;
-      })(),
+        archivedDealersByIdSize: archivedKeys.length,
+        dealerOverridesByIdSize: Object.keys(act.dealerOverridesById ?? {}).length,
+        manuallyCreatedDealersByIdSize: Object.keys(act.manuallyCreatedDealersById ?? {}).length,
+        trashedDealersByIdSize: trashedKeys.length,
+        dealerActualizationContactsByIdSize: Object.keys(act.dealerActualizationContactsById ?? {}).length,
+        archivedDealersByIdSample: archivedKeys.slice(0, 10),
+        trashedDealersByIdSample: trashedKeys.length > 0 ? trashedKeys.slice(0, 10) : null,
 
-      intersectMergedReleaseCodesVsMyOwn: (() => {
-        const own = myCodesQ.data!.ownCodes;
-        let cnt = 0;
-        for (const r of mergedRowsForDealerBase) {
-          const c = r.releaseCode?.trim();
-          if (c && own.has(c)) cnt++;
-        }
-        return cnt;
-      })(),
-    });
+        myCodesArchivedHitCount,
+        myCodesNotArchivedHitCount,
+
+        manualDealersInMergedLen,
+        releaseDealersInMergedLen: mergedRowsForDealerBase.length - manualDealersInMergedLen,
+
+        mergedRowsForDealerBaseLen: mergedRowsForDealerBase.length,
+        mergedRowsForDealerBaseSample: mergedRowsForDealerBase.slice(0, 3).map((r) => ({
+          id: r.id,
+          releaseCode: r.releaseCode,
+          name: r.name,
+          city: r.city,
+          manager: r.manager,
+        })),
+
+        mergedRowsActivePortfolioLen: mergedRowsActivePortfolio.length,
+
+        scopedRowsLen: scopedRows.length,
+        scopedRowsSample: scopedRows.slice(0, 5).map((r) => ({
+          id: r.id,
+          releaseCode: r.releaseCode,
+          name: r.name,
+        })),
+
+        scopedActivePortfolioRowsLen: scopedActivePortfolioRows.length,
+
+        intersectVisVsMyCodes: (() => {
+          if (!visPayload.codes) return null;
+          const vis = new Set(visPayload.codes);
+          let cnt = 0;
+          myCodesQ.data!.ownCodes.forEach((c) => {
+            if (vis.has(c)) cnt++;
+          });
+          return cnt;
+        })(),
+
+        intersectMergedReleaseCodesVsMyOwn: (() => {
+          const own = myCodesQ.data!.ownCodes;
+          let cnt = 0;
+          for (const r of mergedRowsForDealerBase) {
+            const c = r.releaseCode?.trim();
+            if (c && own.has(c)) cnt++;
+          }
+          return cnt;
+        })(),
+      };
+
+      if (typeof sessionStorage !== "undefined") {
+        sessionStorage.setItem(DIAG_SCOPE_SHRINK_KEY, "1");
+      }
+      console.info("[diag scope-shrink]", payload);
+    } catch (e) {
+      console.warn("[diag scope-shrink] failed", e);
+    }
   }, [
     useReal,
     snap,
@@ -1502,6 +1557,7 @@ export default function DealerBase() {
     showArchivedDealers,
     me?.role,
     actx.enabled,
+    teamActualizationPlane,
   ]);
 
   useEffect(() => {
