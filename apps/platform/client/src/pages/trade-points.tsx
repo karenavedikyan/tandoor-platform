@@ -90,6 +90,7 @@ import { useOrgSnapshot } from "@/lib/use-org-snapshot";
 import { useMyVisibleClientCodes } from "@/lib/use-my-visible-client-codes";
 import { buildAssignmentsMap, getVisibleReleaseClients } from "@/lib/real-client-base";
 import { buildDealerRowsFromReleaseClients } from "@/lib/dealer-base-mock-data";
+import { TradePointsWorkspaceSummary } from "@/components/trade-points/trade-points-workspace-summary";
 import { TradePointsManagementCockpit } from "@/pages/trade-points-management-cockpit";
 
 /** Плотность отображения списка торговых точек (как «Витрина дилеров»). */
