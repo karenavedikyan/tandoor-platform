@@ -11,6 +11,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageLoadingFallback } from "@/components/navigation/page-loading";
 import { useCurrentUser, displayUserName } from "@/hooks/use-current-user";
+import { useDealerWorkPlanHydration } from "@/hooks/use-dealer-work-plan-hydration";
 import {
   canAccessPathForUser,
   defaultHomePathForUserRole,
@@ -233,6 +234,7 @@ function AuthenticatedShell({
 }) {
   const salesRole = useMemo(() => userRoleToSalesRole(user.role), [user.role]);
   const { profile } = useReleaseDemoProfile();
+  useDealerWorkPlanHydration(user.id, profile.personaUserId);
   const actx = useClientBaseActualization();
   const teamPlane = useClientBaseTeamActualization();
   const dealerNavCount = useMemo(

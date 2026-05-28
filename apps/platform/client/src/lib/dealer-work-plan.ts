@@ -1,8 +1,16 @@
 /**
- * Рабочий план клиентов (localStorage, без backend).
+ * Рабочий план клиентов.
+ * Чтение: Postgres (кеш) + LS fallback. Запись: оптимистично в LS + API.
  */
 
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
+import {
+  apiClearSchedule,
+  apiHide,
+  apiRestore,
+  apiSchedule,
+} from "@/lib/dealer-work-plan-api";
+import { refreshWorkPlanFromApi, resolveWorkPlanState } from "@/lib/dealer-work-plan-db-cache";
 
 export const DEALER_WORK_PLAN_STORAGE_KEY = "tandoor-dealer-work-plan-v1";
 export const DEALER_WORK_PLAN_EVENT = "tandoor-dealer-work-plan-changed";
@@ -63,29 +71,42 @@ export function saveDealerWorkPlanState(state: DealerWorkPlanState): void {
   window.dispatchEvent(new CustomEvent(DEALER_WORK_PLAN_EVENT));
 }
 
+function fireAndRefresh(localUserKey: string, run: () => Promise<boolean>): void {
+  void run()
+    .then((ok) => {
+      if (ok) void refreshWorkPlanFromApi(localUserKey);
+    })
+    .catch((e) => {
+      console.warn("[dealer-work-plan] API sync failed", e);
+    });
+}
+
 export function getDealerWorkPlanForUser(
   userId: string,
-  state: DealerWorkPlanState = loadDealerWorkPlanState(),
+  state?: DealerWorkPlanState,
 ): {
   hidden: Record<string, true>;
   scheduled: Record<string, DealerWorkPlanScheduleEntry>;
 } {
+  const st = resolveWorkPlanState(state);
   return {
-    hidden: state.hiddenByUser[userId] ?? {},
-    scheduled: state.scheduledByUser[userId] ?? {},
+    hidden: st.hiddenByUser[userId] ?? {},
+    scheduled: st.scheduledByUser[userId] ?? {},
   };
 }
 
-export function isDealerHiddenForUser(userId: string, dealerId: string, state: DealerWorkPlanState): boolean {
-  return Boolean(state.hiddenByUser[userId]?.[dealerId]);
+export function isDealerHiddenForUser(userId: string, dealerId: string, state?: DealerWorkPlanState): boolean {
+  const st = resolveWorkPlanState(state);
+  return Boolean(st.hiddenByUser[userId]?.[dealerId]);
 }
 
 export function getDealerScheduledDateForUser(
   userId: string,
   dealerId: string,
-  state: DealerWorkPlanState,
+  state?: DealerWorkPlanState,
 ): DealerWorkPlanScheduleEntry | null {
-  return state.scheduledByUser[userId]?.[dealerId] ?? null;
+  const st = resolveWorkPlanState(state);
+  return st.scheduledByUser[userId]?.[dealerId] ?? null;
 }
 
 export function hideDealersForUser(userId: string, dealerIds: string[]): void {
@@ -96,6 +117,7 @@ export function hideDealersForUser(userId: string, dealerIds: string[]): void {
   for (const id of dealerIds) next[id] = true;
   state.hiddenByUser[userId] = next;
   saveDealerWorkPlanState(state);
+  fireAndRefresh(userId, () => apiHide(dealerIds));
 }
 
 export function restoreDealersForUser(userId: string, dealerIds: string[]): void {
@@ -106,6 +128,7 @@ export function restoreDealersForUser(userId: string, dealerIds: string[]): void
   for (const id of dealerIds) delete next[id];
   state.hiddenByUser[userId] = next;
   saveDealerWorkPlanState(state);
+  fireAndRefresh(userId, () => apiRestore(dealerIds));
 }
 
 export function scheduleDealersForUser(userId: string, dealerIds: string[], dateIso: string, note?: string): void {
@@ -120,6 +143,7 @@ export function scheduleDealersForUser(userId: string, dealerIds: string[], date
   }
   state.scheduledByUser[userId] = next;
   saveDealerWorkPlanState(state);
+  fireAndRefresh(userId, () => apiSchedule(dealerIds, dateIso.trim(), n));
 }
 
 export function clearDealerScheduleForUser(userId: string, dealerIds: string[]): void {
@@ -130,6 +154,7 @@ export function clearDealerScheduleForUser(userId: string, dealerIds: string[]):
   for (const id of dealerIds) delete next[id];
   state.scheduledByUser[userId] = next;
   saveDealerWorkPlanState(state);
+  fireAndRefresh(userId, () => apiClearSchedule(dealerIds));
 }
 
 /** DD.MM.YYYY из YYYY-MM-DD */
@@ -178,10 +203,11 @@ export function filterDealersByWorkPlan(
   rows: DealerRow[],
   userId: string,
   filter: WorkPlanListFilter,
-  state: DealerWorkPlanState,
+  state?: DealerWorkPlanState,
 ): DealerRow[] {
-  const hidden = state.hiddenByUser[userId] ?? {};
-  const sched = state.scheduledByUser[userId] ?? {};
+  const st = resolveWorkPlanState(state);
+  const hidden = st.hiddenByUser[userId] ?? {};
+  const sched = st.scheduledByUser[userId] ?? {};
   const today = localTodayIsoDay();
   const weekEnd = addDaysLocal(today, 7);
 

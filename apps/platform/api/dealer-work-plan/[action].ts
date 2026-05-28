@@ -1,0 +1,85 @@
+/**
+ * Dealer work plan API (Промт 68):
+ *   GET  /api/dealer-work-plan/list?userId=
+ *   POST /api/dealer-work-plan/hide
+ *   POST /api/dealer-work-plan/restore
+ *   POST /api/dealer-work-plan/schedule
+ *   POST /api/dealer-work-plan/clear-schedule
+ *   POST /api/dealer-work-plan/bulk-import
+ */
+
+import type { VercelRequest, VercelResponse } from "@vercel/node";
+import {
+  enforceCsrfOrigin,
+  getPool,
+  sendJson,
+  vercelHeaders,
+} from "../../shared/admin/admin-auth.js";
+import {
+  handleDealerWorkPlanBulkImport,
+  handleDealerWorkPlanClearSchedule,
+  handleDealerWorkPlanHide,
+  handleDealerWorkPlanList,
+  handleDealerWorkPlanRestore,
+  handleDealerWorkPlanSchedule,
+  resolveSessionContext,
+} from "../../shared/dealer-work-plan-handlers.js";
+
+export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
+  try {
+    const actionRaw = req.query.action;
+    const action = Array.isArray(actionRaw) ? String(actionRaw[0] ?? "") : String(actionRaw ?? "");
+
+    if (req.method !== "GET" && !enforceCsrfOrigin(req)) {
+      sendJson(res, 403, { success: false, code: "CSRF_REJECTED", message: "Недопустимый источник запроса." });
+      return;
+    }
+
+    const pool = getPool();
+    if (!pool) {
+      sendJson(res, 503, {
+        success: false,
+        code: "DB_UNAVAILABLE",
+        message: "База данных недоступна.",
+      });
+      return;
+    }
+
+    const ctx = await resolveSessionContext(pool, vercelHeaders(req));
+    if (!ctx) {
+      sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+      return;
+    }
+
+    if (action === "list" && req.method === "GET") {
+      await handleDealerWorkPlanList(req, res, pool, ctx);
+      return;
+    }
+    if (action === "hide" && req.method === "POST") {
+      await handleDealerWorkPlanHide(req, res, pool, ctx);
+      return;
+    }
+    if (action === "restore" && req.method === "POST") {
+      await handleDealerWorkPlanRestore(req, res, pool, ctx);
+      return;
+    }
+    if (action === "schedule" && req.method === "POST") {
+      await handleDealerWorkPlanSchedule(req, res, pool, ctx);
+      return;
+    }
+    if (action === "clear-schedule" && req.method === "POST") {
+      await handleDealerWorkPlanClearSchedule(req, res, pool, ctx);
+      return;
+    }
+    if (action === "bulk-import" && req.method === "POST") {
+      await handleDealerWorkPlanBulkImport(req, res, pool, ctx);
+      return;
+    }
+
+    sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Неизвестный маршрут dealer-work-plan." });
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    console.error("[dealer-work-plan-api] unhandled", m);
+    sendJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+  }
+}

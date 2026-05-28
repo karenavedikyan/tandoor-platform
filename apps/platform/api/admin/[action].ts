@@ -4081,6 +4081,26 @@ async function handleMigrationsRun(
     await pool.query(`CREATE INDEX IF NOT EXISTS ix_legal_entity_events_le ON legal_entity_events(legal_entity_id)`);
     applied.push("dealer_legal_entities_v1");
 
+    // Промт 68: персональный рабочий план менеджера
+    await pool.query(
+      `CREATE TABLE IF NOT EXISTS dealer_work_plan (
+         user_id UUID NOT NULL,
+         dealer_id TEXT NOT NULL,
+         is_hidden BOOLEAN NOT NULL DEFAULT false,
+         scheduled_date DATE,
+         scheduled_note TEXT,
+         scheduled_updated_at TIMESTAMPTZ,
+         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+         PRIMARY KEY (user_id, dealer_id)
+       )`,
+    );
+    await pool.query(`CREATE INDEX IF NOT EXISTS ix_dwp_user ON dealer_work_plan(user_id)`);
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS ix_dwp_scheduled ON dealer_work_plan(user_id, scheduled_date) WHERE scheduled_date IS NOT NULL`,
+    );
+    applied.push("dealer_work_plan_v1");
+
     // Промт 20: impersonation
     await pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS impersonator_user_id uuid NULL REFERENCES users(id) ON DELETE SET NULL`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_sessions_impersonator ON sessions(impersonator_user_id) WHERE impersonator_user_id IS NOT NULL`);

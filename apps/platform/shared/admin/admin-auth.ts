@@ -89,7 +89,7 @@ export function sendJson(res: VercelResponse, status: number, body: Record<strin
   res.status(status).json(body);
 }
 
-function sha256Hex(value: string): string {
+export function sha256Hex(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
 }
 
@@ -97,7 +97,7 @@ function sha256Buffer(value: string): Buffer {
   return createHash("sha256").update(value, "utf8").digest();
 }
 
-function timingSafeEqualHex(storedHex: string, plainToken: string): boolean {
+export function timingSafeEqualHex(storedHex: string, plainToken: string): boolean {
   let stored: Buffer;
   try {
     stored = Buffer.from(storedHex, "hex");
@@ -109,7 +109,7 @@ function timingSafeEqualHex(storedHex: string, plainToken: string): boolean {
   return timingSafeEqual(stored, computed);
 }
 
-function parseAuthRefreshToken(cookieHeader: string | undefined): string | null {
+export function parseAuthRefreshToken(cookieHeader: string | undefined): string | null {
   if (!cookieHeader?.trim()) return null;
   for (const p of cookieHeader.split(";")) {
     const idx = p.indexOf("=");
