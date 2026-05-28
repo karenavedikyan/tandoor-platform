@@ -74,7 +74,7 @@ export function dealerRowClientCodeForAssignments(row: DealerRow): string {
 }
 
 /**
- * Сопоставление клиента менеджеру: сначала `client_assignments` (responsibleByCode), иначе seed/displayName.
+ * Сопоставление клиента менеджеру: при наличии записи в `responsibleByCode` — только БД (без fallback на seed).
  */
 export function buildDbAwareManagerMatcher(
   managerCatalogId: string,
@@ -87,10 +87,11 @@ export function buildDbAwareManagerMatcher(
     if (resolveDealerRowTeamId(r) !== teamId) return false;
     if (responsibleByCode && userIdToCatalogMgrId) {
       const code = dealerRowClientCodeForAssignments(r);
-      const dbUid = responsibleByCode.get(code);
-      if (dbUid) {
+      if (responsibleByCode.has(code)) {
+        const dbUid = responsibleByCode.get(code);
+        if (!dbUid) return false;
         const catId = userIdToCatalogMgrId.get(dbUid);
-        if (catId) return catId === managerCatalogId;
+        return catId === managerCatalogId;
       }
     }
     return (
