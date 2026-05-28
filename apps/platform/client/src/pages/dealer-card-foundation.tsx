@@ -81,8 +81,8 @@ import {
   formatWorkPlanDateRu,
   getDealerScheduledDateForUser,
   isDealerHiddenForUser,
-  loadDealerWorkPlanState,
 } from "@/lib/dealer-work-plan";
+import { resolveWorkPlanState } from "@/lib/dealer-work-plan-db-cache";
 import { getDealerStockSignal } from "@/lib/dealer-stock-signals";
 import { getDealerEquipmentSignal } from "@/lib/dealer-equipment-signals";
 import {
@@ -1094,12 +1094,12 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
   const competitorActivityRows = useMemo(() => getCompetitorActivityRows(row), [row]);
 
   const dealerWorkPlanEntry = useMemo(() => {
-    const st = loadDealerWorkPlanState();
+    const st = resolveWorkPlanState();
     return getDealerScheduledDateForUser(profile.personaUserId, row.id, st);
   }, [profile.personaUserId, row.id, workPlanBump]);
 
   const dealerWorkPlanHidden = useMemo(() => {
-    const st = loadDealerWorkPlanState();
+    const st = resolveWorkPlanState();
     return isDealerHiddenForUser(profile.personaUserId, row.id, st);
   }, [profile.personaUserId, row.id, workPlanBump]);
 

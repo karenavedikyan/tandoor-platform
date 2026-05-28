@@ -155,13 +155,13 @@ import {
   filterDealersByWorkPlan,
   hideDealersForUser,
   isDealerHiddenForUser,
-  loadDealerWorkPlanState,
   restoreDealersForUser,
   scheduleDealersForUser,
   type DealerWorkPlanState,
   type WorkPlanListFilter,
   WORK_PLAN_FILTER_LABELS,
 } from "@/lib/dealer-work-plan";
+import { resolveWorkPlanState } from "@/lib/dealer-work-plan-db-cache";
 import { DealerShipmentDayPlanner } from "@/components/dealer-shipment-day-planner";
 import { DealerWorkPlanBulkBar } from "@/components/dealer-work-plan-bulk-bar";
 import { CLIENT_NEXT_STEP_CHANGED_EVENT } from "@/lib/client-next-step-data";
@@ -2073,7 +2073,7 @@ export default function DealerBase() {
     return () => window.removeEventListener(DEALER_CHARACTERISTICS_EVENT, h);
   }, []);
 
-  const workPlanState = useMemo(() => loadDealerWorkPlanState(), [workPlanBump]);
+  const workPlanState = useMemo(() => resolveWorkPlanState(), [workPlanBump]);
 
   const rowsForWorkPlan = useMemo(
     () => filterDealersByWorkPlan(displayRows, profile.personaUserId, workPlanFilter, workPlanState),
