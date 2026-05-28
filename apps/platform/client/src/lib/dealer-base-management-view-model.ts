@@ -69,6 +69,37 @@ export function resolveDealerRowTeamId(row: DealerRow): string | undefined {
   return fromRop;
 }
 
+export function dealerRowClientCodeForAssignments(row: DealerRow): string {
+  return row.releaseCode?.trim() || row.id;
+}
+
+/**
+ * Сопоставление клиента менеджеру: сначала `client_assignments` (responsibleByCode), иначе seed/displayName.
+ */
+export function buildDbAwareManagerMatcher(
+  managerCatalogId: string,
+  managerCatalogName: string,
+  teamId: string,
+  responsibleByCode?: Map<string, string>,
+  userIdToCatalogMgrId?: Map<string, string>,
+): (r: DealerRow) => boolean {
+  return (r: DealerRow) => {
+    if (resolveDealerRowTeamId(r) !== teamId) return false;
+    if (responsibleByCode && userIdToCatalogMgrId) {
+      const code = dealerRowClientCodeForAssignments(r);
+      const dbUid = responsibleByCode.get(code);
+      if (dbUid) {
+        const catId = userIdToCatalogMgrId.get(dbUid);
+        if (catId) return catId === managerCatalogId;
+      }
+    }
+    return (
+      r.releaseManagerId === managerCatalogId ||
+      managerDisplayMatchesCatalogName(getDealerManagerDisplay(r), managerCatalogName)
+    );
+  };
+}
+
 function categoryOrder(id: ClientCategoryId): number {
   return CLIENT_CATEGORY_META.find((m) => m.id === id)?.order ?? 999;
 }
@@ -95,12 +126,17 @@ function bestTopSegmentLabel(rows: DealerRow[]): string {
   return getClientCategoryLabel(pick.clientCategory);
 }
 
-function aggregateManagersForTeam(teamId: string, teamRows: DealerRow[], orgSnap?: OrgSnapshot | null): ManagerRowModel[] {
+export function aggregateManagersForTeam(
+  teamId: string,
+  teamRows: DealerRow[],
+  orgSnap?: OrgSnapshot | null,
+  responsibleByCode?: Map<string, string>,
+  userIdToCatalogMgrId?: Map<string, string>,
+): ManagerRowModel[] {
   const managers = managersCatalogForTeam(teamId, orgSnap);
   return managers.map((m) => {
-    const rows = teamRows.filter(
-      (r) => r.releaseManagerId === m.id || managerDisplayMatchesCatalogName(getDealerManagerDisplay(r), m.name),
-    );
+    const match = buildDbAwareManagerMatcher(m.id, m.name, teamId, responsibleByCode, userIdToCatalogMgrId);
+    const rows = teamRows.filter(match);
     const active = rows.filter((r) => r.status === "активный").length;
     const potential = rows.filter((r) => r.status === "потенциальный").length;
     const attention = rows.filter((r) => dealerNeedsAttention(r)).length;
@@ -245,6 +281,8 @@ export function buildRopGroups(
   rows: DealerRow[],
   teams: { teamId: string; ropName: string }[],
   orgSnap?: OrgSnapshot | null,
+  responsibleByCode?: Map<string, string>,
+  userIdToCatalogMgrId?: Map<string, string>,
 ): RopGroupModel[] {
   const teamActiveCounts = teams.map((t) => ({
     teamId: t.teamId,
@@ -254,7 +292,7 @@ export function buildRopGroups(
 
   return teams.map((t) => {
     const teamRows = rows.filter((r) => resolveDealerRowTeamId(r) === t.teamId);
-    const managers = aggregateManagersForTeam(t.teamId, teamRows, orgSnap);
+    const managers = aggregateManagersForTeam(t.teamId, teamRows, orgSnap, responsibleByCode, userIdToCatalogMgrId);
     const active = teamRows.filter((r) => r.status === "активный").length;
     const potential = teamRows.filter((r) => r.status === "потенциальный").length;
     const attention = teamRows.filter((r) => dealerNeedsAttention(r)).length;

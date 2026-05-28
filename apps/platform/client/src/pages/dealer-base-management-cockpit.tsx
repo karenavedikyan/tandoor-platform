@@ -44,7 +44,6 @@ import {
   isDealerArchivedInActualization,
 } from "@/lib/archive-record-visual";
 import { cn } from "@/lib/utils";
-import { managerDisplayMatchesCatalogName } from "@/lib/rop-manager-filters";
 import { useIsMobile } from "@/hooks/use-mobile";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { mapSalesRoleToDealerBaseAccess } from "@/lib/dealer-base-role-views";
@@ -64,9 +63,9 @@ import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
 import { canCreateDealerDuringActualization } from "@/lib/client-base-actualization-permissions";
 import {
   buildCityModels,
+  buildDbAwareManagerMatcher,
   buildRopGroups,
   buildStructureInfographic,
-  resolveDealerRowTeamId,
   dealerMatchesClientListFilter,
   flattenTradePointsForRows,
   topCitiesForChart,
@@ -76,6 +75,8 @@ import {
   type DirectorClientBaseMode,
   type RopGroupModel,
 } from "@/lib/dealer-base-management-view-model";
+import { useMyClientCodes } from "@/hooks/use-my-client-codes";
+import { UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE } from "@shared/admin/actualization-dedupe";
 import { useLocation } from "wouter";
 
 const MODE_LS_KEY = "tandoor-dealer-base-management-mode-v1";
@@ -206,7 +207,17 @@ export function DealerBaseManagementCockpit({
   );
   const teamIds = useMemo(() => teams.map((t) => t.teamId), [teams]);
 
-  const ropGroups = useMemo(() => buildRopGroups(rows, teams, orgTeamCtx?.snap), [rows, teams, orgTeamCtx]);
+  const myCodesQ = useMyClientCodes({ enabled: Boolean(orgTeamCtx?.snap) });
+  const userIdToCatalogMgrId = useMemo(
+    () => new Map(Object.entries(UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE)),
+    [],
+  );
+  const responsibleByCode = myCodesQ.data?.responsibleByCode;
+
+  const ropGroups = useMemo(
+    () => buildRopGroups(rows, teams, orgTeamCtx?.snap, responsibleByCode, userIdToCatalogMgrId),
+    [rows, teams, orgTeamCtx, responsibleByCode, userIdToCatalogMgrId],
+  );
   const archivedPortfolioRows = useMemo(() => {
     if (!actx.enabled) return [] as DealerRow[];
     return buildDealerBaseRowsWithActualization(teamCtx.mergedState, profile, { includeArchivedDealers: true });
@@ -233,14 +244,18 @@ export function DealerBaseManagementCockpit({
     const act = teamCtx.mergedState;
     for (const g of ropGroups) {
       for (const m of g.managers) {
-        const match = (r: DealerRow) =>
-          resolveDealerRowTeamId(r) === g.teamId &&
-          (r.releaseManagerId === m.managerId || managerDisplayMatchesCatalogName(getDealerManagerDisplay(r), m.name));
+        const match = buildDbAwareManagerMatcher(
+          m.managerId,
+          m.name,
+          g.teamId,
+          responsibleByCode,
+          userIdToCatalogMgrId,
+        );
         map.set(m.managerId, computeManagerArchiveCounts(m.rows, archivedPortfolioRows, act, match));
       }
     }
     return map;
-  }, [actx.enabled, ropGroups, archivedPortfolioRows, teamCtx.mergedState]);
+  }, [actx.enabled, ropGroups, archivedPortfolioRows, teamCtx.mergedState, responsibleByCode, userIdToCatalogMgrId]);
 
   const cities = useMemo(() => buildCityModels(rows), [rows]);
   const structure = useMemo(() => buildStructureInfographic(rows, teamIds), [rows, teamIds]);
