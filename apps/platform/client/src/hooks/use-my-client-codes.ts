@@ -22,7 +22,7 @@ export type MyClientCodesResponse =
 export type MyClientCodesData = {
   ownCodes: Set<string>;
   teamCodes: Set<string>;
-  responsibleByCode: Map<string, string>;
+  responsibleByCode: Record<string, string>;
   meta: MyClientCodesMeta;
 };
 
@@ -37,7 +37,7 @@ async function fetchMyClientCodes(): Promise<MyClientCodesData | null> {
   return {
     ownCodes: new Set(json.ownCodes),
     teamCodes: new Set(json.teamCodes),
-    responsibleByCode: new Map(Object.entries(json.responsibleByCode ?? {})),
+    responsibleByCode: json.responsibleByCode ?? {},
     meta: json.meta,
   };
 }
