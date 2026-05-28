@@ -134,6 +134,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  DealerRowQuickMoveActions,
+  type DealerListRowQuickMoveProps,
+} from "@/components/dealer-row-quick-move-actions";
 import { buildTeamSummaryFromRows } from "@/lib/team-summary";
 import { TeamSummaryCard } from "@/components/team-summary-card";
 import { buildCityConcentrationRows, buildDealerBaseAllCitiesHref, buildDealerBaseCityDrillHref } from "@/lib/city-concentration";
@@ -429,6 +433,7 @@ type DealerRowRendererBaseProps = {
   shipmentActiveDayId?: DealerShipmentDayId | null;
   shipmentUserId?: string;
   archiveBulk?: DealerListArchiveBulkProps;
+  rowQuickMove?: DealerListRowQuickMoveProps;
   nextStepsStorage: DealerBaseNextStepsStorage;
   focusList?: DealerFocusViewListCtx;
 };
@@ -451,6 +456,7 @@ function ClientCompactGridBlock({
   shipmentActiveDayId,
   shipmentUserId,
   archiveBulk,
+  rowQuickMove,
   nextStepsStorage: _nextStepsStorage,
   focusList,
 }: DealerRowRendererBaseProps) {
@@ -562,11 +568,14 @@ function ClientCompactGridBlock({
                     </span>
                   ) : null}
                 </div>
-                <Button asChild size="sm" variant="secondary" className="h-7 shrink-0 px-2 text-[11px] font-semibold">
-                  <Link href={`/dealers/${row.id}`} data-testid={`button-open-dealer-${row.id}`}>
-                    Открыть
-                  </Link>
-                </Button>
+                <div className="flex shrink-0 items-center gap-0.5">
+                  {rowQuickMove ? <DealerRowQuickMoveActions row={row} rowQuickMove={rowQuickMove} /> : null}
+                  <Button asChild size="sm" variant="secondary" className="h-7 shrink-0 px-2 text-[11px] font-semibold">
+                    <Link href={`/dealers/${row.id}`} data-testid={`button-open-dealer-${row.id}`}>
+                      Открыть
+                    </Link>
+                  </Button>
+                </div>
               </div>
               <ShowcaseCoverPhotoSlot kind="dealer" dealer={row} profile={profile} size="grid" rounded="lg" className="w-full shrink-0" />
               <div className="min-w-0 space-y-1">
@@ -666,6 +675,7 @@ function ClientListRowsBlock({
   shipmentActiveDayId,
   shipmentUserId,
   archiveBulk,
+  rowQuickMove,
   nextStepsStorage,
   focusList,
 }: DealerRowRendererBaseProps) {
@@ -818,6 +828,7 @@ function ClientListRowsBlock({
                   Открыть
                 </Link>
               </Button>
+              {rowQuickMove ? <DealerRowQuickMoveActions row={row} rowQuickMove={rowQuickMove} /> : null}
               <Button asChild size="sm" variant="secondary" className="hidden h-9 shrink-0 px-2 text-xs font-semibold sm:inline-flex">
                 <Link href={`/dealers/${row.id}`} data-testid={`button-open-dealer-${row.id}`} onClick={(e) => e.stopPropagation()}>
                   Открыть
@@ -865,6 +876,7 @@ export function DealerBaseDataTable({
   shipmentActiveDayId,
   shipmentUserId,
   archiveBulk,
+  rowQuickMove,
   nextStepsStorage,
   focusList,
 }: DealerRowRendererBaseProps) {
@@ -1040,11 +1052,14 @@ export function DealerBaseDataTable({
                   <span className="line-clamp-2">{nextLine}</span>
                 </td>
                 <td className="px-2 py-1.5">
-                  <Button asChild size="sm" variant="secondary" className="h-8 text-xs font-semibold">
-                    <Link href={`/dealers/${row.id}`} data-testid={`button-open-dealer-${row.id}`}>
-                      Открыть
-                    </Link>
-                  </Button>
+                  <div className="flex items-center justify-end gap-0.5">
+                    {rowQuickMove ? <DealerRowQuickMoveActions row={row} rowQuickMove={rowQuickMove} /> : null}
+                    <Button asChild size="sm" variant="secondary" className="h-8 text-xs font-semibold">
+                      <Link href={`/dealers/${row.id}`} data-testid={`button-open-dealer-${row.id}`}>
+                        Открыть
+                      </Link>
+                    </Button>
+                  </div>
                 </td>
               </tr>
             );
@@ -1072,6 +1087,7 @@ function DealerBaseSegmentGroups({
   shipmentActiveDayId,
   shipmentUserId,
   archiveBulk,
+  rowQuickMove,
   actualizationState,
   focusList,
 }: {
@@ -1091,6 +1107,7 @@ function DealerBaseSegmentGroups({
   shipmentActiveDayId?: DealerShipmentDayId | null;
   shipmentUserId?: string;
   archiveBulk?: DealerListArchiveBulkProps;
+  rowQuickMove?: DealerListRowQuickMoveProps;
   actualizationState: ActualizationState;
   focusList?: DealerFocusViewListCtx;
 }) {
@@ -1110,6 +1127,7 @@ function DealerBaseSegmentGroups({
       shipmentActiveDayId,
       shipmentUserId,
       archiveBulk,
+      rowQuickMove,
       nextStepsStorage,
       focusList,
     };
@@ -1130,6 +1148,7 @@ function DealerBaseSegmentGroups({
           shipmentActiveDayId={shipmentActiveDayId}
           shipmentUserId={shipmentUserId}
           archiveBulk={archiveBulk}
+          rowQuickMove={rowQuickMove}
         />
       );
     }
@@ -2200,6 +2219,7 @@ export default function DealerBase() {
   /** Режим массового удаления: чекбоксы архива показываются только после явного включения. */
   const [bulkDeleteMode, setBulkDeleteMode] = useState(false);
   const [bulkArchiveDealerDialogOpen, setBulkArchiveDealerDialogOpen] = useState(false);
+  const [bulkSoftArchiveDealerDialogOpen, setBulkSoftArchiveDealerDialogOpen] = useState(false);
   const [bulkArchiveDealerBusy, setBulkArchiveDealerBusy] = useState(false);
   const [wpScheduleDate, setWpScheduleDate] = useState("");
   const [wpNote, setWpNote] = useState("");
@@ -2709,21 +2729,8 @@ export default function DealerBase() {
     return n;
   }, [selectedBulkArchiveDealerIds, archivableDealerIdsInView]);
 
-  /**
-   * Bulk-delete отправляет клиентов в КОРЗИНУ (`trashedDealersById`).
-   * Снапшоты — через хелпер `snapshotDealerFromRow` (Промт 46).
-   */
-  const confirmBulkArchiveDealers = useCallback(async () => {
-    const ids = Array.from(selectedBulkArchiveDealerIds).filter((id) => archivableDealerIdsInView.has(id));
-    if (ids.length === 0) {
-      setBulkArchiveDealerDialogOpen(false);
-      return;
-    }
-    setBulkArchiveDealerBusy(true);
-    const uid = profile.personaUserId;
-    const uname = userLabelFromProfile(profile);
-    const rowById = new Map<string, DealerRow>(rowsFinalForList.map((r) => [r.id, r]));
-    const snapshotFor = (id: string): TrashedDealerInfo["snapshot"] => {
+  const buildDealerTrashSnapshotForId = useCallback(
+    (id: string, rowById: Map<string, DealerRow>): TrashedDealerInfo["snapshot"] => {
       const row = rowById.get(id);
       const manual = actx.state.manuallyCreatedDealersById?.[id];
       const manualFields = (manual?.fields ?? {}) as Record<string, unknown>;
@@ -2745,14 +2752,142 @@ export default function DealerBase() {
         return null;
       })();
       return snapshotDealerFromRow({ fullName, city, inn, dealerCode, legalEntityName });
+    },
+    [actx.state],
+  );
+
+  const handleRowArchiveDealer = useCallback(
+    async (row: DealerRow) => {
+      const now = new Date().toISOString();
+      const r = await actx.persist((prev) => {
+        const next = { ...prev.archivedDealersById };
+        next[row.id] = {
+          dealerId: row.id,
+          archivedAt: now,
+          archivedBy: profile.personaUserId,
+          archivedByName: userLabelFromProfile(profile),
+          source: "manual_actualization",
+        };
+        return mergeActualizationState(prev, { archivedDealersById: next });
+      });
+      if (r.success) {
+        toast({
+          title: "Клиент перемещён в Архив",
+          description: "Восстановить можно из раздела «Корзина» → Архив.",
+        });
+      } else {
+        toast({ title: "Не удалось сохранить", variant: "destructive" });
+      }
+    },
+    [actx, profile],
+  );
+
+  const handleRowTrashDealer = useCallback(
+    async (row: DealerRow) => {
+      const uid = profile.personaUserId;
+      const uname = userLabelFromProfile(profile);
+      const rowById = new Map<string, DealerRow>([[row.id, row]]);
+      const r = await actx.persist((prev) =>
+        mergeActualizationState(prev, {
+          trashedDealersById: {
+            ...prev.trashedDealersById,
+            [row.id]: makeTrashedDealerInfo({
+              dealerId: row.id,
+              by: { userId: uid, userName: uname },
+              snapshot: buildDealerTrashSnapshotForId(row.id, rowById),
+              source: "client_bulk_delete",
+            }),
+          },
+        }),
+      );
+      if (r.success) {
+        toast({
+          title: "Клиент перемещён в Корзину",
+          description: "Хранится 14 дней. Восстановить можно из раздела «Корзина».",
+        });
+      } else {
+        toast({ title: "Не удалось сохранить", variant: "destructive" });
+      }
+    },
+    [actx, profile, buildDealerTrashSnapshotForId],
+  );
+
+  const dealerRowQuickMoveProps = useMemo((): DealerListRowQuickMoveProps | undefined => {
+    if (!actx.enabled || !canActualizeClientBase(profile) || showArchivedDealers || bulkDeleteMode) return undefined;
+    return {
+      canMoveDealerId: (id) => archivableDealerIdsInView.has(id),
+      onArchive: (row) => void handleRowArchiveDealer(row),
+      onTrash: (row) => void handleRowTrashDealer(row),
     };
+  }, [
+    actx.enabled,
+    profile,
+    showArchivedDealers,
+    bulkDeleteMode,
+    archivableDealerIdsInView,
+    handleRowArchiveDealer,
+    handleRowTrashDealer,
+  ]);
+
+  /** Bulk: мягкая архивация в `archivedDealersById` (Промт 70.6). */
+  const confirmBulkSoftArchiveDealers = useCallback(async () => {
+    const ids = Array.from(selectedBulkArchiveDealerIds).filter((id) => archivableDealerIdsInView.has(id));
+    if (ids.length === 0) {
+      setBulkSoftArchiveDealerDialogOpen(false);
+      return;
+    }
+    setBulkArchiveDealerBusy(true);
+    const now = new Date().toISOString();
+    const uid = profile.personaUserId;
+    const uname = userLabelFromProfile(profile);
+    const r = await actx.persist((prev) => {
+      const next = { ...prev.archivedDealersById };
+      for (const id of ids) {
+        next[id] = {
+          dealerId: id,
+          archivedAt: now,
+          archivedBy: uid,
+          archivedByName: uname,
+          source: "manual_actualization",
+        };
+      }
+      return mergeActualizationState(prev, { archivedDealersById: next });
+    });
+    setBulkArchiveDealerBusy(false);
+    if (r.success) {
+      toast({
+        title: `Перемещено в Архив: ${ids.length}`,
+        description: "Архив доступен через переключатель «Режим архива клиентов» или в разделе «Корзина».",
+      });
+      setSelectedBulkArchiveDealerIds(new Set());
+      setBulkDeleteMode(false);
+      setBulkSoftArchiveDealerDialogOpen(false);
+    } else {
+      toast({ title: "Не удалось сохранить", variant: "destructive" });
+    }
+  }, [selectedBulkArchiveDealerIds, archivableDealerIdsInView, actx, profile]);
+
+  /**
+   * Bulk-delete отправляет клиентов в КОРЗИНУ (`trashedDealersById`).
+   * Снапшоты — через хелпер `snapshotDealerFromRow` (Промт 46).
+   */
+  const confirmBulkArchiveDealers = useCallback(async () => {
+    const ids = Array.from(selectedBulkArchiveDealerIds).filter((id) => archivableDealerIdsInView.has(id));
+    if (ids.length === 0) {
+      setBulkArchiveDealerDialogOpen(false);
+      return;
+    }
+    setBulkArchiveDealerBusy(true);
+    const uid = profile.personaUserId;
+    const uname = userLabelFromProfile(profile);
+    const rowById = new Map<string, DealerRow>(rowsFinalForList.map((r) => [r.id, r]));
     const r = await actx.persist((prev) => {
       const nextTrash = { ...prev.trashedDealersById };
       for (const id of ids) {
         nextTrash[id] = makeTrashedDealerInfo({
           dealerId: id,
           by: { userId: uid, userName: uname },
-          snapshot: snapshotFor(id),
+          snapshot: buildDealerTrashSnapshotForId(id, rowById),
           source: "client_bulk_delete",
         });
       }
@@ -2767,7 +2902,7 @@ export default function DealerBase() {
     } else {
       toast({ title: "Не удалось сохранить", variant: "destructive" });
     }
-  }, [selectedBulkArchiveDealerIds, archivableDealerIdsInView, actx, profile, rowsFinalForList]);
+  }, [selectedBulkArchiveDealerIds, archivableDealerIdsInView, actx, profile, rowsFinalForList, buildDealerTrashSnapshotForId]);
 
   const selectedWpRows = useMemo(
     () => rowsFinalForList.filter((r) => selectedWpIds.has(r.id)),
@@ -3675,8 +3810,8 @@ export default function DealerBase() {
                   onClick={() => setBulkDeleteMode(true)}
                 >
                   <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
-                  <span className="hidden sm:inline">Выбрать для удаления</span>
-                  <span className="sm:hidden">Удалить</span>
+                  <span className="hidden sm:inline">Выбрать для перемещения</span>
+                  <span className="sm:hidden">Выбрать</span>
                 </Button>
               ) : (
                 <Button
@@ -3692,8 +3827,8 @@ export default function DealerBase() {
               )}
             </div>
             {bulkDeleteMode ? (
-              <p className="text-sm leading-snug text-destructive/95" data-testid="text-dealer-bulk-delete-mode-hint">
-                Красным отметьте клиентов, которых нужно удалить из рабочей базы.
+              <p className="text-sm leading-snug text-muted-foreground" data-testid="text-dealer-bulk-delete-mode-hint">
+                Отметьте клиентов для перемещения в Архив или в Корзину.
               </p>
             ) : null}
           </div>
@@ -3748,13 +3883,25 @@ export default function DealerBase() {
               </Button>
               <Button
                 type="button"
-                variant="destructive"
+                variant="default"
+                size="sm"
+                className="min-h-10 w-full font-semibold sm:w-auto"
+                data-testid="button-dealer-bulk-soft-archive"
+                disabled={bulkArchiveDealerDialogCount === 0}
+                onClick={() => setBulkSoftArchiveDealerDialogOpen(true)}
+              >
+                Переместить в Архив ({bulkArchiveDealerDialogCount})
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
                 size="sm"
                 className="min-h-10 w-full font-semibold sm:w-auto"
                 data-testid="button-dealer-bulk-archive"
+                disabled={bulkArchiveDealerDialogCount === 0}
                 onClick={() => setBulkArchiveDealerDialogOpen(true)}
               >
-                Удалить / в архив
+                Переместить в Корзину ({bulkArchiveDealerDialogCount})
               </Button>
             </div>
           </div>
@@ -4000,6 +4147,7 @@ export default function DealerBase() {
                 focusList={focusListCtx}
                 {...workPlanListProps}
                 archiveBulk={archiveBulkListProps}
+                rowQuickMove={dealerRowQuickMoveProps}
               />
             ) : (
               <DealerBaseSegmentGroups
@@ -4017,6 +4165,7 @@ export default function DealerBase() {
                 focusList={focusListCtx}
                 {...workPlanListProps}
                 archiveBulk={archiveBulkListProps}
+                rowQuickMove={dealerRowQuickMoveProps}
               />
             )}
           </div>
@@ -4044,6 +4193,7 @@ export default function DealerBase() {
                 focusList={focusListCtx}
                 {...workPlanListProps}
                 archiveBulk={archiveBulkListProps}
+                rowQuickMove={dealerRowQuickMoveProps}
               />
             )}
           </div>
@@ -4071,11 +4221,51 @@ export default function DealerBase() {
                 focusList={focusListCtx}
                 {...workPlanListProps}
                 archiveBulk={archiveBulkListProps}
+                rowQuickMove={dealerRowQuickMoveProps}
               />
             )}
           </div>
         ) : null}
       </section>
+
+      <AlertDialog
+        open={bulkSoftArchiveDealerDialogOpen}
+        onOpenChange={(open) => {
+          if (bulkArchiveDealerBusy) return;
+          setBulkSoftArchiveDealerDialogOpen(open);
+        }}
+      >
+        <AlertDialogContent data-testid="dialog-dealer-bulk-soft-archive-confirm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Переместить {bulkArchiveDealerDialogCount} клиентов в Архив?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Клиенты исчезнут из активной базы и появятся в Архиве. Восстановить их обратно можно в любой момент (раздел Корзина → Архив).
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col gap-2 sm:flex-row">
+            <AlertDialogCancel asChild>
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-10 w-full font-semibold sm:w-auto"
+                data-testid="button-dealer-bulk-soft-archive-cancel"
+              >
+                Отмена
+              </Button>
+            </AlertDialogCancel>
+            <Button
+              type="button"
+              variant="default"
+              className="min-h-10 w-full font-semibold sm:w-auto"
+              data-testid="button-dealer-bulk-soft-archive-confirm"
+              disabled={bulkArchiveDealerBusy || bulkArchiveDealerDialogCount === 0}
+              onClick={() => void confirmBulkSoftArchiveDealers()}
+            >
+              {bulkArchiveDealerBusy ? "Сохранение…" : "Переместить в Архив"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog
         open={bulkArchiveDealerDialogOpen}
