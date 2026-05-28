@@ -1305,6 +1305,9 @@ export default function DealerBase() {
   const [createDealerOpen, setCreateDealerOpen] = useState(false);
   const [showArchivedDealers, setShowArchivedDealers] = useState(false);
 
+  /** Real-режим: список только архивных клиентов (toggle «Режим архива»). */
+  const dealerBaseArchiveListMode = useReal && actx.enabled && showArchivedDealers;
+
   const mergedRowsForDealerBase = useMemo(() => {
     if (isRealUser && !authLoading && !authError && snap && visPayload && !orgSnapQ.isError && !visCodesQ.isError) {
       const clients = getVisibleReleaseClients(
@@ -1315,10 +1318,14 @@ export default function DealerBase() {
       );
       const releaseRows = buildDealerRowsFromReleaseClients(clients);
       if (!actx.enabled) return releaseRows;
-      return buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, {
-        includeArchivedDealers: showArchivedDealers,
+      const includeArchived = showArchivedDealers;
+      const merged = buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, {
+        includeArchivedDealers: includeArchived,
         releaseDealerRows: releaseRows,
       });
+      if (!includeArchived) return merged;
+      const archivedMap = teamActualizationPlane.archivedDealersById ?? {};
+      return merged.filter((r) => Boolean(archivedMap[r.id]));
     }
     if (isRealUser && !authLoading && !authError && (!snap || !visPayload)) return [];
     if (!actx.enabled) return DEALER_BASE_ROWS;
@@ -2045,6 +2052,9 @@ export default function DealerBase() {
 
   const displayRows = useMemo(() => {
     const limit = DEALER_BASE_DISPLAY_LIMIT;
+    if (dealerBaseArchiveListMode) {
+      return pickerFiltered.slice(0, limit);
+    }
     if (
       workView === "risks_all" ||
       workView === "top_all" ||
@@ -2075,6 +2085,7 @@ export default function DealerBase() {
     teamRowsForModes,
     managerScopedRows,
     needsManagerSelection,
+    dealerBaseArchiveListMode,
   ]);
 
   const cap = DEALER_BASE_DISPLAY_LIMIT;
@@ -2119,6 +2130,7 @@ export default function DealerBase() {
   );
 
   const resultsCapTotal = useMemo(() => {
+    if (dealerBaseArchiveListMode) return pickerFiltered.length;
     switch (workView) {
       case "risks_all":
         return pickerFiltered.filter(isDealerBusinessRisk).length;
@@ -2154,6 +2166,7 @@ export default function DealerBase() {
     managerScopedRows,
     needsManagerSelection,
     pickerArgs,
+    dealerBaseArchiveListMode,
   ]);
 
   const setRopManagerFromClick = (tid: string, mid: string) => {
@@ -2252,10 +2265,10 @@ export default function DealerBase() {
 
   const workPlanState = useMemo(() => resolveWorkPlanState(), [workPlanBump]);
 
-  const rowsForWorkPlan = useMemo(
-    () => filterDealersByWorkPlan(displayRows, profile.personaUserId, workPlanFilter, workPlanState),
-    [displayRows, profile.personaUserId, workPlanFilter, workPlanState],
-  );
+  const rowsForWorkPlan = useMemo(() => {
+    if (dealerBaseArchiveListMode) return displayRows;
+    return filterDealersByWorkPlan(displayRows, profile.personaUserId, workPlanFilter, workPlanState);
+  }, [dealerBaseArchiveListMode, displayRows, profile.personaUserId, workPlanFilter, workPlanState]);
 
   const rowsAfterSegmentFilter = useMemo(() => {
     if (segmentList.length === 0) return rowsForWorkPlan;
