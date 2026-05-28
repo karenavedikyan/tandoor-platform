@@ -18,6 +18,7 @@ import { normalizeTerritoryCityName } from "@/lib/territory-city-normalize";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { getEffectiveTeamLeadTeamId } from "@/lib/release-demo-profile";
 import { realEffectiveTeamLeadTeamId, realRopOptions, realTeamManagers } from "@/lib/real-org-adapter";
+import { catalogTeamIdForRopUserId } from "@/lib/dealer-base-real-scope";
 import type { OrgSnapshot } from "@/lib/use-org-snapshot";
 import { UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE } from "@shared/admin/actualization-dedupe";
 
@@ -43,8 +44,41 @@ export function catalogManagerIdFromUserRef(userRef: string): string {
 
 
 
+/**
+ * Catalog teamId (`team-kupiansky`) для фильтрации DealerRow.releaseTeamId.
+ * В org snapshot `teamsForManagementView` часто отдаёт UUID команды — без маппинга teamRows = [].
+ */
+export function resolveManagementCatalogTeamId(teamId: string, orgSnap?: OrgSnapshot | null): string {
+  if (!orgSnap) return teamId;
+  if (teamId.startsWith("team-")) return teamId;
+  const team = orgSnap.teams.find((t) => t.id === teamId);
+  if (!team) return teamId;
+  if (team.ropUserId) {
+    const fromRop = catalogTeamIdForRopUserId(orgSnap, team.ropUserId);
+    if (fromRop) return fromRop;
+  }
+  return teamId;
+}
+
+/** UUID команды в org snapshot для `realTeamManagers` (менеджеры из БД). */
+export function resolveManagementOrgTeamUuid(teamId: string, orgSnap?: OrgSnapshot | null): string {
+  if (!orgSnap) return teamId;
+  if (!teamId.startsWith("team-")) return teamId;
+  for (const t of orgSnap.teams) {
+    if (t.id === teamId) return t.id;
+    if (t.ropUserId) {
+      const cat = catalogTeamIdForRopUserId(orgSnap, t.ropUserId);
+      if (cat === teamId) return t.id;
+    }
+  }
+  return teamId;
+}
+
 export function managersCatalogForTeam(teamId: string, orgSnap?: OrgSnapshot | null): SalesUser[] {
-  if (orgSnap) return realTeamManagers(orgSnap, teamId);
+  if (orgSnap) {
+    const orgUuid = resolveManagementOrgTeamUuid(teamId, orgSnap);
+    return realTeamManagers(orgSnap, orgUuid);
+  }
   return getTeamManagers(teamId);
 }
 
@@ -93,6 +127,31 @@ export function dealerRowClientCodeForAssignments(row: DealerRow): string {
   return row.releaseCode?.trim() || row.id;
 }
 
+/** Кандидаты client_code для lookup в `responsibleByCode` (БД / my-codes). */
+export function clientAssignmentCodeCandidates(row: DealerRow): string[] {
+  const out: string[] = [];
+  const release = row.releaseCode?.trim();
+  if (release) out.push(release);
+  const id = row.id?.trim();
+  if (id && !out.includes(id)) out.push(id);
+  return out;
+}
+
+function lookupResponsibleForDealerRow(map: ResponsibleByCodeMap, row: DealerRow): string | undefined {
+  for (const code of clientAssignmentCodeCandidates(row)) {
+    const hit = lookupResponsibleByCode(map, code);
+    if (hit) return hit;
+  }
+  return undefined;
+}
+
+function hasResponsibleEntryForDealerRow(map: ResponsibleByCodeMap, row: DealerRow): boolean {
+  for (const code of clientAssignmentCodeCandidates(row)) {
+    if (hasResponsibleByCode(map, code)) return true;
+  }
+  return false;
+}
+
 /**
  * Сопоставление клиента менеджеру: при наличии записи в `responsibleByCode` — только БД (без fallback на seed).
  */
@@ -107,9 +166,8 @@ export function buildDbAwareManagerMatcher(
   return (r: DealerRow) => {
     if (resolveDealerRowTeamId(r) !== teamId) return false;
     if (responsibleByCode) {
-      const code = dealerRowClientCodeForAssignments(r);
-      if (hasResponsibleByCode(responsibleByCode, code)) {
-        const uuid = lookupResponsibleByCode(responsibleByCode, code);
+      if (hasResponsibleEntryForDealerRow(responsibleByCode, r)) {
+        const uuid = lookupResponsibleForDealerRow(responsibleByCode, r);
         if (uuid) {
           const catalogMgr = UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE[uuid] ?? uuid;
           return catalogMgr === catalogMgrId;
@@ -158,10 +216,11 @@ export function aggregateManagersForTeam(
   _userIdToCatalogMgrId?: Map<string, string>,
 ): ManagerRowModel[] {
   void _userIdToCatalogMgrId;
-  const managers = managersCatalogForTeam(teamId, orgSnap);
+  const catalogTeamId = resolveManagementCatalogTeamId(teamId, orgSnap);
+  const managers = managersCatalogForTeam(catalogTeamId, orgSnap);
   return managers.map((m) => {
     const mgrCatalogId = catalogManagerIdFromUserRef(m.id);
-    const match = buildDbAwareManagerMatcher(mgrCatalogId, m.name, teamId, responsibleByCode);
+    const match = buildDbAwareManagerMatcher(mgrCatalogId, m.name, catalogTeamId, responsibleByCode);
     const rows = teamRows.filter(match);
     const active = rows.filter((r) => r.status === "активный").length;
     const potential = rows.filter((r) => r.status === "потенциальный").length;
@@ -310,15 +369,19 @@ export function buildRopGroups(
   responsibleByCode?: ResponsibleByCodeMap,
   userIdToCatalogMgrId?: Map<string, string>,
 ): RopGroupModel[] {
-  const teamActiveCounts = teams.map((t) => ({
-    teamId: t.teamId,
-    n: rows.filter((r) => resolveDealerRowTeamId(r) === t.teamId && r.status === "активный").length,
-  }));
+  const teamActiveCounts = teams.map((t) => {
+    const catalogTeamId = resolveManagementCatalogTeamId(t.teamId, orgSnap);
+    return {
+      teamId: t.teamId,
+      n: rows.filter((r) => resolveDealerRowTeamId(r) === catalogTeamId && r.status === "активный").length,
+    };
+  });
   const maxTeamActive = teamActiveCounts.reduce((m, x) => Math.max(m, x.n), 0);
 
   return teams.map((t) => {
-    const teamRows = rows.filter((r) => resolveDealerRowTeamId(r) === t.teamId);
-    const managers = aggregateManagersForTeam(t.teamId, teamRows, orgSnap, responsibleByCode, userIdToCatalogMgrId);
+    const catalogTeamId = resolveManagementCatalogTeamId(t.teamId, orgSnap);
+    const teamRows = rows.filter((r) => resolveDealerRowTeamId(r) === catalogTeamId);
+    const managers = aggregateManagersForTeam(catalogTeamId, teamRows, orgSnap, responsibleByCode, userIdToCatalogMgrId);
     const active = teamRows.filter((r) => r.status === "активный").length;
     const potential = teamRows.filter((r) => r.status === "потенциальный").length;
     const attention = teamRows.filter((r) => dealerNeedsAttention(r)).length;
