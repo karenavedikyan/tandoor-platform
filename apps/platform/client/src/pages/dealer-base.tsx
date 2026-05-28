@@ -100,6 +100,7 @@ import {
 } from "@/lib/dealer-base-picker-filters";
 import { shouldSelfHealZeroResult } from "@/lib/dealer-base-clients-selfheal";
 import { ArchiveInArchiveBadge, archivedEntityRowClassName, isDealerArchivedInActualization } from "@/components/archive-record-visual";
+import { IGNORE_CLIENT_ARCHIVE_IN_UI } from "@/lib/archive-record-visual";
 import { CityConcentrationBlock } from "@/components/city-concentration-block";
 import { DealerActualizationCreateDialog } from "@/components/client-base-actualization-dealer-forms";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
@@ -2816,18 +2817,9 @@ export default function DealerBase() {
     if (!actx.enabled || !canActualizeClientBase(profile) || showArchivedDealers || bulkDeleteMode) return undefined;
     return {
       canMoveDealerId: (id) => archivableDealerIdsInView.has(id),
-      onArchive: (row) => void handleRowArchiveDealer(row),
       onTrash: (row) => void handleRowTrashDealer(row),
     };
-  }, [
-    actx.enabled,
-    profile,
-    showArchivedDealers,
-    bulkDeleteMode,
-    archivableDealerIdsInView,
-    handleRowArchiveDealer,
-    handleRowTrashDealer,
-  ]);
+  }, [actx.enabled, profile, showArchivedDealers, bulkDeleteMode, archivableDealerIdsInView, handleRowTrashDealer]);
 
   /** Bulk: мягкая архивация в `archivedDealersById` (Промт 70.6). */
   const confirmBulkSoftArchiveDealers = useCallback(async () => {
@@ -3162,7 +3154,7 @@ export default function DealerBase() {
               </AlertDescription>
             </Alert>
           ) : null}
-          {actx.enabled ? (
+          {actx.enabled && !IGNORE_CLIENT_ARCHIVE_IN_UI ? (
             <div
               className="flex max-w-lg flex-col gap-2 rounded-xl border border-border/80 bg-muted/15 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
               data-testid="section-dealers-archived-toggle"

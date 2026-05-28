@@ -1,4 +1,4 @@
-import { Archive, MoreHorizontal, Trash2 } from "lucide-react";
+import { MoreHorizontal, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -11,8 +11,9 @@ import type { TradePointListRow } from "@/lib/trade-point-list-for-actualization
 
 export type TradePointListRowQuickMoveProps = {
   canMoveRow: (row: TradePointListRow) => boolean;
-  onArchive: (row: TradePointListRow) => void;
   onTrash: (row: TradePointListRow) => void;
+  /** @deprecated Промт 79 */
+  onArchive?: (row: TradePointListRow) => void;
 };
 
 export function TradePointRowQuickMoveActions({
@@ -35,31 +36,15 @@ export function TradePointRowQuickMoveActions({
               type="button"
               variant="ghost"
               size="sm"
-              className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
-              data-testid={`button-${archiveTestIdPrefix}-archive-${id}`}
-              onClick={() => rowQuickMove.onArchive(row)}
-            >
-              <Archive className="h-3.5 w-3.5" aria-hidden />
-              <span className="sr-only">В Архив</span>
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="top">В Архив</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
               className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
               data-testid={`button-${archiveTestIdPrefix}-trash-${id}`}
               onClick={() => rowQuickMove.onTrash(row)}
             >
               <Trash2 className="h-3.5 w-3.5" aria-hidden />
-              <span className="sr-only">В Корзину</span>
+              <span className="sr-only">Удалить</span>
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="top">В Корзину</TooltipContent>
+          <TooltipContent side="top">Удалить</TooltipContent>
         </Tooltip>
       </div>
       <DropdownMenu>
@@ -77,13 +62,13 @@ export function TradePointRowQuickMoveActions({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-44">
-          <DropdownMenuItem data-testid={`menu-${archiveTestIdPrefix}-archive-${id}`} onClick={() => rowQuickMove.onArchive(row)}>
-            <Archive className="mr-2 h-4 w-4" aria-hidden />
-            В Архив
-          </DropdownMenuItem>
-          <DropdownMenuItem data-testid={`menu-${archiveTestIdPrefix}-trash-${id}`} onClick={() => rowQuickMove.onTrash(row)}>
+          <DropdownMenuItem
+            className="text-destructive focus:text-destructive"
+            data-testid={`menu-${archiveTestIdPrefix}-trash-${id}`}
+            onClick={() => rowQuickMove.onTrash(row)}
+          >
             <Trash2 className="mr-2 h-4 w-4" aria-hidden />
-            В Корзину
+            Удалить
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

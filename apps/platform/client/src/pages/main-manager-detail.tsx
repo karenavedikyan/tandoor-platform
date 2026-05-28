@@ -189,8 +189,7 @@ function MainManagerDetailContent() {
     (actx.enabled && actx.loading) ||
     (actx.enabled && managementPlane.teamFetchLoading);
 
-  const hasArchive =
-    (scopeMetrics?.archivedClients ?? 0) > 0 || (scopeMetrics?.archivedTradePoints ?? 0) > 0;
+  const hasArchive = false;
 
   if (!loading && !allowed) {
     return <Redirect to="/main" />;
@@ -267,24 +266,18 @@ function MainManagerDetailContent() {
       <section className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-4" data-testid="section-main-manager-kpi">
         <Card className="rounded-xl border border-border">
           <CardContent className="p-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Клиенты вне архива</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Клиенты</p>
             <p className="mt-0.5 text-xl font-semibold tabular-nums" data-testid="metric-manager-active-clients">
               {scopeMetrics?.activeClients ?? "—"}
             </p>
-            {scopeMetrics && scopeMetrics.archivedClients > 0 ? (
-              <p className="mt-1 text-xs text-muted-foreground tabular-nums">{scopeMetrics.archivedClients} в архиве</p>
-            ) : null}
           </CardContent>
         </Card>
         <Card className="rounded-xl border border-border">
           <CardContent className="p-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Торговые точки вне архива</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Торговые точки</p>
             <p className="mt-0.5 text-xl font-semibold tabular-nums" data-testid="metric-manager-active-tp">
               {scopeMetrics?.activeTradePoints ?? "—"}
             </p>
-            {scopeMetrics && scopeMetrics.archivedTradePoints > 0 ? (
-              <p className="mt-1 text-xs text-muted-foreground tabular-nums">{scopeMetrics.archivedTradePoints} в архиве</p>
-            ) : null}
           </CardContent>
         </Card>
       </section>

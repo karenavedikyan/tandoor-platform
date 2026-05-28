@@ -20,6 +20,7 @@ import {
   mergeTradePointsActiveForActualization,
 } from "@/lib/client-base-actualization-data-merge";
 import { buildTradePointListForActualization } from "@/lib/trade-point-list-for-actualization";
+import { IGNORE_CLIENT_ARCHIVE_IN_UI } from "@/lib/archive-record-visual";
 
 /** Безопасная нормализация текста из API/состояния (undefined, не-строки). */
 export function normalizeText(value: unknown): string {
@@ -973,13 +974,16 @@ export function computeTopKpis(
       const dealerId = resolvedEventDealerId(e, state) ?? e.dealerId;
       const did = normalizeText(dealerId);
       if (!did || !inScope(did)) continue;
-      if (e.kind === "manual_dealer" && !state.archivedDealersById[did] && !state.trashedDealersById?.[did]) md.add(did);
+      const dealerArchived = !IGNORE_CLIENT_ARCHIVE_IN_UI && Boolean(state.archivedDealersById[did]);
+      const tpArchived =
+        !IGNORE_CLIENT_ARCHIVE_IN_UI && e.tradePointId && Boolean(state.archivedTradePointsById[e.tradePointId]);
+      if (e.kind === "manual_dealer" && !dealerArchived && !state.trashedDealersById?.[did]) md.add(did);
       else if (e.kind === "dealer_updated") ud.add(did);
       else if (
         e.kind === "manual_trade_point" &&
         e.tradePointId &&
-        !state.archivedDealersById[did] &&
-        !state.archivedTradePointsById[e.tradePointId] &&
+        !dealerArchived &&
+        !tpArchived &&
         !state.trashedDealersById?.[did] &&
         !state.trashedTradePointsById?.[e.tradePointId]
       ) {
@@ -996,7 +1000,7 @@ export function computeTopKpis(
   } else {
     for (const d of Object.values(state.manuallyCreatedDealersById)) {
       if (!inScope(d.id)) continue;
-      if (state.archivedDealersById[d.id]) continue;
+      if (!IGNORE_CLIENT_ARCHIVE_IN_UI && state.archivedDealersById[d.id]) continue;
       if (state.trashedDealersById?.[d.id]) continue;
       const t = firstResolvedActivityMs(d.createdAt, d.updatedAt);
       if (t == null) {
@@ -1013,8 +1017,8 @@ export function computeTopKpis(
     }
     for (const tp of Object.values(state.manuallyCreatedTradePointsById)) {
       if (!inScope(tp.dealerId)) continue;
-      if (state.archivedDealersById[tp.dealerId]) continue;
-      if (state.archivedTradePointsById[tp.id]) continue;
+      if (!IGNORE_CLIENT_ARCHIVE_IN_UI && state.archivedDealersById[tp.dealerId]) continue;
+      if (!IGNORE_CLIENT_ARCHIVE_IN_UI && state.archivedTradePointsById[tp.id]) continue;
       if (state.trashedDealersById?.[tp.dealerId]) continue;
       if (state.trashedTradePointsById?.[tp.id]) continue;
       const t = firstResolvedActivityMs(tp.createdAt, tp.updatedAt);
@@ -1198,7 +1202,7 @@ export function passesContributionGeoFilters(
   manualCityFallback?: string,
 ): boolean {
   if (!pack.scopedDealerIds.has(dealerId)) return false;
-  if (pack.act.archivedDealersById[dealerId]) return false;
+  if (!IGNORE_CLIENT_ARCHIVE_IN_UI && pack.act.archivedDealersById[dealerId]) return false;
   if (pack.act.trashedDealersById?.[dealerId]) return false;
   if (pack.ropTeamId !== "__all__") {
     const row = pack.dealerById.get(dealerId);

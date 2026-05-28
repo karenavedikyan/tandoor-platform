@@ -790,7 +790,7 @@ export function TradePointManualActualizationView(props: {
                 data-testid={`button-trade-point-archive-${point.id}`}
                 onClick={() => onRequestArchive?.()}
               >
-                В архив
+                Удалить
               </Button>
             ) : null}
           </div>

@@ -4,6 +4,7 @@
 
 import type { ActualizationSource, ActualizationState, ArchivedLegalEntityInfo } from "@/lib/client-base-actualization-state";
 import { mergeActualizationState } from "@/lib/client-base-actualization-state";
+import { IGNORE_CLIENT_ARCHIVE_IN_UI } from "@/lib/archive-record-visual";
 
 const DISPLAY_CODE_RE = /^TND-LE-(\d{6})$/i;
 
@@ -40,6 +41,7 @@ export function allocateNextLegalEntityDisplayCode(state: ActualizationState): s
 }
 
 export function isLegalEntityArchivedInActualization(act: ActualizationState, dealerId: string, legalEntityId: string): boolean {
+  if (IGNORE_CLIENT_ARCHIVE_IN_UI) return false;
   const top = act.archivedLegalEntitiesById[legalEntityId];
   if (top && top.dealerId === dealerId) return true;
   const st = act.legalEntityOverridesByDealerId[dealerId];

@@ -881,7 +881,7 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
   const isArchivedDealerCard = actx.enabled && Boolean(actx.state.archivedDealersById[baseRow.id]);
 
   const canTrashDealer =
-    actx.enabled && !actx.state.archivedDealersById[baseRow.id] && !isDealerTrashed && canArchiveDealerDuringActualization(profile, row);
+    actx.enabled && !isDealerTrashed && canArchiveDealerDuringActualization(profile, row);
 
   const trashDealer = useCallback(async () => {
     if (!canTrashDealer) return;
@@ -2336,9 +2336,9 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
       <AlertDialog open={dealerDeleteDialogOpen} onOpenChange={setDealerDeleteDialogOpen}>
         <AlertDialogContent data-testid="dialog-dealer-delete-confirm">
           <AlertDialogHeader>
-            <AlertDialogTitle>Переместить клиента в корзину?</AlertDialogTitle>
+            <AlertDialogTitle>Удалить клиента?</AlertDialogTitle>
             <AlertDialogDescription className="text-sm">
-              Клиент будет храниться в корзине 14 дней. Восстановить можно в любой момент на странице «Корзина». Через 14 дней удалится окончательно.
+              Клиент уйдёт в корзину на 30 дней. Восстановить можно из раздела «Корзина».
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
@@ -2361,7 +2361,7 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
               onClick={() => void softArchiveDealer()}
             >
               <Trash2 className="h-4 w-4" aria-hidden />
-              {dealerArchiveBusy ? "Перемещение…" : "Переместить в корзину"}
+              {dealerArchiveBusy ? "Удаление…" : "Удалить"}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -2463,7 +2463,6 @@ export function DealerCardPage() {
   return (
     <>
       {isTrashedDealer ? <TrashedDealerCardBanner /> : null}
-      {isArchivedDealer && !isTrashedDealer ? <ArchivedDealerCardBanner dealerId={id} profile={profile} row={baseRow} /> : null}
       {mainContent}
     </>
   );

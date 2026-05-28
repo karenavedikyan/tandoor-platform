@@ -172,8 +172,7 @@ export default function MainRopDetailPage() {
     (actx.enabled && actx.loading) ||
     (actx.enabled && managementPlane.teamFetchLoading);
 
-  const hasArchive =
-    (scopeMetrics?.archivedClients ?? 0) > 0 || (scopeMetrics?.archivedTradePoints ?? 0) > 0;
+  const hasArchive = false;
 
   if (!loading && !allowed) {
     return <Redirect to="/main" />;
