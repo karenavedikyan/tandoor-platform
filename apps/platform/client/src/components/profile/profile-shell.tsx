@@ -12,6 +12,7 @@
  *     · Запросы на сброс       (/reset-requests)
  *     · Журнал событий         (/admin/audit)
  *     · Дедуп актуализации     (/admin/actualization/dedupe)
+ *     · Миграция БД            (/admin/migration) — только admin
  *
  * Desktop — sticky 240px sidebar слева. Mobile — accordion сверху.
  */
@@ -65,6 +66,11 @@ function buildProfileNav(role: UserRole | null): SubNavGroup[] {
       href: "/admin/actualization/dedupe",
       label: "Дедуп актуализации",
       testId: "profile-nav-item-admin-actualization-dedupe",
+    });
+    admin.push({
+      href: "/admin/migration",
+      label: "Миграция БД",
+      testId: "profile-nav-item-admin-migration",
     });
   }
   if (admin.length > 0) {

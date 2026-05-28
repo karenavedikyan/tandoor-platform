@@ -137,7 +137,7 @@ export function canAccessPathForUser(role: UserRole, path: string): boolean {
   if (p === "/admin/client-assignments") {
     return canManageClientAssignments(role);
   }
-  if (p === "/admin/actualization/dedupe") {
+  if (p === "/admin/actualization/dedupe" || p === "/admin/migration") {
     return role === "admin";
   }
   if (p === "/profile" || isUnder(p, "/profile")) {
