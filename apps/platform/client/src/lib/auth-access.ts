@@ -99,12 +99,12 @@ export function defaultHomePathForUserRole(role: UserRole): string {
     case "admin":
       return "/admin/users";
     case "director":
-      return "/sales-control";
+      return "/dealer-base";
     case "rop":
     case "regional_manager":
-      return "/sales-control/team-lead";
+      return "/dealer-base";
     case "manager":
-      return "/main";
+      return "/dealer-base";
     case "marketer":
       return "/marketing-briefs";
     case "analyst":
@@ -390,15 +390,8 @@ export function getPilotNavigation(
   ): Extract<PilotNavigationModel, { layout: "grouped" }> => ({
     layout: "grouped",
     leadingItems: [
-      { href: homeHref, label: "Главная", testId: "nav-item-home", navBehaviorId: "nav-main" },
       {
-        href: "/client-base-activity",
-        label: "Статистика обновления",
-        testId: "nav-item-client-base-activity",
-        navBehaviorId: "nav-client-base-activity",
-      },
-      {
-        href: "/dealer-base",
+        href: homeHref,
         label: "Клиенты-дилеры",
         testId: "nav-item-clients",
         navBehaviorId: "nav-dealer-base",
@@ -455,12 +448,12 @@ export function getPilotNavigation(
 
   if (role === "sales_director" || role === "team_lead") {
     void platformUserRole;
-    return unifiedSalesNavigation("/main");
+    return unifiedSalesNavigation("/dealer-base");
   }
 
   if (role === "sales_manager") {
     void platformUserRole;
-    return unifiedSalesNavigation("/main");
+    return unifiedSalesNavigation("/dealer-base");
   }
 
   const flat = ((): PilotNavItem[] => {
