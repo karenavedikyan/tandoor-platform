@@ -34,7 +34,8 @@
     "test:manager-only-state": "tsx api/actualization/__tests__/manager-only-state.test.ts",
     "test:race-hooks-order": "tsx client/src/components/home/__tests__/actualization-race-hooks-order.test.ts",
     "test:real-client-base": "tsx client/src/lib/__tests__/real-client-base.test.ts",
-    "test:rop-real-scope": "tsx client/src/lib/__tests__/dealer-base-real-scope.test.ts"
+    "test:rop-real-scope": "tsx client/src/lib/__tests__/dealer-base-real-scope.test.ts",
+    "test:dealer-base-clients-selfheal": "tsx client/src/lib/__tests__/dealer-base-clients-selfheal.test.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

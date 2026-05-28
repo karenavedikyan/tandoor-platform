@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import {
@@ -96,6 +96,7 @@ import {
   type ClientCategorySelection,
   type QuickFilter,
 } from "@/lib/dealer-base-picker-filters";
+import { shouldSelfHealZeroResult } from "@/lib/dealer-base-clients-selfheal";
 import { ArchiveInArchiveBadge, archivedEntityRowClassName, isDealerArchivedInActualization } from "@/components/archive-record-visual";
 import { CityConcentrationBlock } from "@/components/city-concentration-block";
 import { DealerActualizationCreateDialog } from "@/components/client-base-actualization-dealer-forms";
@@ -2143,6 +2144,71 @@ export default function DealerBase() {
   }, []);
 
   const defaultWorkPlanFilterValue = profile.role === "marketer" || profile.role === "analyst" ? "all" : "active";
+
+  const clientsSelfHealAppliedRef = useRef(false);
+
+  useEffect(() => {
+    if (clientsSelfHealAppliedRef.current) return;
+
+    const heal = shouldSelfHealZeroResult({
+      useReal,
+      snap,
+      access,
+      scopedRowsLength: scopedRows.length,
+      pickerFilteredLength: pickerFiltered.length,
+      ropTeam,
+      manager,
+      defaultRopManager,
+      search,
+      quick,
+      cities,
+      categories,
+      geoRegion,
+      geoDistrict,
+      geoLocality,
+      programFiltersLength: programFilters.length,
+      urlFocusId,
+      urlCharacteristicId,
+      stockListFilter,
+      segmentListLength: segmentList.length,
+      workPlanFilter,
+      defaultWorkPlanFilterValue,
+      selfHealAlreadyApplied: clientsSelfHealAppliedRef.current,
+    });
+
+    if (!heal) return;
+
+    clientsSelfHealAppliedRef.current = true;
+    console.warn("[clients-selfheal] ZeroResult fallback: reset rop/manager to defaults", {
+      previous: { ropTeam, manager },
+      defaults: defaultRopManager,
+    });
+    setRopTeam(defaultRopManager.ropTeam);
+    setManager(defaultRopManager.manager);
+  }, [
+    useReal,
+    snap,
+    access,
+    scopedRows.length,
+    pickerFiltered.length,
+    ropTeam,
+    manager,
+    defaultRopManager,
+    search,
+    quick,
+    cities,
+    categories,
+    geoRegion,
+    geoDistrict,
+    geoLocality,
+    programFilters.length,
+    urlFocusId,
+    urlCharacteristicId,
+    stockListFilter,
+    segmentList.length,
+    workPlanFilter,
+    defaultWorkPlanFilterValue,
+  ]);
 
   const dealerBaseActiveFilterChips = useMemo(() => {
     const chips: { key: string; label: string; onRemove: () => void }[] = [];
