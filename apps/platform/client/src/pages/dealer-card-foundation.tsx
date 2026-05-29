@@ -22,6 +22,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { ArchiveInArchiveBadge } from "@/components/archive-record-visual";
+import { IGNORE_CLIENT_ARCHIVE_IN_UI } from "@/lib/archive-record-visual";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -878,7 +879,8 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
    * (`trashedDealersById`), а не в Архив. Архив остаётся как legacy (restore-banner ниже).
    * Условие активации: actx включён, клиент не в архиве и не в корзине, есть права.
    */
-  const isArchivedDealerCard = actx.enabled && Boolean(actx.state.archivedDealersById[baseRow.id]);
+  const isArchivedDealerCard =
+    !IGNORE_CLIENT_ARCHIVE_IN_UI && actx.enabled && Boolean(actx.state.archivedDealersById[baseRow.id]);
 
   const canTrashDealer =
     actx.enabled && !isDealerTrashed && canArchiveDealerDuringActualization(profile, row);
@@ -2446,7 +2448,8 @@ export function DealerCardPage() {
     return <DealerNotFound />;
   }
 
-  const isArchivedDealer = actx.enabled && Boolean(actx.state.archivedDealersById[id]);
+  const isArchivedDealer =
+    !IGNORE_CLIENT_ARCHIVE_IN_UI && actx.enabled && Boolean(actx.state.archivedDealersById[id]);
   const isTrashedDealer = actx.enabled && Boolean(actx.state.trashedDealersById?.[id]);
 
   const useCleanActualizationAnketa =
