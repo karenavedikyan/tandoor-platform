@@ -69,6 +69,7 @@ const LazySalesControlPerformance = lazy(() => import("@/pages/sales-control-per
 const LazySalesPlanFactManagement = lazy(() => import("@/pages/sales-plan-fact-management"));
 const LazyAnalyticsWorkspace = lazy(() => import("@/pages/analytics-workspace"));
 const LazyMarketingBriefs = lazy(() => import("@/pages/marketing-briefs"));
+const LazyMarketingBriefEditor = lazy(() => import("@/pages/marketing-brief-editor"));
 const LazyMarketingBriefPublished = lazy(() =>
   import("@/pages/marketing-briefs").then((m) => ({ default: m.MarketingBriefPublishedPage })),
 );
@@ -136,6 +137,7 @@ const SalesControlPerformanceRoute = suspensePage(LazySalesControlPerformance);
 const SalesPlanFactManagementRoute = suspensePage(LazySalesPlanFactManagement);
 const AnalyticsWorkspaceRoute = suspensePage(LazyAnalyticsWorkspace);
 const MarketingBriefsRoute = suspensePage(LazyMarketingBriefs);
+const MarketingBriefEditorRoute = suspensePage(LazyMarketingBriefEditor);
 const MarketingBriefPublishedRoute = suspensePage(LazyMarketingBriefPublished);
 const ReleaseOneRoute = suspensePage(LazyReleaseOne);
 const ReleaseClientsRoute = suspensePage(LazyReleaseClients);
@@ -408,6 +410,7 @@ function AuthenticatedShell({
         <Route path="/sales-control" component={SalesControlHubRoute} />
         <Route path="/analytics-workspace" component={AnalyticsWorkspaceRoute} />
         <Route path="/marketing-briefs/view/:id" component={MarketingBriefPublishedRoute} />
+        <Route path="/marketing-briefs/:id" component={MarketingBriefEditorRoute} />
         <Route path="/marketing-briefs" component={MarketingBriefsRoute} />
         <Route path="/listings" component={ListingsRoute} />
         <Route path="/release-one/clients" component={ReleaseClientsRoute} />
