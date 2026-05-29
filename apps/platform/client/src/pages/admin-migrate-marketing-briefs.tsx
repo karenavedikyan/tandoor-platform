@@ -35,6 +35,12 @@ function panelHasError(panel: DbPanel): panel is { error: string } {
   return "error" in panel;
 }
 
+function truncateSqlDisplay(sql: string, max = 50): string {
+  const t = sql.replace(/\s+/g, " ").trim();
+  if (t.length <= max) return t;
+  return `${t.slice(0, max)}…`;
+}
+
 function DbResultPanel({
   title,
   panel,
@@ -96,8 +102,13 @@ function DbResultPanel({
                 ) : (
                   <XCircle className="h-3.5 w-3.5 shrink-0 text-destructive" aria-hidden />
                 )}
-                <span className="min-w-0">
-                  <span className="font-mono text-[10px] text-muted-foreground">{row.sql}</span>
+                <span className="min-w-0 flex-1">
+                  <span
+                    className="block truncate font-mono text-[10px] text-muted-foreground"
+                    title={row.sql}
+                  >
+                    {truncateSqlDisplay(row.sql)}
+                  </span>
                   {row.error ? <span className="block text-destructive">{row.error}</span> : null}
                 </span>
               </li>
@@ -169,21 +180,7 @@ export default function AdminMigrateMarketingBriefsPage() {
   }
 
   if (!isAdmin) {
-    return (
-      <div className="mx-auto max-w-lg space-y-4 p-6" data-testid="page-admin-migrate-marketing-briefs">
-        <Card>
-          <CardHeader>
-            <CardTitle>Недостаточно прав</CardTitle>
-            <CardDescription>Страница доступна только администратору.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button asChild variant="outline">
-              <Link href={homeHref}>На главную</Link>
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
+    return null;
   }
 
   const expected = result?.expected_tables ?? [
@@ -200,7 +197,7 @@ export default function AdminMigrateMarketingBriefsPage() {
     !panelHasError(result.yandex);
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 pb-24 p-4 sm:p-6" data-testid="page-admin-migrate-marketing-briefs">
+    <div className="mx-auto max-w-5xl space-y-5 pb-24 p-4 sm:p-6" data-testid="page-admin-migrate-marketing-briefs">
       <div>
         <h1 className="text-2xl font-semibold text-[#222631]">Миграции маркетинговых брифов</h1>
         <p className="mt-1 text-sm text-[#8F96B0]">
@@ -208,46 +205,46 @@ export default function AdminMigrateMarketingBriefsPage() {
         </p>
       </div>
 
-      <Button
-        type="button"
-        size="lg"
-        className="bg-[#9ACA3C] text-[#222631] hover:bg-[#8AB835]"
-        disabled={loading}
-        data-testid="button-run-dual-migrate"
-        onClick={() => void runMigrate()}
-      >
-        {loading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" aria-hidden /> : null}
-        Применить миграции в обе БД
-      </Button>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <DbResultPanel title="Neon (основная)" panel={result?.neon ?? null} expectedTables={expected} />
-        <DbResultPanel title="Yandex (страховка)" panel={result?.yandex ?? null} expectedTables={expected} />
+      <div className="space-y-2">
+        <Button
+          type="button"
+          size="lg"
+          className="h-14 min-h-[56px] w-full bg-[#9ACA3C] text-base text-[#222631] hover:bg-[#8AB835]"
+          disabled={loading}
+          data-testid="button-run-dual-migrate"
+          onClick={() => void runMigrate()}
+        >
+          {loading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" aria-hidden /> : null}
+          {loading ? "Применяю…" : "Применить миграции в обе БД"}
+        </Button>
+        <p className="text-center text-xs text-[#8F96B0]">Можно нажимать многократно, всё идемпотентно</p>
       </div>
 
       {result ? (
         <div
           className={cn(
-            "rounded-xl border px-4 py-3 text-sm",
+            "rounded-xl border px-4 py-4 text-center text-base font-semibold",
             inSync
-              ? "border-[#9ACA3C]/50 bg-[#9ACA3C]/10 text-[#222631]"
+              ? "border-[#9ACA3C]/50 bg-[#9ACA3C]/15 text-[#222631]"
               : "border-amber-200 bg-amber-50 text-amber-900",
           )}
           data-testid="migrate-dual-status"
         >
-          {inSync ? (
-            <p className="font-medium">Синхронно — все три таблицы есть в Neon и Yandex</p>
-          ) : (
-            <p>
-              <span className="font-medium">Рассинхрон.</span> Проверьте отчёт выше и переменные{" "}
-              <code className="text-xs">DATABASE_URL</code>,{" "}
-              <code className="text-xs">YANDEX_DATABASE_URL_UNPOOLED</code>.
+          {inSync ? "Синхронно ✓" : "Рассинхрон"}
+          {!inSync ? (
+            <p className="mt-2 text-xs font-normal">
+              Проверьте панели ниже и переменные DATABASE_URL, YANDEX_DATABASE_URL_UNPOOLED
             </p>
-          )}
+          ) : null}
         </div>
       ) : null}
 
-      <Button asChild variant="outline" size="sm">
+      <div className="flex flex-col gap-4">
+        <DbResultPanel title="Neon (основная)" panel={result?.neon ?? null} expectedTables={expected} />
+        <DbResultPanel title="Yandex (страховка)" panel={result?.yandex ?? null} expectedTables={expected} />
+      </div>
+
+      <Button asChild variant="outline" size="sm" className="w-full sm:w-auto">
         <Link href="/marketing-briefs">К маркетинговым брифам</Link>
       </Button>
     </div>

@@ -7,6 +7,7 @@ import {
   ChevronDown,
   Circle,
   ClipboardList,
+  Database,
   Home,
   LayoutGrid,
   ListTodo,
@@ -112,6 +113,8 @@ const ICON_BY_TESTID: Partial<Record<string, LucideIcon>> = {
   "nav-analytics-workspace": PieChart,
   "nav-marketing-briefs": Megaphone,
   "nav-listings": FileText,
+  "nav-item-admin-brief-migrate": Database,
+  "nav-admin-brief-migrate": Database,
 };
 
 function pathMatchesNavHref(location: string, href: string): boolean {
