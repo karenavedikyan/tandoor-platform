@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Gift, Moon, Sun } from "lucide-react";
-import { TandoorLogo } from "@/components/tandoor-logo";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { getProductById } from "@/lib/catalog-data";
@@ -31,6 +30,45 @@ import {
   type BrandBriefThemeMode,
 } from "@/components/marketing-brief/brand-brief-theme";
 import { cn } from "@/lib/utils";
+
+function BrandLogo({
+  className,
+  themeMode,
+  testId,
+}: {
+  className?: string;
+  themeMode: BrandBriefThemeMode;
+  testId?: string;
+}) {
+  const letterColor = themeMode === "dark" ? "#F9FAFB" : "#222631";
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 149 42"
+      className={className}
+      role="img"
+      aria-label="TANDOOR"
+      data-testid={testId}
+    >
+      <path
+        d="M 8 6 L 36 6 L 22 34 Z M 14 14 L 28 14 L 21 26 Z"
+        fill="#9ACA3C"
+        fillRule="evenodd"
+      />
+      <text
+        x="44"
+        y="29"
+        fontFamily='"Exo 2", "Segoe UI", sans-serif'
+        fontSize="22"
+        fontWeight="700"
+        letterSpacing="0.5"
+        fill={letterColor}
+      >
+        TANDOOR
+      </text>
+    </svg>
+  );
+}
 
 function asSection(payload: Record<string, unknown>): SectionBlockPayload {
   return {
@@ -75,7 +113,10 @@ function asCallout(payload: Record<string, unknown>): CalloutBlockPayload {
 
 function formatSectionNumber(num: string | undefined, fallbackIndex: number): string {
   const raw = num?.trim();
-  if (raw) return raw.padStart(2, "0");
+  if (raw) {
+    const safe = raw.length > 3 ? raw.slice(0, 3) : raw;
+    return safe.padStart(2, "0");
+  }
   return String(fallbackIndex + 1).padStart(2, "0");
 }
 
@@ -137,10 +178,10 @@ function BrandFooter({ theme, themeMode }: { theme: BrandBriefTheme; themeMode: 
       style={{ borderColor: theme.border }}
       data-testid="brand-brief-footer"
     >
-      <TandoorLogo
-        className="h-12 max-w-[220px] sm:h-14"
-        variant={themeMode === "dark" ? "onDark" : "onLight"}
-        data-testid="brand-brief-footer-logo"
+      <BrandLogo
+        className="h-12 w-auto sm:h-14"
+        themeMode={themeMode}
+        testId="brand-brief-footer-logo"
       />
       <p
         className="text-[10px] font-semibold uppercase tracking-[0.25em] sm:text-xs"
@@ -193,8 +234,9 @@ function renderBrandBlock(
         >
           <div className="flex items-start gap-3">
             <span
-              className="flex h-8 w-8 shrink-0 items-center justify-center text-sm font-bold leading-none text-white"
+              className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden text-sm font-bold leading-none text-white"
               style={{ backgroundColor: theme.accent }}
+              title={p.number?.trim() || ""}
               aria-hidden
             >
               {num}
@@ -524,10 +566,10 @@ export function BrandBriefView({
         data-testid="brand-brief-topbar"
       >
         <div className="mx-auto flex max-w-4xl items-center justify-between gap-3">
-          <TandoorLogo
-            className="h-8 max-w-[140px] sm:h-9"
-            variant={themeMode === "dark" ? "onDark" : "onLight"}
-            data-testid="brand-brief-logo"
+          <BrandLogo
+            className="h-8 w-auto sm:h-9"
+            themeMode={themeMode}
+            testId="brand-brief-logo"
           />
           <div className="flex items-center gap-1 rounded-lg border p-0.5" style={{ borderColor: theme.border }}>
             <Button

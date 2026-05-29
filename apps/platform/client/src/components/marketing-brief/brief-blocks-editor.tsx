@@ -226,13 +226,17 @@ function BlockFields({
     return (
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <Label className="text-xs">Номер</Label>
+          <Label className="text-xs">Номер раздела</Label>
           <Input
             value={p.number ?? ""}
             disabled={readOnly}
-            placeholder="1"
-            onChange={(e) => onPatch({ number: e.target.value })}
+            placeholder="01"
+            maxLength={3}
+            onChange={(e) => onPatch({ number: e.target.value.slice(0, 3) })}
           />
+          <p className="text-[10px] text-muted-foreground">
+            До 3 символов: «01», «02», «А», «B». Полное название идёт в «Заголовок».
+          </p>
         </div>
         <div className="space-y-1.5 sm:col-span-2">
           <Label className="text-xs">Заголовок</Label>
