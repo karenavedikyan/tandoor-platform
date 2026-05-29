@@ -35,6 +35,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import triangleMarkUrl from "@/assets/brand/tandoor-triangle-mark.svg";
 import { TandoorLogo } from "@/components/tandoor-logo";
 import { ThemeToggleDesktop, ThemeToggleSidebarCompact } from "@/components/theme-toggle";
 import { SaveStatusBadge } from "@/components/client-base-actualization-save-status-badge";
@@ -838,16 +839,14 @@ export function AppShell({
               href={homeHref}
               className="flex shrink-0 items-center justify-center no-underline"
               aria-label="На главную"
+              data-testid="brand-logo-tandoor-collapsed"
             >
-              <span
-                className="flex h-9 w-9 items-center justify-center rounded-lg bg-white shadow-sm ring-1 ring-border/60"
-                data-testid="brand-logo-tandoor-collapsed"
-              >
-                <svg viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" aria-hidden>
-                  <polygon points="6,26 14,26 10,18" fill="#9ACA3C" />
-                  <path d="M14 10 H30 V13.5 H23.8 V26 H20.2 V13.5 H14 Z" fill="#222631" />
-                </svg>
-              </span>
+              <img
+                src={triangleMarkUrl}
+                alt="Tandoor"
+                className="h-8 w-8 object-contain"
+                draggable={false}
+              />
             </Link>
           ) : (
             <BrandBlock homeHref={homeHref} className="min-w-0 flex-1" />
