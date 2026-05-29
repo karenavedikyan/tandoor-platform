@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, type ComponentType, type LazyExotic
 import { Switch, Route, Router, useLocation, Link } from "wouter";
 import { useHashLocation } from "wouter/use-hash-location";
 import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { OnboardingUiProvider } from "@/context/onboarding-ui-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,7 +37,7 @@ import { ProfileShell } from "@/components/profile/profile-shell";
 import { ThemeProvider } from "@/context/theme-provider";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { resolveSidebarTrashCount, resolveSidebarWorkingDealerClientCount } from "@/lib/dealer-base-sidebar-client-count";
-import { countWorkingTradePointsForSidebar } from "@/lib/trade-point-list-for-actualization";
+import { fetchTradePointsOverview } from "@/lib/trade-points-overview-api";
 
 const LazySalesManagerWorkspace = lazy(() => import("@/pages/sales-manager-workspace"));
 const LazyMainManagerDetail = lazy(() => import("@/pages/main-manager-detail"));
@@ -263,11 +263,29 @@ function AuthenticatedShell({
       teamPlane.teamFetchLoading,
     ],
   );
-  const tradePointNavCount = useMemo(() => {
-    if (!actx.enabled) return undefined;
-    if (actx.loading || teamPlane.teamFetchLoading) return null;
-    return countWorkingTradePointsForSidebar(profile, teamPlane.mergedState);
-  }, [actx.enabled, actx.loading, teamPlane.mergedState, teamPlane.teamFetchLoading, profile]);
+  const showTradePointsNav =
+    salesRole === "sales_director" || salesRole === "team_lead" || salesRole === "sales_manager";
+
+  const tradePointsOverviewQ = useQuery({
+    queryKey: ["trade-points-overview"],
+    queryFn: fetchTradePointsOverview,
+    enabled: showTradePointsNav,
+    staleTime: 30_000,
+  });
+
+  const tradePointNavCount = useMemo<number | null | undefined>(() => {
+    if (!showTradePointsNav) return undefined;
+    if (tradePointsOverviewQ.isError) return undefined;
+    const data = tradePointsOverviewQ.data;
+    if (data) return data.structure.activeTradePoints;
+    if (tradePointsOverviewQ.isLoading) return null;
+    return null;
+  }, [
+    showTradePointsNav,
+    tradePointsOverviewQ.isError,
+    tradePointsOverviewQ.isLoading,
+    tradePointsOverviewQ.data,
+  ]);
   const trashNavCount = useMemo(
     () =>
       resolveSidebarTrashCount(profile, {
