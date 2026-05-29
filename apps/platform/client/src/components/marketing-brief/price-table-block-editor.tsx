@@ -154,6 +154,9 @@ export function PriceTableBlockEditor({
           disabled={readOnly}
           onChange={(e) => onPatch({ heading: e.target.value })}
         />
+        <p className="text-[10px] leading-snug text-muted-foreground">
+          Например: «АКЦИИ ИЮНЯ» или «НОВЫЕ ЦЕНЫ».
+        </p>
       </div>
       <div className="flex items-center gap-2">
         <Switch
@@ -166,6 +169,9 @@ export function PriceTableBlockEditor({
           Показывать выгоду
         </Label>
       </div>
+      <p className="text-[10px] leading-snug text-muted-foreground">
+        Старая цена → Новая цена. Выгода считается автоматически, если включено.
+      </p>
       <div className="overflow-x-auto rounded-lg border border-border/70">
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <table className="w-full min-w-[640px] text-sm">

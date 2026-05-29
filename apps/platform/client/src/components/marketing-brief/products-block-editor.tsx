@@ -223,6 +223,9 @@ function ProductItemForm({
           <span className={cn(form.manual && "font-semibold text-[#222631]")}>Вручную</span>
         </div>
       </div>
+      <p className="text-[10px] leading-snug text-muted-foreground">
+        Из каталога — выбор по моделям Тандор. Вручную — если модели нет в каталоге.
+      </p>
 
       {!form.manual ? (
         <div className="space-y-2">
@@ -276,6 +279,9 @@ function ProductItemForm({
           disabled={readOnly || (!form.manual && Boolean(form.catalog_id))}
           onChange={(e) => setForm({ ...form, name: e.target.value })}
         />
+        <p className="text-[10px] leading-snug text-muted-foreground">
+          Полное название модели и цвет, как в PDF-брифе.
+        </p>
       </div>
       <div className="space-y-1.5">
         <Label className="text-xs">Артикул</Label>
@@ -303,6 +309,7 @@ function ProductItemForm({
             disabled={readOnly}
             onChange={(e) => setForm({ ...form, price_showroom: e.target.value })}
           />
+          <p className="text-[10px] leading-snug text-muted-foreground">В рублях. Можно оставить пустым.</p>
         </div>
         <div className="space-y-1.5">
           <Label className="text-xs">Цена-розница</Label>
@@ -313,6 +320,7 @@ function ProductItemForm({
             disabled={readOnly}
             onChange={(e) => setForm({ ...form, price_retail: e.target.value })}
           />
+          <p className="text-[10px] leading-snug text-muted-foreground">В рублях. Можно оставить пустым.</p>
         </div>
       </div>
       <div className="space-y-1.5">
@@ -322,6 +330,7 @@ function ProductItemForm({
           disabled={readOnly}
           onChange={(segments) => setForm({ ...form, segments })}
         />
+        <p className="text-[10px] leading-snug text-muted-foreground">К каким сегментам ТОП относится модель.</p>
       </div>
       <div className="space-y-1.5">
         <Label className="text-xs">Заметка</Label>
@@ -497,6 +506,7 @@ export function ProductsBlockEditor({
           placeholder="Товар месяца"
           onChange={(e) => onPatch({ heading: e.target.value })}
         />
+        <p className="text-[10px] leading-snug text-muted-foreground">Необязательно. Например: «Что выставлять».</p>
       </div>
 
       {p.items.length > 0 ? (

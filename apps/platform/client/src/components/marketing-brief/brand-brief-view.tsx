@@ -43,7 +43,7 @@ function BrandLogo({
   const letterColor = themeMode === "dark" ? "#F9FAFB" : "#222631";
   return (
     <span
-      className={cn("inline-flex items-center gap-2", className)}
+      className={cn("inline-flex items-center gap-1.5", className)}
       data-testid={testId}
       aria-label="TANDOOR"
       role="img"
@@ -51,7 +51,8 @@ function BrandLogo({
       <svg
         viewBox="0 0 27 26"
         xmlns="http://www.w3.org/2000/svg"
-        className="h-full w-auto shrink-0"
+        className="w-auto shrink-0"
+        style={{ height: "0.7em" }}
         aria-hidden
       >
         <path
@@ -60,11 +61,11 @@ function BrandLogo({
         />
       </svg>
       <span
-        className="font-bold leading-none tracking-[0.04em]"
+        className="font-bold leading-none tracking-[0.05em]"
         style={{
           color: letterColor,
           fontFamily: '"Exo 2", "Segoe UI", sans-serif',
-          fontSize: "0.95em",
+          fontSize: "1em",
         }}
       >
         TANDOOR
@@ -349,7 +350,7 @@ function renderBrandBlock(
               {p.heading}
             </h3>
           ) : null}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
             {p.items.map((raw) => {
               const item = enrichProductItem(raw);
               const segLabels = (item.segments ?? []).map(
@@ -358,24 +359,21 @@ function renderBrandBlock(
               return (
                 <article
                   key={item.id}
-                  className="flex w-full max-w-[140px] flex-col"
+                  className="flex w-full flex-col"
                   data-testid={`brand-brief-product-${item.id}`}
                 >
                   <div
-                    className="h-[160px] w-[120px] max-w-full overflow-hidden rounded border"
+                    className="flex aspect-[2/3] w-full items-center justify-center overflow-hidden rounded border"
                     style={{ borderColor: theme.border, backgroundColor: theme.zebra }}
                   >
                     {item.image_url?.trim() ? (
                       <img
                         src={item.image_url}
                         alt=""
-                        className="h-full w-full object-cover"
+                        className="h-full w-full object-contain"
                       />
                     ) : (
-                      <div
-                        className="flex h-full w-full items-center justify-center text-xs"
-                        style={{ color: theme.muted }}
-                      >
+                      <div className="text-xs" style={{ color: theme.muted }}>
                         Нет фото
                       </div>
                     )}
