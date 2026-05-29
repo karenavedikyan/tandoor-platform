@@ -415,6 +415,26 @@ export function DealerBaseManagementCockpit({
     [overviewByManagerId],
   );
 
+  const overviewTpByCity = useMemo<Map<string, number>>(() => {
+    const out = new Map<string, number>();
+    const data = tradePointsOverviewQ.data;
+    if (!data) return out;
+    for (const c of data.cities) {
+      out.set(c.cityName, c.tradePointsCount);
+      out.set(c.cityKey, c.tradePointsCount);
+    }
+    return out;
+  }, [tradePointsOverviewQ.data]);
+
+  const resolveCityTp = useCallback(
+    (c: { cityKey: string; displayName: string; tradePoints: number }) => {
+      if (overviewTpByCity.has(c.displayName)) return overviewTpByCity.get(c.displayName)!;
+      if (overviewTpByCity.has(c.cityKey)) return overviewTpByCity.get(c.cityKey)!;
+      return c.tradePoints;
+    },
+    [overviewTpByCity],
+  );
+
   const maxBar = useMemo(
     () => Math.max(structure.active, tpKpiCount, structure.potential, structure.attention, 1),
     [structure, tpKpiCount],
@@ -562,7 +582,7 @@ export function DealerBaseManagementCockpit({
                             </span>
                             <span className="inline-flex items-baseline gap-1">
                               <Store className="h-3 w-3" aria-hidden />
-                              <span className="text-base font-semibold tabular-nums text-foreground">{c.tradePoints}</span>
+                              <span className="text-base font-semibold tabular-nums text-foreground">{resolveCityTp(c)}</span>
                               <span>ТТ</span>
                             </span>
                           </div>
@@ -600,7 +620,7 @@ export function DealerBaseManagementCockpit({
                   Без города: клиенты{" "}
                   <span className="font-semibold text-foreground">{overviewWithoutCity.activeClients}</span>
                   {" · "}ТТ{" "}
-                  <span className="font-semibold text-foreground">{overviewWithoutCity.tradePoints}</span>
+                  <span className="font-semibold text-foreground">{resolveCityTp(overviewWithoutCity)}</span>
                 </div>
               ) : null}
             </CardContent>
@@ -1070,7 +1090,7 @@ export function DealerBaseManagementCockpit({
                         клиенты <span className="text-[#222631]">{c.activeClients}</span>
                         {archiveCountParenSuffix(cityArchiveByKey.get(c.cityKey)?.archivedClients ?? 0)}
                         {" · "}
-                        ТТ <span className="text-[#222631]">{c.tradePoints}</span>
+                        ТТ <span className="text-[#222631]">{resolveCityTp(c)}</span>
                         {archiveCountParenSuffix(cityArchiveByKey.get(c.cityKey)?.archivedTradePoints ?? 0)}
                       </span>
                     </button>
@@ -1092,7 +1112,7 @@ export function DealerBaseManagementCockpit({
                   клиенты <span className="text-[#222631]">{cityChart.noCity.activeClients}</span>
                   {archiveCountParenSuffix(cityArchiveByKey.get(cityChart.noCity.cityKey)?.archivedClients ?? 0)}
                   {" · "}
-                  ТТ <span className="text-[#222631]">{cityChart.noCity.tradePoints}</span>
+                  ТТ <span className="text-[#222631]">{resolveCityTp(cityChart.noCity)}</span>
                   {archiveCountParenSuffix(cityArchiveByKey.get(cityChart.noCity.cityKey)?.archivedTradePoints ?? 0)}
                 </span>
               </button>
