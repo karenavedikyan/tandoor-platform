@@ -126,7 +126,12 @@ export type CalloutBlockPayload = {
 };
 
 type ApiOk<T> = { success: true; data: T };
-type ApiErr = { success: false; code?: string; message?: string };
+type ApiErr = {
+  success: false;
+  code?: string;
+  message?: string;
+  debug?: { message?: string; stack?: string };
+};
 
 async function parseJson<T>(res: Response): Promise<T> {
   return (await res.json()) as T;
@@ -298,13 +303,22 @@ export async function downloadBriefPdf(briefId: string, theme: BriefPdfTheme = "
     body: JSON.stringify({ id: briefId, theme }),
   });
   if (!res.ok) {
+    let data: ApiErr | null = null;
     try {
-      const data = await parseJson<ApiErr>(res);
-      throw apiError(data, res.status);
-    } catch (e) {
-      if (e instanceof Error && e.message !== "HTTP") throw e;
-      throw new Error(`Не удалось скачать PDF (HTTP ${res.status})`);
+      data = await parseJson<ApiErr>(res);
+    } catch (parseErr) {
+      console.error("[marketing-briefs] download-pdf client parse error", {
+        status: res.status,
+        parseErr,
+      });
     }
+    console.error("[marketing-briefs] download-pdf client error", {
+      status: res.status,
+      body: data,
+    });
+    const debugMessage = data?.debug?.message?.trim();
+    const fallback = data?.message ?? `Не удалось скачать PDF (HTTP ${res.status})`;
+    throw new Error(debugMessage || fallback);
   }
   const blob = await res.blob();
   const filename = parsePdfFilenameFromDisposition(res.headers.get("Content-Disposition")) ?? "TANDOOR.pdf";
