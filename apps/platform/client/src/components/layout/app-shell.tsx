@@ -834,8 +834,20 @@ export function AppShell({
       >
         <div className="flex items-center justify-between gap-2 border-b border-border/60 px-3 pb-4 pt-5">
           {sidebarCollapsed ? (
-            <Link href={homeHref} className="flex shrink-0 items-center justify-center no-underline" aria-label="На главную">
-              <TandoorLogo className="h-8 w-8 max-w-[36px] object-contain" data-testid="brand-logo-tandoor-collapsed" />
+            <Link
+              href={homeHref}
+              className="flex shrink-0 items-center justify-center no-underline"
+              aria-label="На главную"
+            >
+              <span
+                className="flex h-9 w-9 items-center justify-center rounded-lg bg-white shadow-sm ring-1 ring-border/60"
+                data-testid="brand-logo-tandoor-collapsed"
+              >
+                <svg viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" aria-hidden>
+                  <polygon points="6,26 14,26 10,18" fill="#9ACA3C" />
+                  <path d="M14 10 H30 V13.5 H23.8 V26 H20.2 V13.5 H14 Z" fill="#222631" />
+                </svg>
+              </span>
             </Link>
           ) : (
             <BrandBlock homeHref={homeHref} className="min-w-0 flex-1" />
