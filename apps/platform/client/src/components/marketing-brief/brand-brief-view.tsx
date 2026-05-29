@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Gift, Moon, Sun } from "lucide-react";
+import { TandoorLogo } from "@/components/tandoor-logo";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { getProductById } from "@/lib/catalog-data";
@@ -30,49 +31,6 @@ import {
   type BrandBriefThemeMode,
 } from "@/components/marketing-brief/brand-brief-theme";
 import { cn } from "@/lib/utils";
-
-function BrandLogo({
-  className,
-  themeMode,
-  testId,
-}: {
-  className?: string;
-  themeMode: BrandBriefThemeMode;
-  testId?: string;
-}) {
-  const letterColor = themeMode === "dark" ? "#F9FAFB" : "#222631";
-  return (
-    <span
-      className={cn("inline-flex items-center gap-1.5", className)}
-      data-testid={testId}
-      aria-label="TANDOOR"
-      role="img"
-    >
-      <svg
-        viewBox="0 0 27 26"
-        xmlns="http://www.w3.org/2000/svg"
-        className="w-auto shrink-0"
-        style={{ height: "0.7em" }}
-        aria-hidden
-      >
-        <path
-          d="M26.9826 26V0H26.4252L5.74839 19.8913L4.21548 21.3671L0 25.4276V26H27H26.9826ZM13.0471 20.4548L21.5826 12.2621V20.4548H13.0035H13.0471Z"
-          fill="#9ACA3C"
-        />
-      </svg>
-      <span
-        className="font-bold leading-none tracking-[0.05em]"
-        style={{
-          color: letterColor,
-          fontFamily: '"Exo 2", "Segoe UI", sans-serif',
-          fontSize: "1em",
-        }}
-      >
-        TANDOOR
-      </span>
-    </span>
-  );
-}
 
 function asSection(payload: Record<string, unknown>): SectionBlockPayload {
   return {
@@ -182,10 +140,10 @@ function BrandFooter({ theme, themeMode }: { theme: BrandBriefTheme; themeMode: 
       style={{ borderColor: theme.border }}
       data-testid="brand-brief-footer"
     >
-      <BrandLogo
-        className="h-12 w-auto sm:h-14"
-        themeMode={themeMode}
-        testId="brand-brief-footer-logo"
+      <TandoorLogo
+        className="h-12 sm:h-14"
+        variant={themeMode === "dark" ? "onDark" : "onLight"}
+        data-testid="brand-brief-footer-logo"
       />
       <p
         className="text-[10px] font-semibold uppercase tracking-[0.25em] sm:text-xs"
@@ -567,10 +525,11 @@ export function BrandBriefView({
         data-testid="brand-brief-topbar"
       >
         <div className="mx-auto flex max-w-4xl items-center justify-between gap-3">
-          <BrandLogo
-            className="h-8 w-auto sm:h-9"
-            themeMode={themeMode}
-            testId="brand-brief-logo"
+          <TandoorLogo
+            className="h-8 sm:h-9"
+            compact
+            variant={themeMode === "dark" ? "onDark" : "onLight"}
+            data-testid="brand-brief-logo"
           />
           <div className="flex items-center gap-1 rounded-lg border p-0.5" style={{ borderColor: theme.border }}>
             <Button
