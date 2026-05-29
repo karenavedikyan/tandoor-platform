@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { ChevronRight, ExternalLink, Info, Store, Users } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -85,6 +86,7 @@ import {
   computeManagerHeatMap,
   sortManagersByHeat,
 } from "@/lib/manager-load-heat";
+import { fetchTradePointsOverview } from "@/lib/trade-points-overview-api";
 
 const MODE_LS_KEY = "tandoor-dealer-base-management-mode-v1";
 const OPEN_ROPS_LS_KEY = "tandoor-dealer-base-management-open-rops-v1";
@@ -342,9 +344,38 @@ export function DealerBaseManagementCockpit({
   const structure = useMemo(() => buildStructureInfographic(rows, teamIds), [rows, teamIds]);
   const cityChart = useMemo(() => topCitiesForChart(cities, 5), [cities]);
 
+  const tradePointsOverviewQ = useQuery({
+    queryKey: ["trade-points-overview"],
+    queryFn: fetchTradePointsOverview,
+    staleTime: 30_000,
+  });
+  const overviewTradePointsCount = tradePointsOverviewQ.data?.structure.activeTradePoints ?? null;
+  const overviewTradePointsLoading = tradePointsOverviewQ.isLoading && !tradePointsOverviewQ.data;
+  const tpKpiCount = overviewTradePointsCount ?? structure.outlets;
+  const tpCountDisplay = (): string =>
+    overviewTradePointsLoading
+      ? "…"
+      : overviewTradePointsCount != null
+        ? String(overviewTradePointsCount)
+        : String(structure.outlets);
+
+  const overviewByManagerId = useMemo<Map<string, number>>(() => {
+    const out = new Map<string, number>();
+    const data = tradePointsOverviewQ.data;
+    if (!data) return out;
+    for (const g of data.ropGroups) {
+      for (const m of g.managers) {
+        out.set(m.userId, m.tradePoints);
+        const catalogId = userIdToCatalogMgrId.get(m.userId);
+        if (catalogId) out.set(catalogId, m.tradePoints);
+      }
+    }
+    return out;
+  }, [tradePointsOverviewQ.data, userIdToCatalogMgrId]);
+
   const maxBar = useMemo(
-    () => Math.max(structure.active, structure.outlets, structure.potential, structure.attention, 1),
-    [structure],
+    () => Math.max(structure.active, tpKpiCount, structure.potential, structure.attention, 1),
+    [structure, tpKpiCount],
   );
 
   const detailSourceRows = useMemo(
@@ -434,11 +465,11 @@ export function DealerBaseManagementCockpit({
         <section data-testid="section-client-base-structure-infographic">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {([
-              ["Активные клиенты", structure.active],
-              ["Торговые точки", structure.outlets],
-              ["Потенциальные", structure.potential],
-              ["Внимание", structure.attention],
-            ] as Array<[string, number]>).map(([label, value]) => (
+              ["Активные клиенты", String(structure.active)],
+              ["Торговые точки", tpCountDisplay()],
+              ["Потенциальные", String(structure.potential)],
+              ["Внимание", String(structure.attention)],
+            ] as Array<[string, string]>).map(([label, value]) => (
               <div key={label} className="rounded-xl border border-border bg-card px-3 py-2.5 text-card-foreground">
                 <p className="text-[11px] leading-tight text-muted-foreground">{label}</p>
                 <p className="mt-0.5 text-lg font-semibold text-foreground tabular-nums sm:text-xl">{value}</p>
@@ -578,7 +609,7 @@ export function DealerBaseManagementCockpit({
                       const heatEntries = g.managers.map((m) => ({
                         id: m.managerId,
                         clientsActive: m.active,
-                        tradePointsActive: m.outlets,
+                        tradePointsActive: overviewByManagerId.get(m.managerId) ?? m.outlets,
                       }));
                       const heatMap = computeManagerHeatMap(heatEntries);
                       const sortedManagers = sortManagersByHeat(
@@ -594,7 +625,10 @@ export function DealerBaseManagementCockpit({
                           {sortedManagers.map((m) => (
                             <ManagerTeamCard
                               key={m.managerId}
-                              manager={m}
+                              manager={{
+                                ...m,
+                                outlets: overviewByManagerId.get(m.managerId) ?? m.outlets,
+                              }}
                               ropName={g.ropName}
                               heatLevel={heatMap[m.managerId] ?? "medium"}
                             />
@@ -899,7 +933,7 @@ export function DealerBaseManagementCockpit({
                 onClick={() => setDetail({ kind: "kpi-trade-points" })}
               >
                 <p className="text-[11px] font-medium text-[#8F96B0]">Торговые точки</p>
-                <p className="text-xl font-semibold tabular-nums">{structure.outlets}</p>
+                <p className="text-xl font-semibold tabular-nums">{tpCountDisplay()}</p>
               </button>
               <div className="rounded-lg p-2">
                 <p className="text-[11px] font-medium text-[#8F96B0]">Потенциальные</p>
@@ -921,7 +955,7 @@ export function DealerBaseManagementCockpit({
             <div className="space-y-2">
               {[
                 { label: "Активные клиенты", val: structure.active, color: "bg-[#9ACA3C]" },
-                { label: "Торговые точки", val: structure.outlets, color: "bg-[#9ACA3C]/85" },
+                { label: "Торговые точки", val: tpKpiCount, color: "bg-[#9ACA3C]/85" },
                 { label: "Потенциальные", val: structure.potential, color: "bg-[#9ACA3C]/70" },
                 { label: "Внимание", val: structure.attention, color: "bg-[#9ACA3C]/55" },
               ].map((row) => (
