@@ -1,13 +1,21 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useRoute } from "wouter";
-import { Loader2 } from "lucide-react";
+import { LayoutGrid, List, Loader2, Table2 } from "lucide-react";
 import { BrandBriefView } from "@/components/marketing-brief/brand-brief-view";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Dialog,
   DialogContent,
@@ -26,15 +34,24 @@ import { FloatingBackButton } from "@/components/navigation/floating-back-button
 import { useRouteSearchParams } from "@/lib/hash-route-utils";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { canManageMarketingBriefs } from "@/lib/auth-access";
+import {
+  BriefBulkActionBar,
+  BriefCardsListView,
+  BriefCardsSelectAllLink,
+  BriefCompactListView,
+  BriefTableListView,
+  readBriefListViewMode,
+  writeBriefListViewMode,
+  type BriefListViewMode,
+  type BriefRowMenuHandlers,
+} from "@/components/marketing-brief/brief-list-views";
 import { TEMPLATE_BLOCKS } from "@/lib/marketing-briefs-template";
 import {
   archiveBrief,
-  briefStatusLabel,
   createBlock,
   createBrief,
   DEFAULT_MARKETING_BRIEF_ACCENT,
-  formatBriefUpdatedAt,
-  formatMarketingBriefPeriodLabel,
+  deleteBrief,
   getBrief,
   last12PeriodOptions,
   listBlocks,
@@ -47,6 +64,7 @@ import {
   type MarketingBriefStatus,
 } from "@/lib/marketing-briefs-api";
 import { toast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 
 type StatusFilter = "all" | MarketingBriefStatus;
 
@@ -179,8 +197,42 @@ export default function MarketingBriefsPage() {
   const [createAccent, setCreateAccent] = useState(DEFAULT_MARKETING_BRIEF_ACCENT);
   const [creating, setCreating] = useState(false);
   const [creatingTemplate, setCreatingTemplate] = useState(false);
+  const [viewMode, setViewMode] = useState<BriefListViewMode>(() => readBriefListViewMode());
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [singleDeleteId, setSingleDeleteId] = useState<string | null>(null);
+  const selectAllRef = useRef<HTMLInputElement>(null);
 
   const periodOptions = useMemo(() => last12PeriodOptions(), []);
+
+  const clearSelection = useCallback(() => setSelectedIds([]), []);
+
+  useEffect(() => {
+    clearSelection();
+  }, [statusFilter, periodFilter, viewMode, clearSelection]);
+
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const allPageSelected = briefs.length > 0 && briefs.every((b) => selectedSet.has(b.id));
+  const someSelected = briefs.some((b) => selectedSet.has(b.id));
+
+  const selection = useMemo(() => {
+    if (!canManage) return null;
+    return {
+      selectedIds,
+      selectionActive: selectedIds.length > 0,
+      isSelected: (id: string) => selectedSet.has(id),
+      onToggle: (id: string) => {
+        setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+      },
+      onToggleAll: () => {
+        if (allPageSelected) clearSelection();
+        else setSelectedIds(briefs.map((b) => b.id));
+      },
+      allSelected: allPageSelected,
+      someSelected,
+    };
+  }, [canManage, selectedIds, selectedSet, allPageSelected, someSelected, briefs, clearSelection]);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -268,6 +320,7 @@ export default function MarketingBriefsPage() {
     try {
       await fn(id);
       toast({ title: label });
+      clearSelection();
       await reload();
     } catch (e) {
       toast({
@@ -276,6 +329,151 @@ export default function MarketingBriefsPage() {
         variant: "destructive",
       });
     }
+  }
+
+  const setViewModePersisted = useCallback((mode: BriefListViewMode) => {
+    setViewMode(mode);
+    writeBriefListViewMode(mode);
+  }, []);
+
+  async function runBulkSequential(
+    ids: string[],
+    actionLabel: string,
+    fn: (id: string) => Promise<unknown>,
+  ): Promise<{ ok: number; fail: number }> {
+    let ok = 0;
+    let fail = 0;
+    const progress = toast({
+      title: actionLabel,
+      description: `0 / ${ids.length}`,
+    });
+    for (let i = 0; i < ids.length; i++) {
+      try {
+        await fn(ids[i]!);
+        ok++;
+      } catch {
+        fail++;
+      }
+      progress.update({
+        id: progress.id,
+        description: `${ok + fail} / ${ids.length}`,
+      });
+    }
+    progress.dismiss();
+    return { ok, fail };
+  }
+
+  async function confirmBulkArchive() {
+    const ids = [...selectedIds];
+    if (!ids.length) return;
+    setBulkBusy(true);
+    const { ok, fail } = await runBulkSequential(ids, "Архивирование…", archiveBrief);
+    toast({
+      title: fail > 0 ? `Архивировано ${ok} из ${ids.length}` : `Архивировано ${ok} из ${ok}`,
+      variant: fail > 0 ? "destructive" : undefined,
+    });
+    clearSelection();
+    await reload();
+    setBulkBusy(false);
+  }
+
+  async function confirmBulkDelete() {
+    const ids = [...selectedIds];
+    if (!ids.length) return;
+    setBulkDeleteOpen(false);
+    setBulkBusy(true);
+    const { ok, fail } = await runBulkSequential(ids, "Удаление…", deleteBrief);
+    toast({
+      title: fail > 0 ? `Удалено ${ok}, ошибок ${fail}` : `Удалено ${ok} из ${ok}`,
+      variant: fail > 0 ? "destructive" : undefined,
+    });
+    clearSelection();
+    await reload();
+    setBulkBusy(false);
+  }
+
+  async function confirmSingleDelete() {
+    if (!singleDeleteId) return;
+    const id = singleDeleteId;
+    setSingleDeleteId(null);
+    try {
+      await deleteBrief(id);
+      toast({ title: "Бриф удалён" });
+      clearSelection();
+      await reload();
+    } catch (e) {
+      toast({
+        title: "Не удалось удалить",
+        description: e instanceof Error ? e.message : undefined,
+        variant: "destructive",
+      });
+    }
+  }
+
+  const menuHandlers: BriefRowMenuHandlers = {
+    onOpen: (brief) => setLocation(`/marketing-briefs/${brief.id}`),
+    onArchive: (id) => void runAction("В архиве", archiveBrief, id),
+    onDelete: (id) => setSingleDeleteId(id),
+  };
+
+  function renderCardFooter(b: MarketingBriefRow) {
+    if (!canManage) {
+      return (
+        <Button asChild variant="outline" size="sm" className="min-h-9">
+          <Link href={`/marketing-briefs/view/${b.id}`}>Открыть</Link>
+        </Button>
+      );
+    }
+    return (
+      <>
+        <Button asChild variant="outline" size="sm" className="min-h-9">
+          <Link href={`/marketing-briefs/${b.id}`}>Открыть</Link>
+        </Button>
+        {b.status === "draft" || b.status === "archived" ? (
+          <Button
+            type="button"
+            size="sm"
+            className="min-h-9"
+            data-testid={`button-marketing-brief-publish-${b.id}`}
+            onClick={() => void runAction("Опубликовано", publishBrief, b.id)}
+          >
+            Опубликовать
+          </Button>
+        ) : null}
+        {b.status === "published" ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            className="min-h-9"
+            onClick={() => void runAction("Снято с публикации", unpublishBrief, b.id)}
+          >
+            Снять с публикации
+          </Button>
+        ) : null}
+        {b.status !== "archived" ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="min-h-9 text-muted-foreground"
+            onClick={() => void runAction("В архиве", archiveBrief, b.id)}
+          >
+            В архив
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="min-h-9"
+            onClick={() => void runAction("Восстановлено", restoreBrief, b.id)}
+          >
+            Восстановить
+          </Button>
+        )}
+      </>
+    );
   }
 
   const emptyMessage = canManage
@@ -298,11 +496,41 @@ export default function MarketingBriefsPage() {
             )}
           </p>
         </div>
-        {canManage ? (
-          <Button type="button" className="min-h-10 shrink-0" data-testid="button-marketing-brief-new" onClick={() => setCreateOpen(true)}>
-            Новый бриф
-          </Button>
-        ) : null}
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <div
+            className="flex rounded-lg border border-border p-0.5"
+            role="group"
+            aria-label="Режим отображения списка"
+            data-testid="brief-list-view-mode"
+          >
+            {(
+              [
+                { mode: "cards" as const, icon: LayoutGrid, label: "Карточки" },
+                { mode: "table" as const, icon: Table2, label: "Таблица" },
+                { mode: "compact" as const, icon: List, label: "Компактный список" },
+              ] as const
+            ).map(({ mode, icon: Icon, label }) => (
+              <Button
+                key={mode}
+                type="button"
+                size="icon"
+                variant="ghost"
+                className={cn("h-9 w-9", viewMode === mode && "bg-secondary")}
+                aria-label={label}
+                aria-pressed={viewMode === mode}
+                data-testid={`button-brief-view-${mode}`}
+                onClick={() => setViewModePersisted(mode)}
+              >
+                <Icon className="h-4 w-4" />
+              </Button>
+            ))}
+          </div>
+          {canManage ? (
+            <Button type="button" className="min-h-10" data-testid="button-marketing-brief-new" onClick={() => setCreateOpen(true)}>
+              Новый бриф
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       {canManage ? (
@@ -342,88 +570,93 @@ export default function MarketingBriefsPage() {
           {emptyMessage}
         </p>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" data-testid="section-marketing-briefs-list">
-          {briefs.map((b) => (
-            <Card
-              key={b.id}
-              className="flex flex-col overflow-hidden rounded-2xl border border-border/80 shadow-sm"
-              data-testid={`card-marketing-brief-${b.id}`}
-            >
-              <div
-                className="px-4 py-8"
-                style={{ backgroundColor: b.accent_color || DEFAULT_MARKETING_BRIEF_ACCENT }}
-              >
-                <p className="text-lg font-semibold text-[#222631]">{formatMarketingBriefPeriodLabel(b.period_label)}</p>
-              </div>
-              <CardHeader className="flex-1 pb-2">
-                <div className="mb-2 flex flex-wrap gap-2">
-                  <Badge variant={b.status === "published" ? "default" : "secondary"}>{briefStatusLabel(b.status)}</Badge>
-                </div>
-                <CardTitle className="text-base leading-snug">{b.title}</CardTitle>
-                <p className="mt-2 text-xs text-muted-foreground">
-                  {b.author_name ?? "—"} · обновлено {formatBriefUpdatedAt(b.updated_at)}
-                </p>
-              </CardHeader>
-              <CardFooter className="flex flex-wrap gap-2 border-t border-border/50 pt-3">
-                {canManage ? (
-                  <>
-                    <Button asChild variant="outline" size="sm" className="min-h-9">
-                      <Link href={`/marketing-briefs/${b.id}`}>Открыть</Link>
-                    </Button>
-                    {b.status === "draft" || b.status === "archived" ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        className="min-h-9"
-                        data-testid={`button-marketing-brief-publish-${b.id}`}
-                        onClick={() => void runAction("Опубликовано", publishBrief, b.id)}
-                      >
-                        Опубликовать
-                      </Button>
-                    ) : null}
-                    {b.status === "published" ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="secondary"
-                        className="min-h-9"
-                        onClick={() => void runAction("Снято с публикации", unpublishBrief, b.id)}
-                      >
-                        Снять с публикации
-                      </Button>
-                    ) : null}
-                    {b.status !== "archived" ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        className="min-h-9 text-muted-foreground"
-                        onClick={() => void runAction("В архиве", archiveBrief, b.id)}
-                      >
-                        В архив
-                      </Button>
-                    ) : (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        className="min-h-9"
-                        onClick={() => void runAction("Восстановлено", restoreBrief, b.id)}
-                      >
-                        Восстановить
-                      </Button>
-                    )}
-                  </>
-                ) : (
-                  <Button asChild variant="outline" size="sm" className="min-h-9">
-                    <Link href={`/marketing-briefs/view/${b.id}`}>Открыть</Link>
-                  </Button>
-                )}
-              </CardFooter>
-            </Card>
-          ))}
+        <div className="space-y-3" data-testid="section-marketing-briefs-list">
+          {canManage && selection && viewMode === "cards" ? (
+            <BriefCardsSelectAllLink selection={selection} />
+          ) : null}
+          {viewMode === "cards" ? (
+            <BriefCardsListView
+              briefs={briefs}
+              canManage={canManage}
+              selection={selection}
+              renderCardFooter={renderCardFooter}
+            />
+          ) : null}
+          {viewMode === "table" ? (
+            <BriefTableListView
+              briefs={briefs}
+              canManage={canManage}
+              selection={selection}
+              selectAllRef={selectAllRef}
+              menuHandlers={menuHandlers}
+            />
+          ) : null}
+          {viewMode === "compact" ? (
+            <BriefCompactListView
+              briefs={briefs}
+              canManage={canManage}
+              selection={selection}
+              selectAllRef={selectAllRef}
+              menuHandlers={menuHandlers}
+            />
+          ) : null}
         </div>
       )}
+
+      {canManage ? (
+        <BriefBulkActionBar
+          count={selectedIds.length}
+          busy={bulkBusy}
+          onArchive={() => void confirmBulkArchive()}
+          onDelete={() => setBulkDeleteOpen(true)}
+          onClear={clearSelection}
+        />
+      ) : null}
+
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={(o) => !bulkBusy && setBulkDeleteOpen(o)}>
+        <AlertDialogContent data-testid="dialog-brief-bulk-delete">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Удалить выбранные брифы?</AlertDialogTitle>
+            <AlertDialogDescription>
+              ({selectedIds.length} шт.) Действие необратимо.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkBusy}>Отмена</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={bulkBusy}
+              onClick={(e) => {
+                e.preventDefault();
+                void confirmBulkDelete();
+              }}
+            >
+              Удалить
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={singleDeleteId != null} onOpenChange={(o) => !o && setSingleDeleteId(null)}>
+        <AlertDialogContent data-testid="dialog-brief-delete">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Удалить бриф?</AlertDialogTitle>
+            <AlertDialogDescription>Действие необратимо.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(e) => {
+                e.preventDefault();
+                void confirmSingleDelete();
+              }}
+            >
+              Удалить
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent data-testid="dialog-marketing-brief-create">

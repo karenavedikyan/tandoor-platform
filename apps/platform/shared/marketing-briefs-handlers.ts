@@ -403,6 +403,29 @@ export async function handleMarketingBriefsRestore(
   sendJson(res, 200, { success: true, data: brief });
 }
 
+export async function handleMarketingBriefsDelete(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  me: SessionUser,
+): Promise<void> {
+  if (!assertCanManage(me, res)) return;
+  const id = parseUuid((req.body as Record<string, unknown>)?.id);
+  if (!id) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите id." });
+    return;
+  }
+
+  const existing = await fetchBriefById(pool, id);
+  if (!existing) {
+    sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Бриф не найден." });
+    return;
+  }
+
+  await pool.query(`DELETE FROM marketing_briefs WHERE id = $1::uuid`, [id]);
+  sendJson(res, 200, { success: true, data: { ok: true } });
+}
+
 async function touchBriefUpdatedAt(pool: PoolLike, briefId: string): Promise<void> {
   await pool.query(`UPDATE marketing_briefs SET updated_at = NOW() WHERE id = $1::uuid`, [briefId]);
 }

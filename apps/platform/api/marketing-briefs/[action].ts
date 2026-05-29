@@ -8,6 +8,7 @@
  *   POST /api/marketing-briefs/unpublish
  *   POST /api/marketing-briefs/archive
  *   POST /api/marketing-briefs/restore
+ *   POST /api/marketing-briefs/delete
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -26,6 +27,7 @@ import {
   handleBlocksUpdate,
   handleMarketingBriefsArchive,
   handleMarketingBriefsCreate,
+  handleMarketingBriefsDelete,
   handleMarketingBriefsGet,
   handleMarketingBriefsList,
   handleMarketingBriefsPublish,
@@ -93,6 +95,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "restore" && req.method === "POST") {
       await handleMarketingBriefsRestore(req, res, pool, sessionUser);
+      return;
+    }
+    if (action === "delete" && req.method === "POST") {
+      await handleMarketingBriefsDelete(req, res, pool, sessionUser);
       return;
     }
     if (action === "blocks-list" && req.method === "GET") {
