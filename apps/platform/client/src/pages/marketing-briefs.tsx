@@ -447,6 +447,7 @@ export default function MarketingBriefsPage() {
     onArchive: (id) => void runAction("В архиве", archiveBrief, id),
     onRestore: (id) => void runAction("Восстановлено", restoreBrief, id),
     onDelete: (id) => setSingleDeleteId(id),
+    onMutate: () => void reload(),
   };
 
   function renderCardFooter(b: MarketingBriefRow) {
@@ -612,6 +613,7 @@ export default function MarketingBriefsPage() {
               briefs={briefs}
               canManage={canManage}
               selection={selection}
+              menuHandlers={menuHandlers}
               renderCardFooter={renderCardFooter}
             />
           ) : null}
