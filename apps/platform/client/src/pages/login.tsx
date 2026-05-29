@@ -11,13 +11,23 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { login } from "@/lib/auth-api";
 import { defaultHomePathForUserRole } from "@/lib/auth-access";
+import { useRouteSearchParams } from "@/lib/hash-route-utils";
 import { AuthScreenBranding } from "@/components/auth-screen-branding";
 import { invalidateAuthUser, useAuthUser } from "@/hooks/use-auth-user";
 import { queryClient } from "@/lib/queryClient";
 import { AUTH_FIELD_CLASS, AUTH_LABEL_CLASS } from "@/lib/auth-form-classes";
 
+function safeReturnPath(raw: string | null): string | null {
+  if (!raw) return null;
+  const path = raw.trim();
+  if (!path.startsWith("/") || path.startsWith("//")) return null;
+  return path;
+}
+
 export default function LoginPage() {
   const [, setLocation] = useLocation();
+  const routeSearch = useRouteSearchParams();
+  const nextReturn = safeReturnPath(routeSearch.get("next"));
   const { user, isLoading } = useAuthUser();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -27,9 +37,9 @@ export default function LoginPage() {
   useEffect(() => {
     if (isLoading) return;
     if (user?.status === "active") {
-      setLocation(defaultHomePathForUserRole(user.role));
+      setLocation(nextReturn ?? defaultHomePathForUserRole(user.role));
     }
-  }, [isLoading, user, setLocation]);
+  }, [isLoading, user, setLocation, nextReturn]);
 
   if (isLoading || user?.status === "active") {
     return (
@@ -47,7 +57,7 @@ export default function LoginPage() {
       const r = await login(email, password);
       if (r.ok) {
         await invalidateAuthUser(queryClient);
-        setLocation(defaultHomePathForUserRole(r.user.role));
+        setLocation(nextReturn ?? defaultHomePathForUserRole(r.user.role));
         return;
       }
       if (r.code === "VALIDATION_ERROR" || r.code === "INTERNAL_ERROR" || r.code === "NETWORK_ERROR") {

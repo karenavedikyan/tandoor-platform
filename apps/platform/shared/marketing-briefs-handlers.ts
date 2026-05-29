@@ -4,6 +4,7 @@
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import type { PoolLike } from "./admin/admin-auth.js";
+import { resolveCurrentUser, vercelHeaders } from "./admin/admin-auth.js";
 import { canManageMarketingBriefsServer } from "./marketing-briefs-access.js";
 import {
   DEFAULT_ACCENT_COLOR,
@@ -446,11 +447,38 @@ export async function handleMarketingBriefsPublicGet(
   }
 
   const brief = await fetchBriefById(pool, id);
-  if (!brief || brief.status !== "published" || brief.visibility !== "public") {
+  if (!brief) {
     sendJson(res, 404, {
       success: false,
       code: "NOT_FOUND",
-      message: "Бриф не найден, не опубликован или приватный.",
+      message: "Бриф не найден.",
+    });
+    return;
+  }
+
+  if (brief.visibility === "public" && brief.status === "published") {
+    const blocks = await fetchBlocksForBrief(pool, id);
+    sendJson(res, 200, { success: true, data: { brief, blocks } });
+    return;
+  }
+
+  const headers = vercelHeaders(req);
+  const me = await resolveCurrentUser(pool, headers);
+  if (!me) {
+    sendJson(res, 401, {
+      success: false,
+      code: "UNAUTHORIZED",
+      message: "Требуется вход.",
+    });
+    return;
+  }
+
+  const sessionUser: SessionUser = { id: me.id, role: me.role, status: me.status };
+  if (!canReadBrief(sessionUser, brief)) {
+    sendJson(res, 403, {
+      success: false,
+      code: "FORBIDDEN",
+      message: "Доступ запрещён.",
     });
     return;
   }
