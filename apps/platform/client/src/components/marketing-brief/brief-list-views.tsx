@@ -1,10 +1,19 @@
-import { useEffect, useRef, type ReactNode, type RefObject } from "react";
-import { Link } from "wouter";
-import { Globe, MoreHorizontal, Share2 } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { Link, useLocation } from "wouter";
+import { Globe, Loader2, MoreHorizontal, Share2 } from "lucide-react";
+import { BrandBriefView } from "@/components/marketing-brief/brand-brief-view";
 import { BriefVisibilityIcon } from "@/components/marketing-brief/brief-visibility-ui";
 import { Button } from "@/components/ui/button";
 import { Card, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,7 +28,10 @@ import {
   DEFAULT_MARKETING_BRIEF_ACCENT,
   formatBriefUpdatedAt,
   formatMarketingBriefPeriodLabel,
+  getBrief,
+  listBlocks,
   updateBrief,
+  type MarketingBriefBlockRow,
   type MarketingBriefRow,
   type MarketingBriefVisibility,
 } from "@/lib/marketing-briefs-api";
@@ -205,10 +217,13 @@ function BriefRowActionsMenu({
   brief,
   canManage,
   handlers,
+  compact = false,
 }: {
   brief: MarketingBriefRow;
   canManage: boolean;
   handlers: BriefRowMenuHandlers;
+  /** Иконка «…» на цветной плашке карточки */
+  compact?: boolean;
 }) {
   if (!canManage) {
     return (
@@ -258,11 +273,15 @@ function BriefRowActionsMenu({
           type="button"
           variant="ghost"
           size="icon"
-          className="h-8 w-8 shrink-0"
+          className={cn(
+            "h-8 w-8 shrink-0",
+            compact && "h-9 w-9 bg-white/20 text-white hover:bg-white/30 hover:text-white",
+          )}
           aria-label="Действия"
           data-testid={`button-brief-actions-${brief.id}`}
+          data-no-print="true"
         >
-          <MoreHorizontal className="h-4 w-4" />
+          <MoreHorizontal className={cn("h-4 w-4", compact && "text-white")} />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-[12rem]">
@@ -318,7 +337,10 @@ function CardShareButton({ brief, onMutate }: { brief: MarketingBriefRow; onMuta
         size="sm"
         variant="ghost"
         className="min-h-9 gap-1"
-        onClick={() => void copyBriefLink(brief.id)}
+        onClick={(e) => {
+          e.stopPropagation();
+          void copyBriefLink(brief.id);
+        }}
         data-testid={`button-card-share-${brief.id}`}
       >
         <Share2 className="h-3.5 w-3.5" aria-hidden />
@@ -332,12 +354,301 @@ function CardShareButton({ brief, onMutate }: { brief: MarketingBriefRow; onMuta
       size="sm"
       variant="ghost"
       className="min-h-9 gap-1"
-      onClick={() => void makeBriefPublicAndCopy(brief.id, onMutate)}
+      onClick={(e) => {
+        e.stopPropagation();
+        void makeBriefPublicAndCopy(brief.id, onMutate);
+      }}
       data-testid={`button-card-make-public-${brief.id}`}
     >
       <Globe className="h-3.5 w-3.5" aria-hidden />
       Сделать публичным
     </Button>
+  );
+}
+
+function BriefPreviewDialog({
+  previewId,
+  briefs,
+  canManage,
+  onClose,
+  onOpenEditor,
+}: {
+  previewId: string | null;
+  briefs: MarketingBriefRow[];
+  canManage: boolean;
+  onClose: () => void;
+  onOpenEditor: (id: string) => void;
+}) {
+  const listBrief = previewId ? briefs.find((b) => b.id === previewId) : undefined;
+  const [brief, setBrief] = useState<MarketingBriefRow | null>(null);
+  const [blocks, setBlocks] = useState<MarketingBriefBlockRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!previewId) {
+      setBrief(null);
+      setBlocks([]);
+      setError(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await getBrief(previewId);
+        if (cancelled) return;
+        const allowDraft = canManage;
+        if (data.brief.status !== "published" && !allowDraft) {
+          setBrief(null);
+          setError("not_found");
+          return;
+        }
+        setBrief(data.brief);
+        try {
+          const blockRows = await listBlocks(data.brief.id);
+          if (!cancelled) setBlocks(blockRows);
+        } catch {
+          if (!cancelled) setBlocks([]);
+        }
+      } catch {
+        if (!cancelled) {
+          setBrief(null);
+          setError("not_found");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [previewId, canManage]);
+
+  const displayBrief = brief ?? listBrief;
+  const title = displayBrief ? briefDisplayTitle(displayBrief.title).text : "Без названия";
+  const isPublishedPublic =
+    displayBrief?.status === "published" && (displayBrief.visibility ?? "private") === "public";
+
+  const handlePrint = () => {
+    window.requestAnimationFrame(() => window.print());
+  };
+
+  return (
+    <Dialog open={previewId !== null} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        className="max-h-[90vh] max-w-4xl gap-0 overflow-y-auto p-0"
+        data-testid="dialog-brief-preview"
+      >
+        <DialogHeader className="px-6 pt-6" data-no-print="true">
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>Предпросмотр</DialogDescription>
+        </DialogHeader>
+        <div className="px-2 pb-2 sm:px-4">
+          {loading ? (
+            <div className="flex justify-center py-16">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden />
+            </div>
+          ) : error || !displayBrief ? (
+            <p className="px-4 py-8 text-center text-sm text-muted-foreground">Не удалось загрузить бриф</p>
+          ) : (
+            <BrandBriefView
+              brief={displayBrief}
+              blocks={blocks}
+              readOnly
+              embed
+              previewMode={canManage && displayBrief.status !== "published"}
+            />
+          )}
+        </div>
+        <DialogFooter
+          className="flex flex-wrap gap-2 border-t bg-muted/30 px-6 py-3"
+          data-no-print="true"
+        >
+          {isPublishedPublic ? (
+            <Button type="button" variant="outline" onClick={() => void copyBriefLink(displayBrief!.id)}>
+              Поделиться
+            </Button>
+          ) : null}
+          <Button type="button" variant="outline" onClick={handlePrint} data-testid="button-brief-preview-pdf">
+            Скачать PDF
+          </Button>
+          <Button type="button" variant="outline" onClick={onClose}>
+            Закрыть
+          </Button>
+          {displayBrief && canManage ? (
+            <Button
+              type="button"
+              onClick={() => {
+                onClose();
+                onOpenEditor(displayBrief.id);
+              }}
+              data-testid="button-brief-preview-edit"
+            >
+              Открыть для редактирования
+            </Button>
+          ) : displayBrief ? (
+            <Button type="button" asChild>
+              <Link href={`/marketing-briefs/view/${displayBrief.id}`}>Открыть</Link>
+            </Button>
+          ) : null}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function MarketingBriefCard({
+  brief: b,
+  canManage,
+  selection,
+  selectionActive,
+  menuHandlers,
+  renderCardFooter,
+  onPreview,
+}: {
+  brief: MarketingBriefRow;
+  canManage: boolean;
+  selection: BriefListSelection | null;
+  selectionActive: boolean;
+  menuHandlers: BriefRowMenuHandlers;
+  renderCardFooter: (brief: MarketingBriefRow) => ReactNode;
+  onPreview: (id: string) => void;
+}) {
+  const selected = selection?.isSelected(b.id) ?? false;
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [draftTitle, setDraftTitle] = useState(b.title);
+
+  useEffect(() => {
+    if (!editingTitle) setDraftTitle(b.title);
+  }, [b.title, editingTitle]);
+
+  async function commitRename() {
+    const next = draftTitle.trim();
+    setEditingTitle(false);
+    if (!next || next === b.title.trim()) return;
+    try {
+      await updateBrief(b.id, { title: next });
+      toast({ description: "Название сохранено" });
+      menuHandlers.onMutate();
+    } catch {
+      toast({ variant: "destructive", description: "Не удалось сохранить название" });
+      setDraftTitle(b.title);
+    }
+  }
+
+  function cancelRename() {
+    setEditingTitle(false);
+    setDraftTitle(b.title);
+  }
+
+  const openPreview = () => onPreview(b.id);
+
+  return (
+    <Card
+      className="group relative flex cursor-pointer flex-col overflow-hidden rounded-2xl border border-border/80 shadow-sm"
+      data-testid={`card-marketing-brief-${b.id}`}
+      role="button"
+      tabIndex={0}
+      onClick={openPreview}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          openPreview();
+        }
+      }}
+    >
+      {canManage && selection ? (
+        <div
+          className={cn(
+            "absolute left-2 top-2 z-10 rounded-md bg-background/90 p-0.5 shadow-sm backdrop-blur-sm transition-opacity",
+            selected || selectionActive ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+          )}
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          <Checkbox
+            checked={selected}
+            onCheckedChange={() => selection.onToggle(b.id)}
+            aria-label={`Выбрать ${b.title}`}
+            data-testid={`checkbox-brief-${b.id}`}
+          />
+        </div>
+      ) : null}
+      <div
+        className="absolute right-3 top-3 z-10"
+        data-no-print="true"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+      >
+        <BriefRowActionsMenu brief={b} canManage={canManage} handlers={menuHandlers} compact />
+      </div>
+      <div
+        className="relative px-4 py-6 pr-12"
+        style={{ backgroundColor: b.accent_color || DEFAULT_MARKETING_BRIEF_ACCENT }}
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+      >
+        {canManage && editingTitle ? (
+          <input
+            autoFocus
+            value={draftTitle}
+            onChange={(e) => setDraftTitle(e.target.value)}
+            onBlur={() => void commitRename()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void commitRename();
+              if (e.key === "Escape") cancelRename();
+            }}
+            onClick={(e) => e.stopPropagation()}
+            className="w-full rounded bg-white/95 px-2 py-1 text-lg font-semibold text-foreground outline-none ring-2 ring-emerald-400"
+            data-testid={`input-rename-${b.id}`}
+          />
+        ) : canManage ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setDraftTitle(b.title);
+              setEditingTitle(true);
+            }}
+            className="block w-full text-left text-lg font-semibold text-white hover:underline"
+            data-testid={`title-${b.id}`}
+          >
+            {briefDisplayTitle(b.title).text}
+          </button>
+        ) : (
+          <p className="text-lg font-semibold leading-snug text-white">{briefDisplayTitle(b.title).text}</p>
+        )}
+        <p className="mt-1 text-sm font-medium text-white/80">
+          {formatMarketingBriefPeriodLabel(b.period_label)}
+        </p>
+      </div>
+      <CardHeader className="flex-1 pb-2">
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <BriefStatusBadge status={b.status} />
+          <BriefVisibilityIcon visibility={b.visibility ?? "private"} />
+        </div>
+        <CardTitle className="sr-only">{briefDisplayTitle(b.title).text}</CardTitle>
+        <p className="mt-2 text-xs text-muted-foreground">
+          {b.author_name ?? "—"} · обновлено {formatBriefUpdatedAt(b.updated_at)}
+        </p>
+      </CardHeader>
+      <CardFooter
+        className="flex flex-wrap gap-2 border-t border-border/50 pt-3"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+      >
+        {canManage ? <CardShareButton brief={b} onMutate={menuHandlers.onMutate} /> : null}
+        <div
+          className="contents"
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          {renderCardFooter(b)}
+        </div>
+      </CardFooter>
+    </Card>
   );
 }
 
@@ -358,73 +669,33 @@ export function BriefCardsListView({
   renderCardFooter,
 }: Pick<BriefListViewsProps, "briefs" | "canManage" | "selection" | "menuHandlers" | "renderCardFooter">) {
   const selectionActive = selection?.selectionActive ?? false;
+  const [previewId, setPreviewId] = useState<string | null>(null);
+  const [, setLocation] = useLocation();
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" data-testid="section-marketing-briefs-list-cards">
-      {briefs.map((b) => {
-        const selected = selection?.isSelected(b.id) ?? false;
-        return (
-          <Card
+    <>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" data-testid="section-marketing-briefs-list-cards">
+        {briefs.map((b) => (
+          <MarketingBriefCard
             key={b.id}
-            className="group relative flex flex-col overflow-hidden rounded-2xl border border-border/80 shadow-sm"
-            data-testid={`card-marketing-brief-${b.id}`}
-          >
-            {canManage && selection ? (
-              <div
-                className={cn(
-                  "absolute left-2 top-2 z-10 rounded-md bg-background/90 p-0.5 shadow-sm backdrop-blur-sm transition-opacity",
-                  selected || selectionActive ? "opacity-100" : "opacity-0 group-hover:opacity-100",
-                )}
-              >
-                <Checkbox
-                  checked={selected}
-                  onCheckedChange={() => selection.onToggle(b.id)}
-                  aria-label={`Выбрать ${b.title}`}
-                  data-testid={`checkbox-brief-${b.id}`}
-                />
-              </div>
-            ) : null}
-            <div
-              className="px-4 py-6"
-              style={{ backgroundColor: b.accent_color || DEFAULT_MARKETING_BRIEF_ACCENT }}
-            >
-              {(() => {
-                const { text, isPlaceholder } = briefDisplayTitle(b.title);
-                return (
-                  <>
-                    <p
-                      className={cn(
-                        "text-lg font-semibold leading-snug text-[#222631]",
-                        isPlaceholder && "text-[#222631]/60",
-                      )}
-                    >
-                      {text}
-                    </p>
-                    <p className="mt-1 text-sm font-medium text-[#222631]/80">
-                      {formatMarketingBriefPeriodLabel(b.period_label)}
-                    </p>
-                  </>
-                );
-              })()}
-            </div>
-            <CardHeader className="flex-1 pb-2">
-              <div className="mb-2 flex flex-wrap items-center gap-2">
-                <BriefStatusBadge status={b.status} />
-                <BriefVisibilityIcon visibility={b.visibility ?? "private"} />
-              </div>
-              <CardTitle className="sr-only">{briefDisplayTitle(b.title).text}</CardTitle>
-              <p className="mt-2 text-xs text-muted-foreground">
-                {b.author_name ?? "—"} · обновлено {formatBriefUpdatedAt(b.updated_at)}
-              </p>
-            </CardHeader>
-            <CardFooter className="flex flex-wrap gap-2 border-t border-border/50 pt-3">
-              {canManage ? <CardShareButton brief={b} onMutate={menuHandlers.onMutate} /> : null}
-              {renderCardFooter(b)}
-            </CardFooter>
-          </Card>
-        );
-      })}
-    </div>
+            brief={b}
+            canManage={canManage}
+            selection={selection}
+            selectionActive={selectionActive}
+            menuHandlers={menuHandlers}
+            renderCardFooter={renderCardFooter}
+            onPreview={setPreviewId}
+          />
+        ))}
+      </div>
+      <BriefPreviewDialog
+        previewId={previewId}
+        briefs={briefs}
+        canManage={canManage}
+        onClose={() => setPreviewId(null)}
+        onOpenEditor={(id) => setLocation(`/marketing-briefs/${id}`)}
+      />
+    </>
   );
 }
 
