@@ -234,7 +234,7 @@ function BlockFields({
             maxLength={3}
             onChange={(e) => onPatch({ number: e.target.value.slice(0, 3) })}
           />
-          <p className="text-[10px] text-muted-foreground">
+          <p className="text-[10px] leading-snug text-muted-foreground">
             До 3 символов: «01», «02», «А», «B». Полное название идёт в «Заголовок».
           </p>
         </div>
@@ -245,6 +245,9 @@ function BlockFields({
             disabled={readOnly}
             onChange={(e) => onPatch({ title: e.target.value })}
           />
+          <p className="text-[10px] leading-snug text-muted-foreground">
+            Краткое название раздела заглавными буквами, например: «УСЛОВИЯ ВЫСТАВЛЕНИЯ», «МЕЖКОМНАТНЫЕ ДВЕРИ».
+          </p>
         </div>
         <div className="space-y-1.5 sm:col-span-2">
           <Label className="text-xs">Подзаголовок</Label>
@@ -253,6 +256,9 @@ function BlockFields({
             disabled={readOnly}
             onChange={(e) => onPatch({ subtitle: e.target.value })}
           />
+          <p className="text-[10px] leading-snug text-muted-foreground">
+            Короткое уточнение под заголовком — необязательно. Например: «Для ТОП-350».
+          </p>
         </div>
       </div>
     );
@@ -269,6 +275,9 @@ function BlockFields({
             disabled={readOnly}
             onChange={(e) => onPatch({ heading: e.target.value })}
           />
+          <p className="text-[10px] leading-snug text-muted-foreground">
+            Необязательно. Если заполнено, идёт жирной строкой над текстом.
+          </p>
         </div>
         <div className="space-y-1.5">
           <Label className="text-xs">Текст</Label>
@@ -279,6 +288,9 @@ function BlockFields({
             disabled={readOnly}
             onChange={(e) => onPatch({ body: e.target.value })}
           />
+          <p className="text-[10px] leading-snug text-muted-foreground">
+            Основной абзац. Можно вставлять переносы строк — каждая новая строка становится отдельным абзацем.
+          </p>
         </div>
       </div>
     );
@@ -301,6 +313,9 @@ function BlockFields({
             disabled={readOnly}
             onChange={(e) => onPatch({ heading: e.target.value })}
           />
+          <p className="text-[10px] leading-snug text-muted-foreground">
+            Необязательно. Заголовок над четырьмя колонками.
+          </p>
         </div>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
           {cols.map((col) => (
@@ -317,6 +332,9 @@ function BlockFields({
                   })
                 }
               />
+              <p className="text-[10px] leading-snug text-muted-foreground">
+                Условия и проценты для этого сегмента. Можно несколько строк.
+              </p>
             </div>
           ))}
         </div>
@@ -344,6 +362,9 @@ function BlockFields({
               <SelectItem value="success">Успех</SelectItem>
             </SelectContent>
           </Select>
+          <p className="text-[10px] leading-snug text-muted-foreground">
+            Тип акцента: «info» — нейтрально, «warning» — внимание, «success» — позитив.
+          </p>
         </div>
         <div className="space-y-1.5">
           <Label className="text-xs">Заголовок</Label>
@@ -352,6 +373,9 @@ function BlockFields({
             disabled={readOnly}
             onChange={(e) => onPatch({ heading: e.target.value })}
           />
+          <p className="text-[10px] leading-snug text-muted-foreground">
+            Опционально. Если заполнено — выводится плакаткой над текстом.
+          </p>
         </div>
         <div className="space-y-1.5">
           <Label className="text-xs">Текст</Label>
@@ -361,6 +385,7 @@ function BlockFields({
             disabled={readOnly}
             onChange={(e) => onPatch({ body: e.target.value })}
           />
+          <p className="text-[10px] leading-snug text-muted-foreground">Основное сообщение.</p>
         </div>
       </div>
     );

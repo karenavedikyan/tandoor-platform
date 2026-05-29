@@ -71,6 +71,9 @@ function SortableBonusCard({
               disabled={readOnly}
               onChange={(e) => onChange({ trigger: e.target.value })}
             />
+            <p className="text-[10px] leading-snug text-muted-foreground">
+              Конкретное действие, за которое даётся бонус. Например: «За продажу VIP-дверей».
+            </p>
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Сколько / что получает</Label>
@@ -80,6 +83,9 @@ function SortableBonusCard({
               disabled={readOnly}
               onChange={(e) => onChange({ reward: e.target.value })}
             />
+            <p className="text-[10px] leading-snug text-muted-foreground">
+              Размер вознаграждения. Например: «1000 руб», «5% от продажи».
+            </p>
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Кому</Label>
@@ -88,6 +94,7 @@ function SortableBonusCard({
               disabled={readOnly}
               onChange={(e) => onChange({ audience: e.target.value })}
             />
+            <p className="text-[10px] leading-snug text-muted-foreground">Менеджер, ТП, ROP — кто получает.</p>
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Условия</Label>
@@ -97,6 +104,7 @@ function SortableBonusCard({
               disabled={readOnly}
               onChange={(e) => onChange({ conditions: e.target.value })}
             />
+            <p className="text-[10px] leading-snug text-muted-foreground">При каких условиях. Например: «От 10 шт.».</p>
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
             <div className="space-y-1">
@@ -107,17 +115,23 @@ function SortableBonusCard({
                 disabled={readOnly}
                 onChange={(e) => onChange({ valid_until: e.target.value || undefined })}
               />
+              <p className="text-[10px] leading-snug text-muted-foreground">Дата окончания акции.</p>
             </div>
-            <div className="flex items-end gap-2 pb-1">
-              <Checkbox
-                id={`photo-${item.id}`}
-                checked={item.require_photo_report === true}
-                disabled={readOnly}
-                onCheckedChange={(v) => onChange({ require_photo_report: v === true })}
-              />
-              <Label htmlFor={`photo-${item.id}`} className="text-xs font-normal">
-                Требуется фотоотчёт
-              </Label>
+            <div className="flex flex-col gap-1 pb-1">
+              <div className="flex items-end gap-2">
+                <Checkbox
+                  id={`photo-${item.id}`}
+                  checked={item.require_photo_report === true}
+                  disabled={readOnly}
+                  onCheckedChange={(v) => onChange({ require_photo_report: v === true })}
+                />
+                <Label htmlFor={`photo-${item.id}`} className="text-xs font-normal">
+                  Требуется фотоотчёт
+                </Label>
+              </div>
+              <p className="text-[10px] leading-snug text-muted-foreground">
+                Включи, если нужно фотоподтверждение продажи.
+              </p>
             </div>
           </div>
         </div>
@@ -168,6 +182,9 @@ export function BonusBlockEditor({
           disabled={readOnly}
           onChange={(e) => onPatch({ heading: e.target.value })}
         />
+        <p className="text-[10px] leading-snug text-muted-foreground">
+          Опционально. По умолчанию: «БОНУС ЗА ПРОДАЖУ».
+        </p>
       </div>
       {p.items.length > 0 ? (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
