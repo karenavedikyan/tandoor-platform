@@ -3,7 +3,8 @@ import { Link, useLocation, useRoute } from "wouter";
 import { Loader2 } from "lucide-react";
 import { BrandBriefView } from "@/components/marketing-brief/brand-brief-view";
 import { Button } from "@/components/ui/button";
-import { buildHashPath } from "@/lib/hash-route-utils";
+import { buildHashPath, useRouteSearchParams } from "@/lib/hash-route-utils";
+import { cn } from "@/lib/utils";
 import {
   fetchPublicBrief,
   MarketingBriefPublicFetchError,
@@ -11,8 +12,19 @@ import {
   type MarketingBriefRow,
 } from "@/lib/marketing-briefs-api";
 
+const BRIEF_PUBLIC_PRINT_CSS = `
+@media print {
+  [data-no-print="true"] { display: none !important; }
+  body { background: #fff !important; color: #111 !important; }
+  .brief-public-shell { padding: 0 !important; margin: 0 !important; }
+  [data-brief-block] { break-inside: avoid; page-break-inside: avoid; }
+}
+`;
+
 export default function MarketingBriefPublicPage() {
   const [, setLocation] = useLocation();
+  const routeSearch = useRouteSearchParams();
+  const wantsPrint = routeSearch.get("print") === "1";
   const [, params] = useRoute("/marketing-briefs/public/:id");
   const id = params?.id ?? "";
 
@@ -45,7 +57,12 @@ export default function MarketingBriefPublicPage() {
         setBlocks([]);
         if (e instanceof MarketingBriefPublicFetchError) {
           if (e.reason === "unauthorized") {
-            setLocation(buildHashPath("/login", { next: `/marketing-briefs/public/${id}` }));
+            setLocation(
+              buildHashPath("/login", {
+                next: `/marketing-briefs/public/${id}`,
+                ...(wantsPrint ? { print: "1" } : {}),
+              }),
+            );
             return;
           }
           if (e.reason === "forbidden") {
@@ -61,7 +78,15 @@ export default function MarketingBriefPublicPage() {
     return () => {
       cancelled = true;
     };
-  }, [id, setLocation]);
+  }, [id, setLocation, wantsPrint]);
+
+  useEffect(() => {
+    if (!wantsPrint || loading || !brief) return;
+    const t = window.setTimeout(() => {
+      window.print();
+    }, 600);
+    return () => window.clearTimeout(t);
+  }, [wantsPrint, loading, brief]);
 
   if (loading) {
     return (
@@ -101,8 +126,22 @@ export default function MarketingBriefPublicPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background" data-testid="page-marketing-brief-public">
-      <BrandBriefView brief={brief} blocks={blocks} showPrint showShare onBriefChange={setBrief} />
-    </div>
+    <>
+      {wantsPrint ? <style>{BRIEF_PUBLIC_PRINT_CSS}</style> : null}
+      <div
+        className={cn("brief-public-shell min-h-screen bg-background", wantsPrint && "print:m-0 print:bg-white")}
+        data-testid="page-marketing-brief-public"
+      >
+        <BrandBriefView
+          brief={brief}
+          blocks={blocks}
+          readOnly={wantsPrint}
+          embed={wantsPrint}
+          showPrint={!wantsPrint}
+          showShare={!wantsPrint}
+          onBriefChange={setBrief}
+        />
+      </div>
+    </>
   );
 }
