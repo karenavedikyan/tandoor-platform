@@ -18,6 +18,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Pencil, Plus, Trash2 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -187,49 +188,92 @@ function ProductItemForm({
   setForm: (f: ProductFormState) => void;
   readOnly?: boolean;
 }) {
+  const [catalogQuery, setCatalogQuery] = useState("");
   const catalogProduct = form.catalog_id ? getProductById(form.catalog_id) : undefined;
   const catalogHref = form.catalog_id ? `/catalog/${form.catalog_id}` : null;
+  const catalogResults = useMemo(() => searchCatalog(catalogQuery, 12), [catalogQuery]);
+
+  function applyCatalogProduct(p: CatalogProduct) {
+    const snap = snapshotCatalogProduct(p);
+    setForm({
+      ...form,
+      manual: false,
+      catalog_id: snap.catalog_id,
+      name: snap.name,
+      article: snap.article,
+      image_url: snap.image_url ?? "",
+      price_retail: snap.price_retail != null ? String(snap.price_retail) : form.price_retail,
+    });
+    setCatalogQuery("");
+  }
 
   return (
-    <div className="space-y-3">
-      {!form.manual && form.catalog_id ? (
-        <div className="rounded-lg border border-[#9ACA3C]/30 bg-[#9ACA3C]/8 px-3 py-2 text-xs text-[#5a7a28]">
-          Связан с каталогом
-          {catalogHref && catalogProduct ? (
-            <>
-              {" · "}
-              <Link href={catalogHref} className="underline">
-                открыть карточку
-              </Link>
-            </>
-          ) : catalogProduct?.sourcePublicUrl ? (
-            <>
-              {" · "}
-              <a href={catalogProduct.sourcePublicUrl} target="_blank" rel="noreferrer" className="underline">
-                открыть на сайте
-              </a>
-            </>
-          ) : null}
-          {!readOnly ? (
-            <div className="mt-2">
-              <Button
+    <div className="space-y-3" data-testid="product-item-form">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
+        <Label className="text-xs font-medium">Источник товара</Label>
+        <div className="flex items-center gap-2 text-xs">
+          <span className={cn(!form.manual && "font-semibold text-[#222631]")}>Из каталога</span>
+          <Switch
+            checked={form.manual}
+            disabled={readOnly}
+            onCheckedChange={(checked) => setForm({ ...form, manual: checked })}
+            data-testid="product-item-manual-toggle"
+            aria-label="Ручной ввод"
+          />
+          <span className={cn(form.manual && "font-semibold text-[#222631]")}>Вручную</span>
+        </div>
+      </div>
+
+      {!form.manual ? (
+        <div className="space-y-2">
+          <Label className="text-xs">Выбрать из каталога</Label>
+          <Input
+            placeholder="Поиск по названию, артикулу, серии…"
+            value={catalogQuery}
+            disabled={readOnly}
+            onChange={(e) => setCatalogQuery(e.target.value)}
+            data-testid="input-product-catalog-search"
+          />
+          <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-border/60 p-1">
+            {catalogResults.map((p) => (
+              <button
+                key={p.id}
                 type="button"
-                variant="outline"
-                size="sm"
-                className="h-7 text-xs"
-                onClick={() => setForm({ ...form, manual: true })}
+                disabled={readOnly}
+                className={cn(
+                  "flex w-full gap-2 rounded-md p-2 text-left text-sm hover:bg-muted/60",
+                  form.catalog_id === p.id && "bg-[#9ACA3C]/10 ring-1 ring-[#9ACA3C]/40",
+                )}
+                onClick={() => applyCatalogProduct(p)}
               >
-                Отвязать от каталога и редактировать как ручной товар
-              </Button>
-            </div>
+                {p.image ? (
+                  <img src={p.image} alt="" className="h-10 w-10 shrink-0 rounded object-cover" />
+                ) : null}
+                <span className="min-w-0 truncate font-medium">{p.name}</span>
+              </button>
+            ))}
+          </div>
+          {form.catalog_id ? (
+            <p className="text-xs text-[#5a7a28]">
+              Выбран: {form.name || catalogProduct?.name}
+              {catalogHref && catalogProduct ? (
+                <>
+                  {" · "}
+                  <Link href={catalogHref} className="underline">
+                    карточка
+                  </Link>
+                </>
+              ) : null}
+            </p>
           ) : null}
         </div>
       ) : null}
+
       <div className="space-y-1.5">
         <Label className="text-xs">Название</Label>
         <Input
           value={form.name}
-          disabled={readOnly}
+          disabled={readOnly || (!form.manual && Boolean(form.catalog_id))}
           onChange={(e) => setForm({ ...form, name: e.target.value })}
         />
       </div>
@@ -237,7 +281,7 @@ function ProductItemForm({
         <Label className="text-xs">Артикул</Label>
         <Input
           value={form.article}
-          disabled={readOnly}
+          disabled={readOnly || (!form.manual && Boolean(form.catalog_id))}
           onChange={(e) => setForm({ ...form, article: e.target.value })}
         />
       </div>

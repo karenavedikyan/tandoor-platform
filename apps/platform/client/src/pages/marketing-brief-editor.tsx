@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useRoute } from "wouter";
-import { Loader2 } from "lucide-react";
+import { Eye, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -219,7 +219,21 @@ export default function MarketingBriefEditorPage() {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          className="gap-1.5"
+          data-testid="button-marketing-brief-preview"
+          onClick={() => {
+            const url = `/marketing-briefs/view/${brief.id}?preview=1`;
+            window.open(url, "_blank", "noopener,noreferrer");
+          }}
+        >
+          <Eye className="h-4 w-4" aria-hidden />
+          Предпросмотр
+        </Button>
         {brief.status === "draft" || brief.status === "archived" ? (
           <Button type="button" onClick={() => void runStatusAction(publishBrief, "Опубликовано")}>
             Опубликовать
@@ -244,6 +258,8 @@ export default function MarketingBriefEditorPage() {
             <Link href={`/marketing-briefs/view/${brief.id}`}>Просмотр для команды</Link>
           </Button>
         ) : null}
+        </div>
+        <p className="text-[11px] text-muted-foreground">Предпросмотр откроется в новой вкладке</p>
       </div>
 
       <p
