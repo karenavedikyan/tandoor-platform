@@ -501,9 +501,16 @@ function AppRouter() {
   }
 
   if (normRoutePath(path).startsWith("/p/brief/")) {
+    const legacyId = normRoutePath(path).replace(/^\/p\/brief\//, "").split("/")[0] ?? "";
+    if (legacyId) {
+      return <HashRedirect to={`/marketing-briefs/public/${legacyId}`} />;
+    }
+  }
+
+  if (normRoutePath(path).startsWith("/marketing-briefs/public/")) {
     return (
       <Suspense fallback={<PageLoadingFallback />}>
-        <Route path="/p/brief/:id" component={MarketingBriefPublicRoute} />
+        <Route path="/marketing-briefs/public/:id" component={MarketingBriefPublicRoute} />
       </Suspense>
     );
   }

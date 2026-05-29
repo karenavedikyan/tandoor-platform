@@ -13,7 +13,7 @@ import {
 
 export default function MarketingBriefPublicPage() {
   const [, setLocation] = useLocation();
-  const [, params] = useRoute("/p/brief/:id");
+  const [, params] = useRoute("/marketing-briefs/public/:id");
   const id = params?.id ?? "";
 
   const [brief, setBrief] = useState<MarketingBriefRow | null>(null);
@@ -45,7 +45,7 @@ export default function MarketingBriefPublicPage() {
         setBlocks([]);
         if (e instanceof MarketingBriefPublicFetchError) {
           if (e.reason === "unauthorized") {
-            setLocation(buildHashPath("/login", { next: `/p/brief/${id}` }));
+            setLocation(buildHashPath("/login", { next: `/marketing-briefs/public/${id}` }));
             return;
           }
           if (e.reason === "forbidden") {

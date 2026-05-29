@@ -14,6 +14,10 @@
       "destination": "/api/actualization/state?_route=purge-trash"
     },
     {
+      "source": "/p/brief/:id",
+      "destination": "/api/p/brief/:id"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
