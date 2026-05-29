@@ -1,38 +1,104 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link, useRoute } from "wouter";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, useLocation, useRoute } from "wouter";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { canManageMarketingBriefs } from "@/lib/auth-access";
 import {
-  defaultTableJson,
-  loadMarketingBriefs,
-  newBriefId,
-  parseTable,
-  saveMarketingBriefs,
-  type MarketingBrief,
+  archiveBrief,
+  briefStatusLabel,
+  createBrief,
+  DEFAULT_MARKETING_BRIEF_ACCENT,
+  formatBriefUpdatedAt,
+  formatMarketingBriefPeriodLabel,
+  getBrief,
+  last12PeriodOptions,
+  listBriefs,
+  publishBrief,
+  restoreBrief,
+  unpublishBrief,
+  type MarketingBriefRow,
   type MarketingBriefStatus,
-} from "@/lib/marketing-brief-data";
-import { cn } from "@/lib/utils";
+} from "@/lib/marketing-briefs-api";
+import { toast } from "@/hooks/use-toast";
 
-function monthLabel(m: string): string {
-  const [y, mo] = m.split("-");
-  const names = ["", "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
-  return `${names[parseInt(mo, 10)] ?? mo} ${y}`;
+type StatusFilter = "all" | MarketingBriefStatus;
+
+function currentPeriodLabel(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
 export function MarketingBriefPublishedPage() {
   const [, params] = useRoute("/marketing-briefs/view/:id");
   const id = params?.id ?? "";
-  const brief = useMemo(() => loadMarketingBriefs().find((b) => b.id === id), [id]);
-  const table = brief ? parseTable(brief.tableJson) : [];
 
-  if (!brief || brief.status !== "published") {
+  const [brief, setBrief] = useState<MarketingBriefRow | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!id) {
+      setLoading(false);
+      setError("not_found");
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await getBrief(id);
+        if (cancelled) return;
+        if (data.brief.status !== "published") {
+          setBrief(null);
+          setError("not_found");
+        } else {
+          setBrief(data.brief);
+        }
+      } catch {
+        if (!cancelled) {
+          setBrief(null);
+          setError("not_found");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center" data-testid="page-marketing-brief-view">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden />
+      </div>
+    );
+  }
+
+  if (!brief || error) {
     return (
       <div className="mx-auto max-w-lg space-y-4 pb-24" data-testid="page-marketing-brief-view">
         <FloatingBackButton href="/marketing-briefs" label="К брифам" testId="button-floating-back-marketing-brief-view" />
@@ -47,106 +113,124 @@ export function MarketingBriefPublishedPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6 pb-24" data-testid="page-marketing-brief-view">
       <FloatingBackButton href="/marketing-briefs" label="К брифам" testId="button-floating-back-marketing-brief-view" />
-      <article className="space-y-4 rounded-2xl border border-border/80 bg-card p-5 shadow-sm sm:p-8">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="secondary">{monthLabel(brief.month)}</Badge>
-          <Badge className="bg-primary/15 text-primary">Опубликовано</Badge>
+      <article className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm">
+        <div
+          className="px-6 py-10 sm:px-8"
+          style={{ backgroundColor: brief.accent_color || DEFAULT_MARKETING_BRIEF_ACCENT }}
+        >
+          <p className="text-2xl font-semibold tracking-tight text-[#222631] sm:text-3xl">
+            {formatMarketingBriefPeriodLabel(brief.period_label)}
+          </p>
         </div>
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">{brief.title}</h1>
-        <div className="prose prose-sm max-w-none text-muted-foreground">
-          {brief.text.split("\n").map((p, i) => (
-            <p key={i}>{p}</p>
-          ))}
-        </div>
-        {brief.imageUrl ? (
-          <div className="overflow-hidden rounded-xl border border-border/60 bg-muted/20 p-2">
-            <p className="mb-2 text-xs font-medium text-muted-foreground">Изображение / ссылка</p>
-            <img src={brief.imageUrl} alt="" className="max-h-64 w-full object-contain" />
-            <a href={brief.imageUrl} className="mt-1 block truncate text-xs text-primary underline" target="_blank" rel="noreferrer">
-              {brief.imageUrl}
-            </a>
+        <div className="space-y-4 p-5 sm:p-8">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="secondary">{formatMarketingBriefPeriodLabel(brief.period_label)}</Badge>
+            <Badge className="bg-primary/15 text-primary">Опубликовано</Badge>
           </div>
-        ) : null}
-        <div className="w-full overflow-x-auto rounded-xl border border-border/60">
-          <table className="w-full min-w-[280px] text-sm">
-            <tbody>
-              {table.map((row, ri) => (
-                <tr key={ri} className={cn(ri === 0 ? "bg-muted/50 font-medium" : "border-t border-border/50")}>
-                  {row.map((cell, ci) => (
-                    <td key={ci} className="px-3 py-2">
-                      {cell}
-                    </td>
-                  ))}
-                </tr>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">{brief.title}</h1>
+          {brief.cover_text.trim() ? (
+            <div className="prose prose-sm max-w-none text-muted-foreground">
+              {brief.cover_text.split("\n").map((p, i) => (
+                <p key={i}>{p}</p>
               ))}
-            </tbody>
-          </table>
+            </div>
+          ) : null}
+          <p className="rounded-lg border border-dashed border-border/80 bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
+            Подробные блоки появятся в следующем релизе.
+          </p>
         </div>
       </article>
+      <Button asChild variant="outline">
+        <Link href="/marketing-briefs">К списку брифов</Link>
+      </Button>
     </div>
   );
 }
 
 export default function MarketingBriefsPage() {
   const { profile } = useReleaseDemoProfile();
+  const [, setLocation] = useLocation();
   const canManage = canManageMarketingBriefs(profile.role);
 
-  const [briefs, setBriefs] = useState<MarketingBrief[]>(() => loadMarketingBriefs());
-  const [selectedId, setSelectedId] = useState<string | null>(() => loadMarketingBriefs()[0]?.id ?? null);
+  const [briefs, setBriefs] = useState<MarketingBriefRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(canManage ? "all" : "published");
+  const [periodFilter, setPeriodFilter] = useState("all");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createPeriod, setCreatePeriod] = useState(currentPeriodLabel);
+  const [createTitle, setCreateTitle] = useState("");
+  const [createAccent, setCreateAccent] = useState(DEFAULT_MARKETING_BRIEF_ACCENT);
+  const [creating, setCreating] = useState(false);
 
-  const listBriefs = useMemo(
-    () => (canManage ? briefs : briefs.filter((b) => b.status === "published")),
-    [briefs, canManage],
-  );
+  const periodOptions = useMemo(() => last12PeriodOptions(), []);
+
+  const reload = useCallback(async () => {
+    setLoading(true);
+    try {
+      const list = await listBriefs({
+        status: statusFilter === "all" ? undefined : statusFilter,
+        period: periodFilter,
+      });
+      setBriefs(list);
+    } catch (e) {
+      toast({
+        title: "Не удалось загрузить брифы",
+        description: e instanceof Error ? e.message : undefined,
+        variant: "destructive",
+      });
+      setBriefs([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [statusFilter, periodFilter]);
 
   useEffect(() => {
-    if (!canManage) return;
-    if (selectedId && !briefs.some((b) => b.id === selectedId)) {
-      setSelectedId(briefs[0]?.id ?? null);
+    void reload();
+  }, [reload]);
+
+  async function handleCreate() {
+    setCreating(true);
+    try {
+      const created = await createBrief({
+        period_label: createPeriod,
+        title: createTitle.trim() || undefined,
+        accent_color: createAccent,
+      });
+      setCreateOpen(false);
+      setCreateTitle("");
+      setLocation(`/marketing-briefs/${created.id}`);
+    } catch (e) {
+      toast({
+        title: "Не удалось создать бриф",
+        description: e instanceof Error ? e.message : undefined,
+        variant: "destructive",
+      });
+    } finally {
+      setCreating(false);
     }
-  }, [briefs, selectedId, canManage]);
+  }
 
-  useEffect(() => {
-    if (canManage) return;
-    if (selectedId && !listBriefs.some((b) => b.id === selectedId)) {
-      setSelectedId(null);
+  async function runAction(
+    label: string,
+    fn: (id: string) => Promise<MarketingBriefRow>,
+    id: string,
+  ) {
+    try {
+      await fn(id);
+      toast({ title: label });
+      await reload();
+    } catch (e) {
+      toast({
+        title: "Ошибка",
+        description: e instanceof Error ? e.message : undefined,
+        variant: "destructive",
+      });
     }
-  }, [listBriefs, selectedId, canManage]);
-
-  const selected = canManage ? (briefs.find((b) => b.id === selectedId) ?? null) : null;
-
-  function persist(next: MarketingBrief[]) {
-    saveMarketingBriefs(next);
-    setBriefs(next);
   }
 
-  function updateSelected(patch: Partial<MarketingBrief>) {
-    if (!selected) return;
-    const next = briefs.map((b) => (b.id === selected.id ? { ...b, ...patch, updatedAt: new Date().toISOString() } : b));
-    persist(next);
-  }
-
-  function createBrief() {
-    if (!canManage) return;
-    const b: MarketingBrief = {
-      id: newBriefId(),
-      month: "2026-05",
-      title: "Новый бриф",
-      text: "",
-      tableJson: defaultTableJson(),
-      imageUrl: "",
-      status: "draft",
-      updatedAt: new Date().toISOString(),
-    };
-    persist([b, ...briefs]);
-    setSelectedId(b.id);
-  }
-
-  function publish(id: string) {
-    if (!canManage) return;
-    const next = briefs.map((b) => (b.id === id ? { ...b, status: "published" as MarketingBriefStatus, updatedAt: new Date().toISOString() } : b));
-    persist(next);
-  }
+  const emptyMessage = canManage
+    ? "Брифов пока нет. Создайте первый — он появится у команды после публикации."
+    : "Опубликованных брифов пока нет. Маркетинг готовит свежие материалы.";
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 pb-24" data-testid="page-marketing-briefs">
@@ -159,131 +243,189 @@ export default function MarketingBriefsPage() {
               <>Ежемесячные материалы для команды продаж. Создание и публикация ведутся в этом кабинете.</>
             ) : (
               <span data-testid="text-marketing-briefs-readonly">
-                Опубликованные брифы для команды продаж. Редактирование и публикация доступны руководителям и маркетологам.
+                Опубликованные брифы для команды продаж. Редактирование доступно руководителям и маркетологам.
               </span>
             )}
           </p>
         </div>
         {canManage ? (
-          <Button type="button" className="min-h-10 shrink-0" onClick={createBrief}>
+          <Button type="button" className="min-h-10 shrink-0" data-testid="button-marketing-brief-new" onClick={() => setCreateOpen(true)}>
             Новый бриф
           </Button>
         ) : null}
       </div>
 
-      <div className={cn("grid gap-6", canManage ? "lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]" : "max-w-3xl")}>
-        <section className="space-y-3" data-testid="section-marketing-briefs-list">
-          <h2 className="text-lg font-semibold text-foreground">Список</h2>
-          {listBriefs.length === 0 ? (
-            <p
-              className="rounded-2xl border border-dashed border-border/80 bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground"
-              data-testid="text-marketing-briefs-empty-published"
+      {canManage ? (
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+          <Tabs value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
+            <TabsList>
+              <TabsTrigger value="all">Все</TabsTrigger>
+              <TabsTrigger value="draft">Черновики</TabsTrigger>
+              <TabsTrigger value="published">Опубликованные</TabsTrigger>
+              <TabsTrigger value="archived">Архив</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <Select value={periodFilter} onValueChange={setPeriodFilter}>
+            <SelectTrigger className="w-full min-w-[180px] sm:w-[220px]">
+              <SelectValue placeholder="Период" />
+            </SelectTrigger>
+            <SelectContent>
+              {periodOptions.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      ) : null}
+
+      {loading ? (
+        <div className="flex justify-center py-16">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden />
+        </div>
+      ) : briefs.length === 0 ? (
+        <p
+          className="rounded-2xl border border-dashed border-border/80 bg-muted/20 px-4 py-10 text-center text-sm text-muted-foreground"
+          data-testid={canManage ? "text-marketing-briefs-empty-manage" : "text-marketing-briefs-empty-published"}
+        >
+          {emptyMessage}
+        </p>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" data-testid="section-marketing-briefs-list">
+          {briefs.map((b) => (
+            <Card
+              key={b.id}
+              className="flex flex-col overflow-hidden rounded-2xl border border-border/80 shadow-sm"
+              data-testid={`card-marketing-brief-${b.id}`}
             >
-              Опубликованных брифов пока нет. Когда маркетинг или руководство опубликует материал, он появится здесь.
-            </p>
-          ) : (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-              {listBriefs.map((b) => (
-                <Card
-                  key={b.id}
-                  className={cn(
-                    "rounded-2xl border shadow-sm transition-colors",
-                    canManage && "cursor-pointer",
-                    canManage && selectedId === b.id ? "border-primary/50 bg-primary/5" : "border-border/80",
-                    !canManage && "border-border/80",
-                  )}
-                  data-testid={`card-marketing-brief-${b.id}`}
-                  onClick={canManage ? () => setSelectedId(b.id) : undefined}
-                >
-                  <CardHeader className="pb-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="outline">{monthLabel(b.month)}</Badge>
-                      <Badge variant={b.status === "published" ? "default" : "secondary"}>
-                        {b.status === "published" ? "Опубликовано" : "Черновик"}
-                      </Badge>
-                    </div>
-                    <CardTitle className="text-base leading-snug">{b.title}</CardTitle>
-                  </CardHeader>
-                  <CardFooter className="flex flex-wrap gap-2 border-t border-border/50 pt-3">
-                    {b.status === "published" ? (
-                      <Button asChild variant="outline" size="sm" className="min-h-9">
-                        <Link href={`/marketing-briefs/view/${b.id}`}>Просмотр для команды</Link>
-                      </Button>
-                    ) : null}
-                    {canManage ? (
+              <div
+                className="px-4 py-8"
+                style={{ backgroundColor: b.accent_color || DEFAULT_MARKETING_BRIEF_ACCENT }}
+              >
+                <p className="text-lg font-semibold text-[#222631]">{formatMarketingBriefPeriodLabel(b.period_label)}</p>
+              </div>
+              <CardHeader className="flex-1 pb-2">
+                <div className="mb-2 flex flex-wrap gap-2">
+                  <Badge variant={b.status === "published" ? "default" : "secondary"}>{briefStatusLabel(b.status)}</Badge>
+                </div>
+                <CardTitle className="text-base leading-snug">{b.title}</CardTitle>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {b.author_name ?? "—"} · обновлено {formatBriefUpdatedAt(b.updated_at)}
+                </p>
+              </CardHeader>
+              <CardFooter className="flex flex-wrap gap-2 border-t border-border/50 pt-3">
+                {canManage ? (
+                  <>
+                    <Button asChild variant="outline" size="sm" className="min-h-9">
+                      <Link href={`/marketing-briefs/${b.id}`}>Открыть</Link>
+                    </Button>
+                    {b.status === "draft" || b.status === "archived" ? (
                       <Button
                         type="button"
                         size="sm"
                         className="min-h-9"
                         data-testid={`button-marketing-brief-publish-${b.id}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          publish(b.id);
-                        }}
+                        onClick={() => void runAction("Опубликовано", publishBrief, b.id)}
                       >
                         Опубликовать
                       </Button>
                     ) : null}
-                  </CardFooter>
-                </Card>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {canManage ? (
-          <section className="space-y-3 rounded-2xl border border-border/80 bg-card p-4 shadow-sm sm:p-5" data-testid="section-marketing-brief-editor">
-            <h2 className="text-lg font-semibold text-foreground">Редактор</h2>
-            {!selected ? (
-              <p className="text-sm text-muted-foreground">Выберите бриф слева или создайте новый.</p>
-            ) : (
-              <div className="space-y-4">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Месяц (YYYY-MM)</Label>
-                    <Input value={selected.month} onChange={(e) => updateSelected({ month: e.target.value })} className="font-mono text-sm" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Статус</Label>
-                    <Input readOnly value={selected.status === "published" ? "Опубликовано" : "Черновик"} className="bg-muted/40 text-sm" />
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Заголовок</Label>
-                  <Input value={selected.title} onChange={(e) => updateSelected({ title: e.target.value })} className="text-sm" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Текст</Label>
-                  <Textarea rows={6} value={selected.text} onChange={(e) => updateSelected({ text: e.target.value })} className="text-sm" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Таблица (JSON: массив строк — массив ячеек)</Label>
-                  <Textarea
-                    rows={5}
-                    className="font-mono text-xs"
-                    value={selected.tableJson}
-                    onChange={(e) => updateSelected({ tableJson: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Ссылка на изображение (URL)</Label>
-                  <Input value={selected.imageUrl} onChange={(e) => updateSelected({ imageUrl: e.target.value })} className="text-sm" />
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" data-testid={`button-marketing-brief-publish-${selected.id}`} onClick={() => publish(selected.id)}>
-                    Опубликовать
+                    {b.status === "published" ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        className="min-h-9"
+                        onClick={() => void runAction("Снято с публикации", unpublishBrief, b.id)}
+                      >
+                        Снять с публикации
+                      </Button>
+                    ) : null}
+                    {b.status !== "archived" ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="min-h-9 text-muted-foreground"
+                        onClick={() => void runAction("В архиве", archiveBrief, b.id)}
+                      >
+                        В архив
+                      </Button>
+                    ) : (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="min-h-9"
+                        onClick={() => void runAction("Восстановлено", restoreBrief, b.id)}
+                      >
+                        Восстановить
+                      </Button>
+                    )}
+                  </>
+                ) : (
+                  <Button asChild variant="outline" size="sm" className="min-h-9">
+                    <Link href={`/marketing-briefs/view/${b.id}`}>Открыть</Link>
                   </Button>
-                  {selected.status === "published" ? (
-                    <Button asChild variant="outline">
-                      <Link href={`/marketing-briefs/view/${selected.id}`}>Открыть просмотр</Link>
-                    </Button>
-                  ) : null}
-                </div>
+                )}
+              </CardFooter>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent data-testid="dialog-marketing-brief-create">
+          <DialogHeader>
+            <DialogTitle>Создание брифа</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Период</Label>
+              <Select value={createPeriod} onValueChange={setCreatePeriod}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {periodOptions
+                    .filter((o) => o.value !== "all")
+                    .map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Заголовок (необязательно)</Label>
+              <Input value={createTitle} onChange={(e) => setCreateTitle(e.target.value)} placeholder="Автозаголовок по периоду" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Цвет акцента</Label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="color"
+                  value={createAccent}
+                  onChange={(e) => setCreateAccent(e.target.value)}
+                  className="h-10 w-14 cursor-pointer rounded border border-border"
+                  aria-label="Цвет акцента"
+                />
+                <Input value={createAccent} onChange={(e) => setCreateAccent(e.target.value)} className="font-mono text-sm" />
               </div>
-            )}
-          </section>
-        ) : null}
-      </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
+              Отмена
+            </Button>
+            <Button type="button" disabled={creating} onClick={() => void handleCreate()}>
+              {creating ? "Создание…" : "Создать черновик"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
