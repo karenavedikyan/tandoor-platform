@@ -443,3 +443,23 @@
 .dark .bg-\[\#E3E6F3\] {
   background-color: hsl(var(--muted));
 }
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  [data-print-root],
+  [data-print-root] * {
+    visibility: visible;
+  }
+  [data-print-root] {
+    position: absolute;
+    inset: 0;
+    background: #ffffff !important;
+    color: #222631 !important;
+  }
+  [data-no-print="true"],
+  .no-print {
+    display: none !important;
+  }
+}

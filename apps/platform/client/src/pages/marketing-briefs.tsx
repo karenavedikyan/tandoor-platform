@@ -172,7 +172,13 @@ export function MarketingBriefPublishedPage() {
       <div className="px-4 pt-4 sm:px-6">
         <FloatingBackButton href="/marketing-briefs" label="К брифам" testId="button-floating-back-marketing-brief-view" />
       </div>
-      <BrandBriefView brief={brief} blocks={blocks} previewMode={isPreview && brief.status !== "published"} />
+      <BrandBriefView
+        brief={brief}
+        blocks={blocks}
+        previewMode={isPreview && brief.status !== "published"}
+        showShare
+        showPrint
+      />
       <div className="mx-auto max-w-4xl px-4 pt-4 sm:px-6">
         <Button asChild variant="outline" size="sm">
           <Link href="/marketing-briefs">К списку брифов</Link>
@@ -202,6 +208,11 @@ export default function MarketingBriefsPage() {
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [singleDeleteId, setSingleDeleteId] = useState<string | null>(null);
+  const singleDeleteBrief = useMemo(
+    () => (singleDeleteId ? briefs.find((b) => b.id === singleDeleteId) : undefined),
+    [singleDeleteId, briefs],
+  );
+  const isArchiveTab = statusFilter === "archived";
   const selectAllRef = useRef<HTMLInputElement>(null);
 
   const periodOptions = useMemo(() => last12PeriodOptions(), []);
@@ -377,6 +388,20 @@ export default function MarketingBriefsPage() {
     setBulkBusy(false);
   }
 
+  async function confirmBulkRestore() {
+    const ids = [...selectedIds];
+    if (!ids.length) return;
+    setBulkBusy(true);
+    const { ok, fail } = await runBulkSequential(ids, "Восстановление…", restoreBrief);
+    toast({
+      title: fail > 0 ? `Восстановлено ${ok} из ${ids.length}` : `Восстановлено ${ok} из ${ok}`,
+      variant: fail > 0 ? "destructive" : undefined,
+    });
+    clearSelection();
+    await reload();
+    setBulkBusy(false);
+  }
+
   async function confirmBulkDelete() {
     const ids = [...selectedIds];
     if (!ids.length) return;
@@ -413,6 +438,7 @@ export default function MarketingBriefsPage() {
   const menuHandlers: BriefRowMenuHandlers = {
     onOpen: (brief) => setLocation(`/marketing-briefs/${brief.id}`),
     onArchive: (id) => void runAction("В архиве", archiveBrief, id),
+    onRestore: (id) => void runAction("Восстановлено", restoreBrief, id),
     onDelete: (id) => setSingleDeleteId(id),
   };
 
@@ -607,7 +633,8 @@ export default function MarketingBriefsPage() {
         <BriefBulkActionBar
           count={selectedIds.length}
           busy={bulkBusy}
-          onArchive={() => void confirmBulkArchive()}
+          primaryLabel={isArchiveTab ? "Восстановить" : "Архивировать"}
+          onPrimary={() => void (isArchiveTab ? confirmBulkRestore() : confirmBulkArchive())}
           onDelete={() => setBulkDeleteOpen(true)}
           onClear={clearSelection}
         />
@@ -616,7 +643,9 @@ export default function MarketingBriefsPage() {
       <AlertDialog open={bulkDeleteOpen} onOpenChange={(o) => !bulkBusy && setBulkDeleteOpen(o)}>
         <AlertDialogContent data-testid="dialog-brief-bulk-delete">
           <AlertDialogHeader>
-            <AlertDialogTitle>Удалить выбранные брифы?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {isArchiveTab ? "Удалить выбранные брифы из архива?" : "Удалить выбранные брифы?"}
+            </AlertDialogTitle>
             <AlertDialogDescription>
               ({selectedIds.length} шт.) Действие необратимо.
             </AlertDialogDescription>
@@ -640,7 +669,9 @@ export default function MarketingBriefsPage() {
       <AlertDialog open={singleDeleteId != null} onOpenChange={(o) => !o && setSingleDeleteId(null)}>
         <AlertDialogContent data-testid="dialog-brief-delete">
           <AlertDialogHeader>
-            <AlertDialogTitle>Удалить бриф?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {singleDeleteBrief?.status === "archived" ? "Удалить бриф из архива?" : "Удалить бриф?"}
+            </AlertDialogTitle>
             <AlertDialogDescription>Действие необратимо.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

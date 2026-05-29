@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useRoute } from "wouter";
-import { Eye, Loader2 } from "lucide-react";
+import { Eye, Loader2, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,7 +28,9 @@ import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { canManageMarketingBriefs } from "@/lib/auth-access";
 import {
   archiveBrief,
+  briefDisplayTitle,
   briefStatusLabel,
+  buildPublicBriefShareUrl,
   DEFAULT_MARKETING_BRIEF_ACCENT,
   formatBriefUpdatedAt,
   formatMarketingBriefPeriodLabel,
@@ -46,6 +48,7 @@ import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { BriefBlocksEditor } from "@/components/marketing-brief/brief-blocks-editor";
 import { buildBrowserHashAppHref } from "@/lib/hash-route-utils";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 export default function MarketingBriefEditorPage() {
   const { profile } = useReleaseDemoProfile();
@@ -216,7 +219,9 @@ export default function MarketingBriefEditorPage() {
               {brief.author_name ?? "—"} · обновлено {formatBriefUpdatedAt(brief.updated_at)}
             </span>
           </div>
-          <h1 className="text-xl font-semibold text-foreground">{title}</h1>
+          <p className={cn("text-xl font-semibold", !title.trim() && "text-muted-foreground")}>
+            {briefDisplayTitle(title).text}
+          </p>
         </div>
       </div>
 
@@ -255,9 +260,33 @@ export default function MarketingBriefEditorPage() {
           </Button>
         )}
         {brief.status === "published" ? (
-          <Button asChild variant="ghost" size="sm">
-            <Link href={`/marketing-briefs/view/${brief.id}`}>Просмотр для команды</Link>
-          </Button>
+          <>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="gap-1.5"
+                  data-testid="button-marketing-brief-share"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(buildPublicBriefShareUrl(brief.id)).then(
+                      () => toast({ title: "Ссылка скопирована" }),
+                      () => toast({ title: "Не удалось скопировать ссылку", variant: "destructive" }),
+                    );
+                  }}
+                >
+                  <Share2 className="h-4 w-4" aria-hidden />
+                  Поделиться
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-[220px] text-xs">
+                Ссылка работает без входа — её можно отправить менеджерам
+              </TooltipContent>
+            </Tooltip>
+            <Button asChild variant="ghost" size="sm">
+              <Link href={`/marketing-briefs/view/${brief.id}`}>Просмотр для команды</Link>
+            </Button>
+          </>
         ) : null}
         </div>
         <p className="text-[11px] text-muted-foreground">Предпросмотр откроется в новой вкладке</p>
@@ -300,10 +329,6 @@ export default function MarketingBriefEditorPage() {
             </Select>
           </div>
           <div className="space-y-1.5 sm:col-span-2">
-            <Label className="text-xs">Заголовок</Label>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} disabled={readOnlyFields} />
-          </div>
-          <div className="space-y-1.5 sm:col-span-2">
             <Label className="text-xs">Текст обложки</Label>
             <Textarea rows={4} value={coverText} onChange={(e) => setCoverText(e.target.value)} disabled={readOnlyFields} />
           </div>
@@ -327,6 +352,26 @@ export default function MarketingBriefEditorPage() {
             </div>
           </div>
         </div>
+      </section>
+
+      <section className="space-y-2">
+        <Label htmlFor="brief-inline-title" className="text-xs text-muted-foreground">
+          Название брифа
+        </Label>
+        <input
+          id="brief-inline-title"
+          type="text"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          disabled={readOnlyFields}
+          placeholder="Например: Май 2026, акции по входным дверям"
+          className={cn(
+            "w-full border-0 border-b border-transparent bg-transparent px-0 py-1 text-xl font-medium text-foreground outline-none transition-colors sm:text-2xl",
+            "placeholder:text-muted-foreground/70 focus:border-primary",
+            readOnlyFields && "cursor-not-allowed opacity-60",
+          )}
+          data-testid="input-brief-title-inline"
+        />
       </section>
 
       <BriefBlocksEditor briefId={brief.id} canEdit={!readOnlyFields} />
