@@ -2,8 +2,6 @@
  * HTTP API маркетинговых брифов (Postgres, Промт 102).
  */
 
-import { buildBrowserHashAppHref } from "@/lib/hash-route-utils";
-
 export type MarketingBriefStatus = "draft" | "published" | "archived";
 
 export type MarketingBriefVisibility = "private" | "public";
@@ -269,10 +267,10 @@ export async function fetchPublicBrief(id: string): Promise<{
   return data.data;
 }
 
-/** Полный URL публичной ссылки на опубликованный бриф (hash-router). */
+/** Полный URL публичной ссылки на бриф (path для OG-ботов + редирект в SPA). */
 export function buildPublicBriefShareUrl(briefId: string): string {
   if (typeof window === "undefined") return `/p/brief/${briefId}`;
-  return `${window.location.origin}${buildBrowserHashAppHref(`/p/brief/${briefId}`)}`;
+  return `${window.location.origin}/p/brief/${briefId}`;
 }
 
 export function briefDisplayTitle(title: string): { text: string; isPlaceholder: boolean } {
