@@ -81,7 +81,7 @@ export default function ChangePasswordPage() {
       className="motion-reduce:transition-none mx-auto flex min-h-[60vh] w-full max-w-md flex-col px-4 py-8 sm:px-6"
       data-testid="page-change-password"
     >
-      <AuthScreenBranding showSlogan={false} />
+      <AuthScreenBranding />
       <div className="rounded-lg border border-card-border bg-card p-6 shadow-sm sm:p-8">
         <h1 className="text-xl font-semibold text-card-foreground">Смена пароля</h1>
         <p className="mt-1 text-sm text-muted-foreground">Введите текущий пароль и новый пароль.</p>

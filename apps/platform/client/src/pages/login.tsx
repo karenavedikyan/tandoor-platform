@@ -96,7 +96,7 @@ export default function LoginPage() {
       className="motion-reduce:transition-none flex min-h-screen flex-col items-center justify-center overflow-x-hidden bg-background px-4 py-10"
       data-testid="page-login"
     >
-      <AuthScreenBranding showSlogan />
+      <AuthScreenBranding />
       <div className="w-full max-w-md rounded-lg border border-card-border bg-card p-6 shadow-sm motion-reduce:transition-none sm:p-8">
         <h1 className="text-xl font-semibold text-card-foreground">Вход в платформу</h1>
         <p className="mt-1 text-sm text-muted-foreground">Введите email и пароль учётной записи.</p>
