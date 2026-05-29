@@ -18,6 +18,7 @@ export function isDealerArchivedInActualization(_dealerId: string, _act: Actuali
 
 /** Muted row surface for archived clients / trade points in tables and lists. */
 export function archivedEntityRowClassName(isArchived: boolean): string {
+  if (IGNORE_CLIENT_ARCHIVE_IN_UI) return "";
   if (!isArchived) return "";
   return "bg-muted/40 text-muted-foreground [&_a:not([class*='text-primary'])]:text-muted-foreground [&_svg]:text-muted-foreground";
 }
@@ -38,6 +39,7 @@ export function ArchiveInArchiveBadge({
   className?: string;
   testId?: string;
 }): ReactNode {
+  if (IGNORE_CLIENT_ARCHIVE_IN_UI) return null;
   return createElement(
     "span",
     {

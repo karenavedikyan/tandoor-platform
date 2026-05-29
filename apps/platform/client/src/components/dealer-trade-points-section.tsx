@@ -1391,7 +1391,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                           {isVirtual ? "Открыть основную точку" : "Открыть точку"}
                         </Link>
                       </Button>
-                      {useAct && canEdit && !isArchived ? (
+                      {useAct && canEdit && (IGNORE_CLIENT_ARCHIVE_IN_UI || !isArchived) ? (
                         <Button
                           type="button"
                           variant="outline"
