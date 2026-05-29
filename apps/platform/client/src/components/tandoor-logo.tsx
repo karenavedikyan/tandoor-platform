@@ -15,17 +15,31 @@ type TandoorLogoProps = {
 export function TandoorLogo({
   className,
   compact = false,
-  variant = "onLight",
+  variant,
   "data-testid": testId,
 }: TandoorLogoProps) {
   const sizeClass = compact ? "max-h-8 max-w-[9.5rem]" : "max-h-[60px] max-w-[168px]";
+  const imgClass = cn("block h-auto w-auto max-w-full shrink-0 object-contain object-left", sizeClass, className);
 
   if (variant === "onDark") {
     return (
       <img
         src={logoLight}
         alt="Tandoor"
-        className={cn("block h-auto w-auto max-w-full shrink-0 object-contain object-left", sizeClass, className)}
+        className={imgClass}
+        loading="eager"
+        decoding="async"
+        data-testid={testId}
+      />
+    );
+  }
+
+  if (variant === "onLight") {
+    return (
+      <img
+        src={logoOfficial}
+        alt="Tandoor"
+        className={imgClass}
         loading="eager"
         decoding="async"
         data-testid={testId}
