@@ -50,7 +50,9 @@ import {
   managerHeatBarClass,
   type ManagerHeatLevel,
 } from "@/lib/manager-load-heat";
-import { getClientCategoryBadgeClass, getClientCategoryLabel } from "@/lib/client-category";
+import { getClientCategoryLabel } from "@/lib/client-category";
+import { ClientCategoryBadge } from "@/components/client-category-badge";
+import { resolveEffectiveClientCategory } from "@/lib/effective-client-category";
 import { EntityListFilters } from "@/components/entity-list/entity-list-filters";
 import { ManagerTradePointsTab } from "@/components/trade-points/manager-trade-points-tab";
 import {
@@ -245,7 +247,8 @@ export default function DealerBaseManagerDetailPage() {
 
   const filteredClients = useMemo(() => {
     let rows = segmentRows;
-    if (categoryF !== "all") rows = rows.filter((r) => r.clientCategory === categoryF);
+    if (categoryF !== "all")
+      rows = rows.filter((r) => resolveEffectiveClientCategory(r, actx.enabled ? actx.state : null) === categoryF);
     if (cityF !== "all") rows = rows.filter((r) => (r.city ?? "").trim() === cityF);
     if (searchQ.trim()) rows = rows.filter((r) => matchesSearch(searchQ, [r.name]));
     return rows;
@@ -532,14 +535,13 @@ export default function DealerBaseManagerDetailPage() {
                           <TableCell>
                             <button
                               type="button"
-                              className={cn(
-                                "inline-flex rounded-md border px-1.5 py-0.5 text-[10px] font-medium transition-opacity hover:opacity-90",
-                                getClientCategoryBadgeClass(r.clientCategory),
-                              )}
-                              onClick={() => setCategoryF(r.clientCategory)}
+                              className="inline-flex transition-opacity hover:opacity-90"
+                              onClick={() =>
+                                setCategoryF(resolveEffectiveClientCategory(r, actx.enabled ? actx.state : null))
+                              }
                               data-testid={`link-manager-client-category-${r.id}`}
                             >
-                              {getClientCategoryLabel(r.clientCategory)}
+                              <ClientCategoryBadge dealer={r} state={actx.enabled ? actx.state : null} />
                             </button>
                           </TableCell>
                           <TableCell className="text-right tabular-nums">{r.outlets}</TableCell>

@@ -80,7 +80,7 @@ import {
 import { cleanContactDisplay, mailtoHref, telHref, whatsAppHref } from "@/lib/dealer-contact-links";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
 import { toast } from "@/hooks/use-toast";
-import { getClientCategoryLabel, type ClientCategoryId } from "@/lib/client-category";
+import { CLIENT_CATEGORY_META, getClientCategoryLabel, type ClientCategoryId } from "@/lib/client-category";
 import type { DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import { cn } from "@/lib/utils";
 import { displayUserName } from "@/lib/auth-api";
@@ -1077,14 +1077,11 @@ export default function TradePointsPage(): ReactElement {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Все</SelectItem>
-            <SelectItem value="top150">ТОП 150</SelectItem>
-            <SelectItem value="top350">ТОП 350</SelectItem>
-            <SelectItem value="top500">ТОП 500</SelectItem>
-            <SelectItem value="top500plus">ТОП 500+</SelectItem>
-            <SelectItem value="uncategorized">Без категории</SelectItem>
-            <SelectItem value="potential">Потенциальный</SelectItem>
-            <SelectItem value="lead">Лид</SelectItem>
-            <SelectItem value="no_sales">Б/П</SelectItem>
+            {CLIENT_CATEGORY_META.map((c) => (
+              <SelectItem key={c.id} value={c.id}>
+                {c.label}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>

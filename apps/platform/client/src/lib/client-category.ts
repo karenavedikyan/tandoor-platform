@@ -3,13 +3,19 @@
  * Источник правды для отображения и фильтров; сиды/Excel — через normalize + derive.
  */
 
+import type { UserRole } from "@shared/auth";
 import type { ReleaseClientNormalizedType } from "@/lib/release-client-seed.generated";
+import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 
 export type ClientCategoryId =
+  | "new_client"
   | "top150"
   | "top350"
   | "top500"
-  | "top500plus"
+  | "top500plus";
+
+/** @deprecated Legacy ids from persisted data — normalize via normalizeClientCategory. */
+export type LegacyClientCategoryId =
   | "potential"
   | "lead"
   | "no_sales"
@@ -25,6 +31,15 @@ export type ClientCategoryMeta = {
 };
 
 const META: Record<ClientCategoryId, ClientCategoryMeta> = {
+  new_client: {
+    id: "new_client",
+    label: "Новый клиент",
+    shortLabel: "Новый",
+    description: "Новый клиент — категория ещё не присвоена",
+    badgeClassName:
+      "border-violet-500/50 bg-violet-500/15 text-violet-900 dark:border-violet-400/60 dark:bg-violet-400/20 dark:text-violet-100",
+    order: 5,
+  },
   top150: {
     id: "top150",
     label: "ТОП 150",
@@ -61,41 +76,6 @@ const META: Record<ClientCategoryId, ClientCategoryMeta> = {
       "border-orange-600/55 bg-orange-600/15 text-orange-900 dark:border-orange-400/65 dark:bg-orange-400/22 dark:text-orange-100",
     order: 40,
   },
-  potential: {
-    id: "potential",
-    label: "Потенциальный",
-    shortLabel: "Потенциал",
-    description: "Потенциальный клиент (по данным Excel / правилам сегмента)",
-    badgeClassName:
-      "border-sky-500/50 bg-sky-500/15 text-sky-900 dark:border-sky-400/60 dark:bg-sky-400/20 dark:text-sky-100",
-    order: 50,
-  },
-  lead: {
-    id: "lead",
-    label: "Лид",
-    shortLabel: "Лид",
-    description: "Новый клиент (только если явно указано в данных)",
-    badgeClassName:
-      "border-violet-500/50 bg-violet-500/15 text-violet-900 dark:border-violet-400/60 dark:bg-violet-400/20 dark:text-violet-100",
-    order: 60,
-  },
-  no_sales: {
-    id: "no_sales",
-    label: "Б/П",
-    shortLabel: "Б/П",
-    description: "Без продаж в течение квартала — только при явной метке в данных",
-    badgeClassName:
-      "border-slate-500/50 bg-slate-500/15 text-slate-800 dark:border-slate-400/60 dark:bg-slate-400/20 dark:text-slate-100",
-    order: 70,
-  },
-  uncategorized: {
-    id: "uncategorized",
-    label: "Без категории",
-    shortLabel: "—",
-    description: "Тип не отнесён к бизнес-сегменту или требует уточнения",
-    badgeClassName: "border-border/80 bg-muted/40 text-muted-foreground",
-    order: 1000,
-  },
 };
 
 export const CLIENT_CATEGORY_META: readonly ClientCategoryMeta[] = (
@@ -111,17 +91,24 @@ export function isClientTopTier(id: ClientCategoryId): boolean {
   return CLIENT_CATEGORY_TOP_IDS.includes(id);
 }
 
+export function isNewClientCategory(id: ClientCategoryId): boolean {
+  return id === "new_client";
+}
+
+function isKnownCategoryId(id: string): id is ClientCategoryId {
+  return id in META;
+}
+
 /**
  * Нормализация произвольной строки (Excel, query, legacy) к ClientCategoryId.
- * Не подставляет «Потенциальный» по витрине — для этого см. deriveReleaseClientCategory и TODO ниже.
  */
 export function normalizeClientCategory(input: string | undefined | null): ClientCategoryId {
-  if (input == null) return "uncategorized";
+  if (input == null) return "new_client";
   const raw = String(input).trim();
-  if (!raw) return "uncategorized";
+  if (!raw) return "new_client";
   const s = raw.toLowerCase().replace(/\s+/g, " ").replace(/_/g, "");
 
-  if (s === "a" || s === "b" || s === "c") return "uncategorized";
+  if (s === "a" || s === "b" || s === "c") return "new_client";
 
   if (s.includes("топ150") || s === "top150" || s === "150" || s.includes("топ 150")) return "top150";
   if (s.includes("топ350") || s === "top350" || s.includes("топ 350")) return "top350";
@@ -131,14 +118,19 @@ export function normalizeClientCategory(input: string | undefined | null): Clien
 
   if (s.includes("объемообраз") || s.includes("объемо образ")) return "top500plus";
 
-  if (s.includes("потенциал") || s === "potential") return "potential";
-  if (s.includes("лид") || s === "lead") return "lead";
+  if (s.includes("новый") || s === "newclient" || s === "new_client") return "new_client";
+
+  if (s.includes("потенциал") || s === "potential") return "new_client";
+  if (s.includes("лид") || s === "lead") return "new_client";
   if (s.includes("б/п") || s.includes("б п") || s.includes("безпродаж") || s.includes("без продаж") || s === "bp" || s === "nosales")
-    return "no_sales";
+    return "new_client";
 
-  if (s === "top" || s === "vip") return "uncategorized";
+  if (s === "top" || s === "vip" || s.includes("безкатегор") || s === "uncategorized" || s === "other" || s === "none")
+    return "new_client";
 
-  return "uncategorized";
+  if (isKnownCategoryId(raw)) return raw;
+
+  return "new_client";
 }
 
 export function clientCategoryFromNormalizedType(nt: ReleaseClientNormalizedType): ClientCategoryId {
@@ -152,54 +144,42 @@ export function clientCategoryFromNormalizedType(nt: ReleaseClientNormalizedType
     case "volume":
       return "top500plus";
     case "potential":
-      return "potential";
     case "active":
-      return "uncategorized";
     case "closed":
-      return "uncategorized";
     case "nonTarget":
     case "unknown":
-      return "uncategorized";
+      return "new_client";
     default:
-      return "uncategorized";
+      return "new_client";
   }
 }
 
 export type ReleaseClientCategoryInput = {
   clientType?: string;
   normalizedClientType: ReleaseClientNormalizedType;
-  /** Когда в сиде появится число полотен на витрине — учесть правило «500+ и >100 → Потенциальный». */
   showcaseCanvasCount?: number | null;
 };
 
-/**
- * Категория для Release/Dealer: сначала явная строка из Excel, затем normalizedClientType.
- *
- * TODO(client-category): при наличии `showcaseCanvasCount` и категории top500plus,
- * если showcaseCanvasCount > 100, возвращать "potential" (бизнес-правило «Потенциальный»).
- * Сейчас поле в сиде отсутствует — не вычисляем.
- */
 export function deriveReleaseClientCategory(c: ReleaseClientCategoryInput): ClientCategoryId {
   const fromExcel = normalizeClientCategory(c.clientType);
-  if (fromExcel !== "uncategorized") {
-    // TODO: showcaseCanvasCount + top500plus → potential (см. JSDoc)
-    return fromExcel;
-  }
-  const fromNt = clientCategoryFromNormalizedType(c.normalizedClientType);
-  // TODO: то же правило, если fromNt === "top500plus" и есть showcaseCanvasCount
-  return fromNt;
+  if (fromExcel !== "new_client") return fromExcel;
+  return clientCategoryFromNormalizedType(c.normalizedClientType);
+}
+
+export function getClientCategoryMeta(id: ClientCategoryId): ClientCategoryMeta {
+  return META[id];
 }
 
 export function getClientCategoryLabel(id: ClientCategoryId): string {
-  return META[id]?.label ?? META.uncategorized.label;
+  return META[id]?.label ?? META.new_client.label;
 }
 
 export function getClientCategoryShortLabel(id: ClientCategoryId): string {
-  return META[id]?.shortLabel ?? META.uncategorized.shortLabel;
+  return META[id]?.shortLabel ?? META.new_client.shortLabel;
 }
 
 export function getClientCategoryBadgeClass(id: ClientCategoryId): string {
-  return META[id]?.badgeClassName ?? META.uncategorized.badgeClassName;
+  return META[id]?.badgeClassName ?? META.new_client.badgeClassName;
 }
 
 export function getClientCategoryOptions(): { value: ClientCategoryId | "all"; label: string }[] {
@@ -218,22 +198,19 @@ export function clientCategoryMatchesFilter(
 
 /**
  * Маппинг значения Select-а «Категория (ТОП)» из паспорта клиента в `ClientCategoryId`.
- *
- * Допустимые значения тира: `top150 | top350 | top500 | other | none`.
- * `other` и `none` оба → `uncategorized`, потому что в текущем UI-варианте Select-а нет
- * варианта «ТОП-500+». Если когда-нибудь добавим — расширить маппинг здесь.
- *
- * Используется в:
- *   - `client-base-actualization-dealer-forms.tsx` (create-flow и edit-flow):
- *     при сохранении dealer override / manual записать в `fields.clientCategory`
- *     вместе с `passportCategoryTier`, чтобы list/KPI сразу подхватили.
- *   - `client-base-actualization-data-merge.ts`: fallback на merge, если в override
- *     лежит только `passportCategoryTier` без `clientCategory` (старые записи).
  */
-export function clientCategoryFromPassportTier(
-  tier: string | undefined | null,
-): ClientCategoryId {
+export function clientCategoryFromPassportTier(tier: string | undefined | null): ClientCategoryId {
   const t = (tier ?? "").trim();
   if (t === "top150" || t === "top350" || t === "top500") return t;
-  return "uncategorized";
+  if (t === "top500plus" || t === "top500_plus") return "top500plus";
+  return "new_client";
+}
+
+/** Admin / director / rop могут присваивать ТОП-категорию в карточке клиента. */
+export function canEditClientBusinessCategory(
+  profile: ReleaseDemoProfile,
+  authRole?: UserRole | null,
+): boolean {
+  if (authRole === "admin" || authRole === "director" || authRole === "rop") return true;
+  return profile.role === "sales_director" || profile.role === "team_lead";
 }

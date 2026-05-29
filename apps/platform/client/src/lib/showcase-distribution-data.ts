@@ -182,9 +182,7 @@ function targetsForClientCategory(cat: ClientCategoryId): Record<ShowcaseCategor
     case "top500":
     case "top500plus":
       return { entrance_doors: 5, interior_doors: 4, hardware: 4, molding: 3 };
-    case "potential":
-      return { entrance_doors: 4, interior_doors: 3, hardware: 3, molding: 2 };
-    case "lead":
+    case "new_client":
       return { entrance_doors: 3, interior_doors: 2, hardware: 2, molding: 2 };
     default:
       return { entrance_doors: 4, interior_doors: 3, hardware: 3, molding: 2 };

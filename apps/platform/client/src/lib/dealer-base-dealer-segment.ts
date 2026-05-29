@@ -45,7 +45,7 @@ function categoryToSegmentKey(cat: ClientCategoryId): DealerBaseSegmentKey | nul
   if (cat === "top150") return "top150";
   if (cat === "top350") return "top350";
   if (cat === "top500" || cat === "top500plus") return cat === "top500plus" ? "volume" : "top500";
-  if (cat === "potential") return "potential";
+  if (cat === "new_client") return "no_segment";
   return null;
 }
 

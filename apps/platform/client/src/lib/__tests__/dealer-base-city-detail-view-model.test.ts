@@ -11,7 +11,7 @@ function row(partial: Partial<DealerRow> & Pick<DealerRow, "id" | "name" | "city
     name: partial.name,
     city: partial.city,
     region: partial.region ?? "",
-    clientCategory: partial.clientCategory ?? "uncategorized",
+    clientCategory: partial.clientCategory ?? "new_client",
     importanceTier: partial.importanceTier ?? "standard",
     status: partial.status ?? "активный",
     format: partial.format ?? "розница",

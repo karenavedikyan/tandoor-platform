@@ -36,10 +36,7 @@ const CAT_WEIGHT: Record<ClientCategoryId, number> = {
   top350: 13,
   top500: 17,
   top500plus: 19,
-  potential: 31,
-  lead: 41,
-  no_sales: 43,
-  uncategorized: 47,
+  new_client: 41,
 };
 
 /** true / false / null = не удалось прочитать из строки */

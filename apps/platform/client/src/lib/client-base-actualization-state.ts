@@ -3,6 +3,8 @@
  * Расширяется в следующих PR формами и UI.
  */
 
+import type { ClientCategoryId } from "@/lib/client-category";
+
 export const ACTUALIZATION_STATE_VERSION = 1;
 
 export type ActualizationSource = "manual_actualization" | "client_soft_archive";
@@ -279,6 +281,8 @@ export type ActualizationState = {
   version: number;
   updatedAt: string | null;
   updatedBy: string | null;
+  /** Ручное присвоение бизнес-категории (ТОП) для любого клиента, в т. ч. импортированного. */
+  clientCategoryOverridesById: Record<string, ClientCategoryId>;
   dealerOverridesById: Record<string, DealerActualizationOverride>;
   manuallyCreatedDealersById: Record<string, ManualDealer>;
   archivedDealersById: Record<string, ArchivedDealerInfo>;
@@ -321,6 +325,7 @@ export function createEmptyActualizationState(): ActualizationState {
     version: ACTUALIZATION_STATE_VERSION,
     updatedAt: null,
     updatedBy: null,
+    clientCategoryOverridesById: {},
     dealerOverridesById: {},
     manuallyCreatedDealersById: {},
     archivedDealersById: {},
@@ -349,6 +354,10 @@ export function mergeActualizationState(base: ActualizationState, patch: Partial
     ...base,
     ...patch,
     version: typeof patch.version === "number" ? patch.version : base.version,
+    clientCategoryOverridesById: {
+      ...base.clientCategoryOverridesById,
+      ...(patch.clientCategoryOverridesById ?? {}),
+    },
     dealerOverridesById: { ...base.dealerOverridesById, ...(patch.dealerOverridesById ?? {}) },
     manuallyCreatedDealersById: { ...base.manuallyCreatedDealersById, ...(patch.manuallyCreatedDealersById ?? {}) },
     /** Полная замена: иначе удаление ключа (восстановление из архива) не сработает при spread `{ ...base, ...patch }`. */
