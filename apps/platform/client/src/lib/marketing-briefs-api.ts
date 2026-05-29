@@ -227,16 +227,44 @@ export async function deleteBrief(id: string): Promise<void> {
   await postJson<{ ok: boolean }>("/api/marketing-briefs/delete", { id });
 }
 
+export type MarketingBriefPublicFetchReason = "not_found" | "unauthorized" | "forbidden";
+
+export class MarketingBriefPublicFetchError extends Error {
+  readonly reason: MarketingBriefPublicFetchReason;
+
+  constructor(reason: MarketingBriefPublicFetchReason, message?: string) {
+    super(message ?? reason);
+    this.name = "MarketingBriefPublicFetchError";
+    this.reason = reason;
+  }
+}
+
 export async function fetchPublicBrief(id: string): Promise<{
   brief: MarketingBriefRow;
   blocks: MarketingBriefBlockRow[];
 }> {
   const res = await fetch(`/api/marketing-briefs/public-get?id=${encodeURIComponent(id)}`, {
+    credentials: "include",
     cache: "no-store",
   });
   const data = await parseJson<ApiOk<{ brief: MarketingBriefRow; blocks: MarketingBriefBlockRow[] }> | ApiErr>(res);
+  if (res.status === 401) {
+    throw new MarketingBriefPublicFetchError(
+      "unauthorized",
+      !data.success ? data.message : "Требуется вход.",
+    );
+  }
+  if (res.status === 403) {
+    throw new MarketingBriefPublicFetchError(
+      "forbidden",
+      !data.success ? data.message : "Доступ запрещён.",
+    );
+  }
   if (!res.ok || !data.success) {
-    throw apiError(!data.success ? data : { success: false, message: `HTTP ${res.status}` }, res.status);
+    throw new MarketingBriefPublicFetchError(
+      "not_found",
+      !data.success ? data.message : `HTTP ${res.status}`,
+    );
   }
   return data.data;
 }

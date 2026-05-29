@@ -428,30 +428,43 @@ function BriefPreviewDialog({
 
   const displayBrief = brief ?? listBrief;
   const title = displayBrief ? briefDisplayTitle(displayBrief.title).text : "Без названия";
-  const isPublishedPublic =
-    displayBrief?.status === "published" && (displayBrief.visibility ?? "private") === "public";
 
   const handlePrint = () => {
     window.requestAnimationFrame(() => window.print());
   };
 
+  async function handleShareFromPreview() {
+    if (!displayBrief) return;
+    try {
+      await navigator.clipboard.writeText(buildPublicBriefShareUrl(displayBrief.id));
+      toast({
+        description:
+          (displayBrief.visibility ?? "private") === "public"
+            ? "Ссылка скопирована — откроется любому"
+            : "Ссылка скопирована — требуется вход в ЛК",
+      });
+    } catch {
+      toast({ variant: "destructive", description: "Не удалось скопировать ссылку" });
+    }
+  }
+
   return (
     <Dialog open={previewId !== null} onOpenChange={(open) => !open && onClose()}>
       <DialogContent
-        className="max-h-[90vh] max-w-4xl gap-0 overflow-y-auto p-0"
+        className="flex max-h-[90vh] flex-col gap-0 p-0 sm:max-w-4xl"
         data-testid="dialog-brief-preview"
       >
-        <DialogHeader className="px-6 pt-6" data-no-print="true">
+        <DialogHeader className="shrink-0 border-b px-6 py-4" data-no-print="true">
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>Предпросмотр</DialogDescription>
         </DialogHeader>
-        <div className="px-2 pb-2 sm:px-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
           {loading ? (
             <div className="flex justify-center py-16">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden />
             </div>
           ) : error || !displayBrief ? (
-            <p className="px-4 py-8 text-center text-sm text-muted-foreground">Не удалось загрузить бриф</p>
+            <p className="py-8 text-center text-sm text-muted-foreground">Не удалось загрузить бриф</p>
           ) : (
             <BrandBriefView
               brief={displayBrief}
@@ -463,14 +476,18 @@ function BriefPreviewDialog({
           )}
         </div>
         <DialogFooter
-          className="flex flex-wrap gap-2 border-t bg-muted/30 px-6 py-3"
+          className="flex shrink-0 flex-wrap gap-2 border-t bg-background px-6 py-3"
           data-no-print="true"
         >
-          {isPublishedPublic ? (
-            <Button type="button" variant="outline" onClick={() => void copyBriefLink(displayBrief!.id)}>
-              Поделиться
-            </Button>
-          ) : null}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void handleShareFromPreview()}
+            data-testid="button-brief-preview-share"
+          >
+            <Share2 className="mr-2 h-4 w-4" aria-hidden />
+            Поделиться
+          </Button>
           <Button type="button" variant="outline" onClick={handlePrint} data-testid="button-brief-preview-pdf">
             Скачать PDF
           </Button>

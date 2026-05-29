@@ -9,7 +9,7 @@
  *   POST /api/marketing-briefs/archive
  *   POST /api/marketing-briefs/restore
  *   POST /api/marketing-briefs/delete
- *   GET  /api/marketing-briefs/public-get?id=  (без авторизации)
+ *   GET  /api/marketing-briefs/public-get?id=  (public+published — без входа; иначе сессия)
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
