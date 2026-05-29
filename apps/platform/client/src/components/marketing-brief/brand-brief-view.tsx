@@ -130,20 +130,22 @@ function Plaque({
   );
 }
 
-function BrandFooter({ theme }: { theme: BrandBriefTheme }) {
+function BrandFooter({ theme, themeMode }: { theme: BrandBriefTheme; themeMode: BrandBriefThemeMode }) {
   return (
     <footer
-      className="mt-16 border-t pt-10 text-center"
+      className="mt-16 flex flex-col items-center gap-3 border-t pt-10 text-center"
       style={{ borderColor: theme.border }}
       data-testid="brand-brief-footer"
     >
+      <TandoorLogo
+        className="h-12 max-w-[220px] sm:h-14"
+        variant={themeMode === "dark" ? "onDark" : "onLight"}
+        data-testid="brand-brief-footer-logo"
+      />
       <p
-        className="text-3xl font-bold tracking-[0.2em] sm:text-4xl"
-        style={{ color: theme.text, fontFamily: '"Exo 2", sans-serif' }}
+        className="text-[10px] font-semibold uppercase tracking-[0.25em] sm:text-xs"
+        style={{ color: theme.muted }}
       >
-        TANDOOR
-      </p>
-      <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.25em] sm:text-xs" style={{ color: theme.muted }}>
         СРАВНИВАЯ, ВЫБИРАЮТ НАС!
       </p>
     </footer>
@@ -191,17 +193,24 @@ function renderBrandBlock(
         >
           <div className="flex items-start gap-3">
             <span
-              className="flex h-8 w-8 shrink-0 items-center justify-center text-sm font-bold text-white"
+              className="flex h-8 w-8 shrink-0 items-center justify-center text-sm font-bold leading-none text-white"
               style={{ backgroundColor: theme.accent }}
+              aria-hidden
             >
               {num}
             </span>
-            <div className="min-w-0 flex-1 space-y-1">
-              <h2 className="text-xl font-bold uppercase leading-tight sm:text-2xl" style={{ color: theme.text }}>
+            <div className="min-w-0 flex-1 space-y-1 break-words">
+              <h2
+                className="break-words text-xl font-bold uppercase leading-tight sm:text-2xl"
+                style={{ color: theme.text, wordBreak: "break-word", overflowWrap: "anywhere" }}
+              >
                 {p.title || "Раздел"}
               </h2>
               {p.subtitle?.trim() ? (
-                <p className="text-sm sm:text-base" style={{ color: theme.muted }}>
+                <p
+                  className="break-words text-sm sm:text-base"
+                  style={{ color: theme.muted, wordBreak: "break-word", overflowWrap: "anywhere" }}
+                >
                   {p.subtitle}
                 </p>
               ) : null}
@@ -430,7 +439,7 @@ function renderBrandBlock(
                 <dl className="grid gap-2 text-sm sm:grid-cols-[minmax(7rem,auto)_1fr]">
                   <dt style={{ color: theme.muted }}>За что</dt>
                   <dd style={{ color: theme.text }}>{item.trigger || "—"}</dd>
-                  <dt style={{ color: theme.muted }}>Награда</dt>
+                  <dt style={{ color: theme.muted }}>Сколько / что получает</dt>
                   <dd style={{ color: theme.text }} className="whitespace-pre-wrap">
                     {item.reward || "—"}
                   </dd>
@@ -515,7 +524,11 @@ export function BrandBriefView({
         data-testid="brand-brief-topbar"
       >
         <div className="mx-auto flex max-w-4xl items-center justify-between gap-3">
-          <TandoorLogo className="h-8 max-w-[140px] sm:h-9" data-testid="brand-brief-logo" />
+          <TandoorLogo
+            className="h-8 max-w-[140px] sm:h-9"
+            variant={themeMode === "dark" ? "onDark" : "onLight"}
+            data-testid="brand-brief-logo"
+          />
           <div className="flex items-center gap-1 rounded-lg border p-0.5" style={{ borderColor: theme.border }}>
             <Button
               type="button"
@@ -585,7 +598,7 @@ export function BrandBriefView({
           <div className="space-y-10 sm:space-y-12">{blockNodes}</div>
         )}
 
-        <BrandFooter theme={theme} />
+        <BrandFooter theme={theme} themeMode={themeMode} />
       </main>
     </div>
   );
