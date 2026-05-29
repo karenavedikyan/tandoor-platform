@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Gift, Moon, Printer, Share2, Sun } from "lucide-react";
+import { Gift, Moon, Printer, Sun } from "lucide-react";
+import { BriefShareActions } from "@/components/marketing-brief/brief-visibility-ui";
 import { TandoorLogo } from "@/components/tandoor-logo";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { getProductById } from "@/lib/catalog-data";
 import {
-  buildPublicBriefShareUrl,
   formatMarketingBriefPeriodLabel,
   type CalloutBlockPayload,
   type MarketingBriefBlockRow,
@@ -32,8 +32,6 @@ import {
   type BrandBriefThemeMode,
 } from "@/components/marketing-brief/brand-brief-theme";
 import { cn } from "@/lib/utils";
-import { toast } from "@/hooks/use-toast";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 function asSection(payload: Record<string, unknown>): SectionBlockPayload {
   return {
@@ -489,14 +487,16 @@ export function BrandBriefView({
   previewMode = false,
   showShare = false,
   showPrint = false,
+  onBriefChange,
 }: {
   brief: MarketingBriefRow;
   blocks: MarketingBriefBlockRow[];
   previewMode?: boolean;
-  /** Кнопка «Поделиться» — только для опубликованного брифа */
+  /** Кнопки «Поделиться» / «Сделать публичным» для опубликованного брифа */
   showShare?: boolean;
   /** Кнопка «Печать / PDF» */
   showPrint?: boolean;
+  onBriefChange?: (brief: MarketingBriefRow) => void;
 }) {
   const [themeMode, setThemeMode] = useState<BrandBriefThemeMode>(() => readBriefViewTheme());
 
@@ -528,17 +528,6 @@ export function BrandBriefView({
     });
   }, []);
 
-  const handleShare = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(buildPublicBriefShareUrl(brief.id));
-      toast({ title: "Ссылка скопирована" });
-    } catch {
-      toast({ title: "Не удалось скопировать ссылку", variant: "destructive" });
-    }
-  }, [brief.id]);
-
-  const canShare = showShare && brief.status === "published";
-
   return (
     <div
       className="min-h-screen font-sans"
@@ -561,26 +550,10 @@ export function BrandBriefView({
             data-testid="brand-brief-logo"
           />
           <div className="flex flex-wrap items-center justify-end gap-1.5">
-            {canShare ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="h-8 gap-1 px-2 text-xs"
-                    onClick={() => void handleShare()}
-                    data-testid="button-brief-share"
-                    data-no-print="true"
-                  >
-                    <Share2 className="h-3.5 w-3.5" aria-hidden />
-                    <span className="hidden sm:inline">Поделиться</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="max-w-[220px] text-xs">
-                  Ссылка работает без входа — её можно отправить менеджерам
-                </TooltipContent>
-              </Tooltip>
+            {showShare ? (
+              <div data-no-print="true" className="[&_button]:h-8 [&_button]:text-xs">
+                <BriefShareActions brief={brief} onBriefUpdated={onBriefChange} />
+              </div>
             ) : null}
             {showPrint ? (
               <Button

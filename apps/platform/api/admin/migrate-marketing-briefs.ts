@@ -57,6 +57,10 @@ const STMTS: string[] = [
      updated_at      timestamptz NOT NULL DEFAULT now()
    )`,
   `CREATE INDEX IF NOT EXISTS idx_marketing_brief_blocks_brief ON marketing_brief_blocks(brief_id, order_index)`,
+
+  `ALTER TABLE marketing_briefs
+     ADD COLUMN IF NOT EXISTS visibility text NOT NULL DEFAULT 'private'
+     CHECK (visibility IN ('private', 'public'))`,
 ];
 
 const EXPECTED_TABLES = ["marketing_briefs", "marketing_brief_revisions", "marketing_brief_blocks"];

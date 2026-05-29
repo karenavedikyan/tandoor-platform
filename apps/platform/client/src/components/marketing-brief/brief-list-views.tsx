@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode, type RefObject } from "react";
 import { Link } from "wouter";
 import { MoreHorizontal } from "lucide-react";
+import { BriefVisibilityIcon } from "@/components/marketing-brief/brief-visibility-ui";
 import { Button } from "@/components/ui/button";
 import { Card, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -273,8 +274,9 @@ export function BriefCardsListView({
               })()}
             </div>
             <CardHeader className="flex-1 pb-2">
-              <div className="mb-2 flex flex-wrap gap-2">
+              <div className="mb-2 flex flex-wrap items-center gap-2">
                 <BriefStatusBadge status={b.status} />
+                <BriefVisibilityIcon visibility={b.visibility} />
               </div>
               <CardTitle className="sr-only">{briefDisplayTitle(b.title).text}</CardTitle>
               <p className="mt-2 text-xs text-muted-foreground">
@@ -341,7 +343,10 @@ export function BriefTableListView({
               </td>
               <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">{formatBriefUpdatedAt(b.updated_at)}</td>
               <td className="px-3 py-2">
-                <BriefStatusBadge status={b.status} />
+                <div className="flex items-center gap-1.5">
+                  <BriefStatusBadge status={b.status} />
+                  <BriefVisibilityIcon visibility={b.visibility} />
+                </div>
               </td>
               <td className="px-2 py-2">
                 <BriefRowActionsMenu brief={b} canManage={canManage} handlers={menuHandlers} />
@@ -385,7 +390,10 @@ export function BriefCompactListView({
                 className="shrink-0"
               />
             ) : null}
-            <BriefStatusBadge status={b.status} />
+            <div className="flex shrink-0 items-center gap-1">
+              <BriefStatusBadge status={b.status} />
+              <BriefVisibilityIcon visibility={b.visibility} />
+            </div>
             <div className="min-w-0 flex-1">
               <p
                 className={cn(

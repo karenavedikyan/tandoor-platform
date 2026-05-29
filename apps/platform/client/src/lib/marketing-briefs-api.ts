@@ -6,11 +6,14 @@ import { buildBrowserHashAppHref } from "@/lib/hash-route-utils";
 
 export type MarketingBriefStatus = "draft" | "published" | "archived";
 
+export type MarketingBriefVisibility = "private" | "public";
+
 export type MarketingBriefRow = {
   id: string;
   period_label: string;
   title: string;
   status: MarketingBriefStatus;
+  visibility: MarketingBriefVisibility;
   accent_color: string;
   cover_text: string;
   created_by: string | null;
@@ -188,6 +191,7 @@ export async function getBrief(id: string): Promise<{
 export async function createBrief(input: {
   period_label: string;
   title?: string;
+  visibility?: MarketingBriefVisibility;
   accent_color?: string;
   cover_text?: string;
 }): Promise<MarketingBriefRow> {
@@ -196,7 +200,9 @@ export async function createBrief(input: {
 
 export async function updateBrief(
   id: string,
-  patch: Partial<Pick<MarketingBriefRow, "period_label" | "title" | "accent_color" | "cover_text">>,
+  patch: Partial<
+    Pick<MarketingBriefRow, "period_label" | "title" | "visibility" | "accent_color" | "cover_text">
+  >,
 ): Promise<MarketingBriefRow> {
   return postJson<MarketingBriefRow>("/api/marketing-briefs/update", { id, patch });
 }

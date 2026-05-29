@@ -62,6 +62,7 @@ import {
   type MarketingBriefBlockRow,
   type MarketingBriefRow,
   type MarketingBriefStatus,
+  type MarketingBriefVisibility,
 } from "@/lib/marketing-briefs-api";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -178,6 +179,7 @@ export function MarketingBriefPublishedPage() {
         previewMode={isPreview && brief.status !== "published"}
         showShare
         showPrint
+        onBriefChange={setBrief}
       />
       <div className="mx-auto max-w-4xl px-4 pt-4 sm:px-6">
         <Button asChild variant="outline" size="sm">
@@ -201,6 +203,7 @@ export default function MarketingBriefsPage() {
   const [createPeriod, setCreatePeriod] = useState(currentPeriodLabel);
   const [createTitle, setCreateTitle] = useState("");
   const [createAccent, setCreateAccent] = useState(DEFAULT_MARKETING_BRIEF_ACCENT);
+  const [createVisibility, setCreateVisibility] = useState<MarketingBriefVisibility>("private");
   const [creating, setCreating] = useState(false);
   const [creatingTemplate, setCreatingTemplate] = useState(false);
   const [viewMode, setViewMode] = useState<BriefListViewMode>(() => readBriefListViewMode());
@@ -275,10 +278,12 @@ export default function MarketingBriefsPage() {
       const created = await createBrief({
         period_label: createPeriod,
         title: createTitle.trim() || undefined,
+        visibility: createVisibility,
         accent_color: createAccent,
       });
       setCreateOpen(false);
       setCreateTitle("");
+      setCreateVisibility("private");
       setLocation(`/marketing-briefs/${created.id}`);
     } catch (e) {
       toast({
@@ -297,6 +302,7 @@ export default function MarketingBriefsPage() {
       const created = await createBrief({
         period_label: createPeriod,
         title: (createTitle.trim() || "Пример брифа") + " (шаблон)",
+        visibility: createVisibility,
         accent_color: createAccent,
       });
       let prevId: string | undefined;
@@ -311,6 +317,7 @@ export default function MarketingBriefsPage() {
       }
       setCreateOpen(false);
       setCreateTitle("");
+      setCreateVisibility("private");
       setLocation(`/marketing-briefs/${created.id}`);
     } catch (e) {
       toast({
@@ -715,6 +722,41 @@ export default function MarketingBriefsPage() {
             <div className="space-y-1.5">
               <Label className="text-xs">Заголовок (необязательно)</Label>
               <Input value={createTitle} onChange={(e) => setCreateTitle(e.target.value)} placeholder="Автозаголовок по периоду" />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs">Доступ</Label>
+              <div className="space-y-2 text-sm" role="radiogroup" aria-label="Доступ к брифу">
+                <label className="flex cursor-pointer items-start gap-2">
+                  <input
+                    type="radio"
+                    name="create-visibility"
+                    value="private"
+                    checked={createVisibility === "private"}
+                    onChange={() => setCreateVisibility("private")}
+                    className="mt-0.5"
+                    data-testid="radio-brief-visibility-private"
+                  />
+                  <span>
+                    <span className="font-medium">Приватный (по умолчанию)</span>
+                    <span className="mt-0.5 block text-xs text-muted-foreground">Видят только сотрудники ЛК</span>
+                  </span>
+                </label>
+                <label className="flex cursor-pointer items-start gap-2">
+                  <input
+                    type="radio"
+                    name="create-visibility"
+                    value="public"
+                    checked={createVisibility === "public"}
+                    onChange={() => setCreateVisibility("public")}
+                    className="mt-0.5"
+                    data-testid="radio-brief-visibility-public"
+                  />
+                  <span>
+                    <span className="font-medium">Публичный</span>
+                    <span className="mt-0.5 block text-xs text-muted-foreground">После публикации — ссылка без входа</span>
+                  </span>
+                </label>
+              </div>
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Цвет акцента</Label>
