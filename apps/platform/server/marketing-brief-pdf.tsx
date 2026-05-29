@@ -2,6 +2,9 @@
  * Серверная генерация PDF маркетингового брифа (@react-pdf/renderer).
  */
 
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import React from "react";
 import {
   Document,
@@ -29,19 +32,34 @@ import { formatMarketingBriefPeriodLabel } from "../shared/marketing-brief-og.js
 
 export type BriefPdfTheme = "light" | "dark";
 
-const FONT_REGULAR =
-  "https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Mu4mxKKTU1Kg.ttf";
-const FONT_BOLD = "https://fonts.gstatic.com/s/roboto/v30/KFOkCnqEu92Fr1Sn14dGENg.ttf";
+const FONT_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "fonts");
 
 let fontsRegistered = false;
+
+function loadFontBuffer(filename: string): Buffer {
+  const candidates = [
+    path.join(FONT_DIR, filename),
+    path.join(process.cwd(), "server/fonts", filename),
+    path.join(process.cwd(), "apps/platform/server/fonts", filename),
+  ];
+  for (const p of candidates) {
+    if (fs.existsSync(p)) return fs.readFileSync(p);
+  }
+  throw new Error(`Font not found: ${filename}. Tried: ${candidates.join(", ")}`);
+}
+
+function fontDataUri(filename: string): string {
+  const buf = loadFontBuffer(filename);
+  return `data:font/ttf;base64,${buf.toString("base64")}`;
+}
 
 function ensureFonts(): void {
   if (fontsRegistered) return;
   Font.register({
     family: "Roboto",
     fonts: [
-      { src: FONT_REGULAR, fontWeight: 400 },
-      { src: FONT_BOLD, fontWeight: 700 },
+      { src: fontDataUri("Roboto-Regular.ttf"), fontWeight: 400 },
+      { src: fontDataUri("Roboto-Bold.ttf"), fontWeight: 700 },
     ],
   });
   fontsRegistered = true;
@@ -200,12 +218,16 @@ function formatSectionNumber(num: string | undefined, index: number): string {
   return String(index + 1).padStart(2, "0");
 }
 
-function resolveImageSrc(url: string | undefined, origin: string): string | undefined {
+function safeImageSrc(url: string | null | undefined, origin: string): string | undefined {
   const t = url?.trim();
   if (!t) return undefined;
-  if (t.startsWith("http://") || t.startsWith("https://")) return t;
-  if (t.startsWith("/")) return `${origin}${t}`;
-  return t;
+  if (/^https?:\/\//i.test(t)) return t;
+  if (t.startsWith("/")) {
+    const base = origin.replace(/\/$/, "");
+    const full = `${base}${t}`;
+    if (/^https?:\/\//i.test(full)) return full;
+  }
+  return undefined;
 }
 
 function makeStyles(theme: BriefPdfTheme) {
@@ -441,7 +463,7 @@ function BlockRenderer({
         <View style={styles.productRow}>
           {p.items.map((item) => {
             const name = item.name?.trim() || item.article?.trim() || "Товар";
-            const img = resolveImageSrc(item.image_url, origin);
+            const img = safeImageSrc(item.image_url, origin);
             const segs = (item.segments ?? [])
               .map((k) => SEGMENT_LABELS[k] ?? k)
               .join(", ");

@@ -39,6 +39,11 @@ import {
   handleMarketingBriefsUpdate,
 } from "../../shared/marketing-briefs-handlers.js";
 
+export const config = {
+  maxDuration: 30,
+  includeFiles: "../../server/fonts/**",
+};
+
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   try {
     const actionRaw = req.query.action;
