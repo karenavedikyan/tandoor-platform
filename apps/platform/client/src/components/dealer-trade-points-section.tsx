@@ -474,6 +474,65 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
     resetAddForm,
   ]);
 
+  const promoteVirtualToManual = useCallback(
+    async (virtualTp: DealerTradePoint): Promise<DealerTradePoint | null> => {
+      if (!useAct) return null;
+      const newId = generateStableManualTradePointId(row.id);
+      const now = new Date().toISOString();
+      const fields = {
+        name: virtualTp.name || "Основная торговая точка",
+        city: virtualTp.city || "",
+        address: virtualTp.address || "",
+        format: virtualTp.format || "Розница / салон",
+        contactName: virtualTp.contactName ?? "",
+        contactPhone: virtualTp.contactPhone ?? "",
+        email: virtualTp.contactEmail ?? "",
+        comment: virtualTp.tpComment ?? "",
+      };
+      const r = await actx.persist((prev) => {
+        const existing = prev.manuallyCreatedTradePointsById[newId];
+        const internalCode = existing?.internalCode ?? nextManualTradePointInternalCode(prev);
+        const rec = {
+          id: newId,
+          dealerId: row.id,
+          internalCode,
+          fields,
+          createdAt: existing?.createdAt ?? now,
+          createdBy: existing?.createdBy ?? profile.personaUserId,
+          createdByName: existing?.createdByName ?? userLabelFromProfile(profile),
+          updatedAt: now,
+          updatedBy: profile.personaUserId,
+          updatedByName: userLabelFromProfile(profile),
+          source: "manual_actualization" as const,
+        };
+        return mergeActualizationState(prev, {
+          manuallyCreatedTradePointsById: { ...prev.manuallyCreatedTradePointsById, [newId]: rec },
+        });
+      });
+      if (!r.success) {
+        toast({
+          title: "Не удалось создать редактируемую точку. Проверьте соединение.",
+          variant: "destructive",
+        });
+        return null;
+      }
+      setTpBump((n) => n + 1);
+      return {
+        ...virtualTp,
+        id: newId,
+        name: fields.name,
+        city: fields.city,
+        address: fields.address,
+        format: fields.format,
+        contactName: fields.contactName,
+        contactPhone: fields.contactPhone,
+        contactEmail: fields.email,
+        tpComment: fields.comment,
+      };
+    },
+    [useAct, actx, row.id, profile],
+  );
+
   const openEdit = useCallback(
     (tp: DealerTradePoint) => {
       setEditId(tp.id);
@@ -1332,14 +1391,23 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                           {isVirtual ? "Открыть основную точку" : "Открыть точку"}
                         </Link>
                       </Button>
-                      {useAct && canEdit && !isVirtual && !isArchived ? (
+                      {useAct && canEdit && !isArchived ? (
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
                           className="h-8 w-full px-2 text-xs font-medium"
                           data-testid={`button-trade-point-edit-${tp.id}`}
-                          onClick={() => openEdit(tp)}
+                          onClick={() => {
+                            void (async () => {
+                              if (isVirtual) {
+                                const realTp = await promoteVirtualToManual(tp);
+                                if (realTp) openEdit(realTp);
+                              } else {
+                                openEdit(tp);
+                              }
+                            })();
+                          }}
                         >
                           Редактировать
                         </Button>
