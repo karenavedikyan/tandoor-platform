@@ -26,9 +26,11 @@ import { FloatingBackButton } from "@/components/navigation/floating-back-button
 import { useRouteSearchParams } from "@/lib/hash-route-utils";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { canManageMarketingBriefs } from "@/lib/auth-access";
+import { TEMPLATE_BLOCKS } from "@/lib/marketing-briefs-template";
 import {
   archiveBrief,
   briefStatusLabel,
+  createBlock,
   createBrief,
   DEFAULT_MARKETING_BRIEF_ACCENT,
   formatBriefUpdatedAt,
@@ -176,6 +178,7 @@ export default function MarketingBriefsPage() {
   const [createTitle, setCreateTitle] = useState("");
   const [createAccent, setCreateAccent] = useState(DEFAULT_MARKETING_BRIEF_ACCENT);
   const [creating, setCreating] = useState(false);
+  const [creatingTemplate, setCreatingTemplate] = useState(false);
 
   const periodOptions = useMemo(() => last12PeriodOptions(), []);
 
@@ -222,6 +225,38 @@ export default function MarketingBriefsPage() {
       });
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function handleCreateFromTemplate() {
+    setCreatingTemplate(true);
+    try {
+      const created = await createBrief({
+        period_label: createPeriod,
+        title: (createTitle.trim() || "Пример брифа") + " (шаблон)",
+        accent_color: createAccent,
+      });
+      let prevId: string | undefined;
+      for (const tb of TEMPLATE_BLOCKS) {
+        const block = await createBlock({
+          brief_id: created.id,
+          type: tb.type,
+          payload: tb.payload,
+          insert_after_id: prevId,
+        });
+        prevId = block.id;
+      }
+      setCreateOpen(false);
+      setCreateTitle("");
+      setLocation(`/marketing-briefs/${created.id}`);
+    } catch (e) {
+      toast({
+        title: "Не удалось создать бриф из шаблона",
+        description: e instanceof Error ? e.message : undefined,
+        variant: "destructive",
+      });
+    } finally {
+      setCreatingTemplate(false);
     }
   }
 
@@ -431,11 +466,29 @@ export default function MarketingBriefsPage() {
               </div>
             </div>
           </div>
-          <DialogFooter>
+          <p className="text-[11px] leading-snug text-muted-foreground">
+            Шаблон создаст бриф с примерами всех типов блоков (раздел, текст, сегменты, выделенный блок, продукты,
+            таблица цен, бонус) — удобно посмотреть как заполнить, и редактировать под себя.
+          </p>
+          <DialogFooter className="flex-col gap-2 sm:flex-col sm:space-x-0">
             <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
               Отмена
             </Button>
-            <Button type="button" disabled={creating} onClick={() => void handleCreate()}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void handleCreateFromTemplate()}
+              disabled={creating || creatingTemplate}
+              data-testid="button-create-from-template"
+            >
+              {creatingTemplate ? "Создание шаблона…" : "Создать из шаблона"}
+            </Button>
+            <Button
+              type="button"
+              disabled={creating || creatingTemplate}
+              onClick={() => void handleCreate()}
+              data-testid="button-create-brief"
+            >
               {creating ? "Создание…" : "Создать черновик"}
             </Button>
           </DialogFooter>
