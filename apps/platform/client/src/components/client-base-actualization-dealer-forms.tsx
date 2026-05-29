@@ -59,6 +59,7 @@ import { SectionSaveButton } from "@/components/section-save-button";
 import { AddressSuggestInput } from "@/components/address-suggest-input";
 import {
   clientCategoryFromPassportTier,
+  normalizePassportCategoryTier,
   getClientCategoryLabel,
   getClientCategoryOptions,
 } from "@/lib/client-category";
@@ -436,7 +437,7 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
   const [comment, setComment] = useState("");
   const [passportClientKind, setPassportClientKind] = useState("other");
   const [passportLifecycleStatus, setPassportLifecycleStatus] = useState("new");
-  const [passportCategoryTier, setPassportCategoryTier] = useState("none");
+  const [passportCategoryTier, setPassportCategoryTier] = useState<string>("new_client");
   const [territoryZone, setTerritoryZone] = useState("");
   const [logisticsComment, setLogisticsComment] = useState("");
   const [doorTri, setDoorTri] = useState<DealerCommercialTriSelect>("unset");
@@ -473,8 +474,8 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
     setPassportClientKind(pk || "other");
     const ls = typeof merged.passportLifecycleStatus === "string" ? merged.passportLifecycleStatus : "";
     setPassportLifecycleStatus(ls || "new");
-    const ct = typeof merged.passportCategoryTier === "string" ? merged.passportCategoryTier : "";
-    setPassportCategoryTier(ct || "none");
+    const rawTier = typeof merged.passportCategoryTier === "string" ? merged.passportCategoryTier.trim() : "";
+    setPassportCategoryTier(normalizePassportCategoryTier(rawTier));
     setTerritoryZone(typeof merged.territoryZone === "string" ? merged.territoryZone : "");
     setLogisticsComment(typeof merged.logisticsComment === "string" ? merged.logisticsComment : "");
     const effective = mergeDealerRowWithActualization(baseRow, state);
@@ -760,11 +761,11 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="top150">ТОП-150</SelectItem>
-                    <SelectItem value="top350">ТОП-350</SelectItem>
-                    <SelectItem value="top500">ТОП-500</SelectItem>
-                    <SelectItem value="other">Прочие</SelectItem>
-                    <SelectItem value="none">Без категории</SelectItem>
+                    <SelectItem value="top150">ТОП 150</SelectItem>
+                    <SelectItem value="top350">ТОП 350</SelectItem>
+                    <SelectItem value="top500">ТОП 500</SelectItem>
+                    <SelectItem value="top500plus">ТОП 500+</SelectItem>
+                    <SelectItem value="new_client">Новый клиент</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1122,7 +1123,7 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
   /** Поля паспорта / логистики: должны попадать в `manuallyCreatedDealersById[id].fields` при создании (см. анкету «Паспорт клиента»). */
   const [passportClientKind, setPassportClientKind] = useState("other");
   const [passportLifecycleStatus, setPassportLifecycleStatus] = useState("new");
-  const [passportCategoryTier, setPassportCategoryTier] = useState("none");
+  const [passportCategoryTier, setPassportCategoryTier] = useState<string>("new_client");
   const [territoryZone, setTerritoryZone] = useState("");
   const [logisticsComment, setLogisticsComment] = useState("");
 
@@ -1689,11 +1690,11 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="top150">ТОП-150</SelectItem>
-                    <SelectItem value="top350">ТОП-350</SelectItem>
-                    <SelectItem value="top500">ТОП-500</SelectItem>
-                    <SelectItem value="other">Прочие</SelectItem>
-                    <SelectItem value="none">Без категории</SelectItem>
+                    <SelectItem value="top150">ТОП 150</SelectItem>
+                    <SelectItem value="top350">ТОП 350</SelectItem>
+                    <SelectItem value="top500">ТОП 500</SelectItem>
+                    <SelectItem value="top500plus">ТОП 500+</SelectItem>
+                    <SelectItem value="new_client">Новый клиент</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

@@ -196,14 +196,23 @@ export function clientCategoryMatchesFilter(
   return rowCategory === categoryFilter;
 }
 
+export type PassportCategoryTierId = "top150" | "top350" | "top500" | "top500plus" | "new_client";
+
+/** Нормализует значение селекта «Категория (ТОП)» к новому набору из 5 опций. */
+export function normalizePassportCategoryTier(raw: string): PassportCategoryTierId {
+  const t = raw.toLowerCase().trim();
+  if (t === "top150") return "top150";
+  if (t === "top350") return "top350";
+  if (t === "top500") return "top500";
+  if (t === "top500plus" || t === "top500_plus" || t === "volume") return "top500plus";
+  return "new_client";
+}
+
 /**
  * Маппинг значения Select-а «Категория (ТОП)» из паспорта клиента в `ClientCategoryId`.
  */
 export function clientCategoryFromPassportTier(tier: string | undefined | null): ClientCategoryId {
-  const t = (tier ?? "").trim();
-  if (t === "top150" || t === "top350" || t === "top500") return t;
-  if (t === "top500plus" || t === "top500_plus") return "top500plus";
-  return "new_client";
+  return normalizePassportCategoryTier((tier ?? "").trim());
 }
 
 /** Admin / director / rop могут присваивать ТОП-категорию в карточке клиента. */
