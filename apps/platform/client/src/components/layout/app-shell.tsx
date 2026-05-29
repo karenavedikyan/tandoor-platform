@@ -45,6 +45,10 @@ import { flattenGroupedPilotNavigation, type PilotNavGroup, type PilotNavItem, t
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actualization-sync-status";
 import { SidebarNavFooter } from "@/components/layout/sidebar-nav-footer";
+import {
+  ImpersonationQuickSwitch,
+  type ImpersonationQuickSwitchUser,
+} from "@/components/layout/impersonation-quick-switch";
 
 const SIDEBAR_COLLAPSED_LS_KEY = "tandoor-shell-sidebar-collapsed-v1";
 
@@ -772,6 +776,9 @@ export type AppShellProps = {
   embeddedBitrix24?: boolean;
   /** Жёлтая плашка режима наблюдения (admin impersonation). */
   impersonationBanner?: ReactNode;
+  /** Текущий пользователь для быстрого переключения «Войти как…» (только admin). */
+  shellUser?: ImpersonationQuickSwitchUser | null;
+  isImpersonating?: boolean;
 };
 
 export function AppShell({
@@ -784,12 +791,22 @@ export function AppShell({
   showAuditLogLink = false,
   embeddedBitrix24 = false,
   impersonationBanner,
+  shellUser = null,
+  isImpersonating = false,
 }: AppShellProps) {
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [impersonationAutoOpen, setImpersonationAutoOpen] = useState(false);
   const ctx = headerContextLabel(location);
   const flatNav = useMemo(() => flattenNavModel(navigation), [navigation]);
   const { effectiveCollapsed: sidebarCollapsed, toggleSidebar, collapseAllowed } = useShellSidebarCollapsedState();
+
+  const requestExpandForImpersonation = useCallback(() => {
+    if (sidebarCollapsed) {
+      toggleSidebar();
+      setImpersonationAutoOpen(true);
+    }
+  }, [sidebarCollapsed, toggleSidebar]);
   const { openGroups: pilotGroupedOpen, toggleGroup: pilotGroupedToggle } = usePilotGroupedNavOpenState(navigation, location);
   const showSaveBadge = ACTUALIZATION_SAVE_STATUS_ROUTES.some((p) => location === p || location.startsWith(`${p}/`));
 
@@ -880,6 +897,31 @@ export function AppShell({
             </Button>
           ) : null}
         </div>
+        {shellUser ? (
+          <div
+            className={cn("px-3", sidebarCollapsed ? "pt-2" : "mt-3")}
+            data-testid="sidebar-impersonation-quick-wrap"
+          >
+            {sidebarCollapsed ? (
+              <ImpersonationQuickSwitch
+                currentUser={shellUser}
+                isImpersonating={isImpersonating}
+                layout="collapsed"
+                sidebarCollapsed={sidebarCollapsed}
+                onRequestExpandSidebar={requestExpandForImpersonation}
+              />
+            ) : (
+              <ImpersonationQuickSwitch
+                currentUser={shellUser}
+                isImpersonating={isImpersonating}
+                layout="sidebar"
+                sidebarCollapsed={sidebarCollapsed}
+                autoOpenPicker={impersonationAutoOpen}
+                onAutoOpenPickerConsumed={() => setImpersonationAutoOpen(false)}
+              />
+            )}
+          </div>
+        ) : null}
         <div className="flex flex-1 flex-col overflow-y-auto overflow-x-hidden px-3 py-4 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#E3E6F3] [&::-webkit-scrollbar-track]:bg-transparent">
           {sidebarCollapsed ? (
             <CollapsedNavList items={flatNav} location={location} />
@@ -1024,6 +1066,15 @@ export function AppShell({
                   </div>
                   <ThemeToggleSidebarCompact />
                   <div className="border-t border-border/60 px-5 pb-4 pt-3">
+                    {shellUser ? (
+                      <div className="mb-3">
+                        <ImpersonationQuickSwitch
+                          currentUser={shellUser}
+                          isImpersonating={isImpersonating}
+                          layout="mobile"
+                        />
+                      </div>
+                    ) : null}
                     <p className="mb-2 text-xs text-muted-foreground">{userName}</p>
                     <Button asChild variant="outline" className="mb-2 w-full gap-2">
                       <Link href="/profile" data-testid="link-app-shell-profile-mobile" onClick={() => setMobileOpen(false)}>
