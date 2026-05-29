@@ -168,14 +168,40 @@ export default function DealerBaseManagerDetailPage() {
 
   const managerCtx = useMemo(() => findManagerInRopGroups(managerId, ropGroups), [managerId, ropGroups]);
 
+  const managerApiUserId = useMemo(() => resolveManagerApiUserId(managerId), [managerId]);
+
+  const tradePointsOverviewQ = useQuery({
+    queryKey: ["trade-points-overview"],
+    queryFn: fetchTradePointsOverview,
+    staleTime: 30_000,
+  });
+
+  const overviewByManagerId = useMemo<Map<string, number>>(() => {
+    const out = new Map<string, number>();
+    const data = tradePointsOverviewQ.data;
+    if (!data) return out;
+    for (const g of data.ropGroups) {
+      for (const mm of g.managers) {
+        out.set(mm.userId, mm.tradePoints);
+        const catalogId = userIdToCatalogMgrId.get(mm.userId);
+        if (catalogId) out.set(catalogId, mm.tradePoints);
+      }
+    }
+    return out;
+  }, [tradePointsOverviewQ.data, userIdToCatalogMgrId]);
+
   const heatLevel: ManagerHeatLevel = useMemo(() => {
     if (!managerCtx) return "medium";
     const m = managerCtx.manager;
     const map = computeManagerHeatMap([
-      { id: m.managerId, clientsActive: m.active, tradePointsActive: m.outlets },
+      {
+        id: m.managerId,
+        clientsActive: m.active,
+        tradePointsActive: overviewByManagerId.get(m.managerId) ?? m.outlets,
+      },
     ]);
     return map[m.managerId] ?? "medium";
-  }, [managerCtx]);
+  }, [managerCtx, overviewByManagerId]);
 
   const dashboard = useMemo(() => {
     if (!managerCtx) return null;
@@ -188,13 +214,6 @@ export default function DealerBaseManagerDetailPage() {
   const [categoryF, setCategoryF] = useState("all");
   const [cityF, setCityF] = useState("all");
 
-  const managerApiUserId = useMemo(() => resolveManagerApiUserId(managerId), [managerId]);
-
-  const tradePointsOverviewQ = useQuery({
-    queryKey: ["trade-points-overview"],
-    queryFn: fetchTradePointsOverview,
-    staleTime: 30_000,
-  });
   const managerTpFromOverview = useMemo<number | null>(() => {
     const data = tradePointsOverviewQ.data;
     if (!data) return null;
