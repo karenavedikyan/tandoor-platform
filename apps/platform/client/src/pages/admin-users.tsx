@@ -31,7 +31,7 @@ import { createPasswordResetLink } from "@/lib/password-reset-api";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { formatDisplayDateTime } from "@/lib/format-display-date";
 import { Link } from "wouter";
-import { LogIn, MoreHorizontal } from "lucide-react";
+import { Database, LogIn, MoreHorizontal } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -498,21 +498,33 @@ export default function AdminUsersPage() {
   );
 
 
+  const showBriefMigrateLink = user?.role === "admin";
+
   return (
     <div className="mx-auto max-w-[1200px] space-y-6 pb-24" data-testid="page-admin-users">
-      <div className="space-y-1">
-        {hierarchyMode ? (
-          <>
-            <h1 className="text-2xl font-semibold text-[hsl(var(--foreground))]">Структура команды</h1>
-            <p className="text-sm text-muted-foreground">Нажмите на стрелку рядом с РОПом, чтобы развернуть его команду</p>
-            <p className="text-sm text-muted-foreground">{subtitle}</p>
-          </>
-        ) : (
-          <>
-            <h1 className="text-xl font-semibold text-[hsl(var(--foreground))]">Пользователи</h1>
-            <p className="text-sm text-muted-foreground">{subtitle}</p>
-          </>
-        )}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 space-y-1">
+          {hierarchyMode ? (
+            <>
+              <h1 className="text-2xl font-semibold text-[hsl(var(--foreground))]">Структура команды</h1>
+              <p className="text-sm text-muted-foreground">Нажмите на стрелку рядом с РОПом, чтобы развернуть его команду</p>
+              <p className="text-sm text-muted-foreground">{subtitle}</p>
+            </>
+          ) : (
+            <>
+              <h1 className="text-xl font-semibold text-[hsl(var(--foreground))]">Пользователи</h1>
+              <p className="text-sm text-muted-foreground">{subtitle}</p>
+            </>
+          )}
+        </div>
+        {showBriefMigrateLink ? (
+          <Button asChild variant="outline" className="min-h-11 w-full shrink-0 sm:w-auto" data-testid="link-admin-brief-db-migrate">
+            <Link href="/admin/migrate-marketing-briefs">
+              <Database className="mr-2 h-4 w-4" aria-hidden />
+              Миграции БД (брифы)
+            </Link>
+          </Button>
+        ) : null}
       </div>
 
       <Card className="border-card-border shadow-sm">
