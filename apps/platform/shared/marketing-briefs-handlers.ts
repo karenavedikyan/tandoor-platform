@@ -7,9 +7,13 @@ import type { PoolLike } from "./admin/admin-auth.js";
 import { canManageMarketingBriefsServer } from "./marketing-briefs-access.js";
 import {
   DEFAULT_ACCENT_COLOR,
+  defaultBlockPayload,
+  isMarketingBriefBlockType,
   isValidPeriodLabel,
+  mapMarketingBriefBlockRow,
   mapMarketingBriefRevisionRow,
   mapMarketingBriefRow,
+  type MarketingBriefBlockRow,
   type MarketingBriefRow,
   type MarketingBriefStatus,
 } from "./marketing-briefs-types.js";
@@ -397,4 +401,288 @@ export async function handleMarketingBriefsRestore(
 
   const brief = await fetchBriefById(pool, id);
   sendJson(res, 200, { success: true, data: brief });
+}
+
+async function touchBriefUpdatedAt(pool: PoolLike, briefId: string): Promise<void> {
+  await pool.query(`UPDATE marketing_briefs SET updated_at = NOW() WHERE id = $1::uuid`, [briefId]);
+}
+
+async function fetchBlockById(pool: PoolLike, id: string): Promise<MarketingBriefBlockRow | null> {
+  const r = await pool.query<Record<string, unknown>>(
+    `SELECT * FROM marketing_brief_blocks WHERE id = $1::uuid LIMIT 1`,
+    [id],
+  );
+  return r.rows[0] ? mapMarketingBriefBlockRow(r.rows[0]) : null;
+}
+
+async function fetchBlocksForBrief(pool: PoolLike, briefId: string): Promise<MarketingBriefBlockRow[]> {
+  const r = await pool.query<Record<string, unknown>>(
+    `SELECT * FROM marketing_brief_blocks WHERE brief_id = $1::uuid ORDER BY order_index ASC`,
+    [briefId],
+  );
+  return r.rows.map(mapMarketingBriefBlockRow);
+}
+
+function canReadBlocks(me: SessionUser, brief: MarketingBriefRow): boolean {
+  if (brief.status === "published") return true;
+  return canManageMarketingBriefsServer(me.role);
+}
+
+function assertBriefNotArchived(brief: MarketingBriefRow, res: VercelResponse): boolean {
+  if (brief.status === "archived") {
+    sendJson(res, 409, { success: false, code: "ARCHIVED", message: "Архивный бриф нельзя редактировать." });
+    return false;
+  }
+  return true;
+}
+
+async function reindexBriefBlocks(pool: PoolLike, briefId: string): Promise<void> {
+  await pool.query(
+    `UPDATE marketing_brief_blocks b
+     SET order_index = sub.rn, updated_at = NOW()
+     FROM (
+       SELECT id, (ROW_NUMBER() OVER (ORDER BY order_index ASC, created_at ASC) - 1)::int AS rn
+       FROM marketing_brief_blocks
+       WHERE brief_id = $1::uuid
+     ) sub
+     WHERE b.id = sub.id`,
+    [briefId],
+  );
+}
+
+export async function handleBlocksList(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  me: SessionUser,
+): Promise<void> {
+  const briefId = parseUuid(typeof req.query.brief_id === "string" ? req.query.brief_id : "");
+  if (!briefId) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите brief_id." });
+    return;
+  }
+
+  const brief = await fetchBriefById(pool, briefId);
+  if (!brief || !canReadBlocks(me, brief)) {
+    sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Бриф не найден." });
+    return;
+  }
+
+  const blocks = await fetchBlocksForBrief(pool, briefId);
+  sendJson(res, 200, { success: true, data: blocks });
+}
+
+export async function handleBlocksCreate(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  me: SessionUser,
+): Promise<void> {
+  if (!assertCanManage(me, res)) return;
+
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const briefId = parseUuid(body.brief_id);
+  const blockType = body.type;
+  const insertAfterId = body.insert_after_id != null ? parseUuid(body.insert_after_id) : null;
+
+  if (!briefId || !isMarketingBriefBlockType(blockType)) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите brief_id и type." });
+    return;
+  }
+
+  const brief = await fetchBriefById(pool, briefId);
+  if (!brief) {
+    sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Бриф не найден." });
+    return;
+  }
+  if (!assertBriefNotArchived(brief, res)) return;
+
+  const payloadRaw = body.payload;
+  const payload =
+    payloadRaw && typeof payloadRaw === "object" && !Array.isArray(payloadRaw)
+      ? { ...defaultBlockPayload(blockType), ...(payloadRaw as Record<string, unknown>) }
+      : defaultBlockPayload(blockType);
+
+  let orderIndex = 0;
+  if (insertAfterId) {
+    const after = await fetchBlockById(pool, insertAfterId);
+    if (!after || after.brief_id !== briefId) {
+      sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "insert_after_id не найден." });
+      return;
+    }
+    orderIndex = after.order_index + 1;
+    await pool.query(
+      `UPDATE marketing_brief_blocks SET order_index = order_index + 1, updated_at = NOW()
+       WHERE brief_id = $1::uuid AND order_index >= $2`,
+      [briefId, orderIndex],
+    );
+  } else {
+    const maxR = await pool.query<{ max: number | null }>(
+      `SELECT MAX(order_index)::int AS max FROM marketing_brief_blocks WHERE brief_id = $1::uuid`,
+      [briefId],
+    );
+    const maxVal = maxR.rows[0]?.max;
+    orderIndex = maxVal != null && Number.isFinite(maxVal) ? maxVal + 1 : 0;
+  }
+
+  const ins = await pool.query<Record<string, unknown>>(
+    `INSERT INTO marketing_brief_blocks (brief_id, order_index, type, payload)
+     VALUES ($1::uuid, $2, $3, $4::jsonb)
+     RETURNING *`,
+    [briefId, orderIndex, blockType, JSON.stringify(payload)],
+  );
+  const row = ins.rows[0];
+  if (!row) {
+    sendJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Не удалось создать блок." });
+    return;
+  }
+
+  await touchBriefUpdatedAt(pool, briefId);
+  await insertRevision(pool, briefId, "block_create", me.id, { block_id: String(row.id), type: blockType });
+
+  sendJson(res, 200, { success: true, data: mapMarketingBriefBlockRow(row) });
+}
+
+export async function handleBlocksUpdate(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  me: SessionUser,
+): Promise<void> {
+  if (!assertCanManage(me, res)) return;
+
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const id = parseUuid(body.id);
+  const patch = body.payload;
+  if (!id || !patch || typeof patch !== "object" || Array.isArray(patch)) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите id и payload." });
+    return;
+  }
+
+  const existing = await fetchBlockById(pool, id);
+  if (!existing) {
+    sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Блок не найден." });
+    return;
+  }
+
+  const brief = await fetchBriefById(pool, existing.brief_id);
+  if (!brief) {
+    sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Бриф не найден." });
+    return;
+  }
+  if (!assertBriefNotArchived(brief, res)) return;
+
+  const merged = { ...existing.payload, ...(patch as Record<string, unknown>) };
+  const payloadKeys = Object.keys(patch as Record<string, unknown>);
+
+  await pool.query(
+    `UPDATE marketing_brief_blocks SET payload = $2::jsonb, updated_at = NOW() WHERE id = $1::uuid`,
+    [id, JSON.stringify(merged)],
+  );
+  await touchBriefUpdatedAt(pool, existing.brief_id);
+  await insertRevision(pool, existing.brief_id, "block_update", me.id, { block_id: id, payload_keys: payloadKeys });
+
+  const updated = await fetchBlockById(pool, id);
+  sendJson(res, 200, { success: true, data: updated });
+}
+
+export async function handleBlocksReorder(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  me: SessionUser,
+): Promise<void> {
+  if (!assertCanManage(me, res)) return;
+
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const briefId = parseUuid(body.brief_id);
+  const orderRaw = body.order;
+  if (!briefId || !Array.isArray(orderRaw)) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите brief_id и order." });
+    return;
+  }
+
+  const order: string[] = [];
+  for (const x of orderRaw) {
+    const parsed = parseUuid(typeof x === "string" ? x : "");
+    if (!parsed) {
+      sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Некорректный order." });
+      return;
+    }
+    order.push(parsed);
+  }
+
+  const brief = await fetchBriefById(pool, briefId);
+  if (!brief) {
+    sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Бриф не найден." });
+    return;
+  }
+  if (!assertBriefNotArchived(brief, res)) return;
+
+  const existing = await fetchBlocksForBrief(pool, briefId);
+  if (existing.length !== order.length) {
+    sendJson(res, 400, {
+      success: false,
+      code: "VALIDATION_ERROR",
+      message: "Порядок должен содержать все блоки брифа.",
+    });
+    return;
+  }
+
+  const existingIds = new Set(existing.map((b) => b.id));
+  for (const blockId of order) {
+    if (!existingIds.has(blockId)) {
+      sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Неизвестный id в order." });
+      return;
+    }
+  }
+
+  for (let i = 0; i < order.length; i++) {
+    const blockId = order[i]!;
+    await pool.query(
+      `UPDATE marketing_brief_blocks SET order_index = $2, updated_at = NOW() WHERE id = $1::uuid AND brief_id = $3::uuid`,
+      [blockId, i, briefId],
+    );
+  }
+
+  await touchBriefUpdatedAt(pool, briefId);
+  await insertRevision(pool, briefId, "block_reorder", me.id, { order });
+
+  const blocks = await fetchBlocksForBrief(pool, briefId);
+  sendJson(res, 200, { success: true, data: blocks });
+}
+
+export async function handleBlocksDelete(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  me: SessionUser,
+): Promise<void> {
+  if (!assertCanManage(me, res)) return;
+
+  const id = parseUuid((req.body as Record<string, unknown>)?.id);
+  if (!id) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите id." });
+    return;
+  }
+
+  const existing = await fetchBlockById(pool, id);
+  if (!existing) {
+    sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Блок не найден." });
+    return;
+  }
+
+  const brief = await fetchBriefById(pool, existing.brief_id);
+  if (!brief) {
+    sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Бриф не найден." });
+    return;
+  }
+  if (!assertBriefNotArchived(brief, res)) return;
+
+  await pool.query(`DELETE FROM marketing_brief_blocks WHERE id = $1::uuid`, [id]);
+  await reindexBriefBlocks(pool, existing.brief_id);
+  await touchBriefUpdatedAt(pool, existing.brief_id);
+  await insertRevision(pool, existing.brief_id, "block_delete", me.id, { block_id: id });
+
+  sendJson(res, 200, { success: true, data: { ok: true } });
 }

@@ -1,0 +1,662 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
+  AlignLeft,
+  Columns3,
+  GripVertical,
+  LayoutList,
+  Loader2,
+  MessageSquareWarning,
+  Plus,
+  Trash2,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { cn } from "@/lib/utils";
+import { toast } from "@/hooks/use-toast";
+import {
+  blockTypeLabel,
+  createBlock,
+  deleteBlock,
+  listBlocks,
+  reorderBlocks,
+  updateBlock,
+  type CalloutBlockPayload,
+  type MarketingBriefBlockRow,
+  type MarketingBriefBlockType,
+  type SectionBlockPayload,
+  type SegmentsBlockPayload,
+  type TextBlockPayload,
+} from "@/lib/marketing-briefs-api";
+
+const BLOCKS_QUERY_KEY = "brief-blocks";
+
+function blockIcon(type: MarketingBriefBlockType) {
+  switch (type) {
+    case "section":
+      return LayoutList;
+    case "text":
+      return AlignLeft;
+    case "segments":
+      return Columns3;
+    case "callout":
+      return MessageSquareWarning;
+    default:
+      return LayoutList;
+  }
+}
+
+function asSection(payload: Record<string, unknown>): SectionBlockPayload {
+  return {
+    number: typeof payload.number === "string" ? payload.number : "",
+    title: typeof payload.title === "string" ? payload.title : "",
+    subtitle: typeof payload.subtitle === "string" ? payload.subtitle : "",
+  };
+}
+
+function asText(payload: Record<string, unknown>): TextBlockPayload {
+  return {
+    heading: typeof payload.heading === "string" ? payload.heading : "",
+    body: typeof payload.body === "string" ? payload.body : "",
+  };
+}
+
+function asSegments(payload: Record<string, unknown>): SegmentsBlockPayload {
+  const seg = payload.segments;
+  const s =
+    seg && typeof seg === "object" && !Array.isArray(seg) ? (seg as Record<string, unknown>) : {};
+  return {
+    heading: typeof payload.heading === "string" ? payload.heading : "",
+    segments: {
+      top150: typeof s.top150 === "string" ? s.top150 : "",
+      top350: typeof s.top350 === "string" ? s.top350 : "",
+      top500: typeof s.top500 === "string" ? s.top500 : "",
+      top500plus: typeof s.top500plus === "string" ? s.top500plus : "",
+    },
+  };
+}
+
+function asCallout(payload: Record<string, unknown>): CalloutBlockPayload {
+  const toneRaw = payload.tone;
+  const tone =
+    toneRaw === "warning" || toneRaw === "success" || toneRaw === "info" ? toneRaw : "info";
+  return {
+    tone,
+    heading: typeof payload.heading === "string" ? payload.heading : "",
+    body: typeof payload.body === "string" ? payload.body : "",
+  };
+}
+
+function AddBlockButtons({
+  onAdd,
+  disabled,
+  variant = "inline",
+}: {
+  onAdd: (type: MarketingBriefBlockType) => void;
+  disabled?: boolean;
+  variant?: "inline" | "empty";
+}) {
+  const types: MarketingBriefBlockType[] = ["section", "text", "segments", "callout"];
+  return (
+    <div
+      className={cn(
+        "flex flex-wrap gap-2",
+        variant === "empty" && "justify-center",
+      )}
+    >
+      {types.map((t) => (
+        <Button
+          key={t}
+          type="button"
+          size="sm"
+          variant={variant === "empty" ? "outline" : "secondary"}
+          disabled={disabled}
+          className={variant === "empty" ? "border-[#9ACA3C]/50" : undefined}
+          onClick={() => onAdd(t)}
+          data-testid={`button-add-block-type-${t}`}
+        >
+          {blockTypeLabel(t)}
+        </Button>
+      ))}
+    </div>
+  );
+}
+
+function BlockFields({
+  block,
+  readOnly,
+  onPatch,
+}: {
+  block: MarketingBriefBlockRow;
+  readOnly: boolean;
+  onPatch: (patch: Record<string, unknown>) => void;
+}) {
+  if (block.type === "section") {
+    const p = asSection(block.payload);
+    return (
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label className="text-xs">Номер</Label>
+          <Input
+            value={p.number ?? ""}
+            disabled={readOnly}
+            placeholder="1"
+            onChange={(e) => onPatch({ number: e.target.value })}
+          />
+        </div>
+        <div className="space-y-1.5 sm:col-span-2">
+          <Label className="text-xs">Заголовок</Label>
+          <Input
+            value={p.title}
+            disabled={readOnly}
+            onChange={(e) => onPatch({ title: e.target.value })}
+          />
+        </div>
+        <div className="space-y-1.5 sm:col-span-2">
+          <Label className="text-xs">Подзаголовок</Label>
+          <Input
+            value={p.subtitle ?? ""}
+            disabled={readOnly}
+            onChange={(e) => onPatch({ subtitle: e.target.value })}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  if (block.type === "text") {
+    const p = asText(block.payload);
+    return (
+      <div className="space-y-3">
+        <div className="space-y-1.5">
+          <Label className="text-xs">Заголовок</Label>
+          <Input
+            value={p.heading ?? ""}
+            disabled={readOnly}
+            onChange={(e) => onPatch({ heading: e.target.value })}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Текст</Label>
+          <Textarea
+            rows={6}
+            className="font-mono text-sm"
+            value={p.body}
+            disabled={readOnly}
+            onChange={(e) => onPatch({ body: e.target.value })}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  if (block.type === "segments") {
+    const p = asSegments(block.payload);
+    const cols = [
+      { key: "top150", label: "ТОП-150" },
+      { key: "top350", label: "ТОП-350" },
+      { key: "top500", label: "ТОП-500" },
+      { key: "top500plus", label: "ТОП-500+" },
+    ] as const;
+    return (
+      <div className="space-y-3">
+        <div className="space-y-1.5">
+          <Label className="text-xs">Заголовок</Label>
+          <Input
+            value={p.heading ?? ""}
+            disabled={readOnly}
+            onChange={(e) => onPatch({ heading: e.target.value })}
+          />
+        </div>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
+          {cols.map((col) => (
+            <div key={col.key} className="space-y-1.5">
+              <Label className="text-xs">{col.label}</Label>
+              <Textarea
+                rows={5}
+                className="text-sm"
+                disabled={readOnly}
+                value={p.segments[col.key]}
+                onChange={(e) =>
+                  onPatch({
+                    segments: { ...p.segments, [col.key]: e.target.value },
+                  })
+                }
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  const p = asCallout(block.payload);
+  return (
+    <div className="space-y-3">
+      <div className="space-y-1.5">
+        <Label className="text-xs">Тон</Label>
+        <Select
+          value={p.tone}
+          disabled={readOnly}
+          onValueChange={(v) => onPatch({ tone: v })}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="info">Информация</SelectItem>
+            <SelectItem value="warning">Внимание</SelectItem>
+            <SelectItem value="success">Успех</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-xs">Заголовок</Label>
+        <Input
+          value={p.heading ?? ""}
+          disabled={readOnly}
+          onChange={(e) => onPatch({ heading: e.target.value })}
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-xs">Текст</Label>
+        <Textarea
+          rows={4}
+          value={p.body}
+          disabled={readOnly}
+          onChange={(e) => onPatch({ body: e.target.value })}
+        />
+      </div>
+    </div>
+  );
+}
+
+function SortableBlockCard({
+  block,
+  readOnly,
+  saveState,
+  onPatch,
+  onDelete,
+  onAddBelow,
+}: {
+  block: MarketingBriefBlockRow;
+  readOnly: boolean;
+  saveState: "idle" | "saving" | "saved" | "error";
+  onPatch: (patch: Record<string, unknown>) => void;
+  onDelete: () => void;
+  onAddBelow: (type: MarketingBriefBlockType) => void;
+}) {
+  const [open, setOpen] = useState(true);
+  const [addOpen, setAddOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: block.id,
+    disabled: readOnly,
+  });
+
+  const Icon = blockIcon(block.type);
+  const p = asSection(block.payload);
+  const summary =
+    block.type === "section"
+      ? p.title || "Раздел"
+      : block.type === "text"
+        ? asText(block.payload).heading || "Текст"
+        : block.type === "segments"
+          ? asSegments(block.payload).heading || "Сегменты"
+          : asCallout(block.payload).heading || "Выноска";
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <Card
+      ref={setNodeRef}
+      style={style}
+      className={cn("border-border/80", isDragging && "z-10 opacity-90 shadow-lg")}
+      data-testid={`brief-block-card-${block.id}`}
+    >
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <CardHeader className="flex flex-row items-start gap-2 space-y-0 p-3 pb-2">
+          {!readOnly ? (
+            <button
+              type="button"
+              className="mt-1 flex h-10 min-h-10 w-10 min-w-10 shrink-0 cursor-grab items-center justify-center rounded-md text-muted-foreground hover:bg-muted active:cursor-grabbing"
+              aria-label="Перетащить блок"
+              data-testid={`brief-block-drag-${block.id}`}
+              {...attributes}
+              {...listeners}
+            >
+              <GripVertical className="h-5 w-5" aria-hidden />
+            </button>
+          ) : null}
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              className="flex min-w-0 flex-1 items-center gap-2 text-left"
+            >
+              <Icon className="h-4 w-4 shrink-0 text-[#8F96B0]" aria-hidden />
+              <span className="truncate text-sm font-medium text-[#222631]">
+                {blockTypeLabel(block.type)}: «{summary}»
+              </span>
+            </button>
+          </CollapsibleTrigger>
+          <span
+            className={cn(
+              "shrink-0 text-[10px]",
+              saveState === "error"
+                ? "text-destructive"
+                : saveState === "saved"
+                  ? "text-emerald-700"
+                  : "text-muted-foreground",
+            )}
+          >
+            {saveState === "saving" ? "Сохраняется…" : saveState === "saved" ? "Сохранено" : null}
+          </span>
+        </CardHeader>
+        <CollapsibleContent>
+          <CardContent className="space-y-3 px-3 pb-3 pt-0">
+            <BlockFields block={block} readOnly={readOnly} onPatch={onPatch} />
+            {!readOnly ? (
+              <div className="flex flex-wrap items-center gap-2 border-t border-border/50 pt-3">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => setDeleteOpen(true)}
+                >
+                  <Trash2 className="mr-1 h-4 w-4" aria-hidden />
+                  Удалить
+                </Button>
+                <Popover open={addOpen} onOpenChange={setAddOpen}>
+                  <PopoverTrigger asChild>
+                    <Button type="button" variant="outline" size="sm" className="gap-1">
+                      <Plus className="h-4 w-4" aria-hidden />
+                      Добавить блок ниже
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-56 p-2" align="start">
+                    <p className="mb-2 px-1 text-xs text-muted-foreground">Тип блока</p>
+                    <AddBlockButtons
+                      onAdd={(t) => {
+                        setAddOpen(false);
+                        onAddBelow(t);
+                      }}
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+            ) : null}
+          </CardContent>
+        </CollapsibleContent>
+      </Collapsible>
+
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Удалить блок</AlertDialogTitle>
+            <AlertDialogDescription>Блок будет удалён без возможности восстановления.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                setDeleteOpen(false);
+                onDelete();
+              }}
+            >
+              Удалить
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </Card>
+  );
+}
+
+export function BriefBlocksEditor({
+  briefId,
+  canEdit,
+}: {
+  briefId: string;
+  canEdit: boolean;
+}) {
+  const qc = useQueryClient();
+  const readOnly = !canEdit;
+
+  const blocksQ = useQuery({
+    queryKey: [BLOCKS_QUERY_KEY, briefId],
+    queryFn: () => listBlocks(briefId),
+    enabled: Boolean(briefId),
+  });
+
+  const [blocks, setBlocks] = useState<MarketingBriefBlockRow[]>([]);
+  const [saveById, setSaveById] = useState<Record<string, "idle" | "saving" | "saved" | "error">>({});
+  const timersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const pendingPatchRef = useRef<Record<string, Record<string, unknown>>>({});
+
+  useEffect(() => {
+    if (blocksQ.data) setBlocks(blocksQ.data);
+  }, [blocksQ.data]);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const scheduleSave = useCallback(
+    (blockId: string, patch: Record<string, unknown>) => {
+      if (readOnly) return;
+      pendingPatchRef.current[blockId] = {
+        ...(pendingPatchRef.current[blockId] ?? {}),
+        ...patch,
+      };
+      if (timersRef.current[blockId]) clearTimeout(timersRef.current[blockId]);
+      timersRef.current[blockId] = setTimeout(() => {
+        const merged = pendingPatchRef.current[blockId];
+        delete pendingPatchRef.current[blockId];
+        if (!merged || Object.keys(merged).length === 0) return;
+
+        void (async () => {
+          setSaveById((s) => ({ ...s, [blockId]: "saving" }));
+          try {
+            const updated = await updateBlock(blockId, merged);
+            setBlocks((prev) => prev.map((b) => (b.id === blockId ? updated : b)));
+            setSaveById((s) => ({ ...s, [blockId]: "saved" }));
+            void qc.invalidateQueries({ queryKey: [BLOCKS_QUERY_KEY, briefId] });
+          } catch (e) {
+            setSaveById((s) => ({ ...s, [blockId]: "error" }));
+            toast({
+              title: "Не удалось сохранить блок",
+              description: e instanceof Error ? e.message : undefined,
+              variant: "destructive",
+            });
+          }
+        })();
+      }, 600);
+    },
+    [briefId, qc, readOnly],
+  );
+
+  const handlePatch = useCallback(
+    (blockId: string, patch: Record<string, unknown>) => {
+      setBlocks((prev) =>
+        prev.map((b) => (b.id === blockId ? { ...b, payload: { ...b.payload, ...patch } } : b)),
+      );
+      scheduleSave(blockId, patch);
+    },
+    [scheduleSave],
+  );
+
+  async function handleAdd(type: MarketingBriefBlockType, insertAfterId?: string) {
+    try {
+      const created = await createBlock({
+        brief_id: briefId,
+        type,
+        insert_after_id: insertAfterId,
+      });
+      await qc.invalidateQueries({ queryKey: [BLOCKS_QUERY_KEY, briefId] });
+      const fresh = await listBlocks(briefId);
+      setBlocks(fresh);
+      setSaveById((s) => ({ ...s, [created.id]: "saved" }));
+    } catch (e) {
+      toast({
+        title: "Не удалось добавить блок",
+        description: e instanceof Error ? e.message : undefined,
+        variant: "destructive",
+      });
+    }
+  }
+
+  async function handleDelete(blockId: string) {
+    try {
+      await deleteBlock(blockId);
+      const fresh = await listBlocks(briefId);
+      setBlocks(fresh);
+      void qc.invalidateQueries({ queryKey: [BLOCKS_QUERY_KEY, briefId] });
+    } catch (e) {
+      toast({
+        title: "Не удалось удалить блок",
+        description: e instanceof Error ? e.message : undefined,
+        variant: "destructive",
+      });
+    }
+  }
+
+  async function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id || readOnly) return;
+
+    const oldIndex = blocks.findIndex((b) => b.id === active.id);
+    const newIndex = blocks.findIndex((b) => b.id === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+
+    const next = arrayMove(blocks, oldIndex, newIndex);
+    setBlocks(next);
+
+    try {
+      const saved = await reorderBlocks(
+        briefId,
+        next.map((b) => b.id),
+      );
+      setBlocks(saved);
+      void qc.invalidateQueries({ queryKey: [BLOCKS_QUERY_KEY, briefId] });
+    } catch (e) {
+      setBlocks(blocksQ.data ?? blocks);
+      toast({
+        title: "Не удалось изменить порядок",
+        description: e instanceof Error ? e.message : undefined,
+        variant: "destructive",
+      });
+    }
+  }
+
+  const blockIds = useMemo(() => blocks.map((b) => b.id), [blocks]);
+
+  if (blocksQ.isLoading) {
+    return (
+      <div className="flex justify-center py-8" data-testid="brief-blocks-loading">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" aria-hidden />
+      </div>
+    );
+  }
+
+  if (blocksQ.isError) {
+    return (
+      <p className="text-sm text-destructive" data-testid="brief-blocks-error">
+        Не удалось загрузить блоки
+      </p>
+    );
+  }
+
+  return (
+    <section className="space-y-4" data-testid="brief-blocks-editor">
+      <h2 className="text-sm font-semibold text-[#222631]">Блоки</h2>
+
+      {blocks.length === 0 ? (
+        <div
+          className="rounded-2xl border border-dashed border-border/80 bg-muted/15 px-4 py-10 text-center"
+          data-testid="brief-blocks-empty"
+        >
+          <p className="mb-4 text-sm text-muted-foreground">Добавьте первый блок</p>
+          {!readOnly ? <AddBlockButtons variant="empty" onAdd={(t) => void handleAdd(t)} /> : null}
+        </div>
+      ) : (
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => void handleDragEnd(e)}>
+          <SortableContext items={blockIds} strategy={verticalListSortingStrategy}>
+            <div className="space-y-3">
+              {blocks.map((block) => (
+                <SortableBlockCard
+                  key={block.id}
+                  block={block}
+                  readOnly={readOnly}
+                  saveState={saveById[block.id] ?? "idle"}
+                  onPatch={(patch) => handlePatch(block.id, patch)}
+                  onDelete={() => void handleDelete(block.id)}
+                  onAddBelow={(type) => void handleAdd(type, block.id)}
+                />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
+      )}
+
+      {!readOnly && blocks.length > 0 ? (
+        <div className="pt-2">
+          <p className="mb-2 text-xs text-muted-foreground">Добавить в конец</p>
+          <AddBlockButtons onAdd={(t) => void handleAdd(t)} />
+        </div>
+      ) : null}
+    </section>
+  );
+}

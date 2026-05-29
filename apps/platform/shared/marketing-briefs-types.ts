@@ -61,3 +61,84 @@ export function mapMarketingBriefRevisionRow(r: Record<string, unknown>): Market
 }
 
 export const DEFAULT_ACCENT_COLOR = "#9ACA3C";
+
+export type MarketingBriefBlockType = "section" | "text" | "segments" | "callout";
+
+export interface SectionBlockPayload {
+  number?: string;
+  title: string;
+  subtitle?: string;
+}
+
+export interface TextBlockPayload {
+  heading?: string;
+  body: string;
+}
+
+export interface SegmentsBlockPayload {
+  heading?: string;
+  segments: {
+    top150: string;
+    top350: string;
+    top500: string;
+    top500plus: string;
+  };
+}
+
+export interface CalloutBlockPayload {
+  tone: "info" | "warning" | "success";
+  heading?: string;
+  body: string;
+}
+
+export type MarketingBriefBlockPayload =
+  | SectionBlockPayload
+  | TextBlockPayload
+  | SegmentsBlockPayload
+  | CalloutBlockPayload;
+
+export type MarketingBriefBlockRow = {
+  id: string;
+  brief_id: string;
+  order_index: number;
+  type: MarketingBriefBlockType;
+  payload: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+const BLOCK_TYPES: MarketingBriefBlockType[] = ["section", "text", "segments", "callout"];
+
+export function isMarketingBriefBlockType(raw: unknown): raw is MarketingBriefBlockType {
+  return typeof raw === "string" && (BLOCK_TYPES as string[]).includes(raw);
+}
+
+export function mapMarketingBriefBlockRow(r: Record<string, unknown>): MarketingBriefBlockRow {
+  return {
+    id: String(r.id),
+    brief_id: String(r.brief_id),
+    order_index: Number(r.order_index),
+    type: String(r.type) as MarketingBriefBlockType,
+    payload:
+      r.payload && typeof r.payload === "object" && !Array.isArray(r.payload)
+        ? (r.payload as Record<string, unknown>)
+        : {},
+    created_at: String(r.created_at),
+    updated_at: String(r.updated_at),
+  };
+}
+
+export function defaultBlockPayload(type: MarketingBriefBlockType): Record<string, unknown> {
+  switch (type) {
+    case "section":
+      return { title: "Новый раздел" };
+    case "text":
+      return { body: "" };
+    case "segments":
+      return { segments: { top150: "", top350: "", top500: "", top500plus: "" } };
+    case "callout":
+      return { tone: "info", body: "" };
+    default:
+      return {};
+  }
+}

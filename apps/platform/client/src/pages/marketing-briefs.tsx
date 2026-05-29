@@ -33,14 +33,17 @@ import {
   formatMarketingBriefPeriodLabel,
   getBrief,
   last12PeriodOptions,
+  listBlocks,
   listBriefs,
   publishBrief,
   restoreBrief,
   unpublishBrief,
+  type MarketingBriefBlockRow,
   type MarketingBriefRow,
   type MarketingBriefStatus,
 } from "@/lib/marketing-briefs-api";
 import { toast } from "@/hooks/use-toast";
+import { MarketingBriefBlocksPublished } from "@/components/marketing-brief/marketing-brief-blocks-published";
 
 type StatusFilter = "all" | MarketingBriefStatus;
 
@@ -54,6 +57,7 @@ export function MarketingBriefPublishedPage() {
   const id = params?.id ?? "";
 
   const [brief, setBrief] = useState<MarketingBriefRow | null>(null);
+  const [blocks, setBlocks] = useState<MarketingBriefBlockRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -75,6 +79,12 @@ export function MarketingBriefPublishedPage() {
           setError("not_found");
         } else {
           setBrief(data.brief);
+          try {
+            const blockRows = await listBlocks(data.brief.id);
+            if (!cancelled) setBlocks(blockRows);
+          } catch {
+            if (!cancelled) setBlocks([]);
+          }
         }
       } catch {
         if (!cancelled) {
@@ -135,9 +145,12 @@ export function MarketingBriefPublishedPage() {
               ))}
             </div>
           ) : null}
-          <p className="rounded-lg border border-dashed border-border/80 bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
-            Подробные блоки появятся в следующем релизе.
-          </p>
+          <div className="pt-4">
+            <MarketingBriefBlocksPublished
+              blocks={blocks}
+              accentColor={brief.accent_color || DEFAULT_MARKETING_BRIEF_ACCENT}
+            />
+          </div>
         </div>
       </article>
       <Button asChild variant="outline">

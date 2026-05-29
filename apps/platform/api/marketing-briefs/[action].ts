@@ -19,6 +19,11 @@ import {
   vercelHeaders,
 } from "../../shared/admin/admin-auth.js";
 import {
+  handleBlocksCreate,
+  handleBlocksDelete,
+  handleBlocksList,
+  handleBlocksReorder,
+  handleBlocksUpdate,
   handleMarketingBriefsArchive,
   handleMarketingBriefsCreate,
   handleMarketingBriefsGet,
@@ -88,6 +93,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "restore" && req.method === "POST") {
       await handleMarketingBriefsRestore(req, res, pool, sessionUser);
+      return;
+    }
+    if (action === "blocks-list" && req.method === "GET") {
+      await handleBlocksList(req, res, pool, sessionUser);
+      return;
+    }
+    if (action === "blocks-create" && req.method === "POST") {
+      await handleBlocksCreate(req, res, pool, sessionUser);
+      return;
+    }
+    if (action === "blocks-update" && req.method === "POST") {
+      await handleBlocksUpdate(req, res, pool, sessionUser);
+      return;
+    }
+    if (action === "blocks-reorder" && req.method === "POST") {
+      await handleBlocksReorder(req, res, pool, sessionUser);
+      return;
+    }
+    if (action === "blocks-delete" && req.method === "POST") {
+      await handleBlocksDelete(req, res, pool, sessionUser);
       return;
     }
 
