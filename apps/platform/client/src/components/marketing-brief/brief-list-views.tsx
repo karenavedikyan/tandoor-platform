@@ -1,6 +1,6 @@
 import { useEffect, useRef, type ReactNode, type RefObject } from "react";
 import { Link } from "wouter";
-import { MoreHorizontal } from "lucide-react";
+import { Globe, MoreHorizontal, Share2 } from "lucide-react";
 import { BriefVisibilityIcon } from "@/components/marketing-brief/brief-visibility-ui";
 import { Button } from "@/components/ui/button";
 import { Card, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,12 +12,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { toast } from "@/hooks/use-toast";
 import {
   briefDisplayTitle,
+  buildPublicBriefShareUrl,
   DEFAULT_MARKETING_BRIEF_ACCENT,
   formatBriefUpdatedAt,
   formatMarketingBriefPeriodLabel,
+  updateBrief,
   type MarketingBriefRow,
+  type MarketingBriefVisibility,
 } from "@/lib/marketing-briefs-api";
 import { cn } from "@/lib/utils";
 
@@ -45,6 +49,51 @@ export function writeBriefListViewMode(mode: BriefListViewMode): void {
 
 function formatBriefCreatedAt(iso: string): string {
   return formatBriefUpdatedAt(iso);
+}
+
+function formatBriefUpdatedShort(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
+}
+
+async function copyBriefLink(briefId: string) {
+  try {
+    await navigator.clipboard.writeText(buildPublicBriefShareUrl(briefId));
+    toast({ description: "Ссылка скопирована" });
+  } catch {
+    toast({ variant: "destructive", description: "Не удалось скопировать ссылку" });
+  }
+}
+
+async function makeBriefPublicAndCopy(briefId: string, onMutate: () => void) {
+  try {
+    await updateBrief(briefId, { visibility: "public" });
+    await navigator.clipboard.writeText(buildPublicBriefShareUrl(briefId));
+    toast({ title: "Бриф теперь публичный, ссылка скопирована" });
+    onMutate();
+  } catch (e) {
+    toast({
+      variant: "destructive",
+      description: e instanceof Error ? e.message : "Не удалось сделать бриф публичным",
+    });
+  }
+}
+
+function BriefStatusDot({ status }: { status: MarketingBriefRow["status"] }) {
+  const cls =
+    status === "published"
+      ? "bg-emerald-500"
+      : status === "archived"
+        ? "bg-amber-500"
+        : "bg-muted-foreground/50";
+  return (
+    <span
+      className={cn("inline-block h-2 w-2 shrink-0 rounded-full", cls)}
+      aria-label={status}
+      data-testid={`brief-status-dot-${status}`}
+    />
+  );
 }
 
 export type BriefListSelection = {
@@ -149,9 +198,10 @@ export type BriefRowMenuHandlers = {
   onArchive: (id: string) => void;
   onRestore: (id: string) => void;
   onDelete: (id: string) => void;
+  onMutate: () => void;
 };
 
-export function BriefRowActionsMenu({
+function BriefRowActionsMenu({
   brief,
   canManage,
   handlers,
@@ -168,6 +218,39 @@ export function BriefRowActionsMenu({
     );
   }
 
+  const visibility = brief.visibility ?? "private";
+  const isPublished = brief.status === "published";
+  const isPublic = visibility === "public";
+
+  async function handleRename() {
+    const next = window.prompt("Название брифа", brief.title);
+    if (!next?.trim() || next.trim() === brief.title.trim()) return;
+    try {
+      await updateBrief(brief.id, { title: next.trim() });
+      toast({ title: "Название сохранено" });
+      handlers.onMutate();
+    } catch (e) {
+      toast({
+        variant: "destructive",
+        description: e instanceof Error ? e.message : "Не удалось сохранить название",
+      });
+    }
+  }
+
+  async function handleVisibility(next: MarketingBriefVisibility) {
+    if (next === visibility) return;
+    try {
+      await updateBrief(brief.id, { visibility: next });
+      toast({ title: "Доступ обновлён" });
+      handlers.onMutate();
+    } catch (e) {
+      toast({
+        variant: "destructive",
+        description: e instanceof Error ? e.message : "Не удалось обновить доступ",
+      });
+    }
+  }
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -182,10 +265,28 @@ export function BriefRowActionsMenu({
           <MoreHorizontal className="h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="min-w-[11rem]">
+      <DropdownMenuContent align="end" className="min-w-[12rem]">
         <DropdownMenuItem className="cursor-pointer" onClick={() => handlers.onOpen(brief)}>
           Открыть
         </DropdownMenuItem>
+        <DropdownMenuItem className="cursor-pointer" onClick={() => void handleRename()}>
+          Переименовать
+        </DropdownMenuItem>
+        {isPublic ? (
+          <DropdownMenuItem className="cursor-pointer" onClick={() => void handleVisibility("private")}>
+            Сделать приватным
+          </DropdownMenuItem>
+        ) : (
+          <DropdownMenuItem className="cursor-pointer" onClick={() => void handleVisibility("public")}>
+            Сделать публичным
+          </DropdownMenuItem>
+        )}
+        {isPublished && isPublic ? (
+          <DropdownMenuItem className="cursor-pointer" onClick={() => void copyBriefLink(brief.id)}>
+            Поделиться ссылкой
+          </DropdownMenuItem>
+        ) : null}
+        <DropdownMenuSeparator />
         {brief.status !== "archived" ? (
           <DropdownMenuItem className="cursor-pointer" onClick={() => handlers.onArchive(brief.id)}>
             Архивировать
@@ -207,13 +308,45 @@ export function BriefRowActionsMenu({
   );
 }
 
+function CardShareButton({ brief, onMutate }: { brief: MarketingBriefRow; onMutate: () => void }) {
+  if (brief.status !== "published") return null;
+  const visibility = brief.visibility ?? "private";
+  if (visibility === "public") {
+    return (
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        className="min-h-9 gap-1"
+        onClick={() => void copyBriefLink(brief.id)}
+        data-testid={`button-card-share-${brief.id}`}
+      >
+        <Share2 className="h-3.5 w-3.5" aria-hidden />
+        Поделиться
+      </Button>
+    );
+  }
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="ghost"
+      className="min-h-9 gap-1"
+      onClick={() => void makeBriefPublicAndCopy(brief.id, onMutate)}
+      data-testid={`button-card-make-public-${brief.id}`}
+    >
+      <Globe className="h-3.5 w-3.5" aria-hidden />
+      Сделать публичным
+    </Button>
+  );
+}
+
 type BriefListViewsProps = {
   briefs: MarketingBriefRow[];
   canManage: boolean;
   selection: BriefListSelection | null;
   selectAllRef?: RefObject<HTMLInputElement>;
   menuHandlers: BriefRowMenuHandlers;
-  /** Card grid only — existing per-card actions */
   renderCardFooter: (brief: MarketingBriefRow) => ReactNode;
 };
 
@@ -221,8 +354,9 @@ export function BriefCardsListView({
   briefs,
   canManage,
   selection,
+  menuHandlers,
   renderCardFooter,
-}: Pick<BriefListViewsProps, "briefs" | "canManage" | "selection" | "renderCardFooter">) {
+}: Pick<BriefListViewsProps, "briefs" | "canManage" | "selection" | "menuHandlers" | "renderCardFooter">) {
   const selectionActive = selection?.selectionActive ?? false;
 
   return (
@@ -276,14 +410,17 @@ export function BriefCardsListView({
             <CardHeader className="flex-1 pb-2">
               <div className="mb-2 flex flex-wrap items-center gap-2">
                 <BriefStatusBadge status={b.status} />
-                <BriefVisibilityIcon visibility={b.visibility} />
+                <BriefVisibilityIcon visibility={b.visibility ?? "private"} />
               </div>
               <CardTitle className="sr-only">{briefDisplayTitle(b.title).text}</CardTitle>
               <p className="mt-2 text-xs text-muted-foreground">
                 {b.author_name ?? "—"} · обновлено {formatBriefUpdatedAt(b.updated_at)}
               </p>
             </CardHeader>
-            <CardFooter className="flex flex-wrap gap-2 border-t border-border/50 pt-3">{renderCardFooter(b)}</CardFooter>
+            <CardFooter className="flex flex-wrap gap-2 border-t border-border/50 pt-3">
+              {canManage ? <CardShareButton brief={b} onMutate={menuHandlers.onMutate} /> : null}
+              {renderCardFooter(b)}
+            </CardFooter>
           </Card>
         );
       })}
@@ -300,27 +437,33 @@ export function BriefTableListView({
 }: Pick<BriefListViewsProps, "briefs" | "canManage" | "selection" | "selectAllRef" | "menuHandlers">) {
   return (
     <div className="overflow-x-auto rounded-xl border border-border/80" data-testid="section-marketing-briefs-list-table">
-      <table className="w-full min-w-[640px] border-collapse text-sm">
+      <table className="w-full min-w-[520px] border-collapse text-sm">
         <thead className="sticky top-0 z-10 bg-background">
           <tr className="border-b text-left text-xs text-muted-foreground">
             {canManage && selection ? (
-              <th className="w-10 px-3 py-2.5">
+              <th className="w-10 px-2 py-2.5">
                 <SelectAllCheckbox selection={selection} selectAllRef={selectAllRef} />
               </th>
             ) : null}
-            <th className="px-3 py-2.5 font-medium">Название</th>
+            <th className="min-w-[120px] px-2 py-2.5 font-medium">Название</th>
             <th className="hidden px-3 py-2.5 font-medium md:table-cell">Сегмент</th>
             <th className="hidden px-3 py-2.5 font-medium md:table-cell">Создан</th>
-            <th className="px-3 py-2.5 font-medium">Обновлён</th>
-            <th className="px-3 py-2.5 font-medium">Статус</th>
-            <th className="w-12 px-3 py-2.5 font-medium">Действия</th>
+            <th className="whitespace-nowrap px-2 py-2.5 font-medium">Обновлён</th>
+            <th className="whitespace-nowrap px-2 py-2.5 font-medium">Статус</th>
+            <th className="w-10 px-1 py-2.5 font-medium">
+              <span className="sr-only">Действия</span>
+            </th>
           </tr>
         </thead>
         <tbody>
           {briefs.map((b) => (
-            <tr key={b.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30" data-testid={`row-marketing-brief-${b.id}`}>
+            <tr
+              key={b.id}
+              className="border-b border-border/50 last:border-0 hover:bg-muted/30"
+              data-testid={`row-marketing-brief-${b.id}`}
+            >
               {canManage && selection ? (
-                <td className="px-3 py-2">
+                <td className="px-2 py-2">
                   <Checkbox
                     checked={selection.isSelected(b.id)}
                     onCheckedChange={() => selection.onToggle(b.id)}
@@ -329,10 +472,14 @@ export function BriefTableListView({
                   />
                 </td>
               ) : null}
-              <td className="max-w-[200px] truncate px-3 py-2 font-medium sm:max-w-xs">
+              <td className="max-w-[140px] px-2 py-2 font-medium sm:max-w-xs">
                 {(() => {
                   const { text, isPlaceholder } = briefDisplayTitle(b.title);
-                  return <span className={cn(isPlaceholder && "text-muted-foreground")}>{text}</span>;
+                  return (
+                    <span className={cn("line-clamp-2 sm:truncate", isPlaceholder && "text-muted-foreground")}>
+                      {text}
+                    </span>
+                  );
                 })()}
               </td>
               <td className="hidden truncate px-3 py-2 text-muted-foreground md:table-cell">
@@ -341,14 +488,22 @@ export function BriefTableListView({
               <td className="hidden whitespace-nowrap px-3 py-2 text-muted-foreground md:table-cell">
                 {formatBriefCreatedAt(b.created_at)}
               </td>
-              <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">{formatBriefUpdatedAt(b.updated_at)}</td>
-              <td className="px-3 py-2">
-                <div className="flex items-center gap-1.5">
-                  <BriefStatusBadge status={b.status} />
-                  <BriefVisibilityIcon visibility={b.visibility} />
+              <td className="whitespace-nowrap px-2 py-2 text-muted-foreground">
+                <span className="md:hidden">{formatBriefUpdatedShort(b.updated_at)}</span>
+                <span className="hidden md:inline">{formatBriefUpdatedAt(b.updated_at)}</span>
+              </td>
+              <td className="whitespace-nowrap px-2 py-2">
+                <div className="flex items-center gap-1">
+                  <span className="md:hidden">
+                    <BriefStatusDot status={b.status} />
+                  </span>
+                  <span className="hidden md:inline-flex">
+                    <BriefStatusBadge status={b.status} />
+                  </span>
+                  <BriefVisibilityIcon visibility={b.visibility ?? "private"} />
                 </div>
               </td>
-              <td className="px-2 py-2">
+              <td className="w-10 px-1 py-2">
                 <BriefRowActionsMenu brief={b} canManage={canManage} handlers={menuHandlers} />
               </td>
             </tr>
@@ -375,41 +530,45 @@ export function BriefCompactListView({
         </div>
       ) : null}
       <ul>
-        {briefs.map((b) => (
-          <li
-            key={b.id}
-            className="flex h-10 items-center gap-2 border-b border-border/50 px-3 last:border-0 hover:bg-muted/30"
-            data-testid={`row-marketing-brief-compact-${b.id}`}
-          >
-            {canManage && selection ? (
-              <Checkbox
-                checked={selection.isSelected(b.id)}
-                onCheckedChange={() => selection.onToggle(b.id)}
-                aria-label={`Выбрать ${b.title}`}
-                data-testid={`checkbox-brief-${b.id}`}
-                className="shrink-0"
-              />
-            ) : null}
-            <div className="flex shrink-0 items-center gap-1">
-              <BriefStatusBadge status={b.status} />
-              <BriefVisibilityIcon visibility={b.visibility} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p
-                className={cn(
-                  "truncate text-sm font-medium leading-tight",
-                  briefDisplayTitle(b.title).isPlaceholder && "text-muted-foreground",
-                )}
-              >
-                {briefDisplayTitle(b.title).text}
-              </p>
-              <p className="truncate text-[10px] leading-tight text-muted-foreground">
-                Обновлён {formatBriefUpdatedAt(b.updated_at)}
-              </p>
-            </div>
-            <BriefRowActionsMenu brief={b} canManage={canManage} handlers={menuHandlers} />
-          </li>
-        ))}
+        {briefs.map((b) => {
+          const { text, isPlaceholder } = briefDisplayTitle(b.title);
+          return (
+            <li
+              key={b.id}
+              className="flex min-h-10 items-center gap-2 border-b border-border/50 px-2 py-1.5 last:border-0 hover:bg-muted/30 sm:px-3"
+              data-testid={`row-marketing-brief-compact-${b.id}`}
+            >
+              {canManage && selection ? (
+                <Checkbox
+                  checked={selection.isSelected(b.id)}
+                  onCheckedChange={() => selection.onToggle(b.id)}
+                  aria-label={`Выбрать ${b.title}`}
+                  data-testid={`checkbox-brief-${b.id}`}
+                  className="shrink-0"
+                />
+              ) : null}
+              <BriefStatusDot status={b.status} />
+              <BriefVisibilityIcon visibility={b.visibility ?? "private"} />
+              <div className="min-w-0 flex-1">
+                <p
+                  className={cn(
+                    "truncate text-sm font-medium leading-tight",
+                    isPlaceholder && "text-muted-foreground",
+                  )}
+                  title={text}
+                >
+                  {text}
+                </p>
+                <p className="hidden truncate text-[10px] leading-tight text-muted-foreground sm:block">
+                  Обновлён {formatBriefUpdatedAt(b.updated_at)}
+                </p>
+              </div>
+              <div className="w-10 shrink-0">
+                <BriefRowActionsMenu brief={b} canManage={canManage} handlers={menuHandlers} />
+              </div>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

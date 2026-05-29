@@ -27,11 +27,14 @@ export function BriefVisibilityIcon({
     <Tooltip>
       <TooltipTrigger asChild>
         <span
-          className={cn("inline-flex shrink-0 text-muted-foreground", className)}
+          className={cn("inline-flex shrink-0", className)}
           aria-label={label}
           data-testid={`brief-visibility-icon-${visibility}`}
         >
-          <Icon className="h-3.5 w-3.5" aria-hidden />
+          <Icon
+            className={cn("h-3.5 w-3.5", isPublic ? "text-emerald-500" : "text-muted-foreground")}
+            aria-hidden
+          />
         </span>
       </TooltipTrigger>
       <TooltipContent side="top" className="max-w-[220px] text-xs">
