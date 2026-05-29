@@ -18,14 +18,17 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
-  AlignLeft,
-  Columns3,
+  Gift,
   GripVertical,
-  LayoutList,
+  Hash,
+  LayoutGrid,
   Loader2,
-  MessageSquareWarning,
+  MessageCircle,
+  Package,
   Plus,
+  Tags,
   Trash2,
+  Type,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -62,6 +65,15 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { mergeBlocksFromServer } from "@/lib/brief-blocks-editor-state";
+import { BonusBlockEditor } from "@/components/marketing-brief/bonus-block-editor";
+import { PriceTableBlockEditor } from "@/components/marketing-brief/price-table-block-editor";
+import { ProductsBlockEditor } from "@/components/marketing-brief/products-block-editor";
+import {
+  asBonusBlock,
+  asPriceTableBlock,
+  asProductsBlock,
+  productDisplayName,
+} from "@/components/marketing-brief/marketing-brief-block-shared";
 import {
   blockTypeLabel,
   createBlock,
@@ -82,16 +94,43 @@ const BLOCKS_QUERY_KEY = "brief-blocks";
 function blockIcon(type: MarketingBriefBlockType) {
   switch (type) {
     case "section":
-      return LayoutList;
+      return Hash;
     case "text":
-      return AlignLeft;
+      return Type;
     case "segments":
-      return Columns3;
+      return LayoutGrid;
     case "callout":
-      return MessageSquareWarning;
+      return MessageCircle;
+    case "products":
+      return Package;
+    case "price_table":
+      return Tags;
+    case "bonus":
+      return Gift;
     default:
-      return LayoutList;
+      return Hash;
   }
+}
+
+function blockSummary(block: MarketingBriefBlockRow): string {
+  if (block.type === "section") return asSection(block.payload).title || "Раздел";
+  if (block.type === "text") return asText(block.payload).heading || "Текст";
+  if (block.type === "segments") return asSegments(block.payload).heading || "Сегменты";
+  if (block.type === "callout") return asCallout(block.payload).heading || "Выноска";
+  if (block.type === "products") {
+    const pb = asProductsBlock(block.payload);
+    if (pb.items.length === 0) return "Товары";
+    return productDisplayName(pb.items[0]!);
+  }
+  if (block.type === "price_table") {
+    const pt = asPriceTableBlock(block.payload);
+    return pt.heading?.trim() || (pt.rows[0]?.model ?? "Прайс");
+  }
+  if (block.type === "bonus") {
+    const bb = asBonusBlock(block.payload);
+    return bb.heading?.trim() || (bb.items[0]?.trigger ?? "Бонус");
+  }
+  return blockTypeLabel(block.type);
 }
 
 function asSection(payload: Record<string, unknown>): SectionBlockPayload {
@@ -144,27 +183,30 @@ function AddBlockButtons({
   disabled?: boolean;
   variant?: "inline" | "empty";
 }) {
-  const types: MarketingBriefBlockType[] = ["section", "text", "segments", "callout"];
+  const row1: MarketingBriefBlockType[] = ["section", "text"];
+  const row2: MarketingBriefBlockType[] = ["segments", "callout"];
+  const row3: MarketingBriefBlockType[] = ["products", "price_table", "bonus"];
+  const rows = [row1, row2, row3];
+
   return (
-    <div
-      className={cn(
-        "flex flex-wrap gap-2",
-        variant === "empty" && "justify-center",
-      )}
-    >
-      {types.map((t) => (
-        <Button
-          key={t}
-          type="button"
-          size="sm"
-          variant={variant === "empty" ? "outline" : "secondary"}
-          disabled={disabled}
-          className={variant === "empty" ? "border-[#9ACA3C]/50" : undefined}
-          onClick={() => onAdd(t)}
-          data-testid={`button-add-block-type-${t}`}
-        >
-          {blockTypeLabel(t)}
-        </Button>
+    <div className={cn("flex flex-col gap-2", variant === "empty" && "items-center")}>
+      {rows.map((types, ri) => (
+        <div key={ri} className="flex flex-wrap gap-2 justify-center">
+          {types.map((t) => (
+            <Button
+              key={t}
+              type="button"
+              size="sm"
+              variant={variant === "empty" ? "outline" : "secondary"}
+              disabled={disabled}
+              className={variant === "empty" ? "border-[#9ACA3C]/50" : undefined}
+              onClick={() => onAdd(t)}
+              data-testid={`button-add-block-type-${t}`}
+            >
+              {blockTypeLabel(t)}
+            </Button>
+          ))}
+        </div>
       ))}
     </div>
   );
@@ -278,45 +320,59 @@ function BlockFields({
     );
   }
 
-  const p = asCallout(block.payload);
-  return (
-    <div className="space-y-3">
-      <div className="space-y-1.5">
-        <Label className="text-xs">Тон</Label>
-        <Select
-          value={p.tone}
-          disabled={readOnly}
-          onValueChange={(v) => onPatch({ tone: v })}
-        >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="info">Информация</SelectItem>
-            <SelectItem value="warning">Внимание</SelectItem>
-            <SelectItem value="success">Успех</SelectItem>
-          </SelectContent>
-        </Select>
+  if (block.type === "callout") {
+    const p = asCallout(block.payload);
+    return (
+      <div className="space-y-3">
+        <div className="space-y-1.5">
+          <Label className="text-xs">Тон</Label>
+          <Select
+            value={p.tone}
+            disabled={readOnly}
+            onValueChange={(v) => onPatch({ tone: v })}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="info">Информация</SelectItem>
+              <SelectItem value="warning">Внимание</SelectItem>
+              <SelectItem value="success">Успех</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Заголовок</Label>
+          <Input
+            value={p.heading ?? ""}
+            disabled={readOnly}
+            onChange={(e) => onPatch({ heading: e.target.value })}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Текст</Label>
+          <Textarea
+            rows={4}
+            value={p.body}
+            disabled={readOnly}
+            onChange={(e) => onPatch({ body: e.target.value })}
+          />
+        </div>
       </div>
-      <div className="space-y-1.5">
-        <Label className="text-xs">Заголовок</Label>
-        <Input
-          value={p.heading ?? ""}
-          disabled={readOnly}
-          onChange={(e) => onPatch({ heading: e.target.value })}
-        />
-      </div>
-      <div className="space-y-1.5">
-        <Label className="text-xs">Текст</Label>
-        <Textarea
-          rows={4}
-          value={p.body}
-          disabled={readOnly}
-          onChange={(e) => onPatch({ body: e.target.value })}
-        />
-      </div>
-    </div>
-  );
+    );
+  }
+
+  if (block.type === "products") {
+    return <ProductsBlockEditor block={block} readOnly={readOnly} onPatch={onPatch} />;
+  }
+  if (block.type === "price_table") {
+    return <PriceTableBlockEditor block={block} readOnly={readOnly} onPatch={onPatch} />;
+  }
+  if (block.type === "bonus") {
+    return <BonusBlockEditor block={block} readOnly={readOnly} onPatch={onPatch} />;
+  }
+
+  return null;
 }
 
 function SortableBlockCard({
@@ -343,15 +399,7 @@ function SortableBlockCard({
   });
 
   const Icon = blockIcon(block.type);
-  const p = asSection(block.payload);
-  const summary =
-    block.type === "section"
-      ? p.title || "Раздел"
-      : block.type === "text"
-        ? asText(block.payload).heading || "Текст"
-        : block.type === "segments"
-          ? asSegments(block.payload).heading || "Сегменты"
-          : asCallout(block.payload).heading || "Выноска";
+  const summary = blockSummary(block);
 
   const style = {
     transform: CSS.Transform.toString(transform),

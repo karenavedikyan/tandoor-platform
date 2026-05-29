@@ -179,6 +179,37 @@ export function getProductById(id: string): CatalogProduct | undefined {
   return CATALOG_PRODUCTS.find((p) => p.id.toLowerCase() === t);
 }
 
+/** Поиск по каталогу для диалога брифа (Промт 105). */
+export function searchCatalog(query: string, limit = 30): CatalogProduct[] {
+  const sorted = [...CATALOG_PRODUCTS].sort((a, b) => a.showcasePriority - b.showcasePriority);
+  const q = query.trim();
+  if (!q) return sorted.slice(0, limit);
+  const matched: CatalogProduct[] = [];
+  for (const p of sorted) {
+    if (matched.length >= limit) break;
+    const haystack = buildCatalogProductSearchHaystack(p);
+    if (catalogSearchQueryMatchesHaystack(q, haystack)) matched.push(p);
+  }
+  return matched;
+}
+
+/** Снимок полей каталога для блока брифа. */
+export function snapshotCatalogProduct(p: CatalogProduct): {
+  catalog_id: string;
+  name: string;
+  article: string;
+  image_url: string | null;
+  price_retail: number | null;
+} {
+  return {
+    catalog_id: p.id,
+    name: p.name,
+    article: p.article,
+    image_url: p.image ?? null,
+    price_retail: p.priceRetailRub ?? null,
+  };
+}
+
 export function getProductsForDealer(dealerId: string): CatalogProduct[] {
   const id = normalizeDealerIdForCatalog(dealerId);
   return CATALOG_PRODUCTS.filter((p) => p.relatedDealerIds.includes(id));
