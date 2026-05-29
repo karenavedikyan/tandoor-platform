@@ -61,6 +61,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
+import { mergeBlocksFromServer } from "@/lib/brief-blocks-editor-state";
 import {
   blockTypeLabel,
   createBlock,
@@ -484,9 +485,11 @@ export function BriefBlocksEditor({
   const [saveById, setSaveById] = useState<Record<string, "idle" | "saving" | "saved" | "error">>({});
   const timersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const pendingPatchRef = useRef<Record<string, Record<string, unknown>>>({});
+  const dirtyBlockIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    if (blocksQ.data) setBlocks(blocksQ.data);
+    if (!blocksQ.data) return;
+    setBlocks((prev) => mergeBlocksFromServer(blocksQ.data, prev, dirtyBlockIdsRef.current));
   }, [blocksQ.data]);
 
   const sensors = useSensors(
@@ -510,10 +513,16 @@ export function BriefBlocksEditor({
         void (async () => {
           setSaveById((s) => ({ ...s, [blockId]: "saving" }));
           try {
-            const updated = await updateBlock(blockId, merged);
-            setBlocks((prev) => prev.map((b) => (b.id === blockId ? updated : b)));
+            await updateBlock(blockId, merged);
+            setBlocks((prev) =>
+              prev.map((b) =>
+                b.id === blockId ? { ...b, updated_at: new Date().toISOString() } : b,
+              ),
+            );
             setSaveById((s) => ({ ...s, [blockId]: "saved" }));
-            void qc.invalidateQueries({ queryKey: [BLOCKS_QUERY_KEY, briefId] });
+            if (!pendingPatchRef.current[blockId]) {
+              dirtyBlockIdsRef.current.delete(blockId);
+            }
           } catch (e) {
             setSaveById((s) => ({ ...s, [blockId]: "error" }));
             toast({
@@ -523,13 +532,14 @@ export function BriefBlocksEditor({
             });
           }
         })();
-      }, 600);
+      }, 800);
     },
-    [briefId, qc, readOnly],
+    [readOnly],
   );
 
   const handlePatch = useCallback(
     (blockId: string, patch: Record<string, unknown>) => {
+      dirtyBlockIdsRef.current.add(blockId);
       setBlocks((prev) =>
         prev.map((b) => (b.id === blockId ? { ...b, payload: { ...b.payload, ...patch } } : b)),
       );
@@ -537,6 +547,17 @@ export function BriefBlocksEditor({
     },
     [scheduleSave],
   );
+
+  useEffect(() => {
+    return () => {
+      for (const [blockId, patch] of Object.entries(pendingPatchRef.current)) {
+        if (patch && Object.keys(patch).length > 0) {
+          void updateBlock(blockId, patch).catch(() => {});
+        }
+      }
+      for (const t of Object.values(timersRef.current)) clearTimeout(t);
+    };
+  }, []);
 
   async function handleAdd(type: MarketingBriefBlockType, insertAfterId?: string) {
     try {
@@ -547,7 +568,7 @@ export function BriefBlocksEditor({
       });
       await qc.invalidateQueries({ queryKey: [BLOCKS_QUERY_KEY, briefId] });
       const fresh = await listBlocks(briefId);
-      setBlocks(fresh);
+      setBlocks((prev) => mergeBlocksFromServer(fresh, prev, dirtyBlockIdsRef.current));
       setSaveById((s) => ({ ...s, [created.id]: "saved" }));
     } catch (e) {
       toast({
@@ -561,8 +582,11 @@ export function BriefBlocksEditor({
   async function handleDelete(blockId: string) {
     try {
       await deleteBlock(blockId);
+      dirtyBlockIdsRef.current.delete(blockId);
+      delete pendingPatchRef.current[blockId];
+      if (timersRef.current[blockId]) clearTimeout(timersRef.current[blockId]);
       const fresh = await listBlocks(briefId);
-      setBlocks(fresh);
+      setBlocks((prev) => mergeBlocksFromServer(fresh, prev, dirtyBlockIdsRef.current));
       void qc.invalidateQueries({ queryKey: [BLOCKS_QUERY_KEY, briefId] });
     } catch (e) {
       toast({
@@ -589,6 +613,7 @@ export function BriefBlocksEditor({
         briefId,
         next.map((b) => b.id),
       );
+      dirtyBlockIdsRef.current.clear();
       setBlocks(saved);
       void qc.invalidateQueries({ queryKey: [BLOCKS_QUERY_KEY, briefId] });
     } catch (e) {
