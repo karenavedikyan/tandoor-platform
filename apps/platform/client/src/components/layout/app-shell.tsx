@@ -26,7 +26,9 @@ import {
   UserRound,
   Users,
 } from "lucide-react";
-import { useCallback, useLayoutEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
+import type { UserRole } from "@shared/auth";
+import type { SalesRole } from "@/lib/sales-control-data";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -114,6 +116,7 @@ const ICON_BY_TESTID: Partial<Record<string, LucideIcon>> = {
   "nav-marketing-briefs": Megaphone,
   "nav-listings": FileText,
   "nav-item-admin-brief-migrate": Database,
+  "nav-item-admin-brief-migrate-top": Database,
   "nav-admin-brief-migrate": Database,
 };
 
@@ -782,6 +785,8 @@ export type AppShellProps = {
   /** Текущий пользователь для быстрого переключения «Войти как…» (только admin). */
   shellUser?: ImpersonationQuickSwitchUser | null;
   isImpersonating?: boolean;
+  /** Временная диагностика ролей для сайдбара (промт 104.3). */
+  navDebugRoles?: { salesRole: SalesRole; platformUserRole: UserRole };
 };
 
 export function AppShell({
@@ -796,7 +801,14 @@ export function AppShell({
   impersonationBanner,
   shellUser = null,
   isImpersonating = false,
+  navDebugRoles,
 }: AppShellProps) {
+  useEffect(() => {
+    if (navDebugRoles) {
+      console.debug("[nav-debug]", navDebugRoles);
+    }
+  }, [navDebugRoles]);
+
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [impersonationAutoOpen, setImpersonationAutoOpen] = useState(false);

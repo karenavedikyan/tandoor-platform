@@ -3,7 +3,7 @@
  */
 import assert from "node:assert/strict";
 import type { UserRole } from "@shared/auth";
-import { canCreateResetLink } from "../auth-access";
+import { canCreateResetLink, flattenGroupedPilotNavigation, getPilotNavigation } from "../auth-access";
 
 const U = (id: string, role: UserRole) => ({ id, role });
 
@@ -26,3 +26,22 @@ t(U("m1", "manager"), U("m2", "manager"), false, "manager→manager запрет
 t(U("d1", "director"), U("d1", "director"), false, "self запрет");
 
 console.log("auth-access reset-link matrix: ok");
+
+function navTestIds(role: Parameters<typeof getPilotNavigation>[0], platformUserRole: UserRole) {
+  const model = getPilotNavigation(role, undefined, undefined, platformUserRole);
+  if (model.layout === "flat") return model.items.map((i) => i.testId);
+  return flattenGroupedPilotNavigation(model).map((i) => i.testId);
+}
+
+const adminIds = navTestIds("sales_director", "admin");
+assert.ok(adminIds.includes("nav-item-admin-brief-migrate-top"), "admin: top migrate shortcut");
+assert.ok(adminIds.includes("nav-item-admin-brief-migrate"), "admin: migrate in administration group");
+assert.ok(adminIds.includes("nav-item-admin-users"), "admin: administration users link");
+
+for (const salesRole of ["sales_manager", "team_lead", "sales_director"] as const) {
+  const ids = navTestIds(salesRole, salesRole === "sales_director" ? "director" : salesRole === "team_lead" ? "rop" : "manager");
+  assert.ok(!ids.includes("nav-item-admin-brief-migrate-top"), `${salesRole}: no top migrate for non-admin`);
+  assert.ok(!ids.includes("nav-item-admin-brief-migrate"), `${salesRole}: no migrate in nav for non-admin`);
+}
+
+console.log("auth-access pilot navigation admin shortcut: ok");

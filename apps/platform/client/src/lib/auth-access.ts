@@ -364,6 +364,37 @@ function buildAdministrationNavGroup(platformUserRole: UserRole | null | undefin
   };
 }
 
+const ADMIN_BRIEF_MIGRATE_TOP_NAV_ITEM: PilotNavItem = {
+  href: "/admin/migrate-marketing-briefs",
+  label: "Миграции брифов",
+  testId: "nav-item-admin-brief-migrate-top",
+  navBehaviorId: "nav-admin-brief-migrate",
+};
+
+function isAdminForBriefMigrateShortcut(
+  platformUserRole: UserRole | null | undefined,
+  role: SalesRole,
+): boolean {
+  // `SalesRole` has no `admin`; keep string check for forward-compatible demo mappings.
+  return platformUserRole === "admin" || (role as string) === "admin";
+}
+
+function withAdminBriefMigrateTopShortcut(
+  platformUserRole: UserRole | null | undefined,
+  role: SalesRole,
+  model: Extract<PilotNavigationModel, { layout: "grouped" }>,
+): Extract<PilotNavigationModel, { layout: "grouped" }> {
+  if (!isAdminForBriefMigrateShortcut(platformUserRole, role)) return model;
+  const leading = model.leadingItems ?? [];
+  if (leading.some((item) => item.testId === ADMIN_BRIEF_MIGRATE_TOP_NAV_ITEM.testId)) {
+    return model;
+  }
+  return {
+    ...model,
+    leadingItems: [ADMIN_BRIEF_MIGRATE_TOP_NAV_ITEM, ...leading],
+  };
+}
+
 function withOptionalAdminGroup(
   platformUserRole: UserRole | null | undefined,
   model: Extract<PilotNavigationModel, { layout: "grouped" }>,
@@ -371,6 +402,14 @@ function withOptionalAdminGroup(
   const g = buildAdministrationNavGroup(platformUserRole);
   if (!g) return model;
   return { ...model, groups: [g, ...model.groups] };
+}
+
+function finalizeGroupedPilotNavigation(
+  platformUserRole: UserRole | null | undefined,
+  role: SalesRole,
+  model: Extract<PilotNavigationModel, { layout: "grouped" }>,
+): Extract<PilotNavigationModel, { layout: "grouped" }> {
+  return withOptionalAdminGroup(platformUserRole, withAdminBriefMigrateTopShortcut(platformUserRole, role, model));
 }
 
 export function getPilotNavigation(
@@ -474,34 +513,35 @@ export function getPilotNavigation(
   });
 
   if (role === "sales_director" || role === "team_lead") {
-    void platformUserRole;
-    return unifiedSalesNavigation("/dealer-base");
+    return finalizeGroupedPilotNavigation(platformUserRole, role, unifiedSalesNavigation("/dealer-base"));
   }
 
   if (role === "sales_manager") {
-    void platformUserRole;
-    return unifiedSalesNavigation("/dealer-base");
+    return finalizeGroupedPilotNavigation(platformUserRole, role, unifiedSalesNavigation("/dealer-base"));
   }
 
   if (role === "marketer") {
-    void platformUserRole;
-    return unifiedSalesNavigation("/dealer-base", {
-      includeMarketingBriefsInDev: false,
-      extraLeadingItems: [
-        {
-          href: "/marketing-briefs",
-          label: "Маркетинговые брифы",
-          testId: "nav-item-marketing-briefs",
-          navBehaviorId: "nav-marketing-briefs",
-        },
-        {
-          href: "/listings",
-          label: "Листовки",
-          testId: "nav-item-listings",
-          navBehaviorId: "nav-listings",
-        },
-      ],
-    });
+    return finalizeGroupedPilotNavigation(
+      platformUserRole,
+      role,
+      unifiedSalesNavigation("/dealer-base", {
+        includeMarketingBriefsInDev: false,
+        extraLeadingItems: [
+          {
+            href: "/marketing-briefs",
+            label: "Маркетинговые брифы",
+            testId: "nav-item-marketing-briefs",
+            navBehaviorId: "nav-marketing-briefs",
+          },
+          {
+            href: "/listings",
+            label: "Листовки",
+            testId: "nav-item-listings",
+            navBehaviorId: "nav-listings",
+          },
+        ],
+      }),
+    );
   }
 
   const flat = ((): PilotNavItem[] => {
