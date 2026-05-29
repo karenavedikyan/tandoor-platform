@@ -44,6 +44,7 @@ import {
 } from "@/lib/marketing-briefs-api";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { BriefBlocksEditor } from "@/components/marketing-brief/brief-blocks-editor";
 
 export default function MarketingBriefEditorPage() {
   const { profile } = useReleaseDemoProfile();
@@ -297,10 +298,9 @@ export default function MarketingBriefEditorPage() {
             </div>
           </div>
         </div>
-        <p className="rounded-lg border border-dashed border-border/70 bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
-          Конструктор блоков появится в следующем обновлении (Промт 103). Сейчас можно заполнять обложку и метаданные.
-        </p>
       </section>
+
+      <BriefBlocksEditor briefId={brief.id} canEdit={!readOnlyFields} />
 
       {revisions.length > 0 ? (
         <section className="space-y-2 rounded-2xl border border-border/80 bg-muted/10 p-4">

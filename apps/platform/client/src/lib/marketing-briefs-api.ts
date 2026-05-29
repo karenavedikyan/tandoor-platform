@@ -27,6 +27,45 @@ export type MarketingBriefRevisionRow = {
   created_at: string;
 };
 
+export type MarketingBriefBlockType = "section" | "text" | "segments" | "callout";
+
+export type MarketingBriefBlockRow = {
+  id: string;
+  brief_id: string;
+  order_index: number;
+  type: MarketingBriefBlockType;
+  payload: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SectionBlockPayload = {
+  number?: string;
+  title: string;
+  subtitle?: string;
+};
+
+export type TextBlockPayload = {
+  heading?: string;
+  body: string;
+};
+
+export type SegmentsBlockPayload = {
+  heading?: string;
+  segments: {
+    top150: string;
+    top350: string;
+    top500: string;
+    top500plus: string;
+  };
+};
+
+export type CalloutBlockPayload = {
+  tone: "info" | "warning" | "success";
+  heading?: string;
+  body: string;
+};
+
 type ApiOk<T> = { success: true; data: T };
 type ApiErr = { success: false; code?: string; message?: string };
 
@@ -120,6 +159,57 @@ export async function restoreBrief(id: string): Promise<MarketingBriefRow> {
   return postJson<MarketingBriefRow>("/api/marketing-briefs/restore", { id });
 }
 
+export async function listBlocks(briefId: string): Promise<MarketingBriefBlockRow[]> {
+  const res = await fetch(
+    `/api/marketing-briefs/blocks-list?brief_id=${encodeURIComponent(briefId)}`,
+    { credentials: "include", cache: "no-store" },
+  );
+  const data = await parseJson<ApiOk<MarketingBriefBlockRow[]> | ApiErr>(res);
+  if (!res.ok || !data.success) {
+    throw apiError(!data.success ? data : { success: false, message: `HTTP ${res.status}` }, res.status);
+  }
+  return data.data;
+}
+
+export async function createBlock(input: {
+  brief_id: string;
+  type: MarketingBriefBlockType;
+  payload?: Record<string, unknown>;
+  insert_after_id?: string;
+}): Promise<MarketingBriefBlockRow> {
+  return postJson<MarketingBriefBlockRow>("/api/marketing-briefs/blocks-create", input);
+}
+
+export async function updateBlock(id: string, payload: Record<string, unknown>): Promise<MarketingBriefBlockRow> {
+  return postJson<MarketingBriefBlockRow>("/api/marketing-briefs/blocks-update", { id, payload });
+}
+
+export async function reorderBlocks(briefId: string, order: string[]): Promise<MarketingBriefBlockRow[]> {
+  return postJson<MarketingBriefBlockRow[]>("/api/marketing-briefs/blocks-reorder", {
+    brief_id: briefId,
+    order,
+  });
+}
+
+export async function deleteBlock(id: string): Promise<void> {
+  await postJson<{ ok: boolean }>("/api/marketing-briefs/blocks-delete", { id });
+}
+
+export function blockTypeLabel(type: MarketingBriefBlockType): string {
+  switch (type) {
+    case "section":
+      return "Раздел";
+    case "text":
+      return "Текст";
+    case "segments":
+      return "Сегменты";
+    case "callout":
+      return "Выноска";
+    default:
+      return type;
+  }
+}
+
 export const DEFAULT_MARKETING_BRIEF_ACCENT = "#9ACA3C";
 
 export function formatMarketingBriefPeriodLabel(periodLabel: string): string {
@@ -174,6 +264,14 @@ export function revisionActionLabel(action: string): string {
       return "Архив";
     case "restore":
       return "Восстановление";
+    case "block_create":
+      return "Добавлен блок";
+    case "block_update":
+      return "Изменён блок";
+    case "block_reorder":
+      return "Изменён порядок блоков";
+    case "block_delete":
+      return "Удалён блок";
     default:
       return action;
   }
