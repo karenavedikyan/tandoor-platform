@@ -920,7 +920,8 @@ function TradePointDetailContent({
             className="mt-2 text-xs text-muted-foreground"
             data-testid="text-trade-point-virtual-default-hint"
           >
-            Точки не заведены отдельно — работаем как с одной основной торговой точкой.
+            Точки не заведены отдельно — работаем как с одной основной торговой точкой. Чтобы
+            редактировать — нажмите «Редактировать» в карточке клиента.
           </p>
         ) : null}
         {tpMeta.isManual && !isVirtualDefaultPoint ? (
