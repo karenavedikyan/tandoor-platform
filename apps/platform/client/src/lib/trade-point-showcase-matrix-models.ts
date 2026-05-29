@@ -47,7 +47,7 @@ const PRESENTATION: Record<
 > = {
   "tc-vh-era-grafit-belyy-matovyy-860kh2050-levaya": {
     basePriority: "high",
-    categoryRules: ["top150", "top350", "top500", "top500plus", "potential", "lead"],
+    categoryRules: ["top150", "top350", "top500", "top500plus", "new_client"],
     importanceReason: "Ходовая входная группа: узнаваемая отделка, хорошо смотрится на витрине рядом с конкурентами.",
     characteristics:
       "Входная дверь, типовой проём 860×2050, левая навеска. Внешняя сторона — графит, внутренняя — белый матовый. Усиленный каркас, многоточечный замок.",
@@ -119,7 +119,7 @@ const PRESENTATION: Record<
   },
   "tc-mk-baget-12-mokko-pet-dg-2000-800-94": {
     basePriority: "high",
-    categoryRules: ["top150", "top350", "top500", "top500plus", "potential", "lead"],
+    categoryRules: ["top150", "top350", "top500", "top500plus", "new_client"],
     importanceReason: "Межкомнатная серия с узнаваемым профилем — быстрый старт разговора про МК.",
     characteristics:
       "Межкомнатная дверь 2000×800, ПЭТ, стекло ДГ. Коллекция «Багет-12», оттенок «Мокко». Подходит для типовых проёмов.",

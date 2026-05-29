@@ -28,7 +28,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
-import { getClientCategoryBadgeClass, getClientCategoryLabel } from "@/lib/client-category";
+import {
+  CLIENT_CATEGORY_META,
+  canEditClientBusinessCategory,
+  getClientCategoryLabel,
+  type ClientCategoryId,
+} from "@/lib/client-category";
+import { ClientCategoryBadge } from "@/components/client-category-badge";
+import { resolveEffectiveClientCategory } from "@/lib/effective-client-category";
 import {
   DEALER_BASE_ROWS,
   getDealerById,
@@ -161,7 +168,7 @@ import {
 import { isManualActualizationDealerId } from "@/lib/client-base-actualization-stable-ids";
 import { CLIENT_BASE_ACTUALIZATION_CLEAN_MODE } from "@/lib/client-base-actualization-config";
 import { canActualizeClientBase, canArchiveDealerDuringActualization, canEditDealerDuringActualization } from "@/lib/client-base-actualization-permissions";
-import { mergeActualizationState } from "@/lib/client-base-actualization-state";
+import { mergeActualizationState, type ActualizationState } from "@/lib/client-base-actualization-state";
 import { makeTrashedDealerInfo, snapshotDealerFromRow } from "@/lib/trash-dealer-helper";
 import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actualization-sync-status";
 import { ShowcaseCoverPhotoSlot } from "@/components/showcase-cover-photo-slot";
@@ -922,7 +929,15 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
   const canSoftArchiveDealer = canTrashDealer;
   const softArchiveDealer = trashDealer;
 
-  const businessCategoryLabel = getClientCategoryLabel(row.clientCategory);
+  const effectiveCategory = useMemo(
+    () => resolveEffectiveClientCategory(row, actx.enabled ? actx.state : null),
+    [row, actx.enabled, actx.state],
+  );
+  const canEditClientCategory = useMemo(
+    () => canEditClientBusinessCategory(profile, user?.role ?? null),
+    [profile, user?.role],
+  );
+  const businessCategoryLabel = getClientCategoryLabel(effectiveCategory);
   const rowView = row;
   const activeSection = useActiveSection(row.id);
   const historyEvents = useMemo(
@@ -1261,13 +1276,11 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                     <Badge variant="outline" className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", statusBadgeClass(row.status))}>
                       {row.status}
                     </Badge>
-                    <Badge
-                      variant="outline"
-                      className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", getClientCategoryBadgeClass(row.clientCategory))}
+                    <ClientCategoryBadge
+                      dealer={row}
+                      state={actx.enabled ? actx.state : null}
                       data-testid="text-dealer-card-client-category"
-                    >
-                      {businessCategoryLabel}
-                    </Badge>
+                    />
                     {canViewShowcaseCard && showcaseDailySignals.openCt > 0 ? (
                       <Badge variant="outline" className="rounded-full border-primary/35 bg-primary/10 text-[11px] font-semibold text-foreground">
                         Задачи по витрине
@@ -1373,9 +1386,73 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                         {ropDisplay ? ropDisplay : "Не назначен"}
                       </p>
                     </div>
-                    <div className="min-w-0">
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Категория</p>
-                      <p className="mt-0.5 break-words text-sm font-medium text-foreground">{businessCategoryLabel}</p>
+                    <div className="min-w-0 sm:col-span-2 xl:col-span-1">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Категория клиента</p>
+                      {canEditClientCategory && actx.enabled ? (
+                        <Select
+                          value={effectiveCategory}
+                          onValueChange={(v) => {
+                            void (async () => {
+                              const next = v as ClientCategoryId;
+                              const now = new Date().toISOString();
+                              const act = actx.state;
+                              const prevOv = act.dealerOverridesById[row.id];
+                              const fields = {
+                                ...(prevOv?.fields ?? {}),
+                                clientCategory: next,
+                                clientTypeLabel: getClientCategoryLabel(next),
+                              };
+                              const patch: Partial<ActualizationState> = {
+                                clientCategoryOverridesById: {
+                                  ...act.clientCategoryOverridesById,
+                                  [row.id]: next,
+                                },
+                                dealerOverridesById: {
+                                  ...act.dealerOverridesById,
+                                  [row.id]: {
+                                    dealerId: row.id,
+                                    fields,
+                                    updatedAt: now,
+                                    updatedBy: profile.personaUserId,
+                                    updatedByName: userLabelFromProfile(profile),
+                                    source: "manual_actualization",
+                                  },
+                                },
+                              };
+                              const manual = act.manuallyCreatedDealersById[row.id];
+                              if (manual) {
+                                patch.manuallyCreatedDealersById = {
+                                  ...act.manuallyCreatedDealersById,
+                                  [row.id]: {
+                                    ...manual,
+                                    fields: { ...manual.fields, clientCategory: next, clientTypeLabel: getClientCategoryLabel(next) },
+                                    updatedAt: now,
+                                    updatedBy: profile.personaUserId,
+                                    updatedByName: userLabelFromProfile(profile),
+                                  },
+                                };
+                              }
+                              const r = await actx.persist((prev) => mergeActualizationState(prev, patch));
+                              if (r.success) setDealerDataBump((b) => b + 1);
+                            })();
+                          }}
+                        >
+                          <SelectTrigger className="mt-1 min-h-9 w-full text-sm" data-testid="select-dealer-client-category">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {CLIENT_CATEGORY_META.map((c) => (
+                              <SelectItem key={c.id} value={c.id}>
+                                {c.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <div className="mt-1">
+                          <ClientCategoryBadge dealer={row} state={actx.enabled ? actx.state : null} />
+                        </div>
+                      )}
                     </div>
                     <div className="min-w-0 sm:col-span-2 xl:col-span-1">
                       <div className="flex flex-col gap-1.5 sm:flex-row sm:items-end sm:justify-between">

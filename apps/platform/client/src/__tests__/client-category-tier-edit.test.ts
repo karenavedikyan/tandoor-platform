@@ -6,7 +6,7 @@
  * passportCategoryTier, а merge читал только clientCategory. Тест проверяет:
  *
  *   1) `clientCategoryFromPassportTier` маппит top150/350/500 в одноимённую категорию;
- *   2) `other` / `none` / undefined → `uncategorized`;
+ *   2) `other` / `none` / undefined → `new_client`;
  *   3) `mergeDealerRowWithActualization` с override, где есть только
  *      passportCategoryTier (без clientCategory) — выставляет корректный
  *      `row.clientCategory` (страховочный fallback из data-merge).
@@ -25,22 +25,22 @@ import { DEALER_BASE_ROWS } from "../lib/dealer-base-mock-data";
   assert.equal(clientCategoryFromPassportTier("top500"), "top500");
 }
 
-// 2. other → uncategorized
+// 2. other → new_client
 {
-  assert.equal(clientCategoryFromPassportTier("other"), "uncategorized");
+  assert.equal(clientCategoryFromPassportTier("other"), "new_client");
 }
 
-// 3. none → uncategorized
+// 3. none → new_client
 {
-  assert.equal(clientCategoryFromPassportTier("none"), "uncategorized");
+  assert.equal(clientCategoryFromPassportTier("none"), "new_client");
 }
 
-// 4. undefined / null / "" → uncategorized
+// 4. undefined / null / "" → new_client
 {
-  assert.equal(clientCategoryFromPassportTier(undefined), "uncategorized");
-  assert.equal(clientCategoryFromPassportTier(null), "uncategorized");
-  assert.equal(clientCategoryFromPassportTier(""), "uncategorized");
-  assert.equal(clientCategoryFromPassportTier("   "), "uncategorized");
+  assert.equal(clientCategoryFromPassportTier(undefined), "new_client");
+  assert.equal(clientCategoryFromPassportTier(null), "new_client");
+  assert.equal(clientCategoryFromPassportTier(""), "new_client");
+  assert.equal(clientCategoryFromPassportTier("   "), "new_client");
 }
 
 // 5. Integration: override содержит только passportCategoryTier → row.clientCategory переключается.
@@ -63,7 +63,7 @@ import { DEALER_BASE_ROWS } from "../lib/dealer-base-mock-data";
   assert.equal(merged.clientCategory, "top150", "fallback from passportCategoryTier=top150 → clientCategory=top150");
 }
 
-// 6. Integration: passportCategoryTier=other → clientCategory=uncategorized.
+// 6. Integration: passportCategoryTier=other → clientCategory=new_client.
 {
   const baseRow = DEALER_BASE_ROWS[0];
   assert.ok(baseRow);
@@ -80,7 +80,7 @@ import { DEALER_BASE_ROWS } from "../lib/dealer-base-mock-data";
     },
   };
   const merged = mergeDealerRowWithActualization(row, state);
-  assert.equal(merged.clientCategory, "uncategorized", "passportCategoryTier=other → clientCategory=uncategorized");
+  assert.equal(merged.clientCategory, "new_client", "passportCategoryTier=other → clientCategory=new_client");
 }
 
 // 7. Integration: явный clientCategory в override побеждает над passportCategoryTier.

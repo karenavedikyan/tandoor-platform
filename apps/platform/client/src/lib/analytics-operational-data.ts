@@ -855,8 +855,7 @@ export function getInfographicCitySegments(
     let lead = 0;
     for (const r of list) {
       if (isClientTopTier(r.clientCategory)) topTier += 1;
-      else if (r.clientCategory === "potential") pot += 1;
-      else if (r.clientCategory === "lead") lead += 1;
+      else if (r.clientCategory === "new_client") lead += 1;
     }
     const other = Math.max(0, n - topTier - pot - lead);
     const seg = (s: PartnerSegment) => list.filter((r: OperationalClientShowcaseRow) => r.segments.includes(s)).length;

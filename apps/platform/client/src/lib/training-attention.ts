@@ -53,8 +53,8 @@ function baseProgramsForDealer(dealer: DealerRow): string[] {
 
 function scoreDealerPriorityFactors(dealer: DealerRow, analyticsCount: number): number {
   let s = 0;
-  if (isClientTopTier(dealer.clientCategory) || dealer.clientCategory === "lead") s += 2;
-  if (dealer.clientCategory === "potential" && dealer.distribution >= 50) s += 1;
+  if (isClientTopTier(dealer.clientCategory)) s += 2;
+  if (dealer.clientCategory === "new_client" && dealer.distribution >= 50) s += 1;
   if (dealer.format === "сетевой" && dealer.outlets >= 3) s += 1;
   if (dealer.distributionDetail.total < 62) s += 1;
   if (dealer.hasProblem || dealer.status === "требует внимания") s += 1;
@@ -105,7 +105,7 @@ export function getDealerTrainingAttentionSignal(
     programs.push(TRAINING_PROGRAM_ONBOARDING);
   }
 
-  if (dealer.clientCategory === "uncategorized" && dealer.distribution >= 70 && !dealer.hasProblem && analytics.length === 0) {
+  if (dealer.clientCategory === "new_client" && dealer.distribution >= 70 && !dealer.hasProblem && analytics.length === 0) {
     return {
       level: "none",
       label: "Обучение не требуется по текущему срезу",
@@ -145,7 +145,7 @@ export function getDealerTrainingAttentionSignal(
     };
   }
 
-  if (score >= 1 || dealer.clientCategory === "potential") {
+  if (score >= 1 || dealer.clientCategory === "new_client") {
     return {
       level: "watch",
       label: "Внимание к персоналу",

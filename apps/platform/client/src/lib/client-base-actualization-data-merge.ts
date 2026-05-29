@@ -45,6 +45,7 @@ import {
   normalizeClientCategory,
   type ClientCategoryId,
 } from "@/lib/client-category";
+import { resolveEffectiveClientCategory } from "@/lib/effective-client-category";
 import { getDealerCoverDisplayUrls, getTradePointCoverDisplayUrls } from "@/lib/client-base-actualization-photos";
 import {
   readCommercialBoolNull,
@@ -253,7 +254,12 @@ export function mergeDealerRowWithActualization(row: DealerRow, act: Actualizati
   const cov = getDealerCoverDisplayUrls(act, row.id);
   if (cov) r = { ...r, coverPhotoUrl: cov.url, coverPhotoThumbnailUrl: cov.thumb };
 
-  return r;
+  const displayCategory = resolveEffectiveClientCategory(r, act);
+  return {
+    ...r,
+    clientCategory: displayCategory,
+    clientTypeLabel: getClientCategoryLabel(displayCategory),
+  };
 }
 
 function tradePointFromManualActualization(m: ManualTradePoint, dealer: DealerRow): DealerTradePoint {

@@ -38,10 +38,7 @@ const CAT: Record<ClientCategoryId, number> = {
   top350: 5,
   top500: 7,
   top500plus: 11,
-  potential: 13,
-  lead: 17,
-  no_sales: 19,
-  uncategorized: 23,
+  new_client: 17,
 };
 
 function norm(s: string | undefined): string {

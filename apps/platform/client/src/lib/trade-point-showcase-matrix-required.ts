@@ -19,7 +19,7 @@ export function resolveShowcaseMatrixClientCategory(
   rowClientCategory: ClientCategoryId,
   dealerActualizationFields: Record<string, unknown>,
 ): ClientCategoryId | null {
-  if (rowClientCategory !== "uncategorized") return rowClientCategory;
+  if (rowClientCategory !== "new_client") return rowClientCategory;
   const tierRaw = dealerActualizationFields.passportCategoryTier;
   const tier = typeof tierRaw === "string" ? tierRaw.trim() : "";
   const map: Record<string, ClientCategoryId> = {

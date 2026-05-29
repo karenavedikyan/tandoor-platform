@@ -372,7 +372,7 @@ export function DealerManualActualizationPage(props: {
 
     let passportStatus: SectionStatusKind = "empty";
     if (lifecycle === "needs_review") passportStatus = "attention";
-    else if (passportKind && lifecycle && (tier || row.clientCategory !== "uncategorized")) passportStatus = "complete";
+    else if (passportKind && lifecycle && (tier || row.clientCategory !== "new_client")) passportStatus = "complete";
     else if (passportKind || str(f.inn) || lifecycle || tier) passportStatus = "partial";
 
     const commercialTri = [row.hasDoorWarehouse, row.hasHardwareWarehouse, row.isTandoorClubMember, row.hasSpecialTerms, row.isCashbackClient];

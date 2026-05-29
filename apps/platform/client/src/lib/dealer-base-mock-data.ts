@@ -13,8 +13,7 @@ export type DealerImportanceTier = "vip" | "standard" | "growth" | "baseline";
 
 function deriveImportanceTier(cat: ClientCategoryId): DealerImportanceTier {
   if (isClientTopTier(cat)) return "vip";
-  if (cat === "potential" || cat === "lead") return "growth";
-  if (cat === "no_sales") return "baseline";
+  if (cat === "new_client") return "growth";
   return "standard";
 }
 export type DealerStatus = "активный" | "потенциальный" | "приостановлен" | "требует внимания";
@@ -295,7 +294,7 @@ function buildTradePointsFromReleaseClient(
     activityHistory: [],
     photos: { attached: false },
     productTrainingCompleted: false,
-    productTrainingStatus: isClientTopTier(clientCategory) || clientCategory === "lead" ? "recommended" : "not_required",
+    productTrainingStatus: isClientTopTier(clientCategory) || clientCategory === "new_client" ? "recommended" : "not_required",
   });
 
   const parsed = c.parsedTradePoints;
@@ -414,7 +413,7 @@ function mapReleaseClientToDealerRow(c: ReleaseClient): DealerRow {
       state: "—",
     },
     productTrainingCompleted: false,
-    productTrainingStatus: isClientTopTier(clientCategory) || clientCategory === "lead" ? "recommended" : "not_required",
+    productTrainingStatus: isClientTopTier(clientCategory) || clientCategory === "new_client" ? "recommended" : "not_required",
     indigoTrainingCandidate: isClientTopTier(clientCategory),
     indigoTrainingStatus: isClientTopTier(clientCategory) ? "recommended" : "not_required",
   };

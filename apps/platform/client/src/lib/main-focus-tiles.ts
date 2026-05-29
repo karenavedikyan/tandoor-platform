@@ -20,7 +20,7 @@ const FOCUS_VIEW_CATEGORY_IDS: readonly ClientCategoryId[] = [
   "top350",
   "top500",
   "top500plus",
-  "lead",
+  "new_client",
 ] as const;
 
 export type FocusViewChipMeta = {
@@ -33,7 +33,7 @@ export type MainFocusTileId =
   | "top350"
   | "top500"
   | "top500plus"
-  | "lead"
+  | "new_client"
   | "has_tandoor_club"
   | "has_cashback_agent"
   | "other"
@@ -57,7 +57,7 @@ export const MAIN_FOCUS_TILES: readonly MainFocusTileDef[] = [
   { id: "top350", icon: "⭐", title: "TOP 350", subtitle: "из 350" },
   { id: "top500", icon: "🎯", title: "TOP 500", subtitle: "из 500" },
   { id: "top500plus", icon: "🌐", title: "TOP 500+", subtitle: "массовый сегмент" },
-  { id: "lead", icon: "🆕", title: "Новые", subtitle: "лиды и онбординг" },
+  { id: "new_client", icon: "🆕", title: "Новые клиенты", subtitle: "категория не присвоена" },
   { id: "has_tandoor_club", icon: "🎖", title: "Тандор Клуб", subtitle: "участники клуба" },
   { id: "has_cashback_agent", icon: "💰", title: "Тандор Бонус", subtitle: "на бонусной программе" },
   { id: "other", icon: "📦", title: "Прочие", subtitle: "вне ТОПов" },
@@ -136,7 +136,7 @@ function segmentForTile(id: MainFocusTileId): DealerBaseSegmentId | null {
       return "top500";
     case "top500plus":
       return "top500_plus";
-    case "lead":
+    case "new_client":
       return "new";
     case "other":
       return "other";
@@ -196,7 +196,7 @@ export function buildMainFocusTileHref(tileId: MainFocusTileId, baseParams: Main
       return buildBrowserHashAppHref("/dealer-base", { ...baseParams, category: "top500plus" });
     }
     if (seg === "new") {
-      return buildBrowserHashAppHref("/dealer-base", { ...baseParams, category: "lead" });
+      return buildBrowserHashAppHref("/dealer-base", { ...baseParams, category: "new_client" });
     }
     return buildBrowserHashAppHref("/dealer-base", { ...baseParams, segment: "other" });
   }
@@ -256,7 +256,7 @@ function categoryToSegmentId(cat: ClientCategoryId): DealerBaseSegmentId | null 
       return "top500";
     case "top500plus":
       return "top500_plus";
-    case "lead":
+    case "new_client":
       return "new";
     default:
       return null;

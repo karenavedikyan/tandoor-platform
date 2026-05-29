@@ -34,8 +34,8 @@ export const DEALER_BASE_SEGMENT_DESCRIPTIONS: Record<DealerBaseSegmentId, strin
   top350: "Расширенный приоритет: план контактов и контроль дистрибуции.",
   top500: "Стабильный портфель: регулярный мониторинг и задачи по витрине.",
   top500_plus: "Массовый сегмент: дисциплина выкладки и точечные улучшения.",
-  new: "Новые клиенты и лиды — быстрый онбординг и первичная постановка задач.",
-  other: "Клиенты вне ТОП-сегментов (потенциальные, без категории и т.д.).",
+  new: "Новые клиенты — категория ТОП ещё не присвоена.",
+  other: "Прочие клиенты вне ТОП-сегментов.",
 };
 
 export const DEALER_BASE_SEGMENT_FILTER_LABELS: Record<DealerBaseSegmentFilterId, string> = {
@@ -53,7 +53,7 @@ export function getDealerBaseSegment(row: DealerRow): DealerBaseSegmentId {
       return "top500";
     case "top500plus":
       return "top500_plus";
-    case "lead":
+    case "new_client":
       return "new";
     default:
       return "other";
