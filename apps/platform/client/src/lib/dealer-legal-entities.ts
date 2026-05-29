@@ -13,6 +13,7 @@ import {
   apiDeleteLegalEntity,
   apiPatchFull,
 } from "@/lib/dealer-legal-entities-api";
+import { patchLegalEntity, type LegalEntityPaymentForm, type LegalEntityUpsertFields } from "@/lib/legal-entities-payment-api";
 import {
   refreshDbLegalEntitiesForDealer,
   replaceLegalEntityIdInCache,
@@ -22,6 +23,26 @@ import {
 
 export const DEALER_LEGAL_ENTITIES_STORAGE_KEY = "tandoor-dealer-legal-entities-v1";
 export const DEALER_LEGAL_ENTITIES_EVENT = "tandoor-dealer-legal-entities-changed";
+
+const LEGAL_ENTITY_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export type DealerLegalEntityPaymentFields = {
+  paymentForm?: LegalEntityPaymentForm | null;
+  paymentDelayDays?: number | null;
+  creditLimitRub?: string | null;
+  edoEnabled?: boolean | null;
+  edoOperator?: string | null;
+};
+
+async function persistLegalEntityPaymentFields(entityId: string, payment: LegalEntityUpsertFields | undefined): Promise<void> {
+  if (!payment || !LEGAL_ENTITY_UUID_RE.test(entityId)) return;
+  try {
+    await patchLegalEntity(entityId, payment);
+  } catch {
+    /* payment patch is best-effort if full row already saved */
+  }
+}
 
 export type DealerLegalEntityStatus = "main" | "additional" | "archived";
 
@@ -43,6 +64,11 @@ export type DealerLegalEntity = {
   email?: string;
   status: DealerLegalEntityStatus;
   comment?: string;
+  paymentForm?: LegalEntityPaymentForm | null;
+  paymentDelayDays?: number | null;
+  creditLimitRub?: string | null;
+  edoEnabled?: boolean | null;
+  edoOperator?: string | null;
   createdAt: string;
   updatedAt: string;
   updatedBy: string;
@@ -175,7 +201,8 @@ export function addDealerLegalEntity(
     comment?: string;
     updatedBy: string;
     updatedByName: string;
-  },
+  } & DealerLegalEntityPaymentFields,
+  paymentPatch?: LegalEntityUpsertFields,
 ): string | undefined {
   const name = payload.name.trim();
   if (!name) return undefined;
@@ -198,11 +225,26 @@ export function addDealerLegalEntity(
     email: payload.email,
     status: payload.status,
     comment: payload.comment,
+    paymentForm: payload.paymentForm,
+    paymentDelayDays: payload.paymentDelayDays,
+    creditLimitRub: payload.creditLimitRub,
+    edoEnabled: payload.edoEnabled,
+    edoOperator: payload.edoOperator,
     createdAt: now,
     updatedAt: now,
     updatedBy: payload.updatedBy,
     updatedByName: payload.updatedByName,
   });
+
+  const paymentUpsert =
+    paymentPatch ??
+    buildLegalEntityPaymentUpsert({
+      paymentForm: payload.paymentForm,
+      paymentDelayDays: payload.paymentDelayDays,
+      creditLimitRub: payload.creditLimitRub,
+      edoEnabled: payload.edoEnabled,
+      edoOperator: payload.edoOperator,
+    });
 
   void apiCreateFull({
     clientId: dealerId,
@@ -221,8 +263,11 @@ export function addDealerLegalEntity(
     comment: payload.comment,
     updatedByUserId: payload.updatedBy,
     updatedByName: payload.updatedByName,
-  }).then((r) => {
-    if (r.ok && r.id) replaceLegalEntityIdInCache(dealerId, optimisticId, r.id);
+  }).then(async (r) => {
+    if (r.ok && r.id) {
+      replaceLegalEntityIdInCache(dealerId, optimisticId, r.id);
+      await persistLegalEntityPaymentFields(r.id, paymentUpsert);
+    }
     if (r.ok) void refreshDbLegalEntitiesForDealer(dealerId);
   });
 
@@ -248,19 +293,67 @@ export function updateDealerLegalEntity(
       | "internalCode"
       | "status"
       | "comment"
-    >
+    > &
+      DealerLegalEntityPaymentFields
   >,
   updatedBy: string,
   updatedByName: string,
+  paymentPatch?: LegalEntityUpsertFields,
 ): void {
   if (entityId.startsWith("passport:")) return;
-  fireAndRefresh(dealerId, () =>
-    apiPatchFull(entityId, {
+  const paymentUpsert =
+    paymentPatch ??
+    buildLegalEntityPaymentUpsert({
+      paymentForm: patch.paymentForm,
+      paymentDelayDays: patch.paymentDelayDays,
+      creditLimitRub: patch.creditLimitRub,
+      edoEnabled: patch.edoEnabled,
+      edoOperator: patch.edoOperator,
+    });
+  fireAndRefresh(dealerId, async () => {
+    const ok = await apiPatchFull(entityId, {
       ...patch,
       updatedByUserId: updatedBy,
       updatedByName,
-    }),
-  );
+    });
+    if (ok) await persistLegalEntityPaymentFields(entityId, paymentUpsert);
+    return ok;
+  });
+}
+
+export function buildLegalEntityPaymentUpsert(
+  fields: DealerLegalEntityPaymentFields & {
+    paymentDelayDays?: number | null | string;
+    creditLimitRub?: string | null | number;
+  },
+): LegalEntityUpsertFields | undefined {
+  const hasAny =
+    fields.paymentForm != null ||
+    fields.paymentDelayDays != null ||
+    fields.creditLimitRub != null ||
+    fields.edoEnabled != null ||
+    (fields.edoOperator != null && fields.edoOperator.trim() !== "");
+  if (!hasAny) return undefined;
+
+  let delay: number | null = null;
+  if (fields.paymentDelayDays != null && String(fields.paymentDelayDays).trim() !== "") {
+    const n = Number(fields.paymentDelayDays);
+    delay = Number.isFinite(n) ? Math.max(0, Math.floor(n)) : null;
+  }
+
+  let limit: number | null = null;
+  if (fields.creditLimitRub != null && String(fields.creditLimitRub).trim() !== "") {
+    const n = Number(String(fields.creditLimitRub).replace(/\s/g, "").replace(",", "."));
+    limit = Number.isFinite(n) ? n : null;
+  }
+
+  return {
+    paymentForm: fields.paymentForm ?? null,
+    paymentDelayDays: delay,
+    creditLimitRub: limit,
+    edoEnabled: fields.edoEnabled ?? null,
+    edoOperator: fields.edoEnabled ? fields.edoOperator?.trim() || null : null,
+  };
 }
 
 export function archiveDealerLegalEntity(dealerId: string, entityId: string, updatedBy: string, updatedByName: string): void {

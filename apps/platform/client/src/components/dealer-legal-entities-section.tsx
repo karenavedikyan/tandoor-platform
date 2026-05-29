@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -24,12 +25,24 @@ import {
   addDealerLegalEntity,
   archiveDealerLegalEntity,
   allocateNextLegalEntityCodeLocal,
+  buildLegalEntityPaymentUpsert,
   canEditDealerLegalEntities,
   DEALER_LEGAL_ENTITIES_EVENT,
   getMergedDealerLegalEntities,
   type DealerLegalEntityStatus,
+  type MergedDealerLegalEntity,
   updateDealerLegalEntity,
 } from "@/lib/dealer-legal-entities";
+import {
+  EDO_OPERATOR_SUGGESTIONS,
+  fetchLegalEntitiesForClient,
+  patchLegalEntity,
+  PAYMENT_FORM_OPTIONS,
+  type LegalEntityDto,
+  type LegalEntityPaymentForm,
+  type LegalEntityUpsertFields,
+} from "@/lib/legal-entities-payment-api";
+import { formatMoney } from "@/lib/sales-manager-kpi-data";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { LegalEntityContactsSubsection } from "@/components/legal-entity-contacts-subsection";
 import { buildLegalEntityNameSuggestions, lookupLegalEntityByInn, type LegalEntityInnLookupResult } from "@/lib/legal-entity-directory";
@@ -99,6 +112,11 @@ type DraftSnapshot = {
   phone: string;
   email: string;
   comment: string;
+  paymentForm: LegalEntityPaymentForm | "";
+  paymentDelayDays: string;
+  creditLimitRub: string;
+  edoEnabled: boolean;
+  edoOperator: string;
 };
 
 const EMPTY_SNAPSHOT: DraftSnapshot = {
@@ -113,7 +131,42 @@ const EMPTY_SNAPSHOT: DraftSnapshot = {
   phone: "",
   email: "",
   comment: "",
+  paymentForm: "",
+  paymentDelayDays: "",
+  creditLimitRub: "",
+  edoEnabled: false,
+  edoOperator: "",
 };
+
+function paymentFieldsFromEntity(
+  e: MergedDealerLegalEntity | LegalEntityDto | undefined,
+): Pick<DraftSnapshot, "paymentForm" | "paymentDelayDays" | "creditLimitRub" | "edoEnabled" | "edoOperator"> {
+  return {
+    paymentForm: e?.paymentForm ?? "",
+    paymentDelayDays: e?.paymentDelayDays != null ? String(e.paymentDelayDays) : "",
+    creditLimitRub:
+      e?.creditLimitRub != null && String(e.creditLimitRub).trim() !== "" ? String(e.creditLimitRub) : "",
+    edoEnabled: e?.edoEnabled === true,
+    edoOperator: e?.edoOperator ?? "",
+  };
+}
+
+function paymentFormLabel(form: LegalEntityPaymentForm | "" | null | undefined): string {
+  if (!form) return "Не указано";
+  return PAYMENT_FORM_OPTIONS.find((o) => o.value === form)?.label ?? form;
+}
+
+function formatEntityPaymentSummary(e: MergedDealerLegalEntity | LegalEntityDto): string | null {
+  const parts: string[] = [];
+  if (e.paymentForm) parts.push(paymentFormLabel(e.paymentForm));
+  if (e.paymentDelayDays != null) parts.push(`отсрочка ${e.paymentDelayDays} дн.`);
+  if (e.creditLimitRub != null && String(e.creditLimitRub).trim() !== "") {
+    const n = Number(String(e.creditLimitRub).replace(/\s/g, "").replace(",", "."));
+    parts.push(Number.isFinite(n) ? `лимит ${formatMoney(n)}` : `лимит ${e.creditLimitRub}`);
+  }
+  if (e.edoEnabled) parts.push(e.edoOperator?.trim() ? `ЭДО: ${e.edoOperator.trim()}` : "ЭДО");
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
 
 function normalizeInn(v: string): string {
   return v.replace(/\s+/g, "").trim();
@@ -131,6 +184,11 @@ function snapshotFromDrafts(params: {
   phone: string;
   email: string;
   comment: string;
+  paymentForm: LegalEntityPaymentForm | "";
+  paymentDelayDays: string;
+  creditLimitRub: string;
+  edoEnabled: boolean;
+  edoOperator: string;
 }): DraftSnapshot {
   return {
     name: params.name.trim(),
@@ -144,6 +202,11 @@ function snapshotFromDrafts(params: {
     phone: params.phone.trim(),
     email: params.email.trim(),
     comment: params.comment.trim(),
+    paymentForm: params.paymentForm,
+    paymentDelayDays: params.paymentDelayDays.trim(),
+    creditLimitRub: params.creditLimitRub.trim(),
+    edoEnabled: params.edoEnabled,
+    edoOperator: params.edoOperator.trim(),
   };
 }
 
@@ -159,7 +222,12 @@ function snapshotsEqual(a: DraftSnapshot, b: DraftSnapshot): boolean {
     a.primaryContact === b.primaryContact &&
     a.phone === b.phone &&
     a.email === b.email &&
-    a.comment === b.comment
+    a.comment === b.comment &&
+    a.paymentForm === b.paymentForm &&
+    a.paymentDelayDays === b.paymentDelayDays &&
+    a.creditLimitRub === b.creditLimitRub &&
+    a.edoEnabled === b.edoEnabled &&
+    a.edoOperator === b.edoOperator
   );
 }
 
@@ -184,7 +252,12 @@ type FieldDirtyKey =
   | "primaryContact"
   | "phone"
   | "email"
-  | "comment";
+  | "comment"
+  | "paymentForm"
+  | "paymentDelayDays"
+  | "creditLimitRub"
+  | "edoEnabled"
+  | "edoOperator";
 
 function DirtyFieldWrap({
   dirty,
@@ -269,6 +342,12 @@ export function DealerLegalEntitiesSection({
   const [draftPhone, setDraftPhone] = useState("");
   const [draftEmail, setDraftEmail] = useState("");
   const [draftComment, setDraftComment] = useState("");
+  const [draftPaymentForm, setDraftPaymentForm] = useState<LegalEntityPaymentForm | "">("");
+  const [draftPaymentDelayDays, setDraftPaymentDelayDays] = useState("");
+  const [draftCreditLimitRub, setDraftCreditLimitRub] = useState("");
+  const [draftEdoEnabled, setDraftEdoEnabled] = useState(false);
+  const [draftEdoOperator, setDraftEdoOperator] = useState("");
+  const [paymentByEntityId, setPaymentByEntityId] = useState<Record<string, LegalEntityDto>>({});
   const [innLookupResults, setInnLookupResults] = useState<LegalEntityInnLookupResult[]>([]);
   const [innLookupNote, setInnLookupNote] = useState("");
 
@@ -290,6 +369,23 @@ export function DealerLegalEntitiesSection({
   useEffect(() => {
     if (useAct) setTick((n) => n + 1);
   }, [useAct, actx.state]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchLegalEntitiesForClient(row.id)
+      .then((items) => {
+        if (cancelled) return;
+        const map: Record<string, LegalEntityDto> = {};
+        for (const it of items) map[it.id] = it;
+        setPaymentByEntityId(map);
+      })
+      .catch(() => {
+        if (!cancelled) setPaymentByEntityId({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [row.id, tick]);
 
   const merged = useMemo(() => {
     if (useAct) return mergeLegalEntitiesForActualization(row, actx.state);
@@ -340,6 +436,11 @@ export function DealerLegalEntitiesSection({
         phone: draftPhone,
         email: draftEmail,
         comment: draftComment,
+        paymentForm: draftPaymentForm,
+        paymentDelayDays: draftPaymentDelayDays,
+        creditLimitRub: draftCreditLimitRub,
+        edoEnabled: draftEdoEnabled,
+        edoOperator: draftEdoOperator,
       }),
     [
       draftName,
@@ -353,6 +454,11 @@ export function DealerLegalEntitiesSection({
       draftPhone,
       draftEmail,
       draftComment,
+      draftPaymentForm,
+      draftPaymentDelayDays,
+      draftCreditLimitRub,
+      draftEdoEnabled,
+      draftEdoOperator,
     ],
   );
 
@@ -389,6 +495,11 @@ export function DealerLegalEntitiesSection({
     setDraftPhone("");
     setDraftEmail("");
     setDraftComment("");
+    setDraftPaymentForm("");
+    setDraftPaymentDelayDays("");
+    setDraftCreditLimitRub("");
+    setDraftEdoEnabled(false);
+    setDraftEdoOperator("");
     setInnLookupResults([]);
     setInnLookupNote("");
     setInnDupInline(null);
@@ -436,6 +547,12 @@ export function DealerLegalEntitiesSection({
       setDraftPhone(formatRussianPhoneInput(e.phone ?? ""));
       setDraftEmail(e.email ?? "");
       setDraftComment(e.comment ?? "");
+      const payment = paymentFieldsFromEntity(paymentByEntityId[id] ?? e);
+      setDraftPaymentForm(payment.paymentForm);
+      setDraftPaymentDelayDays(payment.paymentDelayDays);
+      setDraftCreditLimitRub(payment.creditLimitRub);
+      setDraftEdoEnabled(payment.edoEnabled);
+      setDraftEdoOperator(payment.edoOperator);
       setEditingId(id);
       newEntityIdRef.current = null;
       setInnDupInline(null);
@@ -457,11 +574,12 @@ export function DealerLegalEntitiesSection({
             phone: formatRussianPhoneInput(e.phone ?? ""),
             email: e.email ?? "",
             comment: e.comment ?? "",
+            ...paymentFieldsFromEntity(paymentByEntityId[id] ?? e),
           }),
         );
       });
     },
-    [merged, useAct, legalFormSave],
+    [merged, useAct, legalFormSave, paymentByEntityId],
   );
 
   const onSave = useCallback(async (): Promise<boolean> => {
@@ -501,6 +619,20 @@ export function DealerLegalEntitiesSection({
 
     const now = new Date().toISOString();
     const prevEntitySnap = merged.find((x) => x.id === targetId);
+    const creditParsed =
+      draftCreditLimitRub.trim() === ""
+        ? null
+        : Number(draftCreditLimitRub.replace(/\s/g, "").replace(",", "."));
+    const paymentUpsert: LegalEntityUpsertFields = {
+      paymentForm: draftPaymentForm || null,
+      paymentDelayDays:
+        draftPaymentDelayDays.trim() === ""
+          ? null
+          : Math.max(0, Math.floor(Number(draftPaymentDelayDays))),
+      creditLimitRub: creditParsed != null && !Number.isNaN(creditParsed) ? creditParsed : null,
+      edoEnabled: draftEdoEnabled,
+      edoOperator: draftEdoEnabled ? draftEdoOperator.trim() || null : null,
+    };
 
     let savedCode = "";
 
@@ -536,6 +668,14 @@ export function DealerLegalEntitiesSection({
           updatedAt: now,
           updatedBy: actorUserId,
           updatedByName: actorLabel,
+          paymentForm: draftPaymentForm || null,
+          paymentDelayDays:
+            draftPaymentDelayDays.trim() === ""
+              ? null
+              : Math.max(0, Math.floor(Number(draftPaymentDelayDays))),
+          creditLimitRub: draftCreditLimitRub.trim() || null,
+          edoEnabled: draftEdoEnabled,
+          edoOperator: draftEdoEnabled ? draftEdoOperator.trim() || null : null,
         };
         if (!editingId) {
           payload.createdAt = now;
@@ -562,6 +702,21 @@ export function DealerLegalEntitiesSection({
         setLastSavedInternalCode(savedCode);
         setInnDupInline(null);
         setSaveError(null);
+        try {
+          await patchLegalEntity(targetId, paymentUpsert);
+            setPaymentByEntityId((prev) => ({
+              ...prev,
+              [targetId]: {
+                ...(prev[targetId] ?? { id: targetId, clientId: row.id, name: draftName.trim(), createdAt: now, updatedAt: now }),
+                ...paymentUpsert,
+                paymentForm: paymentUpsert.paymentForm ?? null,
+                creditLimitRub:
+                  paymentUpsert.creditLimitRub != null ? String(paymentUpsert.creditLimitRub) : null,
+              } as LegalEntityDto,
+            }));
+        } catch {
+          /* best-effort */
+        }
         return true;
       }
       setSaveError("Не удалось сохранить");
@@ -590,30 +745,51 @@ export function DealerLegalEntitiesSection({
           email: draftEmail,
           status: "additional",
           comment: draftComment,
+          paymentForm: draftPaymentForm || null,
+          paymentDelayDays:
+            draftPaymentDelayDays.trim() === ""
+              ? null
+              : Math.max(0, Math.floor(Number(draftPaymentDelayDays))),
+          creditLimitRub: draftCreditLimitRub.trim() || null,
+          edoEnabled: draftEdoEnabled,
+          edoOperator: draftEdoEnabled ? draftEdoOperator.trim() || null : null,
         },
         actorUserId,
         actorLabel,
+        paymentUpsert,
       );
       const code = (merged.find((x) => x.id === editingId)?.internalCode ?? "").trim();
       savedCode = code;
     } else {
-      const newId = addDealerLegalEntity(row.id, {
-        name: draftName,
-        inn: draftInn,
-        kpp: draftKpp,
-        ogrn: draftOgrn,
-        legalAddress: draftAddress,
-        actualAddress: draftActualAddress,
-        entityType: draftEntityType,
-        primaryContact: draftPrimaryContact,
-        phone: legalEntityPhoneFormatted,
-        email: draftEmail,
-        internalCode: allocateNextLegalEntityCodeLocal(),
-        status: "additional",
-        comment: draftComment,
-        updatedBy: actorUserId,
-        updatedByName: actorLabel,
-      });
+      const newId = addDealerLegalEntity(
+        row.id,
+        {
+          name: draftName,
+          inn: draftInn,
+          kpp: draftKpp,
+          ogrn: draftOgrn,
+          legalAddress: draftAddress,
+          actualAddress: draftActualAddress,
+          entityType: draftEntityType,
+          primaryContact: draftPrimaryContact,
+          phone: legalEntityPhoneFormatted,
+          email: draftEmail,
+          internalCode: allocateNextLegalEntityCodeLocal(),
+          status: "additional",
+          comment: draftComment,
+          paymentForm: draftPaymentForm || null,
+          paymentDelayDays:
+            draftPaymentDelayDays.trim() === ""
+              ? null
+              : Math.max(0, Math.floor(Number(draftPaymentDelayDays))),
+          creditLimitRub: draftCreditLimitRub.trim() || null,
+          edoEnabled: draftEdoEnabled,
+          edoOperator: draftEdoEnabled ? draftEdoOperator.trim() || null : null,
+          updatedBy: actorUserId,
+          updatedByName: actorLabel,
+        },
+        paymentUpsert,
+      );
       if (newId) {
         setEditingId(newId);
         const list = getMergedDealerLegalEntities(row);
@@ -643,6 +819,11 @@ export function DealerLegalEntitiesSection({
     draftPhone,
     draftEmail,
     draftComment,
+    draftPaymentForm,
+    draftPaymentDelayDays,
+    draftCreditLimitRub,
+    draftEdoEnabled,
+    draftEdoOperator,
     editingId,
     row.id,
     actorUserId,
@@ -749,6 +930,11 @@ export function DealerLegalEntitiesSection({
       phone: b.phone !== c.phone,
       email: b.email !== c.email,
       comment: b.comment !== c.comment,
+      paymentForm: b.paymentForm !== c.paymentForm,
+      paymentDelayDays: b.paymentDelayDays !== c.paymentDelayDays,
+      creditLimitRub: b.creditLimitRub !== c.creditLimitRub,
+      edoEnabled: b.edoEnabled !== c.edoEnabled,
+      edoOperator: b.edoOperator !== c.edoOperator,
     };
   }, [baselineSnapshot, currentSnapshot]);
 
@@ -1198,6 +1384,124 @@ export function DealerLegalEntitiesSection({
                 </div>
               </section>
 
+              <section
+                data-testid="section-legal-entity-form-payment"
+                className="space-y-3 rounded-lg border border-border/60 bg-muted/30 p-3 sm:p-4"
+              >
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Платёжные условия</p>
+                <DirtyFieldWrap dirty={dirtyFlags.paymentForm} fieldKey="paymentForm" label="Форма оплаты">
+                  <RadioGroup
+                    value={draftPaymentForm === "" ? "unset" : draftPaymentForm}
+                    onValueChange={(v) => {
+                      setDraftPaymentForm(v === "unset" ? "" : (v as LegalEntityPaymentForm));
+                      markFormEdited();
+                    }}
+                    className="flex flex-wrap gap-3 text-xs"
+                    disabled={!canMutate}
+                  >
+                    {PAYMENT_FORM_OPTIONS.map((opt) => (
+                      <label key={opt.value || "unset"} className="inline-flex items-center gap-1.5">
+                        <RadioGroupItem value={opt.value === "" ? "unset" : opt.value} disabled={!canMutate} />
+                        {opt.label}
+                      </label>
+                    ))}
+                  </RadioGroup>
+                </DirtyFieldWrap>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <DirtyFieldWrap
+                    dirty={dirtyFlags.paymentDelayDays}
+                    fieldKey="paymentDelayDays"
+                    label="Отсрочка (дней)"
+                    htmlFor="le-payment-delay"
+                  >
+                    <Input
+                      id="le-payment-delay"
+                      type="number"
+                      min={0}
+                      inputMode="numeric"
+                      value={draftPaymentDelayDays}
+                      disabled={!canMutate}
+                      onChange={(e) => {
+                        setDraftPaymentDelayDays(e.target.value);
+                        markFormEdited();
+                      }}
+                      className="min-h-10 w-full min-w-0"
+                      data-testid="input-legal-entity-payment-delay"
+                    />
+                  </DirtyFieldWrap>
+                  <DirtyFieldWrap
+                    dirty={dirtyFlags.creditLimitRub}
+                    fieldKey="creditLimitRub"
+                    label="Кредитный лимит (₽)"
+                    htmlFor="le-credit-limit"
+                  >
+                    <Input
+                      id="le-credit-limit"
+                      type="number"
+                      min={0}
+                      inputMode="decimal"
+                      value={draftCreditLimitRub}
+                      disabled={!canMutate}
+                      onChange={(e) => {
+                        setDraftCreditLimitRub(e.target.value);
+                        markFormEdited();
+                      }}
+                      className="min-h-10 w-full min-w-0"
+                      data-testid="input-legal-entity-credit-limit"
+                    />
+                    {draftCreditLimitRub.trim() &&
+                    !Number.isNaN(Number(draftCreditLimitRub.replace(/\s/g, "").replace(",", "."))) ? (
+                      <p className="text-xs text-muted-foreground tabular-nums">
+                        {formatMoney(Number(draftCreditLimitRub.replace(/\s/g, "").replace(",", ".")))}
+                      </p>
+                    ) : null}
+                  </DirtyFieldWrap>
+                </div>
+                <div className="space-y-2">
+                  <DirtyFieldWrap dirty={dirtyFlags.edoEnabled} fieldKey="edoEnabled" label="ЭДО">
+                    <label className="inline-flex items-center gap-2 text-xs">
+                      <Checkbox
+                        checked={draftEdoEnabled}
+                        disabled={!canMutate}
+                        onCheckedChange={(c) => {
+                          setDraftEdoEnabled(c === true);
+                          if (c !== true) setDraftEdoOperator("");
+                          markFormEdited();
+                        }}
+                      />
+                      ЭДО включён
+                    </label>
+                  </DirtyFieldWrap>
+                  {draftEdoEnabled ? (
+                    <DirtyFieldWrap
+                      dirty={dirtyFlags.edoOperator}
+                      fieldKey="edoOperator"
+                      label="Оператор ЭДО"
+                      htmlFor="le-edo-operator"
+                    >
+                      <Input
+                        id="le-edo-operator"
+                        list="le-edo-operator-suggestions"
+                        value={draftEdoOperator}
+                        disabled={!canMutate}
+                        placeholder="Диадок, СБИС, Контур…"
+                        onChange={(e) => {
+                          setDraftEdoOperator(e.target.value);
+                          markFormEdited();
+                        }}
+                        className="min-h-10 w-full min-w-0"
+                        data-testid="input-legal-entity-edo-operator"
+                      />
+                      <datalist id="le-edo-operator-suggestions">
+                        {EDO_OPERATOR_SUGGESTIONS.map((s) => (
+                          <option key={s} value={s} />
+                        ))}
+                      </datalist>
+                    </DirtyFieldWrap>
+                  ) : null}
+                </div>
+              </section>
+
               <section data-testid="section-legal-entity-form-comment" className="space-y-3 rounded-lg border border-border/60 bg-card/30 p-3 sm:p-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Комментарий</p>
                 <DirtyFieldWrap dirty={dirtyFlags.comment} fieldKey="comment" label="Комментарий менеджера" htmlFor="le-comment">
@@ -1297,6 +1601,7 @@ export function DealerLegalEntitiesSection({
       ) : (
         <div className="space-y-2">
           {visible.active.map((e) => {
+            const paymentSummary = formatEntityPaymentSummary(paymentByEntityId[e.id] ?? e);
             const updatedLabel = formatDisplayDate(e.updatedAt);
             const manualBadge =
               e.isPassportSeed && legalEntityHasOverrides(e.id) ? (
@@ -1377,6 +1682,13 @@ export function DealerLegalEntitiesSection({
                         <p className="text-[11px] text-muted-foreground">Обновлено: {updatedLabel}</p>
                       ) : null}
                       {isFilled(e.comment) ? <p className="text-xs text-foreground">{e.comment}</p> : null}
+                      {paymentSummary ? (
+                        <p className="text-xs text-muted-foreground" data-testid={`text-legal-entity-payment-${e.id}`}>
+                          Платёжные условия: {paymentSummary}
+                        </p>
+                      ) : (
+                        <p className="text-xs italic text-muted-foreground">Платёжные условия не указаны</p>
+                      )}
                       <LegalEntityContactsSubsection
                         row={row}
                         legalEntityId={e.id}
