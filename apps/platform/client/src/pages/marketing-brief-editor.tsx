@@ -65,6 +65,7 @@ export default function MarketingBriefEditorPage() {
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const baselineRef = useRef<string>("");
+  const dirtyMetaRef = useRef(false);
 
   const periodOptions = useMemo(() => last12PeriodOptions().filter((o) => o.value !== "all"), []);
 
@@ -85,6 +86,7 @@ export default function MarketingBriefEditorPage() {
         cover_text: data.brief.cover_text,
         accent_color: data.brief.accent_color,
       });
+      dirtyMetaRef.current = false;
     } catch {
       setBrief(null);
     } finally {
@@ -102,10 +104,14 @@ export default function MarketingBriefEditorPage() {
 
   const scheduleSave = useCallback(() => {
     if (!id || !brief || brief.status === "archived") return;
+    dirtyMetaRef.current = true;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       const snapshot = JSON.stringify({ period_label: periodLabel, title, cover_text: coverText, accent_color: accentColor });
-      if (snapshot === baselineRef.current) return;
+      if (snapshot === baselineRef.current) {
+        dirtyMetaRef.current = false;
+        return;
+      }
 
       void (async () => {
         setSaveState("saving");
@@ -116,13 +122,19 @@ export default function MarketingBriefEditorPage() {
             cover_text: coverText,
             accent_color: accentColor,
           });
-          setBrief(updated);
-          baselineRef.current = JSON.stringify({
-            period_label: updated.period_label,
-            title: updated.title,
-            cover_text: updated.cover_text,
-            accent_color: updated.accent_color,
-          });
+          setBrief((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  updated_at: updated.updated_at,
+                  status: updated.status,
+                  published_at: updated.published_at,
+                  archived_at: updated.archived_at,
+                }
+              : updated,
+          );
+          baselineRef.current = snapshot;
+          dirtyMetaRef.current = false;
           setSaveState("saved");
         } catch (e) {
           setSaveState("error");
@@ -133,7 +145,7 @@ export default function MarketingBriefEditorPage() {
           });
         }
       })();
-    }, 600);
+    }, 800);
   }, [id, brief, periodLabel, title, coverText, accentColor]);
 
   useEffect(() => {
