@@ -62,7 +62,63 @@ export function mapMarketingBriefRevisionRow(r: Record<string, unknown>): Market
 
 export const DEFAULT_ACCENT_COLOR = "#9ACA3C";
 
-export type MarketingBriefBlockType = "section" | "text" | "segments" | "callout";
+export type MarketingBriefBlockType =
+  | "section"
+  | "text"
+  | "segments"
+  | "callout"
+  | "products"
+  | "price_table"
+  | "bonus";
+
+export type BriefProductSegment = "top150" | "top350" | "top500" | "top500plus";
+
+export interface ProductsBlockItem {
+  id: string;
+  catalog_id?: string | null;
+  manual: boolean;
+  name?: string;
+  article?: string;
+  image_url?: string;
+  price_showroom?: number | null;
+  price_retail?: number | null;
+  note?: string;
+  segments?: BriefProductSegment[];
+}
+
+export interface ProductsBlockPayload {
+  heading?: string;
+  items: ProductsBlockItem[];
+}
+
+export interface PriceTableRow {
+  id: string;
+  model: string;
+  price_old?: number | null;
+  price_new?: number | null;
+  note?: string;
+}
+
+export interface PriceTableBlockPayload {
+  heading?: string;
+  rows: PriceTableRow[];
+  show_benefit: boolean;
+}
+
+export interface BonusBlockItem {
+  id: string;
+  trigger: string;
+  reward: string;
+  audience?: string;
+  conditions?: string;
+  valid_until?: string;
+  require_photo_report?: boolean;
+}
+
+export interface BonusBlockPayload {
+  heading?: string;
+  items: BonusBlockItem[];
+}
 
 export interface SectionBlockPayload {
   number?: string;
@@ -95,7 +151,10 @@ export type MarketingBriefBlockPayload =
   | SectionBlockPayload
   | TextBlockPayload
   | SegmentsBlockPayload
-  | CalloutBlockPayload;
+  | CalloutBlockPayload
+  | ProductsBlockPayload
+  | PriceTableBlockPayload
+  | BonusBlockPayload;
 
 export type MarketingBriefBlockRow = {
   id: string;
@@ -107,7 +166,15 @@ export type MarketingBriefBlockRow = {
   updated_at: string;
 };
 
-const BLOCK_TYPES: MarketingBriefBlockType[] = ["section", "text", "segments", "callout"];
+const BLOCK_TYPES: MarketingBriefBlockType[] = [
+  "section",
+  "text",
+  "segments",
+  "callout",
+  "products",
+  "price_table",
+  "bonus",
+];
 
 export function isMarketingBriefBlockType(raw: unknown): raw is MarketingBriefBlockType {
   return typeof raw === "string" && (BLOCK_TYPES as string[]).includes(raw);
@@ -138,6 +205,12 @@ export function defaultBlockPayload(type: MarketingBriefBlockType): Record<strin
       return { segments: { top150: "", top350: "", top500: "", top500plus: "" } };
     case "callout":
       return { tone: "info", body: "" };
+    case "products":
+      return { items: [] };
+    case "price_table":
+      return { rows: [], show_benefit: true };
+    case "bonus":
+      return { items: [] };
     default:
       return {};
   }

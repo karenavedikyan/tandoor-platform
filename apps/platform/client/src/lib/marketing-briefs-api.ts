@@ -27,7 +27,63 @@ export type MarketingBriefRevisionRow = {
   created_at: string;
 };
 
-export type MarketingBriefBlockType = "section" | "text" | "segments" | "callout";
+export type MarketingBriefBlockType =
+  | "section"
+  | "text"
+  | "segments"
+  | "callout"
+  | "products"
+  | "price_table"
+  | "bonus";
+
+export type BriefProductSegment = "top150" | "top350" | "top500" | "top500plus";
+
+export type ProductsBlockItem = {
+  id: string;
+  catalog_id?: string | null;
+  manual: boolean;
+  name?: string;
+  article?: string;
+  image_url?: string;
+  price_showroom?: number | null;
+  price_retail?: number | null;
+  note?: string;
+  segments?: BriefProductSegment[];
+};
+
+export type ProductsBlockPayload = {
+  heading?: string;
+  items: ProductsBlockItem[];
+};
+
+export type PriceTableRow = {
+  id: string;
+  model: string;
+  price_old?: number | null;
+  price_new?: number | null;
+  note?: string;
+};
+
+export type PriceTableBlockPayload = {
+  heading?: string;
+  rows: PriceTableRow[];
+  show_benefit: boolean;
+};
+
+export type BonusBlockItem = {
+  id: string;
+  trigger: string;
+  reward: string;
+  audience?: string;
+  conditions?: string;
+  valid_until?: string;
+  require_photo_report?: boolean;
+};
+
+export type BonusBlockPayload = {
+  heading?: string;
+  items: BonusBlockItem[];
+};
 
 export type MarketingBriefBlockRow = {
   id: string;
@@ -205,6 +261,12 @@ export function blockTypeLabel(type: MarketingBriefBlockType): string {
       return "Сегменты";
     case "callout":
       return "Выноска";
+    case "products":
+      return "Товары";
+    case "price_table":
+      return "Прайс";
+    case "bonus":
+      return "Бонус";
     default:
       return type;
   }
