@@ -215,6 +215,10 @@ export async function restoreBrief(id: string): Promise<MarketingBriefRow> {
   return postJson<MarketingBriefRow>("/api/marketing-briefs/restore", { id });
 }
 
+export async function deleteBrief(id: string): Promise<void> {
+  await postJson<{ ok: boolean }>("/api/marketing-briefs/delete", { id });
+}
+
 export async function listBlocks(briefId: string): Promise<MarketingBriefBlockRow[]> {
   const res = await fetch(
     `/api/marketing-briefs/blocks-list?brief_id=${encodeURIComponent(briefId)}`,
