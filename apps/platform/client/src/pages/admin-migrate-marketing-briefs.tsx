@@ -1,10 +1,10 @@
 /**
- * Admin: синхронное применение DDL маркетинговых брифов к Neon и Yandex (Промт 104.1).
+ * Admin: синхронное применение DDL маркетинговых брифов к Neon и Yandex (Промт 104.1 / 104.4).
  */
 
 import { useState } from "react";
 import { Link } from "wouter";
-import { CheckCircle2, Loader2, XCircle } from "lucide-react";
+import { CheckCircle2, Loader2, MinusCircle, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -15,12 +15,16 @@ import { useToast } from "@/hooks/use-toast";
 
 type StmtResult = { sql: string; ok: boolean; error?: string };
 
-type DbPanel =
-  | { error: string }
-  | {
-      applied: StmtResult[];
-      tables: string[];
-    };
+type DbPanelRun = {
+  applied: StmtResult[];
+  tables: string[];
+};
+
+type DbPanelError = { error: string };
+
+type DbPanelSkipped = { skipped: true; reason: string };
+
+type DbPanel = DbPanelRun | DbPanelError | DbPanelSkipped;
 
 type MigrateResponse = {
   success: boolean;
@@ -31,8 +35,12 @@ type MigrateResponse = {
   message?: string;
 };
 
-function panelHasError(panel: DbPanel): panel is { error: string } {
+function panelHasError(panel: DbPanel): panel is DbPanelError {
   return "error" in panel;
+}
+
+function panelIsSkipped(panel: DbPanel): panel is DbPanelSkipped {
+  return "skipped" in panel && panel.skipped === true;
 }
 
 function truncateSqlDisplay(sql: string, max = 50): string {
@@ -63,13 +71,37 @@ function DbResultPanel({
     );
   }
 
+  if (panelIsSkipped(panel)) {
+    return (
+      <Card className="border-border/80 bg-muted/30" data-testid={`migrate-panel-${title}`}>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-base">
+            {title}
+            <Badge variant="secondary" data-testid={`migrate-panel-${title}-status`}>
+              Пропущено
+            </Badge>
+          </CardTitle>
+          <CardDescription className="text-xs leading-snug">{panel.reason}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p className="flex items-start gap-2 text-sm text-muted-foreground">
+            <MinusCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+            <span>Пропущено (уже применено руками или через HTTPS-прокси вне Vercel).</span>
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   if (panelHasError(panel)) {
     return (
       <Card className="border-destructive/40" data-testid={`migrate-panel-${title}`}>
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2 text-base">
             {title}
-            <Badge variant="destructive">ERROR</Badge>
+            <Badge variant="destructive" data-testid={`migrate-panel-${title}-status`}>
+              Ошибка
+            </Badge>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
@@ -80,14 +112,20 @@ function DbResultPanel({
   }
 
   const tablesOk = expectedTables.every((t) => panel.tables.includes(t));
+  const stmtsOk = panel.applied.every((r) => r.ok);
+  const ready = tablesOk && stmtsOk;
 
   return (
     <Card className="border-border/80" data-testid={`migrate-panel-${title}`}>
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-base">
           {title}
-          <Badge variant={tablesOk ? "default" : "secondary"} className={tablesOk ? "bg-[#9ACA3C]/20 text-[#5a7a28]" : ""}>
-            {tablesOk ? "OK" : "PARTIAL"}
+          <Badge
+            variant={ready ? "default" : "destructive"}
+            className={ready ? "bg-[#9ACA3C]/20 text-[#5a7a28]" : ""}
+            data-testid={`migrate-panel-${title}-status`}
+          >
+            {ready ? "Готово" : "Ошибка"}
           </Badge>
         </CardTitle>
       </CardHeader>
@@ -158,7 +196,11 @@ export default function AdminMigrateMarketingBriefsPage() {
           description: json.message ?? "Проверьте отчёт по базам",
         });
       } else {
-        toast({ title: "Миграции применены в обе БД" });
+        const yandexSkipped = json.yandex && panelIsSkipped(json.yandex);
+        toast({
+          title: yandexSkipped ? "Neon: миграция применена" : "Миграции применены",
+          description: yandexSkipped ? "Yandex пропущен (настроен вручную или через прокси)." : undefined,
+        });
       }
     } catch (e) {
       toast({
@@ -189,19 +231,14 @@ export default function AdminMigrateMarketingBriefsPage() {
     "marketing_brief_blocks",
   ];
 
-  const inSync =
-    result?.success === true &&
-    result.neon &&
-    result.yandex &&
-    !panelHasError(result.neon) &&
-    !panelHasError(result.yandex);
+  const inSync = result?.success === true;
 
   return (
     <div className="mx-auto max-w-5xl space-y-5 pb-24 p-4 sm:p-6" data-testid="page-admin-migrate-marketing-briefs">
       <div>
         <h1 className="text-2xl font-semibold text-[#222631]">Миграции маркетинговых брифов</h1>
         <p className="mt-1 text-sm text-[#8F96B0]">
-          Применяются одновременно к Neon (основная) и Yandex (страховка). Безопасно повторять.
+          Neon применяется с Vercel. Yandex — через HTTPS-прокси (если настроен) или пропускается. Безопасно повторять.
         </p>
       </div>
 
@@ -215,7 +252,7 @@ export default function AdminMigrateMarketingBriefsPage() {
           onClick={() => void runMigrate()}
         >
           {loading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" aria-hidden /> : null}
-          {loading ? "Применяю…" : "Применить миграции в обе БД"}
+          {loading ? "Применяю…" : "Применить миграции"}
         </Button>
         <p className="text-center text-xs text-[#8F96B0]">Можно нажимать многократно, всё идемпотентно</p>
       </div>
@@ -230,11 +267,11 @@ export default function AdminMigrateMarketingBriefsPage() {
           )}
           data-testid="migrate-dual-status"
         >
-          {inSync ? "Синхронно ✓" : "Рассинхрон"}
+          {inSync ? "Neon готов ✓" : "Требуется внимание"}
           {!inSync ? (
-            <p className="mt-2 text-xs font-normal">
-              Проверьте панели ниже и переменные DATABASE_URL, YANDEX_DATABASE_URL_UNPOOLED
-            </p>
+            <p className="mt-2 text-xs font-normal">Проверьте панель Neon и переменную DATABASE_URL</p>
+          ) : panelIsSkipped(result.yandex) ? (
+            <p className="mt-2 text-xs font-normal">Yandex пропущен — DDL уже на стороне Yandex</p>
           ) : null}
         </div>
       ) : null}
