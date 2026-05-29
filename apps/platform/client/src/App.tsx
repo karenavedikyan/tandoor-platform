@@ -364,6 +364,13 @@ function AuthenticatedShell({
       showAuditLogLink={showAuditLogLink}
       embeddedBitrix24={embeddedBitrix24}
       impersonationBanner={impersonationBanner}
+      shellUser={{
+        id: user.id,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role,
+      }}
+      isImpersonating={Boolean(user.impersonatedBy)}
     >
       <Switch>
         <Route path="/" component={SalesManagerWorkspaceRoute} />
