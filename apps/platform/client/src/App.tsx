@@ -73,6 +73,7 @@ const LazyMarketingBriefEditor = lazy(() => import("@/pages/marketing-brief-edit
 const LazyMarketingBriefPublished = lazy(() =>
   import("@/pages/marketing-briefs").then((m) => ({ default: m.MarketingBriefPublishedPage })),
 );
+const LazyMarketingBriefPublic = lazy(() => import("@/pages/marketing-brief-public"));
 const LazyReleaseOne = lazy(() => import("@/pages/release-one"));
 const LazyReleaseClients = lazy(() => import("@/pages/release-clients"));
 const LazyBitrix24Poc = lazy(() => import("@/pages/bitrix24-poc"));
@@ -162,6 +163,7 @@ const ChangePasswordRoute = wrapProfileShell(suspensePage(LazyChangePassword));
 const FeatureInDevelopmentRoute = suspensePage(LazyFeatureInDevelopment);
 const ListingsRoute = suspensePage(LazyListings);
 const InviteRoute = suspensePage(LazyInvite);
+const MarketingBriefPublicRoute = suspensePage(LazyMarketingBriefPublic);
 const ResetPasswordRoute = suspensePage(LazyResetPassword);
 const ForgotPasswordRoute = suspensePage(LazyForgotPassword);
 const ResetRequestsRoute = wrapProfileShell(suspensePage(LazyResetRequests));
@@ -494,6 +496,14 @@ function AppRouter() {
     return (
       <Suspense fallback={<PageLoadingFallback />}>
         <LazyLogin />
+      </Suspense>
+    );
+  }
+
+  if (normRoutePath(path).startsWith("/p/brief/")) {
+    return (
+      <Suspense fallback={<PageLoadingFallback />}>
+        <Route path="/p/brief/:id" component={MarketingBriefPublicRoute} />
       </Suspense>
     );
   }

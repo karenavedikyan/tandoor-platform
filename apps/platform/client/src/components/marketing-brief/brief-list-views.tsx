@@ -1,7 +1,6 @@
 import { useEffect, useRef, type ReactNode, type RefObject } from "react";
 import { Link } from "wouter";
 import { MoreHorizontal } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -13,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  briefStatusLabel,
+  briefDisplayTitle,
   DEFAULT_MARKETING_BRIEF_ACCENT,
   formatBriefUpdatedAt,
   formatMarketingBriefPeriodLabel,
@@ -112,21 +111,42 @@ export function BriefCardsSelectAllLink({ selection }: { selection: BriefListSel
   );
 }
 
-function BriefStatusDot({ status }: { status: MarketingBriefRow["status"] }) {
+export function BriefStatusBadge({
+  status,
+  className,
+}: {
+  status: MarketingBriefRow["status"];
+  className?: string;
+}) {
+  const map = {
+    published: {
+      label: "Опубликовано",
+      cls: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30",
+    },
+    draft: { label: "Черновик", cls: "bg-muted text-foreground border border-border" },
+    archived: {
+      label: "В архиве",
+      cls: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30",
+    },
+  } as const;
+  const m = map[status] ?? map.draft;
   return (
     <span
       className={cn(
-        "inline-block h-2.5 w-2.5 shrink-0 rounded-full",
-        status === "published" ? "bg-emerald-500" : "bg-muted-foreground/50",
+        "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide whitespace-nowrap",
+        m.cls,
+        className,
       )}
-      aria-hidden
-    />
+    >
+      {m.label}
+    </span>
   );
 }
 
 export type BriefRowMenuHandlers = {
   onOpen: (brief: MarketingBriefRow) => void;
   onArchive: (id: string) => void;
+  onRestore: (id: string) => void;
   onDelete: (id: string) => void;
 };
 
@@ -169,7 +189,11 @@ export function BriefRowActionsMenu({
           <DropdownMenuItem className="cursor-pointer" onClick={() => handlers.onArchive(brief.id)}>
             Архивировать
           </DropdownMenuItem>
-        ) : null}
+        ) : (
+          <DropdownMenuItem className="cursor-pointer" onClick={() => handlers.onRestore(brief.id)}>
+            Восстановить
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem
           className="cursor-pointer text-destructive focus:text-destructive"
@@ -226,16 +250,33 @@ export function BriefCardsListView({
               </div>
             ) : null}
             <div
-              className="px-4 py-8"
+              className="px-4 py-6"
               style={{ backgroundColor: b.accent_color || DEFAULT_MARKETING_BRIEF_ACCENT }}
             >
-              <p className="text-lg font-semibold text-[#222631]">{formatMarketingBriefPeriodLabel(b.period_label)}</p>
+              {(() => {
+                const { text, isPlaceholder } = briefDisplayTitle(b.title);
+                return (
+                  <>
+                    <p
+                      className={cn(
+                        "text-lg font-semibold leading-snug text-[#222631]",
+                        isPlaceholder && "text-[#222631]/60",
+                      )}
+                    >
+                      {text}
+                    </p>
+                    <p className="mt-1 text-sm font-medium text-[#222631]/80">
+                      {formatMarketingBriefPeriodLabel(b.period_label)}
+                    </p>
+                  </>
+                );
+              })()}
             </div>
             <CardHeader className="flex-1 pb-2">
               <div className="mb-2 flex flex-wrap gap-2">
-                <Badge variant={b.status === "published" ? "default" : "secondary"}>{briefStatusLabel(b.status)}</Badge>
+                <BriefStatusBadge status={b.status} />
               </div>
-              <CardTitle className="text-base leading-snug">{b.title}</CardTitle>
+              <CardTitle className="sr-only">{briefDisplayTitle(b.title).text}</CardTitle>
               <p className="mt-2 text-xs text-muted-foreground">
                 {b.author_name ?? "—"} · обновлено {formatBriefUpdatedAt(b.updated_at)}
               </p>
@@ -286,7 +327,12 @@ export function BriefTableListView({
                   />
                 </td>
               ) : null}
-              <td className="max-w-[200px] truncate px-3 py-2 font-medium sm:max-w-xs">{b.title}</td>
+              <td className="max-w-[200px] truncate px-3 py-2 font-medium sm:max-w-xs">
+                {(() => {
+                  const { text, isPlaceholder } = briefDisplayTitle(b.title);
+                  return <span className={cn(isPlaceholder && "text-muted-foreground")}>{text}</span>;
+                })()}
+              </td>
               <td className="hidden truncate px-3 py-2 text-muted-foreground md:table-cell">
                 {formatMarketingBriefPeriodLabel(b.period_label)}
               </td>
@@ -295,9 +341,7 @@ export function BriefTableListView({
               </td>
               <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">{formatBriefUpdatedAt(b.updated_at)}</td>
               <td className="px-3 py-2">
-                <Badge variant={b.status === "published" ? "default" : "secondary"} className="text-[10px]">
-                  {briefStatusLabel(b.status)}
-                </Badge>
+                <BriefStatusBadge status={b.status} />
               </td>
               <td className="px-2 py-2">
                 <BriefRowActionsMenu brief={b} canManage={canManage} handlers={menuHandlers} />
@@ -341,9 +385,16 @@ export function BriefCompactListView({
                 className="shrink-0"
               />
             ) : null}
-            <BriefStatusDot status={b.status} />
+            <BriefStatusBadge status={b.status} />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium leading-tight">{b.title}</p>
+              <p
+                className={cn(
+                  "truncate text-sm font-medium leading-tight",
+                  briefDisplayTitle(b.title).isPlaceholder && "text-muted-foreground",
+                )}
+              >
+                {briefDisplayTitle(b.title).text}
+              </p>
               <p className="truncate text-[10px] leading-tight text-muted-foreground">
                 Обновлён {formatBriefUpdatedAt(b.updated_at)}
               </p>
@@ -359,13 +410,15 @@ export function BriefCompactListView({
 export function BriefBulkActionBar({
   count,
   busy,
-  onArchive,
+  primaryLabel,
+  onPrimary,
   onDelete,
   onClear,
 }: {
   count: number;
   busy: boolean;
-  onArchive: () => void;
+  primaryLabel: string;
+  onPrimary: () => void;
   onDelete: () => void;
   onClear: () => void;
 }) {
@@ -382,8 +435,15 @@ export function BriefBulkActionBar({
         Выбрано: {count}
       </span>
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" size="sm" variant="secondary" disabled={busy} onClick={onArchive} data-testid="button-brief-bulk-archive">
-          Архивировать
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          disabled={busy}
+          onClick={onPrimary}
+          data-testid="button-brief-bulk-primary"
+        >
+          {primaryLabel}
         </Button>
         <Button
           type="button"

@@ -9,6 +9,7 @@
  *   POST /api/marketing-briefs/archive
  *   POST /api/marketing-briefs/restore
  *   POST /api/marketing-briefs/delete
+ *   GET  /api/marketing-briefs/public-get?id=  (без авторизации)
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -30,6 +31,7 @@ import {
   handleMarketingBriefsDelete,
   handleMarketingBriefsGet,
   handleMarketingBriefsList,
+  handleMarketingBriefsPublicGet,
   handleMarketingBriefsPublish,
   handleMarketingBriefsRestore,
   handleMarketingBriefsUnpublish,
@@ -40,6 +42,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   try {
     const actionRaw = req.query.action;
     const action = Array.isArray(actionRaw) ? String(actionRaw[0] ?? "") : String(actionRaw ?? "");
+
+    if (action === "public-get" && req.method === "GET") {
+      const pool = getPool();
+      if (!pool) {
+        sendJson(res, 503, {
+          success: false,
+          code: "DB_UNAVAILABLE",
+          message: "База данных недоступна.",
+        });
+        return;
+      }
+      await handleMarketingBriefsPublicGet(req, res, pool);
+      return;
+    }
 
     if (req.method !== "GET" && !enforceCsrfOrigin(req)) {
       sendJson(res, 403, { success: false, code: "CSRF_REJECTED", message: "Недопустимый источник запроса." });

@@ -426,6 +426,27 @@ export async function handleMarketingBriefsDelete(
   sendJson(res, 200, { success: true, data: { ok: true } });
 }
 
+export async function handleMarketingBriefsPublicGet(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+): Promise<void> {
+  const id = parseUuid(typeof req.query.id === "string" ? req.query.id : "");
+  if (!id) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите id." });
+    return;
+  }
+
+  const brief = await fetchBriefById(pool, id);
+  if (!brief || brief.status !== "published") {
+    sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Бриф не найден или не опубликован." });
+    return;
+  }
+
+  const blocks = await fetchBlocksForBrief(pool, id);
+  sendJson(res, 200, { success: true, data: { brief, blocks } });
+}
+
 async function touchBriefUpdatedAt(pool: PoolLike, briefId: string): Promise<void> {
   await pool.query(`UPDATE marketing_briefs SET updated_at = NOW() WHERE id = $1::uuid`, [briefId]);
 }

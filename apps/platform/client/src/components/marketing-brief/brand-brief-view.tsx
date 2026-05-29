@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Gift, Moon, Sun } from "lucide-react";
+import { Gift, Moon, Printer, Share2, Sun } from "lucide-react";
 import { TandoorLogo } from "@/components/tandoor-logo";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { getProductById } from "@/lib/catalog-data";
 import {
+  buildPublicBriefShareUrl,
   formatMarketingBriefPeriodLabel,
   type CalloutBlockPayload,
   type MarketingBriefBlockRow,
@@ -31,6 +32,8 @@ import {
   type BrandBriefThemeMode,
 } from "@/components/marketing-brief/brand-brief-theme";
 import { cn } from "@/lib/utils";
+import { toast } from "@/hooks/use-toast";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 function asSection(payload: Record<string, unknown>): SectionBlockPayload {
   return {
@@ -484,10 +487,16 @@ export function BrandBriefView({
   brief,
   blocks,
   previewMode = false,
+  showShare = false,
+  showPrint = false,
 }: {
   brief: MarketingBriefRow;
   blocks: MarketingBriefBlockRow[];
   previewMode?: boolean;
+  /** Кнопка «Поделиться» — только для опубликованного брифа */
+  showShare?: boolean;
+  /** Кнопка «Печать / PDF» */
+  showPrint?: boolean;
 }) {
   const [themeMode, setThemeMode] = useState<BrandBriefThemeMode>(() => readBriefViewTheme());
 
@@ -512,17 +521,37 @@ export function BrandBriefView({
   const setLight = useCallback(() => setThemeMode("light"), []);
   const setDark = useCallback(() => setThemeMode("dark"), []);
 
+  const handlePrint = useCallback(() => {
+    setThemeMode("light");
+    window.requestAnimationFrame(() => {
+      window.print();
+    });
+  }, []);
+
+  const handleShare = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(buildPublicBriefShareUrl(brief.id));
+      toast({ title: "Ссылка скопирована" });
+    } catch {
+      toast({ title: "Не удалось скопировать ссылку", variant: "destructive" });
+    }
+  }, [brief.id]);
+
+  const canShare = showShare && brief.status === "published";
+
   return (
     <div
       className="min-h-screen font-sans"
       style={{ backgroundColor: theme.bg, color: theme.text, fontFamily: '"Exo 2", var(--font-sans), sans-serif' }}
       data-testid="brand-brief-view"
       data-theme={themeMode}
+      data-print-root
     >
       <div
         className="sticky top-0 z-40 border-b px-4 py-3 backdrop-blur-md sm:px-6"
         style={{ borderColor: theme.border, backgroundColor: `${theme.bg}ee` }}
         data-testid="brand-brief-topbar"
+        data-no-print="true"
       >
         <div className="mx-auto flex max-w-4xl items-center justify-between gap-3">
           <TandoorLogo
@@ -531,29 +560,70 @@ export function BrandBriefView({
             variant={themeMode === "dark" ? "onDark" : "onLight"}
             data-testid="brand-brief-logo"
           />
-          <div className="flex items-center gap-1 rounded-lg border p-0.5" style={{ borderColor: theme.border }}>
-            <Button
-              type="button"
-              size="sm"
-              variant={themeMode === "light" ? "secondary" : "ghost"}
-              className="h-8 gap-1 px-2 text-xs"
-              onClick={setLight}
-              data-testid="brand-brief-theme-light"
+          <div className="flex flex-wrap items-center justify-end gap-1.5">
+            {canShare ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-8 gap-1 px-2 text-xs"
+                    onClick={() => void handleShare()}
+                    data-testid="button-brief-share"
+                    data-no-print="true"
+                  >
+                    <Share2 className="h-3.5 w-3.5" aria-hidden />
+                    <span className="hidden sm:inline">Поделиться</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-[220px] text-xs">
+                  Ссылка работает без входа — её можно отправить менеджерам
+                </TooltipContent>
+              </Tooltip>
+            ) : null}
+            {showPrint ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 gap-1 px-2 text-xs"
+                onClick={handlePrint}
+                data-testid="button-brief-print"
+                data-no-print="true"
+              >
+                <Printer className="h-3.5 w-3.5" aria-hidden />
+                <span className="hidden sm:inline">Печать / PDF</span>
+              </Button>
+            ) : null}
+            <div
+              className="flex items-center gap-1 rounded-lg border p-0.5"
+              style={{ borderColor: theme.border }}
+              data-no-print="true"
             >
-              <Sun className="h-3.5 w-3.5" aria-hidden />
-              Светлая
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant={themeMode === "dark" ? "secondary" : "ghost"}
-              className="h-8 gap-1 px-2 text-xs"
-              onClick={setDark}
-              data-testid="brand-brief-theme-dark"
-            >
-              <Moon className="h-3.5 w-3.5" aria-hidden />
-              Тёмная
-            </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={themeMode === "light" ? "secondary" : "ghost"}
+                className="h-8 gap-1 px-2 text-xs"
+                onClick={setLight}
+                data-testid="brand-brief-theme-light"
+              >
+                <Sun className="h-3.5 w-3.5" aria-hidden />
+                Светлая
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={themeMode === "dark" ? "secondary" : "ghost"}
+                className="h-8 gap-1 px-2 text-xs"
+                onClick={setDark}
+                data-testid="brand-brief-theme-dark"
+              >
+                <Moon className="h-3.5 w-3.5" aria-hidden />
+                Тёмная
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -563,6 +633,7 @@ export function BrandBriefView({
           className="border-b px-4 py-2 text-center text-xs font-medium"
           style={{ borderColor: theme.border, backgroundColor: theme.plaque, color: theme.text }}
           data-testid="brand-brief-preview-banner"
+          data-no-print="true"
         >
           Режим предпросмотра — бриф ещё не опубликован для команды
         </div>
