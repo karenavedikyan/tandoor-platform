@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode, type RefObject } from "rea
 import { Link, useLocation } from "wouter";
 import { Download, Globe, Loader2, MoreHorizontal, Share2 } from "lucide-react";
 import { BrandBriefView } from "@/components/marketing-brief/brand-brief-view";
+import { readBriefViewTheme } from "@/components/marketing-brief/brand-brief-theme";
 import { BriefVisibilityIcon } from "@/components/marketing-brief/brief-visibility-ui";
 import { Button } from "@/components/ui/button";
 import { Card, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -306,7 +307,14 @@ function BriefRowActionsMenu({
             Поделиться ссылкой
           </DropdownMenuItem>
         ) : null}
-        <DropdownMenuItem className="cursor-pointer" onClick={() => downloadBriefPdf(brief.id)}>
+        <DropdownMenuItem
+          className="cursor-pointer"
+          onClick={() =>
+            void downloadBriefPdf(brief.id, readBriefViewTheme()).catch(() => {
+              toast({ variant: "destructive", description: "Не удалось скачать PDF" });
+            })
+          }
+        >
           <Download className="mr-2 h-4 w-4" aria-hidden />
           Скачать PDF
         </DropdownMenuItem>
@@ -483,7 +491,11 @@ function BriefPreviewDialog({
           {displayBrief ? (
             <Button
               type="button"
-              onClick={() => downloadBriefPdf(displayBrief.id)}
+              onClick={() =>
+                void downloadBriefPdf(displayBrief.id, readBriefViewTheme()).catch(() => {
+                  toast({ variant: "destructive", description: "Не удалось скачать PDF" });
+                })
+              }
               data-testid="button-brief-preview-pdf"
             >
               <Download className="mr-2 h-4 w-4" aria-hidden />
