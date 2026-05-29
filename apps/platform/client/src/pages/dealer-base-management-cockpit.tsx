@@ -49,6 +49,7 @@ import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { getEffectiveTeamLeadTeamId } from "@/lib/release-demo-profile";
 import { mapSalesRoleToDealerBaseAccess } from "@/lib/dealer-base-role-views";
 import { getDealerManagerDisplay, type DealerRow } from "@/lib/dealer-base-mock-data";
+import { catalogTeamIdForRopUserId } from "@/lib/dealer-base-real-scope";
 import { getRopOptions } from "@/lib/rop-manager-filters";
 import { realRopOptions } from "@/lib/real-org-adapter";
 import type { OrgSnapshot } from "@/lib/use-org-snapshot";
@@ -67,6 +68,7 @@ import {
   buildDbAwareManagerMatcher,
   buildRopGroups,
   resolveManagementCatalogTeamId,
+  resolveManagementOrgTeamUuid,
   buildStructureInfographic,
   dealerMatchesClientListFilter,
   flattenTradePointsForRows,
@@ -373,6 +375,46 @@ export function DealerBaseManagementCockpit({
     return out;
   }, [tradePointsOverviewQ.data, userIdToCatalogMgrId]);
 
+  const overviewByTeamId = useMemo<Map<string, number>>(() => {
+    const out = new Map<string, number>();
+    const data = tradePointsOverviewQ.data;
+    const snap = orgTeamCtx?.snap ?? null;
+    if (!data) return out;
+    for (const g of data.ropGroups) {
+      const keys = new Set<string>();
+      if (g.teamId) keys.add(String(g.teamId));
+      if (g.ropUserId) keys.add(String(g.ropUserId));
+      keys.add(String(g.teamId ?? g.ropUserId ?? "__no_rop__"));
+      if (g.teamId && snap) {
+        keys.add(resolveManagementCatalogTeamId(g.teamId, snap));
+        keys.add(resolveManagementOrgTeamUuid(g.teamId, snap));
+      }
+      if (g.ropUserId && snap) {
+        const fromRop = catalogTeamIdForRopUserId(snap, g.ropUserId);
+        if (fromRop) keys.add(fromRop);
+      }
+      for (const k of Array.from(keys)) out.set(k, g.tradePoints);
+    }
+    return out;
+  }, [tradePointsOverviewQ.data, orgTeamCtx?.snap]);
+
+  const resolveTeamTp = useCallback(
+    (g: { teamId?: string | null; ropUserId?: string | null; outlets: number }) => {
+      const key = String(g.teamId ?? g.ropUserId ?? "__no_rop__");
+      return overviewByTeamId.get(key) ?? g.outlets;
+    },
+    [overviewByTeamId],
+  );
+
+  const resolveManagerTp = useCallback(
+    (m: { managerId?: string; userId?: string; outlets: number }) => {
+      const key = String(m.managerId ?? m.userId ?? "");
+      if (!key) return m.outlets;
+      return overviewByManagerId.get(key) ?? m.outlets;
+    },
+    [overviewByManagerId],
+  );
+
   const maxBar = useMemo(
     () => Math.max(structure.active, tpKpiCount, structure.potential, structure.attention, 1),
     [structure, tpKpiCount],
@@ -582,7 +624,7 @@ export function DealerBaseManagementCockpit({
                     <div className="flex min-w-0 flex-1 flex-col items-start gap-0.5 text-left">
                       <span className="truncate text-sm font-semibold text-foreground">{g.ropName}</span>
                       <span className="text-[11px] text-muted-foreground">
-                        менеджеров {g.managers.length} · клиенты {g.active} · ТТ {g.outlets}
+                        менеджеров {g.managers.length} · клиенты {g.active} · ТТ {resolveTeamTp(g)}
                       </span>
                     </div>
                   </AccordionTrigger>
@@ -609,7 +651,7 @@ export function DealerBaseManagementCockpit({
                       const heatEntries = g.managers.map((m) => ({
                         id: m.managerId,
                         clientsActive: m.active,
-                        tradePointsActive: overviewByManagerId.get(m.managerId) ?? m.outlets,
+                        tradePointsActive: resolveManagerTp(m),
                       }));
                       const heatMap = computeManagerHeatMap(heatEntries);
                       const sortedManagers = sortManagersByHeat(
@@ -627,7 +669,7 @@ export function DealerBaseManagementCockpit({
                               key={m.managerId}
                               manager={{
                                 ...m,
-                                outlets: overviewByManagerId.get(m.managerId) ?? m.outlets,
+                                outlets: resolveManagerTp(m),
                               }}
                               ropName={g.ropName}
                               heatLevel={heatMap[m.managerId] ?? "medium"}
@@ -661,7 +703,7 @@ export function DealerBaseManagementCockpit({
               </SheetTitle>
               <SheetDescription>
                 {detail?.kind === "manager_overview" && selectedManager
-                  ? `Команда: ${selectedManagerRopName} · клиентов ${selectedManagerClients.length} · ТТ ${selectedManager.outlets}`
+                  ? `Команда: ${selectedManagerRopName} · клиентов ${selectedManagerClients.length} · ТТ ${resolveManagerTp(selectedManager)}`
                   : detail?.kind === "manager_overview"
                     ? "Клиенты по данным базы (назначения и seed)"
                     : "Реальные данные из актуализации"}
@@ -716,7 +758,7 @@ export function DealerBaseManagementCockpit({
                     >
                       <p className="truncate text-sm font-semibold text-foreground">{m.name}</p>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        активные {m.active} · ТТ {m.outlets} · потенц. {m.potential} · вним. {m.attention}
+                        активные {m.active} · ТТ {resolveManagerTp(m)} · потенц. {m.potential} · вним. {m.attention}
                       </p>
                     </button>
                   ))}
@@ -1083,7 +1125,7 @@ export function DealerBaseManagementCockpit({
                     {g.ropName}
                   </span>
                   <span className="text-[11px] text-[#8F96B0]">
-                    клиенты {g.active} · ТТ {g.outlets} · потенц. {g.potential} · вним. {g.attention} · менеджеров{" "}
+                    клиенты {g.active} · ТТ {resolveTeamTp(g)} · потенц. {g.potential} · вним. {g.attention} · менеджеров{" "}
                     {g.managerCatalogCount}
                   </span>
                 </div>
@@ -1116,7 +1158,7 @@ export function DealerBaseManagementCockpit({
                           активные <span className="text-[#222631]">{m.active}</span>
                           {archiveCountDotSuffix(managerArchiveById.get(m.managerId)?.archivedClients ?? 0)}
                           {" · "}
-                          ТТ <span className="text-[#222631]">{m.outlets}</span>
+                          ТТ <span className="text-[#222631]">{resolveManagerTp(m)}</span>
                           {archiveCountDotSuffix(managerArchiveById.get(m.managerId)?.archivedTradePoints ?? 0)}
                           {" · "}
                           сегм. {m.topSegmentLabel}

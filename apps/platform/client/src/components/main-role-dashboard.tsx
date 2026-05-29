@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Home } from "lucide-react";
 import { ActualizationRace } from "@/components/home/actualization-race";
@@ -32,6 +33,7 @@ import {
 } from "@/lib/dealer-base-role-views";
 import { buildBrowserHashAppHref } from "@/lib/hash-route-utils";
 import { computeMainDashboardScopeMetrics, type MainDashboardScopeMetrics } from "@/lib/main-dashboard-scope-metrics";
+import { fetchTradePointsOverview } from "@/lib/trade-points-overview-api";
 import {
   buildDbAwareManagerMatcher,
   catalogManagerIdFromUserRef,
@@ -264,7 +266,16 @@ export function MainRoleDashboard() {
 
   const useMgmtFactualTasks = actx.enabled && shouldUseTeamMergedActualizationPlane(profile);
   const showScopeKpi = actx.enabled && !dashboardLoading;
+
+  const tradePointsOverviewQ = useQuery({
+    queryKey: ["trade-points-overview"],
+    queryFn: fetchTradePointsOverview,
+    staleTime: 30_000,
+    enabled: actx.enabled,
+  });
+  const overviewTradePointsForScope = tradePointsOverviewQ.data?.structure.activeTradePoints ?? null;
   const activeTradePoints = scopeMetrics?.activeTradePoints ?? 0;
+  const activeTradePointsForKpi = overviewTradePointsForScope ?? activeTradePoints;
 
   const { totalClients, activeClients, attentionClients, openTasks, extraKpiLabel, extraKpiValue } = useMemo(() => {
     const total = scopeMetrics?.activeClients ?? scopedClients.length;
@@ -432,7 +443,7 @@ export function MainRoleDashboard() {
 
   const tradePointsSubline =
     showScopeKpi && (role === "sales_manager" || role === "team_lead" || role === "sales_director")
-      ? `ТТ: ${activeTradePoints}`
+      ? `ТТ: ${activeTradePointsForKpi}`
       : null;
 
   const showScopeBreakdownKpi =
