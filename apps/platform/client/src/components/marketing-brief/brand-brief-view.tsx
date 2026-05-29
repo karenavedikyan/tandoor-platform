@@ -42,31 +42,34 @@ function BrandLogo({
 }) {
   const letterColor = themeMode === "dark" ? "#F9FAFB" : "#222631";
   return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 149 42"
-      className={className}
-      role="img"
-      aria-label="TANDOOR"
+    <span
+      className={cn("inline-flex items-center gap-2", className)}
       data-testid={testId}
+      aria-label="TANDOOR"
+      role="img"
     >
-      <path
-        d="M 8 6 L 36 6 L 22 34 Z M 14 14 L 28 14 L 21 26 Z"
-        fill="#9ACA3C"
-        fillRule="evenodd"
-      />
-      <text
-        x="44"
-        y="29"
-        fontFamily='"Exo 2", "Segoe UI", sans-serif'
-        fontSize="22"
-        fontWeight="700"
-        letterSpacing="0.5"
-        fill={letterColor}
+      <svg
+        viewBox="0 0 27 26"
+        xmlns="http://www.w3.org/2000/svg"
+        className="h-full w-auto shrink-0"
+        aria-hidden
+      >
+        <path
+          d="M26.9826 26V0H26.4252L5.74839 19.8913L4.21548 21.3671L0 25.4276V26H27H26.9826ZM13.0471 20.4548L21.5826 12.2621V20.4548H13.0035H13.0471Z"
+          fill="#9ACA3C"
+        />
+      </svg>
+      <span
+        className="font-bold leading-none tracking-[0.04em]"
+        style={{
+          color: letterColor,
+          fontFamily: '"Exo 2", "Segoe UI", sans-serif',
+          fontSize: "0.95em",
+        }}
       >
         TANDOOR
-      </text>
-    </svg>
+      </span>
+    </span>
   );
 }
 
