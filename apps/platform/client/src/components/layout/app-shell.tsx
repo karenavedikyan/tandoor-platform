@@ -15,6 +15,7 @@ import {
   Map,
   MapPinned,
   Megaphone,
+  FileText,
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
@@ -59,6 +60,7 @@ const TRAINING_HREF = "/training";
 const SALES_CONTROL_HREF = "/sales-control";
 const ANALYTICS_WORKSPACE_HREF = "/analytics-workspace";
 const MARKETING_BRIEFS_HREF = "/marketing-briefs";
+const LISTINGS_HREF = "/listings";
 const SALES_MANAGER_HREF = "/sales-manager";
 const COMMUNICATIONS_HREF = "/communications";
 const CLIENT_BASE_ACTIVITY_HREF = "/client-base-activity";
@@ -91,6 +93,7 @@ const ICON_BY_TESTID: Partial<Record<string, LucideIcon>> = {
   "nav-item-training": BookOpen,
   "nav-item-communications": MessageCircle,
   "nav-item-marketing-briefs": Megaphone,
+  "nav-item-listings": FileText,
   "nav-client-base-activity": BarChart3,
   "nav-main": Home,
   "nav-client-map": Map,
@@ -104,6 +107,7 @@ const ICON_BY_TESTID: Partial<Record<string, LucideIcon>> = {
   "nav-sales-control": ClipboardList,
   "nav-analytics-workspace": PieChart,
   "nav-marketing-briefs": Megaphone,
+  "nav-listings": FileText,
 };
 
 function pathMatchesNavHref(location: string, href: string): boolean {
@@ -179,6 +183,11 @@ function isMarketingBriefsPath(path: string) {
   return path === MARKETING_BRIEFS_HREF || path.startsWith(`${MARKETING_BRIEFS_HREF}/`);
 }
 
+function isListingsPath(path: string) {
+  const p = path.split("?")[0] ?? path;
+  return p === LISTINGS_HREF || p.startsWith(`${LISTINGS_HREF}/`);
+}
+
 function isFeatureInDevelopmentPath(path: string) {
   const p = path.split("?")[0] ?? path;
   return p === FEATURE_IN_DEVELOPMENT_HREF;
@@ -210,6 +219,7 @@ function isNavItemActive(item: PilotNavItem, location: string, isActiveFromLink?
   if (bid === "nav-analytics-workspace") return isAnalyticsWorkspacePath(location);
   if (bid === "nav-client-map") return isClientMapPath(location);
   if (bid === "nav-marketing-briefs") return isMarketingBriefsPath(location);
+  if (bid === "nav-listings") return isListingsPath(location);
   if (bid === "nav-client-base-activity") return isClientBaseActivityPath(location);
   return pathMatchesNavHref(location, item.href);
 }
@@ -263,6 +273,7 @@ function headerContextLabel(location: string) {
   if (isSalesControlPath(location)) return "План-факт продаж";
   if (isAnalyticsWorkspacePath(location)) return "Аналитика команды";
   if (isMarketingBriefsPath(location)) return "Маркетинговые брифы";
+  if (isListingsPath(location)) return "Листовки";
   return "";
 }
 

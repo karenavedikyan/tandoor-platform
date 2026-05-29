@@ -95,6 +95,7 @@ const LazyAdminMigration = lazy(() => import("@/pages/admin/migration"));
 const LazyAdminTpCountDiag = lazy(() => import("@/pages/admin-tp-count-diag"));
 const LazyAdminCountsDiag = lazy(() => import("@/pages/admin-counts-diag"));
 const LazyFeatureInDevelopment = lazy(() => import("@/pages/feature-in-development"));
+const LazyListings = lazy(() => import("@/pages/listings"));
 
 function suspensePage(Lazy: LazyExoticComponent<ComponentType<any>>): ComponentType<any> {
   const Wrapped: ComponentType<any> = (props) => (
@@ -156,6 +157,7 @@ const wrapProfileShell = (Comp: ComponentType<unknown>): ComponentType<unknown> 
 const MyProfileRoute = wrapProfileShell(suspensePage(LazyMyProfile));
 const ChangePasswordRoute = wrapProfileShell(suspensePage(LazyChangePassword));
 const FeatureInDevelopmentRoute = suspensePage(LazyFeatureInDevelopment);
+const ListingsRoute = suspensePage(LazyListings);
 const InviteRoute = suspensePage(LazyInvite);
 const ResetPasswordRoute = suspensePage(LazyResetPassword);
 const ForgotPasswordRoute = suspensePage(LazyForgotPassword);
@@ -407,6 +409,7 @@ function AuthenticatedShell({
         <Route path="/analytics-workspace" component={AnalyticsWorkspaceRoute} />
         <Route path="/marketing-briefs/view/:id" component={MarketingBriefPublishedRoute} />
         <Route path="/marketing-briefs" component={MarketingBriefsRoute} />
+        <Route path="/listings" component={ListingsRoute} />
         <Route path="/release-one/clients" component={ReleaseClientsRoute} />
         <Route path="/release-one" component={ReleaseOneRoute} />
         <Route path="/analytics" component={AnalyticsPageRoute} />

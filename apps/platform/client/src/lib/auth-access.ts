@@ -251,10 +251,19 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
 
   if (role === "marketer") {
     return any([
-      (x) => isUnder(x, "/marketing-briefs"),
+      (x) => isUnder(x, "/dealer-base") || isUnder(x, "/dealers"),
+      (x) => isUnder(x, "/trade-points"),
+      (x) => isUnder(x, "/client-map"),
+      (x) => isUnder(x, "/sales-control"),
+      (x) => isUnder(x, "/analytics-workspace"),
+      (x) => isUnder(x, "/tasks"),
       (x) => isUnder(x, "/catalog"),
       (x) => isUnder(x, "/training"),
-      (x) => isUnder(x, "/dealer-base") || isUnder(x, "/dealers") || isUnder(x, "/trade-points") || isUnder(x, "/client-map"),
+      (x) => isUnder(x, "/communications"),
+      (x) => isUnder(x, "/marketing-briefs"),
+      (x) => isUnder(x, "/listings"),
+      (x) => x === "/trash" || isUnder(x, "/trash"),
+      (x) => x === "/feature-in-development" || isUnder(x, "/feature-in-development"),
     ]);
   }
 
@@ -387,9 +396,42 @@ export function getPilotNavigation(
     return { badge: trashCount };
   };
 
+  const buildInDevelopmentNavGroup = (options: {
+    includeMarketingBriefsInDev: boolean;
+  }): PilotNavGroup => {
+    const items: PilotNavItem[] = [
+      { href: "/catalog", label: "Каталог", testId: "nav-item-catalog", navBehaviorId: "nav-catalog" },
+      { href: "/training", label: "Обучение", testId: "nav-item-training", navBehaviorId: "nav-training" },
+      { href: "/client-map", label: "Карта клиентов", testId: "nav-item-client-map", navBehaviorId: "nav-client-map" },
+      { href: "/tasks", label: "Задачи по витрине", testId: "nav-item-showcase-tasks", navBehaviorId: "nav-tasks" },
+      {
+        href: "/analytics-workspace",
+        label: "Аналитика команды",
+        testId: "nav-item-team-analytics",
+        navBehaviorId: "nav-analytics-workspace",
+      },
+      { href: "/communications", label: "Коммуникации", testId: "nav-item-communications", navBehaviorId: "nav-communications" },
+    ];
+    if (options.includeMarketingBriefsInDev) {
+      items.push({
+        href: "/marketing-briefs",
+        label: "Маркетинговые брифы",
+        testId: "nav-item-marketing-briefs",
+        navBehaviorId: "nav-marketing-briefs",
+      });
+    }
+    return {
+      key: "in-development",
+      label: "В разработке",
+      testId: "nav-group-in-development",
+      items,
+    };
+  };
+
   /** Промт 55: плоский список рабочих разделов + аккордеон «В разработке». */
   const unifiedSalesNavigation = (
     homeHref: string,
+    options?: { includeMarketingBriefsInDev?: boolean; extraLeadingItems?: PilotNavItem[] },
   ): Extract<PilotNavigationModel, { layout: "grouped" }> => ({
     layout: "grouped",
     leadingItems: [
@@ -420,33 +462,9 @@ export function getPilotNavigation(
         navBehaviorId: "nav-trash",
         ...trashNavExtras(),
       },
+      ...(options?.extraLeadingItems ?? []),
     ],
-    groups: [
-      {
-        key: "in-development",
-        label: "В разработке",
-        testId: "nav-group-in-development",
-        items: [
-          { href: "/catalog", label: "Каталог", testId: "nav-item-catalog", navBehaviorId: "nav-catalog" },
-          { href: "/training", label: "Обучение", testId: "nav-item-training", navBehaviorId: "nav-training" },
-          { href: "/client-map", label: "Карта клиентов", testId: "nav-item-client-map", navBehaviorId: "nav-client-map" },
-          { href: "/tasks", label: "Задачи по витрине", testId: "nav-item-showcase-tasks", navBehaviorId: "nav-tasks" },
-          {
-            href: "/analytics-workspace",
-            label: "Аналитика команды",
-            testId: "nav-item-team-analytics",
-            navBehaviorId: "nav-analytics-workspace",
-          },
-          { href: "/communications", label: "Коммуникации", testId: "nav-item-communications", navBehaviorId: "nav-communications" },
-          {
-            href: "/marketing-briefs",
-            label: "Маркетинговые брифы",
-            testId: "nav-item-marketing-briefs",
-            navBehaviorId: "nav-marketing-briefs",
-          },
-        ],
-      },
-    ],
+    groups: [buildInDevelopmentNavGroup({ includeMarketingBriefsInDev: options?.includeMarketingBriefsInDev ?? true })],
   });
 
   if (role === "sales_director" || role === "team_lead") {
@@ -459,19 +477,30 @@ export function getPilotNavigation(
     return unifiedSalesNavigation("/dealer-base");
   }
 
+  if (role === "marketer") {
+    void platformUserRole;
+    return unifiedSalesNavigation("/dealer-base", {
+      includeMarketingBriefsInDev: false,
+      extraLeadingItems: [
+        {
+          href: "/marketing-briefs",
+          label: "Маркетинговые брифы",
+          testId: "nav-item-marketing-briefs",
+          navBehaviorId: "nav-marketing-briefs",
+        },
+        {
+          href: "/listings",
+          label: "Листовки",
+          testId: "nav-item-listings",
+          navBehaviorId: "nav-listings",
+        },
+      ],
+    });
+  }
+
   const flat = ((): PilotNavItem[] => {
     const items: PilotNavItem[] = [];
     const push = (x: PilotNavItem) => items.push(x);
-    if (role === "marketer") {
-      push({ href: "/marketing-briefs", label: "Маркетинговые брифы", testId: "nav-marketing-briefs" });
-      push({ href: "/catalog", label: "Каталог", testId: "nav-catalog" });
-      push({ href: "/training", label: "Обучение", testId: "nav-training" });
-      push({ href: "/communications", label: "Коммуникации", testId: "nav-communications" });
-      push({ href: "/dealer-base", label: "Клиенты (просмотр)", testId: "nav-dealer-base", ...dealerNavExtras() });
-      push({ href: "/trade-points", label: "Торговые точки", testId: "nav-trade-points", ...tradePointNavExtras() });
-      push({ href: "/client-map", label: "Карта клиентов", testId: "nav-client-map" });
-      return items;
-    }
     if (role === "analyst") {
       push({ href: "/analytics-workspace", label: "Аналитика команды", testId: "nav-analytics-workspace" });
       push({ href: "/dealer-base", label: "Клиенты", testId: "nav-dealer-base", ...dealerNavExtras() });
