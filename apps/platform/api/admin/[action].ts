@@ -3075,6 +3075,53 @@ function collectTradePointsForUser(
   return { tradePoints, clientsById };
 }
 
+/** client_code → responsible_user_id (все строки client_assignments). */
+async function loadActiveClientAssignmentsByClient(pool: PoolLike): Promise<Map<string, string>> {
+  try {
+    const r = await pool.query<{ client_code: string; responsible_user_id: string }>(
+      `SELECT client_code, responsible_user_id FROM client_assignments`,
+    );
+    const m = new Map<string, string>();
+    for (const row of r.rows) {
+      if (row.client_code && row.responsible_user_id) m.set(row.client_code, row.responsible_user_id);
+    }
+    return m;
+  } catch (err) {
+    console.warn("[trade-points-overview] client_assignments unavailable", {
+      message: err instanceof Error ? err.message : String(err),
+    });
+    return new Map();
+  }
+}
+
+function resolveAssignmentUserId(
+  clientId: string,
+  assignmentByClient: Map<string, string>,
+  allowed: Set<string>,
+): string | null {
+  const assignee = assignmentByClient.get(clientId) ?? null;
+  if (!assignee || !allowed.has(assignee)) return null;
+  return assignee;
+}
+
+function pickTradePointWinner(
+  cur: TradePointAggRow,
+  candidate: TradePointAggRow,
+  assignmentByClient: Map<string, string>,
+  allowed: Set<string>,
+): TradePointAggRow {
+  const assignee = resolveAssignmentUserId(candidate.clientId, assignmentByClient, allowed);
+  if (assignee) {
+    if (cur.userId === assignee && candidate.userId !== assignee) return cur;
+    if (candidate.userId === assignee && cur.userId !== assignee) return candidate;
+  }
+  const curT = Date.parse(cur.updatedAt) || 0;
+  const newT = Date.parse(candidate.updatedAt) || 0;
+  if (newT > curT) return candidate;
+  if (newT < curT) return cur;
+  return candidate.userId < cur.userId ? candidate : cur;
+}
+
 /**
  * Промт 44 A1. Активность менеджера за период.
  *
@@ -3402,7 +3449,40 @@ async function handleTradePointsOverview(
     perUser.push({ userId, tradePoints, clients });
   }
 
-  const allTradePoints: TradePointAggRow[] = perUser.flatMap((p) => p.tradePoints);
+  const rawAllTradePoints: TradePointAggRow[] = perUser.flatMap((p) => p.tradePoints);
+  const assignmentByClient = await loadActiveClientAssignmentsByClient(pool);
+
+  const winnerByTpId = new Map<string, TradePointAggRow>();
+  const dupCounts = new Map<string, number>();
+  for (const tp of rawAllTradePoints) {
+    dupCounts.set(tp.id, (dupCounts.get(tp.id) ?? 0) + 1);
+    const cur = winnerByTpId.get(tp.id);
+    if (!cur) {
+      winnerByTpId.set(tp.id, tp);
+      continue;
+    }
+    winnerByTpId.set(tp.id, pickTradePointWinner(cur, tp, assignmentByClient, allowed));
+  }
+
+  const allTradePoints: TradePointAggRow[] = Array.from(winnerByTpId.values());
+
+  const totalDupIds = Array.from(dupCounts.values()).filter((n) => n > 1).length;
+  if (totalDupIds > 0) {
+    console.warn("[trade-points-overview] tp.id duplicates resolved", {
+      rawCount: rawAllTradePoints.length,
+      uniqueCount: allTradePoints.length,
+      duplicatedTpIds: totalDupIds,
+    });
+  }
+
+  const winnerUserByTpId = new Map<string, string>();
+  for (const tp of allTradePoints) winnerUserByTpId.set(tp.id, tp.userId);
+
+  const dedupedPerUser = perUser.map((p) => ({
+    ...p,
+    tradePoints: p.tradePoints.filter((tp) => winnerUserByTpId.get(tp.id) === p.userId),
+  }));
+
   const tpOwnerCity = (tp: TradePointAggRow): string | null => {
     const owner = allClientsById.get(tp.clientId);
     return (owner?.city ?? tp.city) || null;
@@ -3463,7 +3543,7 @@ async function handleTradePointsOverview(
       managers: Map<string, { meta: ReturnType<typeof userMeta>; tps: TradePointAggRow[] }>;
     }
   >();
-  for (const pu of perUser) {
+  for (const pu of dedupedPerUser) {
     const meta = userMeta(pu.userId, usersById);
     const key = meta.teamId ?? "__no_rop__";
     let group = teamAgg.get(key);
