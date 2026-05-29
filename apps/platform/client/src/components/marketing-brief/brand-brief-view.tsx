@@ -487,6 +487,8 @@ export function BrandBriefView({
   previewMode = false,
   showShare = false,
   showPrint = false,
+  readOnly = false,
+  embed = false,
   onBriefChange,
 }: {
   brief: MarketingBriefRow;
@@ -496,6 +498,10 @@ export function BrandBriefView({
   showShare?: boolean;
   /** Кнопка «Печать / PDF» */
   showPrint?: boolean;
+  /** Только просмотр: без панели действий (для модалки списка) */
+  readOnly?: boolean;
+  /** Встроенный режим (модалка): без min-h-screen и липкой панели */
+  embed?: boolean;
   onBriefChange?: (brief: MarketingBriefRow) => void;
 }) {
   const [themeMode, setThemeMode] = useState<BrandBriefThemeMode>(() => readBriefViewTheme());
@@ -528,14 +534,17 @@ export function BrandBriefView({
     });
   }, []);
 
+  const showTopbar = !readOnly && !embed;
+
   return (
     <div
-      className="min-h-screen font-sans"
+      className={cn("font-sans", !embed && "min-h-screen")}
       style={{ backgroundColor: theme.bg, color: theme.text, fontFamily: '"Exo 2", var(--font-sans), sans-serif' }}
       data-testid="brand-brief-view"
       data-theme={themeMode}
       data-print-root
     >
+      {showTopbar ? (
       <div
         className="sticky top-0 z-40 border-b px-4 py-3 backdrop-blur-md sm:px-6"
         style={{ borderColor: theme.border, backgroundColor: `${theme.bg}ee` }}
@@ -600,6 +609,7 @@ export function BrandBriefView({
           </div>
         </div>
       </div>
+      ) : null}
 
       {previewMode ? (
         <div
@@ -612,7 +622,7 @@ export function BrandBriefView({
         </div>
       ) : null}
 
-      <main className="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-10">
+      <main className={cn("mx-auto max-w-4xl px-4 sm:px-6", embed ? "py-4" : "py-8 sm:py-10")}>
         <header className="relative mb-10 space-y-4" data-testid="brand-brief-hero">
           <div className="flex items-start justify-between gap-4">
             <TriangleMarks side="left" theme={theme} />
