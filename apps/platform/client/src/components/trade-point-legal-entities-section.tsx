@@ -33,7 +33,7 @@ export function TradePointLegalEntitiesSection({ dealerId, tradePointId, canEdit
   const [pickerIds, setPickerIds] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
 
-  const requisitesHref = buildHashPath(`/dealers/${dealerId}`, { section: "payment_requisites" });
+  const requisitesHref = buildHashPath(`/dealers/${dealerId}`, { section: "legal_entities" });
 
   const reload = useCallback(async () => {
     setLoading(true);

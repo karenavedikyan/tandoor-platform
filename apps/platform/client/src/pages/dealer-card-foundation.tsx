@@ -145,7 +145,6 @@ import {
 } from "@/lib/dealer-characteristics";
 import { DealerCharacteristicsSection } from "@/components/dealer-characteristics-section";
 import { DealerLegalEntitiesSection } from "@/components/dealer-legal-entities-section";
-import { DealerLegalEntityRequisitesSection } from "@/components/dealer-legal-entity-requisites-section";
 import { DealerTradePointsSection } from "@/components/dealer-trade-points-section";
 import { DealerActionFocusSection } from "@/components/dealer-action-focus-section";
 import { Bitrix24TasksPanel } from "@/components/bitrix24-tasks-panel";
@@ -183,7 +182,6 @@ const SECTION_IDS = [
   "showcase_distribution",
   "points",
   "legal_entities",
-  "payment_requisites",
   "next_step",
   "terms_distribution",
   "history",
@@ -199,7 +197,6 @@ const SECTION_DOM_IDS: Record<SectionId, string> = {
   points: "dealer-section-points",
   showcase_distribution: "dealer-section-showcase-distribution",
   legal_entities: "dealer-section-legal-entities",
-  payment_requisites: "dealer-section-payment-requisites",
   next_step: "dealer-section-next-step",
   terms_distribution: "dealer-section-terms-distribution",
   history: "section-dealer-activity-history",
@@ -213,7 +210,6 @@ const SECTION_LABELS: Record<SectionId, string> = {
   points: "Точки",
   showcase_distribution: "Витрина",
   legal_entities: "Юрлица",
-  payment_requisites: "Реквизиты",
   next_step: "Шаг",
   terms_distribution: "Условия",
   history: "История",
@@ -227,7 +223,6 @@ const SECTION_NAV_TEST_IDS: Record<SectionId, string> = {
   points: "dealer-section-nav-points",
   showcase_distribution: "dealer-section-nav-showcase-distribution",
   legal_entities: "dealer-section-nav-legal-entities",
-  payment_requisites: "dealer-section-nav-payment-requisites",
   next_step: "dealer-section-nav-next-step",
   terms_distribution: "dealer-section-nav-terms-distribution",
   history: "dealer-section-nav-history",
@@ -242,7 +237,6 @@ const NAV_SECTION_IDS: SectionId[] = [
   "showcase_distribution",
   "points",
   "legal_entities",
-  "payment_requisites",
   "next_step",
   "history",
   "static_profile",
@@ -794,8 +788,8 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
 
   useEffect(() => {
     const section = routeSearch.get("section")?.trim();
-    if (section === "payment_requisites") {
-      scrollToSection("payment_requisites");
+    if (section === "payment_requisites" || section === "legal_entities") {
+      scrollToSection("legal_entities");
     }
   }, [routeSearch]);
 
@@ -1930,8 +1924,6 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
               actorUserId={user?.id ?? profile.personaUserId}
               actorLabel={displayUserName(user) ?? userLabelFromProfile(profile)}
             />
-
-            <DealerLegalEntityRequisitesSection row={row} profile={profile} />
 
             <DealerClientNextStepSection
               row={row}

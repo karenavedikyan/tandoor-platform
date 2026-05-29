@@ -26,6 +26,11 @@ type LegalEntityFullDto = {
   internalCode: string | null;
   status: string;
   comment: string | null;
+  paymentForm?: string | null;
+  paymentDelayDays?: number | null;
+  creditLimitRub?: string | null;
+  edoEnabled?: boolean | null;
+  edoOperator?: string | null;
   updatedByUserId: string | null;
   updatedByName: string | null;
   source: string;
@@ -73,6 +78,11 @@ function mapDtoToEntity(d: LegalEntityFullDto): DealerLegalEntity {
     email: d.email ?? undefined,
     status: (d.isArchived || d.status === "archived" ? "archived" : d.status) as DealerLegalEntity["status"],
     comment: d.comment ?? undefined,
+    paymentForm: (d.paymentForm as DealerLegalEntity["paymentForm"]) ?? undefined,
+    paymentDelayDays: d.paymentDelayDays ?? undefined,
+    creditLimitRub: d.creditLimitRub ?? undefined,
+    edoEnabled: d.edoEnabled ?? undefined,
+    edoOperator: d.edoOperator ?? undefined,
     createdAt: d.createdAt,
     updatedAt: d.updatedAt,
     updatedBy: d.updatedByUserId ?? "",
