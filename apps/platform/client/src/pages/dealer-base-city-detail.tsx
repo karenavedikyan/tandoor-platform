@@ -2,6 +2,7 @@
  * Drill-down города: KPI, сегментация, клиенты, ТТ, менеджеры.
  */
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link, Redirect, useRoute } from "wouter";
 import { ChevronLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -48,6 +49,7 @@ import {
   matchesSearch,
 } from "@/lib/entity-list-filtering";
 import { buildHashPath } from "@/lib/hash-route-utils";
+import { fetchTradePointsOverview } from "@/lib/trade-points-overview-api";
 import { cn } from "@/lib/utils";
 import { useOrgSnapshot } from "@/lib/use-org-snapshot";
 
@@ -137,6 +139,27 @@ export default function DealerBaseCityDetailPage() {
     () => buildCityDetailModel(cityKey, scopedRows, { orgSnap: snap, responsibleByCode }),
     [cityKey, scopedRows, snap, responsibleByCode],
   );
+
+  const tradePointsOverviewQ = useQuery({
+    queryKey: ["trade-points-overview"],
+    queryFn: fetchTradePointsOverview,
+    staleTime: 30_000,
+  });
+  const cityTpFromOverview = useMemo<number | null>(() => {
+    const data = tradePointsOverviewQ.data;
+    if (!data || !detail) return null;
+    const city = data.cities.find(
+      (c) => c.cityName === detail.displayName || c.cityKey === cityKey || c.cityKey === detail.cityKey,
+    );
+    return city ? city.tradePointsCount : 0;
+  }, [tradePointsOverviewQ.data, cityKey, detail]);
+
+  const cityTradePointsKpiDisplay = useMemo(() => {
+    if (!detail) return "—";
+    if (tradePointsOverviewQ.isLoading && !tradePointsOverviewQ.data) return "…";
+    if (cityTpFromOverview != null) return String(cityTpFromOverview);
+    return String(detail.kpis.tradePoints);
+  }, [detail, tradePointsOverviewQ.isLoading, tradePointsOverviewQ.data, cityTpFromOverview]);
 
   const [segmentFilter, setSegmentFilter] = useState<CityDetailSegmentKey | null>(null);
   const [managerF, setManagerF] = useState("all");
@@ -276,10 +299,10 @@ export default function DealerBaseCityDetailPage() {
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {(
             [
-              ["Активные клиенты", detail.kpis.activeClients, "text-foreground"],
-              ["Торговые точки", detail.kpis.tradePoints, "text-foreground"],
-              ["Потенциальные", detail.kpis.potential, "text-sky-700 dark:text-sky-400"],
-              ["Внимание", detail.kpis.attention, "text-destructive"],
+              ["Активные клиенты", String(detail.kpis.activeClients), "text-foreground"],
+              ["Торговые точки", cityTradePointsKpiDisplay, "text-foreground"],
+              ["Потенциальные", String(detail.kpis.potential), "text-sky-700 dark:text-sky-400"],
+              ["Внимание", String(detail.kpis.attention), "text-destructive"],
             ] as const
           ).map(([label, value, valueClass]) => (
             <div

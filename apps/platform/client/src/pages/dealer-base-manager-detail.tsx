@@ -2,6 +2,7 @@
  * Штаб менеджера: KPI, внимание, сегментация, города, клиенты.
  */
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link, Redirect, useRoute } from "wouter";
 import { ChevronLeft, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -60,6 +61,7 @@ import {
 } from "@/lib/entity-list-filtering";
 import { buildHashPath } from "@/lib/hash-route-utils";
 import { resolveManagerApiUserId } from "@/lib/trade-points-overview-view-model";
+import { fetchTradePointsOverview } from "@/lib/trade-points-overview-api";
 import { cn } from "@/lib/utils";
 import { useOrgSnapshot } from "@/lib/use-org-snapshot";
 import { UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE } from "@shared/admin/actualization-dedupe";
@@ -188,6 +190,29 @@ export default function DealerBaseManagerDetailPage() {
 
   const managerApiUserId = useMemo(() => resolveManagerApiUserId(managerId), [managerId]);
 
+  const tradePointsOverviewQ = useQuery({
+    queryKey: ["trade-points-overview"],
+    queryFn: fetchTradePointsOverview,
+    staleTime: 30_000,
+  });
+  const managerTpFromOverview = useMemo<number | null>(() => {
+    const data = tradePointsOverviewQ.data;
+    if (!data) return null;
+    for (const g of data.ropGroups) {
+      for (const m of g.managers) {
+        if (m.userId === managerApiUserId) return m.tradePoints;
+      }
+    }
+    return null;
+  }, [tradePointsOverviewQ.data, managerApiUserId]);
+
+  const managerTradePointsKpiDisplay = useMemo(() => {
+    if (!dashboard) return "—";
+    if (tradePointsOverviewQ.isLoading && !tradePointsOverviewQ.data) return "…";
+    if (managerTpFromOverview != null) return String(managerTpFromOverview);
+    return String(dashboard.kpis.tradePoints);
+  }, [dashboard, tradePointsOverviewQ.isLoading, tradePointsOverviewQ.data, managerTpFromOverview]);
+
   const segmentRows = useMemo(() => {
     if (!dashboard) return [];
     return dashboard.rows.filter((r) => dealerRowMatchesSegment(r, segmentFilter));
@@ -279,10 +304,10 @@ export default function DealerBaseManagerDetailPage() {
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {(
             [
-              ["Активные клиенты", dashboard.kpis.activeClients, "text-foreground"],
-              ["Торговые точки", dashboard.kpis.tradePoints, "text-foreground"],
-              ["Потенциальные", dashboard.kpis.potential, "text-sky-700 dark:text-sky-400"],
-              ["Внимание", dashboard.kpis.attention, "text-destructive"],
+              ["Активные клиенты", String(dashboard.kpis.activeClients), "text-foreground"],
+              ["Торговые точки", managerTradePointsKpiDisplay, "text-foreground"],
+              ["Потенциальные", String(dashboard.kpis.potential), "text-sky-700 dark:text-sky-400"],
+              ["Внимание", String(dashboard.kpis.attention), "text-destructive"],
             ] as const
           ).map(([label, value, valueClass]) => (
             <div
