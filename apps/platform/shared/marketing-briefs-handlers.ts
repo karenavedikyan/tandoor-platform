@@ -23,7 +23,6 @@ import {
   buildBriefPdfContentDisposition,
   buildBriefPdfFilename,
 } from "./marketing-brief-pdf-filename.js";
-import { renderBriefPdf } from "../server/marketing-brief-pdf.js";
 
 type SessionUser = { id: string; role: string; status: string };
 
@@ -519,6 +518,7 @@ export async function handleMarketingBriefsDownloadPdf(
   const origin = host ? `${proto}://${host}` : undefined;
 
   try {
+    const { renderBriefPdf } = await import("../server/marketing-brief-pdf.js");
     const buffer = await renderBriefPdf({ brief, blocks, theme, origin });
     const filename = buildBriefPdfFilename(brief);
     res.setHeader("Content-Type", "application/pdf");
