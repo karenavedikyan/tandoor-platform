@@ -13,7 +13,7 @@
  */
 import assert from "node:assert/strict";
 
-import { clientCategoryFromPassportTier } from "../lib/client-category";
+import { clientCategoryFromPassportTier, normalizePassportCategoryTier } from "../lib/client-category";
 import { createEmptyActualizationState } from "../lib/client-base-actualization-state";
 import { mergeDealerRowWithActualization } from "../lib/client-base-actualization-data-merge";
 import { DEALER_BASE_ROWS } from "../lib/dealer-base-mock-data";
