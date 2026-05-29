@@ -82,7 +82,7 @@ export default function ForgotPasswordPage() {
       className="motion-reduce:transition-none flex min-h-screen flex-col items-center justify-center overflow-x-hidden bg-background px-4 py-10"
       data-testid="page-forgot-password"
     >
-      <AuthScreenBranding showSlogan={false} />
+      <AuthScreenBranding />
       <div className="w-full max-w-md rounded-lg border border-card-border bg-card p-6 shadow-sm motion-reduce:transition-none sm:p-8">
         {step === 1 ? (
           <>
