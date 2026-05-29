@@ -4,11 +4,14 @@
 
 export type MarketingBriefStatus = "draft" | "published" | "archived";
 
+export type MarketingBriefVisibility = "private" | "public";
+
 export type MarketingBriefRow = {
   id: string;
   period_label: string;
   title: string;
   status: MarketingBriefStatus;
+  visibility: MarketingBriefVisibility;
   accent_color: string;
   cover_text: string;
   created_by: string | null;
@@ -33,12 +36,18 @@ export function isValidPeriodLabel(raw: string): boolean {
   return PERIOD_RE.test(raw.trim());
 }
 
+export function parseMarketingBriefVisibility(raw: unknown): MarketingBriefVisibility {
+  const v = typeof raw === "string" ? raw.trim() : "";
+  return v === "public" ? "public" : "private";
+}
+
 export function mapMarketingBriefRow(r: Record<string, unknown>): MarketingBriefRow {
   return {
     id: String(r.id),
     period_label: String(r.period_label),
     title: String(r.title),
     status: String(r.status) as MarketingBriefStatus,
+    visibility: parseMarketingBriefVisibility(r.visibility),
     accent_color: String(r.accent_color ?? "#9ACA3C"),
     cover_text: String(r.cover_text ?? ""),
     created_by: r.created_by != null ? String(r.created_by) : null,

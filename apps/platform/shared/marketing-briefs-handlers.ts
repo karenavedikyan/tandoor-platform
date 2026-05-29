@@ -13,6 +13,7 @@ import {
   mapMarketingBriefBlockRow,
   mapMarketingBriefRevisionRow,
   mapMarketingBriefRow,
+  parseMarketingBriefVisibility,
   type MarketingBriefBlockRow,
   type MarketingBriefRow,
   type MarketingBriefStatus,
@@ -186,12 +187,13 @@ export async function handleMarketingBriefsCreate(
   const accentColor =
     typeof body.accent_color === "string" && body.accent_color.trim() ? body.accent_color.trim() : DEFAULT_ACCENT_COLOR;
   const coverText = typeof body.cover_text === "string" ? body.cover_text : "";
+  const visibility = parseMarketingBriefVisibility(body.visibility);
 
   const r = await pool.query<Record<string, unknown>>(
-    `INSERT INTO marketing_briefs (period_label, title, status, accent_color, cover_text, created_by)
-     VALUES ($1, $2, 'draft', $3, $4, $5::uuid)
+    `INSERT INTO marketing_briefs (period_label, title, status, visibility, accent_color, cover_text, created_by)
+     VALUES ($1, $2, 'draft', $3, $4, $5, $6::uuid)
      RETURNING *`,
-    [periodLabel, title, accentColor, coverText, me.id],
+    [periodLabel, title, visibility, accentColor, coverText, me.id],
   );
   const row = r.rows[0];
   if (!row) {
@@ -266,6 +268,12 @@ export async function handleMarketingBriefsUpdate(
     params.push(String(patch.cover_text));
     updates.push(`cover_text = $${params.length}`);
     patchOut.cover_text = patch.cover_text;
+  }
+  if (patch.visibility !== undefined) {
+    const vis = parseMarketingBriefVisibility(patch.visibility);
+    params.push(vis);
+    updates.push(`visibility = $${params.length}`);
+    patchOut.visibility = vis;
   }
 
   if (updates.length === 0) {
@@ -438,8 +446,12 @@ export async function handleMarketingBriefsPublicGet(
   }
 
   const brief = await fetchBriefById(pool, id);
-  if (!brief || brief.status !== "published") {
-    sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Бриф не найден или не опубликован." });
+  if (!brief || brief.status !== "published" || brief.visibility !== "public") {
+    sendJson(res, 404, {
+      success: false,
+      code: "NOT_FOUND",
+      message: "Бриф не найден, не опубликован или приватный.",
+    });
     return;
   }
 

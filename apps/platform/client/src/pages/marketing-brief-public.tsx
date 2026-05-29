@@ -59,7 +59,7 @@ export default function MarketingBriefPublicPage() {
         data-testid="page-marketing-brief-public"
       >
         <p className="text-sm text-muted-foreground" data-testid="text-marketing-brief-public-not-found">
-          Бриф не найден или не опубликован
+          Бриф не найден, не опубликован или приватный
         </p>
       </div>
     );
@@ -67,7 +67,7 @@ export default function MarketingBriefPublicPage() {
 
   return (
     <div className="min-h-screen bg-background" data-testid="page-marketing-brief-public">
-      <BrandBriefView brief={brief} blocks={blocks} showPrint showShare />
+      <BrandBriefView brief={brief} blocks={blocks} showPrint showShare onBriefChange={setBrief} />
     </div>
   );
 }

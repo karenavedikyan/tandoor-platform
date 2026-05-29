@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useRoute } from "wouter";
-import { Eye, Loader2, Share2 } from "lucide-react";
+import { Eye, Loader2 } from "lucide-react";
+import { BriefShareActions, BriefVisibilityToggle } from "@/components/marketing-brief/brief-visibility-ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,7 +31,6 @@ import {
   archiveBrief,
   briefDisplayTitle,
   briefStatusLabel,
-  buildPublicBriefShareUrl,
   DEFAULT_MARKETING_BRIEF_ACCENT,
   formatBriefUpdatedAt,
   formatMarketingBriefPeriodLabel,
@@ -48,7 +48,6 @@ import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { BriefBlocksEditor } from "@/components/marketing-brief/brief-blocks-editor";
 import { buildBrowserHashAppHref } from "@/lib/hash-route-utils";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 export default function MarketingBriefEditorPage() {
   const { profile } = useReleaseDemoProfile();
@@ -261,34 +260,21 @@ export default function MarketingBriefEditorPage() {
         )}
         {brief.status === "published" ? (
           <>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="gap-1.5"
-                  data-testid="button-marketing-brief-share"
-                  onClick={() => {
-                    void navigator.clipboard.writeText(buildPublicBriefShareUrl(brief.id)).then(
-                      () => toast({ title: "Ссылка скопирована" }),
-                      () => toast({ title: "Не удалось скопировать ссылку", variant: "destructive" }),
-                    );
-                  }}
-                >
-                  <Share2 className="h-4 w-4" aria-hidden />
-                  Поделиться
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="max-w-[220px] text-xs">
-                Ссылка работает без входа — её можно отправить менеджерам
-              </TooltipContent>
-            </Tooltip>
+            <BriefShareActions brief={brief} onBriefUpdated={setBrief} />
             <Button asChild variant="ghost" size="sm">
               <Link href={`/marketing-briefs/view/${brief.id}`}>Просмотр для команды</Link>
             </Button>
           </>
         ) : null}
         </div>
+        {brief.status !== "archived" ? (
+          <BriefVisibilityToggle
+            briefId={brief.id}
+            visibility={brief.visibility ?? "private"}
+            disabled={readOnlyFields}
+            onUpdated={setBrief}
+          />
+        ) : null}
         <p className="text-[11px] text-muted-foreground">Предпросмотр откроется в новой вкладке</p>
       </div>
 
