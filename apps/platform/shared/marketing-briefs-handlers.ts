@@ -19,6 +19,11 @@ import {
   type MarketingBriefRow,
   type MarketingBriefStatus,
 } from "./marketing-briefs-types.js";
+import {
+  buildBriefPdfContentDisposition,
+  buildBriefPdfFilename,
+} from "./marketing-brief-pdf-filename.js";
+import { renderBriefPdf } from "../server/marketing-brief-pdf.js";
 
 type SessionUser = { id: string; role: string; status: string };
 
@@ -485,6 +490,50 @@ export async function handleMarketingBriefsPublicGet(
 
   const blocks = await fetchBlocksForBrief(pool, id);
   sendJson(res, 200, { success: true, data: { brief, blocks } });
+}
+
+export async function handleMarketingBriefsDownloadPdf(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  me: SessionUser,
+): Promise<void> {
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const id = parseUuid(body.id);
+  if (!id) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите id." });
+    return;
+  }
+
+  const brief = await fetchBriefById(pool, id);
+  if (!brief || !canReadBrief(me, brief)) {
+    sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Бриф не найден." });
+    return;
+  }
+
+  const blocks = await fetchBlocksForBrief(pool, id);
+  const theme = body.theme === "dark" ? "dark" : "light";
+  const host = String(req.headers["x-forwarded-host"] || req.headers.host || "");
+  const proto =
+    String(req.headers["x-forwarded-proto"] || "https").split(",")[0]?.trim() || "https";
+  const origin = host ? `${proto}://${host}` : undefined;
+
+  try {
+    const buffer = await renderBriefPdf({ brief, blocks, theme, origin });
+    const filename = buildBriefPdfFilename(brief);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", buildBriefPdfContentDisposition(filename));
+    res.setHeader("Cache-Control", "no-store");
+    res.status(200).send(buffer);
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    console.error("[marketing-briefs] download-pdf failed", m);
+    sendJson(res, 500, {
+      success: false,
+      code: "PDF_ERROR",
+      message: "Не удалось сформировать PDF.",
+    });
+  }
 }
 
 async function touchBriefUpdatedAt(pool: PoolLike, briefId: string): Promise<void> {

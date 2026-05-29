@@ -273,19 +273,50 @@ export function buildPublicBriefShareUrl(briefId: string): string {
   return `${window.location.origin}/p/brief/${briefId}`;
 }
 
-/** URL публичной страницы с автопечатью (открывается в новой вкладке). */
-export function buildBriefPrintUrl(briefId: string): string {
-  if (typeof window === "undefined") return `/p/brief/${briefId}?print=1`;
-  return `${window.location.origin}/p/brief/${briefId}?print=1`;
+export type BriefPdfTheme = "light" | "dark";
+
+function parsePdfFilenameFromDisposition(header: string | null): string | null {
+  if (!header) return null;
+  const star = header.match(/filename\*=UTF-8''([^;]+)/i);
+  if (star?.[1]) {
+    try {
+      return decodeURIComponent(star[1].trim());
+    } catch {
+      /* ignore */
+    }
+  }
+  const plain = header.match(/filename="([^"]+)"/i);
+  return plain?.[1]?.trim() ?? null;
 }
 
-/** Открыть print-страницу брифа и вызвать диалог печати / «Сохранить PDF». */
-export function downloadBriefPdf(briefId: string): void {
-  const url = buildBriefPrintUrl(briefId);
-  const w = window.open(url, "_blank", "noopener,noreferrer");
-  if (!w) {
-    window.location.href = url;
+/** Скачать PDF брифа с сервера (тема = активная в просмотре брифа). */
+export async function downloadBriefPdf(briefId: string, theme: BriefPdfTheme = "light"): Promise<void> {
+  const res = await fetch("/api/marketing-briefs/download-pdf", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: briefId, theme }),
+  });
+  if (!res.ok) {
+    try {
+      const data = await parseJson<ApiErr>(res);
+      throw apiError(data, res.status);
+    } catch (e) {
+      if (e instanceof Error && e.message !== "HTTP") throw e;
+      throw new Error(`Не удалось скачать PDF (HTTP ${res.status})`);
+    }
   }
+  const blob = await res.blob();
+  const filename = parsePdfFilenameFromDisposition(res.headers.get("Content-Disposition")) ?? "TANDOOR.pdf";
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = filename;
+  anchor.rel = "noopener";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(objectUrl);
 }
 
 export function briefDisplayTitle(title: string): { text: string; isPlaceholder: boolean } {

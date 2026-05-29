@@ -29,6 +29,7 @@ import {
   handleMarketingBriefsArchive,
   handleMarketingBriefsCreate,
   handleMarketingBriefsDelete,
+  handleMarketingBriefsDownloadPdf,
   handleMarketingBriefsGet,
   handleMarketingBriefsList,
   handleMarketingBriefsPublicGet,
@@ -115,6 +116,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "delete" && req.method === "POST") {
       await handleMarketingBriefsDelete(req, res, pool, sessionUser);
+      return;
+    }
+    if (action === "download-pdf" && req.method === "POST") {
+      await handleMarketingBriefsDownloadPdf(req, res, pool, sessionUser);
       return;
     }
     if (action === "blocks-list" && req.method === "GET") {
