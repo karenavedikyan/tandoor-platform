@@ -45,6 +45,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { BriefBlocksEditor } from "@/components/marketing-brief/brief-blocks-editor";
+import { buildBrowserHashAppHref } from "@/lib/hash-route-utils";
 
 export default function MarketingBriefEditorPage() {
   const { profile } = useReleaseDemoProfile();
@@ -227,7 +228,7 @@ export default function MarketingBriefEditorPage() {
           className="gap-1.5"
           data-testid="button-marketing-brief-preview"
           onClick={() => {
-            const url = `/marketing-briefs/view/${brief.id}?preview=1`;
+            const url = buildBrowserHashAppHref(`/marketing-briefs/view/${brief.id}`, { preview: 1 });
             window.open(url, "_blank", "noopener,noreferrer");
           }}
         >

@@ -23,6 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
+import { useRouteSearchParams } from "@/lib/hash-route-utils";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { canManageMarketingBriefs } from "@/lib/auth-access";
 import {
@@ -61,9 +62,11 @@ export function MarketingBriefPublishedPage() {
   const { profile } = useReleaseDemoProfile();
   const canManage = canManageMarketingBriefs(profile.role);
   const [location] = useLocation();
+  const routeSearch = useRouteSearchParams();
   const [, params] = useRoute("/marketing-briefs/view/:id");
   const id = params?.id ?? "";
-  const isPreview = parsePreviewFromLocation(location);
+  const isPreview =
+    routeSearch.get("preview") === "1" || parsePreviewFromLocation(location);
 
   const [brief, setBrief] = useState<MarketingBriefRow | null>(null);
   const [blocks, setBlocks] = useState<MarketingBriefBlockRow[]>([]);
@@ -81,12 +84,19 @@ export function MarketingBriefPublishedPage() {
       setLoading(true);
       setError(null);
       try {
+        console.debug("[brief-preview] fetch", { id, isPreview, canManage, role: profile.role });
         const data = await getBrief(id);
         if (cancelled) return;
         const allowDraftPreview = isPreview && canManage;
         if (data.brief.status !== "published" && !allowDraftPreview) {
+          console.warn("[brief-preview] denied", {
+            status: data.brief.status,
+            isPreview,
+            canManage,
+            role: profile.role,
+          });
           setBrief(null);
-          setError("not_found");
+          setError(isPreview && !canManage ? "no_permission" : "not_found");
         } else {
           setBrief(data.brief);
           try {
@@ -108,7 +118,7 @@ export function MarketingBriefPublishedPage() {
     return () => {
       cancelled = true;
     };
-  }, [id, isPreview, canManage]);
+  }, [id, isPreview, canManage, profile.role]);
 
   if (loading) {
     return (
@@ -122,7 +132,14 @@ export function MarketingBriefPublishedPage() {
     return (
       <div className="mx-auto max-w-lg space-y-4 pb-24" data-testid="page-marketing-brief-view">
         <FloatingBackButton href="/marketing-briefs" label="К брифам" testId="button-floating-back-marketing-brief-view" />
-        <p className="text-sm text-muted-foreground">Бриф не найден или ещё в черновике.</p>
+        {error === "no_permission" ? (
+          <p className="text-sm text-muted-foreground" data-testid="text-marketing-brief-no-permission">
+            Предпросмотр черновика доступен только маркетологу или руководителю. Текущая роль: {profile.role}.
+          </p>
+        ) : null}
+        {error === "not_found" ? (
+          <p className="text-sm text-muted-foreground">Бриф не найден или ещё в черновике.</p>
+        ) : null}
         <Button asChild variant="outline">
           <Link href="/marketing-briefs">К списку</Link>
         </Button>
