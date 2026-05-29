@@ -99,6 +99,7 @@ import {
   type QuickFilter,
 } from "@/lib/dealer-base-picker-filters";
 import { shouldSelfHealZeroResult } from "@/lib/dealer-base-clients-selfheal";
+import { fetchTradePointsOverview } from "@/lib/trade-points-overview-api";
 import { ArchiveInArchiveBadge, archivedEntityRowClassName, isDealerArchivedInActualization } from "@/components/archive-record-visual";
 import { IGNORE_CLIENT_ARCHIVE_IN_UI } from "@/lib/archive-record-visual";
 import { CityConcentrationBlock } from "@/components/city-concentration-block";
@@ -1315,6 +1316,15 @@ export default function DealerBase() {
     enabled: actx.enabled,
   });
 
+  const tradePointsOverviewQ = useQuery({
+    queryKey: ["trade-points-overview"],
+    queryFn: fetchTradePointsOverview,
+    staleTime: 30_000,
+    enabled: actx.enabled,
+  });
+  const overviewTradePointsCount = tradePointsOverviewQ.data?.structure.activeTradePoints ?? null;
+  const overviewTradePointsLoading = tradePointsOverviewQ.isLoading && !tradePointsOverviewQ.data;
+
   useEffect(() => {
     if (access !== "sales_director" && access !== "team_lead") return;
     publishDashboardRopTeamId(ropTeam);
@@ -1685,10 +1695,9 @@ export default function DealerBase() {
     const active = pickerFiltered.filter((r) => r.status === "активный").length;
     const potential = pickerFiltered.filter((r) => r.status === "потенциальный").length;
     const attention = pickerFiltered.filter((r) => r.status === "требует внимания" || r.hasProblem).length;
-    const outlets = pickerFiltered.reduce((a, r) => a + r.outlets, 0);
     const avgDist =
       total > 0 ? Math.round(pickerFiltered.reduce((a, r) => a + r.distribution, 0) / total) : 0;
-    return { total, active, potential, attention, outlets, avgDist };
+    return { total, active, potential, attention, avgDist };
   }, [pickerFiltered]);
 
   const categoryOptions = useMemo(() => {
@@ -3197,7 +3206,14 @@ export default function DealerBase() {
             { label: "Активные", value: String(kpis.active) },
             { label: "Потенциальные", value: String(kpis.potential) },
             { label: "Требуют внимания", value: String(kpis.attention) },
-            { label: "Торговые точки", value: String(kpis.outlets) },
+            {
+              label: "Торговые точки",
+              value: overviewTradePointsLoading
+                ? "…"
+                : overviewTradePointsCount != null
+                  ? String(overviewTradePointsCount)
+                  : "—",
+            },
             { label: "Средняя дистрибуция", value: `${kpis.avgDist}%` },
           ].map((k) => (
             <Card key={k.label} className="rounded-2xl border border-border/80 bg-card shadow-md">
