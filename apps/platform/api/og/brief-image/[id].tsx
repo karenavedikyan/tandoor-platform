@@ -3,10 +3,9 @@
  */
 
 import { ImageResponse } from "@vercel/og";
-import { getPool } from "../../../shared/admin/admin-auth.js";
 import {
   briefShowsTitleOnOgImage,
-  fetchBriefForOg,
+  fetchBriefForOgEdge,
   formatMarketingBriefPeriodLabel,
   parseBriefOgId,
 } from "../../../shared/marketing-brief-og.js";
@@ -28,12 +27,7 @@ export default async function handler(req: Request): Promise<Response> {
     return new Response("bad id", { status: 400 });
   }
 
-  const pool = getPool();
-  if (!pool) {
-    return new Response("database unavailable", { status: 503 });
-  }
-
-  const brief = await fetchBriefForOg(pool, id);
+  const brief = await fetchBriefForOgEdge(id);
   const host = req.headers.get("x-forwarded-host") || req.headers.get("host") || "tandoor-platform.vercel.app";
   const showTitle = brief ? briefShowsTitleOnOgImage(brief) : false;
   const accent = brief?.accent_color ?? "#9ACA3C";

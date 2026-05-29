@@ -2,6 +2,7 @@
  * OG-метаданные и минимальная выборка брифа для serverless (без авторизации).
  */
 
+import { neon } from "@neondatabase/serverless";
 import type { PoolLike } from "./admin/admin-auth.js";
 import { DEFAULT_ACCENT_COLOR, mapMarketingBriefRow } from "./marketing-briefs-types.js";
 import type { MarketingBriefVisibility } from "./marketing-briefs-types.js";
@@ -24,6 +25,28 @@ export function parseBriefOgId(raw: unknown): string | null {
   return UUID_RE.test(t) ? t : null;
 }
 
+function resolveDatabaseUrl(): string | null {
+  const a = process.env.DATABASE_URL?.trim();
+  if (a) return a;
+  const b = process.env.POSTGRES_URL?.trim();
+  if (b) return b;
+  const c = process.env.NEON_DATABASE_URL?.trim();
+  if (c) return c;
+  return null;
+}
+
+function mapRowToOgMeta(row: ReturnType<typeof mapMarketingBriefRow>): MarketingBriefOgMeta {
+  return {
+    id: row.id,
+    title: row.title,
+    period_label: row.period_label,
+    author_name: row.author_name,
+    visibility: row.visibility ?? "private",
+    status: row.status,
+    accent_color: row.accent_color?.trim() || DEFAULT_ACCENT_COLOR,
+  };
+}
+
 export async function fetchBriefForOg(pool: PoolLike, id: string): Promise<MarketingBriefOgMeta | null> {
   const r = await pool.query<Record<string, unknown>>(
     `SELECT b.*, u.full_name AS author_name
@@ -34,16 +57,23 @@ export async function fetchBriefForOg(pool: PoolLike, id: string): Promise<Marke
     [id],
   );
   if (!r.rows[0]) return null;
-  const row = mapMarketingBriefRow(r.rows[0]);
-  return {
-    id: row.id,
-    title: row.title,
-    period_label: row.period_label,
-    author_name: row.author_name,
-    visibility: row.visibility ?? "private",
-    status: row.status,
-    accent_color: row.accent_color?.trim() || DEFAULT_ACCENT_COLOR,
-  };
+  return mapRowToOgMeta(mapMarketingBriefRow(r.rows[0]));
+}
+
+/** Edge-safe выборка (без admin-auth / node pool). */
+export async function fetchBriefForOgEdge(id: string): Promise<MarketingBriefOgMeta | null> {
+  const url = resolveDatabaseUrl();
+  if (!url) return null;
+  const sql = neon(url);
+  const rows = (await sql`
+    SELECT b.*, u.full_name AS author_name
+    FROM marketing_briefs b
+    LEFT JOIN users u ON u.id = b.created_by
+    WHERE b.id = ${id}::uuid
+    LIMIT 1
+  `) as Record<string, unknown>[];
+  if (!rows[0]) return null;
+  return mapRowToOgMeta(mapMarketingBriefRow(rows[0]));
 }
 
 export function formatMarketingBriefPeriodLabel(periodLabel: string): string {
