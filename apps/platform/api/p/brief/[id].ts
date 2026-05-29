@@ -6,6 +6,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { getPool } from "../../../shared/admin/admin-auth.js";
 import {
   buildOgDescription,
+  buildOgImageAlt,
   buildOgTitle,
   escapeHtml,
   fetchBriefForOg,
@@ -60,9 +61,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
   const title = escapeHtml(buildOgTitle(brief));
   const description = escapeHtml(buildOgDescription(brief));
+  const imageAlt = escapeHtml(buildOgImageAlt(brief));
 
   res.setHeader("Content-Type", "text/html; charset=utf-8");
-  res.setHeader("Cache-Control", "public, max-age=300, s-maxage=300");
+  res.setHeader("Cache-Control", "public, max-age=60, s-maxage=60");
   res.status(200).end(`<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -72,13 +74,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   <meta property="og:title" content="${title}" />
   <meta property="og:description" content="${description}" />
   <meta property="og:image" content="${imageUrl}" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="${imageAlt}" />
   <meta property="og:url" content="${canonicalUrl}" />
-  <meta property="og:type" content="article" />
+  <meta property="og:type" content="website" />
   <meta property="og:site_name" content="TANDOOR" />
+  <meta property="og:locale" content="ru_RU" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="${title}" />
   <meta name="twitter:description" content="${description}" />
   <meta name="twitter:image" content="${imageUrl}" />
+  <meta name="twitter:image:alt" content="${imageAlt}" />
   <link rel="canonical" href="${canonicalUrl}" />
   <meta http-equiv="refresh" content="0;url=${escapeHtml(spaUrl)}" />
   <script>location.replace(${JSON.stringify(spaUrl)});</script>
