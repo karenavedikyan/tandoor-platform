@@ -273,6 +273,21 @@ export function buildPublicBriefShareUrl(briefId: string): string {
   return `${window.location.origin}/p/brief/${briefId}`;
 }
 
+/** URL публичной страницы с автопечатью (открывается в новой вкладке). */
+export function buildBriefPrintUrl(briefId: string): string {
+  if (typeof window === "undefined") return `/p/brief/${briefId}?print=1`;
+  return `${window.location.origin}/p/brief/${briefId}?print=1`;
+}
+
+/** Открыть print-страницу брифа и вызвать диалог печати / «Сохранить PDF». */
+export function downloadBriefPdf(briefId: string): void {
+  const url = buildBriefPrintUrl(briefId);
+  const w = window.open(url, "_blank", "noopener,noreferrer");
+  if (!w) {
+    window.location.href = url;
+  }
+}
+
 export function briefDisplayTitle(title: string): { text: string; isPlaceholder: boolean } {
   const t = title.trim();
   if (!t) return { text: "Без названия", isPlaceholder: true };

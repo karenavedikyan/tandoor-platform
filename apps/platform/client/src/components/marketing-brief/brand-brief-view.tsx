@@ -191,8 +191,9 @@ function renderBrandBlock(
       node: (
         <header
           key={block.id}
-          className="space-y-2 border-b pb-6"
+          className="brief-block space-y-2 border-b pb-6"
           style={{ borderColor: theme.border }}
+          data-brief-block
           data-testid="brand-brief-section"
         >
           <div className="flex items-start gap-3">
@@ -231,7 +232,7 @@ function renderBrandBlock(
     return {
       nextSectionIndex: sectionIndex,
       node: (
-        <section key={block.id} className="space-y-2" data-testid="brand-brief-text">
+        <section key={block.id} className="brief-block space-y-2" data-brief-block data-testid="brand-brief-text">
           {p.heading?.trim() ? (
             <h3 className="text-lg font-semibold" style={{ color: theme.text }}>
               {p.heading}
@@ -252,7 +253,7 @@ function renderBrandBlock(
     return {
       nextSectionIndex: sectionIndex,
       node: (
-        <section key={block.id} className="space-y-3" data-testid="brand-brief-segments">
+        <section key={block.id} className="brief-block space-y-3" data-brief-block data-testid="brand-brief-segments">
           {p.heading?.trim() ? (
             <h3 className="text-lg font-semibold" style={{ color: theme.text }}>
               {p.heading}
@@ -284,7 +285,7 @@ function renderBrandBlock(
     return {
       nextSectionIndex: sectionIndex,
       node: (
-        <section key={block.id} data-testid={`brand-brief-callout-${p.tone}`}>
+        <section key={block.id} className="brief-block" data-brief-block data-testid={`brand-brief-callout-${p.tone}`}>
           {p.heading?.trim() ? <Plaque theme={theme}>{p.heading}</Plaque> : null}
           <div
             className="px-1 py-3 sm:px-2"
@@ -303,7 +304,7 @@ function renderBrandBlock(
     return {
       nextSectionIndex: sectionIndex,
       node: (
-        <section key={block.id} className="space-y-4" data-testid="brand-brief-products">
+        <section key={block.id} className="brief-block space-y-4" data-brief-block data-testid="brand-brief-products">
           {p.heading?.trim() ? (
             <h3 className="text-lg font-semibold" style={{ color: theme.text }}>
               {p.heading}
@@ -376,7 +377,7 @@ function renderBrandBlock(
     return {
       nextSectionIndex: sectionIndex,
       node: (
-        <section key={block.id} className="space-y-3" data-testid="brand-brief-price-table">
+        <section key={block.id} className="brief-block space-y-3" data-brief-block data-testid="brand-brief-price-table">
           {p.heading?.trim() ? <Plaque theme={theme}>{p.heading}</Plaque> : null}
           <div className="overflow-x-auto rounded border" style={{ borderColor: theme.border }}>
             <table className="w-full min-w-[480px] text-sm" style={{ color: theme.text }}>
@@ -423,7 +424,7 @@ function renderBrandBlock(
     return {
       nextSectionIndex: sectionIndex,
       node: (
-        <section key={block.id} className="space-y-4" data-testid="brand-brief-bonus">
+        <section key={block.id} className="brief-block space-y-4" data-brief-block data-testid="brand-brief-bonus">
           <Plaque theme={theme}>{p.heading?.trim() || "БОНУС ЗА ПРОДАЖУ"}</Plaque>
           <ul className="space-y-4">
             {p.items.map((item) => (

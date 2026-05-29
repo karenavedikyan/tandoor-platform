@@ -36,7 +36,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   const brief = await fetchBriefForOg(pool, id);
   const origin = requestOrigin(req);
   const canonicalUrl = `${origin}/p/brief/${id}`;
-  const spaUrl = `${origin}/#/marketing-briefs/public/${id}`;
+  const wantsPrint = req.query.print === "1";
+  const spaUrl = wantsPrint
+    ? `${origin}/?print=1#/marketing-briefs/public/${id}`
+    : `${origin}/#/marketing-briefs/public/${id}`;
   const imageUrl = `${origin}/api/og/brief-image/${id}`;
 
   if (!brief) {

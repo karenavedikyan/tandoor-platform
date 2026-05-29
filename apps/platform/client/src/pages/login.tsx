@@ -11,7 +11,7 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { login } from "@/lib/auth-api";
 import { defaultHomePathForUserRole } from "@/lib/auth-access";
-import { useRouteSearchParams } from "@/lib/hash-route-utils";
+import { buildHashPath, useRouteSearchParams } from "@/lib/hash-route-utils";
 import { AuthScreenBranding } from "@/components/auth-screen-branding";
 import { invalidateAuthUser, useAuthUser } from "@/hooks/use-auth-user";
 import { queryClient } from "@/lib/queryClient";
@@ -28,6 +28,14 @@ export default function LoginPage() {
   const [, setLocation] = useLocation();
   const routeSearch = useRouteSearchParams();
   const nextReturn = safeReturnPath(routeSearch.get("next"));
+  const printAfterLogin = routeSearch.get("print") === "1";
+
+  function postLoginPath(role: Parameters<typeof defaultHomePathForUserRole>[0]): string {
+    if (!nextReturn) return defaultHomePathForUserRole(role);
+    if (printAfterLogin) return buildHashPath(nextReturn, { print: "1" });
+    return nextReturn;
+  }
+
   const { user, isLoading } = useAuthUser();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -37,9 +45,9 @@ export default function LoginPage() {
   useEffect(() => {
     if (isLoading) return;
     if (user?.status === "active") {
-      setLocation(nextReturn ?? defaultHomePathForUserRole(user.role));
+      setLocation(postLoginPath(user.role));
     }
-  }, [isLoading, user, setLocation, nextReturn]);
+  }, [isLoading, user, setLocation, nextReturn, printAfterLogin]);
 
   if (isLoading || user?.status === "active") {
     return (
@@ -57,7 +65,7 @@ export default function LoginPage() {
       const r = await login(email, password);
       if (r.ok) {
         await invalidateAuthUser(queryClient);
-        setLocation(nextReturn ?? defaultHomePathForUserRole(r.user.role));
+        setLocation(postLoginPath(r.user.role));
         return;
       }
       if (r.code === "VALIDATION_ERROR" || r.code === "INTERNAL_ERROR" || r.code === "NETWORK_ERROR") {

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Link, useLocation } from "wouter";
-import { Globe, Loader2, MoreHorizontal, Share2 } from "lucide-react";
+import { Download, Globe, Loader2, MoreHorizontal, Share2 } from "lucide-react";
 import { BrandBriefView } from "@/components/marketing-brief/brand-brief-view";
 import { BriefVisibilityIcon } from "@/components/marketing-brief/brief-visibility-ui";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,7 @@ import { toast } from "@/hooks/use-toast";
 import {
   briefDisplayTitle,
   buildPublicBriefShareUrl,
+  downloadBriefPdf,
   DEFAULT_MARKETING_BRIEF_ACCENT,
   formatBriefUpdatedAt,
   formatMarketingBriefPeriodLabel,
@@ -305,6 +306,10 @@ function BriefRowActionsMenu({
             Поделиться ссылкой
           </DropdownMenuItem>
         ) : null}
+        <DropdownMenuItem className="cursor-pointer" onClick={() => downloadBriefPdf(brief.id)}>
+          <Download className="mr-2 h-4 w-4" aria-hidden />
+          Скачать PDF
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         {brief.status !== "archived" ? (
           <DropdownMenuItem className="cursor-pointer" onClick={() => handlers.onArchive(brief.id)}>
@@ -429,10 +434,6 @@ function BriefPreviewDialog({
   const displayBrief = brief ?? listBrief;
   const title = displayBrief ? briefDisplayTitle(displayBrief.title).text : "Без названия";
 
-  const handlePrint = () => {
-    window.requestAnimationFrame(() => window.print());
-  };
-
   async function handleShareFromPreview() {
     if (!displayBrief) return;
     try {
@@ -479,24 +480,30 @@ function BriefPreviewDialog({
           className="flex shrink-0 flex-wrap gap-2 border-t bg-background px-6 py-3"
           data-no-print="true"
         >
+          {displayBrief ? (
+            <Button
+              type="button"
+              onClick={() => downloadBriefPdf(displayBrief.id)}
+              data-testid="button-brief-preview-pdf"
+            >
+              <Download className="mr-2 h-4 w-4" aria-hidden />
+              Скачать PDF
+            </Button>
+          ) : null}
           <Button
             type="button"
             variant="outline"
             onClick={() => void handleShareFromPreview()}
+            disabled={!displayBrief}
             data-testid="button-brief-preview-share"
           >
             <Share2 className="mr-2 h-4 w-4" aria-hidden />
             Поделиться
           </Button>
-          <Button type="button" variant="outline" onClick={handlePrint} data-testid="button-brief-preview-pdf">
-            Скачать PDF
-          </Button>
-          <Button type="button" variant="outline" onClick={onClose}>
-            Закрыть
-          </Button>
           {displayBrief && canManage ? (
             <Button
               type="button"
+              variant="outline"
               onClick={() => {
                 onClose();
                 onOpenEditor(displayBrief.id);
@@ -506,10 +513,13 @@ function BriefPreviewDialog({
               Открыть для редактирования
             </Button>
           ) : displayBrief ? (
-            <Button type="button" asChild>
+            <Button type="button" variant="outline" asChild>
               <Link href={`/marketing-briefs/view/${displayBrief.id}`}>Открыть</Link>
             </Button>
           ) : null}
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Закрыть
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -618,7 +628,7 @@ function MarketingBriefCard({
               if (e.key === "Escape") cancelRename();
             }}
             onClick={(e) => e.stopPropagation()}
-            className="w-full rounded bg-white/95 px-2 py-1 text-lg font-semibold text-foreground outline-none ring-2 ring-emerald-400"
+            className="w-full rounded bg-white px-2 py-1 text-lg font-semibold text-slate-900 placeholder:text-slate-400 outline-none ring-2 ring-emerald-400"
             data-testid={`input-rename-${b.id}`}
           />
         ) : canManage ? (
