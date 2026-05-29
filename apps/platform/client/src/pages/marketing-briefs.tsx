@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useRoute } from "wouter";
 import { Loader2 } from "lucide-react";
+import { BrandBriefView } from "@/components/marketing-brief/brand-brief-view";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -43,7 +44,6 @@ import {
   type MarketingBriefStatus,
 } from "@/lib/marketing-briefs-api";
 import { toast } from "@/hooks/use-toast";
-import { MarketingBriefBlocksPublished } from "@/components/marketing-brief/marketing-brief-blocks-published";
 
 type StatusFilter = "all" | MarketingBriefStatus;
 
@@ -52,9 +52,18 @@ function currentPeriodLabel(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
+function parsePreviewFromLocation(location: string): boolean {
+  const q = location.includes("?") ? location.split("?")[1] : "";
+  return new URLSearchParams(q).get("preview") === "1";
+}
+
 export function MarketingBriefPublishedPage() {
+  const { profile } = useReleaseDemoProfile();
+  const canManage = canManageMarketingBriefs(profile.role);
+  const [location] = useLocation();
   const [, params] = useRoute("/marketing-briefs/view/:id");
   const id = params?.id ?? "";
+  const isPreview = parsePreviewFromLocation(location);
 
   const [brief, setBrief] = useState<MarketingBriefRow | null>(null);
   const [blocks, setBlocks] = useState<MarketingBriefBlockRow[]>([]);
@@ -74,7 +83,8 @@ export function MarketingBriefPublishedPage() {
       try {
         const data = await getBrief(id);
         if (cancelled) return;
-        if (data.brief.status !== "published") {
+        const allowDraftPreview = isPreview && canManage;
+        if (data.brief.status !== "published" && !allowDraftPreview) {
           setBrief(null);
           setError("not_found");
         } else {
@@ -98,7 +108,7 @@ export function MarketingBriefPublishedPage() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, isPreview, canManage]);
 
   if (loading) {
     return (
@@ -121,41 +131,16 @@ export function MarketingBriefPublishedPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 pb-24" data-testid="page-marketing-brief-view">
-      <FloatingBackButton href="/marketing-briefs" label="К брифам" testId="button-floating-back-marketing-brief-view" />
-      <article className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm">
-        <div
-          className="px-6 py-10 sm:px-8"
-          style={{ backgroundColor: brief.accent_color || DEFAULT_MARKETING_BRIEF_ACCENT }}
-        >
-          <p className="text-2xl font-semibold tracking-tight text-[#222631] sm:text-3xl">
-            {formatMarketingBriefPeriodLabel(brief.period_label)}
-          </p>
-        </div>
-        <div className="space-y-4 p-5 sm:p-8">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary">{formatMarketingBriefPeriodLabel(brief.period_label)}</Badge>
-            <Badge className="bg-primary/15 text-primary">Опубликовано</Badge>
-          </div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">{brief.title}</h1>
-          {brief.cover_text.trim() ? (
-            <div className="prose prose-sm max-w-none text-muted-foreground">
-              {brief.cover_text.split("\n").map((p, i) => (
-                <p key={i}>{p}</p>
-              ))}
-            </div>
-          ) : null}
-          <div className="pt-4">
-            <MarketingBriefBlocksPublished
-              blocks={blocks}
-              accentColor={brief.accent_color || DEFAULT_MARKETING_BRIEF_ACCENT}
-            />
-          </div>
-        </div>
-      </article>
-      <Button asChild variant="outline">
-        <Link href="/marketing-briefs">К списку брифов</Link>
-      </Button>
+    <div className="pb-8" data-testid="page-marketing-brief-view">
+      <div className="px-4 pt-4 sm:px-6">
+        <FloatingBackButton href="/marketing-briefs" label="К брифам" testId="button-floating-back-marketing-brief-view" />
+      </div>
+      <BrandBriefView brief={brief} blocks={blocks} previewMode={isPreview && brief.status !== "published"} />
+      <div className="mx-auto max-w-4xl px-4 pt-4 sm:px-6">
+        <Button asChild variant="outline" size="sm">
+          <Link href="/marketing-briefs">К списку брифов</Link>
+        </Button>
+      </div>
     </div>
   );
 }
