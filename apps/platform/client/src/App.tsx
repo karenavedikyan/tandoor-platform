@@ -93,6 +93,7 @@ const LazyAdminAudit = lazy(() => import("@/pages/admin-audit"));
 const LazyAdminClientAssignments = lazy(() => import("@/pages/admin-client-assignments"));
 const LazyAdminActualizationDedupe = lazy(() => import("@/pages/admin-actualization-dedupe"));
 const LazyAdminMigration = lazy(() => import("@/pages/admin/migration"));
+const LazyAdminMigrateMarketingBriefs = lazy(() => import("@/pages/admin-migrate-marketing-briefs"));
 const LazyAdminTpCountDiag = lazy(() => import("@/pages/admin-tp-count-diag"));
 const LazyAdminCountsDiag = lazy(() => import("@/pages/admin-counts-diag"));
 const LazyFeatureInDevelopment = lazy(() => import("@/pages/feature-in-development"));
@@ -170,6 +171,7 @@ const AdminAuditRoute = wrapProfileShell(suspensePage(LazyAdminAudit));
 const AdminClientAssignmentsRoute = wrapProfileShell(suspensePage(LazyAdminClientAssignments));
 const AdminActualizationDedupeRoute = wrapProfileShell(suspensePage(LazyAdminActualizationDedupe));
 const AdminMigrationRoute = wrapProfileShell(suspensePage(LazyAdminMigration));
+const AdminMigrateMarketingBriefsRoute = wrapProfileShell(suspensePage(LazyAdminMigrateMarketingBriefs));
 const AdminTpCountDiagRoute = wrapProfileShell(suspensePage(LazyAdminTpCountDiag));
 const AdminCountsDiagRoute = wrapProfileShell(suspensePage(LazyAdminCountsDiag));
 
@@ -390,6 +392,7 @@ function AuthenticatedShell({
         <Route path="/admin/client-assignments" component={AdminClientAssignmentsRoute} />
         <Route path="/admin/actualization/dedupe" component={AdminActualizationDedupeRoute} />
         <Route path="/admin/migration" component={AdminMigrationRoute} />
+        <Route path="/admin/migrate-marketing-briefs" component={AdminMigrateMarketingBriefsRoute} />
         <Route path="/admin/tp-count-diag" component={AdminTpCountDiagRoute} />
         <Route path="/admin/counts-diag" component={AdminCountsDiagRoute} />
         <Route path="/reset-requests" component={ResetRequestsRoute} />
