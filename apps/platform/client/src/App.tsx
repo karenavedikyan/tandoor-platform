@@ -366,6 +366,7 @@ function AuthenticatedShell({
       showAuditLogLink={showAuditLogLink}
       embeddedBitrix24={embeddedBitrix24}
       impersonationBanner={impersonationBanner}
+      navDebugRoles={{ salesRole, platformUserRole: user.role }}
       shellUser={{
         id: user.id,
         fullName: user.fullName,
