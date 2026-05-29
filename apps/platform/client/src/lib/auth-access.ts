@@ -140,7 +140,7 @@ export function canAccessPathForUser(role: UserRole, path: string): boolean {
   if (p === "/admin/actualization/dedupe" || p === "/admin/migration") {
     return role === "admin";
   }
-  if (p === "/admin/tp-count-diag") {
+  if (p === "/admin/tp-count-diag" || p === "/admin/counts-diag") {
     return role === "admin" || role === "director" || role === "rop";
   }
   if (p === "/profile" || isUnder(p, "/profile")) {
