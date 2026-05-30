@@ -30,6 +30,8 @@ import type {
 } from "../shared/marketing-briefs-types.js";
 import { formatMarketingBriefPeriodLabel } from "../shared/marketing-brief-og.js";
 
+const el = React.createElement;
+
 export type BriefPdfTheme = "light" | "dark";
 
 const FONT_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "fonts");
@@ -394,163 +396,169 @@ function BlockRenderer({
     const p = asSection(block.payload);
     const num = formatSectionNumber(p.number, sectionIndexRef.current);
     sectionIndexRef.current += 1;
-    return (
-      <View wrap={false} style={styles.sectionHeader}>
-        <Text style={styles.sectionNumber}>{num}</Text>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.sectionTitle}>{p.title || "Раздел"}</Text>
-          {p.subtitle?.trim() ? <Text style={styles.sectionSubtitle}>{p.subtitle}</Text> : null}
-        </View>
-      </View>
+    return el(
+      View,
+      { wrap: false, style: styles.sectionHeader },
+      el(Text, { style: styles.sectionNumber }, num),
+      el(
+        View,
+        { style: { flex: 1 } },
+        el(Text, { style: styles.sectionTitle }, p.title || "Раздел"),
+        p.subtitle?.trim()
+          ? el(Text, { style: styles.sectionSubtitle }, p.subtitle)
+          : null,
+      ),
     );
   }
 
   if (block.type === "text") {
     const p = asText(block.payload);
-    return (
-      <View style={styles.block}>
-        {p.heading?.trim() ? <Text style={styles.blockTitle}>{p.heading}</Text> : null}
-        {splitLines(p.body).map((line, i) => (
-          <Text key={i} style={styles.blockText}>
-            {line || " "}
-          </Text>
-        ))}
-      </View>
+    return el(
+      View,
+      { style: styles.block },
+      p.heading?.trim() ? el(Text, { style: styles.blockTitle }, p.heading) : null,
+      ...splitLines(p.body).map((line, i) =>
+        el(Text, { key: i, style: styles.blockText }, line || " "),
+      ),
     );
   }
 
   if (block.type === "segments") {
     const p = asSegments(block.payload);
-    return (
-      <View style={styles.block}>
-        {p.heading?.trim() ? <Text style={styles.blockTitle}>{p.heading}</Text> : null}
-        {(["top150", "top350", "top500", "top500plus"] as const).map((key) => (
-          <View key={key} style={{ marginBottom: 6 }}>
-            <Text style={{ fontSize: 9, fontWeight: 700, color: "#9ACA3C" }}>
-              {SEGMENT_LABELS[key]}
-            </Text>
-            {splitLines(p.segments[key]).map((line, i) => (
-              <Text key={i} style={styles.blockText}>
-                {line || " "}
-              </Text>
-            ))}
-          </View>
-        ))}
-      </View>
+    return el(
+      View,
+      { style: styles.block },
+      p.heading?.trim() ? el(Text, { style: styles.blockTitle }, p.heading) : null,
+      ...(["top150", "top350", "top500", "top500plus"] as const).map((key) =>
+        el(
+          View,
+          { key, style: { marginBottom: 6 } },
+          el(Text, { style: { fontSize: 9, fontWeight: 700, color: "#9ACA3C" } }, SEGMENT_LABELS[key]),
+          ...splitLines(p.segments[key]).map((line, i) =>
+            el(Text, { key: i, style: styles.blockText }, line || " "),
+          ),
+        ),
+      ),
     );
   }
 
   if (block.type === "callout") {
     const p = asCallout(block.payload);
-    return (
-      <View style={styles.block}>
-        {p.heading?.trim() ? <Text style={styles.blockTitle}>{p.heading}</Text> : null}
-        {splitLines(p.body).map((line, i) => (
-          <Text key={i} style={styles.blockText}>
-            {line || " "}
-          </Text>
-        ))}
-      </View>
+    return el(
+      View,
+      { style: styles.block },
+      p.heading?.trim() ? el(Text, { style: styles.blockTitle }, p.heading) : null,
+      ...splitLines(p.body).map((line, i) =>
+        el(Text, { key: i, style: styles.blockText }, line || " "),
+      ),
     );
   }
 
   if (block.type === "products") {
     const p = asProducts(block.payload);
     if (p.items.length === 0) return null;
-    return (
-      <View>
-        {p.heading?.trim() ? <Text style={[styles.blockTitle, { marginBottom: 6 }]}>{p.heading}</Text> : null}
-        <View style={styles.productRow}>
-          {p.items.map((item) => {
-            const name = item.name?.trim() || item.article?.trim() || "Товар";
-            const img = safeImageSrc(item.image_url, origin);
-            const segs = (item.segments ?? [])
-              .map((k) => SEGMENT_LABELS[k] ?? k)
-              .join(", ");
-            return (
-              <View key={item.id} wrap={false} style={styles.productCard}>
-                {img ? (
-                  <Image src={img} style={styles.productImage} />
-                ) : (
-                  <View style={styles.productImagePlaceholder}>
-                    <Text style={{ fontSize: 8, color: "#9CA3AF" }}>Нет фото</Text>
-                  </View>
-                )}
-                <Text style={styles.productName}>{name}</Text>
-                <Text style={styles.productMeta}>
-                  {formatPriceRub(item.price_retail ?? item.price_showroom)}
-                </Text>
-                {segs ? <Text style={styles.productMeta}>{segs}</Text> : null}
-              </View>
-            );
-          })}
-        </View>
-      </View>
+    return el(
+      View,
+      null,
+      p.heading?.trim()
+        ? el(Text, { style: [styles.blockTitle, { marginBottom: 6 }] }, p.heading)
+        : null,
+      el(
+        View,
+        { style: styles.productRow },
+        ...p.items.map((item) => {
+          const name = item.name?.trim() || item.article?.trim() || "Товар";
+          const img = safeImageSrc(item.image_url, origin);
+          const segs = (item.segments ?? [])
+            .map((k) => SEGMENT_LABELS[k] ?? k)
+            .join(", ");
+          return el(
+            View,
+            { key: item.id, wrap: false, style: styles.productCard },
+            img
+              ? el(Image, { src: img, style: styles.productImage })
+              : el(
+                  View,
+                  { style: styles.productImagePlaceholder },
+                  el(Text, { style: { fontSize: 8, color: "#9CA3AF" } }, "Нет фото"),
+                ),
+            el(Text, { style: styles.productName }, name),
+            el(
+              Text,
+              { style: styles.productMeta },
+              formatPriceRub(item.price_retail ?? item.price_showroom),
+            ),
+            segs ? el(Text, { style: styles.productMeta }, segs) : null,
+          );
+        }),
+      ),
     );
   }
 
   if (block.type === "price_table") {
     const p = asPriceTable(block.payload);
     if (p.rows.length === 0) return null;
-    return (
-      <View style={styles.block}>
-        {p.heading?.trim() ? <Text style={styles.blockTitle}>{p.heading}</Text> : null}
-        <View style={styles.tableHeader}>
-          <Text style={styles.tableHeaderCell}>Модель</Text>
-          <Text style={[styles.tableHeaderCell, { textAlign: "right" }]}>Старая</Text>
-          <Text style={[styles.tableHeaderCell, { textAlign: "right" }]}>Новая</Text>
-          {p.show_benefit ? (
-            <Text style={[styles.tableHeaderCell, { textAlign: "right" }]}>Выгода</Text>
-          ) : null}
-        </View>
-        {p.rows.map((row) => {
-          const benefit = calcBenefit(row.price_old, row.price_new);
-          return (
-            <View key={row.id} style={styles.tableRow}>
-              <Text style={styles.tableCell}>{row.model || "—"}</Text>
-              <Text style={[styles.tableCell, styles.priceOld, { textAlign: "right" }]}>
-                {formatPriceRub(row.price_old)}
-              </Text>
-              <Text style={[styles.tableCell, styles.priceNew, { textAlign: "right" }]}>
-                {formatPriceRub(row.price_new)}
-              </Text>
-              {p.show_benefit ? (
-                <Text style={[styles.tableCell, { textAlign: "right", color: "#9CA3AF" }]}>
-                  {benefit != null ? formatPriceRub(benefit) : "—"}
-                </Text>
-              ) : null}
-            </View>
-          );
-        })}
-      </View>
+    return el(
+      View,
+      { style: styles.block },
+      p.heading?.trim() ? el(Text, { style: styles.blockTitle }, p.heading) : null,
+      el(
+        View,
+        { style: styles.tableHeader },
+        el(Text, { style: styles.tableHeaderCell }, "Модель"),
+        el(Text, { style: [styles.tableHeaderCell, { textAlign: "right" }] }, "Старая"),
+        el(Text, { style: [styles.tableHeaderCell, { textAlign: "right" }] }, "Новая"),
+        p.show_benefit
+          ? el(Text, { style: [styles.tableHeaderCell, { textAlign: "right" }] }, "Выгода")
+          : null,
+      ),
+      ...p.rows.map((row) => {
+        const benefit = calcBenefit(row.price_old, row.price_new);
+        return el(
+          View,
+          { key: row.id, style: styles.tableRow },
+          el(Text, { style: styles.tableCell }, row.model || "—"),
+          el(Text, { style: [styles.tableCell, styles.priceOld, { textAlign: "right" }] }, formatPriceRub(row.price_old)),
+          el(Text, { style: [styles.tableCell, styles.priceNew, { textAlign: "right" }] }, formatPriceRub(row.price_new)),
+          p.show_benefit
+            ? el(
+                Text,
+                { style: [styles.tableCell, { textAlign: "right", color: "#9CA3AF" }] },
+                benefit != null ? formatPriceRub(benefit) : "—",
+              )
+            : null,
+        );
+      }),
     );
   }
 
   if (block.type === "bonus") {
     const p = asBonus(block.payload);
     if (p.items.length === 0) return null;
-    return (
-      <View>
-        <Text style={styles.bonusTitle}>{p.heading?.trim() || "БОНУС ЗА ПРОДАЖУ"}</Text>
-        {p.items.map((item) => (
-          <View key={item.id} wrap={false} style={styles.bonusBlock}>
-            <Text style={{ fontWeight: 700, marginBottom: 4 }}>{item.trigger || "Бонус"}</Text>
-            <Text style={styles.blockText}>Награда: {item.reward || "—"}</Text>
-            {item.audience?.trim() ? (
-              <Text style={styles.blockText}>Кому: {item.audience}</Text>
-            ) : null}
-            {item.conditions?.trim() ? (
-              <Text style={styles.blockText}>Условия: {item.conditions}</Text>
-            ) : null}
-            {item.valid_until?.trim() ? (
-              <Text style={styles.blockText}>До: {formatDateRu(item.valid_until)}</Text>
-            ) : null}
-            {item.require_photo_report ? (
-              <Text style={{ color: "#9ACA3C", marginTop: 4 }}>Требуется фотоотчёт</Text>
-            ) : null}
-          </View>
-        ))}
-      </View>
+    return el(
+      View,
+      null,
+      el(Text, { style: styles.bonusTitle }, p.heading?.trim() || "БОНУС ЗА ПРОДАЖУ"),
+      ...p.items.map((item) =>
+        el(
+          View,
+          { key: item.id, wrap: false, style: styles.bonusBlock },
+          el(Text, { style: { fontWeight: 700, marginBottom: 4 } }, item.trigger || "Бонус"),
+          el(Text, { style: styles.blockText }, `Награда: ${item.reward || "—"}`),
+          item.audience?.trim()
+            ? el(Text, { style: styles.blockText }, `Кому: ${item.audience}`)
+            : null,
+          item.conditions?.trim()
+            ? el(Text, { style: styles.blockText }, `Условия: ${item.conditions}`)
+            : null,
+          item.valid_until?.trim()
+            ? el(Text, { style: styles.blockText }, `До: ${formatDateRu(item.valid_until)}`)
+            : null,
+          item.require_photo_report
+            ? el(Text, { style: { color: "#9ACA3C", marginTop: 4 } }, "Требуется фотоотчёт")
+            : null,
+        ),
+      ),
     );
   }
 
@@ -572,41 +580,46 @@ export async function renderBriefPdf(input: BriefPdfInput): Promise<Buffer> {
   const period = formatMarketingBriefPeriodLabel(input.brief.period_label);
   const sectionIndexRef = { current: 0 };
 
-  const blockNodes = input.blocks.map((block) => (
-    <BlockRenderer
-      key={block.id}
-      block={block}
-      styles={styles}
-      sectionIndexRef={sectionIndexRef}
-      origin={origin}
-    />
-  ));
+  const blockNodes = input.blocks.map((block) =>
+    el(BlockRenderer, {
+      key: block.id,
+      block,
+      styles,
+      sectionIndexRef,
+      origin,
+    }),
+  );
 
-  const doc = (
-    <Document title={input.brief.title || "Бриф TANDOOR"} author="TANDOOR">
-      <Page size="A4" style={styles.page}>
-        <View style={styles.cover}>
-          <Text style={styles.coverLabel}>БРИФ TANDOOR</Text>
-          <Text style={styles.coverPeriod}>{period}</Text>
-          <Text style={styles.coverTitle}>{input.brief.title.trim() || "Без названия"}</Text>
-          {input.brief.cover_text.trim() ? (
-            <Text style={styles.coverSubtitle}>{input.brief.cover_text.trim()}</Text>
-          ) : null}
-        </View>
-        {blockNodes}
-        <Text
-          style={styles.footer}
-          fixed
-          render={({ pageNumber, totalPages }) =>
-            `tandoor-platform · ${input.brief.title.trim() || "Бриф"} · Стр. ${pageNumber} из ${totalPages}`
-          }
-        />
-      </Page>
-      <Page size="A4" style={styles.lastPage}>
-        <Text style={styles.lastPageLogo}>TANDOOR</Text>
-        <Text style={styles.lastPageSlogan}>Сравнивая, выбирают нас</Text>
-      </Page>
-    </Document>
+  const doc = el(
+    Document,
+    { title: input.brief.title || "Бриф TANDOOR", author: "TANDOOR" },
+    el(
+      Page,
+      { size: "A4", style: styles.page },
+      el(
+        View,
+        { style: styles.cover },
+        el(Text, { style: styles.coverLabel }, "БРИФ TANDOOR"),
+        el(Text, { style: styles.coverPeriod }, period),
+        el(Text, { style: styles.coverTitle }, input.brief.title.trim() || "Без названия"),
+        input.brief.cover_text.trim()
+          ? el(Text, { style: styles.coverSubtitle }, input.brief.cover_text.trim())
+          : null,
+      ),
+      ...blockNodes,
+      el(Text, {
+        style: styles.footer,
+        fixed: true,
+        render: ({ pageNumber, totalPages }: { pageNumber: number; totalPages: number }) =>
+          `tandoor-platform · ${input.brief.title.trim() || "Бриф"} · Стр. ${pageNumber} из ${totalPages}`,
+      }),
+    ),
+    el(
+      Page,
+      { size: "A4", style: styles.lastPage },
+      el(Text, { style: styles.lastPageLogo }, "TANDOOR"),
+      el(Text, { style: styles.lastPageSlogan }, "Сравнивая, выбирают нас"),
+    ),
   );
 
   const buf = await renderToBuffer(doc);
