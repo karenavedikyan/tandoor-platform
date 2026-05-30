@@ -5,6 +5,7 @@
 
 import type { Request, Response } from "express";
 import { neon } from "@neondatabase/serverless";
+import { wrapNeonWithShadow, type NeonHttp } from "../db/neon-client.js";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { auditLog } from "@shared/auth-schema";
 import { getAuthDb } from "../auth/db";
@@ -27,17 +28,18 @@ function resolveDatabaseUrl(): string | null {
   return null;
 }
 
-type NeonSql = ReturnType<typeof neon>;
-let cachedSql: NeonSql | null | undefined;
+let cachedSql: NeonHttp | null | undefined;
 
-function getNeonSql(): NeonSql | null {
+function getNeonSql(): NeonHttp | null {
   if (cachedSql !== undefined) return cachedSql;
   const url = resolveDatabaseUrl();
   if (!url) {
     cachedSql = null;
     return null;
   }
-  cachedSql = neon(url);
+  // wrap so all DML (UPDATE telegram_link_tokens / password_reset_links / users)
+  // is mirrored into Yandex (insurance copy).
+  cachedSql = wrapNeonWithShadow(neon(url), "telegram-recovery");
   return cachedSql;
 }
 
