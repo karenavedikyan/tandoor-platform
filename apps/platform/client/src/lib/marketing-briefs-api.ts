@@ -2,8 +2,6 @@
  * HTTP API маркетинговых брифов (Postgres, Промт 102).
  */
 
-import { toast } from "@/hooks/use-toast";
-
 export type MarketingBriefStatus = "draft" | "published" | "archived";
 
 export type MarketingBriefVisibility = "private" | "public";
@@ -136,6 +134,8 @@ type PdfDownloadDebug = {
   theme?: string;
   blocksCount?: number;
   blocksTypes?: string[];
+  cwd?: string;
+  env?: { VERCEL_ENV?: string | null; NODE_VERSION?: string };
 };
 
 type ApiErr = {
@@ -306,6 +306,27 @@ function parsePdfFilenameFromDisposition(header: string | null): string | null {
   return plain?.[1]?.trim() ?? null;
 }
 
+function showPdfDownloadErrorAlert(status: number, body: ApiErr | null): void {
+  if (body?.debug) {
+    const d = body.debug;
+    const text = [
+      `PDF ERROR (HTTP ${status})`,
+      `Name: ${d.name ?? "—"}`,
+      `Message: ${d.message ?? "—"}`,
+      `Brief: ${d.briefId ?? "—"} | Theme: ${d.theme ?? "—"}`,
+      `Blocks: ${d.blocksCount ?? 0} [${(d.blocksTypes ?? []).join(", ")}]`,
+      `CWD: ${d.cwd ?? "—"}`,
+      `Env: ${JSON.stringify(d.env ?? {})}`,
+      "",
+      "Stack:",
+      d.stack || "(no stack)",
+    ].join("\n");
+    window.alert(text);
+    return;
+  }
+  window.alert(`PDF ERROR (HTTP ${status}): ${body?.message || "Unknown error"}`);
+}
+
 /** Скачать PDF брифа с сервера (тема = активная в просмотре брифа). */
 export async function downloadBriefPdf(briefId: string, theme: BriefPdfTheme = "light"): Promise<void> {
   try {
@@ -324,10 +345,7 @@ export async function downloadBriefPdf(briefId: string, theme: BriefPdfTheme = "
         /* ignore */
       }
       console.error("[downloadBriefPdf] failed", res.status, body);
-      toast({
-        variant: "destructive",
-        description: body?.debug?.message ?? body?.message ?? "Не удалось скачать PDF",
-      });
+      showPdfDownloadErrorAlert(res.status, body);
       return;
     }
 
@@ -345,10 +363,7 @@ export async function downloadBriefPdf(briefId: string, theme: BriefPdfTheme = "
     URL.revokeObjectURL(objectUrl);
   } catch (e) {
     console.error("[downloadBriefPdf] network error", e);
-    toast({
-      variant: "destructive",
-      description: e instanceof Error ? e.message : "Не удалось скачать PDF",
-    });
+    window.alert(`PDF NETWORK ERROR: ${e instanceof Error ? e.message : String(e)}`);
   }
 }
 

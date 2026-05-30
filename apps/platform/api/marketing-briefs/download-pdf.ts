@@ -60,8 +60,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     const sessionUser = { id: me.id, role: me.role, status: me.status };
     await handleMarketingBriefsDownloadPdf(req, res, pool, sessionUser);
   } catch (e) {
-    const m = e instanceof Error ? e.message : String(e);
-    console.error("[marketing-briefs/download-pdf] unhandled", m);
-    sendJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+    const message = e instanceof Error ? e.message : String(e);
+    const stack = e instanceof Error && e.stack ? e.stack : "";
+    const name = e instanceof Error ? e.name : "Unknown";
+    console.error("[download-pdf] unhandled", { message, stack });
+
+    // TEMP: expose debug in all environments (revert after root-cause fix)
+    sendJson(res, 500, {
+      success: false,
+      code: "INTERNAL_ERROR",
+      message: "Внутренняя ошибка сервера.",
+      debug: {
+        name,
+        message,
+        stack: stack.split("\n").slice(0, 20).join("\n"),
+        cwd: process.cwd(),
+        env: {
+          VERCEL_ENV: process.env.VERCEL_ENV ?? null,
+          NODE_VERSION: process.version,
+        },
+      },
+    });
   }
 }
