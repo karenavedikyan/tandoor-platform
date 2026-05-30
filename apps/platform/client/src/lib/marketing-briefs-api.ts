@@ -278,17 +278,6 @@ export function buildPublicBriefShareUrl(briefId: string): string {
   return `${window.location.origin}/p/brief/${briefId}`;
 }
 
-export type BriefPdfTheme = "light" | "dark";
-
-/** Открыть публичную превью-страницу с автозапуском печати (Сохранить как PDF в браузере). */
-export async function downloadBriefPdf(briefId: string, theme: BriefPdfTheme = "light"): Promise<void> {
-  const url = `/p/brief/${encodeURIComponent(briefId)}?print=1&theme=${theme}`;
-  const opened = window.open(url, "_blank", "noopener");
-  if (!opened) {
-    window.location.href = url;
-  }
-}
-
 export function briefDisplayTitle(title: string): { text: string; isPlaceholder: boolean } {
   const t = title.trim();
   if (!t) return { text: "Без названия", isPlaceholder: true };

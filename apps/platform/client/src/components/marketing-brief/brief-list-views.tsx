@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Link, useLocation } from "wouter";
-import { Download, Globe, Loader2, MoreHorizontal, Share2 } from "lucide-react";
+import { Globe, Loader2, MoreHorizontal, Share2 } from "lucide-react";
 import { BrandBriefView } from "@/components/marketing-brief/brand-brief-view";
-import { readBriefViewTheme } from "@/components/marketing-brief/brand-brief-theme";
 import { BriefVisibilityIcon } from "@/components/marketing-brief/brief-visibility-ui";
 import { Button } from "@/components/ui/button";
 import { Card, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,7 +25,6 @@ import { toast } from "@/hooks/use-toast";
 import {
   briefDisplayTitle,
   buildPublicBriefShareUrl,
-  downloadBriefPdf,
   DEFAULT_MARKETING_BRIEF_ACCENT,
   formatBriefUpdatedAt,
   formatMarketingBriefPeriodLabel,
@@ -307,17 +305,6 @@ function BriefRowActionsMenu({
             Поделиться ссылкой
           </DropdownMenuItem>
         ) : null}
-        <DropdownMenuItem
-          className="cursor-pointer"
-          onClick={() =>
-            void downloadBriefPdf(brief.id, readBriefViewTheme()).catch(() => {
-              toast({ variant: "destructive", description: "Не удалось скачать PDF" });
-            })
-          }
-        >
-          <Download className="mr-2 h-4 w-4" aria-hidden />
-          Скачать PDF
-        </DropdownMenuItem>
         <DropdownMenuSeparator />
         {brief.status !== "archived" ? (
           <DropdownMenuItem className="cursor-pointer" onClick={() => handlers.onArchive(brief.id)}>
@@ -488,20 +475,6 @@ function BriefPreviewDialog({
           className="flex shrink-0 flex-wrap gap-2 border-t bg-background px-6 py-3"
           data-no-print="true"
         >
-          {displayBrief ? (
-            <Button
-              type="button"
-              onClick={() =>
-                void downloadBriefPdf(displayBrief.id, readBriefViewTheme()).catch(() => {
-                  toast({ variant: "destructive", description: "Не удалось скачать PDF" });
-                })
-              }
-              data-testid="button-brief-preview-pdf"
-            >
-              <Download className="mr-2 h-4 w-4" aria-hidden />
-              Скачать PDF
-            </Button>
-          ) : null}
           <Button
             type="button"
             variant="outline"

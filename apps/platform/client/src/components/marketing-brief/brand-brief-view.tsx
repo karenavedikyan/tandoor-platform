@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Gift, Moon, Printer, Sun } from "lucide-react";
+import { Gift, Moon, Sun } from "lucide-react";
 import { BriefShareActions } from "@/components/marketing-brief/brief-visibility-ui";
 import { TandoorLogo } from "@/components/tandoor-logo";
 import { Button } from "@/components/ui/button";
@@ -487,7 +487,6 @@ export function BrandBriefView({
   blocks,
   previewMode = false,
   showShare = false,
-  showPrint = false,
   readOnly = false,
   embed = false,
   forcedTheme,
@@ -498,8 +497,6 @@ export function BrandBriefView({
   previewMode?: boolean;
   /** Кнопки «Поделиться» / «Сделать публичным» для опубликованного брифа */
   showShare?: boolean;
-  /** Кнопка «Печать / PDF» */
-  showPrint?: boolean;
   /** Только просмотр: без панели действий (для модалки списка) */
   readOnly?: boolean;
   /** Встроенный режим (модалка): без min-h-screen и липкой панели */
@@ -535,13 +532,6 @@ export function BrandBriefView({
   const setLight = useCallback(() => setThemeMode("light"), []);
   const setDark = useCallback(() => setThemeMode("dark"), []);
 
-  const handlePrint = useCallback(() => {
-    setThemeMode("light");
-    window.requestAnimationFrame(() => {
-      window.print();
-    });
-  }, []);
-
   const showTopbar = !readOnly && !embed;
 
   return (
@@ -571,20 +561,6 @@ export function BrandBriefView({
               <div data-no-print="true" className="[&_button]:h-8 [&_button]:text-xs">
                 <BriefShareActions brief={brief} onBriefUpdated={onBriefChange} />
               </div>
-            ) : null}
-            {showPrint ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-8 gap-1 px-2 text-xs"
-                onClick={handlePrint}
-                data-testid="button-brief-print"
-                data-no-print="true"
-              >
-                <Printer className="h-3.5 w-3.5" aria-hidden />
-                <span className="hidden sm:inline">Печать / PDF</span>
-              </Button>
             ) : null}
             <div
               className="flex items-center gap-1 rounded-lg border p-0.5"

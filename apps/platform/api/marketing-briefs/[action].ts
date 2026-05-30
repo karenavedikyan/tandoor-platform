@@ -11,7 +11,7 @@
  *   POST /api/marketing-briefs/delete
  *   GET  /api/marketing-briefs/public-get?id=  (public+published — без входа; иначе сессия)
  *
- * PDF: клиент открывает /p/brief/:id?print=1 (нативный window.print), без serverless PDF.
+ * Публичная ссылка на бриф: /p/brief/:id (OG + SPA).
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";

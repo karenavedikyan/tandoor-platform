@@ -178,7 +178,6 @@ export function MarketingBriefPublishedPage() {
         blocks={blocks}
         previewMode={isPreview && brief.status !== "published"}
         showShare
-        showPrint
         onBriefChange={setBrief}
       />
       <div className="mx-auto max-w-4xl px-4 pt-4 sm:px-6">
