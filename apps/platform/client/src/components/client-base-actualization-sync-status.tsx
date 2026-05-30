@@ -8,6 +8,7 @@ import type { ActualizationApiMeta, ActualizationSyncStatus } from "@/lib/client
 import { formatDisplayDateTime } from "@/lib/format-display-date";
 import { cn } from "@/lib/utils";
 import { useAuthUser } from "@/hooks/use-auth-user";
+import { DealerTpOverridesSyncStatus } from "@/components/dealer-tp-overrides-sync-status";
 
 export type ClientBaseActualizationSyncStatusProps = {
   syncStatus: ActualizationSyncStatus;
@@ -16,6 +17,10 @@ export type ClientBaseActualizationSyncStatusProps = {
   onRetry?: () => void;
   /** Компактный вид для карточки клиента в clean-актуализации */
   compact?: boolean;
+  /** actualization-blob — legacy канал; dealer-tp-overrides — поля промта 113 */
+  scope?: "actualization-blob" | "dealer-tp-overrides";
+  dealerId?: string;
+  tpId?: string;
 };
 
 function statusLabel(props: ClientBaseActualizationSyncStatusProps): string {
@@ -43,6 +48,17 @@ function storageModeShort(meta: ActualizationApiMeta): string | null {
 }
 
 export function ClientBaseActualizationSyncStatus(props: ClientBaseActualizationSyncStatusProps): ReactElement {
+  const scope = props.scope ?? "actualization-blob";
+  if (scope === "dealer-tp-overrides") {
+    return (
+      <DealerTpOverridesSyncStatus
+        dealerId={props.dealerId}
+        tpId={props.tpId}
+        compact={props.compact}
+      />
+    );
+  }
+
   const { syncStatus, meta, isLoading, onRetry, compact } = props;
   const { user } = useAuthUser();
   const showStorageLabel = user?.role === "admin" || user?.role === "director";

@@ -47,6 +47,7 @@ import { cn } from "@/lib/utils";
 import { flattenGroupedPilotNavigation, type PilotNavGroup, type PilotNavItem, type PilotNavigationModel } from "@/lib/auth-access";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actualization-sync-status";
+import { DealerTpOverridesSyncStatus } from "@/components/dealer-tp-overrides-sync-status";
 import { SidebarNavFooter } from "@/components/layout/sidebar-nav-footer";
 import { MarketingTopCarousel } from "@/components/marketing/MarketingTopCarousel";
 import {
@@ -757,15 +758,21 @@ function ClientBaseActualizationShellBadge({ location }: { location: string }): 
   const actx = useClientBaseActualization();
   if (!actx.enabled) return null;
   if (!isClientBaseActualizationShellBadgeRoute(location)) return null;
+  const showLegacyActualizationBadge = actx.syncStatus !== "local_fallback";
+
   return (
-    <div className="mb-4 min-w-0" data-testid="section-app-shell-client-base-actualization-badge">
-      <ClientBaseActualizationSyncStatus
-        compact
-        isLoading={actx.loading}
-        syncStatus={actx.syncStatus}
-        meta={actx.meta}
-        onRetry={() => void actx.refresh()}
-      />
+    <div className="mb-4 flex min-w-0 flex-col gap-2" data-testid="section-app-shell-client-base-actualization-badge">
+      <DealerTpOverridesSyncStatus compact />
+      {showLegacyActualizationBadge ? (
+        <ClientBaseActualizationSyncStatus
+          compact
+          scope="actualization-blob"
+          isLoading={actx.loading}
+          syncStatus={actx.syncStatus}
+          meta={actx.meta}
+          onRetry={() => void actx.refresh()}
+        />
+      ) : null}
     </div>
   );
 }

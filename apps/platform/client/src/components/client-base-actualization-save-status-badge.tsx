@@ -7,6 +7,7 @@ import {
   hasUnsavedActualizationChanges,
   useActualizationSaveStatus,
 } from "@/lib/client-base-actualization-save-status";
+import { DealerTpOverridesSyncStatus } from "@/components/dealer-tp-overrides-sync-status";
 
 function relativeLabel(iso: string | null): string {
   if (!iso) return "нет даты";
@@ -21,7 +22,16 @@ function relativeLabel(iso: string | null): string {
   return `${diffHour} ч назад`;
 }
 
-export function SaveStatusBadge(): ReactElement {
+export type SaveStatusBadgeProps = {
+  scope?: "actualization-blob" | "dealer-tp-overrides";
+  dealerId?: string;
+  tpId?: string;
+};
+
+export function SaveStatusBadge(props: SaveStatusBadgeProps = {}): ReactElement {
+  if (props.scope === "dealer-tp-overrides") {
+    return <DealerTpOverridesSyncStatus dealerId={props.dealerId} tpId={props.tpId} compact />;
+  }
   const status = useActualizationSaveStatus();
   const [, setTick] = useState(0);
 
