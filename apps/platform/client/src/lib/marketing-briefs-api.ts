@@ -158,10 +158,16 @@ async function postJson<T>(url: string, body: Record<string, unknown>): Promise<
 export async function listBriefs(opts?: {
   status?: MarketingBriefStatus;
   period?: string;
+  limit?: number;
+  sort?: "recent" | "updated";
+  visibility?: "public";
 }): Promise<MarketingBriefRow[]> {
   const q = new URLSearchParams();
   if (opts?.status) q.set("status", opts.status);
   if (opts?.period && opts.period !== "all") q.set("period", opts.period);
+  if (opts?.limit != null && opts.limit > 0) q.set("limit", String(opts.limit));
+  if (opts?.sort) q.set("sort", opts.sort);
+  if (opts?.visibility === "public") q.set("visibility", "public");
   const qs = q.toString();
   const res = await fetch(`/api/marketing-briefs/list${qs ? `?${qs}` : ""}`, {
     credentials: "include",
@@ -172,6 +178,15 @@ export async function listBriefs(opts?: {
     throw apiError(!data.success ? data : { success: false, message: `HTTP ${res.status}` }, res.status);
   }
   return data.data;
+}
+
+export async function fetchRecentPublishedBriefs(limit = 3): Promise<MarketingBriefRow[]> {
+  return listBriefs({
+    status: "published",
+    limit,
+    sort: "recent",
+    visibility: "public",
+  });
 }
 
 export async function getBrief(id: string): Promise<{

@@ -54,6 +54,7 @@ import { getRopOptions } from "@/lib/rop-manager-filters";
 import { getShowcaseOnlyTasks } from "@/lib/task-classification";
 import { getSalesUserById, getTeamManagers, type SalesRole } from "@/lib/sales-control-data";
 import { useOrgSnapshot } from "@/lib/use-org-snapshot";
+import { RecentBriefsWidget } from "@/components/marketing-brief/recent-briefs-widget";
 
 function countOpenTasksForDealers(
   dealerIds: Set<string>,
@@ -481,6 +482,8 @@ export function MainRoleDashboard() {
     <div className="min-w-0 max-w-full overflow-x-hidden space-y-6 pb-10 sm:space-y-8" data-testid="page-main">
       <PageHeader title={headline} description={subline} icon={Home} />
       <DataFreshness updatedAt={actx.meta?.updatedAt ?? null} sourceLabel="Postgres" />
+
+      {user?.role !== "marketer" ? <RecentBriefsWidget /> : null}
 
       {showScopeBreakdownKpi && scopeMetrics ? (
         <section

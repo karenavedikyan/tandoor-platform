@@ -42,6 +42,21 @@ function parseStatusFilter(raw: unknown): MarketingBriefStatus | null {
   return null;
 }
 
+function parseListLimit(raw: unknown): number | null {
+  if (raw === undefined || raw === null || raw === "") return null;
+  const n = typeof raw === "string" ? Number.parseInt(raw, 10) : Number(raw);
+  if (!Number.isFinite(n) || n < 1) return null;
+  return Math.min(Math.floor(n), 50);
+}
+
+function parseListSort(raw: unknown): "recent" | "updated" | null {
+  if (typeof raw !== "string") return null;
+  const s = raw.trim().toLowerCase();
+  if (s === "recent") return "recent";
+  if (s === "updated") return "updated";
+  return null;
+}
+
 async function fetchBriefById(pool: PoolLike, id: string): Promise<MarketingBriefRow | null> {
   const r = await pool.query<Record<string, unknown>>(
     `SELECT b.*, u.full_name AS author_name
@@ -89,6 +104,10 @@ export async function handleMarketingBriefsList(
 ): Promise<void> {
   const canManage = canManageMarketingBriefsServer(me.role);
   const statusFilter = parseStatusFilter(req.query.status);
+  const sort = parseListSort(req.query.sort);
+  const limit = parseListLimit(req.query.limit);
+  const visibilityOnlyPublic =
+    typeof req.query.visibility === "string" && req.query.visibility.trim().toLowerCase() === "public";
   const period =
     typeof req.query.period === "string" && req.query.period.trim() && req.query.period.trim() !== "all"
       ? req.query.period.trim()
@@ -114,14 +133,21 @@ export async function handleMarketingBriefsList(
     clauses.push(`b.period_label = $${params.length}`);
   }
 
+  if (visibilityOnlyPublic) {
+    clauses.push(`b.visibility = 'public'`);
+  }
+
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+  const orderBy =
+    sort === "recent" ? `ORDER BY b.published_at DESC NULLS LAST, b.updated_at DESC` : `ORDER BY b.updated_at DESC`;
+  const limitSql = limit != null ? ` LIMIT ${limit}` : "";
 
   const r = await pool.query<Record<string, unknown>>(
     `SELECT b.*, u.full_name AS author_name
      FROM marketing_briefs b
      LEFT JOIN users u ON u.id = b.created_by
      ${where}
-     ORDER BY b.updated_at DESC`,
+     ${orderBy}${limitSql}`,
     params,
   );
 
