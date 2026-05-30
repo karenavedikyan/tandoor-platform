@@ -12,6 +12,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { PageLoadingFallback } from "@/components/navigation/page-loading";
 import { useCurrentUser, displayUserName } from "@/hooks/use-current-user";
 import { useDealerWorkPlanHydration } from "@/hooks/use-dealer-work-plan-hydration";
+import { OverridesSessionBootstrap } from "@/components/overrides-session-bootstrap";
 import {
   canAccessPathForUser,
   defaultHomePathForUserRole,
@@ -96,6 +97,7 @@ const LazyAdminActualizationDedupe = lazy(() => import("@/pages/admin-actualizat
 const LazyAdminMigration = lazy(() => import("@/pages/admin/migration"));
 const LazyAdminMigrateMarketingBriefs = lazy(() => import("@/pages/admin-migrate-marketing-briefs"));
 const LazyAdminMigrateDealerTp = lazy(() => import("@/pages/admin-migrate-dealer-tp"));
+const LazyAdminSyncHealth = lazy(() => import("@/pages/admin-sync-health"));
 const LazyAdminTpCountDiag = lazy(() => import("@/pages/admin-tp-count-diag"));
 const LazyAdminCountsDiag = lazy(() => import("@/pages/admin-counts-diag"));
 const LazyFeatureInDevelopment = lazy(() => import("@/pages/feature-in-development"));
@@ -176,6 +178,7 @@ const AdminActualizationDedupeRoute = wrapProfileShell(suspensePage(LazyAdminAct
 const AdminMigrationRoute = wrapProfileShell(suspensePage(LazyAdminMigration));
 const AdminMigrateMarketingBriefsRoute = wrapProfileShell(suspensePage(LazyAdminMigrateMarketingBriefs));
 const AdminMigrateDealerTpRoute = wrapProfileShell(suspensePage(LazyAdminMigrateDealerTp));
+const AdminSyncHealthRoute = wrapProfileShell(suspensePage(LazyAdminSyncHealth));
 const AdminTpCountDiagRoute = wrapProfileShell(suspensePage(LazyAdminTpCountDiag));
 const AdminCountsDiagRoute = wrapProfileShell(suspensePage(LazyAdminCountsDiag));
 
@@ -255,6 +258,7 @@ function AuthenticatedShell({
   const salesRole = useMemo(() => userRoleToSalesRole(user.role), [user.role]);
   const { profile } = useReleaseDemoProfile();
   useDealerWorkPlanHydration(user.id, profile.personaUserId);
+  const overridesBootstrap = <OverridesSessionBootstrap userId={user.id} />;
   const actx = useClientBaseActualization();
   const teamPlane = useClientBaseTeamActualization();
   const dealerNavCount = useMemo(
@@ -379,6 +383,7 @@ function AuthenticatedShell({
       }}
       isImpersonating={Boolean(user.impersonatedBy)}
     >
+      {overridesBootstrap}
       <Switch>
         <Route path="/" component={SalesManagerWorkspaceRoute} />
         <Route path="/main/rop/:ropId" component={MainRopDetailRoute} />
@@ -399,6 +404,7 @@ function AuthenticatedShell({
         <Route path="/admin/migration" component={AdminMigrationRoute} />
         <Route path="/admin/migrate-marketing-briefs" component={AdminMigrateMarketingBriefsRoute} />
         <Route path="/admin/migrate-dealer-tp" component={AdminMigrateDealerTpRoute} />
+        <Route path="/admin/sync-health" component={AdminSyncHealthRoute} />
         <Route path="/admin/tp-count-diag" component={AdminTpCountDiagRoute} />
         <Route path="/admin/counts-diag" component={AdminCountsDiagRoute} />
         <Route path="/reset-requests" component={ResetRequestsRoute} />
