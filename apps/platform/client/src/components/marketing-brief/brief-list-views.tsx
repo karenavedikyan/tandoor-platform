@@ -35,7 +35,20 @@ import {
   type MarketingBriefRow,
   type MarketingBriefVisibility,
 } from "@/lib/marketing-briefs-api";
+import { isBriefNew } from "@/lib/marketing-briefs-utils";
 import { cn } from "@/lib/utils";
+
+function BriefNewBadge({ briefId }: { briefId: string }) {
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full bg-[#9ACA3C] px-2 py-0.5 text-xs font-medium text-[#222631]"
+      data-testid={`badge-brief-new-${briefId}`}
+      title="Опубликовано за последние 7 дней"
+    >
+      Новое
+    </span>
+  );
+}
 
 export type BriefListViewMode = "cards" | "table" | "compact";
 
@@ -639,6 +652,7 @@ function MarketingBriefCard({
       <CardHeader className="flex-1 pb-2">
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <BriefStatusBadge status={b.status} />
+          {b.status === "published" && isBriefNew(b.published_at) ? <BriefNewBadge briefId={b.id} /> : null}
           <BriefVisibilityIcon visibility={b.visibility ?? "private"} />
         </div>
         <CardTitle className="sr-only">{briefDisplayTitle(b.title).text}</CardTitle>
@@ -776,13 +790,14 @@ export function BriefTableListView({
                 <span className="hidden md:inline">{formatBriefUpdatedAt(b.updated_at)}</span>
               </td>
               <td className="whitespace-nowrap px-2 py-2">
-                <div className="flex items-center gap-1">
+                <div className="flex flex-wrap items-center gap-1">
                   <span className="md:hidden">
                     <BriefStatusDot status={b.status} />
                   </span>
                   <span className="hidden md:inline-flex">
                     <BriefStatusBadge status={b.status} />
                   </span>
+                  {b.status === "published" && isBriefNew(b.published_at) ? <BriefNewBadge briefId={b.id} /> : null}
                   <BriefVisibilityIcon visibility={b.visibility ?? "private"} />
                 </div>
               </td>
@@ -831,6 +846,7 @@ export function BriefCompactListView({
                 />
               ) : null}
               <BriefStatusDot status={b.status} />
+              {b.status === "published" && isBriefNew(b.published_at) ? <BriefNewBadge briefId={b.id} /> : null}
               <BriefVisibilityIcon visibility={b.visibility ?? "private"} />
               <div className="min-w-0 flex-1">
                 <p
