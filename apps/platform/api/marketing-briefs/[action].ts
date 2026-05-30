@@ -29,7 +29,6 @@ import {
   handleMarketingBriefsArchive,
   handleMarketingBriefsCreate,
   handleMarketingBriefsDelete,
-  handleMarketingBriefsDownloadPdf,
   handleMarketingBriefsGet,
   handleMarketingBriefsList,
   handleMarketingBriefsPublicGet,
@@ -38,10 +37,11 @@ import {
   handleMarketingBriefsUnpublish,
   handleMarketingBriefsUpdate,
 } from "../../shared/marketing-briefs-handlers.js";
+import { handleMarketingBriefsDownloadPdf } from "../../server/marketing-briefs-pdf-handler.js";
 
 export const config = {
   maxDuration: 30,
-  includeFiles: "../../server/fonts/**",
+  includeFiles: ["../../server/fonts/**", "../../server/marketing-brief-pdf.*"],
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {

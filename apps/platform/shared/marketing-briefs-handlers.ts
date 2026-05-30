@@ -19,11 +19,6 @@ import {
   type MarketingBriefRow,
   type MarketingBriefStatus,
 } from "./marketing-briefs-types.js";
-import {
-  buildBriefPdfContentDisposition,
-  buildBriefPdfFilename,
-} from "./marketing-brief-pdf-filename.js";
-
 type SessionUser = { id: string; role: string; status: string };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -489,65 +484,6 @@ export async function handleMarketingBriefsPublicGet(
 
   const blocks = await fetchBlocksForBrief(pool, id);
   sendJson(res, 200, { success: true, data: { brief, blocks } });
-}
-
-export async function handleMarketingBriefsDownloadPdf(
-  req: VercelRequest,
-  res: VercelResponse,
-  pool: PoolLike,
-  me: SessionUser,
-): Promise<void> {
-  const body = (req.body ?? {}) as Record<string, unknown>;
-  const id = parseUuid(body.id);
-  if (!id) {
-    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите id." });
-    return;
-  }
-
-  const brief = await fetchBriefById(pool, id);
-  if (!brief || !canReadBrief(me, brief)) {
-    sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Бриф не найден." });
-    return;
-  }
-
-  const blocks = await fetchBlocksForBrief(pool, id);
-  const theme = body.theme === "dark" ? "dark" : "light";
-  const host = String(req.headers["x-forwarded-host"] || req.headers.host || "");
-  const proto =
-    String(req.headers["x-forwarded-proto"] || "https").split(",")[0]?.trim() || "https";
-  const origin = host ? `${proto}://${host}` : undefined;
-
-  try {
-    const { renderBriefPdf } = await import("../server/marketing-brief-pdf.js");
-    const buffer = await renderBriefPdf({ brief, blocks, theme, origin });
-    const filename = buildBriefPdfFilename(brief);
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", buildBriefPdfContentDisposition(filename));
-    res.setHeader("Cache-Control", "no-store");
-    res.status(200).send(buffer);
-  } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
-    const stack = e instanceof Error && e.stack ? e.stack : "";
-    const name = e instanceof Error ? e.name : "Unknown";
-
-    console.error("[marketing-briefs] download-pdf failed", { briefId: id, theme, message, stack });
-
-    // TEMP: expose debug in all environments (including production) for diagnosis
-    sendJson(res, 500, {
-      success: false,
-      code: "PDF_ERROR",
-      message: "Не удалось сформировать PDF.",
-      debug: {
-        name,
-        message,
-        stack: stack.split("\n").slice(0, 15).join("\n"),
-        briefId: id,
-        theme,
-        blocksCount: blocks?.length ?? 0,
-        blocksTypes: blocks?.map((b) => b.type) ?? [],
-      },
-    });
-  }
 }
 
 async function touchBriefUpdatedAt(pool: PoolLike, briefId: string): Promise<void> {
