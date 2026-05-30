@@ -28,7 +28,7 @@ export async function shadowWrite(sql: string, params: unknown[] = [], tag: stri
 
   const started = Date.now();
   try {
-    const result = await pgProxyQuery(sql, params, { timeoutMs: 5000 });
+    const result = await pgProxyQuery(sql, params, { timeoutMs: 2500 });
     if (!result.ok) {
       console.warn(
         `[shadow-write:${tag}] failed (${result.code}): ${result.error} | ` +
