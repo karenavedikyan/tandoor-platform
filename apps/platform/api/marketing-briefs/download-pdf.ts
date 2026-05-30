@@ -1,33 +1,12 @@
 /**
  * POST /api/marketing-briefs/download-pdf
- *
- * Отдельная serverless-функция. Handler/renderer — lazy import внутри try/catch,
- * чтобы ошибки module-init (@react-pdf и т.д.) возвращались как JSON, а не FUNCTION_INVOCATION_FAILED.
+ * Полностью lazy цепочка импортов для ловли module-init ошибок.
  */
-
-import { createRequire } from "node:module";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import {
-  enforceCsrfOrigin,
-  getPool,
-  resolveCurrentUser,
-  vercelHeaders,
-} from "../../shared/admin/admin-auth.js";
-
-const require = createRequire(import.meta.url);
 
 export const config = {
   maxDuration: 30,
 };
-
-// Hint для Vercel nft-tracer: явно ссылаемся на модули через require.resolve.
-function _vercelTraceHints(): string[] {
-  return [
-    require.resolve("../../server/marketing-briefs-pdf-handler.js"),
-    require.resolve("../../server/marketing-brief-pdf.js"),
-  ];
-}
-void _vercelTraceHints;
 
 function safeEnvSnapshot(): Record<string, unknown> {
   return {
@@ -49,19 +28,20 @@ function sendDebugError(
 ): void {
   if (res.headersSent) return;
   const e = err as { name?: string; message?: string; stack?: string; code?: string };
-  const payload = {
-    error: "pdf_failed",
-    stage,
-    message: e?.message ?? String(err ?? "no error object"),
-    name: e?.name ?? null,
-    code: e?.code ?? null,
-    stack: e?.stack ?? null,
-    env: safeEnvSnapshot(),
-    extra,
-  };
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   res.setHeader("Cache-Control", "no-store");
-  res.status(status).send(JSON.stringify(payload));
+  res.status(status).send(
+    JSON.stringify({
+      error: "pdf_failed",
+      stage,
+      message: e?.message ?? String(err ?? "no error object"),
+      name: e?.name ?? null,
+      code: e?.code ?? null,
+      stack: e?.stack ?? null,
+      env: safeEnvSnapshot(),
+      extra,
+    }),
+  );
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
@@ -71,24 +51,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       return;
     }
 
-    if (!enforceCsrfOrigin(req)) {
+    let authMod: typeof import("../../shared/admin/admin-auth.js");
+    try {
+      authMod = await import("../../shared/admin/admin-auth.js");
+    } catch (e) {
+      sendDebugError(res, 500, "import_admin_auth", e);
+      return;
+    }
+
+    if (!authMod.enforceCsrfOrigin(req)) {
       sendDebugError(res, 403, "csrf_check", new Error("CSRF rejected"));
       return;
     }
 
-    const pool = getPool();
+    const pool = authMod.getPool();
     if (!pool) {
       sendDebugError(res, 503, "db_pool", new Error("Database pool unavailable"));
       return;
     }
 
-    const headers = vercelHeaders(req);
-    const me = await resolveCurrentUser(pool, headers);
+    const headers = authMod.vercelHeaders(req);
+    const me = await authMod.resolveCurrentUser(pool, headers);
     if (!me) {
       sendDebugError(res, 401, "auth", new Error("Authentication required"));
       return;
     }
-
     const sessionUser = { id: me.id, role: me.role, status: me.status };
 
     let handleDownloadPdf: typeof import("../../server/marketing-briefs-pdf-handler.js").handleDownloadPdf;
