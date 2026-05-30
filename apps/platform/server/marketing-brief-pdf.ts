@@ -17,9 +17,14 @@ export async function renderBriefPdf(
   options?: BriefPdfRenderOptions,
 ): Promise<Buffer> {
   const [{ default: chromium }, puppeteer] = await Promise.all([
-    import("@sparticuz/chromium"),
+    import("@sparticuz/chromium-min"),
     import("puppeteer-core"),
   ]);
+
+  const remotePackUrl = process.env.CHROMIUM_REMOTE_EXEC_PATH?.trim();
+  if (!remotePackUrl) {
+    throw new Error("CHROMIUM_REMOTE_EXEC_PATH env var is required for PDF generation");
+  }
 
   const baseUrl =
     options?.baseUrl ??
@@ -31,7 +36,7 @@ export async function renderBriefPdf(
   const browser = await puppeteer.default.launch({
     args: chromium.args,
     defaultViewport: { width: 1200, height: 1600, deviceScaleFactor: 2 },
-    executablePath: await chromium.executablePath(),
+    executablePath: await chromium.executablePath(remotePackUrl),
     headless: typeof chromium.headless === "boolean" ? chromium.headless : true,
   });
 
