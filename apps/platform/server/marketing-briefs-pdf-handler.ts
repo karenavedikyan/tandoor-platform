@@ -97,32 +97,27 @@ export async function handleMarketingBriefsDownloadPdf(
     const stack = e instanceof Error && e.stack ? e.stack : "";
     const name = e instanceof Error ? e.name : "Unknown";
 
-    console.error("[marketing-briefs] download-pdf failed", {
-      briefId: id,
-      theme,
-      message,
-      stack,
-      blocksCount: blocks.length,
-      blocksTypes: blocks.map((b) => b.type),
-    });
+    console.error("[download-pdf] failed", { briefId: id, theme, message, stack });
 
+    // TEMP: expose debug in all environments (revert after root-cause fix)
     sendJson(res, 500, {
       success: false,
       code: "PDF_ERROR",
       message: "Не удалось сформировать PDF.",
-      ...(process.env.VERCEL_ENV !== "production"
-        ? {
-            debug: {
-              name,
-              message,
-              stack: stack.split("\n").slice(0, 15).join("\n"),
-              briefId: id,
-              theme,
-              blocksCount: blocks.length,
-              blocksTypes: blocks.map((b) => b.type),
-            },
-          }
-        : {}),
+      debug: {
+        name,
+        message,
+        stack: stack.split("\n").slice(0, 20).join("\n"),
+        briefId: id,
+        theme,
+        blocksCount: blocks?.length ?? 0,
+        blocksTypes: blocks?.map((b) => b.type) ?? [],
+        cwd: process.cwd(),
+        env: {
+          VERCEL_ENV: process.env.VERCEL_ENV ?? null,
+          NODE_VERSION: process.version,
+        },
+      },
     });
   }
 }
