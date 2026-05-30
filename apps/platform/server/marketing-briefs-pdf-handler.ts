@@ -119,16 +119,24 @@ export async function handleDownloadPdf(
     return;
   }
 
+  if (brief.status !== "published") {
+    sendPdfStageError(res, 400, "brief_not_published", new Error("brief not published yet"), {
+      briefId: id,
+      status: brief.status,
+    });
+    return;
+  }
+
   const body = (req.body ?? {}) as Record<string, unknown>;
   const theme = body.theme === "dark" ? "dark" : "light";
   const host = String(req.headers["x-forwarded-host"] || req.headers.host || "");
   const proto =
     String(req.headers["x-forwarded-proto"] || "https").split(",")[0]?.trim() || "https";
-  const origin = host ? `${proto}://${host}` : undefined;
+  const baseUrl = host ? `${proto}://${host}` : undefined;
 
   let pdfBuffer: Buffer;
   try {
-    pdfBuffer = await renderBriefPdf({ brief, blocks, theme, origin });
+    pdfBuffer = await renderBriefPdf(brief, blocks, theme, { baseUrl });
     if (!pdfBuffer?.length) {
       throw new Error("renderBriefPdf returned empty buffer");
     }

@@ -490,6 +490,7 @@ export function BrandBriefView({
   showPrint = false,
   readOnly = false,
   embed = false,
+  forcedTheme,
   onBriefChange,
 }: {
   brief: MarketingBriefRow;
@@ -503,13 +504,19 @@ export function BrandBriefView({
   readOnly?: boolean;
   /** Встроенный режим (модалка): без min-h-screen и липкой панели */
   embed?: boolean;
+  /** Тема из URL (?theme=dark|light), без localStorage */
+  forcedTheme?: BrandBriefThemeMode;
   onBriefChange?: (brief: MarketingBriefRow) => void;
 }) {
-  const [themeMode, setThemeMode] = useState<BrandBriefThemeMode>(() => readBriefViewTheme());
+  const [themeMode, setThemeMode] = useState<BrandBriefThemeMode>(() => forcedTheme ?? readBriefViewTheme());
 
   useEffect(() => {
-    writeBriefViewTheme(themeMode);
-  }, [themeMode]);
+    if (forcedTheme) setThemeMode(forcedTheme);
+  }, [forcedTheme]);
+
+  useEffect(() => {
+    if (!forcedTheme) writeBriefViewTheme(themeMode);
+  }, [themeMode, forcedTheme]);
 
   const theme = useMemo(() => brandBriefTheme(themeMode), [themeMode]);
   const periodLabel = formatMarketingBriefPeriodLabel(brief.period_label).toUpperCase();
