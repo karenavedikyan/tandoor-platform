@@ -12,6 +12,7 @@ import {
   type TradePointOverrideField,
   type TradePointOverrideRow,
 } from "./trade-point-overrides-types.js";
+import { runOverridesHandlerSafe } from "./overrides-write-errors.js";
 
 type SessionUser = { id: string; role: string; status: string };
 
@@ -163,32 +164,34 @@ export async function handleTradePointOverridesUpsert(
     return;
   }
 
-  const prev = await fetchOverride(pool, tpId);
-  await logEvents(pool, tpId, prev, patch, me.id);
+  await runOverridesHandlerSafe(pool, "trade_point", tpId, body, me.id, async () => {
+    const prev = await fetchOverride(pool, tpId);
+    await logEvents(pool, tpId, prev, patch, me.id);
 
-  if (prev) {
-    const sets: string[] = [];
-    const params: unknown[] = [tpId];
-    for (const [key, val] of Object.entries(patch) as [TradePointOverrideField, unknown][]) {
-      params.push(val === undefined ? null : val);
-      sets.push(`${key} = $${params.length}`);
+    if (prev) {
+      const sets: string[] = [];
+      const params: unknown[] = [tpId];
+      for (const [key, val] of Object.entries(patch) as [TradePointOverrideField, unknown][]) {
+        params.push(val === undefined ? null : val);
+        sets.push(`${key} = $${params.length}`);
+      }
+      params.push(me.id);
+      sets.push(`updated_at = NOW()`, `updated_by = $${params.length}`);
+      await pool.query(`UPDATE trade_point_overrides SET ${sets.join(", ")} WHERE tp_id = $1`, params);
+    } else {
+      const cols: string[] = ["tp_id", "updated_by"];
+      const vals: unknown[] = [tpId, me.id];
+      for (const [key, val] of Object.entries(patch) as [TradePointOverrideField, unknown][]) {
+        cols.push(key);
+        vals.push(val === undefined ? null : val);
+      }
+      const placeholders = vals.map((_, i) => `$${i + 1}`).join(", ");
+      await pool.query(
+        `INSERT INTO trade_point_overrides (${cols.join(", ")}) VALUES (${placeholders})`,
+        vals,
+      );
     }
-    params.push(me.id);
-    sets.push(`updated_at = NOW()`, `updated_by = $${params.length}`);
-    await pool.query(`UPDATE trade_point_overrides SET ${sets.join(", ")} WHERE tp_id = $1`, params);
-  } else {
-    const cols: string[] = ["tp_id", "updated_by"];
-    const vals: unknown[] = [tpId, me.id];
-    for (const [key, val] of Object.entries(patch) as [TradePointOverrideField, unknown][]) {
-      cols.push(key);
-      vals.push(val === undefined ? null : val);
-    }
-    const placeholders = vals.map((_, i) => `$${i + 1}`).join(", ");
-    await pool.query(
-      `INSERT INTO trade_point_overrides (${cols.join(", ")}) VALUES (${placeholders})`,
-      vals,
-    );
-  }
+  });
 
   const override = await fetchOverride(pool, tpId);
   sendJson(res, 200, { success: true, data: { override } });
@@ -207,15 +210,17 @@ export async function handleTradePointOverridesSetTraining(
     sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите tp_id." });
     return;
   }
-  await pool.query(
-    `INSERT INTO trade_point_training_state (tp_id, product_training_done, updated_by)
-     VALUES ($1, COALESCE($2::boolean, FALSE), $3::uuid)
-     ON CONFLICT (tp_id) DO UPDATE SET
-       product_training_done = COALESCE($2::boolean, trade_point_training_state.product_training_done),
-       updated_at = NOW(),
-       updated_by = EXCLUDED.updated_by`,
-    [tpId, body.product_training_done === undefined ? null : Boolean(body.product_training_done), me.id],
-  );
+  await runOverridesHandlerSafe(pool, "trade_point_training", tpId, body, me.id, async () => {
+    await pool.query(
+      `INSERT INTO trade_point_training_state (tp_id, product_training_done, updated_by)
+       VALUES ($1, COALESCE($2::boolean, FALSE), $3::uuid)
+       ON CONFLICT (tp_id) DO UPDATE SET
+         product_training_done = COALESCE($2::boolean, trade_point_training_state.product_training_done),
+         updated_at = NOW(),
+         updated_by = EXCLUDED.updated_by`,
+      [tpId, body.product_training_done === undefined ? null : Boolean(body.product_training_done), me.id],
+    );
+  });
   const r = await pool.query<Record<string, unknown>>(
     `SELECT * FROM trade_point_training_state WHERE tp_id = $1`,
     [tpId],
@@ -236,17 +241,26 @@ async function setTrash(
   const patch: Partial<Record<TradePointOverrideField, unknown>> = trash
     ? { trashed_at: new Date().toISOString(), trashed_by: me.id }
     : { trashed_at: null, trashed_by: null };
-  const prev = await fetchOverride(pool, tpId);
-  await logEvents(pool, tpId, prev, patch, me.id);
-  await pool.query(
-    `INSERT INTO trade_point_overrides (tp_id, trashed_at, trashed_by, updated_by)
-     VALUES ($1, $2, $3::uuid, $4::uuid)
-     ON CONFLICT (tp_id) DO UPDATE SET
-       trashed_at = EXCLUDED.trashed_at,
-       trashed_by = EXCLUDED.trashed_by,
-       updated_at = NOW(),
-       updated_by = EXCLUDED.updated_by`,
-    [tpId, trash ? new Date().toISOString() : null, trash ? me.id : null, me.id],
+  await runOverridesHandlerSafe(
+    pool,
+    trash ? "trade_point_trash" : "trade_point_untrash",
+    tpId,
+    { tp_id: tpId, trash },
+    me.id,
+    async () => {
+      const prev = await fetchOverride(pool, tpId);
+      await logEvents(pool, tpId, prev, patch, me.id);
+      await pool.query(
+        `INSERT INTO trade_point_overrides (tp_id, trashed_at, trashed_by, updated_by)
+         VALUES ($1, $2, $3::uuid, $4::uuid)
+         ON CONFLICT (tp_id) DO UPDATE SET
+           trashed_at = EXCLUDED.trashed_at,
+           trashed_by = EXCLUDED.trashed_by,
+           updated_at = NOW(),
+           updated_by = EXCLUDED.updated_by`,
+        [tpId, trash ? new Date().toISOString() : null, trash ? me.id : null, me.id],
+      );
+    },
   );
   const override = await fetchOverride(pool, tpId);
   sendJson(res, 200, { success: true, data: { override } });

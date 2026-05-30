@@ -141,7 +141,8 @@ export function canAccessPathForUser(role: UserRole, path: string): boolean {
     p === "/admin/actualization/dedupe" ||
     p === "/admin/migration" ||
     p === "/admin/migrate-marketing-briefs" ||
-    p === "/admin/migrate-dealer-tp"
+    p === "/admin/migrate-dealer-tp" ||
+    p === "/admin/sync-health"
   ) {
     return role === "admin";
   }
@@ -334,6 +335,12 @@ function buildAdministrationNavGroup(platformUserRole: UserRole | null | undefin
       label: "Миграции дилер/ТТ",
       testId: "nav-item-admin-dealer-tp-migrate",
       navBehaviorId: "nav-admin-dealer-tp-migrate",
+    });
+    items.push({
+      href: "/admin/sync-health",
+      label: "Sync health overrides",
+      testId: "nav-item-admin-sync-health",
+      navBehaviorId: "nav-admin-sync-health",
     });
     items.push({
       href: "/admin/actualization/dedupe",

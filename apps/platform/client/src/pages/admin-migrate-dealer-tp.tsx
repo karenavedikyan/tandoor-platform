@@ -233,6 +233,7 @@ export default function AdminMigrateDealerTpPage() {
     "trade_point_overrides",
     "trade_point_override_events",
     "trade_point_training_state",
+    "overrides_write_errors",
   ];
 
   const inSync = result?.success === true;

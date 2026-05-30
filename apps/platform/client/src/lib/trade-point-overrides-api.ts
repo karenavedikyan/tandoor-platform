@@ -1,9 +1,11 @@
 /**
- * HTTP API оверрайдов торговых точек (Postgres, prompt 113).
+ * HTTP API оверрайдов торговых точек (Postgres, prompt 113 / 113.1).
  */
 
 import type { TradePointOverrideRow, TradePointTrainingRow } from "../../../shared/trade-point-overrides-types";
 import type { TradePointOverrideField } from "../../../shared/trade-point-overrides-types";
+import { enqueuePendingSync, makePendingId } from "@/lib/overrides-pending-sync";
+import { overridesApiPost, type OverridesApiResult } from "@/lib/overrides-api-result";
 
 type ApiOk<T> = { success: true; data: T };
 type ApiErr = { success: false; code?: string; message?: string };
@@ -54,75 +56,104 @@ export async function fetchTradePointOverride(tpId: string): Promise<{
   }
 }
 
+export async function upsertTradePointOverrideStrict(
+  tpId: string,
+  fields: Partial<Record<TradePointOverrideField, unknown>>,
+  dealerId?: string,
+): Promise<OverridesApiResult<{ override: TradePointOverrideRow | null }>> {
+  const body = { tp_id: tpId, dealer_id: dealerId, fields };
+  const r = await overridesApiPost<{ override: TradePointOverrideRow | null }>({
+    scope: "trade-point",
+    action: "upsert",
+    url: "/api/trade-point-overrides/upsert",
+    entityId: tpId,
+    fields,
+    body,
+  });
+  if (!r.ok && r.network) {
+    enqueuePendingSync({
+      id: makePendingId("tp-upsert", tpId),
+      kind: "tp-upsert",
+      payload: body,
+    });
+  }
+  return r;
+}
+
 export async function upsertTradePointOverride(
   tpId: string,
   fields: Partial<Record<TradePointOverrideField, unknown>>,
   dealerId?: string,
 ): Promise<TradePointOverrideRow | null> {
-  try {
-    const res = await fetch("/api/trade-point-overrides/upsert", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tp_id: tpId, dealer_id: dealerId, fields }),
-    });
-    const data = await parseJson<ApiOk<{ override: TradePointOverrideRow | null }> | ApiErr>(res);
-    if (!res.ok || !data.success) return null;
-    return data.data.override;
-  } catch {
-    return null;
+  const r = await upsertTradePointOverrideStrict(tpId, fields, dealerId);
+  return r.ok ? r.data.override : null;
+}
+
+export async function setTradePointTrainingStrict(
+  tpId: string,
+  partial: { product_training_done?: boolean },
+): Promise<OverridesApiResult<{ training: TradePointTrainingRow | null }>> {
+  const body = { tp_id: tpId, ...partial };
+  const r = await overridesApiPost<{ training: TradePointTrainingRow | null }>({
+    scope: "trade-point",
+    action: "set-training",
+    url: "/api/trade-point-overrides/set-training",
+    entityId: tpId,
+    fields: partial,
+    body,
+  });
+  if (!r.ok && r.network) {
+    enqueuePendingSync({ id: makePendingId("tp-training", tpId), kind: "tp-training", payload: body });
   }
+  return r;
 }
 
 export async function setTradePointTraining(
   tpId: string,
   partial: { product_training_done?: boolean },
 ): Promise<TradePointTrainingRow | null> {
-  try {
-    const res = await fetch("/api/trade-point-overrides/set-training", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tp_id: tpId, ...partial }),
-    });
-    const data = await parseJson<ApiOk<{ training: TradePointTrainingRow | null }> | ApiErr>(res);
-    if (!res.ok || !data.success) return null;
-    return data.data.training;
-  } catch {
-    return null;
+  const r = await setTradePointTrainingStrict(tpId, partial);
+  return r.ok ? r.data.training : null;
+}
+
+export async function trashTradePointStrict(tpId: string): Promise<OverridesApiResult<{ override: TradePointOverrideRow | null }>> {
+  const body = { tp_id: tpId };
+  const r = await overridesApiPost<{ override: TradePointOverrideRow | null }>({
+    scope: "trade-point",
+    action: "trash",
+    url: "/api/trade-point-overrides/trash",
+    entityId: tpId,
+    body,
+  });
+  if (!r.ok && r.network) {
+    enqueuePendingSync({ id: makePendingId("tp-trash", tpId), kind: "tp-trash", payload: body });
   }
+  return r;
 }
 
 export async function trashTradePoint(tpId: string): Promise<TradePointOverrideRow | null> {
-  try {
-    const res = await fetch("/api/trade-point-overrides/trash", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tp_id: tpId }),
-    });
-    const data = await parseJson<ApiOk<{ override: TradePointOverrideRow | null }> | ApiErr>(res);
-    if (!res.ok || !data.success) return null;
-    return data.data.override;
-  } catch {
-    return null;
+  const r = await trashTradePointStrict(tpId);
+  return r.ok ? r.data.override : null;
+}
+
+export async function untrashTradePointStrict(tpId: string): Promise<OverridesApiResult<{ override: TradePointOverrideRow | null }>> {
+  const body = { tp_id: tpId };
+  const r = await overridesApiPost<{ override: TradePointOverrideRow | null }>({
+    scope: "trade-point",
+    action: "untrash",
+    url: "/api/trade-point-overrides/untrash",
+    entityId: tpId,
+    body,
+  });
+  if (!r.ok && r.network) {
+    enqueuePendingSync({ id: makePendingId("tp-untrash", tpId), kind: "tp-untrash", payload: body });
   }
+  return r;
 }
 
 export async function untrashTradePoint(tpId: string): Promise<TradePointOverrideRow | null> {
-  try {
-    const res = await fetch("/api/trade-point-overrides/untrash", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tp_id: tpId }),
-    });
-    const data = await parseJson<ApiOk<{ override: TradePointOverrideRow | null }> | ApiErr>(res);
-    if (!res.ok || !data.success) return null;
-    return data.data.override;
-  } catch {
-    return null;
-  }
+  const r = await untrashTradePointStrict(tpId);
+  return r.ok ? r.data.override : null;
 }
 
 export const TRADE_POINT_OVERRIDES_HYDRATED_EVENT = "tandoor-trade-point-overrides-hydrated";

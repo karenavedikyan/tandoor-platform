@@ -2,8 +2,9 @@
  * Порядок выгрузки клиента (localStorage-кеш + Postgres, Промт 113).
  */
 
-import { upsertDealerOverride } from "@/lib/dealer-overrides-api";
-import { toast } from "@/hooks/use-toast";
+import { upsertDealerOverrideStrict } from "@/lib/dealer-overrides-api";
+import { handleOverridesStrictResult } from "@/lib/overrides-save-feedback";
+import { makePendingId } from "@/lib/overrides-pending-sync";
 
 export const DEALER_UNLOADING_ORDER_STORAGE_KEY = "tandoor-dealer-unloading-order-v1";
 export const DEALER_UNLOADING_ORDER_EVENT = "tandoor-dealer-unloading-order-changed";
@@ -100,24 +101,16 @@ export function setDealerUnloadingOrder(
     historyByDealer[dealerId] = h.slice(0, 80);
   }
 
-  const prevSnapshot = JSON.stringify(loadDealerUnloadingOrderState());
   saveState({ orderByDealer, historyByDealer });
 
-  void upsertDealerOverride(dealerId, {
-    unloading_order: next != null && next > 0 ? String(Math.floor(next)) : null,
-  }).then((saved) => {
-    if (!saved) {
-      try {
-        saveState(JSON.parse(prevSnapshot) as State);
-      } catch {
-        /* ignore */
-      }
-      toast({
-        variant: "destructive",
-        title: "Не удалось сохранить",
-        description: "Попробуйте ещё раз.",
-      });
-    }
+  const fields = { unloading_order: next != null && next > 0 ? String(Math.floor(next)) : null };
+  void upsertDealerOverrideStrict(dealerId, fields).then((result) => {
+    handleOverridesStrictResult(result, {
+      pendingId: makePendingId("dealer-upsert", dealerId),
+      pendingKind: "dealer-upsert",
+      pendingPayload: { dealer_id: dealerId, fields },
+      fieldLabel: "Порядок выгрузки",
+    });
   });
 }
 

@@ -10,7 +10,7 @@
     "dev": "NODE_ENV=development tsx server/index.ts",
     "build": "tsx script/build.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
-    "check": "tsc && node scripts/check-shadow-write-coverage.mjs",
+    "check": "tsc && node scripts/check-shadow-write-coverage.mjs && node scripts/check-no-void-overrides-calls.mjs",
     "lint:shadow-write": "node scripts/check-shadow-write-coverage.mjs",
     "auth:db-push": "node scripts/auth-db-push.mjs",
     "auth:seed-admin": "node scripts/auth-seed-admin.mjs",
@@ -41,7 +41,10 @@
     "test:assignments-scope": "tsx client/src/lib/__tests__/dealer-base-real-scope-assignments.test.ts",
     "test:management-view-model": "tsx client/src/lib/__tests__/dealer-base-management-view-model.test.ts",
     "test:dealer-edit-contact-sync": "tsx client/src/lib/__tests__/dealer-edit-contact-sync.test.ts",
-    "test:pg-migration": "vitest run"
+    "test:pg-migration": "vitest run",
+    "test:overrides-pending-sync": "tsx client/src/lib/__tests__/overrides-pending-sync.test.ts",
+    "test:overrides-backfill": "tsx client/src/lib/__tests__/overrides-backfill-on-login.test.ts",
+    "test:overrides-sync": "npm run test:overrides-pending-sync && npm run test:overrides-backfill"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

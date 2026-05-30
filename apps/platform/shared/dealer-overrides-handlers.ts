@@ -13,6 +13,7 @@ import {
   type DealerOverrideField,
   type DealerOverrideRow,
 } from "./dealer-overrides-types.js";
+import { runOverridesHandlerSafe } from "./overrides-write-errors.js";
 
 type SessionUser = { id: string; role: string; status: string };
 
@@ -191,32 +192,34 @@ export async function handleDealerOverridesUpsert(
     return;
   }
 
-  const prev = await fetchOverride(pool, dealerId);
-  await logEvents(pool, dealerId, prev, patch, me.id);
+  await runOverridesHandlerSafe(pool, "dealer", dealerId, body, me.id, async () => {
+    const prev = await fetchOverride(pool, dealerId);
+    await logEvents(pool, dealerId, prev, patch, me.id);
 
-  if (prev) {
-    const sets: string[] = [];
-    const params: unknown[] = [dealerId];
-    for (const [key, val] of Object.entries(patch) as [DealerOverrideField, unknown][]) {
-      params.push(val === undefined ? null : val);
-      sets.push(`${key} = $${params.length}`);
+    if (prev) {
+      const sets: string[] = [];
+      const params: unknown[] = [dealerId];
+      for (const [key, val] of Object.entries(patch) as [DealerOverrideField, unknown][]) {
+        params.push(val === undefined ? null : val);
+        sets.push(`${key} = $${params.length}`);
+      }
+      params.push(me.id);
+      sets.push(`updated_at = NOW()`, `updated_by = $${params.length}`);
+      await pool.query(`UPDATE dealer_overrides SET ${sets.join(", ")} WHERE dealer_id = $1`, params);
+    } else {
+      const cols: string[] = ["dealer_id", "updated_by"];
+      const vals: unknown[] = [dealerId, me.id];
+      for (const [key, val] of Object.entries(patch) as [DealerOverrideField, unknown][]) {
+        cols.push(key);
+        vals.push(val === undefined ? null : val);
+      }
+      const placeholders = vals.map((_, i) => `$${i + 1}`).join(", ");
+      await pool.query(
+        `INSERT INTO dealer_overrides (${cols.join(", ")}) VALUES (${placeholders})`,
+        vals,
+      );
     }
-    params.push(me.id);
-    sets.push(`updated_at = NOW()`, `updated_by = $${params.length}`);
-    await pool.query(`UPDATE dealer_overrides SET ${sets.join(", ")} WHERE dealer_id = $1`, params);
-  } else {
-    const cols: string[] = ["dealer_id", "updated_by"];
-    const vals: unknown[] = [dealerId, me.id];
-    for (const [key, val] of Object.entries(patch) as [DealerOverrideField, unknown][]) {
-      cols.push(key);
-      vals.push(val === undefined ? null : val);
-    }
-    const placeholders = vals.map((_, i) => `$${i + 1}`).join(", ");
-    await pool.query(
-      `INSERT INTO dealer_overrides (${cols.join(", ")}) VALUES (${placeholders})`,
-      vals,
-    );
-  }
+  });
 
   const override = await fetchOverride(pool, dealerId);
   sendJson(res, 200, { success: true, data: { override } });
@@ -238,21 +241,23 @@ export async function handleDealerOverridesSetTraining(
   const productDone = body.product_training_done;
   const needsNew = body.needs_new_employees_training;
 
-  await pool.query(
-    `INSERT INTO dealer_training_state (dealer_id, product_training_done, needs_new_employees_training, updated_by)
-     VALUES ($1, COALESCE($2::boolean, FALSE), COALESCE($3::boolean, FALSE), $4::uuid)
-     ON CONFLICT (dealer_id) DO UPDATE SET
-       product_training_done = COALESCE($2::boolean, dealer_training_state.product_training_done),
-       needs_new_employees_training = COALESCE($3::boolean, dealer_training_state.needs_new_employees_training),
-       updated_at = NOW(),
-       updated_by = EXCLUDED.updated_by`,
-    [
-      dealerId,
-      productDone === undefined ? null : Boolean(productDone),
-      needsNew === undefined ? null : Boolean(needsNew),
-      me.id,
-    ],
-  );
+  await runOverridesHandlerSafe(pool, "dealer_training", dealerId, body, me.id, async () => {
+    await pool.query(
+      `INSERT INTO dealer_training_state (dealer_id, product_training_done, needs_new_employees_training, updated_by)
+       VALUES ($1, COALESCE($2::boolean, FALSE), COALESCE($3::boolean, FALSE), $4::uuid)
+       ON CONFLICT (dealer_id) DO UPDATE SET
+         product_training_done = COALESCE($2::boolean, dealer_training_state.product_training_done),
+         needs_new_employees_training = COALESCE($3::boolean, dealer_training_state.needs_new_employees_training),
+         updated_at = NOW(),
+         updated_by = EXCLUDED.updated_by`,
+      [
+        dealerId,
+        productDone === undefined ? null : Boolean(productDone),
+        needsNew === undefined ? null : Boolean(needsNew),
+        me.id,
+      ],
+    );
+  });
 
   const r = await pool.query<Record<string, unknown>>(
     `SELECT * FROM dealer_training_state WHERE dealer_id = $1`,
@@ -274,18 +279,26 @@ async function setTrash(
   const patch: Partial<Record<DealerOverrideField, unknown>> = trash
     ? { trashed_at: new Date().toISOString(), trashed_by: me.id }
     : { trashed_at: null, trashed_by: null };
-  const prev = await fetchOverride(pool, dealerId);
-  await logEvents(pool, dealerId, prev, patch, me.id);
-
-  await pool.query(
-    `INSERT INTO dealer_overrides (dealer_id, trashed_at, trashed_by, updated_by)
-     VALUES ($1, $2, $3::uuid, $4::uuid)
-     ON CONFLICT (dealer_id) DO UPDATE SET
-       trashed_at = EXCLUDED.trashed_at,
-       trashed_by = EXCLUDED.trashed_by,
-       updated_at = NOW(),
-       updated_by = EXCLUDED.updated_by`,
-    [dealerId, trash ? new Date().toISOString() : null, trash ? me.id : null, me.id],
+  await runOverridesHandlerSafe(
+    pool,
+    trash ? "dealer_trash" : "dealer_untrash",
+    dealerId,
+    { dealer_id: dealerId, trash },
+    me.id,
+    async () => {
+      const prev = await fetchOverride(pool, dealerId);
+      await logEvents(pool, dealerId, prev, patch, me.id);
+      await pool.query(
+        `INSERT INTO dealer_overrides (dealer_id, trashed_at, trashed_by, updated_by)
+         VALUES ($1, $2, $3::uuid, $4::uuid)
+         ON CONFLICT (dealer_id) DO UPDATE SET
+           trashed_at = EXCLUDED.trashed_at,
+           trashed_by = EXCLUDED.trashed_by,
+           updated_at = NOW(),
+           updated_by = EXCLUDED.updated_by`,
+        [dealerId, trash ? new Date().toISOString() : null, trash ? me.id : null, me.id],
+      );
+    },
   );
   const override = await fetchOverride(pool, dealerId);
   sendJson(res, 200, { success: true, data: { override } });
@@ -342,12 +355,14 @@ export async function handleDealerOverridesCreateManual(
       ? (body.payload as Record<string, unknown>)
       : {};
 
-  await pool.query(
-    `INSERT INTO manual_dealers (dealer_id, payload, created_by)
-     VALUES ($1, $2::jsonb, $3::uuid)
-     ON CONFLICT (dealer_id) DO UPDATE SET payload = EXCLUDED.payload`,
-    [dealerId, JSON.stringify(payload), me.id],
-  );
+  await runOverridesHandlerSafe(pool, "manual_dealer", dealerId, body, me.id, async () => {
+    await pool.query(
+      `INSERT INTO manual_dealers (dealer_id, payload, created_by)
+       VALUES ($1, $2::jsonb, $3::uuid)
+       ON CONFLICT (dealer_id) DO UPDATE SET payload = EXCLUDED.payload`,
+      [dealerId, JSON.stringify(payload), me.id],
+    );
+  });
 
   sendJson(res, 200, {
     success: true,
