@@ -33,10 +33,14 @@ export async function renderBriefPdf(
 
   const url = `${baseUrl.replace(/\/$/, "")}/p/brief/${encodeURIComponent(brief.id)}?print=1&pdf=1&theme=${theme}`;
 
+  const { default: path } = await import("node:path");
+  const executablePath = await chromium.executablePath(remotePackUrl);
+  process.env.LD_LIBRARY_PATH = path.dirname(executablePath);
+
   const browser = await puppeteer.default.launch({
     args: chromium.args,
     defaultViewport: { width: 1200, height: 1600, deviceScaleFactor: 2 },
-    executablePath: await chromium.executablePath(remotePackUrl),
+    executablePath,
     headless: true,
   });
 
