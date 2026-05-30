@@ -16,6 +16,47 @@ import {
   type MarketingBriefRow,
 } from "@/lib/marketing-briefs-api";
 
+const FILENAME_UNSAFE_RE = /[/\\:*?"<>|]/g;
+
+function formatBriefPrintDate(brief: MarketingBriefRow): string {
+  const iso = brief.published_at || brief.updated_at || brief.created_at;
+  const d = iso ? new Date(iso) : new Date();
+  const t = d.getTime();
+  if (Number.isNaN(t)) {
+    return new Date().toLocaleDateString("ru-RU", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+  }
+  return d.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
+function cleanBriefTitleForFilename(title: string): string {
+  return title.replace(FILENAME_UNSAFE_RE, " ").replace(/\s+/g, " ").trim();
+}
+
+function buildBriefPrintDocumentTitle(brief: MarketingBriefRow): string {
+  const rawTitle = brief.title.trim() || "Без названия";
+  const date = formatBriefPrintDate(brief);
+  const cleanTitle = cleanBriefTitleForFilename(rawTitle);
+  return `TANDOOR ${date} ${cleanTitle}`.trim();
+}
+
+function waitForDocumentImages(): Promise<void> {
+  return Promise.all(
+    Array.from(document.images).map((img) => {
+      if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+      return new Promise<void>((resolve) => {
+        const done = () => resolve();
+        img.addEventListener("load", done, { once: true });
+        img.addEventListener("error", done, { once: true });
+        setTimeout(done, 8000);
+      });
+    }),
+  ).then(() => undefined);
+}
+
 function briefPublicPrintCss(themeMode: BrandBriefThemeMode): string {
   const theme = brandBriefTheme(themeMode);
   return `
@@ -103,20 +144,24 @@ export default function MarketingBriefPublicPage() {
   useEffect(() => {
     if (!wantsPrint || loading || !brief) return;
     let cancelled = false;
+    const prevTitle = document.title;
     void (async () => {
       try {
         await document.fonts.ready;
       } catch {
         /* ignore */
       }
+      await waitForDocumentImages();
       await new Promise<void>((resolve) => {
         requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
       });
       if (cancelled) return;
+      document.title = buildBriefPrintDocumentTitle(brief);
       window.print();
     })();
     return () => {
       cancelled = true;
+      document.title = prevTitle;
     };
   }, [wantsPrint, loading, brief]);
 
