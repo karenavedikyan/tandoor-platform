@@ -6,6 +6,7 @@ import {
   parseJsonlGzip,
   quoteIdent,
   serializeCellValue,
+  splitSqlStatements,
   type JsonlEntry,
 } from "../restore-yandex.js";
 
@@ -13,6 +14,71 @@ function makeJsonlGzip(lines: Array<{ table: string; row: Record<string, unknown
   const body = lines.map((l) => JSON.stringify(l)).join("\n");
   return gzipSync(Buffer.from(body, "utf8"));
 }
+
+describe("splitSqlStatements", () => {
+  it("разбивает простые statement'ы по ;", () => {
+    const sql = `CREATE TABLE a (id int); CREATE TABLE b (id int);`;
+    expect(splitSqlStatements(sql)).toEqual([`CREATE TABLE a (id int)`, `CREATE TABLE b (id int)`]);
+  });
+
+  it("не режет $$ ... $$ блоки", () => {
+    const sql = `
+      DO $$ BEGIN
+        ALTER TABLE x ADD CONSTRAINT fk FOREIGN KEY (a) REFERENCES y(id);
+      END $$;
+      CREATE TABLE z (id int);
+    `;
+    const result = splitSqlStatements(sql);
+    expect(result.length).toBe(2);
+    expect(result[0]).toContain("DO $$ BEGIN");
+    expect(result[0]).toContain("END $$");
+    expect(result[1]).toContain("CREATE TABLE z");
+  });
+
+  it("уважает $tag$ ... $tag$ с произвольным тегом", () => {
+    const sql = `
+      DO $body$ BEGIN
+        SELECT 1; SELECT 2;
+      END $body$;
+      SELECT 3;
+    `;
+    const result = splitSqlStatements(sql);
+    expect(result.length).toBe(2);
+    expect(result[0]).toContain("$body$");
+    expect(result[1]).toBe(`SELECT 3`);
+  });
+
+  it("игнорирует ; внутри одинарных кавычек", () => {
+    const sql = `INSERT INTO t(a) VALUES ('hello; world'); SELECT 1;`;
+    const result = splitSqlStatements(sql);
+    expect(result.length).toBe(2);
+    expect(result[0]).toContain(`'hello; world'`);
+  });
+
+  it("обрабатывает экранированные кавычки ''", () => {
+    const sql = `INSERT INTO t(a) VALUES ('it''s ok'); SELECT 1;`;
+    const result = splitSqlStatements(sql);
+    expect(result.length).toBe(2);
+  });
+
+  it("игнорирует ; в однострочных комментариях", () => {
+    const sql = `-- comment; with semicolon\nSELECT 1;`;
+    const result = splitSqlStatements(sql);
+    expect(result.length).toBe(1);
+    expect(result[0]).toContain("SELECT 1");
+  });
+
+  it("игнорирует ; в блочных комментариях", () => {
+    const sql = `/* a; b; c */ SELECT 1; SELECT 2;`;
+    const result = splitSqlStatements(sql);
+    expect(result.length).toBe(2);
+  });
+
+  it("возвращает пустой массив для пустой строки", () => {
+    expect(splitSqlStatements("")).toEqual([]);
+    expect(splitSqlStatements("   \n\n  ")).toEqual([]);
+  });
+});
 
 describe("parseJsonlGzip", () => {
   it("parses gzipped JSONL into table/row entries", () => {

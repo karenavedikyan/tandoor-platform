@@ -131,11 +131,124 @@ async function fetchBlobGzip(blobUrl: string): Promise<Buffer> {
   return Buffer.from(ab);
 }
 
-function splitSqlStatements(ddl: string): string[] {
-  return ddl
-    .split(";")
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0 && !/^--/.test(s));
+/**
+ * Разбивает SQL-файл на отдельные statement'ы по `;` на верхнем уровне.
+ * Учитывает:
+ *  - dollar-quoted strings: `$$ ... $$` и `$tag$ ... $tag$`
+ *  - одинарные кавычки `'...'` с экранированием `''`
+ *  - однострочные комментарии `-- ...`
+ *  - блочные комментарии (slash-star … star-slash)
+ *
+ * Возвращает массив непустых, обрезанных по краям statement'ов
+ * без завершающей точки с запятой.
+ */
+export function splitSqlStatements(sql: string): string[] {
+  const statements: string[] = [];
+  let current = "";
+  let i = 0;
+  const len = sql.length;
+
+  let mode: "normal" | "single" | "line-comment" | "block-comment" | "dollar" = "normal";
+  let dollarTag = "";
+
+  while (i < len) {
+    const ch = sql[i]!;
+    const next = sql[i + 1];
+
+    if (mode === "normal") {
+      if (ch === "-" && next === "-") {
+        current += ch;
+        mode = "line-comment";
+        i += 1;
+        continue;
+      }
+      if (ch === "/" && next === "*") {
+        current += ch + next;
+        mode = "block-comment";
+        i += 2;
+        continue;
+      }
+      if (ch === "'") {
+        current += ch;
+        mode = "single";
+        i += 1;
+        continue;
+      }
+      if (ch === "$") {
+        const m = sql.slice(i).match(/^\$([A-Za-z0-9_]*)\$/);
+        if (m) {
+          dollarTag = m[0];
+          current += dollarTag;
+          mode = "dollar";
+          i += dollarTag.length;
+          continue;
+        }
+      }
+      if (ch === ";") {
+        const trimmed = current.trim();
+        if (trimmed.length > 0) statements.push(trimmed);
+        current = "";
+        i += 1;
+        continue;
+      }
+      current += ch;
+      i += 1;
+      continue;
+    }
+
+    if (mode === "single") {
+      if (ch === "'" && next === "'") {
+        current += "''";
+        i += 2;
+        continue;
+      }
+      if (ch === "'") {
+        current += ch;
+        mode = "normal";
+        i += 1;
+        continue;
+      }
+      current += ch;
+      i += 1;
+      continue;
+    }
+
+    if (mode === "line-comment") {
+      current += ch;
+      if (ch === "\n") mode = "normal";
+      i += 1;
+      continue;
+    }
+
+    if (mode === "block-comment") {
+      current += ch;
+      if (ch === "*" && next === "/") {
+        current += "/";
+        mode = "normal";
+        i += 2;
+        continue;
+      }
+      i += 1;
+      continue;
+    }
+
+    if (mode === "dollar") {
+      if (ch === "$" && sql.slice(i, i + dollarTag.length) === dollarTag) {
+        current += dollarTag;
+        i += dollarTag.length;
+        mode = "normal";
+        dollarTag = "";
+        continue;
+      }
+      current += ch;
+      i += 1;
+      continue;
+    }
+  }
+
+  const tail = current.trim();
+  if (tail.length > 0) statements.push(tail);
+  return statements;
 }
 
 async function loadTableMeta(table: string): Promise<ColumnMeta[]> {
@@ -169,8 +282,10 @@ async function loadPrimaryKeyColumns(table: string): Promise<string[]> {
 
 async function applyDdl(ddl: string): Promise<void> {
   const statements = splitSqlStatements(ddl);
-  for (const statement of statements) {
-    await execProxy(statement);
+  for (const stmt of statements) {
+    const clean = stmt.replace(/\/\*[\s\S]*?\*\//g, "").replace(/--.*$/gm, "").trim();
+    if (!clean) continue;
+    await execProxy(stmt);
   }
 }
 
