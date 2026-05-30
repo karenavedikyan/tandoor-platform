@@ -6,7 +6,6 @@
   "framework": null,
   "functions": {
     "api/marketing-briefs/download-pdf.ts": {
-      "runtime": "nodejs20.x",
       "includeFiles": "server/**",
       "memory": 3008,
       "maxDuration": 60
