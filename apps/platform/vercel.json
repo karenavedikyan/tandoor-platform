@@ -4,13 +4,6 @@
   "outputDirectory": "dist/public",
   "installCommand": "npm install",
   "framework": null,
-  "functions": {
-    "api/marketing-briefs/download-pdf.ts": {
-      "includeFiles": "server/**",
-      "memory": 3008,
-      "maxDuration": 60
-    }
-  },
   "rewrites": [
     {
       "source": "/api/sales-plan-fact/state",

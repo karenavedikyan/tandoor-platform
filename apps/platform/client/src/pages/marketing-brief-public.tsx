@@ -42,7 +42,6 @@ export default function MarketingBriefPublicPage() {
   const [, setLocation] = useLocation();
   const routeSearch = useRouteSearchParams();
   const wantsPrint = routeSearch.get("print") === "1";
-  const isPdfCapture = routeSearch.get("pdf") === "1";
   const themeParam = routeSearch.get("theme");
   const forcedTheme: BrandBriefThemeMode | undefined =
     themeParam === "dark" || themeParam === "light" ? themeParam : undefined;
@@ -102,12 +101,24 @@ export default function MarketingBriefPublicPage() {
   }, [id, setLocation, wantsPrint]);
 
   useEffect(() => {
-    if (!wantsPrint || isPdfCapture || loading || !brief) return;
-    const t = window.setTimeout(() => {
+    if (!wantsPrint || loading || !brief) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        await document.fonts.ready;
+      } catch {
+        /* ignore */
+      }
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      });
+      if (cancelled) return;
       window.print();
-    }, 600);
-    return () => window.clearTimeout(t);
-  }, [wantsPrint, isPdfCapture, loading, brief]);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [wantsPrint, loading, brief]);
 
   if (loading) {
     return (

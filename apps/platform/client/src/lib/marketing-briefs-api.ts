@@ -126,28 +126,6 @@ export type CalloutBlockPayload = {
 };
 
 type ApiOk<T> = { success: true; data: T };
-type PdfErrorBody = {
-  error?: string;
-  stage?: string;
-  message?: string;
-  name?: string | null;
-  code?: string | null;
-  stack?: string | null;
-  env?: Record<string, unknown>;
-  extra?: Record<string, unknown>;
-  success?: false;
-  debug?: {
-    name?: string;
-    message?: string;
-    stack?: string;
-    briefId?: string;
-    theme?: string;
-    blocksCount?: number;
-    blocksTypes?: string[];
-    cwd?: string;
-    env?: Record<string, unknown>;
-  };
-};
 
 type ApiErr = {
   success: false;
@@ -302,96 +280,13 @@ export function buildPublicBriefShareUrl(briefId: string): string {
 
 export type BriefPdfTheme = "light" | "dark";
 
-function parsePdfFilenameFromDisposition(header: string | null): string | null {
-  if (!header) return null;
-  const star = header.match(/filename\*=UTF-8''([^;]+)/i);
-  if (star?.[1]) {
-    try {
-      return decodeURIComponent(star[1].trim());
-    } catch {
-      /* ignore */
-    }
-  }
-  const plain = header.match(/filename="([^"]+)"/i);
-  return plain?.[1]?.trim() ?? null;
-}
-
-function formatPdfDownloadErrorDetail(status: number, body: PdfErrorBody | null): string {
-  if (!body) {
-    return `HTTP ${status}, empty body`;
-  }
-  if (body.debug) {
-    const d = body.debug;
-    return [
-      `stage=${body.stage ?? "legacy_debug"}`,
-      `name=${d.name ?? "?"}`,
-      `message=${d.message ?? "?"}`,
-      d.briefId ? `briefId=${d.briefId}` : "",
-      d.theme ? `theme=${d.theme}` : "",
-      d.blocksCount != null ? `blocks=${d.blocksCount}` : "",
-      d.blocksTypes?.length ? `types=[${d.blocksTypes.join(", ")}]` : "",
-      d.cwd ? `cwd=${d.cwd}` : "",
-      d.env ? `env=${JSON.stringify(d.env)}` : "",
-      d.stack ? `stack:\n${String(d.stack).split("\n").slice(0, 8).join("\n")}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n");
-  }
-  return [
-    `stage=${body.stage ?? "?"}`,
-    `name=${body.name ?? "?"}`,
-    `message=${body.message ?? "?"}`,
-    body.code ? `code=${body.code}` : "",
-    body.env ? `env=${JSON.stringify(body.env)}` : "",
-    body.extra && Object.keys(body.extra).length ? `extra=${JSON.stringify(body.extra)}` : "",
-    body.stack ? `stack:\n${String(body.stack).split("\n").slice(0, 8).join("\n")}` : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
-async function readPdfErrorBody(res: Response): Promise<string> {
-  const contentType = res.headers.get("content-type") ?? "";
-  const raw = await res.text();
-  if (contentType.includes("application/json")) {
-    try {
-      const body = JSON.parse(raw) as PdfErrorBody;
-      return formatPdfDownloadErrorDetail(res.status, body);
-    } catch (parseErr) {
-      return `JSON parse failed: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}\nraw: ${raw.slice(0, 500)}`;
-    }
-  }
-  return `non-JSON response (${contentType || "no content-type"}):\n${raw.slice(0, 800)}`;
-}
-
-/** Скачать PDF брифа с сервера (тема = активная в просмотре брифа). */
+/** Открыть публичную превью-страницу с автозапуском печати (Сохранить как PDF в браузере). */
 export async function downloadBriefPdf(briefId: string, theme: BriefPdfTheme = "light"): Promise<void> {
-  const res = await fetch("/api/marketing-briefs/download-pdf", {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id: briefId, theme }),
-  });
-
-  if (!res.ok) {
-    const detail = await readPdfErrorBody(res);
-    console.error("[downloadBriefPdf] failed", res.status, detail);
-    window.alert(`PDF ERROR (HTTP ${res.status})\n\n${detail}`);
-    throw new Error(`pdf download failed: HTTP ${res.status}`);
+  const url = `/p/brief/${encodeURIComponent(briefId)}?print=1&theme=${theme}`;
+  const opened = window.open(url, "_blank", "noopener");
+  if (!opened) {
+    window.location.href = url;
   }
-
-  const blob = await res.blob();
-  const filename =
-    parsePdfFilenameFromDisposition(res.headers.get("Content-Disposition")) ?? "TANDOOR.pdf";
-  const objectUrl = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = objectUrl;
-  anchor.download = filename;
-  anchor.rel = "noopener";
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(objectUrl);
 }
 
 export function briefDisplayTitle(title: string): { text: string; isPlaceholder: boolean } {
