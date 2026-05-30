@@ -95,14 +95,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       return;
     }
 
-    const yandexUrl = process.env.YANDEX_DATABASE_URL_UNPOOLED?.trim() || "";
-    if (!yandexUrl) {
-      sendJson(res, 500, { ok: false, error: "env-not-configured", missing: ["YANDEX_DATABASE_URL_UNPOOLED"] });
+    if (!process.env.PG_PROXY_URL || !process.env.PG_PROXY_TOKEN) {
+      sendJson(res, 500, {
+        ok: false,
+        error: "env-not-configured",
+        missing: [
+          ...(process.env.PG_PROXY_URL ? [] : ["PG_PROXY_URL"]),
+          ...(process.env.PG_PROXY_TOKEN ? [] : ["PG_PROXY_TOKEN"]),
+        ],
+      });
       return;
     }
 
-    const result = await restoreYandexFromBlob({ blobUrl, mode, yandexUrl });
-    sendJson(res, 200, { ok: true, result });
+    const result = await restoreYandexFromBlob({ blobUrl, mode });
+    sendJson(res, 200, {
+      ok: true,
+      partial: result.errors.length > 0,
+      result,
+    });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     console.error("[db-migrate/restore]", message);

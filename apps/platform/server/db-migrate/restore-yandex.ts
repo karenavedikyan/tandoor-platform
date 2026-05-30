@@ -1,12 +1,13 @@
 /**
  * Восстановление JSONL.gz дампа Neon из Vercel Blob в Yandex Managed PostgreSQL.
+ * Запросы к Yandex идут через HTTPS PG-прокси (без прямого pg.Client с Vercel Serverless).
  */
 
 import { gunzipSync } from "node:zlib";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import pg from "pg";
+import { pgProxyQuery } from "../db/pg-proxy-client.js";
 
 export type RestoreMode = "truncate-and-load" | "append";
 
@@ -26,12 +27,15 @@ const BATCH_SIZE = 500;
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const SCHEMA_SQL_PATH = path.join(MODULE_DIR, "yandex-schema.sql");
 
-function resolveSsl(): pg.ClientConfig["ssl"] {
-  const ca = process.env.PG_SSL_ROOT_CERT?.trim();
-  if (ca) {
-    return { ca, rejectUnauthorized: true };
+async function execProxy(
+  sql: string,
+  params: unknown[] = [],
+): Promise<{ rows: Record<string, unknown>[]; rowCount: number }> {
+  const res = await pgProxyQuery(sql, params, { timeoutMs: 60_000 });
+  if (!res.ok) {
+    throw new Error(`proxy-query-failed: ${res.error}${res.code ? ` (${res.code})` : ""}`);
   }
-  return { rejectUnauthorized: false };
+  return { rows: res.rows, rowCount: res.rowCount };
 }
 
 export function quoteIdent(name: string): string {
@@ -127,8 +131,15 @@ async function fetchBlobGzip(blobUrl: string): Promise<Buffer> {
   return Buffer.from(ab);
 }
 
-async function loadTableMeta(client: pg.Client, table: string): Promise<ColumnMeta[]> {
-  const res = await client.query<{ column_name: string; data_type: string; udt_name: string }>(
+function splitSqlStatements(ddl: string): string[] {
+  return ddl
+    .split(";")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0 && !/^--/.test(s));
+}
+
+async function loadTableMeta(table: string): Promise<ColumnMeta[]> {
+  const res = await execProxy(
     `SELECT column_name, data_type, udt_name
      FROM information_schema.columns
      WHERE table_schema = 'public' AND table_name = $1
@@ -136,13 +147,13 @@ async function loadTableMeta(client: pg.Client, table: string): Promise<ColumnMe
     [table],
   );
   return res.rows.map((r) => ({
-    name: r.column_name,
-    isJson: isJsonColumn(r.data_type, r.udt_name),
+    name: String(r.column_name),
+    isJson: isJsonColumn(String(r.data_type), String(r.udt_name)),
   }));
 }
 
-async function loadPrimaryKeyColumns(client: pg.Client, table: string): Promise<string[]> {
-  const res = await client.query<{ attname: string }>(
+async function loadPrimaryKeyColumns(table: string): Promise<string[]> {
+  const res = await execProxy(
     `SELECT a.attname
      FROM pg_constraint c
      JOIN pg_class t ON c.conrelid = t.oid
@@ -153,28 +164,23 @@ async function loadPrimaryKeyColumns(client: pg.Client, table: string): Promise<
      ORDER BY k.ord`,
     [table],
   );
-  return res.rows.map((r) => r.attname);
+  return res.rows.map((r) => String(r.attname));
 }
 
-async function applyDdl(client: pg.Client, ddl: string): Promise<void> {
-  await client.query("BEGIN");
-  try {
-    await client.query(ddl);
-    await client.query("COMMIT");
-  } catch (e) {
-    await client.query("ROLLBACK");
-    throw e;
+async function applyDdl(ddl: string): Promise<void> {
+  const statements = splitSqlStatements(ddl);
+  for (const statement of statements) {
+    await execProxy(statement);
   }
 }
 
-async function truncateTables(client: pg.Client, tables: string[]): Promise<void> {
+async function truncateTables(tables: string[]): Promise<void> {
   if (tables.length === 0) return;
   const list = tables.map(quoteIdent).join(", ");
-  await client.query(`TRUNCATE TABLE ${list} RESTART IDENTITY CASCADE`);
+  await execProxy(`TRUNCATE TABLE ${list} RESTART IDENTITY CASCADE`);
 }
 
 async function insertEntry(
-  client: pg.Client,
   table: string,
   entry: JsonlEntry,
   columnMeta: ColumnMeta[],
@@ -192,93 +198,78 @@ async function insertEntry(
   const { text } = buildInsertQuery(table, columns, conflictColumns);
   const values = columns.map((col) => serializeCellValue(entry.row[col], metaByName.get(col)!.isJson));
   try {
-    await client.query(text, values);
+    await execProxy(text, values);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     errors.push({ table, rowIndex: entry.lineIndex, error: message });
   }
 }
 
-async function countTableRows(client: pg.Client, table: string): Promise<number> {
-  const res = await client.query<{ count: string }>(`SELECT COUNT(*)::text AS count FROM ${quoteIdent(table)}`);
+async function countTableRows(table: string): Promise<number> {
+  const res = await execProxy(`SELECT COUNT(*)::text AS count FROM ${quoteIdent(table)}`);
   return Number(res.rows[0]?.count ?? 0);
 }
 
 export async function restoreYandexFromBlob(opts: {
   blobUrl: string;
   mode: RestoreMode;
-  yandexUrl?: string;
 }): Promise<RestoreResult> {
   const started = Date.now();
   const errors: RestoreResult["errors"] = [];
-  const yandexUrl = opts.yandexUrl?.trim() || process.env.YANDEX_DATABASE_URL_UNPOOLED?.trim() || "";
-  if (!yandexUrl) {
-    throw new Error("YANDEX_DATABASE_URL_UNPOOLED is not configured");
-  }
 
   const gzipBuffer = await fetchBlobGzip(opts.blobUrl);
   const entries = parseJsonlGzip(gzipBuffer);
   const grouped = groupRowsByTable(entries);
   const tables = Array.from(grouped.keys()).sort();
 
-  const client = new pg.Client({
-    connectionString: yandexUrl,
-    ssl: resolveSsl(),
-  });
+  const ddl = await loadSchemaSql();
+  await applyDdl(ddl);
 
-  await client.connect();
-  try {
-    const ddl = await loadSchemaSql();
-    await applyDdl(client, ddl);
-
-    if (opts.mode === "truncate-and-load") {
-      await truncateTables(client, tables);
-    }
-
-    const metaCache = new Map<string, ColumnMeta[]>();
-    const pkCache = new Map<string, string[]>();
-
-    for (const table of tables) {
-      const tableEntries = grouped.get(table)!;
-      if (!metaCache.has(table)) {
-        metaCache.set(table, await loadTableMeta(client, table));
-      }
-      if (!pkCache.has(table)) {
-        pkCache.set(table, await loadPrimaryKeyColumns(client, table));
-      }
-      const columnMeta = metaCache.get(table)!;
-      const pkColumns = pkCache.get(table)!;
-
-      if (columnMeta.length === 0) {
-        for (const entry of tableEntries) {
-          errors.push({
-            table,
-            rowIndex: entry.lineIndex,
-            error: `table ${table} not found in target schema`,
-          });
-        }
-        continue;
-      }
-
-      for (let i = 0; i < tableEntries.length; i += BATCH_SIZE) {
-        const batch = tableEntries.slice(i, i + BATCH_SIZE);
-        for (const entry of batch) {
-          await insertEntry(client, table, entry, columnMeta, pkColumns, errors);
-        }
-      }
-    }
-
-    const rowCounts: Record<string, number> = {};
-    for (const table of tables) {
-      rowCounts[table] = await countTableRows(client, table);
-    }
-
-    return {
-      durationMs: Date.now() - started,
-      rowCounts,
-      errors,
-    };
-  } finally {
-    await client.end();
+  if (opts.mode === "truncate-and-load") {
+    await truncateTables(tables);
   }
+
+  const metaCache = new Map<string, ColumnMeta[]>();
+  const pkCache = new Map<string, string[]>();
+
+  for (const table of tables) {
+    const tableEntries = grouped.get(table)!;
+    if (!metaCache.has(table)) {
+      metaCache.set(table, await loadTableMeta(table));
+    }
+    if (!pkCache.has(table)) {
+      pkCache.set(table, await loadPrimaryKeyColumns(table));
+    }
+    const columnMeta = metaCache.get(table)!;
+    const pkColumns = pkCache.get(table)!;
+
+    if (columnMeta.length === 0) {
+      for (const entry of tableEntries) {
+        errors.push({
+          table,
+          rowIndex: entry.lineIndex,
+          error: `table ${table} not found in target schema`,
+        });
+      }
+      continue;
+    }
+
+    for (let i = 0; i < tableEntries.length; i += BATCH_SIZE) {
+      const batch = tableEntries.slice(i, i + BATCH_SIZE);
+      for (const entry of batch) {
+        await insertEntry(table, entry, columnMeta, pkColumns, errors);
+      }
+    }
+  }
+
+  const rowCounts: Record<string, number> = {};
+  for (const table of tables) {
+    rowCounts[table] = await countTableRows(table);
+  }
+
+  return {
+    durationMs: Date.now() - started,
+    rowCounts,
+    errors,
+  };
 }
