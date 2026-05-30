@@ -37,13 +37,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   const brief = await fetchBriefForOg(pool, id);
   const origin = requestOrigin(req);
   const canonicalUrl = `${origin}/p/brief/${id}`;
-  const wantsPrint = req.query.print === "1";
-  const wantsPdf = req.query.pdf === "1";
   const themeRaw = req.query.theme;
   const theme = themeRaw === "dark" || themeRaw === "light" ? themeRaw : null;
   const spaParams = new URLSearchParams();
-  if (wantsPrint) spaParams.set("print", "1");
-  if (wantsPdf) spaParams.set("pdf", "1");
   if (theme) spaParams.set("theme", theme);
   const spaQuery = spaParams.toString();
   const spaUrl = `${origin}/${spaQuery ? `?${spaQuery}` : ""}#/marketing-briefs/public/${id}`;
