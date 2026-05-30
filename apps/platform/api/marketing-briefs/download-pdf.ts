@@ -1,18 +1,17 @@
 /**
  * POST /api/marketing-briefs/download-pdf
  *
- * Отдельная serverless-функция. PDF-модули грузятся только через dynamic import.
+ * Отдельная serverless-функция. Статический import цепочки handler → renderer для Vercel nft.
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-// Anchor for Vercel nft-tracer: ensures marketing-brief-pdf is included in the function bundle.
-import type * as _RendererTypes from "../../server/marketing-brief-pdf.js";
 import {
   enforceCsrfOrigin,
   getPool,
   resolveCurrentUser,
   vercelHeaders,
 } from "../../shared/admin/admin-auth.js";
+import { handleDownloadPdf } from "../../server/marketing-briefs-pdf-handler.js";
 
 export const config = {
   maxDuration: 30,
@@ -79,27 +78,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
 
     const sessionUser = { id: me.id, role: me.role, status: me.status };
-
-    let handleDownloadPdf: (
-      req: VercelRequest,
-      res: VercelResponse,
-      pool: NonNullable<ReturnType<typeof getPool>>,
-      user: typeof sessionUser,
-    ) => Promise<void>;
-
-    try {
-      const mod = await import("../../server/marketing-briefs-pdf-handler.js");
-      handleDownloadPdf = mod.handleDownloadPdf;
-      if (typeof handleDownloadPdf !== "function") {
-        sendDebugError(res, 500, "import_handler", new Error("handleDownloadPdf is not a function"), {
-          exported_keys: Object.keys(mod),
-        });
-        return;
-      }
-    } catch (importErr) {
-      sendDebugError(res, 500, "import_handler_module", importErr);
-      return;
-    }
 
     try {
       await handleDownloadPdf(req, res, pool, sessionUser);
