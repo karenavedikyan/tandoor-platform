@@ -6,8 +6,9 @@
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import type { ShowcaseCategoryId } from "@/lib/showcase-distribution-data";
 import { isManualActualizationDealerId } from "@/lib/client-base-actualization-stable-ids";
-import { setDealerTraining } from "@/lib/dealer-overrides-api";
-import { toast } from "@/hooks/use-toast";
+import { setDealerTrainingStrict } from "@/lib/dealer-overrides-api";
+import { handleOverridesStrictResult } from "@/lib/overrides-save-feedback";
+import { makePendingId } from "@/lib/overrides-pending-sync";
 
 export function charSumId(id: string): number {
   let sum = 0;
@@ -239,7 +240,6 @@ export function getNewStaffTrainingNeeded(dealerId: string): boolean {
 
 export function setNewStaffTrainingNeeded(dealerId: string, next: boolean, byLabel: string): void {
   const storage = loadDealerTrainingFlagsStorage();
-  const prevSnapshot = JSON.stringify(storage);
   const prev = storage.dealers[dealerId] ?? { newStaffTrainingNeeded: false, log: [] };
   const now = new Date().toISOString();
   const log = [...prev.log, { at: now, enabled: next, by: byLabel }].slice(-40);
@@ -249,19 +249,14 @@ export function setNewStaffTrainingNeeded(dealerId: string, next: boolean, byLab
   };
   saveDealerTrainingFlagsStorage(storage);
 
-  void setDealerTraining(dealerId, { needs_new_employees_training: next }).then((saved) => {
-    if (!saved) {
-      try {
-        saveDealerTrainingFlagsStorage(JSON.parse(prevSnapshot) as TrainingFlagsStorage);
-      } catch {
-        /* ignore */
-      }
-      toast({
-        variant: "destructive",
-        title: "Не удалось сохранить",
-        description: "Попробуйте ещё раз.",
-      });
-    }
+  const payload = { dealer_id: dealerId, needs_new_employees_training: next };
+  void setDealerTrainingStrict(dealerId, { needs_new_employees_training: next }).then((result) => {
+    handleOverridesStrictResult(result, {
+      pendingId: makePendingId("dealer-training", `${dealerId}:needs-new`),
+      pendingKind: "dealer-training",
+      pendingPayload: payload,
+      fieldLabel: "Обучение новых сотрудников",
+    });
   });
 }
 

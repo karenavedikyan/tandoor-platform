@@ -48,7 +48,9 @@ import {
   sortDealerShipmentDayIds,
   type DealerShipmentDayId,
 } from "@/lib/dealer-shipment-days";
-import { createManualDealer } from "@/lib/dealer-overrides-api";
+import { createManualDealerStrict } from "@/lib/dealer-overrides-api";
+import { handleOverridesStrictResult } from "@/lib/overrides-save-feedback";
+import { makePendingId } from "@/lib/overrides-pending-sync";
 import { getDealerUnloadingOrder } from "@/lib/dealer-unloading-order-storage";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
@@ -1404,7 +1406,16 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
     saveLockRef.current = false;
 
     if (r.success) {
-      void createManualDealer({ dealer_id: id, payload: fields as unknown as Record<string, unknown> });
+      void createManualDealerStrict({ dealer_id: id, payload: fields as unknown as Record<string, unknown> }).then(
+        (result) => {
+          handleOverridesStrictResult(result, {
+            pendingId: makePendingId("manual-dealer", id),
+            pendingKind: "manual-dealer",
+            pendingPayload: { dealer_id: id, payload: fields },
+            fieldLabel: "Ручной клиент",
+          });
+        },
+      );
       toast({ title: "Клиент сохранён" });
       onOpenChange(false);
       onCreated(id);

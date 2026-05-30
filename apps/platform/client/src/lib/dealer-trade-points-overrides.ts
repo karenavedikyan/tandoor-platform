@@ -6,10 +6,11 @@ import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import { getDealerById, getDealerRegionalManagerDisplay, normalizeTradePointId } from "@/lib/dealer-base-mock-data";
 import { isManualActualizationDealerId } from "@/lib/client-base-actualization-stable-ids";
 import { canEditClientNextStep } from "@/lib/client-next-step-data";
-import { upsertTradePointOverride } from "@/lib/trade-point-overrides-api";
+import { upsertTradePointOverrideStrict } from "@/lib/trade-point-overrides-api";
+import { handleOverridesStrictResult } from "@/lib/overrides-save-feedback";
+import { makePendingId } from "@/lib/overrides-pending-sync";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
-import { toast } from "@/hooks/use-toast";
 
 export const DEALER_TRADE_POINTS_STORAGE_KEY = "tandoor-dealer-trade-points-v1";
 export const DEALER_TRADE_POINTS_EVENT = "tandoor-dealer-trade-points-changed";
@@ -433,39 +434,29 @@ export function updateTradePoint(
     updatedBy: act.id,
     updatedByName: act.name,
   };
-  const prevSnapshot = JSON.stringify(state);
   state.editsByTradePoint[key] = next;
   pushDealerTpHistory(state, dealerId, `Обновлена торговая точка: ${label}`, act.name);
   saveDealerTradePointsState(state);
 
-  void upsertTradePointOverride(
-    tradePointId,
-    {
-      name: next.name ?? null,
-      city: next.city ?? null,
-      address: next.address ?? null,
-      contact_name: next.contactName ?? null,
-      contact_phone: next.contactPhone ?? null,
-      comment: next.comment ?? null,
-      showcase_status: next.showcaseStatus ?? null,
-      shipment_days: next.shipmentDayIds ? JSON.stringify(next.shipmentDayIds) : null,
-      is_main_warehouse: next.hasMainWarehouse ?? null,
-      is_hardware_warehouse: next.hasHardwareWarehouse ?? null,
-    },
-    dealerId,
-  ).then((saved) => {
-    if (!saved) {
-      try {
-        saveDealerTradePointsState(JSON.parse(prevSnapshot) as DealerTradePointsState);
-      } catch {
-        /* ignore */
-      }
-      toast({
-        variant: "destructive",
-        title: "Не удалось сохранить",
-        description: "Попробуйте ещё раз.",
-      });
-    }
+  const fields = {
+    name: next.name ?? null,
+    city: next.city ?? null,
+    address: next.address ?? null,
+    contact_name: next.contactName ?? null,
+    contact_phone: next.contactPhone ?? null,
+    comment: next.comment ?? null,
+    showcase_status: next.showcaseStatus ?? null,
+    shipment_days: next.shipmentDayIds ? JSON.stringify(next.shipmentDayIds) : null,
+    is_main_warehouse: next.hasMainWarehouse ?? null,
+    is_hardware_warehouse: next.hasHardwareWarehouse ?? null,
+  };
+  void upsertTradePointOverrideStrict(tradePointId, fields, dealerId).then((result) => {
+    handleOverridesStrictResult(result, {
+      pendingId: makePendingId("tp-upsert", tradePointId),
+      pendingKind: "tp-upsert",
+      pendingPayload: { tp_id: tradePointId, dealer_id: dealerId, fields },
+      fieldLabel: "Торговая точка",
+    });
   });
 }
 

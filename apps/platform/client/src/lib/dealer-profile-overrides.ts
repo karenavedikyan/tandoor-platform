@@ -4,10 +4,11 @@
 
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import { canEditClientNextStep } from "@/lib/client-next-step-data";
-import { upsertDealerOverride } from "@/lib/dealer-overrides-api";
+import { upsertDealerOverrideStrict } from "@/lib/dealer-overrides-api";
+import { handleOverridesStrictResult } from "@/lib/overrides-save-feedback";
+import { makePendingId } from "@/lib/overrides-pending-sync";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
-import { toast } from "@/hooks/use-toast";
 
 export const DEALER_PROFILE_OVERRIDES_STORAGE_KEY = "tandoor-dealer-profile-overrides-v1";
 export const DEALER_PROFILE_OVERRIDES_EVENT = "tandoor-dealer-profile-overrides-changed";
@@ -156,7 +157,6 @@ export function updateDealerProfile(
   profile: ReleaseDemoProfile,
 ): void {
   const state = loadDealerProfileOverridesState();
-  const prevSnapshot = JSON.stringify(state);
   const now = isoNow();
   const act = { id: profile.personaUserId, name: userLabelFromProfile(profile) };
   const prev = state.overridesByDealer[dealerId] ?? {
@@ -175,26 +175,21 @@ export function updateDealerProfile(
   pushHistory(state, dealerId, "Обновлены данные дилера", act.name);
   saveDealerProfileOverridesState(state);
 
-  void upsertDealerOverride(dealerId, {
+  const fields = {
     name: next.displayName ?? null,
     city: next.city ?? null,
     contact_name: next.mainContactName ?? null,
     contact_phone: next.mainContactPhone ?? null,
     contact_email: next.mainContactEmail ?? null,
     general_comment: next.comment ?? null,
-  }).then((saved) => {
-    if (!saved) {
-      try {
-        saveDealerProfileOverridesState(JSON.parse(prevSnapshot) as DealerProfileOverridesState);
-      } catch {
-        /* ignore */
-      }
-      toast({
-        variant: "destructive",
-        title: "Не удалось сохранить",
-        description: "Попробуйте ещё раз.",
-      });
-    }
+  };
+  void upsertDealerOverrideStrict(dealerId, fields).then((result) => {
+    handleOverridesStrictResult(result, {
+      pendingId: makePendingId("dealer-upsert", dealerId),
+      pendingKind: "dealer-upsert",
+      pendingPayload: { dealer_id: dealerId, fields },
+      fieldLabel: "Профиль клиента",
+    });
   });
 }
 

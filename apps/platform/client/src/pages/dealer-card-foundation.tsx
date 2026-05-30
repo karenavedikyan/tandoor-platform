@@ -129,10 +129,12 @@ import {
 import { getMergedDealerTradePoints } from "@/lib/dealer-trade-points-overrides";
 import {
   notifyDealerOverridesHydrated,
-  setDealerTraining,
-  trashDealer as apiTrashDealer,
-  upsertDealerOverride,
+  setDealerTrainingStrict,
+  trashDealerStrict,
+  upsertDealerOverrideStrict,
 } from "@/lib/dealer-overrides-api";
+import { handleOverridesStrictResult } from "@/lib/overrides-save-feedback";
+import { makePendingId } from "@/lib/overrides-pending-sync";
 import { isDealerTrashedInRuntime, patchDealerCategoryRuntime, patchDealerTrashRuntime } from "@/lib/dealer-overrides-runtime";
 import {
   DEALER_TRADE_POINTS_EVENT,
@@ -909,9 +911,16 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
       source: isManualDealerRow ? "manual_actualization" : "client_card_delete",
     });
     patchDealerTrashRuntime(baseRow.id, info);
-    const saved = await apiTrashDealer(baseRow.id);
+    const result = await trashDealerStrict(baseRow.id);
     setDealerArchiveBusy(false);
-    if (saved) {
+    if (
+      handleOverridesStrictResult(result, {
+        pendingId: makePendingId("dealer-trash", baseRow.id),
+        pendingKind: "dealer-trash",
+        pendingPayload: { dealer_id: baseRow.id },
+        fieldLabel: "Архив клиента",
+      })
+    ) {
       notifyDealerOverridesHydrated();
       toast({ title: "Клиент перемещён в корзину", description: "Хранится 14 дней. Восстановить можно из раздела «Корзина»." });
       setDealerDeleteDialogOpen(false);
@@ -1431,17 +1440,20 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                                 const r = await actx.persist((prev) => mergeActualizationState(prev, patch));
                                 if (!r.success) patchDealerCategoryRuntime(row.id, null);
                               }
-                              const saved = await upsertDealerOverride(row.id, { client_category: next });
-                              if (saved) {
+                              const categoryFields = { client_category: next };
+                              const result = await upsertDealerOverrideStrict(row.id, categoryFields);
+                              if (
+                                handleOverridesStrictResult(result, {
+                                  pendingId: makePendingId("dealer-upsert", row.id),
+                                  pendingKind: "dealer-upsert",
+                                  pendingPayload: { dealer_id: row.id, fields: categoryFields },
+                                  fieldLabel: "Категория клиента",
+                                })
+                              ) {
                                 setDealerDataBump((b) => b + 1);
                                 notifyDealerOverridesHydrated();
                               } else {
                                 patchDealerCategoryRuntime(row.id, null);
-                                toast({
-                                  variant: "destructive",
-                                  title: "Не удалось сохранить категорию",
-                                  description: "Попробуйте ещё раз.",
-                                });
                               }
                             })();
                           }}
@@ -1593,6 +1605,9 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                     ) : null}
                     {canActualizeClientBase(profile) ? (
                       <ClientBaseActualizationSyncStatus
+                        scope="dealer-tp-overrides"
+                        dealerId={baseRow.id}
+                        compact
                         syncStatus={actx.syncStatus}
                         meta={actx.meta}
                         isLoading={actx.loading}
@@ -2351,15 +2366,17 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                   const prev = trainingCompleted;
                   setTrainingCompleted(next);
                   sessionStorage.setItem(dealerProductTrainingStorageKey(row.id), next ? "1" : "0");
-                  void setDealerTraining(row.id, { product_training_done: next }).then((saved) => {
-                    if (!saved) {
+                  void setDealerTrainingStrict(row.id, { product_training_done: next }).then((result) => {
+                    if (
+                      !handleOverridesStrictResult(result, {
+                        pendingId: makePendingId("dealer-training", `${row.id}:product`),
+                        pendingKind: "dealer-training",
+                        pendingPayload: { dealer_id: row.id, product_training_done: next },
+                        fieldLabel: "Обучение по продукту",
+                      })
+                    ) {
                       setTrainingCompleted(prev);
                       sessionStorage.setItem(dealerProductTrainingStorageKey(row.id), prev ? "1" : "0");
-                      toast({
-                        variant: "destructive",
-                        title: "Не удалось сохранить",
-                        description: "Попробуйте ещё раз.",
-                      });
                     }
                   });
                 }}

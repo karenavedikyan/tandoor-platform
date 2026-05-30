@@ -75,7 +75,13 @@ import {
   getClientContactScopeHistoryEvents,
 } from "@/lib/client-contacts";
 import { mergeActualizationState } from "@/lib/client-base-actualization-state";
-import { setTradePointTraining, trashTradePoint as apiTrashTradePoint } from "@/lib/trade-point-overrides-api";
+import {
+  setTradePointTrainingStrict,
+  trashTradePointStrict,
+} from "@/lib/trade-point-overrides-api";
+import { handleOverridesStrictResult } from "@/lib/overrides-save-feedback";
+import { makePendingId } from "@/lib/overrides-pending-sync";
+import { DealerTpOverridesSyncStatus } from "@/components/dealer-tp-overrides-sync-status";
 import { patchTradePointTrashRuntime } from "@/lib/dealer-overrides-runtime";
 import { makeTrashedTradePointInfo, snapshotTradePointFromRow } from "@/lib/trash-dealer-helper";
 import {
@@ -806,9 +812,16 @@ function TradePointDetailContent({
         source: "client_card_delete",
       });
       patchTradePointTrashRuntime(point.id, info);
-      const saved = await apiTrashTradePoint(point.id);
+      const result = await trashTradePointStrict(point.id);
       setArchiveOpen(false);
-      if (saved) {
+      if (
+        handleOverridesStrictResult(result, {
+          pendingId: makePendingId("tp-trash", point.id),
+          pendingKind: "tp-trash",
+          pendingPayload: { tp_id: point.id },
+          fieldLabel: "Удаление торговой точки",
+        })
+      ) {
         toast({
           title: "Торговая точка перемещена в корзину",
           description: "Восстановить можно из раздела «Корзина».",
@@ -995,6 +1008,7 @@ function TradePointDetailContent({
         <SurfaceCard className="border-primary/30">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Редактирование точки</CardTitle>
+            <DealerTpOverridesSyncStatus dealerId={dealer.id} tpId={point.id} compact className="mt-2" />
           </CardHeader>
           <CardContent className="space-y-3 pt-0">
             {editErr ? <p className="text-xs font-medium text-destructive">{editErr}</p> : null}
@@ -1273,15 +1287,17 @@ function TradePointDetailContent({
                         const prev = tpTrainingDone;
                         setTpTrainingDone(next);
                         sessionStorage.setItem(tpTrainingStorageKey, next ? "1" : "0");
-                        void setTradePointTraining(point.id, { product_training_done: next }).then((saved) => {
-                          if (!saved) {
+                        void setTradePointTrainingStrict(point.id, { product_training_done: next }).then((result) => {
+                          if (
+                            !handleOverridesStrictResult(result, {
+                              pendingId: makePendingId("tp-training", point.id),
+                              pendingKind: "tp-training",
+                              pendingPayload: { tp_id: point.id, product_training_done: next },
+                              fieldLabel: "Обучение ТТ",
+                            })
+                          ) {
                             setTpTrainingDone(prev);
                             sessionStorage.setItem(tpTrainingStorageKey, prev ? "1" : "0");
-                            toast({
-                              variant: "destructive",
-                              title: "Не удалось сохранить",
-                              description: "Попробуйте ещё раз.",
-                            });
                           }
                         });
                       }}

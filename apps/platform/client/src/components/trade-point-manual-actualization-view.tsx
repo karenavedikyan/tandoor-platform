@@ -797,6 +797,9 @@ export function TradePointManualActualizationView(props: {
         </div>
 
         <ClientBaseActualizationSyncStatus
+          scope="dealer-tp-overrides"
+          dealerId={dealer.id}
+          tpId={point.id}
           compact
           isLoading={actx.loading}
           meta={actx.meta}
