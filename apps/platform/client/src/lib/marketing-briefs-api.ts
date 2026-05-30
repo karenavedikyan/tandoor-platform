@@ -126,23 +126,33 @@ export type CalloutBlockPayload = {
 };
 
 type ApiOk<T> = { success: true; data: T };
-type PdfDownloadDebug = {
-  name?: string;
+type PdfErrorBody = {
+  error?: string;
+  stage?: string;
   message?: string;
-  stack?: string;
-  briefId?: string;
-  theme?: string;
-  blocksCount?: number;
-  blocksTypes?: string[];
-  cwd?: string;
-  env?: { VERCEL_ENV?: string | null; NODE_VERSION?: string };
+  name?: string | null;
+  code?: string | null;
+  stack?: string | null;
+  env?: Record<string, unknown>;
+  extra?: Record<string, unknown>;
+  success?: false;
+  debug?: {
+    name?: string;
+    message?: string;
+    stack?: string;
+    briefId?: string;
+    theme?: string;
+    blocksCount?: number;
+    blocksTypes?: string[];
+    cwd?: string;
+    env?: Record<string, unknown>;
+  };
 };
 
 type ApiErr = {
   success: false;
   code?: string;
   message?: string;
-  debug?: PdfDownloadDebug;
 };
 
 async function parseJson<T>(res: Response): Promise<T> {
@@ -306,65 +316,82 @@ function parsePdfFilenameFromDisposition(header: string | null): string | null {
   return plain?.[1]?.trim() ?? null;
 }
 
-function showPdfDownloadErrorAlert(status: number, body: ApiErr | null): void {
-  if (body?.debug) {
-    const d = body.debug;
-    const text = [
-      `PDF ERROR (HTTP ${status})`,
-      `Name: ${d.name ?? "—"}`,
-      `Message: ${d.message ?? "—"}`,
-      `Brief: ${d.briefId ?? "—"} | Theme: ${d.theme ?? "—"}`,
-      `Blocks: ${d.blocksCount ?? 0} [${(d.blocksTypes ?? []).join(", ")}]`,
-      `CWD: ${d.cwd ?? "—"}`,
-      `Env: ${JSON.stringify(d.env ?? {})}`,
-      "",
-      "Stack:",
-      d.stack || "(no stack)",
-    ].join("\n");
-    window.alert(text);
-    return;
+function formatPdfDownloadErrorDetail(status: number, body: PdfErrorBody | null): string {
+  if (!body) {
+    return `HTTP ${status}, empty body`;
   }
-  window.alert(`PDF ERROR (HTTP ${status}): ${body?.message || "Unknown error"}`);
+  if (body.debug) {
+    const d = body.debug;
+    return [
+      `stage=${body.stage ?? "legacy_debug"}`,
+      `name=${d.name ?? "?"}`,
+      `message=${d.message ?? "?"}`,
+      d.briefId ? `briefId=${d.briefId}` : "",
+      d.theme ? `theme=${d.theme}` : "",
+      d.blocksCount != null ? `blocks=${d.blocksCount}` : "",
+      d.blocksTypes?.length ? `types=[${d.blocksTypes.join(", ")}]` : "",
+      d.cwd ? `cwd=${d.cwd}` : "",
+      d.env ? `env=${JSON.stringify(d.env)}` : "",
+      d.stack ? `stack:\n${String(d.stack).split("\n").slice(0, 8).join("\n")}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+  return [
+    `stage=${body.stage ?? "?"}`,
+    `name=${body.name ?? "?"}`,
+    `message=${body.message ?? "?"}`,
+    body.code ? `code=${body.code}` : "",
+    body.env ? `env=${JSON.stringify(body.env)}` : "",
+    body.extra && Object.keys(body.extra).length ? `extra=${JSON.stringify(body.extra)}` : "",
+    body.stack ? `stack:\n${String(body.stack).split("\n").slice(0, 8).join("\n")}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+async function readPdfErrorBody(res: Response): Promise<string> {
+  const contentType = res.headers.get("content-type") ?? "";
+  const raw = await res.text();
+  if (contentType.includes("application/json")) {
+    try {
+      const body = JSON.parse(raw) as PdfErrorBody;
+      return formatPdfDownloadErrorDetail(res.status, body);
+    } catch (parseErr) {
+      return `JSON parse failed: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}\nraw: ${raw.slice(0, 500)}`;
+    }
+  }
+  return `non-JSON response (${contentType || "no content-type"}):\n${raw.slice(0, 800)}`;
 }
 
 /** Скачать PDF брифа с сервера (тема = активная в просмотре брифа). */
 export async function downloadBriefPdf(briefId: string, theme: BriefPdfTheme = "light"): Promise<void> {
-  try {
-    const res = await fetch("/api/marketing-briefs/download-pdf", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: briefId, theme }),
-    });
+  const res = await fetch("/api/marketing-briefs/download-pdf", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: briefId, theme }),
+  });
 
-    if (!res.ok) {
-      let body: ApiErr | null = null;
-      try {
-        body = await parseJson<ApiErr>(res);
-      } catch {
-        /* ignore */
-      }
-      console.error("[downloadBriefPdf] failed", res.status, body);
-      showPdfDownloadErrorAlert(res.status, body);
-      return;
-    }
-
-    const blob = await res.blob();
-    const filename =
-      parsePdfFilenameFromDisposition(res.headers.get("Content-Disposition")) ?? "TANDOOR.pdf";
-    const objectUrl = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = objectUrl;
-    anchor.download = filename;
-    anchor.rel = "noopener";
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(objectUrl);
-  } catch (e) {
-    console.error("[downloadBriefPdf] network error", e);
-    window.alert(`PDF NETWORK ERROR: ${e instanceof Error ? e.message : String(e)}`);
+  if (!res.ok) {
+    const detail = await readPdfErrorBody(res);
+    console.error("[downloadBriefPdf] failed", res.status, detail);
+    window.alert(`PDF ERROR (HTTP ${res.status})\n\n${detail}`);
+    throw new Error(`pdf download failed: HTTP ${res.status}`);
   }
+
+  const blob = await res.blob();
+  const filename =
+    parsePdfFilenameFromDisposition(res.headers.get("Content-Disposition")) ?? "TANDOOR.pdf";
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = filename;
+  anchor.rel = "noopener";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(objectUrl);
 }
 
 export function briefDisplayTitle(title: string): { text: string; isPlaceholder: boolean } {

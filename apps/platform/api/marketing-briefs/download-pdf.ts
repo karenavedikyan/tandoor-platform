@@ -1,8 +1,7 @@
 /**
  * POST /api/marketing-briefs/download-pdf
  *
- * Отдельная serverless-функция: не смешивать с [action].ts, иначе @react-pdf/renderer
- * инициализируется при каждом list/get и ломает весь роутер.
+ * Отдельная serverless-функция. PDF-модули грузятся только через dynamic import.
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -10,10 +9,8 @@ import {
   enforceCsrfOrigin,
   getPool,
   resolveCurrentUser,
-  sendJson,
   vercelHeaders,
 } from "../../shared/admin/admin-auth.js";
-import { handleMarketingBriefsDownloadPdf } from "../../server/marketing-briefs-pdf-handler.js";
 
 export const config = {
   maxDuration: 30,
@@ -24,62 +21,103 @@ export const config = {
   ],
 };
 
+function safeEnvSnapshot(): Record<string, unknown> {
+  return {
+    node: process.version,
+    platform: process.platform,
+    arch: process.arch,
+    cwd: process.cwd(),
+    vercel_region: process.env.VERCEL_REGION ?? null,
+    vercel_env: process.env.VERCEL_ENV ?? null,
+  };
+}
+
+function sendDebugError(
+  res: VercelResponse,
+  status: number,
+  stage: string,
+  err: unknown,
+  extra: Record<string, unknown> = {},
+): void {
+  if (res.headersSent) return;
+  const e = err as { name?: string; message?: string; stack?: string; code?: string };
+  const payload = {
+    error: "pdf_failed",
+    stage,
+    message: e?.message ?? String(err ?? "no error object"),
+    name: e?.name ?? null,
+    code: e?.code ?? null,
+    stack: e?.stack ?? null,
+    env: safeEnvSnapshot(),
+    extra,
+  };
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.setHeader("Cache-Control", "no-store");
+  res.status(status).send(JSON.stringify(payload));
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   try {
     if (req.method !== "POST") {
-      sendJson(res, 405, { success: false, code: "METHOD_NOT_ALLOWED", message: "Только POST." });
+      sendDebugError(res, 405, "method_check", new Error(`Method ${req.method} not allowed`));
       return;
     }
 
     if (!enforceCsrfOrigin(req)) {
-      sendJson(res, 403, {
-        success: false,
-        code: "CSRF_REJECTED",
-        message: "Недопустимый источник запроса.",
-      });
+      sendDebugError(res, 403, "csrf_check", new Error("CSRF rejected"));
       return;
     }
 
     const pool = getPool();
     if (!pool) {
-      sendJson(res, 503, {
-        success: false,
-        code: "DB_UNAVAILABLE",
-        message: "База данных недоступна.",
-      });
+      sendDebugError(res, 503, "db_pool", new Error("Database pool unavailable"));
       return;
     }
 
     const headers = vercelHeaders(req);
     const me = await resolveCurrentUser(pool, headers);
     if (!me) {
-      sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+      sendDebugError(res, 401, "auth", new Error("Authentication required"));
       return;
     }
 
     const sessionUser = { id: me.id, role: me.role, status: me.status };
-    await handleMarketingBriefsDownloadPdf(req, res, pool, sessionUser);
-  } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
-    const stack = e instanceof Error && e.stack ? e.stack : "";
-    const name = e instanceof Error ? e.name : "Unknown";
-    console.error("[download-pdf] unhandled", { message, stack });
 
-    // TEMP: expose debug in all environments (revert after root-cause fix)
-    sendJson(res, 500, {
-      success: false,
-      code: "INTERNAL_ERROR",
-      message: "Внутренняя ошибка сервера.",
-      debug: {
-        name,
-        message,
-        stack: stack.split("\n").slice(0, 20).join("\n"),
-        cwd: process.cwd(),
-        env: {
-          VERCEL_ENV: process.env.VERCEL_ENV ?? null,
-          NODE_VERSION: process.version,
-        },
-      },
-    });
+    let handleDownloadPdf: (
+      req: VercelRequest,
+      res: VercelResponse,
+      pool: NonNullable<ReturnType<typeof getPool>>,
+      user: typeof sessionUser,
+    ) => Promise<void>;
+
+    try {
+      const mod = await import("../../server/marketing-briefs-pdf-handler.js");
+      handleDownloadPdf = mod.handleDownloadPdf;
+      if (typeof handleDownloadPdf !== "function") {
+        sendDebugError(res, 500, "import_handler", new Error("handleDownloadPdf is not a function"), {
+          exported_keys: Object.keys(mod),
+        });
+        return;
+      }
+    } catch (importErr) {
+      sendDebugError(res, 500, "import_handler_module", importErr);
+      return;
+    }
+
+    try {
+      await handleDownloadPdf(req, res, pool, sessionUser);
+    } catch (runErr) {
+      if (!res.headersSent) {
+        sendDebugError(res, 500, "handler_execution", runErr);
+      } else {
+        console.error("[download-pdf] handler threw after sending headers", runErr);
+      }
+    }
+  } catch (outer) {
+    if (!res.headersSent) {
+      sendDebugError(res, 500, "outer_wrapper", outer);
+    } else {
+      console.error("[download-pdf] outer wrapper after headersSent", outer);
+    }
   }
 }
