@@ -24,7 +24,13 @@ import { splitSqlStatements } from "../../server/db-migrate/restore-yandex.js";
 const here = dirname(fileURLToPath(import.meta.url));
 const ddlPath = join(here, "..", "..", "server", "migrations", "2026_05_31_dealer_tp_overrides.sql");
 const ddlSql = readFileSync(ddlPath, "utf8");
-const STMTS = ["CREATE EXTENSION IF NOT EXISTS pgcrypto", ...splitSqlStatements(ddlSql)];
+const writeErrorsPath = join(here, "..", "..", "server", "migrations", "2026_05_31_overrides_write_errors.sql");
+const writeErrorsSql = readFileSync(writeErrorsPath, "utf8");
+const STMTS = [
+  "CREATE EXTENSION IF NOT EXISTS pgcrypto",
+  ...splitSqlStatements(ddlSql),
+  ...splitSqlStatements(writeErrorsSql),
+];
 
 const EXPECTED_TABLES = [
   "dealer_overrides",
@@ -34,6 +40,7 @@ const EXPECTED_TABLES = [
   "trade_point_overrides",
   "trade_point_override_events",
   "trade_point_training_state",
+  "overrides_write_errors",
 ];
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
