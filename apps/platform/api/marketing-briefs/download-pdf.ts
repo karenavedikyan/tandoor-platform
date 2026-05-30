@@ -1,9 +1,11 @@
 /**
  * POST /api/marketing-briefs/download-pdf
  *
- * Отдельная serverless-функция. Статический import цепочки handler → renderer для Vercel nft.
+ * Отдельная serverless-функция. Handler/renderer — lazy import внутри try/catch,
+ * чтобы ошибки module-init (@react-pdf и т.д.) возвращались как JSON, а не FUNCTION_INVOCATION_FAILED.
  */
 
+import { createRequire } from "node:module";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import {
   enforceCsrfOrigin,
@@ -11,11 +13,21 @@ import {
   resolveCurrentUser,
   vercelHeaders,
 } from "../../shared/admin/admin-auth.js";
-import { handleDownloadPdf } from "../../server/marketing-briefs-pdf-handler.js";
+
+const require = createRequire(import.meta.url);
 
 export const config = {
   maxDuration: 30,
 };
+
+// Hint для Vercel nft-tracer: явно ссылаемся на модули через require.resolve.
+function _vercelTraceHints(): string[] {
+  return [
+    require.resolve("../../server/marketing-briefs-pdf-handler.js"),
+    require.resolve("../../server/marketing-brief-pdf.js"),
+  ];
+}
+void _vercelTraceHints;
 
 function safeEnvSnapshot(): Record<string, unknown> {
   return {
@@ -78,6 +90,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
 
     const sessionUser = { id: me.id, role: me.role, status: me.status };
+
+    let handleDownloadPdf: typeof import("../../server/marketing-briefs-pdf-handler.js").handleDownloadPdf;
+    try {
+      const mod = await import("../../server/marketing-briefs-pdf-handler.js");
+      handleDownloadPdf = mod.handleDownloadPdf;
+      if (typeof handleDownloadPdf !== "function") {
+        sendDebugError(res, 500, "import_handler_module_export", new Error("handleDownloadPdf is not a function"), {
+          exported_keys: Object.keys(mod),
+        });
+        return;
+      }
+    } catch (importErr) {
+      sendDebugError(res, 500, "import_handler_module_init", importErr);
+      return;
+    }
 
     try {
       await handleDownloadPdf(req, res, pool, sessionUser);
