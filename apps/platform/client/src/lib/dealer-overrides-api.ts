@@ -1,9 +1,15 @@
 /**
- * HTTP API оверрайдов дилера (Postgres, prompt 113).
+ * HTTP API оверрайдов дилера (Postgres, prompt 113 / 113.1).
  */
 
 import type { DealerOverrideRow, DealerTrainingRow } from "../../../shared/dealer-overrides-types";
 import type { DealerOverrideField } from "../../../shared/dealer-overrides-types";
+import {
+  enqueuePendingSync,
+  makePendingId,
+  type PendingSyncKind,
+} from "@/lib/overrides-pending-sync";
+import { overridesApiPost, type OverridesApiResult } from "@/lib/overrides-api-result";
 
 type ApiOk<T> = { success: true; data: T };
 type ApiErr = { success: false; code?: string; message?: string };
@@ -31,6 +37,14 @@ export type DealerOverrideEventDto = {
 
 async function parseJson<T>(res: Response): Promise<T> {
   return (await res.json()) as T;
+}
+
+function enqueueOnNetwork(kind: PendingSyncKind, dealerId: string, payload: unknown): void {
+  enqueuePendingSync({
+    id: makePendingId(kind, dealerId),
+    kind,
+    payload,
+  });
 }
 
 export async function fetchDealerOverridesList(dealerIds?: string[]): Promise<DealerOverridesListData | null> {
@@ -62,93 +76,115 @@ export async function fetchDealerOverride(dealerId: string): Promise<DealerOverr
   }
 }
 
+export async function upsertDealerOverrideStrict(
+  dealerId: string,
+  fields: Partial<Record<DealerOverrideField, unknown>>,
+): Promise<OverridesApiResult<{ override: DealerOverrideRow | null }>> {
+  const body = { dealer_id: dealerId, fields };
+  const r = await overridesApiPost<{ override: DealerOverrideRow | null }>({
+    scope: "dealer",
+    action: "upsert",
+    url: "/api/dealer-overrides/upsert",
+    entityId: dealerId,
+    fields,
+    body,
+  });
+  if (!r.ok && r.network) enqueueOnNetwork("dealer-upsert", dealerId, body);
+  return r;
+}
+
 export async function upsertDealerOverride(
   dealerId: string,
   fields: Partial<Record<DealerOverrideField, unknown>>,
 ): Promise<DealerOverrideRow | null> {
-  try {
-    const res = await fetch("/api/dealer-overrides/upsert", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ dealer_id: dealerId, fields }),
-    });
-    const data = await parseJson<ApiOk<{ override: DealerOverrideRow | null }> | ApiErr>(res);
-    if (!res.ok || !data.success) return null;
-    return data.data.override;
-  } catch {
-    return null;
-  }
+  const r = await upsertDealerOverrideStrict(dealerId, fields);
+  return r.ok ? r.data.override : null;
+}
+
+export async function setDealerTrainingStrict(
+  dealerId: string,
+  partial: { product_training_done?: boolean; needs_new_employees_training?: boolean },
+): Promise<OverridesApiResult<{ training: DealerTrainingRow | null }>> {
+  const body = { dealer_id: dealerId, ...partial };
+  const r = await overridesApiPost<{ training: DealerTrainingRow | null }>({
+    scope: "dealer",
+    action: "set-training",
+    url: "/api/dealer-overrides/set-training",
+    entityId: dealerId,
+    fields: partial,
+    body,
+  });
+  if (!r.ok && r.network) enqueueOnNetwork("dealer-training", dealerId, body);
+  return r;
 }
 
 export async function setDealerTraining(
   dealerId: string,
   partial: { product_training_done?: boolean; needs_new_employees_training?: boolean },
 ): Promise<DealerTrainingRow | null> {
-  try {
-    const res = await fetch("/api/dealer-overrides/set-training", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ dealer_id: dealerId, ...partial }),
-    });
-    const data = await parseJson<ApiOk<{ training: DealerTrainingRow | null }> | ApiErr>(res);
-    if (!res.ok || !data.success) return null;
-    return data.data.training;
-  } catch {
-    return null;
-  }
+  const r = await setDealerTrainingStrict(dealerId, partial);
+  return r.ok ? r.data.training : null;
+}
+
+export async function trashDealerStrict(dealerId: string): Promise<OverridesApiResult<{ override: DealerOverrideRow | null }>> {
+  const body = { dealer_id: dealerId };
+  const r = await overridesApiPost<{ override: DealerOverrideRow | null }>({
+    scope: "dealer",
+    action: "trash",
+    url: "/api/dealer-overrides/trash",
+    entityId: dealerId,
+    body,
+  });
+  if (!r.ok && r.network) enqueueOnNetwork("dealer-trash", dealerId, body);
+  return r;
 }
 
 export async function trashDealer(dealerId: string): Promise<DealerOverrideRow | null> {
-  try {
-    const res = await fetch("/api/dealer-overrides/trash", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ dealer_id: dealerId }),
-    });
-    const data = await parseJson<ApiOk<{ override: DealerOverrideRow | null }> | ApiErr>(res);
-    if (!res.ok || !data.success) return null;
-    return data.data.override;
-  } catch {
-    return null;
-  }
+  const r = await trashDealerStrict(dealerId);
+  return r.ok ? r.data.override : null;
+}
+
+export async function untrashDealerStrict(dealerId: string): Promise<OverridesApiResult<{ override: DealerOverrideRow | null }>> {
+  const body = { dealer_id: dealerId };
+  const r = await overridesApiPost<{ override: DealerOverrideRow | null }>({
+    scope: "dealer",
+    action: "untrash",
+    url: "/api/dealer-overrides/untrash",
+    entityId: dealerId,
+    body,
+  });
+  if (!r.ok && r.network) enqueueOnNetwork("dealer-untrash", dealerId, body);
+  return r;
 }
 
 export async function untrashDealer(dealerId: string): Promise<DealerOverrideRow | null> {
-  try {
-    const res = await fetch("/api/dealer-overrides/untrash", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ dealer_id: dealerId }),
-    });
-    const data = await parseJson<ApiOk<{ override: DealerOverrideRow | null }> | ApiErr>(res);
-    if (!res.ok || !data.success) return null;
-    return data.data.override;
-  } catch {
-    return null;
+  const r = await untrashDealerStrict(dealerId);
+  return r.ok ? r.data.override : null;
+}
+
+export async function createManualDealerStrict(payload: {
+  dealer_id?: string;
+  payload: Record<string, unknown>;
+}): Promise<OverridesApiResult<{ dealer_id: string; payload: Record<string, unknown> }>> {
+  const r = await overridesApiPost<{ dealer_id: string; payload: Record<string, unknown> }>({
+    scope: "dealer",
+    action: "create-manual",
+    url: "/api/dealer-overrides/create-manual",
+    entityId: payload.dealer_id,
+    body: payload,
+  });
+  if (!r.ok && r.network) {
+    enqueueOnNetwork("manual-dealer", payload.dealer_id ?? "new", payload);
   }
+  return r;
 }
 
 export async function createManualDealer(payload: {
   dealer_id?: string;
   payload: Record<string, unknown>;
 }): Promise<{ dealer_id: string; payload: Record<string, unknown> } | null> {
-  try {
-    const res = await fetch("/api/dealer-overrides/create-manual", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const data = await parseJson<ApiOk<{ dealer_id: string; payload: Record<string, unknown> }> | ApiErr>(res);
-    if (!res.ok || !data.success) return null;
-    return data.data;
-  } catch {
-    return null;
-  }
+  const r = await createManualDealerStrict(payload);
+  return r.ok ? r.data : null;
 }
 
 export async function fetchDealerOverrideHistory(
