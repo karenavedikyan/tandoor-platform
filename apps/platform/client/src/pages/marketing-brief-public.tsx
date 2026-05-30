@@ -6,25 +6,46 @@ import { Button } from "@/components/ui/button";
 import { buildHashPath, useRouteSearchParams } from "@/lib/hash-route-utils";
 import { cn } from "@/lib/utils";
 import {
+  brandBriefTheme,
+  type BrandBriefThemeMode,
+} from "@/components/marketing-brief/brand-brief-theme";
+import {
   fetchPublicBrief,
   MarketingBriefPublicFetchError,
   type MarketingBriefBlockRow,
   type MarketingBriefRow,
 } from "@/lib/marketing-briefs-api";
 
-const BRIEF_PUBLIC_PRINT_CSS = `
+function briefPublicPrintCss(themeMode: BrandBriefThemeMode): string {
+  const theme = brandBriefTheme(themeMode);
+  return `
 @media print {
   [data-no-print="true"] { display: none !important; }
-  body { background: #fff !important; color: #111 !important; }
-  .brief-public-shell { padding: 0 !important; margin: 0 !important; }
+  html, body {
+    background: ${theme.bg} !important;
+    color: ${theme.text} !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .brief-public-shell {
+    padding: 0 !important;
+    margin: 0 !important;
+    background: ${theme.bg} !important;
+  }
+  [data-print-root] { background: ${theme.bg} !important; }
   [data-brief-block] { break-inside: avoid; page-break-inside: avoid; }
 }
 `;
+}
 
 export default function MarketingBriefPublicPage() {
   const [, setLocation] = useLocation();
   const routeSearch = useRouteSearchParams();
   const wantsPrint = routeSearch.get("print") === "1";
+  const isPdfCapture = routeSearch.get("pdf") === "1";
+  const themeParam = routeSearch.get("theme");
+  const forcedTheme: BrandBriefThemeMode | undefined =
+    themeParam === "dark" || themeParam === "light" ? themeParam : undefined;
   const [, params] = useRoute("/marketing-briefs/public/:id");
   const id = params?.id ?? "";
 
@@ -81,12 +102,12 @@ export default function MarketingBriefPublicPage() {
   }, [id, setLocation, wantsPrint]);
 
   useEffect(() => {
-    if (!wantsPrint || loading || !brief) return;
+    if (!wantsPrint || isPdfCapture || loading || !brief) return;
     const t = window.setTimeout(() => {
       window.print();
     }, 600);
     return () => window.clearTimeout(t);
-  }, [wantsPrint, loading, brief]);
+  }, [wantsPrint, isPdfCapture, loading, brief]);
 
   if (loading) {
     return (
@@ -127,9 +148,14 @@ export default function MarketingBriefPublicPage() {
 
   return (
     <>
-      {wantsPrint ? <style>{BRIEF_PUBLIC_PRINT_CSS}</style> : null}
+      {wantsPrint ? <style>{briefPublicPrintCss(forcedTheme ?? "light")}</style> : null}
       <div
-        className={cn("brief-public-shell min-h-screen bg-background", wantsPrint && "print:m-0 print:bg-white")}
+        className={cn("brief-public-shell min-h-screen", !wantsPrint && "bg-background")}
+        style={
+          wantsPrint
+            ? { backgroundColor: brandBriefTheme(forcedTheme ?? "light").bg, minHeight: "100vh" }
+            : undefined
+        }
         data-testid="page-marketing-brief-public"
       >
         <BrandBriefView
@@ -139,6 +165,7 @@ export default function MarketingBriefPublicPage() {
           embed={wantsPrint}
           showPrint={!wantsPrint}
           showShare={!wantsPrint}
+          forcedTheme={forcedTheme}
           onBriefChange={setBrief}
         />
       </div>
