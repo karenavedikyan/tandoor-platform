@@ -61,9 +61,28 @@ const STMTS: string[] = [
   `ALTER TABLE marketing_briefs
      ADD COLUMN IF NOT EXISTS visibility text NOT NULL DEFAULT 'private'
      CHECK (visibility IN ('private', 'public'))`,
+
+  `ALTER TABLE marketing_briefs
+     ADD COLUMN IF NOT EXISTS category text NOT NULL DEFAULT 'brief'
+     CHECK (category IN ('brief', 'promo', 'info'))`,
+  `CREATE INDEX IF NOT EXISTS idx_marketing_briefs_category ON marketing_briefs (category)`,
+
+  `CREATE TABLE IF NOT EXISTS user_brief_views (
+     user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     brief_id uuid NOT NULL REFERENCES marketing_briefs(id) ON DELETE CASCADE,
+     viewed_at timestamptz NOT NULL DEFAULT now(),
+     PRIMARY KEY (user_id, brief_id)
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_user_brief_views_brief ON user_brief_views (brief_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_user_brief_views_user ON user_brief_views (user_id)`,
 ];
 
-const EXPECTED_TABLES = ["marketing_briefs", "marketing_brief_revisions", "marketing_brief_blocks"];
+const EXPECTED_TABLES = [
+  "marketing_briefs",
+  "marketing_brief_revisions",
+  "marketing_brief_blocks",
+  "user_brief_views",
+];
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   try {

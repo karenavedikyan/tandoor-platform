@@ -42,6 +42,19 @@ for (const salesRole of ["sales_manager", "team_lead", "sales_director"] as cons
   const ids = navTestIds(salesRole, salesRole === "sales_director" ? "director" : salesRole === "team_lead" ? "rop" : "manager");
   assert.ok(!ids.includes("nav-item-admin-brief-migrate-top"), `${salesRole}: no top migrate for non-admin`);
   assert.ok(!ids.includes("nav-item-admin-brief-migrate"), `${salesRole}: no migrate in nav for non-admin`);
+  assert.ok(ids.includes("nav-item-marketing-briefs"), `${salesRole}: marketing briefs in main nav`);
 }
+
+const managerNav = navTestIds("sales_manager", "manager");
+const devGroup = getPilotNavigation("sales_manager", undefined, undefined, "manager");
+assert.equal(devGroup.layout, "grouped");
+if (devGroup.layout === "grouped") {
+  const devItems = devGroup.groups.find((g) => g.key === "in-development")?.items ?? [];
+  assert.ok(
+    !devItems.some((i) => i.testId === "nav-item-marketing-briefs"),
+    "sales_manager: marketing briefs not in in-development",
+  );
+}
+assert.ok(managerNav.filter((id) => id === "nav-item-marketing-briefs").length === 1, "single marketing briefs entry");
 
 console.log("auth-access pilot navigation admin shortcut: ok");

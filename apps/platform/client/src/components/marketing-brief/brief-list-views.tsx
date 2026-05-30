@@ -35,6 +35,7 @@ import {
   type MarketingBriefRow,
   type MarketingBriefVisibility,
 } from "@/lib/marketing-briefs-api";
+import { CategoryBadge } from "@/components/marketing/CategoryBadge";
 import { isBriefNew } from "@/lib/marketing-briefs-utils";
 import { cn } from "@/lib/utils";
 
@@ -651,6 +652,7 @@ function MarketingBriefCard({
       </div>
       <CardHeader className="flex-1 pb-2">
         <div className="mb-2 flex flex-wrap items-center gap-2">
+          <CategoryBadge category={b.category ?? "brief"} />
           <BriefStatusBadge status={b.status} />
           {b.status === "published" && isBriefNew(b.published_at) ? <BriefNewBadge briefId={b.id} /> : null}
           <BriefVisibilityIcon visibility={b.visibility ?? "private"} />

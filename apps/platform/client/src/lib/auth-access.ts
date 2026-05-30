@@ -507,9 +507,15 @@ export function getPilotNavigation(
         navBehaviorId: "nav-trash",
         ...trashNavExtras(),
       },
+      {
+        href: "/marketing-briefs",
+        label: "Маркетинговые брифы",
+        testId: "nav-item-marketing-briefs",
+        navBehaviorId: "nav-marketing-briefs",
+      },
       ...(options?.extraLeadingItems ?? []),
     ],
-    groups: [buildInDevelopmentNavGroup({ includeMarketingBriefsInDev: options?.includeMarketingBriefsInDev ?? true })],
+    groups: [buildInDevelopmentNavGroup({ includeMarketingBriefsInDev: options?.includeMarketingBriefsInDev ?? false })],
   });
 
   if (role === "sales_director" || role === "team_lead") {
@@ -527,12 +533,6 @@ export function getPilotNavigation(
       unifiedSalesNavigation("/dealer-base", {
         includeMarketingBriefsInDev: false,
         extraLeadingItems: [
-          {
-            href: "/marketing-briefs",
-            label: "Маркетинговые брифы",
-            testId: "nav-item-marketing-briefs",
-            navBehaviorId: "nav-marketing-briefs",
-          },
           {
             href: "/listings",
             label: "Листовки",

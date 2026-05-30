@@ -14,8 +14,11 @@ import {
   mapMarketingBriefBlockRow,
   mapMarketingBriefRevisionRow,
   mapMarketingBriefRow,
+  parseMarketingBriefCategory,
   parseMarketingBriefVisibility,
   type MarketingBriefBlockRow,
+  type MarketingBriefFeedItem,
+  type MarketingBriefViewStats,
   type MarketingBriefRow,
   type MarketingBriefStatus,
 } from "./marketing-briefs-types.js";
@@ -182,11 +185,17 @@ export async function handleMarketingBriefsGet(
     [id],
   );
 
+  let viewStats: MarketingBriefViewStats | undefined;
+  if (me.role === "marketer" || me.role === "admin") {
+    viewStats = await fetchBriefViewStats(pool, id);
+  }
+
   sendJson(res, 200, {
     success: true,
     data: {
       brief,
       revisions: rev.rows.map(mapMarketingBriefRevisionRow),
+      ...(viewStats ? { viewStats } : {}),
     },
   });
 }
@@ -214,12 +223,13 @@ export async function handleMarketingBriefsCreate(
     typeof body.accent_color === "string" && body.accent_color.trim() ? body.accent_color.trim() : DEFAULT_ACCENT_COLOR;
   const coverText = typeof body.cover_text === "string" ? body.cover_text : "";
   const visibility = parseMarketingBriefVisibility(body.visibility);
+  const category = parseMarketingBriefCategory(body.category);
 
   const r = await pool.query<Record<string, unknown>>(
-    `INSERT INTO marketing_briefs (period_label, title, status, visibility, accent_color, cover_text, created_by)
-     VALUES ($1, $2, 'draft', $3, $4, $5, $6::uuid)
+    `INSERT INTO marketing_briefs (period_label, title, status, visibility, category, accent_color, cover_text, created_by)
+     VALUES ($1, $2, 'draft', $3, $4, $5, $6, $7::uuid)
      RETURNING *`,
-    [periodLabel, title, visibility, accentColor, coverText, me.id],
+    [periodLabel, title, visibility, category, accentColor, coverText, me.id],
   );
   const row = r.rows[0];
   if (!row) {
@@ -300,6 +310,12 @@ export async function handleMarketingBriefsUpdate(
     params.push(vis);
     updates.push(`visibility = $${params.length}`);
     patchOut.visibility = vis;
+  }
+  if (patch.category !== undefined) {
+    const cat = parseMarketingBriefCategory(patch.category);
+    params.push(cat);
+    updates.push(`category = $${params.length}`);
+    patchOut.category = cat;
   }
 
   if (updates.length === 0) {
@@ -792,6 +808,144 @@ export async function handleBlocksDelete(
   await reindexBriefBlocks(pool, existing.brief_id);
   await touchBriefUpdatedAt(pool, existing.brief_id);
   await insertRevision(pool, existing.brief_id, "block_delete", me.id, { block_id: id });
+
+  sendJson(res, 200, { success: true, data: { ok: true } });
+}
+
+const BRIEF_AUDIENCE_ROLES = ["manager", "regional_manager", "rop", "director"] as const;
+
+function extractSummaryFromBlocks(blocks: MarketingBriefBlockRow[]): string | null {
+  const textBlock = blocks.find((b) => b.type === "text");
+  if (!textBlock) return null;
+  const body = textBlock.payload.body;
+  if (typeof body !== "string") return null;
+  const plain = body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  if (!plain) return null;
+  return plain.length > 120 ? `${plain.slice(0, 120)}…` : plain;
+}
+
+function extractCoverFromBlocks(blocks: MarketingBriefBlockRow[]): string | null {
+  for (const block of blocks) {
+    if (block.type !== "products") continue;
+    const items = block.payload.items;
+    if (!Array.isArray(items)) continue;
+    for (const raw of items) {
+      if (!raw || typeof raw !== "object") continue;
+      const url = (raw as Record<string, unknown>).image_url;
+      if (typeof url === "string" && url.trim()) return url.trim();
+    }
+  }
+  return null;
+}
+
+async function fetchBlocksForBriefIds(pool: PoolLike, briefIds: string[]): Promise<Map<string, MarketingBriefBlockRow[]>> {
+  const map = new Map<string, MarketingBriefBlockRow[]>();
+  if (briefIds.length === 0) return map;
+  const r = await pool.query<Record<string, unknown>>(
+    `SELECT * FROM marketing_brief_blocks WHERE brief_id = ANY($1::uuid[]) ORDER BY brief_id, order_index ASC`,
+    [briefIds],
+  );
+  for (const row of r.rows) {
+    const block = mapMarketingBriefBlockRow(row);
+    const list = map.get(block.brief_id);
+    if (list) list.push(block);
+    else map.set(block.brief_id, [block]);
+  }
+  return map;
+}
+
+async function fetchBriefViewStats(pool: PoolLike, briefId: string): Promise<MarketingBriefViewStats> {
+  const viewedR = await pool.query<{ count: string }>(
+    `SELECT COUNT(DISTINCT user_id)::text AS count FROM user_brief_views WHERE brief_id = $1::uuid`,
+    [briefId],
+  );
+  const audienceR = await pool.query<{ count: string }>(
+    `SELECT COUNT(*)::text AS count FROM users
+     WHERE status = 'active' AND role = ANY($1::text[])`,
+    [BRIEF_AUDIENCE_ROLES],
+  );
+  const viewed_count = Number(viewedR.rows[0]?.count ?? 0);
+  const audience_count = Number(audienceR.rows[0]?.count ?? 0);
+  const percent = audience_count > 0 ? Math.round((viewed_count / audience_count) * 100) : 0;
+  return { viewed_count, audience_count, percent };
+}
+
+export async function handleMarketingBriefsFeed(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  me: SessionUser,
+): Promise<void> {
+  if (me.status !== "active") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+
+  const limitRaw = typeof req.query.limit === "string" ? Number.parseInt(req.query.limit, 10) : 10;
+  const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 20) : 10;
+
+  const r = await pool.query<Record<string, unknown>>(
+    `SELECT b.id, b.title, b.category, b.published_at,
+            EXISTS (
+              SELECT 1 FROM user_brief_views v
+              WHERE v.brief_id = b.id AND v.user_id = $1::uuid
+            ) AS viewed_by_current_user
+     FROM marketing_briefs b
+     WHERE b.visibility = 'public' AND b.status = 'published'
+     ORDER BY b.published_at DESC NULLS LAST, b.updated_at DESC
+     LIMIT $2`,
+    [me.id, limit],
+  );
+
+  const briefIds = r.rows.map((row) => String(row.id));
+  const blocksByBrief = await fetchBlocksForBriefIds(pool, briefIds);
+
+  const items: MarketingBriefFeedItem[] = r.rows.map((row) => {
+    const id = String(row.id);
+    const blocks = blocksByBrief.get(id) ?? [];
+    return {
+      id,
+      title: String(row.title),
+      category: parseMarketingBriefCategory(row.category),
+      published_at: row.published_at != null ? String(row.published_at) : null,
+      cover_image_url: extractCoverFromBlocks(blocks),
+      summary: extractSummaryFromBlocks(blocks),
+      viewed_by_current_user: row.viewed_by_current_user === true || row.viewed_by_current_user === "t",
+    };
+  });
+
+  sendJson(res, 200, { success: true, data: items });
+}
+
+export async function handleMarketingBriefsMarkViewed(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  me: SessionUser,
+): Promise<void> {
+  if (me.status !== "active") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const briefId = parseUuid(body.brief_id ?? body.briefId);
+  if (!briefId) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите brief_id." });
+    return;
+  }
+
+  const brief = await fetchBriefById(pool, briefId);
+  if (!brief || brief.status !== "published" || brief.visibility !== "public") {
+    sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Бриф не найден." });
+    return;
+  }
+
+  await pool.query(
+    `INSERT INTO user_brief_views (user_id, brief_id) VALUES ($1::uuid, $2::uuid)
+     ON CONFLICT (user_id, brief_id) DO NOTHING`,
+    [me.id, briefId],
+  );
 
   sendJson(res, 200, { success: true, data: { ok: true } });
 }

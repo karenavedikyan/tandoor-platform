@@ -48,6 +48,7 @@ import { flattenGroupedPilotNavigation, type PilotNavGroup, type PilotNavItem, t
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actualization-sync-status";
 import { SidebarNavFooter } from "@/components/layout/sidebar-nav-footer";
+import { MarketingTopCarousel } from "@/components/marketing/MarketingTopCarousel";
 import {
   ImpersonationQuickSwitch,
   type ImpersonationQuickSwitchUser,
@@ -1116,6 +1117,7 @@ export function AppShell({
 
         <main className="mx-auto w-full min-w-0 max-w-[1400px] flex-1 px-4 py-5 sm:px-5 sm:py-6 lg:px-8 lg:py-7">
           <ClientBaseActualizationShellBadge location={location} />
+          <MarketingTopCarousel />
           {children}
         </main>
       </div>

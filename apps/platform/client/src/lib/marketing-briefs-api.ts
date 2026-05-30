@@ -6,12 +6,15 @@ export type MarketingBriefStatus = "draft" | "published" | "archived";
 
 export type MarketingBriefVisibility = "private" | "public";
 
+export type MarketingBriefCategory = "brief" | "promo" | "info";
+
 export type MarketingBriefRow = {
   id: string;
   period_label: string;
   title: string;
   status: MarketingBriefStatus;
   visibility: MarketingBriefVisibility;
+  category: MarketingBriefCategory;
   accent_color: string;
   cover_text: string;
   created_by: string | null;
@@ -189,9 +192,42 @@ export async function fetchRecentPublishedBriefs(limit = 3): Promise<MarketingBr
   });
 }
 
+export type MarketingBriefFeedItem = {
+  id: string;
+  title: string;
+  category: MarketingBriefCategory;
+  published_at: string | null;
+  cover_image_url: string | null;
+  summary: string | null;
+  viewed_by_current_user: boolean;
+};
+
+export type MarketingBriefViewStats = {
+  viewed_count: number;
+  audience_count: number;
+  percent: number;
+};
+
+export async function fetchMarketingBriefFeed(limit = 10): Promise<MarketingBriefFeedItem[]> {
+  const res = await fetch(`/api/marketing-briefs/feed?limit=${limit}`, {
+    credentials: "include",
+    cache: "no-store",
+  });
+  const data = await parseJson<ApiOk<MarketingBriefFeedItem[]> | ApiErr>(res);
+  if (!res.ok || !data.success) {
+    throw apiError(!data.success ? data : { success: false, message: `HTTP ${res.status}` }, res.status);
+  }
+  return data.data;
+}
+
+export async function markMarketingBriefViewed(briefId: string): Promise<void> {
+  await postJson<{ ok: boolean }>("/api/marketing-briefs/mark-viewed", { brief_id: briefId });
+}
+
 export async function getBrief(id: string): Promise<{
   brief: MarketingBriefRow;
   revisions: MarketingBriefRevisionRow[];
+  viewStats?: MarketingBriefViewStats;
 }> {
   const res = await fetch(`/api/marketing-briefs/get?id=${encodeURIComponent(id)}`, {
     credentials: "include",
@@ -219,7 +255,7 @@ export async function createBrief(input: {
 export async function updateBrief(
   id: string,
   patch: Partial<
-    Pick<MarketingBriefRow, "period_label" | "title" | "visibility" | "accent_color" | "cover_text">
+    Pick<MarketingBriefRow, "period_label" | "title" | "visibility" | "category" | "accent_color" | "cover_text">
   >,
 ): Promise<MarketingBriefRow> {
   return postJson<MarketingBriefRow>("/api/marketing-briefs/update", { id, patch });
