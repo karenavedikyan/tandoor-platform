@@ -1,5 +1,5 @@
 /**
- * PDF download handler — lazy-loads marketing-brief-pdf so import failures surface as JSON.
+ * PDF download handler — static renderer import (separate download-pdf lambda only).
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -15,7 +15,7 @@ import {
   type MarketingBriefBlockRow,
   type MarketingBriefRow,
 } from "../shared/marketing-briefs-types.js";
-import type { BriefPdfInput } from "./marketing-brief-pdf.js";
+import { renderBriefPdf } from "./marketing-brief-pdf.js";
 
 type SessionUser = { id: string; role: string; status: string };
 
@@ -125,18 +125,6 @@ export async function handleDownloadPdf(
   const proto =
     String(req.headers["x-forwarded-proto"] || "https").split(",")[0]?.trim() || "https";
   const origin = host ? `${proto}://${host}` : undefined;
-
-  let renderBriefPdf: (input: BriefPdfInput) => Promise<Buffer>;
-  try {
-    const mod = await import("./marketing-brief-pdf.js");
-    renderBriefPdf = mod.renderBriefPdf;
-    if (typeof renderBriefPdf !== "function") {
-      throw new Error(`renderBriefPdf is not a function (keys: ${Object.keys(mod).join(",")})`);
-    }
-  } catch (e) {
-    sendPdfStageError(res, 500, "import_renderer", e, { briefId: id });
-    return;
-  }
 
   let pdfBuffer: Buffer;
   try {

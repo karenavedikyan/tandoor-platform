@@ -5,6 +5,8 @@
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+// Anchor for Vercel nft-tracer: ensures marketing-brief-pdf is included in the function bundle.
+import type * as _RendererTypes from "../../server/marketing-brief-pdf.js";
 import {
   enforceCsrfOrigin,
   getPool,
@@ -14,11 +16,6 @@ import {
 
 export const config = {
   maxDuration: 30,
-  includeFiles: [
-    "../../server/fonts/**",
-    "../../server/marketing-brief-pdf.*",
-    "../../server/marketing-briefs-pdf-handler.js",
-  ],
 };
 
 function safeEnvSnapshot(): Record<string, unknown> {
