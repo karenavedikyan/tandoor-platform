@@ -6,12 +6,15 @@ export type MarketingBriefStatus = "draft" | "published" | "archived";
 
 export type MarketingBriefVisibility = "private" | "public";
 
+export type MarketingBriefCategory = "brief" | "promo" | "info";
+
 export type MarketingBriefRow = {
   id: string;
   period_label: string;
   title: string;
   status: MarketingBriefStatus;
   visibility: MarketingBriefVisibility;
+  category: MarketingBriefCategory;
   accent_color: string;
   cover_text: string;
   created_by: string | null;
@@ -41,6 +44,28 @@ export function parseMarketingBriefVisibility(raw: unknown): MarketingBriefVisib
   return v === "public" ? "public" : "private";
 }
 
+export function parseMarketingBriefCategory(raw: unknown): MarketingBriefCategory {
+  const v = typeof raw === "string" ? raw.trim() : "";
+  if (v === "promo" || v === "info") return v;
+  return "brief";
+}
+
+export type MarketingBriefFeedItem = {
+  id: string;
+  title: string;
+  category: MarketingBriefCategory;
+  published_at: string | null;
+  cover_image_url: string | null;
+  summary: string | null;
+  viewed_by_current_user: boolean;
+};
+
+export type MarketingBriefViewStats = {
+  viewed_count: number;
+  audience_count: number;
+  percent: number;
+};
+
 export function mapMarketingBriefRow(r: Record<string, unknown>): MarketingBriefRow {
   return {
     id: String(r.id),
@@ -48,6 +73,7 @@ export function mapMarketingBriefRow(r: Record<string, unknown>): MarketingBrief
     title: String(r.title),
     status: String(r.status) as MarketingBriefStatus,
     visibility: parseMarketingBriefVisibility(r.visibility),
+    category: parseMarketingBriefCategory(r.category),
     accent_color: String(r.accent_color ?? "#9ACA3C"),
     cover_text: String(r.cover_text ?? ""),
     created_by: r.created_by != null ? String(r.created_by) : null,

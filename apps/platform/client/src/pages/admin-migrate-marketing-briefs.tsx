@@ -229,6 +229,7 @@ export default function AdminMigrateMarketingBriefsPage() {
     "marketing_briefs",
     "marketing_brief_revisions",
     "marketing_brief_blocks",
+    "user_brief_views",
   ];
 
   const inSync = result?.success === true;

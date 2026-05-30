@@ -31,7 +31,9 @@ import {
   handleMarketingBriefsArchive,
   handleMarketingBriefsCreate,
   handleMarketingBriefsDelete,
+  handleMarketingBriefsFeed,
   handleMarketingBriefsGet,
+  handleMarketingBriefsMarkViewed,
   handleMarketingBriefsList,
   handleMarketingBriefsPublicGet,
   handleMarketingBriefsPublish,
@@ -89,6 +91,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "get" && req.method === "GET") {
       await handleMarketingBriefsGet(req, res, pool, sessionUser);
+      return;
+    }
+    if (action === "feed" && req.method === "GET") {
+      await handleMarketingBriefsFeed(req, res, pool, sessionUser);
+      return;
+    }
+    if (action === "mark-viewed" && req.method === "POST") {
+      await handleMarketingBriefsMarkViewed(req, res, pool, sessionUser);
       return;
     }
     if (action === "create" && req.method === "POST") {

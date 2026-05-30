@@ -41,9 +41,12 @@ import {
   revisionActionLabel,
   unpublishBrief,
   updateBrief,
+  type MarketingBriefCategory,
   type MarketingBriefRevisionRow,
   type MarketingBriefRow,
+  type MarketingBriefViewStats,
 } from "@/lib/marketing-briefs-api";
+import { CategoryBadge } from "@/components/marketing/CategoryBadge";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { BriefBlocksEditor } from "@/components/marketing-brief/brief-blocks-editor";
@@ -63,6 +66,8 @@ export default function MarketingBriefEditorPage() {
   const [title, setTitle] = useState("");
   const [coverText, setCoverText] = useState("");
   const [accentColor, setAccentColor] = useState(DEFAULT_MARKETING_BRIEF_ACCENT);
+  const [category, setCategory] = useState<MarketingBriefCategory>("brief");
+  const [viewStats, setViewStats] = useState<MarketingBriefViewStats | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [archiveOpen, setArchiveOpen] = useState(false);
 
@@ -83,11 +88,14 @@ export default function MarketingBriefEditorPage() {
       setTitle(data.brief.title);
       setCoverText(data.brief.cover_text);
       setAccentColor(data.brief.accent_color || DEFAULT_MARKETING_BRIEF_ACCENT);
+      setCategory(data.brief.category ?? "brief");
+      setViewStats(data.viewStats ?? null);
       baselineRef.current = JSON.stringify({
         period_label: data.brief.period_label,
         title: data.brief.title,
         cover_text: data.brief.cover_text,
         accent_color: data.brief.accent_color,
+        category: data.brief.category ?? "brief",
       });
       dirtyMetaRef.current = false;
     } catch {
@@ -110,7 +118,13 @@ export default function MarketingBriefEditorPage() {
     dirtyMetaRef.current = true;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
-      const snapshot = JSON.stringify({ period_label: periodLabel, title, cover_text: coverText, accent_color: accentColor });
+      const snapshot = JSON.stringify({
+        period_label: periodLabel,
+        title,
+        cover_text: coverText,
+        accent_color: accentColor,
+        category,
+      });
       if (snapshot === baselineRef.current) {
         dirtyMetaRef.current = false;
         return;
@@ -124,6 +138,7 @@ export default function MarketingBriefEditorPage() {
             title,
             cover_text: coverText,
             accent_color: accentColor,
+            category,
           });
           setBrief((prev) =>
             prev
@@ -149,14 +164,14 @@ export default function MarketingBriefEditorPage() {
         }
       })();
     }, 800);
-  }, [id, brief, periodLabel, title, coverText, accentColor]);
+  }, [id, brief, periodLabel, title, coverText, accentColor, category]);
 
   useEffect(() => {
     scheduleSave();
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, [periodLabel, title, coverText, accentColor, scheduleSave]);
+  }, [periodLabel, title, coverText, accentColor, category, scheduleSave]);
 
   async function runStatusAction(fn: (briefId: string) => Promise<MarketingBriefRow>, successTitle: string) {
     if (!id) return;
@@ -213,6 +228,7 @@ export default function MarketingBriefEditorPage() {
         </div>
         <div className="space-y-3 border-t border-border/60 bg-card px-5 py-4 sm:px-8">
           <div className="flex flex-wrap items-center gap-2">
+            <CategoryBadge category={category} />
             <Badge variant="secondary">{briefStatusLabel(brief.status)}</Badge>
             <span className="text-xs text-muted-foreground">
               {brief.author_name ?? "—"} · обновлено {formatBriefUpdatedAt(brief.updated_at)}
@@ -296,9 +312,32 @@ export default function MarketingBriefEditorPage() {
                 : "Изменения сохраняются автоматически"}
       </p>
 
+      {viewStats ? (
+        <p className="text-sm text-muted-foreground" data-testid="text-marketing-brief-view-stats">
+          👁 Прочитали: {viewStats.viewed_count} из {viewStats.audience_count} менеджеров ({viewStats.percent}%)
+        </p>
+      ) : null}
+
       <section className="space-y-4 rounded-2xl border border-border/80 bg-card p-4 sm:p-5">
         <h2 className="text-sm font-semibold text-foreground">Метаданные</h2>
         <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Категория</Label>
+            <Select
+              value={category}
+              onValueChange={(v) => setCategory(v as MarketingBriefCategory)}
+              disabled={readOnlyFields}
+            >
+              <SelectTrigger data-testid="select-marketing-brief-category">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="brief">Бриф</SelectItem>
+                <SelectItem value="promo">Акция</SelectItem>
+                <SelectItem value="info">Информация</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Период</Label>
             <Select value={periodLabel} onValueChange={setPeriodLabel} disabled={readOnlyFields}>
