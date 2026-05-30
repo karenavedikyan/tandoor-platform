@@ -1,0 +1,356 @@
+/**
+ * API оверрайдов дилера (Postgres, prompt 113).
+ */
+
+import { randomUUID } from "node:crypto";
+import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { PoolLike } from "./admin/admin-auth.js";
+import {
+  DEALER_OVERRIDE_FIELDS,
+  mapDealerOverrideRow,
+  mapDealerTrainingRow,
+  serializeOverrideValue,
+  type DealerOverrideField,
+  type DealerOverrideRow,
+} from "./dealer-overrides-types.js";
+
+type SessionUser = { id: string; role: string; status: string };
+
+function sendJson(res: VercelResponse, status: number, body: Record<string, unknown>): void {
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.setHeader("Cache-Control", "no-store");
+  res.status(status).json(body);
+}
+
+function parseIdList(raw: unknown): string[] {
+  if (typeof raw !== "string" || !raw.trim()) return [];
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function pickFields(body: Record<string, unknown>): Partial<Record<DealerOverrideField, unknown>> {
+  const fields = (body.fields ?? {}) as Record<string, unknown>;
+  const out: Partial<Record<DealerOverrideField, unknown>> = {};
+  for (const key of DEALER_OVERRIDE_FIELDS) {
+    if (key in fields) out[key] = fields[key];
+  }
+  return out;
+}
+
+async function fetchOverride(pool: PoolLike, dealerId: string): Promise<DealerOverrideRow | null> {
+  const r = await pool.query<Record<string, unknown>>(
+    `SELECT * FROM dealer_overrides WHERE dealer_id = $1 LIMIT 1`,
+    [dealerId],
+  );
+  return r.rows[0] ? mapDealerOverrideRow(r.rows[0]) : null;
+}
+
+async function logEvents(
+  pool: PoolLike,
+  dealerId: string,
+  prev: DealerOverrideRow | null,
+  patch: Partial<Record<DealerOverrideField, unknown>>,
+  userId: string,
+): Promise<void> {
+  for (const field of Object.keys(patch) as DealerOverrideField[]) {
+    const oldVal = prev ? (prev[field] as unknown) : null;
+    const newVal = patch[field];
+    const oldS = serializeOverrideValue(oldVal);
+    const newS = serializeOverrideValue(newVal);
+    if (oldS === newS) continue;
+    await pool.query(
+      `INSERT INTO dealer_override_events (dealer_id, field, old_value, new_value, changed_by)
+       VALUES ($1, $2, $3, $4, $5::uuid)`,
+      [dealerId, field, oldS, newS, userId],
+    );
+  }
+}
+
+// TODO(prompt-113): scope write access via client_assignments / team memberships.
+function assertCanWrite(_me: SessionUser, res: VercelResponse): boolean {
+  if (_me.status !== "active") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return false;
+  }
+  return true;
+}
+
+export async function handleDealerOverridesList(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  _me: SessionUser,
+): Promise<void> {
+  const ids = parseIdList(req.query.dealer_ids);
+  const overridesQ =
+    ids.length > 0
+      ? pool.query<Record<string, unknown>>(`SELECT * FROM dealer_overrides WHERE dealer_id = ANY($1::text[])`, [
+          ids,
+        ])
+      : pool.query<Record<string, unknown>>(`SELECT * FROM dealer_overrides`);
+  const trainingQ =
+    ids.length > 0
+      ? pool.query<Record<string, unknown>>(
+          `SELECT * FROM dealer_training_state WHERE dealer_id = ANY($1::text[])`,
+          [ids],
+        )
+      : pool.query<Record<string, unknown>>(`SELECT * FROM dealer_training_state`);
+  const manualQ =
+    ids.length > 0
+      ? pool.query<Record<string, unknown>>(`SELECT * FROM manual_dealers WHERE dealer_id = ANY($1::text[])`, [ids])
+      : pool.query<Record<string, unknown>>(`SELECT * FROM manual_dealers`);
+
+  const [overrides, training, manual] = await Promise.all([overridesQ, trainingQ, manualQ]);
+
+  sendJson(res, 200, {
+    success: true,
+    data: {
+      overrides: overrides.rows.map(mapDealerOverrideRow),
+      training: training.rows.map(mapDealerTrainingRow),
+      manual: manual.rows.map((r) => ({
+        dealer_id: String(r.dealer_id),
+        payload: r.payload as Record<string, unknown>,
+        created_by: r.created_by != null ? String(r.created_by) : null,
+        created_at: String(r.created_at),
+      })),
+    },
+  });
+}
+
+export async function handleDealerOverridesGet(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  _me: SessionUser,
+): Promise<void> {
+  const dealerId = typeof req.query.dealer_id === "string" ? req.query.dealer_id.trim() : "";
+  if (!dealerId) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите dealer_id." });
+    return;
+  }
+  const override = await fetchOverride(pool, dealerId);
+  const tr = await pool.query<Record<string, unknown>>(
+    `SELECT * FROM dealer_training_state WHERE dealer_id = $1 LIMIT 1`,
+    [dealerId],
+  );
+  sendJson(res, 200, {
+    success: true,
+    data: {
+      override,
+      training: tr.rows[0] ? mapDealerTrainingRow(tr.rows[0]) : null,
+    },
+  });
+}
+
+export async function handleDealerOverridesHistory(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  _me: SessionUser,
+): Promise<void> {
+  const dealerId = typeof req.query.dealer_id === "string" ? req.query.dealer_id.trim() : "";
+  const field = typeof req.query.field === "string" ? req.query.field.trim() : "";
+  if (!dealerId) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите dealer_id." });
+    return;
+  }
+  const params: unknown[] = [dealerId];
+  let fieldClause = "";
+  if (field) {
+    params.push(field);
+    fieldClause = ` AND field = $${params.length}`;
+  }
+  const r = await pool.query<Record<string, unknown>>(
+    `SELECT * FROM dealer_override_events
+     WHERE dealer_id = $1${fieldClause}
+     ORDER BY changed_at DESC
+     LIMIT 120`,
+    params,
+  );
+  sendJson(res, 200, { success: true, data: r.rows });
+}
+
+export async function handleDealerOverridesUpsert(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  me: SessionUser,
+): Promise<void> {
+  if (!assertCanWrite(me, res)) return;
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const dealerId = typeof body.dealer_id === "string" ? body.dealer_id.trim() : "";
+  if (!dealerId) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите dealer_id." });
+    return;
+  }
+  const patch = pickFields(body);
+  if (Object.keys(patch).length === 0) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Нет полей для обновления." });
+    return;
+  }
+
+  const prev = await fetchOverride(pool, dealerId);
+  await logEvents(pool, dealerId, prev, patch, me.id);
+
+  if (prev) {
+    const sets: string[] = [];
+    const params: unknown[] = [dealerId];
+    for (const [key, val] of Object.entries(patch) as [DealerOverrideField, unknown][]) {
+      params.push(val === undefined ? null : val);
+      sets.push(`${key} = $${params.length}`);
+    }
+    params.push(me.id);
+    sets.push(`updated_at = NOW()`, `updated_by = $${params.length}`);
+    await pool.query(`UPDATE dealer_overrides SET ${sets.join(", ")} WHERE dealer_id = $1`, params);
+  } else {
+    const cols: string[] = ["dealer_id", "updated_by"];
+    const vals: unknown[] = [dealerId, me.id];
+    for (const [key, val] of Object.entries(patch) as [DealerOverrideField, unknown][]) {
+      cols.push(key);
+      vals.push(val === undefined ? null : val);
+    }
+    const placeholders = vals.map((_, i) => `$${i + 1}`).join(", ");
+    await pool.query(
+      `INSERT INTO dealer_overrides (${cols.join(", ")}) VALUES (${placeholders})`,
+      vals,
+    );
+  }
+
+  const override = await fetchOverride(pool, dealerId);
+  sendJson(res, 200, { success: true, data: { override } });
+}
+
+export async function handleDealerOverridesSetTraining(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  me: SessionUser,
+): Promise<void> {
+  if (!assertCanWrite(me, res)) return;
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const dealerId = typeof body.dealer_id === "string" ? body.dealer_id.trim() : "";
+  if (!dealerId) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите dealer_id." });
+    return;
+  }
+  const productDone = body.product_training_done;
+  const needsNew = body.needs_new_employees_training;
+
+  await pool.query(
+    `INSERT INTO dealer_training_state (dealer_id, product_training_done, needs_new_employees_training, updated_by)
+     VALUES ($1, COALESCE($2::boolean, FALSE), COALESCE($3::boolean, FALSE), $4::uuid)
+     ON CONFLICT (dealer_id) DO UPDATE SET
+       product_training_done = COALESCE($2::boolean, dealer_training_state.product_training_done),
+       needs_new_employees_training = COALESCE($3::boolean, dealer_training_state.needs_new_employees_training),
+       updated_at = NOW(),
+       updated_by = EXCLUDED.updated_by`,
+    [
+      dealerId,
+      productDone === undefined ? null : Boolean(productDone),
+      needsNew === undefined ? null : Boolean(needsNew),
+      me.id,
+    ],
+  );
+
+  const r = await pool.query<Record<string, unknown>>(
+    `SELECT * FROM dealer_training_state WHERE dealer_id = $1`,
+    [dealerId],
+  );
+  sendJson(res, 200, {
+    success: true,
+    data: { training: r.rows[0] ? mapDealerTrainingRow(r.rows[0]) : null },
+  });
+}
+
+async function setTrash(
+  pool: PoolLike,
+  me: SessionUser,
+  dealerId: string,
+  trash: boolean,
+  res: VercelResponse,
+): Promise<void> {
+  const patch: Partial<Record<DealerOverrideField, unknown>> = trash
+    ? { trashed_at: new Date().toISOString(), trashed_by: me.id }
+    : { trashed_at: null, trashed_by: null };
+  const prev = await fetchOverride(pool, dealerId);
+  await logEvents(pool, dealerId, prev, patch, me.id);
+
+  await pool.query(
+    `INSERT INTO dealer_overrides (dealer_id, trashed_at, trashed_by, updated_by)
+     VALUES ($1, $2, $3::uuid, $4::uuid)
+     ON CONFLICT (dealer_id) DO UPDATE SET
+       trashed_at = EXCLUDED.trashed_at,
+       trashed_by = EXCLUDED.trashed_by,
+       updated_at = NOW(),
+       updated_by = EXCLUDED.updated_by`,
+    [dealerId, trash ? new Date().toISOString() : null, trash ? me.id : null, me.id],
+  );
+  const override = await fetchOverride(pool, dealerId);
+  sendJson(res, 200, { success: true, data: { override } });
+}
+
+export async function handleDealerOverridesTrash(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  me: SessionUser,
+): Promise<void> {
+  if (!assertCanWrite(me, res)) return;
+  const dealerId = typeof (req.body as Record<string, unknown>)?.dealer_id === "string"
+    ? String((req.body as Record<string, unknown>).dealer_id).trim()
+    : "";
+  if (!dealerId) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите dealer_id." });
+    return;
+  }
+  await setTrash(pool, me, dealerId, true, res);
+}
+
+export async function handleDealerOverridesUntrash(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  me: SessionUser,
+): Promise<void> {
+  if (!assertCanWrite(me, res)) return;
+  const dealerId = typeof (req.body as Record<string, unknown>)?.dealer_id === "string"
+    ? String((req.body as Record<string, unknown>).dealer_id).trim()
+    : "";
+  if (!dealerId) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите dealer_id." });
+    return;
+  }
+  await setTrash(pool, me, dealerId, false, res);
+}
+
+export async function handleDealerOverridesCreateManual(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  me: SessionUser,
+): Promise<void> {
+  if (!assertCanWrite(me, res)) return;
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const dealerId =
+    typeof body.dealer_id === "string" && body.dealer_id.trim()
+      ? body.dealer_id.trim()
+      : `manual-${randomUUID()}`;
+  const payload =
+    body.payload && typeof body.payload === "object" && !Array.isArray(body.payload)
+      ? (body.payload as Record<string, unknown>)
+      : {};
+
+  await pool.query(
+    `INSERT INTO manual_dealers (dealer_id, payload, created_by)
+     VALUES ($1, $2::jsonb, $3::uuid)
+     ON CONFLICT (dealer_id) DO UPDATE SET payload = EXCLUDED.payload`,
+    [dealerId, JSON.stringify(payload), me.id],
+  );
+
+  sendJson(res, 200, {
+    success: true,
+    data: { dealer_id: dealerId, payload },
+  });
+}

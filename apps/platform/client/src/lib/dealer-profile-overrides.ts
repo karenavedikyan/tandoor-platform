@@ -4,8 +4,10 @@
 
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import { canEditClientNextStep } from "@/lib/client-next-step-data";
+import { upsertDealerOverride } from "@/lib/dealer-overrides-api";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
+import { toast } from "@/hooks/use-toast";
 
 export const DEALER_PROFILE_OVERRIDES_STORAGE_KEY = "tandoor-dealer-profile-overrides-v1";
 export const DEALER_PROFILE_OVERRIDES_EVENT = "tandoor-dealer-profile-overrides-changed";
@@ -82,6 +84,17 @@ export function saveDealerProfileOverridesState(state: DealerProfileOverridesSta
   window.dispatchEvent(new CustomEvent(DEALER_PROFILE_OVERRIDES_EVENT));
 }
 
+/** Слияние серверных оверрайдов поверх локального кеша (Промт 113). */
+export function hydrateDealerProfileOverridesFromServer(
+  fetched: Record<string, DealerProfileOverride>,
+): void {
+  const state = loadDealerProfileOverridesState();
+  for (const [dealerId, row] of Object.entries(fetched)) {
+    state.overridesByDealer[dealerId] = row;
+  }
+  saveDealerProfileOverridesState(state);
+}
+
 export function getDealerProfileOverride(
   dealerId: string,
   state: DealerProfileOverridesState = loadDealerProfileOverridesState(),
@@ -143,6 +156,7 @@ export function updateDealerProfile(
   profile: ReleaseDemoProfile,
 ): void {
   const state = loadDealerProfileOverridesState();
+  const prevSnapshot = JSON.stringify(state);
   const now = isoNow();
   const act = { id: profile.personaUserId, name: userLabelFromProfile(profile) };
   const prev = state.overridesByDealer[dealerId] ?? {
@@ -160,6 +174,28 @@ export function updateDealerProfile(
   state.overridesByDealer[dealerId] = next;
   pushHistory(state, dealerId, "Обновлены данные дилера", act.name);
   saveDealerProfileOverridesState(state);
+
+  void upsertDealerOverride(dealerId, {
+    name: next.displayName ?? null,
+    city: next.city ?? null,
+    contact_name: next.mainContactName ?? null,
+    contact_phone: next.mainContactPhone ?? null,
+    contact_email: next.mainContactEmail ?? null,
+    general_comment: next.comment ?? null,
+  }).then((saved) => {
+    if (!saved) {
+      try {
+        saveDealerProfileOverridesState(JSON.parse(prevSnapshot) as DealerProfileOverridesState);
+      } catch {
+        /* ignore */
+      }
+      toast({
+        variant: "destructive",
+        title: "Не удалось сохранить",
+        description: "Попробуйте ещё раз.",
+      });
+    }
+  });
 }
 
 export function getDealerProfileHistoryEvents(

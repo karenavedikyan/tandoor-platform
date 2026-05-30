@@ -1,6 +1,9 @@
 /**
- * Порядок выгрузки клиента (MVP: localStorage).
+ * Порядок выгрузки клиента (localStorage-кеш + Postgres, Промт 113).
  */
+
+import { upsertDealerOverride } from "@/lib/dealer-overrides-api";
+import { toast } from "@/hooks/use-toast";
 
 export const DEALER_UNLOADING_ORDER_STORAGE_KEY = "tandoor-dealer-unloading-order-v1";
 export const DEALER_UNLOADING_ORDER_EVENT = "tandoor-dealer-unloading-order-changed";
@@ -97,7 +100,33 @@ export function setDealerUnloadingOrder(
     historyByDealer[dealerId] = h.slice(0, 80);
   }
 
+  const prevSnapshot = JSON.stringify(loadDealerUnloadingOrderState());
   saveState({ orderByDealer, historyByDealer });
+
+  void upsertDealerOverride(dealerId, {
+    unloading_order: next != null && next > 0 ? String(Math.floor(next)) : null,
+  }).then((saved) => {
+    if (!saved) {
+      try {
+        saveState(JSON.parse(prevSnapshot) as State);
+      } catch {
+        /* ignore */
+      }
+      toast({
+        variant: "destructive",
+        title: "Не удалось сохранить",
+        description: "Попробуйте ещё раз.",
+      });
+    }
+  });
+}
+
+export function hydrateDealerUnloadingOrderFromServer(orderByDealer: Record<string, number>): void {
+  const state = loadDealerUnloadingOrderState();
+  for (const [dealerId, order] of Object.entries(orderByDealer)) {
+    if (typeof order === "number" && order > 0) state.orderByDealer[dealerId] = order;
+  }
+  saveState(state);
 }
 
 export function getDealerUnloadingOrderHistoryEvents(
