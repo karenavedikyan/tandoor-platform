@@ -37,7 +37,7 @@ export async function renderBriefPdf(
     args: chromium.args,
     defaultViewport: { width: 1200, height: 1600, deviceScaleFactor: 2 },
     executablePath: await chromium.executablePath(remotePackUrl),
-    headless: typeof chromium.headless === "boolean" ? chromium.headless : true,
+    headless: true,
   });
 
   try {
