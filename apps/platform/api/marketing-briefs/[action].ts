@@ -10,6 +10,8 @@
  *   POST /api/marketing-briefs/restore
  *   POST /api/marketing-briefs/delete
  *   GET  /api/marketing-briefs/public-get?id=  (public+published — без входа; иначе сессия)
+ *
+ * POST /api/marketing-briefs/download-pdf — отдельный файл download-pdf.ts (PDF renderer).
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -37,12 +39,6 @@ import {
   handleMarketingBriefsUnpublish,
   handleMarketingBriefsUpdate,
 } from "../../shared/marketing-briefs-handlers.js";
-import { handleMarketingBriefsDownloadPdf } from "../../server/marketing-briefs-pdf-handler.js";
-
-export const config = {
-  maxDuration: 30,
-  includeFiles: ["../../server/fonts/**", "../../server/marketing-brief-pdf.*"],
-};
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   try {
@@ -121,10 +117,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "delete" && req.method === "POST") {
       await handleMarketingBriefsDelete(req, res, pool, sessionUser);
-      return;
-    }
-    if (action === "download-pdf" && req.method === "POST") {
-      await handleMarketingBriefsDownloadPdf(req, res, pool, sessionUser);
       return;
     }
     if (action === "blocks-list" && req.method === "GET") {
