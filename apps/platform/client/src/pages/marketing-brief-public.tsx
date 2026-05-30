@@ -60,6 +60,10 @@ function waitForDocumentImages(): Promise<void> {
 function briefPublicPrintCss(themeMode: BrandBriefThemeMode): string {
   const theme = brandBriefTheme(themeMode);
   return `
+@page {
+  margin: 10mm;
+  size: A4;
+}
 @media print {
   [data-no-print="true"] { display: none !important; }
   html, body {
@@ -74,7 +78,46 @@ function briefPublicPrintCss(themeMode: BrandBriefThemeMode): string {
     background: ${theme.bg} !important;
   }
   [data-print-root] { background: ${theme.bg} !important; }
-  [data-brief-block] { break-inside: avoid; page-break-inside: avoid; }
+
+  [data-brief-block] {
+    break-inside: auto;
+    page-break-inside: auto;
+  }
+
+  [data-brief-block] h2,
+  [data-brief-block] h3 {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  [data-testid^="brand-brief-product-"] {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  [data-brief-block] tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  [data-brief-block] article,
+  [data-brief-block] .brief-segment-card,
+  [data-brief-block] .brief-bonus-card {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  [data-testid^="brand-brief-callout-"] {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  [data-testid="brand-brief-section"] {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  img { break-inside: avoid; page-break-inside: avoid; max-width: 100%; }
 }
 `;
 }
