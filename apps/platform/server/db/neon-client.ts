@@ -5,7 +5,7 @@
 
 import { neon } from "@neondatabase/serverless";
 import { buildTaggedQuery } from "./pg-client.js";
-import { shadowWriteAsync } from "./shadow-write.js";
+import { shadowWrite } from "./shadow-write.js";
 
 export type NeonHttp = ReturnType<typeof neon>;
 
@@ -42,13 +42,15 @@ async function runNeonQuery(sql: NeonHttp, text: string, params: unknown[]): Pro
   return callable(text, params);
 }
 
-function scheduleShadowWrite(sql: string, params: unknown[], tag: string): void {
+async function scheduleShadowWrite(sql: string, params: unknown[], tag: string): Promise<void> {
   if (!isMutationSql(sql)) return;
-  shadowWriteAsync(sql, params, tag);
+  // Ждём ответ от прокси, чтобы лямбда не заморозилась до отправки запроса.
+  // Внутри shadowWrite — swallow ошибок и timeout 2.5s.
+  await shadowWrite(sql, params, tag);
 }
 
 /**
- * Оборачивает neon HTTP-клиент: после успешного DML — shadow-write (fire-and-forget).
+ * Оборачивает neon HTTP-клиент: после успешного DML — awaited shadow-write (best-effort).
  */
 export function wrapNeonWithShadow(base: NeonHttp, tag = "neon"): NeonHttp {
   const wrapped = (async (
@@ -66,7 +68,7 @@ export function wrapNeonWithShadow(base: NeonHttp, tag = "neon"): NeonHttp {
       params = built.values;
     }
     const result = await runNeonQuery(base, text, params);
-    scheduleShadowWrite(text, params, tag);
+    await scheduleShadowWrite(text, params, tag);
     return result;
   }) as NeonHttp;
   return wrapped;
@@ -90,7 +92,7 @@ export function makePoolFromNeon(sql: NeonHttp): PoolLike {
   return {
     async query<T>(text: string, params?: unknown[]): Promise<{ rows: T[]; rowCount?: number }> {
       const raw = (await runNeonQuery(sql, text, params ?? [])) as unknown;
-      scheduleShadowWrite(text, params ?? [], "pool.query");
+      await scheduleShadowWrite(text, params ?? [], "pool.query");
       if (Array.isArray(raw)) {
         return { rows: raw as T[] };
       }
