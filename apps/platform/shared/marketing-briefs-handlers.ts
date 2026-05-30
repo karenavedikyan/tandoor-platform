@@ -527,22 +527,25 @@ export async function handleMarketingBriefsDownloadPdf(
     res.status(200).send(buffer);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
-    const stack = e instanceof Error ? e.stack : undefined;
-    console.error("[marketing-briefs] download-pdf failed", {
-      briefId: id,
-      theme,
-      message,
-      stack,
-      blocksCount: blocks.length,
-      blocksTypes: blocks.map((b) => b.type),
-    });
+    const stack = e instanceof Error && e.stack ? e.stack : "";
+    const name = e instanceof Error ? e.name : "Unknown";
+
+    console.error("[marketing-briefs] download-pdf failed", { briefId: id, theme, message, stack });
+
+    // TEMP: expose debug in all environments (including production) for diagnosis
     sendJson(res, 500, {
       success: false,
       code: "PDF_ERROR",
       message: "Не удалось сформировать PDF.",
-      ...(process.env.VERCEL_ENV !== "production"
-        ? { debug: { message, stack } }
-        : {}),
+      debug: {
+        name,
+        message,
+        stack: stack.split("\n").slice(0, 15).join("\n"),
+        briefId: id,
+        theme,
+        blocksCount: blocks?.length ?? 0,
+        blocksTypes: blocks?.map((b) => b.type) ?? [],
+      },
     });
   }
 }
