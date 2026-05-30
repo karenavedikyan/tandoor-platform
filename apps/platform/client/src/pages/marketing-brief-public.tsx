@@ -79,9 +79,17 @@ function briefPublicPrintCss(themeMode: BrandBriefThemeMode): string {
   }
   [data-print-root] { background: ${theme.bg} !important; }
 
+  /* Каждый блок брифа начинается с новой страницы PDF */
   [data-brief-block] {
+    break-before: page;
+    page-break-before: always;
     break-inside: auto;
     page-break-inside: auto;
+  }
+  [data-brief-block]:first-of-type,
+  [data-brief-block]:first-child {
+    break-before: auto;
+    page-break-before: auto;
   }
 
   [data-brief-block] h2,
