@@ -57,6 +57,7 @@ import { ShowcaseCoverPhotoSlot } from "@/components/showcase-cover-photo-slot";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
+import { useDealerTpOverridesHydration } from "@/hooks/use-dealer-tp-overrides-hydration";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { mergeActualizationState, createEmptyActualizationState } from "@/lib/client-base-actualization-state";
 import { makeTrashedTradePointInfo, snapshotTradePointFromRow } from "@/lib/trash-dealer-helper";
@@ -261,6 +262,7 @@ type ActiveFilterChip = {
 };
 
 export default function TradePointsPage(): ReactElement {
+  useDealerTpOverridesHydration(true);
   const actx = useClientBaseActualization();
   const { profile } = useReleaseDemoProfile();
   const { user: me, isLoading: authLoading, isError: authError } = useAuthUser();

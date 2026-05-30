@@ -223,6 +223,7 @@ import {
 } from "@/lib/main-focus-tiles";
 import { DealerBaseFocusViewBanner } from "@/components/dealer-base-focus-view-banner";
 import { DealerFocusHierarchy } from "@/components/dealer-focus-hierarchy";
+import { useDealerTpOverridesHydration } from "@/hooks/use-dealer-tp-overrides-hydration";
 import { useMainDashboardCityFilterOptional } from "@/context/main-dashboard-city-filter-context";
 import { dealerRowMatchesCityFilter } from "@/lib/main-dashboard-city-stats";
 import { SHOWCASE_STORAGE_EVENT } from "@/lib/showcase-distribution-data";
@@ -1229,6 +1230,7 @@ function ruClientNoun(n: number): "клиент" | "клиента" | "клие�
 }
 
 export default function DealerBase() {
+  useDealerTpOverridesHydration(true);
   const { profile } = useReleaseDemoProfile();
   const { user: me, isLoading: authLoading, isError: authError } = useAuthUser();
   const isRealUser = Boolean(me?.id);

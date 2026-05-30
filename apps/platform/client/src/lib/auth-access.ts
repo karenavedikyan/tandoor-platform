@@ -137,7 +137,12 @@ export function canAccessPathForUser(role: UserRole, path: string): boolean {
   if (p === "/admin/client-assignments") {
     return canManageClientAssignments(role);
   }
-  if (p === "/admin/actualization/dedupe" || p === "/admin/migration" || p === "/admin/migrate-marketing-briefs") {
+  if (
+    p === "/admin/actualization/dedupe" ||
+    p === "/admin/migration" ||
+    p === "/admin/migrate-marketing-briefs" ||
+    p === "/admin/migrate-dealer-tp"
+  ) {
     return role === "admin";
   }
   if (p === "/admin/tp-count-diag" || p === "/admin/counts-diag") {
@@ -323,6 +328,12 @@ function buildAdministrationNavGroup(platformUserRole: UserRole | null | undefin
       label: "Миграции брифов",
       testId: "nav-item-admin-brief-migrate",
       navBehaviorId: "nav-admin-brief-migrate",
+    });
+    items.push({
+      href: "/admin/migrate-dealer-tp",
+      label: "Миграции дилер/ТТ",
+      testId: "nav-item-admin-dealer-tp-migrate",
+      navBehaviorId: "nav-admin-dealer-tp-migrate",
     });
     items.push({
       href: "/admin/actualization/dedupe",

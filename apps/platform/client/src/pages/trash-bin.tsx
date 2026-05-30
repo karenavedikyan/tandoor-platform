@@ -59,6 +59,16 @@ import {
   type ArchivedTpDisplay,
 } from "@/lib/trash-archive-helpers";
 import type { TrashActor } from "@/lib/trash-dealer-helper";
+import { useDealerTpOverridesHydration } from "@/hooks/use-dealer-tp-overrides-hydration";
+import { untrashDealer } from "@/lib/dealer-overrides-api";
+import { untrashTradePoint } from "@/lib/trade-point-overrides-api";
+import {
+  mergeTrashedDealersForUi,
+  mergeTrashedTradePointsForUi,
+  patchDealerTrashRuntime,
+  patchTradePointTrashRuntime,
+} from "@/lib/dealer-overrides-runtime";
+import { isPrompt113BlobFallbackActive } from "@/lib/dealer-overrides-fallback";
 
 type ConfirmKind =
   | { kind: "force-delete-dealer"; dealerId: string; name: string }
@@ -83,6 +93,7 @@ function useArchivePagination(total: number, page: number): { pageIndex: number;
 }
 
 export function TrashBinPage(): ReactElement {
+  useDealerTpOverridesHydration(true);
   const { user } = useAuthUser();
   const actx = useClientBaseActualization();
   const teamPlane = useClientBaseTeamActualization();
@@ -114,13 +125,13 @@ export function TrashBinPage(): ReactElement {
   );
 
   const trashedDealers = useMemo(() => {
-    const map = stateForRead.trashedDealersById ?? {};
+    const map = mergeTrashedDealersForUi(stateForRead);
     return Object.values(map).sort(compareByExpires);
-  }, [stateForRead.trashedDealersById]);
+  }, [stateForRead]);
   const trashedTps = useMemo(() => {
-    const map = stateForRead.trashedTradePointsById ?? {};
+    const map = mergeTrashedTradePointsForUi(stateForRead);
     return Object.values(map).sort(compareByExpires);
-  }, [stateForRead.trashedTradePointsById]);
+  }, [stateForRead]);
 
   const archivedDealerDisplays = useMemo(() => {
     const map = stateForRead.archivedDealersById ?? {};
@@ -217,21 +228,32 @@ export function TrashBinPage(): ReactElement {
   const onRestoreDealer = async (dealerId: string): Promise<void> => {
     if (busy) return;
     setBusy(`restore-dealer:${dealerId}`);
-    const r = await actx.persist(
-      (prev) => {
-        const next = { ...prev.trashedDealersById };
-        delete next[dealerId];
-        return mergeActualizationState(prev, { trashedDealersById: next });
-      },
-      { unTrash: { dealers: [dealerId] } },
-    );
+    patchDealerTrashRuntime(dealerId, null);
+    const saved = await untrashDealer(dealerId);
+    let blobOk = true;
+    if (isPrompt113BlobFallbackActive()) {
+      const r = await actx.persist(
+        (prev) => {
+          const next = { ...prev.trashedDealersById };
+          delete next[dealerId];
+          return mergeActualizationState(prev, { trashedDealersById: next });
+        },
+        { unTrash: { dealers: [dealerId] } },
+      );
+      blobOk = r.success;
+    }
     setBusy(null);
-    afterPersist(r, "Клиент восстановлен в рабочую базу", "Не удалось восстановить");
+    if (saved && blobOk) {
+      toast({ title: "Клиент восстановлен в рабочую базу" });
+      void teamPlane.refresh();
+    } else {
+      toast({ title: "Не удалось восстановить", variant: "destructive" });
+    }
   };
 
   const onRestoreTp = async (tp: TrashedTradePointInfo): Promise<void> => {
     if (busy) return;
-    if (actx.state.trashedDealersById?.[tp.dealerId] || stateForRead.trashedDealersById?.[tp.dealerId]) {
+    if (mergeTrashedDealersForUi(stateForRead)[tp.dealerId]) {
       toast({
         title: "Сначала восстановите клиента",
         description: "Клиент-владелец этой точки находится в корзине.",
@@ -240,16 +262,27 @@ export function TrashBinPage(): ReactElement {
       return;
     }
     setBusy(`restore-tp:${tp.tradePointId}`);
-    const r = await actx.persist(
-      (prev) => {
-        const next = { ...prev.trashedTradePointsById };
-        delete next[tp.tradePointId];
-        return mergeActualizationState(prev, { trashedTradePointsById: next });
-      },
-      { unTrash: { tradePoints: [tp.tradePointId] } },
-    );
+    patchTradePointTrashRuntime(tp.tradePointId, null);
+    const saved = await untrashTradePoint(tp.tradePointId);
+    let blobOk = true;
+    if (isPrompt113BlobFallbackActive()) {
+      const r = await actx.persist(
+        (prev) => {
+          const next = { ...prev.trashedTradePointsById };
+          delete next[tp.tradePointId];
+          return mergeActualizationState(prev, { trashedTradePointsById: next });
+        },
+        { unTrash: { tradePoints: [tp.tradePointId] } },
+      );
+      blobOk = r.success;
+    }
     setBusy(null);
-    afterPersist(r, "Торговая точка восстановлена", "Не удалось восстановить");
+    if (saved && blobOk) {
+      toast({ title: "Торговая точка восстановлена" });
+      void teamPlane.refresh();
+    } else {
+      toast({ title: "Не удалось восстановить", variant: "destructive" });
+    }
   };
 
   const onForceDeleteDealer = async (dealerId: string): Promise<void> => {

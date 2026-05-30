@@ -4,7 +4,9 @@
 
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import { getDealerRegionalManagerDisplay } from "@/lib/dealer-base-mock-data";
+import { upsertDealerOverride } from "@/lib/dealer-overrides-api";
 import { getSalesUserById, SALES_USERS } from "@/lib/sales-control-data";
+import { toast } from "@/hooks/use-toast";
 
 export const DEALER_REGIONAL_MANAGER_OVERRIDES_STORAGE_KEY = "tandoor-dealer-regional-manager-overrides-v1";
 export const DEALER_REGIONAL_MANAGER_OVERRIDES_EVENT = "tandoor-dealer-regional-manager-overrides-changed";
@@ -155,7 +157,27 @@ export function setDealerRegionalManagerOverride(
     pushHistory(nextState, dealerId, body, actorName);
   }
 
+  const prevSnapshot = JSON.stringify(loadDealerRegionalManagerOverridesState());
   saveState(nextState);
+
+  const rm = byDealerId[dealerId];
+  void upsertDealerOverride(dealerId, {
+    regional_manager_id: rm?.userId ?? null,
+    regional_manager_name: rm ? getSalesUserById(rm.userId)?.name?.trim() ?? rm.userId : null,
+  }).then((saved) => {
+    if (!saved) {
+      try {
+        saveState(JSON.parse(prevSnapshot) as DealerRegionalManagerOverridesState);
+      } catch {
+        /* ignore */
+      }
+      toast({
+        variant: "destructive",
+        title: "Не удалось сохранить",
+        description: "Попробуйте ещё раз.",
+      });
+    }
+  });
 }
 
 export function getDealerRegionalManagerHistoryEvents(

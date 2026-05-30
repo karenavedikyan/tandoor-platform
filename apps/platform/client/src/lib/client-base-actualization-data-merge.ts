@@ -16,6 +16,7 @@ import {
   normalizeDealerId,
   normalizeTradePointId,
 } from "@/lib/dealer-base-mock-data";
+import { isDealerTrashedInRuntime } from "@/lib/dealer-overrides-runtime";
 import { getDealerRowWithProfileOverrides } from "@/lib/dealer-profile-overrides";
 import {
   getMergedDealerTradePoints,
@@ -705,7 +706,7 @@ export function buildDealerBaseRowsWithActualization(
   const archivedListMode = !IGNORE_CLIENT_ARCHIVE_IN_UI && opts?.includeArchivedDealers === true;
   const includeId = (id: string) => {
     const isArchived = IGNORE_CLIENT_ARCHIVE_IN_UI ? false : Boolean(act.archivedDealersById[id]);
-    const isTrashed = Boolean(act.trashedDealersById?.[id]);
+    const isTrashed = isDealerTrashedInRuntime(id, act);
     if (trashedListMode) return isTrashed;
     if (archivedListMode) return isArchived && !isTrashed;
     return !isArchived && !isTrashed;

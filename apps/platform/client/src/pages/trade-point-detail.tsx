@@ -75,6 +75,8 @@ import {
   getClientContactScopeHistoryEvents,
 } from "@/lib/client-contacts";
 import { mergeActualizationState } from "@/lib/client-base-actualization-state";
+import { setTradePointTraining, trashTradePoint as apiTrashTradePoint } from "@/lib/trade-point-overrides-api";
+import { patchTradePointTrashRuntime } from "@/lib/dealer-overrides-runtime";
 import { makeTrashedTradePointInfo, snapshotTradePointFromRow } from "@/lib/trash-dealer-helper";
 import {
   canEditDealerTradePoints,
@@ -803,18 +805,16 @@ function TradePointDetailContent({
         }),
         source: "client_card_delete",
       });
-      const r = await actx.persist((prev) =>
-        mergeActualizationState(prev, {
-          trashedTradePointsById: { ...prev.trashedTradePointsById, [point.id]: info },
-        }),
-      );
+      patchTradePointTrashRuntime(point.id, info);
+      const saved = await apiTrashTradePoint(point.id);
       setArchiveOpen(false);
-      if (r.success) {
+      if (saved) {
         toast({
           title: "Торговая точка перемещена в корзину",
           description: "Восстановить можно из раздела «Корзина».",
         });
       } else {
+        patchTradePointTrashRuntime(point.id, null);
         toast({ title: "Не удалось удалить", variant: "destructive" });
       }
       return;
@@ -1270,8 +1270,20 @@ function TradePointDetailContent({
                       checked={tpTrainingDone}
                       onCheckedChange={(v) => {
                         const next = v === true;
+                        const prev = tpTrainingDone;
                         setTpTrainingDone(next);
                         sessionStorage.setItem(tpTrainingStorageKey, next ? "1" : "0");
+                        void setTradePointTraining(point.id, { product_training_done: next }).then((saved) => {
+                          if (!saved) {
+                            setTpTrainingDone(prev);
+                            sessionStorage.setItem(tpTrainingStorageKey, prev ? "1" : "0");
+                            toast({
+                              variant: "destructive",
+                              title: "Не удалось сохранить",
+                              description: "Попробуйте ещё раз.",
+                            });
+                          }
+                        });
                       }}
                       data-testid="checkbox-trade-point-product-training-completed"
                     />

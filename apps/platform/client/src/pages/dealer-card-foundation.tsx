@@ -128,6 +128,13 @@ import {
 } from "@/lib/dealer-regional-manager-overrides";
 import { getMergedDealerTradePoints } from "@/lib/dealer-trade-points-overrides";
 import {
+  notifyDealerOverridesHydrated,
+  setDealerTraining,
+  trashDealer as apiTrashDealer,
+  upsertDealerOverride,
+} from "@/lib/dealer-overrides-api";
+import { isDealerTrashedInRuntime, patchDealerCategoryRuntime, patchDealerTrashRuntime } from "@/lib/dealer-overrides-runtime";
+import {
   DEALER_TRADE_POINTS_EVENT,
   getDealerTradePointHistoryEvents,
 } from "@/lib/dealer-trade-points-overrides";
@@ -874,7 +881,7 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
   );
 
   const isManualDealerRow = isManualActualizationDealerId(baseRow.id);
-  const isDealerTrashed = Boolean(actx.state.trashedDealersById?.[baseRow.id]);
+  const isDealerTrashed = isDealerTrashedInRuntime(baseRow.id, actx.state);
   /**
    * Промт 46: пользовательская кнопка «Удалить» теперь шлёт клиента в Корзину
    * (`trashedDealersById`), а не в Архив. Архив остаётся как legacy (restore-banner ниже).
@@ -901,23 +908,22 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
       }),
       source: isManualDealerRow ? "manual_actualization" : "client_card_delete",
     });
-    const r = await actx.persist((prev) =>
-      mergeActualizationState(prev, {
-        trashedDealersById: { ...prev.trashedDealersById, [baseRow.id]: info },
-      }),
-    );
+    patchDealerTrashRuntime(baseRow.id, info);
+    const saved = await apiTrashDealer(baseRow.id);
     setDealerArchiveBusy(false);
-    if (r.success) {
+    if (saved) {
+      notifyDealerOverridesHydrated();
       toast({ title: "Клиент перемещён в корзину", description: "Хранится 14 дней. Восстановить можно из раздела «Корзина»." });
       setDealerDeleteDialogOpen(false);
       setLocation("/dealer-base");
     } else {
+      patchDealerTrashRuntime(baseRow.id, null);
       toast({
         title: "Не удалось переместить в корзину. Проверьте соединение и попробуйте ещё раз.",
         variant: "destructive",
       });
     }
-  }, [actx, baseRow.id, canTrashDealer, isManualDealerRow, profile, row, setLocation]);
+  }, [baseRow.id, canTrashDealer, profile, row, setLocation]);
 
   // Алиас сохранён для совместимости с существующими использованиями переменной.
   const canSoftArchiveDealer = canTrashDealer;
@@ -1396,38 +1402,47 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                                 clientCategory: next,
                                 clientTypeLabel: getClientCategoryLabel(next),
                               };
-                              const patch: Partial<ActualizationState> = {
-                                clientCategoryOverridesById: {
-                                  ...act.clientCategoryOverridesById,
-                                  [row.id]: next,
-                                },
-                                dealerOverridesById: {
-                                  ...act.dealerOverridesById,
-                                  [row.id]: {
-                                    dealerId: row.id,
-                                    fields,
-                                    updatedAt: now,
-                                    updatedBy: profile.personaUserId,
-                                    updatedByName: userLabelFromProfile(profile),
-                                    source: "manual_actualization",
-                                  },
-                                },
-                              };
+                              patchDealerCategoryRuntime(row.id, next);
                               const manual = act.manuallyCreatedDealersById[row.id];
                               if (manual) {
-                                patch.manuallyCreatedDealersById = {
-                                  ...act.manuallyCreatedDealersById,
-                                  [row.id]: {
-                                    ...manual,
-                                    fields: { ...manual.fields, clientCategory: next, clientTypeLabel: getClientCategoryLabel(next) },
-                                    updatedAt: now,
-                                    updatedBy: profile.personaUserId,
-                                    updatedByName: userLabelFromProfile(profile),
+                                const patch: Partial<ActualizationState> = {
+                                  manuallyCreatedDealersById: {
+                                    ...act.manuallyCreatedDealersById,
+                                    [row.id]: {
+                                      ...manual,
+                                      fields: { ...manual.fields, clientCategory: next, clientTypeLabel: getClientCategoryLabel(next) },
+                                      updatedAt: now,
+                                      updatedBy: profile.personaUserId,
+                                      updatedByName: userLabelFromProfile(profile),
+                                    },
+                                  },
+                                  dealerOverridesById: {
+                                    ...act.dealerOverridesById,
+                                    [row.id]: {
+                                      dealerId: row.id,
+                                      fields,
+                                      updatedAt: now,
+                                      updatedBy: profile.personaUserId,
+                                      updatedByName: userLabelFromProfile(profile),
+                                      source: "manual_actualization",
+                                    },
                                   },
                                 };
+                                const r = await actx.persist((prev) => mergeActualizationState(prev, patch));
+                                if (!r.success) patchDealerCategoryRuntime(row.id, null);
                               }
-                              const r = await actx.persist((prev) => mergeActualizationState(prev, patch));
-                              if (r.success) setDealerDataBump((b) => b + 1);
+                              const saved = await upsertDealerOverride(row.id, { client_category: next });
+                              if (saved) {
+                                setDealerDataBump((b) => b + 1);
+                                notifyDealerOverridesHydrated();
+                              } else {
+                                patchDealerCategoryRuntime(row.id, null);
+                                toast({
+                                  variant: "destructive",
+                                  title: "Не удалось сохранить категорию",
+                                  description: "Попробуйте ещё раз.",
+                                });
+                              }
                             })();
                           }}
                         >
@@ -2333,8 +2348,20 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                   setNewStaffTrainingNeeded(row.id, next, displayUserName(user) ?? userLabelFromProfile(profile));
                 }}
                 onCompletedChange={(next) => {
+                  const prev = trainingCompleted;
                   setTrainingCompleted(next);
                   sessionStorage.setItem(dealerProductTrainingStorageKey(row.id), next ? "1" : "0");
+                  void setDealerTraining(row.id, { product_training_done: next }).then((saved) => {
+                    if (!saved) {
+                      setTrainingCompleted(prev);
+                      sessionStorage.setItem(dealerProductTrainingStorageKey(row.id), prev ? "1" : "0");
+                      toast({
+                        variant: "destructive",
+                        title: "Не удалось сохранить",
+                        description: "Попробуйте ещё раз.",
+                      });
+                    }
+                  });
                 }}
               />
             ) : null}
@@ -2519,7 +2546,7 @@ export function DealerCardPage() {
 
   const isArchivedDealer =
     !IGNORE_CLIENT_ARCHIVE_IN_UI && actx.enabled && Boolean(actx.state.archivedDealersById[id]);
-  const isTrashedDealer = actx.enabled && Boolean(actx.state.trashedDealersById?.[id]);
+  const isTrashedDealer = actx.enabled && isDealerTrashedInRuntime(id, actx.state);
 
   const useCleanActualizationAnketa =
     actx.enabled &&
