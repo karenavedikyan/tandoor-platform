@@ -11,7 +11,7 @@
 1. UI пишет в LS сразу (optimistic).
 2. `*Strict` API (`upsertDealerOverrideStrict`, …) → POST `/api/dealer-overrides/*`.
 3. При ошибке — запись в `pendingSyncStore` (`tandoor:overrides:pending-v1`), тост, воркер повторяет каждые 15 с.
-4. Ошибки HTTP логируются в `tandoor:overrides-error-log` (50 последних).
+4. Ошибки HTTP логируются в `tandoor:overrides:error-log` (50 последних). Трассировка strict/UI — `tandoor:overrides:trace-log` (200).
 
 ## Бэкфил при первом входе
 
