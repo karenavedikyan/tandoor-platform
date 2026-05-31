@@ -1,7 +1,11 @@
 /**
- * Порядок выгрузки клиента (localStorage-кеш + Postgres, Промт 113).
+ * Порядок выгрузки клиента (localStorage-кеш + Postgres, Промт 113 / 114).
  */
 
+import { upsertDealerOverrideStrict } from "@/lib/dealer-overrides-api";
+import { getDbUnloadingOrderOverride, patchDealerUnloadingOrderRuntime } from "@/lib/dealer-overrides-runtime";
+import { handleOverridesStrictResult } from "@/lib/overrides-save-feedback";
+import { makePendingId } from "@/lib/overrides-pending-sync";
 import { saveDealerField } from "@/lib/use-dealer-field-saver";
 
 export const DEALER_UNLOADING_ORDER_STORAGE_KEY = "tandoor-dealer-unloading-order-v1";
@@ -58,16 +62,18 @@ function saveState(state: State): void {
 }
 
 export function getDealerUnloadingOrder(dealerId: string, state = loadDealerUnloadingOrderState()): number | null {
+  const fromDb = getDbUnloadingOrderOverride(dealerId);
+  if (fromDb != null) return fromDb;
   const v = state.orderByDealer[dealerId];
   return typeof v === "number" && Number.isFinite(v) && v > 0 ? Math.floor(v) : null;
 }
 
-export function setDealerUnloadingOrder(
+export async function setDealerUnloadingOrder(
   dealerId: string,
   next: number | null,
   actorUserId: string,
   actorLabel: string,
-): void {
+): Promise<void> {
   const state = loadDealerUnloadingOrderState();
   const prev = getDealerUnloadingOrder(dealerId, state);
   const orderByDealer = { ...state.orderByDealer };
@@ -102,6 +108,20 @@ export function setDealerUnloadingOrder(
   saveState({ orderByDealer, historyByDealer });
 
   const value = next != null && next > 0 ? String(Math.floor(next)) : null;
+  patchDealerUnloadingOrderRuntime(dealerId, next != null && next > 0 ? Math.floor(next) : null);
+
+  const strictResult = await upsertDealerOverrideStrict(dealerId, { unloading_order: value });
+  if (
+    !handleOverridesStrictResult(strictResult, {
+      pendingId: makePendingId("dealer-upsert", `${dealerId}:unloading_order`),
+      pendingKind: "dealer-upsert",
+      pendingPayload: { dealer_id: dealerId, fields: { unloading_order: value } },
+      fieldLabel: "Порядок выгрузки",
+    })
+  ) {
+    /* pending queued */
+  }
+
   void saveDealerField(dealerId, "unloading_order", value, {
     fieldLabel: "Порядок выгрузки",
     source: "dealer-unloading-order-storage",
@@ -111,7 +131,10 @@ export function setDealerUnloadingOrder(
 export function hydrateDealerUnloadingOrderFromServer(orderByDealer: Record<string, number>): void {
   const state = loadDealerUnloadingOrderState();
   for (const [dealerId, order] of Object.entries(orderByDealer)) {
-    if (typeof order === "number" && order > 0) state.orderByDealer[dealerId] = order;
+    if (typeof order === "number" && order > 0) {
+      state.orderByDealer[dealerId] = order;
+      patchDealerUnloadingOrderRuntime(dealerId, order);
+    }
   }
   saveState(state);
 }

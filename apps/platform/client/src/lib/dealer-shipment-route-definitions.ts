@@ -1,9 +1,16 @@
 /**
- * Описания маршрутов по дню отгрузки (localStorage, без backend).
- * До 2 маршрутов на день. Каждый маршрут — имя + список населённых пунктов.
+ * Описания маршрутов по дню отгрузки: LS-кеш + Postgres (Промт 114).
  */
 
 import type { DealerShipmentDayId } from "@/lib/dealer-shipment-days";
+import {
+  apiBulkImportShipmentRoutes,
+  apiDeleteShipmentRoute,
+  apiUpsertShipmentRoute,
+  dtoToLocalRoute,
+  fetchShipmentRoutesList,
+} from "@/lib/dealer-shipment-routes-api";
+import { enqueuePendingSync, makePendingId } from "@/lib/overrides-pending-sync";
 
 export const DEALER_SHIPMENT_ROUTE_DEFS_STORAGE_KEY = "tandoor-dealer-shipment-route-defs-v1";
 export const DEALER_SHIPMENT_ROUTE_DEFS_EVENT = "tandoor-dealer-shipment-route-defs-changed";
@@ -25,6 +32,12 @@ export type DealerShipmentRouteDayDefs = {
 export type DealerShipmentRouteDefsState = {
   byUser: Record<string, Partial<Record<DealerShipmentDayId, DealerShipmentRouteDayDefs>>>;
 };
+
+let sessionAuthUserId: string | null = null;
+
+export function setShipmentRoutesSessionKeys(authUserId: string | null): void {
+  sessionAuthUserId = authUserId;
+}
 
 function emptyState(): DealerShipmentRouteDefsState {
   return { byUser: {} };
@@ -98,6 +111,36 @@ export function saveDealerShipmentRouteDefsState(state: DealerShipmentRouteDefsS
   window.dispatchEvent(new CustomEvent(DEALER_SHIPMENT_ROUTE_DEFS_EVENT));
 }
 
+function applyRoutesToLocalUser(
+  localUserId: string,
+  items: { dayId: DealerShipmentDayId; route: DealerShipmentRouteDefinition }[],
+): void {
+  const state = loadDealerShipmentRouteDefsState();
+  const userDays: Partial<Record<DealerShipmentDayId, DealerShipmentRouteDayDefs>> = {};
+  for (const { dayId, route } of items) {
+    const prev = userDays[dayId]?.routes ?? [];
+    userDays[dayId] = { routes: [...prev, route].slice(0, DEALER_SHIPMENT_ROUTES_PER_DAY_LIMIT) };
+  }
+  state.byUser[localUserId] = userDays;
+  saveDealerShipmentRouteDefsState(state);
+}
+
+/** Загрузить маршруты с сервера в LS (ключ byUser — personaUserId). */
+export async function hydrateShipmentRoutesFromServer(
+  authUserId: string,
+  localUserId: string,
+): Promise<boolean> {
+  setShipmentRoutesSessionKeys(authUserId);
+  const payload = await fetchShipmentRoutesList(authUserId);
+  if (!payload) return false;
+  const items = payload.items.map((d) => ({
+    dayId: d.dayId,
+    route: dtoToLocalRoute(d),
+  }));
+  applyRoutesToLocalUser(localUserId, items);
+  return true;
+}
+
 export function getShipmentRoutesForUserDay(
   userId: string,
   dayId: DealerShipmentDayId,
@@ -126,6 +169,59 @@ function withUserDays(
   return { byUser, userDays };
 }
 
+function persistLocalRoute(
+  userId: string,
+  dayId: DealerShipmentDayId,
+  route: DealerShipmentRouteDefinition,
+  isNew: boolean,
+): void {
+  const state = loadDealerShipmentRouteDefsState();
+  const { byUser, userDays } = withUserDays(state, userId);
+  const existing = userDays[dayId]?.routes ?? [];
+  if (isNew) {
+    userDays[dayId] = { routes: [...existing, route].slice(0, DEALER_SHIPMENT_ROUTES_PER_DAY_LIMIT) };
+  } else {
+    const idx = existing.findIndex((r) => r.id === route.id);
+    const next = existing.slice();
+    if (idx >= 0) next[idx] = route;
+    else next.push(route);
+    userDays[dayId] = { routes: next.slice(0, DEALER_SHIPMENT_ROUTES_PER_DAY_LIMIT) };
+  }
+  saveDealerShipmentRouteDefsState({ byUser });
+}
+
+async function syncRouteToServer(
+  localUserId: string,
+  dayId: DealerShipmentDayId,
+  route: DealerShipmentRouteDefinition,
+  authUserId: string,
+): Promise<void> {
+  const r = await apiUpsertShipmentRoute({
+    id: route.id,
+    userId: authUserId,
+    dayId,
+    name: route.name,
+    cities: route.cities,
+  });
+  if (r.ok && r.item) {
+    persistLocalRoute(localUserId, dayId, dtoToLocalRoute(r.item), false);
+    return;
+  }
+  enqueuePendingSync({
+    id: makePendingId("shipment-routes-upsert", `${route.id}:${dayId}`),
+    kind: "shipment-routes-upsert",
+    payload: {
+      id: route.id,
+      userId: authUserId,
+      localUserId,
+      dayId,
+      name: route.name,
+      cities: route.cities,
+    },
+  });
+}
+
+/** Синхронная запись в LS (legacy); предпочтительно upsertShipmentRouteAsync. */
 export function upsertShipmentRoute(
   userId: string,
   dayId: DealerShipmentDayId,
@@ -144,15 +240,21 @@ export function upsertShipmentRoute(
   );
   const name = input.name.trim();
   const now = new Date().toISOString();
+  const authId = sessionAuthUserId;
 
   if (input.id) {
     const idx = existing.findIndex((r) => r.id === input.id);
     if (idx >= 0) {
-      const next = existing.slice();
-      next[idx] = { ...next[idx]!, name, cities: cleanedCities, updatedAt: now, updatedBy: userId };
-      userDays[dayId] = { routes: next };
-      saveDealerShipmentRouteDefsState({ byUser });
-      return next[idx]!;
+      const route: DealerShipmentRouteDefinition = {
+        ...existing[idx]!,
+        name,
+        cities: cleanedCities,
+        updatedAt: now,
+        updatedBy: userId,
+      };
+      persistLocalRoute(userId, dayId, route, false);
+      if (authId) void syncRouteToServer(userId, dayId, route, authId);
+      return route;
     }
   }
 
@@ -166,9 +268,22 @@ export function upsertShipmentRoute(
     updatedAt: now,
     updatedBy: userId,
   };
-  userDays[dayId] = { routes: [...existing, created] };
-  saveDealerShipmentRouteDefsState({ byUser });
+  persistLocalRoute(userId, dayId, created, true);
+  if (authId) void syncRouteToServer(userId, dayId, created, authId);
   return created;
+}
+
+export async function upsertShipmentRouteAsync(
+  localUserId: string,
+  authUserId: string,
+  dayId: DealerShipmentDayId,
+  input: { id?: string; name: string; cities: string[] },
+): Promise<DealerShipmentRouteDefinition | null> {
+  setShipmentRoutesSessionKeys(authUserId);
+  const local = upsertShipmentRoute(localUserId, dayId, input);
+  if (!local) return null;
+  await syncRouteToServer(localUserId, dayId, local, authUserId);
+  return local;
 }
 
 export function removeShipmentRoute(
@@ -187,9 +302,62 @@ export function removeShipmentRoute(
     userDays[dayId] = { routes: next };
   }
   saveDealerShipmentRouteDefsState({ byUser });
+
+  const authId = sessionAuthUserId;
+  if (authId) {
+    void apiDeleteShipmentRoute({ id: routeId, userId: authId, deletedBy: userId }).then((ok) => {
+      if (!ok) {
+        enqueuePendingSync({
+          id: makePendingId("shipment-routes-delete", routeId),
+          kind: "shipment-routes-delete",
+          payload: { id: routeId, userId: authId, deletedBy: userId },
+        });
+      }
+    });
+  }
+}
+
+export async function removeShipmentRouteAsync(
+  localUserId: string,
+  authUserId: string,
+  dayId: DealerShipmentDayId,
+  routeId: string,
+): Promise<void> {
+  setShipmentRoutesSessionKeys(authUserId);
+  removeShipmentRoute(localUserId, dayId, routeId);
 }
 
 export function formatShipmentRouteCities(cities: string[]): string {
   if (cities.length === 0) return "—";
   return cities.join(", ");
+}
+
+export function buildBulkImportItemsFromLocalState(
+  localUserId: string,
+): { id: string; dayId: DealerShipmentDayId; name: string; cities: string[]; updatedAt: string; updatedBy: string }[] {
+  const state = loadDealerShipmentRouteDefsState();
+  const days = state.byUser[localUserId];
+  if (!days) return [];
+  const out: {
+    id: string;
+    dayId: DealerShipmentDayId;
+    name: string;
+    cities: string[];
+    updatedAt: string;
+    updatedBy: string;
+  }[] = [];
+  for (const [dayKey, entry] of Object.entries(days)) {
+    if (!isShipmentDayId(dayKey) || !entry?.routes) continue;
+    for (const r of entry.routes) {
+      out.push({
+        id: r.id,
+        dayId: dayKey,
+        name: r.name,
+        cities: r.cities,
+        updatedAt: r.updatedAt,
+        updatedBy: r.updatedBy || localUserId,
+      });
+    }
+  }
+  return out;
 }

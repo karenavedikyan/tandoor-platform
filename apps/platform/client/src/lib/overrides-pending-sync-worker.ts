@@ -15,12 +15,18 @@ import {
   untrashTradePointStrict,
   upsertTradePointOverrideStrict,
 } from "@/lib/trade-point-overrides-api";
+import { apiCreateComment } from "@/lib/client-comments-api";
+import {
+  apiDeleteShipmentRoute,
+  apiUpsertShipmentRoute,
+} from "@/lib/dealer-shipment-routes-api";
 import {
   dequeuePendingSync,
   listPendingSyncItems,
   markPendingSyncFailed,
   type PendingSyncItem,
 } from "@/lib/overrides-pending-sync";
+import { refreshDbCommentsForClient } from "@/lib/client-comments-db-cache";
 
 const INTERVAL_MS = 15_000;
 let timer: ReturnType<typeof setInterval> | null = null;
@@ -80,6 +86,42 @@ async function processItem(item: PendingSyncItem): Promise<void> {
     case "tp-untrash":
       result = await untrashTradePointStrict(String(p.tp_id));
       break;
+    case "shipment-routes-upsert": {
+      const r = await apiUpsertShipmentRoute({
+        id: typeof p.id === "string" ? p.id : undefined,
+        userId: String(p.userId),
+        dayId: p.dayId as import("@/lib/dealer-shipment-days").DealerShipmentDayId,
+        name: String(p.name ?? ""),
+        cities: Array.isArray(p.cities) ? (p.cities as string[]) : [],
+      });
+      if (r.ok) {
+        dequeuePendingSync(item.id);
+      } else {
+        markPendingSyncFailed(item.id, r.code ?? "save failed");
+      }
+      return;
+    }
+    case "shipment-routes-delete": {
+      const ok = await apiDeleteShipmentRoute({
+        id: String(p.id),
+        userId: String(p.userId),
+        deletedBy: String(p.deletedBy ?? p.userId),
+      });
+      if (ok) dequeuePendingSync(item.id);
+      else markPendingSyncFailed(item.id, "delete failed");
+      return;
+    }
+    case "client-comments-create": {
+      const r = await apiCreateComment(p as Record<string, unknown>);
+      if (r.ok) {
+        const dealerId = typeof p.dealerId === "string" ? p.dealerId : String(p.clientId ?? "");
+        if (dealerId) await refreshDbCommentsForClient(dealerId);
+        dequeuePendingSync(item.id);
+      } else {
+        markPendingSyncFailed(item.id, "comment create failed");
+      }
+      return;
+    }
     default:
       return;
   }

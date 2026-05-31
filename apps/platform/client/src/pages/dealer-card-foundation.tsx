@@ -37,7 +37,7 @@ import {
 import { ClientCategoryBadge } from "@/components/client-category-badge";
 import { resolveEffectiveClientCategory } from "@/lib/effective-client-category";
 import { useDealerTpOverridesHydration } from "@/hooks/use-dealer-tp-overrides-hydration";
-import { useOverridesRuntimeVersion } from "@/lib/dealer-overrides-runtime";
+import { useDealerUnloadingOrder, useOverridesRuntimeVersion } from "@/lib/dealer-overrides-runtime";
 import {
   DEALER_BASE_ROWS,
   getDealerById,
@@ -1061,7 +1061,10 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
   );
   const ropDisplay = useMemo(() => getDealerRopDisplay(row), [row]);
 
-  const unloadingOrderValue = useMemo(() => getDealerUnloadingOrder(row.id), [row.id, unloadBump]);
+  const overridesVersionForUnload = useOverridesRuntimeVersion();
+  const unloadingOrderValue = useDealerUnloadingOrder(row.id);
+  void unloadBump;
+  void overridesVersionForUnload;
 
   const [profileEditOpen, setProfileEditOpen] = useState(false);
   const [unloadDialogOpen, setUnloadDialogOpen] = useState(false);
@@ -1677,7 +1680,12 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                         if (raw !== "" && raw !== "—" && raw !== "-" && !(Number.isFinite(n) && n > 0)) {
                           return;
                         }
-                        setDealerUnloadingOrder(row.id, next, profile.personaUserId, displayUserName(user) ?? userLabelFromProfile(profile));
+                        void setDealerUnloadingOrder(
+                          row.id,
+                          next,
+                          profile.personaUserId,
+                          displayUserName(user) ?? userLabelFromProfile(profile),
+                        );
                         setUnloadDialogOpen(false);
                       }}
                     >
@@ -1924,7 +1932,7 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                           data-testid="button-dealer-competitor-comment-add"
                           disabled={!competitorCommentDraft.trim()}
                           onClick={() => {
-                            addDealerComment(row.id, {
+                            void addDealerComment(row.id, {
                               type: "competitor",
                               body: competitorCommentDraft,
                               createdBy: user?.id ?? profile.personaUserId,
@@ -2065,7 +2073,7 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                         data-testid="button-dealer-history-comment-add"
                         disabled={!historyCommentDraft.trim()}
                         onClick={() => {
-                          addDealerComment(row.id, {
+                          void addDealerComment(row.id, {
                             type: "general",
                             body: historyCommentDraft,
                             createdBy: user?.id ?? profile.personaUserId,
@@ -2278,7 +2286,7 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                           data-testid="button-dealer-problem-comment-add"
                           disabled={!problemCommentDraft.trim()}
                           onClick={() => {
-                            addDealerComment(row.id, {
+                            void addDealerComment(row.id, {
                               type: "problem",
                               body: problemCommentDraft,
                               createdBy: user?.id ?? profile.personaUserId,

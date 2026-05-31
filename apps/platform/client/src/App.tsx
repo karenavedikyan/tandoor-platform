@@ -258,7 +258,9 @@ function AuthenticatedShell({
   const salesRole = useMemo(() => userRoleToSalesRole(user.role), [user.role]);
   const { profile } = useReleaseDemoProfile();
   useDealerWorkPlanHydration(user.id, profile.personaUserId);
-  const overridesBootstrap = <OverridesSessionBootstrap userId={user.id} />;
+  const overridesBootstrap = (
+    <OverridesSessionBootstrap userId={user.id} localUserId={profile.personaUserId} />
+  );
   const actx = useClientBaseActualization();
   const teamPlane = useClientBaseTeamActualization();
   const dealerNavCount = useMemo(

@@ -53,7 +53,7 @@ import {
   saveDealerFields,
   saveManualDealerToDb,
 } from "@/lib/use-dealer-field-saver";
-import { DEALER_OVERRIDES_HYDRATED_EVENT } from "@/lib/dealer-overrides-api";
+import { DEALER_OVERRIDES_HYDRATED_EVENT, upsertDealerOverrideStrict } from "@/lib/dealer-overrides-api";
 import { getDbClientCategoryOverride } from "@/lib/dealer-overrides-runtime";
 import { getDealerUnloadingOrder } from "@/lib/dealer-unloading-order-storage";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
@@ -661,11 +661,14 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
       return next;
     });
     const dbFields = mapActualizationDealerFieldsToOverrides(fields);
+    const uoStrict = await upsertDealerOverrideStrict(baseRow.id, {
+      unloading_order: Number.isFinite(uoNum) && uoNum > 0 ? String(uoNum) : null,
+    });
     const strictResult = await saveDealerFields(baseRow.id, dbFields, {
       fieldLabel: "Данные клиента",
       source: "dealer-edit-dialog",
     });
-    if (!r.success && !strictResult.ok) {
+    if (!r.success && !strictResult.ok && !uoStrict.ok) {
       const extra =
         r.syncStatus === "local_fallback" || r.storageMode === "local_fallback"
           ? " Данные могли сохраниться только на этом устройстве."
@@ -1430,10 +1433,14 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
     saveLockRef.current = false;
 
     const dbFields = mapActualizationDealerFieldsToOverrides(fields);
+    const uoStrictCreate = await upsertDealerOverrideStrict(id, {
+      unloading_order: Number.isFinite(uoNum) && uoNum > 0 ? String(uoNum) : null,
+    });
     const strictFields = await saveDealerFields(id, dbFields, {
       fieldLabel: "Данные нового клиента",
       source: "dealer-create-dialog",
     });
+    void uoStrictCreate;
     if (r.success) {
       await saveManualDealerToDb(id, fields as unknown as Record<string, unknown>, {
         source: "dealer-create-dialog",

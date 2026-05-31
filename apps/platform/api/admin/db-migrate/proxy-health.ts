@@ -20,6 +20,8 @@ const COMPARE_TABLES = [
   "legal_entities",
   "client_contacts",
   "dealer_work_plan",
+  "dealer_shipment_routes",
+  "dealer_overrides",
   "client_comments",
   "audit_log",
 ] as const;

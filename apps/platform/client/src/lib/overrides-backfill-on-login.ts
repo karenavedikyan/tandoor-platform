@@ -28,6 +28,19 @@ import {
 } from "@/lib/overrides-pending-sync";
 import type { DealerOverrideRow } from "../../../shared/dealer-overrides-types";
 import type { TradePointOverrideRow } from "../../../shared/trade-point-overrides-types";
+import { buildBulkImportItemsFromLocalState } from "@/lib/dealer-shipment-route-definitions";
+import {
+  apiBulkImportShipmentRoutes,
+  fetchShipmentRoutesList,
+  SHIPMENT_ROUTES_BACKFILL_DONE_PREFIX,
+} from "@/lib/dealer-shipment-routes-api";
+import { DEALER_CARD_COMMENTS_STORAGE_KEY } from "@/lib/dealer-card-comments";
+import { TRADE_POINT_COMMENTS_STORAGE_KEY } from "@/lib/trade-point-comments";
+import { apiBulkImport, buildBulkImportPayloadFromLocal, fetchClientComments } from "@/lib/client-comments-api";
+import { loadDealerCardCommentsState } from "@/lib/dealer-card-comments";
+import { loadTradePointCommentsState } from "@/lib/trade-point-comments";
+
+export const CLIENT_COMMENTS_BACKFILL_DONE_PREFIX = "tandoor-client-comments-backfill-done-v1-";
 
 export const OVERRIDES_BACKFILL_DONE_KEY = "tandoor:overrides:backfill-v1:done";
 export const OVERRIDES_BACKFILL_CONFLICTS_KEY = "tandoor:overrides:backfill-conflicts";
@@ -270,6 +283,94 @@ export async function runOverridesBackfillIfNeeded(_currentUserId: string): Prom
   void DEALER_TRAINING_FLAGS_KEY;
 
   localStorage.setItem(OVERRIDES_BACKFILL_DONE_KEY, "1");
+}
+
+export async function backfillShipmentRoutesFromLocalStorage(
+  authUserId: string,
+  localUserId: string,
+): Promise<void> {
+  if (typeof window === "undefined" || !window.localStorage) return;
+  const flagKey = `${SHIPMENT_ROUTES_BACKFILL_DONE_PREFIX}${authUserId}`;
+  if (localStorage.getItem(flagKey) === "1") return;
+
+  const items = buildBulkImportItemsFromLocalState(localUserId);
+  if (items.length === 0) {
+    localStorage.setItem(flagKey, "1");
+    return;
+  }
+
+  const existing = await fetchShipmentRoutesList(authUserId);
+  if (existing && existing.items.length > 0) {
+    localStorage.setItem(flagKey, "1");
+    return;
+  }
+
+  const r = await apiBulkImportShipmentRoutes(authUserId, items);
+  if (r.ok) {
+    localStorage.setItem(flagKey, "1");
+  }
+}
+
+function collectClientIdsWithLocalComments(): string[] {
+  const ids = new Set<string>();
+  try {
+    const dealerRaw = localStorage.getItem(DEALER_CARD_COMMENTS_STORAGE_KEY);
+    if (dealerRaw) {
+      const st = JSON.parse(dealerRaw) as { commentsByDealer?: Record<string, unknown[]> };
+      for (const [dealerId, list] of Object.entries(st.commentsByDealer ?? {})) {
+        if (Array.isArray(list) && list.length > 0) ids.add(dealerId);
+      }
+    }
+    const tpRaw = localStorage.getItem(TRADE_POINT_COMMENTS_STORAGE_KEY);
+    if (tpRaw) {
+      const st = JSON.parse(tpRaw) as { commentsByTradePoint?: Record<string, unknown[]> };
+      for (const key of Object.keys(st.commentsByTradePoint ?? {})) {
+        const sep = key.indexOf("|");
+        if (sep > 0) ids.add(key.slice(0, sep));
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return Array.from(ids);
+}
+
+export async function backfillClientCommentsFromLocalStorage(authUserId: string): Promise<void> {
+  if (typeof window === "undefined" || !window.localStorage) return;
+  const flagKey = `${CLIENT_COMMENTS_BACKFILL_DONE_PREFIX}${authUserId}`;
+  if (localStorage.getItem(flagKey) === "1") return;
+
+  const clientIds = collectClientIdsWithLocalComments();
+  if (clientIds.length === 0) {
+    localStorage.setItem(flagKey, "1");
+    return;
+  }
+
+  let allOk = true;
+  for (const clientId of clientIds) {
+    const existing = await fetchClientComments(clientId);
+    const active = (existing?.items ?? []).filter((c) => !c.isDeleted);
+    if (active.length > 0) continue;
+
+    const dealerState = loadDealerCardCommentsState();
+    const tpState = loadTradePointCommentsState();
+    const dealerComments = dealerState.commentsByDealer[clientId] ?? [];
+    const tpComments: Record<string, import("@/lib/trade-point-comments").TradePointComment[]> = {};
+    const prefix = `${clientId}|`;
+    for (const [key, list] of Object.entries(tpState.commentsByTradePoint)) {
+      if (!key.startsWith(prefix)) continue;
+      tpComments[key.slice(prefix.length)] = list;
+    }
+    if (dealerComments.length === 0 && Object.keys(tpComments).length === 0) continue;
+
+    const payload = buildBulkImportPayloadFromLocal(clientId, dealerState, tpState);
+    const { ok } = await apiBulkImport(payload);
+    if (!ok) allOk = false;
+  }
+
+  if (allOk) {
+    localStorage.setItem(flagKey, "1");
+  }
 }
 
 export function readBackfillConflicts(): BackfillConflict[] {

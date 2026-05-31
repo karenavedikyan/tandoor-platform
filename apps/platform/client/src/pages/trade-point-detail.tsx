@@ -1468,7 +1468,7 @@ function TradePointDetailContent({
                       data-testid="button-trade-point-comment-add"
                       disabled={!commentDraft.trim()}
                       onClick={() => {
-                        addTradePointComment(dealer.id, point.id, {
+                        void addTradePointComment(dealer.id, point.id, {
                           body: commentDraft,
                           createdBy: user?.id ?? profile.personaUserId,
                           createdByName: displayUserName(user) ?? userLabelFromProfile(profile),
