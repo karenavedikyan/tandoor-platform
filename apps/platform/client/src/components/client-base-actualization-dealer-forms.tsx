@@ -53,6 +53,8 @@ import {
   saveDealerFields,
   saveManualDealerToDb,
 } from "@/lib/use-dealer-field-saver";
+import { DEALER_OVERRIDES_HYDRATED_EVENT } from "@/lib/dealer-overrides-api";
+import { getDbClientCategoryOverride } from "@/lib/dealer-overrides-runtime";
 import { getDealerUnloadingOrder } from "@/lib/dealer-unloading-order-storage";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
@@ -479,8 +481,13 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
     setPassportClientKind(pk || "other");
     const ls = typeof merged.passportLifecycleStatus === "string" ? merged.passportLifecycleStatus : "";
     setPassportLifecycleStatus(ls || "new");
-    const rawTier = typeof merged.passportCategoryTier === "string" ? merged.passportCategoryTier.trim() : "";
-    setPassportCategoryTier(normalizePassportCategoryTier(rawTier));
+    const dbCat = getDbClientCategoryOverride(baseRow.id);
+    if (dbCat) {
+      setPassportCategoryTier(normalizePassportCategoryTier(dbCat));
+    } else {
+      const rawTier = typeof merged.passportCategoryTier === "string" ? merged.passportCategoryTier.trim() : "";
+      setPassportCategoryTier(normalizePassportCategoryTier(rawTier));
+    }
     setTerritoryZone(typeof merged.territoryZone === "string" ? merged.territoryZone : "");
     setLogisticsComment(typeof merged.logisticsComment === "string" ? merged.logisticsComment : "");
     const effective = mergeDealerRowWithActualization(baseRow, state);
@@ -496,6 +503,16 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
     setCashbackComment((effective.cashbackComment ?? "").trim());
     setExternal1c((effective.external1cCode ?? "").trim());
   }, [open, baseRow, state]);
+
+  useEffect(() => {
+    if (!open) return;
+    const refreshFromDb = () => {
+      const dbCat = getDbClientCategoryOverride(baseRow.id);
+      if (dbCat) setPassportCategoryTier(normalizePassportCategoryTier(dbCat));
+    };
+    window.addEventListener(DEALER_OVERRIDES_HYDRATED_EVENT, refreshFromDb);
+    return () => window.removeEventListener(DEALER_OVERRIDES_HYDRATED_EVENT, refreshFromDb);
+  }, [open, baseRow.id]);
 
   const persistAll = useCallback(async (): Promise<boolean> => {
     if (!name.trim()) {

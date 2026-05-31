@@ -61,6 +61,9 @@ import {
 } from "@/lib/client-base-actualization-permissions";
 import { DealerActualizationEditDialog } from "@/components/client-base-actualization-dealer-forms";
 import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actualization-sync-status";
+import { useDealerTpOverridesHydration } from "@/hooks/use-dealer-tp-overrides-hydration";
+import { useOverridesRuntimeVersion } from "@/lib/dealer-overrides-runtime";
+import { resolveEffectiveClientCategory } from "@/lib/effective-client-category";
 import { DealerClientNextStepSection } from "@/components/dealer-client-next-step-section";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { displayUserName } from "@/lib/auth-api";
@@ -218,6 +221,8 @@ export function DealerManualActualizationPage(props: {
   embeddedInSheet?: boolean;
 }): ReactElement {
   const { baseRow, profile, readOnly: readOnlyProp, embeddedInSheet } = props;
+  useDealerTpOverridesHydration({ dealerId: baseRow.id });
+  const overridesVersion = useOverridesRuntimeVersion();
   const actx = useClientBaseActualization();
   const { user } = useCurrentUser();
   const [, setLocation] = useLocation();
@@ -229,7 +234,14 @@ export function DealerManualActualizationPage(props: {
   const ovFields = (actx.state.dealerOverridesById[baseRow.id]?.fields ?? {}) as Record<string, unknown>;
   const f = useMemo(() => mergedManualFields(manual, ovFields), [manual, ovFields]);
 
-  const row = useMemo(() => mergeDealerRowWithActualization(baseRow, actx.state), [baseRow, actx.state]);
+  const row = useMemo(
+    () => mergeDealerRowWithActualization(baseRow, actx.state),
+    [baseRow, actx.state, overridesVersion],
+  );
+  const effectiveCategory = useMemo(
+    () => resolveEffectiveClientCategory(row, actx.enabled ? actx.state : null),
+    [row, actx.enabled, actx.state, overridesVersion],
+  );
 
   const audit = actx.state.dealerActualizationAuditByDealerId[baseRow.id];
   const contacts = useMemo(() => listActiveActualizationContactsForDealer(actx.state, baseRow.id), [actx.state, baseRow.id]);
@@ -365,12 +377,14 @@ export function DealerManualActualizationPage(props: {
     const passportSummaryParts: string[] = [];
     if (passportKind) passportSummaryParts.push(PASSPORT_KIND_LABELS[passportKind] ?? passportKind);
     if (lifecycle) passportSummaryParts.push(LIFECYCLE_LABELS[lifecycle] ?? lifecycle);
-    passportSummaryParts.push(tier ? TIER_LABELS[tier] ?? tier : getClientCategoryLabel(row.clientCategory));
+    passportSummaryParts.push(
+      tier && tier !== "new_client" ? TIER_LABELS[tier] ?? tier : getClientCategoryLabel(effectiveCategory),
+    );
     const passportSummary = passportSummaryParts.filter(Boolean).join(" · ") || "Паспорт не заполнен";
 
     let passportStatus: SectionStatusKind = "empty";
     if (lifecycle === "needs_review") passportStatus = "attention";
-    else if (passportKind && lifecycle && (tier || row.clientCategory !== "new_client")) passportStatus = "complete";
+    else if (passportKind && lifecycle && (tier || effectiveCategory !== "new_client")) passportStatus = "complete";
     else if (passportKind || str(f.inn) || lifecycle || tier) passportStatus = "partial";
 
     const commercialTri = [row.hasDoorWarehouse, row.hasHardwareWarehouse, row.isTandoorClubMember, row.hasSpecialTerms, row.isCashbackClient];
@@ -453,6 +467,7 @@ export function DealerManualActualizationPage(props: {
     row,
     tier,
     tps.length,
+    effectiveCategory,
   ]);
 
   const allSectionsExpanded =
@@ -578,7 +593,14 @@ export function DealerManualActualizationPage(props: {
               <Field label="Тип клиента" value={passportKind ? (PASSPORT_KIND_LABELS[passportKind] ?? passportKind) : "—"} />
               <Field label="ИНН" value={row.actualizationInn?.trim() || str(f.inn) || "—"} />
               <Field label="Статус" value={lifecycle ? (LIFECYCLE_LABELS[lifecycle] ?? lifecycle) : row.status} />
-              <Field label="Категория" value={tier ? (TIER_LABELS[tier] ?? tier) : getClientCategoryLabel(row.clientCategory)} />
+              <Field
+                label="Категория"
+                value={
+                  tier && tier !== "new_client"
+                    ? (TIER_LABELS[tier] ?? tier)
+                    : getClientCategoryLabel(effectiveCategory)
+                }
+              />
               <Field label="Общий комментарий" value={row.comment?.trim() || str(f.comment) || "—"} emphasis className="sm:col-span-2" />
             </div>
             {canEdit ? (

@@ -68,6 +68,9 @@ import {
 } from "@/lib/phone-format";
 import { formatDisplayDateTime } from "@/lib/format-display-date";
 import { listActiveTradePointPhotos } from "@/lib/client-base-actualization-photos";
+import { useDealerTpOverridesHydration } from "@/hooks/use-dealer-tp-overrides-hydration";
+import { DEALER_TRADE_POINTS_EVENT, getTradePointEdit } from "@/lib/dealer-trade-points-overrides";
+import { useTradePointOverride } from "@/lib/dealer-overrides-runtime";
 
 function numOrNull(v: string): number | null {
   const t = v.trim();
@@ -245,6 +248,8 @@ export function TradePointManualActualizationView(props: {
   embeddedInSheet?: boolean;
 }): ReactElement {
   const { dealer, point, profile, isArchived = false, onRequestArchive, readOnly: readOnlyProp, embeddedInSheet } = props;
+  const { hydrationVersion } = useDealerTpOverridesHydration({ dealerId: dealer.id, tpId: point.id });
+  const tpOverride = useTradePointOverride(point.id);
   const actx = useClientBaseActualization();
   const readOnlyFromCtx = useTradePointReadOnly();
   const readOnly = readOnlyProp === true || readOnlyFromCtx;
@@ -308,15 +313,27 @@ export function TradePointManualActualizationView(props: {
   useEffect(() => {
     const mf = (manualRec?.fields ?? {}) as Record<string, unknown>;
     const rf = (k: string) => (typeof mf[k] === "string" ? (mf[k] as string).trim() : "");
+    const edit = getTradePointEdit(dealer.id, point.id);
+    const hydratedComment = edit?.comment ?? tpOverride?.comment ?? point.tpComment ?? "";
     setName(point.name);
     setCity(point.city);
     setAddress(point.address);
     setContactName(point.contactName ?? "");
     setContactPhone(formatRussianPhoneInput(point.contactPhone ?? ""));
-    setTpComment(point.tpComment ?? "");
+    setTpComment(hydratedComment);
     setFormatKind(rf("formatKind") || "store");
     setTpStatus(rf("tpStatusKind") || "working");
-  }, [point, manualRec]);
+  }, [point, manualRec, dealer.id, tpOverride, hydrationVersion]);
+
+  useEffect(() => {
+    const syncComment = () => {
+      const edit = getTradePointEdit(dealer.id, point.id);
+      const hydratedComment = edit?.comment ?? tpOverride?.comment;
+      if (hydratedComment != null) setTpComment(hydratedComment);
+    };
+    window.addEventListener(DEALER_TRADE_POINTS_EVENT, syncComment);
+    return () => window.removeEventListener(DEALER_TRADE_POINTS_EVENT, syncComment);
+  }, [dealer.id, point.id, tpOverride]);
 
   useEffect(() => {
     const sh = showcaseRec ?? emptyShowcase(dealer.id, point.id);

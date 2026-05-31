@@ -1230,7 +1230,7 @@ function ruClientNoun(n: number): "клиент" | "клиента" | "клие�
 }
 
 export default function DealerBase() {
-  useDealerTpOverridesHydration(true);
+  const { hydrationVersion } = useDealerTpOverridesHydration(true);
   const { profile } = useReleaseDemoProfile();
   const { user: me, isLoading: authLoading, isError: authError } = useAuthUser();
   const isRealUser = Boolean(me?.id);
@@ -1376,6 +1376,7 @@ export default function DealerBase() {
     teamActualizationPlane,
     profile,
     showArchivedDealers,
+    hydrationVersion,
   ]);
 
   useEffect(() => {
