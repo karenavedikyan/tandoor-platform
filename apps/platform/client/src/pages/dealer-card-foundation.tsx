@@ -36,6 +36,8 @@ import {
 } from "@/lib/client-category";
 import { ClientCategoryBadge } from "@/components/client-category-badge";
 import { resolveEffectiveClientCategory } from "@/lib/effective-client-category";
+import { useDealerTpOverridesHydration } from "@/hooks/use-dealer-tp-overrides-hydration";
+import { useOverridesRuntimeVersion } from "@/lib/dealer-overrides-runtime";
 import {
   DEALER_BASE_ROWS,
   getDealerById,
@@ -757,6 +759,7 @@ function DealerSectionNav({ active }: { active: SectionId }) {
 
 function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
   const { profile } = useReleaseDemoProfile();
+  useDealerTpOverridesHydration({ dealerId: baseRow.id });
   useClientContactsHydration(baseRow.id);
   useDealerLegalEntitiesHydration(baseRow.id);
   useClientCommentsHydration(baseRow.id);
@@ -873,9 +876,10 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
     else setTrainingCompleted(baseRow.productTrainingCompleted);
   }, [baseRow.id, baseRow.productTrainingCompleted]);
 
+  const overridesVersion = useOverridesRuntimeVersion();
   const row = useMemo(
     () => mergeDealerRowWithActualization(getDealerRowWithProfileOverrides(baseRow), actx.state),
-    [baseRow, actx.state, dealerDataBump],
+    [baseRow, actx.state, dealerDataBump, overridesVersion],
   );
 
   const isManualDealerRow = isManualActualizationDealerId(baseRow.id);
@@ -936,7 +940,7 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
 
   const effectiveCategory = useMemo(
     () => resolveEffectiveClientCategory(row, actx.enabled ? actx.state : null),
-    [row, actx.enabled, actx.state],
+    [row, actx.enabled, actx.state, overridesVersion],
   );
   const canEditClientCategory = useMemo(
     () => canEditClientBusinessCategory(profile, user?.role ?? null),
