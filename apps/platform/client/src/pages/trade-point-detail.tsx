@@ -75,10 +75,8 @@ import {
   getClientContactScopeHistoryEvents,
 } from "@/lib/client-contacts";
 import { mergeActualizationState } from "@/lib/client-base-actualization-state";
-import {
-  setTradePointTrainingStrict,
-  trashTradePointStrict,
-} from "@/lib/trade-point-overrides-api";
+import { trashTradePointStrict } from "@/lib/trade-point-overrides-api";
+import { saveTradePointTrainingField } from "@/lib/use-dealer-field-saver";
 import { handleOverridesStrictResult } from "@/lib/overrides-save-feedback";
 import { makePendingId } from "@/lib/overrides-pending-sync";
 import { DealerTpOverridesSyncStatus } from "@/components/dealer-tp-overrides-sync-status";
@@ -742,7 +740,7 @@ function TradePointDetailContent({
       toast({ title: "Укажите название, город и адрес.", variant: "destructive" });
       return false;
     }
-    updateTradePoint(
+    void updateTradePoint(
       dealer.id,
       point.id,
       {
@@ -1287,15 +1285,11 @@ function TradePointDetailContent({
                         const prev = tpTrainingDone;
                         setTpTrainingDone(next);
                         sessionStorage.setItem(tpTrainingStorageKey, next ? "1" : "0");
-                        void setTradePointTrainingStrict(point.id, { product_training_done: next }).then((result) => {
-                          if (
-                            !handleOverridesStrictResult(result, {
-                              pendingId: makePendingId("tp-training", point.id),
-                              pendingKind: "tp-training",
-                              pendingPayload: { tp_id: point.id, product_training_done: next },
-                              fieldLabel: "Обучение ТТ",
-                            })
-                          ) {
+                        void saveTradePointTrainingField(point.id, { product_training_done: next }, {
+                          fieldLabel: "Обучение по продукту",
+                          source: "trade-point-detail",
+                        }).then((result) => {
+                          if (!result.ok) {
                             setTpTrainingDone(prev);
                             sessionStorage.setItem(tpTrainingStorageKey, prev ? "1" : "0");
                           }

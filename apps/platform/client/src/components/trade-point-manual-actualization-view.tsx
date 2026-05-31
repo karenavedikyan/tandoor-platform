@@ -53,6 +53,7 @@ import { SectionSaveButton } from "@/components/section-save-button";
 import { TradePointShowcaseCatalogPanel } from "@/components/trade-point-showcase-catalog-panel";
 import { Bitrix24TasksPanel } from "@/components/bitrix24-tasks-panel";
 import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actualization-sync-status";
+import { mapActualizationTpFieldsToOverrides, saveTradePointFields } from "@/lib/use-dealer-field-saver";
 import { EntityActualizationPhotoGallery } from "@/components/entity-actualization-photo-gallery";
 import { ShowcaseCoverPhotoSlot } from "@/components/showcase-cover-photo-slot";
 import { canEditClientNextStep } from "@/lib/client-next-step-data";
@@ -485,7 +486,12 @@ export function TradePointManualActualizationView(props: {
         tradePointOverridesById: { ...prev.tradePointOverridesById, [point.id]: ov },
       });
     });
-    if (!r.success) {
+    const dbFields = mapActualizationTpFieldsToOverrides(nextFields);
+    const strictResult = await saveTradePointFields(point.id, dbFields, dealer.id, {
+      fieldLabel: "Торговая точка",
+      source: "trade-point-manual-actualization",
+    });
+    if (!r.success && !strictResult.ok) {
       toast({ title: "Ошибка сохранения", variant: "destructive" });
       return false;
     }

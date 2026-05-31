@@ -48,10 +48,7 @@ import {
 import { CLIENT_BASE_ACTUALIZATION_CLEAN_MODE } from "@/lib/client-base-actualization-config";
 import { findSimilarTradePointsInDealer, type TradePointSuggestion } from "@/lib/client-base-actualization-tp-suggest";
 import { toast } from "@/hooks/use-toast";
-import { upsertTradePointOverrideStrict } from "@/lib/trade-point-overrides-api";
-import { handleOverridesStrictResult } from "@/lib/overrides-save-feedback";
-import { makePendingId } from "@/lib/overrides-pending-sync";
-import { pushOverridesTrace } from "@/lib/overrides-trace-log";
+import { mapActualizationTpFieldsToOverrides, saveTradePointFields } from "@/lib/use-dealer-field-saver";
 import { useSectionSaveFeedback } from "@/hooks/use-section-save-feedback";
 import { SectionSaveButton } from "@/components/section-save-button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -585,14 +582,6 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
       updatedByName: userLabelFromProfile(profile),
       source: "manual_actualization" as const,
     };
-    pushOverridesTrace({
-      fn: "dealer-trade-points.comment",
-      stage: "ui_change_started",
-      tpId: editId,
-      dealerId: row.id,
-      field: "comment",
-      newValue: editComment.trim(),
-    });
     const r = await actx.persist((prev) => {
       let next = mergeActualizationState(prev, {
         tradePointOverridesById: { ...prev.tradePointOverridesById, [editId]: ov },
@@ -612,45 +601,19 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
       }
       return next;
     });
-    pushOverridesTrace({
-      fn: "dealer-trade-points.comment",
-      stage: "old_channel_result",
-      tpId: editId,
-      dealerId: row.id,
-      success: r.success,
-      error: r.success ? undefined : r.syncStatus,
-    });
-    const tpFields = {
+    const tpFields = mapActualizationTpFieldsToOverrides({
       name: editName.trim(),
       city: editCity.trim(),
       address: editAddress.trim(),
-      contact_name: editContactName.trim() || null,
-      contact_phone: formattedPhone || null,
-      comment: editComment.trim() || null,
-    };
-    pushOverridesTrace({
-      fn: "dealer-trade-points.comment",
-      stage: "before_strict_call",
-      tpId: editId,
-      dealerId: row.id,
+      contactName: editContactName.trim(),
+      contactPhone: formattedPhone,
+      comment: editComment.trim(),
     });
-    const strictResult = await upsertTradePointOverrideStrict(editId, tpFields, row.id);
-    pushOverridesTrace({
-      fn: "dealer-trade-points.comment",
-      stage: "after_strict_call",
-      tpId: editId,
-      dealerId: row.id,
-      result: strictResult.ok
-        ? { ok: true }
-        : { ok: false, message: strictResult.message, code: strictResult.code },
+    const strictResult = await saveTradePointFields(editId, tpFields, row.id, {
+      fieldLabel: "Торговая точка",
+      source: "dealer-trade-points-section",
     });
-    handleOverridesStrictResult(strictResult, {
-      pendingId: makePendingId("tp-upsert", editId),
-      pendingKind: "tp-upsert",
-      pendingPayload: { tp_id: editId, dealer_id: row.id, fields: tpFields },
-      fieldLabel: "Комментарий торговой точки",
-    });
-    if (r.success) {
+    if (r.success || strictResult.ok) {
       setEditOpen(false);
       setEditId(null);
       return true;

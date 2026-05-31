@@ -4,9 +4,7 @@
 
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import { canEditClientNextStep } from "@/lib/client-next-step-data";
-import { upsertDealerOverrideStrict } from "@/lib/dealer-overrides-api";
-import { handleOverridesStrictResult } from "@/lib/overrides-save-feedback";
-import { makePendingId } from "@/lib/overrides-pending-sync";
+import { saveDealerFields } from "@/lib/use-dealer-field-saver";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
 
@@ -149,13 +147,13 @@ export function canEditDealerProfile(profile: ReleaseDemoProfile, dealer: Dealer
   return canEditClientNextStep(profile, dealer);
 }
 
-export function updateDealerProfile(
+export async function updateDealerProfile(
   dealerId: string,
   patch: Partial<
     Pick<DealerProfileOverride, "displayName" | "city" | "mainContactName" | "mainContactPhone" | "mainContactEmail" | "comment">
   >,
   profile: ReleaseDemoProfile,
-): void {
+): Promise<void> {
   const state = loadDealerProfileOverridesState();
   const now = isoNow();
   const act = { id: profile.personaUserId, name: userLabelFromProfile(profile) };
@@ -183,13 +181,9 @@ export function updateDealerProfile(
     contact_email: next.mainContactEmail ?? null,
     general_comment: next.comment ?? null,
   };
-  void upsertDealerOverrideStrict(dealerId, fields).then((result) => {
-    handleOverridesStrictResult(result, {
-      pendingId: makePendingId("dealer-upsert", dealerId),
-      pendingKind: "dealer-upsert",
-      pendingPayload: { dealer_id: dealerId, fields },
-      fieldLabel: "Профиль клиента",
-    });
+  await saveDealerFields(dealerId, fields, {
+    fieldLabel: "Профиль клиента",
+    source: "dealer-profile-overrides",
   });
 }
 

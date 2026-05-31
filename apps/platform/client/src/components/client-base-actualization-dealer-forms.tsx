@@ -48,9 +48,11 @@ import {
   sortDealerShipmentDayIds,
   type DealerShipmentDayId,
 } from "@/lib/dealer-shipment-days";
-import { createManualDealerStrict } from "@/lib/dealer-overrides-api";
-import { handleOverridesStrictResult } from "@/lib/overrides-save-feedback";
-import { makePendingId } from "@/lib/overrides-pending-sync";
+import {
+  mapActualizationDealerFieldsToOverrides,
+  saveDealerFields,
+  saveManualDealerToDb,
+} from "@/lib/use-dealer-field-saver";
 import { getDealerUnloadingOrder } from "@/lib/dealer-unloading-order-storage";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
@@ -641,7 +643,12 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
       }
       return next;
     });
-    if (!r.success) {
+    const dbFields = mapActualizationDealerFieldsToOverrides(fields);
+    const strictResult = await saveDealerFields(baseRow.id, dbFields, {
+      fieldLabel: "Данные клиента",
+      source: "dealer-edit-dialog",
+    });
+    if (!r.success && !strictResult.ok) {
       const extra =
         r.syncStatus === "local_fallback" || r.storageMode === "local_fallback"
           ? " Данные могли сохраниться только на этом устройстве."
@@ -1405,18 +1412,26 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
     setSaving(false);
     saveLockRef.current = false;
 
+    const dbFields = mapActualizationDealerFieldsToOverrides(fields);
+    const strictFields = await saveDealerFields(id, dbFields, {
+      fieldLabel: "Данные нового клиента",
+      source: "dealer-create-dialog",
+    });
     if (r.success) {
-      void createManualDealerStrict({ dealer_id: id, payload: fields as unknown as Record<string, unknown> }).then(
-        (result) => {
-          handleOverridesStrictResult(result, {
-            pendingId: makePendingId("manual-dealer", id),
-            pendingKind: "manual-dealer",
-            pendingPayload: { dealer_id: id, payload: fields },
-            fieldLabel: "Ручной клиент",
-          });
-        },
-      );
+      await saveManualDealerToDb(id, fields as unknown as Record<string, unknown>, {
+        source: "dealer-create-dialog",
+      });
       toast({ title: "Клиент сохранён" });
+      onOpenChange(false);
+      onCreated(id);
+    } else if (strictFields.ok) {
+      await saveManualDealerToDb(id, fields as unknown as Record<string, unknown>, {
+        source: "dealer-create-dialog",
+      });
+      toast({
+        title: "Клиент сохранён в облаке",
+        description: "Локальная актуализация не синхронизировалась — данные overrides записаны в БД.",
+      });
       onOpenChange(false);
       onCreated(id);
     } else {

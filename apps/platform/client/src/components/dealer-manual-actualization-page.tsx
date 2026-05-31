@@ -503,6 +503,8 @@ export function DealerManualActualizationPage(props: {
         ) : null}
 
         <ClientBaseActualizationSyncStatus
+          scope="dealer-tp-overrides"
+          dealerId={baseRow.id}
           compact
           isLoading={actx.loading}
           meta={actx.meta}

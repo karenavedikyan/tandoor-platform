@@ -127,15 +127,10 @@ import {
   setDealerRegionalManagerOverride,
 } from "@/lib/dealer-regional-manager-overrides";
 import { getMergedDealerTradePoints } from "@/lib/dealer-trade-points-overrides";
-import {
-  notifyDealerOverridesHydrated,
-  setDealerTrainingStrict,
-  trashDealerStrict,
-  upsertDealerOverrideStrict,
-} from "@/lib/dealer-overrides-api";
+import { notifyDealerOverridesHydrated, trashDealerStrict } from "@/lib/dealer-overrides-api";
 import { handleOverridesStrictResult } from "@/lib/overrides-save-feedback";
 import { makePendingId } from "@/lib/overrides-pending-sync";
-import { pushOverridesTrace } from "@/lib/overrides-trace-log";
+import { saveDealerField, saveDealerTrainingField } from "@/lib/use-dealer-field-saver";
 import { isDealerTrashedInRuntime, patchDealerCategoryRuntime, patchDealerTrashRuntime } from "@/lib/dealer-overrides-runtime";
 import {
   DEALER_TRADE_POINTS_EVENT,
@@ -1096,7 +1091,7 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
       setProfileSaveErr("Укажите название и город.");
       return;
     }
-    updateDealerProfile(
+    void updateDealerProfile(
       row.id,
       {
         displayName: peName.trim(),
@@ -1404,21 +1399,6 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                           onValueChange={(v) => {
                             void (async () => {
                               const next = v as ClientCategoryId;
-                              pushOverridesTrace({
-                                fn: "dealer-card.client_category",
-                                stage: "ui_change_started",
-                                dealerId: row.id,
-                                field: "client_category",
-                                newValue: next,
-                              });
-                              if (!profile?.personaUserId) {
-                                pushOverridesTrace({
-                                  fn: "dealer-card.client_category",
-                                  stage: "early_return",
-                                  dealerId: row.id,
-                                  reason: "missing personaUserId",
-                                });
-                              }
                               const now = new Date().toISOString();
                               const act = actx.state;
                               const prevOv = act.dealerOverridesById[row.id];
@@ -1453,36 +1433,13 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                                     },
                                   },
                                 };
-                                const r = await actx.persist((prev) => mergeActualizationState(prev, patch));
-                                pushOverridesTrace({
-                                  fn: "dealer-card.client_category",
-                                  stage: "old_channel_result",
-                                  dealerId: row.id,
-                                  success: r.success,
-                                  error: r.success ? undefined : r.syncStatus,
-                                });
+                                await actx.persist((prev) => mergeActualizationState(prev, patch));
                               }
-                              const categoryFields = { client_category: next };
-                              pushOverridesTrace({
-                                fn: "dealer-card.client_category",
-                                stage: "before_strict_call",
-                                dealerId: row.id,
+                              const result = await saveDealerField(row.id, "client_category", next, {
+                                fieldLabel: "Категория клиента",
+                                source: "dealer-card-foundation",
                               });
-                              const result = await upsertDealerOverrideStrict(row.id, categoryFields);
-                              pushOverridesTrace({
-                                fn: "dealer-card.client_category",
-                                stage: "after_strict_call",
-                                dealerId: row.id,
-                                result: result.ok ? { ok: true } : { ok: false, message: result.message, code: result.code },
-                              });
-                              if (
-                                handleOverridesStrictResult(result, {
-                                  pendingId: makePendingId("dealer-upsert", row.id),
-                                  pendingKind: "dealer-upsert",
-                                  pendingPayload: { dealer_id: row.id, fields: categoryFields },
-                                  fieldLabel: "Категория клиента",
-                                })
-                              ) {
+                              if (result.ok) {
                                 setDealerDataBump((b) => b + 1);
                                 notifyDealerOverridesHydrated();
                               } else {
@@ -2399,15 +2356,12 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                   const prev = trainingCompleted;
                   setTrainingCompleted(next);
                   sessionStorage.setItem(dealerProductTrainingStorageKey(row.id), next ? "1" : "0");
-                  void setDealerTrainingStrict(row.id, { product_training_done: next }).then((result) => {
-                    if (
-                      !handleOverridesStrictResult(result, {
-                        pendingId: makePendingId("dealer-training", `${row.id}:product`),
-                        pendingKind: "dealer-training",
-                        pendingPayload: { dealer_id: row.id, product_training_done: next },
-                        fieldLabel: "Обучение по продукту",
-                      })
-                    ) {
+                  void saveDealerTrainingField(
+                    row.id,
+                    { product_training_done: next },
+                    { fieldLabel: "Обучение по продукту", source: "dealer-card-foundation" },
+                  ).then((result) => {
+                    if (!result.ok) {
                       setTrainingCompleted(prev);
                       sessionStorage.setItem(dealerProductTrainingStorageKey(row.id), prev ? "1" : "0");
                     }
