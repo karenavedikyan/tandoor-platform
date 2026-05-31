@@ -978,7 +978,10 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
 
   const canViewShowcaseCard = useMemo(() => canViewShowcaseDistribution(profile, row), [profile, row]);
 
-  const canEditCardComments = useMemo(() => canEditDealerCardComments(profile, row), [profile, row]);
+  const canEditCardComments = useMemo(
+    () => canEditDealerCardComments(profile, row, user?.role),
+    [profile, row, user?.role],
+  );
 
   const canEditProfile = useMemo(() => canEditDealerProfile(profile, row), [profile, row]);
   const mergedProfView = useMemo(() => getMergedDealerProfile(row), [row, dealerDataBump]);
@@ -1142,7 +1145,7 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
     const label = displayUserName(user) ?? userLabelFromProfile(profile);
     const uid = user?.id ?? profile.personaUserId;
     const iso = addCalendarDaysIso(new Date(), 5);
-    if (canEditClientNextStep(profile, row)) {
+    if (canEditClientNextStep(profile, row, user?.role)) {
       saveClientNextStep(row.id, {
         actionType: "showcase_check",
         contactDate: iso,
@@ -1963,6 +1966,7 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
               actorUserId={user?.id ?? profile.personaUserId}
               actorLabel={displayUserName(user) ?? userLabelFromProfile(profile)}
               onSaved={() => setNextStepBump((n) => n + 1)}
+              authRole={user?.role}
             />
 
             {!isManualDealerRow ? (
@@ -1970,7 +1974,7 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                 scope="dealer"
                 dealerId={row.id}
                 dealerName={rowView.name}
-                canCreate={canEditClientNextStep(profile, row)}
+                canCreate={canEditClientNextStep(profile, row, user?.role)}
                 actorUserId={user?.id ?? profile.personaUserId}
                 actorLabel={displayUserName(user) ?? userLabelFromProfile(profile)}
                 compact

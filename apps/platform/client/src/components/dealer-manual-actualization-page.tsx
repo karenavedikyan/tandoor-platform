@@ -284,8 +284,8 @@ export function DealerManualActualizationPage(props: {
 
   const readOnlyFromCtx = useDealerCardReadOnly();
   const readOnly = readOnlyProp === true || readOnlyFromCtx;
-  const canEdit = canEditDealerDuringActualization(profile, row) && !readOnly;
-  const canArchive = canArchiveDealerDuringActualization(profile, row);
+  const canEdit = canEditDealerDuringActualization(profile, row, user?.role) && !readOnly;
+  const canArchive = canArchiveDealerDuringActualization(profile, row, user?.role);
   const isDealerArchived = Boolean(actx.state.archivedDealersById[baseRow.id]);
   const isDealerTrashed = Boolean(actx.state.trashedDealersById?.[baseRow.id]);
   /** Промт 46: «Удалить» с этой страницы тоже идёт в Корзину. */
@@ -773,13 +773,14 @@ export function DealerManualActualizationPage(props: {
               actorLabel={user ? displayUserName(user) : userLabelFromProfile(profile)}
               onSaved={() => void actx.refresh()}
               allowManualActualizationCard
+              authRole={user?.role}
             />
             <div data-testid="section-dealer-bitrix-tasks">
               <Bitrix24TasksPanel
                 scope="dealer"
                 dealerId={row.id}
                 dealerName={row.name}
-                canCreate={canEditClientNextStep(profile, row)}
+                canCreate={canEditClientNextStep(profile, row, user?.role)}
                 actorUserId={user?.id ?? profile.personaUserId}
                 actorLabel={user ? displayUserName(user) : userLabelFromProfile(profile)}
                 compact

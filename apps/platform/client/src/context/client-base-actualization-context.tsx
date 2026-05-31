@@ -49,7 +49,7 @@ const Ctx = createContext<ClientBaseActualizationContextValue | null>(null);
 export function ClientBaseActualizationProvider({ children }: { children: ReactNode }): ReactElement {
   const { user: authUser } = useAuthUser();
   const { profile } = useReleaseDemoProfile();
-  const enabled = useMemo(() => canActualizeClientBase(profile), [profile]);
+  const enabled = useMemo(() => canActualizeClientBase(profile, authUser?.role), [profile, authUser?.role]);
 
   const [loading, setLoading] = useState(true);
   const [state, setState] = useState<ActualizationState>(() => createEmptyActualizationState());

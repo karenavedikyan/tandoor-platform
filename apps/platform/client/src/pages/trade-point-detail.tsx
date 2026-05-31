@@ -578,8 +578,14 @@ function TradePointDetailContent({
     () => !isVirtualDefaultPoint && canEditDealerTradePoints(profile, dealerForRbac),
     [profile, dealerForRbac, isVirtualDefaultPoint],
   );
-  const canEditTpComments = useMemo(() => canEditTradePointComments(profile, dealer), [profile, dealer]);
-  const canCreateBitrix24Task = useMemo(() => canEditClientNextStep(profile, dealer), [profile, dealer]);
+  const canEditTpComments = useMemo(
+    () => canEditTradePointComments(profile, dealer, user?.role),
+    [profile, dealer, user?.role],
+  );
+  const canCreateBitrix24Task = useMemo(
+    () => canEditClientNextStep(profile, dealer, user?.role),
+    [profile, dealer, user?.role],
+  );
   const tpComments = useMemo(() => getTradePointComments(dealer.id, point.id), [dealer.id, point.id, commentsBump]);
   const showcaseTasksOpen = useMemo(() => {
     const storage = loadShowcaseStorage();

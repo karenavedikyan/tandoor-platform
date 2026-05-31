@@ -2,10 +2,24 @@
  * «Следующий шаг» по клиенту: sessionStorage без backend.
  */
 
+import type { UserRole } from "@shared/auth";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { getEffectiveTeamLeadTeamId } from "@/lib/release-demo-profile";
 import type { SalesRole } from "@/lib/sales-control-data";
+
+type ProfileSalesRole = SalesRole | "admin";
+
+function profileSalesRole(profile: ReleaseDemoProfile): ProfileSalesRole {
+  return profile.role as ProfileSalesRole;
+}
+
+/** Платформенный admin и legacy `profile.role === "admin"` — те же права, что у sales_director. */
+export function hasSalesDirectorEditScope(profile: ReleaseDemoProfile, authRole?: UserRole | null): boolean {
+  if (authRole === "admin") return true;
+  const role = profileSalesRole(profile);
+  return role === "sales_director" || role === "admin";
+}
 
 export const CLIENT_NEXT_STEP_STORAGE_KEY = "tandoor-client-next-steps-v1";
 
@@ -143,11 +157,15 @@ export function saveClientNextStep(
   return storage;
 }
 
-/** Редактирование: менеджер своего клиента, РОП команды, руководитель продаж; маркетолог и аналитик — только просмотр. */
-export function canEditClientNextStep(profile: ReleaseDemoProfile, dealer: DealerRow): boolean {
-  const role = profile.role as SalesRole;
+/** Редактирование: менеджер своего клиента, РОП команды, руководитель продаж, admin; маркетолог и аналитик — только просмотр. */
+export function canEditClientNextStep(
+  profile: ReleaseDemoProfile,
+  dealer: DealerRow,
+  authRole?: UserRole | null,
+): boolean {
+  if (hasSalesDirectorEditScope(profile, authRole)) return true;
+  const role = profileSalesRole(profile);
   if (role === "marketer" || role === "analyst") return false;
-  if (role === "sales_director") return true;
   if (role === "sales_manager") return dealer.releaseManagerId === profile.personaUserId;
   if (role === "team_lead") return dealer.releaseTeamId === getEffectiveTeamLeadTeamId(profile);
   return false;
