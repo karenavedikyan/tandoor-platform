@@ -6,6 +6,29 @@
 
 `localStorage` / `sessionStorage` — только **оптимистический кеш** и офлайн-очередь. После гидрации с API серверные значения имеют приоритет.
 
+## Чтение overrides (гидрация и UI)
+
+При старте сессии `OverridesSessionBootstrap` вызывает `hydrateAllOverridesFromServer()` **до** бэкфила. На карточке дилера/ТТ — `useDealerTpOverridesHydration({ dealerId, tpId })` (перестраховка + `visibilitychange`).
+
+Трассировка в `tandoor:overrides:trace-log`: `hydrate_started` / `hydrate_finished` с `count_loaded`.
+
+```ts
+import { useDealerOverride, useTradePointOverride } from "@/lib/dealer-overrides-runtime";
+import { resolveEffectiveClientCategory } from "@/lib/effective-client-category";
+
+// Категория: DB-оверрайд приоритетнее seed и blob
+const category = resolveEffectiveClientCategory(dealerRow, actx.state);
+
+// Произвольное поле из строки dealer_overrides
+const override = useDealerOverride(dealerId);
+const displayName = override?.name ?? dealerRow.name;
+
+const tp = useTradePointOverride(tpId);
+const comment = tp?.comment ?? point.tpComment;
+```
+
+`useDealerOverride` / `useTradePointOverride` подписаны на `useSyncExternalStore` и перерисовывают UI после `apply*OverridesRuntime` и событий гидрации.
+
 ## Клиентский поток сохранения
 
 1. UI пишет в LS сразу (optimistic).
