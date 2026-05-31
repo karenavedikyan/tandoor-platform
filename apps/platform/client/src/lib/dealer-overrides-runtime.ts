@@ -1,7 +1,10 @@
 /**
- * In-memory снимок оверрайдов дилера после гидрации с API (Промт 113).
+ * In-memory снимок оверрайдов дилера/ТТ после гидрации с API (Промт 113 / 113.4).
  */
 
+import { useSyncExternalStore } from "react";
+import { DEALER_OVERRIDES_HYDRATED_EVENT } from "@/lib/dealer-overrides-api";
+import { TRADE_POINT_OVERRIDES_HYDRATED_EVENT } from "@/lib/trade-point-overrides-api";
 import type { ClientCategoryId } from "@/lib/client-category";
 import { normalizeClientCategory } from "@/lib/client-category";
 import type { ActualizationState, TrashedDealerInfo, TrashedTradePointInfo } from "@/lib/client-base-actualization-state";
@@ -10,8 +13,11 @@ import { isPrompt113BlobFallbackActive } from "@/lib/dealer-overrides-fallback";
 import type { DealerOverrideRow, DealerTrainingRow } from "../../../shared/dealer-overrides-types";
 import type { TradePointOverrideRow, TradePointTrainingRow } from "../../../shared/trade-point-overrides-types";
 
+export const OVERRIDES_RUNTIME_CHANGED_EVENT = "tandoor-overrides-runtime-changed";
+
 let dealerHydrated = false;
 let tpHydrated = false;
+let runtimeVersion = 0;
 
 const dbTrashedDealersById: Record<string, TrashedDealerInfo> = {};
 const dbTrashedTradePointsById: Record<string, TrashedTradePointInfo> = {};
@@ -19,6 +25,36 @@ const dbClientCategoryByDealerId: Record<string, ClientCategoryId> = {};
 const dbDealerTrainingById: Record<string, DealerTrainingRow> = {};
 const dbTpTrainingById: Record<string, TradePointTrainingRow> = {};
 const dbManualDealerPayloads: Record<string, Record<string, unknown>> = {};
+const dbDealerOverridesById: Record<string, DealerOverrideRow> = {};
+const dbTradePointOverridesById: Record<string, TradePointOverrideRow> = {};
+
+function bumpRuntimeVersion(): void {
+  runtimeVersion += 1;
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(OVERRIDES_RUNTIME_CHANGED_EVENT));
+  }
+}
+
+export function getOverridesRuntimeVersion(): number {
+  return runtimeVersion;
+}
+
+export function subscribeOverridesRuntime(onStoreChange: () => void): () => void {
+  if (typeof window === "undefined") return () => undefined;
+  const fn = () => onStoreChange();
+  window.addEventListener(OVERRIDES_RUNTIME_CHANGED_EVENT, fn);
+  window.addEventListener(DEALER_OVERRIDES_HYDRATED_EVENT, fn);
+  window.addEventListener(TRADE_POINT_OVERRIDES_HYDRATED_EVENT, fn);
+  return () => {
+    window.removeEventListener(OVERRIDES_RUNTIME_CHANGED_EVENT, fn);
+    window.removeEventListener(DEALER_OVERRIDES_HYDRATED_EVENT, fn);
+    window.removeEventListener(TRADE_POINT_OVERRIDES_HYDRATED_EVENT, fn);
+  };
+}
+
+export function useOverridesRuntimeVersion(): number {
+  return useSyncExternalStore(subscribeOverridesRuntime, getOverridesRuntimeVersion, () => 0);
+}
 
 export function isDealerOverridesHydrated(): boolean {
   return dealerHydrated;
@@ -26,6 +62,28 @@ export function isDealerOverridesHydrated(): boolean {
 
 export function isTradePointOverridesHydrated(): boolean {
   return tpHydrated;
+}
+
+export function getDealerOverride(dealerId: string): DealerOverrideRow | null {
+  return dbDealerOverridesById[dealerId] ?? null;
+}
+
+export function getTradePointOverride(tpId: string): TradePointOverrideRow | null {
+  return dbTradePointOverridesById[tpId] ?? null;
+}
+
+export function useDealerOverride(dealerId: string | undefined): DealerOverrideRow | null {
+  const version = useOverridesRuntimeVersion();
+  void version;
+  if (!dealerId) return null;
+  return getDealerOverride(dealerId);
+}
+
+export function useTradePointOverride(tpId: string | undefined): TradePointOverrideRow | null {
+  const version = useOverridesRuntimeVersion();
+  void version;
+  if (!tpId) return null;
+  return getTradePointOverride(tpId);
 }
 
 function trashedDealerFromOverride(row: DealerOverrideRow): TrashedDealerInfo | null {
@@ -78,8 +136,10 @@ export function applyDealerOverridesRuntime(
   for (const k of Object.keys(dbClientCategoryByDealerId)) delete dbClientCategoryByDealerId[k];
   for (const k of Object.keys(dbDealerTrainingById)) delete dbDealerTrainingById[k];
   for (const k of Object.keys(dbManualDealerPayloads)) delete dbManualDealerPayloads[k];
+  for (const k of Object.keys(dbDealerOverridesById)) delete dbDealerOverridesById[k];
 
   for (const row of overrides) {
+    dbDealerOverridesById[row.dealer_id] = row;
     const tr = trashedDealerFromOverride(row);
     if (tr) dbTrashedDealersById[row.dealer_id] = tr;
     if (row.client_category) {
@@ -89,6 +149,7 @@ export function applyDealerOverridesRuntime(
   for (const t of training) dbDealerTrainingById[t.dealer_id] = t;
   for (const m of manual) dbManualDealerPayloads[m.dealer_id] = m.payload;
   dealerHydrated = true;
+  bumpRuntimeVersion();
 }
 
 export function applyTradePointOverridesRuntime(
@@ -97,28 +158,36 @@ export function applyTradePointOverridesRuntime(
 ): void {
   for (const k of Object.keys(dbTrashedTradePointsById)) delete dbTrashedTradePointsById[k];
   for (const k of Object.keys(dbTpTrainingById)) delete dbTpTrainingById[k];
+  for (const k of Object.keys(dbTradePointOverridesById)) delete dbTradePointOverridesById[k];
 
   for (const row of overrides) {
+    dbTradePointOverridesById[row.tp_id] = row;
     const tr = trashedTpFromOverride(row);
     if (tr) dbTrashedTradePointsById[row.tp_id] = tr;
   }
   for (const t of training) dbTpTrainingById[t.tp_id] = t;
   tpHydrated = true;
+  bumpRuntimeVersion();
 }
 
 export function patchDealerTrashRuntime(dealerId: string, info: TrashedDealerInfo | null): void {
   if (info) dbTrashedDealersById[dealerId] = info;
   else delete dbTrashedDealersById[dealerId];
+  bumpRuntimeVersion();
 }
 
 export function patchTradePointTrashRuntime(tpId: string, info: TrashedTradePointInfo | null): void {
   if (info) dbTrashedTradePointsById[tpId] = info;
   else delete dbTrashedTradePointsById[tpId];
+  bumpRuntimeVersion();
 }
 
 export function patchDealerCategoryRuntime(dealerId: string, category: ClientCategoryId | null): void {
   if (category) dbClientCategoryByDealerId[dealerId] = category;
   else delete dbClientCategoryByDealerId[dealerId];
+  const row = dbDealerOverridesById[dealerId];
+  if (row) row.client_category = category;
+  bumpRuntimeVersion();
 }
 
 export function getDbClientCategoryOverride(dealerId: string): ClientCategoryId | undefined {

@@ -38,6 +38,7 @@ import {
   notifyTradePointOverridesHydrated,
 } from "@/lib/trade-point-overrides-api";
 import { applyDealerOverridesRuntime, applyTradePointOverridesRuntime } from "@/lib/dealer-overrides-runtime";
+import { pushOverridesTrace } from "@/lib/overrides-trace-log";
 
 function profileFromOverride(row: DealerOverrideRow): DealerProfileOverride | null {
   const has =
@@ -218,31 +219,127 @@ function applyTpTrainingHydration(
   }
 }
 
-/** Загрузить все оверрайды дилера с сервера и записать в LS + runtime. */
-export async function hydrateDealerOverridesFromServer(): Promise<boolean> {
-  const data = await fetchDealerOverridesList();
-  if (!data) return false;
+function countDealerOverridesInLocalCaches(): number {
+  if (typeof window === "undefined" || !window.localStorage) return 0;
+  let n = 0;
+  try {
+    const prof = window.localStorage.getItem(DEALER_PROFILE_OVERRIDES_STORAGE_KEY);
+    if (prof) {
+      const p = JSON.parse(prof) as DealerProfileOverridesState;
+      n += Object.keys(p.overridesByDealer ?? {}).length;
+    }
+    const tp = window.localStorage.getItem(DEALER_TRADE_POINTS_STORAGE_KEY);
+    if (tp) {
+      const t = JSON.parse(tp) as DealerTradePointsState;
+      n += Object.keys(t.editsByTradePoint ?? {}).length;
+    }
+  } catch {
+    /* ignore */
+  }
+  return n;
+}
+
+/** Загрузить оверрайды дилера с сервера и записать в LS + runtime. */
+export async function hydrateDealerOverridesFromServer(opts?: { dealerIds?: string[] }): Promise<boolean> {
+  const countBefore = countDealerOverridesInLocalCaches();
+  pushOverridesTrace({
+    fn: "hydrateDealerOverridesFromServer",
+    stage: "hydrate_started",
+    fieldsKeys: opts?.dealerIds,
+    newValue: countBefore,
+  });
+  const data = await fetchDealerOverridesList(opts?.dealerIds);
+  if (!data) {
+    pushOverridesTrace({
+      fn: "hydrateDealerOverridesFromServer",
+      stage: "hydrate_finished",
+      message: "fetch failed",
+      newValue: countBefore,
+    });
+    return false;
+  }
   applyDealerOverridesRuntime(data.overrides, data.training, data.manual);
   applyDealerProfileHydration(data.overrides);
   applyUnloadingOrderHydration(data.overrides);
   applyRegionalManagerHydration(data.overrides);
   applyDealerTrainingHydration(data.training);
   notifyDealerOverridesHydrated();
+  const countAfter = countDealerOverridesInLocalCaches();
+  pushOverridesTrace({
+    fn: "hydrateDealerOverridesFromServer",
+    stage: "hydrate_finished",
+    newValue: data.overrides.length,
+    result: { count_loaded: data.overrides.length, count_local_after: countAfter },
+  });
   return true;
 }
 
-/** Загрузить все оверрайды ТТ с сервера и записать в LS + runtime. */
-export async function hydrateTradePointOverridesFromServer(): Promise<boolean> {
-  const data = await fetchTradePointOverridesList();
-  if (!data) return false;
+/** Загрузить оверрайды ТТ с сервера и записать в LS + runtime. */
+export async function hydrateTradePointOverridesFromServer(opts?: {
+  dealerId?: string;
+  tpIds?: string[];
+}): Promise<boolean> {
+  const countBefore = countDealerOverridesInLocalCaches();
+  pushOverridesTrace({
+    fn: "hydrateTradePointOverridesFromServer",
+    stage: "hydrate_started",
+    dealerId: opts?.dealerId,
+    tpId: opts?.tpIds?.[0],
+    newValue: countBefore,
+  });
+  const data = await fetchTradePointOverridesList(
+    opts?.tpIds?.length
+      ? { tpIds: opts.tpIds }
+      : opts?.dealerId
+        ? { dealerId: opts.dealerId }
+        : undefined,
+  );
+  if (!data) {
+    pushOverridesTrace({
+      fn: "hydrateTradePointOverridesFromServer",
+      stage: "hydrate_finished",
+      message: "fetch failed",
+    });
+    return false;
+  }
   applyTradePointOverridesRuntime(data.overrides, data.training);
   applyTradePointEditsHydration(data.overrides);
   applyTpTrainingHydration(data.overrides, data.training);
   notifyTradePointOverridesHydrated();
+  pushOverridesTrace({
+    fn: "hydrateTradePointOverridesFromServer",
+    stage: "hydrate_finished",
+    newValue: data.overrides.length,
+    result: { count_loaded: data.overrides.length },
+  });
   return true;
 }
 
-/** Полная гидрация дилер + ТТ (стартовые экраны). */
+/** Полная гидрация дилер + ТТ (при старте сессии). */
+export async function hydrateAllOverridesFromServer(): Promise<void> {
+  await hydrateAllDealerAndTradePointOverrides();
+}
+
+/** Полная гидрация дилер + ТТ (alias). */
 export async function hydrateAllDealerAndTradePointOverrides(): Promise<void> {
   await Promise.all([hydrateDealerOverridesFromServer(), hydrateTradePointOverridesFromServer()]);
+}
+
+/** Точечная гидрация одного дилера (перестраховка на карточке). */
+export async function hydrateDealerOverridesForDealer(dealerId: string): Promise<boolean> {
+  return hydrateDealerOverridesFromServer({ dealerIds: [dealerId] });
+}
+
+/** Точечная гидрация ТТ дилера или одной точки. */
+export async function hydrateTradePointOverridesForEntity(opts: {
+  dealerId?: string;
+  tpId?: string;
+}): Promise<boolean> {
+  if (opts.tpId) {
+    return hydrateTradePointOverridesFromServer({ tpIds: [opts.tpId] });
+  }
+  if (opts.dealerId) {
+    return hydrateTradePointOverridesFromServer({ dealerId: opts.dealerId });
+  }
+  return false;
 }
