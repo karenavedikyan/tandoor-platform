@@ -156,6 +156,7 @@ import { DealerTradePointsSection } from "@/components/dealer-trade-points-secti
 import { DealerActionFocusSection } from "@/components/dealer-action-focus-section";
 import { Bitrix24TasksPanel } from "@/components/bitrix24-tasks-panel";
 import { DealerClientNextStepSection } from "@/components/dealer-client-next-step-section";
+import { DealerQuickCommentsSection } from "@/components/dealer-quick-comments-section";
 import { DealerStaticProfileSection } from "@/components/dealer-static-profile-section";
 import {
   getShowcaseMatrixDealerHistoryEvents,
@@ -190,6 +191,7 @@ const SECTION_IDS = [
   "points",
   "legal_entities",
   "next_step",
+  "comments",
   "terms_distribution",
   "history",
   "static_profile",
@@ -205,6 +207,7 @@ const SECTION_DOM_IDS: Record<SectionId, string> = {
   showcase_distribution: "dealer-section-showcase-distribution",
   legal_entities: "dealer-section-legal-entities",
   next_step: "dealer-section-next-step",
+  comments: "section-dealer-quick-comments",
   terms_distribution: "dealer-section-terms-distribution",
   history: "section-dealer-activity-history",
   static_profile: "dealer-section-static-profile",
@@ -218,6 +221,7 @@ const SECTION_LABELS: Record<SectionId, string> = {
   showcase_distribution: "Витрина",
   legal_entities: "Юрлица",
   next_step: "Шаг",
+  comments: "Комментарии",
   terms_distribution: "Условия",
   history: "История",
   static_profile: "Паспорт",
@@ -231,6 +235,7 @@ const SECTION_NAV_TEST_IDS: Record<SectionId, string> = {
   showcase_distribution: "dealer-section-nav-showcase-distribution",
   legal_entities: "dealer-section-nav-legal-entities",
   next_step: "dealer-section-nav-next-step",
+  comments: "dealer-section-nav-comments",
   terms_distribution: "dealer-section-nav-terms-distribution",
   history: "dealer-section-nav-history",
   static_profile: "dealer-section-nav-static-profile",
@@ -245,6 +250,7 @@ const NAV_SECTION_IDS: SectionId[] = [
   "points",
   "legal_entities",
   "next_step",
+  "comments",
   "history",
   "static_profile",
 ];
@@ -1211,7 +1217,8 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
     [row],
   );
 
-  const showProblemsBlock = row.hasProblem || isFilledDataCell(row.issues.summary);
+  const hasProblemDetails = row.hasProblem || isFilledDataCell(row.issues.summary);
+  const showProblemsBlock = hasProblemDetails || canEditCardComments;
 
   const hasSalesData = useMemo(
     () =>
@@ -1981,6 +1988,14 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
               />
             ) : null}
 
+            <DealerQuickCommentsSection
+              row={row}
+              profile={profile}
+              authRole={user?.role}
+              actorUserId={user?.id ?? profile.personaUserId}
+              actorLabel={displayUserName(user) ?? userLabelFromProfile(profile)}
+            />
+
             {showTermsDistributionBlock ? (
               <section
                 id={SECTION_DOM_IDS.terms_distribution}
@@ -2220,7 +2235,15 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
 
             {showProblemsBlock ? (
               <div data-testid="section-dealer-problems">
-                <SectionTitle subtitle="Только если есть зафиксированные вопросы по клиенту.">Проблемы и внимание</SectionTitle>
+                <SectionTitle
+                  subtitle={
+                    hasProblemDetails
+                      ? "Зафиксированные вопросы по клиенту."
+                      : "Можно оставить комментарий по проблеме, даже если критичных замечаний нет."
+                  }
+                >
+                  Проблемы и внимание
+                </SectionTitle>
                 <SurfaceCard
                   className={cn(
                     "mt-2 border-amber-200/80 bg-gradient-to-b from-amber-50/50 to-card",
@@ -2240,29 +2263,35 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                         Без критичных замечаний
                       </Badge>
                     )}
-                    <p className={cn("text-sm font-semibold leading-snug", row.hasProblem ? "text-red-700" : "text-foreground")}>
-                      {row.issues.summary}
-                    </p>
-                    <div className="grid gap-2 rounded-lg bg-card/80 p-2.5 sm:grid-cols-2 sm:gap-3 sm:p-3">
-                      <div>
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Кто зафиксировал</p>
-                        <p className="mt-0.5 text-sm font-medium text-foreground">{row.issues.who}</p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Дата</p>
-                        <p className="mt-0.5 text-sm font-medium text-foreground">{row.issues.date}</p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                          Действие в карточке внимания
-                        </p>
-                        <p className="mt-0.5 text-sm font-medium text-foreground">{row.nextAction}</p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Статус</p>
-                        <p className="mt-0.5 text-sm font-medium text-foreground">{row.issues.state}</p>
-                      </div>
-                    </div>
+                    {hasProblemDetails ? (
+                      <>
+                        {isFilledDataCell(row.issues.summary) ? (
+                          <p className={cn("text-sm font-semibold leading-snug", row.hasProblem ? "text-red-700" : "text-foreground")}>
+                            {row.issues.summary}
+                          </p>
+                        ) : null}
+                        <div className="grid gap-2 rounded-lg bg-card/80 p-2.5 sm:grid-cols-2 sm:gap-3 sm:p-3">
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Кто зафиксировал</p>
+                            <p className="mt-0.5 text-sm font-medium text-foreground">{row.issues.who}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Дата</p>
+                            <p className="mt-0.5 text-sm font-medium text-foreground">{row.issues.date}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                              Действие в карточке внимания
+                            </p>
+                            <p className="mt-0.5 text-sm font-medium text-foreground">{row.nextAction}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Статус</p>
+                            <p className="mt-0.5 text-sm font-medium text-foreground">{row.issues.state}</p>
+                          </div>
+                        </div>
+                      </>
+                    ) : null}
                     {isFilledDataCell(row.comment) ? (
                       <p className="text-xs text-muted-foreground">Комментарий: {row.comment}</p>
                     ) : null}
