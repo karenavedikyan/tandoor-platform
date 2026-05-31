@@ -10,6 +10,7 @@ import {
   type PendingSyncKind,
 } from "@/lib/overrides-pending-sync";
 import { overridesApiPost, type OverridesApiResult } from "@/lib/overrides-api-result";
+import { traceOverridesStrictCalled } from "@/lib/overrides-strict-trace";
 
 type ApiOk<T> = { success: true; data: T };
 type ApiErr = { success: false; code?: string; message?: string };
@@ -80,6 +81,7 @@ export async function upsertDealerOverrideStrict(
   dealerId: string,
   fields: Partial<Record<DealerOverrideField, unknown>>,
 ): Promise<OverridesApiResult<{ override: DealerOverrideRow | null }>> {
+  traceOverridesStrictCalled("upsertDealerOverrideStrict", { dealerId, fields });
   const body = { dealer_id: dealerId, fields };
   const r = await overridesApiPost<{ override: DealerOverrideRow | null }>({
     scope: "dealer",
@@ -88,6 +90,7 @@ export async function upsertDealerOverrideStrict(
     entityId: dealerId,
     fields,
     body,
+    traceFn: "upsertDealerOverrideStrict",
   });
   if (!r.ok && r.network) enqueueOnNetwork("dealer-upsert", dealerId, body);
   return r;
@@ -105,6 +108,7 @@ export async function setDealerTrainingStrict(
   dealerId: string,
   partial: { product_training_done?: boolean; needs_new_employees_training?: boolean },
 ): Promise<OverridesApiResult<{ training: DealerTrainingRow | null }>> {
+  traceOverridesStrictCalled("setDealerTrainingStrict", { dealerId, fields: partial });
   const body = { dealer_id: dealerId, ...partial };
   const r = await overridesApiPost<{ training: DealerTrainingRow | null }>({
     scope: "dealer",
@@ -113,6 +117,7 @@ export async function setDealerTrainingStrict(
     entityId: dealerId,
     fields: partial,
     body,
+    traceFn: "setDealerTrainingStrict",
   });
   if (!r.ok && r.network) enqueueOnNetwork("dealer-training", dealerId, body);
   return r;
@@ -127,6 +132,7 @@ export async function setDealerTraining(
 }
 
 export async function trashDealerStrict(dealerId: string): Promise<OverridesApiResult<{ override: DealerOverrideRow | null }>> {
+  traceOverridesStrictCalled("trashDealerStrict", { dealerId });
   const body = { dealer_id: dealerId };
   const r = await overridesApiPost<{ override: DealerOverrideRow | null }>({
     scope: "dealer",
@@ -134,6 +140,7 @@ export async function trashDealerStrict(dealerId: string): Promise<OverridesApiR
     url: "/api/dealer-overrides/trash",
     entityId: dealerId,
     body,
+    traceFn: "trashDealerStrict",
   });
   if (!r.ok && r.network) enqueueOnNetwork("dealer-trash", dealerId, body);
   return r;
@@ -145,6 +152,7 @@ export async function trashDealer(dealerId: string): Promise<DealerOverrideRow |
 }
 
 export async function untrashDealerStrict(dealerId: string): Promise<OverridesApiResult<{ override: DealerOverrideRow | null }>> {
+  traceOverridesStrictCalled("untrashDealerStrict", { dealerId });
   const body = { dealer_id: dealerId };
   const r = await overridesApiPost<{ override: DealerOverrideRow | null }>({
     scope: "dealer",
@@ -152,6 +160,7 @@ export async function untrashDealerStrict(dealerId: string): Promise<OverridesAp
     url: "/api/dealer-overrides/untrash",
     entityId: dealerId,
     body,
+    traceFn: "untrashDealerStrict",
   });
   if (!r.ok && r.network) enqueueOnNetwork("dealer-untrash", dealerId, body);
   return r;
@@ -166,12 +175,14 @@ export async function createManualDealerStrict(payload: {
   dealer_id?: string;
   payload: Record<string, unknown>;
 }): Promise<OverridesApiResult<{ dealer_id: string; payload: Record<string, unknown> }>> {
+  traceOverridesStrictCalled("createManualDealerStrict", { dealerId: payload.dealer_id, args: payload });
   const r = await overridesApiPost<{ dealer_id: string; payload: Record<string, unknown> }>({
     scope: "dealer",
     action: "create-manual",
     url: "/api/dealer-overrides/create-manual",
     entityId: payload.dealer_id,
     body: payload,
+    traceFn: "createManualDealerStrict",
   });
   if (!r.ok && r.network) {
     enqueueOnNetwork("manual-dealer", payload.dealer_id ?? "new", payload);

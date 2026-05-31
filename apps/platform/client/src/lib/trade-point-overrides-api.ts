@@ -6,6 +6,7 @@ import type { TradePointOverrideRow, TradePointTrainingRow } from "../../../shar
 import type { TradePointOverrideField } from "../../../shared/trade-point-overrides-types";
 import { enqueuePendingSync, makePendingId } from "@/lib/overrides-pending-sync";
 import { overridesApiPost, type OverridesApiResult } from "@/lib/overrides-api-result";
+import { traceOverridesStrictCalled } from "@/lib/overrides-strict-trace";
 
 type ApiOk<T> = { success: true; data: T };
 type ApiErr = { success: false; code?: string; message?: string };
@@ -61,6 +62,7 @@ export async function upsertTradePointOverrideStrict(
   fields: Partial<Record<TradePointOverrideField, unknown>>,
   dealerId?: string,
 ): Promise<OverridesApiResult<{ override: TradePointOverrideRow | null }>> {
+  traceOverridesStrictCalled("upsertTradePointOverrideStrict", { tpId, dealerId, fields });
   const body = { tp_id: tpId, dealer_id: dealerId, fields };
   const r = await overridesApiPost<{ override: TradePointOverrideRow | null }>({
     scope: "trade-point",
@@ -69,6 +71,7 @@ export async function upsertTradePointOverrideStrict(
     entityId: tpId,
     fields,
     body,
+    traceFn: "upsertTradePointOverrideStrict",
   });
   if (!r.ok && r.network) {
     enqueuePendingSync({
@@ -93,6 +96,7 @@ export async function setTradePointTrainingStrict(
   tpId: string,
   partial: { product_training_done?: boolean },
 ): Promise<OverridesApiResult<{ training: TradePointTrainingRow | null }>> {
+  traceOverridesStrictCalled("setTradePointTrainingStrict", { tpId, fields: partial });
   const body = { tp_id: tpId, ...partial };
   const r = await overridesApiPost<{ training: TradePointTrainingRow | null }>({
     scope: "trade-point",
@@ -101,6 +105,7 @@ export async function setTradePointTrainingStrict(
     entityId: tpId,
     fields: partial,
     body,
+    traceFn: "setTradePointTrainingStrict",
   });
   if (!r.ok && r.network) {
     enqueuePendingSync({ id: makePendingId("tp-training", tpId), kind: "tp-training", payload: body });
@@ -117,6 +122,7 @@ export async function setTradePointTraining(
 }
 
 export async function trashTradePointStrict(tpId: string): Promise<OverridesApiResult<{ override: TradePointOverrideRow | null }>> {
+  traceOverridesStrictCalled("trashTradePointStrict", { tpId });
   const body = { tp_id: tpId };
   const r = await overridesApiPost<{ override: TradePointOverrideRow | null }>({
     scope: "trade-point",
@@ -124,6 +130,7 @@ export async function trashTradePointStrict(tpId: string): Promise<OverridesApiR
     url: "/api/trade-point-overrides/trash",
     entityId: tpId,
     body,
+    traceFn: "trashTradePointStrict",
   });
   if (!r.ok && r.network) {
     enqueuePendingSync({ id: makePendingId("tp-trash", tpId), kind: "tp-trash", payload: body });
@@ -137,6 +144,7 @@ export async function trashTradePoint(tpId: string): Promise<TradePointOverrideR
 }
 
 export async function untrashTradePointStrict(tpId: string): Promise<OverridesApiResult<{ override: TradePointOverrideRow | null }>> {
+  traceOverridesStrictCalled("untrashTradePointStrict", { tpId });
   const body = { tp_id: tpId };
   const r = await overridesApiPost<{ override: TradePointOverrideRow | null }>({
     scope: "trade-point",
@@ -144,6 +152,7 @@ export async function untrashTradePointStrict(tpId: string): Promise<OverridesAp
     url: "/api/trade-point-overrides/untrash",
     entityId: tpId,
     body,
+    traceFn: "untrashTradePointStrict",
   });
   if (!r.ok && r.network) {
     enqueuePendingSync({ id: makePendingId("tp-untrash", tpId), kind: "tp-untrash", payload: body });
