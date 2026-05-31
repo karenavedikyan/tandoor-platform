@@ -26,6 +26,13 @@ const INTERVAL_MS = 15_000;
 let timer: ReturnType<typeof setInterval> | null = null;
 let running = false;
 
+export type OverridesPendingSyncRunResult = {
+  processed: number;
+  succeeded: number;
+  failed: number;
+  errors: { id: string; kind: string; error: string }[];
+};
+
 async function processItem(item: PendingSyncItem): Promise<void> {
   const p = item.payload as Record<string, unknown>;
   let result: { ok: boolean } = { ok: false };
@@ -90,15 +97,32 @@ async function processItem(item: PendingSyncItem): Promise<void> {
   }
 }
 
-export async function runOverridesPendingSyncOnce(): Promise<void> {
-  if (running || typeof window === "undefined") return;
-  if (!navigator.onLine) return;
+export async function runOverridesPendingSyncOnce(): Promise<OverridesPendingSyncRunResult | null> {
+  if (running || typeof window === "undefined") return null;
+  if (!navigator.onLine) {
+    return { processed: 0, succeeded: 0, failed: 0, errors: [{ id: "-", kind: "-", error: "offline" }] };
+  }
   running = true;
+  const result: OverridesPendingSyncRunResult = { processed: 0, succeeded: 0, failed: 0, errors: [] };
   try {
     const items = listPendingSyncItems();
     for (const item of items) {
+      result.processed += 1;
+      const beforeFailed = item.lastError;
       await processItem(item);
+      const still = listPendingSyncItems().find((x) => x.id === item.id);
+      if (!still) {
+        result.succeeded += 1;
+      } else {
+        result.failed += 1;
+        result.errors.push({
+          id: item.id,
+          kind: item.kind,
+          error: still.lastError ?? beforeFailed ?? "save failed",
+        });
+      }
     }
+    return result;
   } finally {
     running = false;
   }
