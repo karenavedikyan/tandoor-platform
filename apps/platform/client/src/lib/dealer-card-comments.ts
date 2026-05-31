@@ -3,6 +3,7 @@
  * Чтение: Postgres (кеш) → fallback localStorage. Запись: LS + awaited API (Промт 114).
  */
 
+import type { UserRole } from "@shared/auth";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import { canEditClientNextStep } from "@/lib/client-next-step-data";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
@@ -58,8 +59,12 @@ export function getDealerComments(dealerId: string, state?: DealerCardCommentsSt
   return list.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
 }
 
-export function canEditDealerCardComments(profile: ReleaseDemoProfile, dealer: DealerRow): boolean {
-  return canEditClientNextStep(profile, dealer);
+export function canEditDealerCardComments(
+  profile: ReleaseDemoProfile,
+  dealer: DealerRow,
+  authRole?: UserRole | null,
+): boolean {
+  return canEditClientNextStep(profile, dealer, authRole);
 }
 
 function formatMetaRu(iso: string, name: string): string {

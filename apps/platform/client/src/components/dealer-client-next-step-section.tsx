@@ -23,6 +23,7 @@ import {
 } from "@/lib/client-next-step-data";
 import { canViewShowcaseDistribution } from "@/lib/showcase-distribution-data";
 import { canActualizeClientBase } from "@/lib/client-base-actualization-permissions";
+import type { UserRole } from "@shared/auth";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { cn } from "@/lib/utils";
 import { useSectionSaveFeedback } from "@/hooks/use-section-save-feedback";
@@ -50,6 +51,7 @@ type Props = {
   /** Карточка ручного клиента в актуализации: показать блок без витрины release. */
   allowManualActualizationCard?: boolean;
   readOnly?: boolean;
+  authRole?: UserRole | null;
 };
 
 export function DealerClientNextStepSection({
@@ -60,13 +62,14 @@ export function DealerClientNextStepSection({
   onSaved,
   allowManualActualizationCard,
   readOnly = false,
+  authRole,
 }: Props) {
   const canView = allowManualActualizationCard
-    ? canActualizeClientBase(profile)
+    ? canActualizeClientBase(profile, authRole)
     : canViewShowcaseDistribution(profile, row);
   if (!canView) return null;
 
-  const canEdit = canEditClientNextStep(profile, row) && !readOnly;
+  const canEdit = canEditClientNextStep(profile, row, authRole) && !readOnly;
   const nextStepSave = useSectionSaveFeedback();
   const [tick, setTick] = useState(0);
   const [actionType, setActionType] = useState<ClientNextStepActionType>("visit");
