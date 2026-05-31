@@ -69,6 +69,7 @@ import {
 import { formatDisplayDateTime } from "@/lib/format-display-date";
 import { listActiveTradePointPhotos } from "@/lib/client-base-actualization-photos";
 import { useDealerTpOverridesHydration } from "@/hooks/use-dealer-tp-overrides-hydration";
+import { hydrateTradePointOverridesForEntity } from "@/lib/dealer-overrides-sync";
 import { DEALER_TRADE_POINTS_EVENT, getTradePointEdit } from "@/lib/dealer-trade-points-overrides";
 import { useTradePointOverride } from "@/lib/dealer-overrides-runtime";
 
@@ -310,7 +311,11 @@ export function TradePointManualActualizationView(props: {
     showcaseSave.markDirty();
   }, [showcaseSave.markDirty]);
 
+  const skipMainFormHydrate =
+    mainSave.isDirty || mainSave.phase === "saving" || showcaseSave.isDirty || showcaseSave.phase === "saving";
+
   useEffect(() => {
+    if (skipMainFormHydrate) return;
     const mf = (manualRec?.fields ?? {}) as Record<string, unknown>;
     const rf = (k: string) => (typeof mf[k] === "string" ? (mf[k] as string).trim() : "");
     const edit = getTradePointEdit(dealer.id, point.id);
@@ -323,19 +328,21 @@ export function TradePointManualActualizationView(props: {
     setTpComment(hydratedComment);
     setFormatKind(rf("formatKind") || "store");
     setTpStatus(rf("tpStatusKind") || "working");
-  }, [point, manualRec, dealer.id, tpOverride, hydrationVersion]);
+  }, [point, manualRec, dealer.id, tpOverride, hydrationVersion, skipMainFormHydrate]);
 
   useEffect(() => {
     const syncComment = () => {
+      if (mainSave.isDirty || mainSave.phase === "saving") return;
       const edit = getTradePointEdit(dealer.id, point.id);
       const hydratedComment = edit?.comment ?? tpOverride?.comment;
       if (hydratedComment != null) setTpComment(hydratedComment);
     };
     window.addEventListener(DEALER_TRADE_POINTS_EVENT, syncComment);
     return () => window.removeEventListener(DEALER_TRADE_POINTS_EVENT, syncComment);
-  }, [dealer.id, point.id, tpOverride]);
+  }, [dealer.id, point.id, tpOverride, mainSave.isDirty, mainSave.phase]);
 
   useEffect(() => {
+    if (showcaseSave.isDirty || showcaseSave.phase === "saving") return;
     const sh = showcaseRec ?? emptyShowcase(dealer.id, point.id);
     setHasShowcase(sh.hasShowcase);
     setTotalPortals(sh.totalPortals != null ? String(sh.totalPortals) : "");
@@ -357,7 +364,7 @@ export function TradePointManualActualizationView(props: {
     setSelectedShowcaseModels(Array.isArray(sh.selectedShowcaseModels) ? sh.selectedShowcaseModels : []);
     setShowcaseMatrixTasks(Array.isArray(sh.showcaseMatrixTasks) ? sh.showcaseMatrixTasks : []);
     setShowcaseDirty(false);
-  }, [showcaseRec, dealer.id, point.id]);
+  }, [showcaseRec, dealer.id, point.id, showcaseSave.isDirty, showcaseSave.phase]);
 
   const dealerMergedFields = useMemo(() => {
     const manualD = actx.state.manuallyCreatedDealersById[dealer.id];
@@ -512,6 +519,7 @@ export function TradePointManualActualizationView(props: {
       toast({ title: "Ошибка сохранения", variant: "destructive" });
       return false;
     }
+    await hydrateTradePointOverridesForEntity({ dealerId: dealer.id, tpId: point.id });
     return true;
   }, [
     actx,

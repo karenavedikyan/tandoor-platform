@@ -10,6 +10,7 @@ const SUCCESS_MS = 1800;
  */
 export function useSectionSaveFeedback() {
   const [phase, setPhase] = useState<SectionSavePhase>("idle");
+  const [isDirty, setIsDirty] = useState(false);
   const timerRef = useRef<number | null>(null);
 
   const clearTimer = useCallback(() => {
@@ -23,6 +24,7 @@ export function useSectionSaveFeedback() {
 
   const markDirty = useCallback(() => {
     clearTimer();
+    setIsDirty(true);
     setPhase("idle");
   }, [clearTimer]);
 
@@ -36,6 +38,7 @@ export function useSectionSaveFeedback() {
           setPhase("idle");
           return false;
         }
+        setIsDirty(false);
         setPhase("success");
         timerRef.current = window.setTimeout(() => {
           setPhase("idle");
@@ -50,5 +53,5 @@ export function useSectionSaveFeedback() {
     [clearTimer],
   );
 
-  return { phase, runSave, markDirty };
+  return { phase, isDirty, runSave, markDirty };
 }
