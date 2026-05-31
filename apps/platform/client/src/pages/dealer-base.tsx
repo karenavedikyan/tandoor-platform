@@ -172,6 +172,13 @@ import {
 } from "@/lib/dealer-work-plan";
 import { resolveWorkPlanState } from "@/lib/dealer-work-plan-db-cache";
 import { DealerShipmentDayPlanner } from "@/components/dealer-shipment-day-planner";
+import { DealerShipmentRoutesSection } from "@/components/dealer-shipment-routes-section";
+import {
+  DEALER_SHIPMENT_ROUTE_DEFS_EVENT,
+  getShipmentRoutesForUserDay,
+  removeShipmentRouteAsync,
+  upsertShipmentRouteAsync,
+} from "@/lib/dealer-shipment-route-definitions";
 import { DealerWorkPlanBulkBar } from "@/components/dealer-work-plan-bulk-bar";
 import { CLIENT_NEXT_STEP_CHANGED_EVENT } from "@/lib/client-next-step-data";
 import {
@@ -2245,6 +2252,7 @@ export default function DealerBase() {
   });
   const [activeShipmentDayId, setActiveShipmentDayId] = useState<DealerShipmentDayId | null>(null);
   const [routeBump, setRouteBump] = useState(0);
+  const [cityRouteDefsBump, setCityRouteDefsBump] = useState(0);
   const [trafficBump, setTrafficBump] = useState(0);
   const nextStepsStorage = useMemo(() => loadClientNextStepsStorage(), [trafficBump]);
   const [characteristicsBump, setCharacteristicsBump] = useState(0);
@@ -2278,6 +2286,12 @@ export default function DealerBase() {
     const h = () => setRouteBump((n) => n + 1);
     window.addEventListener(DEALER_ROUTE_PLAN_EVENT, h);
     return () => window.removeEventListener(DEALER_ROUTE_PLAN_EVENT, h);
+  }, []);
+
+  useEffect(() => {
+    const h = () => setCityRouteDefsBump((n) => n + 1);
+    window.addEventListener(DEALER_SHIPMENT_ROUTE_DEFS_EVENT, h);
+    return () => window.removeEventListener(DEALER_SHIPMENT_ROUTE_DEFS_EVENT, h);
   }, []);
 
   useEffect(() => {
@@ -2914,6 +2928,11 @@ export default function DealerBase() {
   );
 
   const routePlanState = useMemo(() => loadDealerRoutePlanState(), [routeBump]);
+  const cityShipmentRoutesForDay = useMemo(() => {
+    if (!activeShipmentDayId) return [];
+    return getShipmentRoutesForUserDay(profile.personaUserId, activeShipmentDayId);
+  }, [profile.personaUserId, activeShipmentDayId, cityRouteDefsBump]);
+
   const routeDefsByDay = useMemo(() => {
     const uid = profile.personaUserId;
     const out: Record<DealerShipmentDayId, ShipmentRouteDefinition[]> = {
@@ -3800,6 +3819,35 @@ export default function DealerBase() {
               getShipmentStatus={getShipmentStatusForRow}
               buildDealerHref={buildDealerAbsHref}
             />
+            {activeShipmentDayId && isRealUser && me?.id ? (
+              <DealerShipmentRoutesSection
+                activeDayId={activeShipmentDayId}
+                routes={cityShipmentRoutesForDay}
+                cityOptions={cityOptions}
+                canEdit={canMutateRoute}
+                activeRouteId={shipmentRouteCityFilter?.routeName ?? null}
+                routeClientCount={(route) => {
+                  const lc = (s: string) => s.trim().toLowerCase();
+                  const targets = new Set(route.cities.map(lc));
+                  return rowsForRoutePlanning.filter((r) => {
+                    const c = lc(r.city);
+                    return targets.has(c) && getDealerShipmentDays(r).includes(activeShipmentDayId);
+                  }).length;
+                }}
+                onSave={(input) => {
+                  void upsertShipmentRouteAsync(profile.personaUserId, me.id, activeShipmentDayId, input).then(
+                    () => setCityRouteDefsBump((n) => n + 1),
+                  );
+                }}
+                onRemove={(routeId) => {
+                  void removeShipmentRouteAsync(profile.personaUserId, me.id, activeShipmentDayId, routeId).then(
+                    () => setCityRouteDefsBump((n) => n + 1),
+                  );
+                }}
+                onApplyRoute={(route) => handleShowRouteClients("slot1", route.cities)}
+                onClearRoute={clearShipmentRouteCityFilter}
+              />
+            ) : null}
           </div>
         ) : null}
         {canShowBulkDeleteEntry && showClientShipmentAndSegments ? (

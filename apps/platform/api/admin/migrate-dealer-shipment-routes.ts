@@ -1,0 +1,68 @@
+/**
+ * Admin: DDL маршрутов отгрузки на Neon и Yandex (Промт 114).
+ * POST /api/admin/migrate-dealer-shipment-routes
+ */
+
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import type { VercelRequest, VercelResponse } from "@vercel/node";
+import {
+  enforceCsrfOrigin,
+  getPool,
+  resolveCurrentUser,
+  sendJson,
+  vercelHeaders,
+} from "../../shared/admin/admin-auth.js";
+import { isDualMigrateSuccess, runOnNeon, runOnYandex } from "../../shared/dual-db-migrate.js";
+import { splitSqlStatements } from "../../server/db-migrate/restore-yandex.js";
+
+const here = dirname(fileURLToPath(import.meta.url));
+const ddlPath = join(here, "..", "..", "server", "migrations", "2026_06_01_dealer_shipment_routes.sql");
+const ddlSql = readFileSync(ddlPath, "utf8");
+const STMTS = splitSqlStatements(ddlSql);
+const EXPECTED_TABLES = ["dealer_shipment_routes"];
+
+export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
+  try {
+    if (req.method !== "POST") {
+      sendJson(res, 405, { success: false, code: "METHOD_NOT_ALLOWED", message: "Только POST." });
+      return;
+    }
+    if (!enforceCsrfOrigin(req)) {
+      sendJson(res, 403, { success: false, code: "CSRF_REJECTED", message: "Недопустимый источник запроса." });
+      return;
+    }
+
+    const pool = getPool();
+    if (!pool) {
+      sendJson(res, 503, { success: false, code: "DB_UNAVAILABLE", message: "База данных недоступна." });
+      return;
+    }
+
+    const me = await resolveCurrentUser(pool, vercelHeaders(req));
+    if (!me) {
+      sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+      return;
+    }
+    if (me.role !== "admin") {
+      sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Только для администратора." });
+      return;
+    }
+
+    const neonRes = await runOnNeon(STMTS, EXPECTED_TABLES);
+    const yandexRes = await runOnYandex(STMTS, EXPECTED_TABLES);
+    const ok = isDualMigrateSuccess(neonRes, yandexRes, EXPECTED_TABLES);
+
+    sendJson(res, ok ? 200 : 500, {
+      success: ok,
+      neon: neonRes,
+      yandex: yandexRes,
+      expectedTables: EXPECTED_TABLES,
+    });
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    console.error("[migrate-dealer-shipment-routes] unhandled", m);
+    sendJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: m });
+  }
+}

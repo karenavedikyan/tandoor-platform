@@ -1,6 +1,6 @@
 /**
  * Комментарии по торговой точке.
- * Чтение: Postgres (кеш) → fallback localStorage. Запись: LS + API.
+ * Чтение: Postgres (кеш) → fallback localStorage. Запись: LS + awaited API (Промт 114).
  */
 
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
@@ -8,6 +8,7 @@ import { canEditClientNextStep } from "@/lib/client-next-step-data";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { apiCreateComment } from "@/lib/client-comments-api";
 import { refreshDbCommentsForClient, resolveTradePointComments } from "@/lib/client-comments-db-cache";
+import { enqueuePendingSync, makePendingId } from "@/lib/overrides-pending-sync";
 
 export const TRADE_POINT_COMMENTS_STORAGE_KEY = "tandoor-trade-point-comments-v1";
 export const TRADE_POINT_COMMENTS_EVENT = "tandoor-trade-point-comments-changed";
@@ -68,11 +69,11 @@ export function canEditTradePointComments(profile: ReleaseDemoProfile, dealer: D
   return canEditClientNextStep(profile, dealer);
 }
 
-export function addTradePointComment(
+export async function addTradePointComment(
   dealerId: string,
   tradePointId: string,
   payload: { body: string; createdBy: string; createdByName: string },
-): void {
+): Promise<void> {
   const body = payload.body.trim();
   if (!body) return;
   const state = loadTradePointCommentsState();
@@ -89,14 +90,22 @@ export function addTradePointComment(
   state.commentsByTradePoint[key] = [entry, ...prev].slice(0, 80);
   saveTradePointCommentsState(state);
 
-  void apiCreateComment({
+  const apiBody = {
     clientId: dealerId,
-    scope: "trade_point",
+    scope: "trade_point" as const,
     scopeRef: tradePointId,
     body,
     createdByUserId: payload.createdBy,
     createdByName: payload.createdByName,
-  }).then((r) => {
-    if (r.ok) void refreshDbCommentsForClient(dealerId);
+  };
+  const r = await apiCreateComment(apiBody);
+  if (r.ok) {
+    await refreshDbCommentsForClient(dealerId);
+    return;
+  }
+  enqueuePendingSync({
+    id: makePendingId("client-comments-create", optimisticId),
+    kind: "client-comments-create",
+    payload: { ...apiBody, optimisticId, dealerId, tradePointId },
   });
 }

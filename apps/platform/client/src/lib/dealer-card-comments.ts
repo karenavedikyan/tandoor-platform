@@ -1,6 +1,6 @@
 /**
  * Комментарии по карточке клиента.
- * Чтение: Postgres (кеш) → fallback localStorage. Запись: LS + API.
+ * Чтение: Postgres (кеш) → fallback localStorage. Запись: LS + awaited API (Промт 114).
  */
 
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
@@ -8,6 +8,7 @@ import { canEditClientNextStep } from "@/lib/client-next-step-data";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { apiCreateComment } from "@/lib/client-comments-api";
 import { refreshDbCommentsForClient, resolveDealerCommentsForClient } from "@/lib/client-comments-db-cache";
+import { enqueuePendingSync, makePendingId } from "@/lib/overrides-pending-sync";
 
 export const DEALER_CARD_COMMENTS_STORAGE_KEY = "tandoor-dealer-card-comments-v1";
 export const DEALER_CARD_COMMENTS_EVENT = "tandoor-dealer-card-comments-changed";
@@ -73,7 +74,7 @@ function typeTitle(t: DealerCardCommentType): string {
   return "Комментарий по конкурентам";
 }
 
-export function addDealerComment(
+export async function addDealerComment(
   dealerId: string,
   payload: {
     type: DealerCardCommentType;
@@ -81,7 +82,7 @@ export function addDealerComment(
     createdBy: string;
     createdByName: string;
   },
-): void {
+): Promise<void> {
   const body = payload.body.trim();
   if (!body) return;
   const state = loadDealerCardCommentsState();
@@ -98,15 +99,23 @@ export function addDealerComment(
   state.commentsByDealer[dealerId] = [entry, ...prev].slice(0, 120);
   saveDealerCardCommentsState(state);
 
-  void apiCreateComment({
+  const apiBody = {
     clientId: dealerId,
-    scope: "dealer",
+    scope: "dealer" as const,
     type: payload.type,
     body,
     createdByUserId: payload.createdBy,
     createdByName: payload.createdByName,
-  }).then((r) => {
-    if (r.ok) void refreshDbCommentsForClient(dealerId);
+  };
+  const r = await apiCreateComment(apiBody);
+  if (r.ok) {
+    await refreshDbCommentsForClient(dealerId);
+    return;
+  }
+  enqueuePendingSync({
+    id: makePendingId("client-comments-create", optimisticId),
+    kind: "client-comments-create",
+    payload: { ...apiBody, optimisticId, dealerId },
   });
 }
 
@@ -119,8 +128,8 @@ export function getDealerCommentsHistoryEvents(dealerId: string, state?: DealerC
 }[] {
   return getDealerComments(dealerId, state).map((c) => ({
     id: c.id,
+    meta: `${formatMetaRu(c.createdAt, c.createdByName)} · ${typeTitle(c.type)}`,
+    body: c.body,
     at: c.createdAt,
-    meta: formatMetaRu(c.createdAt, c.createdByName),
-    body: `${typeTitle(c.type)}\n${c.body}`,
   }));
 }

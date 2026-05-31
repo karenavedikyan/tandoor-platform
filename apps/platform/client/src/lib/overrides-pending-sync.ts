@@ -11,7 +11,10 @@ export type PendingSyncKind =
   | "dealer-untrash"
   | "tp-trash"
   | "tp-untrash"
-  | "manual-dealer";
+  | "manual-dealer"
+  | "shipment-routes-upsert"
+  | "shipment-routes-delete"
+  | "client-comments-create";
 
 export type PendingSyncItem = {
   id: string;

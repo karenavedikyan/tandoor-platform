@@ -27,6 +27,7 @@ const dbTpTrainingById: Record<string, TradePointTrainingRow> = {};
 const dbManualDealerPayloads: Record<string, Record<string, unknown>> = {};
 const dbDealerOverridesById: Record<string, DealerOverrideRow> = {};
 const dbTradePointOverridesById: Record<string, TradePointOverrideRow> = {};
+const dbUnloadingOrderByDealerId: Record<string, number> = {};
 
 function bumpRuntimeVersion(): void {
   runtimeVersion += 1;
@@ -137,6 +138,7 @@ export function applyDealerOverridesRuntime(
   for (const k of Object.keys(dbDealerTrainingById)) delete dbDealerTrainingById[k];
   for (const k of Object.keys(dbManualDealerPayloads)) delete dbManualDealerPayloads[k];
   for (const k of Object.keys(dbDealerOverridesById)) delete dbDealerOverridesById[k];
+  for (const k of Object.keys(dbUnloadingOrderByDealerId)) delete dbUnloadingOrderByDealerId[k];
 
   for (const row of overrides) {
     dbDealerOverridesById[row.dealer_id] = row;
@@ -144,6 +146,10 @@ export function applyDealerOverridesRuntime(
     if (tr) dbTrashedDealersById[row.dealer_id] = tr;
     if (row.client_category) {
       dbClientCategoryByDealerId[row.dealer_id] = normalizeClientCategory(row.client_category) as ClientCategoryId;
+    }
+    if (row.unloading_order) {
+      const n = Number(row.unloading_order);
+      if (Number.isFinite(n) && n > 0) dbUnloadingOrderByDealerId[row.dealer_id] = Math.floor(n);
     }
   }
   for (const t of training) dbDealerTrainingById[t.dealer_id] = t;
@@ -192,6 +198,36 @@ export function patchDealerCategoryRuntime(dealerId: string, category: ClientCat
 
 export function getDbClientCategoryOverride(dealerId: string): ClientCategoryId | undefined {
   return dbClientCategoryByDealerId[dealerId];
+}
+
+export function getDbUnloadingOrderOverride(dealerId: string): number | undefined {
+  return dbUnloadingOrderByDealerId[dealerId];
+}
+
+export function patchDealerUnloadingOrderRuntime(dealerId: string, order: number | null): void {
+  if (order != null && order > 0) dbUnloadingOrderByDealerId[dealerId] = Math.floor(order);
+  else delete dbUnloadingOrderByDealerId[dealerId];
+  const row = dbDealerOverridesById[dealerId];
+  if (row) row.unloading_order = order != null && order > 0 ? String(Math.floor(order)) : null;
+  bumpRuntimeVersion();
+}
+
+export function useDealerUnloadingOrder(dealerId: string | undefined): number | null {
+  const version = useOverridesRuntimeVersion();
+  void version;
+  if (!dealerId) return null;
+  const fromDb = getDbUnloadingOrderOverride(dealerId);
+  if (fromDb != null) return fromDb;
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem("tandoor-dealer-unloading-order-v1");
+    if (!raw) return null;
+    const p = JSON.parse(raw) as { orderByDealer?: Record<string, number> };
+    const v = p.orderByDealer?.[dealerId];
+    return typeof v === "number" && v > 0 ? Math.floor(v) : null;
+  } catch {
+    return null;
+  }
 }
 
 export function getDbDealerTraining(dealerId: string): DealerTrainingRow | undefined {
