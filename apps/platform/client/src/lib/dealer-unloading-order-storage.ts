@@ -2,9 +2,7 @@
  * Порядок выгрузки клиента (localStorage-кеш + Postgres, Промт 113).
  */
 
-import { upsertDealerOverrideStrict } from "@/lib/dealer-overrides-api";
-import { handleOverridesStrictResult } from "@/lib/overrides-save-feedback";
-import { makePendingId } from "@/lib/overrides-pending-sync";
+import { saveDealerField } from "@/lib/use-dealer-field-saver";
 
 export const DEALER_UNLOADING_ORDER_STORAGE_KEY = "tandoor-dealer-unloading-order-v1";
 export const DEALER_UNLOADING_ORDER_EVENT = "tandoor-dealer-unloading-order-changed";
@@ -103,14 +101,10 @@ export function setDealerUnloadingOrder(
 
   saveState({ orderByDealer, historyByDealer });
 
-  const fields = { unloading_order: next != null && next > 0 ? String(Math.floor(next)) : null };
-  void upsertDealerOverrideStrict(dealerId, fields).then((result) => {
-    handleOverridesStrictResult(result, {
-      pendingId: makePendingId("dealer-upsert", dealerId),
-      pendingKind: "dealer-upsert",
-      pendingPayload: { dealer_id: dealerId, fields },
-      fieldLabel: "Порядок выгрузки",
-    });
+  const value = next != null && next > 0 ? String(Math.floor(next)) : null;
+  void saveDealerField(dealerId, "unloading_order", value, {
+    fieldLabel: "Порядок выгрузки",
+    source: "dealer-unloading-order-storage",
   });
 }
 

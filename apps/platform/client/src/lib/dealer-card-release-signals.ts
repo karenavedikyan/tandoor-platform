@@ -6,9 +6,7 @@
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import type { ShowcaseCategoryId } from "@/lib/showcase-distribution-data";
 import { isManualActualizationDealerId } from "@/lib/client-base-actualization-stable-ids";
-import { setDealerTrainingStrict } from "@/lib/dealer-overrides-api";
-import { handleOverridesStrictResult } from "@/lib/overrides-save-feedback";
-import { makePendingId } from "@/lib/overrides-pending-sync";
+import { saveDealerTrainingField } from "@/lib/use-dealer-field-saver";
 
 export function charSumId(id: string): number {
   let sum = 0;
@@ -249,15 +247,11 @@ export function setNewStaffTrainingNeeded(dealerId: string, next: boolean, byLab
   };
   saveDealerTrainingFlagsStorage(storage);
 
-  const payload = { dealer_id: dealerId, needs_new_employees_training: next };
-  void setDealerTrainingStrict(dealerId, { needs_new_employees_training: next }).then((result) => {
-    handleOverridesStrictResult(result, {
-      pendingId: makePendingId("dealer-training", `${dealerId}:needs-new`),
-      pendingKind: "dealer-training",
-      pendingPayload: payload,
-      fieldLabel: "Обучение новых сотрудников",
-    });
-  });
+  void saveDealerTrainingField(
+    dealerId,
+    { needs_new_employees_training: next },
+    { fieldLabel: "Обучение новых сотрудников", source: "dealer-card-release-signals" },
+  );
 }
 
 export type TrainingFlagHistoryEvent = {

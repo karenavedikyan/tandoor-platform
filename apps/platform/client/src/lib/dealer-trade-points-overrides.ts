@@ -6,9 +6,7 @@ import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import { getDealerById, getDealerRegionalManagerDisplay, normalizeTradePointId } from "@/lib/dealer-base-mock-data";
 import { isManualActualizationDealerId } from "@/lib/client-base-actualization-stable-ids";
 import { canEditClientNextStep } from "@/lib/client-next-step-data";
-import { upsertTradePointOverrideStrict } from "@/lib/trade-point-overrides-api";
-import { handleOverridesStrictResult } from "@/lib/overrides-save-feedback";
-import { makePendingId } from "@/lib/overrides-pending-sync";
+import { saveTradePointFields } from "@/lib/use-dealer-field-saver";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
 
@@ -409,14 +407,14 @@ function resolveTradePointDisplayName(dealerId: string, tradePointId: string, st
   return merged.find((m) => m.point.id === tradePointId)?.point.name ?? tradePointId;
 }
 
-export function updateTradePoint(
+export async function updateTradePoint(
   dealerId: string,
   tradePointId: string,
   patch: Partial<
     Omit<TradePointEditRecord, "updatedAt" | "updatedBy" | "updatedByName" | "isArchived">
   > & { isArchived?: boolean },
   profile: ReleaseDemoProfile,
-): void {
+): Promise<void> {
   const state = loadDealerTradePointsState();
   const label = patch.name?.trim() || resolveTradePointDisplayName(dealerId, tradePointId, state);
   const key = tradePointKey(dealerId, tradePointId);
@@ -450,13 +448,9 @@ export function updateTradePoint(
     is_main_warehouse: next.hasMainWarehouse ?? null,
     is_hardware_warehouse: next.hasHardwareWarehouse ?? null,
   };
-  void upsertTradePointOverrideStrict(tradePointId, fields, dealerId).then((result) => {
-    handleOverridesStrictResult(result, {
-      pendingId: makePendingId("tp-upsert", tradePointId),
-      pendingKind: "tp-upsert",
-      pendingPayload: { tp_id: tradePointId, dealer_id: dealerId, fields },
-      fieldLabel: "Торговая точка",
-    });
+  await saveTradePointFields(tradePointId, fields, dealerId, {
+    fieldLabel: "Торговая точка",
+    source: "dealer-trade-points-overrides",
   });
 }
 

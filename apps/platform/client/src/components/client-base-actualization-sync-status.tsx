@@ -9,6 +9,7 @@ import { formatDisplayDateTime } from "@/lib/format-display-date";
 import { cn } from "@/lib/utils";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { DealerTpOverridesSyncStatus } from "@/components/dealer-tp-overrides-sync-status";
+import { isStrictCoveredField } from "@/lib/use-dealer-field-saver";
 
 export type ClientBaseActualizationSyncStatusProps = {
   syncStatus: ActualizationSyncStatus;
@@ -21,6 +22,8 @@ export type ClientBaseActualizationSyncStatusProps = {
   scope?: "actualization-blob" | "dealer-tp-overrides";
   dealerId?: string;
   tpId?: string;
+  /** Если поле покрыто strict-каналом — не показывать ложный «Работает локально». */
+  field?: string;
 };
 
 function statusLabel(props: ClientBaseActualizationSyncStatusProps): string {
@@ -49,7 +52,9 @@ function storageModeShort(meta: ActualizationApiMeta): string | null {
 
 export function ClientBaseActualizationSyncStatus(props: ClientBaseActualizationSyncStatusProps): ReactElement {
   const scope = props.scope ?? "actualization-blob";
-  if (scope === "dealer-tp-overrides") {
+  const useOverridesStatus =
+    scope === "dealer-tp-overrides" || (props.field != null && isStrictCoveredField(props.field));
+  if (useOverridesStatus) {
     return (
       <DealerTpOverridesSyncStatus
         dealerId={props.dealerId}

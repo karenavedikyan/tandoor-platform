@@ -4,9 +4,7 @@
 
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import { getDealerRegionalManagerDisplay } from "@/lib/dealer-base-mock-data";
-import { upsertDealerOverrideStrict } from "@/lib/dealer-overrides-api";
-import { handleOverridesStrictResult } from "@/lib/overrides-save-feedback";
-import { makePendingId } from "@/lib/overrides-pending-sync";
+import { saveDealerFields } from "@/lib/use-dealer-field-saver";
 import { getSalesUserById, SALES_USERS } from "@/lib/sales-control-data";
 
 export const DEALER_REGIONAL_MANAGER_OVERRIDES_STORAGE_KEY = "tandoor-dealer-regional-manager-overrides-v1";
@@ -165,13 +163,9 @@ export function setDealerRegionalManagerOverride(
     regional_manager_id: rm?.userId ?? null,
     regional_manager_name: rm ? getSalesUserById(rm.userId)?.name?.trim() ?? rm.userId : null,
   };
-  void upsertDealerOverrideStrict(dealerId, fields).then((result) => {
-    handleOverridesStrictResult(result, {
-      pendingId: makePendingId("dealer-upsert", dealerId),
-      pendingKind: "dealer-upsert",
-      pendingPayload: { dealer_id: dealerId, fields },
-      fieldLabel: "Региональный менеджер",
-    });
+  void saveDealerFields(dealerId, fields, {
+    fieldLabel: "Региональный менеджер",
+    source: "dealer-regional-manager-overrides",
   });
 }
 

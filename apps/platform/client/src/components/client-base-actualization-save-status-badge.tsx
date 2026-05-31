@@ -8,6 +8,7 @@ import {
   useActualizationSaveStatus,
 } from "@/lib/client-base-actualization-save-status";
 import { DealerTpOverridesSyncStatus } from "@/components/dealer-tp-overrides-sync-status";
+import { isStrictCoveredField } from "@/lib/use-dealer-field-saver";
 
 function relativeLabel(iso: string | null): string {
   if (!iso) return "нет даты";
@@ -26,10 +27,13 @@ export type SaveStatusBadgeProps = {
   scope?: "actualization-blob" | "dealer-tp-overrides";
   dealerId?: string;
   tpId?: string;
+  field?: string;
 };
 
 export function SaveStatusBadge(props: SaveStatusBadgeProps = {}): ReactElement {
-  if (props.scope === "dealer-tp-overrides") {
+  const useOverridesStatus =
+    props.scope === "dealer-tp-overrides" || (props.field != null && isStrictCoveredField(props.field));
+  if (useOverridesStatus) {
     return <DealerTpOverridesSyncStatus dealerId={props.dealerId} tpId={props.tpId} compact />;
   }
   const status = useActualizationSaveStatus();
