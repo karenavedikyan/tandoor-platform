@@ -113,7 +113,7 @@ import {
   SHOWCASE_MATRIX_CHANGED_EVENT,
 } from "@/lib/trade-point-showcase-matrix-storage";
 
-const SECTION_IDS = ["overview", "training", "matrix", "showcase", "distribution", "tasks", "history", "photos"] as const;
+const SECTION_IDS = ["overview", "training", "matrix", "showcase", "distribution", "tasks", "comments", "history", "photos"] as const;
 type SectionId = (typeof SECTION_IDS)[number];
 
 const SECTION_DOM_IDS: Record<SectionId, string> = {
@@ -123,6 +123,7 @@ const SECTION_DOM_IDS: Record<SectionId, string> = {
   showcase: "section-trade-point-showcase-matrix",
   distribution: "section-trade-point-showcase-distribution",
   tasks: "section-trade-point-showcase-open-tasks",
+  comments: "section-trade-point-comments",
   history: "trade-point-section-history",
   photos: "trade-point-section-photos",
 };
@@ -134,6 +135,7 @@ const SECTION_LABELS: Record<SectionId, string> = {
   showcase: "Витрина",
   distribution: "Дистрибуция",
   tasks: "Задачи по витрине",
+  comments: "Комментарии",
   history: "История",
   photos: "Фото",
 };
@@ -145,6 +147,7 @@ const NAV_TEST_IDS: Record<SectionId, string> = {
   showcase: "trade-point-section-nav-showcase",
   distribution: "trade-point-section-nav-distribution",
   tasks: "trade-point-section-nav-tasks",
+  comments: "trade-point-section-nav-comments",
   history: "trade-point-section-nav-history",
   photos: "trade-point-section-nav-photos",
 };
@@ -1406,55 +1409,16 @@ function TradePointDetailContent({
             compact
           />
 
-          <section id={SECTION_DOM_IDS.history} data-testid="section-trade-point-history" className="scroll-mt-28 space-y-4 sm:scroll-mt-32">
-            <SectionTitle subtitle="Визиты и изменения по точке.">История</SectionTitle>
-            <SurfaceCard className="mt-3">
-              <CardContent className="divide-y divide-border pt-2">
-                {point.activityHistory.map((ev, idx) => (
-                  <div
-                    key={`${point.id}-act-${idx}`}
-                    className="flex flex-col gap-1 py-4 first:pt-4 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <p className="text-sm font-medium text-foreground">{ev.text}</p>
-                    <time className="shrink-0 text-xs tabular-nums text-muted-foreground">{ev.date}</time>
-                  </div>
-                ))}
-                {tpMatrixHistory.map((ev) => (
-                  <div
-                    key={ev.id}
-                    data-testid={`row-trade-point-showcase-matrix-history-${ev.id}`}
-                    className="flex flex-col gap-1 py-4 sm:flex-row sm:items-start sm:justify-between"
-                  >
-                    <p className="min-w-0 text-sm font-medium text-foreground">{ev.body}</p>
-                    <p className="shrink-0 text-xs tabular-nums text-muted-foreground sm:text-right">{ev.meta}</p>
-                  </div>
-                ))}
-                {tpContactHistory.map((ev) => (
-                  <div
-                    key={ev.id}
-                    data-testid={`row-trade-point-contact-history-${ev.id}`}
-                    className="flex flex-col gap-1 py-4 sm:flex-row sm:items-start sm:justify-between"
-                  >
-                    <p className="min-w-0 text-sm font-medium text-foreground">{ev.body}</p>
-                    <p className="shrink-0 text-xs tabular-nums text-muted-foreground sm:text-right">{ev.meta}</p>
-                  </div>
-                ))}
-              </CardContent>
-            </SurfaceCard>
-            <SurfaceCard>
-              <CardContent className="pt-5">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Комментарии и внимание</p>
-                <p className="mt-2 text-sm leading-relaxed text-foreground">{point.issues}</p>
-              </CardContent>
-            </SurfaceCard>
-          </section>
-
-          <section data-testid="section-trade-point-comments" className="scroll-mt-28 space-y-3 sm:scroll-mt-32">
-            <SectionTitle subtitle="Сохраняются в браузере.">Комментарии по точке</SectionTitle>
+          <section
+            id={SECTION_DOM_IDS.comments}
+            data-testid="section-trade-point-comments"
+            className="scroll-mt-28 space-y-3 sm:scroll-mt-32"
+          >
+            <SectionTitle subtitle="Сохраняются в базе и отображаются в истории точки.">Комментарии по точке</SectionTitle>
             <SurfaceCard className="mt-3">
               <CardContent className="space-y-3 p-4">
                 {canEditTpComments ? (
-                  <div className="space-y-2">
+                  <div className="space-y-2" data-testid="section-trade-point-comment-form">
                     <Label htmlFor="trade-point-comment-input" className="text-xs text-muted-foreground">
                       Комментарий по торговой точке
                     </Label>
@@ -1506,6 +1470,49 @@ function TradePointDetailContent({
                     })
                   )}
                 </div>
+              </CardContent>
+            </SurfaceCard>
+          </section>
+
+          <section id={SECTION_DOM_IDS.history} data-testid="section-trade-point-history" className="scroll-mt-28 space-y-4 sm:scroll-mt-32">
+            <SectionTitle subtitle="Визиты и изменения по точке.">История</SectionTitle>
+            <SurfaceCard className="mt-3">
+              <CardContent className="divide-y divide-border pt-2">
+                {point.activityHistory.map((ev, idx) => (
+                  <div
+                    key={`${point.id}-act-${idx}`}
+                    className="flex flex-col gap-1 py-4 first:pt-4 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <p className="text-sm font-medium text-foreground">{ev.text}</p>
+                    <time className="shrink-0 text-xs tabular-nums text-muted-foreground">{ev.date}</time>
+                  </div>
+                ))}
+                {tpMatrixHistory.map((ev) => (
+                  <div
+                    key={ev.id}
+                    data-testid={`row-trade-point-showcase-matrix-history-${ev.id}`}
+                    className="flex flex-col gap-1 py-4 sm:flex-row sm:items-start sm:justify-between"
+                  >
+                    <p className="min-w-0 text-sm font-medium text-foreground">{ev.body}</p>
+                    <p className="shrink-0 text-xs tabular-nums text-muted-foreground sm:text-right">{ev.meta}</p>
+                  </div>
+                ))}
+                {tpContactHistory.map((ev) => (
+                  <div
+                    key={ev.id}
+                    data-testid={`row-trade-point-contact-history-${ev.id}`}
+                    className="flex flex-col gap-1 py-4 sm:flex-row sm:items-start sm:justify-between"
+                  >
+                    <p className="min-w-0 text-sm font-medium text-foreground">{ev.body}</p>
+                    <p className="shrink-0 text-xs tabular-nums text-muted-foreground sm:text-right">{ev.meta}</p>
+                  </div>
+                ))}
+              </CardContent>
+            </SurfaceCard>
+            <SurfaceCard>
+              <CardContent className="pt-5">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Комментарии и внимание</p>
+                <p className="mt-2 text-sm leading-relaxed text-foreground">{point.issues}</p>
               </CardContent>
             </SurfaceCard>
           </section>

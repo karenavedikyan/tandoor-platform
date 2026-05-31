@@ -65,6 +65,12 @@ import { useDealerTpOverridesHydration } from "@/hooks/use-dealer-tp-overrides-h
 import { useOverridesRuntimeVersion } from "@/lib/dealer-overrides-runtime";
 import { resolveEffectiveClientCategory } from "@/lib/effective-client-category";
 import { DealerClientNextStepSection } from "@/components/dealer-client-next-step-section";
+import { DealerQuickCommentsSection } from "@/components/dealer-quick-comments-section";
+import {
+  canEditDealerCardComments,
+  DEALER_CARD_COMMENTS_EVENT,
+  getDealerComments,
+} from "@/lib/dealer-card-comments";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { displayUserName } from "@/lib/auth-api";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
@@ -127,6 +133,7 @@ const CLEAN_CARD_SECTION_IDS = [
   "photos",
   "tps",
   "next",
+  "comments",
 ] as const;
 
 function cleanCardSectionsLsKey(dealerId: string): string {
@@ -285,6 +292,7 @@ export function DealerManualActualizationPage(props: {
   const readOnlyFromCtx = useDealerCardReadOnly();
   const readOnly = readOnlyProp === true || readOnlyFromCtx;
   const canEdit = canEditDealerDuringActualization(profile, row, user?.role) && !readOnly;
+  const canEditCardComments = canEditDealerCardComments(profile, row, user?.role);
   const canArchive = canArchiveDealerDuringActualization(profile, row, user?.role);
   const isDealerArchived = Boolean(actx.state.archivedDealersById[baseRow.id]);
   const isDealerTrashed = Boolean(actx.state.trashedDealersById?.[baseRow.id]);
@@ -360,6 +368,13 @@ export function DealerManualActualizationPage(props: {
     const fn = () => setNextStepTick((n) => n + 1);
     window.addEventListener(CLIENT_NEXT_STEP_CHANGED_EVENT, fn);
     return () => window.removeEventListener(CLIENT_NEXT_STEP_CHANGED_EVENT, fn);
+  }, []);
+
+  const [commentsMetaBump, setCommentsMetaBump] = useState(0);
+  useEffect(() => {
+    const fn = () => setCommentsMetaBump((n) => n + 1);
+    window.addEventListener(DEALER_CARD_COMMENTS_EVENT, fn);
+    return () => window.removeEventListener(DEALER_CARD_COMMENTS_EVENT, fn);
   }, []);
 
   const activeLegals = useMemo(
@@ -441,6 +456,17 @@ export function DealerManualActualizationPage(props: {
         }`
       : "Следующий шаг не зафиксирован";
 
+    void commentsMetaBump;
+    const dealerComments = getDealerComments(baseRow.id);
+    const commentsCount = dealerComments.length;
+    const commentsSummary =
+      commentsCount === 0
+        ? canEditCardComments
+          ? "Комментариев пока нет — добавьте в ленту, по проблеме или конкурентам"
+          : "Комментариев пока нет"
+        : `Комментариев: ${commentsCount}`;
+    const commentsStatus: SectionStatusKind = commentsCount === 0 ? (canEditCardComments ? "partial" : "empty") : "partial";
+
     return {
       passport: { summary: passportSummary, status: passportStatus },
       commercial: { summary: commercialSummary, status: commercialStatus },
@@ -451,6 +477,7 @@ export function DealerManualActualizationPage(props: {
       photos: { summary: photosSummary, status: photosStatus },
       tps: { summary: tradePointsSummary, status: tradePointsStatus },
       next: { summary: nextSummary, status: nextStatus },
+      comments: { summary: commentsSummary, status: commentsStatus },
     };
   }, [
     activeLegals,
@@ -468,6 +495,8 @@ export function DealerManualActualizationPage(props: {
     tier,
     tps.length,
     effectiveCategory,
+    canEditCardComments,
+    commentsMetaBump,
   ]);
 
   const allSectionsExpanded =
@@ -788,6 +817,30 @@ export function DealerManualActualizationPage(props: {
             </div>
           </AccordionContent>
         </AccordionItem>
+
+        {canEditCardComments ? (
+          <AccordionItem
+            value="comments"
+            data-testid="section-dealer-comments"
+            className="overflow-hidden rounded-lg border border-border/50 bg-card !border-b-0 shadow-sm"
+          >
+            <AccordionSectionTrigger
+              title="Комментарии"
+              summary={sectionMeta.comments.summary}
+              status={sectionMeta.comments.status}
+            />
+            <AccordionContent className="border-t border-border/35 px-3 pb-2.5 pt-1.5 sm:px-3.5">
+              <DealerQuickCommentsSection
+                row={row}
+                profile={profile}
+                authRole={user?.role}
+                actorUserId={user?.id ?? profile.personaUserId}
+                actorLabel={user ? displayUserName(user) : userLabelFromProfile(profile)}
+                embedded
+              />
+            </AccordionContent>
+          </AccordionItem>
+        ) : null}
         </Accordion>
       </div>
 
