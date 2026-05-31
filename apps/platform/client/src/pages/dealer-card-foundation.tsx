@@ -135,6 +135,7 @@ import {
 } from "@/lib/dealer-overrides-api";
 import { handleOverridesStrictResult } from "@/lib/overrides-save-feedback";
 import { makePendingId } from "@/lib/overrides-pending-sync";
+import { pushOverridesTrace } from "@/lib/overrides-trace-log";
 import { isDealerTrashedInRuntime, patchDealerCategoryRuntime, patchDealerTrashRuntime } from "@/lib/dealer-overrides-runtime";
 import {
   DEALER_TRADE_POINTS_EVENT,
@@ -1403,6 +1404,21 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                           onValueChange={(v) => {
                             void (async () => {
                               const next = v as ClientCategoryId;
+                              pushOverridesTrace({
+                                fn: "dealer-card.client_category",
+                                stage: "ui_change_started",
+                                dealerId: row.id,
+                                field: "client_category",
+                                newValue: next,
+                              });
+                              if (!profile?.personaUserId) {
+                                pushOverridesTrace({
+                                  fn: "dealer-card.client_category",
+                                  stage: "early_return",
+                                  dealerId: row.id,
+                                  reason: "missing personaUserId",
+                                });
+                              }
                               const now = new Date().toISOString();
                               const act = actx.state;
                               const prevOv = act.dealerOverridesById[row.id];
@@ -1438,10 +1454,27 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                                   },
                                 };
                                 const r = await actx.persist((prev) => mergeActualizationState(prev, patch));
-                                if (!r.success) patchDealerCategoryRuntime(row.id, null);
+                                pushOverridesTrace({
+                                  fn: "dealer-card.client_category",
+                                  stage: "old_channel_result",
+                                  dealerId: row.id,
+                                  success: r.success,
+                                  error: r.success ? undefined : r.syncStatus,
+                                });
                               }
                               const categoryFields = { client_category: next };
+                              pushOverridesTrace({
+                                fn: "dealer-card.client_category",
+                                stage: "before_strict_call",
+                                dealerId: row.id,
+                              });
                               const result = await upsertDealerOverrideStrict(row.id, categoryFields);
+                              pushOverridesTrace({
+                                fn: "dealer-card.client_category",
+                                stage: "after_strict_call",
+                                dealerId: row.id,
+                                result: result.ok ? { ok: true } : { ok: false, message: result.message, code: result.code },
+                              });
                               if (
                                 handleOverridesStrictResult(result, {
                                   pendingId: makePendingId("dealer-upsert", row.id),

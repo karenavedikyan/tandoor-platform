@@ -141,10 +141,12 @@ export function canAccessPathForUser(role: UserRole, path: string): boolean {
     p === "/admin/actualization/dedupe" ||
     p === "/admin/migration" ||
     p === "/admin/migrate-marketing-briefs" ||
-    p === "/admin/migrate-dealer-tp" ||
-    p === "/admin/sync-health"
+    p === "/admin/migrate-dealer-tp"
   ) {
     return role === "admin";
+  }
+  if (p === "/admin/sync-health") {
+    return role === "admin" || role === "director";
   }
   if (p === "/admin/tp-count-diag" || p === "/admin/counts-diag") {
     return role === "admin" || role === "director" || role === "rop";

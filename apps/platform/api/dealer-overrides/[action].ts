@@ -22,12 +22,19 @@ import {
   handleDealerOverridesUntrash,
   handleDealerOverridesUpsert,
 } from "../../shared/dealer-overrides-handlers.js";
+import {
+  isOverridesWriteAction,
+  withOverridesApiAccessLog,
+} from "../../shared/overrides-api-access-log.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
-  try {
-    const actionRaw = req.query.action;
-    const action = Array.isArray(actionRaw) ? String(actionRaw[0] ?? "") : String(actionRaw ?? "");
+  const actionRaw = req.query.action;
+  const action = Array.isArray(actionRaw) ? String(actionRaw[0] ?? "") : String(actionRaw ?? "");
+  const route = `/api/dealer-overrides/${action}`;
+  const method = req.method ?? "GET";
+  const isWrite = isOverridesWriteAction(action);
 
+  try {
     if (req.method !== "GET" && !enforceCsrfOrigin(req)) {
       sendJson(res, 403, { success: false, code: "CSRF_REJECTED", message: "Недопустимый источник запроса." });
       return;
@@ -51,37 +58,47 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
 
     const sessionUser = { id: me.id, role: me.role, status: me.status };
+    const body = req.body;
+
+    const runLogged = async (fn: () => Promise<void>): Promise<void> => {
+      await withOverridesApiAccessLog(
+        pool,
+        { route, method, actorUserId: me.id, body, isWrite },
+        res,
+        fn,
+      );
+    };
 
     if (action === "list" && req.method === "GET") {
-      await handleDealerOverridesList(req, res, pool, sessionUser);
+      await runLogged(() => handleDealerOverridesList(req, res, pool, sessionUser));
       return;
     }
     if (action === "get" && req.method === "GET") {
-      await handleDealerOverridesGet(req, res, pool, sessionUser);
+      await runLogged(() => handleDealerOverridesGet(req, res, pool, sessionUser));
       return;
     }
     if (action === "history" && req.method === "GET") {
-      await handleDealerOverridesHistory(req, res, pool, sessionUser);
+      await runLogged(() => handleDealerOverridesHistory(req, res, pool, sessionUser));
       return;
     }
     if (action === "upsert" && req.method === "POST") {
-      await handleDealerOverridesUpsert(req, res, pool, sessionUser);
+      await runLogged(() => handleDealerOverridesUpsert(req, res, pool, sessionUser));
       return;
     }
     if (action === "set-training" && req.method === "POST") {
-      await handleDealerOverridesSetTraining(req, res, pool, sessionUser);
+      await runLogged(() => handleDealerOverridesSetTraining(req, res, pool, sessionUser));
       return;
     }
     if (action === "trash" && req.method === "POST") {
-      await handleDealerOverridesTrash(req, res, pool, sessionUser);
+      await runLogged(() => handleDealerOverridesTrash(req, res, pool, sessionUser));
       return;
     }
     if (action === "untrash" && req.method === "POST") {
-      await handleDealerOverridesUntrash(req, res, pool, sessionUser);
+      await runLogged(() => handleDealerOverridesUntrash(req, res, pool, sessionUser));
       return;
     }
     if (action === "create-manual" && req.method === "POST") {
-      await handleDealerOverridesCreateManual(req, res, pool, sessionUser);
+      await runLogged(() => handleDealerOverridesCreateManual(req, res, pool, sessionUser));
       return;
     }
 

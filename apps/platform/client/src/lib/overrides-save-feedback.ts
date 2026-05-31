@@ -4,6 +4,7 @@
 
 import { toast } from "@/hooks/use-toast";
 import type { OverridesApiResult } from "@/lib/overrides-api-result";
+import { pushOverridesTrace } from "@/lib/overrides-trace-log";
 import {
   dequeuePendingSync,
   enqueuePendingSync,
@@ -32,6 +33,14 @@ export function handleOverridesStrictResult(
     dequeuePendingSync(opts.pendingId);
     return true;
   }
+  pushOverridesTrace({
+    fn: opts.pendingKind,
+    stage: "enqueued",
+    pendingId: opts.pendingId,
+    message: result.message,
+    status: result.status,
+    code: result.code,
+  });
   enqueuePendingSync({
     id: opts.pendingId,
     kind: opts.pendingKind,

@@ -26,10 +26,13 @@ const ddlPath = join(here, "..", "..", "server", "migrations", "2026_05_31_deale
 const ddlSql = readFileSync(ddlPath, "utf8");
 const writeErrorsPath = join(here, "..", "..", "server", "migrations", "2026_05_31_overrides_write_errors.sql");
 const writeErrorsSql = readFileSync(writeErrorsPath, "utf8");
+const accessLogPath = join(here, "..", "..", "server", "migrations", "2026_05_31_overrides_api_access_log.sql");
+const accessLogSql = readFileSync(accessLogPath, "utf8");
 const STMTS = [
   "CREATE EXTENSION IF NOT EXISTS pgcrypto",
   ...splitSqlStatements(ddlSql),
   ...splitSqlStatements(writeErrorsSql),
+  ...splitSqlStatements(accessLogSql),
 ];
 
 const EXPECTED_TABLES = [
@@ -41,6 +44,7 @@ const EXPECTED_TABLES = [
   "trade_point_override_events",
   "trade_point_training_state",
   "overrides_write_errors",
+  "overrides_api_access_log",
 ];
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
