@@ -20,12 +20,19 @@ import {
   handleTradePointOverridesUntrash,
   handleTradePointOverridesUpsert,
 } from "../../shared/trade-point-overrides-handlers.js";
+import {
+  isOverridesWriteAction,
+  withOverridesApiAccessLog,
+} from "../../shared/overrides-api-access-log.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
-  try {
-    const actionRaw = req.query.action;
-    const action = Array.isArray(actionRaw) ? String(actionRaw[0] ?? "") : String(actionRaw ?? "");
+  const actionRaw = req.query.action;
+  const action = Array.isArray(actionRaw) ? String(actionRaw[0] ?? "") : String(actionRaw ?? "");
+  const route = `/api/trade-point-overrides/${action}`;
+  const method = req.method ?? "GET";
+  const isWrite = isOverridesWriteAction(action);
 
+  try {
     if (req.method !== "GET" && !enforceCsrfOrigin(req)) {
       sendJson(res, 403, { success: false, code: "CSRF_REJECTED", message: "Недопустимый источник запроса." });
       return;
@@ -49,29 +56,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
 
     const sessionUser = { id: me.id, role: me.role, status: me.status };
+    const body = req.body;
+
+    const runLogged = async (fn: () => Promise<void>): Promise<void> => {
+      await withOverridesApiAccessLog(
+        pool,
+        { route, method, actorUserId: me.id, body, isWrite },
+        res,
+        fn,
+      );
+    };
 
     if (action === "list" && req.method === "GET") {
-      await handleTradePointOverridesList(req, res, pool, sessionUser);
+      await runLogged(() => handleTradePointOverridesList(req, res, pool, sessionUser));
       return;
     }
     if (action === "get" && req.method === "GET") {
-      await handleTradePointOverridesGet(req, res, pool, sessionUser);
+      await runLogged(() => handleTradePointOverridesGet(req, res, pool, sessionUser));
       return;
     }
     if (action === "upsert" && req.method === "POST") {
-      await handleTradePointOverridesUpsert(req, res, pool, sessionUser);
+      await runLogged(() => handleTradePointOverridesUpsert(req, res, pool, sessionUser));
       return;
     }
     if (action === "set-training" && req.method === "POST") {
-      await handleTradePointOverridesSetTraining(req, res, pool, sessionUser);
+      await runLogged(() => handleTradePointOverridesSetTraining(req, res, pool, sessionUser));
       return;
     }
     if (action === "trash" && req.method === "POST") {
-      await handleTradePointOverridesTrash(req, res, pool, sessionUser);
+      await runLogged(() => handleTradePointOverridesTrash(req, res, pool, sessionUser));
       return;
     }
     if (action === "untrash" && req.method === "POST") {
-      await handleTradePointOverridesUntrash(req, res, pool, sessionUser);
+      await runLogged(() => handleTradePointOverridesUntrash(req, res, pool, sessionUser));
       return;
     }
 
