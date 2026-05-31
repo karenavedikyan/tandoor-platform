@@ -54,6 +54,7 @@ import {
   saveManualDealerToDb,
 } from "@/lib/use-dealer-field-saver";
 import { DEALER_OVERRIDES_HYDRATED_EVENT, upsertDealerOverrideStrict } from "@/lib/dealer-overrides-api";
+import { hydrateDealerOverridesForDealer } from "@/lib/dealer-overrides-sync";
 import { getDbClientCategoryOverride } from "@/lib/dealer-overrides-runtime";
 import { getDealerUnloadingOrder } from "@/lib/dealer-unloading-order-storage";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
@@ -430,6 +431,19 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
   const logisticsSave = useSectionSaveFeedback();
   const contactsSave = useSectionSaveFeedback();
   const commercialSave = useSectionSaveFeedback();
+
+  const skipDialogHydrate =
+    passportSave.isDirty ||
+    passportSave.phase === "saving" ||
+    responsiblesSave.isDirty ||
+    responsiblesSave.phase === "saving" ||
+    logisticsSave.isDirty ||
+    logisticsSave.phase === "saving" ||
+    contactsSave.isDirty ||
+    contactsSave.phase === "saving" ||
+    commercialSave.isDirty ||
+    commercialSave.phase === "saving";
+
   const [name, setName] = useState("");
   const [inn, setInn] = useState("");
   const [city, setCity] = useState("");
@@ -460,7 +474,7 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
   const [external1c, setExternal1c] = useState("");
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || skipDialogHydrate) return;
     setName(baseRow.name ?? "");
     setInn(baseRow.actualizationInn ?? "");
     setCity(baseRow.city ?? "");
@@ -502,17 +516,18 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
     setCashbackTri(commercialTriFromBoolNull(effective.isCashbackClient));
     setCashbackComment((effective.cashbackComment ?? "").trim());
     setExternal1c((effective.external1cCode ?? "").trim());
-  }, [open, baseRow, state]);
+  }, [open, baseRow, state, skipDialogHydrate]);
 
   useEffect(() => {
     if (!open) return;
     const refreshFromDb = () => {
+      if (skipDialogHydrate) return;
       const dbCat = getDbClientCategoryOverride(baseRow.id);
       if (dbCat) setPassportCategoryTier(normalizePassportCategoryTier(dbCat));
     };
     window.addEventListener(DEALER_OVERRIDES_HYDRATED_EVENT, refreshFromDb);
     return () => window.removeEventListener(DEALER_OVERRIDES_HYDRATED_EVENT, refreshFromDb);
-  }, [open, baseRow.id]);
+  }, [open, baseRow.id, skipDialogHydrate]);
 
   const persistAll = useCallback(async (): Promise<boolean> => {
     if (!name.trim()) {
@@ -680,6 +695,7 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
       });
       return false;
     }
+    await hydrateDealerOverridesForDealer(baseRow.id);
     return true;
   }, [
     name,
