@@ -4,6 +4,7 @@
 
 import type { VercelResponse } from "@vercel/node";
 import type { PoolLike } from "./admin/admin-auth.js";
+import { shadowWriteAsync } from "../server/db/shadow-write.js";
 
 export type OverridesApiAccessBodySummary = {
   dealer_id?: string;
@@ -88,21 +89,21 @@ export async function logOverridesApiAccess(
     durationMs: number;
   },
 ): Promise<void> {
-  try {
-    await pool.query(
-      `INSERT INTO overrides_api_access_log (
+  const sql = `INSERT INTO overrides_api_access_log (
          route, method, actor_user_id, body_summary, response_status, response_code, duration_ms
-       ) VALUES ($1, $2, $3::uuid, $4::jsonb, $5, $6, $7)`,
-      [
-        entry.route,
-        entry.method,
-        entry.actorUserId ?? null,
-        entry.bodySummary ? JSON.stringify(entry.bodySummary) : null,
-        entry.responseStatus,
-        entry.responseCode,
-        entry.durationMs,
-      ],
-    );
+       ) VALUES ($1, $2, $3::uuid, $4::jsonb, $5, $6, $7)`;
+  const params = [
+    entry.route,
+    entry.method,
+    entry.actorUserId ?? null,
+    entry.bodySummary ? JSON.stringify(entry.bodySummary) : null,
+    entry.responseStatus,
+    entry.responseCode,
+    entry.durationMs,
+  ];
+  try {
+    await pool.query(sql, params);
+    shadowWriteAsync(sql, params, "overrides-api-access-log");
   } catch (e) {
     console.error("[overrides-api-access-log] insert failed", e);
   }
