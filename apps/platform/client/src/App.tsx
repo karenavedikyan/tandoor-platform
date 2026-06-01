@@ -97,6 +97,7 @@ const LazyAdminActualizationDedupe = lazy(() => import("@/pages/admin-actualizat
 const LazyAdminMigration = lazy(() => import("@/pages/admin/migration"));
 const LazyAdminMigrateMarketingBriefs = lazy(() => import("@/pages/admin-migrate-marketing-briefs"));
 const LazyAdminMigrateDealerTp = lazy(() => import("@/pages/admin-migrate-dealer-tp"));
+const LazyAdminMigrateCatalog1c = lazy(() => import("@/pages/admin-migrate-catalog-1c"));
 const LazyAdminSyncHealth = lazy(() => import("@/pages/admin-sync-health"));
 const LazyAdminTpCountDiag = lazy(() => import("@/pages/admin-tp-count-diag"));
 const LazyAdminCountsDiag = lazy(() => import("@/pages/admin-counts-diag"));
@@ -178,6 +179,7 @@ const AdminActualizationDedupeRoute = wrapProfileShell(suspensePage(LazyAdminAct
 const AdminMigrationRoute = wrapProfileShell(suspensePage(LazyAdminMigration));
 const AdminMigrateMarketingBriefsRoute = wrapProfileShell(suspensePage(LazyAdminMigrateMarketingBriefs));
 const AdminMigrateDealerTpRoute = wrapProfileShell(suspensePage(LazyAdminMigrateDealerTp));
+const AdminMigrateCatalog1cRoute = wrapProfileShell(suspensePage(LazyAdminMigrateCatalog1c));
 const AdminSyncHealthRoute = wrapProfileShell(suspensePage(LazyAdminSyncHealth));
 const AdminTpCountDiagRoute = wrapProfileShell(suspensePage(LazyAdminTpCountDiag));
 const AdminCountsDiagRoute = wrapProfileShell(suspensePage(LazyAdminCountsDiag));
@@ -406,6 +408,8 @@ function AuthenticatedShell({
         <Route path="/admin/migration" component={AdminMigrationRoute} />
         <Route path="/admin/migrate-marketing-briefs" component={AdminMigrateMarketingBriefsRoute} />
         <Route path="/admin/migrate-dealer-tp" component={AdminMigrateDealerTpRoute} />
+        <Route path="/admin/migrate-catalog-1c" component={AdminMigrateCatalog1cRoute} />
+        <Route path="/admin/migrate" component={AdminMigrateCatalog1cRoute} />
         <Route path="/admin/sync-health" component={AdminSyncHealthRoute} />
         <Route path="/admin/tp-count-diag" component={AdminTpCountDiagRoute} />
         <Route path="/admin/counts-diag" component={AdminCountsDiagRoute} />
