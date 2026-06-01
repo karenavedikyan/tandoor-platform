@@ -17,6 +17,7 @@ import {
   sendJson,
   vercelHeaders,
 } from "../../shared/admin/admin-auth.js";
+import { hiddenCategoryFilterSql } from "./_hidden.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   try {
@@ -81,6 +82,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         `EXISTS (SELECT 1 FROM catalog_product_properties pp WHERE pp.product_id = p.id AND LOWER(TRIM(pp.name)) = 'акция' AND NULLIF(TRIM(pp.value), '') IS NOT NULL)`,
       );
     }
+
+    const hidden = hiddenCategoryFilterSql(params.length + 1);
+    if (hidden.sql) {
+      where.push(hidden.sql.trim().replace(/^AND\s+/, ""));
+      params.push(...hidden.params);
+    }
+
     const whereSql = `WHERE ${where.join(" AND ")}`;
 
     const sortSql =

@@ -10,6 +10,7 @@ import {
   sendJson,
   vercelHeaders,
 } from "../../shared/admin/admin-auth.js";
+import { hiddenCategoriesExcludeSql } from "./_hidden.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   try {
@@ -28,6 +29,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       return;
     }
 
+    const hidden = hiddenCategoriesExcludeSql("c", 1);
+    const catParams = [...hidden.params];
+
     const r = await pool.query<{
       id: string;
       name: string;
@@ -38,18 +42,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       `SELECT c.id, c.name, c.parent_id, c.sort_order,
               (SELECT COUNT(*) FROM catalog_product_categories pc WHERE pc.category_id = c.id) AS product_count
        FROM catalog_categories c
+       WHERE 1=1 ${hidden.sql}
        ORDER BY c.sort_order ASC NULLS LAST, c.name ASC`,
+      catParams,
     );
 
     sendJson(res, 200, {
       success: true,
       items: r.rows.map((row) => ({
-        id: row.id,
-        name: row.name,
-        parent_id: row.parent_id,
-        sort_order: row.sort_order,
-        product_count: Number(row.product_count),
-      })),
+          id: row.id,
+          name: row.name,
+          parent_id: row.parent_id,
+          sort_order: row.sort_order,
+          product_count: Number(row.product_count),
+        })),
     });
   } catch (e) {
     const m = e instanceof Error ? e.message : String(e);
