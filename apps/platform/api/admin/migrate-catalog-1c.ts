@@ -86,25 +86,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       sendJson(res, 405, { success: false, code: "METHOD_NOT_ALLOWED", message: "Только POST." });
       return;
     }
-    if (!enforceCsrfOrigin(req)) {
-      sendJson(res, 403, { success: false, code: "CSRF_REJECTED", message: "Недопустимый источник запроса." });
-      return;
-    }
 
-    const pool = getPool();
-    if (!pool) {
-      sendJson(res, 503, { success: false, code: "DB_UNAVAILABLE", message: "База данных недоступна." });
-      return;
-    }
+    // Альтернативная авторизация: Bearer CRON_SECRET (для одноразовых вызовов миграции из CLI)
+    const cronSecret = (process.env.CRON_SECRET || "").trim();
+    const authHeader = (req.headers.authorization || "").trim();
+    const isCronAuth = cronSecret.length > 0 && authHeader === `Bearer ${cronSecret}`;
 
-    const me = await resolveCurrentUser(pool, vercelHeaders(req));
-    if (!me) {
-      sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
-      return;
-    }
-    if (me.role !== "admin") {
-      sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Только для администратора." });
-      return;
+    if (!isCronAuth) {
+      if (!enforceCsrfOrigin(req)) {
+        sendJson(res, 403, { success: false, code: "CSRF_REJECTED", message: "Недопустимый источник запроса." });
+        return;
+      }
+
+      const pool = getPool();
+      if (!pool) {
+        sendJson(res, 503, { success: false, code: "DB_UNAVAILABLE", message: "База данных недоступна." });
+        return;
+      }
+
+      const me = await resolveCurrentUser(pool, vercelHeaders(req));
+      if (!me) {
+        sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+        return;
+      }
+      if (me.role !== "admin") {
+        sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Только для администратора." });
+        return;
+      }
     }
 
     const neonRes = await runOnNeon(STMTS, [...CATALOG_1C_EXPECTED_TABLES]);
