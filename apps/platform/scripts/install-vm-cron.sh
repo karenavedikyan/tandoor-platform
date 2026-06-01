@@ -13,6 +13,7 @@ ssh -i "$SSH_KEY" "$VM_HOST" "mkdir -p ${REMOTE_DIR}/catalog-1c ${REMOTE_DIR}/ya
 
 rsync -avz -e "ssh -i $SSH_KEY" \
   "$REPO_ROOT/apps/platform/scripts/sync-1c-catalog.mjs" \
+  "$REPO_ROOT/apps/platform/scripts/sync-1c-photos.mjs" \
   "$REPO_ROOT/apps/platform/scripts/catalog-1c/" \
   "${VM_HOST}:${REMOTE_DIR}/"
 
@@ -40,7 +41,7 @@ EOF
   echo "Create /home/ubuntu/sync-1c/.env from .env.example (secrets not in git)"
 fi
 
-# node deps (basic-ftp, sax, pg) — from platform checkout on VM if present
+# node deps (basic-ftp, sax, pg, @vercel/blob) — from platform checkout on VM if present
 if [ -d /home/ubuntu/tandoor-platform/apps/platform ]; then
   cd /home/ubuntu/tandoor-platform/apps/platform && npm install --omit=dev
   export NODE_PATH=/home/ubuntu/tandoor-platform/apps/platform/node_modules
@@ -81,6 +82,7 @@ WorkingDirectory=/home/ubuntu/sync-1c
 EnvironmentFile=-/home/ubuntu/sync-1c/.env
 Environment=NODE_PATH=/home/ubuntu/tandoor-platform/apps/platform/node_modules
 Environment=SYNC_1C_SCRIPT=/home/ubuntu/sync-1c/sync-1c-catalog.mjs
+Environment=SYNC_1C_PHOTOS_SCRIPT=/home/ubuntu/sync-1c/sync-1c-photos.mjs
 ExecStart=/usr/bin/node /home/ubuntu/sync-1c/yandex-vm/sync-1c-runner.mjs
 Restart=always
 

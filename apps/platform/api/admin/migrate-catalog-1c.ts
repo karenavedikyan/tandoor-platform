@@ -23,6 +23,7 @@ import {
 } from "../../shared/dual-db-migrate.js";
 import { splitSqlStatements } from "../../server/db-migrate/restore-yandex.js";
 import { makePoolFromNeon } from "../../server/db/neon-client.js";
+import { isCronBearerOnly } from "../../shared/cron-auth.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const migrationPath = join(
@@ -34,9 +35,23 @@ const migrationPath = join(
   "20260601120000_catalog_1c_foundation",
   "migration.sql",
 );
+const blobMigrationPath = join(
+  here,
+  "..",
+  "..",
+  "prisma",
+  "migrations",
+  "20260601193000_catalog_image_blob_url",
+  "migration.sql",
+);
 const ddlSql = readFileSync(migrationPath, "utf8");
+const blobSql = readFileSync(blobMigrationPath, "utf8");
 
-const STMTS = ["CREATE EXTENSION IF NOT EXISTS pgcrypto", ...splitSqlStatements(ddlSql)];
+const STMTS = [
+  "CREATE EXTENSION IF NOT EXISTS pgcrypto",
+  ...splitSqlStatements(ddlSql),
+  ...splitSqlStatements(blobSql),
+];
 
 export const CATALOG_1C_EXPECTED_TABLES = [
   "catalog_categories",
@@ -83,25 +98,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       sendJson(res, 405, { success: false, code: "METHOD_NOT_ALLOWED", message: "Только POST." });
       return;
     }
-    if (!enforceCsrfOrigin(req)) {
+    const cronCli = isCronBearerOnly(req);
+
+    if (!cronCli && !enforceCsrfOrigin(req)) {
       sendJson(res, 403, { success: false, code: "CSRF_REJECTED", message: "Недопустимый источник запроса." });
       return;
     }
 
-    const pool = getPool();
-    if (!pool) {
-      sendJson(res, 503, { success: false, code: "DB_UNAVAILABLE", message: "База данных недоступна." });
-      return;
-    }
+    if (!cronCli) {
+      const pool = getPool();
+      if (!pool) {
+        sendJson(res, 503, { success: false, code: "DB_UNAVAILABLE", message: "База данных недоступна." });
+        return;
+      }
 
-    const me = await resolveCurrentUser(pool, vercelHeaders(req));
-    if (!me) {
-      sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
-      return;
-    }
-    if (me.role !== "admin") {
-      sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Только для администратора." });
-      return;
+      const me = await resolveCurrentUser(pool, vercelHeaders(req));
+      if (!me) {
+        sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+        return;
+      }
+      if (me.role !== "admin") {
+        sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Только для администратора." });
+        return;
+      }
     }
 
     const neonRes = await runOnNeon(STMTS, [...CATALOG_1C_EXPECTED_TABLES]);

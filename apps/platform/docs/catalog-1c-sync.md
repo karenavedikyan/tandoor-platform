@@ -23,9 +23,17 @@ Dry-run (только лог, без записи товаров):
 DRY_RUN=1 CATALOG_XML_PATH=... npm run sync:catalog-1c
 ```
 
+## Фото в Vercel Blob (промт 120)
+
+- `scripts/sync-1c-photos.mjs` + `scripts/catalog-1c/photo-sync.mjs`
+- `POST /api/admin/sync-catalog-1c-photos` — `{ target, limit, dry }`
+- Cron: `GET /api/cron/sync-catalog-1c-photos` (`0 4 * * *` UTC), env `PHOTO_SYNC_LIMIT` (default 500)
+- Runner: `POST /run/photos`
+- Миграция blob-колонок входит в `POST /api/admin/migrate-catalog-1c`
+
 ## Yandex VM runner
 
-- `yandex-vm/sync-1c-runner.mjs` — `POST /run/catalog`, `GET /status`, `GET /health`
+- `yandex-vm/sync-1c-runner.mjs` — `POST /run/catalog`, `POST /run/photos`, `GET /status`, `GET /health`
 - Env: `SYNC_1C_RUNNER_URL`, `SYNC_RUNNER_TOKEN`
 - Установка: `bash apps/platform/scripts/install-vm-cron.sh`
 - Cron: `sync-1c-catalog.timer` (hourly)

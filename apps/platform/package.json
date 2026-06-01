@@ -17,6 +17,7 @@
     "migrate:manager-only-state": "node scripts/migrate-2026-05-27-manager-only-state.mjs",
     "catalog:import": "node scripts/import-tandoor-public-catalog.mjs",
     "sync:catalog-1c": "node scripts/sync-1c-catalog.mjs",
+    "sync:catalog-1c-photos": "node scripts/sync-1c-photos.mjs",
     "release:import-clients": "node scripts/import-release-clients.mjs",
     "release:import-koteneva": "node scripts/import-koteneva-clients.mjs",
     "release:import-koteneva:slice1981": "node scripts/import-koteneva-clients.mjs --from-master-slice=1981",

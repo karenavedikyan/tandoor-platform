@@ -60,8 +60,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     const p = productR.rows[0];
 
     const [imagesR, propsR, stocksR, catsR, pricesR] = await Promise.all([
-      pool.query<{ path: string; sort_order: number | null }>(
-        `SELECT path, sort_order FROM catalog_product_images
+      pool.query<{ path: string; sort_order: number | null; blob_url: string | null }>(
+        `SELECT path, sort_order, blob_url FROM catalog_product_images
          WHERE product_id = $1::uuid
          ORDER BY sort_order ASC NULLS LAST, path ASC`,
         [id],
@@ -130,7 +130,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         active: p.active,
         synced_at: p.synced_at,
         group: p.group_id ? { id: p.group_id, name: p.group_name } : null,
-        images: imagesR.rows.map((r) => ({ path: r.path, sort_order: r.sort_order })),
+        images: imagesR.rows.map((r) => ({
+          path: r.path,
+          sort_order: r.sort_order,
+          blob_url: r.blob_url,
+        })),
         properties: propsR.rows.map((r) => ({ name: r.name, value: r.value })),
         stocks: stocksR.rows.map((r) => ({
           warehouse_id: r.warehouse_id,

@@ -70,12 +70,18 @@ model CatalogProductCategory {
 }
 
 model CatalogProductImage {
-  id        BigInt @id @default(autoincrement())
-  productId String @map("product_id") @db.Uuid
-  path      String
-  sortOrder Int    @default(0) @map("sort_order")
-  product   CatalogProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  id              BigInt    @id @default(autoincrement())
+  productId       String    @map("product_id") @db.Uuid
+  path            String
+  sortOrder       Int       @default(0) @map("sort_order")
+  blobUrl         String?   @map("blob_url")
+  blobSize        BigInt?   @map("blob_size")
+  blobUploadedAt  DateTime? @map("blob_uploaded_at") @db.Timestamptz(6)
+  sourceSize      BigInt?   @map("source_size")
+  sourceMtime     DateTime? @map("source_mtime") @db.Timestamptz(6)
+  product         CatalogProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
 
+  @@unique([productId, path], map: "catalog_product_images_product_path_uq")
   @@map("catalog_product_images")
 }
 
