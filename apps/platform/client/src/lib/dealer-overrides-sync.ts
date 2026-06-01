@@ -21,6 +21,16 @@ import {
   type DealerRegionalManagerOverridesState,
 } from "@/lib/dealer-regional-manager-overrides";
 import {
+  DEALER_ROP_OVERRIDES_EVENT,
+  DEALER_ROP_OVERRIDES_STORAGE_KEY,
+  type DealerRopOverridesState,
+} from "@/lib/dealer-rop-overrides";
+import {
+  TP_ROP_RM_OVERRIDES_EVENT,
+  TP_ROP_RM_OVERRIDES_STORAGE_KEY,
+  type TradePointRopRmOverridesState,
+} from "@/lib/trade-point-rop-rm-overrides";
+import {
   DEALER_TRADE_POINTS_EVENT,
   DEALER_TRADE_POINTS_STORAGE_KEY,
   tradePointKey,
@@ -117,6 +127,7 @@ function applyRegionalManagerHydration(overrides: DealerOverrideRow[]): void {
     if (!row.regional_manager_id) continue;
     state.byDealerId[row.dealer_id] = {
       userId: row.regional_manager_id,
+      displayName: row.regional_manager_name ?? "",
       updatedAt: row.updated_at,
       updatedBy: row.updated_by ?? "",
       updatedByName: row.regional_manager_name ?? "",
@@ -124,6 +135,52 @@ function applyRegionalManagerHydration(overrides: DealerOverrideRow[]): void {
   }
   window.localStorage.setItem(DEALER_REGIONAL_MANAGER_OVERRIDES_STORAGE_KEY, JSON.stringify(state));
   window.dispatchEvent(new CustomEvent(DEALER_REGIONAL_MANAGER_OVERRIDES_EVENT));
+}
+
+function applyRopHydration(overrides: DealerOverrideRow[]): void {
+  if (typeof window === "undefined" || !window.localStorage) return;
+  let state: DealerRopOverridesState = { byDealerId: {} };
+  try {
+    const raw = window.localStorage.getItem(DEALER_ROP_OVERRIDES_STORAGE_KEY);
+    if (raw) state = JSON.parse(raw) as DealerRopOverridesState;
+  } catch {
+    /* ignore */
+  }
+  for (const row of overrides) {
+    if (!row.rop_id) continue;
+    state.byDealerId[row.dealer_id] = {
+      userId: row.rop_id,
+      displayName: row.rop_name ?? "",
+      updatedAt: row.updated_at,
+      updatedBy: row.updated_by ?? "",
+      updatedByName: row.rop_name ?? "",
+    };
+  }
+  window.localStorage.setItem(DEALER_ROP_OVERRIDES_STORAGE_KEY, JSON.stringify(state));
+  window.dispatchEvent(new CustomEvent(DEALER_ROP_OVERRIDES_EVENT));
+}
+
+function applyTradePointRopRmHydration(overrides: TradePointOverrideRow[]): void {
+  if (typeof window === "undefined" || !window.localStorage) return;
+  let state: TradePointRopRmOverridesState = { byTpId: {} };
+  try {
+    const raw = window.localStorage.getItem(TP_ROP_RM_OVERRIDES_STORAGE_KEY);
+    if (raw) state = JSON.parse(raw) as TradePointRopRmOverridesState;
+  } catch {
+    /* ignore */
+  }
+  for (const row of overrides) {
+    if (!row.rop_id && !row.regional_manager_id) continue;
+    state.byTpId[row.tp_id] = {
+      ropId: row.rop_id,
+      ropName: row.rop_name,
+      regionalManagerId: row.regional_manager_id,
+      regionalManagerName: row.regional_manager_name,
+      updatedAt: row.updated_at,
+    };
+  }
+  window.localStorage.setItem(TP_ROP_RM_OVERRIDES_STORAGE_KEY, JSON.stringify(state));
+  window.dispatchEvent(new CustomEvent(TP_ROP_RM_OVERRIDES_EVENT));
 }
 
 function applyDealerTrainingHydration(
@@ -262,6 +319,7 @@ export async function hydrateDealerOverridesFromServer(opts?: { dealerIds?: stri
   applyDealerProfileHydration(data.overrides);
   applyUnloadingOrderHydration(data.overrides);
   applyRegionalManagerHydration(data.overrides);
+  applyRopHydration(data.overrides);
   applyDealerTrainingHydration(data.training);
   notifyDealerOverridesHydrated();
   const countAfter = countDealerOverridesInLocalCaches();
@@ -304,6 +362,7 @@ export async function hydrateTradePointOverridesFromServer(opts?: {
   }
   applyTradePointOverridesRuntime(data.overrides, data.training);
   applyTradePointEditsHydration(data.overrides);
+  applyTradePointRopRmHydration(data.overrides);
   applyTpTrainingHydration(data.overrides, data.training);
   notifyTradePointOverridesHydrated();
   pushOverridesTrace({

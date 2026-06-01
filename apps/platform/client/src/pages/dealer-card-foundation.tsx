@@ -42,7 +42,6 @@ import {
   DEALER_BASE_ROWS,
   getDealerById,
   getDealerManagerDisplay,
-  getDealerRopDisplay,
   normalizeDealerId,
   type DealerRow,
   type DealerStatus,
@@ -120,14 +119,20 @@ import {
   getDealerUnloadingOrderHistoryEvents,
   setDealerUnloadingOrder,
 } from "@/lib/dealer-unloading-order-storage";
+import { DealerRopRmSelectors } from "@/components/dealer-rop-rm-selectors";
 import {
   DEALER_REGIONAL_MANAGER_OVERRIDES_EVENT,
   getDealerRegionalManagerEffectiveDisplay,
   getDealerRegionalManagerHistoryEvents,
   getRegionalManagerOverrideUserId,
-  listRegionalManagerPickerUsers,
   setDealerRegionalManagerOverride,
 } from "@/lib/dealer-regional-manager-overrides";
+import {
+  DEALER_ROP_OVERRIDES_EVENT,
+  getDealerRopEffectiveDisplay,
+  getRopOverrideUserId,
+  setDealerRopOverride,
+} from "@/lib/dealer-rop-overrides";
 import { getMergedDealerTradePoints } from "@/lib/dealer-trade-points-overrides";
 import { notifyDealerOverridesHydrated, trashDealerStrict } from "@/lib/dealer-overrides-api";
 import { handleOverridesStrictResult } from "@/lib/overrides-save-feedback";
@@ -784,6 +789,7 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
   const [dealerDataBump, setDealerDataBump] = useState(0);
   const [unloadBump, setUnloadBump] = useState(0);
   const [regionalBump, setRegionalBump] = useState(0);
+  const [ropBump, setRopBump] = useState(0);
   const [dealerEditOpen, setDealerEditOpen] = useState(false);
   const [dealerArchiveBusy, setDealerArchiveBusy] = useState(false);
   const [dealerDeleteDialogOpen, setDealerDeleteDialogOpen] = useState(false);
@@ -867,6 +873,12 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
     const fn = () => setRegionalBump((n) => n + 1);
     window.addEventListener(DEALER_REGIONAL_MANAGER_OVERRIDES_EVENT, fn);
     return () => window.removeEventListener(DEALER_REGIONAL_MANAGER_OVERRIDES_EVENT, fn);
+  }, []);
+
+  useEffect(() => {
+    const fn = () => setRopBump((n) => n + 1);
+    window.addEventListener(DEALER_ROP_OVERRIDES_EVENT, fn);
+    return () => window.removeEventListener(DEALER_ROP_OVERRIDES_EVENT, fn);
   }, []);
 
   useEffect(() => {
@@ -1068,7 +1080,7 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
     () => getDealerRegionalManagerEffectiveDisplay(row),
     [row, regionalBump],
   );
-  const ropDisplay = useMemo(() => getDealerRopDisplay(row), [row]);
+  const ropDisplay = useMemo(() => getDealerRopEffectiveDisplay(row), [row, ropBump]);
 
   const overridesVersionForUnload = useOverridesRuntimeVersion();
   const unloadingOrderValue = useDealerUnloadingOrder(row.id);
@@ -1078,9 +1090,11 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
   const [profileEditOpen, setProfileEditOpen] = useState(false);
   const [unloadDialogOpen, setUnloadDialogOpen] = useState(false);
   const [unloadDraft, setUnloadDraft] = useState("");
-  const [regionalDialogOpen, setRegionalDialogOpen] = useState(false);
-  const REGIONAL_RM_NONE = "__none__";
-  const [regionalDraftUserId, setRegionalDraftUserId] = useState(REGIONAL_RM_NONE);
+  const [responsiblesDialogOpen, setResponsiblesDialogOpen] = useState(false);
+  const [ropDraftUserId, setRopDraftUserId] = useState<string | null>(null);
+  const [ropDraftName, setRopDraftName] = useState<string | null>(null);
+  const [regionalDraftUserId, setRegionalDraftUserId] = useState<string | null>(null);
+  const [regionalDraftName, setRegionalDraftName] = useState<string | null>(null);
   const [peName, setPeName] = useState(row.name);
   const [peCity, setPeCity] = useState(row.city);
   const [peContactName, setPeContactName] = useState(row.contacts.lpr);
@@ -1371,11 +1385,17 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                         {quickManagerDisplay ? quickManagerDisplay : "Не назначен"}
                       </p>
                     </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">РОП</p>
+                      <p className="mt-0.5 break-words text-sm font-medium text-foreground" data-testid="text-dealer-quick-info-rop">
+                        {ropDisplay ? ropDisplay : "Не назначен"}
+                      </p>
+                    </div>
                     <div className="min-w-0 sm:col-span-2 xl:col-span-1">
                       <div className="flex flex-col gap-1.5 sm:flex-row sm:items-end sm:justify-between">
                         <div className="min-w-0">
                           <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                            Ответственный региональный менеджер
+                            Региональный менеджер
                           </p>
                           <p
                             className="mt-0.5 break-words text-sm font-medium text-foreground"
@@ -1392,21 +1412,15 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                             className="min-h-8 w-full shrink-0 text-xs sm:w-auto"
                             data-testid="button-dealer-regional-manager-edit"
                             onClick={() => {
-                              const cur = getRegionalManagerOverrideUserId(row.id);
-                              setRegionalDraftUserId(cur ?? REGIONAL_RM_NONE);
-                              setRegionalDialogOpen(true);
+                              setRopDraftUserId(getRopOverrideUserId(row.id));
+                              setRegionalDraftUserId(getRegionalManagerOverrideUserId(row.id));
+                              setResponsiblesDialogOpen(true);
                             }}
                           >
                             Изменить
                           </Button>
                         ) : null}
                       </div>
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Ответственный РОП</p>
-                      <p className="mt-0.5 break-words text-sm font-medium text-foreground" data-testid="text-dealer-quick-info-rop">
-                        {ropDisplay ? ropDisplay : "Не назначен"}
-                      </p>
                     </div>
                     <div className="min-w-0 sm:col-span-2 xl:col-span-1">
                       <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Категория клиента</p>
@@ -1704,39 +1718,31 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
-              <Dialog open={regionalDialogOpen} onOpenChange={setRegionalDialogOpen}>
+              <Dialog open={responsiblesDialogOpen} onOpenChange={setResponsiblesDialogOpen}>
                 <DialogContent className="sm:max-w-md">
                   <DialogHeader>
-                    <DialogTitle>Ответственный региональный менеджер</DialogTitle>
+                    <DialogTitle>РОП и региональный менеджер</DialogTitle>
                   </DialogHeader>
-                  <div className="space-y-2 py-1">
-                    <Label htmlFor="dealer-regional-manager-select" className="text-xs text-muted-foreground">
-                      Сотрудник
-                    </Label>
-                    <Select value={regionalDraftUserId} onValueChange={setRegionalDraftUserId}>
-                      <SelectTrigger
-                        id="dealer-regional-manager-select"
-                        className="min-h-10 w-full"
-                        data-testid="select-dealer-regional-manager"
-                      >
-                        <SelectValue placeholder="Не назначен" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={REGIONAL_RM_NONE}>Не назначен</SelectItem>
-                        {listRegionalManagerPickerUsers().map((u) => (
-                          <SelectItem key={u.id} value={u.id}>
-                            {u.name} · {u.roleLabel}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  <DealerRopRmSelectors
+                    ropUserId={ropDraftUserId}
+                    regionalManagerUserId={regionalDraftUserId}
+                    onRopChange={(id, name) => {
+                      setRopDraftUserId(id);
+                      setRopDraftName(name);
+                    }}
+                    onRegionalManagerChange={(id, name) => {
+                      setRegionalDraftUserId(id);
+                      setRegionalDraftName(name);
+                    }}
+                    ropTestId="select-dealer-rop"
+                    rmTestId="select-dealer-regional-manager"
+                  />
                   <DialogFooter className="gap-2 sm:gap-0">
                     <Button
                       type="button"
                       variant="outline"
                       data-testid="button-dealer-regional-manager-cancel"
-                      onClick={() => setRegionalDialogOpen(false)}
+                      onClick={() => setResponsiblesDialogOpen(false)}
                     >
                       Отмена
                     </Button>
@@ -1744,18 +1750,19 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                       type="button"
                       data-testid="button-dealer-regional-manager-save"
                       onClick={() => {
-                        const next =
-                          regionalDraftUserId === REGIONAL_RM_NONE || regionalDraftUserId.trim() === ""
-                            ? null
-                            : regionalDraftUserId;
+                        const actorId = profile.personaUserId;
+                        const actorName = displayUserName(user) ?? userLabelFromProfile(profile);
+                        setDealerRopOverride(row.id, ropDraftUserId, ropDraftName, actorId, actorName);
                         setDealerRegionalManagerOverride(
                           row.id,
-                          next,
-                          profile.personaUserId,
-                          displayUserName(user) ?? userLabelFromProfile(profile),
+                          regionalDraftUserId,
+                          regionalDraftName,
+                          actorId,
+                          actorName,
                         );
-                        setRegionalDialogOpen(false);
+                        setResponsiblesDialogOpen(false);
                         setRegionalBump((n) => n + 1);
+                        setRopBump((n) => n + 1);
                       }}
                     >
                       Сохранить

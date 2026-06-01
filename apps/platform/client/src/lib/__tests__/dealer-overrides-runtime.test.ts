@@ -34,6 +34,8 @@ applyDealerOverridesRuntime(
       unloading_order: null,
       regional_manager_id: null,
       regional_manager_name: null,
+      rop_id: null,
+      rop_name: null,
       created_at: "2026-05-27T07:34:38.000Z",
       updated_at: "2026-05-27T07:34:38.000Z",
       updated_by: "u-test",

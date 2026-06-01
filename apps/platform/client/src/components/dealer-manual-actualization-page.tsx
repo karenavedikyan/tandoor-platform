@@ -39,6 +39,11 @@ import { useClientBaseActualization } from "@/context/client-base-actualization-
 import { useDealerCardReadOnly } from "@/lib/dealer-card-read-only-context";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
+import {
+  DEALER_REGIONAL_MANAGER_OVERRIDES_EVENT,
+  getDealerRegionalManagerEffectiveDisplay,
+} from "@/lib/dealer-regional-manager-overrides";
+import { DEALER_ROP_OVERRIDES_EVENT, getDealerRopEffectiveDisplay } from "@/lib/dealer-rop-overrides";
 import { logisticsShipmentDaysTextFromManualFields } from "@/lib/dealer-shipment-days";
 import { getClientCategoryLabel } from "@/lib/client-category";
 import { mergeTradePointsActiveForActualization, mergeDealerRowWithActualization, mergeLegalEntitiesForActualization } from "@/lib/client-base-actualization-data-merge";
@@ -236,6 +241,17 @@ export function DealerManualActualizationPage(props: {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [responsiblesBump, setResponsiblesBump] = useState(0);
+
+  useEffect(() => {
+    const bump = () => setResponsiblesBump((n) => n + 1);
+    window.addEventListener(DEALER_REGIONAL_MANAGER_OVERRIDES_EVENT, bump);
+    window.addEventListener(DEALER_ROP_OVERRIDES_EVENT, bump);
+    return () => {
+      window.removeEventListener(DEALER_REGIONAL_MANAGER_OVERRIDES_EVENT, bump);
+      window.removeEventListener(DEALER_ROP_OVERRIDES_EVENT, bump);
+    };
+  }, []);
 
   const manual = actx.state.manuallyCreatedDealersById[baseRow.id];
   const ovFields = (actx.state.dealerOverridesById[baseRow.id]?.fields ?? {}) as Record<string, unknown>;
@@ -245,6 +261,11 @@ export function DealerManualActualizationPage(props: {
     () => mergeDealerRowWithActualization(baseRow, actx.state),
     [baseRow, actx.state, overridesVersion],
   );
+  const regionalManagerDisplay = useMemo(
+    () => getDealerRegionalManagerEffectiveDisplay(row),
+    [row, responsiblesBump],
+  );
+  const ropDisplay = useMemo(() => getDealerRopEffectiveDisplay(row), [row, responsiblesBump]);
   const effectiveCategory = useMemo(
     () => resolveEffectiveClientCategory(row, actx.enabled ? actx.state : null),
     [row, actx.enabled, actx.state, overridesVersion],
@@ -411,11 +432,11 @@ export function DealerManualActualizationPage(props: {
       commercialSet === 0 ? "Коммерческие признаки не отмечены" : `Отмечено ${commercialSet} из ${commercialTri.length} блоков`;
 
     const hasMgr = Boolean(row.manager?.trim());
-    const hasRm = Boolean(row.regionalManager?.trim());
-    const hasRop = Boolean(row.ropName?.trim());
+    const hasRm = Boolean(regionalManagerDisplay?.trim());
+    const hasRop = Boolean(ropDisplay?.trim());
     const responsiblesStatus: SectionStatusKind =
       !hasMgr && !hasRm && !hasRop ? "empty" : hasMgr && hasRm ? "complete" : "partial";
-    const responsiblesSummary = [hasMgr && `Менеджер: ${row.manager}`, hasRm && `РМ: ${row.regionalManager}`]
+    const responsiblesSummary = [hasMgr && `Менеджер: ${row.manager}`, hasRm && `РМ: ${regionalManagerDisplay}`]
       .filter(Boolean)
       .join(" · ") || "Ответственные не указаны";
 
@@ -681,8 +702,8 @@ export function DealerManualActualizationPage(props: {
           <AccordionContent className="border-t border-border/35 px-3 pb-2.5 pt-1.5 text-sm sm:px-3.5">
             <div className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
             <Field label="Менеджер" value={row.manager || "—"} />
-            <Field label="Региональный менеджер" value={row.regionalManager?.trim() || "—"} />
-            <Field label="РОП" value={row.ropName?.trim() || "—"} />
+            <Field label="Региональный менеджер" value={regionalManagerDisplay?.trim() || "—"} />
+            <Field label="РОП" value={ropDisplay?.trim() || "—"} />
             <Field label="Территория / зона" value={str(f.territoryZone) || "—"} />
             <Field label="Кто актуализировал" value={audit?.lastUpdatedByName ?? manual?.createdByName ?? "—"} />
             <Field

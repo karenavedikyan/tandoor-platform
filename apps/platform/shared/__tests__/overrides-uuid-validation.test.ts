@@ -20,4 +20,12 @@ assert.throws(
   (e) => e instanceof OverridesValidationError && e.field === "regional_manager_id",
 );
 
+assert.throws(
+  () =>
+    sanitizeDealerOverrideUuidFields({
+      rop_id: "rop-fake",
+    }),
+  (e) => e instanceof OverridesValidationError && e.field === "rop_id",
+);
+
 console.log("overrides-uuid-validation: ok");
