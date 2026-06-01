@@ -101,7 +101,26 @@ async function main() {
       logLine(`use local XML: ${local}`);
       fs.copyFileSync(local, xmlPath);
     } else {
-      await downloadCatalogXml(xmlPath);
+      // 1С может держать файл заблокированным во время обновления (~xx:00/xx:35).
+      // Делаем retry с backoff: 5s, 15s, 30s, 60s.
+      const delays = [5_000, 15_000, 30_000, 60_000];
+      let lastErr = null;
+      let ok = false;
+      for (let attempt = 0; attempt <= delays.length; attempt += 1) {
+        try {
+          await downloadCatalogXml(xmlPath);
+          ok = true;
+          break;
+        } catch (err) {
+          lastErr = err;
+          const isLock = err && (err.code === 550 || /550/.test(String(err.message ?? "")));
+          if (!isLock || attempt >= delays.length) break;
+          const wait = delays[attempt];
+          logLine(`FTP 550 file locked by 1C, retry in ${Math.round(wait / 1000)}s (attempt ${attempt + 1}/${delays.length})`);
+          await new Promise((r) => setTimeout(r, wait));
+        }
+      }
+      if (!ok) throw lastErr;
     }
 
     logLine("parsing XML …");
