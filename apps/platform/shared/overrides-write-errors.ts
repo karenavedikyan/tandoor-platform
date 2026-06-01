@@ -42,12 +42,24 @@ export async function runOverridesHandlerSafe<T>(
   try {
     return await fn();
   } catch (e) {
+    // Извлекаем код/детали ошибки Postgres (например 23505 — unique_violation),
+    // чтобы первопричина была видна и в БД, и в логах Vercel.
+    const pg = e as { code?: string; detail?: string; constraint?: string };
     const msg = e instanceof Error ? e.message : String(e);
+    const fullMsg = [
+      msg,
+      pg.code ? `code=${pg.code}` : null,
+      pg.constraint ? `constraint=${pg.constraint}` : null,
+      pg.detail ? `detail=${pg.detail}` : null,
+    ]
+      .filter(Boolean)
+      .join(" | ");
+    console.error(`[overrides-write] ${entityKind}:${entityId} failed: ${fullMsg}`);
     await logOverridesWriteError(pool, {
       entityKind,
       entityId,
       payload,
-      errorMessage: msg,
+      errorMessage: fullMsg,
       actorUserId,
     });
     throw e;

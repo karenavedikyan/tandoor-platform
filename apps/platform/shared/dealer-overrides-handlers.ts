@@ -196,29 +196,25 @@ export async function handleDealerOverridesUpsert(
     const prev = await fetchOverride(pool, dealerId);
     await logEvents(pool, dealerId, prev, patch, me.id);
 
-    if (prev) {
-      const sets: string[] = [];
-      const params: unknown[] = [dealerId];
-      for (const [key, val] of Object.entries(patch) as [DealerOverrideField, unknown][]) {
-        params.push(val === undefined ? null : val);
-        sets.push(`${key} = $${params.length}`);
-      }
-      params.push(me.id);
-      sets.push(`updated_at = NOW()`, `updated_by = $${params.length}`);
-      await pool.query(`UPDATE dealer_overrides SET ${sets.join(", ")} WHERE dealer_id = $1`, params);
-    } else {
-      const cols: string[] = ["dealer_id", "updated_by"];
-      const vals: unknown[] = [dealerId, me.id];
-      for (const [key, val] of Object.entries(patch) as [DealerOverrideField, unknown][]) {
-        cols.push(key);
-        vals.push(val === undefined ? null : val);
-      }
-      const placeholders = vals.map((_, i) => `$${i + 1}`).join(", ");
-      await pool.query(
-        `INSERT INTO dealer_overrides (${cols.join(", ")}) VALUES (${placeholders})`,
-        vals,
-      );
+    // Атомарный upsert: INSERT ... ON CONFLICT DO UPDATE.
+    // Раньше использовалась связка SELECT -> INSERT/UPDATE, что при
+    // одновременных (или ретраящихся) запросах по одному dealer_id давало
+    // гонку и нарушение PK (Postgres 23505) -> 500. Теперь это идемпотентно.
+    const cols: string[] = ["dealer_id", "updated_by"];
+    const vals: unknown[] = [dealerId, me.id];
+    const updateSets: string[] = [];
+    for (const [key, val] of Object.entries(patch) as [DealerOverrideField, unknown][]) {
+      cols.push(key);
+      vals.push(val === undefined ? null : val);
+      updateSets.push(`${key} = EXCLUDED.${key}`);
     }
+    updateSets.push(`updated_at = NOW()`, `updated_by = EXCLUDED.updated_by`);
+    const placeholders = vals.map((_, i) => `$${i + 1}`).join(", ");
+    await pool.query(
+      `INSERT INTO dealer_overrides (${cols.join(", ")}) VALUES (${placeholders})
+       ON CONFLICT (dealer_id) DO UPDATE SET ${updateSets.join(", ")}`,
+      vals,
+    );
   });
 
   const override = await fetchOverride(pool, dealerId);
