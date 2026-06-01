@@ -1,9 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
-import { LayoutGrid, List, Search, Table2 } from "lucide-react";
+import { LayoutGrid, List, RefreshCw, Search, Table2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -14,363 +14,427 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import {
-  CATALOG_PRODUCTS,
-  buildCatalogProductSearchHaystack,
-  catalogSearchQueryMatchesHaystack,
-  type CatalogProduct,
-} from "@/lib/catalog-data";
-import { FloatingBackButton } from "@/components/navigation/floating-back-button";
+import { useToast } from "@/hooks/use-toast";
+import { useAuthUser } from "@/hooks/use-auth-user";
 
 type ViewMode = "cards" | "list" | "table";
-type QuickChip = "all" | "hit" | "new" | "exclusive" | "action" | "stock";
 
-const CHIPS: { id: QuickChip; label: string; testId: string }[] = [
-  { id: "all", label: "Все", testId: "filter-catalog-all" },
-  { id: "hit", label: "Хиты", testId: "filter-catalog-hit" },
-  { id: "new", label: "Новинки", testId: "filter-catalog-new" },
-  { id: "exclusive", label: "Эксклюзив", testId: "filter-catalog-exclusive" },
-  { id: "action", label: "Акции", testId: "filter-catalog-action" },
-  { id: "stock", label: "В наличии", testId: "filter-catalog-stock" },
-];
+type CatalogProductItem = {
+  id: string;
+  name: string;
+  display_name: string | null;
+  brand: string | null;
+  is_on_site: boolean;
+  image_path: string | null;
+  total_stock: number | null;
+};
 
-function applyChip(p: CatalogProduct, chip: QuickChip): boolean {
-  switch (chip) {
-    case "all":
-      return true;
-    case "hit":
-      return p.isTop;
-    case "new":
-      return p.isNew;
-    case "exclusive":
-      return p.isExclusive;
-    case "action":
-      return p.isAction;
-    case "stock":
-      return p.inStock;
-    default:
-      return true;
-  }
+type CategoryItem = {
+  id: string;
+  name: string;
+  parent_id: string | null;
+  product_count: number;
+};
+
+type SyncLogRow = {
+  id: string;
+  source_file: string;
+  started_at: string;
+  finished_at: string | null;
+  status: string;
+  rows_upserted: number;
+  duration_ms: number | null;
+  error: string | null;
+};
+
+const PAGE_SIZE = 50;
+
+function formatStock(n: number | null): string {
+  if (n == null) return "—";
+  return Math.round(n).toLocaleString("ru-RU");
 }
 
-function ProductImage({ product }: { product: CatalogProduct }) {
-  if (product.image) {
-    return (
-      <img
-        src={product.image}
-        alt=""
-        className="mx-auto h-full max-h-[min(52vh,420px)] w-full max-w-full object-contain"
-      />
-    );
+function formatDateTime(iso: string | null): string {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleString("ru-RU", {
+      day: "2-digit",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso;
   }
-  return (
-    <div className="flex h-full min-h-[120px] w-full flex-col items-center justify-center bg-muted/60 p-4 text-center">
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{product.doorKind}</p>
-      <p className="mt-1 text-[11px] text-muted-foreground">Изображение модели не загружено</p>
-    </div>
-  );
-}
-
-function ProductBadges({ p }: { p: CatalogProduct }) {
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {p.isTop ? (
-        <Badge variant="outline" className="border-primary/40 bg-primary/15 font-semibold">
-          Хит
-        </Badge>
-      ) : null}
-      {p.isNew ? (
-        <Badge variant="outline" className="border-sky-200 bg-sky-50 text-sky-950">
-          Новинка
-        </Badge>
-      ) : null}
-      {p.isExclusive ? (
-        <Badge variant="outline" className="border-purple-200 bg-purple-50 text-purple-950">
-          Эксклюзив
-        </Badge>
-      ) : null}
-      {p.isAction ? (
-        <Badge variant="outline" className="border-rose-200 bg-rose-50 text-rose-950">
-          Акция
-        </Badge>
-      ) : null}
-      {p.recommendedForShowcase ? (
-        <Badge variant="outline" className="border-border bg-muted/60">
-          Витрина
-        </Badge>
-      ) : null}
-    </div>
-  );
 }
 
 export default function CatalogPage() {
+  const { user } = useAuthUser();
+  const { toast } = useToast();
+  const isAdmin = user?.role === "admin";
+
   const [view, setView] = useState<ViewMode>("cards");
-  const [search, setSearch] = useState("");
-  const [chip, setChip] = useState<QuickChip>("all");
-  const [category, setCategory] = useState<string>("all");
-  const [series, setSeries] = useState<string>("all");
-  const [doorKind, setDoorKind] = useState<string>("all");
-  const [status, setStatus] = useState<string>("all");
+  const [query, setQuery] = useState("");
+  const [categoryId, setCategoryId] = useState<string>("all");
+  const [items, setItems] = useState<CatalogProductItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const [offset, setOffset] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [categories, setCategories] = useState<CategoryItem[]>([]);
+  const [lastSync, setLastSync] = useState<SyncLogRow | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
-  const categories = useMemo(() => Array.from(new Set(CATALOG_PRODUCTS.map((p) => p.category))).sort(), []);
-  const seriesList = useMemo(() => Array.from(new Set(CATALOG_PRODUCTS.map((p) => p.series))).sort(), []);
-  const doorKinds = useMemo(() => Array.from(new Set(CATALOG_PRODUCTS.map((p) => p.doorKind))).sort(), []);
-  const statuses = useMemo(() => Array.from(new Set(CATALOG_PRODUCTS.map((p) => p.status))).sort(), []);
+  const abortRef = useRef<AbortController | null>(null);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return CATALOG_PRODUCTS.filter((p) => {
-      if (!applyChip(p, chip)) return false;
-      if (category !== "all" && p.category !== category) return false;
-      if (series !== "all" && p.series !== series) return false;
-      if (doorKind !== "all" && p.doorKind !== doorKind) return false;
-      if (status !== "all" && p.status !== status) return false;
-      if (!q) return true;
-      const hay = buildCatalogProductSearchHaystack(p);
-      return catalogSearchQueryMatchesHaystack(q, hay);
-    });
-  }, [search, chip, category, series, doorKind, status]);
+  async function loadProducts(nextOffset: number, append = false) {
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (query.trim()) params.set("q", query.trim());
+      if (categoryId && categoryId !== "all") params.set("category_id", categoryId);
+      params.set("limit", String(PAGE_SIZE));
+      params.set("offset", String(nextOffset));
+      const r = await fetch(`/api/catalog/products?${params}`, { signal: ac.signal, credentials: "include" });
+      const data = await r.json();
+      if (!r.ok || !data.success) {
+        throw new Error(data.message || `HTTP ${r.status}`);
+      }
+      setTotal(data.total ?? 0);
+      setOffset(nextOffset);
+      setItems((prev) => (append ? [...prev, ...data.items] : data.items));
+    } catch (e) {
+      if ((e as Error).name === "AbortError") return;
+      toast({
+        title: "Не удалось загрузить каталог",
+        description: e instanceof Error ? e.message : String(e),
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadCategories() {
+    try {
+      const r = await fetch(`/api/catalog/categories`, { credentials: "include" });
+      const data = await r.json();
+      if (r.ok && data.success) {
+        setCategories(data.items ?? []);
+      }
+    } catch {
+      /* tolerable */
+    }
+  }
+
+  async function loadLastSync() {
+    if (!isAdmin) return;
+    try {
+      const r = await fetch(`/api/admin/catalog-1c-sync-log?limit=1`, { credentials: "include" });
+      const data = await r.json();
+      if (r.ok && data.success && data.logs?.[0]) {
+        setLastSync(data.logs[0]);
+      }
+    } catch {
+      /* tolerable */
+    }
+  }
+
+  async function triggerSync() {
+    setSyncing(true);
+    try {
+      const r = await fetch(`/api/admin/sync-catalog-1c`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target: "both" }),
+      });
+      const data = await r.json();
+      if (!r.ok || !data.success) {
+        throw new Error(data.message || `HTTP ${r.status}`);
+      }
+      toast({
+        title: "Импорт каталога запущен",
+        description: "Идёт загрузка с FTP 1С — обновите через 1–3 минуты.",
+      });
+      // poll status каждые 5с в течение 3 минут
+      let tries = 0;
+      const iv = setInterval(async () => {
+        tries += 1;
+        await loadLastSync();
+        if (tries >= 36) clearInterval(iv);
+      }, 5000);
+    } catch (e) {
+      toast({
+        title: "Не удалось запустить импорт",
+        description: e instanceof Error ? e.message : String(e),
+        variant: "destructive",
+      });
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadCategories();
+    void loadLastSync();
+    // initial products load
+    void loadProducts(0, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      void loadProducts(0, false);
+    }, 250);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, categoryId]);
+
+  const topCategories = useMemo(
+    () => categories.filter((c) => c.parent_id == null && c.product_count > 0),
+    [categories],
+  );
+
+  function imageSrc(path: string | null): string | null {
+    if (!path) return null;
+    // 1С шлёт относительные пути типа "20250523/OL HH.png".
+    // Подменяй базу через переменную, если будет настроено хранилище. Пока — null.
+    return null;
+  }
 
   return (
-    <div className="space-y-6 sm:space-y-8" data-testid="page-catalog">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Каталог</h1>
-        <p className="mt-1 text-sm text-muted-foreground sm:text-base">
-          Входные, межкомнатные и скрытые двери Tandoor: поиск по названию и артикулу, фильтры и переход в карточку модели.
-        </p>
-      </div>
-
-      <section className="space-y-4" data-testid="section-catalog-filters">
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Название, артикул или серия…"
-            className="min-h-11 rounded-xl border-border bg-card pl-10"
-            data-testid="input-catalog-search"
-            aria-label="Поиск по каталогу"
-          />
+    <div className="space-y-6 p-4 lg:p-6">
+      <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Каталог</h1>
+          <p className="text-sm text-muted-foreground">
+            Товары из 1С • {total.toLocaleString("ru-RU")} активных позиций
+          </p>
         </div>
-
-        <div className="flex flex-wrap gap-2" data-testid="section-catalog-quick-filters">
-          {CHIPS.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => setChip(c.id)}
-              data-testid={c.testId}
-              className={cn(
-                "min-h-10 shrink-0 rounded-full border px-3.5 py-2 text-sm font-medium transition-colors",
-                chip === c.id
-                  ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                  : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground",
-              )}
-            >
-              {c.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="space-y-2">
-            <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Категория</Label>
-            <Select value={category} onValueChange={setCategory}>
-              <SelectTrigger className="min-h-11 rounded-xl bg-card" data-testid="select-catalog-category">
-                <SelectValue placeholder="Все" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Все категории</SelectItem>
-                {categories.map((c) => (
-                  <SelectItem key={c} value={c}>
-                    {c}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Серия</Label>
-            <Select value={series} onValueChange={setSeries}>
-              <SelectTrigger className="min-h-11 rounded-xl bg-card" data-testid="select-catalog-series">
-                <SelectValue placeholder="Все" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Все серии</SelectItem>
-                {seriesList.map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {s}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Вид двери</Label>
-            <Select value={doorKind} onValueChange={setDoorKind}>
-              <SelectTrigger className="min-h-11 rounded-xl bg-card" data-testid="select-catalog-door-kind">
-                <SelectValue placeholder="Все" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Любой</SelectItem>
-                {doorKinds.map((t) => (
-                  <SelectItem key={t} value={t}>
-                    {t}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Статус</Label>
-            <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger className="min-h-11 rounded-xl bg-card" data-testid="select-catalog-status">
-                <SelectValue placeholder="Все" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Все статусы</SelectItem>
-                {statuses.map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {s}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2 border-b border-border pb-3">
-          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Вид:</span>
-          {(
-            [
-              { id: "cards" as const, icon: LayoutGrid, label: "Карточки", testId: "button-catalog-view-cards" },
-              { id: "list" as const, icon: List, label: "Список", testId: "button-catalog-view-list" },
-              { id: "table" as const, icon: Table2, label: "Таблица", testId: "button-catalog-view-table" },
-            ] as const
-          ).map((v) => (
-            <Button
-              key={v.id}
-              type="button"
-              variant={view === v.id ? "default" : "outline"}
-              size="sm"
-              className="min-h-10 gap-2 rounded-full"
-              data-testid={v.testId}
-              onClick={() => setView(v.id)}
-            >
-              <v.icon className="h-4 w-4" aria-hidden />
-              {v.label}
-            </Button>
-          ))}
-          <span className="ml-auto text-sm text-muted-foreground" data-testid="text-catalog-count">
-            Найдено: {filtered.length}
-          </span>
-        </div>
-      </section>
-
-      {view === "cards" ? (
-        <div className="grid gap-4 sm:grid-cols-2" data-testid="section-catalog-results-cards">
-          {filtered.map((p) => (
-            <Card
-              key={p.id}
-              data-testid={`card-catalog-product-${p.id}`}
-              className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-md"
-            >
-        <div className="aspect-[4/3] w-full overflow-hidden border-b border-border bg-[#F7F8FB] px-2 py-3 sm:px-4 sm:py-5">
-                <ProductImage product={p} />
+        {isAdmin && (
+          <div className="flex flex-wrap items-center gap-2">
+            {lastSync && (
+              <div className="text-xs text-muted-foreground">
+                Последняя синхронизация:{" "}
+                <Badge
+                  variant={lastSync.status === "ok" ? "secondary" : lastSync.status === "running" ? "default" : "destructive"}
+                  className="ml-1"
+                >
+                  {lastSync.status === "ok"
+                    ? "успешно"
+                    : lastSync.status === "running"
+                      ? "идёт"
+                      : "ошибка"}
+                </Badge>
+                <span className="ml-2">
+                  {formatDateTime(lastSync.finished_at ?? lastSync.started_at)}
+                </span>
               </div>
-              <CardHeader className="space-y-2 pb-2">
-                <ProductBadges p={p} />
-                <CardTitle className="text-lg leading-snug">{p.name}</CardTitle>
-                <p className="text-sm font-mono text-muted-foreground">{p.article}</p>
-                <p className="text-xs text-muted-foreground">
-                  {p.doorKind} · серия «{p.series}» · {p.coating}
-                </p>
-                <p className="line-clamp-2 text-sm text-muted-foreground">{p.shortDescription}</p>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <Button asChild className="w-full min-h-11 font-semibold" data-testid={`button-catalog-open-${p.id}`}>
-                  <Link href={`/catalog/${p.id}`}>Открыть</Link>
-                </Button>
-              </CardContent>
-            </Card>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void triggerSync()}
+              disabled={syncing || lastSync?.status === "running"}
+              data-testid="catalog-sync-button"
+            >
+              <RefreshCw className={cn("mr-2 h-4 w-4", syncing && "animate-spin")} />
+              Обновить из 1С
+            </Button>
+          </div>
+        )}
+      </header>
+
+      <Card>
+        <CardContent className="grid gap-3 p-4 md:grid-cols-[1fr_240px_auto]">
+          <div className="space-y-1">
+            <Label htmlFor="catalog-search" className="text-xs">
+              Поиск
+            </Label>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                id="catalog-search"
+                placeholder="Название, отображение, артикул…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                className="pl-8"
+                data-testid="catalog-search-input"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <Label className="text-xs">Раздел</Label>
+            <Select value={categoryId} onValueChange={(v) => setCategoryId(v)}>
+              <SelectTrigger data-testid="catalog-category-select">
+                <SelectValue placeholder="Все разделы" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Все разделы</SelectItem>
+                {topCategories.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name} • {c.product_count}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex items-end gap-1">
+            <Button
+              size="icon"
+              variant={view === "cards" ? "default" : "outline"}
+              onClick={() => setView("cards")}
+              title="Карточки"
+              aria-label="Карточки"
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </Button>
+            <Button
+              size="icon"
+              variant={view === "list" ? "default" : "outline"}
+              onClick={() => setView("list")}
+              title="Список"
+              aria-label="Список"
+            >
+              <List className="h-4 w-4" />
+            </Button>
+            <Button
+              size="icon"
+              variant={view === "table" ? "default" : "outline"}
+              onClick={() => setView("table")}
+              title="Таблица"
+              aria-label="Таблица"
+            >
+              <Table2 className="h-4 w-4" />
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {loading && items.length === 0 ? (
+        <div className="grid place-items-center py-16 text-sm text-muted-foreground">
+          Загружаю каталог…
+        </div>
+      ) : items.length === 0 ? (
+        <div className="grid place-items-center py-16 text-sm text-muted-foreground">
+          Ничего не найдено. Уточните запрос.
+        </div>
+      ) : view === "cards" ? (
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+          {items.map((p) => (
+            <ProductCard key={p.id} product={p} imageSrc={imageSrc(p.image_path)} />
           ))}
         </div>
-      ) : null}
-
-      {view === "list" ? (
-        <ul className="space-y-2" data-testid="section-catalog-results-list">
-          {filtered.map((p) => (
-            <li key={p.id} data-testid={`row-catalog-product-${p.id}`}>
-              <Card className="rounded-2xl border border-border/80 bg-card shadow-sm">
-                <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <p className="font-semibold text-foreground">{p.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {p.article} · {p.doorKind} · серия «{p.series}» · {p.status}
-                    </p>
-                    <ProductBadges p={p} />
-                  </div>
-                  <Button asChild variant="outline" className="min-h-10 shrink-0 border-border bg-card" data-testid={`button-catalog-open-${p.id}`}>
-                    <Link href={`/catalog/${p.id}`}>Открыть</Link>
-                  </Button>
-                </CardContent>
-              </Card>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-
-      {view === "table" ? (
-        <Card className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-md" data-testid="section-catalog-results-table">
-          <div className="overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:thin]">
-            <table className="w-full min-w-[640px] text-left text-sm">
-              <thead className="border-b border-border bg-muted/40">
-                <tr>
-                  <th className="px-4 py-3 font-semibold">Модель</th>
-                  <th className="px-4 py-3 font-semibold">Артикул</th>
-                  <th className="px-4 py-3 font-semibold">Вид</th>
-                  <th className="px-4 py-3 font-semibold">Серия</th>
-                  <th className="px-4 py-3 font-semibold">Статус</th>
-                  <th className="px-4 py-3 font-semibold"> </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((p) => (
-                  <tr
-                    key={p.id}
-                    data-testid={`table-row-catalog-product-${p.id}`}
-                    className="border-b border-border/80 last:border-0"
-                  >
-                    <td className="max-w-[200px] px-4 py-3 font-medium break-words">{p.name}</td>
-                    <td className="whitespace-nowrap px-4 py-3 font-mono text-muted-foreground">{p.article}</td>
-                    <td className="px-4 py-3">{p.doorKind}</td>
-                    <td className="px-4 py-3">{p.series}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{p.status}</td>
-                    <td className="px-4 py-3">
-                      <Button asChild variant="ghost" size="sm" className="font-semibold text-primary" data-testid={`button-catalog-open-${p.id}`}>
-                        <Link href={`/catalog/${p.id}`}>Открыть</Link>
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+      ) : view === "list" ? (
+        <Card>
+          <CardContent className="divide-y p-0">
+            {items.map((p) => (
+              <Link
+                key={p.id}
+                href={`/catalog/1c/${p.id}`}
+                className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/40"
+                data-testid={`catalog-row-${p.id}`}
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-medium">{p.display_name || p.name}</div>
+                  <div className="truncate text-xs text-muted-foreground">{p.name}</div>
+                </div>
+                <Badge variant="secondary" className="shrink-0">
+                  Остаток {formatStock(p.total_stock)}
+                </Badge>
+              </Link>
+            ))}
+          </CardContent>
         </Card>
-      ) : null}
+      ) : (
+        <Card>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/40 text-left text-xs uppercase text-muted-foreground">
+                  <tr>
+                    <th className="px-3 py-2">Отображение</th>
+                    <th className="px-3 py-2">Артикул 1С</th>
+                    <th className="px-3 py-2">Бренд</th>
+                    <th className="px-3 py-2 text-right">Остаток</th>
+                    <th className="px-3 py-2">Сайт</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((p) => (
+                    <tr key={p.id} className="border-t hover:bg-muted/30">
+                      <td className="px-3 py-2">
+                        <Link href={`/catalog/1c/${p.id}`} className="font-medium underline-offset-2 hover:underline">
+                          {p.display_name || p.name}
+                        </Link>
+                      </td>
+                      <td className="px-3 py-2 text-xs text-muted-foreground">{p.name}</td>
+                      <td className="px-3 py-2 text-xs">{p.brand ?? "—"}</td>
+                      <td className="px-3 py-2 text-right">{formatStock(p.total_stock)}</td>
+                      <td className="px-3 py-2">
+                        {p.is_on_site ? (
+                          <Badge variant="secondary">Да</Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-      {filtered.length === 0 ? (
-        <p className="text-center text-sm text-muted-foreground" data-testid="text-catalog-empty">
-          Ничего не найдено — измените фильтры или запрос.
-        </p>
-      ) : null}
-
-      <FloatingBackButton
-        href="/dealer-base"
-        label="К базе"
-        testId="floating-back-to-dealer-base"
-        ariaLabel="Назад к клиентской базе"
-      />
+      {items.length < total && (
+        <div className="flex justify-center pt-2">
+          <Button
+            variant="outline"
+            onClick={() => void loadProducts(offset + PAGE_SIZE, true)}
+            disabled={loading}
+            data-testid="catalog-load-more"
+          >
+            {loading ? "Загружаю…" : `Показать ещё (${total - items.length})`}
+          </Button>
+        </div>
+      )}
     </div>
+  );
+}
+
+function ProductCard({ product, imageSrc }: { product: CatalogProductItem; imageSrc: string | null }) {
+  return (
+    <Link
+      href={`/catalog/1c/${product.id}`}
+      className="block"
+      data-testid={`catalog-card-${product.id}`}
+    >
+      <Card className="h-full transition hover:shadow-md">
+        <div className="aspect-square w-full overflow-hidden rounded-t-lg bg-muted">
+          {imageSrc ? (
+            <img src={imageSrc} alt={product.name} className="h-full w-full object-cover" loading="lazy" />
+          ) : (
+            <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+              Фото в 1С отсутствует
+            </div>
+          )}
+        </div>
+        <CardContent className="space-y-1 p-3">
+          <div className="line-clamp-2 text-sm font-medium" title={product.display_name || product.name}>
+            {product.display_name || product.name}
+          </div>
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>{product.brand ?? ""}</span>
+            <Badge variant="secondary">{formatStock(product.total_stock)}</Badge>
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
   );
 }
