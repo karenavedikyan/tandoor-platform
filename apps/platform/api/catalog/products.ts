@@ -46,7 +46,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     const limit = Number.isFinite(limitNum) && limitNum > 0 ? Math.min(Math.floor(limitNum), 100) : 50;
     const offsetNum = Number(req.query.offset);
     const offset = Number.isFinite(offsetNum) && offsetNum >= 0 ? Math.floor(offsetNum) : 0;
-    const sort = String(req.query.sort ?? "name") === "stock" ? "stock" : "name";
+    const sortRaw = String(req.query.sort ?? "name");
+    const sort = sortRaw === "stock" ? "stock" : sortRaw === "price_asc" ? "price_asc" : sortRaw === "price_desc" ? "price_desc" : "name";
+    const onlyInStock = String(req.query.in_stock ?? "") === "1";
+    const onlyNew = String(req.query.is_new ?? "") === "1";
+    const onlyHit = String(req.query.is_hit ?? "") === "1";
+    const onlySale = String(req.query.is_sale ?? "") === "1";
 
     const where: string[] = ["p.active = TRUE"];
     const params: unknown[] = [];
@@ -62,12 +67,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       params.push(groupId);
       where.push(`p.group_id = $${params.length}::uuid`);
     }
+    if (onlyInStock) {
+      where.push(`EXISTS (SELECT 1 FROM catalog_stocks s WHERE s.product_id = p.id AND s.qty > 0)`);
+    }
+    if (onlyNew) {
+      where.push(`EXISTS (SELECT 1 FROM catalog_product_properties pp WHERE pp.product_id = p.id AND LOWER(TRIM(pp.name)) = 'новинка' AND LOWER(TRIM(pp.value)) IN ('да','y','yes','true','1'))`);
+    }
+    if (onlyHit) {
+      where.push(`EXISTS (SELECT 1 FROM catalog_product_properties pp WHERE pp.product_id = p.id AND LOWER(TRIM(pp.name)) = 'хит продаж' AND LOWER(TRIM(pp.value)) IN ('да','y','yes','true','1'))`);
+    }
+    if (onlySale) {
+      where.push(`EXISTS (SELECT 1 FROM catalog_product_properties pp WHERE pp.product_id = p.id AND LOWER(TRIM(pp.name)) = 'акция' AND LOWER(TRIM(pp.value)) IN ('да','y','yes','true','1'))`);
+    }
     const whereSql = `WHERE ${where.join(" AND ")}`;
 
     const sortSql =
       sort === "stock"
         ? `ORDER BY total_stock DESC NULLS LAST, p.name ASC`
-        : `ORDER BY p.name ASC`;
+        : sort === "price_asc"
+          ? `ORDER BY price_retail ASC NULLS LAST, p.name ASC`
+          : sort === "price_desc"
+            ? `ORDER BY price_retail DESC NULLS LAST, p.name ASC`
+            : `ORDER BY p.name ASC`;
 
     params.push(limit);
     params.push(offset);
@@ -80,6 +101,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       is_on_site: boolean;
       image_path: string | null;
       total_stock: string | null;
+      price_retail: string | null;
+      price_retail_sale: string | null;
+      is_new: boolean;
+      is_hit: boolean;
+      is_sale: boolean;
       total_count: string;
     }>(
       `SELECT
@@ -90,6 +116,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
          p.is_on_site,
          (SELECT i.path FROM catalog_product_images i WHERE i.product_id = p.id ORDER BY i.sort_order ASC NULLS LAST LIMIT 1) AS image_path,
          (SELECT SUM(s.qty)::numeric FROM catalog_stocks s WHERE s.product_id = p.id) AS total_stock,
+         (SELECT pr.value FROM catalog_prices pr JOIN catalog_price_types pt ON pt.id = pr.price_type_id WHERE pr.product_id = p.id AND LOWER(pt.name) LIKE '%ррц тандор%' LIMIT 1) AS price_retail,
+         (SELECT pr.value FROM catalog_prices pr JOIN catalog_price_types pt ON pt.id = pr.price_type_id WHERE pr.product_id = p.id AND LOWER(pt.name) LIKE '%акционнаяцена_тандор_розница%' LIMIT 1) AS price_retail_sale,
+         EXISTS (SELECT 1 FROM catalog_product_properties pp WHERE pp.product_id = p.id AND LOWER(TRIM(pp.name)) = 'новинка' AND LOWER(TRIM(pp.value)) IN ('да','y','yes','true','1')) AS is_new,
+         EXISTS (SELECT 1 FROM catalog_product_properties pp WHERE pp.product_id = p.id AND LOWER(TRIM(pp.name)) = 'хит продаж' AND LOWER(TRIM(pp.value)) IN ('да','y','yes','true','1')) AS is_hit,
+         EXISTS (SELECT 1 FROM catalog_product_properties pp WHERE pp.product_id = p.id AND LOWER(TRIM(pp.name)) = 'акция' AND LOWER(TRIM(pp.value)) IN ('да','y','yes','true','1')) AS is_sale,
          COUNT(*) OVER () AS total_count
        FROM catalog_products p
        ${whereSql}
@@ -113,6 +144,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         is_on_site: row.is_on_site,
         image_path: row.image_path,
         total_stock: row.total_stock != null ? Number(row.total_stock) : null,
+        price_retail: row.price_retail != null ? Number(row.price_retail) : null,
+        price_retail_sale: row.price_retail_sale != null ? Number(row.price_retail_sale) : null,
+        is_new: row.is_new,
+        is_hit: row.is_hit,
+        is_sale: row.is_sale,
       })),
     });
   } catch (e) {

@@ -51,6 +51,13 @@ import { normPath, normUuid } from "./util.mjs";
  */
 
 /**
+ * @typedef {object} CatalogPriceRow
+ * @property {string} productId
+ * @property {string} priceTypeId
+ * @property {number} value
+ */
+
+/**
  * @typedef {object} ParsedCatalogXml
  * @property {CatalogCategoryRow[]} categories
  * @property {CatalogGroupRow[]} groups
@@ -58,6 +65,7 @@ import { normPath, normUuid } from "./util.mjs";
  * @property {CatalogProductRow[]} products
  * @property {CatalogStockRow[]} stocks
  * @property {CatalogExpectedStockRow[]} expectedStocks
+ * @property {CatalogPriceRow[]} prices
  * @property {Set<string>} warehouseIds
  */
 
@@ -97,6 +105,8 @@ export function parseCatalogXmlFile(filePath) {
     const stocks = [];
     /** @type {CatalogExpectedStockRow[]} */
     const expectedStocks = [];
+    /** @type {CatalogPriceRow[]} */
+    const prices = [];
     const warehouseIds = new Set();
 
     const parser = sax.createStream(true, { trim: true, normalize: true });
@@ -243,6 +253,17 @@ export function parseCatalogXmlFile(filePath) {
         inExpectedStocks = true;
         return;
       }
+
+      if (name === "ЦенаТовара" && stack.includes("Цены") && !curProduct) {
+        const productId = normUuid(pickAttr(attrs, "КодТовара", "кодтовара"));
+        const priceTypeId = normUuid(pickAttr(attrs, "КодЦены", "кодцены"));
+        if (!productId || !priceTypeId) return;
+        const raw = pickAttr(attrs, "Цена", "цена").replace(",", ".");
+        const v = Number(raw);
+        if (!Number.isFinite(v) || v <= 0) return; // 0 в 1С = нет цены, пропускаем
+        prices.push({ productId, priceTypeId, value: v });
+        return;
+      }
       if (name === "Остаток" && inExpectedStocks) {
         curExpectedProductId = normUuid(pickAttr(attrs, "Код", "код"));
         inExpectedWarehouses = false;
@@ -299,7 +320,7 @@ export function parseCatalogXmlFile(filePath) {
 
     parser.on("error", (e) => reject(e));
     parser.on("end", () => {
-      resolve({ categories, groups, priceTypes, products, stocks, expectedStocks, warehouseIds });
+      resolve({ categories, groups, priceTypes, products, stocks, expectedStocks, prices, warehouseIds });
     });
 
     fs.createReadStream(filePath).pipe(parser);

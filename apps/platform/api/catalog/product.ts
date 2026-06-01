@@ -59,7 +59,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     const p = productR.rows[0];
 
-    const [imagesR, propsR, stocksR, catsR] = await Promise.all([
+    const [imagesR, propsR, stocksR, catsR, pricesR] = await Promise.all([
       pool.query<{ path: string; sort_order: number | null }>(
         `SELECT path, sort_order FROM catalog_product_images
          WHERE product_id = $1::uuid
@@ -88,7 +88,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
          ORDER BY c.name ASC NULLS LAST`,
         [id],
       ),
+      pool.query<{ price_type_id: string; type_name: string; value: string; currency: string }>(
+        `SELECT pr.price_type_id, pt.name AS type_name, pr.value, pr.currency
+         FROM catalog_prices pr
+         LEFT JOIN catalog_price_types pt ON pt.id = pr.price_type_id
+         WHERE pr.product_id = $1::uuid
+         ORDER BY pt.name ASC NULLS LAST`,
+        [id],
+      ),
     ]);
+
+    // Бейджи из свойств 1С
+    const propsLc = propsR.rows.map((r) => ({ name: r.name.trim().toLowerCase(), value: (r.value ?? "").trim().toLowerCase() }));
+    const truthy = (v: string) => v === "да" || v === "y" || v === "yes" || v === "true" || v === "1";
+    const badges = {
+      is_new: propsLc.some((p) => p.name === "новинка" && truthy(p.value)),
+      is_hit: propsLc.some((p) => p.name === "хит продаж" && truthy(p.value)),
+      is_sale: propsLc.some((p) => p.name === "акция" && truthy(p.value)),
+    };
+
+    // Розничная цена = "РРЦ Тандор", акционная = "АкционнаяЦена_Тандор_Розница"
+    const prices = pricesR.rows.map((r) => ({
+      price_type_id: r.price_type_id,
+      type_name: r.type_name,
+      value: Number(r.value),
+      currency: r.currency,
+    }));
+    const findPrice = (sub: string) =>
+      prices.find((x) => (x.type_name ?? "").toLowerCase().includes(sub.toLowerCase()))?.value ?? null;
+    const priceRetail = findPrice("ррц тандор");
+    const priceRetailSale = findPrice("акционнаяцена_тандор_розница");
 
     sendJson(res, 200, {
       success: true,
@@ -110,6 +139,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
           expected_qty: r.expected_qty != null ? Number(r.expected_qty) : null,
         })),
         categories: catsR.rows.map((r) => ({ id: r.category_id, name: r.category_name })),
+        prices,
+        price_retail: priceRetail,
+        price_retail_sale: priceRetailSale,
+        badges,
       },
     });
   } catch (e) {

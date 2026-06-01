@@ -18,6 +18,7 @@ export async function importCatalogToDb(db, data) {
     images: 0,
     stocks: 0,
     expectedPatches: 0,
+    prices: 0,
   };
 
   logLine(`[${db.label}] categories (${data.categories.length})`);
@@ -42,6 +43,9 @@ export async function importCatalogToDb(db, data) {
   logLine(`[${db.label}] expected stocks (${data.expectedStocks.length})`);
   stats.expectedPatches += await patchExpectedStocks(db, data.expectedStocks);
 
+  logLine(`[${db.label}] prices (${data.prices?.length ?? 0})`);
+  stats.prices += await upsertPrices(db, data.prices ?? []);
+
   const rowsUpserted =
     stats.categories +
     stats.groups +
@@ -52,7 +56,8 @@ export async function importCatalogToDb(db, data) {
     stats.productCategories +
     stats.images +
     stats.stocks +
-    stats.expectedPatches;
+    stats.expectedPatches +
+    stats.prices;
 
   return { stats, rowsUpserted };
 }
@@ -344,6 +349,58 @@ async function upsertStocks(db, stocks) {
         );
         n += sub.length;
       }
+    });
+  }
+  return n;
+}
+
+async function upsertPrices(db, prices) {
+  if (!prices || prices.length === 0) return 0;
+  // дедуп по (productId, priceTypeId): оставляем последнюю встреченную цену
+  const map = new Map();
+  for (const p of prices) map.set(`${p.productId}|${p.priceTypeId}`, p);
+  const deduped = [...map.values()];
+
+  // в catalog_prices product_id ~ FK на catalog_products. Делаем выборку из реальных id и фильтруем
+  // (в 1С бывают цены для неэкспортируемых товаров)
+  let n = 0;
+  for (const batch of chunk(deduped, BATCH)) {
+    await db.transaction(async (q) => {
+      const productIds = [...new Set(batch.map((p) => p.productId))];
+      const existing = await q.query(
+        `SELECT id FROM catalog_products WHERE id = ANY($1::uuid[])`,
+        [productIds],
+      );
+      const existingSet = new Set(existing.rows.map((r) => r.id));
+
+      const priceTypeIds = [...new Set(batch.map((p) => p.priceTypeId))];
+      const existingTypes = await q.query(
+        `SELECT id FROM catalog_price_types WHERE id = ANY($1::uuid[])`,
+        [priceTypeIds],
+      );
+      const existingTypeSet = new Set(existingTypes.rows.map((r) => r.id));
+
+      const rows = batch.filter((p) => existingSet.has(p.productId) && existingTypeSet.has(p.priceTypeId));
+      if (rows.length === 0) return;
+
+      const values = [];
+      const params = [];
+      let i = 1;
+      for (const r of rows) {
+        values.push(`($${i}::uuid, $${i + 1}::uuid, $${i + 2}::numeric, 'RUB', NOW())`);
+        params.push(r.productId, r.priceTypeId, r.value);
+        i += 3;
+      }
+      await q.query(
+        `INSERT INTO catalog_prices (product_id, price_type_id, value, currency, synced_at)
+         VALUES ${values.join(",")}
+         ON CONFLICT (product_id, price_type_id) DO UPDATE SET
+           value = EXCLUDED.value,
+           currency = EXCLUDED.currency,
+           synced_at = NOW()`,
+        params,
+      );
+      n += rows.length;
     });
   }
   return n;

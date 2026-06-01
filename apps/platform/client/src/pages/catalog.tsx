@@ -27,6 +27,11 @@ type CatalogProductItem = {
   is_on_site: boolean;
   image_path: string | null;
   total_stock: number | null;
+  price_retail: number | null;
+  price_retail_sale: number | null;
+  is_new: boolean;
+  is_hit: boolean;
+  is_sale: boolean;
 };
 
 type CategoryItem = {
@@ -54,6 +59,11 @@ function formatStock(n: number | null): string {
   return Math.round(n).toLocaleString("ru-RU");
 }
 
+function formatPrice(n: number | null): string {
+  if (n == null) return "—";
+  return `${Math.round(n).toLocaleString("ru-RU")} ₽`;
+}
+
 function formatDateTime(iso: string | null): string {
   if (!iso) return "—";
   try {
@@ -76,6 +86,11 @@ export default function CatalogPage() {
   const [view, setView] = useState<ViewMode>("cards");
   const [query, setQuery] = useState("");
   const [categoryId, setCategoryId] = useState<string>("all");
+  const [sort, setSort] = useState<"name" | "stock" | "price_asc" | "price_desc">("name");
+  const [onlyInStock, setOnlyInStock] = useState(false);
+  const [onlyNew, setOnlyNew] = useState(false);
+  const [onlyHit, setOnlyHit] = useState(false);
+  const [onlySale, setOnlySale] = useState(false);
   const [items, setItems] = useState<CatalogProductItem[]>([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
@@ -95,6 +110,11 @@ export default function CatalogPage() {
       const params = new URLSearchParams();
       if (query.trim()) params.set("q", query.trim());
       if (categoryId && categoryId !== "all") params.set("category_id", categoryId);
+      if (sort !== "name") params.set("sort", sort);
+      if (onlyInStock) params.set("in_stock", "1");
+      if (onlyNew) params.set("is_new", "1");
+      if (onlyHit) params.set("is_hit", "1");
+      if (onlySale) params.set("is_sale", "1");
       params.set("limit", String(PAGE_SIZE));
       params.set("offset", String(nextOffset));
       const r = await fetch(`/api/catalog/products?${params}`, { signal: ac.signal, credentials: "include" });
@@ -191,7 +211,7 @@ export default function CatalogPage() {
     }, 250);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, categoryId]);
+  }, [query, categoryId, sort, onlyInStock, onlyNew, onlyHit, onlySale]);
 
   const topCategories = useMemo(
     () => categories.filter((c) => c.parent_id == null && c.product_count > 0),
@@ -284,6 +304,28 @@ export default function CatalogPage() {
             </Select>
           </div>
 
+          <div className="col-span-full flex flex-wrap items-center gap-2 pt-1">
+            <Label className="text-xs text-muted-foreground">Быстрые фильтры:</Label>
+            <FilterChip active={onlyInStock} onClick={() => setOnlyInStock((v) => !v)}>В наличии</FilterChip>
+            <FilterChip active={onlyNew} onClick={() => setOnlyNew((v) => !v)}>Новинки</FilterChip>
+            <FilterChip active={onlyHit} onClick={() => setOnlyHit((v) => !v)}>Хит</FilterChip>
+            <FilterChip active={onlySale} onClick={() => setOnlySale((v) => !v)}>Акции</FilterChip>
+            <div className="ml-auto flex items-center gap-1">
+              <Label className="text-xs text-muted-foreground">Сортировка:</Label>
+              <Select value={sort} onValueChange={(v) => setSort(v as typeof sort)}>
+                <SelectTrigger className="h-8 w-[180px] text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="name">По названию</SelectItem>
+                  <SelectItem value="price_asc">Цена ↑</SelectItem>
+                  <SelectItem value="price_desc">Цена ↓</SelectItem>
+                  <SelectItem value="stock">По остатку</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
           <div className="flex items-end gap-1">
             <Button
               size="icon"
@@ -341,12 +383,25 @@ export default function CatalogPage() {
                 data-testid={`catalog-row-${p.id}`}
               >
                 <div className="min-w-0 flex-1">
-                  <div className="truncate font-medium">{p.display_name || p.name}</div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="truncate font-medium">{p.display_name || p.name}</div>
+                    <ProductBadges p={p} small />
+                  </div>
                   <div className="truncate text-xs text-muted-foreground">{p.name}</div>
                 </div>
-                <Badge variant="secondary" className="shrink-0">
-                  Остаток {formatStock(p.total_stock)}
-                </Badge>
+                <div className="flex shrink-0 items-center gap-3">
+                  <div className="text-right text-sm">
+                    {p.price_retail_sale && p.price_retail ? (
+                      <>
+                        <div className="font-semibold text-rose-600">{formatPrice(p.price_retail_sale)}</div>
+                        <div className="text-xs text-muted-foreground line-through">{formatPrice(p.price_retail)}</div>
+                      </>
+                    ) : (
+                      <div className="font-semibold">{formatPrice(p.price_retail)}</div>
+                    )}
+                  </div>
+                  <Badge variant="secondary">{formatStock(p.total_stock)}</Badge>
+                </div>
               </Link>
             ))}
           </CardContent>
@@ -361,6 +416,7 @@ export default function CatalogPage() {
                     <th className="px-3 py-2">Отображение</th>
                     <th className="px-3 py-2">Артикул 1С</th>
                     <th className="px-3 py-2">Бренд</th>
+                    <th className="px-3 py-2 text-right">РРЦ</th>
                     <th className="px-3 py-2 text-right">Остаток</th>
                     <th className="px-3 py-2">Сайт</th>
                   </tr>
@@ -375,6 +431,16 @@ export default function CatalogPage() {
                       </td>
                       <td className="px-3 py-2 text-xs text-muted-foreground">{p.name}</td>
                       <td className="px-3 py-2 text-xs">{p.brand ?? "—"}</td>
+                      <td className="px-3 py-2 text-right">
+                        {p.price_retail_sale && p.price_retail ? (
+                          <span>
+                            <span className="text-rose-600">{formatPrice(p.price_retail_sale)}</span>
+                            <span className="ml-1 text-xs text-muted-foreground line-through">{formatPrice(p.price_retail)}</span>
+                          </span>
+                        ) : (
+                          formatPrice(p.price_retail)
+                        )}
+                      </td>
                       <td className="px-3 py-2 text-right">{formatStock(p.total_stock)}</td>
                       <td className="px-3 py-2">
                         {p.is_on_site ? (
@@ -408,7 +474,36 @@ export default function CatalogPage() {
   );
 }
 
+function FilterChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "rounded-full border px-3 py-1 text-xs transition",
+        active
+          ? "border-foreground bg-foreground text-background"
+          : "border-border bg-background hover:bg-muted",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+function ProductBadges({ p, small }: { p: CatalogProductItem; small?: boolean }) {
+  const cls = small ? "px-1.5 py-0 text-[10px]" : "";
+  return (
+    <>
+      {p.is_new && <Badge className={cn("bg-emerald-600 text-white hover:bg-emerald-600", cls)}>New</Badge>}
+      {p.is_hit && <Badge className={cn("bg-amber-500 text-white hover:bg-amber-500", cls)}>Hit</Badge>}
+      {p.is_sale && <Badge className={cn("bg-rose-600 text-white hover:bg-rose-600", cls)}>Sale</Badge>}
+    </>
+  );
+}
+
 function ProductCard({ product, imageSrc }: { product: CatalogProductItem; imageSrc: string | null }) {
+  const hasSale = product.price_retail_sale != null && product.price_retail != null;
   return (
     <Link
       href={`/catalog/1c/${product.id}`}
@@ -416,7 +511,7 @@ function ProductCard({ product, imageSrc }: { product: CatalogProductItem; image
       data-testid={`catalog-card-${product.id}`}
     >
       <Card className="h-full transition hover:shadow-md">
-        <div className="aspect-square w-full overflow-hidden rounded-t-lg bg-muted">
+        <div className="relative aspect-square w-full overflow-hidden rounded-t-lg bg-muted">
           {imageSrc ? (
             <img src={imageSrc} alt={product.name} className="h-full w-full object-cover" loading="lazy" />
           ) : (
@@ -424,13 +519,26 @@ function ProductCard({ product, imageSrc }: { product: CatalogProductItem; image
               Фото в 1С отсутствует
             </div>
           )}
+          <div className="absolute left-2 top-2 flex flex-col items-start gap-1">
+            <ProductBadges p={product} />
+          </div>
         </div>
         <CardContent className="space-y-1 p-3">
           <div className="line-clamp-2 text-sm font-medium" title={product.display_name || product.name}>
             {product.display_name || product.name}
           </div>
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>{product.brand ?? ""}</span>
+          {product.brand && <div className="truncate text-xs text-muted-foreground">{product.brand}</div>}
+          <div className="flex items-end justify-between gap-2">
+            <div className="min-w-0">
+              {hasSale ? (
+                <>
+                  <div className="font-semibold text-rose-600">{formatPrice(product.price_retail_sale)}</div>
+                  <div className="text-xs text-muted-foreground line-through">{formatPrice(product.price_retail)}</div>
+                </>
+              ) : (
+                <div className="font-semibold">{formatPrice(product.price_retail)}</div>
+              )}
+            </div>
             <Badge variant="secondary">{formatStock(product.total_stock)}</Badge>
           </div>
         </CardContent>
