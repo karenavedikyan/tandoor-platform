@@ -77,7 +77,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       where.push(`EXISTS (SELECT 1 FROM catalog_product_properties pp WHERE pp.product_id = p.id AND LOWER(TRIM(pp.name)) = 'хит продаж' AND LOWER(TRIM(pp.value)) IN ('да','y','yes','true','1'))`);
     }
     if (onlySale) {
-      where.push(`EXISTS (SELECT 1 FROM catalog_product_properties pp WHERE pp.product_id = p.id AND LOWER(TRIM(pp.name)) = 'акция' AND LOWER(TRIM(pp.value)) IN ('да','y','yes','true','1'))`);
+      where.push(
+        `EXISTS (SELECT 1 FROM catalog_product_properties pp WHERE pp.product_id = p.id AND LOWER(TRIM(pp.name)) = 'акция' AND NULLIF(TRIM(pp.value), '') IS NOT NULL)`,
+      );
     }
     const whereSql = `WHERE ${where.join(" AND ")}`;
 
@@ -120,7 +122,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
          (SELECT pr.value FROM catalog_prices pr JOIN catalog_price_types pt ON pt.id = pr.price_type_id WHERE pr.product_id = p.id AND LOWER(pt.name) LIKE '%акционнаяцена_тандор_розница%' LIMIT 1) AS price_retail_sale,
          EXISTS (SELECT 1 FROM catalog_product_properties pp WHERE pp.product_id = p.id AND LOWER(TRIM(pp.name)) = 'новинка' AND LOWER(TRIM(pp.value)) IN ('да','y','yes','true','1')) AS is_new,
          EXISTS (SELECT 1 FROM catalog_product_properties pp WHERE pp.product_id = p.id AND LOWER(TRIM(pp.name)) = 'хит продаж' AND LOWER(TRIM(pp.value)) IN ('да','y','yes','true','1')) AS is_hit,
-         EXISTS (SELECT 1 FROM catalog_product_properties pp WHERE pp.product_id = p.id AND LOWER(TRIM(pp.name)) = 'акция' AND LOWER(TRIM(pp.value)) IN ('да','y','yes','true','1')) AS is_sale,
+         EXISTS (SELECT 1 FROM catalog_product_properties pp WHERE pp.product_id = p.id AND LOWER(TRIM(pp.name)) = 'акция' AND NULLIF(TRIM(pp.value), '') IS NOT NULL) AS is_sale,
          COUNT(*) OVER () AS total_count
        FROM catalog_products p
        ${whereSql}

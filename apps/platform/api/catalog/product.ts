@@ -104,7 +104,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     const badges = {
       is_new: propsLc.some((p) => p.name === "новинка" && truthy(p.value)),
       is_hit: propsLc.some((p) => p.name === "хит продаж" && truthy(p.value)),
-      is_sale: propsLc.some((p) => p.name === "акция" && truthy(p.value)),
+      is_sale: propsLc.some((p) => p.name === "акция" && p.value !== ""),
     };
 
     // Розничная цена = "РРЦ Тандор", акционная = "АкционнаяЦена_Тандор_Розница"

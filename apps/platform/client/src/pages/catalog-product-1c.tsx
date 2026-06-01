@@ -26,7 +26,16 @@ type ProductDetail = {
   properties: { name: string; value: string }[];
   stocks: Stock[];
   categories: { id: string; name: string | null }[];
+  prices?: { price_type_id: string; type_name: string; value: number; currency: string }[];
+  price_retail?: number | null;
+  price_retail_sale?: number | null;
+  badges?: { is_new: boolean; is_hit: boolean; is_sale: boolean };
 };
+
+function fmtPrice(n: number | null | undefined): string {
+  if (n == null) return "—";
+  return `${Math.round(n).toLocaleString("ru-RU")} ₽`;
+}
 
 function fmtQty(n: number | null | undefined): string {
   if (n == null) return "—";
@@ -103,6 +112,15 @@ export default function CatalogProduct1cPage() {
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           <span>{product.name}</span>
           {product.brand && <Badge variant="outline">{product.brand}</Badge>}
+          {product.badges?.is_new && (
+            <Badge className="bg-emerald-600 text-white hover:bg-emerald-600">Новинка</Badge>
+          )}
+          {product.badges?.is_hit && (
+            <Badge className="bg-amber-500 text-white hover:bg-amber-500">Хит</Badge>
+          )}
+          {product.badges?.is_sale && (
+            <Badge className="bg-rose-600 text-white hover:bg-rose-600">Акция</Badge>
+          )}
           {product.is_on_site && <Badge variant="secondary">На сайте</Badge>}
           {!product.active && <Badge variant="destructive">Неактивный</Badge>}
           {product.group?.name && (
@@ -112,6 +130,20 @@ export default function CatalogProduct1cPage() {
             </span>
           )}
         </div>
+        {(product.price_retail != null || product.price_retail_sale != null) && (
+          <div className="pt-1" data-testid="catalog-1c-product-prices">
+            {product.price_retail_sale != null ? (
+              <>
+                <div className="text-2xl font-semibold text-rose-600">{fmtPrice(product.price_retail_sale)}</div>
+                {product.price_retail != null ? (
+                  <div className="text-sm text-muted-foreground line-through">{fmtPrice(product.price_retail)}</div>
+                ) : null}
+              </>
+            ) : (
+              <div className="text-2xl font-semibold">{fmtPrice(product.price_retail)}</div>
+            )}
+          </div>
+        )}
       </header>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
