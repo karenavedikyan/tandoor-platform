@@ -15,6 +15,9 @@ const TOKEN = process.env.SYNC_RUNNER_TOKEN?.trim() ?? "";
 const SCRIPT =
   process.env.SYNC_1C_SCRIPT?.trim() ||
   path.join(__dirname, "sync-1c-catalog.mjs");
+const PHOTO_SCRIPT =
+  process.env.SYNC_1C_PHOTO_SCRIPT?.trim() ||
+  path.join(__dirname, "sync-1c-photos.mjs");
 
 /** @type {import('node:child_process').ChildProcess | null} */
 let running = null;
@@ -33,7 +36,7 @@ function authOk(req) {
   return h === `Bearer ${TOKEN}`;
 }
 
-function startSync(target = "both", dry = false, extraEnv = {}) {
+function startSync(target = "both", dry = false, extraEnv = {}, kind = "catalog", extraArgs = []) {
   if (running) {
     return { ok: false, code: "BUSY", message: "Sync already running" };
   }
@@ -44,12 +47,15 @@ function startSync(target = "both", dry = false, extraEnv = {}) {
     "DATABASE_URL",
     "DATABASE_URL_UNPOOLED",
     "POSTGRES_URL_NON_POOLING",
+    "BLOB_READ_WRITE_TOKEN",
   ]);
   const safeExtra = {};
   for (const [k, v] of Object.entries(extraEnv || {})) {
     if (allowedExtra.has(k) && typeof v === "string" && v.length > 0) safeExtra[k] = v;
   }
-  const child = spawn(process.execPath, [SCRIPT], {
+  const script = kind === "photos" ? PHOTO_SCRIPT : SCRIPT;
+  const args = [script, ...extraArgs];
+  const child = spawn(process.execPath, args, {
     env: {
       ...process.env,
       ...safeExtra,
@@ -95,7 +101,8 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  if (req.method === "POST" && req.url === "/run/catalog") {
+  if (req.method === "POST" && (req.url === "/run/catalog" || req.url === "/run/photos")) {
+    const kind = req.url === "/run/photos" ? "photos" : "catalog";
     let body = "";
     req.on("data", (c) => {
       body += c;
@@ -104,17 +111,23 @@ const server = http.createServer((req, res) => {
       let target = "both";
       let dry = false;
       let extraEnv = {};
+      let extraArgs = [];
       try {
         if (body.trim()) {
           const p = JSON.parse(body);
           if (p.target) target = String(p.target);
           if (p.dry) dry = Boolean(p.dry);
           if (p.extraEnv && typeof p.extraEnv === "object") extraEnv = p.extraEnv;
+          if (Array.isArray(p.args)) {
+            extraArgs = p.args
+              .filter((s) => typeof s === "string" && /^--[a-z][a-z0-9-]*(=[0-9a-zA-Z_.-]+)?$/.test(s))
+              .slice(0, 8);
+          }
         }
       } catch {
         /* ignore */
       }
-      const r = startSync(target, dry, extraEnv);
+      const r = startSync(target, dry, extraEnv, kind, extraArgs);
       json(res, r.ok ? 202 : 409, r);
     });
     return;

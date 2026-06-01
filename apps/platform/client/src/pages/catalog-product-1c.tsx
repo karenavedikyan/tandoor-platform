@@ -22,7 +22,7 @@ type ProductDetail = {
   active: boolean;
   synced_at: string;
   group: { id: string; name: string | null } | null;
-  images: { path: string; sort_order: number | null }[];
+  images: { path: string; sort_order: number | null; blob_url: string | null }[];
   properties: { name: string; value: string }[];
   stocks: Stock[];
   categories: { id: string; name: string | null }[];
@@ -150,13 +150,20 @@ export default function CatalogProduct1cPage() {
         <Card>
           <CardContent className="space-y-3 p-4">
             <div className="aspect-square w-full overflow-hidden rounded-lg bg-muted">
-              {product.images[activeImg] ? (
+              {product.images[activeImg]?.blob_url ? (
+                <img
+                  src={product.images[activeImg].blob_url ?? undefined}
+                  alt={product.name}
+                  className="h-full w-full object-contain"
+                  loading="lazy"
+                />
+              ) : product.images[activeImg] ? (
                 <div className="flex h-full w-full items-center justify-center px-4 text-center text-xs text-muted-foreground">
                   <div>
                     <Package className="mx-auto mb-2 h-6 w-6 opacity-50" />
                     Файл: {product.images[activeImg].path}
                     <div className="mt-1 opacity-70">
-                      (хранилище фото из 1С пока не подключено — пути есть, изображения подгрузим отдельно)
+                      (фото ещё не загружено в хранилище — синк идёт пачками раз в сутки)
                     </div>
                   </div>
                 </div>
@@ -174,12 +181,16 @@ export default function CatalogProduct1cPage() {
                     type="button"
                     onClick={() => setActiveImg(i)}
                     className={
-                      "h-12 w-12 rounded border text-[10px] " +
+                      "h-12 w-12 overflow-hidden rounded border " +
                       (i === activeImg ? "border-foreground" : "border-border")
                     }
                     title={img.path}
                   >
-                    {i + 1}
+                    {img.blob_url ? (
+                      <img src={img.blob_url} alt="" className="h-full w-full object-cover" loading="lazy" />
+                    ) : (
+                      <span className="flex h-full w-full items-center justify-center text-[10px]">{i + 1}</span>
+                    )}
                   </button>
                 ))}
               </div>

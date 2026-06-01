@@ -30,6 +30,10 @@
     {
       "path": "/api/cron/sync-catalog-1c",
       "schedule": "15 * * * *"
+    },
+    {
+      "path": "/api/cron/sync-catalog-1c-photos",
+      "schedule": "0 4 * * *"
     }
   ]
 }
