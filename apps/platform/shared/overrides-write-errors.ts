@@ -12,21 +12,42 @@ export async function logOverridesWriteError(
     payload: unknown;
     errorMessage: string;
     actorUserId?: string | null;
+    permanent?: boolean;
   },
 ): Promise<void> {
   try {
     await pool.query(
-      `INSERT INTO overrides_write_errors (entity_kind, entity_id, payload, error_message, actor_user_id)
-       VALUES ($1, $2, $3::jsonb, $4, $5::uuid)`,
+      `INSERT INTO overrides_write_errors (entity_kind, entity_id, payload, error_message, actor_user_id, permanent)
+       VALUES ($1, $2, $3::jsonb, $4, $5::uuid, $6)`,
       [
         args.entityKind,
         args.entityId,
         JSON.stringify(args.payload ?? {}),
         args.errorMessage.slice(0, 4000),
         args.actorUserId ?? null,
+        args.permanent === true,
       ],
     );
   } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes('column "permanent"')) {
+      try {
+        await pool.query(
+          `INSERT INTO overrides_write_errors (entity_kind, entity_id, payload, error_message, actor_user_id)
+           VALUES ($1, $2, $3::jsonb, $4, $5::uuid)`,
+          [
+            args.entityKind,
+            args.entityId,
+            JSON.stringify(args.payload ?? {}),
+            args.errorMessage.slice(0, 4000),
+            args.actorUserId ?? null,
+          ],
+        );
+      } catch (fallbackErr) {
+        console.error("[overrides-write-errors] failed to log", fallbackErr);
+      }
+      return;
+    }
     console.error("[overrides-write-errors] failed to log", e);
   }
 }

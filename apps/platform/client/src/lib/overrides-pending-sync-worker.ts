@@ -1,5 +1,5 @@
 /**
- * Фоновый воркер повторной синхронизации overrides (Промт 113.1).
+ * Фоновый воркер повторной синхронизации overrides (Промт 113.1 / 114.4).
  */
 
 import {
@@ -20,36 +20,54 @@ import {
   apiDeleteShipmentRoute,
   apiUpsertShipmentRoute,
 } from "@/lib/dealer-shipment-routes-api";
+import { sanitizeDealerOverrideFieldsForApi } from "@/lib/overrides-persona-fields";
 import {
   dequeuePendingSync,
   listPendingSyncItems,
+  markPendingSyncDead,
   markPendingSyncFailed,
+  purgeStaleDeadPendingSync,
   type PendingSyncItem,
 } from "@/lib/overrides-pending-sync";
 import { refreshDbCommentsForClient } from "@/lib/client-comments-db-cache";
 
 const INTERVAL_MS = 15_000;
+const PURGE_INTERVAL_MS = 60 * 60 * 1000;
 let timer: ReturnType<typeof setInterval> | null = null;
+let purgeTimer: ReturnType<typeof setInterval> | null = null;
 let running = false;
 
-export type OverridesPendingSyncRunResult = {
-  processed: number;
-  succeeded: number;
-  failed: number;
-  errors: { id: string; kind: string; error: string }[];
-};
+function failureMessage(result: { ok: false; message?: string; code?: string; status?: number }): string {
+  if (result.code) return result.code;
+  if (result.status) return `HTTP ${result.status}`;
+  return result.message ?? "save failed";
+}
+
+function isPermanentApiFailure(result: { ok: false; status?: number; code?: string; message?: string }): boolean {
+  if (result.status === 400) return true;
+  const code = (result.code ?? "").toUpperCase();
+  if (code === "INVALID_UUID_FIELD") return true;
+  const msg = (result.message ?? "").toLowerCase();
+  return msg.includes("invalid input syntax for type uuid");
+}
 
 async function processItem(item: PendingSyncItem): Promise<void> {
+  if (item.dead) return;
+
   const p = item.payload as Record<string, unknown>;
-  let result: { ok: boolean } = { ok: false };
+  let result: { ok: boolean; status?: number; code?: string; message?: string; network?: boolean } = { ok: false };
 
   switch (item.kind) {
-    case "dealer-upsert":
-      result = await upsertDealerOverrideStrict(
-        String(p.dealer_id),
-        (p.fields ?? {}) as Record<string, unknown>,
-      );
+    case "dealer-upsert": {
+      const rawFields = (p.fields ?? {}) as Record<string, unknown>;
+      const fields = sanitizeDealerOverrideFieldsForApi(rawFields);
+      if (Object.keys(fields).length === 0) {
+        markPendingSyncDead(item.id, "INVALID_UUID_FIELD: empty fields after sanitize");
+        return;
+      }
+      result = await upsertDealerOverrideStrict(String(p.dealer_id), fields);
       break;
+    }
     case "dealer-training":
       result = await setDealerTrainingStrict(String(p.dealer_id), {
         product_training_done: p.product_training_done as boolean | undefined,
@@ -97,7 +115,9 @@ async function processItem(item: PendingSyncItem): Promise<void> {
       if (r.ok) {
         dequeuePendingSync(item.id);
       } else {
-        markPendingSyncFailed(item.id, r.code ?? "save failed");
+        const err = r.code ?? "save failed";
+        if (r.status === 400) markPendingSyncDead(item.id, err);
+        else markPendingSyncFailed(item.id, err);
       }
       return;
     }
@@ -128,13 +148,15 @@ async function processItem(item: PendingSyncItem): Promise<void> {
 
   if (result.ok) {
     dequeuePendingSync(item.id);
+    return;
+  }
+
+  const err = failureMessage(result as { ok: false; message?: string; code?: string; status?: number });
+  if (isPermanentApiFailure(result as { ok: false; status?: number; code?: string; message?: string })) {
+    markPendingSyncDead(item.id, err);
+  } else if ("network" in result && result.network) {
+    markPendingSyncFailed(item.id, "network");
   } else {
-    const err =
-      "message" in result && result.message
-        ? String(result.message)
-        : "network" in result && result.network
-          ? "network"
-          : "save failed";
     markPendingSyncFailed(item.id, err);
   }
 }
@@ -152,9 +174,16 @@ export async function runOverridesPendingSyncOnce(): Promise<OverridesPendingSyn
       result.processed += 1;
       const beforeFailed = item.lastError;
       await processItem(item);
-      const still = listPendingSyncItems().find((x) => x.id === item.id);
+      const still = listPendingSyncItems({ includeDead: true }).find((x) => x.id === item.id);
       if (!still) {
         result.succeeded += 1;
+      } else if (still.dead) {
+        result.failed += 1;
+        result.errors.push({
+          id: item.id,
+          kind: item.kind,
+          error: still.lastError ?? "dead",
+        });
       } else {
         result.failed += 1;
         result.errors.push({
@@ -170,10 +199,19 @@ export async function runOverridesPendingSyncOnce(): Promise<OverridesPendingSyn
   }
 }
 
+export type OverridesPendingSyncRunResult = {
+  processed: number;
+  succeeded: number;
+  failed: number;
+  errors: { id: string; kind: string; error: string }[];
+};
+
 export function startOverridesPendingSyncWorker(): void {
   if (typeof window === "undefined" || timer != null) return;
+  purgeStaleDeadPendingSync();
   void runOverridesPendingSyncOnce();
   timer = setInterval(() => void runOverridesPendingSyncOnce(), INTERVAL_MS);
+  purgeTimer = setInterval(() => purgeStaleDeadPendingSync(), PURGE_INTERVAL_MS);
   window.addEventListener("online", () => void runOverridesPendingSyncOnce());
 }
 
@@ -181,5 +219,9 @@ export function stopOverridesPendingSyncWorker(): void {
   if (timer != null) {
     clearInterval(timer);
     timer = null;
+  }
+  if (purgeTimer != null) {
+    clearInterval(purgeTimer);
+    purgeTimer = null;
   }
 }

@@ -11,9 +11,11 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { defaultHomePathForUserRole } from "@/lib/auth-access";
 import { clearOverridesErrorLog, OVERRIDES_ERROR_LOG_KEY, readOverridesErrorLog } from "@/lib/overrides-api-result";
 import {
+  listAllPendingSyncItems,
   listPendingSyncItems,
   OVERRIDES_PENDING_STORAGE_KEY,
   pendingSyncCount,
+  removePendingSyncWithUuidErrors,
 } from "@/lib/overrides-pending-sync";
 import {
   OVERRIDES_BACKFILL_CONFLICTS_KEY,
@@ -50,13 +52,39 @@ type OverridesDebugData = {
   access_log: AccessLogRow[];
 };
 
+type OverridesHealthData = {
+  windowMinutes: number;
+  recentErrors: number;
+  lastError: {
+    entityKind: string;
+    entityId: string;
+    message: string;
+    actorUserId: string | null;
+    permanent: boolean;
+    createdAt: string;
+  } | null;
+  errorStatusBreakdown: { status: number; count: number }[];
+};
+
+type ServerWriteErrorRow = {
+  id: string;
+  entity_kind: string;
+  entity_id: string;
+  payload: unknown;
+  error_message: string;
+  actor_user_id: string | null;
+  permanent: boolean;
+  created_at: string;
+};
+
 export default function AdminSyncHealthPage(): ReactElement {
   const { user } = useCurrentUser();
   const [, bump] = useState(0);
   const homeHref = user ? defaultHomePathForUserRole(user.role) : "/main";
   const canView = user?.role === "admin" || user?.role === "director";
 
-  const pending = useMemo(() => listPendingSyncItems(), [bump]);
+  const pending = useMemo(() => listAllPendingSyncItems(), [bump]);
+  const pendingActive = useMemo(() => listPendingSyncItems(), [bump]);
   const errors = useMemo(() => readOverridesErrorLog(), [bump]);
   const conflicts = useMemo(() => readBackfillConflicts(), [bump]);
   const trace = useMemo(() => readOverridesTraceLog(), [bump]);
@@ -69,6 +97,11 @@ export default function AdminSyncHealthPage(): ReactElement {
   const [debugData, setDebugData] = useState<OverridesDebugData | null>(null);
   const [debugError, setDebugError] = useState<string | null>(null);
   const [debugBusy, setDebugBusy] = useState(false);
+  const [health, setHealth] = useState<OverridesHealthData | null>(null);
+  const [healthError, setHealthError] = useState<string | null>(null);
+  const [writeErrors, setWriteErrors] = useState<ServerWriteErrorRow[]>([]);
+  const [writeErrorsError, setWriteErrorsError] = useState<string | null>(null);
+  const [actorFilter, setActorFilter] = useState("");
 
   const loadAccessLog = useCallback(async () => {
     setAccessLogError(null);
@@ -87,10 +120,51 @@ export default function AdminSyncHealthPage(): ReactElement {
     }
   }, []);
 
+  const loadHealth = useCallback(async () => {
+    setHealthError(null);
+    try {
+      const res = await fetch("/api/admin/overrides-health", { credentials: "include", cache: "no-store" });
+      const data = (await res.json()) as { success?: boolean; data?: OverridesHealthData; message?: string };
+      if (!res.ok || !data.success) {
+        setHealthError(data.message ?? `HTTP ${res.status}`);
+        setHealth(null);
+        return;
+      }
+      setHealth(data.data ?? null);
+    } catch (e) {
+      setHealthError(e instanceof Error ? e.message : String(e));
+      setHealth(null);
+    }
+  }, []);
+
+  const loadWriteErrors = useCallback(async () => {
+    setWriteErrorsError(null);
+    const q = new URLSearchParams({ limit: "50" });
+    if (actorFilter.trim()) q.set("actor_user_id", actorFilter.trim());
+    try {
+      const res = await fetch(`/api/admin/overrides-write-errors?${q}`, {
+        credentials: "include",
+        cache: "no-store",
+      });
+      const data = (await res.json()) as { success?: boolean; data?: ServerWriteErrorRow[]; message?: string };
+      if (!res.ok || !data.success) {
+        setWriteErrorsError(data.message ?? `HTTP ${res.status}`);
+        setWriteErrors([]);
+        return;
+      }
+      setWriteErrors(data.data ?? []);
+    } catch (e) {
+      setWriteErrorsError(e instanceof Error ? e.message : String(e));
+      setWriteErrors([]);
+    }
+  }, [actorFilter]);
+
   useEffect(() => {
     if (!canView) return;
     void loadAccessLog();
-  }, [canView, loadAccessLog, bump]);
+    void loadHealth();
+    void loadWriteErrors();
+  }, [canView, loadAccessLog, loadHealth, loadWriteErrors, bump]);
 
   const onForceSync = useCallback(async () => {
     setForceSyncBusy(true);
@@ -158,7 +232,13 @@ export default function AdminSyncHealthPage(): ReactElement {
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
           <p>
-            Элементов в очереди: <strong>{pendingSyncCount()}</strong>
+            Элементов в активной очереди: <strong>{pendingActive.length}</strong>
+            {pending.length > pendingActive.length ? (
+              <span className="text-muted-foreground">
+                {" "}
+                (всего с dead: {pending.length})
+              </span>
+            ) : null}
           </p>
           <p>
             Бэкфил выполнен: <strong>{backfillDone ? "да" : "нет"}</strong> ({OVERRIDES_BACKFILL_DONE_KEY})
@@ -180,6 +260,78 @@ export default function AdminSyncHealthPage(): ReactElement {
           <p className="text-xs text-muted-foreground">
             Ключи: {OVERRIDES_PENDING_STORAGE_KEY}, {OVERRIDES_ERROR_LOG_KEY}, {OVERRIDES_TRACE_LOG_KEY}
           </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2 flex flex-row items-center justify-between gap-2">
+          <CardTitle className="text-base">Сервер: overrides health (15 мин)</CardTitle>
+          <Button type="button" size="sm" variant="outline" onClick={() => void loadHealth()}>
+            Обновить
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm">
+          {healthError ? <p className="text-destructive">{healthError}</p> : null}
+          {health ? (
+            <>
+              <p>
+                Ошибок записи в БД: <strong>{health.recentErrors}</strong>
+              </p>
+              {health.lastError ? (
+                <div className="rounded border border-border/60 bg-muted/30 p-2 text-xs">
+                  <p>
+                    Последняя: {health.lastError.entityKind} / {health.lastError.entityId}
+                    {health.lastError.permanent ? " · permanent" : ""}
+                  </p>
+                  <p className="text-muted-foreground">{health.lastError.message}</p>
+                  <p className="text-muted-foreground">{health.lastError.createdAt}</p>
+                </div>
+              ) : (
+                <p className="text-muted-foreground">За окно ошибок нет.</p>
+              )}
+              {health.errorStatusBreakdown.length > 0 ? (
+                <pre className="max-h-32 overflow-auto rounded bg-muted/40 p-2 text-xs">
+                  {JSON.stringify(health.errorStatusBreakdown, null, 2)}
+                </pre>
+              ) : null}
+            </>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2 flex flex-row items-center justify-between gap-2 flex-wrap">
+          <CardTitle className="text-base">Recent write errors (Postgres)</CardTitle>
+          <div className="flex flex-wrap gap-2">
+            <Input
+              className="h-8 w-56 text-xs"
+              placeholder="actor_user_id (UUID)"
+              value={actorFilter}
+              onChange={(e) => setActorFilter(e.target.value)}
+            />
+            <Button type="button" size="sm" variant="outline" onClick={() => void loadWriteErrors()}>
+              Применить фильтр
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {writeErrorsError ? <p className="text-sm text-destructive">{writeErrorsError}</p> : null}
+          {writeErrors.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Записей нет.</p>
+          ) : (
+            <ul className="max-h-96 space-y-2 overflow-y-auto text-xs">
+              {writeErrors.map((row) => (
+                <li key={row.id} className="rounded border border-border/60 bg-muted/30 p-2">
+                  <div className="font-medium">
+                    {row.created_at} · {row.entity_kind} · {row.entity_id}
+                    {row.permanent ? " · permanent" : ""}
+                  </div>
+                  <div className="text-muted-foreground">{row.error_message}</div>
+                  {row.actor_user_id ? <div>actor: {row.actor_user_id}</div> : null}
+                </li>
+              ))}
+            </ul>
+          )}
         </CardContent>
       </Card>
 
@@ -349,8 +501,21 @@ export default function AdminSyncHealthPage(): ReactElement {
       </Card>
 
       <Card>
-        <CardHeader className="pb-2">
+        <CardHeader className="pb-2 flex flex-row items-center justify-between gap-2">
           <CardTitle className="text-base">Очередь pendingSyncStore</CardTitle>
+          <Button
+            type="button"
+            size="sm"
+            variant="destructive"
+            onClick={() => {
+              const removed = removePendingSyncWithUuidErrors();
+              bump((n) => n + 1);
+              window.alert(removed > 0 ? `Удалено записей с UUID-ошибкой: ${removed}` : "Подходящих записей не найдено.");
+            }}
+            data-testid="button-clear-stuck-uuid-pending"
+          >
+            Очистить застрявшие UUID
+          </Button>
         </CardHeader>
         <CardContent>
           {pending.length === 0 ? (

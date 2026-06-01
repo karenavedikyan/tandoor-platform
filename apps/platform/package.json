@@ -46,6 +46,8 @@
     "test:overrides-backfill": "tsx client/src/lib/__tests__/overrides-backfill-on-login.test.ts",
     "test:dealer-overrides-runtime": "tsx client/src/lib/__tests__/dealer-overrides-runtime.test.ts",
     "test:client-next-step-permissions": "tsx client/src/lib/__tests__/client-next-step-data.test.ts",
+    "test:overrides-persona-fields": "tsx client/src/lib/__tests__/overrides-persona-fields.test.ts",
+    "test:overrides-uuid-validation": "tsx shared/__tests__/overrides-uuid-validation.test.ts",
     "test:overrides-sync": "npm run test:overrides-pending-sync && npm run test:overrides-backfill && npm run test:dealer-overrides-runtime"
   },
   "dependencies": {

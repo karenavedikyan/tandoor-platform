@@ -13,7 +13,8 @@ import {
   type DealerOverrideField,
   type DealerOverrideRow,
 } from "./dealer-overrides-types.js";
-import { runOverridesHandlerSafe } from "./overrides-write-errors.js";
+import { logOverridesWriteError, runOverridesHandlerSafe } from "./overrides-write-errors.js";
+import { OverridesValidationError, sanitizeDealerOverrideUuidFields } from "./overrides-uuid-validation.js";
 
 type SessionUser = { id: string; role: string; status: string };
 
@@ -186,13 +187,42 @@ export async function handleDealerOverridesUpsert(
     sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите dealer_id." });
     return;
   }
-  const patch = pickFields(body);
+  let patch = pickFields(body);
   if (Object.keys(patch).length === 0) {
     sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Нет полей для обновления." });
     return;
   }
 
-  await runOverridesHandlerSafe(pool, "dealer", dealerId, body, me.id, async () => {
+  try {
+    patch = sanitizeDealerOverrideUuidFields(patch);
+  } catch (e) {
+    if (e instanceof OverridesValidationError) {
+      await logOverridesWriteError(pool, {
+        entityKind: "dealer",
+        entityId: dealerId,
+        payload: body,
+        errorMessage: e.message,
+        actorUserId: me.id,
+        permanent: true,
+      });
+      sendJson(res, 400, {
+        success: false,
+        code: e.code,
+        field: e.field,
+        value: e.value,
+        message: `Некорректный UUID в поле ${e.field}.`,
+      });
+      return;
+    }
+    throw e;
+  }
+
+  if (Object.keys(patch).length === 0) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Нет полей для обновления." });
+    return;
+  }
+
+  await runOverridesHandlerSafe(pool, "dealer", dealerId, { ...body, fields: patch }, me.id, async () => {
     const prev = await fetchOverride(pool, dealerId);
     await logEvents(pool, dealerId, prev, patch, me.id);
 

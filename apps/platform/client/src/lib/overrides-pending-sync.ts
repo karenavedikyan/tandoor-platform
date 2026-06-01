@@ -1,5 +1,5 @@
 /**
- * Очередь отложенной синхронизации overrides (Промт 113.1).
+ * Очередь отложенной синхронизации overrides (Промт 113.1 / 114.4).
  */
 
 export type PendingSyncKind =
@@ -23,6 +23,8 @@ export type PendingSyncItem = {
   createdAt: number;
   attempts: number;
   lastError?: string;
+  /** Не ретраить (400 / UUID / 5+ одинаковых ошибок). */
+  dead?: boolean;
 };
 
 export type PendingSyncState = {
@@ -33,6 +35,8 @@ export const OVERRIDES_PENDING_STORAGE_KEY = "tandoor:overrides:pending-v1";
 export const OVERRIDES_PENDING_CHANGED_EVENT = "tandoor:overrides-pending-changed";
 
 const HOURLY_LOG_MS = 60 * 60 * 1000;
+const DEAD_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+const MAX_ATTEMPTS = 5;
 const lastHourlyLogById = new Map<string, number>();
 
 function emptyState(): PendingSyncState {
@@ -57,12 +61,18 @@ function saveState(state: PendingSyncState): void {
   window.dispatchEvent(new CustomEvent(OVERRIDES_PENDING_CHANGED_EVENT));
 }
 
-export function listPendingSyncItems(): PendingSyncItem[] {
-  return [...loadState().items];
+export function listPendingSyncItems(opts?: { includeDead?: boolean }): PendingSyncItem[] {
+  const items = [...loadState().items];
+  if (opts?.includeDead) return items;
+  return items.filter((x) => !x.dead);
+}
+
+export function listAllPendingSyncItems(): PendingSyncItem[] {
+  return listPendingSyncItems({ includeDead: true });
 }
 
 export function pendingSyncCount(): number {
-  return loadState().items.length;
+  return listPendingSyncItems().length;
 }
 
 export function enqueuePendingSync(item: Omit<PendingSyncItem, "createdAt" | "attempts"> & { createdAt?: number; attempts?: number }): void {
@@ -71,11 +81,13 @@ export function enqueuePendingSync(item: Omit<PendingSyncItem, "createdAt" | "at
   if (existing) {
     existing.payload = item.payload;
     existing.lastError = item.lastError;
+    if (item.dead) existing.dead = true;
   } else {
     state.items.push({
       ...item,
       createdAt: item.createdAt ?? Date.now(),
       attempts: item.attempts ?? 0,
+      dead: item.dead ?? false,
     });
   }
   saveState(state);
@@ -87,14 +99,47 @@ export function dequeuePendingSync(id: string): void {
   saveState(state);
 }
 
+export function markPendingSyncDead(id: string, err: string): void {
+  const state = loadState();
+  const item = state.items.find((x) => x.id === id);
+  if (!item) return;
+  item.dead = true;
+  item.lastError = err;
+  saveState(state);
+  console.warn("[overrides-pending-sync] marked dead", id, err);
+}
+
+function isPermanentClientError(err: string): boolean {
+  const lower = err.toLowerCase();
+  return (
+    lower.includes("invalid input syntax for type uuid") ||
+    lower.includes("invalid_uuid_field") ||
+    lower.includes("http 400")
+  );
+}
+
 export function markPendingSyncFailed(id: string, err: string): void {
   const state = loadState();
   const item = state.items.find((x) => x.id === id);
   if (!item) return;
+  const prevErr = item.lastError;
   item.attempts += 1;
   item.lastError = err;
+
+  if (isPermanentClientError(err)) {
+    item.dead = true;
+  } else if (item.attempts >= MAX_ATTEMPTS && prevErr === err) {
+    item.dead = true;
+  }
+
   saveState(state);
-  if (item.attempts > 5) {
+
+  if (item.dead) {
+    console.warn("[overrides-pending-sync] item dead after failures", id, err);
+    return;
+  }
+
+  if (item.attempts > MAX_ATTEMPTS) {
     const last = lastHourlyLogById.get(id) ?? 0;
     if (Date.now() - last > HOURLY_LOG_MS) {
       console.warn("[overrides-pending-sync] item exceeded 5 attempts", id, err);
@@ -103,8 +148,57 @@ export function markPendingSyncFailed(id: string, err: string): void {
   }
 }
 
+/** Удалить dead-записи старше 7 дней. */
+export function purgeStaleDeadPendingSync(): number {
+  const state = loadState();
+  const cutoff = Date.now() - DEAD_RETENTION_MS;
+  const before = state.items.length;
+  state.items = state.items.filter((x) => !x.dead || x.createdAt >= cutoff);
+  const removed = before - state.items.length;
+  if (removed > 0) saveState(state);
+  return removed;
+}
+
+/** Удалить записи с UUID-ошибками (one-shot / health cleanup). */
+export function removePendingSyncWithUuidErrors(): number {
+  const state = loadState();
+  const before = state.items.length;
+  state.items = state.items.filter((item) => {
+    if (item.lastError && isPermanentClientError(item.lastError)) return false;
+    const p = item.payload as Record<string, unknown> | undefined;
+    const fields = (p?.fields ?? {}) as Record<string, unknown>;
+    for (const [key, val] of Object.entries(fields)) {
+      if (!key.endsWith("_id") || val == null) continue;
+      const s = String(val).trim();
+      if (!s) continue;
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s) && s.startsWith("mgr-")) {
+        return false;
+      }
+    }
+    return true;
+  });
+  const removed = before - state.items.length;
+  if (removed > 0) saveState(state);
+  return removed;
+}
+
+export function clearPendingSyncForDealers(dealerIds: string[]): number {
+  const set = new Set(dealerIds);
+  const state = loadState();
+  const before = state.items.length;
+  state.items = state.items.filter((item) => {
+    const p = item.payload as Record<string, unknown> | undefined;
+    if (!p) return true;
+    const dealerId = String(p.dealer_id ?? p.dealerId ?? "");
+    return !set.has(dealerId);
+  });
+  const removed = before - state.items.length;
+  if (removed > 0) saveState(state);
+  return removed;
+}
+
 export function listPendingForDealer(dealerId: string): PendingSyncItem[] {
-  return loadState().items.filter((item) => {
+  return listPendingSyncItems().filter((item) => {
     const p = item.payload as Record<string, unknown> | undefined;
     if (!p) return false;
     if (item.kind.startsWith("dealer-") || item.kind === "manual-dealer") {
@@ -118,7 +212,7 @@ export function listPendingForDealer(dealerId: string): PendingSyncItem[] {
 }
 
 export function listPendingForTp(tpId: string): PendingSyncItem[] {
-  return loadState().items.filter((item) => {
+  return listPendingSyncItems().filter((item) => {
     const p = item.payload as Record<string, unknown> | undefined;
     if (!p) return false;
     return String(p.tp_id ?? p.tpId ?? "") === tpId;
@@ -132,7 +226,7 @@ export function pendingStatusForEntity(opts: { dealerId?: string; tpId?: string 
       ? listPendingForDealer(opts.dealerId)
       : [];
   if (items.length === 0) return "saved";
-  if (items.some((i) => i.attempts > 3)) return "error";
+  if (items.some((i) => i.dead || i.attempts > 3)) return "error";
   return "pending";
 }
 

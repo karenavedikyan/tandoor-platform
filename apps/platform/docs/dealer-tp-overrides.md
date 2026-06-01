@@ -33,7 +33,7 @@ const comment = tp?.comment ?? point.tpComment;
 
 1. UI пишет в LS сразу (optimistic).
 2. `*Strict` API (`upsertDealerOverrideStrict`, …) → POST `/api/dealer-overrides/*`.
-3. При ошибке — запись в `pendingSyncStore` (`tandoor:overrides:pending-v1`), тост, воркер повторяет каждые 15 с.
+3. При ошибке — запись в `pendingSyncStore` (`tandoor:overrides:pending-v1`), тост, воркер повторяет каждые 15 с. Legacy persona-коды (`mgr-*`) перед отправкой маппятся в UUID; ответ **400 INVALID_UUID_FIELD** помечает запись как `dead` (без ретраев). См. Промт 114.4.
 4. Ошибки HTTP логируются в `tandoor:overrides:error-log` (50 последних). Трассировка strict/UI — `tandoor:overrides:trace-log` (200).
 
 ## Бэкфил при первом входе
