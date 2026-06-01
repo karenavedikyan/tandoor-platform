@@ -358,16 +358,8 @@ async function patchExpectedStocks(db, expected) {
          WHERE product_id = $1::uuid AND warehouse_id = $2::uuid`,
         [r.productId, r.warehouseId, r.expectedQty],
       );
-      if (res.rowCount === 0) {
-        await db.query(
-          `INSERT INTO catalog_stocks (product_id, warehouse_id, qty, expected_qty, synced_at)
-           VALUES ($1::uuid, $2::uuid, 0, $3, NOW())
-           ON CONFLICT (product_id, warehouse_id) DO UPDATE SET
-             expected_qty = EXCLUDED.expected_qty,
-             synced_at = NOW()`,
-          [r.productId, r.warehouseId, r.expectedQty],
-        );
-      }
+      // если такой пары product/warehouse нет — товар отсутствует в catalog_products, пропускаем
+      // (1С может слать expected stocks для несуществующих товаров)
       n += 1;
     }
   }
