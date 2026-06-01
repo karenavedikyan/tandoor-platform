@@ -30,7 +30,7 @@ Shadow-write дублирует часть DML в Yandex автоматичес�
 - SQL: `apps/platform/prisma/migrations/20260601120000_catalog_1c_foundation/migration.sql`
 - Prisma: `apps/platform/prisma/schema.prisma` → `npm run prisma:generate`
 - Dual-migrate: **POST** `/api/admin/migrate-catalog-1c` (alias **POST** `/api/admin/migrate`) со страницы `/admin/migrate`
-- Данные из FTP `catalog1.xml` — промт 117 (схема без наполнения)
+- Данные из FTP `catalog1.xml` — промт 117: см. [catalog-1c-sync.md](./catalog-1c-sync.md)
 
 ### Маркетинговые брифы (Промты 102–104)
 
