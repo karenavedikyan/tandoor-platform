@@ -13,6 +13,11 @@ export default defineConfig({
   test: {
     environment: "node",
     setupFiles: [path.resolve(here, "vitest.setup.ts")],
-    include: ["server/**/*.spec.ts", "shared/**/*.spec.ts", "client/**/*.test.ts"],
+    include: [
+      "server/**/*.spec.ts",
+      "shared/**/*.spec.ts",
+      "api/**/*.spec.ts",
+      "client/**/*.test.ts",
+    ],
   },
 });
