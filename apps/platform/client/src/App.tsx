@@ -52,6 +52,7 @@ const LazyDealerCardFoundation = lazy(() => import("@/pages/dealer-card-foundati
 const LazyDealerCardPage = lazy(() => import("@/pages/dealer-card-foundation").then((m) => ({ default: m.DealerCardPage })));
 const LazyTradePointDetailPage = lazy(() => import("@/pages/trade-point-detail").then((m) => ({ default: m.TradePointDetailPage })));
 const LazyCatalogPage = lazy(() => import("@/pages/catalog"));
+const LazyCatalogProduct1cPage = lazy(() => import("@/pages/catalog-product-1c"));
 const LazyProductDetailPage = lazy(() => import("@/pages/product-detail").then((m) => ({ default: m.ProductDetailPage })));
 const LazyTasksPage = lazy(() => import("@/pages/tasks"));
 const LazyOrdersPage = lazy(() => import("@/pages/orders"));
@@ -125,6 +126,7 @@ const DealerCardFoundationRoute = suspensePage(LazyDealerCardFoundation);
 const DealerCardPageRoute = suspensePage(LazyDealerCardPage);
 const TradePointDetailPageRoute = suspensePage(LazyTradePointDetailPage);
 const CatalogPageRoute = suspensePage(LazyCatalogPage);
+const CatalogProduct1cPageRoute = suspensePage(LazyCatalogProduct1cPage);
 const ProductDetailPageRoute = suspensePage(LazyProductDetailPage);
 const TasksPageRoute = suspensePage(LazyTasksPage);
 const OrdersPageRoute = suspensePage(LazyOrdersPage);
@@ -422,6 +424,7 @@ function AuthenticatedShell({
         <Route path="/dealer-base" component={DealerBaseRoute} />
         <Route path="/trade-points" component={TradePointsRoute} />
         <Route path="/client-map" component={ClientMapRoute} />
+        <Route path="/catalog/1c/:productId" component={CatalogProduct1cPageRoute} />
         <Route path="/catalog/:productId" component={ProductDetailPageRoute} />
         <Route path="/catalog" component={CatalogPageRoute} />
         <Route path="/tasks" component={TasksPageRoute} />
