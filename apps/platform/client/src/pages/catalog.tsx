@@ -26,6 +26,7 @@ type CatalogProductItem = {
   brand: string | null;
   is_on_site: boolean;
   image_path: string | null;
+  image_url: string | null;
   total_stock: number | null;
   price_retail: number | null;
   price_retail_sale: number | null;
@@ -120,6 +121,7 @@ export default function CatalogPage() {
   const [categories, setCategories] = useState<CategoryItem[]>([]);
   const [lastSync, setLastSync] = useState<SyncLogRow | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [syncingPhotos, setSyncingPhotos] = useState(false);
 
   const abortRef = useRef<AbortController | null>(null);
 
@@ -219,6 +221,34 @@ export default function CatalogPage() {
     }
   }
 
+  async function triggerPhotoSync() {
+    setSyncingPhotos(true);
+    try {
+      const r = await fetch(`/api/admin/sync-catalog-1c-photos`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target: "both", limit: 500 }),
+      });
+      const data = await r.json();
+      if (!r.ok || !data.success) {
+        throw new Error(data.message || `HTTP ${r.status}`);
+      }
+      toast({
+        title: "Синк фото запущен",
+        description: "До 500 фото за запуск. Обновите страницу через 2–5 минут.",
+      });
+    } catch (e) {
+      toast({
+        title: "Не удалось запустить синк фото",
+        description: e instanceof Error ? e.message : String(e),
+        variant: "destructive",
+      });
+    } finally {
+      setSyncingPhotos(false);
+    }
+  }
+
   useEffect(() => {
     void loadCategories();
     void loadLastSync();
@@ -240,11 +270,9 @@ export default function CatalogPage() {
     [categories],
   );
 
-  function imageSrc(path: string | null): string | null {
-    if (!path) return null;
-    // 1С шлёт относительные пути типа "20250523/OL HH.png".
-    // Подменяй базу через переменную, если будет настроено хранилище. Пока — null.
-    return null;
+  function imageSrc(p: CatalogProductItem): string | null {
+    // Vercel Blob если уже залит, иначе пока null (заливка идёт пачками на VM).
+    return p.image_url || null;
   }
 
   return (
@@ -285,6 +313,16 @@ export default function CatalogPage() {
             >
               <RefreshCw className={cn("mr-2 h-4 w-4", syncing && "animate-spin")} />
               Обновить из 1С
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void triggerPhotoSync()}
+              disabled={syncingPhotos}
+              data-testid="catalog-sync-photos-button"
+            >
+              <RefreshCw className={cn("mr-2 h-4 w-4", syncingPhotos && "animate-spin")} />
+              Загрузить фото
             </Button>
           </div>
         )}
@@ -391,7 +429,7 @@ export default function CatalogPage() {
       ) : view === "cards" ? (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
           {items.map((p) => (
-            <ProductCard key={p.id} product={p} imageSrc={imageSrc(p.image_path)} />
+            <ProductCard key={p.id} product={p} imageSrc={imageSrc(p)} />
           ))}
         </div>
       ) : view === "list" ? (

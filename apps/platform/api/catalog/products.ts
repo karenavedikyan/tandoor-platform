@@ -102,6 +102,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       brand: string | null;
       is_on_site: boolean;
       image_path: string | null;
+      image_url: string | null;
       total_stock: string | null;
       price_retail: string | null;
       price_retail_sale: string | null;
@@ -117,6 +118,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
          p.brand,
          p.is_on_site,
          (SELECT i.path FROM catalog_product_images i WHERE i.product_id = p.id ORDER BY i.sort_order ASC NULLS LAST LIMIT 1) AS image_path,
+         (SELECT i.blob_url FROM catalog_product_images i WHERE i.product_id = p.id AND i.blob_url IS NOT NULL ORDER BY i.sort_order ASC NULLS LAST LIMIT 1) AS image_url,
          (SELECT SUM(s.qty)::numeric FROM catalog_stocks s WHERE s.product_id = p.id) AS total_stock,
          (SELECT pr.value FROM catalog_prices pr JOIN catalog_price_types pt ON pt.id = pr.price_type_id WHERE pr.product_id = p.id AND LOWER(pt.name) LIKE '%ррц тандор%' LIMIT 1) AS price_retail,
          (SELECT pr.value FROM catalog_prices pr JOIN catalog_price_types pt ON pt.id = pr.price_type_id WHERE pr.product_id = p.id AND LOWER(pt.name) LIKE '%акционнаяцена_тандор_розница%' LIMIT 1) AS price_retail_sale,
@@ -145,6 +147,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         brand: row.brand,
         is_on_site: row.is_on_site,
         image_path: row.image_path,
+        image_url: row.image_url,
         total_stock: row.total_stock != null ? Number(row.total_stock) : null,
         price_retail: row.price_retail != null ? Number(row.price_retail) : null,
         price_retail_sale: row.price_retail_sale != null ? Number(row.price_retail_sale) : null,

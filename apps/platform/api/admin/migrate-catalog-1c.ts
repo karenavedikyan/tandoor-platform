@@ -25,18 +25,21 @@ import { splitSqlStatements } from "../../server/db-migrate/restore-yandex.js";
 import { makePoolFromNeon } from "../../server/db/neon-client.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const migrationPath = join(
-  here,
-  "..",
-  "..",
-  "prisma",
-  "migrations",
-  "20260601120000_catalog_1c_foundation",
-  "migration.sql",
+const migrationsDir = join(here, "..", "..", "prisma", "migrations");
+const foundationSql = readFileSync(
+  join(migrationsDir, "20260601120000_catalog_1c_foundation", "migration.sql"),
+  "utf8",
 );
-const ddlSql = readFileSync(migrationPath, "utf8");
+const blobSql = readFileSync(
+  join(migrationsDir, "20260601193000_catalog_image_blob_url", "migration.sql"),
+  "utf8",
+);
 
-const STMTS = ["CREATE EXTENSION IF NOT EXISTS pgcrypto", ...splitSqlStatements(ddlSql)];
+const STMTS = [
+  "CREATE EXTENSION IF NOT EXISTS pgcrypto",
+  ...splitSqlStatements(foundationSql),
+  ...splitSqlStatements(blobSql),
+];
 
 export const CATALOG_1C_EXPECTED_TABLES = [
   "catalog_categories",
