@@ -45,6 +45,7 @@
     "test:management-view-model": "tsx client/src/lib/__tests__/dealer-base-management-view-model.test.ts",
     "test:dealer-edit-contact-sync": "tsx client/src/lib/__tests__/dealer-edit-contact-sync.test.ts",
     "test:pg-migration": "vitest run",
+    "test:catalog-property-filters": "vitest run shared/catalog-1c/property-filters.spec.ts",
     "test:overrides-pending-sync": "tsx client/src/lib/__tests__/overrides-pending-sync.test.ts",
     "test:overrides-backfill": "tsx client/src/lib/__tests__/overrides-backfill-on-login.test.ts",
     "test:dealer-overrides-runtime": "tsx client/src/lib/__tests__/dealer-overrides-runtime.test.ts",

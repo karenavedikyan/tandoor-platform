@@ -1,16 +1,36 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
-import { ArrowLeft, Building2, Package, Tag } from "lucide-react";
+import { Heart, Package, Share2, ShoppingCart, Tag } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
+import { LightboxModal } from "@/components/catalog/LightboxModal";
+import {
+  groupProperties,
+  pickShortProperties,
+  type GroupedProperty,
+} from "../../../shared/catalog-1c/property-filters";
 
 type Stock = {
   warehouse_id: string;
   warehouse_name: string | null;
   qty: number;
   expected_qty: number | null;
+};
+
+type Breadcrumb = { id: string; name: string; kind: "group" | "category" };
+
+type RelatedProduct = {
+  id: string;
+  name: string;
+  display_name: string | null;
+  brand: string | null;
+  image_url: string | null;
+  price_retail: number | null;
+  price_retail_sale: number | null;
+  badges: { is_new: boolean; is_hit: boolean; is_sale: boolean };
 };
 
 type ProductDetail = {
@@ -23,13 +43,15 @@ type ProductDetail = {
   synced_at: string;
   group: { id: string; name: string | null } | null;
   images: { path: string; sort_order: number | null; blob_url: string | null }[];
-  properties: { name: string; value: string }[];
+  properties: GroupedProperty[];
   stocks: Stock[];
   categories: { id: string; name: string | null }[];
-  prices?: { price_type_id: string; type_name: string; value: number; currency: string }[];
   price_retail?: number | null;
   price_retail_sale?: number | null;
   badges?: { is_new: boolean; is_hit: boolean; is_sale: boolean };
+  breadcrumbs?: Breadcrumb[];
+  related?: RelatedProduct[];
+  description?: string | null;
 };
 
 function fmtPrice(n: number | null | undefined): string {
@@ -42,12 +64,109 @@ function fmtQty(n: number | null | undefined): string {
   return Math.round(n).toLocaleString("ru-RU");
 }
 
+function discountPercent(retail: number, sale: number): number | null {
+  if (retail <= 0 || sale >= retail) return null;
+  return Math.round((1 - sale / retail) * 100);
+}
+
+function ProductBadgesRow({
+  badges,
+  small,
+}: {
+  badges?: { is_new: boolean; is_hit: boolean; is_sale: boolean };
+  small?: boolean;
+}) {
+  const cls = small ? "px-1.5 py-0 text-[10px]" : "";
+  return (
+    <div className="flex flex-wrap gap-1">
+      {badges?.is_new ? (
+        <Badge className={cn("bg-emerald-600 text-white hover:bg-emerald-600", cls)}>New</Badge>
+      ) : null}
+      {badges?.is_hit ? (
+        <Badge className={cn("bg-amber-500 text-white hover:bg-amber-500", cls)}>Hit</Badge>
+      ) : null}
+      {badges?.is_sale ? (
+        <Badge className={cn("bg-rose-600 text-white hover:bg-rose-600", cls)}>Sale</Badge>
+      ) : null}
+    </div>
+  );
+}
+
+function CatalogPriceBlock({
+  retail,
+  sale,
+  large,
+}: {
+  retail: number | null | undefined;
+  sale: number | null | undefined;
+  large?: boolean;
+}) {
+  const pct = retail != null && sale != null ? discountPercent(retail, sale) : null;
+  if (sale != null) {
+    return (
+      <div>
+        <div className="flex flex-wrap items-baseline gap-2">
+          <span className={cn("font-semibold text-rose-600", large ? "text-3xl" : "text-lg")}>
+            {fmtPrice(sale)}
+          </span>
+          {pct != null ? (
+            <Badge variant="destructive" className="text-xs">
+              −{pct}%
+            </Badge>
+          ) : null}
+        </div>
+        {retail != null ? (
+          <div className={cn("text-muted-foreground line-through", large ? "text-base" : "text-sm")}>
+            {fmtPrice(retail)}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+  return <div className={cn("font-semibold", large ? "text-3xl" : "text-lg")}>{fmtPrice(retail)}</div>;
+}
+
+function RelatedCard({ item }: { item: RelatedProduct }) {
+  const title = item.display_name || item.name;
+  const hasSale = item.price_retail_sale != null;
+  return (
+    <Link href={`/catalog/1c/${item.id}`} className="group block" data-testid={`related-product-${item.id}`}>
+      <Card className="h-full overflow-hidden transition hover:shadow-md">
+        <div className="relative aspect-square bg-muted">
+          {item.image_url ? (
+            <img src={item.image_url} alt={title} className="h-full w-full object-contain p-1" loading="lazy" />
+          ) : (
+            <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+              <Package className="h-8 w-8 opacity-40" />
+            </div>
+          )}
+          <div className="absolute left-2 top-2">
+            <ProductBadgesRow badges={item.badges} small />
+          </div>
+        </div>
+        <CardContent className="space-y-1 p-3">
+          <p className="line-clamp-2 text-sm font-medium leading-snug group-hover:underline">{title}</p>
+          {item.brand ? <p className="truncate text-xs text-muted-foreground">{item.brand}</p> : null}
+          <div className="text-sm font-semibold">
+            {hasSale ? (
+              <span className="text-rose-600">{fmtPrice(item.price_retail_sale)}</span>
+            ) : (
+              fmtPrice(item.price_retail)
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
+  );
+}
+
 export default function CatalogProduct1cPage() {
   const params = useParams<{ productId: string }>();
   const { toast } = useToast();
   const [product, setProduct] = useState<ProductDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeImg, setActiveImg] = useState(0);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
   useEffect(() => {
     if (!params.productId) return;
@@ -62,7 +181,10 @@ export default function CatalogProduct1cPage() {
         if (!r.ok || !data.success) {
           throw new Error(data.message || `HTTP ${r.status}`);
         }
-        if (!cancelled) setProduct(data.product);
+        if (!cancelled) {
+          setProduct(data.product);
+          setActiveImg(0);
+        }
       } catch (e) {
         if (!cancelled) {
           toast({
@@ -80,6 +202,43 @@ export default function CatalogProduct1cPage() {
     };
   }, [params.productId, toast]);
 
+  const lightboxImages = useMemo(
+    () =>
+      (product?.images ?? [])
+        .filter((img): img is typeof img & { blob_url: string } => Boolean(img.blob_url?.trim()))
+        .map((img) => ({ blob_url: img.blob_url!, path: img.path })),
+    [product?.images],
+  );
+
+  const activeBlobIdx = useMemo(() => {
+    if (!product?.images[activeImg]?.blob_url) return 0;
+    const url = product.images[activeImg].blob_url;
+    const idx = lightboxImages.findIndex((i) => i.blob_url === url);
+    return idx >= 0 ? idx : 0;
+  }, [product?.images, activeImg, lightboxImages]);
+
+  const propertyGroups = useMemo(
+    () => (product ? groupProperties(product.properties) : []),
+    [product],
+  );
+  const shortProps = useMemo(
+    () => (product ? pickShortProperties(product.properties) : []),
+    [product],
+  );
+
+  const scrollToAllProperties = () => {
+    document.getElementById("all-properties")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const shareProduct = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      toast({ title: "Ссылка скопирована" });
+    } catch {
+      toast({ title: "Не удалось скопировать ссылку", variant: "destructive" });
+    }
+  };
+
   if (loading) {
     return <div className="grid place-items-center py-16 text-sm text-muted-foreground">Загружаю карточку…</div>;
   }
@@ -95,179 +254,277 @@ export default function CatalogProduct1cPage() {
   }
 
   const totalQty = product.stocks.reduce((s, x) => s + (x.qty ?? 0), 0);
+  const title = product.display_name || product.name;
+  const subtitle =
+    product.display_name && product.name.trim() !== product.display_name.trim() ? product.name : null;
+  const hasAnyBlob = product.images.some((i) => i.blob_url?.trim());
+  const currentImg = product.images[activeImg];
+  const showLightboxForCurrent = Boolean(currentImg?.blob_url?.trim());
 
   return (
-    <div className="space-y-6 p-4 lg:p-6">
-      <div className="flex items-center gap-2">
-        <Link href="/catalog">
-          <Button variant="ghost" size="sm" className="-ml-2">
-            <ArrowLeft className="mr-1 h-4 w-4" />
-            Каталог
-          </Button>
+    <div className="space-y-8 p-4 lg:p-6" data-testid="page-catalog-product-1c">
+      <nav className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground" aria-label="Хлебные крошки">
+        <Link href="/catalog" className="hover:text-foreground hover:underline">
+          Каталог
         </Link>
-      </div>
+        {(product.breadcrumbs ?? []).map((b) => (
+          <span key={`${b.kind}-${b.id}`} className="inline-flex items-center gap-1">
+            <span aria-hidden>›</span>
+            <Link href="/catalog" className="max-w-[200px] truncate hover:text-foreground hover:underline">
+              {b.name}
+            </Link>
+          </span>
+        ))}
+        <span aria-hidden>›</span>
+        <span className="max-w-[240px] truncate font-medium text-foreground">{title}</span>
+      </nav>
 
-      <header className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold tracking-tight">{product.display_name || product.name}</h1>
-        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-          <span>{product.name}</span>
-          {product.brand && <Badge variant="outline">{product.brand}</Badge>}
-          {product.badges?.is_new && (
-            <Badge className="bg-emerald-600 text-white hover:bg-emerald-600">Новинка</Badge>
-          )}
-          {product.badges?.is_hit && (
-            <Badge className="bg-amber-500 text-white hover:bg-amber-500">Хит</Badge>
-          )}
-          {product.badges?.is_sale && (
-            <Badge className="bg-rose-600 text-white hover:bg-rose-600">Акция</Badge>
-          )}
-          {product.is_on_site && <Badge variant="secondary">На сайте</Badge>}
-          {!product.active && <Badge variant="destructive">Неактивный</Badge>}
-          {product.group?.name && (
-            <span className="inline-flex items-center gap-1">
-              <Building2 className="h-3.5 w-3.5" />
-              {product.group.name}
-            </span>
-          )}
+      <header className="space-y-2">
+        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{title}</h1>
+        {subtitle ? <p className="font-mono text-sm text-muted-foreground">{subtitle}</p> : null}
+        <div className="flex flex-wrap items-center gap-2">
+          {product.brand ? <span className="text-sm font-medium text-muted-foreground">{product.brand}</span> : null}
+          <ProductBadgesRow badges={product.badges} />
+          {product.is_on_site ? <Badge variant="secondary">На сайте</Badge> : null}
+          {!product.active ? <Badge variant="destructive">Неактивный</Badge> : null}
         </div>
-        {(product.price_retail != null || product.price_retail_sale != null) && (
-          <div className="pt-1" data-testid="catalog-1c-product-prices">
-            {product.price_retail_sale != null ? (
-              <>
-                <div className="text-2xl font-semibold text-rose-600">{fmtPrice(product.price_retail_sale)}</div>
-                {product.price_retail != null ? (
-                  <div className="text-sm text-muted-foreground line-through">{fmtPrice(product.price_retail)}</div>
-                ) : null}
-              </>
-            ) : (
-              <div className="text-2xl font-semibold">{fmtPrice(product.price_retail)}</div>
-            )}
-          </div>
-        )}
       </header>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-        <Card>
-          <CardContent className="space-y-3 p-4">
-            <div className="aspect-square w-full overflow-hidden rounded-lg bg-muted">
-              {product.images[activeImg]?.blob_url ? (
-                <img
-                  src={product.images[activeImg].blob_url ?? undefined}
-                  alt={product.name}
-                  className="h-full w-full object-contain"
-                  loading="lazy"
-                />
-              ) : product.images[activeImg] ? (
-                <div className="flex h-full w-full items-center justify-center px-4 text-center text-xs text-muted-foreground">
-                  <div>
-                    <Package className="mx-auto mb-2 h-6 w-6 opacity-50" />
-                    Файл: {product.images[activeImg].path}
-                    <div className="mt-1 opacity-70">
-                      (фото ещё не загружено в хранилище — синк идёт пачками раз в сутки)
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-                  Изображений нет
-                </div>
-              )}
-            </div>
-            {product.images.length > 1 && (
-              <div className="flex flex-wrap gap-1">
-                {product.images.map((img, i) => (
-                  <button
-                    key={img.path + i}
-                    type="button"
-                    onClick={() => setActiveImg(i)}
-                    className={
-                      "h-12 w-12 overflow-hidden rounded border " +
-                      (i === activeImg ? "border-foreground" : "border-border")
-                    }
-                    title={img.path}
-                  >
-                    {img.blob_url ? (
-                      <img src={img.blob_url} alt="" className="h-full w-full object-cover" loading="lazy" />
-                    ) : (
-                      <span className="flex h-full w-full items-center justify-center text-[10px]">{i + 1}</span>
-                    )}
-                  </button>
-                ))}
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+        {/* Галерея */}
+        <div className="space-y-3">
+          <button
+            type="button"
+            className={cn(
+              "aspect-square w-full overflow-hidden rounded-xl bg-muted",
+              showLightboxForCurrent && "cursor-zoom-in",
+            )}
+            onClick={() => showLightboxForCurrent && setLightboxOpen(true)}
+            disabled={!showLightboxForCurrent}
+            aria-label={showLightboxForCurrent ? "Открыть фото на весь экран" : undefined}
+          >
+            {currentImg?.blob_url ? (
+              <img src={currentImg.blob_url} alt={title} className="h-full w-full object-contain p-2" />
+            ) : (
+              <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center text-sm text-muted-foreground">
+                <Package className="h-10 w-10 opacity-40" />
+                <p>Фото будет загружено в ближайшую синхронизацию</p>
               </div>
             )}
-            <div className="text-xs text-muted-foreground">
-              Синхронизировано: {new Date(product.synced_at).toLocaleString("ru-RU")}
-            </div>
-          </CardContent>
-        </Card>
+          </button>
 
-        <div className="space-y-4">
+          {product.images.length > 1 ? (
+            <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:thin]">
+              {product.images.map((img, i) => (
+                <button
+                  key={img.path + i}
+                  type="button"
+                  onClick={() => setActiveImg(i)}
+                  className={cn(
+                    "h-16 w-16 shrink-0 overflow-hidden rounded-lg border-2 bg-muted transition",
+                    i === activeImg ? "border-primary" : "border-transparent opacity-80 hover:opacity-100",
+                  )}
+                  title={img.path}
+                >
+                  {img.blob_url ? (
+                    <img src={img.blob_url} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
+                      {i + 1}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          <LightboxModal
+            open={lightboxOpen}
+            onOpenChange={setLightboxOpen}
+            images={lightboxImages}
+            activeIdx={activeBlobIdx}
+            onActiveIdxChange={(idx) => {
+              const url = lightboxImages[idx]?.blob_url;
+              if (!url) return;
+              const orig = product.images.findIndex((im) => im.blob_url === url);
+              if (orig >= 0) setActiveImg(orig);
+            }}
+            alt={title}
+          />
+        </div>
+
+        {/* Правая колонка */}
+        <div className="space-y-4 lg:sticky lg:top-4 lg:self-start">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">Остатки по складам</CardTitle>
+              <CardTitle className="text-base">Цена и наличие</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2">
-              {product.stocks.length === 0 ? (
-                <div className="text-sm text-muted-foreground">Остатков нет.</div>
+            <CardContent className="space-y-4">
+              <div>
+                <p className="text-xs text-muted-foreground">Розничная цена</p>
+                <CatalogPriceBlock
+                  retail={product.price_retail}
+                  sale={product.price_retail_sale}
+                  large
+                />
+                <p className="mt-1 text-xs text-muted-foreground">за единицу</p>
+              </div>
+
+              {totalQty > 0 ? (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-900">
+                  В наличии: {fmtQty(totalQty)} шт.
+                </div>
               ) : (
-                <div className="space-y-1.5">
-                  {product.stocks.map((s) => (
-                    <div key={s.warehouse_id} className="flex items-center justify-between gap-2 text-sm">
-                      <span className="truncate">{s.warehouse_name || s.warehouse_id}</span>
-                      <span className="font-medium">{fmtQty(s.qty)}</span>
-                      {s.expected_qty != null && s.expected_qty !== 0 && (
-                        <Badge variant="outline" className="text-xs">
-                          ожид. {fmtQty(s.expected_qty)}
-                        </Badge>
-                      )}
-                    </div>
-                  ))}
-                  <div className="flex items-center justify-between border-t pt-2 text-sm font-semibold">
-                    <span>Итого</span>
-                    <span>{fmtQty(totalQty)}</span>
-                  </div>
+                <div className="rounded-lg border bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+                  Под заказ
                 </div>
               )}
+
+              <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
+                <Button
+                  type="button"
+                  className="w-full gap-2"
+                  onClick={() =>
+                    toast({ title: "Корзина появится в следующем релизе" })
+                  }
+                >
+                  <ShoppingCart className="h-4 w-4" />
+                  В корзину
+                </Button>
+                <Button type="button" variant="outline" className="w-full gap-2">
+                  <Heart className="h-4 w-4" />
+                  В избранное
+                </Button>
+                <Button type="button" variant="outline" className="w-full gap-2" onClick={() => void shareProduct()}>
+                  <Share2 className="h-4 w-4" />
+                  Поделиться
+                </Button>
+              </div>
             </CardContent>
           </Card>
 
-          {product.categories.length > 0 && (
+          {shortProps.length > 0 ? (
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-base">Разделы</CardTitle>
+                <CardTitle className="text-base">Краткие характеристики</CardTitle>
               </CardHeader>
-              <CardContent className="flex flex-wrap gap-1.5">
-                {product.categories.map((c) => (
-                  <Badge key={c.id} variant="outline" className="text-xs">
-                    <Tag className="mr-1 h-3 w-3" />
-                    {c.name || c.id}
-                  </Badge>
-                ))}
-              </CardContent>
-            </Card>
-          )}
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Свойства из 1С</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {product.properties.length === 0 ? (
-                <div className="text-sm text-muted-foreground">Свойств нет.</div>
-              ) : (
-                <dl className="grid grid-cols-1 gap-x-6 gap-y-1.5 text-sm md:grid-cols-2">
-                  {product.properties.map((p, i) => (
-                    <div key={p.name + i} className="flex flex-col">
-                      <dt className="text-xs uppercase tracking-wide text-muted-foreground">{p.name}</dt>
-                      <dd className="break-words">{p.value}</dd>
+              <CardContent className="space-y-3">
+                <dl className="space-y-2 text-sm">
+                  {shortProps.map((p) => (
+                    <div key={p.name} className="flex justify-between gap-4 border-b border-border/60 pb-2 last:border-0">
+                      <dt className="text-muted-foreground">{p.name}</dt>
+                      <dd className="text-right font-medium">{p.value}</dd>
                     </div>
                   ))}
                 </dl>
-              )}
-            </CardContent>
-          </Card>
+                <button
+                  type="button"
+                  className="text-sm font-medium text-primary hover:underline"
+                  onClick={scrollToAllProperties}
+                >
+                  Все характеристики →
+                </button>
+              </CardContent>
+            </Card>
+          ) : null}
         </div>
       </div>
+
+      {product.description ? (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Описание</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="whitespace-pre-line text-sm leading-relaxed text-foreground">{product.description}</p>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {propertyGroups.length > 0 ? (
+        <Card id="all-properties">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Все характеристики</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {propertyGroups.map((g) => (
+              <section key={g.title}>
+                <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">{g.title}</h3>
+                <dl className="grid gap-x-8 gap-y-2 sm:grid-cols-2">
+                  {g.properties.map((p) => (
+                    <div key={p.name} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] gap-2 border-b border-border/40 py-1.5 text-sm">
+                      <dt className="text-muted-foreground">{p.name}</dt>
+                      <dd className="break-words font-medium">{p.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </section>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Остатки по складам</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {product.stocks.length === 0 ? (
+            <div className="text-sm text-muted-foreground">Остатков нет.</div>
+          ) : (
+            <div className="space-y-1.5">
+              {product.stocks.map((s) => (
+                <div key={s.warehouse_id} className="flex items-center justify-between gap-2 text-sm">
+                  <span className="truncate">{s.warehouse_name || s.warehouse_id}</span>
+                  <span className="font-medium">{fmtQty(s.qty)}</span>
+                  {s.expected_qty != null && s.expected_qty !== 0 ? (
+                    <Badge variant="outline" className="text-xs">
+                      ожид. {fmtQty(s.expected_qty)}
+                    </Badge>
+                  ) : null}
+                </div>
+              ))}
+              <div className="flex items-center justify-between border-t pt-2 text-sm font-semibold">
+                <span>Итого</span>
+                <span>{fmtQty(totalQty)}</span>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {product.categories.length > 0 ? (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Разделы</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-1.5">
+            {product.categories.map((c) => (
+              <Badge key={c.id} variant="outline" className="text-xs">
+                <Tag className="mr-1 h-3 w-3" />
+                {c.name || c.id}
+              </Badge>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {(product.related?.length ?? 0) > 0 ? (
+        <section className="space-y-4">
+          <h2 className="text-lg font-semibold">Похожие товары</h2>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+            {product.related!.map((r) => (
+              <RelatedCard key={r.id} item={r} />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {!hasAnyBlob && product.images.length > 0 ? (
+        <p className="text-center text-xs text-muted-foreground">
+          Синхронизировано: {new Date(product.synced_at).toLocaleString("ru-RU")}
+        </p>
+      ) : null}
     </div>
   );
 }
