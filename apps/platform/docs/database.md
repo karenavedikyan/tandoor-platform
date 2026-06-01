@@ -23,6 +23,15 @@ Shadow-write дублирует часть DML в Yandex автоматичес�
 3. Если миграция меняет схему уже развёрнутых прод-кластеров — добавьте стейтменты в admin-эндпоинт dual-migrate или расширьте существующий (см. `api/admin/migrate-marketing-briefs.ts` и `shared/dual-db-migrate.ts`).
 4. После деплоя админ запускает **POST** `/api/admin/migrate-marketing-briefs` со страницы `/admin/migrate-marketing-briefs` и проверяет отчёт «Синхронно».
 
+### Каталог 1С (Промт 116)
+
+Таблицы `catalog_*` (11 шт.): разделы, группы, товары, свойства, M2M, картинки, склады, остатки, типы цен, цены, журнал синков.
+
+- SQL: `apps/platform/prisma/migrations/20260601120000_catalog_1c_foundation/migration.sql`
+- Prisma: `apps/platform/prisma/schema.prisma` → `npm run prisma:generate`
+- Dual-migrate: **POST** `/api/admin/migrate-catalog-1c` (alias **POST** `/api/admin/migrate`) со страницы `/admin/migrate`
+- Данные из FTP `catalog1.xml` — промт 117 (схема без наполнения)
+
 ### Маркетинговые брифы (Промты 102–104)
 
 Таблицы:

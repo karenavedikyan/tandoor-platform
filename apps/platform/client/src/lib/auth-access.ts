@@ -141,7 +141,9 @@ export function canAccessPathForUser(role: UserRole, path: string): boolean {
     p === "/admin/actualization/dedupe" ||
     p === "/admin/migration" ||
     p === "/admin/migrate-marketing-briefs" ||
-    p === "/admin/migrate-dealer-tp"
+    p === "/admin/migrate-dealer-tp" ||
+    p === "/admin/migrate-catalog-1c" ||
+    p === "/admin/migrate"
   ) {
     return role === "admin";
   }
@@ -337,6 +339,12 @@ function buildAdministrationNavGroup(platformUserRole: UserRole | null | undefin
       label: "Миграции дилер/ТТ",
       testId: "nav-item-admin-dealer-tp-migrate",
       navBehaviorId: "nav-admin-dealer-tp-migrate",
+    });
+    items.push({
+      href: "/admin/migrate",
+      label: "Миграция каталог 1С",
+      testId: "nav-item-admin-catalog-1c-migrate",
+      navBehaviorId: "nav-admin-catalog-1c-migrate",
     });
     items.push({
       href: "/admin/sync-health",

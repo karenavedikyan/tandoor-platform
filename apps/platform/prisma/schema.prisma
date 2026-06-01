@@ -1,0 +1,137 @@
+// Prisma schema: каталог 1С (Промт 116). Остальные таблицы — Drizzle (shared/auth-schema.ts).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model CatalogCategory {
+  id        String   @id @db.Uuid
+  name      String
+  parentId  String?  @map("parent_id") @db.Uuid
+  sortOrder Int      @default(0) @map("sort_order")
+  raw       Json?
+  syncedAt  DateTime @default(now()) @map("synced_at") @db.Timestamptz(6)
+  parent    CatalogCategory?  @relation("CatChild", fields: [parentId], references: [id], onDelete: SetNull)
+  children  CatalogCategory[] @relation("CatChild")
+
+  @@map("catalog_categories")
+}
+
+model CatalogGroup {
+  id       String   @id @db.Uuid
+  parentId String?  @map("parent_id") @db.Uuid
+  name     String?
+  syncedAt DateTime @default(now()) @map("synced_at") @db.Timestamptz(6)
+
+  @@map("catalog_groups")
+}
+
+model CatalogProduct {
+  id          String   @id @db.Uuid
+  groupId     String?  @map("group_id") @db.Uuid
+  name        String
+  active      Boolean  @default(true)
+  brand       String?
+  displayName String?  @map("display_name")
+  isOnSite    Boolean  @default(false) @map("is_on_site")
+  syncedAt    DateTime @default(now()) @map("synced_at") @db.Timestamptz(6)
+  properties  CatalogProductProperty[]
+  categories  CatalogProductCategory[]
+  images      CatalogProductImage[]
+  stocks      CatalogStock[]
+  prices      CatalogPrice[]
+
+  @@map("catalog_products")
+}
+
+model CatalogProductProperty {
+  productId    String  @map("product_id") @db.Uuid
+  propertyCode String  @map("property_code") @db.Uuid
+  name         String
+  value        String?
+  product      CatalogProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([productId, propertyCode])
+  @@map("catalog_product_properties")
+}
+
+model CatalogProductCategory {
+  productId  String @map("product_id") @db.Uuid
+  categoryId String @map("category_id") @db.Uuid
+  product    CatalogProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([productId, categoryId])
+  @@map("catalog_product_categories")
+}
+
+model CatalogProductImage {
+  id        BigInt @id @default(autoincrement())
+  productId String @map("product_id") @db.Uuid
+  path      String
+  sortOrder Int    @default(0) @map("sort_order")
+  product   CatalogProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("catalog_product_images")
+}
+
+model CatalogWarehouse {
+  id       String   @id @db.Uuid
+  name     String?
+  syncedAt DateTime @default(now()) @map("synced_at") @db.Timestamptz(6)
+
+  @@map("catalog_warehouses")
+}
+
+model CatalogStock {
+  productId   String  @map("product_id") @db.Uuid
+  warehouseId String  @map("warehouse_id") @db.Uuid
+  qty         Decimal @default(0) @db.Decimal(18, 3)
+  expectedQty Decimal @default(0) @map("expected_qty") @db.Decimal(18, 3)
+  syncedAt    DateTime @default(now()) @map("synced_at") @db.Timestamptz(6)
+  product     CatalogProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([productId, warehouseId])
+  @@map("catalog_stocks")
+}
+
+model CatalogPriceType {
+  id       String @id @db.Uuid
+  name     String
+  syncedAt DateTime @default(now()) @map("synced_at") @db.Timestamptz(6)
+  prices   CatalogPrice[]
+
+  @@map("catalog_price_types")
+}
+
+model CatalogPrice {
+  productId   String   @map("product_id") @db.Uuid
+  priceTypeId String   @map("price_type_id") @db.Uuid
+  value       Decimal? @db.Decimal(18, 2)
+  currency    String   @default("RUB")
+  syncedAt    DateTime @default(now()) @map("synced_at") @db.Timestamptz(6)
+  product     CatalogProduct  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  priceType   CatalogPriceType @relation(fields: [priceTypeId], references: [id], onDelete: Cascade)
+
+  @@id([productId, priceTypeId])
+  @@map("catalog_prices")
+}
+
+model CatalogSyncLog {
+  id           BigInt    @id @default(autoincrement())
+  sourceFile   String    @map("source_file")
+  startedAt    DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
+  finishedAt   DateTime? @map("finished_at") @db.Timestamptz(6)
+  status       String    @default("running")
+  rowsTotal    Int       @default(0) @map("rows_total")
+  rowsUpserted Int       @default(0) @map("rows_upserted")
+  rowsSkipped  Int       @default(0) @map("rows_skipped")
+  error        String?
+  details      Json?
+
+  @@map("catalog_sync_log")
+}
