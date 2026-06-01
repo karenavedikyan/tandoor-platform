@@ -64,6 +64,28 @@ function formatPrice(n: number | null): string {
   return `${Math.round(n).toLocaleString("ru-RU")} ₽`;
 }
 
+function CatalogPriceBlock({
+  priceRetail,
+  priceRetailSale,
+  className,
+}: {
+  priceRetail: number | null;
+  priceRetailSale: number | null;
+  className?: string;
+}) {
+  if (priceRetailSale != null) {
+    return (
+      <div className={className}>
+        <div className="font-semibold text-rose-600">{formatPrice(priceRetailSale)}</div>
+        {priceRetail != null ? (
+          <div className="text-xs text-muted-foreground line-through">{formatPrice(priceRetail)}</div>
+        ) : null}
+      </div>
+    );
+  }
+  return <div className={cn("font-semibold", className)}>{formatPrice(priceRetail)}</div>;
+}
+
 function formatDateTime(iso: string | null): string {
   if (!iso) return "—";
   try {
@@ -390,16 +412,11 @@ export default function CatalogPage() {
                   <div className="truncate text-xs text-muted-foreground">{p.name}</div>
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
-                  <div className="text-right text-sm">
-                    {p.price_retail_sale && p.price_retail ? (
-                      <>
-                        <div className="font-semibold text-rose-600">{formatPrice(p.price_retail_sale)}</div>
-                        <div className="text-xs text-muted-foreground line-through">{formatPrice(p.price_retail)}</div>
-                      </>
-                    ) : (
-                      <div className="font-semibold">{formatPrice(p.price_retail)}</div>
-                    )}
-                  </div>
+                  <CatalogPriceBlock
+                    className="text-right text-sm"
+                    priceRetail={p.price_retail}
+                    priceRetailSale={p.price_retail_sale}
+                  />
                   <Badge variant="secondary">{formatStock(p.total_stock)}</Badge>
                 </div>
               </Link>
@@ -432,14 +449,7 @@ export default function CatalogPage() {
                       <td className="px-3 py-2 text-xs text-muted-foreground">{p.name}</td>
                       <td className="px-3 py-2 text-xs">{p.brand ?? "—"}</td>
                       <td className="px-3 py-2 text-right">
-                        {p.price_retail_sale && p.price_retail ? (
-                          <span>
-                            <span className="text-rose-600">{formatPrice(p.price_retail_sale)}</span>
-                            <span className="ml-1 text-xs text-muted-foreground line-through">{formatPrice(p.price_retail)}</span>
-                          </span>
-                        ) : (
-                          formatPrice(p.price_retail)
-                        )}
+                        <CatalogPriceBlock priceRetail={p.price_retail} priceRetailSale={p.price_retail_sale} />
                       </td>
                       <td className="px-3 py-2 text-right">{formatStock(p.total_stock)}</td>
                       <td className="px-3 py-2">
@@ -503,7 +513,6 @@ function ProductBadges({ p, small }: { p: CatalogProductItem; small?: boolean })
 }
 
 function ProductCard({ product, imageSrc }: { product: CatalogProductItem; imageSrc: string | null }) {
-  const hasSale = product.price_retail_sale != null && product.price_retail != null;
   return (
     <Link
       href={`/catalog/1c/${product.id}`}
@@ -529,16 +538,11 @@ function ProductCard({ product, imageSrc }: { product: CatalogProductItem; image
           </div>
           {product.brand && <div className="truncate text-xs text-muted-foreground">{product.brand}</div>}
           <div className="flex items-end justify-between gap-2">
-            <div className="min-w-0">
-              {hasSale ? (
-                <>
-                  <div className="font-semibold text-rose-600">{formatPrice(product.price_retail_sale)}</div>
-                  <div className="text-xs text-muted-foreground line-through">{formatPrice(product.price_retail)}</div>
-                </>
-              ) : (
-                <div className="font-semibold">{formatPrice(product.price_retail)}</div>
-              )}
-            </div>
+            <CatalogPriceBlock
+              className="min-w-0"
+              priceRetail={product.price_retail}
+              priceRetailSale={product.price_retail_sale}
+            />
             <Badge variant="secondary">{formatStock(product.total_stock)}</Badge>
           </div>
         </CardContent>
