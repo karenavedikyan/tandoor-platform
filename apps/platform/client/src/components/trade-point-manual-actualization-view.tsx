@@ -72,6 +72,14 @@ import { useDealerTpOverridesHydration } from "@/hooks/use-dealer-tp-overrides-h
 import { hydrateTradePointOverridesForEntity } from "@/lib/dealer-overrides-sync";
 import { DEALER_TRADE_POINTS_EVENT, getTradePointEdit } from "@/lib/dealer-trade-points-overrides";
 import { useTradePointOverride } from "@/lib/dealer-overrides-runtime";
+import { DealerRopRmSelectors } from "@/components/dealer-rop-rm-selectors";
+import { getDealerRegionalManagerEffectiveDisplay } from "@/lib/dealer-regional-manager-overrides";
+import { getDealerRopEffectiveDisplay } from "@/lib/dealer-rop-overrides";
+import {
+  getTradePointRopRmOverride,
+  setTradePointRopRmOverride,
+  TP_ROP_RM_OVERRIDES_EVENT,
+} from "@/lib/trade-point-rop-rm-overrides";
 
 function numOrNull(v: string): number | null {
   const t = v.trim();
@@ -605,9 +613,33 @@ export function TradePointManualActualizationView(props: {
     profile.personaUserId,
   ]);
 
-  const inheritedRm = dealer.regionalManager?.trim() || "Не указано";
+  const [tpRopRmBump, setTpRopRmBump] = useState(0);
+  useEffect(() => {
+    const bump = () => setTpRopRmBump((n) => n + 1);
+    window.addEventListener(TP_ROP_RM_OVERRIDES_EVENT, bump);
+    return () => window.removeEventListener(TP_ROP_RM_OVERRIDES_EVENT, bump);
+  }, []);
+
+  const tpRopRm = useMemo(
+    () => getTradePointRopRmOverride(point.id),
+    [point.id, tpRopRmBump],
+  );
+  const dealerRmDisplay = getDealerRegionalManagerEffectiveDisplay(dealer);
+  const dealerRopDisplay = getDealerRopEffectiveDisplay(dealer);
+  const displayRm = tpRopRm?.regionalManagerName?.trim() || dealerRmDisplay?.trim() || "Не указано";
+  const displayRop = tpRopRm?.ropName?.trim() || dealerRopDisplay?.trim() || "Не указано";
   const inheritedMgr = dealer.manager?.trim() || "Не указано";
-  const inheritedRop = dealer.ropName?.trim() || "Не указано";
+  const [tpRopUserId, setTpRopUserId] = useState<string | null>(null);
+  const [tpRmUserId, setTpRmUserId] = useState<string | null>(null);
+  const [tpRopName, setTpRopName] = useState<string | null>(null);
+  const [tpRmName, setTpRmName] = useState<string | null>(null);
+
+  useEffect(() => {
+    setTpRopUserId(tpRopRm?.ropId ?? null);
+    setTpRmUserId(tpRopRm?.regionalManagerId ?? null);
+    setTpRopName(tpRopRm?.ropName ?? null);
+    setTpRmName(tpRopRm?.regionalManagerName ?? null);
+  }, [tpRopRm, tpRopRmBump]);
 
   const openMatrixTasks = useMemo(
     () => showcaseMatrixTasks.filter((t) => t.tradePointId === point.id && t.status === "new"),
@@ -708,7 +740,7 @@ export function TradePointManualActualizationView(props: {
     if (cityOk && addrOk) addressStatus = contactName.trim() || contactPhone.trim() ? "complete" : "partial";
     else if (cityOk || addrOk) addressStatus = "partial";
 
-    const respSummary = `Менеджер: ${inheritedMgr} · РМ: ${inheritedRm}`;
+    const respSummary = `Менеджер: ${inheritedMgr} · РМ: ${displayRm}`;
     const hasMgr = Boolean(dealer.manager?.trim());
     const hasRm = Boolean(dealer.regionalManager?.trim());
     const responsiblesStatus: TpSectionStatusKind =
@@ -761,9 +793,9 @@ export function TradePointManualActualizationView(props: {
     contactName,
     contactPhone,
     inheritedMgr,
-    inheritedRm,
+    displayRm,
+    displayRop,
     dealer.manager,
-    dealer.regionalManager,
     showcaseTriggerSummary,
     hasShowcase,
     summary.needsPrimaryInstall,
@@ -1039,22 +1071,53 @@ export function TradePointManualActualizationView(props: {
 
         <AccordionItem value="responsibles" data-testid="section-trade-point-responsibles" className="overflow-hidden rounded-lg border border-border/50 bg-card !border-b-0 shadow-xs">
           <TpAccordionSectionTrigger title="Ответственные" summary={sectionMeta.responsibles.summary} status={sectionMeta.responsibles.status} />
-          <AccordionContent className="space-y-1.5 border-t border-border/40 px-2.5 pb-2.5 pt-1.5 text-sm text-muted-foreground sm:px-3">
+          <AccordionContent className="space-y-2 border-t border-border/40 px-2.5 pb-2.5 pt-1.5 text-sm text-muted-foreground sm:px-3">
             <p className="leading-snug">
               <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Менеджер</span>
               <span className="mt-0.5 block text-[13px] font-medium text-foreground">{inheritedMgr}</span>
               <span className="text-[10px] text-muted-foreground/80">с карточки клиента</span>
             </p>
-            <p className="leading-snug">
-              <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Региональный менеджер</span>
-              <span className="mt-0.5 block text-[13px] font-medium text-foreground">{inheritedRm}</span>
-              <span className="text-[10px] text-muted-foreground/80">с карточки клиента</span>
-            </p>
-            <p className="leading-snug">
-              <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">РОП</span>
-              <span className="mt-0.5 block text-[13px] font-medium text-foreground">{inheritedRop}</span>
-              <span className="text-[10px] text-muted-foreground/80">с карточки клиента</span>
-            </p>
+            {canEditUi ? (
+              <DealerRopRmSelectors
+                ropUserId={tpRopUserId}
+                regionalManagerUserId={tpRmUserId}
+                onRopChange={(id, name) => {
+                  setTpRopUserId(id);
+                  setTpRopName(name);
+                  setTradePointRopRmOverride(point.id, dealer.id, {
+                    ropId: id,
+                    ropName: name,
+                    regionalManagerId: tpRmUserId,
+                    regionalManagerName: tpRmName,
+                  });
+                  setTpRopRmBump((n) => n + 1);
+                }}
+                onRegionalManagerChange={(id, name) => {
+                  setTpRmUserId(id);
+                  setTpRmName(name);
+                  setTradePointRopRmOverride(point.id, dealer.id, {
+                    ropId: tpRopUserId,
+                    ropName: tpRopName,
+                    regionalManagerId: id,
+                    regionalManagerName: name,
+                  });
+                  setTpRopRmBump((n) => n + 1);
+                }}
+                ropTestId="select-trade-point-rop"
+                rmTestId="select-trade-point-regional-manager"
+              />
+            ) : (
+              <>
+                <p className="leading-snug" data-testid="text-trade-point-display-rm">
+                  <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Региональный менеджер</span>
+                  <span className="mt-0.5 block text-[13px] font-medium text-foreground">{displayRm}</span>
+                </p>
+                <p className="leading-snug" data-testid="text-trade-point-display-rop">
+                  <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">РОП</span>
+                  <span className="mt-0.5 block text-[13px] font-medium text-foreground">{displayRop}</span>
+                </p>
+              </>
+            )}
           </AccordionContent>
         </AccordionItem>
 

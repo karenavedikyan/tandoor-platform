@@ -16,6 +16,8 @@ export type DealerOverrideRow = {
   unloading_order: string | null;
   regional_manager_id: string | null;
   regional_manager_name: string | null;
+  rop_id: string | null;
+  rop_name: string | null;
   created_at: string;
   updated_at: string;
   updated_by: string | null;
@@ -59,6 +61,8 @@ export const DEALER_OVERRIDE_FIELDS = [
   "unloading_order",
   "regional_manager_id",
   "regional_manager_name",
+  "rop_id",
+  "rop_name",
 ] as const;
 
 export type DealerOverrideField = (typeof DEALER_OVERRIDE_FIELDS)[number];
@@ -78,6 +82,8 @@ export function mapDealerOverrideRow(r: Record<string, unknown>): DealerOverride
     unloading_order: r.unloading_order != null ? String(r.unloading_order) : null,
     regional_manager_id: r.regional_manager_id != null ? String(r.regional_manager_id) : null,
     regional_manager_name: r.regional_manager_name != null ? String(r.regional_manager_name) : null,
+    rop_id: r.rop_id != null ? String(r.rop_id) : null,
+    rop_name: r.rop_name != null ? String(r.rop_name) : null,
     created_at: String(r.created_at),
     updated_at: String(r.updated_at),
     updated_by: r.updated_by != null ? String(r.updated_by) : null,

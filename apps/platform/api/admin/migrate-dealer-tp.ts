@@ -19,6 +19,7 @@ import {
   runOnNeon,
   runOnYandex,
 } from "../../shared/dual-db-migrate.js";
+import { seedRmBatchOnNeon, seedRmBatchOnYandex } from "../../shared/dual-db-seed-rm.js";
 import { splitSqlStatements } from "../../server/db-migrate/restore-yandex.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -37,12 +38,15 @@ const writeErrorsPermanentPath = join(
   "2026_06_01_overrides_write_errors_permanent.sql",
 );
 const writeErrorsPermanentSql = readFileSync(writeErrorsPermanentPath, "utf8");
+const ropColumnsPath = join(here, "..", "..", "server", "migrations", "2026_06_01_rop_override_columns.sql");
+const ropColumnsSql = readFileSync(ropColumnsPath, "utf8");
 const STMTS = [
   "CREATE EXTENSION IF NOT EXISTS pgcrypto",
   ...splitSqlStatements(ddlSql),
   ...splitSqlStatements(writeErrorsSql),
   ...splitSqlStatements(accessLogSql),
   ...splitSqlStatements(writeErrorsPermanentSql),
+  ...splitSqlStatements(ropColumnsSql),
 ];
 
 const EXPECTED_TABLES = [
@@ -87,6 +91,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     const neonRes = await runOnNeon(STMTS, EXPECTED_TABLES);
     const yandexRes = await runOnYandex(STMTS, EXPECTED_TABLES);
 
+    const rmSeedNeon = await seedRmBatchOnNeon();
+    const rmSeedYandex = await seedRmBatchOnYandex();
+
     const ok = isDualMigrateSuccess(neonRes, yandexRes, EXPECTED_TABLES);
 
     sendJson(res, 200, {
@@ -94,6 +101,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       neon: neonRes,
       yandex: yandexRes,
       expected_tables: EXPECTED_TABLES,
+      rm_seed: { neon: rmSeedNeon, yandex: rmSeedYandex },
     });
   } catch (e) {
     const m = e instanceof Error ? e.message : String(e);

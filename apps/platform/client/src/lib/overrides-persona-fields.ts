@@ -55,11 +55,11 @@ function sanitizeUuidIdFields<T extends string>(
 export function sanitizeDealerOverrideFieldsForApi(
   fields: Partial<Record<DealerOverrideField, unknown>>,
 ): Partial<Record<DealerOverrideField, unknown>> {
-  return sanitizeUuidIdFields(fields, ["regional_manager_id", "trashed_by"] as const);
+  return sanitizeUuidIdFields(fields, ["regional_manager_id", "rop_id", "trashed_by"] as const);
 }
 
 export function sanitizeTradePointOverrideFieldsForApi(
   fields: Partial<Record<TradePointOverrideField, unknown>>,
 ): Partial<Record<TradePointOverrideField, unknown>> {
-  return sanitizeUuidIdFields(fields, ["trashed_by"] as const);
+  return sanitizeUuidIdFields(fields, ["rop_id", "regional_manager_id", "trashed_by"] as const);
 }

@@ -16,6 +16,10 @@ import {
   type DealerRegionalManagerOverridesState,
 } from "@/lib/dealer-regional-manager-overrides";
 import {
+  DEALER_ROP_OVERRIDES_STORAGE_KEY,
+  type DealerRopOverridesState,
+} from "@/lib/dealer-rop-overrides";
+import {
   DEALER_TRADE_POINTS_STORAGE_KEY,
   tradePointKey,
   type DealerTradePointsState,
@@ -168,7 +172,23 @@ export async function runOverridesBackfillIfNeeded(_currentUserId: string): Prom
         const srv = dealerById.get(dealerId);
         maybeEnqueueDealerFields(dealerId, srv, [
           ["regional_manager_id", rm.userId, srv?.regional_manager_id],
-          ["regional_manager_name", rm.updatedByName, srv?.regional_manager_name],
+          ["regional_manager_name", rm.displayName || rm.updatedByName, srv?.regional_manager_name],
+        ]);
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+
+  try {
+    const ropRaw = localStorage.getItem(DEALER_ROP_OVERRIDES_STORAGE_KEY);
+    if (ropRaw) {
+      const st = JSON.parse(ropRaw) as DealerRopOverridesState;
+      for (const [dealerId, rop] of Object.entries(st.byDealerId ?? {})) {
+        const srv = dealerById.get(dealerId);
+        maybeEnqueueDealerFields(dealerId, srv, [
+          ["rop_id", rop.userId, srv?.rop_id],
+          ["rop_name", rop.displayName || rop.updatedByName, srv?.rop_name],
         ]);
       }
     }

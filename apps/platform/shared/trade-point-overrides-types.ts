@@ -17,6 +17,10 @@ export type TradePointOverrideRow = {
   is_hardware_warehouse: boolean | null;
   trashed_at: string | null;
   trashed_by: string | null;
+  rop_id: string | null;
+  rop_name: string | null;
+  regional_manager_id: string | null;
+  regional_manager_name: string | null;
   created_at: string;
   updated_at: string;
   updated_by: string | null;
@@ -53,6 +57,10 @@ export const TRADE_POINT_OVERRIDE_FIELDS = [
   "is_hardware_warehouse",
   "trashed_at",
   "trashed_by",
+  "rop_id",
+  "rop_name",
+  "regional_manager_id",
+  "regional_manager_name",
 ] as const;
 
 export type TradePointOverrideField = (typeof TRADE_POINT_OVERRIDE_FIELDS)[number];
@@ -79,6 +87,10 @@ export function mapTradePointOverrideRow(r: Record<string, unknown>): TradePoint
         : r.is_hardware_warehouse === true || r.is_hardware_warehouse === "t",
     trashed_at: r.trashed_at != null ? String(r.trashed_at) : null,
     trashed_by: r.trashed_by != null ? String(r.trashed_by) : null,
+    rop_id: r.rop_id != null ? String(r.rop_id) : null,
+    rop_name: r.rop_name != null ? String(r.rop_name) : null,
+    regional_manager_id: r.regional_manager_id != null ? String(r.regional_manager_id) : null,
+    regional_manager_name: r.regional_manager_name != null ? String(r.regional_manager_name) : null,
     created_at: String(r.created_at),
     updated_at: String(r.updated_at),
     updated_by: r.updated_by != null ? String(r.updated_by) : null,

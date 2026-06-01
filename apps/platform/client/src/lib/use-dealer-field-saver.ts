@@ -30,6 +30,8 @@ export const STRICT_COVERED_DEALER_FIELDS = [
   "unloading_order",
   "regional_manager_id",
   "regional_manager_name",
+  "rop_id",
+  "rop_name",
 ] as const satisfies readonly DealerOverrideField[];
 
 export const STRICT_COVERED_TP_FIELDS = [
@@ -43,6 +45,10 @@ export const STRICT_COVERED_TP_FIELDS = [
   "shipment_days",
   "is_main_warehouse",
   "is_hardware_warehouse",
+  "rop_id",
+  "rop_name",
+  "regional_manager_id",
+  "regional_manager_name",
 ] as const satisfies readonly TradePointOverrideField[];
 
 export const STRICT_COVERED_TRAINING_DEALER_FIELDS = [
@@ -71,6 +77,8 @@ const DEALER_FIELD_LABELS: Record<DealerOverrideField, string> = {
   unloading_order: "Порядок выгрузки",
   regional_manager_id: "Региональный менеджер",
   regional_manager_name: "Региональный менеджер",
+  rop_id: "РОП",
+  rop_name: "РОП",
 };
 
 const TP_FIELD_LABELS: Record<TradePointOverrideField, string> = {
@@ -87,6 +95,10 @@ const TP_FIELD_LABELS: Record<TradePointOverrideField, string> = {
   is_hardware_warehouse: "Склад комплектации",
   trashed_at: "Корзина",
   trashed_by: "Корзина",
+  rop_id: "РОП",
+  rop_name: "РОП",
+  regional_manager_id: "Региональный менеджер",
+  regional_manager_name: "Региональный менеджер",
 };
 
 export function isStrictCoveredDealerField(field: string): field is (typeof STRICT_COVERED_DEALER_FIELDS)[number] {

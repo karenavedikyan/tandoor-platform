@@ -57,6 +57,12 @@ import { DEALER_OVERRIDES_HYDRATED_EVENT, upsertDealerOverrideStrict } from "@/l
 import { hydrateDealerOverridesForDealer } from "@/lib/dealer-overrides-sync";
 import { getDbClientCategoryOverride } from "@/lib/dealer-overrides-runtime";
 import { getDealerUnloadingOrder } from "@/lib/dealer-unloading-order-storage";
+import { DealerRopRmSelectors } from "@/components/dealer-rop-rm-selectors";
+import {
+  getRegionalManagerOverrideUserId,
+  setDealerRegionalManagerOverride,
+} from "@/lib/dealer-regional-manager-overrides";
+import { getRopOverrideUserId, setDealerRopOverride } from "@/lib/dealer-rop-overrides";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
 import { getAllSalesManagers, getSalesUserById, getTeamManagers, type SalesUser } from "@/lib/sales-control-data";
@@ -451,8 +457,10 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [manager, setManager] = useState("");
-  const [regionalManager, setRegionalManager] = useState("");
-  const [ropName, setRopName] = useState("");
+  const [ropUserId, setRopUserId] = useState<string | null>(null);
+  const [ropDisplayName, setRopDisplayName] = useState<string | null>(null);
+  const [regionalManagerUserId, setRegionalManagerUserId] = useState<string | null>(null);
+  const [regionalManagerDisplayName, setRegionalManagerDisplayName] = useState<string | null>(null);
   const [shipmentDayIds, setShipmentDayIds] = useState<DealerShipmentDayId[]>([]);
   const [unloadingOrder, setUnloadingOrder] = useState("");
   const [comment, setComment] = useState("");
@@ -482,8 +490,10 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
     setPhone(formatRussianPhoneInput(baseRow.contacts?.phone ?? ""));
     setEmail(baseRow.contacts?.email ?? "");
     setManager(baseRow.manager ?? "");
-    setRegionalManager(baseRow.regionalManager ?? "");
-    setRopName(baseRow.ropName ?? "");
+    setRopUserId(getRopOverrideUserId(baseRow.id));
+    setRegionalManagerUserId(getRegionalManagerOverrideUserId(baseRow.id));
+    setRopDisplayName(null);
+    setRegionalManagerDisplayName(null);
     setComment(baseRow.comment ?? "");
     const uo = state.unloadingOrderByDealerId?.[baseRow.id] ?? getDealerUnloadingOrder(baseRow.id);
     setUnloadingOrder(uo != null ? String(uo) : "");
@@ -554,8 +564,8 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
       phone: phoneFormatted,
       email: email.trim(),
       manager: manager.trim(),
-      regionalManager: regionalManager.trim(),
-      ropName: ropName.trim(),
+      regionalManager: (regionalManagerDisplayName ?? "").trim(),
+      ropName: (ropDisplayName ?? "").trim(),
       comment: comment.trim(),
       shipmentDayIds: shipmentDayIds.length > 0 ? shipmentDayIds : [],
       shipmentDayLabel: shipmentDayIds.length > 0 ? formatShipmentDaysForDisplay(shipmentDayIds) : undefined,
@@ -620,8 +630,8 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
             phone: phoneFormatted,
             email: email.trim(),
             manager: manager.trim(),
-            regionalManager: regionalManager.trim(),
-            ropName: ropName.trim(),
+            regionalManager: (regionalManagerDisplayName ?? "").trim(),
+            ropName: (ropDisplayName ?? "").trim(),
             comment: comment.trim(),
             shipmentDayIds: shipmentDayIds.length > 0 ? shipmentDayIds : [],
             shipmentDayLabel: shipmentDayIds.length > 0 ? formatShipmentDaysForDisplay(shipmentDayIds) : undefined,
@@ -683,6 +693,14 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
       fieldLabel: "Данные клиента",
       source: "dealer-edit-dialog",
     });
+    setDealerRopOverride(baseRow.id, ropUserId, ropDisplayName, uid, uname);
+    setDealerRegionalManagerOverride(
+      baseRow.id,
+      regionalManagerUserId,
+      regionalManagerDisplayName,
+      uid,
+      uname,
+    );
     if (!r.success && !strictResult.ok && !uoStrict.ok) {
       const extra =
         r.syncStatus === "local_fallback" || r.storageMode === "local_fallback"
@@ -705,8 +723,10 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
     phone,
     email,
     manager,
-    regionalManager,
-    ropName,
+    ropUserId,
+    ropDisplayName,
+    regionalManagerUserId,
+    regionalManagerDisplayName,
     comment,
     shipmentDayIds,
     unloadingOrder,
@@ -842,36 +862,22 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
                   className="min-h-10"
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Ответственный региональный менеджер</Label>
-                <ResponsiblePersonCombobox
-                  value={regionalManager}
-                  onValueChange={(next) => {
-                    setRegionalManager(next);
-                    responsiblesSave.markDirty();
-                  }}
-                  options={REGIONAL_MANAGER_OPTIONS}
-                  placeholder="Выберите регионального менеджера"
-                  searchPlaceholder="Введите ФИО регионального менеджера"
-                  emptyText="Региональный менеджер не найден."
-                  testId="select-dealer-regional-manager"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Ответственный РОП</Label>
-                <ResponsiblePersonCombobox
-                  value={ropName}
-                  onValueChange={(next) => {
-                    setRopName(next);
-                    responsiblesSave.markDirty();
-                  }}
-                  options={ROP_OPTIONS}
-                  placeholder="Выберите РОП"
-                  searchPlaceholder="Введите ФИО РОП"
-                  emptyText="РОП не найден."
-                  testId="select-dealer-rop"
-                />
-              </div>
+              <DealerRopRmSelectors
+                ropUserId={ropUserId}
+                regionalManagerUserId={regionalManagerUserId}
+                onRopChange={(id, name) => {
+                  setRopUserId(id);
+                  setRopDisplayName(name);
+                  responsiblesSave.markDirty();
+                }}
+                onRegionalManagerChange={(id, name) => {
+                  setRegionalManagerUserId(id);
+                  setRegionalManagerDisplayName(name);
+                  responsiblesSave.markDirty();
+                }}
+                ropTestId="select-dealer-rop"
+                rmTestId="select-dealer-regional-manager"
+              />
               <SectionSaveButton
                 testId="button-dealer-section-save-responsibles"
                 statusTestId="text-save-status-responsibles"
@@ -1143,8 +1149,10 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
   const [routeLabel, setRouteLabel] = useState("");
   const [unloadingOrder, setUnloadingOrder] = useState("");
   const [managerUserId, setManagerUserId] = useState(profile.personaUserId);
-  const [regionalManager, setRegionalManager] = useState("");
-  const [ropName, setRopName] = useState("");
+  const [ropUserId, setRopUserId] = useState<string | null>(null);
+  const [ropDisplayName, setRopDisplayName] = useState<string | null>(null);
+  const [regionalManagerUserId, setRegionalManagerUserId] = useState<string | null>(null);
+  const [regionalManagerDisplayName, setRegionalManagerDisplayName] = useState<string | null>(null);
   const [contactPerson, setContactPerson] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -1214,8 +1222,10 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
     setShipmentDayIds([]);
     setRouteLabel("");
     setUnloadingOrder("");
-    setRegionalManager("");
-    setRopName("");
+    setRopUserId(null);
+    setRopDisplayName(null);
+    setRegionalManagerUserId(null);
+    setRegionalManagerDisplayName(null);
     setContactPerson("");
     setPhone("");
     setEmail("");
@@ -1332,8 +1342,8 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
       managerUserId: mgr.id,
       releaseManagerId: mgr.id,
       releaseTeamId: mgr.teamId,
-      regionalManager: regionalManager.trim(),
-      ropName: ropName.trim(),
+      regionalManager: (regionalManagerDisplayName ?? "").trim(),
+      ropName: (ropDisplayName ?? "").trim(),
       shipmentDayIds: shipmentDayIds.length > 0 ? shipmentDayIds : [],
       shipmentDayLabel: shipmentDayIds.length > 0 ? formatShipmentDaysForDisplay(shipmentDayIds) : undefined,
       routeLabel: routeLabel.trim() || undefined,
@@ -1456,6 +1466,10 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
       fieldLabel: "Данные нового клиента",
       source: "dealer-create-dialog",
     });
+    const uid = profile.personaUserId;
+    const uname = userLabelFromProfile(profile);
+    setDealerRopOverride(id, ropUserId, ropDisplayName, uid, uname);
+    setDealerRegionalManagerOverride(id, regionalManagerUserId, regionalManagerDisplayName, uid, uname);
     void uoStrictCreate;
     if (r.success) {
       await saveManualDealerToDb(id, fields as unknown as Record<string, unknown>, {
@@ -1491,8 +1505,10 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
     city,
     address,
     managerUserId,
-    regionalManager,
-    ropName,
+    ropUserId,
+    ropDisplayName,
+    regionalManagerUserId,
+    regionalManagerDisplayName,
     shipmentDayIds,
     routeLabel,
     unloadingOrder,
@@ -1835,30 +1851,20 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Ответственный региональный менеджер</Label>
-                <ResponsiblePersonCombobox
-                  value={regionalManager}
-                  onValueChange={setRegionalManager}
-                  options={REGIONAL_MANAGER_OPTIONS}
-                  placeholder="Выберите регионального менеджера"
-                  searchPlaceholder="Введите ФИО регионального менеджера"
-                  emptyText="Региональный менеджер не найден."
-                  testId="select-dealer-create-regional-manager"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Ответственный РОП</Label>
-                <ResponsiblePersonCombobox
-                  value={ropName}
-                  onValueChange={setRopName}
-                  options={ROP_OPTIONS}
-                  placeholder="Выберите РОП"
-                  searchPlaceholder="Введите ФИО РОП"
-                  emptyText="РОП не найден."
-                  testId="select-dealer-create-rop"
-                />
-              </div>
+              <DealerRopRmSelectors
+                ropUserId={ropUserId}
+                regionalManagerUserId={regionalManagerUserId}
+                onRopChange={(id, name) => {
+                  setRopUserId(id);
+                  setRopDisplayName(name);
+                }}
+                onRegionalManagerChange={(id, name) => {
+                  setRegionalManagerUserId(id);
+                  setRegionalManagerDisplayName(name);
+                }}
+                ropTestId="select-dealer-create-rop"
+                rmTestId="select-dealer-create-regional-manager"
+              />
             </div>
 
             <div className="space-y-3">

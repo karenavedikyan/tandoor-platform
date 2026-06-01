@@ -21,4 +21,12 @@ const uuid = sanitizeDealerOverrideFieldsForApi({
 });
 assert.equal(uuid.regional_manager_id, "e60f1a83-88ae-41f8-8c32-edd91f666e8d");
 
+const ropMapped = sanitizeDealerOverrideFieldsForApi({
+  rop_id: "e60f1a83-88ae-41f8-8c32-edd91f666e8d",
+});
+assert.equal(ropMapped.rop_id, "e60f1a83-88ae-41f8-8c32-edd91f666e8d");
+
+const ropStripped = sanitizeDealerOverrideFieldsForApi({ rop_id: "rop-fake" });
+assert.equal("rop_id" in ropStripped, false);
+
 console.log("overrides-persona-fields: ok");

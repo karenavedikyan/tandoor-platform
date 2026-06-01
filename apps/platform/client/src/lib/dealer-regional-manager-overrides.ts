@@ -1,18 +1,17 @@
 /**
- * Назначение ответственного регионального менеджера (MVP: localStorage, отдельно от РОП и менеджера).
+ * Назначение регионального менеджера на карточке дилера (overrides: regional_manager_id + name).
  */
 
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import { getDealerRegionalManagerDisplay } from "@/lib/dealer-base-mock-data";
 import { saveDealerFields } from "@/lib/use-dealer-field-saver";
-import { getSalesUserById, SALES_USERS } from "@/lib/sales-control-data";
 
 export const DEALER_REGIONAL_MANAGER_OVERRIDES_STORAGE_KEY = "tandoor-dealer-regional-manager-overrides-v1";
 export const DEALER_REGIONAL_MANAGER_OVERRIDES_EVENT = "tandoor-dealer-regional-manager-overrides-changed";
 
 export type RegionalManagerOverride = {
-  /** id из SALES_USERS */
   userId: string;
+  displayName: string;
   updatedAt: string;
   updatedBy: string;
   updatedByName: string;
@@ -81,45 +80,35 @@ export function getRegionalManagerOverrideUserId(
   dealerId: string,
   state = loadDealerRegionalManagerOverridesState(),
 ): string | null {
-  const uid = state.byDealerId[dealerId]?.userId?.trim();
-  if (!uid) return null;
-  return getSalesUserById(uid) ? uid : null;
+  return state.byDealerId[dealerId]?.userId?.trim() || null;
 }
 
-/** Список сотрудников для выбора (mock-справочник). */
+export function getRegionalManagerOverrideDisplayName(
+  dealerId: string,
+  state = loadDealerRegionalManagerOverridesState(),
+): string {
+  return state.byDealerId[dealerId]?.displayName?.trim() ?? "";
+}
+
+/** @deprecated Используйте listRegionalManagerPickerUsers из users-picker-api */
 export function listRegionalManagerPickerUsers(): { id: string; name: string; roleLabel: string }[] {
-  const roleLabel: Record<string, string> = {
-    sales_director: "Руководитель продаж",
-    team_lead: "Руководитель команды",
-    sales_manager: "Менеджер",
-    marketer: "Маркетолог",
-    analyst: "Аналитик",
-  };
-  return [...SALES_USERS]
-    .map((u) => ({
-      id: u.id,
-      name: u.name,
-      roleLabel: roleLabel[u.role] ?? u.role,
-    }))
-    .sort((a, b) => a.name.localeCompare(b.name, "ru", { sensitivity: "base" }));
+  return [];
 }
 
-/** Итоговая подпись: override (по id сотрудника) или данные строки клиента. */
+/** Итоговая подпись: override или данные строки клиента. */
 export function getDealerRegionalManagerEffectiveDisplay(
   row: DealerRow,
   state = loadDealerRegionalManagerOverridesState(),
 ): string {
-  const uid = getRegionalManagerOverrideUserId(row.id, state);
-  if (uid) {
-    const u = getSalesUserById(uid);
-    if (u?.name?.trim()) return u.name.trim();
-  }
+  const name = getRegionalManagerOverrideDisplayName(row.id, state);
+  if (name) return name;
   return getDealerRegionalManagerDisplay(row);
 }
 
 export function setDealerRegionalManagerOverride(
   dealerId: string,
   nextUserId: string | null,
+  nextDisplayName: string | null,
   actorUserId: string,
   actorName: string,
 ): void {
@@ -129,9 +118,9 @@ export function setDealerRegionalManagerOverride(
   const nextState: DealerRegionalManagerOverridesState = { byDealerId, historyByDealer };
 
   const prevUid = state.byDealerId[dealerId]?.userId ?? null;
-  const prevName = prevUid ? getSalesUserById(prevUid)?.name?.trim() ?? prevUid : "";
+  const prevName = state.byDealerId[dealerId]?.displayName?.trim() ?? "";
 
-  if (!nextUserId || !getSalesUserById(nextUserId)) {
+  if (!nextUserId?.trim()) {
     delete byDealerId[dealerId];
     if (prevUid) {
       pushHistory(
@@ -142,9 +131,10 @@ export function setDealerRegionalManagerOverride(
       );
     }
   } else {
-    const nextName = getSalesUserById(nextUserId)?.name?.trim() ?? nextUserId;
+    const nextName = (nextDisplayName ?? nextUserId).trim();
     byDealerId[dealerId] = {
-      userId: nextUserId,
+      userId: nextUserId.trim(),
+      displayName: nextName,
       updatedAt: isoNow(),
       updatedBy: actorUserId,
       updatedByName: actorName,
@@ -159,14 +149,14 @@ export function setDealerRegionalManagerOverride(
   saveState(nextState);
 
   const rm = byDealerId[dealerId];
-  const fields = {
-    regional_manager_id: rm?.userId ?? null,
-    regional_manager_name: rm ? getSalesUserById(rm.userId)?.name?.trim() ?? rm.userId : null,
-  };
-  void saveDealerFields(dealerId, fields, {
-    fieldLabel: "Региональный менеджер",
-    source: "dealer-regional-manager-overrides",
-  });
+  void saveDealerFields(
+    dealerId,
+    {
+      regional_manager_id: rm?.userId ?? null,
+      regional_manager_name: rm?.displayName ?? null,
+    },
+    { fieldLabel: "Региональный менеджер", source: "dealer-regional-manager-overrides" },
+  );
 }
 
 export function getDealerRegionalManagerHistoryEvents(

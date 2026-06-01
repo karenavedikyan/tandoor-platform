@@ -11,12 +11,16 @@ export function isUuidString(value: unknown): boolean {
 }
 
 /** Поля overrides дилера, хранящиеся в Postgres как UUID. */
-export const DEALER_OVERRIDE_UUID_FIELDS = ["regional_manager_id", "trashed_by"] as const;
+export const DEALER_OVERRIDE_UUID_FIELDS = ["regional_manager_id", "rop_id", "trashed_by"] as const;
 
 export type DealerOverrideUuidField = (typeof DEALER_OVERRIDE_UUID_FIELDS)[number];
 
 /** Поля overrides ТТ с типом UUID в БД. */
-export const TRADE_POINT_OVERRIDE_UUID_FIELDS = ["trashed_by"] as const;
+export const TRADE_POINT_OVERRIDE_UUID_FIELDS = [
+  "rop_id",
+  "regional_manager_id",
+  "trashed_by",
+] as const;
 
 export type TradePointOverrideUuidField = (typeof TRADE_POINT_OVERRIDE_UUID_FIELDS)[number];
 
