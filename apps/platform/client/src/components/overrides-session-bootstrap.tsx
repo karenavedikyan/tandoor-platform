@@ -10,6 +10,7 @@ import {
   runOverridesBackfillIfNeeded,
 } from "@/lib/overrides-backfill-on-login";
 import { hydrateShipmentRoutesFromServer, setShipmentRoutesSessionKeys } from "@/lib/dealer-shipment-route-definitions";
+import { runPendingSyncUuidCleanupOnLogin } from "@/lib/overrides-pending-uuid-cleanup";
 import { startOverridesPendingSyncWorker } from "@/lib/overrides-pending-sync-worker";
 
 export function OverridesSessionBootstrap({
@@ -24,6 +25,11 @@ export function OverridesSessionBootstrap({
   useEffect(() => {
     startOverridesPendingSyncWorker();
   }, []);
+
+  useEffect(() => {
+    if (!userId) return;
+    runPendingSyncUuidCleanupOnLogin(userId);
+  }, [userId]);
 
   useEffect(() => {
     if (!userId || hydrateStarted.current) return;

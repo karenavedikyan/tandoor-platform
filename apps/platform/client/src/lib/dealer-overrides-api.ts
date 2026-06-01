@@ -10,6 +10,7 @@ import {
   type PendingSyncKind,
 } from "@/lib/overrides-pending-sync";
 import { overridesApiPost, type OverridesApiResult } from "@/lib/overrides-api-result";
+import { sanitizeDealerOverrideFieldsForApi } from "@/lib/overrides-persona-fields";
 import { traceOverridesStrictCalled } from "@/lib/overrides-strict-trace";
 
 type ApiOk<T> = { success: true; data: T };
@@ -81,14 +82,15 @@ export async function upsertDealerOverrideStrict(
   dealerId: string,
   fields: Partial<Record<DealerOverrideField, unknown>>,
 ): Promise<OverridesApiResult<{ override: DealerOverrideRow | null }>> {
-  traceOverridesStrictCalled("upsertDealerOverrideStrict", { dealerId, fields });
-  const body = { dealer_id: dealerId, fields };
+  const sanitizedFields = sanitizeDealerOverrideFieldsForApi(fields);
+  traceOverridesStrictCalled("upsertDealerOverrideStrict", { dealerId, fields: sanitizedFields });
+  const body = { dealer_id: dealerId, fields: sanitizedFields };
   const r = await overridesApiPost<{ override: DealerOverrideRow | null }>({
     scope: "dealer",
     action: "upsert",
     url: "/api/dealer-overrides/upsert",
     entityId: dealerId,
-    fields,
+    fields: sanitizedFields,
     body,
     traceFn: "upsertDealerOverrideStrict",
   });

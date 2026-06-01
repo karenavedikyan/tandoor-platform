@@ -28,11 +28,21 @@ const writeErrorsPath = join(here, "..", "..", "server", "migrations", "2026_05_
 const writeErrorsSql = readFileSync(writeErrorsPath, "utf8");
 const accessLogPath = join(here, "..", "..", "server", "migrations", "2026_05_31_overrides_api_access_log.sql");
 const accessLogSql = readFileSync(accessLogPath, "utf8");
+const writeErrorsPermanentPath = join(
+  here,
+  "..",
+  "..",
+  "server",
+  "migrations",
+  "2026_06_01_overrides_write_errors_permanent.sql",
+);
+const writeErrorsPermanentSql = readFileSync(writeErrorsPermanentPath, "utf8");
 const STMTS = [
   "CREATE EXTENSION IF NOT EXISTS pgcrypto",
   ...splitSqlStatements(ddlSql),
   ...splitSqlStatements(writeErrorsSql),
   ...splitSqlStatements(accessLogSql),
+  ...splitSqlStatements(writeErrorsPermanentSql),
 ];
 
 const EXPECTED_TABLES = [

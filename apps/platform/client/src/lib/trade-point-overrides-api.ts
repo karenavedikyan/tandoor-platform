@@ -6,6 +6,7 @@ import type { TradePointOverrideRow, TradePointTrainingRow } from "../../../shar
 import type { TradePointOverrideField } from "../../../shared/trade-point-overrides-types";
 import { enqueuePendingSync, makePendingId } from "@/lib/overrides-pending-sync";
 import { overridesApiPost, type OverridesApiResult } from "@/lib/overrides-api-result";
+import { sanitizeTradePointOverrideFieldsForApi } from "@/lib/overrides-persona-fields";
 import { traceOverridesStrictCalled } from "@/lib/overrides-strict-trace";
 
 type ApiOk<T> = { success: true; data: T };
@@ -62,14 +63,15 @@ export async function upsertTradePointOverrideStrict(
   fields: Partial<Record<TradePointOverrideField, unknown>>,
   dealerId?: string,
 ): Promise<OverridesApiResult<{ override: TradePointOverrideRow | null }>> {
-  traceOverridesStrictCalled("upsertTradePointOverrideStrict", { tpId, dealerId, fields });
-  const body = { tp_id: tpId, dealer_id: dealerId, fields };
+  const sanitizedFields = sanitizeTradePointOverrideFieldsForApi(fields);
+  traceOverridesStrictCalled("upsertTradePointOverrideStrict", { tpId, dealerId, fields: sanitizedFields });
+  const body = { tp_id: tpId, dealer_id: dealerId, fields: sanitizedFields };
   const r = await overridesApiPost<{ override: TradePointOverrideRow | null }>({
     scope: "trade-point",
     action: "upsert",
     url: "/api/trade-point-overrides/upsert",
     entityId: tpId,
-    fields,
+    fields: sanitizedFields,
     body,
     traceFn: "upsertTradePointOverrideStrict",
   });

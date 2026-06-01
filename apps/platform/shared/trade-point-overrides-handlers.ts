@@ -12,7 +12,8 @@ import {
   type TradePointOverrideField,
   type TradePointOverrideRow,
 } from "./trade-point-overrides-types.js";
-import { runOverridesHandlerSafe } from "./overrides-write-errors.js";
+import { logOverridesWriteError, runOverridesHandlerSafe } from "./overrides-write-errors.js";
+import { OverridesValidationError, sanitizeTradePointOverrideUuidFields } from "./overrides-uuid-validation.js";
 
 type SessionUser = { id: string; role: string; status: string };
 
@@ -155,7 +156,7 @@ export async function handleTradePointOverridesUpsert(
     sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите tp_id." });
     return;
   }
-  const patch = pickFields(body);
+  let patch = pickFields(body);
   if (typeof body.dealer_id === "string" && body.dealer_id.trim()) {
     patch.dealer_id = body.dealer_id.trim();
   }
@@ -164,7 +165,36 @@ export async function handleTradePointOverridesUpsert(
     return;
   }
 
-  await runOverridesHandlerSafe(pool, "trade_point", tpId, body, me.id, async () => {
+  try {
+    patch = sanitizeTradePointOverrideUuidFields(patch);
+  } catch (e) {
+    if (e instanceof OverridesValidationError) {
+      await logOverridesWriteError(pool, {
+        entityKind: "trade_point",
+        entityId: tpId,
+        payload: body,
+        errorMessage: e.message,
+        actorUserId: me.id,
+        permanent: true,
+      });
+      sendJson(res, 400, {
+        success: false,
+        code: e.code,
+        field: e.field,
+        value: e.value,
+        message: `Некорректный UUID в поле ${e.field}.`,
+      });
+      return;
+    }
+    throw e;
+  }
+
+  if (Object.keys(patch).length === 0) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Нет полей для обновления." });
+    return;
+  }
+
+  await runOverridesHandlerSafe(pool, "trade_point", tpId, { ...body, fields: patch }, me.id, async () => {
     const prev = await fetchOverride(pool, tpId);
     await logEvents(pool, tpId, prev, patch, me.id);
 

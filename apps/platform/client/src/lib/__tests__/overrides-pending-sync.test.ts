@@ -30,9 +30,11 @@ const {
   dequeuePendingSync,
   enqueuePendingSync,
   listPendingSyncItems,
+  markPendingSyncDead,
   markPendingSyncFailed,
   OVERRIDES_PENDING_STORAGE_KEY,
   pendingSyncCount,
+  removePendingSyncWithUuidErrors,
 } = await import("../overrides-pending-sync.js");
 
 store.clear();
@@ -57,5 +59,17 @@ const item = listPendingSyncItems()[0];
 assert.equal(item?.attempts, 1, "markFailed increments attempts");
 assert.equal(item?.lastError, "HTTP 503");
 assert.ok(localStorageMock.getItem(OVERRIDES_PENDING_STORAGE_KEY)?.includes("HTTP 503"));
+
+enqueuePendingSync({
+  id: "dealer-upsert:bad",
+  kind: "dealer-upsert",
+  payload: { dealer_id: "D2", fields: { regional_manager_id: "mgr-bad" } },
+  lastError: "invalid input syntax for type uuid: mgr-bad",
+});
+assert.equal(removePendingSyncWithUuidErrors(), 1);
+assert.equal(pendingSyncCount(), 1, "only active non-uuid item remains");
+
+markPendingSyncDead("tp-upsert:T1", "INVALID_UUID_FIELD");
+assert.equal(listPendingSyncItems().length, 0, "dead items excluded from active list");
 
 console.log("✓ overrides-pending-sync tests passed");
