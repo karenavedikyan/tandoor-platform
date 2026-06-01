@@ -2,12 +2,20 @@
  * Admin: DDL каталога 1С → Neon + Yandex (Промт 116).
  */
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "wouter";
 import { CheckCircle2, Loader2, MinusCircle, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -201,13 +209,101 @@ function SmokeCountsCard({ smoke }: { smoke: MigrateResponse["smoke_counts_neon"
   );
 }
 
+type SyncLogRow = {
+  id: string;
+  source_file: string;
+  started_at: string;
+  finished_at: string | null;
+  status: string;
+  rows_total: number;
+  rows_upserted: number;
+  rows_skipped: number;
+  error: string | null;
+  duration_ms: number | null;
+};
+
+type SyncLogResponse = {
+  success: boolean;
+  has_running?: boolean;
+  logs?: SyncLogRow[];
+  message?: string;
+};
+
+function formatDuration(ms: number | null): string {
+  if (ms == null || !Number.isFinite(ms)) return "—";
+  if (ms < 1000) return `${ms} мс`;
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s} с`;
+  return `${Math.floor(s / 60)} мин ${s % 60} с`;
+}
+
 export default function AdminMigrateCatalog1cPage() {
   const { user } = useCurrentUser();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<MigrateResponse | null>(null);
+  const [syncLoading, setSyncLoading] = useState(false);
+  const [syncLogs, setSyncLogs] = useState<SyncLogRow[]>([]);
+  const [hasRunningSync, setHasRunningSync] = useState(false);
 
   const isAdmin = user?.role === "admin";
+
+  const fetchSyncLogs = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/catalog-1c-sync-log?limit=10", { credentials: "include" });
+      const json = (await res.json()) as SyncLogResponse;
+      if (res.ok && json.success && json.logs) {
+        setSyncLogs(json.logs);
+        setHasRunningSync(Boolean(json.has_running));
+      }
+    } catch {
+      /* ignore poll errors */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    void fetchSyncLogs();
+    const t = window.setInterval(() => {
+      void fetchSyncLogs();
+    }, hasRunningSync ? 5000 : 30000);
+    return () => window.clearInterval(t);
+  }, [isAdmin, hasRunningSync, fetchSyncLogs]);
+
+  async function runCatalogSync() {
+    setSyncLoading(true);
+    try {
+      const res = await fetch("/api/admin/sync-catalog-1c", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target: "both", dry: false }),
+      });
+      const json = (await res.json()) as { success?: boolean; message?: string };
+      if (!res.ok || !json.success) {
+        toast({
+          variant: "destructive",
+          title: "Не удалось запустить импорт",
+          description: json.message ?? `HTTP ${res.status}`,
+        });
+      } else {
+        toast({
+          title: "Импорт запущен на Yandex VM",
+          description: json.message ?? "Обновление лога каждые 5 с",
+        });
+        setHasRunningSync(true);
+        void fetchSyncLogs();
+      }
+    } catch (e) {
+      toast({
+        variant: "destructive",
+        title: "Ошибка запроса",
+        description: e instanceof Error ? e.message : undefined,
+      });
+    } finally {
+      setSyncLoading(false);
+    }
+  }
 
   async function runMigrate() {
     setLoading(true);
@@ -259,11 +355,87 @@ export default function AdminMigrateCatalog1cPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-5 pb-24 p-4 sm:p-6" data-testid="page-admin-migrate-catalog-1c">
       <div>
-        <h1 className="text-2xl font-semibold text-[#222631]">Миграция: каталог 1С (схема)</h1>
+        <h1 className="text-2xl font-semibold text-[#222631]">Каталог 1С: схема и импорт</h1>
         <p className="mt-1 text-sm text-[#8F96B0]">
-          Промт 116 — 11 таблиц <code className="text-xs">catalog_*</code> в Neon и Yandex. Парсинг FTP — в промте 117.
+          Промт 116 — DDL · Промт 117 — импорт <code className="text-xs">catalog1.xml</code> с FTP (runner на Yandex VM, cron hourly).
         </p>
       </div>
+
+      <Card className="border-border/80" data-testid="section-catalog-1c-sync">
+        <CardHeader>
+          <CardTitle className="text-base">Импорт данных</CardTitle>
+          <CardDescription>
+            Запускает <code className="text-xs">sync-1c-catalog.mjs</code> на VM (не Vercel). Требуется{" "}
+            <code className="text-xs">SYNC_1C_RUNNER_URL</code> в env.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Button
+            type="button"
+            variant="default"
+            className="w-full bg-[#222631] text-white hover:bg-[#333a4d] sm:w-auto"
+            disabled={syncLoading || hasRunningSync}
+            data-testid="button-sync-catalog-1c-now"
+            onClick={() => void runCatalogSync()}
+          >
+            {syncLoading || hasRunningSync ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+            ) : null}
+            {hasRunningSync ? "Импорт выполняется…" : "Импортировать каталог 1С сейчас"}
+          </Button>
+
+          <div className="overflow-x-auto rounded-md border border-border/60">
+            <Table data-testid="table-catalog-sync-log">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>ID</TableHead>
+                  <TableHead>Файл</TableHead>
+                  <TableHead>Старт</TableHead>
+                  <TableHead>Статус</TableHead>
+                  <TableHead className="text-right">Upserted</TableHead>
+                  <TableHead>Длительность</TableHead>
+                  <TableHead>Ошибка</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {syncLogs.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-muted-foreground">
+                      Нет записей в catalog_sync_log
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  syncLogs.map((row) => (
+                    <TableRow key={row.id}>
+                      <TableCell className="font-mono text-xs">{row.id}</TableCell>
+                      <TableCell>{row.source_file}</TableCell>
+                      <TableCell className="text-xs whitespace-nowrap">{row.started_at}</TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            row.status === "ok"
+                              ? "default"
+                              : row.status === "running"
+                                ? "secondary"
+                                : "destructive"
+                          }
+                        >
+                          {row.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">{row.rows_upserted}</TableCell>
+                      <TableCell>{formatDuration(row.duration_ms)}</TableCell>
+                      <TableCell className="max-w-[200px] truncate text-xs text-destructive" title={row.error ?? ""}>
+                        {row.error ?? "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="space-y-2">
         <Button
