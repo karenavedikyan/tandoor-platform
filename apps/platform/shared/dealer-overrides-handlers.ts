@@ -17,6 +17,29 @@ import { runOverridesHandlerSafe } from "./overrides-write-errors.js";
 
 type SessionUser = { id: string; role: string; status: string };
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Поля dealer_overrides, колонки которых в БД имеют тип uuid. */
+const UUID_FIELDS: DealerOverrideField[] = ["regional_manager_id", "trashed_by"];
+
+/**
+ * Проверяет, что все uuid-поля в patch — либо null/пустые, либо валидные UUID.
+ * Возвращает первое невалидное поле или null, если всё в порядке.
+ */
+function validateUuidFields(
+  patch: Partial<Record<DealerOverrideField, unknown>>,
+): { field: string; value: string } | null {
+  for (const field of UUID_FIELDS) {
+    if (!(field in patch)) continue;
+    const v = patch[field];
+    if (v === null || v === undefined || v === "") continue;
+    if (typeof v !== "string" || !UUID_RE.test(v)) {
+      return { field, value: String(v) };
+    }
+  }
+  return null;
+}
+
 function sendJson(res: VercelResponse, status: number, body: Record<string, unknown>): void {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   res.setHeader("Cache-Control", "no-store");
@@ -189,6 +212,19 @@ export async function handleDealerOverridesUpsert(
   const patch = pickFields(body);
   if (Object.keys(patch).length === 0) {
     sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Нет полей для обновления." });
+    return;
+  }
+
+  // Валидация полей типа uuid ДО обращения к БД. Без этого невалидное
+  // значение (напр. slug "mgr-ilyuchenko-an") вызывало Postgres-ошибку
+  // 22P02 invalid_text_representation -> 500 -> бесконечные ретраи клиента.
+  const invalidUuid = validateUuidFields(patch);
+  if (invalidUuid) {
+    sendJson(res, 400, {
+      success: false,
+      code: "VALIDATION_ERROR",
+      message: `Поле «${invalidUuid.field}» должно быть UUID пользователя, а не «${invalidUuid.value}».`,
+    });
     return;
   }
 
