@@ -33,13 +33,26 @@ function authOk(req) {
   return h === `Bearer ${TOKEN}`;
 }
 
-function startSync(target = "both", dry = false) {
+function startSync(target = "both", dry = false, extraEnv = {}) {
   if (running) {
     return { ok: false, code: "BUSY", message: "Sync already running" };
+  }
+  // extraEnv позволяет Vercel передавать временные секреты (напр. DATABASE_URL_UNPOOLED для Neon),
+  // чтобы не хранить их в ~/.env на VM. Секреты попадают только в env дочернего
+  // процесса, никуда не логируются.
+  const allowedExtra = new Set([
+    "DATABASE_URL",
+    "DATABASE_URL_UNPOOLED",
+    "POSTGRES_URL_NON_POOLING",
+  ]);
+  const safeExtra = {};
+  for (const [k, v] of Object.entries(extraEnv || {})) {
+    if (allowedExtra.has(k) && typeof v === "string" && v.length > 0) safeExtra[k] = v;
   }
   const child = spawn(process.execPath, [SCRIPT], {
     env: {
       ...process.env,
+      ...safeExtra,
       TARGET_DB: target,
       DRY_RUN: dry ? "1" : "0",
     },
@@ -90,16 +103,18 @@ const server = http.createServer((req, res) => {
     req.on("end", () => {
       let target = "both";
       let dry = false;
+      let extraEnv = {};
       try {
         if (body.trim()) {
           const p = JSON.parse(body);
           if (p.target) target = String(p.target);
           if (p.dry) dry = Boolean(p.dry);
+          if (p.extraEnv && typeof p.extraEnv === "object") extraEnv = p.extraEnv;
         }
       } catch {
         /* ignore */
       }
-      const r = startSync(target, dry);
+      const r = startSync(target, dry, extraEnv);
       json(res, r.ok ? 202 : 409, r);
     });
     return;

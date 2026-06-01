@@ -57,10 +57,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (token) headers.Authorization = `Bearer ${token}`;
 
+    // Пробрасываем Neon URL на раннер одноразово в body, чтобы VM видел его только в момент импорта
+    // и только при запуске из Vercel (cron на VM без этого будет импортировать только в Yandex — бэкап-ветвь).
+    const extraEnv: Record<string, string> = {};
+    if (target === "both" || target === "neon") {
+      const neonUrl = process.env.DATABASE_URL_UNPOOLED?.trim() || process.env.POSTGRES_URL_NON_POOLING?.trim();
+      if (neonUrl) extraEnv.DATABASE_URL_UNPOOLED = neonUrl;
+    }
+
     const r = await fetch(`${runnerUrl}/run/catalog`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ target, dry }),
+      body: JSON.stringify({ target, dry, extraEnv: Object.keys(extraEnv).length ? extraEnv : undefined }),
       signal: AbortSignal.timeout(15_000),
     });
 
