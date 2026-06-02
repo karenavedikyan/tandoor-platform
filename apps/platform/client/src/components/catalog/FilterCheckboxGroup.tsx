@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+const filterCheckboxClass =
+  "h-3.5 w-3.5 shrink-0 rounded-[2px] border-[#e3e6f3] data-[state=checked]:border-[#9aca3c] data-[state=checked]:bg-[#9aca3c] data-[state=checked]:text-white";
 
 export type FilterCheckboxOption = { value: string; count: number };
 
@@ -47,9 +49,10 @@ export function FilterCheckboxGroup({
         <Checkbox
           id={id}
           checked={checked}
+          className={filterCheckboxClass}
           onCheckedChange={(v) => onChange(v === true ? [yes] : [])}
         />
-        <Label htmlFor={id} className="cursor-pointer text-sm font-normal">
+        <Label htmlFor={id} className="cursor-pointer text-sm font-normal text-foreground">
           {label}
           {showCounts && options[0] ? (
             <span className="text-muted-foreground"> ({options[0].count.toLocaleString("ru-RU")})</span>
@@ -70,9 +73,10 @@ export function FilterCheckboxGroup({
               <Checkbox
                 id={id}
                 checked={checked}
+                className={filterCheckboxClass}
                 onCheckedChange={(v) => toggle(opt.value, v === true)}
               />
-              <Label htmlFor={id} className="cursor-pointer text-sm font-normal leading-snug">
+              <Label htmlFor={id} className="cursor-pointer text-sm font-normal leading-snug text-foreground">
                 {opt.value}
                 {showCounts ? (
                   <span className="text-muted-foreground"> ({opt.count.toLocaleString("ru-RU")})</span>

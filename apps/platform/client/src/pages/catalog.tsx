@@ -23,7 +23,6 @@ import { Slider } from "@/components/ui/slider";
 import {
   Sheet,
   SheetContent,
-  SheetHeader,
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
@@ -513,24 +512,32 @@ export default function CatalogPage() {
             </Select>
           </div>
 
-          <div className="flex items-end gap-1">
+          <div className="flex flex-col items-stretch gap-2">
             <Sheet open={filtersSheetOpen} onOpenChange={setFiltersSheetOpen}>
               <SheetTrigger asChild>
-                <Button variant="outline" size="sm" className="relative gap-1.5 md:hidden" aria-label="Подобрать по фильтрам">
-                  <SlidersHorizontal className="h-4 w-4" />
-                  <span className="text-xs">Фильтры</span>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="relative w-full gap-2 bg-[#9aca3c] text-white hover:bg-[#86b832]"
+                  aria-label="Подобрать по Фильтрам"
+                  data-testid="catalog-filters-open"
+                >
+                  <SlidersHorizontal className="h-4 w-4 shrink-0" />
+                  <span className="text-xs font-semibold sm:text-sm">Подобрать по Фильтрам</span>
                   {hasAdvancedFilters ? (
-                    <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-primary" />
+                    <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-[#d84040] ring-2 ring-white" />
                   ) : null}
                 </Button>
               </SheetTrigger>
-              <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto">
-                <SheetHeader>
-                  <SheetTitle>Фильтры</SheetTitle>
-                </SheetHeader>
-                <div className="mt-4">{advancedFiltersPanel}</div>
+              <SheetContent
+                side="right"
+                className="flex h-full w-[300px] max-w-[90vw] flex-col gap-0 overflow-hidden p-0 sm:max-w-[300px]"
+              >
+                <SheetTitle className="sr-only">Фильтр</SheetTitle>
+                {advancedFiltersPanel}
               </SheetContent>
             </Sheet>
+            <div className="flex items-center justify-end gap-1">
             <Button
               size="icon"
               variant={cardSize === "xl" ? "default" : "outline"}
@@ -567,6 +574,7 @@ export default function CatalogPage() {
             >
               <List className="h-4 w-4" />
             </Button>
+            </div>
           </div>
 
           <div className="col-span-full flex flex-col gap-2 pt-1 sm:flex-row sm:flex-wrap sm:items-center">
@@ -610,7 +618,6 @@ export default function CatalogPage() {
             </div>
           </div>
 
-          <div className="col-span-full hidden md:block">{advancedFiltersPanel}</div>
         </CardContent>
       </Card>
 
@@ -689,95 +696,107 @@ function CatalogAdvancedFilters({
   }, [groups]);
 
   return (
-    <div className="flex flex-col gap-4">
-      <h3 className="text-sm font-semibold">
-        Фильтр / {title}
-      </h3>
+    <div className="flex h-full min-h-0 flex-col">
+      <header className="shrink-0 px-[21px] pb-3 pt-[21px]">
+        <h2 className="text-[22px] font-semibold leading-[26px] text-foreground">Фильтр</h2>
+        <p className="mt-1 text-sm text-[#7d8e9a]">{title}</p>
+      </header>
 
-      {filtersLoading && !filtersData ? (
-        <p className="text-sm text-muted-foreground">Загружаю фильтры…</p>
-      ) : (
-        <>
-          {bHi > bLo && (
-            <div className="space-y-3">
-              <Label className="text-sm font-medium">Цена, ₽</Label>
-              <div className="flex gap-2">
-                <Input
-                  type="number"
-                  className="h-9"
-                  value={Math.round(sliderValue[0])}
+      <div className="min-h-0 flex-1 overflow-y-auto px-[21px] pb-[21px]">
+        {filtersLoading && !filtersData ? (
+          <p className="text-sm text-muted-foreground">Загружаю фильтры…</p>
+        ) : (
+          <div className="flex flex-col gap-5">
+            {bHi > bLo && (
+              <div className="space-y-3">
+                <Label className="text-sm font-medium text-foreground">Цена, ₽</Label>
+                <div className="flex gap-2">
+                  <Input
+                    type="number"
+                    className="h-9 rounded-[2px] border-[#eeeff7] text-center text-foreground"
+                    value={Math.round(sliderValue[0])}
+                    min={bLo}
+                    max={sliderValue[1]}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      if (Number.isFinite(v)) onPriceChange([v, sliderValue[1]]);
+                    }}
+                  />
+                  <Input
+                    type="number"
+                    className="h-9 rounded-[2px] border-[#eeeff7] text-center text-foreground"
+                    value={Math.round(sliderValue[1])}
+                    min={sliderValue[0]}
+                    max={bHi}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      if (Number.isFinite(v)) onPriceChange([sliderValue[0], v]);
+                    }}
+                  />
+                </div>
+                <Slider
                   min={bLo}
-                  max={sliderValue[1]}
-                  onChange={(e) => {
-                    const v = Number(e.target.value);
-                    if (Number.isFinite(v)) onPriceChange([v, sliderValue[1]]);
-                  }}
-                />
-                <Input
-                  type="number"
-                  className="h-9"
-                  value={Math.round(sliderValue[1])}
-                  min={sliderValue[0]}
-                  max={bHi}
-                  onChange={(e) => {
-                    const v = Number(e.target.value);
-                    if (Number.isFinite(v)) onPriceChange([sliderValue[0], v]);
+                  max={sliderMax}
+                  step={1}
+                  value={sliderValue}
+                  className="[&_.bg-primary]:bg-[#9aca3c] [&_.border-primary]:border-[#9aca3c]"
+                  onValueChange={(v) => {
+                    if (v.length >= 2) onPriceChange([v[0]!, v[1]!]);
                   }}
                 />
               </div>
-              <Slider
-                min={bLo}
-                max={sliderMax}
-                step={1}
-                value={sliderValue}
-                onValueChange={(v) => {
-                  if (v.length >= 2) onPriceChange([v[0]!, v[1]!]);
-                }}
-              />
-            </div>
-          )}
+            )}
 
-          <Accordion type="multiple" value={openSections} onValueChange={setOpenSections} className="w-full">
-            {groups.map((group) => (
-              <AccordionItem key={group.key} value={group.key} className="border-b">
-                <AccordionTrigger className="py-2 text-sm hover:no-underline">
-                  {group.label}
-                </AccordionTrigger>
-                <AccordionContent className="pb-3 pt-1">
-                  <FilterCheckboxGroup
-                    label={group.label}
-                    kind={group.kind}
-                    options={group.values}
-                    selected={propFilters[group.key] ?? []}
-                    onChange={(next) =>
-                      setPropFilters((prev) => {
-                        const copy = { ...prev };
-                        if (next.length) copy[group.key] = next;
-                        else delete copy[group.key];
-                        return copy;
-                      })
-                    }
-                  />
-                </AccordionContent>
-              </AccordionItem>
-            ))}
-          </Accordion>
-        </>
-      )}
+            <Accordion type="multiple" value={openSections} onValueChange={setOpenSections} className="w-full">
+              {groups.map((group) => (
+                <AccordionItem key={group.key} value={group.key} className="border-b border-[#e3e6f3]">
+                  <AccordionTrigger className="py-2.5 text-sm font-medium text-foreground hover:no-underline">
+                    {group.label}
+                  </AccordionTrigger>
+                  <AccordionContent className="pb-3 pt-1">
+                    <FilterCheckboxGroup
+                      label={group.label}
+                      kind={group.kind}
+                      options={group.values}
+                      selected={propFilters[group.key] ?? []}
+                      onChange={(next) =>
+                        setPropFilters((prev) => {
+                          const copy = { ...prev };
+                          if (next.length) copy[group.key] = next;
+                          else delete copy[group.key];
+                          return copy;
+                        })
+                      }
+                    />
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
+          </div>
+        )}
+      </div>
 
-      <div className="flex items-center justify-between gap-2 border-t pt-3">
-        <Button type="button" variant="ghost" size="icon" onClick={onReset} aria-label="Сбросить фильтры">
+      <footer className="flex shrink-0 items-center justify-between gap-2 border-t border-[#e3e6f3] px-[21px] py-[21px]">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-[42px] w-[42px] shrink-0 rounded-[2px]"
+          onClick={onReset}
+          aria-label="Сбросить фильтры"
+        >
           <RotateCcw className="h-4 w-4" />
         </Button>
         <Button
           type="button"
-          className="flex-1 bg-emerald-600 font-semibold uppercase tracking-wide hover:bg-emerald-700"
+          className="h-[42px] flex-1 bg-[#9aca3c] font-semibold text-white hover:bg-[#86b832]"
           onClick={onApply}
           disabled={filtersLoading}
+          data-testid="catalog-filters-apply"
         >
           Применить
         </Button>
-      </div>
+      </footer>
     </div>
   );
 }
