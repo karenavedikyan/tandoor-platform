@@ -16,6 +16,7 @@ import {
   CatalogStockLine,
   showSpecsButton,
 } from "./catalog-card-parts";
+import { optimizedImage } from "@/lib/catalog-image";
 import { VariantSwitchers } from "./VariantSwitchers";
 
 export type CatalogListProduct = {
@@ -94,7 +95,7 @@ function useVariantDisplay(product: CatalogListProduct) {
 export function ProductListRow({ product }: { product: CatalogListProduct }) {
   const { active, selection, setSelection, showSwitchers, variants, title, subtitleColor, groupStock } =
     useVariantDisplay(product);
-  const imageSrc = active.image_url || product.image_url || null;
+  const imageSrc = optimizedImage(active.image_url || product.image_url, 160);
   const detailHref = `/catalog/1c/${active.product_id}`;
   const colors = product.colors ?? [];
   const hasPalette = colors.length > 1;
@@ -183,7 +184,8 @@ export function ProductCardGrid({
 }) {
   const { active, selection, setSelection, showSwitchers, variants, title, subtitleColor, groupStock } =
     useVariantDisplay(product);
-  const imageSrc = active.image_url || product.image_url || null;
+  const previewWidth = size === "xl" ? 640 : size === "m" ? 320 : 200;
+  const imageSrc = optimizedImage(active.image_url || product.image_url, previewWidth);
   const detailHref = `/catalog/1c/${active.product_id}`;
   const colors = product.colors ?? [];
   const hasPalette = colors.length > 1;
