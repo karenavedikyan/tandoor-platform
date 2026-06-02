@@ -188,10 +188,7 @@ async function upsertProductsWithChildren(db, products) {
       const ids = batch.map((p) => p.id);
       await q.query(`DELETE FROM catalog_product_properties WHERE product_id = ANY($1::uuid[])`, [ids]);
       await q.query(`DELETE FROM catalog_product_categories WHERE product_id = ANY($1::uuid[])`, [ids]);
-      // ВАЖНО: catalog_product_images НЕ удаляем целиком — иначе теряются blob_url
-      // (привязка к Vercel Blob), которые проставляет отдельный фото-синк.
-      // Вместо этого ниже делаем upsert по (product_id, path) с сохранением blob-полей
-      // и точечно удаляем только устаревшие пути, которых больше нет в выгрузке 1С.
+      await q.query(`DELETE FROM catalog_product_images WHERE product_id = ANY($1::uuid[])`, [ids]);
 
       const pValues = [];
       const pParams = [];
@@ -232,7 +229,7 @@ async function upsertProductsWithChildren(db, products) {
       await insertProductCategories(q, batch);
       stats.productCategories += batch.reduce((s, p) => s + p.categoryIds.length, 0);
 
-      await upsertProductImages(q, batch);
+      await insertProductImages(q, batch);
       stats.images += batch.reduce((s, p) => s + p.imagePaths.length, 0);
     });
   }
@@ -291,22 +288,7 @@ async function insertProductCategories(q, batch) {
   }
 }
 
-/**
- * Upsert изображений с СОХРАНЕНИЕМ blob-полей.
- *
- * Импорт каталога знает только path и sort_order. Поля blob_url/blob_size/
- * blob_uploaded_at/source_size заполняет отдельный фото-синк (photo-sync.mjs),
- * поэтому при импорте их нельзя затирать. Раньше здесь был DELETE+INSERT, из-за
- * чего blob_url обнулялся при каждом синке каталога (~раз в 3 часа), и фото
- * пропадали из каталога до следующего фото-синка.
- *
- * Теперь:
- *   1. INSERT ... ON CONFLICT (product_id, path) DO UPDATE — обновляем только
- *      sort_order, blob-поля не трогаем (они либо уже есть, либо NULL до фото-синка).
- *   2. Удаляем только устаревшие пути товара, которых больше нет в выгрузке 1С.
- */
-async function upsertProductImages(q, batch) {
-  // 1. Upsert текущих путей.
+async function insertProductImages(q, batch) {
   const rows = [];
   for (const p of batch) {
     p.imagePaths.forEach((path, sortOrder) => {
@@ -324,25 +306,9 @@ async function upsertProductImages(q, batch) {
     }
     await q.query(
       `INSERT INTO catalog_product_images (product_id, path, sort_order)
-       VALUES ${values.join(",")}
-       ON CONFLICT (product_id, path) DO UPDATE SET
-         sort_order = EXCLUDED.sort_order`,
+       VALUES ${values.join(",")}`,
       params,
     );
-  }
-
-  // 2. Удаляем пути, которых больше нет в выгрузке (по каждому товару отдельно).
-  for (const p of batch) {
-    if (p.imagePaths.length > 0) {
-      await q.query(
-        `DELETE FROM catalog_product_images
-          WHERE product_id = $1::uuid AND NOT (path = ANY($2::text[]))`,
-        [p.id, p.imagePaths],
-      );
-    } else {
-      // У товара больше нет фото в выгрузке — чистим все его строки.
-      await q.query(`DELETE FROM catalog_product_images WHERE product_id = $1::uuid`, [p.id]);
-    }
   }
 }
 
