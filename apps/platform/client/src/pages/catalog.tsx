@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Grid2x2, Grid3x3, LayoutGrid, List, RefreshCw, RotateCcw, Search, SlidersHorizontal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -6,6 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Accordion,
   AccordionContent,
@@ -392,9 +399,9 @@ export default function CatalogPage() {
   }, [categoryId, categories]);
 
   const gridCls = {
-    xl: "grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3",
-    m: "grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5",
-    s: "grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8",
+    xl: "grid grid-cols-1 gap-5 min-[650px]:grid-cols-2 min-[866px]:grid-cols-3",
+    m: "grid grid-cols-2 gap-3 min-[650px]:grid-cols-3 min-[866px]:grid-cols-4 min-[866px]:gap-4",
+    s: "grid grid-cols-2 gap-2 min-[650px]:grid-cols-4 min-[866px]:grid-cols-6 min-[866px]:gap-3",
   }[cardSize === "list" ? "m" : cardSize];
 
   const filterPanelTitle =
@@ -530,48 +537,46 @@ export default function CatalogPage() {
                 {advancedFiltersPanel}
               </SheetContent>
             </Sheet>
-            <div className="flex items-center justify-end gap-1">
-            <Button
-              size="icon"
-              variant={cardSize === "xl" ? "default" : "outline"}
-              onClick={() => setCardSize("xl")}
-              title="Крупный"
-              aria-label="Крупный"
-            >
-              <LayoutGrid className="h-5 w-5" />
-            </Button>
-            <Button
-              size="icon"
-              variant={cardSize === "m" ? "default" : "outline"}
-              onClick={() => setCardSize("m")}
-              title="Средний"
-              aria-label="Средний"
-            >
-              <Grid3x3 className="h-4 w-4" />
-            </Button>
-            <Button
-              size="icon"
-              variant={cardSize === "s" ? "default" : "outline"}
-              onClick={() => setCardSize("s")}
-              title="Мелкий"
-              aria-label="Мелкий"
-            >
-              <Grid2x2 className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              size="icon"
-              variant={cardSize === "list" ? "default" : "outline"}
-              onClick={() => setCardSize("list")}
-              title="Список"
-              aria-label="Список"
-            >
-              <List className="h-4 w-4" />
-            </Button>
+            <div className="flex max-w-full flex-wrap items-center justify-end gap-2.5">
+              <CatalogViewToggle
+                active={cardSize === "xl"}
+                onClick={() => setCardSize("xl")}
+                title="Крупный"
+                aria-label="Крупный"
+                className="max-[865px]:hidden"
+              >
+                <LayoutGrid className="h-5 w-5" />
+              </CatalogViewToggle>
+              <CatalogViewToggle
+                active={cardSize === "m"}
+                onClick={() => setCardSize("m")}
+                title="Средний"
+                aria-label="Средний"
+              >
+                <Grid3x3 className="h-4 w-4" />
+              </CatalogViewToggle>
+              <CatalogViewToggle
+                active={cardSize === "s"}
+                onClick={() => setCardSize("s")}
+                title="Мелкий"
+                aria-label="Мелкий"
+                className="max-[865px]:hidden"
+              >
+                <Grid2x2 className="h-3.5 w-3.5" />
+              </CatalogViewToggle>
+              <CatalogViewToggle
+                active={cardSize === "list"}
+                onClick={() => setCardSize("list")}
+                title="Список"
+                aria-label="Список"
+              >
+                <List className="h-4 w-4" />
+              </CatalogViewToggle>
             </div>
           </div>
 
-          <div className="col-span-full flex flex-col gap-2 pt-1 sm:flex-row sm:flex-wrap sm:items-center">
-            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+          <div className="col-span-full flex flex-col gap-2 pt-1 min-[866px]:flex-row min-[866px]:flex-wrap min-[866px]:items-center">
+            <div className="hidden min-w-0 min-[866px]:flex min-[866px]:flex-1 min-[866px]:flex-wrap min-[866px]:items-center min-[866px]:gap-2">
               <span className="sr-only">Быстрые фильтры</span>
               <QuickFilterSegment
                 active={onlyHit}
@@ -594,10 +599,13 @@ export default function CatalogPage() {
                 label="В наличии"
               />
             </div>
-            <div className="flex shrink-0 items-center gap-2 sm:ml-auto">
-              <Label className="text-xs text-muted-foreground whitespace-nowrap">Сортировка</Label>
+            <div className="flex w-full shrink-0 items-center gap-2 min-[866px]:ml-auto min-[866px]:w-auto">
+              <Label className="whitespace-nowrap text-xs text-[#8f96b0]">Сортировка</Label>
               <Select value={sort} onValueChange={(v) => setSort(v as typeof sort)}>
-                <SelectTrigger className="h-8 w-full min-w-[200px] text-xs sm:w-[220px]" data-testid="catalog-sort-select">
+                <SelectTrigger
+                  className="h-9 w-full min-w-[200px] border-[#e3e6f3] bg-white text-xs text-[#222631] min-[866px]:w-[220px]"
+                  data-testid="catalog-sort-select"
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -796,6 +804,41 @@ function CatalogAdvancedFilters({
   );
 }
 
+function CatalogViewToggle({
+  active,
+  onClick,
+  title,
+  "aria-label": ariaLabel,
+  className,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  title: string;
+  "aria-label": string;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-label={ariaLabel}
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(
+        "flex h-9 w-9 shrink-0 items-center justify-center rounded-md border transition",
+        active
+          ? "border-[#9aca3c] bg-[#9aca3c] text-white shadow-[0_4px_4px_rgba(0,0,0,0.25)]"
+          : "border-[#eeeff7] bg-white text-[#8f96b0] hover:border-[#9aca3c]",
+        className,
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
 function QuickFilterSegment({
   active,
   onClick,
@@ -813,8 +856,8 @@ function QuickFilterSegment({
       className={cn(
         "rounded-full border px-3 py-1.5 text-xs font-medium transition",
         active
-          ? "border-lime-600 bg-lime-500 text-lime-950 shadow-sm"
-          : "border-border bg-background text-foreground hover:border-muted-foreground/40 hover:bg-muted",
+          ? "border-[#9aca3c] bg-[#9aca3c] text-white shadow-[0_4px_4px_rgba(0,0,0,0.25)]"
+          : "border-[#eeeff7] bg-white text-[#222631] hover:border-[#9aca3c]/60",
       )}
     >
       {label}
