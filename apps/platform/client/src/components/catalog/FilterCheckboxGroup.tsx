@@ -7,18 +7,22 @@ export type FilterCheckboxOption = { value: string; count: number };
 
 type Props = {
   label: string;
+  kind?: "checkbox" | "range_buckets" | "boolean";
   options: FilterCheckboxOption[];
   selected: string[];
   onChange: (next: string[]) => void;
   maxVisible?: number;
+  showCounts?: boolean;
 };
 
 export function FilterCheckboxGroup({
   label,
+  kind = "checkbox",
   options,
   selected,
   onChange,
   maxVisible = 8,
+  showCounts = true,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
   const visible = expanded ? options : options.slice(0, maxVisible);
@@ -34,9 +38,29 @@ export function FilterCheckboxGroup({
 
   if (options.length === 0) return null;
 
+  if (kind === "boolean") {
+    const yes = options[0]?.value ?? "Да";
+    const checked = selected.includes(yes);
+    const id = `${label}-boolean`;
+    return (
+      <div className="flex items-center gap-2">
+        <Checkbox
+          id={id}
+          checked={checked}
+          onCheckedChange={(v) => onChange(v === true ? [yes] : [])}
+        />
+        <Label htmlFor={id} className="cursor-pointer text-sm font-normal">
+          {label}
+          {showCounts && options[0] ? (
+            <span className="text-muted-foreground"> ({options[0].count.toLocaleString("ru-RU")})</span>
+          ) : null}
+        </Label>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-2">
-      <div className="text-sm font-medium">{label}</div>
       <div className="space-y-1.5">
         {visible.map((opt) => {
           const id = `${label}-${opt.value}`;
@@ -49,14 +73,16 @@ export function FilterCheckboxGroup({
                 onCheckedChange={(v) => toggle(opt.value, v === true)}
               />
               <Label htmlFor={id} className="cursor-pointer text-sm font-normal leading-snug">
-                {opt.value}{" "}
-                <span className="text-muted-foreground">({opt.count.toLocaleString("ru-RU")})</span>
+                {opt.value}
+                {showCounts ? (
+                  <span className="text-muted-foreground"> ({opt.count.toLocaleString("ru-RU")})</span>
+                ) : null}
               </Label>
             </div>
           );
         })}
       </div>
-      {hasMore && (
+      {hasMore && kind === "checkbox" && (
         <Button type="button" variant="link" className="h-auto p-0 text-xs" onClick={() => setExpanded((e) => !e)}>
           {expanded ? "Свернуть" : `Показать все (${options.length})`}
         </Button>

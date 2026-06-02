@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Grid2x2, Grid3x3, LayoutGrid, List, RefreshCw, Search, SlidersHorizontal } from "lucide-react";
+import { Grid2x2, Grid3x3, LayoutGrid, List, RefreshCw, RotateCcw, Search, SlidersHorizontal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -58,14 +58,18 @@ type CategoryItem = {
   product_count: number;
 };
 
+type FilterGroupKind = "checkbox" | "range_buckets" | "boolean";
+
 type FiltersResponse = {
   success: boolean;
+  categoryTitle: string | null;
+  rootCategoryId: string | null;
   price: { min: number | null; max: number | null };
-  brands: Array<{ value: string; count: number }>;
-  properties: Array<{
+  groups: Array<{
     key: string;
     label: string;
-    unit: string | null;
+    kind: FilterGroupKind;
+    order: number;
     values: Array<{ value: string; count: number }>;
   }>;
 };
@@ -133,12 +137,11 @@ export default function CatalogPage() {
   const [onlyHit, setOnlyHit] = useState(false);
   const [onlySale, setOnlySale] = useState(false);
 
-  const [brandFilter, setBrandFilter] = useState<string[]>([]);
-  const [propFilters, setPropFilters] = useState<Record<string, string[]>>({});
-  const [priceRange, setPriceRange] = useState<[number, number] | null>(null);
-  const [debouncedPriceRange, setDebouncedPriceRange] = useState<[number, number] | null>(null);
+  const [pendingPropFilters, setPendingPropFilters] = useState<Record<string, string[]>>({});
+  const [appliedPropFilters, setAppliedPropFilters] = useState<Record<string, string[]>>({});
+  const [pendingPriceRange, setPendingPriceRange] = useState<[number, number] | null>(null);
+  const [appliedPriceRange, setAppliedPriceRange] = useState<[number, number] | null>(null);
   const [priceBounds, setPriceBounds] = useState<[number, number]>([0, 0]);
-  const [priceTouched, setPriceTouched] = useState(false);
   const [filtersSheetOpen, setFiltersSheetOpen] = useState(false);
 
   const [items, setItems] = useState<CatalogProductItem[]>([]);
@@ -157,16 +160,10 @@ export default function CatalogPage() {
   }, [cardSize]);
 
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedPriceRange(priceRange), 400);
-    return () => clearTimeout(t);
-  }, [priceRange]);
-
-  useEffect(() => {
-    setBrandFilter([]);
-    setPropFilters({});
-    setPriceRange(null);
-    setDebouncedPriceRange(null);
-    setPriceTouched(false);
+    setPendingPropFilters({});
+    setAppliedPropFilters({});
+    setPendingPriceRange(null);
+    setAppliedPriceRange(null);
   }, [categoryId]);
 
   const filtersQuery = useQuery({
@@ -187,24 +184,27 @@ export default function CatalogPage() {
     const p = filtersQuery.data?.price;
     if (p?.min == null || p?.max == null) return;
     setPriceBounds([p.min, p.max]);
-    if (!priceTouched) {
-      setPriceRange([p.min, p.max]);
-      setDebouncedPriceRange([p.min, p.max]);
-    }
-  }, [filtersQuery.data, categoryId, priceTouched]);
+    setPendingPriceRange([p.min, p.max]);
+    setAppliedPriceRange([p.min, p.max]);
+  }, [filtersQuery.data, categoryId]);
 
   const priceFilterActive = useMemo(() => {
-    if (!debouncedPriceRange) return false;
-    const [lo, hi] = debouncedPriceRange;
+    if (!appliedPriceRange) return false;
+    const [lo, hi] = appliedPriceRange;
     const [bLo, bHi] = priceBounds;
     if (bHi <= bLo) return false;
     return lo > bLo || hi < bHi;
-  }, [debouncedPriceRange, priceBounds]);
+  }, [appliedPriceRange, priceBounds]);
 
   const hasAdvancedFilters =
-    brandFilter.length > 0 ||
-    Object.values(propFilters).some((v) => v.length > 0) ||
-    priceFilterActive;
+    Object.values(appliedPropFilters).some((v) => v.length > 0) || priceFilterActive;
+
+  const hasPendingChanges = useMemo(() => {
+    const priceChanged =
+      JSON.stringify(pendingPriceRange) !== JSON.stringify(appliedPriceRange);
+    const propsChanged = JSON.stringify(pendingPropFilters) !== JSON.stringify(appliedPropFilters);
+    return priceChanged || propsChanged;
+  }, [pendingPropFilters, appliedPropFilters, pendingPriceRange, appliedPriceRange]);
 
   const productsQueryKey = useMemo(
     () => [
@@ -216,9 +216,8 @@ export default function CatalogPage() {
       onlyNew,
       onlyHit,
       onlySale,
-      brandFilter,
-      propFilters,
-      debouncedPriceRange,
+      appliedPropFilters,
+      appliedPriceRange,
       priceFilterActive,
     ],
     [
@@ -229,9 +228,8 @@ export default function CatalogPage() {
       onlyNew,
       onlyHit,
       onlySale,
-      brandFilter,
-      propFilters,
-      debouncedPriceRange,
+      appliedPropFilters,
+      appliedPriceRange,
       priceFilterActive,
     ],
   );
@@ -250,12 +248,11 @@ export default function CatalogPage() {
       if (onlyNew) params.set("is_new", "1");
       if (onlyHit) params.set("is_hit", "1");
       if (onlySale) params.set("is_sale", "1");
-      for (const b of brandFilter) params.append("brand", b);
-      const propsEnc = encodePropsParam(propFilters);
+      const propsEnc = encodePropsParam(appliedPropFilters);
       if (propsEnc) params.set("props", propsEnc);
-      if (priceFilterActive && debouncedPriceRange) {
-        params.set("price_min", String(Math.round(debouncedPriceRange[0])));
-        params.set("price_max", String(Math.round(debouncedPriceRange[1])));
+      if (priceFilterActive && appliedPriceRange) {
+        params.set("price_min", String(Math.round(appliedPriceRange[0])));
+        params.set("price_max", String(Math.round(appliedPriceRange[1])));
       }
       params.set("limit", String(PAGE_SIZE));
       params.set("offset", String(nextOffset));
@@ -367,17 +364,22 @@ export default function CatalogPage() {
   }
 
   function resetAdvancedFilters() {
-    setBrandFilter([]);
-    setPropFilters({});
-    setPriceTouched(false);
+    setPendingPropFilters({});
+    setAppliedPropFilters({});
     const p = filtersQuery.data?.price;
     if (p?.min != null && p?.max != null) {
-      setPriceRange([p.min, p.max]);
-      setDebouncedPriceRange([p.min, p.max]);
+      setPendingPriceRange([p.min, p.max]);
+      setAppliedPriceRange([p.min, p.max]);
     } else {
-      setPriceRange(null);
-      setDebouncedPriceRange(null);
+      setPendingPriceRange(null);
+      setAppliedPriceRange(null);
     }
+  }
+
+  function applyAdvancedFilters() {
+    setAppliedPropFilters({ ...pendingPropFilters });
+    setAppliedPriceRange(pendingPriceRange ? [...pendingPriceRange] : null);
+    setFiltersSheetOpen(false);
   }
 
   useEffect(() => {
@@ -409,22 +411,26 @@ export default function CatalogPage() {
     s: "grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8",
   }[cardSize === "list" ? "m" : cardSize];
 
+  const filterPanelTitle =
+    filtersQuery.data?.categoryTitle ??
+    (categoryId !== "all"
+      ? topCategories.find((c) => c.id === categoryId)?.name
+      : null) ??
+    "Все разделы";
+
   const advancedFiltersPanel = (
     <CatalogAdvancedFilters
+      title={filterPanelTitle}
       filtersData={filtersQuery.data}
       filtersLoading={filtersQuery.isLoading}
-      brandFilter={brandFilter}
-      setBrandFilter={setBrandFilter}
-      propFilters={propFilters}
-      setPropFilters={setPropFilters}
-      priceRange={priceRange}
+      propFilters={pendingPropFilters}
+      setPropFilters={setPendingPropFilters}
+      priceRange={pendingPriceRange}
       priceBounds={priceBounds}
-      onPriceChange={(next) => {
-        setPriceTouched(true);
-        setPriceRange(next);
-      }}
-      hasAdvancedFilters={hasAdvancedFilters}
+      onPriceChange={setPendingPriceRange}
       onReset={resetAdvancedFilters}
+      onApply={applyAdvancedFilters}
+      hasPendingChanges={hasPendingChanges}
     />
   );
 
@@ -520,8 +526,9 @@ export default function CatalogPage() {
           <div className="flex items-end gap-1">
             <Sheet open={filtersSheetOpen} onOpenChange={setFiltersSheetOpen}>
               <SheetTrigger asChild>
-                <Button variant="outline" size="icon" className="relative md:hidden" aria-label="Фильтры">
+                <Button variant="outline" size="sm" className="relative gap-1.5 md:hidden" aria-label="Подобрать по фильтрам">
                   <SlidersHorizontal className="h-4 w-4" />
+                  <span className="text-xs">Фильтры</span>
                   {hasAdvancedFilters ? (
                     <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-primary" />
                   ) : null}
@@ -637,126 +644,132 @@ export default function CatalogPage() {
 }
 
 function CatalogAdvancedFilters({
+  title,
   filtersData,
   filtersLoading,
-  brandFilter,
-  setBrandFilter,
   propFilters,
   setPropFilters,
   priceRange,
   priceBounds,
   onPriceChange,
-  hasAdvancedFilters,
   onReset,
+  onApply,
+  hasPendingChanges,
 }: {
+  title: string;
   filtersData: FiltersResponse | undefined;
   filtersLoading: boolean;
-  brandFilter: string[];
-  setBrandFilter: (v: string[]) => void;
   propFilters: Record<string, string[]>;
   setPropFilters: React.Dispatch<React.SetStateAction<Record<string, string[]>>>;
   priceRange: [number, number] | null;
   priceBounds: [number, number];
   onPriceChange: (v: [number, number]) => void;
-  hasAdvancedFilters: boolean;
   onReset: () => void;
+  onApply: () => void;
+  hasPendingChanges: boolean;
 }) {
   const [bLo, bHi] = priceBounds;
   const sliderMax = bHi > bLo ? bHi : bLo + 1;
   const sliderValue = priceRange ?? [bLo, sliderMax];
+  const groups = filtersData?.groups ?? [];
+  const defaultOpen = useMemo(() => groups.map((g) => g.key), [groups]);
+  const [openSections, setOpenSections] = useState<string[]>(defaultOpen);
 
-  const [openSections, setOpenSections] = useState<string[]>([]);
   useEffect(() => {
-    if (hasAdvancedFilters) setOpenSections(["advanced"]);
-  }, [hasAdvancedFilters]);
+    setOpenSections(groups.map((g) => g.key));
+  }, [groups]);
 
   return (
-    <Accordion type="multiple" value={openSections} onValueChange={setOpenSections} className="w-full">
-      <AccordionItem value="advanced" className="border-none">
-        <div className="flex items-center justify-between gap-2">
-          <AccordionTrigger className="py-2 text-sm font-medium hover:no-underline">
-            Подробные фильтры
-          </AccordionTrigger>
-          {hasAdvancedFilters && (
-            <Button type="button" variant="ghost" size="sm" className="shrink-0 text-xs" onClick={onReset}>
-              Сбросить фильтры
-            </Button>
+    <div className="flex flex-col gap-4">
+      <h3 className="text-sm font-semibold">
+        Фильтр / {title}
+      </h3>
+
+      {filtersLoading && !filtersData ? (
+        <p className="text-sm text-muted-foreground">Загружаю фильтры…</p>
+      ) : (
+        <>
+          {bHi > bLo && (
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">Цена, ₽</Label>
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  className="h-9"
+                  value={Math.round(sliderValue[0])}
+                  min={bLo}
+                  max={sliderValue[1]}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    if (Number.isFinite(v)) onPriceChange([v, sliderValue[1]]);
+                  }}
+                />
+                <Input
+                  type="number"
+                  className="h-9"
+                  value={Math.round(sliderValue[1])}
+                  min={sliderValue[0]}
+                  max={bHi}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    if (Number.isFinite(v)) onPriceChange([sliderValue[0], v]);
+                  }}
+                />
+              </div>
+              <Slider
+                min={bLo}
+                max={sliderMax}
+                step={1}
+                value={sliderValue}
+                onValueChange={(v) => {
+                  if (v.length >= 2) onPriceChange([v[0]!, v[1]!]);
+                }}
+              />
+            </div>
           )}
-        </div>
-        <AccordionContent className="space-y-6 pb-2 pt-1">
-          {filtersLoading && !filtersData ? (
-            <p className="text-sm text-muted-foreground">Загружаю фильтры…</p>
-          ) : (
-            <>
-              {bHi > bLo && (
-                <div className="space-y-3">
-                  <Label className="text-sm font-medium">Цена, ₽</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      type="number"
-                      className="h-9"
-                      value={Math.round(sliderValue[0])}
-                      min={bLo}
-                      max={sliderValue[1]}
-                      onChange={(e) => {
-                        const v = Number(e.target.value);
-                        if (Number.isFinite(v)) onPriceChange([v, sliderValue[1]]);
-                      }}
-                    />
-                    <Input
-                      type="number"
-                      className="h-9"
-                      value={Math.round(sliderValue[1])}
-                      min={sliderValue[0]}
-                      max={bHi}
-                      onChange={(e) => {
-                        const v = Number(e.target.value);
-                        if (Number.isFinite(v)) onPriceChange([sliderValue[0], v]);
-                      }}
-                    />
-                  </div>
-                  <Slider
-                    min={bLo}
-                    max={sliderMax}
-                    step={1}
-                    value={sliderValue}
-                    onValueChange={(v) => {
-                      if (v.length >= 2) onPriceChange([v[0]!, v[1]!]);
-                    }}
+
+          <Accordion type="multiple" value={openSections} onValueChange={setOpenSections} className="w-full">
+            {groups.map((group) => (
+              <AccordionItem key={group.key} value={group.key} className="border-b">
+                <AccordionTrigger className="py-2 text-sm hover:no-underline">
+                  {group.label}
+                </AccordionTrigger>
+                <AccordionContent className="pb-3 pt-1">
+                  <FilterCheckboxGroup
+                    label={group.label}
+                    kind={group.kind}
+                    options={group.values}
+                    selected={propFilters[group.key] ?? []}
+                    onChange={(next) =>
+                      setPropFilters((prev) => {
+                        const copy = { ...prev };
+                        if (next.length) copy[group.key] = next;
+                        else delete copy[group.key];
+                        return copy;
+                      })
+                    }
                   />
-                </div>
-              )}
+                </AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
+        </>
+      )}
 
-              {filtersData?.brands && filtersData.brands.length > 0 && (
-                <FilterCheckboxGroup
-                  label="Бренд"
-                  options={filtersData.brands}
-                  selected={brandFilter}
-                  onChange={setBrandFilter}
-                />
-              )}
-
-              {filtersData?.properties.map((prop) => (
-                <FilterCheckboxGroup
-                  key={prop.key}
-                  label={prop.unit ? `${prop.label} (${prop.unit})` : prop.label}
-                  options={prop.values}
-                  selected={propFilters[prop.key] ?? []}
-                  onChange={(next) =>
-                    setPropFilters((prev) => {
-                      const copy = { ...prev };
-                      if (next.length) copy[prop.key] = next;
-                      else delete copy[prop.key];
-                      return copy;
-                    })
-                  }
-                />
-              ))}
-            </>
-          )}
-        </AccordionContent>
-      </AccordionItem>
-    </Accordion>
+      <div className="flex items-center justify-between gap-2 border-t pt-3">
+        <Button type="button" variant="ghost" size="icon" onClick={onReset} aria-label="Сбросить фильтры">
+          <RotateCcw className="h-4 w-4" />
+        </Button>
+        <Button
+          type="button"
+          className="flex-1 bg-emerald-600 font-semibold uppercase tracking-wide hover:bg-emerald-700"
+          onClick={onApply}
+          disabled={filtersLoading}
+        >
+          Применить
+        </Button>
+      </div>
+    </div>
   );
 }
 

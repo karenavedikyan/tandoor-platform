@@ -1,4 +1,6 @@
 import type { VercelRequest } from "@vercel/node";
+import type { FilterGroupDef } from "./_filter-config.js";
+import { buildGroupFilterClause } from "./_filter-build.js";
 import { hiddenCategoryFilterSql } from "./_hidden.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -17,41 +19,6 @@ export const CATALOG_EFFECTIVE_PRICE_SQL = `COALESCE(
    LIMIT 1)
 )`;
 
-export const FILTERABLE_PROPERTIES = [
-  "Бренд",
-  "Производитель",
-  "Страна производитель",
-  "Цветовая гамма",
-  "НП. Коллекция",
-  "Толщина",
-  "Толщина полотна, мм",
-  "НП. Толщина ламели",
-  "НП. Класс эксплуатации",
-  "НП. Тип соединения",
-  "НП. Размер ламели",
-  "НП. Устойчивость к воздействию влаги",
-  "Возможность укладки на теплый пол",
-  "НП. Возможность укладки ёлочки",
-  "Класс истираемости",
-  "Дизайн",
-  "Материал",
-  "Покрытие",
-  "Вид комплекта",
-  "Фаска",
-  "Условия эксплуатации",
-  "Размер, мм",
-  "Гарантийный срок",
-  "Количество в упаковке (шт)",
-  "В одной упаковке (м)",
-  "Цвет",
-  "Комплектующие",
-] as const;
-
-/** Свойства для блока properties (бренды — отдельно). */
-export const FILTER_PROPERTIES_WITHOUT_BRAND = FILTERABLE_PROPERTIES.filter(
-  (n) => n !== "Бренд" && n !== "Производитель",
-);
-
 export type CatalogListFilters = {
   q?: string;
   categoryId?: string;
@@ -60,7 +27,6 @@ export type CatalogListFilters = {
   onlyNew?: boolean;
   onlyHit?: boolean;
   onlySale?: boolean;
-  brands?: string[];
   propFilters?: Map<string, string[]>;
   priceMin?: number;
   priceMax?: number;
@@ -110,7 +76,7 @@ export function parsePropsParam(raw: unknown): Map<string, string[]> {
   return map;
 }
 
-function parseBrands(raw: unknown): string[] {
+function parseLegacyBrands(raw: unknown): string[] {
   const arr = Array.isArray(raw) ? raw : raw != null && raw !== "" ? [raw] : [];
   const out: string[] = [];
   for (const item of arr) {
@@ -137,8 +103,15 @@ export function parseCatalogListFilters(req: VercelRequest): CatalogListFilters 
   const onlyNew = String(req.query.is_new ?? "") === "1";
   const onlyHit = String(req.query.is_hit ?? "") === "1";
   const onlySale = String(req.query.is_sale ?? "") === "1";
-  const brands = parseBrands(req.query.brand);
   const propFilters = parsePropsParam(req.query.props);
+  const legacyBrand = parseLegacyBrands(req.query.brand);
+  if (legacyBrand.length) {
+    const list = propFilters.get("Бренд") ?? [];
+    for (const b of legacyBrand) {
+      if (!list.includes(b)) list.push(b);
+    }
+    propFilters.set("Бренд", list);
+  }
 
   let priceMin: number | undefined;
   let priceMax: number | undefined;
@@ -159,7 +132,6 @@ export function parseCatalogListFilters(req: VercelRequest): CatalogListFilters 
     onlyNew,
     onlyHit,
     onlySale,
-    brands: brands.length ? brands : undefined,
     propFilters: propFilters.size ? propFilters : undefined,
     priceMin,
     priceMax,
@@ -172,7 +144,7 @@ export function parseCatalogListFilters(req: VercelRequest): CatalogListFilters 
  */
 export function buildCatalogProductWhere(
   filters: CatalogListFilters,
-  opts?: { includeListingFilters?: boolean },
+  opts?: { includeListingFilters?: boolean; filterGroupDefs?: FilterGroupDef[] },
 ): { clauses: string[]; params: unknown[] } {
   const includeListing = opts?.includeListingFilters !== false;
   const clauses: string[] = ["p.active = TRUE"];
@@ -224,32 +196,12 @@ export function buildCatalogProductWhere(
     );
   }
 
-  if (includeListing && filters.brands?.length) {
-    const lowered = filters.brands.map((b) => b.toLowerCase());
-    params.push(lowered);
-    const n = params.length;
-    clauses.push(`(
-      LOWER(TRIM(COALESCE(p.brand, ''))) = ANY($${n}::text[])
-      OR EXISTS (
-        SELECT 1 FROM catalog_product_properties pp
-        WHERE pp.product_id = p.id
-          AND pp.name IN ('Бренд', 'Производитель')
-          AND LOWER(TRIM(pp.value)) = ANY($${n}::text[])
-      )
-    )`);
-  }
+  const groupDefs = opts?.filterGroupDefs ?? [];
 
   if (includeListing && filters.propFilters) {
-    for (const [propName, values] of filters.propFilters) {
-      if (!values.length) continue;
-      params.push(propName);
-      const nameIdx = params.length;
-      params.push(values);
-      const valsIdx = params.length;
-      clauses.push(`EXISTS (
-        SELECT 1 FROM catalog_product_properties pp
-        WHERE pp.product_id = p.id AND pp.name = $${nameIdx} AND pp.value = ANY($${valsIdx}::text[])
-      )`);
+    for (const [groupKey, values] of filters.propFilters) {
+      const clause = buildGroupFilterClause(groupKey, values, groupDefs, params);
+      if (clause) clauses.push(clause);
     }
   }
 

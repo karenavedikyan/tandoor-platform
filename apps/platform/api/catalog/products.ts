@@ -23,6 +23,8 @@ import {
   parseCatalogListFilters,
   whereSqlFromClauses,
 } from "./_catalog-query.js";
+import { getFilterGroupsForRoot } from "./_filter-config.js";
+import { resolveRootCategory } from "./_filter-resolve.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   try {
@@ -44,6 +46,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
 
     const filters = parseCatalogListFilters(req);
+    const root = await resolveRootCategory(pool, filters.categoryId, filters.groupId);
+    const filterGroupDefs = getFilterGroupsForRoot(root.id, root.name);
     const limitNum = Number(req.query.limit);
     const limit = Number.isFinite(limitNum) && limitNum > 0 ? Math.min(Math.floor(limitNum), 100) : 50;
     const offsetNum = Number(req.query.offset);
@@ -58,7 +62,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
             ? "price_desc"
             : "name";
 
-    const { clauses, params } = buildCatalogProductWhere(filters);
+    const { clauses, params } = buildCatalogProductWhere(filters, { filterGroupDefs });
     const whereSql = whereSqlFromClauses(clauses);
 
     const sortSql =
