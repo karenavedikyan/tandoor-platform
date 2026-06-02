@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import {
   resolveCatalogVariant,
@@ -8,6 +7,15 @@ import {
   type CatalogVariant,
   type VariantSelection,
 } from "@/lib/catalog-variant-resolve";
+import {
+  CatalogActionIcons,
+  CatalogColorPalette,
+  CatalogPhotoBadges,
+  CatalogPriceBlock,
+  CatalogSpecsButton,
+  CatalogStockLine,
+  showSpecsButton,
+} from "./catalog-card-parts";
 import { VariantSwitchers } from "./VariantSwitchers";
 
 export type CatalogListProduct = {
@@ -29,46 +37,6 @@ export type CatalogListProduct = {
   sides?: Array<{ value: string; product_id: string }>;
   variants?: CatalogVariant[];
 };
-
-function formatStock(n: number | null): string {
-  if (n == null) return "—";
-  return Math.round(n).toLocaleString("ru-RU");
-}
-
-function formatPrice(n: number | null): string {
-  if (n == null) return "—";
-  return `${Math.round(n).toLocaleString("ru-RU")} ₽`;
-}
-
-function ProductBadges({ p }: { p: CatalogListProduct }) {
-  return (
-    <>
-      {p.is_new && (
-        <Badge className="bg-emerald-600 px-1.5 py-0 text-[10px] text-white hover:bg-emerald-600">New</Badge>
-      )}
-      {p.is_hit && (
-        <Badge className="bg-amber-500 px-1.5 py-0 text-[10px] text-white hover:bg-amber-500">Hit</Badge>
-      )}
-      {p.is_sale && (
-        <Badge className="bg-rose-600 px-1.5 py-0 text-[10px] text-white hover:bg-rose-600">Sale</Badge>
-      )}
-    </>
-  );
-}
-
-function PriceBlock({ priceRetail, priceRetailSale }: { priceRetail: number | null; priceRetailSale: number | null }) {
-  if (priceRetailSale != null) {
-    return (
-      <div className="text-right">
-        <div className="font-semibold text-rose-600">{formatPrice(priceRetailSale)}</div>
-        {priceRetail != null ? (
-          <div className="text-xs text-muted-foreground line-through">{formatPrice(priceRetail)}</div>
-        ) : null}
-      </div>
-    );
-  }
-  return <div className="font-semibold">{formatPrice(priceRetail)}</div>;
-}
 
 function useVariantDisplay(product: CatalogListProduct) {
   const variants = product.variants ?? [];
@@ -108,57 +76,100 @@ function useVariantDisplay(product: CatalogListProduct) {
       (product.door_types?.length ?? 0) > 1 ||
       (product.sides?.length ?? 0) > 1);
 
-  return { active, selection, setSelection, showSwitchers, variants };
+  const title = product.display_name || product.name;
+  const subtitleColor = active.color ?? selection.color ?? null;
+
+  return {
+    active,
+    selection,
+    setSelection,
+    showSwitchers,
+    variants,
+    title,
+    subtitleColor,
+    groupStock: product.total_stock,
+  };
 }
 
 export function ProductListRow({ product }: { product: CatalogListProduct }) {
-  const { active, selection, setSelection, showSwitchers, variants } = useVariantDisplay(product);
+  const { active, selection, setSelection, showSwitchers, variants, title, subtitleColor, groupStock } =
+    useVariantDisplay(product);
   const imageSrc = active.image_url || product.image_url || null;
+  const detailHref = `/catalog/1c/${active.product_id}`;
+  const colors = product.colors ?? [];
+  const hasPalette = colors.length > 1;
 
   return (
-    <div className="flex flex-col gap-1 px-3 py-2.5 hover:bg-muted/40 sm:flex-row sm:items-center sm:gap-3">
-      <Link
-        href={`/catalog/1c/${active.product_id}`}
-        className="flex min-w-0 flex-1 items-center gap-3"
-        data-testid={`catalog-row-${product.id}`}
-      >
-        <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-md bg-white">
-          {imageSrc ? (
-            <img src={imageSrc} alt={product.name} className="h-full w-full object-contain p-1" loading="lazy" />
-          ) : (
-            <div className="flex h-full items-center justify-center text-[10px] text-muted-foreground">Нет фото</div>
-          )}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="truncate font-medium">{product.display_name || product.name}</span>
-            <ProductBadges p={product} />
+    <div
+      className="border-b border-border last:border-b-0 hover:bg-muted/30"
+      data-testid={`catalog-row-${product.id}`}
+    >
+      <div className="flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-start sm:gap-4">
+        <Link href={detailHref} className="flex shrink-0">
+          <div className="relative h-20 w-20 overflow-hidden rounded-md border border-border/60 bg-white">
+            {imageSrc ? (
+              <img src={imageSrc} alt={title} className="h-full w-full object-contain p-1" loading="lazy" />
+            ) : (
+              <div className="flex h-full items-center justify-center text-[10px] text-muted-foreground">Нет фото</div>
+            )}
+            <div className="absolute left-0.5 top-0.5">
+              <CatalogPhotoBadges
+                product={product}
+                priceRetail={active.price_retail}
+                priceRetailSale={active.price_retail_sale}
+                compact
+              />
+            </div>
           </div>
-          {product.brand ? (
-            <div className="truncate text-xs text-muted-foreground">{product.brand}</div>
+        </Link>
+
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <Link href={detailHref} className="line-clamp-2 text-sm font-semibold leading-snug text-foreground hover:underline">
+                {title}
+              </Link>
+              {subtitleColor ? (
+                <p className="mt-0.5 truncate text-xs text-muted-foreground">{subtitleColor}</p>
+              ) : product.brand ? (
+                <p className="mt-0.5 truncate text-xs text-muted-foreground">{product.brand}</p>
+              ) : null}
+            </div>
+            <CatalogPriceBlock
+              priceRetail={active.price_retail}
+              priceRetailSale={active.price_retail_sale}
+              align="right"
+              size="sm"
+            />
+          </div>
+
+          <CatalogStockLine stock={groupStock} />
+
+          {hasPalette ? (
+            <CatalogColorPalette
+              compact
+              colors={colors}
+              variants={variants}
+              selectedColor={selection.color}
+              onSelect={(color) => setSelection({ ...selection, color })}
+            />
           ) : null}
-          <div className="mt-1 flex flex-wrap items-center gap-3">
-            <PriceBlock priceRetail={active.price_retail} priceRetailSale={active.price_retail_sale} />
-            <Badge variant="secondary" className="text-xs">
-              {formatStock(active.total_stock)}
-            </Badge>
-          </div>
+
+          {showSwitchers ? (
+            <VariantSwitchers
+              compact
+              hideColors={hasPalette}
+              variants={variants}
+              selection={selection}
+              onSelectionChange={setSelection}
+              sizes={product.sizes ?? []}
+              colors={colors}
+              doorTypes={product.door_types ?? []}
+              sides={product.sides ?? []}
+            />
+          ) : null}
         </div>
-      </Link>
-      {showSwitchers ? (
-        <div className="shrink-0 pl-[5.25rem] sm:pl-0">
-          <VariantSwitchers
-            compact
-            variants={variants}
-            selection={selection}
-            onSelectionChange={setSelection}
-            sizes={product.sizes ?? []}
-            colors={product.colors ?? []}
-            doorTypes={product.door_types ?? []}
-            sides={product.sides ?? []}
-          />
-        </div>
-      ) : null}
+      </div>
     </div>
   );
 }
@@ -170,79 +181,117 @@ export function ProductCardGrid({
   product: CatalogListProduct;
   size: "xl" | "m" | "s";
 }) {
-  const { active, selection, setSelection, showSwitchers, variants } = useVariantDisplay(product);
+  const { active, selection, setSelection, showSwitchers, variants, title, subtitleColor, groupStock } =
+    useVariantDisplay(product);
   const imageSrc = active.image_url || product.image_url || null;
-
-  const titleCls = size === "xl" ? "text-base" : size === "m" ? "text-sm" : "text-xs";
-  const brandCls = size === "xl" ? "text-sm" : size === "m" ? "text-xs" : "hidden";
-  const pad = size === "s" ? "p-2" : "p-3";
-  const imgPad = size === "s" ? "p-1" : "p-2";
   const detailHref = `/catalog/1c/${active.product_id}`;
+  const colors = product.colors ?? [];
+  const hasPalette = colors.length > 1;
+  const compact = size === "m" || size === "s";
+  const tiny = size === "s";
+
+  const padX = tiny ? "px-2" : compact ? "px-2.5" : "px-3";
+  const titleCls = tiny ? "text-xs" : compact ? "text-sm" : "text-base";
 
   return (
-    <div
-      className={cn("h-full overflow-hidden rounded-lg border bg-card transition hover:shadow-md")}
+    <article
+      className={cn(
+        "Card-product flex h-full flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm transition hover:shadow-md",
+      )}
       data-testid={`catalog-card-${product.id}`}
     >
-      <Link href={detailHref} className="block">
-        <div className="relative aspect-square w-full overflow-hidden bg-white">
-          {imageSrc ? (
-            <img
-              src={imageSrc}
-              alt={product.name}
-              className={cn("h-full w-full object-contain", imgPad)}
-              loading="lazy"
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-              Фото в 1С отсутствует
-            </div>
-          )}
-          <div className="absolute left-1.5 top-1.5 flex flex-col gap-1">
-            <ProductBadges p={product} />
-          </div>
-        </div>
-      </Link>
+      <header className={cn("space-y-1.5 pt-3", padX)}>
+        <Link href={detailHref} className="block min-w-0">
+          <h3 className={cn("Card-product__title-text line-clamp-2 font-semibold leading-snug text-foreground", titleCls)}>
+            {title}
+          </h3>
+          <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
+            {subtitleColor ? <span>{subtitleColor}</span> : null}
+            {subtitleColor && product.brand ? <span> · </span> : null}
+            {product.brand ? <span>{product.brand}</span> : null}
+            {!subtitleColor && !product.brand ? <span className="text-muted-foreground/60">—</span> : null}
+          </p>
+        </Link>
+        <CatalogSpecsButton visible={showSpecsButton(product) && !tiny} compact={compact} />
+      </header>
 
-      {showSwitchers && size !== "s" ? (
-        <div className={cn("border-t border-border/50", pad, "pt-2")}>
-          <VariantSwitchers
+      {hasPalette && !tiny ? (
+        <div className={cn(padX, "pt-2")}>
+          <CatalogColorPalette
+            compact={compact}
+            colors={colors}
             variants={variants}
-            selection={selection}
-            onSelectionChange={setSelection}
-            sizes={product.sizes ?? []}
-            colors={product.colors ?? []}
-            doorTypes={product.door_types ?? []}
-            sides={product.sides ?? []}
-            compact={size === "m"}
+            selectedColor={selection.color}
+            onSelect={(color) => setSelection({ ...selection, color })}
           />
         </div>
       ) : null}
 
-      <Link href={detailHref} className={cn("block space-y-1", pad, showSwitchers && size !== "s" && "pt-0")}>
-        <div className={cn("line-clamp-2 font-medium", titleCls)} title={product.display_name || product.name}>
-          {product.display_name || product.name}
-        </div>
-        {product.brand && brandCls !== "hidden" ? (
-          <div className={cn("truncate text-muted-foreground", brandCls)}>{product.brand}</div>
-        ) : null}
-        <div className="flex items-end justify-between gap-1">
-          <PriceBlock priceRetail={active.price_retail} priceRetailSale={active.price_retail_sale} />
-          {size !== "s" ? (
-            <Badge variant="secondary" className="shrink-0 text-xs">
-              {formatStock(active.total_stock)}
-            </Badge>
+      <div className="relative mt-2 aspect-square w-full bg-white">
+        <Link href={detailHref} className="block h-full w-full">
+          {imageSrc ? (
+            <img
+              src={imageSrc}
+              alt={title}
+              className={cn("h-full w-full object-contain", tiny ? "p-1" : "p-2")}
+              loading="lazy"
+            />
           ) : (
+            <div className="flex h-full items-center justify-center text-xs text-muted-foreground">Нет фото</div>
+          )}
+        </Link>
+        <div className="pointer-events-none absolute inset-0">
+          <div className="pointer-events-auto absolute left-1.5 top-1.5">
+            <CatalogPhotoBadges
+              product={product}
+              priceRetail={active.price_retail}
+              priceRetailSale={active.price_retail_sale}
+              compact={compact || tiny}
+            />
+          </div>
+          {!tiny ? (
+            <div className="pointer-events-auto absolute right-1.5 top-1.5">
+              <CatalogActionIcons compact={compact} />
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      {showSwitchers && !tiny ? (
+        <div className={cn("border-t border-border/40 pt-2", padX)} onClick={(e) => e.stopPropagation()}>
+          <VariantSwitchers
+            compact={compact}
+            hideColors={hasPalette}
+            variants={variants}
+            selection={selection}
+            onSelectionChange={setSelection}
+            sizes={product.sizes ?? []}
+            colors={colors}
+            doorTypes={product.door_types ?? []}
+            sides={product.sides ?? []}
+          />
+        </div>
+      ) : null}
+
+      <footer className={cn("mt-auto space-y-1.5 pb-3 pt-2", padX)}>
+        {!tiny ? <CatalogStockLine stock={groupStock} /> : null}
+        <CatalogPriceBlock
+          priceRetail={active.price_retail}
+          priceRetailSale={active.price_retail_sale}
+          size={tiny ? "sm" : "md"}
+        />
+        {tiny ? (
+          <div className="flex items-center justify-between gap-1">
             <span
               className={cn(
-                "h-2 w-2 shrink-0 rounded-full",
-                (active.total_stock ?? 0) > 0 ? "bg-emerald-500" : "bg-muted-foreground/40",
+                "h-2 w-2 rounded-full",
+                (groupStock ?? 0) > 0 ? "bg-emerald-500" : "bg-muted-foreground/40",
               )}
-              title={formatStock(active.total_stock)}
+              title={`В наличии: ${groupStock ?? 0}`}
             />
-          )}
-        </div>
-      </Link>
-    </div>
+          </div>
+        ) : null}
+      </footer>
+    </article>
   );
 }
