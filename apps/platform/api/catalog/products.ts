@@ -18,6 +18,8 @@ import { getFilterGroupsForRoot } from "./_filter-config.js";
 import {
   buildGroupedProductsQuery,
   isInteriorDoorGrouping,
+  parseCatalogListSort,
+  resolveDefaultSortMode,
   type CatalogVariantRow,
   type VariantOption,
 } from "./_catalog-grouping.js";
@@ -83,15 +85,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     const limit = Number.isFinite(limitNum) && limitNum > 0 ? Math.min(Math.floor(limitNum), 100) : 50;
     const offsetNum = Number(req.query.offset);
     const offset = Number.isFinite(offsetNum) && offsetNum >= 0 ? Math.floor(offsetNum) : 0;
-    const sortRaw = String(req.query.sort ?? "name");
-    const sort =
-      sortRaw === "stock"
-        ? "stock"
-        : sortRaw === "price_asc"
-          ? "price_asc"
-          : sortRaw === "price_desc"
-            ? "price_desc"
-            : "name";
+    const sort = parseCatalogListSort(req.query.sort);
+    const defaultSortMode = resolveDefaultSortMode(root.id, root.name);
 
     const { clauses: filterClauses, params } = buildCatalogProductWhere(filters, { filterGroupDefs });
     const scopeClauses = [filterClauses[0]!];
@@ -110,6 +105,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       filterWhereSql,
       interiorParamIndex,
       sort,
+      defaultSortMode,
     );
 
     params.push(limit);

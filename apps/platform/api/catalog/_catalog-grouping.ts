@@ -109,6 +109,66 @@ const DOOR_TYPE_VAL_SQL = `(
   LIMIT 1
 )`;
 
+const ARTICLE_VAL_SQL = `(
+  SELECT NULLIF(TRIM(pp.value), '') FROM catalog_product_properties pp
+  WHERE pp.product_id = p.id AND pp.name = 'Артикул'
+  LIMIT 1
+)`;
+
+export type CatalogListSort = "default" | "name" | "stock" | "price_asc" | "price_desc";
+
+/** Боевой default: акция → новинка → хит; фурнитура/прочее — производитель → артикул. */
+export type CatalogDefaultSortMode = "promo" | "article";
+
+export function parseCatalogListSort(raw: unknown): CatalogListSort {
+  const s = String(raw ?? "default").trim();
+  if (s === "name" || s === "stock" || s === "price_asc" || s === "price_desc") return s;
+  return "default";
+}
+
+export function resolveDefaultSortMode(
+  rootCategoryId: string | null,
+  rootCategoryName: string | null,
+): CatalogDefaultSortMode {
+  if (rootCategoryId === ROOT_CATEGORY_IDS.HARDWARE) return "article";
+  const name = rootCategoryName?.trim().toLowerCase() ?? "";
+  if (name.includes("фурнитур")) return "article";
+
+  if (
+    rootCategoryId === ROOT_CATEGORY_IDS.ENTRANCE ||
+    rootCategoryId === ROOT_CATEGORY_IDS.INTERIOR ||
+    rootCategoryId === INTERIOR_ROOT_ID_ALT ||
+    isInteriorDoorGrouping({ id: rootCategoryId, name: rootCategoryName })
+  ) {
+    return "promo";
+  }
+  const doorNames = ["входные", "межкомнатные"];
+  if (doorNames.some((d) => name.includes(d))) return "promo";
+
+  if (!rootCategoryId) return "promo";
+
+  return "article";
+}
+
+function buildGroupOrderSql(sort: CatalogListSort, defaultMode: CatalogDefaultSortMode): string {
+  if (sort === "stock") {
+    return `ORDER BY group_total_stock DESC NULLS LAST, rep_name ASC`;
+  }
+  if (sort === "price_asc") {
+    return `ORDER BY rep_price_retail ASC NULLS LAST, rep_name ASC`;
+  }
+  if (sort === "price_desc") {
+    return `ORDER BY rep_price_retail DESC NULLS LAST, rep_name ASC`;
+  }
+  if (sort === "name") {
+    return `ORDER BY rep_name ASC`;
+  }
+  if (defaultMode === "article") {
+    return `ORDER BY rep_brand ASC NULLS LAST, rep_article ASC NULLS LAST, rep_name ASC`;
+  }
+  return `ORDER BY grp_is_sale DESC, grp_is_new DESC, grp_is_hit DESC, rep_name ASC`;
+}
+
 /** JSON-массив вариантов свойства по группе. */
 function variantJsonAgg(propName: string, includeImage: boolean): string {
   const imageSelect = includeImage
@@ -139,7 +199,8 @@ export function buildGroupedProductsQuery(
   scopeWhereSql: string,
   filterWhereSql: string,
   interiorParamIndex: number,
-  sort: "name" | "stock" | "price_asc" | "price_desc",
+  sort: CatalogListSort,
+  defaultSortMode: CatalogDefaultSortMode,
 ): { sql: string; sortSql: string } {
   const repPriority = `(
     CASE
@@ -158,14 +219,7 @@ export function buildGroupedProductsQuery(
     END
   )`;
 
-  const sortSql =
-    sort === "stock"
-      ? `ORDER BY group_total_stock DESC NULLS LAST, rep_name ASC`
-      : sort === "price_asc"
-        ? `ORDER BY rep_price_retail ASC NULLS LAST, rep_name ASC`
-        : sort === "price_desc"
-          ? `ORDER BY rep_price_retail DESC NULLS LAST, rep_name ASC`
-          : `ORDER BY rep_name ASC`;
+  const sortSql = buildGroupOrderSql(sort, defaultSortMode);
 
   const sql = `
     WITH scoped AS (
@@ -186,6 +240,7 @@ export function buildGroupedProductsQuery(
         ${IS_MAIN_SQL} AS is_main,
         ${HAS_IMAGE_SQL} AS has_image,
         ${PHOTO_SORT_SQL} AS photo_sort,
+        ${ARTICLE_VAL_SQL} AS article_val,
         EXISTS (SELECT 1 FROM catalog_product_properties pp WHERE pp.product_id = p.id AND LOWER(TRIM(pp.name)) = 'новинка' AND LOWER(TRIM(pp.value)) IN ('да','y','yes','true','1')) AS is_new,
         EXISTS (SELECT 1 FROM catalog_product_properties pp WHERE pp.product_id = p.id AND LOWER(TRIM(pp.name)) = 'хит продаж' AND LOWER(TRIM(pp.value)) IN ('да','y','yes','true','1')) AS is_hit,
         EXISTS (SELECT 1 FROM catalog_product_properties pp WHERE pp.product_id = p.id AND LOWER(TRIM(pp.name)) = 'акция' AND NULLIF(TRIM(pp.value), '') IS NOT NULL) AS is_sale
@@ -239,9 +294,13 @@ export function buildGroupedProductsQuery(
         r.is_new AS rep_is_new,
         r.is_hit AS rep_is_hit,
         r.is_sale AS rep_is_sale,
+        r.article_val AS rep_article,
         r.group_key,
         r.variant_count,
-        r.group_total_stock
+        r.group_total_stock,
+        (SELECT MAX(CASE WHEN v.is_sale THEN 1 ELSE 0 END) FROM group_variants v WHERE v.group_key = r.group_key) AS grp_is_sale,
+        (SELECT MAX(CASE WHEN v.is_new THEN 1 ELSE 0 END) FROM group_variants v WHERE v.group_key = r.group_key) AS grp_is_new,
+        (SELECT MAX(CASE WHEN v.is_hit THEN 1 ELSE 0 END) FROM group_variants v WHERE v.group_key = r.group_key) AS grp_is_hit
       FROM ranked r
       WHERE r.rn = 1
     ),
