@@ -1,7 +1,8 @@
-import { GitCompare, Heart, ListChecks } from "lucide-react";
+import { Flame, GitCompare, Heart, ListChecks } from "lucide-react";
 import { optimizedImage } from "@/lib/catalog-image";
 import { cn } from "@/lib/utils";
 import type { CatalogListProduct } from "./ProductListRow";
+
 
 export function formatCatalogPrice(n: number | null): string {
   if (n == null) return "—";
@@ -18,23 +19,43 @@ export function saleDiscountPercent(retail: number | null, sale: number | null):
   return Math.round(((retail - sale) / retail) * 100);
 }
 
-type BadgeTone = "sale" | "new" | "hit";
-
-const BADGE_STYLES: Record<BadgeTone, string> = {
-  sale: "bg-rose-600 text-white",
-  new: "bg-lime-500 text-lime-950",
-  hit: "bg-amber-500 text-amber-950",
-};
-
-function PhotoBadge({ tone, children }: { tone: BadgeTone; children: React.ReactNode }) {
+function DiscountBadge({ children, compact }: { children: React.ReactNode; compact?: boolean }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none shadow-sm",
-        BADGE_STYLES[tone],
+        "inline-flex items-center bg-[#d84040] font-semibold leading-none text-white shadow-sm",
+        "rounded-[2px] p-[5px]",
+        compact ? "text-sm" : "text-lg",
       )}
     >
       {children}
+    </span>
+  );
+}
+
+function NewBadge({ compact }: { compact?: boolean }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-[2px] bg-[#9aca3c] px-1.5 py-0.5 font-semibold leading-none text-white shadow-sm",
+        compact ? "text-[10px]" : "text-xs",
+      )}
+    >
+      Новинка
+    </span>
+  );
+}
+
+function HitBadge({ compact }: { compact?: boolean }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-0.5 rounded-[2px] bg-[#d84040] px-1.5 py-0.5 font-semibold leading-none text-white shadow-sm",
+        compact ? "text-[10px]" : "text-xs",
+      )}
+    >
+      <Flame className={cn(compact ? "h-3 w-3" : "h-3.5 w-3.5")} aria-hidden />
+      Хит
     </span>
   );
 }
@@ -55,17 +76,17 @@ export function CatalogPhotoBadges({
 
   return (
     <div className={cn("flex flex-col items-start gap-1", compact && "gap-0.5")}>
-      {showSale ? <PhotoBadge tone="sale">−{pct}%</PhotoBadge> : null}
-      {product.is_new ? <PhotoBadge tone="new">Новинка</PhotoBadge> : null}
-      {product.is_hit ? <PhotoBadge tone="hit">Хит</PhotoBadge> : null}
-      {!showSale && product.is_sale ? <PhotoBadge tone="sale">Акция</PhotoBadge> : null}
+      {showSale ? <DiscountBadge compact={compact}>−{pct}%</DiscountBadge> : null}
+      {product.is_new ? <NewBadge compact={compact} /> : null}
+      {product.is_hit ? <HitBadge compact={compact} /> : null}
+      {!showSale && product.is_sale ? <DiscountBadge compact={compact}>Акция</DiscountBadge> : null}
     </div>
   );
 }
 
 export function CatalogActionIcons({ compact }: { compact?: boolean }) {
   const btn = cn(
-    "flex items-center justify-center rounded-full border border-border/80 bg-background/90 text-muted-foreground shadow-sm backdrop-blur-sm transition hover:bg-muted hover:text-foreground",
+    "flex items-center justify-center rounded-full border border-border bg-background/90 text-muted-foreground shadow-sm backdrop-blur-sm transition hover:bg-muted hover:text-[#9aca3c]",
     compact ? "h-7 w-7" : "h-8 w-8",
   );
   return (
@@ -98,7 +119,7 @@ export function CatalogSpecsButton({
         onClick?.();
       }}
       className={cn(
-        "inline-flex items-center gap-1 rounded-md bg-lime-500 px-2 py-1 text-[11px] font-medium text-lime-950 shadow-sm transition hover:bg-lime-400",
+        "inline-flex items-center gap-1 rounded-md bg-[#9aca3c] px-2 py-1 text-[11px] font-medium text-white shadow-sm transition hover:bg-[#8ab835]",
         compact && "px-1.5 py-0.5 text-[10px]",
       )}
     >
@@ -142,7 +163,9 @@ export function CatalogColorPalette({
             className={cn(
               "shrink-0 overflow-hidden rounded-md border-2 bg-white transition",
               compact ? "h-8 w-8" : "h-10 w-10",
-              active ? "border-lime-500 ring-1 ring-lime-500/40" : "border-border hover:border-muted-foreground/50",
+              active
+                ? "border-[#9aca3c] ring-1 ring-[#9aca3c]/40"
+                : "border-border hover:border-muted-foreground/50",
             )}
             onClick={() => onSelect(c.value)}
           >
@@ -172,23 +195,45 @@ export function CatalogPriceBlock({
   size?: "md" | "sm";
 }) {
   const onSale = priceRetailSale != null;
-  const alignCls = align === "right" ? "text-right items-end" : "text-left items-start";
-  const mainCls = size === "sm" ? "text-base" : "text-lg font-bold";
+  const priceCls =
+    size === "sm"
+      ? "text-lg font-semibold leading-[22px] tabular-nums"
+      : "text-[22px] font-semibold leading-[26px] tabular-nums";
+  const labelCls = cn("text-[11px] font-medium text-[#9aca3c]", size === "sm" && "text-[10px]");
+  const rowAlign = align === "right" ? "flex-row-reverse text-right" : "flex-row text-left";
 
   if (onSale) {
     return (
-      <div className={cn("flex flex-col gap-0.5", alignCls)}>
-        <div className="text-[10px] text-muted-foreground line-through">{formatCatalogPrice(priceRetail)}</div>
-        <div className="text-[11px] font-medium text-rose-600">Акционная цена</div>
-        <div className={cn("tabular-nums text-rose-600", mainCls)}>{formatCatalogPrice(priceRetailSale)}</div>
+      <div
+        className={cn(
+          "Card-product__retail-price flex w-full min-h-[52px] flex-col justify-center gap-0.5",
+          size === "md" && "min-h-[65px]",
+          align === "right" && "items-end",
+        )}
+      >
+        <div className="flex flex-wrap items-baseline gap-1 text-muted-foreground">
+          <span className={cn("text-[10px] line-through", size === "sm" && "text-[9px]")}>
+            {formatCatalogPrice(priceRetail)}
+          </span>
+        </div>
+        <div className={cn("flex w-full items-center justify-between gap-2", rowAlign)}>
+          <span className={labelCls}>Акционная цена</span>
+          <span className={cn(priceCls, "text-[#d84040]")}>{formatCatalogPrice(priceRetailSale)}</span>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className={cn("flex flex-col gap-0.5", alignCls)}>
-      <div className="text-[11px] text-muted-foreground">Розничная цена</div>
-      <div className={cn("tabular-nums text-foreground", mainCls)}>{formatCatalogPrice(priceRetail)}</div>
+    <div
+      className={cn(
+        "Card-product__retail-price flex w-full items-center justify-between gap-2",
+        size === "md" ? "min-h-[65px] py-2.5" : "min-h-[52px] py-1",
+        rowAlign,
+      )}
+    >
+      <span className={labelCls}>{size === "sm" ? "Розничная цена" : "Цена"}</span>
+      <span className={cn(priceCls, "text-[#9aca3c]")}>{formatCatalogPrice(priceRetail)}</span>
     </div>
   );
 }

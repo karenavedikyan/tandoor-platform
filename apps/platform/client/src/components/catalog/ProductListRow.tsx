@@ -102,10 +102,10 @@ export function ProductListRow({ product }: { product: CatalogListProduct }) {
 
   return (
     <div
-      className="border-b border-border last:border-b-0 hover:bg-muted/30"
+      className="Card-product-aflat border-b border-border last:border-b-0 hover:bg-muted/20"
       data-testid={`catalog-row-${product.id}`}
     >
-      <div className="flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-start sm:gap-4">
+      <div className="flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-center sm:gap-4">
         <Link href={detailHref} className="flex shrink-0">
           <div className="relative h-20 w-20 overflow-hidden rounded-md border border-border/60 bg-white">
             {imageSrc ? (
@@ -127,7 +127,10 @@ export function ProductListRow({ product }: { product: CatalogListProduct }) {
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
-              <Link href={detailHref} className="line-clamp-2 text-sm font-semibold leading-snug text-foreground hover:underline">
+              <Link
+                href={detailHref}
+                className="line-clamp-2 text-sm font-semibold leading-snug text-foreground hover:underline"
+              >
                 {title}
               </Link>
               {subtitleColor ? (
@@ -198,11 +201,12 @@ export function ProductCardGrid({
   return (
     <article
       className={cn(
-        "Card-product flex h-full flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm transition hover:shadow-md",
+        "Card-product flex h-full flex-col justify-between overflow-hidden rounded-lg border border-border/80 bg-white shadow-[0_5px_15px_rgba(143,150,176,0.3)] transition hover:shadow-[0_8px_24px_rgba(143,150,176,0.4)]",
+        size === "xl" && "min-h-[450px]",
       )}
       data-testid={`catalog-card-${product.id}`}
     >
-      <header className={cn("space-y-1.5 pt-3", padX)}>
+      <header className={cn("Card-product__header space-y-1.5 pt-3", padX)}>
         <Link href={detailHref} className="block min-w-0">
           <h3 className={cn("Card-product__title-text line-clamp-2 font-semibold leading-snug text-foreground", titleCls)}>
             {title}
@@ -229,7 +233,7 @@ export function ProductCardGrid({
         </div>
       ) : null}
 
-      <div className="relative mt-2 aspect-square w-full bg-white">
+      <div className="Card-product__block-img relative mt-2 aspect-square w-full overflow-hidden bg-white">
         <Link href={detailHref} className="block h-full w-full">
           {imageSrc ? (
             <img
@@ -275,19 +279,21 @@ export function ProductCardGrid({
         </div>
       ) : null}
 
-      <footer className={cn("mt-auto space-y-1.5 pb-3 pt-2", padX)}>
-        {!tiny ? <CatalogStockLine stock={groupStock} /> : null}
-        <CatalogPriceBlock
-          priceRetail={active.price_retail}
-          priceRetailSale={active.price_retail_sale}
-          size={tiny ? "sm" : "md"}
-        />
+      <footer className={cn("mt-auto space-y-1 pb-3 pt-1", padX)}>
+        {!tiny ? <CatalogStockLine stock={groupStock} className="px-0.5" /> : null}
+        <div className={cn(!tiny && "px-1 sm:px-4")}>
+          <CatalogPriceBlock
+            priceRetail={active.price_retail}
+            priceRetailSale={active.price_retail_sale}
+            size={tiny ? "sm" : "md"}
+          />
+        </div>
         {tiny ? (
           <div className="flex items-center justify-between gap-1">
             <span
               className={cn(
                 "h-2 w-2 rounded-full",
-                (groupStock ?? 0) > 0 ? "bg-emerald-500" : "bg-muted-foreground/40",
+                (groupStock ?? 0) > 0 ? "bg-[#9aca3c]" : "bg-muted-foreground/40",
               )}
               title={`В наличии: ${groupStock ?? 0}`}
             />
