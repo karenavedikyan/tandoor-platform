@@ -1,14 +1,5 @@
 /**
- * GET /api/catalog/products
- *   ?q=строка
- *   &category_id=uuid
- *   &group_id=uuid
- *   &brand=…&brand=…
- *   &props=Key:Val,…
- *   &price_min=&price_max=
- *   &limit=50 (1..100)
- *   &offset=0
- *   &sort=name|stock|price_asc|price_desc
+ * GET /api/catalog/products — листинг по моделям (группы вариантов 1С).
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -24,7 +15,27 @@ import {
   whereSqlFromClauses,
 } from "./_catalog-query.js";
 import { getFilterGroupsForRoot } from "./_filter-config.js";
+import {
+  buildGroupedProductsQuery,
+  isInteriorDoorGrouping,
+  type VariantOption,
+} from "./_catalog-grouping.js";
 import { resolveRootCategory } from "./_filter-resolve.js";
+
+type VariantOptionRow = VariantOption;
+
+function parseVariantJson(raw: unknown): VariantOptionRow[] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw as VariantOptionRow[];
+  if (typeof raw === "string") {
+    try {
+      return JSON.parse(raw) as VariantOptionRow[];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   try {
@@ -48,6 +59,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     const filters = parseCatalogListFilters(req);
     const root = await resolveRootCategory(pool, filters.categoryId, filters.groupId);
     const filterGroupDefs = getFilterGroupsForRoot(root.id, root.name);
+    const interiorGrouping = isInteriorDoorGrouping(root);
+
     const limitNum = Number(req.query.limit);
     const limit = Number.isFinite(limitNum) && limitNum > 0 ? Math.min(Math.floor(limitNum), 100) : 50;
     const offsetNum = Number(req.query.offset);
@@ -62,58 +75,51 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
             ? "price_desc"
             : "name";
 
-    const { clauses, params } = buildCatalogProductWhere(filters, { filterGroupDefs });
-    const whereSql = whereSqlFromClauses(clauses);
+    const { clauses: filterClauses, params } = buildCatalogProductWhere(filters, { filterGroupDefs });
+    const scopeClauses = [filterClauses[0]!];
+    const lastClause = filterClauses[filterClauses.length - 1];
+    if (lastClause?.includes("hidden_tree")) {
+      scopeClauses.push(lastClause);
+    }
+    const scopeWhereSql = whereSqlFromClauses(scopeClauses);
+    const filterWhereSql = whereSqlFromClauses(filterClauses);
 
-    const sortSql =
-      sort === "stock"
-        ? `ORDER BY total_stock DESC NULLS LAST, p.name ASC`
-        : sort === "price_asc"
-          ? `ORDER BY price_retail ASC NULLS LAST, p.name ASC`
-          : sort === "price_desc"
-            ? `ORDER BY price_retail DESC NULLS LAST, p.name ASC`
-            : `ORDER BY p.name ASC`;
+    params.push(interiorGrouping);
+    const interiorParamIndex = params.length;
+
+    const { sql: groupedSql } = buildGroupedProductsQuery(
+      scopeWhereSql,
+      filterWhereSql,
+      interiorParamIndex,
+      sort,
+    );
 
     params.push(limit);
     params.push(offset);
+    const limitIdx = params.length - 1;
+    const offsetIdx = params.length;
 
     const r = await pool.query<{
-      id: string;
-      name: string;
-      display_name: string | null;
-      brand: string | null;
-      is_on_site: boolean;
-      image_path: string | null;
-      image_url: string | null;
-      total_stock: string | null;
-      price_retail: string | null;
-      price_retail_sale: string | null;
-      is_new: boolean;
-      is_hit: boolean;
-      is_sale: boolean;
+      rep_id: string;
+      rep_name: string;
+      rep_display_name: string | null;
+      rep_brand: string | null;
+      rep_is_on_site: boolean;
+      rep_image_path: string | null;
+      rep_image_url: string | null;
+      rep_price_retail: string | null;
+      rep_price_retail_sale: string | null;
+      rep_is_new: boolean;
+      rep_is_hit: boolean;
+      rep_is_sale: boolean;
+      variant_count: number;
+      group_total_stock: string | null;
       total_count: string;
-    }>(
-      `SELECT
-         p.id,
-         p.name,
-         p.display_name,
-         p.brand,
-         p.is_on_site,
-         (SELECT i.path FROM catalog_product_images i WHERE i.product_id = p.id ORDER BY i.sort_order ASC NULLS LAST LIMIT 1) AS image_path,
-         (SELECT i.blob_url FROM catalog_product_images i WHERE i.product_id = p.id AND i.blob_url IS NOT NULL ORDER BY i.sort_order ASC NULLS LAST LIMIT 1) AS image_url,
-         (SELECT SUM(s.qty)::numeric FROM catalog_stocks s WHERE s.product_id = p.id) AS total_stock,
-         (SELECT pr.value FROM catalog_prices pr JOIN catalog_price_types pt ON pt.id = pr.price_type_id WHERE pr.product_id = p.id AND LOWER(pt.name) LIKE '%ррц тандор%' LIMIT 1) AS price_retail,
-         (SELECT pr.value FROM catalog_prices pr JOIN catalog_price_types pt ON pt.id = pr.price_type_id WHERE pr.product_id = p.id AND LOWER(pt.name) LIKE '%акционнаяцена_тандор_розница%' LIMIT 1) AS price_retail_sale,
-         EXISTS (SELECT 1 FROM catalog_product_properties pp WHERE pp.product_id = p.id AND LOWER(TRIM(pp.name)) = 'новинка' AND LOWER(TRIM(pp.value)) IN ('да','y','yes','true','1')) AS is_new,
-         EXISTS (SELECT 1 FROM catalog_product_properties pp WHERE pp.product_id = p.id AND LOWER(TRIM(pp.name)) = 'хит продаж' AND LOWER(TRIM(pp.value)) IN ('да','y','yes','true','1')) AS is_hit,
-         EXISTS (SELECT 1 FROM catalog_product_properties pp WHERE pp.product_id = p.id AND LOWER(TRIM(pp.name)) = 'акция' AND NULLIF(TRIM(pp.value), '') IS NOT NULL) AS is_sale,
-         COUNT(*) OVER () AS total_count
-       FROM catalog_products p
-       ${whereSql}
-       ${sortSql}
-       LIMIT $${params.length - 1} OFFSET $${params.length}`,
-      params,
-    );
+      sizes: unknown;
+      colors: unknown;
+      door_types: unknown;
+      sides: unknown;
+    }>(`${groupedSql} LIMIT $${limitIdx} OFFSET $${offsetIdx}`, params);
 
     const total = r.rows.length > 0 ? Number(r.rows[0].total_count) : 0;
 
@@ -123,19 +129,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       limit,
       offset,
       items: r.rows.map((row) => ({
-        id: row.id,
-        name: row.name,
-        display_name: row.display_name,
-        brand: row.brand,
-        is_on_site: row.is_on_site,
-        image_path: row.image_path,
-        image_url: row.image_url,
-        total_stock: row.total_stock != null ? Number(row.total_stock) : null,
-        price_retail: row.price_retail != null ? Number(row.price_retail) : null,
-        price_retail_sale: row.price_retail_sale != null ? Number(row.price_retail_sale) : null,
-        is_new: row.is_new,
-        is_hit: row.is_hit,
-        is_sale: row.is_sale,
+        id: row.rep_id,
+        name: row.rep_name,
+        display_name: row.rep_display_name,
+        brand: row.rep_brand,
+        is_on_site: row.rep_is_on_site,
+        image_path: row.rep_image_path,
+        image_url: row.rep_image_url,
+        total_stock: row.group_total_stock != null ? Number(row.group_total_stock) : null,
+        price_retail: row.rep_price_retail != null ? Number(row.rep_price_retail) : null,
+        price_retail_sale: row.rep_price_retail_sale != null ? Number(row.rep_price_retail_sale) : null,
+        is_new: row.rep_is_new,
+        is_hit: row.rep_is_hit,
+        is_sale: row.rep_is_sale,
+        variant_count: row.variant_count,
+        sizes: parseVariantJson(row.sizes),
+        colors: parseVariantJson(row.colors),
+        door_types: parseVariantJson(row.door_types).map(({ value, product_id }) => ({ value, product_id })),
+        sides: parseVariantJson(row.sides).map(({ value, product_id }) => ({ value, product_id })),
       })),
     });
   } catch (e) {
