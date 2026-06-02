@@ -1,13 +1,14 @@
 /**
  * GET /api/catalog/products
- *   ?q=строка (по name/display_name)
- *   &category_id=uuid (фильтр по разделу catalog_categories)
- *   &group_id=uuid (фильтр по группе catalog_groups)
+ *   ?q=строка
+ *   &category_id=uuid
+ *   &group_id=uuid
+ *   &brand=…&brand=…
+ *   &props=Key:Val,…
+ *   &price_min=&price_max=
  *   &limit=50 (1..100)
  *   &offset=0
- *   &sort=name|stock
- * Возвращает товары из catalog_products (Neon).
- * Доступно любому авторизованному.
+ *   &sort=name|stock|price_asc|price_desc
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -17,7 +18,11 @@ import {
   sendJson,
   vercelHeaders,
 } from "../../shared/admin/admin-auth.js";
-import { hiddenCategoryFilterSql } from "./_hidden.js";
+import {
+  buildCatalogProductWhere,
+  parseCatalogListFilters,
+  whereSqlFromClauses,
+} from "./_catalog-query.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   try {
@@ -38,58 +43,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       return;
     }
 
-    const q = String(req.query.q ?? "").trim();
-    const categoryIdRaw = req.query.category_id;
-    const categoryId = Array.isArray(categoryIdRaw) ? categoryIdRaw[0] : categoryIdRaw;
-    const groupIdRaw = req.query.group_id;
-    const groupId = Array.isArray(groupIdRaw) ? groupIdRaw[0] : groupIdRaw;
+    const filters = parseCatalogListFilters(req);
     const limitNum = Number(req.query.limit);
     const limit = Number.isFinite(limitNum) && limitNum > 0 ? Math.min(Math.floor(limitNum), 100) : 50;
     const offsetNum = Number(req.query.offset);
     const offset = Number.isFinite(offsetNum) && offsetNum >= 0 ? Math.floor(offsetNum) : 0;
     const sortRaw = String(req.query.sort ?? "name");
-    const sort = sortRaw === "stock" ? "stock" : sortRaw === "price_asc" ? "price_asc" : sortRaw === "price_desc" ? "price_desc" : "name";
-    const onlyInStock = String(req.query.in_stock ?? "") === "1";
-    const onlyNew = String(req.query.is_new ?? "") === "1";
-    const onlyHit = String(req.query.is_hit ?? "") === "1";
-    const onlySale = String(req.query.is_sale ?? "") === "1";
+    const sort =
+      sortRaw === "stock"
+        ? "stock"
+        : sortRaw === "price_asc"
+          ? "price_asc"
+          : sortRaw === "price_desc"
+            ? "price_desc"
+            : "name";
 
-    const where: string[] = ["p.active = TRUE"];
-    const params: unknown[] = [];
-    if (q) {
-      params.push(`%${q}%`);
-      where.push(`(p.name ILIKE $${params.length} OR p.display_name ILIKE $${params.length})`);
-    }
-    if (categoryId && typeof categoryId === "string" && /^[0-9a-f-]{36}$/i.test(categoryId)) {
-      params.push(categoryId);
-      where.push(`EXISTS (SELECT 1 FROM catalog_product_categories pc WHERE pc.product_id = p.id AND pc.category_id = $${params.length}::uuid)`);
-    }
-    if (groupId && typeof groupId === "string" && /^[0-9a-f-]{36}$/i.test(groupId)) {
-      params.push(groupId);
-      where.push(`p.group_id = $${params.length}::uuid`);
-    }
-    if (onlyInStock) {
-      where.push(`EXISTS (SELECT 1 FROM catalog_stocks s WHERE s.product_id = p.id AND s.qty > 0)`);
-    }
-    if (onlyNew) {
-      where.push(`EXISTS (SELECT 1 FROM catalog_product_properties pp WHERE pp.product_id = p.id AND LOWER(TRIM(pp.name)) = 'новинка' AND LOWER(TRIM(pp.value)) IN ('да','y','yes','true','1'))`);
-    }
-    if (onlyHit) {
-      where.push(`EXISTS (SELECT 1 FROM catalog_product_properties pp WHERE pp.product_id = p.id AND LOWER(TRIM(pp.name)) = 'хит продаж' AND LOWER(TRIM(pp.value)) IN ('да','y','yes','true','1'))`);
-    }
-    if (onlySale) {
-      where.push(
-        `EXISTS (SELECT 1 FROM catalog_product_properties pp WHERE pp.product_id = p.id AND LOWER(TRIM(pp.name)) = 'акция' AND NULLIF(TRIM(pp.value), '') IS NOT NULL)`,
-      );
-    }
-
-    const hidden = hiddenCategoryFilterSql(params.length + 1);
-    if (hidden.sql) {
-      where.push(hidden.sql.trim().replace(/^AND\s+/, ""));
-      params.push(...hidden.params);
-    }
-
-    const whereSql = `WHERE ${where.join(" AND ")}`;
+    const { clauses, params } = buildCatalogProductWhere(filters);
+    const whereSql = whereSqlFromClauses(clauses);
 
     const sortSql =
       sort === "stock"

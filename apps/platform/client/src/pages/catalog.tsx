@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "wouter";
-import { LayoutGrid, List, RefreshCw, Search, Table2 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Grid2x2, Grid3x3, LayoutGrid, List, RefreshCw, Search, SlidersHorizontal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,11 +13,27 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import { Slider } from "@/components/ui/slider";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useAuthUser } from "@/hooks/use-auth-user";
+import { FilterCheckboxGroup } from "@/components/catalog/FilterCheckboxGroup";
+import { ProductCardGrid, ProductListRow } from "@/components/catalog/ProductListRow";
 
-type ViewMode = "cards" | "list" | "table";
+type CardSize = "xl" | "m" | "s" | "list";
 
 type CatalogProductItem = {
   id: string;
@@ -42,6 +58,18 @@ type CategoryItem = {
   product_count: number;
 };
 
+type FiltersResponse = {
+  success: boolean;
+  price: { min: number | null; max: number | null };
+  brands: Array<{ value: string; count: number }>;
+  properties: Array<{
+    key: string;
+    label: string;
+    unit: string | null;
+    values: Array<{ value: string; count: number }>;
+  }>;
+};
+
 type SyncLogRow = {
   id: string;
   source_file: string;
@@ -54,37 +82,27 @@ type SyncLogRow = {
 };
 
 const PAGE_SIZE = 50;
+const CARD_SIZE_KEY = "catalog-card-size";
+
+function readCardSize(): CardSize {
+  const v = localStorage.getItem(CARD_SIZE_KEY);
+  if (v === "xl" || v === "m" || v === "s" || v === "list") return v;
+  return "m";
+}
+
+function encodePropsParam(propFilters: Record<string, string[]>): string {
+  const pairs: string[] = [];
+  for (const [k, vals] of Object.entries(propFilters)) {
+    for (const v of vals) {
+      pairs.push(`${encodeURIComponent(k)}:${encodeURIComponent(v)}`);
+    }
+  }
+  return pairs.join(",");
+}
 
 function formatStock(n: number | null): string {
   if (n == null) return "—";
   return Math.round(n).toLocaleString("ru-RU");
-}
-
-function formatPrice(n: number | null): string {
-  if (n == null) return "—";
-  return `${Math.round(n).toLocaleString("ru-RU")} ₽`;
-}
-
-function CatalogPriceBlock({
-  priceRetail,
-  priceRetailSale,
-  className,
-}: {
-  priceRetail: number | null;
-  priceRetailSale: number | null;
-  className?: string;
-}) {
-  if (priceRetailSale != null) {
-    return (
-      <div className={className}>
-        <div className="font-semibold text-rose-600">{formatPrice(priceRetailSale)}</div>
-        {priceRetail != null ? (
-          <div className="text-xs text-muted-foreground line-through">{formatPrice(priceRetail)}</div>
-        ) : null}
-      </div>
-    );
-  }
-  return <div className={cn("font-semibold", className)}>{formatPrice(priceRetail)}</div>;
 }
 
 function formatDateTime(iso: string | null): string {
@@ -106,7 +124,7 @@ export default function CatalogPage() {
   const { toast } = useToast();
   const isAdmin = user?.role === "admin";
 
-  const [view, setView] = useState<ViewMode>("cards");
+  const [cardSize, setCardSize] = useState<CardSize>(readCardSize);
   const [query, setQuery] = useState("");
   const [categoryId, setCategoryId] = useState<string>("all");
   const [sort, setSort] = useState<"name" | "stock" | "price_asc" | "price_desc">("name");
@@ -114,6 +132,15 @@ export default function CatalogPage() {
   const [onlyNew, setOnlyNew] = useState(false);
   const [onlyHit, setOnlyHit] = useState(false);
   const [onlySale, setOnlySale] = useState(false);
+
+  const [brandFilter, setBrandFilter] = useState<string[]>([]);
+  const [propFilters, setPropFilters] = useState<Record<string, string[]>>({});
+  const [priceRange, setPriceRange] = useState<[number, number] | null>(null);
+  const [debouncedPriceRange, setDebouncedPriceRange] = useState<[number, number] | null>(null);
+  const [priceBounds, setPriceBounds] = useState<[number, number]>([0, 0]);
+  const [priceTouched, setPriceTouched] = useState(false);
+  const [filtersSheetOpen, setFiltersSheetOpen] = useState(false);
+
   const [items, setItems] = useState<CatalogProductItem[]>([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
@@ -124,6 +151,90 @@ export default function CatalogPage() {
   const [syncingPhotos, setSyncingPhotos] = useState(false);
 
   const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem(CARD_SIZE_KEY, cardSize);
+  }, [cardSize]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedPriceRange(priceRange), 400);
+    return () => clearTimeout(t);
+  }, [priceRange]);
+
+  useEffect(() => {
+    setBrandFilter([]);
+    setPropFilters({});
+    setPriceRange(null);
+    setDebouncedPriceRange(null);
+    setPriceTouched(false);
+  }, [categoryId]);
+
+  const filtersQuery = useQuery({
+    queryKey: ["catalog-filters", categoryId],
+    queryFn: async (): Promise<FiltersResponse> => {
+      const qs =
+        categoryId !== "all" ? `?category_id=${encodeURIComponent(categoryId)}` : "";
+      const r = await fetch(`/api/catalog/filters${qs}`, { credentials: "include" });
+      const data = await r.json();
+      if (!r.ok || !data.success) {
+        throw new Error(data.message || `HTTP ${r.status}`);
+      }
+      return data;
+    },
+  });
+
+  useEffect(() => {
+    const p = filtersQuery.data?.price;
+    if (p?.min == null || p?.max == null) return;
+    setPriceBounds([p.min, p.max]);
+    if (!priceTouched) {
+      setPriceRange([p.min, p.max]);
+      setDebouncedPriceRange([p.min, p.max]);
+    }
+  }, [filtersQuery.data, categoryId, priceTouched]);
+
+  const priceFilterActive = useMemo(() => {
+    if (!debouncedPriceRange) return false;
+    const [lo, hi] = debouncedPriceRange;
+    const [bLo, bHi] = priceBounds;
+    if (bHi <= bLo) return false;
+    return lo > bLo || hi < bHi;
+  }, [debouncedPriceRange, priceBounds]);
+
+  const hasAdvancedFilters =
+    brandFilter.length > 0 ||
+    Object.values(propFilters).some((v) => v.length > 0) ||
+    priceFilterActive;
+
+  const productsQueryKey = useMemo(
+    () => [
+      "catalog-products",
+      query,
+      categoryId,
+      sort,
+      onlyInStock,
+      onlyNew,
+      onlyHit,
+      onlySale,
+      brandFilter,
+      propFilters,
+      debouncedPriceRange,
+      priceFilterActive,
+    ],
+    [
+      query,
+      categoryId,
+      sort,
+      onlyInStock,
+      onlyNew,
+      onlyHit,
+      onlySale,
+      brandFilter,
+      propFilters,
+      debouncedPriceRange,
+      priceFilterActive,
+    ],
+  );
 
   async function loadProducts(nextOffset: number, append = false) {
     abortRef.current?.abort();
@@ -139,6 +250,13 @@ export default function CatalogPage() {
       if (onlyNew) params.set("is_new", "1");
       if (onlyHit) params.set("is_hit", "1");
       if (onlySale) params.set("is_sale", "1");
+      for (const b of brandFilter) params.append("brand", b);
+      const propsEnc = encodePropsParam(propFilters);
+      if (propsEnc) params.set("props", propsEnc);
+      if (priceFilterActive && debouncedPriceRange) {
+        params.set("price_min", String(Math.round(debouncedPriceRange[0])));
+        params.set("price_max", String(Math.round(debouncedPriceRange[1])));
+      }
       params.set("limit", String(PAGE_SIZE));
       params.set("offset", String(nextOffset));
       const r = await fetch(`/api/catalog/products?${params}`, { signal: ac.signal, credentials: "include" });
@@ -203,7 +321,6 @@ export default function CatalogPage() {
         title: "Импорт каталога запущен",
         description: "Идёт загрузка с FTP 1С — обновите через 1–3 минуты.",
       });
-      // poll status каждые 5с в течение 3 минут
       let tries = 0;
       const iv = setInterval(async () => {
         tries += 1;
@@ -249,11 +366,23 @@ export default function CatalogPage() {
     }
   }
 
+  function resetAdvancedFilters() {
+    setBrandFilter([]);
+    setPropFilters({});
+    setPriceTouched(false);
+    const p = filtersQuery.data?.price;
+    if (p?.min != null && p?.max != null) {
+      setPriceRange([p.min, p.max]);
+      setDebouncedPriceRange([p.min, p.max]);
+    } else {
+      setPriceRange(null);
+      setDebouncedPriceRange(null);
+    }
+  }
+
   useEffect(() => {
     void loadCategories();
     void loadLastSync();
-    // initial products load
-    void loadProducts(0, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -263,7 +392,7 @@ export default function CatalogPage() {
     }, 250);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, categoryId, sort, onlyInStock, onlyNew, onlyHit, onlySale]);
+  }, productsQueryKey);
 
   const topCategories = useMemo(
     () => categories.filter((c) => c.parent_id == null && c.product_count > 0),
@@ -271,9 +400,33 @@ export default function CatalogPage() {
   );
 
   function imageSrc(p: CatalogProductItem): string | null {
-    // Vercel Blob если уже залит, иначе пока null (заливка идёт пачками на VM).
     return p.image_url || null;
   }
+
+  const gridCls = {
+    xl: "grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3",
+    m: "grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5",
+    s: "grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8",
+  }[cardSize === "list" ? "m" : cardSize];
+
+  const advancedFiltersPanel = (
+    <CatalogAdvancedFilters
+      filtersData={filtersQuery.data}
+      filtersLoading={filtersQuery.isLoading}
+      brandFilter={brandFilter}
+      setBrandFilter={setBrandFilter}
+      propFilters={propFilters}
+      setPropFilters={setPropFilters}
+      priceRange={priceRange}
+      priceBounds={priceBounds}
+      onPriceChange={(next) => {
+        setPriceTouched(true);
+        setPriceRange(next);
+      }}
+      hasAdvancedFilters={hasAdvancedFilters}
+      onReset={resetAdvancedFilters}
+    />
+  );
 
   return (
     <div className="space-y-6 p-4 lg:p-6">
@@ -338,7 +491,7 @@ export default function CatalogPage() {
               <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 id="catalog-search"
-                placeholder="Название, отображение, артикул…"
+                placeholder="Название, бренд, цвет, коллекция…"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 className="pl-8"
@@ -364,6 +517,61 @@ export default function CatalogPage() {
             </Select>
           </div>
 
+          <div className="flex items-end gap-1">
+            <Sheet open={filtersSheetOpen} onOpenChange={setFiltersSheetOpen}>
+              <SheetTrigger asChild>
+                <Button variant="outline" size="icon" className="relative md:hidden" aria-label="Фильтры">
+                  <SlidersHorizontal className="h-4 w-4" />
+                  {hasAdvancedFilters ? (
+                    <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-primary" />
+                  ) : null}
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto">
+                <SheetHeader>
+                  <SheetTitle>Фильтры</SheetTitle>
+                </SheetHeader>
+                <div className="mt-4">{advancedFiltersPanel}</div>
+              </SheetContent>
+            </Sheet>
+            <Button
+              size="icon"
+              variant={cardSize === "xl" ? "default" : "outline"}
+              onClick={() => setCardSize("xl")}
+              title="Крупный"
+              aria-label="Крупный"
+            >
+              <LayoutGrid className="h-5 w-5" />
+            </Button>
+            <Button
+              size="icon"
+              variant={cardSize === "m" ? "default" : "outline"}
+              onClick={() => setCardSize("m")}
+              title="Средний"
+              aria-label="Средний"
+            >
+              <Grid3x3 className="h-4 w-4" />
+            </Button>
+            <Button
+              size="icon"
+              variant={cardSize === "s" ? "default" : "outline"}
+              onClick={() => setCardSize("s")}
+              title="Мелкий"
+              aria-label="Мелкий"
+            >
+              <Grid2x2 className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              size="icon"
+              variant={cardSize === "list" ? "default" : "outline"}
+              onClick={() => setCardSize("list")}
+              title="Список"
+              aria-label="Список"
+            >
+              <List className="h-4 w-4" />
+            </Button>
+          </div>
+
           <div className="col-span-full flex flex-wrap items-center gap-2 pt-1">
             <Label className="text-xs text-muted-foreground">Быстрые фильтры:</Label>
             <FilterChip active={onlyInStock} onClick={() => setOnlyInStock((v) => !v)}>В наличии</FilterChip>
@@ -386,35 +594,7 @@ export default function CatalogPage() {
             </div>
           </div>
 
-          <div className="flex items-end gap-1">
-            <Button
-              size="icon"
-              variant={view === "cards" ? "default" : "outline"}
-              onClick={() => setView("cards")}
-              title="Карточки"
-              aria-label="Карточки"
-            >
-              <LayoutGrid className="h-4 w-4" />
-            </Button>
-            <Button
-              size="icon"
-              variant={view === "list" ? "default" : "outline"}
-              onClick={() => setView("list")}
-              title="Список"
-              aria-label="Список"
-            >
-              <List className="h-4 w-4" />
-            </Button>
-            <Button
-              size="icon"
-              variant={view === "table" ? "default" : "outline"}
-              onClick={() => setView("table")}
-              title="Таблица"
-              aria-label="Таблица"
-            >
-              <Table2 className="h-4 w-4" />
-            </Button>
-          </div>
+          <div className="col-span-full hidden md:block">{advancedFiltersPanel}</div>
         </CardContent>
       </Card>
 
@@ -426,84 +606,18 @@ export default function CatalogPage() {
         <div className="grid place-items-center py-16 text-sm text-muted-foreground">
           Ничего не найдено. Уточните запрос.
         </div>
-      ) : view === "cards" ? (
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+      ) : cardSize === "list" ? (
+        <div className="divide-y rounded-lg border bg-card">
           {items.map((p) => (
-            <ProductCard key={p.id} product={p} imageSrc={imageSrc(p)} />
+            <ProductListRow key={p.id} product={p} imageSrc={imageSrc(p)} />
           ))}
         </div>
-      ) : view === "list" ? (
-        <Card>
-          <CardContent className="divide-y p-0">
-            {items.map((p) => (
-              <Link
-                key={p.id}
-                href={`/catalog/1c/${p.id}`}
-                className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/40"
-                data-testid={`catalog-row-${p.id}`}
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <div className="truncate font-medium">{p.display_name || p.name}</div>
-                    <ProductBadges p={p} small />
-                  </div>
-                  <div className="truncate text-xs text-muted-foreground">{p.name}</div>
-                </div>
-                <div className="flex shrink-0 items-center gap-3">
-                  <CatalogPriceBlock
-                    className="text-right text-sm"
-                    priceRetail={p.price_retail}
-                    priceRetailSale={p.price_retail_sale}
-                  />
-                  <Badge variant="secondary">{formatStock(p.total_stock)}</Badge>
-                </div>
-              </Link>
-            ))}
-          </CardContent>
-        </Card>
       ) : (
-        <Card>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/40 text-left text-xs uppercase text-muted-foreground">
-                  <tr>
-                    <th className="px-3 py-2">Отображение</th>
-                    <th className="px-3 py-2">Артикул 1С</th>
-                    <th className="px-3 py-2">Бренд</th>
-                    <th className="px-3 py-2 text-right">РРЦ</th>
-                    <th className="px-3 py-2 text-right">Остаток</th>
-                    <th className="px-3 py-2">Сайт</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((p) => (
-                    <tr key={p.id} className="border-t hover:bg-muted/30">
-                      <td className="px-3 py-2">
-                        <Link href={`/catalog/1c/${p.id}`} className="font-medium underline-offset-2 hover:underline">
-                          {p.display_name || p.name}
-                        </Link>
-                      </td>
-                      <td className="px-3 py-2 text-xs text-muted-foreground">{p.name}</td>
-                      <td className="px-3 py-2 text-xs">{p.brand ?? "—"}</td>
-                      <td className="px-3 py-2 text-right">
-                        <CatalogPriceBlock priceRetail={p.price_retail} priceRetailSale={p.price_retail_sale} />
-                      </td>
-                      <td className="px-3 py-2 text-right">{formatStock(p.total_stock)}</td>
-                      <td className="px-3 py-2">
-                        {p.is_on_site ? (
-                          <Badge variant="secondary">Да</Badge>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
+        <div className={gridCls}>
+          {items.map((p) => (
+            <ProductCardGrid key={p.id} product={p} imageSrc={imageSrc(p)} size={cardSize} />
+          ))}
+        </div>
       )}
 
       {items.length < total && (
@@ -522,7 +636,139 @@ export default function CatalogPage() {
   );
 }
 
-function FilterChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+function CatalogAdvancedFilters({
+  filtersData,
+  filtersLoading,
+  brandFilter,
+  setBrandFilter,
+  propFilters,
+  setPropFilters,
+  priceRange,
+  priceBounds,
+  onPriceChange,
+  hasAdvancedFilters,
+  onReset,
+}: {
+  filtersData: FiltersResponse | undefined;
+  filtersLoading: boolean;
+  brandFilter: string[];
+  setBrandFilter: (v: string[]) => void;
+  propFilters: Record<string, string[]>;
+  setPropFilters: React.Dispatch<React.SetStateAction<Record<string, string[]>>>;
+  priceRange: [number, number] | null;
+  priceBounds: [number, number];
+  onPriceChange: (v: [number, number]) => void;
+  hasAdvancedFilters: boolean;
+  onReset: () => void;
+}) {
+  const [bLo, bHi] = priceBounds;
+  const sliderMax = bHi > bLo ? bHi : bLo + 1;
+  const sliderValue = priceRange ?? [bLo, sliderMax];
+
+  const [openSections, setOpenSections] = useState<string[]>([]);
+  useEffect(() => {
+    if (hasAdvancedFilters) setOpenSections(["advanced"]);
+  }, [hasAdvancedFilters]);
+
+  return (
+    <Accordion type="multiple" value={openSections} onValueChange={setOpenSections} className="w-full">
+      <AccordionItem value="advanced" className="border-none">
+        <div className="flex items-center justify-between gap-2">
+          <AccordionTrigger className="py-2 text-sm font-medium hover:no-underline">
+            Подробные фильтры
+          </AccordionTrigger>
+          {hasAdvancedFilters && (
+            <Button type="button" variant="ghost" size="sm" className="shrink-0 text-xs" onClick={onReset}>
+              Сбросить фильтры
+            </Button>
+          )}
+        </div>
+        <AccordionContent className="space-y-6 pb-2 pt-1">
+          {filtersLoading && !filtersData ? (
+            <p className="text-sm text-muted-foreground">Загружаю фильтры…</p>
+          ) : (
+            <>
+              {bHi > bLo && (
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium">Цена, ₽</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      type="number"
+                      className="h-9"
+                      value={Math.round(sliderValue[0])}
+                      min={bLo}
+                      max={sliderValue[1]}
+                      onChange={(e) => {
+                        const v = Number(e.target.value);
+                        if (Number.isFinite(v)) onPriceChange([v, sliderValue[1]]);
+                      }}
+                    />
+                    <Input
+                      type="number"
+                      className="h-9"
+                      value={Math.round(sliderValue[1])}
+                      min={sliderValue[0]}
+                      max={bHi}
+                      onChange={(e) => {
+                        const v = Number(e.target.value);
+                        if (Number.isFinite(v)) onPriceChange([sliderValue[0], v]);
+                      }}
+                    />
+                  </div>
+                  <Slider
+                    min={bLo}
+                    max={sliderMax}
+                    step={1}
+                    value={sliderValue}
+                    onValueChange={(v) => {
+                      if (v.length >= 2) onPriceChange([v[0]!, v[1]!]);
+                    }}
+                  />
+                </div>
+              )}
+
+              {filtersData?.brands && filtersData.brands.length > 0 && (
+                <FilterCheckboxGroup
+                  label="Бренд"
+                  options={filtersData.brands}
+                  selected={brandFilter}
+                  onChange={setBrandFilter}
+                />
+              )}
+
+              {filtersData?.properties.map((prop) => (
+                <FilterCheckboxGroup
+                  key={prop.key}
+                  label={prop.unit ? `${prop.label} (${prop.unit})` : prop.label}
+                  options={prop.values}
+                  selected={propFilters[prop.key] ?? []}
+                  onChange={(next) =>
+                    setPropFilters((prev) => {
+                      const copy = { ...prev };
+                      if (next.length) copy[prop.key] = next;
+                      else delete copy[prop.key];
+                      return copy;
+                    })
+                  }
+                />
+              ))}
+            </>
+          )}
+        </AccordionContent>
+      </AccordionItem>
+    </Accordion>
+  );
+}
+
+function FilterChip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
   return (
     <button
       type="button"
@@ -536,55 +782,5 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
     >
       {children}
     </button>
-  );
-}
-
-function ProductBadges({ p, small }: { p: CatalogProductItem; small?: boolean }) {
-  const cls = small ? "px-1.5 py-0 text-[10px]" : "";
-  return (
-    <>
-      {p.is_new && <Badge className={cn("bg-emerald-600 text-white hover:bg-emerald-600", cls)}>New</Badge>}
-      {p.is_hit && <Badge className={cn("bg-amber-500 text-white hover:bg-amber-500", cls)}>Hit</Badge>}
-      {p.is_sale && <Badge className={cn("bg-rose-600 text-white hover:bg-rose-600", cls)}>Sale</Badge>}
-    </>
-  );
-}
-
-function ProductCard({ product, imageSrc }: { product: CatalogProductItem; imageSrc: string | null }) {
-  return (
-    <Link
-      href={`/catalog/1c/${product.id}`}
-      className="block"
-      data-testid={`catalog-card-${product.id}`}
-    >
-      <Card className="h-full transition hover:shadow-md">
-        <div className="relative aspect-square w-full overflow-hidden rounded-t-lg bg-muted">
-          {imageSrc ? (
-            <img src={imageSrc} alt={product.name} className="h-full w-full object-cover" loading="lazy" />
-          ) : (
-            <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-              Фото в 1С отсутствует
-            </div>
-          )}
-          <div className="absolute left-2 top-2 flex flex-col items-start gap-1">
-            <ProductBadges p={product} />
-          </div>
-        </div>
-        <CardContent className="space-y-1 p-3">
-          <div className="line-clamp-2 text-sm font-medium" title={product.display_name || product.name}>
-            {product.display_name || product.name}
-          </div>
-          {product.brand && <div className="truncate text-xs text-muted-foreground">{product.brand}</div>}
-          <div className="flex items-end justify-between gap-2">
-            <CatalogPriceBlock
-              className="min-w-0"
-              priceRetail={product.price_retail}
-              priceRetailSale={product.price_retail_sale}
-            />
-            <Badge variant="secondary">{formatStock(product.total_stock)}</Badge>
-          </div>
-        </CardContent>
-      </Card>
-    </Link>
   );
 }
