@@ -27,19 +27,20 @@ describe("catalog filters helpers", () => {
   it("filters response shape (contract)", () => {
     const sample = {
       success: true,
+      categoryTitle: "Межкомнатные двери",
+      rootCategoryId: "342a9a43-85ad-11ed-8126-00155d0a0a4e",
       price: { min: 100, max: 50000 },
-      brands: [{ value: "Aberhof", count: 10 }],
-      properties: [
+      groups: [
         {
-          key: "Толщина",
-          label: "Толщина",
-          unit: null,
-          values: [{ value: "8", count: 5 }],
+          key: "Дизайн",
+          label: "Дизайн",
+          kind: "checkbox" as const,
+          order: 10,
+          values: [{ value: "Классика", count: 5 }],
         },
       ],
     };
-    expect(Array.isArray(sample.brands)).toBe(true);
-    expect(Array.isArray(sample.properties)).toBe(true);
+    expect(Array.isArray(sample.groups)).toBe(true);
     expect(typeof sample.price.min).toBe("number");
     expect(typeof sample.price.max).toBe("number");
   });
