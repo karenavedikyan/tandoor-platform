@@ -10,6 +10,18 @@ export type VariantOption = {
   image_url?: string | null;
 };
 
+export type CatalogVariantRow = {
+  product_id: string;
+  size: string | null;
+  color: string | null;
+  door_type: string | null;
+  side: string | null;
+  price_retail: number | null;
+  price_retail_sale: number | null;
+  image_url: string | null;
+  total_stock: number | null;
+};
+
 export function isInteriorDoorGrouping(root: RootCategory): boolean {
   const name = root.name?.trim().toLowerCase() ?? "";
   if (name === "межкомнатные двери") return true;
@@ -262,7 +274,31 @@ export function buildGroupedProductsQuery(
             WHERE v.group_key = g.group_key AND NULLIF(TRIM(pp.value), '') IS NOT NULL
             ORDER BY NULLIF(TRIM(pp.value), ''), v.id
           ) x
-        ) AS sides
+        ) AS sides,
+        (
+          SELECT COALESCE(json_agg(row_to_json(x) ORDER BY x.product_id), '[]'::json)
+          FROM (
+            SELECT
+              v.id AS product_id,
+              (SELECT NULLIF(TRIM(pp.value), '') FROM catalog_product_properties pp
+               WHERE pp.product_id = v.id AND pp.name = ${PROP_SIZE} LIMIT 1) AS size,
+              (SELECT NULLIF(TRIM(pp.value), '') FROM catalog_product_properties pp
+               WHERE pp.product_id = v.id AND pp.name = ${PROP_COLOR} LIMIT 1) AS color,
+              COALESCE(
+                v.door_type_val,
+                (SELECT NULLIF(TRIM(pp.value), '') FROM catalog_product_properties pp
+                 WHERE pp.product_id = v.id AND pp.name = ${PROP_DOOR} LIMIT 1)
+              ) AS door_type,
+              (SELECT NULLIF(TRIM(pp.value), '') FROM catalog_product_properties pp
+               WHERE pp.product_id = v.id AND pp.name = ${PROP_SIDE} LIMIT 1) AS side,
+              v.price_retail,
+              v.price_retail_sale,
+              v.image_url,
+              v.variant_stock AS total_stock
+            FROM group_variants v
+            WHERE v.group_key = g.group_key
+          ) x
+        ) AS variants
       FROM representatives g
       ${sortSql}
     )
