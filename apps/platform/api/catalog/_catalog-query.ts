@@ -172,7 +172,19 @@ export function buildCatalogProductWhere(
   if (filters.categoryId) {
     params.push(filters.categoryId);
     clauses.push(
-      `EXISTS (SELECT 1 FROM catalog_product_categories pc WHERE pc.product_id = p.id AND pc.category_id = $${params.length}::uuid)`,
+      `EXISTS (
+         SELECT 1 FROM catalog_product_categories pc
+         WHERE pc.product_id = p.id
+           AND pc.category_id IN (
+             WITH RECURSIVE subtree AS (
+               SELECT id FROM catalog_categories WHERE id = $${params.length}::uuid
+               UNION ALL
+               SELECT ch.id FROM catalog_categories ch
+               INNER JOIN subtree st ON ch.parent_id = st.id
+             )
+             SELECT id FROM subtree
+           )
+       )`,
     );
   }
   if (filters.groupId) {
