@@ -19,6 +19,8 @@ type Props = {
   doorTypes: Array<{ value: string; product_id: string }>;
   sides: Array<{ value: string; product_id: string }>;
   compact?: boolean;
+  /** Палитра цветов вынесена в Card-product — не дублировать здесь */
+  hideColors?: boolean;
 };
 
 export function VariantSwitchers({
@@ -30,6 +32,7 @@ export function VariantSwitchers({
   doorTypes,
   sides,
   compact = false,
+  hideColors = false,
 }: Props) {
   const stop = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -73,6 +76,7 @@ export function VariantSwitchers({
           selection={selection}
           onSelectionChange={onSelectionChange}
           showSides={false}
+          hideColors={hideColors}
         />
       </div>
     );
@@ -88,6 +92,7 @@ export function VariantSwitchers({
       selection={selection}
       onSelectionChange={onSelectionChange}
       showSides={sides.length > 1}
+      hideColors={hideColors}
       onClickStop={stop}
     />
   );
@@ -112,6 +117,7 @@ function AxisRows({
   onSelectionChange: (next: VariantSelection) => void;
   showSides: boolean;
   compact?: boolean;
+  hideColors?: boolean;
   onClickStop?: (e: React.MouseEvent) => void;
 }) {
   return (
@@ -166,7 +172,7 @@ function AxisRows({
         </div>
       ) : null}
 
-      {colors.length > 1 ? (
+      {!hideColors && colors.length > 1 ? (
         <div className="flex flex-wrap gap-1">
           {colors.map((c) => {
             const active = selection.color === c.value;
