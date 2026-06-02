@@ -31,24 +31,18 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { FilterCheckboxGroup } from "@/components/catalog/FilterCheckboxGroup";
-import { ProductCardGrid, ProductListRow } from "@/components/catalog/ProductListRow";
+import {
+  ProductCardGrid,
+  ProductListRow,
+  type CatalogListProduct,
+} from "@/components/catalog/ProductListRow";
 
 type CardSize = "xl" | "m" | "s" | "list";
 
-type CatalogProductItem = {
-  id: string;
-  name: string;
-  display_name: string | null;
-  brand: string | null;
+type CatalogProductItem = CatalogListProduct & {
   is_on_site: boolean;
   image_path: string | null;
   image_url: string | null;
-  total_stock: number | null;
-  price_retail: number | null;
-  price_retail_sale: number | null;
-  is_new: boolean;
-  is_hit: boolean;
-  is_sale: boolean;
 };
 
 type CategoryItem = {
@@ -401,10 +395,6 @@ export default function CatalogPage() {
     [categories],
   );
 
-  function imageSrc(p: CatalogProductItem): string | null {
-    return p.image_url || null;
-  }
-
   const gridCls = {
     xl: "grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3",
     m: "grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5",
@@ -616,13 +606,13 @@ export default function CatalogPage() {
       ) : cardSize === "list" ? (
         <div className="divide-y rounded-lg border bg-card">
           {items.map((p) => (
-            <ProductListRow key={p.id} product={p} imageSrc={imageSrc(p)} />
+            <ProductListRow key={p.id} product={p} />
           ))}
         </div>
       ) : (
         <div className={gridCls}>
           {items.map((p) => (
-            <ProductCardGrid key={p.id} product={p} imageSrc={imageSrc(p)} size={cardSize} />
+            <ProductCardGrid key={p.id} product={p} size={cardSize} />
           ))}
         </div>
       )}

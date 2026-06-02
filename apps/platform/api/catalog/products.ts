@@ -18,6 +18,7 @@ import { getFilterGroupsForRoot } from "./_filter-config.js";
 import {
   buildGroupedProductsQuery,
   isInteriorDoorGrouping,
+  type CatalogVariantRow,
   type VariantOption,
 } from "./_catalog-grouping.js";
 import { resolveRootCategory } from "./_filter-resolve.js";
@@ -35,6 +36,23 @@ function parseVariantJson(raw: unknown): VariantOptionRow[] {
     }
   }
   return [];
+}
+
+function parseVariantsJson(raw: unknown): CatalogVariantRow[] {
+  return parseVariantJson(raw).map((item) => {
+    const row = item as unknown as CatalogVariantRow;
+    return {
+      product_id: String(row.product_id),
+      size: row.size != null ? String(row.size) : null,
+      color: row.color != null ? String(row.color) : null,
+      door_type: row.door_type != null ? String(row.door_type) : null,
+      side: row.side != null ? String(row.side) : null,
+      price_retail: row.price_retail != null ? Number(row.price_retail) : null,
+      price_retail_sale: row.price_retail_sale != null ? Number(row.price_retail_sale) : null,
+      image_url: row.image_url != null ? String(row.image_url) : null,
+      total_stock: row.total_stock != null ? Number(row.total_stock) : null,
+    };
+  });
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
@@ -119,6 +137,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       colors: unknown;
       door_types: unknown;
       sides: unknown;
+      variants: unknown;
     }>(`${groupedSql} LIMIT $${limitIdx} OFFSET $${offsetIdx}`, params);
 
     const total = r.rows.length > 0 ? Number(r.rows[0].total_count) : 0;
@@ -147,6 +166,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         colors: parseVariantJson(row.colors),
         door_types: parseVariantJson(row.door_types).map(({ value, product_id }) => ({ value, product_id })),
         sides: parseVariantJson(row.sides).map(({ value, product_id }) => ({ value, product_id })),
+        variants: parseVariantsJson(row.variants),
       })),
     });
   } catch (e) {
