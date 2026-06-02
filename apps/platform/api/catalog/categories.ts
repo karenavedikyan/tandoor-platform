@@ -40,7 +40,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       product_count: string;
     }>(
       `SELECT c.id, c.name, c.parent_id, c.sort_order,
-              (SELECT COUNT(*) FROM catalog_product_categories pc WHERE pc.category_id = c.id) AS product_count
+              (
+                SELECT COUNT(DISTINCT pc.product_id)
+                FROM catalog_product_categories pc
+                WHERE pc.category_id IN (
+                  WITH RECURSIVE subtree AS (
+                    SELECT id FROM catalog_categories WHERE id = c.id
+                    UNION ALL
+                    SELECT ch.id FROM catalog_categories ch
+                    INNER JOIN subtree st ON ch.parent_id = st.id
+                  )
+                  SELECT id FROM subtree
+                )
+              ) AS product_count
        FROM catalog_categories c
        WHERE 1=1 ${hidden.sql}
        ORDER BY c.sort_order ASC NULLS LAST, c.name ASC`,
