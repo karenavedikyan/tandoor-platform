@@ -7,13 +7,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Accordion,
   AccordionContent,
   AccordionItem,
@@ -29,6 +22,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useAuthUser } from "@/hooks/use-auth-user";
+import { CategoryTreeNav } from "@/components/catalog/CategoryTreeNav";
 import { FilterCheckboxGroup } from "@/components/catalog/FilterCheckboxGroup";
 import {
   ProductCardGrid,
@@ -48,6 +42,7 @@ type CategoryItem = {
   id: string;
   name: string;
   parent_id: string | null;
+  sort_order?: number | null;
   product_count: number;
 };
 
@@ -136,6 +131,7 @@ export default function CatalogPage() {
   const [appliedPriceRange, setAppliedPriceRange] = useState<[number, number] | null>(null);
   const [priceBounds, setPriceBounds] = useState<[number, number]>([0, 0]);
   const [filtersSheetOpen, setFiltersSheetOpen] = useState(false);
+  const [categoryTreeOpen, setCategoryTreeOpen] = useState(false);
 
   const [items, setItems] = useState<CatalogProductItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -147,6 +143,7 @@ export default function CatalogPage() {
   const [syncingPhotos, setSyncingPhotos] = useState(false);
 
   const abortRef = useRef<AbortController | null>(null);
+  const listingRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     localStorage.setItem(CARD_SIZE_KEY, cardSize);
@@ -389,10 +386,10 @@ export default function CatalogPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, productsQueryKey);
 
-  const topCategories = useMemo(
-    () => categories.filter((c) => c.parent_id == null && c.product_count > 0),
-    [categories],
-  );
+  const selectedCategoryName = useMemo(() => {
+    if (categoryId === "all") return null;
+    return categories.find((c) => c.id === categoryId)?.name ?? null;
+  }, [categoryId, categories]);
 
   const gridCls = {
     xl: "grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3",
@@ -401,11 +398,7 @@ export default function CatalogPage() {
   }[cardSize === "list" ? "m" : cardSize];
 
   const filterPanelTitle =
-    filtersQuery.data?.categoryTitle ??
-    (categoryId !== "all"
-      ? topCategories.find((c) => c.id === categoryId)?.name
-      : null) ??
-    "Все разделы";
+    filtersQuery.data?.categoryTitle ?? selectedCategoryName ?? "Все разделы";
 
   const advancedFiltersPanel = (
     <CatalogAdvancedFilters
@@ -496,20 +489,20 @@ export default function CatalogPage() {
           </div>
 
           <div className="space-y-1">
-            <Label className="text-xs">Раздел</Label>
-            <Select value={categoryId} onValueChange={(v) => setCategoryId(v)}>
-              <SelectTrigger data-testid="catalog-category-select">
-                <SelectValue placeholder="Все разделы" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Все разделы</SelectItem>
-                {topCategories.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name} • {c.product_count}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label className="text-xs">Каталог</Label>
+            <CategoryTreeNav
+              categories={categories}
+              selectedId={categoryId}
+              onSelect={(id) => {
+                setCategoryId(id);
+                setCategoryTreeOpen(false);
+                requestAnimationFrame(() => {
+                  listingRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                });
+              }}
+              open={categoryTreeOpen}
+              onOpenChange={setCategoryTreeOpen}
+            />
           </div>
 
           <div className="flex flex-col items-stretch gap-2">
@@ -621,6 +614,7 @@ export default function CatalogPage() {
         </CardContent>
       </Card>
 
+      <div ref={listingRef} className="scroll-mt-4">
       {loading && items.length === 0 ? (
         <div className="grid place-items-center py-16 text-sm text-muted-foreground">
           Загружаю каталог…
@@ -655,6 +649,7 @@ export default function CatalogPage() {
           </Button>
         </div>
       )}
+      </div>
     </div>
   );
 }
