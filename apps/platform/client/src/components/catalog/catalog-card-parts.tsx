@@ -1,4 +1,5 @@
 import { GitCompare, Heart, ListChecks } from "lucide-react";
+import { optimizedImage } from "@/lib/catalog-image";
 import { cn } from "@/lib/utils";
 import type { CatalogListProduct } from "./ProductListRow";
 
@@ -131,7 +132,8 @@ export function CatalogColorPalette({
     <div className={cn("Palette flex gap-1.5 overflow-x-auto pb-1", compact && "gap-1")} onClick={stop}>
       {colors.map((c) => {
         const active = selectedColor === c.value;
-        const thumb = c.image_url ?? variants.find((v) => v.color === c.value)?.image_url;
+        const thumbRaw = c.image_url ?? variants.find((v) => v.color === c.value)?.image_url;
+        const thumb = optimizedImage(thumbRaw, 96);
         return (
           <button
             key={c.value}

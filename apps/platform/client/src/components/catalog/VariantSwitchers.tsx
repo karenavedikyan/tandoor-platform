@@ -1,3 +1,4 @@
+import { optimizedImage } from "@/lib/catalog-image";
 import { cn } from "@/lib/utils";
 import {
   doorTypeShortLabel,
@@ -177,7 +178,8 @@ function AxisRows({
         <div className="flex flex-wrap gap-1">
           {colors.map((c) => {
             const active = selection.color === c.value;
-            const thumb = c.image_url ?? variants.find((v) => v.color === c.value)?.image_url;
+            const thumbRaw = c.image_url ?? variants.find((v) => v.color === c.value)?.image_url;
+            const thumb = optimizedImage(thumbRaw, 96);
             return (
               <button
                 key={c.value}

@@ -4,6 +4,21 @@
   "outputDirectory": "dist/public",
   "installCommand": "npm install",
   "framework": null,
+  "images": {
+    "sizes": [64, 80, 96, 128, 160, 200, 256, 320, 640],
+    "minimumCacheTTL": 86400,
+    "formats": ["image/webp"],
+    "remotePatterns": [
+      {
+        "protocol": "https",
+        "hostname": "ospv42n5b4su63ca.public.blob.vercel-storage.com"
+      },
+      {
+        "protocol": "https",
+        "hostname": "*.public.blob.vercel-storage.com"
+      }
+    ]
+  },
   "rewrites": [
     {
       "source": "/api/sales-plan-fact/state",
