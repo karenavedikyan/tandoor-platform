@@ -29,6 +29,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useAuthUser } from "@/hooks/use-auth-user";
+import { CatalogSectionsLanding } from "@/components/catalog/CatalogSectionsLanding";
 import { CategoryTreeNav } from "@/components/catalog/CategoryTreeNav";
 import { FilterCheckboxGroup } from "@/components/catalog/FilterCheckboxGroup";
 import {
@@ -407,6 +408,15 @@ export default function CatalogPage() {
   const filterPanelTitle =
     filtersQuery.data?.categoryTitle ?? selectedCategoryName ?? "Все разделы";
 
+  const showSectionsLanding =
+    categoryId === "all" &&
+    !query.trim() &&
+    !onlyHit &&
+    !onlyNew &&
+    !onlySale &&
+    !onlyInStock &&
+    !hasAdvancedFilters;
+
   const advancedFiltersPanel = (
     <CatalogAdvancedFilters
       title={filterPanelTitle}
@@ -623,40 +633,50 @@ export default function CatalogPage() {
       </Card>
 
       <div ref={listingRef} className="scroll-mt-4">
-      {loading && items.length === 0 ? (
-        <div className="grid place-items-center py-16 text-sm text-muted-foreground">
-          Загружаю каталог…
-        </div>
-      ) : items.length === 0 ? (
-        <div className="grid place-items-center py-16 text-sm text-muted-foreground">
-          Ничего не найдено. Уточните запрос.
-        </div>
-      ) : cardSize === "list" ? (
-        <div className="divide-y rounded-lg border bg-card">
-          {items.map((p) => (
-            <ProductListRow key={p.id} product={p} />
-          ))}
-        </div>
-      ) : (
-        <div className={gridCls}>
-          {items.map((p) => (
-            <ProductCardGrid key={p.id} product={p} size={cardSize} />
-          ))}
-        </div>
-      )}
+        {showSectionsLanding ? (
+          <CatalogSectionsLanding
+            categories={categories}
+            onSelect={(id) => {
+              setCategoryId(id);
+              requestAnimationFrame(() => {
+                listingRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+              });
+            }}
+          />
+        ) : loading && items.length === 0 ? (
+          <div className="grid place-items-center py-16 text-sm text-muted-foreground">
+            Загружаю каталог…
+          </div>
+        ) : items.length === 0 ? (
+          <div className="grid place-items-center py-16 text-sm text-muted-foreground">
+            Ничего не найдено. Уточните запрос.
+          </div>
+        ) : cardSize === "list" ? (
+          <div className="divide-y rounded-lg border bg-card">
+            {items.map((p) => (
+              <ProductListRow key={p.id} product={p} />
+            ))}
+          </div>
+        ) : (
+          <div className={gridCls}>
+            {items.map((p) => (
+              <ProductCardGrid key={p.id} product={p} size={cardSize} />
+            ))}
+          </div>
+        )}
 
-      {items.length < total && (
-        <div className="flex justify-center pt-2">
-          <Button
-            variant="outline"
-            onClick={() => void loadProducts(offset + PAGE_SIZE, true)}
-            disabled={loading}
-            data-testid="catalog-load-more"
-          >
-            {loading ? "Загружаю…" : `Показать ещё (${total - items.length})`}
-          </Button>
-        </div>
-      )}
+        {!showSectionsLanding && items.length < total ? (
+          <div className="flex justify-center pt-2">
+            <Button
+              variant="outline"
+              onClick={() => void loadProducts(offset + PAGE_SIZE, true)}
+              disabled={loading}
+              data-testid="catalog-load-more"
+            >
+              {loading ? "Загружаю…" : `Показать ещё (${total - items.length})`}
+            </Button>
+          </div>
+        ) : null}
       </div>
     </div>
   );
