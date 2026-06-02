@@ -1,4 +1,4 @@
-/** Корневые категории catalog_categories (суффикс 1С: 85ad-11ed-8126-00155d0a0a4e). */
+/** Корневые категории catalog_categories (фактические GUID из 1С в БД). */
 export const ROOT_CATEGORY_IDS = {
   ENTRANCE: "5ac286c2-c158-11ec-8116-00155d0a0a4e",
   INTERIOR: "342a9a43-c159-11ec-8116-00155d0a0a4e",
