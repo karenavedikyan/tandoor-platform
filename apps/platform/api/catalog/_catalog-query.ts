@@ -141,6 +141,9 @@ export function parseCatalogListFilters(req: VercelRequest): CatalogListFilters 
 /**
  * WHERE-условия для catalog_products (алиас p).
  * includeListingFilters=false — только раздел/группа/hidden (для /filters).
+ *
+ * Листинг (125-A): условия применяются к каждому варианту; модель в выдаче,
+ * если хотя бы один вариант проходит (см. CTE passing в buildGroupedProductsQuery).
  */
 export function buildCatalogProductWhere(
   filters: CatalogListFilters,

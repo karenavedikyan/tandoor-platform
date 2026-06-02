@@ -125,7 +125,7 @@ export default function CatalogPage() {
   const [cardSize, setCardSize] = useState<CardSize>(readCardSize);
   const [query, setQuery] = useState("");
   const [categoryId, setCategoryId] = useState<string>("all");
-  const [sort, setSort] = useState<"name" | "stock" | "price_asc" | "price_desc">("name");
+  const [sort, setSort] = useState<"default" | "name" | "stock" | "price_asc" | "price_desc">("default");
   const [onlyInStock, setOnlyInStock] = useState(false);
   const [onlyNew, setOnlyNew] = useState(false);
   const [onlyHit, setOnlyHit] = useState(false);
@@ -237,7 +237,7 @@ export default function CatalogPage() {
       const params = new URLSearchParams();
       if (query.trim()) params.set("q", query.trim());
       if (categoryId && categoryId !== "all") params.set("category_id", categoryId);
-      if (sort !== "name") params.set("sort", sort);
+      if (sort !== "default") params.set("sort", sort);
       if (onlyInStock) params.set("in_stock", "1");
       if (onlyNew) params.set("is_new", "1");
       if (onlyHit) params.set("is_hit", "1");
@@ -569,19 +569,38 @@ export default function CatalogPage() {
             </Button>
           </div>
 
-          <div className="col-span-full flex flex-wrap items-center gap-2 pt-1">
-            <Label className="text-xs text-muted-foreground">Быстрые фильтры:</Label>
-            <FilterChip active={onlyInStock} onClick={() => setOnlyInStock((v) => !v)}>В наличии</FilterChip>
-            <FilterChip active={onlyNew} onClick={() => setOnlyNew((v) => !v)}>Новинки</FilterChip>
-            <FilterChip active={onlyHit} onClick={() => setOnlyHit((v) => !v)}>Хит</FilterChip>
-            <FilterChip active={onlySale} onClick={() => setOnlySale((v) => !v)}>Акции</FilterChip>
-            <div className="ml-auto flex items-center gap-1">
-              <Label className="text-xs text-muted-foreground">Сортировка:</Label>
+          <div className="col-span-full flex flex-col gap-2 pt-1 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+              <span className="sr-only">Быстрые фильтры</span>
+              <QuickFilterSegment
+                active={onlyHit}
+                onClick={() => setOnlyHit((v) => !v)}
+                label="Хит"
+              />
+              <QuickFilterSegment
+                active={onlyNew}
+                onClick={() => setOnlyNew((v) => !v)}
+                label="Новинки"
+              />
+              <QuickFilterSegment
+                active={onlySale}
+                onClick={() => setOnlySale((v) => !v)}
+                label="Акции"
+              />
+              <QuickFilterSegment
+                active={onlyInStock}
+                onClick={() => setOnlyInStock((v) => !v)}
+                label="В наличии"
+              />
+            </div>
+            <div className="flex shrink-0 items-center gap-2 sm:ml-auto">
+              <Label className="text-xs text-muted-foreground whitespace-nowrap">Сортировка</Label>
               <Select value={sort} onValueChange={(v) => setSort(v as typeof sort)}>
-                <SelectTrigger className="h-8 w-[180px] text-xs">
+                <SelectTrigger className="h-8 w-full min-w-[200px] text-xs sm:w-[220px]" data-testid="catalog-sort-select">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="default">По умолчанию (рекомендуемые)</SelectItem>
                   <SelectItem value="name">По названию</SelectItem>
                   <SelectItem value="price_asc">Цена ↑</SelectItem>
                   <SelectItem value="price_desc">Цена ↓</SelectItem>
@@ -763,27 +782,28 @@ function CatalogAdvancedFilters({
   );
 }
 
-function FilterChip({
+function QuickFilterSegment({
   active,
   onClick,
-  children,
+  label,
 }: {
   active: boolean;
   onClick: () => void;
-  children: React.ReactNode;
+  label: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={cn(
-        "rounded-full border px-3 py-1 text-xs transition",
+        "rounded-full border px-3 py-1.5 text-xs font-medium transition",
         active
-          ? "border-foreground bg-foreground text-background"
-          : "border-border bg-background hover:bg-muted",
+          ? "border-lime-600 bg-lime-500 text-lime-950 shadow-sm"
+          : "border-border bg-background text-foreground hover:border-muted-foreground/40 hover:bg-muted",
       )}
     >
-      {children}
+      {label}
     </button>
   );
 }
