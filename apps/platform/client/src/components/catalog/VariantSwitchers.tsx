@@ -107,6 +107,7 @@ function AxisRows({
   onSelectionChange,
   showSides,
   compact,
+  hideColors,
   onClickStop,
 }: {
   sizes: AxisOption[];
