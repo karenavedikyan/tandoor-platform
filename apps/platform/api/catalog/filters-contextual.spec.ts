@@ -48,7 +48,7 @@ describe("contextual filter config", () => {
     expect(keys).toContain("Вид ручки");
     expect(keys).toContain("Основание ручки");
     expect(keys).toContain("Тип установки");
-    expect(keys).toContain("Высота петли");
+    expect(keys).toContain("Размер петли");
   });
 
   it("flooring returns no filter groups", () => {

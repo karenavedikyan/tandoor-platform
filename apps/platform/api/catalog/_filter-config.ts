@@ -1,10 +1,10 @@
 /** Корневые категории catalog_categories (суффикс 1С: 85ad-11ed-8126-00155d0a0a4e). */
 export const ROOT_CATEGORY_IDS = {
-  ENTRANCE: "5ac286c2-85ad-11ed-8126-00155d0a0a4e",
-  INTERIOR: "342a9a43-85ad-11ed-8126-00155d0a0a4e",
-  PLINTH: "a243849d-85ad-11ed-8126-00155d0a0a4e",
-  MOLDING: "dce6990b-85ad-11ed-8126-00155d0a0a4e",
-  HARDWARE: "e7386898-85ad-11ed-8126-00155d0a0a4e",
+  ENTRANCE: "5ac286c2-c158-11ec-8116-00155d0a0a4e",
+  INTERIOR: "342a9a43-c159-11ec-8116-00155d0a0a4e",
+  PLINTH: "a243849d-a79d-11ed-8126-00155d0a0a4e",
+  MOLDING: "dce6990b-c159-11ec-8116-00155d0a0a4e",
+  HARDWARE: "e7386898-c159-11ec-8116-00155d0a0a4e",
   FLOORING: "cf1d70a8-85ad-11ed-8126-00155d0a0a4e",
 } as const;
 
@@ -86,8 +86,8 @@ const INTERIOR_GROUPS: FilterGroupDef[] = [
 ];
 
 const ENTRANCE_GROUPS: FilterGroupDef[] = [
-  { key: "Место назначения", propName: "Место назначения", label: "Место назначения", kind: "checkbox", order: 10 },
-  { key: "Вид двери", propName: "Вид двери", label: "Вид двери", kind: "checkbox", order: 20 },
+  { key: "Место назначения", propName: "ВХ. По назначению", propNames: ["ВХ. По назначению", "Место назначения"], label: "Место назначения", kind: "checkbox", order: 10 },
+  { key: "Вид двери", propName: "МТ.Вид двери", propNames: ["МТ.Вид двери", "Вид двери"], label: "Вид двери", kind: "checkbox", order: 20 },
   {
     key: "Толщина полотна, мм",
     propName: "Толщина полотна, мм",
@@ -104,10 +104,10 @@ const ENTRANCE_GROUPS: FilterGroupDef[] = [
     order: 40,
     buckets: STEEL_THICKNESS_BUCKETS,
   },
-  { key: "Терморазрыв", propName: "Терморазрыв", label: "Терморазрыв", kind: "boolean", order: 50 },
-  { key: "Ковка", propName: "Ковка", label: "Ковка", kind: "boolean", order: 60 },
-  { key: "Стеклопакет", propName: "Стеклопакет", label: "Стеклопакет", kind: "boolean", order: 70 },
-  { key: "Зеркало", propName: "Зеркало", label: "Зеркало", kind: "boolean", order: 80 },
+  { key: "Терморазрыв", propName: "ВХ. Терморазрыв", propNames: ["ВХ. Терморазрыв", "Терморазрыв"], label: "Терморазрыв", kind: "boolean", order: 50 },
+  { key: "Ковка", propName: "ВХ. Ковка", propNames: ["ВХ. Ковка", "Ковка"], label: "Ковка", kind: "boolean", order: 60 },
+  { key: "Стеклопакет", propName: "ВХ. Стеклопакет", propNames: ["ВХ. Стеклопакет", "Стеклопакет"], label: "Стеклопакет", kind: "boolean", order: 70 },
+  { key: "Зеркало", propName: "ВХ. Зеркало", propNames: ["ВХ. Зеркало", "Зеркало"], label: "Зеркало", kind: "boolean", order: 80 },
 ];
 
 const PLINTH_GROUPS: FilterGroupDef[] = [
@@ -116,10 +116,10 @@ const PLINTH_GROUPS: FilterGroupDef[] = [
 ];
 
 const HARDWARE_GROUPS: FilterGroupDef[] = [
-  { key: "Вид ручки", propName: "Вид ручки", label: "Вид ручки", kind: "checkbox", order: 10 },
-  { key: "Основание ручки", propName: "Основание ручки", label: "Основание ручки", kind: "checkbox", order: 20 },
-  { key: "Тип установки", propName: "Тип установки", label: "Тип установки", kind: "checkbox", order: 30 },
-  { key: "Высота петли", propName: "Высота петли", label: "Высота петли", kind: "checkbox", order: 40 },
+  { key: "Вид ручки", propName: "ФР. Вид ручки", propNames: ["ФР. Вид ручки", "Вид ручки"], label: "Вид ручки", kind: "checkbox", order: 10 },
+  { key: "Основание ручки", propName: "ФР. Основание ручки", propNames: ["ФР. Основание ручки", "Основание ручки"], label: "Основание ручки", kind: "checkbox", order: 20 },
+  { key: "Тип установки", propName: "ФР. Тип установки", propNames: ["ФР. Тип установки", "Тип установки"], label: "Тип установки", kind: "checkbox", order: 30 },
+  { key: "Размер петли", propName: "ФР.Размер петли", propNames: ["ФР.Размер петли", "Высота петли"], label: "Размер петли", kind: "checkbox", order: 40 },
 ];
 
 const MOLDING_GROUPS: FilterGroupDef[] = [
