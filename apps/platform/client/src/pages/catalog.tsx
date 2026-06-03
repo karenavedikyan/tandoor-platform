@@ -29,8 +29,8 @@ import {
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useAuthUser } from "@/hooks/use-auth-user";
-import { CatalogSectionsLanding } from "@/components/catalog/CatalogSectionsLanding";
 import { CatalogShowcase, type ShowcaseBadge } from "@/components/catalog/CatalogShowcase";
+import { CategoryChips } from "@/components/catalog/CategoryChips";
 import { CategoryTreeNav } from "@/components/catalog/CategoryTreeNav";
 import { FilterCheckboxGroup } from "@/components/catalog/FilterCheckboxGroup";
 import {
@@ -409,7 +409,7 @@ export default function CatalogPage() {
   const filterPanelTitle =
     filtersQuery.data?.categoryTitle ?? selectedCategoryName ?? "Все разделы";
 
-  const showSectionsLanding =
+  const showShowcase =
     categoryId === "all" &&
     !query.trim() &&
     !onlyHit &&
@@ -417,6 +417,12 @@ export default function CatalogPage() {
     !onlySale &&
     !onlyInStock &&
     !hasAdvancedFilters;
+
+  const scrollToListing = () => {
+    requestAnimationFrame(() => {
+      listingRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
 
   const advancedFiltersPanel = (
     <CatalogAdvancedFilters
@@ -488,55 +494,33 @@ export default function CatalogPage() {
       </header>
 
       <Card>
-        <CardContent className="grid gap-3 p-4 md:grid-cols-[1fr_240px_auto]">
-          <div className="space-y-1">
-            <Label htmlFor="catalog-search" className="text-xs">
-              Поиск
-            </Label>
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <CardContent className="flex flex-col gap-3 p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative min-w-0 flex-1 basis-[min(100%,12rem)]">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 id="catalog-search"
                 placeholder="Название, бренд, цвет, коллекция…"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                className="pl-8"
+                className="h-10 pl-9"
                 data-testid="catalog-search-input"
               />
             </div>
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-xs">Каталог</Label>
-            <CategoryTreeNav
-              categories={categories}
-              selectedId={categoryId}
-              onSelect={(id) => {
-                setCategoryId(id);
-                setCategoryTreeOpen(false);
-                requestAnimationFrame(() => {
-                  listingRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-                });
-              }}
-              open={categoryTreeOpen}
-              onOpenChange={setCategoryTreeOpen}
-            />
-          </div>
-
-          <div className="flex flex-col items-stretch gap-2">
             <Sheet open={filtersSheetOpen} onOpenChange={setFiltersSheetOpen}>
               <SheetTrigger asChild>
                 <Button
                   type="button"
-                  size="sm"
-                  className="relative w-full gap-2 bg-[#9aca3c] text-white hover:bg-[#86b832]"
-                  aria-label="Подобрать по Фильтрам"
+                  variant="outline"
+                  size="icon"
+                  className="relative h-10 w-10 shrink-0 border-border bg-card text-[#7d8e9a] hover:border-[#9aca3c] hover:text-[#9aca3c]"
+                  aria-label="Фильтры"
+                  title="Фильтры"
                   data-testid="catalog-filters-open"
                 >
                   <SlidersHorizontal className="h-4 w-4 shrink-0" />
-                  <span className="text-xs font-semibold sm:text-sm">Подобрать по Фильтрам</span>
                   {hasAdvancedFilters ? (
-                    <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-[#d84040] ring-2 ring-white" />
+                    <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-[#d84040] ring-2 ring-background" />
                   ) : null}
                 </Button>
               </SheetTrigger>
@@ -548,7 +532,20 @@ export default function CatalogPage() {
                 {advancedFiltersPanel}
               </SheetContent>
             </Sheet>
-            <div className="flex max-w-full flex-wrap items-center justify-end gap-2.5">
+            <div className="w-full min-w-[8.5rem] shrink-0 sm:w-auto sm:max-w-[11rem] min-[866px]:max-w-[13rem]">
+              <CategoryTreeNav
+                categories={categories}
+                selectedId={categoryId}
+                onSelect={(id) => {
+                  setCategoryId(id);
+                  setCategoryTreeOpen(false);
+                  scrollToListing();
+                }}
+                open={categoryTreeOpen}
+                onOpenChange={setCategoryTreeOpen}
+              />
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
               <CatalogViewToggle
                 active={cardSize === "xl"}
                 onClick={() => setCardSize("xl")}
@@ -586,8 +583,17 @@ export default function CatalogPage() {
             </div>
           </div>
 
-          <div className="col-span-full flex flex-col gap-2 pt-1 min-[866px]:flex-row min-[866px]:flex-wrap min-[866px]:items-center">
-            <div className="hidden min-w-0 min-[866px]:flex min-[866px]:flex-1 min-[866px]:flex-wrap min-[866px]:items-center min-[866px]:gap-2">
+          <CategoryChips
+            categories={categories}
+            selectedId={categoryId}
+            onSelect={(id) => {
+              setCategoryId(id);
+              scrollToListing();
+            }}
+          />
+
+          <div className="flex flex-col gap-3 min-[866px]:flex-row min-[866px]:items-center">
+            <div className="-mx-1 flex min-w-0 flex-1 gap-2 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden min-[866px]:flex-wrap min-[866px]:overflow-visible">
               <span className="sr-only">Быстрые фильтры</span>
               <QuickFilterSegment
                 active={onlyHit}
@@ -614,7 +620,7 @@ export default function CatalogPage() {
               <Label className="whitespace-nowrap text-xs text-[#8f96b0]">Сортировка</Label>
               <Select value={sort} onValueChange={(v) => setSort(v as typeof sort)}>
                 <SelectTrigger
-                  className="h-9 w-full min-w-[200px] border-[#e3e6f3] bg-white text-xs text-[#222631] min-[866px]:w-[220px]"
+                  className="h-9 w-full min-w-[200px] border-border bg-card text-xs text-foreground min-[866px]:w-[220px]"
                   data-testid="catalog-sort-select"
                 >
                   <SelectValue />
@@ -629,69 +635,62 @@ export default function CatalogPage() {
               </Select>
             </div>
           </div>
-
         </CardContent>
       </Card>
 
-      <div ref={listingRef} className="scroll-mt-4">
-        {showSectionsLanding ? (
-          <div className="space-y-8">
-            <CatalogShowcase
-              categories={categories}
-              onOpenSelection={(id, badge: ShowcaseBadge) => {
-                setCategoryId(id);
-                setOnlySale(badge === "sale");
-                setOnlyHit(badge === "hit");
-                setOnlyNew(badge === "new");
-                requestAnimationFrame(() => {
-                  listingRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-                });
-              }}
-            />
-            <CatalogSectionsLanding
-              categories={categories}
-              onSelect={(id) => {
-                setCategoryId(id);
-                requestAnimationFrame(() => {
-                  listingRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-                });
-              }}
-            />
-          </div>
-        ) : loading && items.length === 0 ? (
-          <div className="grid place-items-center py-16 text-sm text-muted-foreground">
-            Загружаю каталог…
-          </div>
-        ) : items.length === 0 ? (
-          <div className="grid place-items-center py-16 text-sm text-muted-foreground">
-            Ничего не найдено. Уточните запрос.
-          </div>
-        ) : cardSize === "list" ? (
-          <div className="divide-y rounded-lg border bg-card">
-            {items.map((p) => (
-              <ProductListRow key={p.id} product={p} />
-            ))}
-          </div>
-        ) : (
-          <div className={gridCls}>
-            {items.map((p) => (
-              <ProductCardGrid key={p.id} product={p} size={cardSize} />
-            ))}
-          </div>
-        )}
-
-        {!showSectionsLanding && items.length < total ? (
-          <div className="flex justify-center pt-2">
-            <Button
-              variant="outline"
-              onClick={() => void loadProducts(offset + PAGE_SIZE, true)}
-              disabled={loading}
-              data-testid="catalog-load-more"
-            >
-              {loading ? "Загружаю…" : `Показать ещё (${total - items.length})`}
-            </Button>
-          </div>
+      <div ref={listingRef} className="scroll-mt-4 space-y-8">
+        {showShowcase ? (
+          <CatalogShowcase
+            categories={categories}
+            onOpenSelection={(id, badge: ShowcaseBadge) => {
+              setCategoryId(id);
+              setOnlySale(badge === "sale");
+              setOnlyHit(badge === "hit");
+              setOnlyNew(badge === "new");
+              scrollToListing();
+            }}
+          />
         ) : null}
+
+        <section className="space-y-4">
+          <h2 className="text-sm font-semibold text-[#8f96b0]">
+            {selectedCategoryName ?? "Все товары"}
+          </h2>
+          {loading && items.length === 0 ? (
+            <div className="grid place-items-center py-16 text-sm text-muted-foreground">
+              Загружаю каталог…
+            </div>
+          ) : items.length === 0 ? (
+            <div className="grid place-items-center py-16 text-sm text-muted-foreground">
+              Ничего не найдено. Уточните запрос.
+            </div>
+          ) : cardSize === "list" ? (
+            <div className="divide-y rounded-lg border bg-card">
+              {items.map((p) => (
+                <ProductListRow key={p.id} product={p} />
+              ))}
+            </div>
+          ) : (
+            <div className={gridCls}>
+              {items.map((p) => (
+                <ProductCardGrid key={p.id} product={p} size={cardSize} />
+              ))}
+            </div>
+          )}
+
+          {items.length < total ? (
+            <div className="flex justify-center pt-2">
+              <Button
+                variant="outline"
+                onClick={() => void loadProducts(offset + PAGE_SIZE, true)}
+                disabled={loading}
+                data-testid="catalog-load-more"
+              >
+                {loading ? "Загружаю…" : `Показать ещё (${total - items.length})`}
+              </Button>
+            </div>
+          ) : null}
+        </section>
       </div>
     </div>
   );
@@ -891,7 +890,7 @@ function QuickFilterSegment({
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        "rounded-full border px-3 py-1.5 text-xs font-medium transition",
+        "shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition",
         active
           ? "border-[#9aca3c] bg-[#9aca3c] text-white"
           : "border-[#9aca3c] bg-transparent text-[#9aca3c] hover:bg-[#9aca3c]/10",
