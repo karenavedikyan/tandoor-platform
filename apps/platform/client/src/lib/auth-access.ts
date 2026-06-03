@@ -191,6 +191,7 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
       (x) => x === "/" || isUnder(x, "/main") || isUnder(x, "/sales-manager"),
       (x) => isUnder(x, "/dealer-base") || isUnder(x, "/dealers") || isUnder(x, "/trade-points") || isUnder(x, "/client-map"),
       (x) => isUnder(x, "/tasks"),
+      (x) => isUnder(x, "/distribution"),
       (x) => isUnder(x, "/catalog"),
       (x) => isUnder(x, "/training"),
       (x) => isUnder(x, "/marketing-briefs"),
@@ -217,6 +218,7 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
         isUnder(x, "/client-map") ||
         x === "/client-base-activity",
       (x) => isUnder(x, "/tasks"),
+      (x) => isUnder(x, "/distribution"),
       (x) => isUnder(x, "/catalog"),
       (x) => isUnder(x, "/training"),
       (x) => isUnder(x, "/marketing-briefs"),
@@ -244,6 +246,7 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
         isUnder(x, "/client-map") ||
         x === "/client-base-activity",
       (x) => isUnder(x, "/tasks"),
+      (x) => isUnder(x, "/distribution"),
       (x) => isUnder(x, "/catalog"),
       (x) => isUnder(x, "/training"),
       (x) => isUnder(x, "/marketing-briefs"),
@@ -267,6 +270,7 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
       (x) => isUnder(x, "/sales-control"),
       (x) => isUnder(x, "/analytics-workspace"),
       (x) => isUnder(x, "/tasks"),
+      (x) => isUnder(x, "/distribution"),
       (x) => isUnder(x, "/catalog"),
       (x) => isUnder(x, "/training"),
       (x) => isUnder(x, "/communications"),
@@ -282,6 +286,7 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
       (x) => isUnder(x, "/analytics-workspace"),
       (x) => isUnder(x, "/dealer-base") || isUnder(x, "/dealers") || isUnder(x, "/trade-points") || isUnder(x, "/client-map"),
       (x) => isUnder(x, "/tasks"),
+      (x) => isUnder(x, "/distribution"),
       (x) => isUnder(x, "/catalog"),
       (x) => isUnder(x, "/marketing-briefs"),
     ]);
@@ -522,6 +527,12 @@ export function getPilotNavigation(
         ...tradePointNavExtras(),
       },
       {
+        href: "/distribution",
+        label: "Дистрибуция",
+        testId: "nav-item-distribution",
+        navBehaviorId: "nav-distribution",
+      },
+      {
         href: "/catalog",
         label: "Каталог",
         testId: "nav-item-catalog",
@@ -584,6 +595,7 @@ export function getPilotNavigation(
       push({ href: "/analytics-workspace", label: "Аналитика команды", testId: "nav-analytics-workspace" });
       push({ href: "/dealer-base", label: "Клиенты", testId: "nav-dealer-base", ...dealerNavExtras() });
       push({ href: "/trade-points", label: "Торговые точки", testId: "nav-trade-points", ...tradePointNavExtras() });
+      push({ href: "/distribution", label: "Дистрибуция", testId: "nav-item-distribution" });
       push({ href: "/client-map", label: "Карта клиентов", testId: "nav-client-map" });
       push({ href: "/tasks", label: "Задачи по витрине", testId: "nav-tasks" });
       push({ href: "/communications", label: "Коммуникации", testId: "nav-communications" });

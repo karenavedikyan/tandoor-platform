@@ -49,6 +49,7 @@ import {
 import { dealerRowStatusForProduct, getDealerProductPreview } from "@/lib/catalog-data";
 import { DealerShowcaseDistributionSection, type ShowcaseCategoryListMode } from "@/components/dealer-showcase-distribution-section";
 import { DealerShowcaseMatrixSummarySection } from "@/components/dealer-showcase-matrix-summary-section";
+import { DistributionTree } from "@/components/distribution/distribution-tree";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { useClientContactsHydration } from "@/hooks/use-client-contacts-hydration";
@@ -193,6 +194,7 @@ const SECTION_IDS = [
   "contacts",
   "work",
   "showcase_distribution",
+  "distribution_live",
   "points",
   "legal_entities",
   "next_step",
@@ -210,6 +212,7 @@ const SECTION_DOM_IDS: Record<SectionId, string> = {
   work: "dealer-section-work",
   points: "dealer-section-points",
   showcase_distribution: "dealer-section-showcase-distribution",
+  distribution_live: "dealer-section-distribution-live",
   legal_entities: "dealer-section-legal-entities",
   next_step: "dealer-section-next-step",
   comments: "section-dealer-quick-comments",
@@ -224,6 +227,7 @@ const SECTION_LABELS: Record<SectionId, string> = {
   work: "Работа",
   points: "Точки",
   showcase_distribution: "Витрина",
+  distribution_live: "Дистрибуция",
   legal_entities: "Юрлица",
   next_step: "Шаг",
   comments: "Комментарии",
@@ -238,6 +242,7 @@ const SECTION_NAV_TEST_IDS: Record<SectionId, string> = {
   work: "dealer-section-nav-work",
   points: "dealer-section-nav-points",
   showcase_distribution: "dealer-section-nav-showcase-distribution",
+  distribution_live: "dealer-section-nav-distribution-live",
   legal_entities: "dealer-section-nav-legal-entities",
   next_step: "dealer-section-nav-next-step",
   comments: "dealer-section-nav-comments",
@@ -252,6 +257,7 @@ const NAV_SECTION_IDS: SectionId[] = [
   "contacts",
   "work",
   "showcase_distribution",
+  "distribution_live",
   "points",
   "legal_entities",
   "next_step",
@@ -1866,6 +1872,21 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
 
             {canViewShowcaseCard && !isManualDealerRow ? (
               <DealerShowcaseMatrixSummarySection row={row} profile={profile} />
+            ) : null}
+
+            {canViewShowcaseCard ? (
+              <section
+                id={SECTION_DOM_IDS.distribution_live}
+                data-testid="section-dealer-distribution-live"
+                className="scroll-mt-28 space-y-3 sm:scroll-mt-32"
+              >
+                <SectionTitle subtitle="Сквозной просмотр витрин по точкам в реальном времени.">
+                  Дистрибуция
+                </SectionTitle>
+                <SurfaceCard>
+                  <DistributionTree scope={{ kind: "dealer", dealer: row }} profile={profile} />
+                </SurfaceCard>
+              </section>
             ) : null}
 
             <DealerTradePointsSection row={row} sectionDomId={SECTION_DOM_IDS.points} profile={profile} />
