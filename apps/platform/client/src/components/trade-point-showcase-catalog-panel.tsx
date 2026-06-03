@@ -32,6 +32,13 @@ import {
   type ShowcasePortalCaps,
 } from "@/lib/trade-point-showcase-matrix-required";
 import type { ShowcaseMatrixModelDefinition } from "@/lib/trade-point-showcase-matrix-models";
+import type { ShowcaseMatrixStatus } from "@/lib/showcase-matrix-api";
+import {
+  loadCachedMatrix,
+  refreshMatrixFromServer,
+  setMatrixStatus,
+  SHOWCASE_MATRIX_STORE_CHANGED_EVENT,
+} from "@/lib/showcase-matrix-store";
 import { cn } from "@/lib/utils";
 
 export type ShowcaseCatalogViewMode = "large" | "compact" | "mini" | "list";
@@ -134,7 +141,18 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
   const [detailProductId, setDetailProductId] = useState<string | null>(null);
   const [matrixListMode, setMatrixListMode] = useState<"deficit" | "all">("deficit");
   const [jumpHighlightId, setJumpHighlightId] = useState<string | null>(null);
+  const [bump, setBump] = useState(0);
   const cardRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
+
+  useEffect(() => {
+    void refreshMatrixFromServer(tradePointId, dealerId);
+  }, [tradePointId, dealerId]);
+
+  useEffect(() => {
+    const fn = () => setBump((n) => n + 1);
+    window.addEventListener(SHOWCASE_MATRIX_STORE_CHANGED_EVENT, fn);
+    return () => window.removeEventListener(SHOWCASE_MATRIX_STORE_CHANGED_EVENT, fn);
+  }, []);
 
   useEffect(() => {
     const v = readLsString(lsKeyView(tradePointId));
@@ -171,7 +189,24 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
     return () => window.clearTimeout(t);
   }, [jumpHighlightId, mainTab, viewMode, search, preset, doorType]);
 
-  const selectedIds = useMemo(() => new Set(selectedShowcaseModels.map((m) => m.productId)), [selectedShowcaseModels]);
+  const backendVariantStatus = useMemo(() => {
+    void bump;
+    const map = new Map<string, ShowcaseMatrixStatus>();
+    for (const entry of loadCachedMatrix(tradePointId)) {
+      if (entry.targetKind === "variant") map.set(entry.targetId, entry.status);
+    }
+    return map;
+  }, [bump, tradePointId]);
+
+  const isProductSelected = useCallback(
+    (productId: string): boolean => {
+      const backend = backendVariantStatus.get(productId);
+      if (backend === "not_relevant") return false;
+      if (backend === "installed") return true;
+      return selectedShowcaseModels.some((m) => m.productId === productId);
+    },
+    [backendVariantStatus, selectedShowcaseModels],
+  );
 
   const requiredDefs = useMemo(() => {
     if (!matrixClientCategory) return [] as ShowcaseMatrixModelDefinition[];
@@ -183,10 +218,10 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
   const missingRequiredCount = useMemo(() => {
     let n = 0;
     for (const d of requiredDefs) {
-      if (!selectedIds.has(d.id)) n += 1;
+      if (!isProductSelected(d.id)) n += 1;
     }
     return n;
-  }, [requiredDefs, selectedIds]);
+  }, [requiredDefs, isProductSelected]);
 
   const doorCatalog = useMemo(() => CATALOG_PRODUCTS.filter(isDoorProduct), []);
 
@@ -214,19 +249,19 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
 
     const catKnown = matrixClientCategory != null;
 
-    if (preset === "on_showcase") list = list.filter((p) => selectedIds.has(p.id));
-    else if (preset === "unselected") list = list.filter((p) => !selectedIds.has(p.id));
+    if (preset === "on_showcase") list = list.filter((p) => isProductSelected(p.id));
+    else if (preset === "unselected") list = list.filter((p) => !isProductSelected(p.id));
     else if (preset === "required") list = list.filter((p) => catKnown && requiredIdSet.has(p.id));
-    else if (preset === "missing") list = list.filter((p) => catKnown && requiredIdSet.has(p.id) && !selectedIds.has(p.id));
+    else if (preset === "missing") list = list.filter((p) => catKnown && requiredIdSet.has(p.id) && !isProductSelected(p.id));
     else if (preset === "entrance") list = list.filter((p) => inferShowcasePortalTypeFromCatalogProduct(p) === "entrance");
     else if (preset === "interior") list = list.filter((p) => inferShowcasePortalTypeFromCatalogProduct(p) === "interior");
     else if (preset === "overfill") {
       if (!portalWarn) list = [];
-      else list = list.filter((p) => selectedIds.has(p.id));
+      else list = list.filter((p) => isProductSelected(p.id));
     }
 
     return list;
-  }, [doorCatalog, doorType, search, hayById, preset, selectedIds, requiredIdSet, matrixClientCategory, portalWarn]);
+  }, [doorCatalog, doorType, search, hayById, preset, isProductSelected, requiredIdSet, matrixClientCategory, portalWarn]);
 
   const countsLine = useMemo(() => {
     let ent = 0;
@@ -251,6 +286,15 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
       if (!canEdit) return;
       onMarkDirty();
       if (nextChecked) {
+        setMatrixStatus({
+          dealerId,
+          tradePointId,
+          targetKind: "variant",
+          targetId: p.id,
+          status: "installed",
+          updatedBy: actorUserId,
+          updatedByName: actorLabel,
+        });
         const iso = new Date().toISOString();
         const portalType = inferShowcasePortalTypeFromCatalogProduct(p);
         onChangeSelected([
@@ -266,10 +310,19 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
           },
         ]);
       } else {
+        setMatrixStatus({
+          dealerId,
+          tradePointId,
+          targetKind: "variant",
+          targetId: p.id,
+          status: "not_relevant",
+          updatedBy: actorUserId,
+          updatedByName: actorLabel,
+        });
         onChangeSelected(selectedShowcaseModels.filter((x) => x.productId !== p.id));
       }
     },
-    [actorLabel, actorUserId, canEdit, onChangeSelected, onMarkDirty, selectedShowcaseModels],
+    [actorLabel, actorUserId, canEdit, dealerId, onChangeSelected, onMarkDirty, selectedShowcaseModels, tradePointId],
   );
 
   const addMatrixTask = useCallback(
@@ -337,7 +390,7 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
   }, []);
 
   const renderProductCard = (p: CatalogProduct): ReactElement => {
-    const sel = selectedIds.has(p.id);
+    const sel = isProductSelected(p.id);
     const req = matrixClientCategory != null && requiredIdSet.has(p.id);
     const { line, missing } = productBadges({ selected: sel, required: req, categoryKnown: matrixClientCategory != null });
     const portalType = inferShowcasePortalTypeFromCatalogProduct(p);
@@ -485,7 +538,7 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
           }}
           className={cn(
             "flex min-w-0 cursor-pointer items-center gap-2 rounded-lg border bg-card p-2 text-left transition-colors",
-            sel ? "border-emerald-600 ring-1 ring-emerald-600/30" : "border-border/70 hover:bg-muted/30",
+            sel ? "border-emerald-600 opacity-60 ring-1 ring-emerald-600/30 grayscale" : "border-border/70 hover:bg-muted/30",
           )}
         >
           <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md sm:h-14 sm:w-14">{imgBox({ maxH: "h-12 sm:h-14", rounded: "rounded-md" })}</div>
@@ -522,7 +575,7 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
           "relative flex min-w-0 cursor-pointer flex-col gap-1.5 rounded-lg border bg-card text-left transition-colors",
           pad,
           viewMode === "large" && "max-h-[300px]",
-          sel ? "border-emerald-600 ring-1 ring-emerald-600/25" : "border-border/70 hover:bg-muted/20",
+          sel ? "border-emerald-600 opacity-60 ring-1 ring-emerald-600/25 grayscale" : "border-border/70 hover:bg-muted/20",
           jumpHighlightId === p.id && "ring-2 ring-amber-500",
         )}
       >
@@ -688,7 +741,7 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
               </div>
               {(() => {
                 const defs =
-                  matrixListMode === "deficit" ? requiredDefs.filter((d) => !selectedIds.has(d.id)) : requiredDefs;
+                  matrixListMode === "deficit" ? requiredDefs.filter((d) => !isProductSelected(d.id)) : requiredDefs;
                 if (defs.length === 0 && matrixListMode === "deficit") {
                   return (
                     <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 px-3 py-4 text-center text-sm text-emerald-950 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-50">
@@ -699,7 +752,7 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
                 return (
                   <div className="flex flex-col gap-2">
                     {defs.map((def) => {
-                      const sel = selectedIds.has(def.id);
+                      const sel = isProductSelected(def.id);
                       const p = getProductById(def.id);
                       const name = p?.name ?? def.name;
                       const imgSrc = p?.image ?? def.imageUrl;
@@ -768,7 +821,7 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
                   <p className="text-xs text-muted-foreground">Не входит в обязательный минимум для текущей категории.</p>
                 )}
                 <p className="text-sm font-medium">
-                  {selectedIds.has(detailProduct.id) ? "Статус: стоит на витрине" : requiredIdSet.has(detailProduct.id) ? "Статус: нужно поставить" : "Статус: не на витрине"}
+                  {isProductSelected(detailProduct.id) ? "Статус: стоит на витрине" : requiredIdSet.has(detailProduct.id) ? "Статус: нужно поставить" : "Статус: не на витрине"}
                 </p>
                 {(() => {
                   const sm = selectedShowcaseModels.find((m) => m.productId === detailProduct.id);
@@ -807,10 +860,10 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
                     <Button
                       type="button"
                       onClick={() => {
-                        toggleSelected(detailProduct, !selectedIds.has(detailProduct.id));
+                        toggleSelected(detailProduct, !isProductSelected(detailProduct.id));
                       }}
                     >
-                      {selectedIds.has(detailProduct.id) ? "Убрать с витрины" : "Отметить на витрине"}
+                      {isProductSelected(detailProduct.id) ? "Убрать с витрины" : "Отметить на витрине"}
                     </Button>
                   ) : null}
                   <Button type="button" variant="outline" onClick={() => setDetailProductId(null)}>
