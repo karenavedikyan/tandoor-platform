@@ -241,8 +241,12 @@ export default function CatalogPage() {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      if (query.trim()) params.set("q", query.trim());
-      if (categoryId && categoryId !== "all") params.set("category_id", categoryId);
+      const hasQuery = query.trim().length > 0;
+      if (hasQuery) params.set("q", query.trim());
+      // При активном поиске игнорируем фильтр категории — ищем по всему каталогу.
+      if (!hasQuery && categoryId && categoryId !== "all") {
+        params.set("category_id", categoryId);
+      }
       if (sort !== "default") params.set("sort", sort);
       if (onlyInStock) params.set("in_stock", "1");
       if (onlyNew) params.set("is_new", "1");
@@ -407,8 +411,15 @@ export default function CatalogPage() {
     s: "grid grid-cols-2 gap-2 min-[650px]:grid-cols-4 min-[866px]:grid-cols-6 min-[866px]:gap-3",
   }[cardSize === "list" ? "m" : cardSize];
 
+  const hasSearchQuery = query.trim().length > 0;
+
   const filterPanelTitle =
     filtersQuery.data?.categoryTitle ?? selectedCategoryName ?? "Все разделы";
+
+  const listingTitle =
+    hasSearchQuery && categoryId !== "all"
+      ? "Результаты поиска по всему каталогу"
+      : (selectedCategoryName ?? "Все товары");
 
   const showShowcase =
     categoryId === "all" &&
@@ -656,7 +667,7 @@ export default function CatalogPage() {
 
         <section className="space-y-4">
           <h2 className="text-sm font-semibold text-[#8f96b0]">
-            {selectedCategoryName ?? "Все товары"}
+            {listingTitle}
           </h2>
           {loading && items.length === 0 ? (
             <div className="grid place-items-center py-16 text-sm text-muted-foreground">
