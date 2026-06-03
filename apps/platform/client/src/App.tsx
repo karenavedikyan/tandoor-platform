@@ -56,7 +56,6 @@ const LazyCatalogProduct1cPage = lazy(() => import("@/pages/catalog-product-1c")
 const LazyProductDetailPage = lazy(() => import("@/pages/product-detail").then((m) => ({ default: m.ProductDetailPage })));
 const LazyTasksPage = lazy(() => import("@/pages/tasks"));
 const LazyDistributionPage = lazy(() => import("@/pages/distribution"));
-const LazyDistributionMatrixCatalogPage = lazy(() => import("@/pages/distribution-matrix-catalog"));
 const LazyOrdersPage = lazy(() => import("@/pages/orders"));
 const LazyOrderDetailPage = lazy(() => import("@/pages/order-detail"));
 const LazyAnalyticsPage = lazy(() => import("@/pages/analytics"));
@@ -132,6 +131,7 @@ const CatalogProduct1cPageRoute = suspensePage(LazyCatalogProduct1cPage);
 const ProductDetailPageRoute = suspensePage(LazyProductDetailPage);
 const TasksPageRoute = suspensePage(LazyTasksPage);
 const DistributionPageRoute = suspensePage(LazyDistributionPage);
+const DistributionMatrixCatalogPageRoute = suspensePage(LazyDistributionMatrixCatalogPage);
 const OrdersPageRoute = suspensePage(LazyOrdersPage);
 const OrderDetailPageRoute = suspensePage(LazyOrderDetailPage);
 const AnalyticsPageRoute = suspensePage(LazyAnalyticsPage);
