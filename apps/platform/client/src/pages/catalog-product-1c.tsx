@@ -4,6 +4,7 @@ import { ArrowLeft, Heart, Package, Share2, ShoppingCart, Tag } from "lucide-rea
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useAuthUser } from "@/hooks/use-auth-user";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { optimizedImage } from "@/lib/catalog-image";
@@ -228,7 +229,9 @@ function RelatedCard({ item }: { item: RelatedProduct }) {
 export default function CatalogProduct1cPage() {
   const params = useParams<{ productId: string }>();
   const [, setLocation] = useLocation();
+  const { user } = useAuthUser();
   const { toast } = useToast();
+  const isAdmin = user?.role === "admin";
   const canGoBackRef = useRef(false);
   const [product, setProduct] = useState<ProductDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -683,7 +686,7 @@ export default function CatalogProduct1cPage() {
         </section>
       ) : null}
 
-      {!hasAnyBlob && product.images.length > 0 ? (
+      {isAdmin && !hasAnyBlob && product.images.length > 0 ? (
         <p className="text-center text-xs text-muted-foreground">
           Синхронизировано: {new Date(product.synced_at).toLocaleString("ru-RU")}
         </p>
