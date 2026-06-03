@@ -15,11 +15,14 @@ import { getProductById } from "@/lib/catalog-data";
 import { MultiSelect } from "@/components/ui/multi-select";
 import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
+import { priorityLabelRu, type ShowcaseMatrixModelDefinition } from "@/lib/trade-point-showcase-matrix-models";
+import { fetchActiveMatrixDef } from "@/lib/showcase-matrix-catalog-api";
 import {
-  getShowcaseMatrixModelsForTradePoint,
-  priorityLabelRu,
-  type ShowcaseMatrixModelDefinition,
-} from "@/lib/trade-point-showcase-matrix-models";
+  refreshMatrixDefFromServer,
+  SHOWCASE_MATRIX_CATALOG_CHANGED_EVENT,
+  SHOWCASE_MATRIX_CATALOG_REMOTE_UPDATE_EVENT,
+} from "@/lib/showcase-matrix-catalog-store";
+import { resolveTradePointMatrixModels } from "@/lib/trade-point-matrix-resolver";
 import {
   canEditTradePointShowcaseMatrix,
   canViewTradePointShowcaseMatrix,
@@ -339,6 +342,7 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
   const canEdit = useMemo(() => canEditTradePointShowcaseMatrix(profile, dealer), [profile, dealer]);
 
   const [bump, setBump] = useState(0);
+  const [catalogBump, setCatalogBump] = useState(0);
   useEffect(() => {
     const fn = () => setBump((n) => n + 1);
     window.addEventListener(SHOWCASE_MATRIX_CHANGED_EVENT, fn);
@@ -350,8 +354,28 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
   }, []);
 
   useEffect(() => {
+    const fn = () => setCatalogBump((n) => n + 1);
+    window.addEventListener(SHOWCASE_MATRIX_CATALOG_CHANGED_EVENT, fn);
+    window.addEventListener(SHOWCASE_MATRIX_CATALOG_REMOTE_UPDATE_EVENT, fn);
+    return () => {
+      window.removeEventListener(SHOWCASE_MATRIX_CATALOG_CHANGED_EVENT, fn);
+      window.removeEventListener(SHOWCASE_MATRIX_CATALOG_REMOTE_UPDATE_EVENT, fn);
+    };
+  }, []);
+
+  useEffect(() => {
     void refreshMatrixFromServer(point.id, dealer.id);
   }, [point.id, dealer.id]);
+
+  useEffect(() => {
+    void fetchActiveMatrixDef({
+      clientCategory: dealer.clientCategory,
+      region: dealer.region,
+      city: point.city,
+    }).then((def) => {
+      if (def?.id) void refreshMatrixDefFromServer(def.id);
+    });
+  }, [dealer.clientCategory, dealer.region, dealer.id, point.city, point.id]);
 
   useEffect(() => {
     const onOnline = () => void refreshMatrixFromServer(point.id, dealer.id);
@@ -399,10 +423,16 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
     [backendByModelId, storage, dealer.id, point.id],
   );
 
-  const models = useMemo(
-    () => getShowcaseMatrixModelsForTradePoint(dealer.id, point.id, dealer.clientCategory),
-    [dealer.id, dealer.clientCategory, point.id],
-  );
+  const models = useMemo(() => {
+    void catalogBump;
+    return resolveTradePointMatrixModels({
+      dealerId: dealer.id,
+      tradePointId: point.id,
+      clientCategory: dealer.clientCategory,
+      region: dealer.region,
+      city: point.city,
+    });
+  }, [catalogBump, dealer.clientCategory, dealer.id, dealer.region, point.city, point.id]);
 
   const deficitTasks = useMemo(() => {
     void bump;

@@ -92,6 +92,8 @@ function catalogLookup(id: string): CatalogProduct | undefined {
 export type TradePointShowcaseCatalogPanelProps = {
   tradePointId: string;
   dealerId: string;
+  matrixScopeRegion?: string | null;
+  matrixScopeCity?: string | null;
   matrixClientCategory: ClientCategoryId | null;
   canEdit: boolean;
   actorUserId: string;

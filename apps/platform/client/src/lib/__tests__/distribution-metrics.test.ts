@@ -7,6 +7,7 @@ import {
   computeDistributionMetrics,
   placementEntries,
 } from "../distribution-metrics";
+import { computeMatrixValueQualitativePct } from "../trade-point-matrix-resolver";
 
 function placement(
   partial: Partial<ShowcaseMatrixEntryDto> & {

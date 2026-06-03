@@ -430,7 +430,12 @@ export function DistributionTree({
           <p className="text-sm text-muted-foreground">По запросу ничего не найдено.</p>
         ) : (
           <div className="overflow-hidden rounded-lg border border-border/40 bg-card">
-            <TradePointDistributionMetricsPanel entries={tpEntries} pointId={scope.point.id} />
+            <TradePointDistributionMetricsPanel
+              entries={tpEntries}
+              pointId={scope.point.id}
+              dealer={scope.dealer}
+              point={scope.point}
+            />
             {visible.map((entry) => (
               <PositionRow key={entry.id} entry={entry} dealer={scope.dealer} />
             ))}
