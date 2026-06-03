@@ -115,6 +115,11 @@ const ARTICLE_VAL_SQL = `(
   LIMIT 1
 )`;
 
+/** Correlated subqueries in fragments use `p.id`; remap for other row aliases. */
+function productSql(sql: string, productAlias: string): string {
+  return sql.replace(/\bp\.id\b/g, `${productAlias}.id`);
+}
+
 export type CatalogListSort = "default" | "name" | "stock" | "price_asc" | "price_desc";
 
 /** Боевой default: акция → новинка → хит; фурнитура/прочее — производитель → артикул. */
@@ -202,27 +207,12 @@ export function buildGroupedProductsQuery(
   sort: CatalogListSort,
   defaultSortMode: CatalogDefaultSortMode,
 ): { sql: string; sortSql: string } {
-  const repPriority = `(
-    CASE
-      WHEN ${IS_MAIN_SQL} AND ${HAS_IMAGE_SQL} THEN 0
-      WHEN ${HAS_IMAGE_SQL} THEN 1
-      WHEN ${IS_MAIN_SQL} THEN 2
-      ELSE 3
-    END
-  )`;
-
-  const groupKeySql = `(
-    CASE
-      WHEN ${LINK_VAL_SQL} IS NULL THEN 'single:' || p.id::text
-      WHEN $${interiorParamIndex}::boolean THEN ${LINK_VAL_SQL} || '|' || COALESCE(${DOOR_TYPE_VAL_SQL}, '')
-      ELSE ${LINK_VAL_SQL}
-    END
-  )`;
-
   const sortSql = buildGroupOrderSql(sort, defaultSortMode);
 
+  const gvHeavy = (expr: string) => productSql(expr, "s");
+
   const sql = `
-    WITH scoped AS (
+    WITH scoped_base AS (
       SELECT
         p.id,
         p.name,
@@ -231,25 +221,29 @@ export function buildGroupedProductsQuery(
         p.is_on_site,
         ${LINK_VAL_SQL} AS link_val,
         ${DOOR_TYPE_VAL_SQL} AS door_type_val,
-        ${groupKeySql} AS group_key,
         ${VARIANT_STOCK_SQL} AS variant_stock,
-        ${VARIANT_IMAGE_PATH_SQL} AS image_path,
-        ${VARIANT_IMAGE_SQL} AS image_url,
-        ${VARIANT_PRICE_RETAIL_SQL} AS price_retail,
-        ${VARIANT_PRICE_SALE_SQL} AS price_retail_sale,
         ${IS_MAIN_SQL} AS is_main,
         ${HAS_IMAGE_SQL} AS has_image,
         ${PHOTO_SORT_SQL} AS photo_sort,
-        ${ARTICLE_VAL_SQL} AS article_val,
         EXISTS (SELECT 1 FROM catalog_product_properties pp WHERE pp.product_id = p.id AND LOWER(TRIM(pp.name)) = 'новинка' AND LOWER(TRIM(pp.value)) IN ('да','y','yes','true','1')) AS is_new,
         EXISTS (SELECT 1 FROM catalog_product_properties pp WHERE pp.product_id = p.id AND LOWER(TRIM(pp.name)) = 'хит продаж' AND LOWER(TRIM(pp.value)) IN ('да','y','yes','true','1')) AS is_hit,
         EXISTS (SELECT 1 FROM catalog_product_properties pp WHERE pp.product_id = p.id AND LOWER(TRIM(pp.name)) = 'акция' AND NULLIF(TRIM(pp.value), '') IS NOT NULL) AS is_sale
       FROM catalog_products p
       ${scopeWhereSql}
     ),
+    scoped_light AS (
+      SELECT
+        b.*,
+        CASE
+          WHEN b.link_val IS NULL THEN 'single:' || b.id::text
+          WHEN $${interiorParamIndex}::boolean THEN b.link_val || '|' || COALESCE(b.door_type_val, '')
+          ELSE b.link_val
+        END AS group_key
+      FROM scoped_base b
+    ),
     passing AS (
       SELECT s.id, s.group_key
-      FROM scoped s
+      FROM scoped_light s
       INNER JOIN catalog_products p ON p.id = s.id
       ${filterWhereSql}
     ),
@@ -257,8 +251,14 @@ export function buildGroupedProductsQuery(
       SELECT DISTINCT group_key FROM passing
     ),
     group_variants AS (
-      SELECT s.*
-      FROM scoped s
+      SELECT
+        s.*,
+        ${gvHeavy(VARIANT_IMAGE_PATH_SQL)} AS image_path,
+        ${gvHeavy(VARIANT_IMAGE_SQL)} AS image_url,
+        ${gvHeavy(VARIANT_PRICE_RETAIL_SQL)} AS price_retail,
+        ${gvHeavy(VARIANT_PRICE_SALE_SQL)} AS price_retail_sale,
+        ${gvHeavy(ARTICLE_VAL_SQL)} AS article_val
+      FROM scoped_light s
       INNER JOIN eligible_groups eg ON eg.group_key = s.group_key
     ),
     ranked AS (
@@ -266,6 +266,9 @@ export function buildGroupedProductsQuery(
         gv.*,
         COUNT(*) OVER (PARTITION BY gv.group_key)::int AS variant_count,
         SUM(gv.variant_stock) OVER (PARTITION BY gv.group_key) AS group_total_stock,
+        MAX(CASE WHEN gv.is_sale THEN 1 ELSE 0 END) OVER (PARTITION BY gv.group_key) AS grp_is_sale,
+        MAX(CASE WHEN gv.is_new THEN 1 ELSE 0 END) OVER (PARTITION BY gv.group_key) AS grp_is_new,
+        MAX(CASE WHEN gv.is_hit THEN 1 ELSE 0 END) OVER (PARTITION BY gv.group_key) AS grp_is_hit,
         ROW_NUMBER() OVER (
           PARTITION BY gv.group_key
           ORDER BY
@@ -298,9 +301,9 @@ export function buildGroupedProductsQuery(
         r.group_key,
         r.variant_count,
         r.group_total_stock,
-        (SELECT MAX(CASE WHEN v.is_sale THEN 1 ELSE 0 END) FROM group_variants v WHERE v.group_key = r.group_key) AS grp_is_sale,
-        (SELECT MAX(CASE WHEN v.is_new THEN 1 ELSE 0 END) FROM group_variants v WHERE v.group_key = r.group_key) AS grp_is_new,
-        (SELECT MAX(CASE WHEN v.is_hit THEN 1 ELSE 0 END) FROM group_variants v WHERE v.group_key = r.group_key) AS grp_is_hit
+        (r.grp_is_sale > 0) AS grp_is_sale,
+        (r.grp_is_new > 0) AS grp_is_new,
+        (r.grp_is_hit > 0) AS grp_is_hit
       FROM ranked r
       WHERE r.rn = 1
     ),
