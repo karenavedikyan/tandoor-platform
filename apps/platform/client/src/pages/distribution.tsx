@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { DistributionDashboardSummary } from "@/components/distribution/distribution-dashboard-summary";
+import { DistributionClientTab } from "@/components/distribution/distribution-client-tab";
 import { DistributionManagerTab } from "@/components/distribution/distribution-manager-tab";
 import { DistributionEntryTradePointPanel } from "@/components/distribution/distribution-entry-tradepoint-panel";
 import { DistributionFiltersBar } from "@/components/distribution/distribution-filters-bar";
@@ -125,9 +126,15 @@ export default function DistributionPage() {
               <TabsTrigger value="manager" className="min-h-9 text-xs sm:text-sm" data-testid="tab-distribution-breakdown-manager">
                 Менеджер
               </TabsTrigger>
+              <TabsTrigger value="client" className="min-h-9 text-xs sm:text-sm" data-testid="tab-distribution-breakdown-client">
+                Клиент
+              </TabsTrigger>
             </TabsList>
             <TabsContent value="manager" className="mt-0 focus-visible:ring-0">
               <DistributionManagerTab scope={viewScope} filter={filter} />
+            </TabsContent>
+            <TabsContent value="client" className="mt-0 focus-visible:ring-0">
+              <DistributionClientTab scope={viewScope} filter={filter} profile={profile} />
             </TabsContent>
           </Tabs>
 
