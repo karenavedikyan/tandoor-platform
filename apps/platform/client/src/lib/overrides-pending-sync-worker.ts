@@ -22,6 +22,8 @@ import {
 } from "@/lib/dealer-shipment-routes-api";
 import {
   apiUpsertShowcaseMatrixEntryStrict,
+  type ShowcasePlacementSegment,
+  type ShowcasePlacementType,
   type ShowcaseMatrixStatus,
   type ShowcaseMatrixTargetKind,
 } from "@/lib/showcase-matrix-api";
@@ -156,6 +158,11 @@ async function processItem(item: PendingSyncItem): Promise<void> {
         status: p.status as ShowcaseMatrixStatus,
         comment: typeof p.comment === "string" ? p.comment : null,
         clientOpId: typeof p.clientOpId === "string" ? p.clientOpId : undefined,
+        placementType: (p.placementType as ShowcasePlacementType | null | undefined) ?? null,
+        placementSegment: (p.placementSegment as ShowcasePlacementSegment | null | undefined) ?? null,
+        placementCapacity: typeof p.placementCapacity === "number" ? p.placementCapacity : null,
+        placementActual: typeof p.placementActual === "number" ? p.placementActual : null,
+        placementRef: typeof p.placementRef === "string" ? p.placementRef : null,
       });
       break;
     }
