@@ -86,6 +86,22 @@ function mergeTradePointEntries(
   return next;
 }
 
+/** Записать entries batch scope-fetch в существующий кэш матрицы. */
+export function applyScopeEntriesToMatrixCache(entries: readonly ShowcaseMatrixEntryDto[]): void {
+  if (entries.length === 0) return;
+  let record = loadCacheRecord();
+  const byTp = new Map<string, ShowcaseMatrixEntryDto[]>();
+  for (const entry of entries) {
+    const list = byTp.get(entry.tradePointId) ?? [];
+    list.push(entry);
+    byTp.set(entry.tradePointId, list);
+  }
+  for (const [tradePointId, list] of Array.from(byTp.entries())) {
+    record = mergeTradePointEntries(record, tradePointId, list);
+  }
+  saveCacheRecord(record);
+}
+
 export function notifyMatrixUpdated(detail: {
   tradePointId: string;
   dealerId?: string;
