@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   INTERIOR_ROOT_ID_ALT,
+  buildGroupedProductsQuery,
   computeGroupKey,
   isInteriorDoorGrouping,
   parseCatalogListSort,
@@ -52,5 +53,20 @@ describe("catalog model grouping", () => {
     expect(resolveDefaultSortMode(null, null)).toBe("promo");
     expect(resolveDefaultSortMode(ROOT_CATEGORY_IDS.HARDWARE, "Фурнитура")).toBe("article");
     expect(resolveDefaultSortMode(ROOT_CATEGORY_IDS.PLINTH, "Плинтус")).toBe("article");
+  });
+
+  it("buildGroupedProductsQuery uses window aggregates and scoped_light", () => {
+    const { sql, sortSql } = buildGroupedProductsQuery(
+      "WHERE p.active = true",
+      "WHERE p.active = true",
+      1,
+      "default",
+      "promo",
+    );
+    expect(sql).toContain("scoped_light");
+    expect(sql).toContain("MAX(CASE WHEN gv.is_sale THEN 1 ELSE 0 END) OVER (PARTITION BY gv.group_key)");
+    expect(sql).not.toContain("FROM group_variants v WHERE v.group_key = r.group_key");
+    expect(sql).toContain("SELECT * FROM paged");
+    expect(sortSql).toContain("ORDER BY grp_is_sale DESC");
   });
 });
