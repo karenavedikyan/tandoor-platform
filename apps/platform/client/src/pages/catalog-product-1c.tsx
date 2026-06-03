@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { optimizedImage } from "@/lib/catalog-image";
 import { LightboxModal } from "@/components/catalog/LightboxModal";
 import {
   groupProperties,
@@ -186,7 +187,8 @@ function RelatedCard({ item }: { item: RelatedProduct }) {
   const title = item.display_name || item.name;
   const hasSale = item.price_retail_sale != null;
   const [imageBroken, setImageBroken] = useState(false);
-  const showImage = Boolean(item.image_url?.trim()) && !imageBroken;
+  const relatedImageSrc = optimizedImage(item.image_url, 300);
+  const showImage = Boolean(relatedImageSrc) && !imageBroken;
 
   return (
     <Link href={`/catalog/1c/${item.id}`} className="group block" data-testid={`related-product-${item.id}`}>
@@ -194,7 +196,7 @@ function RelatedCard({ item }: { item: RelatedProduct }) {
         <div className="relative aspect-square bg-muted">
           {showImage ? (
             <img
-              src={item.image_url!}
+              src={relatedImageSrc!}
               alt={title}
               className="h-full w-full object-contain p-1"
               loading="lazy"
@@ -281,14 +283,17 @@ export default function CatalogProduct1cPage() {
     () =>
       (product?.images ?? [])
         .filter((img): img is typeof img & { blob_url: string } => Boolean(img.blob_url?.trim()))
-        .map((img) => ({ blob_url: img.blob_url!, path: img.path })),
+        .map((img) => ({
+          path: img.path,
+          blob_url: optimizedImage(img.blob_url, 1600, 85) ?? img.blob_url!,
+        })),
     [product?.images],
   );
 
   const activeBlobIdx = useMemo(() => {
-    if (!product?.images[activeImg]?.blob_url) return 0;
-    const url = product.images[activeImg].blob_url;
-    const idx = lightboxImages.findIndex((i) => i.blob_url === url);
+    const path = product?.images[activeImg]?.path;
+    if (!path) return 0;
+    const idx = lightboxImages.findIndex((i) => i.path === path);
     return idx >= 0 ? idx : 0;
   }, [product?.images, activeImg, lightboxImages]);
 
@@ -335,7 +340,8 @@ export default function CatalogProduct1cPage() {
   const hasAnyBlob = product.images.some((i) => i.blob_url?.trim());
   const currentImg = product.images[activeImg];
   const mainImageUrl = currentImg?.blob_url?.trim();
-  const showMainImage = Boolean(mainImageUrl && !brokenImages.has(activeImg));
+  const mainImageSrc = mainImageUrl ? optimizedImage(mainImageUrl, 1000, 80) : null;
+  const showMainImage = Boolean(mainImageSrc && !brokenImages.has(activeImg));
   const showLightboxForCurrent = showMainImage;
   const readableBreadcrumbs = (product.breadcrumbs ?? []).filter(
     (b) => b.name?.trim() && !looksLikeCode(b.name),
@@ -385,7 +391,7 @@ export default function CatalogProduct1cPage() {
           >
             {showMainImage ? (
               <img
-                src={mainImageUrl}
+                src={mainImageSrc!}
                 alt={title}
                 className="h-full w-full object-contain p-2"
                 onError={() => markImageBroken(activeImg)}
@@ -397,7 +403,9 @@ export default function CatalogProduct1cPage() {
 
           {product.images.length > 1 ? (
             <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:thin]">
-              {product.images.map((img, i) => (
+              {product.images.map((img, i) => {
+                const thumbSrc = img.blob_url?.trim() ? optimizedImage(img.blob_url, 96) : null;
+                return (
                 <button
                   key={img.path + i}
                   type="button"
@@ -408,9 +416,9 @@ export default function CatalogProduct1cPage() {
                   )}
                   title={img.path}
                 >
-                  {img.blob_url?.trim() && !brokenImages.has(i) ? (
+                  {thumbSrc && !brokenImages.has(i) ? (
                     <img
-                      src={img.blob_url}
+                      src={thumbSrc}
                       alt=""
                       className="h-full w-full object-cover"
                       onError={() => markImageBroken(i)}
@@ -425,7 +433,8 @@ export default function CatalogProduct1cPage() {
                     </span>
                   )}
                 </button>
-              ))}
+                );
+              })}
             </div>
           ) : null}
 
@@ -435,9 +444,9 @@ export default function CatalogProduct1cPage() {
             images={lightboxImages}
             activeIdx={activeBlobIdx}
             onActiveIdxChange={(idx) => {
-              const url = lightboxImages[idx]?.blob_url;
-              if (!url) return;
-              const orig = product.images.findIndex((im) => im.blob_url === url);
+              const path = lightboxImages[idx]?.path;
+              if (!path) return;
+              const orig = product.images.findIndex((im) => im.path === path);
               if (orig >= 0) setActiveImg(orig);
             }}
             alt={title}
