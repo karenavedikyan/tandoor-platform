@@ -25,6 +25,10 @@ globalThis.window = {
   addEventListener: () => undefined,
   removeEventListener: () => undefined,
 };
+Object.defineProperty(globalThis, "navigator", {
+  value: { onLine: true },
+  configurable: true,
+});
 
 const {
   dequeuePendingSync,
@@ -71,5 +75,74 @@ assert.equal(pendingSyncCount(), 1, "only active non-uuid item remains");
 
 markPendingSyncDead("tp-upsert:T1", "INVALID_UUID_FIELD");
 assert.equal(listPendingSyncItems().length, 0, "dead items excluded from active list");
+
+for (const item of listPendingSyncItems({ includeDead: true })) {
+  dequeuePendingSync(item.id);
+}
+
+enqueuePendingSync({
+  id: "showcase-matrix-catalog-upsert:op-cat-1",
+  kind: "showcase-matrix-catalog-upsert",
+  payload: {
+    clientCategory: "top150",
+    scopeKind: "global",
+    clientOpId: "op-cat-1",
+  },
+});
+enqueuePendingSync({
+  id: "showcase-matrix-catalog-set-status:op-cat-2",
+  kind: "showcase-matrix-catalog-set-status",
+  payload: { id: "def-uuid", status: "published", clientOpId: "op-cat-2" },
+});
+enqueuePendingSync({
+  id: "showcase-matrix-catalog-delete:op-cat-3",
+  kind: "showcase-matrix-catalog-delete",
+  payload: { id: "def-uuid", clientOpId: "op-cat-3" },
+});
+enqueuePendingSync({
+  id: "showcase-matrix-catalog-replace-models:op-cat-4",
+  kind: "showcase-matrix-catalog-replace-models",
+  payload: {
+    defId: "def-uuid",
+    models: [{ targetKind: "model", targetId: "m1", segment: "vh" }],
+    clientOpId: "op-cat-4",
+  },
+});
+
+const catalogKinds = listPendingSyncItems().map((x) => x.kind);
+assert.ok(catalogKinds.includes("showcase-matrix-catalog-upsert"));
+assert.ok(catalogKinds.includes("showcase-matrix-catalog-set-status"));
+assert.ok(catalogKinds.includes("showcase-matrix-catalog-delete"));
+assert.ok(catalogKinds.includes("showcase-matrix-catalog-replace-models"));
+
+const workerFetchLog: { url: string; body: unknown }[] = [];
+Object.defineProperty(globalThis, "fetch", {
+  value: async (url: string, init?: RequestInit) => {
+    workerFetchLog.push({
+      url,
+      body: init?.body ? JSON.parse(String(init.body)) : null,
+    });
+    return {
+      ok: true,
+      status: 200,
+      async json() {
+        return { success: true, def: { id: "def-uuid" }, idempotent: false, models: [] };
+      },
+    };
+  },
+  configurable: true,
+});
+
+const { runOverridesPendingSyncOnce } = await import("../overrides-pending-sync-worker.js");
+const runResult = await runOverridesPendingSyncOnce();
+assert.ok(runResult, "worker should run when queue has catalog ops");
+assert.equal(runResult!.succeeded, 4);
+assert.equal(listPendingSyncItems().length, 0);
+const upsertCall = workerFetchLog.find((c) => c.url.includes("/upsert"));
+assert.ok(upsertCall?.url.includes("showcase-matrix-catalog"));
+assert.equal((upsertCall?.body as Record<string, unknown>).clientCategory, "top150");
+assert.ok(workerFetchLog.some((c) => c.url.includes("/set-status")));
+assert.ok(workerFetchLog.some((c) => c.url.includes("/delete")));
+assert.ok(workerFetchLog.some((c) => c.url.includes("/replace-models")));
 
 console.log("✓ overrides-pending-sync tests passed");
