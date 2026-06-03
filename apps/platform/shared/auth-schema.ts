@@ -8,6 +8,7 @@ import {
   type AnyPgColumn,
   bigint,
   boolean,
+  date,
   index,
   integer,
   jsonb,
@@ -314,5 +315,73 @@ export const showcaseMatrixEvents = pgTable(
   (t) => [
     index("idx_showcase_matrix_events_tp").on(t.tradePointId, t.changedAt),
     index("idx_showcase_matrix_events_dealer").on(t.dealerId, t.changedAt),
+  ],
+);
+
+/** Промт 159: справочник управляемых матриц моделей на витрину (заголовок версии). */
+export const showcaseMatrixDefs = pgTable(
+  "showcase_matrix_defs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Синхронизировать с `ClientCategoryId` в `client/src/lib/client-category.ts`. */
+    clientCategory: text("client_category").notNull(),
+    scopeKind: text("scope_kind").notNull(),
+    scopeRegion: text("scope_region"),
+    scopeCity: text("scope_city"),
+    effectiveFrom: date("effective_from"),
+    effectiveTo: date("effective_to"),
+    seasonLabel: text("season_label"),
+    status: text("status").notNull().default("draft"),
+    title: text("title"),
+    comment: text("comment"),
+    clientOpId: text("client_op_id"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" })
+      .notNull()
+      .default(sql`now()`),
+    updatedBy: uuid("updated_by").references(() => authUsers.id),
+    updatedByName: text("updated_by_name"),
+  },
+  (t) => [
+    uniqueIndex("uq_showcase_matrix_defs_client_op")
+      .on(t.clientOpId)
+      .where(sql`${t.clientOpId} IS NOT NULL`),
+    index("idx_showcase_matrix_defs_resolve").on(
+      t.clientCategory,
+      t.scopeKind,
+      t.scopeRegion,
+      t.scopeCity,
+      t.status,
+    ),
+    index("idx_showcase_matrix_defs_period").on(t.effectiveFrom, t.effectiveTo),
+  ],
+);
+
+/** Промт 159: позиции справочника матрицы (состав моделей). */
+export const showcaseMatrixDefModels = pgTable(
+  "showcase_matrix_def_models",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    defId: uuid("def_id")
+      .notNull()
+      .references(() => showcaseMatrixDefs.id, { onDelete: "cascade" }),
+    targetKind: text("target_kind").notNull(),
+    targetId: text("target_id").notNull(),
+    priority: text("priority").notNull().default("medium"),
+    segment: text("segment").notNull(),
+    valueWeight: integer("value_weight"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    index("idx_smdm_def").on(t.defId),
+    uniqueIndex("uq_smdm_def_target").on(t.defId, t.targetKind, t.targetId),
   ],
 );
