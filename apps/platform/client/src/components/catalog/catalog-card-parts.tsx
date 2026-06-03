@@ -84,26 +84,111 @@ export function CatalogPhotoBadges({
   );
 }
 
+/** Horizontal mini badges for compact list rows (~16px tall). */
+export function CatalogInlineBadges({
+  product,
+  priceRetail,
+  priceRetailSale,
+}: {
+  product: CatalogListProduct;
+  priceRetail: number | null;
+  priceRetailSale: number | null;
+}) {
+  const pct = saleDiscountPercent(priceRetail, priceRetailSale);
+  const showSale = pct != null && pct > 0;
+  const hasAny =
+    showSale || product.is_new || product.is_hit || (!showSale && product.is_sale);
+  if (!hasAny) return null;
+
+  const pill = "inline-flex h-4 items-center rounded px-1 text-[10px] font-semibold leading-none";
+
+  return (
+    <div className="flex shrink-0 items-center gap-1">
+      {showSale ? (
+        <span className={cn(pill, "bg-[#d84040] text-white")}>−{pct}%</span>
+      ) : null}
+      {product.is_new ? (
+        <span className={cn(pill, "font-bold uppercase tracking-wide text-[#9aca3c]")}>NEW</span>
+      ) : null}
+      {product.is_hit ? (
+        <span className={cn(pill, "bg-[#d84040] text-white")}>Хит</span>
+      ) : null}
+      {!showSale && product.is_sale ? (
+        <span className={cn(pill, "bg-[#d84040] text-white")}>Акция</span>
+      ) : null}
+    </div>
+  );
+}
+
+/** Single-line price for compact list rows (no min-height). */
+export function CatalogInlinePrice({
+  priceRetail,
+  priceRetailSale,
+  className,
+}: {
+  priceRetail: number | null;
+  priceRetailSale: number | null;
+  className?: string;
+}) {
+  const onSale = priceRetailSale != null;
+
+  if (onSale) {
+    return (
+      <span className={cn("inline-flex items-baseline justify-end gap-1.5 tabular-nums", className)}>
+        <span className="text-[10px] leading-none text-muted-foreground line-through">
+          {formatCatalogPrice(priceRetail)}
+        </span>
+        <span className="text-sm font-semibold leading-none text-[#d84040]">
+          {formatCatalogPrice(priceRetailSale)}
+        </span>
+      </span>
+    );
+  }
+
+  return (
+    <span className={cn("text-sm font-semibold tabular-nums leading-none text-[#9aca3c]", className)}>
+      {formatCatalogPrice(priceRetail)}
+    </span>
+  );
+}
+
 export function CatalogCardActionsRow({
   compact,
   layout = "card",
+  density,
 }: {
   compact?: boolean;
   layout?: "card" | "list";
+  /** Tighter icon row for document-style list rows */
+  density?: "default" | "compact";
 }) {
-  const icon = cn("transition", compact ? "h-4 w-4" : "h-5 w-5");
+  const icon = cn(
+    "transition",
+    density === "compact" ? "h-3.5 w-3.5" : compact ? "h-4 w-4" : "h-5 w-5",
+  );
   const btn = "text-muted-foreground transition hover:text-[#9aca3c]";
+  const gap = density === "compact" ? "gap-1.5" : "gap-3";
 
   if (layout === "list") {
     return (
-      <div className="flex items-center justify-end gap-3">
+      <div className={cn("flex items-center justify-end", gap)}>
         <button type="button" className={btn} aria-label="В избранное" onClick={(e) => e.preventDefault()}>
           <Heart className={icon} />
         </button>
-        <button type="button" className={btn} aria-label="Сравнить" onClick={(e) => e.preventDefault()}>
+        <button
+          type="button"
+          className={cn(btn, "max-[649px]:hidden")}
+          aria-label="Сравнить"
+          onClick={(e) => e.preventDefault()}
+        >
           <GitCompare className={icon} />
         </button>
-        <button type="button" className={btn} aria-label="В проём" onClick={(e) => e.preventDefault()}>
+        <button
+          type="button"
+          className={cn(btn, "max-[649px]:hidden")}
+          aria-label="В проём"
+          onClick={(e) => e.preventDefault()}
+        >
           <DoorOpen className={icon} />
         </button>
         <button type="button" className={btn} aria-label="В корзину" onClick={(e) => e.preventDefault()}>
