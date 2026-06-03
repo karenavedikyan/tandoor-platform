@@ -113,6 +113,14 @@ function managerLabelForKey(
   return getDealerRegionalManagerDisplay(dealer) || "Без менеджера";
 }
 
+/** Статус модели в контексте одной ТТ (обёртка для разреза «Продукт»). */
+export function statusForModelInTradePoint(
+  ctx: DistributionMetricsContext,
+  targetId: string,
+): ShowcaseMatrixStatus | null {
+  return modelEntryStatus(ctx.entries, targetId);
+}
+
 function modelEntryStatus(
   entries: readonly ShowcaseMatrixEntryDto[],
   targetId: string,
