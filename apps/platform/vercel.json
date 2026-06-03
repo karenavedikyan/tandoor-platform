@@ -5,7 +5,7 @@
   "installCommand": "npm install",
   "framework": null,
   "images": {
-    "sizes": [64, 80, 96, 128, 160, 200, 256, 320, 640],
+    "sizes": [64, 80, 96, 128, 160, 200, 256, 320, 640, 750, 828, 1080, 1200, 1600, 1920],
     "minimumCacheTTL": 86400,
     "formats": ["image/webp"],
     "remotePatterns": [
