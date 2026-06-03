@@ -80,13 +80,13 @@ function ProductBadgesRow({
   return (
     <div className="flex flex-wrap gap-1">
       {badges?.is_new ? (
-        <Badge className={cn("bg-emerald-600 text-white hover:bg-emerald-600", cls)}>New</Badge>
+        <Badge className={cn("bg-[#9aca3c] text-white hover:bg-[#9aca3c]", cls)}>Новинка</Badge>
       ) : null}
       {badges?.is_hit ? (
-        <Badge className={cn("bg-amber-500 text-white hover:bg-amber-500", cls)}>Hit</Badge>
+        <Badge className={cn("bg-[#d84040] text-white hover:bg-[#d84040]", cls)}>Хит</Badge>
       ) : null}
       {badges?.is_sale ? (
-        <Badge className={cn("bg-rose-600 text-white hover:bg-rose-600", cls)}>Sale</Badge>
+        <Badge className={cn("bg-[#d84040] text-white hover:bg-[#d84040]", cls)}>Акция</Badge>
       ) : null}
     </div>
   );
@@ -106,11 +106,11 @@ function CatalogPriceBlock({
     return (
       <div>
         <div className="flex flex-wrap items-baseline gap-2">
-          <span className={cn("font-semibold text-rose-600", large ? "text-3xl" : "text-lg")}>
+          <span className={cn("font-semibold text-[#d84040]", large ? "text-3xl" : "text-lg")}>
             {fmtPrice(sale)}
           </span>
           {pct != null ? (
-            <Badge variant="destructive" className="text-xs">
+            <Badge className="border-transparent bg-[#d84040] text-xs text-white hover:bg-[#d84040]">
               −{pct}%
             </Badge>
           ) : null}
@@ -123,7 +123,11 @@ function CatalogPriceBlock({
       </div>
     );
   }
-  return <div className={cn("font-semibold", large ? "text-3xl" : "text-lg")}>{fmtPrice(retail)}</div>;
+  return (
+    <div className={cn("font-semibold text-[#9aca3c]", large ? "text-3xl" : "text-lg")}>
+      {fmtPrice(retail)}
+    </div>
+  );
 }
 
 function RelatedCard({ item }: { item: RelatedProduct }) {
@@ -149,9 +153,9 @@ function RelatedCard({ item }: { item: RelatedProduct }) {
           {item.brand ? <p className="truncate text-xs text-muted-foreground">{item.brand}</p> : null}
           <div className="text-sm font-semibold">
             {hasSale ? (
-              <span className="text-rose-600">{fmtPrice(item.price_retail_sale)}</span>
+              <span className="text-[#d84040]">{fmtPrice(item.price_retail_sale)}</span>
             ) : (
-              fmtPrice(item.price_retail)
+              <span className="text-[#9aca3c]">{fmtPrice(item.price_retail)}</span>
             )}
           </div>
         </CardContent>
@@ -167,6 +171,7 @@ export default function CatalogProduct1cPage() {
   const [loading, setLoading] = useState(true);
   const [activeImg, setActiveImg] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [qty, setQty] = useState(1);
 
   useEffect(() => {
     if (!params.productId) return;
@@ -262,7 +267,7 @@ export default function CatalogProduct1cPage() {
   const showLightboxForCurrent = Boolean(currentImg?.blob_url?.trim());
 
   return (
-    <div className="space-y-8 p-4 lg:p-6" data-testid="page-catalog-product-1c">
+    <div className="catalog-font space-y-8 p-4 lg:p-6" data-testid="page-catalog-product-1c">
       <nav className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground" aria-label="Хлебные крошки">
         <Link href="/catalog" className="hover:text-foreground hover:underline">
           Каталог
@@ -371,7 +376,7 @@ export default function CatalogProduct1cPage() {
               </div>
 
               {totalQty > 0 ? (
-                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-900">
+                <div className="rounded-lg border border-[#9aca3c]/40 bg-[#9aca3c]/10 px-3 py-2 text-sm font-medium text-foreground">
                   В наличии: {fmtQty(totalQty)} шт.
                 </div>
               ) : (
@@ -380,17 +385,38 @@ export default function CatalogProduct1cPage() {
                 </div>
               )}
 
-              <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
-                <Button
-                  type="button"
-                  className="w-full gap-2"
-                  onClick={() =>
-                    toast({ title: "Корзина появится в следующем релизе" })
-                  }
-                >
-                  <ShoppingCart className="h-4 w-4" />
-                  В корзину
-                </Button>
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center rounded-md border border-border">
+                    <button
+                      type="button"
+                      className="grid h-9 w-9 place-items-center text-lg hover:text-[#9aca3c]"
+                      onClick={() => setQty((q) => Math.max(1, q - 1))}
+                      aria-label="Уменьшить количество"
+                    >
+                      −
+                    </button>
+                    <span className="w-10 text-center text-sm font-medium tabular-nums">{qty}</span>
+                    <button
+                      type="button"
+                      className="grid h-9 w-9 place-items-center text-lg hover:text-[#9aca3c]"
+                      onClick={() => setQty((q) => q + 1)}
+                      aria-label="Увеличить количество"
+                    >
+                      +
+                    </button>
+                  </div>
+                  <Button
+                    type="button"
+                    className="h-9 flex-1 gap-2 bg-[#9aca3c] text-white hover:bg-[#9aca3c]/90"
+                    onClick={() =>
+                      toast({ title: "Корзина появится в следующем релизе" })
+                    }
+                  >
+                    <ShoppingCart className="h-4 w-4" />
+                    В корзину
+                  </Button>
+                </div>
                 <Button type="button" variant="outline" className="w-full gap-2">
                   <Heart className="h-4 w-4" />
                   В избранное
@@ -419,7 +445,7 @@ export default function CatalogProduct1cPage() {
                 </dl>
                 <button
                   type="button"
-                  className="text-sm font-medium text-primary hover:underline"
+                  className="text-sm font-medium text-[#9aca3c] hover:underline"
                   onClick={scrollToAllProperties}
                 >
                   Все характеристики →
