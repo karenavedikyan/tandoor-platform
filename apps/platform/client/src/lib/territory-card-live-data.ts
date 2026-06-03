@@ -13,7 +13,7 @@ import { loadShowcaseMatrixStorage, type ShowcaseMatrixEntryStored } from "@/lib
 import { getTrainingAttentionKpisForDealers, type TerritoryTrainingAttentionKpis } from "@/lib/training-attention";
 import {
   getManagementFactualShowcaseTasksForDealers,
-  getShowcaseBackedTasksForDealers,
+  getShowcaseDistributionPlanTasksForDealers,
   type MatrixTaskWithContext,
 } from "@/lib/trade-point-task-data";
 import type {
@@ -540,7 +540,7 @@ export function buildTerritoryCardLivePack(
     };
   }
 
-  const tasks = getShowcaseBackedTasksForDealers(dealers);
+  const tasks = getShowcaseDistributionPlanTasksForDealers(dealers);
   const taskMap = buildTaskCountByDealerId(tasks);
   const byCity = new Map<string, DealerRow[]>();
   for (const d of dealers) {

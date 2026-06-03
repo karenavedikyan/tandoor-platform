@@ -20,7 +20,7 @@ import { getTaskPresetCounts, type TaskPresetId } from "@/lib/task-presets";
 import {
   getAllMatrixTasks,
   getManagementFactualShowcaseTasksForDealers,
-  getShowcaseBackedTasksForDealers,
+  getShowcaseDistributionPlanTasksForDealers,
   type MatrixTaskWithContext,
 } from "@/lib/trade-point-task-data";
 import { aggregateManagersForTeamFromRows, buildTeamSummaries, buildTeamSummaryFromRows, type TeamSummary } from "@/lib/team-summary";
@@ -135,7 +135,7 @@ export function AnalyticsWorkspaceReleaseOverview() {
     if (useMgmtFactualTasks) {
       pool = getManagementFactualShowcaseTasksForDealers(workingRows, teamCtx.mergedState);
     } else if (actx.enabled) {
-      pool = getShowcaseBackedTasksForDealers(workingRows);
+      pool = getShowcaseDistributionPlanTasksForDealers(workingRows);
     } else {
       pool = getAllMatrixTasks();
     }
