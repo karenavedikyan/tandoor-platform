@@ -876,8 +876,8 @@ function QuickFilterSegment({
       className={cn(
         "rounded-full border px-3 py-1.5 text-xs font-medium transition",
         active
-          ? "border-[#9aca3c] bg-[#9aca3c] text-white shadow-[0_4px_4px_rgba(0,0,0,0.25)]"
-          : "border-[#eeeff7] bg-white text-[#222631] hover:border-[#9aca3c]/60",
+          ? "border-[#9aca3c] bg-[#9aca3c] text-white"
+          : "border-[#9aca3c] bg-transparent text-[#9aca3c] hover:bg-[#9aca3c]/10",
       )}
     >
       {label}

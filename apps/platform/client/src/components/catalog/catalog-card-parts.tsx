@@ -1,4 +1,4 @@
-import { Flame, GitCompare, Heart, ListChecks } from "lucide-react";
+import { Flame, GitCompare, DoorOpen, Heart, ListChecks, ShoppingCart } from "lucide-react";
 import { optimizedImage } from "@/lib/catalog-image";
 import { cn } from "@/lib/utils";
 import type { CatalogListProduct } from "./ProductListRow";
@@ -37,11 +37,11 @@ function NewBadge({ compact }: { compact?: boolean }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-[2px] bg-[#9aca3c] px-1.5 py-0.5 font-semibold leading-none text-white shadow-sm",
-        compact ? "text-[10px]" : "text-xs",
+        "font-bold uppercase tracking-wide text-[#9aca3c]",
+        compact ? "text-[10px]" : "text-[11px]",
       )}
     >
-      Новинка
+      NEW
     </span>
   );
 }
@@ -80,6 +80,31 @@ export function CatalogPhotoBadges({
       {product.is_new ? <NewBadge compact={compact} /> : null}
       {product.is_hit ? <HitBadge compact={compact} /> : null}
       {!showSale && product.is_sale ? <DiscountBadge compact={compact}>Акция</DiscountBadge> : null}
+    </div>
+  );
+}
+
+export function CatalogCardActionsRow({ compact }: { compact?: boolean }) {
+  const icon = cn("transition", compact ? "h-4 w-4" : "h-5 w-5");
+  const btn = "text-muted-foreground transition hover:text-[#9aca3c]";
+  return (
+    <div className="flex items-center justify-between border-t border-border/40 pt-2">
+      <div className="flex items-center gap-3">
+        <button type="button" className={btn} aria-label="В избранное" onClick={(e) => e.preventDefault()}>
+          <Heart className={icon} />
+        </button>
+        <button type="button" className={btn} aria-label="Сравнить" onClick={(e) => e.preventDefault()}>
+          <GitCompare className={icon} />
+        </button>
+      </div>
+      <div className="flex items-center gap-3">
+        <button type="button" className={btn} aria-label="В проём" onClick={(e) => e.preventDefault()}>
+          <DoorOpen className={icon} />
+        </button>
+        <button type="button" className={btn} aria-label="В корзину" onClick={(e) => e.preventDefault()}>
+          <ShoppingCart className={icon} />
+        </button>
+      </div>
     </div>
   );
 }
@@ -200,26 +225,36 @@ export function CatalogPriceBlock({
       ? "text-lg font-semibold leading-[22px] tabular-nums"
       : "text-[22px] font-semibold leading-[26px] tabular-nums";
   const labelCls = cn("text-[11px] font-medium text-[#9aca3c]", size === "sm" && "text-[10px]");
-  const rowAlign = align === "right" ? "flex-row-reverse text-right" : "flex-row text-left";
+  const alignEnd = align === "right";
 
   if (onSale) {
     return (
       <div
         className={cn(
-          "Card-product__retail-price flex w-full min-h-[52px] flex-col justify-center gap-0.5",
-          size === "md" && "min-h-[65px]",
-          align === "right" && "items-end",
+          "Card-product__retail-price flex w-full flex-col justify-center gap-0.5",
+          size === "md" ? "min-h-[52px] items-start py-1" : "min-h-[52px]",
+          size === "sm" && (alignEnd ? "items-end" : "items-start"),
         )}
       >
-        <div className="flex flex-wrap items-baseline gap-1 text-muted-foreground">
-          <span className={cn("text-[10px] line-through", size === "sm" && "text-[9px]")}>
-            {formatCatalogPrice(priceRetail)}
-          </span>
-        </div>
-        <div className={cn("flex w-full items-center justify-between gap-2", rowAlign)}>
-          <span className={labelCls}>Акционная цена</span>
+        <span className={cn("text-muted-foreground line-through", size === "sm" ? "text-[9px]" : "text-[10px]")}>
+          {formatCatalogPrice(priceRetail)}
+        </span>
+        {size === "sm" ? (
+          <div className={cn("flex w-full gap-2", alignEnd ? "flex-row-reverse justify-end" : "justify-between")}>
+            <span className={labelCls}>Акционная цена</span>
+            <span className={cn(priceCls, "text-[#d84040]")}>{formatCatalogPrice(priceRetailSale)}</span>
+          </div>
+        ) : (
           <span className={cn(priceCls, "text-[#d84040]")}>{formatCatalogPrice(priceRetailSale)}</span>
-        </div>
+        )}
+      </div>
+    );
+  }
+
+  if (size === "md") {
+    return (
+      <div className="Card-product__retail-price flex w-full items-start py-1">
+        <span className={cn(priceCls, "text-[#9aca3c]")}>{formatCatalogPrice(priceRetail)}</span>
       </div>
     );
   }
@@ -227,12 +262,11 @@ export function CatalogPriceBlock({
   return (
     <div
       className={cn(
-        "Card-product__retail-price flex w-full items-center justify-between gap-2",
-        size === "md" ? "min-h-[65px] py-2.5" : "min-h-[52px] py-1",
-        rowAlign,
+        "Card-product__retail-price flex w-full min-h-[52px] items-center gap-2 py-1",
+        alignEnd ? "flex-row-reverse justify-end text-right" : "justify-between text-left",
       )}
     >
-      <span className={labelCls}>{size === "sm" ? "Розничная цена" : "Цена"}</span>
+      <span className={labelCls}>Розничная цена</span>
       <span className={cn(priceCls, "text-[#9aca3c]")}>{formatCatalogPrice(priceRetail)}</span>
     </div>
   );
