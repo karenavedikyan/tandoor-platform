@@ -541,7 +541,7 @@ export default function CatalogPage() {
               </SheetTrigger>
               <SheetContent
                 side="right"
-                className="flex h-full w-[300px] max-w-[90vw] flex-col gap-0 overflow-hidden p-0 sm:max-w-[300px]"
+                className="catalog-font flex h-full w-[300px] max-w-[90vw] flex-col gap-0 overflow-hidden p-0 sm:max-w-[300px]"
               >
                 <SheetTitle className="sr-only">Фильтр</SheetTitle>
                 {advancedFiltersPanel}
@@ -618,7 +618,7 @@ export default function CatalogPage() {
                 >
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="catalog-font">
                   <SelectItem value="default">По умолчанию (рекомендуемые)</SelectItem>
                   <SelectItem value="name">По названию</SelectItem>
                   <SelectItem value="price_asc">Цена ↑</SelectItem>
@@ -802,11 +802,12 @@ function CatalogAdvancedFilters({
       <footer className="flex shrink-0 items-center justify-between gap-2 border-t border-[#e3e6f3] px-[21px] py-[21px]">
         <Button
           type="button"
-          variant="ghost"
+          variant="outline"
           size="icon"
-          className="h-[42px] w-[42px] shrink-0 rounded-[2px]"
+          className="h-[42px] w-[42px] shrink-0 rounded-[2px] border-border text-muted-foreground hover:border-[#d84040]/40 hover:text-[#d84040]"
           onClick={onReset}
           aria-label="Сбросить фильтры"
+          title="Сбросить фильтры"
         >
           <RotateCcw className="h-4 w-4" />
         </Button>
