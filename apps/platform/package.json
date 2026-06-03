@@ -52,6 +52,7 @@
     "test:distribution-metrics": "tsx client/src/lib/__tests__/distribution-metrics.test.ts",
     "test:trade-point-matrix-resolver": "tsx client/src/lib/__tests__/trade-point-matrix-resolver.test.ts",
     "test:distribution-matrix-catalog-view-model": "tsx client/src/lib/__tests__/distribution-matrix-catalog-view-model.test.ts",
+    "test:distribution-analytics": "tsx client/src/lib/__tests__/distribution-analytics.test.ts",
     "test:matrix-catalog-resolve": "vitest run shared/__tests__/showcase-matrix-catalog-handlers.spec.ts",
     "test:matrix-catalog": "vitest run shared/__tests__/showcase-matrix-catalog-handlers.spec.ts server/migrations/__tests__/showcase-matrix-catalog-migration.spec.ts",
     "test:showcase-matrix-catalog-store": "tsx client/src/lib/__tests__/showcase-matrix-catalog-store.test.ts",
