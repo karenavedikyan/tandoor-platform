@@ -434,7 +434,7 @@ export default function CatalogPage() {
   );
 
   return (
-    <div className="space-y-6 p-4 lg:p-6">
+    <div className="catalog-font space-y-6 p-4 lg:p-6">
       <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Каталог</h1>
