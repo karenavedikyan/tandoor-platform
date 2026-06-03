@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Grid2x2, Grid3x3, LayoutGrid, List, RefreshCw, RotateCcw, Search, SlidersHorizontal } from "lucide-react";
+import { Grid3x3, LayoutGrid, List, RefreshCw, RotateCcw, Search, SlidersHorizontal, Square } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -555,7 +555,7 @@ export default function CatalogPage() {
                 aria-label="Крупный"
                 className="max-[865px]:hidden"
               >
-                <LayoutGrid className="h-5 w-5" />
+                <Square className="h-5 w-5" />
               </CatalogViewToggle>
               <CatalogViewToggle
                 active={cardSize === "m"}
@@ -563,7 +563,7 @@ export default function CatalogPage() {
                 title="Средний"
                 aria-label="Средний"
               >
-                <Grid3x3 className="h-4 w-4" />
+                <LayoutGrid className="h-5 w-5" />
               </CatalogViewToggle>
               <CatalogViewToggle
                 active={cardSize === "s"}
@@ -572,7 +572,7 @@ export default function CatalogPage() {
                 aria-label="Мелкий"
                 className="max-[865px]:hidden"
               >
-                <Grid2x2 className="h-3.5 w-3.5" />
+                <Grid3x3 className="h-5 w-5" />
               </CatalogViewToggle>
               <CatalogViewToggle
                 active={cardSize === "list"}
@@ -580,7 +580,7 @@ export default function CatalogPage() {
                 title="Список"
                 aria-label="Список"
               >
-                <List className="h-4 w-4" />
+                <List className="h-5 w-5" />
               </CatalogViewToggle>
             </div>
           </div>
