@@ -1,13 +1,44 @@
 /**
- * API витринной матрицы (Postgres) — Промт 150.
+ * API витринной матрицы (Postgres) — Промт 150, блоки размещения — Промт 155.
  */
 
 import type { PoolLike } from "./admin/admin-auth.js";
 
-export type ShowcaseMatrixTargetKind = "model" | "variant";
+export type ShowcaseMatrixTargetKind = "model" | "variant" | "placement";
 export type ShowcaseMatrixStatus = "need_install" | "installed" | "postponed" | "not_relevant";
 
-const TARGET_KINDS = new Set<ShowcaseMatrixTargetKind>(["model", "variant"]);
+export type ShowcasePlacementType =
+  | "portal"
+  | "cube"
+  | "book"
+  | "hoof"
+  | "unmounted"
+  | "branded_stand"
+  | "stream_sku";
+
+export type ShowcasePlacementSegment = "vh" | "mk" | "hardware";
+
+const TARGET_KINDS = new Set<ShowcaseMatrixTargetKind>(["model", "variant", "placement"]);
+export const PLACEMENT_TYPES = new Set<ShowcasePlacementType>([
+  "portal",
+  "cube",
+  "book",
+  "hoof",
+  "unmounted",
+  "branded_stand",
+  "stream_sku",
+]);
+export const PLACEMENT_SEGMENTS = new Set<ShowcasePlacementSegment>(["vh", "mk", "hardware"]);
+
+const DOOR_PLACEMENT_TYPES = new Set<ShowcasePlacementType>([
+  "portal",
+  "cube",
+  "book",
+  "hoof",
+  "unmounted",
+]);
+const HARDWARE_PLACEMENT_TYPES = new Set<ShowcasePlacementType>(["branded_stand", "stream_sku"]);
+
 export const MAX_SCOPE_TRADE_POINTS = 500;
 const STATUSES = new Set<ShowcaseMatrixStatus>([
   "need_install",
@@ -27,6 +58,11 @@ export type ShowcaseMatrixEntryDto = {
   updatedAt: string;
   updatedBy: string | null;
   updatedByName: string | null;
+  placementType: ShowcasePlacementType | null;
+  placementSegment: ShowcasePlacementSegment | null;
+  placementCapacity: number | null;
+  placementActual: number | null;
+  placementRef: string | null;
 };
 
 export type ShowcaseMatrixEventDto = {
@@ -42,6 +78,11 @@ export type ShowcaseMatrixEventDto = {
   changedBy: string | null;
   changedByName: string | null;
   changedAt: string;
+  placementType: ShowcasePlacementType | null;
+  placementSegment: ShowcasePlacementSegment | null;
+  placementCapacity: number | null;
+  placementActual: number | null;
+  placementRef: string | null;
 };
 
 export type ShowcaseMatrixSessionUser = {
@@ -59,6 +100,11 @@ export type ShowcaseMatrixUpsertInput = {
   status: ShowcaseMatrixStatus;
   comment?: string | null;
   clientOpId?: string | null;
+  placementType?: ShowcasePlacementType | null;
+  placementSegment?: ShowcasePlacementSegment | null;
+  placementCapacity?: number | null;
+  placementActual?: number | null;
+  placementRef?: string | null;
 };
 
 export type ShowcaseMatrixUpsertResult = {
@@ -120,16 +166,124 @@ function parseOptionalClientOpId(raw: unknown): string | null {
   return t || null;
 }
 
-export function parseShowcaseMatrixUpsertInput(body: Record<string, unknown>): ShowcaseMatrixUpsertInput {
+function parsePlacementType(raw: unknown): ShowcasePlacementType | null {
+  if (raw == null || raw === "") return null;
+  const v = typeof raw === "string" ? raw.trim() : String(raw).trim();
+  if (!v) return null;
+  if (!PLACEMENT_TYPES.has(v as ShowcasePlacementType)) {
+    throw new ShowcaseMatrixValidationError("Некорректный placementType.");
+  }
+  return v as ShowcasePlacementType;
+}
+
+function parsePlacementSegment(raw: unknown): ShowcasePlacementSegment | null {
+  if (raw == null || raw === "") return null;
+  const v = typeof raw === "string" ? raw.trim() : String(raw).trim();
+  if (!v) return null;
+  if (!PLACEMENT_SEGMENTS.has(v as ShowcasePlacementSegment)) {
+    throw new ShowcaseMatrixValidationError("Некорректный placementSegment.");
+  }
+  return v as ShowcasePlacementSegment;
+}
+
+function parseOptionalCount(raw: unknown, field: string): number | null {
+  if (raw == null || raw === "") return null;
+  let n: number;
+  if (typeof raw === "number") {
+    n = raw;
+  } else if (typeof raw === "string" && raw.trim() !== "") {
+    n = Number(raw.trim());
+  } else {
+    throw new ShowcaseMatrixValidationError(`Некорректный ${field}.`);
+  }
+  if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) {
+    throw new ShowcaseMatrixValidationError(`Некорректный ${field}.`);
+  }
+  return n;
+}
+
+function parseOptionalRef(raw: unknown): string | null {
+  return parseOptionalClientOpId(raw);
+}
+
+function assertPlacementTypeMatchesSegment(
+  placementType: ShowcasePlacementType,
+  placementSegment: ShowcasePlacementSegment,
+): void {
+  if (placementSegment === "hardware") {
+    if (!HARDWARE_PLACEMENT_TYPES.has(placementType)) {
+      throw new ShowcaseMatrixValidationError(
+        "Для сегмента hardware допустимы только типы branded_stand и stream_sku.",
+      );
+    }
+    return;
+  }
+  if (!DOOR_PLACEMENT_TYPES.has(placementType)) {
+    throw new ShowcaseMatrixValidationError(
+      "Для сегментов vh и mk допустимы только типы portal, cube, book, hoof, unmounted.",
+    );
+  }
+}
+
+function normalizePlacementFields(input: ShowcaseMatrixUpsertInput): ShowcaseMatrixUpsertInput {
+  if (input.targetKind === "placement") {
+    if (!input.placementType || !input.placementSegment) {
+      throw new ShowcaseMatrixValidationError("Для блока размещения укажите placementType и placementSegment.");
+    }
+    assertPlacementTypeMatchesSegment(input.placementType, input.placementSegment);
+    return {
+      ...input,
+      status: "installed",
+      placementRef: null,
+      comment: input.comment ?? null,
+    };
+  }
+
   return {
+    ...input,
+    placementType: null,
+    placementSegment: null,
+    placementCapacity: null,
+    placementActual: null,
+    placementRef: input.placementRef ?? null,
+  };
+}
+
+export function parseShowcaseMatrixUpsertInput(body: Record<string, unknown>): ShowcaseMatrixUpsertInput {
+  const targetKind = parseTargetKind(body.targetKind);
+  const parsed: ShowcaseMatrixUpsertInput = {
     dealerId: trimStr(body.dealerId, "dealerId"),
     tradePointId: trimStr(body.tradePointId, "tradePointId"),
-    targetKind: parseTargetKind(body.targetKind),
+    targetKind,
     targetId: trimStr(body.targetId, "targetId"),
     status: parseStatus(body.status),
     comment: parseOptionalComment(body.comment),
     clientOpId: parseOptionalClientOpId(body.clientOpId),
+    placementType: parsePlacementType(body.placementType),
+    placementSegment: parsePlacementSegment(body.placementSegment),
+    placementCapacity: parseOptionalCount(body.placementCapacity, "placementCapacity"),
+    placementActual: parseOptionalCount(body.placementActual, "placementActual"),
+    placementRef: parseOptionalRef(body.placementRef),
   };
+  return normalizePlacementFields(parsed);
+}
+
+function mapOptionalPlacementType(raw: unknown): ShowcasePlacementType | null {
+  if (raw == null) return null;
+  const v = String(raw);
+  return PLACEMENT_TYPES.has(v as ShowcasePlacementType) ? (v as ShowcasePlacementType) : null;
+}
+
+function mapOptionalPlacementSegment(raw: unknown): ShowcasePlacementSegment | null {
+  if (raw == null) return null;
+  const v = String(raw);
+  return PLACEMENT_SEGMENTS.has(v as ShowcasePlacementSegment) ? (v as ShowcasePlacementSegment) : null;
+}
+
+function mapOptionalInt(raw: unknown): number | null {
+  if (raw == null) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
 }
 
 function mapEntryRow(row: Record<string, unknown>): ShowcaseMatrixEntryDto {
@@ -144,6 +298,11 @@ function mapEntryRow(row: Record<string, unknown>): ShowcaseMatrixEntryDto {
     updatedAt: String(row.updated_at),
     updatedBy: row.updated_by != null ? String(row.updated_by) : null,
     updatedByName: row.updated_by_name != null ? String(row.updated_by_name) : null,
+    placementType: mapOptionalPlacementType(row.placement_type),
+    placementSegment: mapOptionalPlacementSegment(row.placement_segment),
+    placementCapacity: mapOptionalInt(row.placement_capacity),
+    placementActual: mapOptionalInt(row.placement_actual),
+    placementRef: row.placement_ref != null ? String(row.placement_ref) : null,
   };
 }
 
@@ -161,6 +320,11 @@ function mapEventRow(row: Record<string, unknown>): ShowcaseMatrixEventDto {
     changedBy: row.changed_by != null ? String(row.changed_by) : null,
     changedByName: row.changed_by_name != null ? String(row.changed_by_name) : null,
     changedAt: String(row.changed_at),
+    placementType: mapOptionalPlacementType(row.placement_type),
+    placementSegment: mapOptionalPlacementSegment(row.placement_segment),
+    placementCapacity: mapOptionalInt(row.placement_capacity),
+    placementActual: mapOptionalInt(row.placement_actual),
+    placementRef: row.placement_ref != null ? String(row.placement_ref) : null,
   };
 }
 
@@ -190,6 +354,14 @@ async function fetchByTarget(
   return r.rows[0] ? mapEntryRow(r.rows[0]) : null;
 }
 
+type PlacementSnapshot = {
+  placementType: ShowcasePlacementType | null;
+  placementSegment: ShowcasePlacementSegment | null;
+  placementCapacity: number | null;
+  placementActual: number | null;
+  placementRef: string | null;
+};
+
 async function insertEvent(
   pool: PoolLike,
   params: {
@@ -203,13 +375,15 @@ async function insertEvent(
     comment: string | null;
     changedBy: string;
     changedByName: string;
+    placement: PlacementSnapshot;
   },
 ): Promise<void> {
   await pool.query(
     `INSERT INTO showcase_matrix_events (
        entry_id, dealer_id, trade_point_id, target_kind, target_id,
-       old_status, new_status, comment, changed_by, changed_by_name
-     ) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9::uuid, $10)`,
+       old_status, new_status, comment, changed_by, changed_by_name,
+       placement_type, placement_segment, placement_capacity, placement_actual, placement_ref
+     ) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9::uuid, $10, $11, $12, $13, $14, $15)`,
     [
       params.entryId,
       params.dealerId,
@@ -221,8 +395,35 @@ async function insertEvent(
       params.comment,
       params.changedBy,
       params.changedByName,
+      params.placement.placementType,
+      params.placement.placementSegment,
+      params.placement.placementCapacity,
+      params.placement.placementActual,
+      params.placement.placementRef,
     ],
   );
+}
+
+function placementSnapshotFromInput(input: ShowcaseMatrixUpsertInput): PlacementSnapshot {
+  return {
+    placementType: input.placementType ?? null,
+    placementSegment: input.placementSegment ?? null,
+    placementCapacity: input.placementCapacity ?? null,
+    placementActual: input.placementActual ?? null,
+    placementRef: input.placementRef ?? null,
+  };
+}
+
+function entryChanged(prev: ShowcaseMatrixEntryDto | null, input: ShowcaseMatrixUpsertInput): boolean {
+  if (!prev) return true;
+  if (prev.status !== input.status) return true;
+  if ((prev.comment ?? null) !== (input.comment ?? null)) return true;
+  if (prev.placementType !== (input.placementType ?? null)) return true;
+  if (prev.placementSegment !== (input.placementSegment ?? null)) return true;
+  if (prev.placementCapacity !== (input.placementCapacity ?? null)) return true;
+  if (prev.placementActual !== (input.placementActual ?? null)) return true;
+  if (prev.placementRef !== (input.placementRef ?? null)) return true;
+  return false;
 }
 
 export async function upsertShowcaseMatrixEntry(
@@ -234,7 +435,9 @@ export async function upsertShowcaseMatrixEntry(
     throw new ShowcaseMatrixValidationError("Недостаточно прав.");
   }
 
-  const clientOpId = input.clientOpId ?? null;
+  const normalized = normalizePlacementFields(input);
+
+  const clientOpId = normalized.clientOpId ?? null;
   if (clientOpId) {
     const existingByOp = await fetchByClientOpId(pool, clientOpId);
     if (existingByOp) {
@@ -242,15 +445,21 @@ export async function upsertShowcaseMatrixEntry(
     }
   }
 
-  const prev = await fetchByTarget(pool, input.tradePointId, input.targetKind, input.targetId);
+  const prev = await fetchByTarget(
+    pool,
+    normalized.tradePointId,
+    normalized.targetKind,
+    normalized.targetId,
+  );
   const oldStatus = prev?.status ?? null;
-  const statusChanged = oldStatus !== input.status;
+  const shouldWriteEvent = entryChanged(prev, normalized);
 
   const r = await pool.query<Record<string, unknown>>(
     `INSERT INTO showcase_matrix_entries (
        dealer_id, trade_point_id, target_kind, target_id, status, comment,
-       client_op_id, updated_at, updated_by, updated_by_name
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), $8::uuid, $9)
+       client_op_id, updated_at, updated_by, updated_by_name,
+       placement_type, placement_segment, placement_capacity, placement_actual, placement_ref
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), $8::uuid, $9, $10, $11, $12, $13, $14)
      ON CONFLICT (trade_point_id, target_kind, target_id)
      DO UPDATE SET
        dealer_id = EXCLUDED.dealer_id,
@@ -259,34 +468,45 @@ export async function upsertShowcaseMatrixEntry(
        client_op_id = COALESCE(EXCLUDED.client_op_id, showcase_matrix_entries.client_op_id),
        updated_at = NOW(),
        updated_by = EXCLUDED.updated_by,
-       updated_by_name = EXCLUDED.updated_by_name
+       updated_by_name = EXCLUDED.updated_by_name,
+       placement_type = EXCLUDED.placement_type,
+       placement_segment = EXCLUDED.placement_segment,
+       placement_capacity = EXCLUDED.placement_capacity,
+       placement_actual = EXCLUDED.placement_actual,
+       placement_ref = EXCLUDED.placement_ref
      RETURNING *`,
     [
-      input.dealerId,
-      input.tradePointId,
-      input.targetKind,
-      input.targetId,
-      input.status,
-      input.comment,
+      normalized.dealerId,
+      normalized.tradePointId,
+      normalized.targetKind,
+      normalized.targetId,
+      normalized.status,
+      normalized.comment ?? null,
       clientOpId,
       sessionUser.id,
       sessionUser.fullName,
+      normalized.placementType,
+      normalized.placementSegment,
+      normalized.placementCapacity,
+      normalized.placementActual,
+      normalized.placementRef,
     ],
   );
 
   const entry = mapEntryRow(r.rows[0]!);
-  if (!prev || statusChanged) {
+  if (shouldWriteEvent) {
     await insertEvent(pool, {
       entryId: entry.id,
-      dealerId: input.dealerId,
-      tradePointId: input.tradePointId,
-      targetKind: input.targetKind,
-      targetId: input.targetId,
+      dealerId: normalized.dealerId,
+      tradePointId: normalized.tradePointId,
+      targetKind: normalized.targetKind,
+      targetId: normalized.targetId,
       oldStatus,
-      newStatus: input.status,
-      comment: input.comment ?? null,
+      newStatus: normalized.status,
+      comment: normalized.comment ?? null,
       changedBy: sessionUser.id,
       changedByName: sessionUser.fullName,
+      placement: placementSnapshotFromInput(normalized),
     });
   }
 

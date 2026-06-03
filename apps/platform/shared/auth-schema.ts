@@ -266,6 +266,11 @@ export const showcaseMatrixEntries = pgTable(
       .default(sql`now()`),
     updatedBy: uuid("updated_by").references(() => authUsers.id),
     updatedByName: text("updated_by_name"),
+    placementType: text("placement_type"),
+    placementSegment: text("placement_segment"),
+    placementCapacity: integer("placement_capacity"),
+    placementActual: integer("placement_actual"),
+    placementRef: text("placement_ref"),
   },
   (t) => [
     uniqueIndex("uq_showcase_matrix_entry").on(t.tradePointId, t.targetKind, t.targetId),
@@ -274,6 +279,12 @@ export const showcaseMatrixEntries = pgTable(
     uniqueIndex("uq_showcase_matrix_client_op")
       .on(t.clientOpId)
       .where(sql`${t.clientOpId} IS NOT NULL`),
+    index("idx_showcase_matrix_placement")
+      .on(t.tradePointId, t.placementSegment)
+      .where(sql`${t.targetKind} = 'placement'`),
+    index("idx_showcase_matrix_placement_ref")
+      .on(t.placementRef)
+      .where(sql`${t.placementRef} IS NOT NULL`),
   ],
 );
 
@@ -294,6 +305,11 @@ export const showcaseMatrixEvents = pgTable(
     changedAt: timestamp("changed_at", { withTimezone: true, mode: "string" })
       .notNull()
       .default(sql`now()`),
+    placementType: text("placement_type"),
+    placementSegment: text("placement_segment"),
+    placementCapacity: integer("placement_capacity"),
+    placementActual: integer("placement_actual"),
+    placementRef: text("placement_ref"),
   },
   (t) => [
     index("idx_showcase_matrix_events_tp").on(t.tradePointId, t.changedAt),
