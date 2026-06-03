@@ -36,15 +36,25 @@ Object.defineProperty(globalThis, "fetch", {
   configurable: true,
 });
 
+let opCounter = 0;
 Object.defineProperty(globalThis, "crypto", {
-  value: { randomUUID: () => "test-op-uuid-0001" },
+  value: {
+    randomUUID: () => {
+      opCounter += 1;
+      return `test-op-uuid-${String(opCounter).padStart(4, "0")}`;
+    },
+  },
   configurable: true,
 });
 
 const {
   showcaseMatrixCacheKey,
   loadCachedMatrix,
+  loadCachedPlacements,
+  loadCachedPlacementModels,
   setMatrixStatus,
+  setMatrixPlacement,
+  setMatrixPlacementModel,
   SHOWCASE_MATRIX_STORE_CACHE_KEY,
 } = await import("../showcase-matrix-store.js");
 
@@ -53,6 +63,7 @@ const { listPendingSyncItems, OVERRIDES_PENDING_STORAGE_KEY } = await import("..
 store.clear();
 localStorageMock.removeItem(OVERRIDES_PENDING_STORAGE_KEY);
 localStorageMock.removeItem(SHOWCASE_MATRIX_STORE_CACHE_KEY);
+opCounter = 0;
 
 assert.equal(showcaseMatrixCacheKey("tp-1", "model", "m-42"), "tp-1|model|m-42");
 
@@ -72,18 +83,99 @@ assert.equal(cached.length, 1);
 assert.equal(cached[0]?.status, "need_install");
 assert.equal(cached[0]?.targetId, "m-42");
 assert.equal(cached[0]?.updatedByName, "Tester");
+assert.equal(cached[0]?.placementType, null);
+assert.equal(cached[0]?.placementSegment, null);
+assert.equal(cached[0]?.placementCapacity, null);
+assert.equal(cached[0]?.placementActual, null);
+assert.equal(cached[0]?.placementRef, null);
 
 const rawCache = localStorageMock.getItem(SHOWCASE_MATRIX_STORE_CACHE_KEY);
 assert.ok(rawCache?.includes("tp-1|model|m-42"));
 
-const pending = listPendingSyncItems();
+let pending = listPendingSyncItems();
 assert.equal(pending.length, 1);
 assert.equal(pending[0]?.kind, "showcase-matrix-upsert");
 assert.equal(pending[0]?.id, "showcase-matrix-upsert:test-op-uuid-0001");
 
-const payload = pending[0]?.payload as Record<string, unknown>;
-assert.equal(payload.dealerId, "d-1");
-assert.equal(payload.tradePointId, "tp-1");
-assert.equal(payload.clientOpId, "test-op-uuid-0001");
+const statusPayload = pending[0]?.payload as Record<string, unknown>;
+assert.equal(statusPayload.dealerId, "d-1");
+assert.equal(statusPayload.tradePointId, "tp-1");
+assert.equal(statusPayload.clientOpId, "test-op-uuid-0001");
+
+setMatrixPlacement({
+  dealerId: "d-1",
+  tradePointId: "tp-2",
+  targetId: "block-portal-1",
+  placementType: "portal",
+  placementSegment: "vh",
+  placementCapacity: 6,
+  placementActual: 2,
+  comment: "блок портал",
+  updatedByName: "Маркетолог",
+});
+
+const placementEntry = loadCachedMatrix("tp-2")[0];
+assert.equal(placementEntry?.targetKind, "placement");
+assert.equal(placementEntry?.status, "installed");
+assert.equal(placementEntry?.placementType, "portal");
+assert.equal(placementEntry?.placementSegment, "vh");
+assert.equal(placementEntry?.placementCapacity, 6);
+assert.equal(placementEntry?.placementActual, 2);
+assert.equal(placementEntry?.placementRef, null);
+
+assert.ok(
+  localStorageMock.getItem(SHOWCASE_MATRIX_STORE_CACHE_KEY)?.includes("tp-2|placement|block-portal-1"),
+);
+
+pending = listPendingSyncItems();
+const placementPending = pending.find((x) => x.id === "showcase-matrix-upsert:test-op-uuid-0002");
+assert.ok(placementPending);
+const placementPayload = placementPending!.payload as Record<string, unknown>;
+assert.equal(placementPayload.targetKind, "placement");
+assert.equal(placementPayload.status, "installed");
+assert.equal(placementPayload.placementType, "portal");
+assert.equal(placementPayload.placementSegment, "vh");
+assert.equal(placementPayload.placementCapacity, 6);
+assert.equal(placementPayload.placementActual, 2);
+assert.equal(placementPayload.placementRef, null);
+
+setMatrixPlacementModel({
+  dealerId: "d-1",
+  tradePointId: "tp-2",
+  targetKind: "model",
+  targetId: "model-in-block",
+  placementRef: "block-portal-1",
+  status: "installed",
+});
+
+const modelInBlock = loadCachedMatrix("tp-2").find((e) => e.targetId === "model-in-block");
+assert.equal(modelInBlock?.placementRef, "block-portal-1");
+assert.equal(modelInBlock?.placementType, null);
+
+pending = listPendingSyncItems();
+const modelPending = pending.find((x) => x.id === "showcase-matrix-upsert:test-op-uuid-0003");
+assert.ok(modelPending);
+const modelPayload = modelPending!.payload as Record<string, unknown>;
+assert.equal(modelPayload.placementRef, "block-portal-1");
+assert.equal(modelPayload.targetKind, "model");
+
+setMatrixStatus({
+  dealerId: "d-1",
+  tradePointId: "tp-2",
+  targetKind: "variant",
+  targetId: "sku-loose",
+  status: "postponed",
+});
+
+const placementsOnly = loadCachedPlacements("tp-2");
+assert.equal(placementsOnly.length, 1);
+assert.equal(placementsOnly[0]?.targetId, "block-portal-1");
+
+const modelsInBlock = loadCachedPlacementModels("tp-2", "block-portal-1");
+assert.equal(modelsInBlock.length, 1);
+assert.equal(modelsInBlock[0]?.targetId, "model-in-block");
+
+const looseVariant = loadCachedPlacementModels("tp-2", "missing-block");
+assert.equal(looseVariant.length, 0);
 
 console.log("✓ showcase-matrix-store tests passed");

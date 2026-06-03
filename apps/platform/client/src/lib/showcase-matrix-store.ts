@@ -5,6 +5,8 @@
 import {
   fetchShowcaseMatrixList,
   type ShowcaseMatrixEntryDto,
+  type ShowcasePlacementSegment,
+  type ShowcasePlacementType,
   type ShowcaseMatrixStatus,
   type ShowcaseMatrixTargetKind,
 } from "@/lib/showcase-matrix-api";
@@ -130,6 +132,144 @@ export async function refreshMatrixFromServer(
   return fromServer;
 }
 
+const NULL_PLACEMENT_FIELDS = {
+  placementType: null,
+  placementSegment: null,
+  placementCapacity: null,
+  placementActual: null,
+  placementRef: null,
+} as const;
+
+function enqueueShowcaseMatrixUpsert(
+  clientOpId: string,
+  payload: Record<string, unknown>,
+): void {
+  enqueuePendingSync({
+    id: makePendingId("showcase-matrix-upsert", clientOpId),
+    kind: "showcase-matrix-upsert",
+    payload,
+  });
+  void runOverridesPendingSyncOnce();
+}
+
+export function loadCachedPlacements(tradePointId: string): ShowcaseMatrixEntryDto[] {
+  return loadCachedMatrix(tradePointId).filter((e) => e.targetKind === "placement");
+}
+
+export function loadCachedPlacementModels(
+  tradePointId: string,
+  blockTargetId: string,
+): ShowcaseMatrixEntryDto[] {
+  return loadCachedMatrix(tradePointId).filter(
+    (e) =>
+      (e.targetKind === "model" || e.targetKind === "variant") && e.placementRef === blockTargetId,
+  );
+}
+
+export function setMatrixPlacement(params: {
+  dealerId: string;
+  tradePointId: string;
+  targetId: string;
+  placementType: ShowcasePlacementType;
+  placementSegment: ShowcasePlacementSegment;
+  placementCapacity: number;
+  placementActual: number;
+  comment?: string | null;
+  updatedBy?: string;
+  updatedByName?: string;
+}): { entry: ShowcaseMatrixEntryDto; queued: boolean } {
+  const clientOpId = newClientOpId();
+  const now = new Date().toISOString();
+  const comment = params.comment ?? null;
+
+  const entry: ShowcaseMatrixEntryDto = {
+    id: `local-${clientOpId}`,
+    dealerId: params.dealerId,
+    tradePointId: params.tradePointId,
+    targetKind: "placement",
+    targetId: params.targetId,
+    status: "installed",
+    comment,
+    updatedAt: now,
+    updatedBy: params.updatedBy ?? null,
+    updatedByName: params.updatedByName ?? null,
+    placementType: params.placementType,
+    placementSegment: params.placementSegment,
+    placementCapacity: params.placementCapacity,
+    placementActual: params.placementActual,
+    placementRef: null,
+  };
+
+  const record = loadCacheRecord();
+  record[showcaseMatrixCacheKey(params.tradePointId, "placement", params.targetId)] = entry;
+  saveCacheRecord(record);
+
+  enqueueShowcaseMatrixUpsert(clientOpId, {
+    dealerId: params.dealerId,
+    tradePointId: params.tradePointId,
+    targetKind: "placement",
+    targetId: params.targetId,
+    status: "installed",
+    comment,
+    clientOpId,
+    placementType: params.placementType,
+    placementSegment: params.placementSegment,
+    placementCapacity: params.placementCapacity,
+    placementActual: params.placementActual,
+    placementRef: null,
+  });
+
+  return { entry, queued: true };
+}
+
+export function setMatrixPlacementModel(params: {
+  dealerId: string;
+  tradePointId: string;
+  targetKind: "model" | "variant";
+  targetId: string;
+  placementRef: string;
+  status: ShowcaseMatrixStatus;
+  comment?: string | null;
+  updatedBy?: string;
+  updatedByName?: string;
+}): { entry: ShowcaseMatrixEntryDto; queued: boolean } {
+  const clientOpId = newClientOpId();
+  const now = new Date().toISOString();
+  const comment = params.comment ?? null;
+
+  const entry: ShowcaseMatrixEntryDto = {
+    id: `local-${clientOpId}`,
+    dealerId: params.dealerId,
+    tradePointId: params.tradePointId,
+    targetKind: params.targetKind,
+    targetId: params.targetId,
+    status: params.status,
+    comment,
+    updatedAt: now,
+    updatedBy: params.updatedBy ?? null,
+    updatedByName: params.updatedByName ?? null,
+    ...NULL_PLACEMENT_FIELDS,
+    placementRef: params.placementRef,
+  };
+
+  const record = loadCacheRecord();
+  record[showcaseMatrixCacheKey(params.tradePointId, params.targetKind, params.targetId)] = entry;
+  saveCacheRecord(record);
+
+  enqueueShowcaseMatrixUpsert(clientOpId, {
+    dealerId: params.dealerId,
+    tradePointId: params.tradePointId,
+    targetKind: params.targetKind,
+    targetId: params.targetId,
+    status: params.status,
+    comment,
+    clientOpId,
+    placementRef: params.placementRef,
+  });
+
+  return { entry, queued: true };
+}
+
 export function setMatrixStatus(params: {
   dealerId: string;
   tradePointId: string;
@@ -155,27 +295,22 @@ export function setMatrixStatus(params: {
     updatedAt: now,
     updatedBy: params.updatedBy ?? null,
     updatedByName: params.updatedByName ?? null,
+    ...NULL_PLACEMENT_FIELDS,
   };
 
   const record = loadCacheRecord();
   record[showcaseMatrixCacheKey(params.tradePointId, params.targetKind, params.targetId)] = entry;
   saveCacheRecord(record);
 
-  enqueuePendingSync({
-    id: makePendingId("showcase-matrix-upsert", clientOpId),
-    kind: "showcase-matrix-upsert",
-    payload: {
-      dealerId: params.dealerId,
-      tradePointId: params.tradePointId,
-      targetKind: params.targetKind,
-      targetId: params.targetId,
-      status: params.status,
-      comment,
-      clientOpId,
-    },
+  enqueueShowcaseMatrixUpsert(clientOpId, {
+    dealerId: params.dealerId,
+    tradePointId: params.tradePointId,
+    targetKind: params.targetKind,
+    targetId: params.targetId,
+    status: params.status,
+    comment,
+    clientOpId,
   });
-
-  void runOverridesPendingSyncOnce();
 
   return { entry, queued: true };
 }
