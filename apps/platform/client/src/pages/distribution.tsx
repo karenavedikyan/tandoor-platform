@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
+import { Link } from "wouter";
 import { Search } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -48,11 +50,16 @@ export default function DistributionPage() {
           className="pointer-events-none absolute left-0 top-0 h-full w-1 rounded-l-2xl bg-primary"
           aria-hidden
         />
-        <div className="relative min-w-0 pl-3 sm:pl-4">
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Дистрибуция</h1>
-          <p className="mt-1 text-sm text-muted-foreground sm:text-base">
-            Сквозной просмотр витрин по клиентам и точкам в реальном времени.
-          </p>
+        <div className="relative flex min-w-0 flex-col gap-3 pl-3 sm:flex-row sm:items-start sm:justify-between sm:pl-4">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Дистрибуция</h1>
+            <p className="mt-1 text-sm text-muted-foreground sm:text-base">
+              Сквозной просмотр витрин по клиентам и точкам в реальном времени.
+            </p>
+          </div>
+          <Button asChild variant="outline" size="sm" className="shrink-0" data-testid="link-distribution-matrix-catalog">
+            <Link href="/distribution/matrix-catalog">Справочник матриц</Link>
+          </Button>
         </div>
       </header>
 
