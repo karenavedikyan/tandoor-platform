@@ -25,6 +25,16 @@ globalThis.window = {
   addEventListener: () => undefined,
   removeEventListener: () => undefined,
 };
+Object.defineProperty(globalThis, "navigator", {
+  value: { onLine: true },
+  configurable: true,
+});
+Object.defineProperty(globalThis, "fetch", {
+  value: async () => {
+    throw new Error("network");
+  },
+  configurable: true,
+});
 
 Object.defineProperty(globalThis, "crypto", {
   value: { randomUUID: () => "test-op-uuid-0001" },
