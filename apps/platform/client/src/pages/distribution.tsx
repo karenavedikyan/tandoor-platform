@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { DistributionDashboardSummary } from "@/components/distribution/distribution-dashboard-summary";
 import { DistributionClientTab } from "@/components/distribution/distribution-client-tab";
+import { DistributionProductTab } from "@/components/distribution/distribution-product-tab";
 import { DistributionTradePointTab } from "@/components/distribution/distribution-tradepoint-tab";
 import { DistributionManagerTab } from "@/components/distribution/distribution-manager-tab";
 import { DistributionEntryTradePointPanel } from "@/components/distribution/distribution-entry-tradepoint-panel";
@@ -133,6 +134,9 @@ export default function DistributionPage() {
               <TabsTrigger value="tradePoint" className="min-h-9 text-xs sm:text-sm" data-testid="tab-distribution-breakdown-tradepoint">
                 ТТ
               </TabsTrigger>
+              <TabsTrigger value="product" className="min-h-9 text-xs sm:text-sm" data-testid="tab-distribution-breakdown-product">
+                Продукт
+              </TabsTrigger>
             </TabsList>
             <TabsContent value="manager" className="mt-0 focus-visible:ring-0">
               <DistributionManagerTab scope={viewScope} filter={filter} />
@@ -142,6 +146,9 @@ export default function DistributionPage() {
             </TabsContent>
             <TabsContent value="tradePoint" className="mt-0 focus-visible:ring-0">
               <DistributionTradePointTab scope={viewScope} filter={filter} profile={profile} />
+            </TabsContent>
+            <TabsContent value="product" className="mt-0 focus-visible:ring-0">
+              <DistributionProductTab scope={viewScope} filter={filter} profile={profile} />
             </TabsContent>
           </Tabs>
 
