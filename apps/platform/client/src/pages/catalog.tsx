@@ -642,7 +642,7 @@ export default function CatalogPage() {
         {showShowcase ? (
           <CatalogShowcase
             categories={categories}
-            cardSize={cardSize === "list" ? "m" : cardSize}
+            cardSize={cardSize}
             onOpenSelection={(id, badge: ShowcaseBadge) => {
               setCategoryId(id);
               setOnlySale(badge === "sale");

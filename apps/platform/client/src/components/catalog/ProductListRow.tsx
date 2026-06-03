@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { DoorOpen } from "lucide-react";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
 import {
@@ -92,28 +93,49 @@ function useVariantDisplay(product: CatalogListProduct) {
   };
 }
 
+function ListRowPhotoPlaceholder() {
+  return (
+    <div className="flex h-full w-full flex-col items-center justify-center gap-1 bg-muted text-muted-foreground">
+      <DoorOpen className="h-6 w-6 shrink-0 opacity-60" aria-hidden />
+      <span className="text-[10px] leading-none">Нет фото</span>
+    </div>
+  );
+}
+
 export function ProductListRow({ product }: { product: CatalogListProduct }) {
   const { active, selection, setSelection, showSwitchers, variants, title, subtitleColor, groupStock } =
     useVariantDisplay(product);
-  const imageSrc = optimizedImage(active.image_url || product.image_url, 160);
+  const imageSrc = optimizedImage(active.image_url || product.image_url, 240);
+  const [imgFailed, setImgFailed] = useState(false);
   const detailHref = `/catalog/1c/${active.product_id}`;
   const colors = product.colors ?? [];
   const hasPalette = colors.length > 1;
+  const showImage = Boolean(imageSrc) && !imgFailed;
+
+  useEffect(() => {
+    setImgFailed(false);
+  }, [product.id, imageSrc]);
 
   return (
     <div
       className="Card-product-aflat border-b border-border last:border-b-0 hover:bg-muted/20"
       data-testid={`catalog-row-${product.id}`}
     >
-      <div className="flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-center sm:gap-4">
-        <Link href={detailHref} className="flex shrink-0">
-          <div className="relative h-20 w-20 overflow-hidden rounded-md border border-border/60 bg-white">
-            {imageSrc ? (
-              <img src={imageSrc} alt={title} className="h-full w-full object-contain p-1" loading="lazy" />
+      <div className="flex flex-col gap-3 px-3 py-3 min-[650px]:flex-row min-[650px]:items-start min-[650px]:gap-4 min-[650px]:px-4">
+        <Link href={detailHref} className="shrink-0">
+          <div className="relative h-24 w-24 overflow-hidden rounded-md border border-border bg-card min-[650px]:h-28 min-[650px]:w-28">
+            {showImage ? (
+              <img
+                src={imageSrc!}
+                alt=""
+                className="h-full w-full object-contain p-1.5"
+                loading="lazy"
+                onError={() => setImgFailed(true)}
+              />
             ) : (
-              <div className="flex h-full items-center justify-center text-[10px] text-muted-foreground">Нет фото</div>
+              <ListRowPhotoPlaceholder />
             )}
-            <div className="absolute left-0.5 top-0.5">
+            <div className="pointer-events-none absolute left-1 top-1">
               <CatalogPhotoBadges
                 product={product}
                 priceRetail={active.price_retail}
@@ -125,38 +147,19 @@ export function ProductListRow({ product }: { product: CatalogListProduct }) {
         </Link>
 
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div className="min-w-0 flex-1">
-              <Link
-                href={detailHref}
-                className="line-clamp-2 text-sm font-semibold leading-snug text-foreground hover:underline"
-              >
-                {title}
-              </Link>
-              {subtitleColor ? (
-                <p className="mt-0.5 truncate text-xs text-muted-foreground">{subtitleColor}</p>
-              ) : product.brand ? (
-                <p className="mt-0.5 truncate text-xs text-muted-foreground">{product.brand}</p>
-              ) : null}
-            </div>
-            <CatalogPriceBlock
-              priceRetail={active.price_retail}
-              priceRetailSale={active.price_retail_sale}
-              align="right"
-              size="sm"
-            />
-          </div>
-
-          <CatalogStockLine stock={groupStock} />
-
-          {hasPalette ? (
-            <CatalogColorPalette
-              compact
-              colors={colors}
-              variants={variants}
-              selectedColor={selection.color}
-              onSelect={(color) => setSelection({ ...selection, color })}
-            />
+          <Link
+            href={detailHref}
+            className="line-clamp-2 text-sm font-semibold leading-snug text-foreground hover:underline"
+          >
+            {title}
+          </Link>
+          {subtitleColor ? (
+            <p className="truncate text-xs text-muted-foreground">{subtitleColor}</p>
+          ) : product.brand ? (
+            <p className="truncate text-xs text-muted-foreground">{product.brand}</p>
+          ) : null}
+          {subtitleColor && product.brand ? (
+            <p className="truncate text-xs text-muted-foreground">{product.brand}</p>
           ) : null}
 
           {showSwitchers ? (
@@ -172,6 +175,28 @@ export function ProductListRow({ product }: { product: CatalogListProduct }) {
               sides={product.sides ?? []}
             />
           ) : null}
+
+          {hasPalette ? (
+            <CatalogColorPalette
+              compact
+              colors={colors}
+              variants={variants}
+              selectedColor={selection.color}
+              onSelect={(color) => setSelection({ ...selection, color })}
+            />
+          ) : null}
+
+          <CatalogStockLine stock={groupStock} />
+        </div>
+
+        <div className="flex shrink-0 flex-row items-center justify-between gap-4 border-t border-border/40 pt-2 min-[650px]:w-44 min-[650px]:flex-col min-[650px]:items-end min-[650px]:border-t-0 min-[650px]:pt-0">
+          <CatalogPriceBlock
+            priceRetail={active.price_retail}
+            priceRetailSale={active.price_retail_sale}
+            align="right"
+            size="sm"
+          />
+          <CatalogCardActionsRow compact layout="list" />
         </div>
       </div>
     </div>
