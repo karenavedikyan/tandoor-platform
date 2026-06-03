@@ -187,7 +187,7 @@ function RelatedCard({ item }: { item: RelatedProduct }) {
   const title = item.display_name || item.name;
   const hasSale = item.price_retail_sale != null;
   const [imageBroken, setImageBroken] = useState(false);
-  const relatedImageSrc = optimizedImage(item.image_url, 300);
+  const relatedImageSrc = optimizedImage(item.image_url, 320);
   const showImage = Boolean(relatedImageSrc) && !imageBroken;
 
   return (
@@ -340,7 +340,7 @@ export default function CatalogProduct1cPage() {
   const hasAnyBlob = product.images.some((i) => i.blob_url?.trim());
   const currentImg = product.images[activeImg];
   const mainImageUrl = currentImg?.blob_url?.trim();
-  const mainImageSrc = mainImageUrl ? optimizedImage(mainImageUrl, 1000, 80) : null;
+  const mainImageSrc = mainImageUrl ? optimizedImage(mainImageUrl, 1080, 80) : null;
   const showMainImage = Boolean(mainImageSrc && !brokenImages.has(activeImg));
   const showLightboxForCurrent = showMainImage;
   const readableBreadcrumbs = (product.breadcrumbs ?? []).filter(
