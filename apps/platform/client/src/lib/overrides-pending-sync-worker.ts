@@ -20,6 +20,11 @@ import {
   apiDeleteShipmentRoute,
   apiUpsertShipmentRoute,
 } from "@/lib/dealer-shipment-routes-api";
+import {
+  apiUpsertShowcaseMatrixEntryStrict,
+  type ShowcaseMatrixStatus,
+  type ShowcaseMatrixTargetKind,
+} from "@/lib/showcase-matrix-api";
 import { sanitizeDealerOverrideFieldsForApi } from "@/lib/overrides-persona-fields";
 import {
   dequeuePendingSync,
@@ -141,6 +146,18 @@ async function processItem(item: PendingSyncItem): Promise<void> {
         markPendingSyncFailed(item.id, "comment create failed");
       }
       return;
+    }
+    case "showcase-matrix-upsert": {
+      result = await apiUpsertShowcaseMatrixEntryStrict({
+        dealerId: String(p.dealerId),
+        tradePointId: String(p.tradePointId),
+        targetKind: p.targetKind as ShowcaseMatrixTargetKind,
+        targetId: String(p.targetId),
+        status: p.status as ShowcaseMatrixStatus,
+        comment: typeof p.comment === "string" ? p.comment : null,
+        clientOpId: typeof p.clientOpId === "string" ? p.clientOpId : undefined,
+      });
+      break;
     }
     default:
       return;
