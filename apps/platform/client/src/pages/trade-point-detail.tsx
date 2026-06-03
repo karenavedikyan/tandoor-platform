@@ -107,6 +107,7 @@ import { TradePointPhotoBlock } from "@/components/trade-point-photo-block";
 import { TradePointLegalEntitiesSection } from "@/components/trade-point-legal-entities-section";
 import { ShowcaseCoverPhotoSlot } from "@/components/showcase-cover-photo-slot";
 import { TradePointShowcaseMatrixSection } from "@/components/trade-point-showcase-matrix-section";
+import { DistributionTree } from "@/components/distribution/distribution-tree";
 import {
   getShowcaseMatrixTpHistoryEvents,
   loadShowcaseMatrixStorage,
@@ -1396,6 +1397,21 @@ function TradePointDetailContent({
               ),
             }}
           />
+
+          <section
+            data-testid="section-trade-point-distribution-live"
+            className="scroll-mt-28 space-y-3 sm:scroll-mt-32"
+          >
+            <SectionTitle subtitle="Сквозной просмотр позиций витрины в реальном времени.">
+              Дистрибуция
+            </SectionTitle>
+            <SurfaceCard>
+              <DistributionTree
+                scope={{ kind: "trade-point", dealer, point }}
+                profile={profile}
+              />
+            </SurfaceCard>
+          </section>
 
           <Bitrix24TasksPanel
             scope="trade_point"

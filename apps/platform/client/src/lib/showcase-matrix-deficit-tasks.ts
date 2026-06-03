@@ -54,7 +54,8 @@ function formatDueDateFromIso(iso: string): string {
   return `${dd}.${mm}.${yyyy}`;
 }
 
-function resolveProductForEntry(
+/** Имя позиции матрицы (model/variant) — единый резолв для задач и дерева дистрибуции. */
+export function resolveShowcaseMatrixPositionForEntry(
   entry: ShowcaseMatrixEntryDto,
   dealer: DealerRow,
 ): { productId: string; productName: string; showcaseMatrixImageSrc?: string } {
@@ -98,7 +99,7 @@ export function mapBackendEntriesToDeficitTasks(
     const dealer = maps.pointToDealer.get(entry.tradePointId);
     if (!dealer) continue;
 
-    const { productId, productName, showcaseMatrixImageSrc } = resolveProductForEntry(entry, dealer);
+    const { productId, productName, showcaseMatrixImageSrc } = resolveShowcaseMatrixPositionForEntry(entry, dealer);
     const status: MatrixTaskStatus =
       entry.status === "postponed" ? "in_progress" : "new";
     const priority: MatrixTaskPriority = entry.status === "need_install" ? "high" : "medium";

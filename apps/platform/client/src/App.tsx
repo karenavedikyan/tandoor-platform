@@ -55,6 +55,7 @@ const LazyCatalogPage = lazy(() => import("@/pages/catalog"));
 const LazyCatalogProduct1cPage = lazy(() => import("@/pages/catalog-product-1c"));
 const LazyProductDetailPage = lazy(() => import("@/pages/product-detail").then((m) => ({ default: m.ProductDetailPage })));
 const LazyTasksPage = lazy(() => import("@/pages/tasks"));
+const LazyDistributionPage = lazy(() => import("@/pages/distribution"));
 const LazyOrdersPage = lazy(() => import("@/pages/orders"));
 const LazyOrderDetailPage = lazy(() => import("@/pages/order-detail"));
 const LazyAnalyticsPage = lazy(() => import("@/pages/analytics"));
@@ -129,6 +130,7 @@ const CatalogPageRoute = suspensePage(LazyCatalogPage);
 const CatalogProduct1cPageRoute = suspensePage(LazyCatalogProduct1cPage);
 const ProductDetailPageRoute = suspensePage(LazyProductDetailPage);
 const TasksPageRoute = suspensePage(LazyTasksPage);
+const DistributionPageRoute = suspensePage(LazyDistributionPage);
 const OrdersPageRoute = suspensePage(LazyOrdersPage);
 const OrderDetailPageRoute = suspensePage(LazyOrderDetailPage);
 const AnalyticsPageRoute = suspensePage(LazyAnalyticsPage);
@@ -428,6 +430,7 @@ function AuthenticatedShell({
         <Route path="/catalog/:productId" component={ProductDetailPageRoute} />
         <Route path="/catalog" component={CatalogPageRoute} />
         <Route path="/tasks" component={TasksPageRoute} />
+        <Route path="/distribution" component={DistributionPageRoute} />
         <Route path="/training/programs/:programId" component={TrainingProgramPageRoute} />
         <Route path="/training/:articleId" component={TrainingArticlePageRoute} />
         <Route path="/training" component={TrainingPageRoute} />
