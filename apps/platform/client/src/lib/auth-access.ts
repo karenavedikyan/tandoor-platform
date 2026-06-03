@@ -473,7 +473,6 @@ export function getPilotNavigation(
     includeMarketingBriefsInDev: boolean;
   }): PilotNavGroup => {
     const items: PilotNavItem[] = [
-      { href: "/catalog", label: "Каталог", testId: "nav-item-catalog", navBehaviorId: "nav-catalog" },
       { href: "/training", label: "Обучение", testId: "nav-item-training", navBehaviorId: "nav-training" },
       { href: "/client-map", label: "Карта клиентов", testId: "nav-item-client-map", navBehaviorId: "nav-client-map" },
       { href: "/tasks", label: "Задачи по витрине", testId: "nav-item-showcase-tasks", navBehaviorId: "nav-tasks" },
@@ -521,6 +520,12 @@ export function getPilotNavigation(
         testId: "nav-item-trade-points",
         navBehaviorId: "nav-trade-points",
         ...tradePointNavExtras(),
+      },
+      {
+        href: "/catalog",
+        label: "Каталог",
+        testId: "nav-item-catalog",
+        navBehaviorId: "nav-catalog",
       },
       {
         href: "/sales-control/plan-fact",
