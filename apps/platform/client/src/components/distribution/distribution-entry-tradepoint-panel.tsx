@@ -5,10 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import {
-  TradePointShowcaseMatrixSection,
-  type TradePointShowcasePageBundle,
-} from "@/components/trade-point-showcase-matrix-section";
+import { DistributionTradePointMatrixEntry } from "@/components/distribution/distribution-tradepoint-matrix-entry";
 import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
@@ -21,60 +18,10 @@ import {
 import { formatRelativeTime } from "@/lib/format-datetime";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
-import type { TradePointMatrixSummary } from "@/lib/trade-point-matrix-data";
 import { SHOWCASE_MATRIX_STORE_CHANGED_EVENT } from "@/lib/showcase-matrix-store";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
 import { useCurrentUser, displayUserName } from "@/hooks/use-current-user";
-
-const EMPTY_MATRIX_SUMMARY: TradePointMatrixSummary = {
-  totalRequired: 0,
-  totalPresent: 0,
-  totalMissing: 0,
-  totalUnderReview: 0,
-  zoneA: 0,
-  zoneB: 0,
-  zoneC: 0,
-  entrancePresent: 0,
-  entranceRequired: 0,
-  interiorPresent: 0,
-  interiorRequired: 0,
-};
-
-function buildDistributionEntryShowcasePageBundle(
-  point: { id: string; distribution: { mk: number; vh: number; total: number } },
-): TradePointShowcasePageBundle {
-  const noop = () => undefined;
-  return {
-    matrixSummary: EMPTY_MATRIX_SUMMARY,
-    showcaseComment: "—",
-    distribution: point.distribution,
-    distributionConclusion: "—",
-    productMatrixFiltered: [],
-    productMatrixFilter: "all",
-    onProductMatrixFilterChange: noop,
-    recommendationByProductId: new Map(),
-    showcaseTasksOpen: [],
-    openTasksCount: 0,
-    recommendations: [],
-    createdTaskByProductId: new Map(),
-    onCreateMatrixTask: noop,
-    onScrollToMatrixTask: noop,
-    tasksLinkHref: `/trade-points/${point.id}`,
-    matrixTasksSlot: null,
-  };
-}
-
-function freshnessLabel(lastUpdatedAt: string | null): string {
-  if (!lastUpdatedAt) return "нет данных";
-  return `обновлено ${formatRelativeTime(lastUpdatedAt)}`;
-}
-
-function coverageBadgeClass(pct: number): string {
-  if (pct >= 100) return "border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300";
-  if (pct >= 50) return "border-primary/30 bg-primary/10 text-primary";
-  return "border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200";
-}
 
 type DistributionEntryTradePointPanelProps = {
   profile: ReleaseDemoProfile;
@@ -126,11 +73,6 @@ export function DistributionEntryTradePointPanel({ profile }: DistributionEntryT
 
   const actorUserId = user?.id ?? profile.personaUserId;
   const actorName = (user ? displayUserName(user) : null) ?? userLabelFromProfile(profile);
-
-  const showcasePage = useMemo(
-    () => (selectedRef ? buildDistributionEntryShowcasePageBundle(selectedRef.point) : null),
-    [selectedRef],
-  );
 
   const handleSelectRow = useCallback((row: DistributionEntryTradePointRow) => {
     setSelectedTradePointId(row.tradePointId);
@@ -202,27 +144,14 @@ export function DistributionEntryTradePointPanel({ profile }: DistributionEntryT
     </div>
   );
 
-  const entryColumn = selectedRow && selectedRef && showcasePage ? (
-    selectedRow.templateModelsCount === 0 ? (
-      <Card className="rounded-xl border border-border bg-card shadow-xs">
-        <CardContent className="px-4 py-8 text-center">
-          <p className="text-sm font-medium text-foreground">Активная матрица не назначена</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Для этой торговой точки нет чек-листа моделей. Выберите другую точку или назначьте матрицу в
-            справочнике.
-          </p>
-        </CardContent>
-      </Card>
-    ) : (
-      <TradePointShowcaseMatrixSection
-        dealer={selectedRef.dealer}
-        point={selectedRef.point}
-        profile={profile}
-        actorUserId={actorUserId}
-        actorName={actorName}
-        page={showcasePage}
-      />
-    )
+  const entryColumn = selectedRow && selectedRef ? (
+    <DistributionTradePointMatrixEntry
+      dealer={selectedRef.dealer}
+      point={selectedRef.point}
+      profile={profile}
+      actorUserId={actorUserId}
+      actorName={actorName}
+    />
   ) : (
     <Card className="rounded-xl border border-dashed border-border bg-muted/10 shadow-none">
       <CardContent className="px-4 py-10 text-center">
