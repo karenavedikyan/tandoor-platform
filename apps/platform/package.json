@@ -52,6 +52,7 @@
     "test:distribution-metrics": "tsx client/src/lib/__tests__/distribution-metrics.test.ts",
     "test:matrix-catalog-resolve": "vitest run shared/__tests__/showcase-matrix-catalog-handlers.spec.ts",
     "test:matrix-catalog": "vitest run shared/__tests__/showcase-matrix-catalog-handlers.spec.ts server/migrations/__tests__/showcase-matrix-catalog-migration.spec.ts",
+    "test:showcase-matrix-catalog-store": "tsx client/src/lib/__tests__/showcase-matrix-catalog-store.test.ts",
     "test:overrides-backfill": "tsx client/src/lib/__tests__/overrides-backfill-on-login.test.ts",
     "test:dealer-overrides-runtime": "tsx client/src/lib/__tests__/dealer-overrides-runtime.test.ts",
     "test:client-next-step-permissions": "tsx client/src/lib/__tests__/client-next-step-data.test.ts",

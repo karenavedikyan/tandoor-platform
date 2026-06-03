@@ -15,7 +15,11 @@ export type PendingSyncKind =
   | "shipment-routes-upsert"
   | "shipment-routes-delete"
   | "client-comments-create"
-  | "showcase-matrix-upsert";
+  | "showcase-matrix-upsert"
+  | "showcase-matrix-catalog-upsert"
+  | "showcase-matrix-catalog-set-status"
+  | "showcase-matrix-catalog-delete"
+  | "showcase-matrix-catalog-replace-models";
 
 export type PendingSyncItem = {
   id: string;

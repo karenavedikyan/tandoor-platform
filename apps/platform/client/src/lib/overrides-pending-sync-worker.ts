@@ -21,6 +21,15 @@ import {
   apiUpsertShipmentRoute,
 } from "@/lib/dealer-shipment-routes-api";
 import {
+  apiDeleteMatrixDefStrict,
+  apiReplaceMatrixDefModelsStrict,
+  apiSetMatrixDefStatusStrict,
+  apiUpsertMatrixDefStrict,
+  type ShowcaseMatrixCatalogStatus,
+  type ShowcaseMatrixDefModelInput,
+  type ShowcaseMatrixDefUpsertInput,
+} from "@/lib/showcase-matrix-catalog-api";
+import {
   apiUpsertShowcaseMatrixEntryStrict,
   type ShowcasePlacementSegment,
   type ShowcasePlacementType,
@@ -164,6 +173,29 @@ async function processItem(item: PendingSyncItem): Promise<void> {
         placementActual: typeof p.placementActual === "number" ? p.placementActual : null,
         placementRef: typeof p.placementRef === "string" ? p.placementRef : null,
       });
+      break;
+    }
+    case "showcase-matrix-catalog-upsert": {
+      result = await apiUpsertMatrixDefStrict(p as unknown as ShowcaseMatrixDefUpsertInput);
+      break;
+    }
+    case "showcase-matrix-catalog-set-status": {
+      result = await apiSetMatrixDefStatusStrict(
+        String(p.id),
+        p.status as ShowcaseMatrixCatalogStatus,
+      );
+      break;
+    }
+    case "showcase-matrix-catalog-delete": {
+      result = await apiDeleteMatrixDefStrict(String(p.id));
+      break;
+    }
+    case "showcase-matrix-catalog-replace-models": {
+      const rawModels = p.models;
+      const models = Array.isArray(rawModels)
+        ? (rawModels as ShowcaseMatrixDefModelInput[])
+        : [];
+      result = await apiReplaceMatrixDefModelsStrict(String(p.defId), models);
       break;
     }
     default:
