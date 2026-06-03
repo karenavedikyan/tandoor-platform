@@ -31,8 +31,16 @@ import {
   SHOWCASE_MATRIX_VIEW_MODE_STORAGE_KEY,
   statusLabelRu,
   upsertShowcaseMatrixModelState,
+  type ShowcaseMatrixEntryStored,
   type ShowcaseMatrixStatusId,
 } from "@/lib/trade-point-showcase-matrix-storage";
+import type { ShowcaseMatrixEntryDto, ShowcaseMatrixStatus } from "@/lib/showcase-matrix-api";
+import {
+  loadCachedMatrix,
+  refreshMatrixFromServer,
+  setMatrixStatus,
+  SHOWCASE_MATRIX_STORE_CHANGED_EVENT,
+} from "@/lib/showcase-matrix-store";
 import type { ShowcaseTask } from "@/lib/showcase-distribution-data";
 import type { MatrixFilterId, TradePointMatrixSummary, TradePointProductMatrixItem } from "@/lib/trade-point-matrix-data";
 import type { MatrixTask, MatrixTaskRecommendation } from "@/lib/trade-point-task-data";
@@ -73,6 +81,10 @@ type MatrixCatalogFilterRow = {
   label: string;
   options: { value: string; label: string }[];
 };
+
+function showcaseStatusToLocal(status: ShowcaseMatrixStatus): ShowcaseMatrixStatusId {
+  return status;
+}
 
 function modelsMatchingCategory(
   list: ShowcaseMatrixModelDefinition[],
@@ -329,13 +341,62 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
   useEffect(() => {
     const fn = () => setBump((n) => n + 1);
     window.addEventListener(SHOWCASE_MATRIX_CHANGED_EVENT, fn);
-    return () => window.removeEventListener(SHOWCASE_MATRIX_CHANGED_EVENT, fn);
+    window.addEventListener(SHOWCASE_MATRIX_STORE_CHANGED_EVENT, fn);
+    return () => {
+      window.removeEventListener(SHOWCASE_MATRIX_CHANGED_EVENT, fn);
+      window.removeEventListener(SHOWCASE_MATRIX_STORE_CHANGED_EVENT, fn);
+    };
   }, []);
+
+  useEffect(() => {
+    void refreshMatrixFromServer(point.id, dealer.id);
+  }, [point.id, dealer.id]);
+
+  useEffect(() => {
+    const onOnline = () => void refreshMatrixFromServer(point.id, dealer.id);
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, [point.id, dealer.id]);
 
   const storage = useMemo(() => {
     void bump;
     return loadShowcaseMatrixStorage();
   }, [bump]);
+
+  const backendByModelId = useMemo(() => {
+    void bump;
+    const map = new Map<string, ShowcaseMatrixEntryDto>();
+    for (const entry of loadCachedMatrix(point.id)) {
+      if (entry.targetKind === "model") map.set(entry.targetId, entry);
+    }
+    return map;
+  }, [bump, point.id]);
+
+  const effectiveStatus = useCallback(
+    (modelId: string): ShowcaseMatrixStatusId => {
+      const backend = backendByModelId.get(modelId);
+      if (backend) return showcaseStatusToLocal(backend.status);
+      return getEffectiveMatrixStatus(dealer.id, point.id, modelId, storage);
+    },
+    [backendByModelId, storage, dealer.id, point.id],
+  );
+
+  const effectiveEntry = useCallback(
+    (modelId: string): ShowcaseMatrixEntryStored => {
+      const backend = backendByModelId.get(modelId);
+      if (backend) {
+        return {
+          status: showcaseStatusToLocal(backend.status),
+          comment: backend.comment ?? "",
+          updatedAt: backend.updatedAt,
+          updatedBy: backend.updatedBy ?? "",
+          updatedByName: backend.updatedByName ?? "",
+        };
+      }
+      return getEffectiveMatrixEntry(dealer.id, point.id, modelId, storage);
+    },
+    [backendByModelId, storage, dealer.id, point.id],
+  );
 
   const models = useMemo(
     () => getShowcaseMatrixModelsForTradePoint(dealer.id, point.id, dealer.clientCategory),
@@ -355,10 +416,10 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
   const priorityNeedModels = useMemo(() => {
     const pr: Record<ShowcaseMatrixModelDefinition["basePriority"], number> = { high: 0, medium: 1, low: 2 };
     return models
-      .filter((m) => getEffectiveMatrixStatus(dealer.id, point.id, m.id, storage) === "need_install")
+      .filter((m) => effectiveStatus(m.id) === "need_install")
       .sort((a, b) => pr[a.basePriority] - pr[b.basePriority] || a.name.localeCompare(b.name))
       .slice(0, 3);
-  }, [models, storage, dealer.id, point.id]);
+  }, [models, effectiveStatus]);
 
   const statusCounts = useMemo(() => {
     const acc: Record<ShowcaseMatrixStatusId, number> = {
@@ -368,11 +429,11 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
       not_relevant: 0,
     };
     for (const m of models) {
-      const st = getEffectiveMatrixStatus(dealer.id, point.id, m.id, storage);
+      const st = effectiveStatus(m.id);
       acc[st] += 1;
     }
     return acc;
-  }, [models, storage, dealer.id, point.id]);
+  }, [models, effectiveStatus]);
 
   const [userQuickFilter, setUserQuickFilter] = useState<ShowcaseMatrixQuickFilterId | null>(null);
   const autoQuickFilter: ShowcaseMatrixQuickFilterId = statusCounts.need_install > 0 ? "needed" : "all";
@@ -384,10 +445,10 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
 
   const statusFilteredModels = useMemo(() => {
     return models.filter((m) => {
-      const st = getEffectiveMatrixStatus(dealer.id, point.id, m.id, storage);
+      const st = effectiveStatus(m.id);
       return modelMatchesQuickFilter(st, activeQuickFilter);
     });
-  }, [models, storage, dealer.id, point.id, activeQuickFilter]);
+  }, [models, effectiveStatus, activeQuickFilter]);
 
   const modelsForCatalogOptionScope = useMemo(
     () => modelsMatchingCategory(models, categoryFilter),
@@ -467,6 +528,16 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
 
   const persist = useCallback(
     (model: ShowcaseMatrixModelDefinition, status: ShowcaseMatrixStatusId, comment: string) => {
+      setMatrixStatus({
+        dealerId: dealer.id,
+        tradePointId: point.id,
+        targetKind: "model",
+        targetId: model.id,
+        status,
+        comment,
+        updatedBy: actorUserId,
+        updatedByName: actorName,
+      });
       upsertShowcaseMatrixModelState({
         dealerId: dealer.id,
         tradePointId: point.id,
@@ -957,8 +1028,8 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
         ) : (
           <div className={cn(gridClass, viewMode === "list" && "divide-y divide-border/80")}>
             {filteredModels.map((m) => {
-              const st = getEffectiveMatrixStatus(dealer.id, point.id, m.id, storage);
-              const entry = getEffectiveMatrixEntry(dealer.id, point.id, m.id, storage);
+              const st = effectiveStatus(m.id);
+              const entry = effectiveEntry(m.id);
               const commentVal = entry.comment ?? "";
 
               if (viewMode === "list") {
