@@ -11,10 +11,13 @@ import {
 import {
   CatalogCardActionsRow,
   CatalogColorPalette,
+  CatalogInlineBadges,
+  CatalogInlinePrice,
   CatalogPhotoBadges,
   CatalogPriceBlock,
   CatalogSpecsButton,
   CatalogStockLine,
+  formatCatalogStock,
   showSpecsButton,
 } from "./catalog-card-parts";
 import { optimizedImage } from "@/lib/catalog-image";
@@ -93,24 +96,25 @@ function useVariantDisplay(product: CatalogListProduct) {
   };
 }
 
-function ListRowPhotoPlaceholder() {
+function ListRowThumbPlaceholder() {
   return (
-    <div className="flex h-full w-full flex-col items-center justify-center gap-1 bg-muted text-muted-foreground">
-      <DoorOpen className="h-6 w-6 shrink-0 opacity-60" aria-hidden />
-      <span className="text-[10px] leading-none">Нет фото</span>
+    <div className="flex h-full w-full items-center justify-center bg-muted">
+      <DoorOpen className="h-4 w-4 shrink-0 text-muted-foreground opacity-50" aria-hidden />
     </div>
   );
 }
 
 export function ProductListRow({ product }: { product: CatalogListProduct }) {
-  const { active, selection, setSelection, showSwitchers, variants, title, subtitleColor, groupStock } =
-    useVariantDisplay(product);
-  const imageSrc = optimizedImage(active.image_url || product.image_url, 240);
+  const { active, title, subtitleColor, groupStock } = useVariantDisplay(product);
+  const imageSrc = optimizedImage(active.image_url || product.image_url, 96);
   const [imgFailed, setImgFailed] = useState(false);
   const detailHref = `/catalog/1c/${active.product_id}`;
-  const colors = product.colors ?? [];
-  const hasPalette = colors.length > 1;
   const showImage = Boolean(imageSrc) && !imgFailed;
+  const subtitle = subtitleColor || product.brand;
+  const titleLine = subtitle ? `${title} · ${subtitle}` : title;
+  const variantHint =
+    (product.variant_count ?? 0) > 1 ? product.variant_count : (product.variants?.length ?? 0) > 1 ? product.variants!.length : 0;
+  const stock = groupStock ?? 0;
 
   useEffect(() => {
     setImgFailed(false);
@@ -118,85 +122,62 @@ export function ProductListRow({ product }: { product: CatalogListProduct }) {
 
   return (
     <div
-      className="Card-product-aflat border-b border-border last:border-b-0 hover:bg-muted/20"
+      className="Card-product-aflat border-b border-border last:border-b-0 hover:bg-muted/30"
       data-testid={`catalog-row-${product.id}`}
     >
-      <div className="flex flex-col gap-3 px-3 py-3 min-[650px]:flex-row min-[650px]:items-start min-[650px]:gap-4 min-[650px]:px-4">
-        <Link href={detailHref} className="shrink-0">
-          <div className="relative h-24 w-24 overflow-hidden rounded-md border border-border bg-card min-[650px]:h-28 min-[650px]:w-28">
+      <div className="flex items-center gap-2 px-3 py-2 min-[650px]:gap-3">
+        <Link
+          href={detailHref}
+          className="group flex min-w-0 flex-1 items-center gap-2 min-[650px]:gap-3 hover:underline"
+        >
+          <div className="h-8 w-8 shrink-0 overflow-hidden rounded border border-border bg-card">
             {showImage ? (
               <img
                 src={imageSrc!}
                 alt=""
-                className="h-full w-full object-contain p-1.5"
+                className="h-full w-full object-contain p-0.5"
                 loading="lazy"
                 onError={() => setImgFailed(true)}
               />
             ) : (
-              <ListRowPhotoPlaceholder />
+              <ListRowThumbPlaceholder />
             )}
-            <div className="pointer-events-none absolute left-1 top-1">
-              <CatalogPhotoBadges
-                product={product}
-                priceRetail={active.price_retail}
-                priceRetailSale={active.price_retail_sale}
-                compact
-              />
-            </div>
           </div>
+          <span className="min-w-0 truncate text-sm font-medium text-foreground group-hover:text-[#9aca3c] hover:text-[#9aca3c]">
+            {titleLine}
+            {variantHint > 1 ? (
+              <span className="ml-1.5 text-[10px] font-normal text-muted-foreground">+{variantHint}</span>
+            ) : null}
+          </span>
         </Link>
 
-        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-          <Link
-            href={detailHref}
-            className="line-clamp-2 text-sm font-semibold leading-snug text-foreground hover:underline"
-          >
-            {title}
-          </Link>
-          {subtitleColor ? (
-            <p className="truncate text-xs text-muted-foreground">{subtitleColor}</p>
-          ) : product.brand ? (
-            <p className="truncate text-xs text-muted-foreground">{product.brand}</p>
-          ) : null}
-          {subtitleColor && product.brand ? (
-            <p className="truncate text-xs text-muted-foreground">{product.brand}</p>
-          ) : null}
-
-          {showSwitchers ? (
-            <VariantSwitchers
-              compact
-              hideColors={hasPalette}
-              variants={variants}
-              selection={selection}
-              onSelectionChange={setSelection}
-              sizes={product.sizes ?? []}
-              colors={colors}
-              doorTypes={product.door_types ?? []}
-              sides={product.sides ?? []}
-            />
-          ) : null}
-
-          {hasPalette ? (
-            <CatalogColorPalette
-              compact
-              colors={colors}
-              variants={variants}
-              selectedColor={selection.color}
-              onSelect={(color) => setSelection({ ...selection, color })}
-            />
-          ) : null}
-
-          <CatalogStockLine stock={groupStock} />
-        </div>
-
-        <div className="flex shrink-0 flex-row items-center justify-between gap-4 border-t border-border/40 pt-2 min-[650px]:w-44 min-[650px]:flex-col min-[650px]:items-end min-[650px]:border-t-0 min-[650px]:pt-0">
-          <CatalogPriceBlock
+        <div className="hidden shrink-0 min-[650px]:block">
+          <CatalogInlineBadges
+            product={product}
             priceRetail={active.price_retail}
             priceRetailSale={active.price_retail_sale}
-            align="right"
-            size="sm"
           />
-          <CatalogCardActionsRow compact layout="list" />
+        </div>
+
+        <span
+          className={cn(
+            "hidden w-16 shrink-0 text-right text-xs tabular-nums min-[650px]:block",
+            stock > 0 ? "text-foreground" : "text-muted-foreground",
+          )}
+          title={stock > 0 ? `В наличии: ${formatCatalogStock(stock)}` : "Нет в наличии"}
+        >
+          {stock > 0 ? `${formatCatalogStock(stock)}` : "—"}
+        </span>
+
+        <div className="w-[5.5rem] shrink-0 text-right min-[650px]:w-28">
+          <CatalogInlinePrice
+            priceRetail={active.price_retail}
+            priceRetailSale={active.price_retail_sale}
+          />
+        </div>
+
+        <div className="relative z-10 shrink-0" onClick={(e) => e.stopPropagation()}>
+          <CatalogCardActionsRow compact layout="list" density="compact" />
         </div>
       </div>
     </div>
