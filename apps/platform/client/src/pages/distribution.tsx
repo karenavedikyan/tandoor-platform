@@ -5,7 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
 import { DistributionDashboardSummary } from "@/components/distribution/distribution-dashboard-summary";
+import { DistributionManagerTab } from "@/components/distribution/distribution-manager-tab";
 import { DistributionEntryTradePointPanel } from "@/components/distribution/distribution-entry-tradepoint-panel";
 import { DistributionFiltersBar } from "@/components/distribution/distribution-filters-bar";
 import { DistributionTree } from "@/components/distribution/distribution-tree";
@@ -117,6 +119,17 @@ export default function DistributionPage() {
           />
 
           <DistributionDashboardSummary scope={viewScope} filter={filter} />
+
+          <Tabs defaultValue="manager" className="w-full min-w-0 space-y-3" data-testid="tabs-distribution-view-breakdown">
+            <TabsList className="h-auto w-full max-w-lg justify-start gap-1 bg-muted/50 p-1">
+              <TabsTrigger value="manager" className="min-h-9 text-xs sm:text-sm" data-testid="tab-distribution-breakdown-manager">
+                Менеджер
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="manager" className="mt-0 focus-visible:ring-0">
+              <DistributionManagerTab scope={viewScope} filter={filter} />
+            </TabsContent>
+          </Tabs>
 
           <div className="relative max-w-md">
             <Search

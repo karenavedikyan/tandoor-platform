@@ -374,6 +374,14 @@ export function aggregateByDealer(
   return out;
 }
 
+/** Ключ менеджера для ref (та же логика, что в aggregateByManager). */
+export function resolveManagerKeyForRef(
+  ref: ScopeTradePointRef,
+  options?: ManagerAggregationOptions,
+): string {
+  return resolveManagerUserIdForDealer(ref.dealer, options?.responsibleByCode) ?? "unassigned";
+}
+
 export function aggregateByManager(
   refs: readonly ScopeTradePointRef[],
   ctxBuilder: (ref: ScopeTradePointRef) => DistributionMetricsContext,
