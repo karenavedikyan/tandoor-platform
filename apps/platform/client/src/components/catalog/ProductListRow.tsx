@@ -214,9 +214,9 @@ export function ProductCardGrid({
           {subtitleColor ? (
             <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{subtitleColor}</p>
           ) : null}
-          <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
-            {product.brand ? <span>{product.brand}</span> : <span className="text-muted-foreground/60">—</span>}
-          </p>
+          {product.brand ? (
+            <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{product.brand}</p>
+          ) : null}
         </Link>
         <div className="flex justify-center">
           <CatalogSpecsButton visible={showSpecsButton(product) && !tiny} compact={compact} />
