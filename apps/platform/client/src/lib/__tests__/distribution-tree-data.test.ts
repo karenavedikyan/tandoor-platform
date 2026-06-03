@@ -34,6 +34,11 @@ const entry = (partial: Partial<ShowcaseMatrixEntryDto>): ShowcaseMatrixEntryDto
   updatedAt: "2026-05-01T12:00:00.000Z",
   updatedBy: "u1",
   updatedByName: "Менеджер",
+  placementType: null,
+  placementSegment: null,
+  placementCapacity: null,
+  placementActual: null,
+  placementRef: null,
   ...partial,
 });
 

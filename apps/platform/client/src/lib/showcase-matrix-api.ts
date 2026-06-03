@@ -2,8 +2,19 @@
  * HTTP API витринной матрицы (Postgres) — Промт 151.
  */
 
-export type ShowcaseMatrixTargetKind = "model" | "variant";
+export type ShowcaseMatrixTargetKind = "model" | "variant" | "placement";
 export type ShowcaseMatrixStatus = "need_install" | "installed" | "postponed" | "not_relevant";
+
+export type ShowcasePlacementType =
+  | "portal"
+  | "cube"
+  | "book"
+  | "hoof"
+  | "unmounted"
+  | "branded_stand"
+  | "stream_sku";
+
+export type ShowcasePlacementSegment = "vh" | "mk" | "hardware";
 
 export type ShowcaseMatrixEntryDto = {
   id: string;
@@ -16,6 +27,11 @@ export type ShowcaseMatrixEntryDto = {
   updatedAt: string;
   updatedBy: string | null;
   updatedByName: string | null;
+  placementType: ShowcasePlacementType | null;
+  placementSegment: ShowcasePlacementSegment | null;
+  placementCapacity: number | null;
+  placementActual: number | null;
+  placementRef: string | null;
 };
 
 export type ShowcaseMatrixEventDto = {
@@ -31,6 +47,11 @@ export type ShowcaseMatrixEventDto = {
   changedBy: string | null;
   changedByName: string | null;
   changedAt: string;
+  placementType: ShowcasePlacementType | null;
+  placementSegment: ShowcasePlacementSegment | null;
+  placementCapacity: number | null;
+  placementActual: number | null;
+  placementRef: string | null;
 };
 
 export type ShowcaseMatrixUpsertBody = {
@@ -41,6 +62,11 @@ export type ShowcaseMatrixUpsertBody = {
   status: ShowcaseMatrixStatus;
   comment?: string | null;
   clientOpId?: string | null;
+  placementType?: ShowcasePlacementType | null;
+  placementSegment?: ShowcasePlacementSegment | null;
+  placementCapacity?: number | null;
+  placementActual?: number | null;
+  placementRef?: string | null;
 };
 
 type ApiOk<T> = { success: true } & T;
