@@ -4,6 +4,8 @@ import { Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DistributionEntryTradePointPanel } from "@/components/distribution/distribution-entry-tradepoint-panel";
 import { DistributionTree } from "@/components/distribution/distribution-tree";
 import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
@@ -13,10 +15,13 @@ import { useClientBaseActualization } from "@/context/client-base-actualization-
 import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 
+type DistributionMode = "view" | "entry";
+
 export default function DistributionPage() {
   const { profile } = useReleaseDemoProfile();
   const actx = useClientBaseActualization();
   const managementPlane = useClientBaseTeamActualization();
+  const [mode, setMode] = useState<DistributionMode>("view");
   const [searchQuery, setSearchQuery] = useState("");
 
   const workingDealerRows = useMemo(
@@ -58,37 +63,64 @@ export default function DistributionPage() {
         </div>
       </header>
 
-      {actualizationLoading ? (
-        <p className="text-sm text-muted-foreground">Загрузка актуализации…</p>
-      ) : null}
+      <Tabs
+        value={mode}
+        onValueChange={(v) => setMode(v as DistributionMode)}
+        className="w-full min-w-0 space-y-4"
+      >
+        <TabsList
+          data-testid="tabs-distribution-mode"
+          className="grid h-auto w-full min-w-0 max-w-md grid-cols-2 gap-1 bg-muted/50 p-1"
+        >
+          <TabsTrigger value="view" className="min-h-10 text-xs sm:text-sm" data-testid="tab-distribution-view">
+            Просмотр
+          </TabsTrigger>
+          <TabsTrigger value="entry" className="min-h-10 text-xs sm:text-sm" data-testid="tab-distribution-entry">
+            Ввод
+          </TabsTrigger>
+        </TabsList>
 
-      <div className="relative max-w-md">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-        <Input
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Поиск по клиенту или торговой точке"
-          className="pl-9"
-          data-testid="input-distribution-search"
-        />
-      </div>
+        <TabsContent value="view" className="mt-0 min-w-0 space-y-4 focus-visible:ring-0">
+          {actualizationLoading ? (
+            <p className="text-sm text-muted-foreground">Загрузка актуализации…</p>
+          ) : null}
 
-      {!actualizationLoading && scoped.length === 0 ? (
-        <Card className="rounded-xl border border-border bg-card shadow-xs">
-          <CardContent className="px-3 py-6 sm:px-4">
-            <p className="text-sm text-muted-foreground">В вашей зоне видимости пока нет клиентов.</p>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card className="rounded-xl border border-border bg-card shadow-xs">
-          <DistributionTree
-            scope={{ kind: "global", dealers: scoped }}
-            profile={profile}
-            searchQuery={searchQuery}
-            actualizationLoading={actualizationLoading}
-          />
-        </Card>
-      )}
+          <div className="relative max-w-md">
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+              aria-hidden
+            />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Поиск по клиенту или торговой точке"
+              className="pl-9"
+              data-testid="input-distribution-search"
+            />
+          </div>
+
+          {!actualizationLoading && scoped.length === 0 ? (
+            <Card className="rounded-xl border border-border bg-card shadow-xs">
+              <CardContent className="px-3 py-6 sm:px-4">
+                <p className="text-sm text-muted-foreground">В вашей зоне видимости пока нет клиентов.</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="rounded-xl border border-border bg-card shadow-xs">
+              <DistributionTree
+                scope={{ kind: "global", dealers: scoped }}
+                profile={profile}
+                searchQuery={searchQuery}
+                actualizationLoading={actualizationLoading}
+              />
+            </Card>
+          )}
+        </TabsContent>
+
+        <TabsContent value="entry" className="mt-0 min-w-0 focus-visible:ring-0">
+          <DistributionEntryTradePointPanel profile={profile} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
