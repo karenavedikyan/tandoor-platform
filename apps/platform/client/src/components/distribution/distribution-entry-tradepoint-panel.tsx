@@ -5,7 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { DistributionTradePointMatrixEntry } from "@/components/distribution/distribution-tradepoint-matrix-entry";
+import {
+  DistributionTradePointMatrixEntry,
+  coverageBadgeClass,
+  freshnessLabel,
+} from "@/components/distribution/distribution-tradepoint-matrix-entry";
 import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
@@ -15,7 +19,6 @@ import {
   findDealerTradePointForEntryRow,
   type DistributionEntryTradePointRow,
 } from "@/lib/distribution-entry-tradepoint-view-model";
-import { formatRelativeTime } from "@/lib/format-datetime";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
 import { SHOWCASE_MATRIX_STORE_CHANGED_EVENT } from "@/lib/showcase-matrix-store";

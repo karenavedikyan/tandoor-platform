@@ -6,8 +6,22 @@ import {
 } from "@/components/trade-point-showcase-matrix-section";
 import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
+import { formatRelativeTime } from "@/lib/format-datetime";
 import type { TradePointMatrixSummary } from "@/lib/trade-point-matrix-data";
 import { getShowcaseMatrixModelsForTradePoint } from "@/lib/trade-point-showcase-matrix-models";
+
+
+
+export function freshnessLabel(lastUpdatedAt: string | null): string {
+  if (!lastUpdatedAt) return "нет данных";
+  return `обновлено ${formatRelativeTime(lastUpdatedAt)}`;
+}
+
+export function coverageBadgeClass(pct: number): string {
+  if (pct >= 100) return "border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300";
+  if (pct >= 50) return "border-primary/30 bg-primary/10 text-primary";
+  return "border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200";
+}
 
 const EMPTY_MATRIX_SUMMARY: TradePointMatrixSummary = {
   totalRequired: 0,
