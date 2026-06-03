@@ -1,6 +1,20 @@
 export type GroupedProperty = { name: string; value: string };
 export type PropertyGroup = { title: string; properties: GroupedProperty[] };
 
+/** Collapse property/description values longer than this in buyer product card UI. */
+export const LONG_VALUE_THRESHOLD = 160;
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function looksLikeCode(s: string | null | undefined): boolean {
+  if (!s) return true;
+  const t = s.trim();
+  if (!t) return true;
+  if (UUID_RE.test(t)) return true;
+  if (t.length >= 16 && !t.includes(" ") && /^[0-9a-f-]+$/i.test(t)) return true;
+  return false;
+}
+
 const HIDDEN_PATTERNS: RegExp[] = [
   /^ссылка/i,
   /ссылка/i,
@@ -14,6 +28,12 @@ const HIDDEN_PATTERNS: RegExp[] = [
   /^артикул\s+для\s+маркетплейс/i,
   /^id[\s_]/i,
   /^главная$/i,
+  /^главная\s*\(бот\)/i,
+  /\(бот\)/i,
+  /^тип\s+товара$/i,
+  /^хит\s+продаж$/i,
+  /^новинка$/i,
+  /^акция$/i,
   /^название\s+для\s+сайта$/i,
   /_опт(овик)?$/i,
   /маркетплейс/i,
