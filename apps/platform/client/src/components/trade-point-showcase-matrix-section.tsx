@@ -52,6 +52,7 @@ import {
 } from "@/lib/trade-point-task-data";
 import { ShowcaseModelPresentationDialog } from "@/components/showcase-model-presentation-dialog";
 import { TradePointProductMatrixVisual } from "@/components/trade-point-product-matrix-visual";
+import { TradePointPlacementBlocksSection } from "@/components/distribution/trade-point-placement-blocks-section";
 
 export type ShowcaseMatrixViewMode = "large" | "compact" | "mini" | "list";
 
@@ -1579,6 +1580,14 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
           </div>
         )}
           </div>
+
+          <TradePointPlacementBlocksSection
+            dealerId={dealer.id}
+            tradePointId={point.id}
+            canEdit={canEdit}
+            actorUserId={actorUserId}
+            actorName={actorName}
+          />
 
           <Separator className="bg-border/50" />
 
