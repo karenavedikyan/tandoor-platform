@@ -1,13 +1,5 @@
 import { useMemo, type ElementType } from "react";
-import {
-  ChevronRight,
-  DoorClosed,
-  DoorOpen,
-  Folder,
-  KeyRound,
-  Minus,
-  Percent,
-} from "lucide-react";
+import { DoorClosed, DoorOpen, Folder, KeyRound, Minus, Percent } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { CatalogCategoryItem } from "./CategoryTreeNav";
 
@@ -70,17 +62,16 @@ export function CatalogSectionsLanding({ categories, onSelect }: Props) {
             key={section.id}
             type="button"
             className={cn(
-              "flex min-h-16 w-full items-center gap-4 rounded-lg border border-border bg-card px-5 py-4 text-left shadow-sm transition",
-              "hover:border-[#9aca3c] hover:bg-muted/50",
+              "group flex min-h-16 w-full items-center gap-4 rounded-[15px] border border-border/60 bg-card px-5 py-4 text-left shadow-[0_5px_15px_rgba(143,150,176,0.15)] transition",
+              "hover:border-[#9aca3c]/60 hover:shadow-[0_8px_24px_rgba(143,150,176,0.25)]",
             )}
             data-testid={`catalog-section-card-${section.id}`}
             onClick={() => onSelect(section.id)}
           >
             <Icon className={cn("h-7 w-7 shrink-0 text-foreground", iconCls)} aria-hidden />
-            <span className="min-w-0 flex-1 text-lg font-semibold leading-snug text-foreground">
+            <span className="min-w-0 flex-1 text-lg font-semibold leading-snug text-foreground decoration-2 group-hover:underline group-hover:decoration-[#9aca3c] group-hover:underline-offset-4">
               {section.name}
             </span>
-            <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden />
           </button>
         );
       })}
