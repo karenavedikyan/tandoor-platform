@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "wouter";
-import { Heart, Package, Share2, ShoppingCart, Tag } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useLocation, useParams } from "wouter";
+import { ArrowLeft, Heart, Package, Share2, ShoppingCart, Tag } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -227,7 +227,9 @@ function RelatedCard({ item }: { item: RelatedProduct }) {
 
 export default function CatalogProduct1cPage() {
   const params = useParams<{ productId: string }>();
+  const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const canGoBackRef = useRef(false);
   const [product, setProduct] = useState<ProductDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeImg, setActiveImg] = useState(0);
@@ -243,6 +245,10 @@ export default function CatalogProduct1cPage() {
       return next;
     });
   };
+
+  useEffect(() => {
+    canGoBackRef.current = window.history.length > 1;
+  }, []);
 
   useEffect(() => {
     if (!params.productId) return;
@@ -347,8 +353,27 @@ export default function CatalogProduct1cPage() {
     (b) => b.name?.trim() && !looksLikeCode(b.name),
   );
 
+  const handleBack = () => {
+    if (canGoBackRef.current) {
+      window.history.back();
+    } else {
+      setLocation("/catalog");
+    }
+  };
+
   return (
     <div className="catalog-font space-y-8 p-4 lg:p-6" data-testid="page-catalog-product-1c">
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="mb-1 h-8 gap-1.5 px-2 text-muted-foreground hover:text-foreground"
+        onClick={handleBack}
+        data-testid="catalog-detail-back"
+      >
+        <ArrowLeft className="h-4 w-4" aria-hidden />
+        Назад
+      </Button>
       <nav className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground" aria-label="Хлебные крошки">
         <Link href="/catalog" className="hover:text-foreground hover:underline">
           Каталог
