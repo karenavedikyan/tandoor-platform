@@ -3,10 +3,8 @@ import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { canEditClientNextStep } from "@/lib/client-next-step-data";
 import { canViewShowcaseDistribution } from "@/lib/showcase-distribution-data";
 import { getEffectiveDealerTradePoints } from "@/lib/dealer-trade-points-overrides";
-import {
-  getShowcaseMatrixModelsForTradePoint,
-  type ShowcaseMatrixModelDefinition,
-} from "@/lib/trade-point-showcase-matrix-models";
+import { type ShowcaseMatrixModelDefinition } from "@/lib/trade-point-showcase-matrix-models";
+import { resolveTradePointMatrixModels } from "@/lib/trade-point-matrix-resolver";
 
 export const SHOWCASE_MATRIX_STORAGE_KEY = "tandoor-trade-point-showcase-matrix-v1";
 
@@ -145,7 +143,13 @@ export function computeTradePointShowcaseMatrixStats(
   point: DealerTradePoint,
   storage: ShowcaseMatrixStorageV1,
 ): { total: number; installed: number; missing: number; completionPct: number } {
-  const models = getShowcaseMatrixModelsForTradePoint(dealer.id, point.id, dealer.clientCategory);
+  const models = resolveTradePointMatrixModels({
+    dealerId: dealer.id,
+    tradePointId: point.id,
+    clientCategory: dealer.clientCategory,
+    region: dealer.region,
+    city: point.city,
+  });
   let installed = 0;
   let missing = 0;
   for (const m of models) {
@@ -172,7 +176,13 @@ export function computeDealerShowcaseMatrixSummary(dealer: DealerRow, storage: S
   let totalMissingModels = 0;
 
   for (const tp of tradePoints) {
-    const models = getShowcaseMatrixModelsForTradePoint(dealer.id, tp.id, dealer.clientCategory);
+    const models = resolveTradePointMatrixModels({
+      dealerId: dealer.id,
+      tradePointId: tp.id,
+      clientCategory: dealer.clientCategory,
+      region: dealer.region,
+      city: tp.city,
+    });
     let installed = 0;
     let missing = 0;
     for (const m of models) {

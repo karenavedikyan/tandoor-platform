@@ -1,5 +1,9 @@
 import type { ShowcaseMatrixEntryDto, ShowcasePlacementType } from "@/lib/showcase-matrix-api";
 import { PLACEMENT_QUALITY_WEIGHT } from "@/lib/showcase-placement-labels";
+import {
+  computeMatrixValueQualitativePct,
+  type ResolveTradePointMatrixParams,
+} from "@/lib/trade-point-matrix-resolver";
 
 export type PlacementTypeMetric = {
   type: ShowcasePlacementType;
@@ -37,7 +41,6 @@ export function placementEntries(entries: readonly ShowcaseMatrixEntryDto[]): Sh
   return entries.filter((e) => e.targetKind === "placement");
 }
 
-// TODO: заменить веса типов на матрицу ценности из каталога (этап матрицы ценности)
 export function computeQualitativeDistributionPct(
   byType: readonly PlacementTypeMetric[],
   totalActual: number,
@@ -50,7 +53,14 @@ export function computeQualitativeDistributionPct(
   return roundPct((weighted / totalActual) * 100);
 }
 
-export function computeDistributionMetrics(entries: readonly ShowcaseMatrixEntryDto[]): DistributionMetrics {
+export type DistributionMetricsContext = Omit<ResolveTradePointMatrixParams, "onDate"> & {
+  onDate?: string;
+};
+
+export function computeDistributionMetrics(
+  entries: readonly ShowcaseMatrixEntryDto[],
+  context?: DistributionMetricsContext,
+): DistributionMetrics {
   const blocks = placementEntries(entries).filter((e) => e.placementType != null);
   if (blocks.length === 0) return { ...EMPTY_METRICS };
 
@@ -87,7 +97,13 @@ export function computeDistributionMetrics(entries: readonly ShowcaseMatrixEntry
 
   const quantitativePct =
     totalCapacity > 0 ? roundPct((totalActual / totalCapacity) * 100) : null;
-  const qualitativePct = computeQualitativeDistributionPct(byType, totalActual);
+  let qualitativePct: number | null = null;
+  if (context) {
+    qualitativePct = computeMatrixValueQualitativePct(entries, context);
+  }
+  if (qualitativePct == null) {
+    qualitativePct = computeQualitativeDistributionPct(byType, totalActual);
+  }
 
   return {
     byType,

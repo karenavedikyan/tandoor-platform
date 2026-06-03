@@ -60,7 +60,7 @@ import {
   CATALOG_PRODUCTS,
   getProductById,
 } from "@/lib/catalog-data";
-import { getShowcaseMatrixModelsForTradePoint } from "@/lib/trade-point-showcase-matrix-models";
+import { resolveTradePointMatrixModels } from "@/lib/trade-point-matrix-resolver";
 
 type ViewMode = "cards" | "list";
 
@@ -269,7 +269,14 @@ function resolveShowcaseTaskDoorImage(
   if (matrixStored) return matrixStored;
   if (dealer) {
     try {
-      const models = getShowcaseMatrixModelsForTradePoint(task.dealerId, task.tradePointId, dealer.clientCategory);
+      const tp = dealer.tradePoints.find((p) => p.id === task.tradePointId);
+      const models = resolveTradePointMatrixModels({
+        dealerId: task.dealerId,
+        tradePointId: task.tradePointId,
+        clientCategory: dealer.clientCategory,
+        region: dealer.region,
+        city: tp?.city ?? dealer.city,
+      });
       const byId = models.find((m) => m.id === task.productId);
       const byName = models.find((m) => m.name.trim() === task.productName.trim());
       const m = byId ?? byName;

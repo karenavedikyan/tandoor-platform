@@ -137,7 +137,13 @@ export function countShowcaseMatrixDeficitForDealer(dealer: DealerRow, act: Actu
   const fields = dealerMergedFields(dealer.id, act);
   const cat = resolveShowcaseMatrixClientCategory(dealer.clientCategory, fields);
   if (!cat) return 0;
-  const required = getRequiredShowcaseMatrixDefinitions(cat);
+  const tp = dealer.tradePoints.find((p) => p.status?.trim() !== "Архив") ?? dealer.tradePoints[0];
+  const required = getRequiredShowcaseMatrixDefinitions(cat, {
+    dealerId: dealer.id,
+    tradePointId: tp?.id ?? dealer.id,
+    region: dealer.region,
+    city: tp?.city ?? dealer.city,
+  });
   const sel = new Set((sh?.selectedShowcaseModels ?? []).map((m) => m.productId));
   return required.filter((d) => !sel.has(d.id)).length;
 }

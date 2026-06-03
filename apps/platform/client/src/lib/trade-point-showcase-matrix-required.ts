@@ -5,9 +5,19 @@ import {
   SHOWCASE_MATRIX_MODEL_DEFINITIONS,
   type ShowcaseMatrixModelDefinition,
 } from "@/lib/trade-point-showcase-matrix-models";
+import {
+  resolveRequiredTradePointMatrixModels,
+  type ResolveTradePointMatrixParams,
+} from "@/lib/trade-point-matrix-resolver";
 
 /** Обязательные позиции матрицы для бизнес-категории клиента (по правилам categoryRules). */
-export function getRequiredShowcaseMatrixDefinitions(clientCategory: ClientCategoryId): ShowcaseMatrixModelDefinition[] {
+export function getRequiredShowcaseMatrixDefinitions(
+  clientCategory: ClientCategoryId,
+  scope?: Omit<ResolveTradePointMatrixParams, "clientCategory">,
+): ShowcaseMatrixModelDefinition[] {
+  if (scope) {
+    return resolveRequiredTradePointMatrixModels({ ...scope, clientCategory });
+  }
   return SHOWCASE_MATRIX_MODEL_DEFINITIONS.filter((m) => m.categoryRules.includes(clientCategory));
 }
 

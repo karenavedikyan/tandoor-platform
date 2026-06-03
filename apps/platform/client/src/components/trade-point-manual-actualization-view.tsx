@@ -400,7 +400,7 @@ export function TradePointManualActualizationView(props: {
     if (!matrixClientCategory) return 0;
     const defs = getRequiredShowcaseMatrixDefinitions(matrixClientCategory);
     return defs.filter((d) => !selectedProductIds.has(d.id)).length;
-  }, [matrixClientCategory, selectedProductIds]);
+  }, [dealer.id, dealer.region, matrixClientCategory, point.city, point.id, selectedProductIds]);
 
   const portalOverfill = useMemo(
     () => hasShowcase === true && computeShowcasePortalOverfill(selectedShowcaseModels, portalCaps, getProductById),

@@ -10,7 +10,7 @@ import {
   type ShowcaseMatrixStatus,
 } from "@/lib/showcase-matrix-api";
 import { loadCachedMatrix } from "@/lib/showcase-matrix-store";
-import { getShowcaseMatrixModelsForTradePoint } from "@/lib/trade-point-showcase-matrix-models";
+import { resolveTradePointMatrixModels } from "@/lib/trade-point-matrix-resolver";
 import type {
   MatrixTaskPriority,
   MatrixTaskStatus,
@@ -54,17 +54,25 @@ function formatDueDateFromIso(iso: string): string {
   return `${dd}.${mm}.${yyyy}`;
 }
 
+function matrixScopeForDealerPoint(dealer: DealerRow, tradePointId: string): { region: string; city: string } {
+  const point = dealer.tradePoints.find((tp) => tp.id === tradePointId);
+  return { region: dealer.region, city: point?.city ?? dealer.city };
+}
+
 /** Имя позиции матрицы (model/variant) — единый резолв для задач и дерева дистрибуции. */
 export function resolveShowcaseMatrixPositionForEntry(
   entry: ShowcaseMatrixEntryDto,
   dealer: DealerRow,
 ): { productId: string; productName: string; showcaseMatrixImageSrc?: string } {
   if (entry.targetKind === "model") {
-    const models = getShowcaseMatrixModelsForTradePoint(
-      dealer.id,
-      entry.tradePointId,
-      dealer.clientCategory,
-    );
+    const scope = matrixScopeForDealerPoint(dealer, entry.tradePointId);
+    const models = resolveTradePointMatrixModels({
+      dealerId: dealer.id,
+      tradePointId: entry.tradePointId,
+      clientCategory: dealer.clientCategory,
+      region: scope.region,
+      city: scope.city,
+    });
     const model = models.find((m) => m.id === entry.targetId);
     if (model) {
       return {
