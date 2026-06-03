@@ -49,7 +49,11 @@ import { MainDashboardFocusClientsPanel } from "@/components/main-dashboard-focu
 import { getEffectiveTeamLeadTeamId } from "@/lib/release-demo-profile";
 import type { ActualizationState } from "@/lib/client-base-actualization-state";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
-import { getAllMatrixTasks, getManagementFactualShowcaseTasksForDealers, getShowcaseBackedTasksForDealers } from "@/lib/trade-point-task-data";
+import {
+  getAllMatrixTasks,
+  getManagementFactualShowcaseTasksForDealers,
+  getShowcaseDistributionPlanTasksForDealers,
+} from "@/lib/trade-point-task-data";
 import { getRopOptions } from "@/lib/rop-manager-filters";
 import { getShowcaseOnlyTasks } from "@/lib/task-classification";
 import { getSalesUserById, getTeamManagers, type SalesRole } from "@/lib/sales-control-data";
@@ -68,7 +72,7 @@ function countOpenTasksForDealers(
     opts.mode === "management_factual" && opts.mergedState
       ? getManagementFactualShowcaseTasksForDealers(opts.dealersForTasks, opts.mergedState)
       : opts.mode === "showcase_backed"
-        ? getShowcaseBackedTasksForDealers(opts.dealersForTasks)
+        ? getShowcaseDistributionPlanTasksForDealers(opts.dealersForTasks)
         : getAllMatrixTasks();
   return getShowcaseOnlyTasks(pool).filter((t) => dealerIds.has(t.dealerId) && t.status !== "done").length;
 }

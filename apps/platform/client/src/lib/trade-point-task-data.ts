@@ -6,11 +6,10 @@ import {
   SHOWCASE_CATEGORY_LABEL,
   type ShowcaseGlobalTaskRow,
 } from "./showcase-distribution-data";
-import { getShowcaseMatrixModelsForTradePoint } from "./trade-point-showcase-matrix-models";
 import {
-  getEffectiveMatrixStatus,
-  loadShowcaseMatrixStorage,
-} from "./trade-point-showcase-matrix-storage";
+  fetchShowcaseMatrixDeficitTasksForDealers,
+  getCachedShowcaseMatrixDeficitTasksForDealers,
+} from "./showcase-matrix-deficit-tasks";
 import {
   getTradePointMatrix,
   type MatrixActionKind,
@@ -333,70 +332,21 @@ function computeShowcaseMatrixTasksForDealers(dealers: DealerRow[]): MatrixTaskW
   return getAllShowcaseGlobalTaskRows(dealers).map(mapShowcaseGlobalToMatrixTask);
 }
 
-function dueDateShowcaseMatrixDeficit(dealerId: string, pointId: string, modelId: string): string {
-  const seed = (charSum(dealerId) + charSum(pointId) + charSum(modelId)) % 21;
-  const day = (seed % 27) + 1;
-  const month = (seed % 4) + 5;
-  return `${String(day).padStart(2, "0")}.${String(month).padStart(2, "0")}.2026`;
-}
-
-function computeShowcaseMatrixDeficitTasksForDealers(dealers: DealerRow[]): MatrixTaskWithContext[] {
-  const storage = loadShowcaseMatrixStorage();
-  const out: MatrixTaskWithContext[] = [];
-  for (const dealer of dealers) {
-    for (const point of dealer.tradePoints) {
-      if (point.status?.trim() === "Архив") continue;
-      const models = getShowcaseMatrixModelsForTradePoint(dealer.id, point.id, dealer.clientCategory);
-      for (const m of models) {
-        const st = getEffectiveMatrixStatus(dealer.id, point.id, m.id, storage);
-        if (st !== "need_install" && st !== "postponed") continue;
-        const taskId = `smx-${dealer.id}-${point.id}-${m.id}`;
-        const overdueSeed = charSum(taskId) % 5;
-        const overdue = st === "need_install" && m.basePriority === "high" && overdueSeed === 0;
-        const status: MatrixTaskStatus = overdue ? "overdue" : st === "postponed" ? "in_progress" : "new";
-        out.push({
-          taskId,
-          productId: m.id,
-          productName: m.name,
-          productArticle: "ВИТРИНА",
-          dealerId: dealer.id,
-          tradePointId: point.id,
-          tradePointName: point.name,
-          type: "add_to_showcase",
-          title: `Поставить на витрину: ${m.name}`,
-          description: m.importanceReason,
-          priority: m.basePriority,
-          status,
-          assigneeRole: "manager",
-          dueDate: dueDateShowcaseMatrixDeficit(dealer.id, point.id, m.id),
-          source: "showcase_matrix_deficit",
-          zone: "A",
-          portal: m.type === "entrance" ? "Портал входных дверей" : "Портал межкомнатных дверей",
-          targetSamples: 1,
-          actualSamples: 0,
-          insightDomain: "showcase",
-          insightLabel: "Матрица витрины точки",
-          dealerName: dealer.name,
-          showcaseExtraStatus: st === "postponed" ? "postponed" : undefined,
-          showcaseMatrixImageSrc: m.imageUrl,
-        });
-      }
-    }
-  }
-  return out;
-}
-
+/**
+ * Дефицит по точке из локального backend-кэша (без сети).
+ * Для актуального списка на `/tasks` используйте {@link fetchShowcaseMatrixDeficitTasksForDealers}.
+ */
 export function getShowcaseMatrixDeficitTasksForTradePoint(dealer: DealerRow, pointId: string): MatrixTaskWithContext[] {
-  return computeShowcaseMatrixDeficitTasksForDealers([dealer]).filter((t) => t.tradePointId === pointId.trim());
+  return getCachedShowcaseMatrixDeficitTasksForDealers([dealer]).filter((t) => t.tradePointId === pointId.trim());
 }
 
 /**
- * Реальные открытые задачи по витрине: план витрины (sessionStorage) + дефицит матрицы по переданным строкам.
- * Без синтетической матрицы каталога и без автогенерации тысяч строк на клиента.
+ * Реальные открытые задачи по витрине: план витрины (sessionStorage) + дефицит матрицы из БД.
  */
-export function getShowcaseBackedTasksForDealers(dealers: DealerRow[]): MatrixTaskWithContext[] {
+export async function getShowcaseBackedTasksForDealers(dealers: DealerRow[]): Promise<MatrixTaskWithContext[]> {
   if (dealers.length === 0) return [];
-  return [...computeShowcaseMatrixTasksForDealers(dealers), ...computeShowcaseMatrixDeficitTasksForDealers(dealers)];
+  const deficit = await fetchShowcaseMatrixDeficitTasksForDealers(dealers);
+  return [...computeShowcaseMatrixTasksForDealers(dealers), ...deficit];
 }
 
 /**
@@ -544,11 +494,7 @@ function computeAllMatrixTasks(): MatrixTaskWithContext[] {
  */
 export function getAllMatrixTasks(): MatrixTaskWithContext[] {
   if (!matrixBaseTasksCache) matrixBaseTasksCache = computeAllMatrixTasks();
-  return [
-    ...matrixBaseTasksCache,
-    ...computeShowcaseMatrixTasksForDealers(DEALER_BASE_ROWS),
-    ...computeShowcaseMatrixDeficitTasksForDealers(DEALER_BASE_ROWS),
-  ];
+  return [...matrixBaseTasksCache, ...computeShowcaseMatrixTasksForDealers(DEALER_BASE_ROWS)];
 }
 
 function buildProductTrainingTasks(dealers: DealerRow[]): MatrixTaskWithContext[] {

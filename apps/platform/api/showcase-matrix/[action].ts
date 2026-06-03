@@ -4,6 +4,7 @@
  *   GET  /api/showcase-matrix/history?tradePointId=&dealerId=&limit=
  *   POST /api/showcase-matrix/upsert
  *   POST /api/showcase-matrix/batch-sync
+ *   POST /api/showcase-matrix/scope
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -18,6 +19,7 @@ import {
   handleShowcaseMatrixBatchSync,
   handleShowcaseMatrixHistory,
   handleShowcaseMatrixList,
+  handleShowcaseMatrixScope,
   handleShowcaseMatrixUpsert,
   ShowcaseMatrixValidationError,
   type ShowcaseMatrixSessionUser,
@@ -123,6 +125,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
     if (action === "batch-sync" && req.method === "POST") {
       const payload = await handleShowcaseMatrixBatchSync(pool, sessionUser, body);
+      sendJson(res, 200, payload);
+      return;
+    }
+
+    if (action === "scope" && req.method === "POST") {
+      const payload = await handleShowcaseMatrixScope(pool, {
+        tradePointIds: body.tradePointIds,
+        statuses: body.statuses,
+      });
       sendJson(res, 200, payload);
       return;
     }

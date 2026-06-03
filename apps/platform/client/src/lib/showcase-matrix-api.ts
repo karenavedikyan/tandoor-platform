@@ -70,6 +70,36 @@ export async function fetchShowcaseMatrixList(opts: {
   }
 }
 
+const SCOPE_CHUNK_SIZE = 500;
+
+export async function fetchShowcaseMatrixScope(opts: {
+  tradePointIds: string[];
+  statuses?: ShowcaseMatrixStatus[];
+}): Promise<ShowcaseMatrixEntryDto[] | null> {
+  const ids = [...new Set(opts.tradePointIds.map((id) => id.trim()).filter(Boolean))];
+  if (ids.length === 0) return [];
+
+  const all: ShowcaseMatrixEntryDto[] = [];
+  try {
+    for (let i = 0; i < ids.length; i += SCOPE_CHUNK_SIZE) {
+      const chunk = ids.slice(i, i + SCOPE_CHUNK_SIZE);
+      const res = await fetch("/api/showcase-matrix/scope", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tradePointIds: chunk, statuses: opts.statuses }),
+        cache: "no-store",
+      });
+      const data = await parseJson<ApiOk<{ entries: ShowcaseMatrixEntryDto[] }> | ApiErr>(res);
+      if (!res.ok || !data.success) return null;
+      all.push(...data.entries);
+    }
+    return all;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchShowcaseMatrixHistory(opts: {
   tradePointId: string;
   dealerId?: string;

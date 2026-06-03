@@ -8,6 +8,7 @@ export type ShowcaseMatrixTargetKind = "model" | "variant";
 export type ShowcaseMatrixStatus = "need_install" | "installed" | "postponed" | "not_relevant";
 
 const TARGET_KINDS = new Set<ShowcaseMatrixTargetKind>(["model", "variant"]);
+export const MAX_SCOPE_TRADE_POINTS = 500;
 const STATUSES = new Set<ShowcaseMatrixStatus>([
   "need_install",
   "installed",
@@ -308,6 +309,55 @@ export async function handleShowcaseMatrixList(
   if (dealerId) {
     queryParams.push(dealerId);
     sql += ` AND dealer_id = $${queryParams.length}`;
+  }
+  sql += ` ORDER BY updated_at DESC`;
+
+  const r = await pool.query<Record<string, unknown>>(sql, queryParams);
+  return { success: true, entries: r.rows.map(mapEntryRow) };
+}
+
+function parseScopeTradePointIds(raw: unknown): string[] {
+  if (!Array.isArray(raw)) {
+    throw new ShowcaseMatrixValidationError("Укажите tradePointIds.");
+  }
+  const ids = [
+    ...new Set(
+      raw
+        .filter((x): x is string => typeof x === "string")
+        .map((x) => x.trim())
+        .filter(Boolean),
+    ),
+  ];
+  if (ids.length === 0) {
+    throw new ShowcaseMatrixValidationError("Укажите tradePointIds.");
+  }
+  return ids.slice(0, MAX_SCOPE_TRADE_POINTS);
+}
+
+function parseScopeStatuses(raw: unknown): ShowcaseMatrixStatus[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: ShowcaseMatrixStatus[] = [];
+  for (const s of raw) {
+    if (typeof s === "string" && STATUSES.has(s as ShowcaseMatrixStatus)) {
+      out.push(s as ShowcaseMatrixStatus);
+    }
+  }
+  if (out.length === 0) return undefined;
+  return [...new Set(out)];
+}
+
+export async function handleShowcaseMatrixScope(
+  pool: PoolLike,
+  params: { tradePointIds?: unknown; statuses?: unknown },
+): Promise<{ success: true; entries: ShowcaseMatrixEntryDto[] }> {
+  const tradePointIds = parseScopeTradePointIds(params.tradePointIds);
+  const statuses = parseScopeStatuses(params.statuses);
+
+  const queryParams: unknown[] = [tradePointIds];
+  let sql = `SELECT * FROM showcase_matrix_entries WHERE trade_point_id = ANY($1::text[])`;
+  if (statuses && statuses.length > 0) {
+    queryParams.push(statuses);
+    sql += ` AND status = ANY($${queryParams.length}::text[])`;
   }
   sql += ` ORDER BY updated_at DESC`;
 

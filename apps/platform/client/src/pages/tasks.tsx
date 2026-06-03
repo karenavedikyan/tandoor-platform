@@ -18,11 +18,12 @@ import { cn } from "@/lib/utils";
 import {
   getAllMatrixTasks,
   getManagementFactualShowcaseTasksForDealers,
-  getShowcaseBackedTasksForDealers,
+  getShowcaseDistributionPlanTasksForDealers,
   MATRIX_TASK_PRIORITY_LABEL,
   MATRIX_TASK_STATUS_LABEL,
   type MatrixTaskWithContext,
 } from "@/lib/trade-point-task-data";
+import { fetchShowcaseMatrixDeficitTasksForDealers } from "@/lib/showcase-matrix-deficit-tasks";
 import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
 import {
   getManagersForRopTeam,
@@ -45,6 +46,10 @@ import {
 } from "@/lib/dealer-base-role-views";
 import { SHOWCASE_STORAGE_EVENT } from "@/lib/showcase-distribution-data";
 import { SHOWCASE_MATRIX_CHANGED_EVENT } from "@/lib/trade-point-showcase-matrix-storage";
+import {
+  SHOWCASE_MATRIX_REMOTE_UPDATE_EVENT,
+  SHOWCASE_MATRIX_STORE_CHANGED_EVENT,
+} from "@/lib/showcase-matrix-store";
 import { getShowcaseOnlyTasks, getTaskCategoryMeta } from "@/lib/task-classification";
 import { taskMatchesUrgentPresetForBadge } from "@/lib/task-presets";
 import { useRouteSearchParams, buildHashPath } from "@/lib/hash-route-utils";
@@ -695,13 +700,19 @@ export default function TasksPage() {
   const { publishDashboardRopTeamId } = managementPlane;
 
   const [showcaseTick, setShowcaseTick] = useState(0);
+  const [backendDeficitTasks, setBackendDeficitTasks] = useState<MatrixTaskWithContext[]>([]);
+
   useEffect(() => {
     const onBump = () => setShowcaseTick((n) => n + 1);
     window.addEventListener(SHOWCASE_STORAGE_EVENT, onBump);
     window.addEventListener(SHOWCASE_MATRIX_CHANGED_EVENT, onBump);
+    window.addEventListener(SHOWCASE_MATRIX_STORE_CHANGED_EVENT, onBump);
+    window.addEventListener(SHOWCASE_MATRIX_REMOTE_UPDATE_EVENT, onBump);
     return () => {
       window.removeEventListener(SHOWCASE_STORAGE_EVENT, onBump);
       window.removeEventListener(SHOWCASE_MATRIX_CHANGED_EVENT, onBump);
+      window.removeEventListener(SHOWCASE_MATRIX_STORE_CHANGED_EVENT, onBump);
+      window.removeEventListener(SHOWCASE_MATRIX_REMOTE_UPDATE_EVENT, onBump);
     };
   }, []);
 
@@ -807,6 +818,21 @@ export default function TasksPage() {
 
   const directorRopFactualShowcaseTasks = actx.enabled && shouldUseTeamMergedActualizationPlane(profile);
 
+  useEffect(() => {
+    if (actualizationLoading) {
+      setBackendDeficitTasks([]);
+      return;
+    }
+    let cancelled = false;
+    const scoped = roleScopedDealerRows(workingDealerRows, profile);
+    void fetchShowcaseMatrixDeficitTasksForDealers(scoped).then((tasks) => {
+      if (!cancelled) setBackendDeficitTasks(tasks);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [actualizationLoading, workingDealerRows, profile, showcaseTick]);
+
   const hasPersistedShowcaseTasksInRoleScope = useMemo(() => {
     if (!directorRopFactualShowcaseTasks || actualizationLoading) return false;
     const raw = getManagementFactualShowcaseTasksForDealers(
@@ -822,6 +848,11 @@ export default function TasksPage() {
     allowedDealerIds,
   ]);
 
+  const hasAnyShowcaseTasksInScope = useMemo(() => {
+    if (hasPersistedShowcaseTasksInRoleScope) return true;
+    return backendDeficitTasks.some((t) => allowedDealerIds.has(t.dealerId));
+  }, [hasPersistedShowcaseTasksInRoleScope, backendDeficitTasks, allowedDealerIds]);
+
   const showcaseTasks = useMemo(() => {
     if (actualizationLoading) return [] as MatrixTaskWithContext[];
     let rawSource: MatrixTaskWithContext[];
@@ -830,9 +861,10 @@ export default function TasksPage() {
     } else if (directorRopFactualShowcaseTasks) {
       rawSource = getManagementFactualShowcaseTasksForDealers(workingDealerRows, managementPlane.mergedState);
     } else {
-      rawSource = getShowcaseBackedTasksForDealers(workingDealerRows);
+      rawSource = getShowcaseDistributionPlanTasksForDealers(workingDealerRows);
     }
-    const raw = sortTasks(rawSource).filter((t) => allowedDealerIds.has(t.dealerId));
+    const rawWithDeficit = [...rawSource, ...backendDeficitTasks];
+    const raw = sortTasks(rawWithDeficit).filter((t) => allowedDealerIds.has(t.dealerId));
     return getShowcaseOnlyTasks(raw);
   }, [
     actualizationLoading,
@@ -842,6 +874,7 @@ export default function TasksPage() {
     managementPlane.mergedState,
     allowedDealerIds,
     showcaseTick,
+    backendDeficitTasks,
   ]);
 
   const filteredByScope = useMemo(() => {
@@ -897,9 +930,9 @@ export default function TasksPage() {
   }, []);
 
   const showFullShowcaseTaskUi =
-    !directorRopFactualShowcaseTasks || (!actualizationLoading && hasPersistedShowcaseTasksInRoleScope);
+    !directorRopFactualShowcaseTasks || (!actualizationLoading && hasAnyShowcaseTasksInScope);
   const showFactualShowcaseEmpty =
-    directorRopFactualShowcaseTasks && !actualizationLoading && !hasPersistedShowcaseTasksInRoleScope;
+    directorRopFactualShowcaseTasks && !actualizationLoading && !hasAnyShowcaseTasksInScope;
 
   return (
     <div
