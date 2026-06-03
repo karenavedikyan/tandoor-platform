@@ -202,6 +202,23 @@ const {
   apiReplaceMatrixDefModelsStrict,
 } = await import("../showcase-matrix-catalog-api.js");
 
+// Слив фоновой optimistic-очереди от deleteMatrixDefLocal до strict-проверок,
+// чтобы запоздалый фоновый fetch не перетирал захваченный URL.
+Object.defineProperty(globalThis, "fetch", {
+  value: async () => ({
+    ok: true,
+    status: 200,
+    async json() {
+      return { success: true, def: { id: "x" }, idempotent: false, models: [], applied: 0, skipped: 0, results: [] };
+    },
+  }),
+  configurable: true,
+});
+const { runOverridesPendingSyncOnce } = await import("../overrides-pending-sync-worker.js");
+await runOverridesPendingSyncOnce();
+await new Promise((r) => setTimeout(r, 0));
+assert.equal(listPendingSyncItems().length, 0, "pending catalog ops flushed");
+
 let strictUrl = "";
 let strictBody: unknown = null;
 Object.defineProperty(globalThis, "fetch", {
@@ -219,6 +236,8 @@ Object.defineProperty(globalThis, "fetch", {
   configurable: true,
 });
 
+strictUrl = "";
+strictBody = null;
 const upsertStrict = await apiUpsertMatrixDefStrict({
   clientCategory: "top350",
   scopeKind: "region",
@@ -228,12 +247,18 @@ assert.equal(upsertStrict.ok, true);
 assert.ok(strictUrl.includes("/upsert"));
 assert.equal((strictBody as Record<string, unknown>).clientCategory, "top350");
 
+strictUrl = "";
+strictBody = null;
 await apiSetMatrixDefStatusStrict("def-1", "archived");
 assert.ok(strictUrl.includes("/set-status"));
 
+strictUrl = "";
+strictBody = null;
 await apiDeleteMatrixDefStrict("def-1");
 assert.ok(strictUrl.includes("/delete"));
 
+strictUrl = "";
+strictBody = null;
 await apiReplaceMatrixDefModelsStrict("def-1", [
   { targetKind: "model", targetId: "a", segment: "vh" },
 ]);
