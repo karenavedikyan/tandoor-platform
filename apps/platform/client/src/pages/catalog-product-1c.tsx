@@ -9,9 +9,13 @@ import { cn } from "@/lib/utils";
 import { LightboxModal } from "@/components/catalog/LightboxModal";
 import {
   groupProperties,
+  LONG_VALUE_THRESHOLD,
+  looksLikeCode,
   pickShortProperties,
   type GroupedProperty,
 } from "../../../shared/catalog-1c/property-filters";
+
+const DESCRIPTION_LONG_THRESHOLD = 280;
 
 type Stock = {
   warehouse_id: string;
@@ -67,6 +71,54 @@ function fmtQty(n: number | null | undefined): string {
 function discountPercent(retail: number, sale: number): number | null {
   if (retail <= 0 || sale >= retail) return null;
   return Math.round((1 - sale / retail) * 100);
+}
+
+function warehouseDisplayName(s: Stock): string {
+  const name = s.warehouse_name?.trim();
+  if (name && !looksLikeCode(name)) return name;
+  return "Основной склад";
+}
+
+function PhotoPlaceholder({ compact }: { compact?: boolean }) {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center text-[#8f96b0]">
+      <Package className={cn("shrink-0", compact ? "h-8 w-8" : "h-12 w-12")} aria-hidden />
+      <p className={cn("font-medium", compact ? "text-xs" : "text-sm")}>Фото загружается</p>
+      <p className={cn(compact ? "text-[10px]" : "text-xs")}>Фото появится после синхронизации</p>
+    </div>
+  );
+}
+
+function CollapsibleValue({
+  value,
+  collapseThreshold = LONG_VALUE_THRESHOLD,
+  collapsedLines = 2,
+}: {
+  value: string;
+  collapseThreshold?: number;
+  collapsedLines?: 2 | 4;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const isLong = value.length > collapseThreshold;
+
+  if (!isLong) {
+    return <span className="whitespace-pre-line">{value}</span>;
+  }
+
+  const clampClass = collapsedLines === 4 ? "line-clamp-4" : "line-clamp-2";
+
+  return (
+    <div>
+      <p className={cn("whitespace-pre-line", !expanded && clampClass)}>{value}</p>
+      <button
+        type="button"
+        className="mt-1 text-sm font-medium text-[#9aca3c] hover:underline"
+        onClick={() => setExpanded((open) => !open)}
+      >
+        {expanded ? "Свернуть" : "Показать полностью"}
+      </button>
+    </div>
+  );
 }
 
 function ProductBadgesRow({
@@ -133,16 +185,23 @@ function CatalogPriceBlock({
 function RelatedCard({ item }: { item: RelatedProduct }) {
   const title = item.display_name || item.name;
   const hasSale = item.price_retail_sale != null;
+  const [imageBroken, setImageBroken] = useState(false);
+  const showImage = Boolean(item.image_url?.trim()) && !imageBroken;
+
   return (
     <Link href={`/catalog/1c/${item.id}`} className="group block" data-testid={`related-product-${item.id}`}>
       <Card className="h-full overflow-hidden transition hover:shadow-md">
         <div className="relative aspect-square bg-muted">
-          {item.image_url ? (
-            <img src={item.image_url} alt={title} className="h-full w-full object-contain p-1" loading="lazy" />
+          {showImage ? (
+            <img
+              src={item.image_url!}
+              alt={title}
+              className="h-full w-full object-contain p-1"
+              loading="lazy"
+              onError={() => setImageBroken(true)}
+            />
           ) : (
-            <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-              <Package className="h-8 w-8 opacity-40" />
-            </div>
+            <PhotoPlaceholder compact />
           )}
           <div className="absolute left-2 top-2">
             <ProductBadgesRow badges={item.badges} small />
@@ -172,6 +231,16 @@ export default function CatalogProduct1cPage() {
   const [activeImg, setActiveImg] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [qty, setQty] = useState(1);
+  const [brokenImages, setBrokenImages] = useState<Set<number>>(() => new Set());
+
+  const markImageBroken = (index: number) => {
+    setBrokenImages((prev) => {
+      if (prev.has(index)) return prev;
+      const next = new Set(prev);
+      next.add(index);
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (!params.productId) return;
@@ -189,6 +258,7 @@ export default function CatalogProduct1cPage() {
         if (!cancelled) {
           setProduct(data.product);
           setActiveImg(0);
+          setBrokenImages(new Set());
         }
       } catch (e) {
         if (!cancelled) {
@@ -264,7 +334,12 @@ export default function CatalogProduct1cPage() {
     product.display_name && product.name.trim() !== product.display_name.trim() ? product.name : null;
   const hasAnyBlob = product.images.some((i) => i.blob_url?.trim());
   const currentImg = product.images[activeImg];
-  const showLightboxForCurrent = Boolean(currentImg?.blob_url?.trim());
+  const mainImageUrl = currentImg?.blob_url?.trim();
+  const showMainImage = Boolean(mainImageUrl && !brokenImages.has(activeImg));
+  const showLightboxForCurrent = showMainImage;
+  const readableBreadcrumbs = (product.breadcrumbs ?? []).filter(
+    (b) => b.name?.trim() && !looksLikeCode(b.name),
+  );
 
   return (
     <div className="catalog-font space-y-8 p-4 lg:p-6" data-testid="page-catalog-product-1c">
@@ -272,7 +347,7 @@ export default function CatalogProduct1cPage() {
         <Link href="/catalog" className="hover:text-foreground hover:underline">
           Каталог
         </Link>
-        {(product.breadcrumbs ?? []).map((b) => (
+        {readableBreadcrumbs.map((b) => (
           <span key={`${b.kind}-${b.id}`} className="inline-flex items-center gap-1">
             <span aria-hidden>›</span>
             <Link href="/catalog" className="max-w-[200px] truncate hover:text-foreground hover:underline">
@@ -308,13 +383,15 @@ export default function CatalogProduct1cPage() {
             disabled={!showLightboxForCurrent}
             aria-label={showLightboxForCurrent ? "Открыть фото на весь экран" : undefined}
           >
-            {currentImg?.blob_url ? (
-              <img src={currentImg.blob_url} alt={title} className="h-full w-full object-contain p-2" />
+            {showMainImage ? (
+              <img
+                src={mainImageUrl}
+                alt={title}
+                className="h-full w-full object-contain p-2"
+                onError={() => markImageBroken(activeImg)}
+              />
             ) : (
-              <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center text-sm text-muted-foreground">
-                <Package className="h-10 w-10 opacity-40" />
-                <p>Фото будет загружено в ближайшую синхронизацию</p>
-              </div>
+              <PhotoPlaceholder />
             )}
           </button>
 
@@ -331,11 +408,20 @@ export default function CatalogProduct1cPage() {
                   )}
                   title={img.path}
                 >
-                  {img.blob_url ? (
-                    <img src={img.blob_url} alt="" className="h-full w-full object-cover" />
+                  {img.blob_url?.trim() && !brokenImages.has(i) ? (
+                    <img
+                      src={img.blob_url}
+                      alt=""
+                      className="h-full w-full object-cover"
+                      onError={() => markImageBroken(i)}
+                    />
                   ) : (
-                    <span className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
-                      {i + 1}
+                    <span className="flex h-full w-full items-center justify-center text-[#8f96b0]">
+                      {img.blob_url?.trim() && brokenImages.has(i) ? (
+                        <Package className="h-4 w-4" aria-hidden />
+                      ) : (
+                        <span className="text-[10px]">{i + 1}</span>
+                      )}
                     </span>
                   )}
                 </button>
@@ -461,8 +547,12 @@ export default function CatalogProduct1cPage() {
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Описание</CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="whitespace-pre-line text-sm leading-relaxed text-foreground">{product.description}</p>
+          <CardContent className="text-sm leading-relaxed text-foreground">
+            <CollapsibleValue
+              value={product.description}
+              collapseThreshold={DESCRIPTION_LONG_THRESHOLD}
+              collapsedLines={4}
+            />
           </CardContent>
         </Card>
       ) : null}
@@ -477,12 +567,25 @@ export default function CatalogProduct1cPage() {
               <section key={g.title}>
                 <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">{g.title}</h3>
                 <dl className="grid gap-x-8 gap-y-2 sm:grid-cols-2">
-                  {g.properties.map((p) => (
-                    <div key={p.name} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] gap-2 border-b border-border/40 py-1.5 text-sm">
-                      <dt className="text-muted-foreground">{p.name}</dt>
-                      <dd className="break-words font-medium">{p.value}</dd>
-                    </div>
-                  ))}
+                  {g.properties.map((p) => {
+                    const isLong = p.value.length > LONG_VALUE_THRESHOLD;
+                    return (
+                      <div
+                        key={p.name}
+                        className={cn(
+                          "border-b border-border/40 py-1.5 text-sm",
+                          isLong
+                            ? "flex flex-col gap-1 sm:col-span-2"
+                            : "grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] gap-2",
+                        )}
+                      >
+                        <dt className="text-muted-foreground">{p.name}</dt>
+                        <dd className="break-words font-medium">
+                          <CollapsibleValue value={p.value} />
+                        </dd>
+                      </div>
+                    );
+                  })}
                 </dl>
               </section>
             ))}
@@ -501,7 +604,7 @@ export default function CatalogProduct1cPage() {
             <div className="space-y-1.5">
               {product.stocks.map((s) => (
                 <div key={s.warehouse_id} className="flex items-center justify-between gap-2 text-sm">
-                  <span className="truncate">{s.warehouse_name || s.warehouse_id}</span>
+                  <span className="truncate">{warehouseDisplayName(s)}</span>
                   <span className="font-medium">{fmtQty(s.qty)}</span>
                   {s.expected_qty != null && s.expected_qty !== 0 ? (
                     <Badge variant="outline" className="text-xs">

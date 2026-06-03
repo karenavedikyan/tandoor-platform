@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   groupProperties,
   isHidden,
+  looksLikeCode,
   pickShortProperties,
   visibleProperties,
   type GroupedProperty,
@@ -43,6 +44,36 @@ describe("isHidden", () => {
     expect(isHidden("Покрытие")).toBe(false);
     expect(isHidden("Размер, мм")).toBe(false);
     expect(isHidden("Гарантийный срок")).toBe(false);
+    expect(isHidden("Вид утеплителя")).toBe(false);
+    expect(isHidden("Замок")).toBe(false);
+  });
+
+  it("hides bot and internal flag property names", () => {
+    expect(isHidden("главная (бот)")).toBe(true);
+    expect(isHidden("Главная (бот)")).toBe(true);
+    expect(isHidden("Тип товара")).toBe(true);
+    expect(isHidden("Хит продаж")).toBe(true);
+    expect(isHidden("Новинка")).toBe(true);
+    expect(isHidden("Акция")).toBe(true);
+  });
+});
+
+describe("looksLikeCode", () => {
+  it("treats empty and UUID as code", () => {
+    expect(looksLikeCode(null)).toBe(true);
+    expect(looksLikeCode("")).toBe(true);
+    expect(looksLikeCode("   ")).toBe(true);
+    expect(looksLikeCode("5d60f799-9eb4-11e2-9beb-000000000001")).toBe(true);
+  });
+
+  it("treats long hex-like strings without spaces as code", () => {
+    expect(looksLikeCode("7c4eede4e20c11ea80f5abcdef123456")).toBe(true);
+  });
+
+  it("keeps human-readable labels", () => {
+    expect(looksLikeCode("Входные двери")).toBe(false);
+    expect(looksLikeCode("Основной склад")).toBe(false);
+    expect(looksLikeCode("Покрытие")).toBe(false);
   });
 });
 
