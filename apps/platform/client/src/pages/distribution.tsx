@@ -5,8 +5,18 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DistributionDashboardSummary } from "@/components/distribution/distribution-dashboard-summary";
 import { DistributionEntryTradePointPanel } from "@/components/distribution/distribution-entry-tradepoint-panel";
+import { DistributionFiltersBar } from "@/components/distribution/distribution-filters-bar";
 import { DistributionTree } from "@/components/distribution/distribution-tree";
+import type { DistributionScope } from "@/lib/distribution-tree-data";
+import {
+  defaultDistributionFilterState,
+  extractCityOptions,
+  extractRegionOptions,
+  filterScopeDealers,
+  type DistributionFilterState,
+} from "@/lib/distribution-filters";
 import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
@@ -23,6 +33,7 @@ export default function DistributionPage() {
   const managementPlane = useClientBaseTeamActualization();
   const [mode, setMode] = useState<DistributionMode>("view");
   const [searchQuery, setSearchQuery] = useState("");
+  const [filter, setFilter] = useState<DistributionFilterState>(defaultDistributionFilterState);
 
   const workingDealerRows = useMemo(
     () =>
@@ -35,6 +46,19 @@ export default function DistributionPage() {
   );
 
   const scoped = useMemo(() => roleScopedDealerRows(workingDealerRows, profile), [workingDealerRows, profile]);
+
+  const filteredDealers = useMemo(
+    () => filterScopeDealers(scoped, filter),
+    [scoped, filter],
+  );
+
+  const viewScope: DistributionScope = useMemo(
+    () => ({ kind: "global", dealers: filteredDealers }),
+    [filteredDealers],
+  );
+
+  const regionOptions = useMemo(() => extractRegionOptions(scoped), [scoped]);
+  const cityOptions = useMemo(() => extractCityOptions(scoped), [scoped]);
 
   const actualizationLoading =
     (actx.enabled && actx.loading) ||
@@ -85,6 +109,15 @@ export default function DistributionPage() {
             <p className="text-sm text-muted-foreground">Загрузка актуализации…</p>
           ) : null}
 
+          <DistributionFiltersBar
+            value={filter}
+            onChange={setFilter}
+            regionOptions={regionOptions}
+            cityOptions={cityOptions}
+          />
+
+          <DistributionDashboardSummary scope={viewScope} filter={filter} />
+
           <div className="relative max-w-md">
             <Search
               className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
@@ -99,16 +132,20 @@ export default function DistributionPage() {
             />
           </div>
 
-          {!actualizationLoading && scoped.length === 0 ? (
+          {!actualizationLoading && filteredDealers.length === 0 ? (
             <Card className="rounded-xl border border-border bg-card shadow-xs">
               <CardContent className="px-3 py-6 sm:px-4">
-                <p className="text-sm text-muted-foreground">В вашей зоне видимости пока нет клиентов.</p>
+                <p className="text-sm text-muted-foreground">
+                  {scoped.length === 0
+                    ? "В вашей зоне видимости пока нет клиентов."
+                    : "Нет клиентов по выбранным фильтрам."}
+                </p>
               </CardContent>
             </Card>
           ) : (
             <Card className="rounded-xl border border-border bg-card shadow-xs">
               <DistributionTree
-                scope={{ kind: "global", dealers: scoped }}
+                scope={viewScope}
                 profile={profile}
                 searchQuery={searchQuery}
                 actualizationLoading={actualizationLoading}
