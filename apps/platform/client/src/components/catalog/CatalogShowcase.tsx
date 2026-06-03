@@ -1,8 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
 import { ProductCardGrid, type CatalogListProduct } from "@/components/catalog/ProductListRow";
 import type { CatalogCategoryItem } from "@/components/catalog/CategoryTreeNav";
+import { cn } from "@/lib/utils";
 
 export type ShowcaseBadge = "sale" | "hit" | "new";
+export type ShowcaseCardSize = "xl" | "m" | "s";
+
+const SHELF_SLIDE_WIDTH: Record<ShowcaseCardSize, string> = {
+  xl: "w-[240px] sm:w-[280px]",
+  m: "w-[160px] sm:w-[200px]",
+  s: "w-[132px] sm:w-[150px]",
+};
+
+const SHELF_SKELETON_HEIGHT: Record<ShowcaseCardSize, string> = {
+  xl: "h-[420px]",
+  m: "h-[300px]",
+  s: "h-[240px]",
+};
 
 type ShowcaseRow = {
   key: string;
@@ -14,6 +28,7 @@ type ShowcaseRow = {
 type Props = {
   categories: CatalogCategoryItem[];
   onOpenSelection: (categoryId: string, badge: ShowcaseBadge) => void;
+  cardSize: ShowcaseCardSize;
 };
 
 const SALE_CATEGORY_PATTERNS: { pattern: RegExp; fallbackLabel: string }[] = [
@@ -49,9 +64,11 @@ function badgeParam(badge: ShowcaseBadge): string {
 function ShowcaseShelf({
   row,
   onOpenSelection,
+  cardSize,
 }: {
   row: ShowcaseRow;
   onOpenSelection: Props["onOpenSelection"];
+  cardSize: ShowcaseCardSize;
 }) {
   const [items, setItems] = useState<CatalogListProduct[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -108,7 +125,11 @@ function ShowcaseShelf({
           {Array.from({ length: 4 }, (_, i) => (
             <div
               key={i}
-              className="h-[300px] w-[160px] shrink-0 rounded-[15px] bg-muted animate-pulse sm:w-[200px]"
+              className={cn(
+                SHELF_SLIDE_WIDTH[cardSize],
+                SHELF_SKELETON_HEIGHT[cardSize],
+                "shrink-0 rounded-[15px] bg-muted animate-pulse",
+              )}
               aria-hidden
             />
           ))}
@@ -116,8 +137,8 @@ function ShowcaseShelf({
       ) : (
         <div className="flex gap-3 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:thin]">
           {items!.map((p) => (
-            <div key={p.id} className="w-[160px] shrink-0 sm:w-[200px]">
-              <ProductCardGrid product={p} size="m" />
+            <div key={p.id} className={cn(SHELF_SLIDE_WIDTH[cardSize], "shrink-0")}>
+              <ProductCardGrid product={p} size={cardSize} />
             </div>
           ))}
         </div>
@@ -126,7 +147,7 @@ function ShowcaseShelf({
   );
 }
 
-export function CatalogShowcase({ categories, onOpenSelection }: Props) {
+export function CatalogShowcase({ categories, onOpenSelection, cardSize }: Props) {
   const rows = useMemo(() => buildShowcaseRows(categories), [categories]);
 
   if (rows.length === 0) {
@@ -136,7 +157,12 @@ export function CatalogShowcase({ categories, onOpenSelection }: Props) {
   return (
     <div className="space-y-8" data-testid="catalog-showcase">
       {rows.map((row) => (
-        <ShowcaseShelf key={row.key} row={row} onOpenSelection={onOpenSelection} />
+        <ShowcaseShelf
+          key={row.key}
+          row={row}
+          cardSize={cardSize}
+          onOpenSelection={onOpenSelection}
+        />
       ))}
     </div>
   );
