@@ -35,6 +35,7 @@ import { CategoryTreeNav } from "@/components/catalog/CategoryTreeNav";
 import { FilterCheckboxGroup } from "@/components/catalog/FilterCheckboxGroup";
 import {
   ProductCardGrid,
+  ProductListHeader,
   ProductListRow,
   type CatalogListProduct,
 } from "@/components/catalog/ProductListRow";
@@ -666,7 +667,8 @@ export default function CatalogPage() {
               Ничего не найдено. Уточните запрос.
             </div>
           ) : cardSize === "list" ? (
-            <div className="divide-y rounded-lg border bg-card">
+            <div className="divide-y divide-border overflow-hidden rounded-lg border bg-card">
+              <ProductListHeader />
               {items.map((p) => (
                 <ProductListRow key={p.id} product={p} />
               ))}

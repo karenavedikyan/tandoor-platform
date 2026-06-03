@@ -104,6 +104,40 @@ function ListRowThumbPlaceholder() {
   );
 }
 
+const listHeaderLabel =
+  "text-[11px] font-medium uppercase tracking-wide text-muted-foreground";
+
+/** Column header for document-style list rows — widths match `ProductListRow`. */
+export function ProductListHeader() {
+  return (
+    <div
+      className="bg-muted/40"
+      role="row"
+      data-testid="catalog-list-header"
+    >
+      <div className="flex items-center gap-2 px-3 py-1.5 min-[650px]:gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-2 min-[650px]:gap-3">
+          <span className="w-8 shrink-0" aria-hidden />
+          <span className={listHeaderLabel}>Товар</span>
+        </div>
+        <span className="hidden w-20 shrink-0 min-[650px]:block" aria-hidden />
+        <span className={cn(listHeaderLabel, "hidden w-16 shrink-0 text-right min-[650px]:block")}>
+          Остаток
+        </span>
+        <span
+          className={cn(
+            listHeaderLabel,
+            "w-[5.5rem] shrink-0 text-right min-[650px]:w-28",
+          )}
+        >
+          Цена
+        </span>
+        <span className="w-[4.25rem] shrink-0 min-[650px]:w-[4.5rem]" aria-hidden />
+      </div>
+    </div>
+  );
+}
+
 export function ProductListRow({ product }: { product: CatalogListProduct }) {
   const { active, title, subtitleColor, groupStock } = useVariantDisplay(product);
   const imageSrc = optimizedImage(active.image_url || product.image_url, 96);
@@ -151,7 +185,7 @@ export function ProductListRow({ product }: { product: CatalogListProduct }) {
           </span>
         </Link>
 
-        <div className="hidden shrink-0 min-[650px]:block">
+        <div className="hidden w-20 shrink-0 min-[650px]:block">
           <CatalogInlineBadges
             product={product}
             priceRetail={active.price_retail}
@@ -176,7 +210,10 @@ export function ProductListRow({ product }: { product: CatalogListProduct }) {
           />
         </div>
 
-        <div className="relative z-10 shrink-0" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="relative z-10 w-[4.25rem] shrink-0 min-[650px]:w-[4.5rem]"
+          onClick={(e) => e.stopPropagation()}
+        >
           <CatalogCardActionsRow compact layout="list" density="compact" />
         </div>
       </div>

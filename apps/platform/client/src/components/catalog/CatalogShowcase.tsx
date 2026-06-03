@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { ProductCardGrid, ProductListRow, type CatalogListProduct } from "@/components/catalog/ProductListRow";
+import {
+  ProductCardGrid,
+  ProductListHeader,
+  ProductListRow,
+  type CatalogListProduct,
+} from "@/components/catalog/ProductListRow";
 import type { CatalogCategoryItem } from "@/components/catalog/CategoryTreeNav";
 import { cn } from "@/lib/utils";
 
@@ -157,7 +162,8 @@ function ShowcaseShelf({
           </div>
         )
       ) : isList ? (
-        <div className="overflow-hidden rounded-lg border bg-card">
+        <div className="divide-y divide-border overflow-hidden rounded-lg border bg-card">
+          <ProductListHeader />
           {items!.map((p) => (
             <ProductListRow key={p.id} product={p} />
           ))}
