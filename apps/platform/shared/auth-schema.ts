@@ -245,3 +245,58 @@ export const auditLog = pgTable("audit_log", {
     .notNull()
     .default(sql`now()`),
 });
+
+/** Промт 150: витринная матрица позиций по торговым точкам (дистрибуция). */
+export const showcaseMatrixEntries = pgTable(
+  "showcase_matrix_entries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    dealerId: text("dealer_id").notNull(),
+    tradePointId: text("trade_point_id").notNull(),
+    targetKind: text("target_kind").notNull(),
+    targetId: text("target_id").notNull(),
+    status: text("status").notNull(),
+    comment: text("comment"),
+    clientOpId: text("client_op_id"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" })
+      .notNull()
+      .default(sql`now()`),
+    updatedBy: uuid("updated_by").references(() => authUsers.id),
+    updatedByName: text("updated_by_name"),
+  },
+  (t) => [
+    uniqueIndex("uq_showcase_matrix_entry").on(t.tradePointId, t.targetKind, t.targetId),
+    index("idx_showcase_matrix_tp").on(t.tradePointId),
+    index("idx_showcase_matrix_dealer").on(t.dealerId),
+    uniqueIndex("uq_showcase_matrix_client_op")
+      .on(t.clientOpId)
+      .where(sql`${t.clientOpId} IS NOT NULL`),
+  ],
+);
+
+export const showcaseMatrixEvents = pgTable(
+  "showcase_matrix_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    entryId: uuid("entry_id"),
+    dealerId: text("dealer_id").notNull(),
+    tradePointId: text("trade_point_id").notNull(),
+    targetKind: text("target_kind").notNull(),
+    targetId: text("target_id").notNull(),
+    oldStatus: text("old_status"),
+    newStatus: text("new_status"),
+    comment: text("comment"),
+    changedBy: uuid("changed_by").references(() => authUsers.id),
+    changedByName: text("changed_by_name"),
+    changedAt: timestamp("changed_at", { withTimezone: true, mode: "string" })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    index("idx_showcase_matrix_events_tp").on(t.tradePointId, t.changedAt),
+    index("idx_showcase_matrix_events_dealer").on(t.dealerId, t.changedAt),
+  ],
+);
