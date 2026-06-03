@@ -84,9 +84,35 @@ export function CatalogPhotoBadges({
   );
 }
 
-export function CatalogCardActionsRow({ compact }: { compact?: boolean }) {
+export function CatalogCardActionsRow({
+  compact,
+  layout = "card",
+}: {
+  compact?: boolean;
+  layout?: "card" | "list";
+}) {
   const icon = cn("transition", compact ? "h-4 w-4" : "h-5 w-5");
   const btn = "text-muted-foreground transition hover:text-[#9aca3c]";
+
+  if (layout === "list") {
+    return (
+      <div className="flex items-center justify-end gap-3">
+        <button type="button" className={btn} aria-label="В избранное" onClick={(e) => e.preventDefault()}>
+          <Heart className={icon} />
+        </button>
+        <button type="button" className={btn} aria-label="Сравнить" onClick={(e) => e.preventDefault()}>
+          <GitCompare className={icon} />
+        </button>
+        <button type="button" className={btn} aria-label="В проём" onClick={(e) => e.preventDefault()}>
+          <DoorOpen className={icon} />
+        </button>
+        <button type="button" className={btn} aria-label="В корзину" onClick={(e) => e.preventDefault()}>
+          <ShoppingCart className={icon} />
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="flex items-center justify-between border-t border-border/40 pt-2">
       <div className="flex items-center gap-3">

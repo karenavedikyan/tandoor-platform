@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { ProductCardGrid, type CatalogListProduct } from "@/components/catalog/ProductListRow";
+import { ProductCardGrid, ProductListRow, type CatalogListProduct } from "@/components/catalog/ProductListRow";
 import type { CatalogCategoryItem } from "@/components/catalog/CategoryTreeNav";
 import { cn } from "@/lib/utils";
 
 export type ShowcaseBadge = "sale" | "hit" | "new";
-export type ShowcaseCardSize = "xl" | "m" | "s";
+export type ShowcaseCardSize = "xl" | "m" | "s" | "list";
 
 const SHELF_SLIDE_WIDTH: Record<ShowcaseCardSize, string> = {
   xl: "w-[240px] sm:w-[280px]",
@@ -106,6 +106,9 @@ function ShowcaseShelf({
     return null;
   }
 
+  const isList = cardSize === "list";
+  const gridCardSize = cardSize === "list" ? "m" : cardSize;
+
   return (
     <section aria-labelledby={`showcase-${row.key}`}>
       <div className="mb-3 flex items-center justify-between gap-3">
@@ -121,24 +124,49 @@ function ShowcaseShelf({
         </button>
       </div>
       {loading ? (
-        <div className="flex gap-3 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:thin]">
-          {Array.from({ length: 4 }, (_, i) => (
-            <div
-              key={i}
-              className={cn(
-                SHELF_SLIDE_WIDTH[cardSize],
-                SHELF_SKELETON_HEIGHT[cardSize],
-                "shrink-0 rounded-[15px] bg-muted animate-pulse",
-              )}
-              aria-hidden
-            />
+        isList ? (
+          <div className="overflow-hidden rounded-lg border bg-card">
+            {Array.from({ length: 3 }, (_, i) => (
+              <div
+                key={i}
+                className="flex gap-3 border-b border-border px-3 py-3 last:border-b-0 min-[650px]:px-4"
+                aria-hidden
+              >
+                <div className="h-24 w-24 shrink-0 rounded-md bg-muted animate-pulse min-[650px]:h-28 min-[650px]:w-28" />
+                <div className="flex flex-1 flex-col gap-2 py-1">
+                  <div className="h-4 w-3/4 max-w-xs rounded bg-muted animate-pulse" />
+                  <div className="h-3 w-1/2 max-w-[8rem] rounded bg-muted animate-pulse" />
+                  <div className="h-3 w-1/3 max-w-[6rem] rounded bg-muted animate-pulse" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex gap-3 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:thin]">
+            {Array.from({ length: 4 }, (_, i) => (
+              <div
+                key={i}
+                className={cn(
+                  SHELF_SLIDE_WIDTH[gridCardSize],
+                  SHELF_SKELETON_HEIGHT[gridCardSize],
+                  "shrink-0 rounded-[15px] bg-muted animate-pulse",
+                )}
+                aria-hidden
+              />
+            ))}
+          </div>
+        )
+      ) : isList ? (
+        <div className="overflow-hidden rounded-lg border bg-card">
+          {items!.map((p) => (
+            <ProductListRow key={p.id} product={p} />
           ))}
         </div>
       ) : (
         <div className="flex gap-3 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:thin]">
           {items!.map((p) => (
-            <div key={p.id} className={cn(SHELF_SLIDE_WIDTH[cardSize], "shrink-0")}>
-              <ProductCardGrid product={p} size={cardSize} />
+            <div key={p.id} className={cn(SHELF_SLIDE_WIDTH[gridCardSize], "shrink-0")}>
+              <ProductCardGrid product={p} size={gridCardSize} />
             </div>
           ))}
         </div>
