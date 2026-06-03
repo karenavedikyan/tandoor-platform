@@ -8,7 +8,7 @@ import {
   type VariantSelection,
 } from "@/lib/catalog-variant-resolve";
 import {
-  CatalogActionIcons,
+  CatalogCardActionsRow,
   CatalogColorPalette,
   CatalogPhotoBadges,
   CatalogPriceBlock,
@@ -201,24 +201,26 @@ export function ProductCardGrid({
   return (
     <article
       className={cn(
-        "Card-product flex h-full flex-col justify-between overflow-hidden rounded-lg border border-border/80 bg-white shadow-[0_5px_15px_rgba(143,150,176,0.3)] transition hover:shadow-[0_8px_24px_rgba(143,150,176,0.4)]",
+        "Card-product flex h-full flex-col justify-between overflow-hidden rounded-lg border border-border/80 bg-card shadow-[0_5px_15px_rgba(143,150,176,0.3)] transition hover:shadow-[0_8px_24px_rgba(143,150,176,0.4)]",
         size === "xl" && "min-h-[450px]",
       )}
       data-testid={`catalog-card-${product.id}`}
     >
-      <header className={cn("Card-product__header space-y-1.5 pt-3", padX)}>
+      <header className={cn("Card-product__header space-y-1.5 pt-3 text-center", padX)}>
         <Link href={detailHref} className="block min-w-0">
           <h3 className={cn("Card-product__title-text line-clamp-2 font-semibold leading-snug text-foreground", titleCls)}>
             {title}
           </h3>
+          {subtitleColor ? (
+            <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{subtitleColor}</p>
+          ) : null}
           <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
-            {subtitleColor ? <span>{subtitleColor}</span> : null}
-            {subtitleColor && product.brand ? <span> · </span> : null}
-            {product.brand ? <span>{product.brand}</span> : null}
-            {!subtitleColor && !product.brand ? <span className="text-muted-foreground/60">—</span> : null}
+            {product.brand ? <span>{product.brand}</span> : <span className="text-muted-foreground/60">—</span>}
           </p>
         </Link>
-        <CatalogSpecsButton visible={showSpecsButton(product) && !tiny} compact={compact} />
+        <div className="flex justify-center">
+          <CatalogSpecsButton visible={showSpecsButton(product) && !tiny} compact={compact} />
+        </div>
       </header>
 
       {hasPalette && !tiny ? (
@@ -255,11 +257,6 @@ export function ProductCardGrid({
               compact={compact || tiny}
             />
           </div>
-          {!tiny ? (
-            <div className="pointer-events-auto absolute right-1.5 top-1.5">
-              <CatalogActionIcons compact={compact} />
-            </div>
-          ) : null}
         </div>
       </div>
 
@@ -279,15 +276,14 @@ export function ProductCardGrid({
         </div>
       ) : null}
 
-      <footer className={cn("mt-auto space-y-1 pb-3 pt-1", padX)}>
+      <footer className={cn("mt-auto space-y-2 pb-3 pt-1", padX)}>
         {!tiny ? <CatalogStockLine stock={groupStock} className="px-0.5" /> : null}
-        <div className={cn(!tiny && "px-1 sm:px-4")}>
-          <CatalogPriceBlock
-            priceRetail={active.price_retail}
-            priceRetailSale={active.price_retail_sale}
-            size={tiny ? "sm" : "md"}
-          />
-        </div>
+        <CatalogPriceBlock
+          priceRetail={active.price_retail}
+          priceRetailSale={active.price_retail_sale}
+          size={tiny ? "sm" : "md"}
+        />
+        {!tiny ? <CatalogCardActionsRow compact={compact} /> : null}
         {tiny ? (
           <div className="flex items-center justify-between gap-1">
             <span
