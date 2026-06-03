@@ -30,6 +30,7 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { CatalogSectionsLanding } from "@/components/catalog/CatalogSectionsLanding";
+import { CatalogShowcase, type ShowcaseBadge } from "@/components/catalog/CatalogShowcase";
 import { CategoryTreeNav } from "@/components/catalog/CategoryTreeNav";
 import { FilterCheckboxGroup } from "@/components/catalog/FilterCheckboxGroup";
 import {
@@ -634,15 +635,29 @@ export default function CatalogPage() {
 
       <div ref={listingRef} className="scroll-mt-4">
         {showSectionsLanding ? (
-          <CatalogSectionsLanding
-            categories={categories}
-            onSelect={(id) => {
-              setCategoryId(id);
-              requestAnimationFrame(() => {
-                listingRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-              });
-            }}
-          />
+          <div className="space-y-8">
+            <CatalogShowcase
+              categories={categories}
+              onOpenSelection={(id, badge: ShowcaseBadge) => {
+                setCategoryId(id);
+                setOnlySale(badge === "sale");
+                setOnlyHit(badge === "hit");
+                setOnlyNew(badge === "new");
+                requestAnimationFrame(() => {
+                  listingRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                });
+              }}
+            />
+            <CatalogSectionsLanding
+              categories={categories}
+              onSelect={(id) => {
+                setCategoryId(id);
+                requestAnimationFrame(() => {
+                  listingRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                });
+              }}
+            />
+          </div>
         ) : loading && items.length === 0 ? (
           <div className="grid place-items-center py-16 text-sm text-muted-foreground">
             Загружаю каталог…
@@ -813,12 +828,13 @@ function CatalogAdvancedFilters({
         </Button>
         <Button
           type="button"
-          className="h-[42px] flex-1 bg-[#9aca3c] font-semibold text-white hover:bg-[#86b832]"
+          className="h-[42px] flex-1 gap-2 bg-[#9aca3c] font-semibold text-white hover:bg-[#86b832]"
           onClick={onApply}
           disabled={filtersLoading}
           data-testid="catalog-filters-apply"
         >
-          Применить
+          <Search className="h-4 w-4 shrink-0" aria-hidden />
+          Найти
         </Button>
       </footer>
     </div>
