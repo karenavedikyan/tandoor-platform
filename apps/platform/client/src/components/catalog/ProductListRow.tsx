@@ -201,7 +201,7 @@ export function ProductCardGrid({
   return (
     <article
       className={cn(
-        "Card-product flex h-full flex-col justify-between overflow-hidden rounded-lg border border-border/80 bg-card shadow-[0_5px_15px_rgba(143,150,176,0.3)] transition hover:shadow-[0_8px_24px_rgba(143,150,176,0.4)]",
+        "Card-product flex h-full flex-col justify-between overflow-hidden rounded-[15px] border border-border/80 bg-card shadow-[0_5px_15px_rgba(143,150,176,0.3)] transition hover:shadow-[0_8px_24px_rgba(143,150,176,0.4)]",
         size === "xl" && "min-h-[450px]",
       )}
       data-testid={`catalog-card-${product.id}`}

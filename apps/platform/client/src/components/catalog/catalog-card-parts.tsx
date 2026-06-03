@@ -186,8 +186,8 @@ export function CatalogColorPalette({
             type="button"
             title={c.value}
             className={cn(
-              "shrink-0 overflow-hidden rounded-md border-2 bg-white transition",
-              compact ? "h-8 w-8" : "h-10 w-10",
+              "shrink-0 overflow-hidden rounded-md border-2 bg-card transition",
+              compact ? "h-6 w-6" : "h-[25px] w-[25px]",
               active
                 ? "border-[#9aca3c] ring-1 ring-[#9aca3c]/40"
                 : "border-border hover:border-muted-foreground/50",
