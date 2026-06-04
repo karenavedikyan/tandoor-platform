@@ -31,6 +31,7 @@ import { useClientBaseTeamActualization } from "@/context/client-base-team-actua
 import {
   DISTRIBUTION_ENTRY_VIRTUAL_ESTIMATE,
   distributionEntryVirtualItemStyle,
+  useDistributionEntryDesktopLayout,
   useDistributionEntryTradepointGridLanes,
   useDistributionEntryVirtualizer,
 } from "@/lib/distribution-entry-element-virtualizer";
@@ -51,6 +52,7 @@ export function DistributionEntryTradePointPanel({ profile, dealers: dealersProp
   const [selectedTradePointId, setSelectedTradePointId] = useState<string | null>(null);
   const [cacheBump, setCacheBump] = useState(0);
   const isMobile = useIsMobile();
+  const isDesktopLayout = useDistributionEntryDesktopLayout();
   const [tradePointView, setTradePointView] = useState<DistributionEntryTradePointView>(() =>
     readDistributionEntryTradePointView(isMobile),
   );
@@ -294,35 +296,37 @@ export function DistributionEntryTradePointPanel({ profile, dealers: dealersProp
 
   return (
     <div className="min-w-0 space-y-4" data-testid="distribution-entry-tradepoint-panel">
-      <div className="hidden min-h-[min(70vh,780px)] gap-4 lg:grid lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)]">
-        <Card className="rounded-xl border border-border bg-card shadow-xs">
-          <CardContent className="p-3 sm:p-4">{listColumn}</CardContent>
-        </Card>
-        <div className="min-w-0">{entryColumn}</div>
-      </div>
-
-      <div className="space-y-4 lg:hidden">
-        {selectedTradePointId && selectedRow ? (
-          <>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="min-h-10"
-              onClick={() => setSelectedTradePointId(null)}
-              data-testid="button-distribution-entry-back-to-list"
-            >
-              <ArrowLeft className="mr-2 h-4 w-4" aria-hidden />
-              Назад к списку
-            </Button>
-            {entryColumn}
-          </>
-        ) : (
+      {isDesktopLayout ? (
+        <div className="grid min-h-[min(70vh,780px)] gap-4 grid-cols-[minmax(280px,340px)_minmax(0,1fr)]">
           <Card className="rounded-xl border border-border bg-card shadow-xs">
             <CardContent className="p-3 sm:p-4">{listColumn}</CardContent>
           </Card>
-        )}
-      </div>
+          <div className="min-w-0">{entryColumn}</div>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {selectedTradePointId && selectedRow ? (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="min-h-10"
+                onClick={() => setSelectedTradePointId(null)}
+                data-testid="button-distribution-entry-back-to-list"
+              >
+                <ArrowLeft className="mr-2 h-4 w-4" aria-hidden />
+                Назад к списку
+              </Button>
+              {entryColumn}
+            </>
+          ) : (
+            <Card className="rounded-xl border border-border bg-card shadow-xs">
+              <CardContent className="p-3 sm:p-4">{listColumn}</CardContent>
+            </Card>
+          )}
+        </div>
+      )}
     </div>
   );
 }
