@@ -72,6 +72,7 @@
     "test:distribution-city-drilldown": "tsx client/src/lib/__tests__/distribution-city-drilldown.test.ts",
     "test:distribution-trend": "tsx client/src/lib/__tests__/distribution-trend.test.ts",
     "test:distribution-excel-export": "tsx client/src/lib/__tests__/distribution-excel-export.test.ts",
+    "test:distribution-entry-product": "tsx client/src/lib/__tests__/distribution-entry-product-view-model.test.ts",
     "test:distribution-fullscreen-entry-draft": "tsx client/src/lib/__tests__/distribution-fullscreen-entry-draft.test.ts"
   },
   "dependencies": {
