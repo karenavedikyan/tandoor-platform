@@ -123,7 +123,7 @@ export function DistributionEntryTradePointCard({
       type="button"
       onClick={onSelect}
       className={cn(
-        "flex w-full flex-col overflow-hidden rounded-xl border text-left shadow-sm transition-colors",
+        "flex w-full shrink-0 flex-col overflow-hidden rounded-xl border text-left shadow-sm transition-colors",
         selectedCls,
       )}
       data-testid={`distribution-entry-tradepoint-row-${row.tradePointId}`}
