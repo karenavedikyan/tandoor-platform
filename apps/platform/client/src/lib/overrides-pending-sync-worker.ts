@@ -172,6 +172,8 @@ async function processItem(item: PendingSyncItem): Promise<void> {
         placementCapacity: typeof p.placementCapacity === "number" ? p.placementCapacity : null,
         placementActual: typeof p.placementActual === "number" ? p.placementActual : null,
         placementRef: typeof p.placementRef === "string" ? p.placementRef : null,
+        placementOurModels: Array.isArray(p.placementOurModels) ? p.placementOurModels : undefined,
+        placementCompetitors: Array.isArray(p.placementCompetitors) ? p.placementCompetitors : undefined,
       });
       break;
     }

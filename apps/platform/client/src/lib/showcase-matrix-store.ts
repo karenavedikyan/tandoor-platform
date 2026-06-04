@@ -154,6 +154,8 @@ const NULL_PLACEMENT_FIELDS = {
   placementCapacity: null,
   placementActual: null,
   placementRef: null,
+  placementOurModels: [] as ShowcaseMatrixEntryDto["placementOurModels"],
+  placementCompetitors: [] as ShowcaseMatrixEntryDto["placementCompetitors"],
 } as const;
 
 function enqueueShowcaseMatrixUpsert(
@@ -214,6 +216,8 @@ export function setMatrixPlacement(params: {
     placementCapacity: params.placementCapacity,
     placementActual: params.placementActual,
     placementRef: null,
+    placementOurModels: [],
+    placementCompetitors: [],
   };
 
   const record = loadCacheRecord();
@@ -311,6 +315,8 @@ export function setMatrixStatus(params: {
   const placementCapacity = prev?.placementCapacity ?? null;
   const placementActual = prev?.placementActual ?? null;
   const placementRef = prev?.placementRef ?? null;
+  const placementOurModels = prev?.placementOurModels ?? [];
+  const placementCompetitors = prev?.placementCompetitors ?? [];
 
   const entry: ShowcaseMatrixEntryDto = {
     id: prev?.id ?? `local-${clientOpId}`,
@@ -328,6 +334,8 @@ export function setMatrixStatus(params: {
     placementCapacity,
     placementActual,
     placementRef,
+    placementOurModels,
+    placementCompetitors,
   };
 
   const record = loadCacheRecord();
