@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
-import { Search } from "lucide-react";
+import { Download, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -148,7 +148,38 @@ export default function DistributionPage() {
             cityOptions={cityOptions}
           />
 
-          <DistributionDashboardSummary scope={viewScope} filter={filter} />
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0 flex-1">
+              <DistributionDashboardSummary scope={viewScope} filter={filter} />
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0 self-start"
+              data-testid="btn-distribution-export-excel"
+              onClick={() => {
+                void (async () => {
+                  const XLSX = await import("xlsx");
+                  const { buildDistributionWorkbook, distributionExportFileName } = await import(
+                    "@/lib/distribution-excel-export"
+                  );
+                  const wb = buildDistributionWorkbook({
+                    scope: viewScope,
+                    filter,
+                    managerOptions: {
+                      responsibleByCode,
+                      managerLabelByUserId,
+                    },
+                  });
+                  XLSX.writeFile(wb, distributionExportFileName(viewScope));
+                })();
+              }}
+            >
+              <Download className="mr-2 h-4 w-4" aria-hidden />
+              Экспорт в Excel
+            </Button>
+          </div>
 
           <Tabs defaultValue="manager" className="w-full min-w-0 space-y-3" data-testid="tabs-distribution-view-breakdown">
             <TabsList className="h-auto w-full max-w-lg justify-start gap-1 bg-muted/50 p-1">
