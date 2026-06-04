@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { DistributionDashboardSummary } from "@/components/distribution/distribution-dashboard-summary";
 import { DistributionCityTab } from "@/components/distribution/distribution-city-tab";
+import { DistributionTrendTab } from "@/components/distribution/distribution-trend-tab";
 import { DistributionClientTab } from "@/components/distribution/distribution-client-tab";
 import { DistributionProductTab } from "@/components/distribution/distribution-product-tab";
 import { DistributionTradePointTab } from "@/components/distribution/distribution-tradepoint-tab";
@@ -166,6 +167,9 @@ export default function DistributionPage() {
               <TabsTrigger value="city" className="min-h-9 text-xs sm:text-sm" data-testid="tab-distribution-breakdown-city">
                 Город
               </TabsTrigger>
+              <TabsTrigger value="trend" className="min-h-9 text-xs sm:text-sm" data-testid="tab-distribution-breakdown-trend">
+                Динамика
+              </TabsTrigger>
             </TabsList>
             <TabsContent value="manager" className="mt-0 focus-visible:ring-0">
               <DistributionManagerTab
@@ -186,6 +190,9 @@ export default function DistributionPage() {
             </TabsContent>
             <TabsContent value="city" className="mt-0 focus-visible:ring-0">
               <DistributionCityTab scope={viewScope} filter={filter} profile={profile} />
+            </TabsContent>
+            <TabsContent value="trend" className="mt-0 focus-visible:ring-0">
+              <DistributionTrendTab scope={viewScope} filter={filter} />
             </TabsContent>
           </Tabs>
 

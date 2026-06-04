@@ -69,7 +69,8 @@
     "test:distribution-client-drilldown": "tsx client/src/lib/__tests__/distribution-client-drilldown.test.ts",
     "test:distribution-tradepoint-drilldown": "tsx client/src/lib/__tests__/distribution-tradepoint-drilldown.test.ts",
     "test:distribution-product-drilldown": "tsx client/src/lib/__tests__/distribution-product-drilldown.test.ts",
-    "test:distribution-city-drilldown": "tsx client/src/lib/__tests__/distribution-city-drilldown.test.ts"
+    "test:distribution-city-drilldown": "tsx client/src/lib/__tests__/distribution-city-drilldown.test.ts",
+    "test:distribution-trend": "tsx client/src/lib/__tests__/distribution-trend.test.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
