@@ -24,6 +24,7 @@ import { useEffect } from "react";
 import {
   DISTRIBUTION_ENTRY_VIRTUAL_ESTIMATE,
   distributionEntryVirtualItemStyle,
+  useDistributionEntryDesktopLayout,
   useDistributionEntryVirtualizer,
 } from "@/lib/distribution-entry-element-virtualizer";
 
@@ -41,6 +42,7 @@ function filterRowsByCity(rows: DistributionEntryTradePointRow[], city: string):
 
 export function DistributionEntryCityPanel({ profile, dealers }: DistributionEntryCityPanelProps) {
   const { user } = useCurrentUser();
+  const isDesktopLayout = useDistributionEntryDesktopLayout();
   const [cityQuery, setCityQuery] = useState("");
   const [tpQuery, setTpQuery] = useState("");
   const [selectedCity, setSelectedCity] = useState<string | null>(null);
@@ -249,12 +251,12 @@ export function DistributionEntryCityPanel({ profile, dealers }: DistributionEnt
 
   return (
     <div className="min-w-0 space-y-4" data-testid="distribution-entry-city-panel">
-      {showTpColumn ? (
+      {showTpColumn && !isDesktopLayout ? (
         <Button
           type="button"
           variant="ghost"
           size="sm"
-          className="min-h-10 px-0 text-muted-foreground lg:hidden"
+          className="min-h-10 px-0 text-muted-foreground"
           onClick={() => {
             if (showShowcase) setSelectedTradePointId(null);
             else {
@@ -273,38 +275,34 @@ export function DistributionEntryCityPanel({ profile, dealers }: DistributionEnt
         <Card className="rounded-xl border border-border bg-card shadow-xs">
           <CardContent className="p-3 sm:p-4">{cityList}</CardContent>
         </Card>
+      ) : isDesktopLayout ? (
+        <div className="grid min-h-[min(70vh,780px)] gap-4 grid-cols-[minmax(280px,340px)_minmax(0,1fr)]">
+          <Card className="rounded-xl border border-border bg-card shadow-xs">
+            <CardContent className="p-3 sm:p-4">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="mb-3 min-h-9 px-0 text-muted-foreground"
+                onClick={() => {
+                  setSelectedCity(null);
+                  setSelectedTradePointId(null);
+                }}
+              >
+                <ArrowLeft className="mr-2 h-4 w-4" aria-hidden />
+                Города
+              </Button>
+              {tpList}
+            </CardContent>
+          </Card>
+          <div className="min-w-0">{showcase}</div>
+        </div>
+      ) : showShowcase ? (
+        showcase
       ) : (
-        <>
-          <div className="hidden min-h-[min(70vh,780px)] gap-4 lg:grid lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)]">
-            <Card className="rounded-xl border border-border bg-card shadow-xs">
-              <CardContent className="p-3 sm:p-4">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="mb-3 min-h-9 px-0 text-muted-foreground"
-                  onClick={() => {
-                    setSelectedCity(null);
-                    setSelectedTradePointId(null);
-                  }}
-                >
-                  <ArrowLeft className="mr-2 h-4 w-4" aria-hidden />
-                  Города
-                </Button>
-                {tpList}
-              </CardContent>
-            </Card>
-            <div className="min-w-0">{showcase}</div>
-          </div>
-
-          <div className="lg:hidden">
-            {showShowcase ? showcase : (
-              <Card className="rounded-xl border border-border bg-card shadow-xs">
-                <CardContent className="p-3 sm:p-4">{tpList}</CardContent>
-              </Card>
-            )}
-          </div>
-        </>
+        <Card className="rounded-xl border border-border bg-card shadow-xs">
+          <CardContent className="p-3 sm:p-4">{tpList}</CardContent>
+        </Card>
       )}
     </div>
   );

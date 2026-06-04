@@ -52,6 +52,23 @@ export function useDistributionEntryTradepointGridLanes(): number {
   return lanes;
 }
 
+/** Двухколоночный лейаут «Ввод» (совпадает с Tailwind `lg`, 1024px). */
+export function useDistributionEntryDesktopLayout(): boolean {
+  const [isDesktop, setIsDesktop] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia("(min-width: 1024px)").matches : false,
+  );
+
+  useLayoutEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const update = () => setIsDesktop(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
+  return isDesktop;
+}
+
 function catalogGridColumnsFromClass(gridClass: string, width: number): number {
   if (gridClass.includes("min-[866px]:grid-cols-6") && width >= 866) return 6;
   if (gridClass.includes("min-[866px]:grid-cols-4") && width >= 866) return 4;

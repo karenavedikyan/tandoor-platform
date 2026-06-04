@@ -43,4 +43,16 @@ const lanes = 2;
 const virtualRows500 = Math.ceil(500 / lanes);
 assert.ok(virtualRows500 + DISTRIBUTION_ENTRY_VIRTUAL_OVERSCAN * 2 < 500);
 
+
+assert.ok(tpPanel.includes("useDistributionEntryDesktopLayout"), "tradepoint: desktop layout hook");
+assert.ok(tpPanel.includes("isDesktopLayout ?"), "tradepoint: conditional layout");
+assert.ok(!tpPanel.includes("lg:hidden"), "tradepoint: no CSS-only mobile branch");
+assert.ok(productPanel.includes("isDesktopLayout ?"), "product: conditional tpList");
+assert.ok(cityPanel.includes("isDesktopLayout ?"), "city: conditional tpList");
+assert.equal(
+  (tpPanel.split("list-distribution-entry-tradepoints").length - 1),
+  1,
+  "tradepoint: single virtual list testid definition",
+);
+
 console.log("distribution-entry-list-virtualization.test.ts: ok");

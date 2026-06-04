@@ -41,6 +41,7 @@ import { loadCachedMatrix, SHOWCASE_MATRIX_STORE_CHANGED_EVENT } from "@/lib/sho
 import {
   DISTRIBUTION_ENTRY_VIRTUAL_ESTIMATE,
   distributionEntryVirtualItemStyle,
+  useDistributionEntryDesktopLayout,
   useDistributionEntryCatalogGridColumns,
   useDistributionEntryVirtualizer,
 } from "@/lib/distribution-entry-element-virtualizer";
@@ -72,6 +73,7 @@ export function DistributionEntryProductPanel({
   filter,
 }: DistributionEntryProductPanelProps) {
   const { user } = useCurrentUser();
+  const isDesktopLayout = useDistributionEntryDesktopLayout();
   const [segment, setSegment] = useState<DistributionSegmentFilter>(filter.segment);
   const [step, setStep] = useState<Step>("segment");
   const [modelQuery, setModelQuery] = useState("");
@@ -470,30 +472,35 @@ export function DistributionEntryProductPanel({
         </Card>
       ) : null}
 
-      {(step === "tradePoints" || step === "showcase") && (
-        <div className="hidden min-h-[min(70vh,780px)] gap-4 lg:grid lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)]">
-          <Card className="rounded-xl border border-border bg-card shadow-xs">
-            <CardContent className="p-3 sm:p-4">{tpList}</CardContent>
-          </Card>
-          <div className="min-w-0">{step === "showcase" ? showcase : (
-            <Card className="rounded-xl border border-dashed border-border bg-muted/10 shadow-none">
-              <CardContent className="px-4 py-10 text-center">
-                <p className="text-sm text-muted-foreground">Выберите торговую точку в списке.</p>
-              </CardContent>
-            </Card>
-          )}</div>
-        </div>
-      )}
-
-      {(step === "tradePoints" || step === "showcase") && (
-        <div className="space-y-4 lg:hidden">
-          {step === "showcase" ? showcase : (
+      {(step === "tradePoints" || step === "showcase") &&
+        (isDesktopLayout ? (
+          <div className="grid min-h-[min(70vh,780px)] gap-4 grid-cols-[minmax(280px,340px)_minmax(0,1fr)]">
             <Card className="rounded-xl border border-border bg-card shadow-xs">
               <CardContent className="p-3 sm:p-4">{tpList}</CardContent>
             </Card>
-          )}
-        </div>
-      )}
+            <div className="min-w-0">
+              {step === "showcase" ? (
+                showcase
+              ) : (
+                <Card className="rounded-xl border border-dashed border-border bg-muted/10 shadow-none">
+                  <CardContent className="px-4 py-10 text-center">
+                    <p className="text-sm text-muted-foreground">Выберите торговую точку в списке.</p>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {step === "showcase" ? (
+              showcase
+            ) : (
+              <Card className="rounded-xl border border-border bg-card shadow-xs">
+                <CardContent className="p-3 sm:p-4">{tpList}</CardContent>
+              </Card>
+            )}
+          </div>
+        ))}
     </div>
   );
 }
