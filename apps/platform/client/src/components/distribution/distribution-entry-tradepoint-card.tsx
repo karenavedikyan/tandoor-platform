@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+import { CardContent } from "@/components/ui/card";
 import { ShowcaseCoverPhotoSlot } from "@/components/showcase-cover-photo-slot";
 import {
   coverageBadgeClass,
@@ -122,38 +122,39 @@ export function DistributionEntryTradePointCard({
     <button
       type="button"
       onClick={onSelect}
-      className={cn("w-full overflow-hidden rounded-xl border text-left shadow-sm transition-colors", selectedCls)}
+      className={cn(
+        "block w-full overflow-hidden rounded-xl border text-left shadow-sm transition-colors",
+        selectedCls,
+      )}
       data-testid={`distribution-entry-tradepoint-row-${row.tradePointId}`}
     >
-      <Card className="border-0 bg-transparent shadow-none">
-        <CardContent className="space-y-3 p-3 sm:p-4">
-          <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:gap-4">
-            <ShowcaseCoverPhotoSlot
-              kind="trade_point"
-              dealer={dealer}
-              tradePoint={point}
-              profile={profile}
-              size="large"
-              className="shrink-0"
-            />
-            <div className="min-w-0 flex-1 space-y-2">
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div className="min-w-0 space-y-0.5">
-                  <p className="text-lg font-semibold leading-snug text-foreground sm:text-xl">{row.tradePointName}</p>
-                  <p className="text-sm text-muted-foreground">
-                    <span className="font-medium text-foreground">{row.clientName}</span>
-                    {row.city ? <span className="mt-0.5 block text-xs">{row.city}</span> : null}
-                  </p>
-                </div>
-                <div className="flex shrink-0 flex-col items-end gap-1">
-                  <CoverageBadge row={row} />
-                  <span className="text-[10px] text-muted-foreground">{freshness}</span>
-                </div>
+      <div className="space-y-3 p-3 sm:p-4">
+        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:gap-4">
+          <ShowcaseCoverPhotoSlot
+            kind="trade_point"
+            dealer={dealer}
+            tradePoint={point}
+            profile={profile}
+            size="large"
+            className="shrink-0"
+          />
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0 space-y-0.5">
+                <p className="text-lg font-semibold leading-snug text-foreground sm:text-xl">{row.tradePointName}</p>
+                <p className="text-sm text-muted-foreground">
+                  <span className="font-medium text-foreground">{row.clientName}</span>
+                  {row.city ? <span className="mt-0.5 block text-xs">{row.city}</span> : null}
+                </p>
+              </div>
+              <div className="flex shrink-0 flex-col items-end gap-1">
+                <CoverageBadge row={row} />
+                <span className="text-[10px] text-muted-foreground">{freshness}</span>
               </div>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </button>
   );
 }
