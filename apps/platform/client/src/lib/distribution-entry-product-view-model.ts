@@ -2,6 +2,7 @@
  * View-model разреза «Ввод → по продукту»: модели матрицы и статус ТТ для выбранной модели.
  */
 
+import type { CatalogListProduct } from "@/components/catalog/ProductListRow";
 import type { ClientCategoryId } from "@/lib/client-category";
 import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import { getMergedDealerTradePoints } from "@/lib/dealer-trade-points-overrides";
@@ -178,4 +179,36 @@ export function entryProductPresenceLabelRu(presence: EntryProductTpPresence): s
     default:
       return presence;
   }
+}
+
+/** Матричная модель витрины → карточка каталога (без API). */
+export function matrixModelToCatalogListProduct(
+  model: ShowcaseMatrixModelDefinition,
+): CatalogListProduct {
+  return {
+    id: model.id,
+    name: model.name,
+    display_name: model.name,
+    brand: model.typeLabelRu,
+    image_url: model.imageUrl?.trim() || null,
+    total_stock: null,
+    price_retail: null,
+    price_retail_sale: null,
+    is_new: false,
+    is_hit: false,
+    is_sale: false,
+    variant_count: 0,
+  };
+}
+
+export function entryProductModelsToCatalogProducts(
+  dealers: readonly DealerRow[],
+  segment: DistributionSegmentFilter,
+  query?: string,
+): CatalogListProduct[] {
+  const q = query?.trim().toLowerCase() ?? "";
+  return collectEntryCatalogModels(dealers)
+    .filter((m) => modelMatchesSegment(m, segment))
+    .filter((m) => !q || m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q))
+    .map(matrixModelToCatalogListProduct);
 }

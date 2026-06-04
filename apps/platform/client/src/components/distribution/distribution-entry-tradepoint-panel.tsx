@@ -1,16 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Search } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { ArrowLeft, LayoutGrid, List, Search, Square } from "lucide-react";
+import { DistributionEntryTradePointCard } from "@/components/distribution/distribution-entry-tradepoint-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import {
+  readDistributionEntryTradePointView,
+  writeDistributionEntryTradePointView,
+  type DistributionEntryTradePointView,
+} from "@/lib/distribution-entry-tradepoint-view";
+import {
   DistributionTradePointMatrixEntry,
-  coverageBadgeClass,
-  freshnessLabel,
 } from "@/components/distribution/distribution-tradepoint-matrix-entry";
-import { DEALER_BASE_ROWS, type DealerRow } from "@/lib/dealer-base-mock-data";
+import { DEALER_BASE_ROWS, type DealerRow, type DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
 import { roleScopedDealerRows } from "@/lib/dealer-base-role-views";
@@ -39,6 +43,14 @@ export function DistributionEntryTradePointPanel({ profile, dealers: dealersProp
   const [query, setQuery] = useState("");
   const [selectedTradePointId, setSelectedTradePointId] = useState<string | null>(null);
   const [cacheBump, setCacheBump] = useState(0);
+  const isMobile = useIsMobile();
+  const [tradePointView, setTradePointView] = useState<DistributionEntryTradePointView>(() =>
+    readDistributionEntryTradePointView(isMobile),
+  );
+
+  useEffect(() => {
+    writeDistributionEntryTradePointView(tradePointView);
+  }, [tradePointView]);
 
   const workingDealerRows = useMemo(
     () =>
@@ -68,6 +80,15 @@ export function DistributionEntryTradePointPanel({ profile, dealers: dealersProp
     return buildDistributionEntryTradePointRows({ dealers: scopedDealers, query });
   }, [scopedDealers, query, cacheBump]);
 
+  const rowRefs = useMemo(() => {
+    const map = new Map<string, { dealer: DealerRow; point: DealerTradePoint }>();
+    for (const row of rows) {
+      const ref = findDealerTradePointForEntryRow(scopedDealers, row);
+      if (ref) map.set(row.tradePointId, ref);
+    }
+    return map;
+  }, [rows, scopedDealers]);
+
   const selectedRow = useMemo(
     () => rows.find((r) => r.tradePointId === selectedTradePointId) ?? null,
     [rows, selectedTradePointId],
@@ -85,68 +106,92 @@ export function DistributionEntryTradePointPanel({ profile, dealers: dealersProp
     setSelectedTradePointId(row.tradePointId);
   }, []);
 
+  const feedLayoutClass =
+    tradePointView === "large"
+      ? "mx-auto flex w-full max-w-4xl flex-col gap-3"
+      : tradePointView === "grid"
+        ? "grid grid-cols-2 gap-2 lg:grid-cols-1"
+        : "flex flex-col divide-y divide-border/70 overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm";
+
   const listColumn = (
     <div className="flex min-h-0 min-w-0 flex-col gap-3">
-      <div className="relative">
-        <Search
-          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-          aria-hidden
-        />
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Поиск по точке, клиенту, городу"
-          className="pl-9"
-          data-testid="input-distribution-entry-tradepoint-search"
-        />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="relative min-w-0 flex-1">
+          <Search
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+            aria-hidden
+          />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Поиск по точке, клиенту, городу"
+            className="min-h-10 pl-9"
+            data-testid="input-distribution-entry-tradepoint-search"
+          />
+        </div>
+        <div
+          className="flex shrink-0 items-center gap-0.5 self-start rounded-lg border border-border bg-card p-0.5"
+          role="radiogroup"
+          aria-label="Вид списка торговых точек"
+          data-testid="distribution-entry-tradepoint-view-toggle"
+        >
+          {(
+            [
+              { id: "large" as const, label: "Крупные", icon: Square },
+              { id: "grid" as const, label: "Сетка", icon: LayoutGrid },
+              { id: "list" as const, label: "Список", icon: List },
+            ] as const
+          ).map((opt) => {
+            const Icon = opt.icon;
+            const active = tradePointView === opt.id;
+            return (
+              <Button
+                key={opt.id}
+                type="button"
+                variant="outline"
+                size="icon"
+                className={cn(
+                  "h-9 w-9 shrink-0 rounded-md border",
+                  active
+                    ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
+                    : "border-transparent bg-card text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+                aria-label={opt.label}
+                aria-pressed={active}
+                onClick={() => setTradePointView(opt.id)}
+                data-testid={`distribution-entry-tradepoint-view-${opt.id}`}
+              >
+                <Icon className="h-4 w-4" aria-hidden />
+              </Button>
+            );
+          })}
+        </div>
       </div>
 
       {rows.length === 0 ? (
         <p className="text-sm text-muted-foreground">В вашей зоне видимости нет торговых точек для ввода.</p>
       ) : (
-        <ul className="flex max-h-[min(70vh,720px)] flex-col gap-2 overflow-y-auto pr-0.5" data-testid="list-distribution-entry-tradepoints">
+        <div
+          className={cn("max-h-[min(70vh,720px)] overflow-y-auto pr-0.5", feedLayoutClass)}
+          data-testid="list-distribution-entry-tradepoints"
+        >
           {rows.map((row) => {
-            const selected = row.tradePointId === selectedTradePointId;
-            const noMatrix = row.templateModelsCount === 0;
+            const ref = rowRefs.get(row.tradePointId);
+            if (!ref) return null;
             return (
-              <li key={row.tradePointId}>
-                <button
-                  type="button"
-                  onClick={() => handleSelectRow(row)}
-                  className={cn(
-                    "w-full rounded-xl border px-3 py-3 text-left transition-colors",
-                    selected
-                      ? "border-primary/50 bg-primary/5 shadow-xs"
-                      : "border-border bg-card hover:bg-muted/40",
-                  )}
-                  data-testid={`distribution-entry-tradepoint-row-${row.tradePointId}`}
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div className="min-w-0 space-y-0.5">
-                      <p className="truncate text-sm font-semibold text-foreground">{row.tradePointName}</p>
-                      <p className="truncate text-xs text-muted-foreground">{row.clientName}</p>
-                      {row.city ? (
-                        <p className="truncate text-xs text-muted-foreground">{row.city}</p>
-                      ) : null}
-                    </div>
-                    <div className="flex shrink-0 flex-col items-end gap-1">
-                      {noMatrix ? (
-                        <Badge variant="outline" className="text-[10px] font-medium">
-                          нет матрицы
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className={cn("text-[10px] font-medium tabular-nums", coverageBadgeClass(row.coveragePct))}>
-                          {row.filledCount}/{row.templateModelsCount} · {row.coveragePct}%
-                        </Badge>
-                      )}
-                      <span className="text-[10px] text-muted-foreground">{freshnessLabel(row.lastUpdatedAt)}</span>
-                    </div>
-                  </div>
-                </button>
-              </li>
+              <DistributionEntryTradePointCard
+                key={row.tradePointId}
+                row={row}
+                dealer={ref.dealer}
+                point={ref.point}
+                profile={profile}
+                view={tradePointView}
+                selected={row.tradePointId === selectedTradePointId}
+                onSelect={() => handleSelectRow(row)}
+              />
             );
           })}
-        </ul>
+        </div>
       )}
     </div>
   );

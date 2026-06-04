@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Search } from "lucide-react";
+import { ArrowLeft, Grid3x3, LayoutGrid, List, Search, Square } from "lucide-react";
+import {
+  ProductCardGrid,
+  ProductListHeader,
+  ProductListRow,
+} from "@/components/catalog/ProductListRow";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -7,14 +12,20 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import {
+  catalogCardGridClass,
+  readCatalogCardSizeFromStorage,
+  writeCatalogCardSizeToStorage,
+  type CatalogCardSize,
+} from "@/lib/catalog-card-grid";
+import {
   DISTRIBUTION_SEGMENT_OPTIONS,
   type DistributionFilterState,
   type DistributionSegmentFilter,
 } from "@/lib/distribution-filters";
 import {
-  buildEntryProductModelRows,
   buildEntryProductTradePointRows,
   collectEntryCatalogModels,
+  entryProductModelsToCatalogProducts,
   entryProductPresenceLabelRu,
   type EntryProductTradePointRow,
 } from "@/lib/distribution-entry-product-view-model";
@@ -30,6 +41,7 @@ import { loadCachedMatrix, SHOWCASE_MATRIX_STORE_CHANGED_EVENT } from "@/lib/sho
 import { useCurrentUser, displayUserName } from "@/hooks/use-current-user";
 
 type Step = "segment" | "model" | "tradePoints" | "showcase";
+const DISTRIBUTION_ENTRY_CATALOG_CARD_SIZE_KEY = "catalog-card-size";
 
 type DistributionEntryProductPanelProps = {
   profile: ReleaseDemoProfile;
@@ -85,8 +97,16 @@ export function DistributionEntryProductPanel({
     [allModels, selectedModelId],
   );
 
-  const modelRows = useMemo(
-    () => buildEntryProductModelRows(dealers, segment, modelQuery),
+  const [cardSize, setCardSize] = useState<CatalogCardSize>(() =>
+    readCatalogCardSizeFromStorage(DISTRIBUTION_ENTRY_CATALOG_CARD_SIZE_KEY, "m"),
+  );
+
+  useEffect(() => {
+    writeCatalogCardSizeToStorage(DISTRIBUTION_ENTRY_CATALOG_CARD_SIZE_KEY, cardSize);
+  }, [cardSize]);
+
+  const catalogProducts = useMemo(
+    () => entryProductModelsToCatalogProducts(dealers, segment, modelQuery),
     [dealers, segment, modelQuery],
   );
 
@@ -130,7 +150,7 @@ export function DistributionEntryProductPanel({
     setStep("tradePoints");
   }, []);
 
-  const furnitureEmpty = segment === "furniture" && allModels.length > 0 && modelRows.length === 0;
+  const furnitureEmpty = segment === "furniture" && allModels.length > 0 && catalogProducts.length === 0;
 
   const segmentStep = (
     <div className="space-y-3">
@@ -158,45 +178,108 @@ export function DistributionEntryProductPanel({
     </div>
   );
 
+  const gridCls = catalogCardGridClass(cardSize === "list" ? "m" : cardSize);
+
   const modelList = (
     <div className="flex min-h-0 flex-col gap-3">
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-        <Input
-          value={modelQuery}
-          onChange={(e) => setModelQuery(e.target.value)}
-          placeholder="Поиск модели"
-          className="min-h-10 pl-9"
-          data-testid="input-distribution-entry-product-model-search"
-        />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="relative min-w-0 flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+          <Input
+            value={modelQuery}
+            onChange={(e) => setModelQuery(e.target.value)}
+            placeholder="Поиск модели"
+            className="min-h-10 pl-9"
+            data-testid="input-distribution-entry-product-model-search"
+          />
+        </div>
+        <div
+          className="flex shrink-0 items-center gap-0.5 self-start rounded-lg border border-border bg-card p-0.5"
+          role="radiogroup"
+          aria-label="Размер карточек моделей"
+          data-testid="distribution-entry-product-card-size-toggle"
+        >
+          {(
+            [
+              { id: "xl" as const, label: "Крупный", icon: Square, hideNarrow: true },
+              { id: "m" as const, label: "Средний", icon: LayoutGrid, hideNarrow: false },
+              { id: "s" as const, label: "Мелкий", icon: Grid3x3, hideNarrow: true },
+              { id: "list" as const, label: "Список", icon: List, hideNarrow: false },
+            ] as const
+          ).map((opt) => {
+            const Icon = opt.icon;
+            const active = cardSize === opt.id;
+            return (
+              <Button
+                key={opt.id}
+                type="button"
+                variant="outline"
+                size="icon"
+                className={cn(
+                  "h-9 w-9 shrink-0 rounded-md border",
+                  opt.hideNarrow && "max-[865px]:hidden",
+                  active
+                    ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
+                    : "border-transparent bg-card text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+                aria-label={opt.label}
+                aria-pressed={active}
+                onClick={() => setCardSize(opt.id)}
+                data-testid={`distribution-entry-product-card-size-${opt.id}`}
+              >
+                <Icon className="h-4 w-4" aria-hidden />
+              </Button>
+            );
+          })}
+        </div>
       </div>
       {furnitureEmpty ? (
         <p className="text-sm text-muted-foreground">
           В матрице витрины нет позиций сегмента «Фурнитура». Выберите ВХ или МК.
         </p>
-      ) : modelRows.length === 0 ? (
+      ) : catalogProducts.length === 0 ? (
         <p className="text-sm text-muted-foreground">Модели не найдены.</p>
-      ) : (
-        <ul className="flex max-h-[min(60vh,560px)] flex-col gap-2 overflow-y-auto" data-testid="list-distribution-entry-product-models">
-          {modelRows.map((row) => (
-            <li key={row.modelId}>
-              <button
-                type="button"
-                onClick={() => handleSelectModel(row.modelId)}
-                className={cn(
-                  "w-full rounded-xl border px-3 py-3 text-left transition-colors",
-                  selectedModelId === row.modelId
-                    ? "border-primary/50 bg-primary/5"
-                    : "border-border bg-card hover:bg-muted/40",
-                )}
-                data-testid={`distribution-entry-product-model-${row.modelId}`}
-              >
-                <p className="text-sm font-semibold text-foreground">{row.name}</p>
-                <p className="text-xs text-muted-foreground">{row.typeLabelRu}</p>
-              </button>
-            </li>
+      ) : cardSize === "list" ? (
+        <div
+          className="max-h-[min(60vh,560px)] overflow-y-auto rounded-lg border border-border bg-card"
+          data-testid="list-distribution-entry-product-models"
+        >
+          <ProductListHeader />
+          {catalogProducts.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => handleSelectModel(p.id)}
+              className={cn(
+                "block w-full text-left [&_a]:pointer-events-none [&_button]:pointer-events-none",
+                selectedModelId === p.id && "bg-primary/5 ring-1 ring-inset ring-primary/30",
+              )}
+              data-testid={`distribution-entry-product-model-${p.id}`}
+            >
+              <ProductListRow product={p} />
+            </button>
           ))}
-        </ul>
+        </div>
+      ) : (
+        <div
+          className={cn("max-h-[min(60vh,560px)] overflow-y-auto", gridCls)}
+          data-testid="list-distribution-entry-product-models"
+        >
+          {catalogProducts.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => handleSelectModel(p.id)}
+              className={cn(
+                "block w-full min-w-0 text-left [&_a]:pointer-events-none [&_button]:pointer-events-none",
+                selectedModelId === p.id && "rounded-[15px] ring-2 ring-primary/40",
+              )}
+              data-testid={`distribution-entry-product-model-${p.id}`}
+            >
+              <ProductCardGrid product={p} size={cardSize} />
+            </button>
+          ))}
+        </div>
       )}
     </div>
   );
