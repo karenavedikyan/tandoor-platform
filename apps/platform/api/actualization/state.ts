@@ -21,7 +21,9 @@ import {
 } from "../../shared/admin/manager-only-state-fields.js";
 
 const JSON_CT = "application/json; charset=utf-8";
-const MAX_BODY_CHARS = 400_000;
+// Стейт актуализации может достигать ~1.3 МБ у активных пользователей с большой базой.
+// Vercel-лимит тела serverless ~4.5 МБ, поэтому 4 000 000 символов безопасно.
+const MAX_BODY_CHARS = 4_000_000;
 
 const memoryStore = new Map<string, { state: unknown; updatedAt: string }>();
 const salesPlanFactMemoryStore = new Map<string, { state: unknown; updatedAt: string }>();
