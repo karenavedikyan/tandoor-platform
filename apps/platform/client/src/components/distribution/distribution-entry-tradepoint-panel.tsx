@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, LayoutGrid, List, Search, Square } from "lucide-react";
 import { DistributionEntryTradePointCard } from "@/components/distribution/distribution-entry-tradepoint-card";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,13 @@ import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
 import { SHOWCASE_MATRIX_STORE_CHANGED_EVENT } from "@/lib/showcase-matrix-store";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
+import {
+  DISTRIBUTION_ENTRY_VIRTUAL_ESTIMATE,
+  distributionEntryVirtualItemStyle,
+  useDistributionEntryTradepointGridLanes,
+  useDistributionEntryVirtualizer,
+} from "@/lib/distribution-entry-element-virtualizer";
+
 import { useCurrentUser, displayUserName } from "@/hooks/use-current-user";
 
 type DistributionEntryTradePointPanelProps = {
@@ -106,12 +113,54 @@ export function DistributionEntryTradePointPanel({ profile, dealers: dealersProp
     setSelectedTradePointId(row.tradePointId);
   }, []);
 
-  const feedLayoutClass =
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const gridLanes = useDistributionEntryTradepointGridLanes();
+  const displayRows = useMemo(
+    () => rows.filter((r) => rowRefs.has(r.tradePointId)),
+    [rows, rowRefs],
+  );
+
+  const virtualRowCount =
+    tradePointView === "grid" ? Math.ceil(displayRows.length / gridLanes) : displayRows.length;
+
+  const listEstimateSize =
     tradePointView === "large"
-      ? "mx-auto flex w-full max-w-4xl flex-col gap-3"
+      ? DISTRIBUTION_ENTRY_VIRTUAL_ESTIMATE.tradepointLarge
       : tradePointView === "grid"
-        ? "grid grid-cols-2 gap-2 lg:grid-cols-1"
-        : "flex flex-col divide-y divide-border/70 overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm";
+        ? DISTRIBUTION_ENTRY_VIRTUAL_ESTIMATE.tradepointGridRow
+        : DISTRIBUTION_ENTRY_VIRTUAL_ESTIMATE.tradepointList;
+
+  const virtualizer = useDistributionEntryVirtualizer({
+    count: virtualRowCount,
+    estimateSize: listEstimateSize,
+    scrollRef,
+  });
+
+  useEffect(() => {
+    if (!selectedTradePointId || displayRows.length === 0) return;
+    const idx = displayRows.findIndex((r) => r.tradePointId === selectedTradePointId);
+    if (idx < 0) return;
+    const virtualIndex = tradePointView === "grid" ? Math.floor(idx / gridLanes) : idx;
+    virtualizer.scrollToIndex(virtualIndex, { align: "auto" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- scroll when selection/view changes only
+  }, [selectedTradePointId, displayRows.length, tradePointView, gridLanes]);
+
+  const renderTradePointCard = (row: DistributionEntryTradePointRow) => {
+    const ref = rowRefs.get(row.tradePointId);
+    if (!ref) return null;
+    return (
+      <DistributionEntryTradePointCard
+        key={row.tradePointId}
+        row={row}
+        dealer={ref.dealer}
+        point={ref.point}
+        profile={profile}
+        view={tradePointView}
+        selected={row.tradePointId === selectedTradePointId}
+        onSelect={() => handleSelectRow(row)}
+      />
+    );
+  };
 
   const listColumn = (
     <div className="flex min-h-0 min-w-0 flex-col gap-3">
@@ -172,25 +221,56 @@ export function DistributionEntryTradePointPanel({ profile, dealers: dealersProp
         <p className="text-sm text-muted-foreground">В вашей зоне видимости нет торговых точек для ввода.</p>
       ) : (
         <div
-          className={cn("max-h-[min(70vh,720px)] overflow-y-auto pr-0.5", feedLayoutClass)}
+          ref={scrollRef}
+          className={cn(
+            "max-h-[min(70vh,720px)] overflow-y-auto pr-0.5",
+            tradePointView === "list" &&
+              "overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm",
+          )}
           data-testid="list-distribution-entry-tradepoints"
         >
-          {rows.map((row) => {
-            const ref = rowRefs.get(row.tradePointId);
-            if (!ref) return null;
-            return (
-              <DistributionEntryTradePointCard
-                key={row.tradePointId}
-                row={row}
-                dealer={ref.dealer}
-                point={ref.point}
-                profile={profile}
-                view={tradePointView}
-                selected={row.tradePointId === selectedTradePointId}
-                onSelect={() => handleSelectRow(row)}
-              />
-            );
-          })}
+          <div
+            className={cn(
+              "relative w-full",
+              tradePointView === "large" && "mx-auto max-w-4xl",
+            )}
+            style={{ height: virtualizer.getTotalSize() }}
+          >
+            {virtualizer.getVirtualItems().map((vi) => {
+              if (tradePointView === "grid") {
+                const startIdx = vi.index * gridLanes;
+                const slice = displayRows.slice(startIdx, startIdx + gridLanes);
+                return (
+                  <div
+                    key={vi.key}
+                    data-index={vi.index}
+                    ref={virtualizer.measureElement}
+                    className="pb-2"
+                    style={distributionEntryVirtualItemStyle(virtualizer, vi.start)}
+                  >
+                    <div className="grid grid-cols-2 gap-2 lg:grid-cols-1">
+                      {slice.map((row) => renderTradePointCard(row))}
+                    </div>
+                  </div>
+                );
+              }
+              const row = displayRows[vi.index];
+              if (!row) return null;
+              return (
+                <div
+                  key={vi.key}
+                  data-index={vi.index}
+                  ref={virtualizer.measureElement}
+                  className={cn(
+                    tradePointView === "large" ? "pb-3" : "border-b border-border/70 last:border-0",
+                  )}
+                  style={distributionEntryVirtualItemStyle(virtualizer, vi.start)}
+                >
+                  {renderTradePointCard(row)}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
