@@ -4,7 +4,7 @@
  * те же правила userId, что и дашборд активности (`resolveActualizationDashboardSourceUserIds`).
  */
 
-import { fetchActualizationStateByUserId } from "@/lib/client-base-actualization-api";
+import { fetchActualizationStateByUserIdsBatch } from "@/lib/client-base-actualization-api";
 import { canActualizeClientBase } from "@/lib/client-base-actualization-permissions";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import {
@@ -14,8 +14,15 @@ import {
   resolveActualizationDashboardSourceUserIds,
 } from "@/lib/client-base-actualization-team-state-merge";
 import { createEmptyActualizationState, type ActualizationState } from "@/lib/client-base-actualization-state";
+import {
+  getTeamActualizationCacheKey,
+  invalidateTeamActualizationCache,
+  runWithTeamActualizationCache,
+} from "@/lib/client-base-team-actualization-cache";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
+
+export { invalidateTeamActualizationCache };
 
 export type TeamActualizationFetchDiagnostics = {
   requestedUserIds: string[];
@@ -42,11 +49,12 @@ function emptyDiag(ids: string[]): TeamActualizationFetchDiagnostics {
   };
 }
 
-/**
- * Загружает state по всем userId в scope и объединяет в один снимок для списков/KPI.
- * Используется РОП/директором; менеджеру не нужен (см. {@link shouldUseTeamMergedActualizationPlane}).
- */
-export async function fetchMergedTeamActualizationForManagement(
+function roleQueryForTeamBatch(profile: ReleaseDemoProfile): string | undefined {
+  if (profile.role === "team_lead" || profile.role === "sales_director") return profile.role;
+  return undefined;
+}
+
+async function fetchMergedTeamActualizationForManagementUncached(
   profile: ReleaseDemoProfile,
   dashboardRopTeamId: string,
 ): Promise<TeamActualizationFetchResult> {
@@ -60,16 +68,16 @@ export async function fetchMergedTeamActualizationForManagement(
     };
   }
 
-  const results = await Promise.all(ids.map((id) => fetchActualizationStateByUserId(id)));
+  const batchParts = await fetchActualizationStateByUserIdsBatch(ids, roleQueryForTeamBatch(profile));
+  const batchByUserId = new Map(batchParts.map((p) => [p.userId, p]));
   let failed = 0;
   let empty = 0;
   let sumManual = 0;
   const parts: { userId: string; state: ActualizationState }[] = [];
 
-  for (let i = 0; i < ids.length; i++) {
-    const id = ids[i]!;
-    const r = results[i]!;
-    if (r.syncStatus === "error" || !r.meta.success) {
+  for (const id of ids) {
+    const r = batchByUserId.get(id);
+    if (!r || r.syncStatus === "error" || !r.meta.success) {
       failed += 1;
       parts.push({ userId: id, state: createEmptyActualizationState() });
       continue;
@@ -100,6 +108,21 @@ export async function fetchMergedTeamActualizationForManagement(
     },
     errorMessage,
   };
+}
+
+/**
+ * Загружает state по всем userId в scope и объединяет в один снимок для списков/KPI.
+ * Используется РОП/директором; менеджеру не нужен (см. {@link shouldUseTeamMergedActualizationPlane}).
+ */
+export async function fetchMergedTeamActualizationForManagement(
+  profile: ReleaseDemoProfile,
+  dashboardRopTeamId: string,
+): Promise<TeamActualizationFetchResult> {
+  const ids = resolveActualizationDashboardSourceUserIds(profile, dashboardRopTeamId);
+  const key = getTeamActualizationCacheKey(dashboardRopTeamId, ids);
+  return runWithTeamActualizationCache(key, () =>
+    fetchMergedTeamActualizationForManagementUncached(profile, dashboardRopTeamId),
+  );
 }
 
 /** РОП и директор при включённой актуализации используют объединённый team plane. */

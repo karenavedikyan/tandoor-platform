@@ -122,6 +122,23 @@ function getRole(req: VercelRequest): string | null {
   return sanitizeRole(fromHeader) ?? sanitizeRole(fromQuery);
 }
 
+export function getBatchUserIds(req: VercelRequest): string[] | null {
+  const q = req.query?.userIds;
+  const raw = typeof q === "string" ? q : Array.isArray(q) ? q.join(",") : "";
+  if (!raw.trim()) return null;
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const piece of raw.split(",")) {
+    const s = sanitizeUserId(piece);
+    if (s && !seen.has(s)) {
+      seen.add(s);
+      out.push(s);
+    }
+    if (out.length >= 200) break;
+  }
+  return out.length > 0 ? out : null;
+}
+
 function scopeKeyForUser(userId: string): string {
   return `user:${userId}`;
 }
@@ -298,6 +315,61 @@ export async function resolveVisibleUserScopeKeys(
     // Если таблиц нет (старые миграции) — возвращаем только свой scope.
     return [`user:${currentUserId}`];
   }
+}
+
+export type ActualizationStateBatchPart = {
+  userId: string;
+  state: Record<string, unknown>;
+  updatedAt: string | null;
+};
+
+export function sanitizeStateFromDbRow(
+  row: { state: unknown; updated_at: unknown; role: unknown } | undefined,
+): { state: Record<string, unknown>; updatedAt: string | null } {
+  if (!row) {
+    return { state: emptyState(), updatedAt: null };
+  }
+  const rowState = coerceState(row.state);
+  const rowRole = canonicalizeRole(typeof row.role === "string" ? row.role : null);
+  const safeState = shouldSanitizeStateForRole(rowRole) ? sanitizeStateForNonManagerRole(rowState) : rowState;
+  return { state: safeState, updatedAt: rowUpdatedAtIso(row.updated_at) };
+}
+
+export async function fetchActualizationBatchParts(
+  sql: SqlFn,
+  userIds: string[],
+): Promise<ActualizationStateBatchPart[]> {
+  if (userIds.length === 0) return [];
+  const orderedScopes = userIds.map((id) => scopeKeyForUser(id));
+  const rows = await sql`
+    SELECT scope_key, state, updated_at, role
+    FROM client_base_actualization_state
+    WHERE scope_key = ANY(${orderedScopes})
+  `;
+  const rowByScope = new Map<string, { state: unknown; updated_at: unknown; role: unknown }>();
+  for (const r of rows) {
+    rowByScope.set(String(r.scope_key), {
+      state: r.state,
+      updated_at: r.updated_at,
+      role: r.role,
+    });
+  }
+  return userIds.map((id) => {
+    const { state, updatedAt } = sanitizeStateFromDbRow(rowByScope.get(scopeKeyForUser(id)));
+    return { userId: id, state, updatedAt };
+  });
+}
+
+function buildBatchPartsResponse(
+  success: boolean,
+  storageMode: "persistent" | "server_memory" | "not_configured",
+  parts: ActualizationStateBatchPart[],
+  message?: string,
+  code?: string,
+): Record<string, unknown> {
+  const o: Record<string, unknown> = { success, storageMode, parts, message: message ?? MSG_PERSISTENT_OK };
+  if (code) o.code = code;
+  return o;
 }
 
 function rowUpdatedAtIso(v: unknown): string | null {
@@ -715,6 +787,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
     if (globallyDisabled) {
       if (req.method === "GET") {
+        const batchUserIdsDisabled = getBatchUserIds(req);
+        if (batchUserIdsDisabled) {
+          sendJson(
+            res,
+            200,
+            buildBatchPartsResponse(
+              true,
+              "not_configured",
+              batchUserIdsDisabled.map((id) => ({ userId: id, state: emptyState(), updatedAt: null })),
+              MSG_FEATURE_DISABLED,
+            ),
+          );
+          return;
+        }
         sendJson(
           res,
           200,
@@ -743,6 +829,51 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
 
     if (req.method === "GET") {
+      const batchUserIds = getBatchUserIds(req);
+      if (batchUserIds) {
+        if (!dbUrl) {
+          const parts = batchUserIds.map((id) => {
+            const row = memoryStore.get(id);
+            return {
+              userId: id,
+              state: row ? coerceState(row.state) : emptyState(),
+              updatedAt: row?.updatedAt ?? null,
+            };
+          });
+          sendJson(
+            res,
+            200,
+            buildBatchPartsResponse(
+              true,
+              "server_memory",
+              parts,
+              `${MSG_PERSISTENT_NOT_CONFIGURED} ${MSG_SERVER_MEMORY_FALLBACK}`,
+            ),
+          );
+          return;
+        }
+        try {
+          const sql = await createSqlExecutor(dbUrl);
+          const parts = await fetchActualizationBatchParts(sql, batchUserIds);
+          sendJson(res, 200, buildBatchPartsResponse(true, "persistent", parts, MSG_PERSISTENT_OK));
+        } catch (e) {
+          const m = e instanceof Error ? e.message : String(e);
+          console.error("[actualization-api] persistent GET batch", m.slice(0, 200));
+          sendJson(
+            res,
+            200,
+            buildBatchPartsResponse(
+              false,
+              "persistent",
+              batchUserIds.map((id) => ({ userId: id, state: emptyState(), updatedAt: null })),
+              MSG_STORAGE_ERROR,
+              "ACTUALIZATION_STORAGE_ERROR",
+            ),
+          );
+        }
+        return;
+      }
+
       if (!dbUrl) {
         const ownRow = memoryStore.get(userId);
         const orderedStates: Record<string, unknown>[] = [ownRow ? coerceState(ownRow.state) : emptyState()];
