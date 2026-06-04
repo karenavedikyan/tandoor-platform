@@ -5,7 +5,7 @@
 
 import { neon } from "@neondatabase/serverless";
 import { buildTaggedQuery } from "./pg-client.js";
-import { shadowWrite } from "./shadow-write.js";
+import { shadowWriteAsync } from "./shadow-write.js";
 
 export type NeonHttp = ReturnType<typeof neon>;
 
@@ -42,15 +42,18 @@ async function runNeonQuery(sql: NeonHttp, text: string, params: unknown[]): Pro
   return callable(text, params);
 }
 
-async function scheduleShadowWrite(sql: string, params: unknown[], tag: string): Promise<void> {
+/**
+ * Регистрирует теневую запись в Yandex как фоновую (fire-and-forget):
+ * НЕ блокирует ответ основного запроса. Основная БД (Neon) пишется всегда;
+ * теневая копия — best-effort (внутри swallow ошибок + timeout 2.5s).
+ */
+function scheduleShadowWrite(sql: string, params: unknown[], tag: string): void {
   if (!isMutationSql(sql)) return;
-  // Ждём ответ от прокси, чтобы лямбда не заморозилась до отправки запроса.
-  // Внутри shadowWrite — swallow ошибок и timeout 2.5s.
-  await shadowWrite(sql, params, tag);
+  shadowWriteAsync(sql, params, tag);
 }
 
 /**
- * Оборачивает neon HTTP-клиент: после успешного DML — awaited shadow-write (best-effort).
+ * Оборачивает neon HTTP-клиент: после успешного DML — фоновая теневая запись (best-effort, без ожидания).
  */
 export function wrapNeonWithShadow(base: NeonHttp, tag = "neon"): NeonHttp {
   const wrapped = (async (
@@ -68,7 +71,7 @@ export function wrapNeonWithShadow(base: NeonHttp, tag = "neon"): NeonHttp {
       params = built.values;
     }
     const result = await runNeonQuery(base, text, params);
-    await scheduleShadowWrite(text, params, tag);
+    scheduleShadowWrite(text, params, tag);
     return result;
   }) as NeonHttp;
   return wrapped;
@@ -92,7 +95,7 @@ export function makePoolFromNeon(sql: NeonHttp): PoolLike {
   return {
     async query<T>(text: string, params?: unknown[]): Promise<{ rows: T[]; rowCount?: number }> {
       const raw = (await runNeonQuery(sql, text, params ?? [])) as unknown;
-      await scheduleShadowWrite(text, params ?? [], "pool.query");
+      scheduleShadowWrite(text, params ?? [], "pool.query");
       if (Array.isArray(raw)) {
         return { rows: raw as T[] };
       }
