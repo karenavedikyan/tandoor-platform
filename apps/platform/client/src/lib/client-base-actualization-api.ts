@@ -187,7 +187,13 @@ async function postActualizationStateOnce(
   });
   const text = await res.text();
   const json = JSON.parse(text) as Record<string, unknown>;
-  if (!res.ok) throw new Error(String(res.status));
+  if (!res.ok) {
+    const err = new Error(String(res.status)) as Error & { httpStatus?: number; noRetry?: boolean };
+    err.httpStatus = res.status;
+    // 4xx (включая 413 Payload Too Large) — ретрай бессмыслен: повтор того же тела даст ту же ошибку.
+    err.noRetry = res.status >= 400 && res.status < 500;
+    throw err;
+  }
   const meta = parseApiEnvelope(json);
   if (!meta.success) {
     return {
@@ -213,6 +219,16 @@ async function postActualizationStateWithRetry(
       lastError = result.errorMessage ?? result.meta.message ?? "Сервер вернул ошибку при сохранении состояния актуализации.";
     } catch (e) {
       lastError = e instanceof Error ? e.message : "Сетевая ошибка";
+      // 4xx (например, 413 — слишком большой стейт) ретраить нельзя: повтор даст ту же ошибку
+      // и приведёт к 15с зависания. Сразу выходим с понятной ошибкой.
+      const noRetry = !!(e && typeof e === "object" && (e as { noRetry?: boolean }).noRetry);
+      if (noRetry) {
+        const status = (e as { httpStatus?: number }).httpStatus;
+        if (status === 413) {
+          throw new Error("Данные слишком большие для сохранения (413). Обратитесь к администратору.");
+        }
+        throw e instanceof Error ? e : new Error(lastError);
+      }
     }
     if (attempt < 3) await delay(5_000);
   }
