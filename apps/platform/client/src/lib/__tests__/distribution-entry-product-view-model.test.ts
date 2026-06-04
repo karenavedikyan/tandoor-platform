@@ -6,6 +6,7 @@ import type { ShowcaseMatrixEntryDto } from "@/lib/showcase-matrix-api";
 import type { ShowcaseMatrixModelDefinition } from "@/lib/trade-point-showcase-matrix-models";
 import {
   buildEntryProductModelRows,
+  matrixModelToCatalogListProduct,
   isModelInstalledInEntries,
   isModelRecommendedForCategory,
   modelMatchesSegment,
@@ -69,5 +70,14 @@ assert.equal(isModelInstalledInEntries([installedEntry], "m-vh-1"), true);
 assert.equal(isModelInstalledInEntries([installedEntry], "m-mk-1"), false);
 
 assert.equal(buildEntryProductModelRows([], "furniture").length, 0);
+
+const catalog = matrixModelToCatalogListProduct(modelVh);
+assert.equal(catalog.id, "m-vh-1");
+assert.equal(catalog.name, "Входная Эра");
+assert.equal(catalog.display_name, "Входная Эра");
+assert.equal(catalog.brand, "ВХ");
+assert.equal(catalog.image_url, null);
+assert.equal(catalog.is_new, false);
+assert.equal(catalog.total_stock, null);
 
 console.log("distribution-entry-product-view-model.test.ts: ok");

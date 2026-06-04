@@ -13,7 +13,7 @@ import { DistributionFiltersBar } from "@/components/distribution/distribution-f
 import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
-import { roleScopedDealerRows } from "@/lib/dealer-base-role-views";
+import { distributionEntryScopedDealerRows } from "@/lib/distribution-entry-dealer-scope";
 import {
   defaultDistributionFilterState,
   extractCityOptions,
@@ -46,7 +46,10 @@ export function DistributionEntryWizard({ profile }: DistributionEntryWizardProp
     [actx.enabled, managementPlane.mergedState, profile],
   );
 
-  const scoped = useMemo(() => roleScopedDealerRows(workingDealerRows, profile), [workingDealerRows, profile]);
+  const scoped = useMemo(
+    () => distributionEntryScopedDealerRows(workingDealerRows, profile),
+    [workingDealerRows, profile],
+  );
 
   const filteredDealers = useMemo(() => filterScopeDealers(scoped, filter), [scoped, filter]);
 
