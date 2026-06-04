@@ -16,7 +16,7 @@ import {
   sanitizeStateForNonManagerRole,
   shouldSanitizeStateForRole,
 } from "../../../shared/admin/manager-only-state-fields";
-import { canonicalizeRole } from "../state";
+import { canonicalizeRole, sanitizeStateFromDbRow } from "../state";
 
 // ==========================================================================
 // 1. shouldSanitizeStateForRole: матрица канонических ролей.
@@ -225,4 +225,30 @@ import { canonicalizeRole } from "../state";
   }
 }
 
-console.log("manager-only-state: ok (6 cases)");
+
+// ==========================================================================
+// 7. Batch sanitize: non-manager row обнуляет manager-only поля.
+// ==========================================================================
+{
+  const { state } = sanitizeStateFromDbRow({
+    state: {
+      version: 1,
+      archivedDealersById: { D1: { dealerId: "D1" } },
+      trashedDealersById: { D2: { dealerId: "D2" } },
+      dealerCardViewSettingsByUserId: { u1: { theme: "light" } },
+    },
+    updated_at: "2026-06-01T00:00:00.000Z",
+    role: "rop",
+  });
+  assert.deepEqual(state.archivedDealersById, {}, "batch sanitize rop: archivedDealersById");
+  assert.deepEqual(state.trashedDealersById, {}, "batch sanitize rop: trashedDealersById");
+  assert.deepEqual(state.dealerCardViewSettingsByUserId, { u1: { theme: "light" } }, "batch sanitize rop: UI поле");
+  const mgr = sanitizeStateFromDbRow({
+    state: { version: 1, archivedDealersById: { D1: { dealerId: "D1" } } },
+    updated_at: null,
+    role: "manager",
+  });
+  assert.deepEqual(mgr.state.archivedDealersById, { D1: { dealerId: "D1" } }, "batch sanitize manager: не трогаем");
+}
+
+console.log("manager-only-state: ok (7 cases)");

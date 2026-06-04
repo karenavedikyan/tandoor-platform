@@ -15,6 +15,7 @@ import {
   markActualizationSaveStarted,
   markActualizationSaveSucceeded,
 } from "@/lib/client-base-actualization-save-status";
+import { invalidateTeamActualizationCache } from "@/lib/client-base-team-actualization-cache";
 
 export const ACTUALIZATION_STATE_CACHE_KEY = "tandoor-client-base-actualization-state-cache-v1";
 
@@ -43,6 +44,16 @@ export type ActualizationLoadResult = {
   syncStatus: ActualizationSyncStatus;
   errorMessage?: string;
 };
+
+export type ActualizationBatchPart = {
+  userId: string;
+  meta: ActualizationApiMeta;
+  syncStatus: ActualizationSyncStatus;
+  errorMessage?: string;
+};
+
+const BATCH_USER_IDS_CHUNK = 100;
+const BATCH_URL_SAFE_LEN = 1800;
 
 function normalizeState(raw: unknown): ActualizationState {
   if (raw == null || typeof raw !== "object" || Array.isArray(raw)) {
@@ -187,13 +198,7 @@ async function postActualizationStateOnce(
   });
   const text = await res.text();
   const json = JSON.parse(text) as Record<string, unknown>;
-  if (!res.ok) {
-    const err = new Error(String(res.status)) as Error & { httpStatus?: number; noRetry?: boolean };
-    err.httpStatus = res.status;
-    // 4xx (включая 413 Payload Too Large) — ретрай бессмыслен: повтор того же тела даст ту же ошибку.
-    err.noRetry = res.status >= 400 && res.status < 500;
-    throw err;
-  }
+  if (!res.ok) throw new Error(String(res.status));
   const meta = parseApiEnvelope(json);
   if (!meta.success) {
     return {
@@ -219,16 +224,6 @@ async function postActualizationStateWithRetry(
       lastError = result.errorMessage ?? result.meta.message ?? "Сервер вернул ошибку при сохранении состояния актуализации.";
     } catch (e) {
       lastError = e instanceof Error ? e.message : "Сетевая ошибка";
-      // 4xx (например, 413 — слишком большой стейт) ретраить нельзя: повтор даст ту же ошибку
-      // и приведёт к 15с зависания. Сразу выходим с понятной ошибкой.
-      const noRetry = !!(e && typeof e === "object" && (e as { noRetry?: boolean }).noRetry);
-      if (noRetry) {
-        const status = (e as { httpStatus?: number }).httpStatus;
-        if (status === 413) {
-          throw new Error("Данные слишком большие для сохранения (413). Обратитесь к администратору.");
-        }
-        throw e instanceof Error ? e : new Error(lastError);
-      }
     }
     if (attempt < 3) await delay(5_000);
   }
@@ -248,6 +243,7 @@ function ensureOnlineFlushListener(): void {
         if (result.syncStatus === "api_ok" && result.meta.success) {
           writeLocalCache({ userId: q.userId, state: result.meta.state, updatedAt: result.meta.updatedAt });
           markActualizationSaveSucceeded(result.meta.updatedAt);
+          invalidateTeamActualizationCache();
         }
       })
       .catch((e: unknown) => {
@@ -319,6 +315,142 @@ export async function fetchActualizationStateByUserIdWithRole(
   }
 }
 
+function dedupeSanitizedUserIds(userIds: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of userIds) {
+    const id = raw.trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+function chunkUserIdsForBatchUrl(userIds: string[]): string[][] {
+  if (userIds.length === 0) return [];
+  const chunks: string[][] = [];
+  let current: string[] = [];
+  let currentLen = 0;
+  for (const id of userIds) {
+    const addLen = (current.length > 0 ? 1 : 0) + encodeURIComponent(id).length;
+    if (current.length >= BATCH_USER_IDS_CHUNK || (currentLen + addLen > BATCH_URL_SAFE_LEN && current.length > 0)) {
+      chunks.push(current);
+      current = [];
+      currentLen = 0;
+    }
+    current.push(id);
+    currentLen += addLen;
+  }
+  if (current.length > 0) chunks.push(current);
+  return chunks;
+}
+
+function parseBatchEnvelopePart(
+  userId: string,
+  part: Record<string, unknown>,
+  envelope: Record<string, unknown>,
+): ActualizationBatchPart {
+  const storageMode = (["persistent", "server_memory", "local_fallback", "not_configured"].includes(
+    String(envelope.storageMode),
+  )
+    ? envelope.storageMode
+    : "server_memory") as ActualizationStorageMode;
+  const envelopeSuccess = Boolean(envelope.success);
+  const state = normalizeState(part.state);
+  const updatedAt =
+    typeof part.updatedAt === "string" || part.updatedAt === null ? (part.updatedAt as string | null) : null;
+  const success = envelopeSuccess && part.state != null;
+  return {
+    userId,
+    meta: {
+      success,
+      storageMode,
+      state,
+      updatedAt,
+      message: typeof envelope.message === "string" ? envelope.message : undefined,
+      code: typeof envelope.code === "string" ? envelope.code : undefined,
+    },
+    syncStatus: success ? "api_ok" : "error",
+    errorMessage: success ? undefined : (typeof envelope.message === "string" ? envelope.message : "Ошибка загрузки state."),
+  };
+}
+
+function errorBatchParts(userIds: string[], message: string): ActualizationBatchPart[] {
+  const meta: ActualizationApiMeta = {
+    success: false,
+    storageMode: "server_memory",
+    state: createEmptyActualizationState(),
+    updatedAt: null,
+    message,
+  };
+  return userIds.map((userId) => ({
+    userId,
+    meta,
+    syncStatus: "error" as const,
+    errorMessage: message,
+  }));
+}
+
+async function fetchActualizationStateByUserIdsBatchChunk(
+  userIds: string[],
+  role?: string,
+): Promise<ActualizationBatchPart[]> {
+  if (userIds.length === 0) return [];
+  const csv = userIds.map((id) => encodeURIComponent(id)).join(",");
+  const url = role
+    ? `/api/actualization/state?userIds=${csv}&role=${encodeURIComponent(role)}`
+    : `/api/actualization/state?userIds=${csv}`;
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      headers: demoHeaders(userIds[0]!, role),
+      credentials: "same-origin",
+    });
+    const text = await res.text();
+    let json: Record<string, unknown>;
+    try {
+      json = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      throw new Error("not_json");
+    }
+    if (!res.ok) {
+      throw new Error(String(res.status));
+    }
+    const rawParts = json.parts;
+    if (!Array.isArray(rawParts)) {
+      throw new Error("no_parts");
+    }
+    const byUserId = new Map<string, Record<string, unknown>>();
+    for (const p of rawParts) {
+      if (p && typeof p === "object" && !Array.isArray(p)) {
+        const row = p as Record<string, unknown>;
+        const uid = typeof row.userId === "string" ? row.userId.trim() : "";
+        if (uid) byUserId.set(uid, row);
+      }
+    }
+    return userIds.map((id) => parseBatchEnvelopePart(id, byUserId.get(id) ?? { state: null }, json));
+  } catch {
+    return errorBatchParts(userIds, "Сеть или API недоступны.");
+  }
+}
+
+/** Batch-загрузка state для списка userId (один HTTP на чанк). */
+export async function fetchActualizationStateByUserIdsBatch(
+  userIds: readonly string[],
+  role?: string,
+): Promise<ActualizationBatchPart[]> {
+  const ids = dedupeSanitizedUserIds(userIds);
+  if (ids.length === 0) return [];
+  const chunks = chunkUserIdsForBatchUrl(ids);
+  const merged: ActualizationBatchPart[] = [];
+  const chunkResults = await Promise.all(chunks.map((chunk) => fetchActualizationStateByUserIdsBatchChunk(chunk, role)));
+  for (const part of chunkResults) {
+    merged.push(...part);
+  }
+  return merged;
+}
+
 export async function fetchActualizationStateByUserId(userIdRaw: string): Promise<ActualizationLoadResult> {
   return fetchActualizationStateByUserIdWithRole(userIdRaw);
 }
@@ -375,6 +507,9 @@ export async function saveActualizationState(
     const result = await postActualizationStateWithRetry(userId, role, next, unTrash);
     writeLocalCache({ userId, state: result.meta.state, updatedAt: result.meta.updatedAt });
     markActualizationSaveSucceeded(result.meta.updatedAt);
+    if (result.syncStatus === "api_ok" && result.meta.success) {
+      invalidateTeamActualizationCache();
+    }
     return result;
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : "Сетевая ошибка";

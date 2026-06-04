@@ -9,6 +9,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactElement,
   type ReactNode,
@@ -201,6 +202,9 @@ export function ClientBaseTeamActualizationProvider({ children }: { children: Re
     setDashboardRopTeamId(next);
   }, [profile.personaUserId, profile.role, access]);
 
+  const lastLoadAtRef = useRef(0);
+  const VISIBILITY_RELOAD_MIN_MS = 30_000;
+
   const loadTeam = useCallback(async () => {
     if (!isTeamPlane) return;
     setTeamFetchLoading(true);
@@ -218,7 +222,8 @@ export function ClientBaseTeamActualizationProvider({ children }: { children: Re
     });
     if (r.errorMessage) setTeamFetchError(r.errorMessage);
     setTeamFetchLoading(false);
-  }, [isTeamPlane, profile, dashboardRopTeamId]);
+    lastLoadAtRef.current = Date.now();
+  }, [isTeamPlane, profile.personaUserId, profile.role, dashboardRopTeamId]);
 
   useEffect(() => {
     if (!actx.enabled) {
@@ -241,7 +246,9 @@ export function ClientBaseTeamActualizationProvider({ children }: { children: Re
   useEffect(() => {
     if (!isTeamPlane || typeof document === "undefined") return;
     const onVis = (): void => {
-      if (document.visibilityState === "visible") void loadTeam();
+      if (document.visibilityState !== "visible") return;
+      if (Date.now() - lastLoadAtRef.current < VISIBILITY_RELOAD_MIN_MS) return;
+      void loadTeam();
     };
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);
