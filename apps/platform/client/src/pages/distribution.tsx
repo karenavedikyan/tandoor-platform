@@ -28,7 +28,10 @@ import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-managem
 import { roleScopedDealerRows } from "@/lib/dealer-base-role-views";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
+import { useMyClientCodes } from "@/hooks/use-my-client-codes";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
+import { useCurrentUser } from "@/hooks/use-current-user";
+import { useOrgSnapshot } from "@/lib/use-org-snapshot";
 
 type DistributionMode = "view" | "entry";
 
@@ -39,6 +42,28 @@ export default function DistributionPage() {
   const [mode, setMode] = useState<DistributionMode>("view");
   const [searchQuery, setSearchQuery] = useState("");
   const [filter, setFilter] = useState<DistributionFilterState>(defaultDistributionFilterState);
+
+  const { user } = useCurrentUser();
+  const isRealUser = Boolean(user?.id);
+  const myCodesQ = useMyClientCodes({ enabled: isRealUser });
+  const orgSnapQ = useOrgSnapshot({ enabled: isRealUser });
+
+  const responsibleByCode = useMemo(() => {
+    const map = myCodesQ.data?.responsibleByCode;
+    if (!map || Object.keys(map).length === 0) return undefined;
+    return map;
+  }, [myCodesQ.data]);
+
+  const managerLabelByUserId = useMemo(() => {
+    const users = orgSnapQ.data?.users ?? [];
+    const m = new Map<string, string>();
+    for (const u of users) {
+      const name = u.fullName?.trim();
+      if (u.id && name) m.set(u.id, name);
+    }
+    return m;
+  }, [orgSnapQ.data]);
+
 
   const workingDealerRows = useMemo(
     () =>
@@ -139,7 +164,12 @@ export default function DistributionPage() {
               </TabsTrigger>
             </TabsList>
             <TabsContent value="manager" className="mt-0 focus-visible:ring-0">
-              <DistributionManagerTab scope={viewScope} filter={filter} />
+              <DistributionManagerTab
+                scope={viewScope}
+                filter={filter}
+                responsibleByCode={responsibleByCode}
+                managerLabelByUserId={managerLabelByUserId}
+              />
             </TabsContent>
             <TabsContent value="client" className="mt-0 focus-visible:ring-0">
               <DistributionClientTab scope={viewScope} filter={filter} profile={profile} />
