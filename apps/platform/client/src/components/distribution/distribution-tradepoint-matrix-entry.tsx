@@ -135,6 +135,7 @@ export function DistributionTradePointMatrixEntry({
         actorUserId={actorUserId}
         actorName={actorName}
         page={showcasePage}
+        density="compact"
       />
       {fullscreenOpen && canEdit ? (
         <DistributionFullscreenEntry

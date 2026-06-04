@@ -58,6 +58,7 @@ import { TradePointProductMatrixVisual } from "@/components/trade-point-product-
 import { TradePointPlacementBlocksSection } from "@/components/distribution/trade-point-placement-blocks-section";
 
 export type ShowcaseMatrixViewMode = "large" | "compact" | "mini" | "list";
+export type ShowcaseSectionDensity = "comfortable" | "compact";
 
 const VIEW_MODE_LABEL_RU: Record<ShowcaseMatrixViewMode, string> = {
   large: "Крупно",
@@ -335,11 +336,13 @@ type Props = {
   actorUserId: string;
   actorName: string;
   page: TradePointShowcasePageBundle;
+  density?: ShowcaseSectionDensity;
 };
 
-export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorUserId, actorName, page }: Props) {
+export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorUserId, actorName, page, density = "comfortable" }: Props) {
   const canView = useMemo(() => canViewTradePointShowcaseMatrix(profile, dealer), [profile, dealer]);
   const canEdit = useMemo(() => canEditTradePointShowcaseMatrix(profile, dealer), [profile, dealer]);
+  const isCompact = density === "compact";
 
   const [bump, setBump] = useState(0);
   const [catalogBump, setCatalogBump] = useState(0);
@@ -598,16 +601,16 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
       <section
         id="section-trade-point-showcase-matrix"
         data-testid="section-trade-point-showcase-matrix"
-        className="scroll-mt-28 space-y-4 overflow-x-clip min-w-0 sm:scroll-mt-32"
+        className={cn("scroll-mt-28 overflow-x-clip min-w-0 sm:scroll-mt-32", isCompact ? "space-y-3" : "space-y-4")}
       >
         <div
           data-testid="section-trade-point-showcase-unified"
-          className="space-y-4 rounded-2xl border border-border/80 bg-muted/10 p-3 sm:p-4"
+          className={cn("rounded-2xl border border-border/80 bg-muted/10", isCompact ? "space-y-3 p-2.5 sm:p-4" : "space-y-4 p-3 sm:p-4")}
         >
-          <div data-testid="section-trade-point-showcase" className="space-y-3">
+          <div data-testid="section-trade-point-showcase" className={cn(isCompact ? "space-y-2" : "space-y-3")}>
             <div className="space-y-1">
-              <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Витрина торговой точки</h2>
-              <p className="max-w-2xl text-sm text-muted-foreground">
+              <h2 className={cn("font-semibold tracking-tight text-foreground sm:text-lg", isCompact ? "text-sm sm:text-lg" : "text-base")}>Витрина торговой точки</h2>
+              <p className={cn("max-w-2xl text-sm text-muted-foreground", isCompact && "hidden sm:block")}>
                 Что стоит, что нужно поставить и какие задачи есть по этой точке. Статусы матрицы сохраняются в этом браузере.
               </p>
             </div>
@@ -669,7 +672,7 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
             <div
               id="section-trade-point-showcase-focus"
               data-testid="section-trade-point-showcase-focus"
-              className="rounded-xl border border-amber-300/80 bg-gradient-to-br from-amber-50 to-orange-50/80 px-3 py-2.5 sm:px-4"
+              className={cn("rounded-xl border border-amber-300/80 bg-gradient-to-br from-amber-50 to-orange-50/80 sm:px-4", isCompact ? "px-2.5 py-2" : "px-3 py-2.5")}
             >
               {priorityNeedModels.length > 0 ? (
                 <div className="space-y-2">
@@ -1641,8 +1644,8 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
             className="scroll-mt-28 space-y-2 sm:scroll-mt-32"
           >
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Текущее состояние витрины</p>
-            <div className="rounded-lg border border-border/70 bg-card/90 p-3 text-sm">
-              <div className="grid gap-2 sm:grid-cols-2">
+            <div className={cn("rounded-lg border border-border/70 bg-card/90 text-sm", isCompact ? "p-2.5" : "p-3")}>
+              <div className={cn("grid sm:grid-cols-2", isCompact ? "gap-1" : "gap-2")}>
                 <p>
                   <span className="text-muted-foreground">Статус витрины: </span>
                   <span className="font-medium text-foreground">{point.showcaseStatus}</span>
@@ -1660,25 +1663,25 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
                   <span className="font-medium text-foreground">{page.showcaseComment}</span>
                 </p>
               </div>
-              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                <div className="rounded-md border border-border bg-muted/30 px-2 py-1.5 text-center">
-                  <p className="text-[10px] font-semibold uppercase text-muted-foreground">Должно быть</p>
-                  <p className="text-base font-bold tabular-nums">{page.matrixSummary.totalRequired}</p>
+              <div className={cn("grid gap-1.5 sm:grid-cols-4", isCompact ? "mt-2 grid-cols-4" : "mt-3 grid-cols-2 sm:gap-2")}>
+                <div className={cn("rounded-md border border-border bg-muted/30 text-center", isCompact ? "px-1 py-1" : "px-2 py-1.5")}>
+                  <p className={cn("font-semibold uppercase text-muted-foreground", isCompact ? "text-[9px] leading-tight" : "text-[10px]")}>Должно быть</p>
+                  <p className={cn("font-bold tabular-nums", isCompact ? "text-sm" : "text-base")}>{page.matrixSummary.totalRequired}</p>
                 </div>
-                <div className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-center">
-                  <p className="text-[10px] font-semibold uppercase text-emerald-900/80">На витрине</p>
-                  <p className="text-base font-bold tabular-nums text-emerald-900">{page.matrixSummary.totalPresent}</p>
+                <div className={cn("rounded-md border border-emerald-200 bg-emerald-50 text-center", isCompact ? "px-1 py-1" : "px-2 py-1.5")}>
+                  <p className={cn("font-semibold uppercase text-emerald-900/80", isCompact ? "text-[9px] leading-tight" : "text-[10px]")}>На витрине</p>
+                  <p className={cn("font-bold tabular-nums text-emerald-900", isCompact ? "text-sm" : "text-base")}>{page.matrixSummary.totalPresent}</p>
                 </div>
-                <div className="rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-center">
-                  <p className="text-[10px] font-semibold uppercase text-red-900/80">Отсутствует</p>
-                  <p className="text-base font-bold tabular-nums text-red-900">{page.matrixSummary.totalMissing}</p>
+                <div className={cn("rounded-md border border-red-200 bg-red-50 text-center", isCompact ? "px-1 py-1" : "px-2 py-1.5")}>
+                  <p className={cn("font-semibold uppercase text-red-900/80", isCompact ? "text-[9px] leading-tight" : "text-[10px]")}>Отсутствует</p>
+                  <p className={cn("font-bold tabular-nums text-red-900", isCompact ? "text-sm" : "text-base")}>{page.matrixSummary.totalMissing}</p>
                 </div>
-                <div className="rounded-md border border-primary/30 bg-primary/10 px-2 py-1.5 text-center">
-                  <p className="text-[10px] font-semibold uppercase text-primary/80">Зона A</p>
-                  <p className="text-base font-bold tabular-nums text-primary">{page.matrixSummary.zoneA}</p>
+                <div className={cn("rounded-md border border-primary/30 bg-primary/10 text-center", isCompact ? "px-1 py-1" : "px-2 py-1.5")}>
+                  <p className={cn("font-semibold uppercase text-primary/80", isCompact ? "text-[9px] leading-tight" : "text-[10px]")}>Зона A</p>
+                  <p className={cn("font-bold tabular-nums text-primary", isCompact ? "text-sm" : "text-base")}>{page.matrixSummary.zoneA}</p>
                 </div>
               </div>
-              <p className="mt-3 text-xs text-muted-foreground">
+              <p className={cn("text-xs text-muted-foreground", isCompact ? "mt-2" : "mt-3")}>
                 <span className="font-semibold text-foreground">Ближайшее действие: </span>
                 {dealer.nextAction}
               </p>
