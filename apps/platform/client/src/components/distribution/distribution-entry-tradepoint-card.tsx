@@ -123,12 +123,12 @@ export function DistributionEntryTradePointCard({
       type="button"
       onClick={onSelect}
       className={cn(
-        "block w-full overflow-hidden rounded-xl border text-left shadow-sm transition-colors",
+        "flex w-full flex-col overflow-hidden rounded-xl border text-left shadow-sm transition-colors",
         selectedCls,
       )}
       data-testid={`distribution-entry-tradepoint-row-${row.tradePointId}`}
     >
-      <div className="space-y-3 p-3 sm:p-4">
+      <div className="w-full space-y-3 p-3 sm:p-4">
         <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:gap-4">
           <ShowcaseCoverPhotoSlot
             kind="trade_point"
