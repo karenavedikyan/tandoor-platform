@@ -236,6 +236,14 @@ import { dealerRowMatchesCityFilter } from "@/lib/main-dashboard-city-stats";
 import { SHOWCASE_STORAGE_EVENT } from "@/lib/showcase-distribution-data";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DealerBulkDeleteCheckbox } from "@/components/dealer-bulk-delete-checkbox";
+import {
+  DEALER_BASE_VIRTUAL_ESTIMATE,
+  dealerBaseVirtualItemStyle,
+  useDealerBaseListScrollMargin,
+  useDealerBaseWindowVirtualizer,
+  useDealerCompactGridColumnCount,
+} from "@/lib/dealer-base-list-window-virtualizer";
+
 import { DealerBaseDealerShowcaseGrid } from "@/components/dealer-base-dealer-showcase-grid";
 import { ShowcaseCoverPhotoSlot } from "@/components/showcase-cover-photo-slot";
 import { cleanContactDisplay, mailtoHref, telHref, whatsAppHref } from "@/lib/dealer-contact-links";
@@ -485,9 +493,37 @@ function ClientCompactGridBlock({
   const badgeOutline = "border-primary/35 bg-card text-foreground";
   const badgeSoft = "border-primary/30 bg-primary/10 text-foreground";
 
+  const listRef = useRef<HTMLDivElement>(null);
+  const columns = useDealerCompactGridColumnCount();
+  const virtualRowCount = Math.ceil(rows.length / columns);
+  const scrollMargin = useDealerBaseListScrollMargin(listRef, [rows.length, columns]);
+  const virtualizer = useDealerBaseWindowVirtualizer({
+    count: virtualRowCount,
+    estimateSize: DEALER_BASE_VIRTUAL_ESTIMATE.gridRow,
+    scrollMargin,
+  });
+  const virtualItems = virtualizer.getVirtualItems();
+
   return (
-    <div className="grid min-w-0 grid-cols-1 gap-2 min-[380px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-      {rows.map((row) => {
+    <div
+      ref={listRef}
+      className="relative w-full"
+      style={{ height: virtualizer.getTotalSize() }}
+      data-testid="dealer-base-virtual-list-grid"
+    >
+      {virtualItems.map((vi) => {
+        const startIdx = vi.index * columns;
+        const slice = rows.slice(startIdx, startIdx + columns);
+        return (
+          <div
+            key={vi.key}
+            data-index={vi.index}
+            ref={virtualizer.measureElement}
+            className="pb-2"
+            style={dealerBaseVirtualItemStyle(virtualizer, vi.start)}
+          >
+            <div className="grid min-w-0 grid-cols-1 gap-2 min-[380px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {slice.map((row) => {
         const hidden = wp ? isDealerHiddenForUser(workPlanUserId, row.id, workPlanState) : false;
         const checked = Boolean(selectedIds?.has(row.id));
         const stockSig = getDealerStockSignal(row);
@@ -639,6 +675,10 @@ function ClientCompactGridBlock({
             </CardContent>
           </Card>
         );
+              })}
+            </div>
+          </div>
+        );
       })}
     </div>
   );
@@ -708,9 +748,24 @@ function ClientListRowsBlock({
   const iconBtnClass =
     "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-card text-foreground hover:bg-primary/10";
 
+  const listRef = useRef<HTMLDivElement>(null);
+  const scrollMargin = useDealerBaseListScrollMargin(listRef, [rows.length]);
+  const virtualizer = useDealerBaseWindowVirtualizer({
+    count: rows.length,
+    estimateSize: DEALER_BASE_VIRTUAL_ESTIMATE.list,
+    scrollMargin,
+  });
+  const virtualItems = virtualizer.getVirtualItems();
+
   return (
-    <div className="min-w-0 divide-y divide-border overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-      {rows.map((row) => {
+    <div
+      ref={listRef}
+      className="relative min-w-0 w-full overflow-hidden rounded-xl border border-border bg-card shadow-sm"
+      style={{ height: virtualizer.getTotalSize() }}
+      data-testid="dealer-base-virtual-list-list"
+    >
+      {virtualItems.map((vi) => {
+        const row = rows[vi.index]!;
         const hidden = wp ? isDealerHiddenForUser(workPlanUserId, row.id, workPlanState) : false;
         const checked = Boolean(selectedIds?.has(row.id));
         const ns = getClientNextStepForDealer(row.id, nextStepsStorage);
@@ -726,11 +781,14 @@ function ClientListRowsBlock({
         const rowArchived = isDealerArchivedInActualization(row.id, actualizationState);
         return (
           <div
-            key={row.id}
+            key={vi.key}
+            data-index={vi.index}
+            ref={virtualizer.measureElement}
             className={cn(
-              "flex min-w-0 items-stretch gap-1.5 p-2 sm:gap-2 sm:p-2.5",
+              "flex min-w-0 items-stretch gap-1.5 border-b border-border p-2 sm:gap-2 sm:p-2.5 last:border-0",
               archivedEntityRowClassName(rowArchived),
             )}
+            style={dealerBaseVirtualItemStyle(virtualizer, vi.start)}
             data-testid={`row-dealer-showcase-list-${row.id}`}
           >
             <div className="flex shrink-0 flex-col items-start gap-1 pt-0.5">
@@ -909,6 +967,15 @@ export function DealerBaseDataTable({
 
   const sortedRows = useMemo(() => sortDealerRowsForTable(rows, sortKey, sortDir), [rows, sortKey, sortDir]);
 
+  const listRef = useRef<HTMLDivElement>(null);
+  const scrollMargin = useDealerBaseListScrollMargin(listRef, [sortedRows.length, sortKey, sortDir]);
+  const virtualizer = useDealerBaseWindowVirtualizer({
+    count: sortedRows.length,
+    estimateSize: DEALER_BASE_VIRTUAL_ESTIMATE.table,
+    scrollMargin,
+  });
+  const virtualItems = virtualizer.getVirtualItems();
+
   if (rows.length === 0) {
     if (!empty.trim()) return null;
     return (
@@ -934,7 +1001,11 @@ export function DealerBaseDataTable({
   );
 
   return (
-    <div className="min-w-0 overflow-x-auto rounded-xl border border-border/80 bg-card shadow-sm">
+    <div
+      ref={listRef}
+      className="min-w-0 overflow-x-auto rounded-xl border border-border/80 bg-card shadow-sm"
+      data-testid="dealer-base-virtual-list-table"
+    >
       <table className="w-full min-w-[72rem] text-left text-sm">
         <thead className="border-b border-border bg-muted/40">
           <tr className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -958,8 +1029,12 @@ export function DealerBaseDataTable({
             <th className="px-2 py-2" />
           </tr>
         </thead>
-        <tbody>
-          {sortedRows.map((row) => {
+        <tbody
+          className="relative block"
+          style={{ height: virtualizer.getTotalSize() }}
+        >
+          {virtualItems.map((vi) => {
+            const row = sortedRows[vi.index]!;
             const hidden = wp ? isDealerHiddenForUser(workPlanUserId, row.id, workPlanState) : false;
             const checked = Boolean(selectedIds?.has(row.id));
             const stockSig = getDealerStockSignal(row);
@@ -974,8 +1049,18 @@ export function DealerBaseDataTable({
             const rowArchived = isDealerArchivedInActualization(row.id, actualizationState);
             return (
               <tr
-                key={row.id}
-                className={cn("border-b border-border/80 last:border-0", archivedEntityRowClassName(rowArchived))}
+                key={vi.key}
+                data-index={vi.index}
+                ref={virtualizer.measureElement}
+                className={cn("border-b border-border/80", archivedEntityRowClassName(rowArchived))}
+                style={{
+                  display: "table",
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  transform: `translateY(${vi.start - virtualizer.options.scrollMargin}px)`,
+                }}
                 data-testid={`row-dealer-table-${row.id}`}
               >
                 {showWorkPlanSelect && wp && onToggleWorkPlanSelect ? (

@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { Building2, Mail, MessageCircle, Phone } from "lucide-react";
 import { ArchiveInArchiveBadge, archivedEntityRowClassName, isDealerArchivedInActualization } from "@/components/archive-record-visual";
@@ -46,6 +46,12 @@ import {
   whatsAppHref,
 } from "@/lib/dealer-contact-links";
 import { ShowcaseCoverPhotoSlot } from "@/components/showcase-cover-photo-slot";
+import {
+  DEALER_BASE_VIRTUAL_ESTIMATE,
+  dealerBaseVirtualItemStyle,
+  useDealerBaseListScrollMargin,
+  useDealerBaseWindowVirtualizer,
+} from "@/lib/dealer-base-list-window-virtualizer";
 
 const badgeOutline = "border-primary/35 bg-card text-foreground";
 const badgeSoft = "border-primary/30 bg-primary/10 text-foreground";
@@ -668,26 +674,50 @@ export function DealerBaseDealerShowcaseGrid(props: DealerShowcaseGridProps) {
     );
   }
 
+  const listRef = useRef<HTMLDivElement>(null);
+  const scrollMargin = useDealerBaseListScrollMargin(listRef, [rows.length]);
+  const virtualizer = useDealerBaseWindowVirtualizer({
+    count: rows.length,
+    estimateSize: DEALER_BASE_VIRTUAL_ESTIMATE.large,
+    scrollMargin,
+  });
+  const virtualItems = virtualizer.getVirtualItems();
+
   return (
     <TooltipProvider delayDuration={200}>
-      <div className="grid grid-cols-1 gap-3">
-        {rows.map((row) => (
-          <DealerShowcaseCard
-            key={row.id}
-            row={row}
-            act={actualizationState}
-            profile={profile}
-            workPlanUserId={workPlanUserId}
-            workPlanState={workPlanState}
-            showWorkPlanSelect={showWorkPlanSelect}
-            selectedIds={selectedIds}
-            onToggleWorkPlanSelect={onToggleWorkPlanSelect}
-            shipmentActiveDayId={shipmentActiveDayId}
-            shipmentUserId={shipmentUserId}
-            archiveBulk={archiveBulk}
-            rowQuickMove={rowQuickMove}
-          />
-        ))}
+      <div
+        ref={listRef}
+        className="relative w-full"
+        style={{ height: virtualizer.getTotalSize() }}
+        data-testid="dealer-base-virtual-list-large"
+      >
+        {virtualItems.map((vi) => {
+          const row = rows[vi.index]!;
+          return (
+            <div
+              key={vi.key}
+              data-index={vi.index}
+              ref={virtualizer.measureElement}
+              className="pb-3"
+              style={dealerBaseVirtualItemStyle(virtualizer, vi.start)}
+            >
+              <DealerShowcaseCard
+                row={row}
+                act={actualizationState}
+                profile={profile}
+                workPlanUserId={workPlanUserId}
+                workPlanState={workPlanState}
+                showWorkPlanSelect={showWorkPlanSelect}
+                selectedIds={selectedIds}
+                onToggleWorkPlanSelect={onToggleWorkPlanSelect}
+                shipmentActiveDayId={shipmentActiveDayId}
+                shipmentUserId={shipmentUserId}
+                archiveBulk={archiveBulk}
+                rowQuickMove={rowQuickMove}
+              />
+            </div>
+          );
+        })}
       </div>
     </TooltipProvider>
   );
