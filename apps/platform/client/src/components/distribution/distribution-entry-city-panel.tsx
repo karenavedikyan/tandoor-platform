@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,12 @@ import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
 import { SHOWCASE_MATRIX_STORE_CHANGED_EVENT } from "@/lib/showcase-matrix-store";
 import { useEffect } from "react";
+import {
+  DISTRIBUTION_ENTRY_VIRTUAL_ESTIMATE,
+  distributionEntryVirtualItemStyle,
+  useDistributionEntryVirtualizer,
+} from "@/lib/distribution-entry-element-virtualizer";
+
 import { useCurrentUser, displayUserName } from "@/hooks/use-current-user";
 
 type DistributionEntryCityPanelProps = {
@@ -69,6 +75,20 @@ export function DistributionEntryCityPanel({ profile, dealers }: DistributionEnt
   const actorUserId = user?.id ?? profile.personaUserId;
   const actorName = (user ? displayUserName(user) : null) ?? userLabelFromProfile(profile);
 
+  const cityScrollRef = useRef<HTMLDivElement>(null);
+  const cityVirtualizer = useDistributionEntryVirtualizer({
+    count: cityRows.length,
+    estimateSize: DISTRIBUTION_ENTRY_VIRTUAL_ESTIMATE.simpleRow,
+    scrollRef: cityScrollRef,
+  });
+
+  const tpScrollRef = useRef<HTMLDivElement>(null);
+  const tpVirtualizer = useDistributionEntryVirtualizer({
+    count: tpRows.length,
+    estimateSize: DISTRIBUTION_ENTRY_VIRTUAL_ESTIMATE.simpleRow,
+    scrollRef: tpScrollRef,
+  });
+
   const handleSelectCity = useCallback((city: string) => {
     setSelectedCity(city);
     setSelectedTradePointId(null);
@@ -89,28 +109,44 @@ export function DistributionEntryCityPanel({ profile, dealers }: DistributionEnt
       {cityRows.length === 0 ? (
         <p className="text-sm text-muted-foreground">Города не найдены.</p>
       ) : (
-        <ul className="flex max-h-[min(60vh,560px)] flex-col gap-2 overflow-y-auto" data-testid="list-distribution-entry-cities">
-          {cityRows.map((row) => (
-            <li key={row.city}>
-              <button
-                type="button"
-                onClick={() => handleSelectCity(row.city)}
-                className={cn(
-                  "flex w-full items-center justify-between gap-2 rounded-xl border px-3 py-3 text-left transition-colors",
-                  selectedCity === row.city
-                    ? "border-primary/50 bg-primary/5"
-                    : "border-border bg-card hover:bg-muted/40",
-                )}
-                data-testid={`distribution-entry-city-row-${row.city}`}
-              >
-                <span className="text-sm font-semibold text-foreground">{row.city}</span>
-                <Badge variant="secondary" className="tabular-nums">
-                  {row.tradePointCount} ТТ
-                </Badge>
-              </button>
-            </li>
-          ))}
-        </ul>
+        <div
+          ref={cityScrollRef}
+          className="max-h-[min(60vh,560px)] overflow-y-auto"
+          data-testid="list-distribution-entry-cities"
+        >
+          <ul className="relative m-0 list-none p-0" style={{ height: cityVirtualizer.getTotalSize() }}>
+            {cityVirtualizer.getVirtualItems().map((vi) => {
+              const row = cityRows[vi.index];
+              if (!row) return null;
+              return (
+                <li
+                  key={vi.key}
+                  data-index={vi.index}
+                  ref={cityVirtualizer.measureElement}
+                  className="mb-2 list-none"
+                  style={distributionEntryVirtualItemStyle(cityVirtualizer, vi.start)}
+                >
+                  <button
+                    type="button"
+                    onClick={() => handleSelectCity(row.city)}
+                    className={cn(
+                      "flex w-full items-center justify-between gap-2 rounded-xl border px-3 py-3 text-left transition-colors",
+                      selectedCity === row.city
+                        ? "border-primary/50 bg-primary/5"
+                        : "border-border bg-card hover:bg-muted/40",
+                    )}
+                    data-testid={`distribution-entry-city-row-${row.city}`}
+                  >
+                    <span className="text-sm font-semibold text-foreground">{row.city}</span>
+                    <Badge variant="secondary" className="tabular-nums">
+                      {row.tradePointCount} ТТ
+                    </Badge>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       )}
     </div>
   );
@@ -131,47 +167,62 @@ export function DistributionEntryCityPanel({ profile, dealers }: DistributionEnt
       {tpRows.length === 0 ? (
         <p className="text-sm text-muted-foreground">Торговые точки не найдены.</p>
       ) : (
-        <ul className="flex max-h-[min(60vh,560px)] flex-col gap-2 overflow-y-auto" data-testid="list-distribution-entry-city-tradepoints">
-          {tpRows.map((row) => {
-            const selected = row.tradePointId === selectedTradePointId;
-            const noMatrix = row.templateModelsCount === 0;
-            return (
-              <li key={row.tradePointId}>
-                <button
-                  type="button"
-                  onClick={() => setSelectedTradePointId(row.tradePointId)}
-                  className={cn(
-                    "w-full rounded-xl border px-3 py-3 text-left transition-colors",
-                    selected ? "border-primary/50 bg-primary/5" : "border-border bg-card hover:bg-muted/40",
-                  )}
-                  data-testid={`distribution-entry-city-tp-${row.tradePointId}`}
+        <div
+          ref={tpScrollRef}
+          className="max-h-[min(60vh,560px)] overflow-y-auto"
+          data-testid="list-distribution-entry-city-tradepoints"
+        >
+          <ul className="relative m-0 list-none p-0" style={{ height: tpVirtualizer.getTotalSize() }}>
+            {tpVirtualizer.getVirtualItems().map((vi) => {
+              const row = tpRows[vi.index];
+              if (!row) return null;
+              const selected = row.tradePointId === selectedTradePointId;
+              const noMatrix = row.templateModelsCount === 0;
+              return (
+                <li
+                  key={vi.key}
+                  data-index={vi.index}
+                  ref={tpVirtualizer.measureElement}
+                  className="mb-2 list-none"
+                  style={distributionEntryVirtualItemStyle(tpVirtualizer, vi.start)}
                 >
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-foreground">{row.tradePointName}</p>
-                      <p className="truncate text-xs text-muted-foreground">{row.clientName}</p>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedTradePointId(row.tradePointId)}
+                    className={cn(
+                      "w-full rounded-xl border px-3 py-3 text-left transition-colors",
+                      selected ? "border-primary/50 bg-primary/5" : "border-border bg-card hover:bg-muted/40",
+                    )}
+                    data-testid={`distribution-entry-city-tp-${row.tradePointId}`}
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-foreground">{row.tradePointName}</p>
+                        <p className="truncate text-xs text-muted-foreground">{row.clientName}</p>
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        {noMatrix ? (
+                          <Badge variant="outline" className="text-[10px]">
+                            нет матрицы
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant="outline"
+                            className={cn("text-[10px] tabular-nums", coverageBadgeClass(row.coveragePct))}
+                          >
+                            {row.filledCount}/{row.templateModelsCount} · {row.coveragePct}%
+                          </Badge>
+                        )}
+                        <span className="text-[10px] text-muted-foreground">{freshnessLabel(row.lastUpdatedAt)}</span>
+                      </div>
                     </div>
-                    <div className="flex shrink-0 flex-col items-end gap-1">
-                      {noMatrix ? (
-                        <Badge variant="outline" className="text-[10px]">
-                          нет матрицы
-                        </Badge>
-                      ) : (
-                        <Badge
-                          variant="outline"
-                          className={cn("text-[10px] tabular-nums", coverageBadgeClass(row.coveragePct))}
-                        >
-                          {row.filledCount}/{row.templateModelsCount} · {row.coveragePct}%
-                        </Badge>
-                      )}
-                      <span className="text-[10px] text-muted-foreground">{freshnessLabel(row.lastUpdatedAt)}</span>
-                    </div>
-                  </div>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+
       )}
     </div>
   ) : null;

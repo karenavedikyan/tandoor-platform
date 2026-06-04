@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Grid3x3, LayoutGrid, List, Search, Square } from "lucide-react";
 import {
   ProductCardGrid,
@@ -38,6 +38,13 @@ import {
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
 import { loadCachedMatrix, SHOWCASE_MATRIX_STORE_CHANGED_EVENT } from "@/lib/showcase-matrix-store";
+import {
+  DISTRIBUTION_ENTRY_VIRTUAL_ESTIMATE,
+  distributionEntryVirtualItemStyle,
+  useDistributionEntryCatalogGridColumns,
+  useDistributionEntryVirtualizer,
+} from "@/lib/distribution-entry-element-virtualizer";
+
 import { useCurrentUser, displayUserName } from "@/hooks/use-current-user";
 
 type Step = "segment" | "model" | "tradePoints" | "showcase";
@@ -179,6 +186,27 @@ export function DistributionEntryProductPanel({
   );
 
   const gridCls = catalogCardGridClass(cardSize === "list" ? "m" : cardSize);
+  const catalogGridColumns = useDistributionEntryCatalogGridColumns(cardSize === "list" ? "" : gridCls);
+  const modelScrollRef = useRef<HTMLDivElement>(null);
+  const modelVirtualRowCount =
+    cardSize === "list"
+      ? catalogProducts.length
+      : Math.ceil(catalogProducts.length / Math.max(1, catalogGridColumns));
+  const modelVirtualizer = useDistributionEntryVirtualizer({
+    count: modelVirtualRowCount,
+    estimateSize:
+      cardSize === "list"
+        ? DISTRIBUTION_ENTRY_VIRTUAL_ESTIMATE.catalogList
+        : DISTRIBUTION_ENTRY_VIRTUAL_ESTIMATE.catalogGridRow,
+    scrollRef: modelScrollRef,
+  });
+
+  const tpScrollRef = useRef<HTMLDivElement>(null);
+  const tpVirtualizer = useDistributionEntryVirtualizer({
+    count: tpRows.length,
+    estimateSize: DISTRIBUTION_ENTRY_VIRTUAL_ESTIMATE.simpleRow,
+    scrollRef: tpScrollRef,
+  });
 
   const modelList = (
     <div className="flex min-h-0 flex-col gap-3">
@@ -241,44 +269,76 @@ export function DistributionEntryProductPanel({
         <p className="text-sm text-muted-foreground">Модели не найдены.</p>
       ) : cardSize === "list" ? (
         <div
+          ref={modelScrollRef}
           className="max-h-[min(60vh,560px)] overflow-y-auto rounded-lg border border-border bg-card"
           data-testid="list-distribution-entry-product-models"
         >
           <ProductListHeader />
-          {catalogProducts.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => handleSelectModel(p.id)}
-              className={cn(
-                "block w-full text-left [&_a]:pointer-events-none [&_button]:pointer-events-none",
-                selectedModelId === p.id && "bg-primary/5 ring-1 ring-inset ring-primary/30",
-              )}
-              data-testid={`distribution-entry-product-model-${p.id}`}
-            >
-              <ProductListRow product={p} />
-            </button>
-          ))}
+          <div className="relative w-full" style={{ height: modelVirtualizer.getTotalSize() }}>
+            {modelVirtualizer.getVirtualItems().map((vi) => {
+              const p = catalogProducts[vi.index];
+              if (!p) return null;
+              return (
+                <div
+                  key={vi.key}
+                  data-index={vi.index}
+                  ref={modelVirtualizer.measureElement}
+                  style={distributionEntryVirtualItemStyle(modelVirtualizer, vi.start)}
+                >
+                  <button
+                    type="button"
+                    onClick={() => handleSelectModel(p.id)}
+                    className={cn(
+                      "block w-full text-left [&_a]:pointer-events-none [&_button]:pointer-events-none",
+                      selectedModelId === p.id && "bg-primary/5 ring-1 ring-inset ring-primary/30",
+                    )}
+                    data-testid={`distribution-entry-product-model-${p.id}`}
+                  >
+                    <ProductListRow product={p} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
         </div>
       ) : (
         <div
-          className={cn("max-h-[min(60vh,560px)] overflow-y-auto", gridCls)}
+          ref={modelScrollRef}
+          className="max-h-[min(60vh,560px)] overflow-y-auto"
           data-testid="list-distribution-entry-product-models"
         >
-          {catalogProducts.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => handleSelectModel(p.id)}
-              className={cn(
-                "block w-full min-w-0 text-left [&_a]:pointer-events-none [&_button]:pointer-events-none",
-                selectedModelId === p.id && "rounded-[15px] ring-2 ring-primary/40",
-              )}
-              data-testid={`distribution-entry-product-model-${p.id}`}
-            >
-              <ProductCardGrid product={p} size={cardSize} />
-            </button>
-          ))}
+          <div className="relative w-full" style={{ height: modelVirtualizer.getTotalSize() }}>
+            {modelVirtualizer.getVirtualItems().map((vi) => {
+              const startIdx = vi.index * catalogGridColumns;
+              const slice = catalogProducts.slice(startIdx, startIdx + catalogGridColumns);
+              return (
+                <div
+                  key={vi.key}
+                  data-index={vi.index}
+                  ref={modelVirtualizer.measureElement}
+                  className="pb-2"
+                  style={distributionEntryVirtualItemStyle(modelVirtualizer, vi.start)}
+                >
+                  <div className={gridCls}>
+                    {slice.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => handleSelectModel(p.id)}
+                        className={cn(
+                          "block w-full min-w-0 text-left [&_a]:pointer-events-none [&_button]:pointer-events-none",
+                          selectedModelId === p.id && "rounded-[15px] ring-2 ring-primary/40",
+                        )}
+                        data-testid={`distribution-entry-product-model-${p.id}`}
+                      >
+                        <ProductCardGrid product={p} size={cardSize} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
@@ -300,37 +360,53 @@ export function DistributionEntryProductPanel({
       {tpRows.length === 0 ? (
         <p className="text-sm text-muted-foreground">Нет торговых точек, где эта модель стоит или рекомендована.</p>
       ) : (
-        <ul className="flex max-h-[min(60vh,560px)] flex-col gap-2 overflow-y-auto" data-testid="list-distribution-entry-product-tradepoints">
-          {tpRows.map((row) => (
-            <li key={row.tradePointId}>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedTradePointId(row.tradePointId);
-                  setStep("showcase");
-                }}
-                className={cn(
-                  "w-full rounded-xl border px-3 py-3 text-left transition-colors",
-                  selectedTradePointId === row.tradePointId
-                    ? "border-primary/50 bg-primary/5"
-                    : "border-border bg-card hover:bg-muted/40",
-                )}
-                data-testid={`distribution-entry-product-tp-${row.tradePointId}`}
-              >
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-foreground">{row.tradePointName}</p>
-                    <p className="truncate text-xs text-muted-foreground">{row.clientName}</p>
-                    {row.city ? <p className="truncate text-xs text-muted-foreground">{row.city}</p> : null}
-                  </div>
-                  <Badge variant="outline" className={cn("shrink-0 text-[10px]", presenceBadgeClass(row.presence))}>
-                    {entryProductPresenceLabelRu(row.presence)}
-                  </Badge>
-                </div>
-              </button>
-            </li>
-          ))}
-        </ul>
+        <div
+          ref={tpScrollRef}
+          className="max-h-[min(60vh,560px)] overflow-y-auto"
+          data-testid="list-distribution-entry-product-tradepoints"
+        >
+          <ul className="relative m-0 list-none p-0" style={{ height: tpVirtualizer.getTotalSize() }}>
+            {tpVirtualizer.getVirtualItems().map((vi) => {
+              const row = tpRows[vi.index];
+              if (!row) return null;
+              return (
+                <li
+                  key={vi.key}
+                  data-index={vi.index}
+                  ref={tpVirtualizer.measureElement}
+                  className="mb-2 list-none"
+                  style={distributionEntryVirtualItemStyle(tpVirtualizer, vi.start)}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedTradePointId(row.tradePointId);
+                      setStep("showcase");
+                    }}
+                    className={cn(
+                      "w-full rounded-xl border px-3 py-3 text-left transition-colors",
+                      selectedTradePointId === row.tradePointId
+                        ? "border-primary/50 bg-primary/5"
+                        : "border-border bg-card hover:bg-muted/40",
+                    )}
+                    data-testid={`distribution-entry-product-tp-${row.tradePointId}`}
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-foreground">{row.tradePointName}</p>
+                        <p className="truncate text-xs text-muted-foreground">{row.clientName}</p>
+                        {row.city ? <p className="truncate text-xs text-muted-foreground">{row.city}</p> : null}
+                      </div>
+                      <Badge variant="outline" className={cn("shrink-0 text-[10px]", presenceBadgeClass(row.presence))}>
+                        {entryProductPresenceLabelRu(row.presence)}
+                      </Badge>
+                    </div>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       )}
     </div>
   ) : null;
