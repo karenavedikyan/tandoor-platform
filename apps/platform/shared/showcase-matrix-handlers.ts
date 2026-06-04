@@ -638,25 +638,37 @@ export async function handleShowcaseMatrixHistory(
   params: { tradePointId?: string; dealerId?: string; limit?: number },
 ): Promise<{ success: true; events: ShowcaseMatrixEventDto[] }> {
   const tradePointId = typeof params.tradePointId === "string" ? params.tradePointId.trim() : "";
-  if (!tradePointId) {
-    throw new ShowcaseMatrixValidationError("Укажите tradePointId.");
+  const dealerId = typeof params.dealerId === "string" ? params.dealerId.trim() : "";
+  // Допускаем выборку либо по ТТ (детальная история точки),
+  // либо по дилеру (batch для тренда дистрибуции по скоупу). Хотя бы один обязателен.
+  if (!tradePointId && !dealerId) {
+    throw new ShowcaseMatrixValidationError("Укажите tradePointId или dealerId.");
   }
 
-  const dealerId = typeof params.dealerId === "string" ? params.dealerId.trim() : "";
   const limitRaw = params.limit;
+  // Для batch-выборки по дилеру событий заметно больше, поэтому потолок выше (2000),
+  // для точечной истории ТТ поведение прежнее.
+  const maxLimit = tradePointId ? 500 : 2000;
+  const defaultLimit = tradePointId ? 200 : 2000;
   const limit =
     typeof limitRaw === "number" && Number.isFinite(limitRaw) && limitRaw > 0
-      ? Math.min(Math.floor(limitRaw), 500)
-      : 200;
+      ? Math.min(Math.floor(limitRaw), maxLimit)
+      : defaultLimit;
 
-  const queryParams: unknown[] = [tradePointId];
-  let sql = `SELECT * FROM showcase_matrix_events WHERE trade_point_id = $1`;
+  const queryParams: unknown[] = [];
+  const conditions: string[] = [];
+  if (tradePointId) {
+    queryParams.push(tradePointId);
+    conditions.push(`trade_point_id = $${queryParams.length}`);
+  }
   if (dealerId) {
     queryParams.push(dealerId);
-    sql += ` AND dealer_id = $${queryParams.length}`;
+    conditions.push(`dealer_id = $${queryParams.length}`);
   }
   queryParams.push(limit);
-  sql += ` ORDER BY changed_at DESC LIMIT $${queryParams.length}`;
+  const sql =
+    `SELECT * FROM showcase_matrix_events WHERE ${conditions.join(" AND ")}` +
+    ` ORDER BY changed_at DESC LIMIT $${queryParams.length}`;
 
   const r = await pool.query<Record<string, unknown>>(sql, queryParams);
   return { success: true, events: r.rows.map(mapEventRow) };

@@ -127,13 +127,16 @@ export async function fetchShowcaseMatrixScope(opts: {
 }
 
 export async function fetchShowcaseMatrixHistory(opts: {
-  tradePointId: string;
+  /** История по конкретной ТТ. Либо tradePointId, либо dealerId должен быть задан. */
+  tradePointId?: string;
+  /** Batch по дилеру (для тренда дистрибуции по скоупу). */
   dealerId?: string;
   limit?: number;
 }): Promise<ShowcaseMatrixEventDto[] | null> {
+  if (!opts.tradePointId && !opts.dealerId) return null;
   try {
     const params = new URLSearchParams();
-    params.set("tradePointId", opts.tradePointId);
+    if (opts.tradePointId) params.set("tradePointId", opts.tradePointId);
     if (opts.dealerId) params.set("dealerId", opts.dealerId);
     if (opts.limit != null) params.set("limit", String(opts.limit));
     const res = await fetch(`/api/showcase-matrix/history?${params}`, {
