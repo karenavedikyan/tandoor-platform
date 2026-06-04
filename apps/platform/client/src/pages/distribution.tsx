@@ -13,7 +13,7 @@ import { DistributionClientTab } from "@/components/distribution/distribution-cl
 import { DistributionProductTab } from "@/components/distribution/distribution-product-tab";
 import { DistributionTradePointTab } from "@/components/distribution/distribution-tradepoint-tab";
 import { DistributionManagerTab } from "@/components/distribution/distribution-manager-tab";
-import { DistributionEntryTradePointPanel } from "@/components/distribution/distribution-entry-tradepoint-panel";
+import { DistributionEntryWizard } from "@/components/distribution/distribution-entry-wizard";
 import { DistributionFiltersBar } from "@/components/distribution/distribution-filters-bar";
 import { DistributionTree } from "@/components/distribution/distribution-tree";
 import type { DistributionScope } from "@/lib/distribution-tree-data";
@@ -41,7 +41,7 @@ export default function DistributionPage() {
   const { profile } = useReleaseDemoProfile();
   const actx = useClientBaseActualization();
   const managementPlane = useClientBaseTeamActualization();
-  const [mode, setMode] = useState<DistributionMode>("view");
+  const [mode, setMode] = useState<DistributionMode>("entry");
   const [searchQuery, setSearchQuery] = useState("");
   const [filter, setFilter] = useState<DistributionFilterState>(defaultDistributionFilterState);
 
@@ -128,11 +128,11 @@ export default function DistributionPage() {
           data-testid="tabs-distribution-mode"
           className="grid h-auto w-full min-w-0 max-w-md grid-cols-2 gap-1 bg-muted/50 p-1"
         >
-          <TabsTrigger value="view" className="min-h-10 text-xs sm:text-sm" data-testid="tab-distribution-view">
-            Просмотр
-          </TabsTrigger>
           <TabsTrigger value="entry" className="min-h-10 text-xs sm:text-sm" data-testid="tab-distribution-entry">
             Ввод
+          </TabsTrigger>
+          <TabsTrigger value="view" className="min-h-10 text-xs sm:text-sm" data-testid="tab-distribution-view">
+            Аналитика
           </TabsTrigger>
         </TabsList>
 
@@ -264,7 +264,7 @@ export default function DistributionPage() {
         </TabsContent>
 
         <TabsContent value="entry" className="mt-0 min-w-0 focus-visible:ring-0">
-          <DistributionEntryTradePointPanel profile={profile} />
+          <DistributionEntryWizard profile={profile} />
         </TabsContent>
       </Tabs>
     </div>

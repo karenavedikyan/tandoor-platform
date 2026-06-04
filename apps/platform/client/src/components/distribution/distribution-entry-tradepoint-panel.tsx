@@ -10,7 +10,7 @@ import {
   coverageBadgeClass,
   freshnessLabel,
 } from "@/components/distribution/distribution-tradepoint-matrix-entry";
-import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
+import { DEALER_BASE_ROWS, type DealerRow } from "@/lib/dealer-base-mock-data";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
 import { roleScopedDealerRows } from "@/lib/dealer-base-role-views";
@@ -28,9 +28,11 @@ import { useCurrentUser, displayUserName } from "@/hooks/use-current-user";
 
 type DistributionEntryTradePointPanelProps = {
   profile: ReleaseDemoProfile;
+  /** Отфильтрованные дилеры из мастера «Ввод»; если не переданы — считаются внутри панели. */
+  dealers?: readonly DealerRow[];
 };
 
-export function DistributionEntryTradePointPanel({ profile }: DistributionEntryTradePointPanelProps) {
+export function DistributionEntryTradePointPanel({ profile, dealers: dealersProp }: DistributionEntryTradePointPanelProps) {
   const { user } = useCurrentUser();
   const actx = useClientBaseActualization();
   const managementPlane = useClientBaseTeamActualization();
@@ -48,10 +50,12 @@ export function DistributionEntryTradePointPanel({ profile }: DistributionEntryT
     [actx.enabled, managementPlane.mergedState, profile],
   );
 
-  const scopedDealers = useMemo(
+  const scopedDealersInternal = useMemo(
     () => roleScopedDealerRows(workingDealerRows, profile),
     [workingDealerRows, profile],
   );
+
+  const scopedDealers = dealersProp ?? scopedDealersInternal;
 
   useEffect(() => {
     const onCache = () => setCacheBump((n) => n + 1);
