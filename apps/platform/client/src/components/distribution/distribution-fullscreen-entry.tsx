@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ChevronDown,
+  ChevronUp,
   Grid3x3,
   LayoutGrid,
   List,
@@ -33,7 +35,6 @@ import {
   type CatalogProduct,
 } from "@/lib/catalog-data";
 import {
-  catalogCardGridClass,
   readCatalogCardSizeFromStorage,
   writeCatalogCardSizeToStorage,
   type CatalogCardSize,
@@ -74,6 +75,16 @@ import {
 import { useToast } from "@/hooks/use-toast";
 
 const CARD_SIZE_STORAGE_KEY = "distribution-fullscreen-entry-card-size";
+
+function fullscreenEntryProductGridClass(size: CatalogCardSize): string {
+  if (size === "list") return "flex flex-col gap-2";
+  const dense: Record<Exclude<CatalogCardSize, "list">, string> = {
+    xl: "grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5",
+    m: "grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6",
+    s: "grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10",
+  };
+  return dense[size];
+}
 
 type SourceTab = "matrix" | "catalog";
 type DoorFilter = "all" | "vh" | "mk";
@@ -147,6 +158,7 @@ export function DistributionFullscreenEntry({
   );
   const [draft, setDraft] = useState<FullscreenEntryDraftMap>({});
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [headerCollapsed, setHeaderCollapsed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [online, setOnline] = useState(
     () => typeof navigator === "undefined" || navigator.onLine,
@@ -422,7 +434,7 @@ export function DistributionFullscreenEntry({
     toast,
   ]);
 
-  const gridClass = catalogCardGridClass(cardSize);
+  const gridClass = fullscreenEntryProductGridClass(cardSize);
 
   return (
     <div
@@ -431,29 +443,47 @@ export function DistributionFullscreenEntry({
       role="dialog"
       aria-modal="true"
     >
-      <header className="z-20 shrink-0 border-b border-border/80 bg-background/95 px-3 py-3 backdrop-blur-sm sm:px-4">
-        <div className="flex min-h-10 items-start justify-between gap-3">
+      <header className="z-20 shrink-0 border-b border-border/80 bg-background/95 px-3 py-2 backdrop-blur-sm sm:px-4 md:py-2.5">
+        <div className="flex min-h-10 items-center gap-2">
           <div className="min-w-0 flex-1">
             <p className="truncate text-base font-semibold text-foreground">{point.name}</p>
-            <p className="truncate text-sm text-muted-foreground">
-              {dealer.name}
-              {point.city?.trim() && point.city !== "—" ? ` · ${point.city.trim()}` : ""}
-            </p>
+            {!headerCollapsed ? (
+              <p className="truncate text-sm text-muted-foreground">
+                {dealer.name}
+                {point.city?.trim() && point.city !== "—" ? ` · ${point.city.trim()}` : ""}
+              </p>
+            ) : null}
           </div>
-          <div className="flex shrink-0 flex-col items-end gap-2">
+          <div className="flex shrink-0 items-center gap-1">
             {!online ? (
               <Badge
                 variant="outline"
-                className="border-amber-500/40 bg-amber-500/10 text-amber-900 dark:text-amber-200"
+                className="hidden max-w-[9rem] truncate border-amber-500/40 bg-amber-500/10 text-[10px] text-amber-900 dark:text-amber-200 sm:inline-flex"
               >
-                Оффлайн — сохранится после синхронизации
+                Оффлайн
               </Badge>
             ) : null}
             <Button
               type="button"
+              variant="outline"
+              size="icon"
+              className="h-9 w-9 shrink-0"
+              onClick={() => setHeaderCollapsed((c) => !c)}
+              data-testid="button-fullscreen-entry-toggle-header"
+              aria-label={headerCollapsed ? "Развернуть панель" : "Свернуть панель"}
+              aria-expanded={!headerCollapsed}
+            >
+              {headerCollapsed ? (
+                <ChevronDown className="h-4 w-4" aria-hidden />
+              ) : (
+                <ChevronUp className="h-4 w-4" aria-hidden />
+              )}
+            </Button>
+            <Button
+              type="button"
               variant="ghost"
               size="icon"
-              className="h-10 w-10 shrink-0"
+              className="h-9 w-9 shrink-0"
               onClick={onClose}
               data-testid="button-fullscreen-entry-close"
               aria-label="Закрыть"
@@ -462,44 +492,85 @@ export function DistributionFullscreenEntry({
             </Button>
           </div>
         </div>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Отмечено: <span className="font-semibold tabular-nums text-foreground">{installedCount}</span>
-        </p>
+        {!headerCollapsed ? (
+          <p className="mt-1.5 text-sm text-muted-foreground md:hidden">
+            Отмечено: <span className="font-semibold tabular-nums text-foreground">{installedCount}</span>
+          </p>
+        ) : null}
+        {!online ? (
+          <Badge
+            variant="outline"
+            className="mt-2 w-fit border-amber-500/40 bg-amber-500/10 text-[10px] text-amber-900 dark:text-amber-200 sm:hidden"
+          >
+            Оффлайн — сохранится после синхронизации
+          </Badge>
+        ) : null}
       </header>
 
-      <div className="z-10 shrink-0 border-b border-border/60 bg-background/95 px-3 py-3 backdrop-blur-sm sm:px-4">
-        <div className="flex flex-col gap-3">
-          <div className="relative">
-            <Search
-              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-              aria-hidden
-            />
-            <Input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Поиск по каталогу"
-              className="min-h-10 pl-9"
-              data-testid="input-fullscreen-entry-search"
-            />
+      <div
+        className={cn(
+          "z-10 shrink-0 overflow-hidden border-b border-border/60 bg-background/95 backdrop-blur-sm transition-[max-height,opacity] duration-200 ease-out",
+          headerCollapsed ? "max-h-0 border-transparent opacity-0" : "max-h-[min(40vh,520px)] opacity-100",
+        )}
+        aria-hidden={headerCollapsed}
+      >
+        <div className="flex flex-col gap-2 px-3 py-2 sm:px-4 md:gap-2 md:py-2.5">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-2">
+            <div className="relative min-w-0 flex-1">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                aria-hidden
+              />
+              <Input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Поиск по каталогу"
+                className="min-h-9 pl-9"
+                data-testid="input-fullscreen-entry-search"
+              />
+            </div>
+            <div className="flex shrink-0 items-center gap-1 md:ml-auto">
+              {(
+                [
+                  ["xl", Square],
+                  ["m", LayoutGrid],
+                  ["s", Grid3x3],
+                  ["list", List],
+                ] as const
+              ).map(([size, Icon]) => (
+                <Button
+                  key={size}
+                  type="button"
+                  size="icon"
+                  variant={cardSize === size ? "default" : "outline"}
+                  className="h-9 w-9"
+                  onClick={() => setCardSize(size)}
+                  data-testid={`button-fullscreen-entry-size-${size}`}
+                  aria-label={size}
+                >
+                  <Icon className="h-4 w-4" />
+                </Button>
+              ))}
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
             <Tabs
               value={sourceTab}
               onValueChange={(v) => setSourceTab(v as SourceTab)}
-              className="min-w-0"
+              className="min-w-0 shrink-0"
             >
-              <TabsList className="grid h-auto min-h-10 w-full max-w-md grid-cols-2 gap-1 p-1">
+              <TabsList className="grid h-auto min-h-9 w-full min-w-[12rem] max-w-md grid-cols-2 gap-1 p-0.5">
                 <TabsTrigger
                   value="matrix"
-                  className="min-h-10 text-xs sm:text-sm"
+                  className="min-h-9 text-xs sm:text-sm"
                   data-testid="tab-fullscreen-entry-matrix"
                 >
                   Из матрицы
                 </TabsTrigger>
                 <TabsTrigger
                   value="catalog"
-                  className="min-h-10 text-xs sm:text-sm"
+                  className="min-h-9 text-xs sm:text-sm"
                   data-testid="tab-fullscreen-entry-catalog"
                 >
                   Весь каталог
@@ -520,95 +591,82 @@ export function DistributionFullscreenEntry({
                   type="button"
                   size="sm"
                   variant={doorFilter === id ? "default" : "outline"}
-                  className="min-h-10"
+                  className="min-h-9 px-2.5"
                   onClick={() => setDoorFilter(id)}
                 >
                   {label}
                 </Button>
               ))}
             </div>
+          </div>
+        </div>
+      </div>
 
-            <div className="ml-auto flex shrink-0 items-center gap-1">
-              {(
-                [
-                  ["xl", Square],
-                  ["m", LayoutGrid],
-                  ["s", Grid3x3],
-                  ["list", List],
-                ] as const
-              ).map(([size, Icon]) => (
-                <Button
-                  key={size}
-                  type="button"
-                  size="icon"
-                  variant={cardSize === size ? "default" : "outline"}
-                  className="h-10 w-10"
-                  onClick={() => setCardSize(size)}
-                  data-testid={`button-fullscreen-entry-size-${size}`}
-                  aria-label={size}
-                >
-                  <Icon className="h-4 w-4" />
-                </Button>
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 pb-4 sm:px-4 md:pb-28 md:pr-4">
+          {visibleProducts.length === 0 ? (
+            <p className="py-12 text-center text-sm text-muted-foreground">Ничего не найдено</p>
+          ) : cardSize === "list" ? (
+            <ul className={gridClass}>
+              {visibleProducts.map((p) => (
+                <FullscreenProductRow
+                  key={p.id}
+                  product={p}
+                  draft={draft[p.id]}
+                  matrixModel={matrixModelById.get(p.id)}
+                  onDraftChange={updateDraft}
+                />
+              ))}
+            </ul>
+          ) : (
+            <div className={gridClass}>
+              {visibleProducts.map((p) => (
+                <FullscreenProductCard
+                  key={p.id}
+                  product={p}
+                  cardSize={cardSize}
+                  draft={draft[p.id]}
+                  matrixModel={matrixModelById.get(p.id)}
+                  onDraftChange={updateDraft}
+                />
               ))}
             </div>
+          )}
+        </div>
+
+        <div
+          className={cn(
+            "z-30 shrink-0 border-t border-border/80 bg-background/95 px-3 py-3 backdrop-blur-sm sm:px-4",
+            "md:fixed md:bottom-3 md:right-3 md:z-30 md:max-w-[min(100vw-1.5rem,28rem)] md:rounded-xl md:border md:border-t md:shadow-lg",
+          )}
+          aria-live="polite"
+        >
+          <p className="mb-2 text-center text-sm text-muted-foreground md:text-right">
+            Отмечено: <span className="font-semibold tabular-nums text-foreground">{installedCount}</span>
+          </p>
+          <div className="flex flex-wrap gap-2 md:justify-end">
+            <Button
+              type="button"
+              className="min-h-10 flex-1 sm:flex-none"
+              disabled={changedIds.length === 0 || saving}
+              onClick={() => void handleSave()}
+              data-testid="button-fullscreen-entry-save"
+            >
+              {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> : null}
+              Сохранить ({changedIds.length})
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-10"
+              onClick={() => setHistoryOpen(true)}
+              data-testid="button-fullscreen-entry-history"
+            >
+              История
+            </Button>
           </div>
         </div>
       </div>
-
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 pb-4 sm:px-4">
-        {visibleProducts.length === 0 ? (
-          <p className="py-12 text-center text-sm text-muted-foreground">Ничего не найдено</p>
-        ) : cardSize === "list" ? (
-          <ul className={gridClass}>
-            {visibleProducts.map((p) => (
-              <FullscreenProductRow
-                key={p.id}
-                product={p}
-                draft={draft[p.id]}
-                matrixModel={matrixModelById.get(p.id)}
-                onDraftChange={updateDraft}
-              />
-            ))}
-          </ul>
-        ) : (
-          <div className={gridClass}>
-            {visibleProducts.map((p) => (
-              <FullscreenProductCard
-                key={p.id}
-                product={p}
-                cardSize={cardSize}
-                draft={draft[p.id]}
-                matrixModel={matrixModelById.get(p.id)}
-                onDraftChange={updateDraft}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-
-      <footer className="z-20 shrink-0 border-t border-border/80 bg-background/95 px-3 py-3 backdrop-blur-sm sm:px-4">
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            className="min-h-10 flex-1 sm:flex-none"
-            disabled={changedIds.length === 0 || saving}
-            onClick={() => void handleSave()}
-            data-testid="button-fullscreen-entry-save"
-          >
-            {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> : null}
-            Сохранить ({changedIds.length})
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className="min-h-10"
-            onClick={() => setHistoryOpen(true)}
-            data-testid="button-fullscreen-entry-history"
-          >
-            История
-          </Button>
-        </div>
-      </footer>
 
       <Sheet open={historyOpen} onOpenChange={setHistoryOpen}>
         <SheetContent side="right" className="flex w-full flex-col sm:max-w-md">
