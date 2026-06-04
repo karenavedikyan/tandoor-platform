@@ -1,4 +1,7 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { Maximize2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { DistributionFullscreenEntry } from "@/components/distribution/distribution-fullscreen-entry";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   TradePointShowcaseMatrixSection,
@@ -9,6 +12,7 @@ import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { formatRelativeTime } from "@/lib/format-datetime";
 import type { TradePointMatrixSummary } from "@/lib/trade-point-matrix-data";
 import { getShowcaseMatrixModelsForTradePoint } from "@/lib/trade-point-showcase-matrix-models";
+import { canEditTradePointShowcaseMatrix } from "@/lib/trade-point-showcase-matrix-storage";
 
 
 
@@ -87,6 +91,12 @@ export function DistributionTradePointMatrixEntry({
     [point],
   );
 
+  const canEdit = useMemo(
+    () => canEditTradePointShowcaseMatrix(profile, dealer),
+    [profile, dealer],
+  );
+  const [fullscreenOpen, setFullscreenOpen] = useState(false);
+
   if (templateModelsCount === 0) {
     return (
       <Card className="rounded-xl border border-border bg-card shadow-xs">
@@ -102,13 +112,40 @@ export function DistributionTradePointMatrixEntry({
   }
 
   return (
-    <TradePointShowcaseMatrixSection
-      dealer={dealer}
-      point={point}
-      profile={profile}
-      actorUserId={actorUserId}
-      actorName={actorName}
-      page={showcasePage}
-    />
+    <div className="space-y-3">
+      {canEdit ? (
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="min-h-10 gap-2"
+            data-testid="button-distribution-entry-fullscreen"
+            onClick={() => setFullscreenOpen(true)}
+          >
+            <Maximize2 className="h-4 w-4 shrink-0" aria-hidden />
+            Полноэкранный режим
+          </Button>
+        </div>
+      ) : null}
+      <TradePointShowcaseMatrixSection
+        dealer={dealer}
+        point={point}
+        profile={profile}
+        actorUserId={actorUserId}
+        actorName={actorName}
+        page={showcasePage}
+      />
+      {fullscreenOpen && canEdit ? (
+        <DistributionFullscreenEntry
+          dealer={dealer}
+          point={point}
+          profile={profile}
+          actorUserId={actorUserId}
+          actorName={actorName}
+          onClose={() => setFullscreenOpen(false)}
+        />
+      ) : null}
+    </div>
   );
 }

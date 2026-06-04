@@ -295,13 +295,25 @@ export function setMatrixStatus(params: {
   comment?: string | null;
   updatedBy?: string;
   updatedByName?: string;
+  placementType?: ShowcasePlacementType | null;
+  placementSegment?: ShowcasePlacementSegment | null;
 }): { entry: ShowcaseMatrixEntryDto; queued: boolean } {
   const clientOpId = newClientOpId();
   const now = new Date().toISOString();
   const comment = params.comment ?? null;
 
+  const cacheKey = showcaseMatrixCacheKey(params.tradePointId, params.targetKind, params.targetId);
+  const prev = loadCacheRecord()[cacheKey];
+  const placementType =
+    params.placementType !== undefined ? params.placementType : (prev?.placementType ?? null);
+  const placementSegment =
+    params.placementSegment !== undefined ? params.placementSegment : (prev?.placementSegment ?? null);
+  const placementCapacity = prev?.placementCapacity ?? null;
+  const placementActual = prev?.placementActual ?? null;
+  const placementRef = prev?.placementRef ?? null;
+
   const entry: ShowcaseMatrixEntryDto = {
-    id: `local-${clientOpId}`,
+    id: prev?.id ?? `local-${clientOpId}`,
     dealerId: params.dealerId,
     tradePointId: params.tradePointId,
     targetKind: params.targetKind,
@@ -311,11 +323,15 @@ export function setMatrixStatus(params: {
     updatedAt: now,
     updatedBy: params.updatedBy ?? null,
     updatedByName: params.updatedByName ?? null,
-    ...NULL_PLACEMENT_FIELDS,
+    placementType,
+    placementSegment,
+    placementCapacity,
+    placementActual,
+    placementRef,
   };
 
   const record = loadCacheRecord();
-  record[showcaseMatrixCacheKey(params.tradePointId, params.targetKind, params.targetId)] = entry;
+  record[cacheKey] = entry;
   saveCacheRecord(record);
 
   enqueueShowcaseMatrixUpsert(clientOpId, {
@@ -326,6 +342,11 @@ export function setMatrixStatus(params: {
     status: params.status,
     comment,
     clientOpId,
+    placementType,
+    placementSegment,
+    placementCapacity,
+    placementActual,
+    placementRef,
   });
 
   return { entry, queued: true };
