@@ -166,11 +166,14 @@ function PositionRow({ entry, dealer }: { entry: ShowcaseMatrixEntryDto; dealer:
 }
 
 function TradePointNode({
-  ref: tpRef,
+  // Use a custom prop name (tpRef) instead of `ref`: React reserves `ref`,
+  // intercepts it and never forwards it as a normal prop, which made tpRef
+  // undefined and crashed on tpRef.dealer when expanding a client node.
+  tpRef,
   entries,
   defaultOpen,
 }: {
-  ref: ScopeTradePointRef;
+  tpRef: ScopeTradePointRef;
   entries: ShowcaseMatrixEntryDto[];
   defaultOpen: boolean;
 }) {
@@ -278,7 +281,7 @@ function DealerNode({
         {visibleTpRefs.map((ref) => (
           <TradePointNode
             key={ref.point.id}
-            ref={ref}
+            tpRef={ref}
             entries={entriesForTradePoint(grouped, dealer.id, ref.point.id)}
             defaultOpen={false}
           />
@@ -433,8 +436,6 @@ export function DistributionTree({
             <TradePointDistributionMetricsPanel
               entries={tpEntries}
               pointId={scope.point.id}
-              dealer={scope.dealer}
-              point={scope.point}
             />
             {visible.map((entry) => (
               <PositionRow key={entry.id} entry={entry} dealer={scope.dealer} />
@@ -482,7 +483,7 @@ export function DistributionTree({
             return refs.map((ref) => (
               <TradePointNode
                 key={ref.point.id}
-                ref={ref}
+                tpRef={ref}
                 entries={entriesForTradePoint(grouped, dealer.id, ref.point.id)}
                 defaultOpen={scope.kind === "dealer" ? false : true}
               />
