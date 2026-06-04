@@ -431,7 +431,7 @@ export function DistributionFullscreenEntry({
       role="dialog"
       aria-modal="true"
     >
-      <header className="sticky top-0 z-20 border-b border-border/80 bg-background/95 px-3 py-3 backdrop-blur-sm sm:px-4">
+      <header className="z-20 shrink-0 border-b border-border/80 bg-background/95 px-3 py-3 backdrop-blur-sm sm:px-4">
         <div className="flex min-h-10 items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <p className="truncate text-base font-semibold text-foreground">{point.name}</p>
@@ -467,7 +467,7 @@ export function DistributionFullscreenEntry({
         </p>
       </header>
 
-      <div className="sticky top-[var(--fullscreen-entry-header,0)] z-10 border-b border-border/60 bg-background/95 px-3 py-3 backdrop-blur-sm sm:px-4">
+      <div className="z-10 shrink-0 border-b border-border/60 bg-background/95 px-3 py-3 backdrop-blur-sm sm:px-4">
         <div className="flex flex-col gap-3">
           <div className="relative">
             <Search
@@ -555,7 +555,7 @@ export function DistributionFullscreenEntry({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 pb-28 sm:px-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 pb-4 sm:px-4">
         {visibleProducts.length === 0 ? (
           <p className="py-12 text-center text-sm text-muted-foreground">Ничего не найдено</p>
         ) : cardSize === "list" ? (
@@ -586,7 +586,7 @@ export function DistributionFullscreenEntry({
         )}
       </div>
 
-      <footer className="sticky bottom-0 z-20 border-t border-border/80 bg-background/95 px-3 py-3 backdrop-blur-sm sm:px-4">
+      <footer className="z-20 shrink-0 border-t border-border/80 bg-background/95 px-3 py-3 backdrop-blur-sm sm:px-4">
         <div className="flex flex-wrap gap-2">
           <Button
             type="button"
