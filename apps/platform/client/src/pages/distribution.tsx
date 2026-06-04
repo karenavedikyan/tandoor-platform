@@ -98,18 +98,18 @@ export default function DistributionPage() {
 
   return (
     <div
-      className="max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom))] min-w-0 max-w-full space-y-4 overflow-x-hidden sm:space-y-6"
+      className="max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom))] min-w-0 max-w-full space-y-3 overflow-x-hidden sm:space-y-6"
       data-testid="page-distribution"
     >
-      <header className="relative overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-lg sm:p-8">
+      <header className="relative overflow-hidden rounded-2xl border border-border bg-card p-4 shadow-lg sm:p-8">
         <div
           className="pointer-events-none absolute left-0 top-0 h-full w-1 rounded-l-2xl bg-primary"
           aria-hidden
         />
         <div className="relative flex min-w-0 flex-col gap-3 pl-3 sm:flex-row sm:items-start sm:justify-between sm:pl-4">
           <div className="min-w-0">
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Дистрибуция</h1>
-            <p className="mt-1 text-sm text-muted-foreground sm:text-base">
+            <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl lg:text-3xl">Дистрибуция</h1>
+            <p className="mt-1 hidden text-sm text-muted-foreground sm:block sm:text-base">
               Сквозной просмотр витрин по клиентам и точкам в реальном времени.
             </p>
           </div>
