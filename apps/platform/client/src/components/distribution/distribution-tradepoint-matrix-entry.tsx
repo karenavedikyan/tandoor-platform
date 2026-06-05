@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Maximize2 } from "lucide-react";
+import { ChevronDown, Maximize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { DistributionFullscreenEntry } from "@/components/distribution/distribution-fullscreen-entry";
 import { TradePointShowcaseParamsSection } from "@/components/trade-point-showcase-params-section";
 import {
@@ -35,6 +36,7 @@ import {
   loadShowcaseStorage,
   SHOWCASE_STORAGE_EVENT,
 } from "@/lib/showcase-distribution-data";
+import { cn } from "@/lib/utils";
 
 export function freshnessLabel(lastUpdatedAt: string | null): string {
   if (!lastUpdatedAt) return "нет данных";
@@ -79,6 +81,7 @@ export function DistributionTradePointMatrixEntry({
     [profile, dealer],
   );
   const [fullscreenOpen, setFullscreenOpen] = useState(false);
+  const [paramsOpen, setParamsOpen] = useState(false);
   const [showcaseBump, setShowcaseBump] = useState(0);
   const [matrixBump, setMatrixBump] = useState(0);
 
@@ -249,7 +252,26 @@ export function DistributionTradePointMatrixEntry({
 
   return (
     <div className="space-y-3">
-      <TradePointShowcaseParamsSection dealer={dealer} point={point} profile={profile} canEdit={canEdit} />
+      <Collapsible open={paramsOpen} onOpenChange={setParamsOpen} className="space-y-2">
+        <CollapsibleTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-9 w-full justify-between gap-2 text-sm font-semibold"
+            data-testid="button-showcase-params-accordion"
+          >
+            Параметры витрины
+            <ChevronDown
+              className={cn("h-4 w-4 shrink-0 opacity-70 transition-transform", paramsOpen && "rotate-180")}
+              aria-hidden
+            />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <TradePointShowcaseParamsSection dealer={dealer} point={point} profile={profile} canEdit={canEdit} />
+        </CollapsibleContent>
+      </Collapsible>
       {templateModelsCount === 0 ? (
         <Card className="rounded-xl border border-border bg-card shadow-xs">
           <CardContent className="px-4 py-8 text-center">
@@ -262,21 +284,6 @@ export function DistributionTradePointMatrixEntry({
         </Card>
       ) : (
         <>
-          {canEdit ? (
-            <div className="flex justify-end">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="min-h-10 gap-2"
-                data-testid="button-distribution-entry-fullscreen"
-                onClick={() => setFullscreenOpen(true)}
-              >
-                <Maximize2 className="h-4 w-4 shrink-0" aria-hidden />
-                Полноэкранный режим
-              </Button>
-            </div>
-          ) : null}
           <TradePointShowcaseMatrixSection
             dealer={dealer}
             point={point}
@@ -285,6 +292,20 @@ export function DistributionTradePointMatrixEntry({
             actorName={actorName}
             page={showcasePage}
             density="compact"
+            statusFilterActionSlot={
+              canEdit ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-8 shrink-0 gap-1.5 bg-emerald-600 text-xs font-semibold text-white hover:bg-emerald-700"
+                  data-testid="button-distribution-entry-fullscreen"
+                  onClick={() => setFullscreenOpen(true)}
+                >
+                  <Maximize2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  Внести дистрибуцию
+                </Button>
+              ) : null
+            }
           />
           {fullscreenOpen && canEdit ? (
             <DistributionFullscreenEntry
