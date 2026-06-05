@@ -337,9 +337,19 @@ type Props = {
   actorName: string;
   page: TradePointShowcasePageBundle;
   density?: ShowcaseSectionDensity;
+  statusFilterActionSlot?: ReactNode;
 };
 
-export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorUserId, actorName, page, density = "comfortable" }: Props) {
+export function TradePointShowcaseMatrixSection({
+  dealer,
+  point,
+  profile,
+  actorUserId,
+  actorName,
+  page,
+  density = "comfortable",
+  statusFilterActionSlot,
+}: Props) {
   const canView = useMemo(() => canViewTradePointShowcaseMatrix(profile, dealer), [profile, dealer]);
   const canEdit = useMemo(() => canEditTradePointShowcaseMatrix(profile, dealer), [profile, dealer]);
   const isCompact = density === "compact";
@@ -761,6 +771,9 @@ export function TradePointShowcaseMatrixSection({ dealer, point, profile, actorU
                   >
                     Все
                   </Button>
+                  {statusFilterActionSlot ? (
+                    <div className="ml-auto flex shrink-0 items-center">{statusFilterActionSlot}</div>
+                  ) : null}
                 </div>
               </div>
 
