@@ -192,6 +192,7 @@ export function setMatrixPlacement(params: {
   placementSegment: ShowcasePlacementSegment;
   placementCapacity: number;
   placementActual: number;
+  placementCompetitors?: ShowcaseMatrixEntryDto["placementCompetitors"];
   comment?: string | null;
   updatedBy?: string;
   updatedByName?: string;
@@ -200,8 +201,13 @@ export function setMatrixPlacement(params: {
   const now = new Date().toISOString();
   const comment = params.comment ?? null;
 
+  const cacheKey = showcaseMatrixCacheKey(params.tradePointId, "placement", params.targetId);
+  const prev = loadCacheRecord()[cacheKey];
+  const placementOurModels = prev?.placementOurModels ?? [];
+  const placementCompetitors = params.placementCompetitors ?? prev?.placementCompetitors ?? [];
+
   const entry: ShowcaseMatrixEntryDto = {
-    id: `local-${clientOpId}`,
+    id: prev?.id ?? `local-${clientOpId}`,
     dealerId: params.dealerId,
     tradePointId: params.tradePointId,
     targetKind: "placement",
@@ -216,12 +222,12 @@ export function setMatrixPlacement(params: {
     placementCapacity: params.placementCapacity,
     placementActual: params.placementActual,
     placementRef: null,
-    placementOurModels: [],
-    placementCompetitors: [],
+    placementOurModels,
+    placementCompetitors,
   };
 
   const record = loadCacheRecord();
-  record[showcaseMatrixCacheKey(params.tradePointId, "placement", params.targetId)] = entry;
+  record[cacheKey] = entry;
   saveCacheRecord(record);
 
   enqueueShowcaseMatrixUpsert(clientOpId, {
@@ -237,6 +243,8 @@ export function setMatrixPlacement(params: {
     placementCapacity: params.placementCapacity,
     placementActual: params.placementActual,
     placementRef: null,
+    placementOurModels,
+    placementCompetitors,
   });
 
   return { entry, queued: true };
