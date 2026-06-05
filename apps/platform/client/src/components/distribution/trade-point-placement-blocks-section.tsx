@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Package, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, Package, Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
@@ -292,45 +293,80 @@ export function TradePointPlacementBlocksSection({
                   data-testid={`row-placement-block-${block.targetId}`}
                 >
                   <CardContent className="space-y-3 px-3 py-3 sm:px-4">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="min-w-0 space-y-1.5">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-sm font-semibold text-foreground">
-                            {block.placementType
-                              ? PLACEMENT_TYPE_LABEL_RU[block.placementType]
-                              : block.targetId}
-                          </span>
-                          {block.placementSegment ? (
-                            <Badge variant="outline" className="shrink-0 whitespace-nowrap text-xs">
-                              {PLACEMENT_SEGMENT_LABEL_RU[block.placementSegment]}
-                            </Badge>
-                          ) : null}
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Наши / общая вместимость:{" "}
-                          <span className="font-medium text-foreground">
-                            {formatCapacityLine(block.placementActual, block.placementCapacity)}
-                          </span>
+                    <div className="min-w-0 space-y-1.5">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className="text-sm font-semibold text-foreground">
+                          {block.placementType
+                            ? PLACEMENT_TYPE_LABEL_RU[block.placementType]
+                            : block.targetId}
+                        </span>
+                        {block.placementSegment ? (
+                          <Badge variant="outline" className="shrink-0 whitespace-nowrap text-xs">
+                            {PLACEMENT_SEGMENT_LABEL_RU[block.placementSegment]}
+                          </Badge>
+                        ) : null}
+                        <span
+                          className="w-full text-xs text-muted-foreground tabular-nums sm:w-auto"
+                          data-testid={`text-capacity-summary-${block.targetId}`}
+                        >
+                          {formatCapacityLine(block.placementActual, block.placementCapacity)}
                           {block.placementCapacity != null && block.placementCapacity > 0 ? (
-                            <span className="text-muted-foreground"> · {pct}% наших</span>
+                            <span> · {pct}%</span>
                           ) : null}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Остаток мест:{" "}
-                          <span className="font-medium text-foreground">{remainingSlots(block)}</span>
+                          {remainingSlots(block) > 0 ? (
+                            <span> · своб. {remainingSlots(block)}</span>
+                          ) : null}
                           {sumCompetitors(block) > 0 ? (
-                            <span className="text-muted-foreground">
-                              {" "}
-                              · конкуренты: {sumCompetitors(block)}
-                            </span>
+                            <span> · конк. {sumCompetitors(block)}</span>
                           ) : null}
-                        </p>
+                        </span>
                       </div>
-                    </div>
 
-                    {block.placementCapacity != null && block.placementCapacity > 0 ? (
-                      <Progress value={pct} className="h-2" aria-label="Доля наших образцов" />
-                    ) : null}
+                      <Collapsible defaultOpen={false}>
+                        <CollapsibleTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="group h-8 min-h-8 justify-start gap-1.5 px-2 text-xs text-muted-foreground hover:text-foreground"
+                            data-testid={`button-toggle-capacity-${block.targetId}`}
+                          >
+                            Подробнее о вместимости
+                            <ChevronDown
+                              className="h-4 w-4 shrink-0 transition-transform duration-200 group-data-[state=open]:rotate-180"
+                              aria-hidden
+                            />
+                          </Button>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent
+                          className="space-y-2 pt-1 data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down"
+                          data-testid={`capacity-details-${block.targetId}`}
+                        >
+                          <p className="text-xs text-muted-foreground">
+                            Наши / общая вместимость:{" "}
+                            <span className="font-medium text-foreground">
+                              {formatCapacityLine(block.placementActual, block.placementCapacity)}
+                            </span>
+                            {block.placementCapacity != null && block.placementCapacity > 0 ? (
+                              <span className="text-muted-foreground"> · {pct}% наших</span>
+                            ) : null}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Остаток мест:{" "}
+                            <span className="font-medium text-foreground">{remainingSlots(block)}</span>
+                            {sumCompetitors(block) > 0 ? (
+                              <span className="text-muted-foreground">
+                                {" "}
+                                · конкуренты: {sumCompetitors(block)}
+                              </span>
+                            ) : null}
+                          </p>
+                          {block.placementCapacity != null && block.placementCapacity > 0 ? (
+                            <Progress value={pct} className="h-2" aria-label="Доля наших образцов" />
+                          ) : null}
+                        </CollapsibleContent>
+                      </Collapsible>
+                    </div>
 
                     {models.length > 0 ? (
                       <ul className="space-y-1 rounded-lg border border-border/60 bg-muted/10 px-2 py-2">
