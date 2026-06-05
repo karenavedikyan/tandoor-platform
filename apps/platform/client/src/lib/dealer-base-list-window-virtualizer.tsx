@@ -9,7 +9,7 @@ export const DEALER_BASE_VIRTUAL_OVERSCAN = 6;
 
 /** Оценки высоты по режимам (уточняются measureElement). */
 export const DEALER_BASE_VIRTUAL_ESTIMATE = {
-  large: 420,
+  large: 820,
   gridRow: 240,
   list: 112,
   table: 56,
