@@ -22,7 +22,7 @@ import {
   SHOWCASE_MATRIX_CATALOG_CHANGED_EVENT,
   SHOWCASE_MATRIX_CATALOG_REMOTE_UPDATE_EVENT,
 } from "@/lib/showcase-matrix-catalog-store";
-import { resolveTradePointMatrixModels } from "@/lib/trade-point-matrix-resolver";
+import { resolveTradePointMatrixWithSource } from "@/lib/trade-point-matrix-resolver";
 import {
   canEditTradePointShowcaseMatrix,
   canViewTradePointShowcaseMatrix,
@@ -47,12 +47,6 @@ import {
 import type { ShowcaseTask } from "@/lib/showcase-distribution-data";
 import type { MatrixFilterId, TradePointMatrixSummary, TradePointProductMatrixItem } from "@/lib/trade-point-matrix-data";
 import type { MatrixTask, MatrixTaskRecommendation } from "@/lib/trade-point-task-data";
-import {
-  getShowcaseMatrixDeficitTasksForTradePoint,
-  MATRIX_TASK_PRIORITY_LABEL,
-  MATRIX_TASK_STATUS_LABEL,
-  MATRIX_TASK_TYPE_LABEL,
-} from "@/lib/trade-point-task-data";
 import { ShowcaseModelPresentationDialog } from "@/components/showcase-model-presentation-dialog";
 import { TradePointProductMatrixVisual } from "@/components/trade-point-product-matrix-visual";
 import { TradePointPlacementBlocksSection } from "@/components/distribution/trade-point-placement-blocks-section";
@@ -71,10 +65,6 @@ function showcaseModelImageSrc(m: ShowcaseMatrixModelDefinition): string {
   const direct = m.imageUrl?.trim() ?? "";
   if (direct) return direct;
   return getProductById(m.id)?.image?.trim() ?? "";
-}
-
-function deficitTaskThumbSrc(t: { productId: string; showcaseMatrixImageSrc?: string }): string {
-  return getProductById(t.productId)?.image?.trim() || t.showcaseMatrixImageSrc?.trim() || "";
 }
 
 type ShowcaseMatrixQuickFilterId = "needed" | "installed" | "postponed" | "not_relevant" | "all";
@@ -242,12 +232,6 @@ function modelMatchesQuickFilter(st: ShowcaseMatrixStatusId, f: ShowcaseMatrixQu
   if (f === "installed") return st === "installed";
   if (f === "postponed") return st === "postponed";
   return st === "not_relevant";
-}
-
-function recPriorityBadgeClass(p: MatrixTaskRecommendation["priority"]) {
-  if (p === "high") return "border-red-200 bg-red-50 text-red-900";
-  if (p === "medium") return "border-amber-200 bg-amber-50 text-amber-950";
-  return "border-border bg-muted text-muted-foreground";
 }
 
 type ShowcasePhotoPlaceholderDensity = "comfortable" | "compact" | "micro";
@@ -436,9 +420,9 @@ export function TradePointShowcaseMatrixSection({
     [backendByModelId, storage, dealer.id, point.id],
   );
 
-  const models = useMemo(() => {
+  const resolvedMatrix = useMemo(() => {
     void catalogBump;
-    return resolveTradePointMatrixModels({
+    return resolveTradePointMatrixWithSource({
       dealerId: dealer.id,
       tradePointId: point.id,
       clientCategory: dealer.clientCategory,
@@ -446,11 +430,8 @@ export function TradePointShowcaseMatrixSection({
       city: point.city,
     });
   }, [catalogBump, dealer.clientCategory, dealer.id, dealer.region, point.city, point.id]);
-
-  const deficitTasks = useMemo(() => {
-    void bump;
-    return getShowcaseMatrixDeficitTasksForTradePoint(dealer, point.id);
-  }, [bump, dealer.id, point.id]);
+  const models = resolvedMatrix.source === "managed" ? resolvedMatrix.models : [];
+  const isManagedMatrix = resolvedMatrix.source === "managed";
 
   const matrixCompletionPct = useMemo(
     () => computeTradePointShowcaseMatrixStats(dealer, point, storage).completionPct,
@@ -943,139 +924,17 @@ export function TradePointShowcaseMatrixSection({
             </div>
           </div>
 
-          <div data-testid="section-trade-point-showcase-recommended-tasks" className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Задачи по матрице</p>
-            {deficitTasks.length === 0 && page.recommendations.length === 0 ? (
-              <p className="text-xs text-muted-foreground">Нет открытых рекомендаций по дефициту матрицы витрины.</p>
-            ) : (
-              <div className="space-y-2">
-                {deficitTasks.length > 0 ? (
-                  <ul className={cn(viewMode === "large" ? "space-y-2" : "space-y-1")}>
-                    {deficitTasks.slice(0, 6).map((t) => (
-                      <li
-                        key={t.taskId}
-                        className={cn(
-                          "flex min-w-0 gap-2 rounded-lg border border-border/70 bg-card/80 text-sm",
-                          viewMode === "large" ? "px-2 py-2" : "items-center px-2 py-1.5",
-                        )}
-                      >
-                        <ModelDoorPhotoFrame
-                          src={deficitTaskThumbSrc(t)}
-                          alt=""
-                          frameClass={viewMode === "large" ? "h-12 w-10 shrink-0" : "h-9 w-8 shrink-0"}
-                          placeholderDensity={viewMode === "large" ? "compact" : "micro"}
-                        />
-                        <div className="min-w-0 flex-1">
-                          <p className={cn("font-medium leading-snug text-foreground", viewMode !== "large" && "line-clamp-2 text-xs")}>
-                            {t.title}
-                          </p>
-                          <p className={cn("text-muted-foreground", viewMode === "large" ? "text-xs" : "line-clamp-1 text-[10px]")}>
-                            {MATRIX_TASK_STATUS_LABEL[t.status]} · срок {t.dueDate}
-                          </p>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-                {page.recommendations.length > 0 ? (
-                  <div className={cn(viewMode === "large" ? "grid gap-2 sm:grid-cols-2" : "space-y-1")}>
-                    {page.recommendations.slice(0, 6).map((rec) => {
-                      const created = page.createdTaskByProductId.get(rec.productId);
-                      const img = getProductById(rec.productId)?.image ?? "";
-                      if (viewMode !== "large") {
-                        return (
-                          <div
-                            key={rec.taskId}
-                            className="flex min-w-0 items-center gap-2 rounded-lg border border-border/80 bg-card px-2 py-1.5 shadow-sm"
-                          >
-                            <ModelDoorPhotoFrame src={img} alt="" frameClass="h-9 w-8 shrink-0" placeholderDensity="micro" />
-                            <div className="min-w-0 flex-1">
-                              <p className="line-clamp-2 text-xs font-semibold leading-snug text-foreground">{rec.title}</p>
-                              <p className="line-clamp-1 text-[10px] text-muted-foreground">
-                                {MATRIX_TASK_TYPE_LABEL[rec.type]} · зона {rec.zone} · {rec.dueDate}
-                              </p>
-                            </div>
-                            <div className="shrink-0">
-                              {created ? (
-                                <Button
-                                  type="button"
-                                  variant="secondary"
-                                  size="sm"
-                                  className="h-7 px-2 text-[10px]"
-                                  data-testid={`button-focus-recommended-matrix-task-${rec.taskId}`}
-                                  onClick={() => page.onScrollToMatrixTask(created.taskId)}
-                                >
-                                  Открыть
-                                </Button>
-                              ) : (
-                                <Button
-                                  type="button"
-                                  variant="default"
-                                  size="sm"
-                                  className="h-7 px-2 text-[10px] font-semibold"
-                                  data-testid={`button-create-matrix-task-recommended-${rec.taskId}`}
-                                  onClick={() => page.onCreateMatrixTask(rec)}
-                                >
-                                  Задача
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      }
-                      return (
-                        <div key={rec.taskId} className="flex gap-2 rounded-lg border border-border/80 bg-card p-2 shadow-sm">
-                          <ModelDoorPhotoFrame src={img} alt="" frameClass="h-14 w-11 shrink-0" />
-                          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-                            <div className="flex flex-wrap items-start justify-between gap-1">
-                              <p className="min-w-0 font-semibold leading-snug text-foreground">{rec.title}</p>
-                              <Badge variant="outline" className={cn("shrink-0 text-[10px] font-medium", recPriorityBadgeClass(rec.priority))}>
-                                {MATRIX_TASK_PRIORITY_LABEL[rec.priority]}
-                              </Badge>
-                            </div>
-                            <p className="text-[11px] text-muted-foreground">
-                              {MATRIX_TASK_TYPE_LABEL[rec.type]} · Зона {rec.zone} · Срок {rec.dueDate}
-                            </p>
-                            {created ? (
-                              <Button
-                                type="button"
-                                variant="secondary"
-                                size="sm"
-                                className="h-8 w-full text-xs"
-                                data-testid={`button-focus-recommended-matrix-task-${rec.taskId}`}
-                                onClick={() => page.onScrollToMatrixTask(created.taskId)}
-                              >
-                                {MATRIX_TASK_STATUS_LABEL[created.status]} · открыть
-                              </Button>
-                            ) : (
-                              <Button
-                                type="button"
-                                variant="default"
-                                size="sm"
-                                className="h-8 w-full text-xs font-semibold"
-                                data-testid={`button-create-matrix-task-recommended-${rec.taskId}`}
-                                onClick={() => page.onCreateMatrixTask(rec)}
-                              >
-                                Создать задачу
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : null}
-              </div>
-            )}
-          </div>
-
           <div className="space-y-2">
             <div className="space-y-0.5">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Матрица клиента</p>
               <p className="text-xs text-muted-foreground">Что поставить на витрину по плану.</p>
             </div>
 
-        {filteredModels.length === 0 ? (
+        {!isManagedMatrix ? (
+          <div className="rounded-xl border border-dashed border-border/80 bg-muted/10 px-3 py-6 text-center text-sm text-muted-foreground">
+            <p>Для этой торговой точки не назначена матрица витрины. Назначьте матрицу, чтобы планировать выкладку.</p>
+          </div>
+        ) : filteredModels.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border/80 bg-muted/10 px-3 py-6 text-center text-sm text-muted-foreground">
             <p>Нет моделей в выбранном фильтре.</p>
             <Button
