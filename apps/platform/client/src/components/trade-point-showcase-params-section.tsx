@@ -77,6 +77,7 @@ export function TradePointShowcaseParamsSection({
 }: TradePointShowcaseParamsSectionProps): ReactElement {
   const actx = useClientBaseActualization();
   const rec = actx.state.tradePointShowcaseActualizationById[point.id];
+  const isInitialLoading = actx.loading && rec === undefined;
   const save = useSectionSaveFeedback();
 
   const [hasShowcase, setHasShowcase] = useState<boolean | null>(rec?.hasShowcase ?? null);
@@ -155,6 +156,20 @@ export function TradePointShowcaseParamsSection({
 
   const readOnlyLabel = (value: string | null | undefined, empty = "Не указано") =>
     value?.trim() ? value.trim() : empty;
+
+  if (isInitialLoading) {
+    return (
+      <div
+        className="rounded-lg border border-border/50 bg-card p-2.5 sm:p-3"
+        data-testid="section-trade-point-showcase-params"
+      >
+        <h3 className="text-sm font-semibold leading-tight text-foreground">Параметры витрины</h3>
+        <p className="mt-2 text-sm text-muted-foreground" data-testid="text-showcase-params-loading">
+          Загрузка параметров витрины…
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div
