@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Package, Plus } from "lucide-react";
+import { Package, Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import { getProductById, searchCatalog } from "@/lib/catalog-data";
 import type { ShowcaseMatrixEntryDto, ShowcasePlacementSegment, ShowcasePlacementType } from "@/lib/showcase-matrix-api";
+import { computePlacementDistribution } from "@/lib/showcase-placement-distribution";
 import {
   allowedTypesForSegment,
   PLACEMENT_SEGMENT_LABEL_RU,
@@ -56,6 +57,16 @@ function formatCapacityLine(actual: number | null, capacity: number | null): str
   return `${a} / ${c}`;
 }
 
+function sumCompetitors(block: ShowcaseMatrixEntryDto): number {
+  return (block.placementCompetitors ?? []).reduce((acc, c) => acc + (c?.count ?? 0), 0);
+}
+
+function remainingSlots(block: ShowcaseMatrixEntryDto): number {
+  const cap = block.placementCapacity ?? 0;
+  const ours = block.placementActual ?? 0;
+  return Math.max(0, cap - ours - sumCompetitors(block));
+}
+
 export function TradePointPlacementBlocksSection({
   dealerId,
   tradePointId,
@@ -70,6 +81,9 @@ export function TradePointPlacementBlocksSection({
   const [actualInput, setActualInput] = useState("0");
   const [formError, setFormError] = useState<string | null>(null);
   const [modelSearchByBlock, setModelSearchByBlock] = useState<Record<string, string>>({});
+  const [competitorDraftByBlock, setCompetitorDraftByBlock] = useState<
+    Record<string, { brand: string; count: string }>
+  >({});
 
   const bumpCache = useCallback(() => setCacheBump((n) => n + 1), []);
 
@@ -145,6 +159,52 @@ export function TradePointPlacementBlocksSection({
     bumpCache();
   };
 
+  const persistCompetitors = (
+    block: ShowcaseMatrixEntryDto,
+    next: ShowcaseMatrixEntryDto["placementCompetitors"],
+  ) => {
+    if (!block.placementType || !block.placementSegment) return;
+    setMatrixPlacement({
+      dealerId,
+      tradePointId,
+      targetId: block.targetId,
+      placementType: block.placementType,
+      placementSegment: block.placementSegment,
+      placementCapacity: block.placementCapacity ?? 0,
+      placementActual: block.placementActual ?? 0,
+      placementCompetitors: next,
+      updatedBy: actorUserId,
+      updatedByName: actorName,
+    });
+    bumpCache();
+  };
+
+  const handleAddCompetitor = (block: ShowcaseMatrixEntryDto) => {
+    const draft = competitorDraftByBlock[block.targetId] ?? { brand: "", count: "1" };
+    const brand = draft.brand.trim();
+    const count = Number.parseInt(draft.count.trim(), 10);
+    if (!brand || !Number.isFinite(count) || count < 1) return;
+    const next = [
+      ...(block.placementCompetitors ?? []),
+      { brand: brand.slice(0, 120), count },
+    ];
+    persistCompetitors(block, next);
+    setCompetitorDraftByBlock((prev) => ({
+      ...prev,
+      [block.targetId]: { brand: "", count: "1" },
+    }));
+  };
+
+  const handleRemoveCompetitor = (block: ShowcaseMatrixEntryDto, index: number) => {
+    const next = (block.placementCompetitors ?? []).filter((_, i) => i !== index);
+    persistCompetitors(block, next);
+  };
+
+  const distributionSummary = useMemo(
+    () => computePlacementDistribution(placements),
+    [placements],
+  );
+
   return (
     <section
       data-testid="section-trade-point-placement-blocks"
@@ -158,6 +218,56 @@ export function TradePointPlacementBlocksSection({
           Физические блоки на точке: тип размещения, сегмент и заполнение нашими образцами.
         </p>
       </div>
+
+      {distributionSummary.overall.totalCapacity > 0 ? (
+        <Card
+          className="rounded-xl border border-border bg-card shadow-xs"
+          data-testid="card-placement-distribution"
+        >
+          <CardContent className="space-y-2 px-3 py-3 sm:px-4">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                % дистрибуции по витрине
+              </span>
+              <span
+                className="text-base font-bold tabular-nums text-foreground"
+                data-testid="text-distribution-overall"
+              >
+                {distributionSummary.overall.distributionPercent}%
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Наши {distributionSummary.overall.totalOurs} из {distributionSummary.overall.totalCapacity}{" "}
+              мест
+              {distributionSummary.overall.totalCompetitors > 0
+                ? ` · конкуренты ${distributionSummary.overall.totalCompetitors}`
+                : ""}
+              {` · свободно ${distributionSummary.overall.remaining}`}
+            </p>
+            {distributionSummary.bySegment.length > 0 ? (
+              <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
+                {distributionSummary.bySegment.map((seg) => (
+                  <div
+                    key={seg.segment}
+                    className="rounded-md border border-border/60 bg-muted/20 px-2 py-1.5"
+                    data-testid={`segment-distribution-${seg.segment}`}
+                  >
+                    <p className="text-[10px] font-semibold uppercase text-muted-foreground">
+                      {PLACEMENT_SEGMENT_LABEL_RU[seg.segment]}
+                    </p>
+                    <p className="text-sm font-bold tabular-nums text-foreground">
+                      {seg.stats.distributionPercent}%
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {seg.stats.totalOurs}/{seg.stats.totalCapacity}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
 
       {placements.length === 0 ? (
         <Card className="rounded-xl border border-border bg-card shadow-xs">
@@ -203,6 +313,16 @@ export function TradePointPlacementBlocksSection({
                           </span>
                           {block.placementCapacity != null && block.placementCapacity > 0 ? (
                             <span className="text-muted-foreground"> · {pct}% наших</span>
+                          ) : null}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Остаток мест:{" "}
+                          <span className="font-medium text-foreground">{remainingSlots(block)}</span>
+                          {sumCompetitors(block) > 0 ? (
+                            <span className="text-muted-foreground">
+                              {" "}
+                              · конкуренты: {sumCompetitors(block)}
+                            </span>
                           ) : null}
                         </p>
                       </div>
@@ -269,6 +389,90 @@ export function TradePointPlacementBlocksSection({
                             ))}
                           </ul>
                         ) : null}
+                      </div>
+                    ) : null}
+
+                    {(block.placementCompetitors ?? []).length > 0 ? (
+                      <ul className="space-y-1 rounded-lg border border-amber-200/60 bg-amber-50/40 px-2 py-2 dark:border-amber-900/40 dark:bg-amber-950/20">
+                        {(block.placementCompetitors ?? []).map((c, i) => (
+                          <li
+                            key={`${c.brand}-${i}`}
+                            className="flex min-w-0 items-center justify-between gap-2 text-xs"
+                          >
+                            <span className="min-w-0 break-words text-foreground">{c.brand}</span>
+                            <span className="flex shrink-0 items-center gap-2">
+                              <span className="font-medium tabular-nums text-foreground">{c.count}</span>
+                              {canEdit ? (
+                                <button
+                                  type="button"
+                                  aria-label="Удалить конкурента"
+                                  data-testid={`button-remove-competitor-${block.targetId}-${i}`}
+                                  className="text-muted-foreground hover:text-destructive"
+                                  onClick={() => handleRemoveCompetitor(block, i)}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                                </button>
+                              ) : null}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+
+                    {canEdit ? (
+                      <div className="space-y-1.5">
+                        <Label
+                          className="text-xs text-muted-foreground"
+                          htmlFor={`competitor-brand-${block.targetId}`}
+                        >
+                          Добавить конкурента (чужой товар)
+                        </Label>
+                        <div className="flex gap-2">
+                          <Input
+                            id={`competitor-brand-${block.targetId}`}
+                            data-testid={`input-competitor-brand-${block.targetId}`}
+                            value={competitorDraftByBlock[block.targetId]?.brand ?? ""}
+                            onChange={(e) =>
+                              setCompetitorDraftByBlock((prev) => ({
+                                ...prev,
+                                [block.targetId]: {
+                                  brand: e.target.value,
+                                  count: prev[block.targetId]?.count ?? "1",
+                                },
+                              }))
+                            }
+                            placeholder="Бренд / название"
+                            className="h-9 flex-1 text-sm"
+                          />
+                          <Input
+                            data-testid={`input-competitor-count-${block.targetId}`}
+                            type="number"
+                            min={1}
+                            inputMode="numeric"
+                            value={competitorDraftByBlock[block.targetId]?.count ?? "1"}
+                            onChange={(e) =>
+                              setCompetitorDraftByBlock((prev) => ({
+                                ...prev,
+                                [block.targetId]: {
+                                  brand: prev[block.targetId]?.brand ?? "",
+                                  count: e.target.value,
+                                },
+                              }))
+                            }
+                            className="h-9 w-16 text-sm"
+                            aria-label="Количество"
+                          />
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-9 shrink-0"
+                            data-testid={`button-add-competitor-${block.targetId}`}
+                            onClick={() => handleAddCompetitor(block)}
+                          >
+                            <Plus className="h-4 w-4" aria-hidden />
+                          </Button>
+                        </div>
                       </div>
                     ) : null}
                   </CardContent>
