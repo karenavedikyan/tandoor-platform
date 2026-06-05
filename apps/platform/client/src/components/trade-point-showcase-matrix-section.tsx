@@ -771,9 +771,6 @@ export function TradePointShowcaseMatrixSection({
                   >
                     Все
                   </Button>
-                  {statusFilterActionSlot ? (
-                    <div className="ml-auto flex shrink-0 items-center">{statusFilterActionSlot}</div>
-                  ) : null}
                 </div>
               </div>
 
@@ -799,7 +796,10 @@ export function TradePointShowcaseMatrixSection({
                   forceMount
                   className="space-y-2 pt-2 data-[state=closed]:hidden md:!block md:pt-0 md:data-[state=closed]:!block"
                 >
-                  <div className="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-start lg:justify-end">
+                  <div className="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
+                    {statusFilterActionSlot ? (
+                      <div className="flex shrink-0 items-center">{statusFilterActionSlot}</div>
+                    ) : null}
                     <div
                       data-testid="section-showcase-matrix-view-sticky-toolbar"
                       className={cn(
