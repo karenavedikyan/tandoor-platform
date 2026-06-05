@@ -209,18 +209,30 @@ export function TradePointPlacementBlocksSection({
   return (
     <section
       data-testid="section-trade-point-placement-blocks"
-      className="scroll-mt-28 space-y-3 sm:scroll-mt-32"
+      className="scroll-mt-28 space-y-2 sm:scroll-mt-32"
     >
-      <div className="space-y-1">
-        <h3 className="text-sm font-semibold tracking-tight text-foreground sm:text-base">
-          Типы размещения витрины
-        </h3>
-        <p className="max-w-2xl text-xs text-muted-foreground sm:text-sm">
-          Физические блоки на точке: тип размещения, сегмент и заполнение нашими образцами.
-        </p>
-      </div>
+      <Collapsible defaultOpen={false}>
+        <CollapsibleTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-9 w-full justify-between text-xs sm:w-auto"
+            data-testid="button-placement-blocks-toggle"
+          >
+            <span className="flex items-center gap-2">
+              <Package className="h-4 w-4" aria-hidden />
+              Типы размещения витрины
+            </span>
+            <ChevronDown className="h-4 w-4 opacity-70" />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-2 space-y-3">
+          <p className="max-w-2xl text-xs text-muted-foreground sm:text-sm">
+            Физические блоки на точке: тип размещения, сегмент и заполнение нашими образцами.
+          </p>
 
-      {distributionSummary.overall.totalCapacity > 0 ? (
+          {distributionSummary.overall.totalCapacity > 0 ? (
         <Card
           className="rounded-xl border border-border bg-card shadow-xs"
           data-testid="card-placement-distribution"
@@ -611,6 +623,8 @@ export function TradePointPlacementBlocksSection({
           </CardContent>
         </Card>
       ) : null}
+        </CollapsibleContent>
+      </Collapsible>
     </section>
   );
 }

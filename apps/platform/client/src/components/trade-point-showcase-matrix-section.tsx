@@ -1520,8 +1520,21 @@ export function TradePointShowcaseMatrixSection({
             data-testid="section-trade-point-showcase-current-state"
             className="scroll-mt-28 space-y-2 sm:scroll-mt-32"
           >
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Текущее состояние витрины</p>
-            <div className={cn("rounded-lg border border-border/70 bg-card/90 text-sm", isCompact ? "p-2.5" : "p-3")}>
+            <Collapsible defaultOpen={false}>
+              <CollapsibleTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9 w-full justify-between text-xs sm:w-auto"
+                  data-testid="button-current-state-toggle"
+                >
+                  <span>Текущее состояние витрины</span>
+                  <ChevronDown className="h-4 w-4 opacity-70" />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-2">
+                <div className={cn("rounded-lg border border-border/70 bg-card/90 text-sm", isCompact ? "p-2.5" : "p-3")}>
               <div className={cn("grid sm:grid-cols-2", isCompact ? "gap-1" : "gap-2")}>
                 <p>
                   <span className="text-muted-foreground">Статус витрины: </span>
@@ -1562,7 +1575,9 @@ export function TradePointShowcaseMatrixSection({
                 <span className="font-semibold text-foreground">Ближайшее действие: </span>
                 {dealer.nextAction}
               </p>
-            </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
           </div>
 
           <div
@@ -1609,13 +1624,26 @@ export function TradePointShowcaseMatrixSection({
             data-testid="section-trade-point-showcase-open-tasks"
             className="scroll-mt-28 space-y-2 sm:scroll-mt-32"
           >
-            <div className="flex flex-wrap items-end justify-between gap-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Открытые задачи</p>
-              <Button asChild variant="outline" size="sm" className="h-8 text-xs" data-testid="button-open-all-tasks">
-                <Link href={page.tasksLinkHref}>Все задачи</Link>
-              </Button>
-            </div>
-            {point.tasks.some((t) => t.status !== "Закрыта") ? (
+            <Collapsible defaultOpen={false}>
+              <CollapsibleTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9 w-full justify-between text-xs sm:w-auto"
+                  data-testid="button-open-tasks-toggle"
+                >
+                  <span>Открытые задачи</span>
+                  <ChevronDown className="h-4 w-4 opacity-70" />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-2 space-y-2">
+                <div className="flex justify-end">
+                  <Button asChild variant="outline" size="sm" className="h-8 text-xs" data-testid="button-open-all-tasks">
+                    <Link href={page.tasksLinkHref}>Все задачи</Link>
+                  </Button>
+                </div>
+                {point.tasks.some((t) => t.status !== "Закрыта") ? (
               <ul className="space-y-1.5 rounded-lg border border-border/70 bg-card/80 p-2 text-sm">
                 {point.tasks
                   .filter((t) => t.status !== "Закрыта")
@@ -1636,7 +1664,9 @@ export function TradePointShowcaseMatrixSection({
                 ))}
               </ul>
             ) : null}
-            {page.matrixTasksSlot}
+                {page.matrixTasksSlot}
+              </CollapsibleContent>
+            </Collapsible>
           </div>
         </div>
       </section>
