@@ -28,6 +28,7 @@ type DistributionFiltersBarProps = {
   onChange: (next: DistributionFilterState) => void;
   regionOptions: string[];
   cityOptions: string[];
+  title?: string;
 };
 
 function FilterField({
@@ -200,14 +201,14 @@ function FiltersGrid({
 }
 
 export function DistributionFiltersBar(props: DistributionFiltersBarProps) {
-  const { value, onChange } = props;
+  const { value, onChange, title } = props;
   const [open, setOpen] = useState(false);
   const chips = listActiveDistributionFilterChips(value);
 
   return (
     <CardShell data-testid="distribution-filters-bar">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-semibold text-foreground">Фильтры</p>
+        <p className="text-sm font-semibold text-foreground">{title ?? "Фильтры"}</p>
         <div className="flex flex-wrap gap-2">
           <Button
             type="button"
