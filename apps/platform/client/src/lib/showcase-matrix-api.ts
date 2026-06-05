@@ -16,6 +16,9 @@ export type ShowcasePlacementType =
 
 export type ShowcasePlacementSegment = "vh" | "mk" | "hardware";
 
+export type ShowcasePlacementOurModel = { modelId: string; count: number };
+export type ShowcasePlacementCompetitor = { brand: string; count: number };
+
 export type ShowcaseMatrixEntryDto = {
   id: string;
   dealerId: string;
@@ -32,6 +35,8 @@ export type ShowcaseMatrixEntryDto = {
   placementCapacity: number | null;
   placementActual: number | null;
   placementRef: string | null;
+  placementOurModels: ShowcasePlacementOurModel[];
+  placementCompetitors: ShowcasePlacementCompetitor[];
 };
 
 export type ShowcaseMatrixEventDto = {
@@ -52,6 +57,8 @@ export type ShowcaseMatrixEventDto = {
   placementCapacity: number | null;
   placementActual: number | null;
   placementRef: string | null;
+  placementOurModels: ShowcasePlacementOurModel[];
+  placementCompetitors: ShowcasePlacementCompetitor[];
 };
 
 export type ShowcaseMatrixUpsertBody = {
@@ -67,7 +74,55 @@ export type ShowcaseMatrixUpsertBody = {
   placementCapacity?: number | null;
   placementActual?: number | null;
   placementRef?: string | null;
+  placementOurModels?: ShowcasePlacementOurModel[] | null;
+  placementCompetitors?: ShowcasePlacementCompetitor[] | null;
 };
+
+function mapShowcaseMatrixEntryDto(raw: Record<string, unknown>): ShowcaseMatrixEntryDto {
+  return {
+    id: String(raw.id),
+    dealerId: String(raw.dealerId),
+    tradePointId: String(raw.tradePointId),
+    targetKind: raw.targetKind as ShowcaseMatrixEntryDto["targetKind"],
+    targetId: String(raw.targetId),
+    status: raw.status as ShowcaseMatrixEntryDto["status"],
+    comment: raw.comment != null ? String(raw.comment) : null,
+    updatedAt: String(raw.updatedAt),
+    updatedBy: raw.updatedBy != null ? String(raw.updatedBy) : null,
+    updatedByName: raw.updatedByName != null ? String(raw.updatedByName) : null,
+    placementType: (raw.placementType as ShowcaseMatrixEntryDto["placementType"]) ?? null,
+    placementSegment: (raw.placementSegment as ShowcaseMatrixEntryDto["placementSegment"]) ?? null,
+    placementCapacity: typeof raw.placementCapacity === "number" ? raw.placementCapacity : null,
+    placementActual: typeof raw.placementActual === "number" ? raw.placementActual : null,
+    placementRef: raw.placementRef != null ? String(raw.placementRef) : null,
+    placementOurModels: Array.isArray(raw.placementOurModels) ? raw.placementOurModels : [],
+    placementCompetitors: Array.isArray(raw.placementCompetitors) ? raw.placementCompetitors : [],
+  };
+}
+
+function mapShowcaseMatrixEventDto(raw: Record<string, unknown>): ShowcaseMatrixEventDto {
+  return {
+    id: String(raw.id),
+    entryId: raw.entryId != null ? String(raw.entryId) : null,
+    dealerId: String(raw.dealerId),
+    tradePointId: String(raw.tradePointId),
+    targetKind: raw.targetKind as ShowcaseMatrixEventDto["targetKind"],
+    targetId: String(raw.targetId),
+    oldStatus: raw.oldStatus != null ? String(raw.oldStatus) : null,
+    newStatus: raw.newStatus != null ? String(raw.newStatus) : null,
+    comment: raw.comment != null ? String(raw.comment) : null,
+    changedBy: raw.changedBy != null ? String(raw.changedBy) : null,
+    changedByName: raw.changedByName != null ? String(raw.changedByName) : null,
+    changedAt: String(raw.changedAt),
+    placementType: (raw.placementType as ShowcaseMatrixEventDto["placementType"]) ?? null,
+    placementSegment: (raw.placementSegment as ShowcaseMatrixEventDto["placementSegment"]) ?? null,
+    placementCapacity: typeof raw.placementCapacity === "number" ? raw.placementCapacity : null,
+    placementActual: typeof raw.placementActual === "number" ? raw.placementActual : null,
+    placementRef: raw.placementRef != null ? String(raw.placementRef) : null,
+    placementOurModels: Array.isArray(raw.placementOurModels) ? raw.placementOurModels : [],
+    placementCompetitors: Array.isArray(raw.placementCompetitors) ? raw.placementCompetitors : [],
+  };
+}
 
 type ApiOk<T> = { success: true } & T;
 type ApiErr = { success: false; code?: string; message?: string };
@@ -90,7 +145,7 @@ export async function fetchShowcaseMatrixList(opts: {
     });
     const data = await parseJson<ApiOk<{ entries: ShowcaseMatrixEntryDto[] }> | ApiErr>(res);
     if (!res.ok || !data.success) return null;
-    return data.entries;
+    return data.entries.map((e) => mapShowcaseMatrixEntryDto(e as unknown as Record<string, unknown>));
   } catch {
     return null;
   }
@@ -118,7 +173,11 @@ export async function fetchShowcaseMatrixScope(opts: {
       });
       const data = await parseJson<ApiOk<{ entries: ShowcaseMatrixEntryDto[] }> | ApiErr>(res);
       if (!res.ok || !data.success) return null;
-      all.push(...data.entries);
+      all.push(
+        ...data.entries.map((e) =>
+          mapShowcaseMatrixEntryDto(e as unknown as Record<string, unknown>),
+        ),
+      );
     }
     return all;
   } catch {
@@ -145,7 +204,7 @@ export async function fetchShowcaseMatrixHistory(opts: {
     });
     const data = await parseJson<ApiOk<{ events: ShowcaseMatrixEventDto[] }> | ApiErr>(res);
     if (!res.ok || !data.success) return null;
-    return data.events;
+    return data.events.map((e) => mapShowcaseMatrixEventDto(e as unknown as Record<string, unknown>));
   } catch {
     return null;
   }
@@ -175,7 +234,10 @@ export async function apiUpsertShowcaseMatrixEntry(
         status: res.status,
       };
     }
-    return { ok: true, entry: data.entry };
+    return {
+      ok: true,
+      entry: mapShowcaseMatrixEntryDto(data.entry as unknown as Record<string, unknown>),
+    };
   } catch {
     return { ok: false, network: true };
   }

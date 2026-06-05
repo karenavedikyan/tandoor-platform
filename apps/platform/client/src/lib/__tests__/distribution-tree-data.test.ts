@@ -39,6 +39,8 @@ const entry = (partial: Partial<ShowcaseMatrixEntryDto>): ShowcaseMatrixEntryDto
   placementCapacity: null,
   placementActual: null,
   placementRef: null,
+  placementOurModels: [],
+  placementCompetitors: [],
   ...partial,
 });
 

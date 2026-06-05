@@ -18,6 +18,9 @@ export type ShowcasePlacementType =
 
 export type ShowcasePlacementSegment = "vh" | "mk" | "hardware";
 
+export type ShowcasePlacementOurModel = { modelId: string; count: number };
+export type ShowcasePlacementCompetitor = { brand: string; count: number };
+
 const TARGET_KINDS = new Set<ShowcaseMatrixTargetKind>(["model", "variant", "placement"]);
 export const PLACEMENT_TYPES = new Set<ShowcasePlacementType>([
   "portal",
@@ -63,6 +66,8 @@ export type ShowcaseMatrixEntryDto = {
   placementCapacity: number | null;
   placementActual: number | null;
   placementRef: string | null;
+  placementOurModels: ShowcasePlacementOurModel[];
+  placementCompetitors: ShowcasePlacementCompetitor[];
 };
 
 export type ShowcaseMatrixEventDto = {
@@ -83,6 +88,8 @@ export type ShowcaseMatrixEventDto = {
   placementCapacity: number | null;
   placementActual: number | null;
   placementRef: string | null;
+  placementOurModels: ShowcasePlacementOurModel[];
+  placementCompetitors: ShowcasePlacementCompetitor[];
 };
 
 export type ShowcaseMatrixSessionUser = {
@@ -105,6 +112,8 @@ export type ShowcaseMatrixUpsertInput = {
   placementCapacity?: number | null;
   placementActual?: number | null;
   placementRef?: string | null;
+  placementOurModels?: ShowcasePlacementOurModel[] | null;
+  placementCompetitors?: ShowcasePlacementCompetitor[] | null;
 };
 
 export type ShowcaseMatrixUpsertResult = {
@@ -206,6 +215,33 @@ function parseOptionalRef(raw: unknown): string | null {
   return parseOptionalClientOpId(raw);
 }
 
+
+function parseOurModels(raw: unknown): ShowcasePlacementOurModel[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ShowcasePlacementOurModel[] = [];
+  for (const r of raw) {
+    if (!r || typeof r !== "object") continue;
+    const modelId = String((r as { modelId?: unknown }).modelId ?? "").trim();
+    const count = Number.parseInt(String((r as { count?: unknown }).count ?? ""), 10);
+    if (!modelId || !Number.isFinite(count) || count < 1) continue;
+    out.push({ modelId, count });
+  }
+  return out;
+}
+
+function parseCompetitors(raw: unknown): ShowcasePlacementCompetitor[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ShowcasePlacementCompetitor[] = [];
+  for (const r of raw) {
+    if (!r || typeof r !== "object") continue;
+    const brand = String((r as { brand?: unknown }).brand ?? "").trim();
+    const count = Number.parseInt(String((r as { count?: unknown }).count ?? ""), 10);
+    if (!brand || !Number.isFinite(count) || count < 1) continue;
+    out.push({ brand: brand.slice(0, 120), count });
+  }
+  return out;
+}
+
 function assertPlacementTypeMatchesSegment(
   placementType: ShowcasePlacementType,
   placementSegment: ShowcasePlacementSegment,
@@ -246,6 +282,8 @@ function normalizePlacementFields(input: ShowcaseMatrixUpsertInput): ShowcaseMat
     placementCapacity: null,
     placementActual: null,
     placementRef: input.placementRef ?? null,
+    placementOurModels: [],
+    placementCompetitors: [],
   };
 }
 
@@ -264,6 +302,8 @@ export function parseShowcaseMatrixUpsertInput(body: Record<string, unknown>): S
     placementCapacity: parseOptionalCount(body.placementCapacity, "placementCapacity"),
     placementActual: parseOptionalCount(body.placementActual, "placementActual"),
     placementRef: parseOptionalRef(body.placementRef),
+    placementOurModels: parseOurModels(body.placementOurModels),
+    placementCompetitors: parseCompetitors(body.placementCompetitors),
   };
   return normalizePlacementFields(parsed);
 }
@@ -303,6 +343,8 @@ function mapEntryRow(row: Record<string, unknown>): ShowcaseMatrixEntryDto {
     placementCapacity: mapOptionalInt(row.placement_capacity),
     placementActual: mapOptionalInt(row.placement_actual),
     placementRef: row.placement_ref != null ? String(row.placement_ref) : null,
+    placementOurModels: parseOurModels(row.placement_our_models),
+    placementCompetitors: parseCompetitors(row.placement_competitors),
   };
 }
 
@@ -325,6 +367,8 @@ function mapEventRow(row: Record<string, unknown>): ShowcaseMatrixEventDto {
     placementCapacity: mapOptionalInt(row.placement_capacity),
     placementActual: mapOptionalInt(row.placement_actual),
     placementRef: row.placement_ref != null ? String(row.placement_ref) : null,
+    placementOurModels: parseOurModels(row.placement_our_models),
+    placementCompetitors: parseCompetitors(row.placement_competitors),
   };
 }
 
@@ -360,6 +404,8 @@ type PlacementSnapshot = {
   placementCapacity: number | null;
   placementActual: number | null;
   placementRef: string | null;
+  placementOurModels: ShowcasePlacementOurModel[];
+  placementCompetitors: ShowcasePlacementCompetitor[];
 };
 
 async function insertEvent(
@@ -382,8 +428,9 @@ async function insertEvent(
     `INSERT INTO showcase_matrix_events (
        entry_id, dealer_id, trade_point_id, target_kind, target_id,
        old_status, new_status, comment, changed_by, changed_by_name,
-       placement_type, placement_segment, placement_capacity, placement_actual, placement_ref
-     ) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9::uuid, $10, $11, $12, $13, $14, $15)`,
+       placement_type, placement_segment, placement_capacity, placement_actual, placement_ref,
+       placement_our_models, placement_competitors
+     ) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9::uuid, $10, $11, $12, $13, $14, $15, $16::jsonb, $17::jsonb)`,
     [
       params.entryId,
       params.dealerId,
@@ -400,6 +447,8 @@ async function insertEvent(
       params.placement.placementCapacity,
       params.placement.placementActual,
       params.placement.placementRef,
+      JSON.stringify(params.placement.placementOurModels ?? []),
+      JSON.stringify(params.placement.placementCompetitors ?? []),
     ],
   );
 }
@@ -411,6 +460,8 @@ function placementSnapshotFromInput(input: ShowcaseMatrixUpsertInput): Placement
     placementCapacity: input.placementCapacity ?? null,
     placementActual: input.placementActual ?? null,
     placementRef: input.placementRef ?? null,
+    placementOurModels: input.placementOurModels ?? [],
+    placementCompetitors: input.placementCompetitors ?? [],
   };
 }
 
@@ -423,6 +474,14 @@ function entryChanged(prev: ShowcaseMatrixEntryDto | null, input: ShowcaseMatrix
   if (prev.placementCapacity !== (input.placementCapacity ?? null)) return true;
   if (prev.placementActual !== (input.placementActual ?? null)) return true;
   if (prev.placementRef !== (input.placementRef ?? null)) return true;
+  if (JSON.stringify(prev.placementOurModels ?? []) !== JSON.stringify(input.placementOurModels ?? [])) {
+    return true;
+  }
+  if (
+    JSON.stringify(prev.placementCompetitors ?? []) !== JSON.stringify(input.placementCompetitors ?? [])
+  ) {
+    return true;
+  }
   return false;
 }
 
@@ -458,8 +517,9 @@ export async function upsertShowcaseMatrixEntry(
     `INSERT INTO showcase_matrix_entries (
        dealer_id, trade_point_id, target_kind, target_id, status, comment,
        client_op_id, updated_at, updated_by, updated_by_name,
-       placement_type, placement_segment, placement_capacity, placement_actual, placement_ref
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), $8::uuid, $9, $10, $11, $12, $13, $14)
+       placement_type, placement_segment, placement_capacity, placement_actual, placement_ref,
+       placement_our_models, placement_competitors
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), $8::uuid, $9, $10, $11, $12, $13, $14, $15::jsonb, $16::jsonb)
      ON CONFLICT (trade_point_id, target_kind, target_id)
      DO UPDATE SET
        dealer_id = EXCLUDED.dealer_id,
@@ -473,7 +533,9 @@ export async function upsertShowcaseMatrixEntry(
        placement_segment = EXCLUDED.placement_segment,
        placement_capacity = EXCLUDED.placement_capacity,
        placement_actual = EXCLUDED.placement_actual,
-       placement_ref = EXCLUDED.placement_ref
+       placement_ref = EXCLUDED.placement_ref,
+       placement_our_models = EXCLUDED.placement_our_models,
+       placement_competitors = EXCLUDED.placement_competitors
      RETURNING *`,
     [
       normalized.dealerId,
@@ -490,6 +552,8 @@ export async function upsertShowcaseMatrixEntry(
       normalized.placementCapacity,
       normalized.placementActual,
       normalized.placementRef,
+      JSON.stringify(normalized.placementOurModels ?? []),
+      JSON.stringify(normalized.placementCompetitors ?? []),
     ],
   );
 

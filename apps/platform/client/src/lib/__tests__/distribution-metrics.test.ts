@@ -29,6 +29,8 @@ function placement(
     placementRef: null,
     placementCapacity: 100,
     placementActual: 100,
+    placementOurModels: [],
+    placementCompetitors: [],
     ...partial,
   };
 }
