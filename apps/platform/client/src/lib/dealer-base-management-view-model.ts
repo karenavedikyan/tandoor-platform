@@ -162,24 +162,75 @@ export function buildDbAwareManagerMatcher(
   responsibleByCode?: ResponsibleByCodeMap,
   userIdToCatalogMgrId?: Map<string, string>,
 ): (r: DealerRow) => boolean {
+  void userIdToCatalogMgrId;
   const catalogMgrId = catalogManagerIdFromUserRef(managerCatalogId);
   return (r: DealerRow) => {
     if (resolveDealerRowTeamId(r) !== teamId) return false;
-    if (responsibleByCode) {
-      if (hasResponsibleEntryForDealerRow(responsibleByCode, r)) {
-        const uuid = lookupResponsibleForDealerRow(responsibleByCode, r);
-        if (uuid) {
-          const catalogMgr = UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE[uuid] ?? uuid;
-          return catalogMgr === catalogMgrId;
-        }
-        return false;
-      }
-    }
-    return (
-      r.releaseManagerId === catalogMgrId ||
-      managerDisplayMatchesCatalogName(getDealerManagerDisplay(r), managerCatalogName)
-    );
+    return matchesManagerForDealerRow(r, catalogMgrId, managerCatalogName, responsibleByCode);
   };
+}
+
+/** Для строк, уже сгруппированных по catalogTeamId — без повторного resolveDealerRowTeamId. */
+function buildDbAwareManagerMatcherForPreGroupedTeamRows(
+  managerCatalogId: string,
+  managerCatalogName: string,
+  responsibleByCode?: ResponsibleByCodeMap,
+): (r: DealerRow) => boolean {
+  const catalogMgrId = catalogManagerIdFromUserRef(managerCatalogId);
+  return (r: DealerRow) => matchesManagerForDealerRow(r, catalogMgrId, managerCatalogName, responsibleByCode);
+}
+
+function matchesManagerForDealerRow(
+  r: DealerRow,
+  catalogMgrId: string,
+  managerCatalogName: string,
+  responsibleByCode?: ResponsibleByCodeMap,
+): boolean {
+  if (responsibleByCode) {
+    if (hasResponsibleEntryForDealerRow(responsibleByCode, r)) {
+      const uuid = lookupResponsibleForDealerRow(responsibleByCode, r);
+      if (uuid) {
+        const catalogMgr = UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE[uuid] ?? uuid;
+        return catalogMgr === catalogMgrId;
+      }
+      return false;
+    }
+  }
+  return (
+    r.releaseManagerId === catalogMgrId ||
+    managerDisplayMatchesCatalogName(getDealerManagerDisplay(r), managerCatalogName)
+  );
+}
+
+function groupRowsByResolvedTeamId(rows: DealerRow[]): Map<string, DealerRow[]> {
+  const map = new Map<string, DealerRow[]>();
+  for (const r of rows) {
+    const teamId = resolveDealerRowTeamId(r);
+    if (!teamId) continue;
+    const bucket = map.get(teamId);
+    if (bucket) bucket.push(r);
+    else map.set(teamId, [r]);
+  }
+  return map;
+}
+
+function summarizeTeamRows(teamRows: DealerRow[]): {
+  active: number;
+  potential: number;
+  attention: number;
+  outlets: number;
+} {
+  let active = 0;
+  let potential = 0;
+  let attention = 0;
+  let outlets = 0;
+  for (const r of teamRows) {
+    if (r.status === "активный") active += 1;
+    if (r.status === "потенциальный") potential += 1;
+    if (dealerNeedsAttention(r)) attention += 1;
+    outlets += r.outlets;
+  }
+  return { active, potential, attention, outlets };
 }
 
 function categoryOrder(id: ClientCategoryId): number {
@@ -220,7 +271,7 @@ export function aggregateManagersForTeam(
   const managers = managersCatalogForTeam(catalogTeamId, orgSnap);
   return managers.map((m) => {
     const mgrCatalogId = catalogManagerIdFromUserRef(m.id);
-    const match = buildDbAwareManagerMatcher(mgrCatalogId, m.name, catalogTeamId, responsibleByCode);
+    const match = buildDbAwareManagerMatcherForPreGroupedTeamRows(mgrCatalogId, m.name, responsibleByCode);
     const rows = teamRows.filter(match);
     const active = rows.filter((r) => r.status === "активный").length;
     const potential = rows.filter((r) => r.status === "потенциальный").length;
@@ -284,19 +335,18 @@ export function topCitiesForChart(cities: CityRowModel[], topN: number): {
 }
 
 export function countManagersWithActiveNoTp(rows: DealerRow[], teamIds: string[]): number {
-  const set = new Set<string>();
-  for (const tid of teamIds) {
-    for (const m of getTeamManagers(tid)) {
-      const has = rows.some(
-        (r) =>
-          (r.releaseManagerId === m.id || managerDisplayMatchesCatalogName(getDealerManagerDisplay(r), m.name)) &&
-          r.status === "активный" &&
-          r.outlets === 0,
-      );
-      if (has) set.add(m.id);
+  const managers = teamIds.flatMap((tid) => getTeamManagers(tid));
+  const matched = new Set<string>();
+  for (const r of rows) {
+    if (r.status !== "активный" || r.outlets !== 0) continue;
+    const mgrDisplay = getDealerManagerDisplay(r);
+    for (const m of managers) {
+      if (r.releaseManagerId === m.id || managerDisplayMatchesCatalogName(mgrDisplay, m.name)) {
+        matched.add(m.id);
+      }
     }
   }
-  return set.size;
+  return matched.size;
 }
 
 export function countCitiesWithActiveNoTp(cities: CityRowModel[]): number {
@@ -304,15 +354,21 @@ export function countCitiesWithActiveNoTp(cities: CityRowModel[]): number {
 }
 
 export function topLeaderManagers(rows: DealerRow[], teamIds: string[], limit: number): { id: string; name: string; active: number }[] {
+  const rowsByTeam = groupRowsByResolvedTeamId(rows);
   const list: { id: string; name: string; active: number }[] = [];
   for (const tid of teamIds) {
+    const teamRows = rowsByTeam.get(tid) ?? [];
     for (const m of getTeamManagers(tid)) {
-      const active = rows.filter(
-        (r) =>
-          resolveDealerRowTeamId(r) === tid &&
-          (r.releaseManagerId === m.id || managerDisplayMatchesCatalogName(getDealerManagerDisplay(r), m.name)) &&
-          r.status === "активный",
-      ).length;
+      let active = 0;
+      for (const r of teamRows) {
+        if (r.status !== "активный") continue;
+        if (
+          r.releaseManagerId === m.id ||
+          managerDisplayMatchesCatalogName(getDealerManagerDisplay(r), m.name)
+        ) {
+          active += 1;
+        }
+      }
       list.push({ id: m.id, name: m.name, active });
     }
   }
@@ -369,23 +425,18 @@ export function buildRopGroups(
   responsibleByCode?: ResponsibleByCodeMap,
   userIdToCatalogMgrId?: Map<string, string>,
 ): RopGroupModel[] {
-  const teamActiveCounts = teams.map((t) => {
-    const catalogTeamId = resolveManagementCatalogTeamId(t.teamId, orgSnap);
-    return {
-      teamId: t.teamId,
-      n: rows.filter((r) => resolveDealerRowTeamId(r) === catalogTeamId && r.status === "активный").length,
-    };
-  });
-  const maxTeamActive = teamActiveCounts.reduce((m, x) => Math.max(m, x.n), 0);
+  void userIdToCatalogMgrId;
+  const rowsByCatalogTeamId = groupRowsByResolvedTeamId(rows);
 
-  return teams.map((t) => {
+  const teamBundles = teams.map((t) => {
     const catalogTeamId = resolveManagementCatalogTeamId(t.teamId, orgSnap);
-    const teamRows = rows.filter((r) => resolveDealerRowTeamId(r) === catalogTeamId);
+    const teamRows = rowsByCatalogTeamId.get(catalogTeamId) ?? [];
+    return { t, catalogTeamId, teamRows, stats: summarizeTeamRows(teamRows) };
+  });
+  const maxTeamActive = teamBundles.reduce((m, x) => Math.max(m, x.stats.active), 0);
+
+  return teamBundles.map(({ t, catalogTeamId, teamRows, stats }) => {
     const managers = aggregateManagersForTeam(catalogTeamId, teamRows, orgSnap, responsibleByCode, userIdToCatalogMgrId);
-    const active = teamRows.filter((r) => r.status === "активный").length;
-    const potential = teamRows.filter((r) => r.status === "потенциальный").length;
-    const attention = teamRows.filter((r) => dealerNeedsAttention(r)).length;
-    const outlets = teamRows.reduce((a, r) => a + r.outlets, 0);
     const mgrCatalog = managersCatalogForTeam(t.teamId, orgSnap);
     const statusLine = buildRopStatusLine(
       teamRows,
@@ -396,10 +447,10 @@ export function buildRopGroups(
       teamId: t.teamId,
       ropName: t.ropName,
       managers,
-      active,
-      potential,
-      attention,
-      outlets,
+      active: stats.active,
+      potential: stats.potential,
+      attention: stats.attention,
+      outlets: stats.outlets,
       managerCatalogCount: mgrCatalog.length,
       statusLine,
       rows: teamRows,

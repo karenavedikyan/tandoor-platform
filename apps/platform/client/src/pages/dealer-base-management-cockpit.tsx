@@ -92,6 +92,7 @@ import { fetchTradePointsOverview } from "@/lib/trade-points-overview-api";
 
 const MODE_LS_KEY = "tandoor-dealer-base-management-mode-v1";
 const OPEN_ROPS_LS_KEY = "tandoor-dealer-base-management-open-rops-v1";
+const EMPTY_RESPONSIBLE_BY_CODE: Record<string, string> = {};
 
 type DetailKind =
   | { kind: "rop"; teamId: string }
@@ -237,7 +238,7 @@ export function DealerBaseManagementCockpit({
     () => new Map(Object.entries(UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE)),
     [],
   );
-  const responsibleByCode = myCodesQ.data?.responsibleByCode ?? {};
+  const responsibleByCode = myCodesQ.data?.responsibleByCode ?? EMPTY_RESPONSIBLE_BY_CODE;
 
   const ropGroups = useMemo(
     () => buildRopGroups(rows, teams, orgTeamCtx?.snap, responsibleByCode, userIdToCatalogMgrId),
@@ -258,50 +259,6 @@ export function DealerBaseManagementCockpit({
     }
   }, [ownTeamIds.join("|")]); // eslint-disable-line react-hooks/exhaustive-deps -- re-init when teams load
 
-  useEffect(() => {
-    const DIAG_KEY = "tandoor-diag-rop-drilldown-v1";
-    try {
-      if (typeof sessionStorage === "undefined" || sessionStorage.getItem(DIAG_KEY)) return;
-      if (!orgTeamCtx?.snap || rows.length === 0) return;
-      sessionStorage.setItem(DIAG_KEY, "1");
-      console.log("[diag rop-drill]", {
-        teamsCount: teams.length,
-        teams: teams.map((t) => ({
-          teamId: t.teamId,
-          catalogTeamId: resolveManagementCatalogTeamId(t.teamId, orgTeamCtx.snap),
-          ropName: t.ropName,
-        })),
-        rowsCount: rows.length,
-        rowsSample: rows.slice(0, 5).map((r) => ({
-          id: r.id,
-          releaseCode: r.releaseCode,
-          releaseTeamId: r.releaseTeamId,
-          releaseManagerId: r.releaseManagerId,
-          manager: r.manager,
-          ropName: r.ropName,
-          status: r.status,
-        })),
-        responsibleByCodeSize: Object.keys(responsibleByCode).length,
-        responsibleByCodeSample: Object.entries(responsibleByCode).slice(0, 5),
-        teamsInBuildRopGroups: ropGroups.map((g) => ({
-          teamId: g.teamId,
-          ropName: g.ropName,
-          rowsInTeam: g.rows.length,
-          active: g.active,
-          outlets: g.outlets,
-          managers: g.managers.map((m) => ({
-            managerId: m.managerId,
-            name: m.name,
-            active: m.active,
-            outlets: m.outlets,
-            rowCount: m.rows.length,
-          })),
-        })),
-      });
-    } catch (e) {
-      console.warn("[diag rop-drill] failed", e);
-    }
-  }, [teams, rows, responsibleByCode, ropGroups, orgTeamCtx?.snap]);
   const archivedPortfolioRows = useMemo(() => {
     if (!actx.enabled) return [] as DealerRow[];
     return buildDealerBaseRowsWithActualization(teamCtx.mergedState, profile, { includeArchivedDealers: true });

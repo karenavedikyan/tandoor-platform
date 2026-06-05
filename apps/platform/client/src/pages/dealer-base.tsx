@@ -1360,6 +1360,11 @@ export default function DealerBase() {
     return mapSalesRoleToDealerBaseAccess(profile.role);
   }, [isRealUser, me?.role, profile.role]);
 
+  const orgTeamCtxForCockpit = useMemo(
+    () => (useReal && snap ? { snap, access } : undefined),
+    [useReal, snap, access],
+  );
+
   const [workView, setWorkView] = useState<DealerBaseWorkView>(() => {
     const p = loadReleaseDemoProfile();
     return defaultWorkViewForAccess(mapSalesRoleToDealerBaseAccess(p.role));
@@ -3197,7 +3202,7 @@ export default function DealerBase() {
       <DealerBaseManagementCockpit
         profile={profile}
         rows={scopedActivePortfolioRows}
-        orgTeamCtx={useReal && snap ? { snap, access } : undefined}
+        orgTeamCtx={orgTeamCtxForCockpit}
         overview={overviewQ.data ?? null}
         mergedDealerRowsForCreate={
           useReal && snap && visPayload && !orgSnapQ.isError && !visCodesQ.isError ? mergedRowsActivePortfolio : undefined
