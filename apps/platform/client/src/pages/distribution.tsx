@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { Download, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -42,6 +42,7 @@ export default function DistributionPage() {
   const actx = useClientBaseActualization();
   const managementPlane = useClientBaseTeamActualization();
   const [mode, setMode] = useState<DistributionMode>("entry");
+  const [entryAxisActive, setEntryAxisActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [filter, setFilter] = useState<DistributionFilterState>(defaultDistributionFilterState);
 
@@ -96,28 +97,34 @@ export default function DistributionPage() {
     (actx.enabled && actx.loading) ||
     (actx.enabled && shouldUseTeamMergedActualizationPlane(profile) && managementPlane.teamFetchLoading);
 
+  useEffect(() => {
+    if (mode !== "entry") setEntryAxisActive(false);
+  }, [mode]);
+
   return (
     <div
       className="max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom))] min-w-0 max-w-full space-y-3 overflow-x-hidden sm:space-y-6"
       data-testid="page-distribution"
     >
-      <header className="relative overflow-hidden rounded-2xl border border-border bg-card p-4 shadow-lg sm:p-8">
-        <div
-          className="pointer-events-none absolute left-0 top-0 h-full w-1 rounded-l-2xl bg-primary"
-          aria-hidden
-        />
-        <div className="relative flex min-w-0 flex-col gap-3 pl-3 sm:flex-row sm:items-start sm:justify-between sm:pl-4">
-          <div className="min-w-0">
-            <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl lg:text-3xl">Дистрибуция</h1>
-            <p className="mt-1 hidden text-sm text-muted-foreground sm:block sm:text-base">
-              Сквозной просмотр витрин по клиентам и точкам в реальном времени.
-            </p>
+      {!(mode === "entry" && entryAxisActive) ? (
+        <header className="relative overflow-hidden rounded-2xl border border-border bg-card p-4 shadow-lg sm:p-8">
+          <div
+            className="pointer-events-none absolute left-0 top-0 h-full w-1 rounded-l-2xl bg-primary"
+            aria-hidden
+          />
+          <div className="relative flex min-w-0 flex-col gap-3 pl-3 sm:flex-row sm:items-start sm:justify-between sm:pl-4">
+            <div className="min-w-0">
+              <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl lg:text-3xl">Дистрибуция</h1>
+              <p className="mt-1 hidden text-sm text-muted-foreground sm:block sm:text-base">
+                Сквозной просмотр витрин по клиентам и точкам в реальном времени.
+              </p>
+            </div>
+            <Button asChild variant="outline" size="sm" className="shrink-0" data-testid="link-distribution-matrix-catalog">
+              <Link href="/distribution/matrix-catalog">Справочник матриц</Link>
+            </Button>
           </div>
-          <Button asChild variant="outline" size="sm" className="shrink-0" data-testid="link-distribution-matrix-catalog">
-            <Link href="/distribution/matrix-catalog">Справочник матриц</Link>
-          </Button>
-        </div>
-      </header>
+        </header>
+      ) : null}
 
       <Tabs
         value={mode}
@@ -265,7 +272,7 @@ export default function DistributionPage() {
         </TabsContent>
 
         <TabsContent value="entry" className="mt-0 min-w-0 focus-visible:ring-0">
-          <DistributionEntryWizard profile={profile} />
+          <DistributionEntryWizard profile={profile} onAxisChange={setEntryAxisActive} />
         </TabsContent>
       </Tabs>
     </div>

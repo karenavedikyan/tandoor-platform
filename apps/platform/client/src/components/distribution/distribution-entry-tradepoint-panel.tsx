@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, LayoutGrid, List, Search, Square } from "lucide-react";
+import { ArrowLeft, LayoutGrid, List, Search, SlidersHorizontal, Square } from "lucide-react";
 import { DistributionEntryTradePointCard } from "@/components/distribution/distribution-entry-tradepoint-card";
+import { DistributionFiltersBar } from "@/components/distribution/distribution-filters-bar";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import {
@@ -23,6 +26,11 @@ import {
   findDealerTradePointForEntryRow,
   type DistributionEntryTradePointRow,
 } from "@/lib/distribution-entry-tradepoint-view-model";
+import {
+  defaultDistributionFilterState,
+  listActiveDistributionFilterChips,
+  type DistributionFilterState,
+} from "@/lib/distribution-filters";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
 import { SHOWCASE_MATRIX_STORE_CHANGED_EVENT } from "@/lib/showcase-matrix-store";
@@ -42,9 +50,20 @@ type DistributionEntryTradePointPanelProps = {
   profile: ReleaseDemoProfile;
   /** Отфильтрованные дилеры из мастера «Ввод»; если не переданы — считаются внутри панели. */
   dealers?: readonly DealerRow[];
+  filter: DistributionFilterState;
+  onFilterChange: (next: DistributionFilterState) => void;
+  regionOptions: string[];
+  cityOptions: string[];
 };
 
-export function DistributionEntryTradePointPanel({ profile, dealers: dealersProp }: DistributionEntryTradePointPanelProps) {
+export function DistributionEntryTradePointPanel({
+  profile,
+  dealers: dealersProp,
+  filter,
+  onFilterChange,
+  regionOptions,
+  cityOptions,
+}: DistributionEntryTradePointPanelProps) {
   const { user } = useCurrentUser();
   const actx = useClientBaseActualization();
   const managementPlane = useClientBaseTeamActualization();
@@ -56,6 +75,9 @@ export function DistributionEntryTradePointPanel({ profile, dealers: dealersProp
   const [tradePointView, setTradePointView] = useState<DistributionEntryTradePointView>(() =>
     readDistributionEntryTradePointView(isMobile),
   );
+  const [filtersOpen, setFiltersOpen] = useState(false);
+
+  const activeChips = useMemo(() => listActiveDistributionFilterChips(filter), [filter]);
 
   useEffect(() => {
     writeDistributionEntryTradePointView(tradePointView);
@@ -180,44 +202,102 @@ export function DistributionEntryTradePointPanel({ profile, dealers: dealersProp
             data-testid="input-distribution-entry-tradepoint-search"
           />
         </div>
-        <div
-          className="flex shrink-0 items-center gap-0.5 self-start rounded-lg border border-border bg-card p-0.5"
-          role="radiogroup"
-          aria-label="Вид списка торговых точек"
-          data-testid="distribution-entry-tradepoint-view-toggle"
-        >
-          {(
-            [
-              { id: "large" as const, label: "Крупные", icon: Square },
-              { id: "grid" as const, label: "Сетка", icon: LayoutGrid },
-              { id: "list" as const, label: "Список", icon: List },
-            ] as const
-          ).map((opt) => {
-            const Icon = opt.icon;
-            const active = tradePointView === opt.id;
-            return (
-              <Button
-                key={opt.id}
-                type="button"
-                variant="outline"
-                size="icon"
-                className={cn(
-                  "h-9 w-9 shrink-0 rounded-md border",
-                  active
-                    ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
-                    : "border-transparent bg-card text-muted-foreground hover:bg-muted hover:text-foreground",
-                )}
-                aria-label={opt.label}
-                aria-pressed={active}
-                onClick={() => setTradePointView(opt.id)}
-                data-testid={`distribution-entry-tradepoint-view-${opt.id}`}
+        <div className="flex shrink-0 items-center gap-2 self-start">
+          <div
+            className="flex items-center gap-0.5 rounded-lg border border-border bg-card p-0.5"
+            role="radiogroup"
+            aria-label="Вид списка торговых точек"
+            data-testid="distribution-entry-tradepoint-view-toggle"
+          >
+            {(
+              [
+                { id: "large" as const, label: "Крупные", icon: Square },
+                { id: "grid" as const, label: "Сетка", icon: LayoutGrid },
+                { id: "list" as const, label: "Список", icon: List },
+              ] as const
+            ).map((opt) => {
+              const Icon = opt.icon;
+              const active = tradePointView === opt.id;
+              return (
+                <Button
+                  key={opt.id}
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className={cn(
+                    "h-9 w-9 shrink-0 rounded-md border",
+                    active
+                      ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
+                      : "border-transparent bg-card text-muted-foreground hover:bg-muted hover:text-foreground",
+                  )}
+                  aria-label={opt.label}
+                  aria-pressed={active}
+                  onClick={() => setTradePointView(opt.id)}
+                  data-testid={`distribution-entry-tradepoint-view-${opt.id}`}
+                >
+                  <Icon className="h-4 w-4" aria-hidden />
+                </Button>
+              );
+            })}
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="relative h-9 gap-1.5 px-2.5"
+            data-testid="button-distribution-entry-tt-filters"
+            onClick={() => setFiltersOpen(true)}
+          >
+            <SlidersHorizontal className="h-4 w-4 shrink-0" aria-hidden />
+            <span className="text-xs sm:text-sm">Фильтры</span>
+            {activeChips.length > 0 ? (
+              <Badge
+                variant="secondary"
+                className="h-5 min-w-5 rounded-full px-1.5 text-[10px] font-medium tabular-nums"
               >
-                <Icon className="h-4 w-4" aria-hidden />
-              </Button>
-            );
-          })}
+                {activeChips.length}
+              </Badge>
+            ) : null}
+          </Button>
         </div>
       </div>
+
+      {activeChips.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-2">
+          {activeChips.map((chip) => (
+            <Badge key={chip.id} variant="secondary" className="font-normal">
+              {chip.label}
+            </Badge>
+          ))}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 text-xs"
+            onClick={() => onFilterChange(defaultDistributionFilterState())}
+            data-testid="distribution-entry-reset-filters"
+          >
+            Сбросить фильтры
+          </Button>
+        </div>
+      ) : null}
+
+      <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
+        <SheetContent side="right" className="flex w-full flex-col overflow-y-auto sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle>Фильтры списка</SheetTitle>
+          </SheetHeader>
+          <div className="mt-4 min-w-0">
+            <DistributionFiltersBar
+              value={filter}
+              onChange={onFilterChange}
+              regionOptions={regionOptions}
+              cityOptions={cityOptions}
+              title="Фильтры списка: по торговой точке"
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {rows.length === 0 ? (
         <p className="text-sm text-muted-foreground">В вашей зоне видимости нет торговых точек для ввода.</p>
