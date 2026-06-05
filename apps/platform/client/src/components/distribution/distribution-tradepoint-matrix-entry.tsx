@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Maximize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DistributionFullscreenEntry } from "@/components/distribution/distribution-fullscreen-entry";
+import { TradePointShowcaseParamsSection } from "@/components/trade-point-showcase-params-section";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   TradePointShowcaseMatrixSection,
@@ -97,56 +98,57 @@ export function DistributionTradePointMatrixEntry({
   );
   const [fullscreenOpen, setFullscreenOpen] = useState(false);
 
-  if (templateModelsCount === 0) {
-    return (
-      <Card className="rounded-xl border border-border bg-card shadow-xs">
-        <CardContent className="px-4 py-8 text-center">
-          <p className="text-sm font-medium text-foreground">Активная матрица не назначена</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Для этой торговой точки нет чек-листа моделей. Выберите другую точку или назначьте матрицу в
-            справочнике.
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
     <div className="space-y-3">
-      {canEdit ? (
-        <div className="flex justify-end">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="min-h-10 gap-2"
-            data-testid="button-distribution-entry-fullscreen"
-            onClick={() => setFullscreenOpen(true)}
-          >
-            <Maximize2 className="h-4 w-4 shrink-0" aria-hidden />
-            Полноэкранный режим
-          </Button>
-        </div>
-      ) : null}
-      <TradePointShowcaseMatrixSection
-        dealer={dealer}
-        point={point}
-        profile={profile}
-        actorUserId={actorUserId}
-        actorName={actorName}
-        page={showcasePage}
-        density="compact"
-      />
-      {fullscreenOpen && canEdit ? (
-        <DistributionFullscreenEntry
-          dealer={dealer}
-          point={point}
-          profile={profile}
-          actorUserId={actorUserId}
-          actorName={actorName}
-          onClose={() => setFullscreenOpen(false)}
-        />
-      ) : null}
+      <TradePointShowcaseParamsSection dealer={dealer} point={point} profile={profile} canEdit={canEdit} />
+      {templateModelsCount === 0 ? (
+        <Card className="rounded-xl border border-border bg-card shadow-xs">
+          <CardContent className="px-4 py-8 text-center">
+            <p className="text-sm font-medium text-foreground">Активная матрица не назначена</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Для этой торговой точки нет чек-листа моделей. Выберите другую точку или назначьте матрицу в
+              справочнике.
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          {canEdit ? (
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="min-h-10 gap-2"
+                data-testid="button-distribution-entry-fullscreen"
+                onClick={() => setFullscreenOpen(true)}
+              >
+                <Maximize2 className="h-4 w-4 shrink-0" aria-hidden />
+                Полноэкранный режим
+              </Button>
+            </div>
+          ) : null}
+          <TradePointShowcaseMatrixSection
+            dealer={dealer}
+            point={point}
+            profile={profile}
+            actorUserId={actorUserId}
+            actorName={actorName}
+            page={showcasePage}
+            density="compact"
+          />
+          {fullscreenOpen && canEdit ? (
+            <DistributionFullscreenEntry
+              dealer={dealer}
+              point={point}
+              profile={profile}
+              actorUserId={actorUserId}
+              actorName={actorName}
+              onClose={() => setFullscreenOpen(false)}
+            />
+          ) : null}
+        </>
+      )}
     </div>
   );
 }
