@@ -297,11 +297,11 @@ export function DistributionTradePointMatrixEntry({
                 <Button
                   type="button"
                   size="sm"
-                  className="h-8 shrink-0 gap-1.5 bg-emerald-600 text-xs font-semibold text-white hover:bg-emerald-700"
+                  className="h-9 w-full justify-center gap-1.5 bg-emerald-600 text-sm font-semibold text-white hover:bg-emerald-700"
                   data-testid="button-distribution-entry-fullscreen"
                   onClick={() => setFullscreenOpen(true)}
                 >
-                  <Maximize2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  <Maximize2 className="h-4 w-4 shrink-0" aria-hidden />
                   Внести дистрибуцию
                 </Button>
               ) : null
