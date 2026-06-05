@@ -1,10 +1,11 @@
 import type { ComponentProps, ComponentType, ReactElement, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
-import { Camera, ChevronRight, MapPin, Store, BookOpen, Trash2 } from "lucide-react";
+import { Camera, ChevronDown, ChevronRight, MapPin, Store, BookOpen, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
@@ -131,16 +132,60 @@ const NAV_TEST_IDS: Record<SectionId, string> = {
   photos: "trade-point-section-nav-photos",
 };
 
-function scrollToSection(id: SectionId) {
-  document.getElementById(SECTION_DOM_IDS[id])?.scrollIntoView({ behavior: "smooth", block: "start" });
-}
-
 function SectionTitle({ children, subtitle, className }: { children: ReactNode; subtitle?: string; className?: string }) {
   return (
     <div className={cn("space-y-1", className)}>
       <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">{children}</h2>
       {subtitle ? <p className="max-w-2xl text-sm text-muted-foreground">{subtitle}</p> : null}
     </div>
+  );
+}
+
+function CollapsibleSection({
+  id,
+  domId,
+  title,
+  subtitle,
+  open,
+  onToggle,
+  className,
+  testId,
+  children,
+}: {
+  id: SectionId;
+  domId: string;
+  title: string;
+  subtitle?: string;
+  open: boolean;
+  onToggle: (id: SectionId) => void;
+  className?: string;
+  testId: string;
+  children: ReactNode;
+}) {
+  return (
+    <section id={domId} data-testid={testId} className={cn("scroll-mt-28 sm:scroll-mt-32", className)}>
+      <Collapsible open={open} onOpenChange={() => onToggle(id)} className="space-y-2">
+        <CollapsibleTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-10 w-full justify-between gap-2 text-sm font-semibold"
+            data-testid={`button-section-toggle-${id}`}
+          >
+            <span className="truncate">{title}</span>
+            <ChevronDown
+              className={cn("h-4 w-4 shrink-0 opacity-70 transition-transform", open && "rotate-180")}
+              aria-hidden
+            />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="space-y-4 pt-1">
+          {subtitle ? <p className="max-w-2xl text-sm text-muted-foreground">{subtitle}</p> : null}
+          {children}
+        </CollapsibleContent>
+      </Collapsible>
+    </section>
   );
 }
 
@@ -196,9 +241,15 @@ function useActiveSection() {
   return active;
 }
 
-function TradePointSectionNav({ active, variant }: { active: SectionId; variant: "sidebar" | "chips" }) {
-  const onNav = useCallback((id: SectionId) => scrollToSection(id), []);
-
+function TradePointSectionNav({
+  active,
+  variant,
+  onNavigate,
+}: {
+  active: SectionId;
+  variant: "sidebar" | "chips";
+  onNavigate: (id: SectionId) => void;
+}) {
   if (variant === "sidebar") {
     return (
       <nav
@@ -211,7 +262,7 @@ function TradePointSectionNav({ active, variant }: { active: SectionId; variant:
           <button
             key={id}
             type="button"
-            onClick={() => onNav(id)}
+            onClick={() => onNavigate(id)}
             data-testid={NAV_TEST_IDS[id]}
             className={cn(
               "flex w-full items-center rounded-xl px-3 py-2 text-left text-sm font-medium transition-colors",
@@ -243,7 +294,7 @@ function TradePointSectionNav({ active, variant }: { active: SectionId; variant:
             type="button"
             role="tab"
             aria-selected={active === id}
-            onClick={() => onNav(id)}
+            onClick={() => onNavigate(id)}
             data-testid={NAV_TEST_IDS[id]}
             className={cn(
               "min-h-10 shrink-0 rounded-full border px-3.5 py-2 text-sm font-medium transition-colors",
@@ -322,6 +373,33 @@ function TradePointDetailContent({
   const actx = useClientBaseActualization();
   const { user } = useCurrentUser();
   const activeSection = useActiveSection();
+  const [openSections, setOpenSections] = useState<Set<SectionId>>(() => new Set());
+  const toggleSection = useCallback((id: SectionId) => {
+    setOpenSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+  const openSection = useCallback((id: SectionId) => {
+    setOpenSections((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+  }, []);
+  const handleNavigate = useCallback(
+    (id: SectionId) => {
+      const target: SectionId = id === "matrix" ? "showcase" : id;
+      openSection(target);
+      requestAnimationFrame(() => {
+        document.getElementById(SECTION_DOM_IDS[id])?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    },
+    [openSection],
+  );
   const [commentsBump, setCommentsBump] = useState(0);
   const [contactsBump, setContactsBump] = useState(0);
   const [matrixBump, setMatrixBump] = useState(0);
@@ -422,13 +500,14 @@ function TradePointDetailContent({
 
   useEffect(() => {
     if (routeQs.get("tradePointShowcase") !== "1") return;
+    openSection("showcase");
     requestAnimationFrame(() => {
       document.getElementById("section-trade-point-showcase-matrix")?.scrollIntoView({
         behavior: "smooth",
         block: "start",
       });
     });
-  }, [routeQs, dealer.id, point.id]);
+  }, [routeQs, dealer.id, point.id, openSection]);
   const mapSearch = useMemo(() => mapSearchTextForPoint(point), [point]);
   const yandexMapHref = useMemo(() => `https://yandex.ru/maps/?text=${encodeURIComponent(mapSearch || "Россия")}`, [mapSearch]);
   const clientMapHref = useMemo(() => {
@@ -935,16 +1014,19 @@ function TradePointDetailContent({
         <span className="font-medium text-foreground">Торговая точка</span>
       </nav>
 
-      <TradePointSectionNav active={activeSection} variant="chips" />
+      <TradePointSectionNav active={activeSection} variant="chips" onNavigate={handleNavigate} />
 
       <div className="lg:grid lg:grid-cols-12 lg:items-start lg:gap-8">
         <div className="min-w-0 space-y-4 sm:space-y-6 lg:col-span-8">
-          <section
-            id={SECTION_DOM_IDS.overview}
-            data-testid="section-trade-point-overview"
-            className="scroll-mt-28 space-y-4 sm:scroll-mt-32"
+          <CollapsibleSection
+            id="overview"
+            domId={SECTION_DOM_IDS.overview}
+            title={SECTION_LABELS.overview}
+            subtitle="Основные сведения по точке."
+            open={openSections.has("overview")}
+            onToggle={toggleSection}
+            testId="section-trade-point-overview"
           >
-            <SectionTitle subtitle="Основные сведения по точке.">Общее</SectionTitle>
             <SurfaceCard className="overflow-hidden border border-border border-l-4 border-l-primary p-3 sm:p-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
                 <ShowcaseCoverPhotoSlot kind="trade_point" dealer={dealer} tradePoint={point} profile={profile} size="hero" rounded="xl" className="w-full shrink-0 sm:max-w-[15rem]" />
@@ -972,16 +1054,17 @@ function TradePointDetailContent({
               </SurfaceCard>
               <TradePointContactsSection row={dealer} tradePoint={point} profile={profile} />
             </div>
-          </section>
+          </CollapsibleSection>
 
-          <section
-            id={SECTION_DOM_IDS.training}
-            data-testid="section-trade-point-training-attention"
-            className="scroll-mt-28 space-y-4 sm:scroll-mt-32"
+          <CollapsibleSection
+            id="training"
+            domId={SECTION_DOM_IDS.training}
+            title={SECTION_LABELS.training}
+            subtitle="Нужен ли визит с продуктовым блоком для персонала точки."
+            open={openSections.has("training")}
+            onToggle={toggleSection}
+            testId="section-trade-point-training-attention"
           >
-            <SectionTitle subtitle="Нужен ли визит с продуктовым блоком для персонала точки.">
-              Обучение персонала точки
-            </SectionTitle>
             <SurfaceCard data-testid="card-trade-point-training-signal">
               <CardHeader className="space-y-2 pb-2 pt-5">
                 <div className="flex flex-wrap items-center gap-2">
@@ -1043,50 +1126,74 @@ function TradePointDetailContent({
                 </div>
               </CardContent>
             </SurfaceCard>
-          </section>
+          </CollapsibleSection>
 
-          <DistributionTradePointMatrixEntry
-            dealer={dealer}
-            point={point}
-            profile={profile}
-            actorUserId={user?.id ?? profile.personaUserId}
-            actorName={displayUserName(user) ?? userLabelFromProfile(profile)}
-          />
-
-          <section
-            data-testid="section-trade-point-distribution-live"
-            className="scroll-mt-28 space-y-3 sm:scroll-mt-32"
+          <CollapsibleSection
+            id="showcase"
+            domId={SECTION_DOM_IDS.showcase}
+            title={SECTION_LABELS.showcase}
+            open={openSections.has("showcase")}
+            onToggle={toggleSection}
+            testId="section-trade-point-showcase"
           >
-            <SectionTitle subtitle="Сквозной просмотр позиций витрины в реальном времени.">
-              Дистрибуция
-            </SectionTitle>
+            <span id={SECTION_DOM_IDS.matrix} className="block scroll-mt-28 sm:scroll-mt-32" aria-hidden />
+            <DistributionTradePointMatrixEntry
+              dealer={dealer}
+              point={point}
+              profile={profile}
+              actorUserId={user?.id ?? profile.personaUserId}
+              actorName={displayUserName(user) ?? userLabelFromProfile(profile)}
+            />
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            id="distribution"
+            domId={SECTION_DOM_IDS.distribution}
+            title={SECTION_LABELS.distribution}
+            subtitle="Сквозной просмотр позиций витрины в реальном времени."
+            open={openSections.has("distribution")}
+            onToggle={toggleSection}
+            testId="section-trade-point-distribution-live"
+          >
             <SurfaceCard>
               <DistributionTree
                 scope={{ kind: "trade-point", dealer, point }}
                 profile={profile}
               />
             </SurfaceCard>
-          </section>
+          </CollapsibleSection>
 
-          <Bitrix24TasksPanel
-            scope="trade_point"
-            dealerId={dealer.id}
-            dealerName={dealer.name}
-            tradePointId={point.id}
-            tradePointName={point.name}
-            canCreate={canCreateBitrix24Task}
-            actorUserId={user?.id ?? profile.personaUserId}
-            actorLabel={displayUserName(user) ?? userLabelFromProfile(profile)}
-            compact
-          />
-
-          <section
-            id={SECTION_DOM_IDS.comments}
-            data-testid="section-trade-point-comments"
-            className="scroll-mt-28 space-y-3 sm:scroll-mt-32"
+          <CollapsibleSection
+            id="tasks"
+            domId={SECTION_DOM_IDS.tasks}
+            title={SECTION_LABELS.tasks}
+            open={openSections.has("tasks")}
+            onToggle={toggleSection}
+            testId="section-trade-point-tasks"
           >
-            <SectionTitle subtitle="Сохраняются в базе и отображаются в истории точки.">Комментарии по точке</SectionTitle>
-            <SurfaceCard className="mt-3">
+            <Bitrix24TasksPanel
+              scope="trade_point"
+              dealerId={dealer.id}
+              dealerName={dealer.name}
+              tradePointId={point.id}
+              tradePointName={point.name}
+              canCreate={canCreateBitrix24Task}
+              actorUserId={user?.id ?? profile.personaUserId}
+              actorLabel={displayUserName(user) ?? userLabelFromProfile(profile)}
+              compact
+            />
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            id="comments"
+            domId={SECTION_DOM_IDS.comments}
+            title={SECTION_LABELS.comments}
+            subtitle="Сохраняются в базе и отображаются в истории точки."
+            open={openSections.has("comments")}
+            onToggle={toggleSection}
+            testId="section-trade-point-comments"
+          >
+            <SurfaceCard>
               <CardContent className="space-y-3 p-4">
                 {canEditTpComments ? (
                   <div className="space-y-2" data-testid="section-trade-point-comment-form">
@@ -1143,11 +1250,18 @@ function TradePointDetailContent({
                 </div>
               </CardContent>
             </SurfaceCard>
-          </section>
+          </CollapsibleSection>
 
-          <section id={SECTION_DOM_IDS.history} data-testid="section-trade-point-history" className="scroll-mt-28 space-y-4 sm:scroll-mt-32">
-            <SectionTitle subtitle="Визиты и изменения по точке.">История</SectionTitle>
-            <SurfaceCard className="mt-3">
+          <CollapsibleSection
+            id="history"
+            domId={SECTION_DOM_IDS.history}
+            title={SECTION_LABELS.history}
+            subtitle="Визиты и изменения по точке."
+            open={openSections.has("history")}
+            onToggle={toggleSection}
+            testId="section-trade-point-history"
+          >
+            <SurfaceCard>
               <CardContent className="divide-y divide-border pt-2">
                 {point.activityHistory.map((ev, idx) => (
                   <div
@@ -1186,11 +1300,19 @@ function TradePointDetailContent({
                 <p className="mt-2 text-sm leading-relaxed text-foreground">{point.issues}</p>
               </CardContent>
             </SurfaceCard>
-          </section>
+          </CollapsibleSection>
 
-          <section id={SECTION_DOM_IDS.photos} data-testid="section-trade-point-photos" className="scroll-mt-28 space-y-4 pb-2 sm:scroll-mt-32">
-            <SectionTitle subtitle="Визуальные материалы по точке.">Фото</SectionTitle>
-            <SurfaceCard className="mt-3">
+          <CollapsibleSection
+            id="photos"
+            domId={SECTION_DOM_IDS.photos}
+            title={SECTION_LABELS.photos}
+            subtitle="Визуальные материалы по точке."
+            open={openSections.has("photos")}
+            onToggle={toggleSection}
+            className="pb-2"
+            testId="section-trade-point-photos"
+          >
+            <SurfaceCard>
               <CardContent className="space-y-3 pt-5">
                 <div className="flex items-start gap-3">
                   <Camera className="mt-0.5 h-6 w-6 shrink-0 text-muted-foreground" aria-hidden />
@@ -1201,11 +1323,11 @@ function TradePointDetailContent({
                 <TradePointPhotoBlock dealerId={dealer.id} tradePointId={point.id} canEdit={canEditTp} />
               </CardContent>
             </SurfaceCard>
-          </section>
+          </CollapsibleSection>
         </div>
 
         <aside className="mt-6 hidden lg:col-span-4 lg:mt-0 lg:block">
-          <TradePointSectionNav active={activeSection} variant="sidebar" />
+          <TradePointSectionNav active={activeSection} variant="sidebar" onNavigate={handleNavigate} />
         </aside>
       </div>
 
