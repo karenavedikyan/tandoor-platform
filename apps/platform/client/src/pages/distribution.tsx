@@ -146,6 +146,7 @@ export default function DistributionPage() {
             onChange={setFilter}
             regionOptions={regionOptions}
             cityOptions={cityOptions}
+            title="Фильтры аналитики"
           />
 
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">

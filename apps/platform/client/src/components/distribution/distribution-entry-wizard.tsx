@@ -94,6 +94,7 @@ export function DistributionEntryWizard({ profile }: DistributionEntryWizardProp
           onChange={setFilter}
           regionOptions={regionOptions}
           cityOptions={cityOptions}
+          title={`Фильтры списка${axisTitle ? `: ${axisTitle.toLowerCase()}` : ""}`}
         />
       ) : null}
 
