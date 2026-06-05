@@ -77,6 +77,34 @@ function emptyState(): DealerTradePointsState {
   return { tradePointsByDealer: {}, editsByTradePoint: {}, historyByDealer: {} };
 }
 
+let cachedState: DealerTradePointsState | null = null;
+let cachedRaw: string | null = null;
+
+function invalidateDealerTradePointsCache(): void {
+  cachedState = null;
+  cachedRaw = null;
+}
+
+function parseDealerTradePointsState(raw: string): DealerTradePointsState {
+  const p = JSON.parse(raw) as Partial<DealerTradePointsState>;
+  return {
+    tradePointsByDealer:
+      p.tradePointsByDealer && typeof p.tradePointsByDealer === "object" ? p.tradePointsByDealer : {},
+    editsByTradePoint:
+      p.editsByTradePoint && typeof p.editsByTradePoint === "object" ? p.editsByTradePoint : {},
+    historyByDealer: p.historyByDealer && typeof p.historyByDealer === "object" ? p.historyByDealer : {},
+  };
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener(DEALER_TRADE_POINTS_EVENT, invalidateDealerTradePointsCache);
+  window.addEventListener("storage", (e) => {
+    if (!e.key || e.key === DEALER_TRADE_POINTS_STORAGE_KEY) {
+      invalidateDealerTradePointsCache();
+    }
+  });
+}
+
 export function tradePointKey(dealerId: string, tradePointId: string): string {
   return `${dealerId}|${tradePointId}`;
 }
@@ -108,15 +136,13 @@ export function loadDealerTradePointsState(): DealerTradePointsState {
   try {
     const raw = window.localStorage.getItem(DEALER_TRADE_POINTS_STORAGE_KEY);
     if (!raw) return emptyState();
-    const p = JSON.parse(raw) as Partial<DealerTradePointsState>;
-    return {
-      tradePointsByDealer:
-        p.tradePointsByDealer && typeof p.tradePointsByDealer === "object" ? p.tradePointsByDealer : {},
-      editsByTradePoint:
-        p.editsByTradePoint && typeof p.editsByTradePoint === "object" ? p.editsByTradePoint : {},
-      historyByDealer: p.historyByDealer && typeof p.historyByDealer === "object" ? p.historyByDealer : {},
-    };
+    if (cachedState !== null && cachedRaw === raw) return cachedState;
+    const parsed = parseDealerTradePointsState(raw);
+    cachedState = parsed;
+    cachedRaw = raw;
+    return parsed;
   } catch {
+    invalidateDealerTradePointsCache();
     return emptyState();
   }
 }
@@ -124,6 +150,7 @@ export function loadDealerTradePointsState(): DealerTradePointsState {
 export function saveDealerTradePointsState(state: DealerTradePointsState): void {
   if (typeof window === "undefined" || !window.localStorage) return;
   window.localStorage.setItem(DEALER_TRADE_POINTS_STORAGE_KEY, JSON.stringify(state));
+  invalidateDealerTradePointsCache();
   window.dispatchEvent(new CustomEvent(DEALER_TRADE_POINTS_EVENT));
 }
 

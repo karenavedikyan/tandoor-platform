@@ -39,6 +39,32 @@ function emptyState(): DealerProfileOverridesState {
   return { overridesByDealer: {}, historyByDealer: {} };
 }
 
+let cachedState: DealerProfileOverridesState | null = null;
+let cachedRaw: string | null = null;
+
+function invalidateDealerProfileOverridesCache(): void {
+  cachedState = null;
+  cachedRaw = null;
+}
+
+function parseDealerProfileOverridesState(raw: string): DealerProfileOverridesState {
+  const p = JSON.parse(raw) as Partial<DealerProfileOverridesState>;
+  return {
+    overridesByDealer:
+      p.overridesByDealer && typeof p.overridesByDealer === "object" ? p.overridesByDealer : {},
+    historyByDealer: p.historyByDealer && typeof p.historyByDealer === "object" ? p.historyByDealer : {},
+  };
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener(DEALER_PROFILE_OVERRIDES_EVENT, invalidateDealerProfileOverridesCache);
+  window.addEventListener("storage", (e) => {
+    if (!e.key || e.key === DEALER_PROFILE_OVERRIDES_STORAGE_KEY) {
+      invalidateDealerProfileOverridesCache();
+    }
+  });
+}
+
 function isoNow(): string {
   return new Date().toISOString();
 }
@@ -66,13 +92,13 @@ export function loadDealerProfileOverridesState(): DealerProfileOverridesState {
   try {
     const raw = window.localStorage.getItem(DEALER_PROFILE_OVERRIDES_STORAGE_KEY);
     if (!raw) return emptyState();
-    const p = JSON.parse(raw) as Partial<DealerProfileOverridesState>;
-    return {
-      overridesByDealer:
-        p.overridesByDealer && typeof p.overridesByDealer === "object" ? p.overridesByDealer : {},
-      historyByDealer: p.historyByDealer && typeof p.historyByDealer === "object" ? p.historyByDealer : {},
-    };
+    if (cachedState !== null && cachedRaw === raw) return cachedState;
+    const parsed = parseDealerProfileOverridesState(raw);
+    cachedState = parsed;
+    cachedRaw = raw;
+    return parsed;
   } catch {
+    invalidateDealerProfileOverridesCache();
     return emptyState();
   }
 }
@@ -80,6 +106,7 @@ export function loadDealerProfileOverridesState(): DealerProfileOverridesState {
 export function saveDealerProfileOverridesState(state: DealerProfileOverridesState): void {
   if (typeof window === "undefined" || !window.localStorage) return;
   window.localStorage.setItem(DEALER_PROFILE_OVERRIDES_STORAGE_KEY, JSON.stringify(state));
+  invalidateDealerProfileOverridesCache();
   window.dispatchEvent(new CustomEvent(DEALER_PROFILE_OVERRIDES_EVENT));
 }
 
