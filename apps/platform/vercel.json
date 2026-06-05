@@ -39,6 +39,10 @@
   ],
   "crons": [
     {
+      "path": "/api/cron/sync-yandex",
+      "schedule": "0 0 * * *"
+    },
+    {
       "path": "/api/cron/purge-trash",
       "schedule": "0 3 * * *"
     },
