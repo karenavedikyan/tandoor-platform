@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useMemo, useRef, useState } from "react";
+import { memo, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { Building2, Mail, MessageCircle, Phone } from "lucide-react";
 import { ArchiveInArchiveBadge, archivedEntityRowClassName, isDealerArchivedInActualization } from "@/components/archive-record-visual";
@@ -204,7 +204,7 @@ function tradePointShowcaseStatusBadgeClass(line: string, deficit: number, newTa
   return badgeNeutral;
 }
 
-function TradePointShowcaseRow({
+const TradePointShowcaseRow = memo(function TradePointShowcaseRow({
   dealer,
   tp,
   act,
@@ -333,9 +333,9 @@ function TradePointShowcaseRow({
       </div>
     </div>
   );
-}
+});
 
-function DealerShowcaseCard({
+const DealerShowcaseCard = memo(function DealerShowcaseCard({
   row,
   act,
   profile,
@@ -646,7 +646,7 @@ function DealerShowcaseCard({
       </CardContent>
     </Card>
   );
-}
+});
 
 export function DealerBaseDealerShowcaseGrid(props: DealerShowcaseGridProps) {
   const {
@@ -679,6 +679,7 @@ export function DealerBaseDealerShowcaseGrid(props: DealerShowcaseGridProps) {
   const virtualizer = useDealerBaseWindowVirtualizer({
     count: rows.length,
     estimateSize: DEALER_BASE_VIRTUAL_ESTIMATE.large,
+    overscan: 2,
     scrollMargin,
   });
   const virtualItems = virtualizer.getVirtualItems();
