@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
-import { ChevronDown, MoreHorizontal, PieChart } from "lucide-react";
+import { ChevronDown, MoreHorizontal, PieChart, SlidersHorizontal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -486,7 +486,7 @@ export function TradePointShowcaseMatrixSection({
   const [categoryFilter, setCategoryFilter] = useState<ShowcaseMatrixCategoryFilter>("all");
   const [catalogFilters, setCatalogFilters] = useState<Record<string, string[]>>({});
   const [catalogFiltersPanelOpen, setCatalogFiltersPanelOpen] = useState(false);
-  const [showcaseSecondaryFiltersOpen, setShowcaseSecondaryFiltersOpen] = useState(false);
+  const [matrixViewFiltersOpen, setMatrixViewFiltersOpen] = useState(false);
 
   const statusFilteredModels = useMemo(() => {
     return models.filter((m) => {
@@ -774,46 +774,44 @@ export function TradePointShowcaseMatrixSection({
                 </div>
               </div>
 
-              <Collapsible open={showcaseSecondaryFiltersOpen} onOpenChange={setShowcaseSecondaryFiltersOpen}>
-                <CollapsibleTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-8 w-full justify-between gap-2 text-xs md:hidden"
+              <div className="space-y-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                  {statusFilterActionSlot ? (
+                    <div className="flex shrink-0 items-center">{statusFilterActionSlot}</div>
+                  ) : null}
+                  <Collapsible
+                    open={matrixViewFiltersOpen}
+                    onOpenChange={setMatrixViewFiltersOpen}
+                    className="min-w-0 w-full sm:w-auto"
                   >
-                    <span>Фильтры витрины</span>
-                    <ChevronDown
-                      className={cn(
-                        "h-4 w-4 shrink-0 opacity-70 transition-transform",
-                        showcaseSecondaryFiltersOpen && "rotate-180",
-                      )}
-                      aria-hidden
-                    />
-                  </Button>
-                </CollapsibleTrigger>
-                <CollapsibleContent
-                  forceMount
-                  className="space-y-2 pt-2 data-[state=closed]:hidden md:!block md:pt-0 md:data-[state=closed]:!block"
-                >
-                  <div className="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
-                    {statusFilterActionSlot ? (
-                      <div className="flex shrink-0 items-center">{statusFilterActionSlot}</div>
-                    ) : null}
-                    <div
-                      data-testid="section-showcase-matrix-view-sticky-toolbar"
-                      className={cn(
-                        "sticky z-20 -mx-1 rounded-lg border border-border/70 bg-background/95 px-2 py-2 shadow-sm backdrop-blur-md supports-[backdrop-filter]:bg-background/85",
-                        "top-[7.25rem] max-md:top-[7.25rem]",
-                        "md:static md:z-0 md:mx-0 md:rounded-none md:border-0 md:border-b-0 md:bg-transparent md:px-0 md:py-0 md:shadow-none md:backdrop-blur-none",
-                      )}
-                    >
-                      <div className="flex min-w-0 flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:justify-between">
+                    <CollapsibleTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 w-full justify-between gap-2 text-xs sm:w-auto sm:min-w-[12rem]"
+                        data-testid="button-showcase-matrix-filters-toggle"
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <SlidersHorizontal className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
+                          Фильтры матрицы
+                        </span>
+                        <ChevronDown
+                          className={cn(
+                            "h-4 w-4 shrink-0 opacity-70 transition-transform",
+                            matrixViewFiltersOpen && "rotate-180",
+                          )}
+                          aria-hidden
+                        />
+                      </Button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="space-y-2 pt-2">
+                      <div data-testid="section-showcase-matrix-view-sticky-toolbar" className="min-w-0 space-y-1.5">
                         <p className="text-[11px] text-muted-foreground md:hidden">
                           <span className="font-semibold text-foreground">Вид матрицы:</span> {VIEW_MODE_LABEL_RU[viewMode]}
                         </p>
                         <div className="min-w-0 space-y-1.5">
-                          <p className="hidden text-[10px] font-semibold uppercase tracking-wide text-muted-foreground md:block">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                             Вид матрицы
                           </p>
                           <div className="flex min-w-0 flex-wrap gap-1.5">
@@ -860,10 +858,8 @@ export function TradePointShowcaseMatrixSection({
                           </div>
                         </div>
                       </div>
-                    </div>
-                  </div>
 
-                  <div className="space-y-2 rounded-lg border border-border/60 bg-muted/10 px-2 py-2 sm:px-3">
+                      <div className="space-y-2 rounded-lg border border-border/60 bg-muted/10 px-2 py-2 sm:px-3">
                     <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
                       <div className="min-w-0 space-y-1.5">
                         <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Категория</p>
@@ -956,9 +952,11 @@ export function TradePointShowcaseMatrixSection({
                       {" из "}
                       <span className="font-semibold tabular-nums text-foreground">{statusFilteredModels.length}</span> моделей
                     </p>
-                  </div>
-                </CollapsibleContent>
-              </Collapsible>
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                </div>
+              </div>
             </div>
           </div>
 
