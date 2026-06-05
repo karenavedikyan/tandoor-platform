@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Link } from "wouter";
 import { ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -19,7 +20,7 @@ type Props = {
   heatLevel: ManagerHeatLevel;
 };
 
-export function ManagerTeamCard({ manager, ropName, heatLevel }: Props) {
+export const ManagerTeamCard = memo(function ManagerTeamCard({ manager, ropName, heatLevel }: Props) {
   const dashboard = buildManagerDashboardModel(manager, ropName, heatLevel);
   const topCities = dashboard.cities.slice(0, 3);
   const totalForBar = dashboard.rows.length;
@@ -102,4 +103,4 @@ export function ManagerTeamCard({ manager, ropName, heatLevel }: Props) {
       </Button>
     </div>
   );
-}
+});

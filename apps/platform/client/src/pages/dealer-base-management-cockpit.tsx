@@ -78,6 +78,7 @@ import {
   type CityRowModel,
   type ClientListFilter,
   type DirectorClientBaseMode,
+  type ManagerRowModel,
   type RopGroupModel,
 } from "@/lib/dealer-base-management-view-model";
 import { useMyClientCodes } from "@/hooks/use-my-client-codes";
@@ -87,6 +88,7 @@ import { ManagerTeamCard } from "@/components/dealer-base/manager-team-card";
 import {
   computeManagerHeatMap,
   sortManagersByHeat,
+  type ManagerHeatLevel,
 } from "@/lib/manager-load-heat";
 import { fetchTradePointsOverview } from "@/lib/trade-points-overview-api";
 
@@ -372,6 +374,34 @@ export function DealerBaseManagementCockpit({
     [overviewByManagerId],
   );
 
+  const ropGroupManagersViewByTeamKey = useMemo(() => {
+    const openSet = new Set(openOverviewTeamIds);
+    const map = new Map<
+      string,
+      {
+        sortedManagers: Array<ManagerRowModel & { id: string; fullName: string }>;
+        heatMap: Record<string, ManagerHeatLevel>;
+      }
+    >();
+    for (const g of ropGroups) {
+      const teamKey = g.teamId ?? "__no_rop__";
+      if (!openSet.has(teamKey)) continue;
+      const heatEntries = g.managers.map((m) => ({
+        id: m.managerId,
+        clientsActive: m.active,
+        tradePointsActive: resolveManagerTp(m),
+      }));
+      const heatMap = computeManagerHeatMap(heatEntries);
+      const sortedManagers = sortManagersByHeat(
+        g.managers.map((m) => ({ ...m, id: m.managerId, fullName: m.name })),
+        heatMap,
+        heatEntries,
+      );
+      map.set(teamKey, { sortedManagers, heatMap });
+    }
+    return map;
+  }, [ropGroups, openOverviewTeamIds, resolveManagerTp]);
+
   const overviewTpByCity = useMemo<Map<string, number>>(() => {
     const out = new Map<string, number>();
     const data = tradePointsOverviewQ.data;
@@ -587,6 +617,8 @@ export function DealerBaseManagementCockpit({
           <Accordion type="multiple" value={openOverviewTeamIds} onValueChange={setOpenOverviewTeamIds} className="space-y-2">
             {ropGroups.map((g) => {
               const teamKey = g.teamId ?? "__no_rop__";
+              const isOpen = openOverviewTeamIds.includes(teamKey);
+              const managersView = ropGroupManagersViewByTeamKey.get(teamKey);
               return (
                 <AccordionItem
                   key={teamKey}
@@ -606,42 +638,31 @@ export function DealerBaseManagementCockpit({
                     </div>
                   </AccordionTrigger>
                   <AccordionContent className="px-3 pb-3 pt-0">
-                    <div className="mb-2 flex flex-wrap items-center gap-2">
-                      <p className="text-[11px] text-muted-foreground">
-                        потенц. {g.potential} · вним. {g.attention}
-                      </p>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="ml-auto h-8 text-xs"
-                        data-testid={`button-client-base-rop-details-${teamKey}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDetail({ kind: "rop_overview", teamId: teamKey });
-                        }}
-                      >
-                        Детали команды
-                      </Button>
-                    </div>
-                    {(() => {
-                      const heatEntries = g.managers.map((m) => ({
-                        id: m.managerId,
-                        clientsActive: m.active,
-                        tradePointsActive: resolveManagerTp(m),
-                      }));
-                      const heatMap = computeManagerHeatMap(heatEntries);
-                      const sortedManagers = sortManagersByHeat(
-                        g.managers.map((m) => ({ ...m, id: m.managerId, fullName: m.name })),
-                        heatMap,
-                        heatEntries,
-                      );
-                      return (
+                    {isOpen && managersView ? (
+                      <>
+                        <div className="mb-2 flex flex-wrap items-center gap-2">
+                          <p className="text-[11px] text-muted-foreground">
+                            потенц. {g.potential} · вним. {g.attention}
+                          </p>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="ml-auto h-8 text-xs"
+                            data-testid={`button-client-base-rop-details-${teamKey}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDetail({ kind: "rop_overview", teamId: teamKey });
+                            }}
+                          >
+                            Детали команды
+                          </Button>
+                        </div>
                         <div
                           className="grid grid-cols-1 gap-3 lg:grid-cols-2"
                           data-testid={`grid-managers-${teamKey}`}
                         >
-                          {sortedManagers.map((m) => (
+                          {managersView.sortedManagers.map((m) => (
                             <ManagerTeamCard
                               key={m.managerId}
                               manager={{
@@ -649,12 +670,12 @@ export function DealerBaseManagementCockpit({
                                 outlets: resolveManagerTp(m),
                               }}
                               ropName={g.ropName}
-                              heatLevel={heatMap[m.managerId] ?? "medium"}
+                              heatLevel={managersView.heatMap[m.managerId] ?? "medium"}
                             />
                           ))}
                         </div>
-                      );
-                    })()}
+                      </>
+                    ) : null}
                   </AccordionContent>
                 </AccordionItem>
               );
