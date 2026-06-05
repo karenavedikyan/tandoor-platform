@@ -1,6 +1,8 @@
 import { gzipSync } from "node:zlib";
 import { describe, expect, it, vi } from "vitest";
 import {
+  batchRowLimitForColumns,
+  buildBatchInsertQuery,
   buildInsertQuery,
   groupRowsByTable,
   parseJsonlGzip,
@@ -118,6 +120,30 @@ describe("buildInsertQuery", () => {
     expect(text).toContain("ON CONFLICT");
     expect(text).toContain("$1, $2");
     expect(text).toContain(quoteIdent("id"));
+  });
+});
+
+describe("buildBatchInsertQuery", () => {
+  it("builds multi-row INSERT with sequential placeholders", () => {
+    const text = buildBatchInsertQuery("users", ["id", "email"], ["id"], 2);
+    expect(text).toContain(`INSERT INTO ${quoteIdent("users")}`);
+    expect(text).toContain("VALUES ($1, $2), ($3, $4)");
+    expect(text).toContain("ON CONFLICT");
+  });
+
+  it("serializes jsonb in batch value order", () => {
+    const cols = ["id", "placement_our_models"];
+    const text = buildBatchInsertQuery("showcase_matrix_entries", cols, ["id"], 1);
+    expect(text).toContain(quoteIdent("placement_our_models"));
+    const jsonVal = serializeCellValue([{ modelId: "m1", count: 2 }], true);
+    expect(jsonVal).toBe('[{"modelId":"m1","count":2}]');
+  });
+});
+
+describe("batchRowLimitForColumns", () => {
+  it("caps batch size by pg parameter limit", () => {
+    expect(batchRowLimitForColumns(2)).toBe(200);
+    expect(batchRowLimitForColumns(400)).toBe(163);
   });
 });
 

@@ -467,3 +467,56 @@ CREATE TABLE IF NOT EXISTS marketing_brief_blocks (
 CREATE INDEX IF NOT EXISTS idx_marketing_brief_blocks_brief
   ON marketing_brief_blocks(brief_id, order_index);
 
+-- ── Витрина / матрица моделей (showcase) ──
+CREATE TABLE IF NOT EXISTS "showcase_matrix_defs" (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  client_category text NOT NULL,
+  scope_kind text NOT NULL,
+  scope_region text, scope_city text,
+  effective_from date, effective_to date,
+  season_label text,
+  status text NOT NULL DEFAULT 'draft',
+  title text, comment text, client_op_id text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  updated_by uuid, updated_by_name text
+);
+CREATE TABLE IF NOT EXISTS "showcase_matrix_def_models" (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  def_id uuid NOT NULL,
+  target_kind text NOT NULL, target_id text NOT NULL,
+  priority text NOT NULL DEFAULT 'medium',
+  segment text NOT NULL,
+  value_weight integer,
+  sort_order integer NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS "showcase_matrix_entries" (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  dealer_id text NOT NULL, trade_point_id text NOT NULL,
+  target_kind text NOT NULL, target_id text NOT NULL,
+  status text NOT NULL,
+  comment text, client_op_id text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  updated_by uuid, updated_by_name text,
+  placement_type text, placement_segment text,
+  placement_capacity integer, placement_actual integer,
+  placement_ref text,
+  placement_our_models jsonb, placement_competitors jsonb
+);
+CREATE TABLE IF NOT EXISTS "showcase_matrix_events" (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  entry_id uuid,
+  dealer_id text NOT NULL, trade_point_id text NOT NULL,
+  target_kind text NOT NULL, target_id text NOT NULL,
+  old_status text, new_status text, comment text,
+  changed_by uuid, changed_by_name text,
+  changed_at timestamptz NOT NULL DEFAULT now(),
+  placement_type text, placement_segment text,
+  placement_capacity integer, placement_actual integer,
+  placement_ref text,
+  placement_our_models jsonb, placement_competitors jsonb
+);
+

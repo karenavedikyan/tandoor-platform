@@ -23,7 +23,9 @@ export type RestoreResult = {
   errors: Array<{ table: string; rowIndex: number; error: string }>;
 };
 
-const BATCH_SIZE = 500;
+/** Макс. строк в одном INSERT; ограничено лимитом параметров pg (65535). */
+const BATCH_ROW_TARGET = 200;
+const PG_MAX_PARAMS = 65535;
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const SCHEMA_SQL_PATH = path.join(MODULE_DIR, "yandex-schema.sql");
 
@@ -104,6 +106,62 @@ export function buildInsertQuery(
   const conflict = conflictColumns.map((c) => quoteIdent(c)).join(", ");
   const text = `INSERT INTO ${quotedTable} (${columnList.join(", ")}) VALUES (${placeholders}) ON CONFLICT (${conflict}) DO NOTHING`;
   return { text, columnList: columns };
+}
+
+/** Сборка мульти-строчного INSERT … ON CONFLICT DO NOTHING. */
+export function buildBatchInsertQuery(
+  table: string,
+  columns: string[],
+  conflictColumns: string[],
+  rowCount: number,
+): string {
+  if (rowCount < 1) {
+    throw new Error("buildBatchInsertQuery: rowCount must be >= 1");
+  }
+  const quotedTable = quoteIdent(table);
+  const columnList = columns.map((c) => quoteIdent(c));
+  const conflict = conflictColumns.map((c) => quoteIdent(c)).join(", ");
+  const valueGroups: string[] = [];
+  let paramIndex = 1;
+  for (let r = 0; r < rowCount; r++) {
+    const placeholders = columns.map(() => `$${paramIndex++}`).join(", ");
+    valueGroups.push(`(${placeholders})`);
+  }
+  return `INSERT INTO ${quotedTable} (${columnList.join(", ")}) VALUES ${valueGroups.join(", ")} ON CONFLICT (${conflict}) DO NOTHING`;
+}
+
+export function batchRowLimitForColumns(columnCount: number): number {
+  if (columnCount <= 0) return 1;
+  return Math.max(1, Math.min(BATCH_ROW_TARGET, Math.floor(PG_MAX_PARAMS / columnCount)));
+}
+
+function resolveBatchColumns(
+  entries: JsonlEntry[],
+  columnMeta: ColumnMeta[],
+): string[] {
+  const metaNames = new Set(columnMeta.map((c) => c.name));
+  const colSet = new Set<string>();
+  for (const entry of entries) {
+    for (const k of Object.keys(entry.row)) {
+      if (metaNames.has(k)) colSet.add(k);
+    }
+  }
+  return columnMeta.map((c) => c.name).filter((n) => colSet.has(n));
+}
+
+function buildBatchValues(
+  entries: JsonlEntry[],
+  columns: string[],
+  columnMeta: ColumnMeta[],
+): unknown[] {
+  const metaByName = new Map(columnMeta.map((c) => [c.name, c]));
+  const values: unknown[] = [];
+  for (const entry of entries) {
+    for (const col of columns) {
+      values.push(serializeCellValue(entry.row[col], metaByName.get(col)!.isJson));
+    }
+  }
+  return values;
 }
 
 async function loadSchemaSql(): Promise<string> {
@@ -320,6 +378,37 @@ async function insertEntry(
   }
 }
 
+async function insertEntriesBatch(
+  table: string,
+  entries: JsonlEntry[],
+  columnMeta: ColumnMeta[],
+  pkColumns: string[],
+  errors: RestoreResult["errors"],
+): Promise<void> {
+  if (entries.length === 0) return;
+
+  const columns = resolveBatchColumns(entries, columnMeta);
+  if (columns.length === 0) {
+    for (const entry of entries) {
+      errors.push({ table, rowIndex: entry.lineIndex, error: "no known columns in row" });
+    }
+    return;
+  }
+
+  const conflictColumns =
+    pkColumns.length > 0 ? pkColumns : columns.includes("id") ? ["id"] : columns.slice(0, 1);
+  const text = buildBatchInsertQuery(table, columns, conflictColumns, entries.length);
+  const values = buildBatchValues(entries, columns, columnMeta);
+
+  try {
+    await execProxy(text, values);
+  } catch {
+    for (const entry of entries) {
+      await insertEntry(table, entry, columnMeta, pkColumns, errors);
+    }
+  }
+}
+
 async function countTableRows(table: string): Promise<number> {
   const res = await execProxy(`SELECT COUNT(*)::text AS count FROM ${quoteIdent(table)}`);
   return Number(res.rows[0]?.count ?? 0);
@@ -369,11 +458,10 @@ export async function restoreYandexFromBlob(opts: {
       continue;
     }
 
-    for (let i = 0; i < tableEntries.length; i += BATCH_SIZE) {
-      const batch = tableEntries.slice(i, i + BATCH_SIZE);
-      for (const entry of batch) {
-        await insertEntry(table, entry, columnMeta, pkColumns, errors);
-      }
+    const rowLimit = batchRowLimitForColumns(columnMeta.length);
+    for (let i = 0; i < tableEntries.length; i += rowLimit) {
+      const batch = tableEntries.slice(i, i + rowLimit);
+      await insertEntriesBatch(table, batch, columnMeta, pkColumns, errors);
     }
   }
 
