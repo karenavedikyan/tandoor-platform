@@ -107,11 +107,11 @@ export function defaultDealerBaseSegmentCollapse(isNarrowViewport: boolean): Dea
   }
   return {
     top150: false,
-    top350: false,
-    top500: false,
-    top500_plus: false,
-    new: false,
-    other: false,
+    top350: true,
+    top500: true,
+    top500_plus: true,
+    new: true,
+    other: true,
   };
 }
 
