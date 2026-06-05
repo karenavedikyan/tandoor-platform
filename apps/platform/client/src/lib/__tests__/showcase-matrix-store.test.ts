@@ -139,6 +139,33 @@ assert.equal(placementPayload.placementCapacity, 6);
 assert.equal(placementPayload.placementActual, 2);
 assert.equal(placementPayload.placementRef, null);
 
+setMatrixPlacement({
+  dealerId: "d-1",
+  tradePointId: "tp-2",
+  targetId: "block-portal-1",
+  placementType: "portal",
+  placementSegment: "vh",
+  placementCapacity: 6,
+  placementActual: 2,
+  placementCompetitors: [{ brand: "RivalCo", count: 1 }],
+});
+
+const withCompetitors = loadCachedPlacements("tp-2").find((e) => e.targetId === "block-portal-1");
+assert.equal(withCompetitors?.placementCompetitors.length, 1);
+assert.equal(withCompetitors?.placementCompetitors[0]?.brand, "RivalCo");
+
+pending = listPendingSyncItems();
+const competitorUpserts = pending
+  .filter((x) => x.kind === "showcase-matrix-upsert")
+  .map((x) => x.payload as Record<string, unknown>)
+  .filter((p) => p.targetId === "block-portal-1");
+const lastPlacementPayload = competitorUpserts[competitorUpserts.length - 1];
+assert.ok(Array.isArray(lastPlacementPayload?.placementCompetitors));
+assert.equal(
+  (lastPlacementPayload!.placementCompetitors as { brand: string }[])[0]?.brand,
+  "RivalCo",
+);
+
 setMatrixPlacementModel({
   dealerId: "d-1",
   tradePointId: "tp-2",
@@ -153,7 +180,11 @@ assert.equal(modelInBlock?.placementRef, "block-portal-1");
 assert.equal(modelInBlock?.placementType, null);
 
 pending = listPendingSyncItems();
-const modelPending = pending.find((x) => x.id === "showcase-matrix-upsert:test-op-uuid-0003");
+const modelPending = pending.find(
+  (x) =>
+    x.kind === "showcase-matrix-upsert" &&
+    (x.payload as Record<string, unknown>).targetId === "model-in-block",
+);
 assert.ok(modelPending);
 const modelPayload = modelPending!.payload as Record<string, unknown>;
 assert.equal(modelPayload.placementRef, "block-portal-1");
