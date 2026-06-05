@@ -157,6 +157,29 @@ export function TradePointShowcaseParamsSection({
   const readOnlyLabel = (value: string | null | undefined, empty = "Не указано") =>
     value?.trim() ? value.trim() : empty;
 
+  const saveFooter = canEdit ? (
+    <div className="flex flex-col gap-1 pt-1">
+      <SectionSaveButton
+        testId="button-showcase-params-save"
+        phase={save.phase}
+        onSave={() => void save.runSave(persist)}
+      />
+      <p
+        className="text-[10px] leading-snug text-muted-foreground"
+        data-testid="text-showcase-params-save-status"
+        aria-live="polite"
+      >
+        {save.phase === "saving"
+          ? "Сохраняем…"
+          : save.phase === "success"
+            ? "Сохранено"
+            : save.isDirty
+              ? "Есть несохранённые изменения"
+              : "Нет несохранённых изменений"}
+      </p>
+    </div>
+  ) : null;
+
   if (isInitialLoading) {
     return (
       <div
@@ -176,36 +199,12 @@ export function TradePointShowcaseParamsSection({
       className="rounded-lg border border-border/50 bg-card p-2.5 sm:p-3"
       data-testid="section-trade-point-showcase-params"
     >
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 space-y-0.5">
-          <h3 className="text-sm font-semibold leading-tight text-foreground">Параметры витрины</h3>
-          {rec?.updatedAt?.trim() ? (
-            <p className="text-[10px] text-muted-foreground/90">
-              Обновлено: {formatDisplayDateTime(rec.updatedAt)}
-            </p>
-          ) : null}
-        </div>
-        {canEdit ? (
-          <div className="flex shrink-0 flex-col items-stretch gap-1 sm:items-end">
-            <SectionSaveButton
-              testId="button-showcase-params-save"
-              phase={save.phase}
-              onSave={() => void save.runSave(persist)}
-            />
-            <p
-              className="text-[10px] leading-snug text-muted-foreground"
-              data-testid="text-showcase-params-save-status"
-              aria-live="polite"
-            >
-              {save.phase === "saving"
-                ? "Сохраняем…"
-                : save.phase === "success"
-                  ? "Сохранено"
-                  : save.isDirty
-                    ? "Есть несохранённые изменения"
-                    : "Нет несохранённых изменений"}
-            </p>
-          </div>
+      <div className="min-w-0 space-y-0.5">
+        <h3 className="text-sm font-semibold leading-tight text-foreground">Параметры витрины</h3>
+        {rec?.updatedAt?.trim() ? (
+          <p className="text-[10px] text-muted-foreground/90">
+            Обновлено: {formatDisplayDateTime(rec.updatedAt)}
+          </p>
         ) : null}
       </div>
 
@@ -292,8 +291,8 @@ export function TradePointShowcaseParamsSection({
         ) : null}
 
         {hasShowcase === true ? (
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            <div className="space-y-1 sm:col-span-2 lg:col-span-1">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className="space-y-1">
               <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                 Площадь витрины, м²
               </Label>
@@ -350,28 +349,7 @@ export function TradePointShowcaseParamsSection({
               )}
             </div>
 
-            <div className="space-y-1">
-              <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                Доп. порталов можно занять
-              </Label>
-              {canEdit ? (
-                <Input
-                  className="min-h-9"
-                  inputMode="numeric"
-                  value={addPortals}
-                  onChange={(e) => {
-                    setAddPortals(e.target.value);
-                    markDirty();
-                  }}
-                />
-              ) : (
-                <p className="min-h-9 rounded-md border border-border/40 bg-muted/20 px-3 py-2 text-sm text-foreground">
-                  {readOnlyLabel(addPortals)}
-                </p>
-              )}
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 sm:col-span-2 lg:col-span-3">
+            <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
               {canEdit ? (
                 <Checkbox
                   id={`exp-pot-${point.id}`}
@@ -392,7 +370,7 @@ export function TradePointShowcaseParamsSection({
               </Label>
             </div>
 
-            <div className="space-y-1 sm:col-span-2 lg:col-span-3">
+            <div className="space-y-1 sm:col-span-2">
               <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                 Что поставить в первую очередь
               </Label>
@@ -413,7 +391,7 @@ export function TradePointShowcaseParamsSection({
               )}
             </div>
 
-            <div className="space-y-1 sm:col-span-2 lg:col-span-3">
+            <div className="space-y-1 sm:col-span-2">
               <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                 Комментарий для РМ/РОП
               </Label>
@@ -434,7 +412,7 @@ export function TradePointShowcaseParamsSection({
               )}
             </div>
 
-            <div className="space-y-1 sm:col-span-2 lg:col-span-3">
+            <div className="space-y-1 sm:col-span-2">
               <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                 Комментарий по витрине
               </Label>
@@ -456,7 +434,7 @@ export function TradePointShowcaseParamsSection({
             </div>
 
             {canEdit ? (
-              <div className="sm:col-span-2 lg:col-span-3">
+              <div className="sm:col-span-2">
                 <Button
                   type="button"
                   size="sm"
@@ -471,8 +449,12 @@ export function TradePointShowcaseParamsSection({
                 </Button>
               </div>
             ) : null}
+
+            {saveFooter ? <div className="sm:col-span-2">{saveFooter}</div> : null}
           </div>
         ) : null}
+
+        {hasShowcase !== true ? saveFooter : null}
       </div>
     </div>
   );
