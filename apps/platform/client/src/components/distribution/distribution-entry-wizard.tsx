@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,13 +28,19 @@ import { useClientBaseTeamActualization } from "@/context/client-base-team-actua
 
 type DistributionEntryWizardProps = {
   profile: ReleaseDemoProfile;
+  onAxisChange?: (active: boolean) => void;
 };
 
-export function DistributionEntryWizard({ profile }: DistributionEntryWizardProps) {
+export function DistributionEntryWizard({ profile, onAxisChange }: DistributionEntryWizardProps) {
   const actx = useClientBaseActualization();
   const managementPlane = useClientBaseTeamActualization();
   const [axis, setAxis] = useState<DistributionEntryAxis | null>(null);
   const [filter, setFilter] = useState<DistributionFilterState>(defaultDistributionFilterState);
+
+  useEffect(() => {
+    onAxisChange?.(axis !== null);
+    return () => onAxisChange?.(false);
+  }, [axis, onAxisChange]);
 
   const workingDealerRows = useMemo(
     () =>
@@ -88,7 +94,7 @@ export function DistributionEntryWizard({ profile }: DistributionEntryWizardProp
         </div>
       ) : null}
 
-      {axis ? (
+      {axis && axis !== "tradePoint" ? (
         <DistributionFiltersBar
           value={filter}
           onChange={setFilter}
@@ -98,7 +104,7 @@ export function DistributionEntryWizard({ profile }: DistributionEntryWizardProp
         />
       ) : null}
 
-      {axis && activeChips.length > 0 ? (
+      {axis && axis !== "tradePoint" && activeChips.length > 0 ? (
         <div className="flex flex-wrap items-center gap-2">
           {activeChips.map((chip) => (
             <Badge key={chip.id} variant="secondary" className="font-normal">
@@ -121,7 +127,14 @@ export function DistributionEntryWizard({ profile }: DistributionEntryWizardProp
       {!axis ? (
         <DistributionEntryAxisPicker onSelect={setAxis} />
       ) : axis === "tradePoint" ? (
-        <DistributionEntryTradePointPanel profile={profile} dealers={filteredDealers} />
+        <DistributionEntryTradePointPanel
+          profile={profile}
+          dealers={filteredDealers}
+          filter={filter}
+          onFilterChange={setFilter}
+          regionOptions={regionOptions}
+          cityOptions={cityOptions}
+        />
       ) : axis === "product" ? (
         <DistributionEntryProductPanel profile={profile} dealers={filteredDealers} filter={filter} />
       ) : (
