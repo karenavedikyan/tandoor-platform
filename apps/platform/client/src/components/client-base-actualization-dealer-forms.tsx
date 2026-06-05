@@ -432,23 +432,9 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
   const { open, onOpenChange, baseRow, profile } = props;
   const { persist, state } = useClientBaseActualization();
   const queryClient = useQueryClient();
-  const passportSave = useSectionSaveFeedback();
-  const responsiblesSave = useSectionSaveFeedback();
-  const logisticsSave = useSectionSaveFeedback();
-  const contactsSave = useSectionSaveFeedback();
-  const commercialSave = useSectionSaveFeedback();
+  const formSave = useSectionSaveFeedback();
 
-  const skipDialogHydrate =
-    passportSave.isDirty ||
-    passportSave.phase === "saving" ||
-    responsiblesSave.isDirty ||
-    responsiblesSave.phase === "saving" ||
-    logisticsSave.isDirty ||
-    logisticsSave.phase === "saving" ||
-    contactsSave.isDirty ||
-    contactsSave.phase === "saving" ||
-    commercialSave.isDirty ||
-    commercialSave.phase === "saving";
+  const skipDialogHydrate = formSave.isDirty || formSave.phase === "saving";
 
   const [name, setName] = useState("");
   const [inn, setInn] = useState("");
@@ -767,7 +753,7 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
                   value={inn}
                   onChange={(e) => {
                     setInn(e.target.value);
-                    passportSave.markDirty();
+                    formSave.markDirty();
                   }}
                   className="min-h-10"
                 />
@@ -778,7 +764,7 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
                   value={passportClientKind}
                   onValueChange={(v) => {
                     setPassportClientKind(v);
-                    passportSave.markDirty();
+                    formSave.markDirty();
                   }}
                 >
                   <SelectTrigger className="min-h-10">
@@ -799,7 +785,7 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
                   value={passportLifecycleStatus}
                   onValueChange={(v) => {
                     setPassportLifecycleStatus(v);
-                    passportSave.markDirty();
+                    formSave.markDirty();
                   }}
                 >
                   <SelectTrigger className="min-h-10">
@@ -820,7 +806,7 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
                   value={passportCategoryTier}
                   onValueChange={(v) => {
                     setPassportCategoryTier(v);
-                    passportSave.markDirty();
+                    formSave.markDirty();
                   }}
                 >
                   <SelectTrigger className="min-h-10">
@@ -835,16 +821,6 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
                   </SelectContent>
                 </Select>
               </div>
-              <SectionSaveButton
-                testId="button-dealer-section-save-passport"
-                statusTestId="text-save-status-passport"
-                phase={passportSave.phase}
-                onSave={() =>
-                  void passportSave.runSave(async () => {
-                    return persistAll();
-                  })
-                }
-              />
             </AccordionContent>
           </AccordionItem>
 
@@ -857,7 +833,7 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
                   value={manager}
                   onChange={(e) => {
                     setManager(e.target.value);
-                    responsiblesSave.markDirty();
+                    formSave.markDirty();
                   }}
                   className="min-h-10"
                 />
@@ -868,25 +844,15 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
                 onRopChange={(id, name) => {
                   setRopUserId(id);
                   setRopDisplayName(name);
-                  responsiblesSave.markDirty();
+                  formSave.markDirty();
                 }}
                 onRegionalManagerChange={(id, name) => {
                   setRegionalManagerUserId(id);
                   setRegionalManagerDisplayName(name);
-                  responsiblesSave.markDirty();
+                  formSave.markDirty();
                 }}
                 ropTestId="select-dealer-rop"
                 rmTestId="select-dealer-regional-manager"
-              />
-              <SectionSaveButton
-                testId="button-dealer-section-save-responsibles"
-                statusTestId="text-save-status-responsibles"
-                phase={responsiblesSave.phase}
-                onSave={() =>
-                  void responsiblesSave.runSave(async () => {
-                    return persistAll();
-                  })
-                }
               />
             </AccordionContent>
           </AccordionItem>
@@ -900,7 +866,7 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
                   value={city}
                   onChange={(e) => {
                     setCity(e.target.value);
-                    logisticsSave.markDirty();
+                    formSave.markDirty();
                   }}
                   className="min-h-10"
                 />
@@ -912,7 +878,7 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
                   value={address}
                   onChange={(v) => {
                     setAddress(v);
-                    logisticsSave.markDirty();
+                    formSave.markDirty();
                   }}
                   rows={2}
                   className="[&_textarea]:min-h-[52px]"
@@ -924,7 +890,7 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
                 <ShipmentDaysMultiSelect
                   value={shipmentDayIds}
                   onChange={setShipmentDayIds}
-                  onMarkDirty={() => logisticsSave.markDirty()}
+                  onMarkDirty={() => formSave.markDirty()}
                   triggerTestId="button-dealer-shipment-days-trigger"
                   popoverTestId="popover-dealer-shipment-days"
                 />
@@ -936,7 +902,7 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
                   value={unloadingOrder}
                   onChange={(e) => {
                     setUnloadingOrder(e.target.value);
-                    logisticsSave.markDirty();
+                    formSave.markDirty();
                   }}
                   className="min-h-10"
                 />
@@ -947,7 +913,7 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
                   value={territoryZone}
                   onChange={(e) => {
                     setTerritoryZone(e.target.value);
-                    logisticsSave.markDirty();
+                    formSave.markDirty();
                   }}
                   className="min-h-10"
                 />
@@ -959,21 +925,11 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
                   value={logisticsComment}
                   onChange={(e) => {
                     setLogisticsComment(e.target.value);
-                    logisticsSave.markDirty();
+                    formSave.markDirty();
                   }}
                   className="min-h-[52px]"
                 />
               </div>
-              <SectionSaveButton
-                testId="button-dealer-section-save-logistics"
-                statusTestId="text-save-status-logistics"
-                phase={logisticsSave.phase}
-                onSave={() =>
-                  void logisticsSave.runSave(async () => {
-                    return persistAll();
-                  })
-                }
-              />
             </AccordionContent>
           </AccordionItem>
 
@@ -988,7 +944,7 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
                   value={name}
                   onChange={(e) => {
                     setName(e.target.value);
-                    contactsSave.markDirty();
+                    formSave.markDirty();
                   }}
                   className="min-h-10"
                 />
@@ -1001,7 +957,7 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
                   placeholder={RU_PHONE_PLACEHOLDER}
                   onChange={(e) => {
                     setPhone(formatRussianPhoneInput(e.target.value));
-                    contactsSave.markDirty();
+                    formSave.markDirty();
                   }}
                   className="min-h-10"
                 />
@@ -1012,7 +968,7 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
                   value={email}
                   onChange={(e) => {
                     setEmail(e.target.value);
-                    contactsSave.markDirty();
+                    formSave.markDirty();
                   }}
                   className="min-h-10"
                 />
@@ -1023,42 +979,12 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
                   value={comment}
                   onChange={(e) => {
                     setComment(e.target.value);
-                    contactsSave.markDirty();
+                    formSave.markDirty();
                   }}
                   rows={2}
                   className="min-h-[52px]"
                 />
               </div>
-              <SectionSaveButton
-                testId="button-dealer-section-save-contacts"
-                statusTestId="text-save-status-contacts"
-                phase={contactsSave.phase}
-                onSave={() =>
-                  void contactsSave.runSave(async () => {
-                    const ok = await persistAll();
-                    if (!ok) return false;
-                    const phoneFormatted = phone.trim() ? formatRussianPhoneInput(phone) : "";
-                    const syncOk = await upsertPrimaryDealerContactFromEditForm({
-                      dealerId: baseRow.id,
-                      name: name.trim(),
-                      nameFallback: baseRow.name,
-                      phone: phoneFormatted,
-                      email: email.trim(),
-                      comment: comment.trim(),
-                      profile,
-                    });
-                    if (!syncOk) {
-                      toast({
-                        title: "Сохранено локально, контакт синхронизируется при следующем входе",
-                      });
-                    } else {
-                      await queryClient.invalidateQueries({ queryKey: ["client-contacts", baseRow.id] });
-                      void refreshDbContactsForDealer(baseRow.id);
-                    }
-                    return true;
-                  })
-                }
-              />
             </AccordionContent>
           </AccordionItem>
 
@@ -1088,26 +1014,47 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
                 setCashbackComment={setCashbackComment}
                 external1c={external1c}
                 setExternal1c={setExternal1c}
-                onMarkDirty={() => commercialSave.markDirty()}
-              />
-              <SectionSaveButton
-                testId="button-dealer-section-save-commercial"
-                statusTestId="text-save-status-commercial"
-                phase={commercialSave.phase}
-                onSave={() =>
-                  void commercialSave.runSave(async () => {
-                    return persistAll();
-                  })
-                }
+                onMarkDirty={() => formSave.markDirty()}
               />
             </AccordionContent>
           </AccordionItem>
         </Accordion>
-        <DialogFooter className="sticky bottom-0 flex-col items-stretch gap-2 border-t border-border bg-background pt-3 sm:flex-row sm:justify-between">
-          <p className="text-xs text-muted-foreground">Сохраняйте изменения кнопкой внутри каждого блока.</p>
+        <DialogFooter className="sticky bottom-0 flex-col items-stretch gap-2 border-t border-border bg-background pt-3 sm:flex-row sm:justify-end">
           <Button type="button" variant="outline" className="min-h-10 w-full sm:w-auto" onClick={() => onOpenChange(false)}>
             Закрыть без сохранения
           </Button>
+          <SectionSaveButton
+            testId="button-dealer-edit-save-all"
+            statusTestId="text-save-status-dealer-edit"
+            phase={formSave.phase}
+            className="w-full sm:w-auto"
+            onSave={() =>
+              void formSave.runSave(async () => {
+                const ok = await persistAll();
+                if (!ok) return false;
+                const phoneFormatted = phone.trim() ? formatRussianPhoneInput(phone) : "";
+                const syncOk = await upsertPrimaryDealerContactFromEditForm({
+                  dealerId: baseRow.id,
+                  name: name.trim(),
+                  nameFallback: baseRow.name,
+                  phone: phoneFormatted,
+                  email: email.trim(),
+                  comment: comment.trim(),
+                  profile,
+                });
+                if (!syncOk) {
+                  toast({
+                    title: "Сохранено локально, контакт синхронизируется при следующем входе",
+                  });
+                } else {
+                  await queryClient.invalidateQueries({ queryKey: ["client-contacts", baseRow.id] });
+                  void refreshDbContactsForDealer(baseRow.id);
+                }
+                onOpenChange(false);
+                return true;
+              })
+            }
+          />
         </DialogFooter>
       </DialogContent>
     </Dialog>
