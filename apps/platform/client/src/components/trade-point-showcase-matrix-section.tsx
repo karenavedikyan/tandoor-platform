@@ -48,7 +48,6 @@ import type { ShowcaseTask } from "@/lib/showcase-distribution-data";
 import type { MatrixFilterId, TradePointMatrixSummary, TradePointProductMatrixItem } from "@/lib/trade-point-matrix-data";
 import type { MatrixTask, MatrixTaskRecommendation } from "@/lib/trade-point-task-data";
 import { ShowcaseModelPresentationDialog } from "@/components/showcase-model-presentation-dialog";
-import { TradePointProductMatrixVisual } from "@/components/trade-point-product-matrix-visual";
 import { TradePointPlacementBlocksSection } from "@/components/distribution/trade-point-placement-blocks-section";
 
 export type ShowcaseMatrixViewMode = "large" | "compact" | "mini" | "list";
@@ -1512,20 +1511,6 @@ export function TradePointShowcaseMatrixSection({
             canEdit={canEdit}
             actorUserId={actorUserId}
             actorName={actorName}
-          />
-
-          <Separator className="bg-border/50" />
-
-          <TradePointProductMatrixVisual
-            viewMode={viewMode}
-            matrixSummary={page.matrixSummary}
-            filteredItems={page.productMatrixFiltered}
-            matrixFilter={page.productMatrixFilter}
-            onMatrixFilterChange={page.onProductMatrixFilterChange}
-            recommendationByProductId={page.recommendationByProductId}
-            createdTaskByProductId={page.createdTaskByProductId}
-            onCreateMatrixTask={page.onCreateMatrixTask}
-            onScrollToMatrixTask={page.onScrollToMatrixTask}
           />
 
           <Separator className="bg-border/60" />
