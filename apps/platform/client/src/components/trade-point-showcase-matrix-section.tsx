@@ -495,7 +495,7 @@ export function TradePointShowcaseMatrixSection({
   const manualOnlyModels = useMemo(() => {
     const matrixModelIds = new Set(models.map((m) => m.id));
     const out: ShowcaseMatrixModelDefinition[] = [];
-    for (const entry of backendByModelId.values()) {
+    for (const entry of Array.from(backendByModelId.values())) {
       if (entry.targetKind !== "model") continue;
       if (matrixModelIds.has(entry.targetId)) continue;
       out.push(buildManualModelFromEntry(entry, dealer));
