@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
-  Check,
   ChevronDown,
   ChevronRight,
   ChevronUp,
@@ -178,7 +177,6 @@ export function DistributionFullscreenEntry({
       return false;
     }
   });
-  const [paintStatus, setPaintStatus] = useState<ShowcaseMatrixStatusId>("installed");
   const [draft, setDraft] = useState<FullscreenEntryDraftMap>({});
   const [historyOpen, setHistoryOpen] = useState(false);
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
@@ -487,6 +485,7 @@ export function DistributionFullscreenEntry({
       role="dialog"
       aria-modal="true"
     >
+      {!compactMode ? (
       <header className="z-20 shrink-0 border-b border-border/80 bg-background/95 px-3 py-2 backdrop-blur-sm sm:px-4 md:py-2.5">
         <div className="flex min-h-10 items-center gap-2">
           {onBackToList ? (
@@ -563,13 +562,14 @@ export function DistributionFullscreenEntry({
           </Badge>
         ) : null}
       </header>
+      ) : null}
 
       <div
         className={cn(
           "z-10 shrink-0 overflow-hidden border-b border-border/60 bg-background/95 backdrop-blur-sm transition-[max-height,opacity] duration-200 ease-out",
-          headerCollapsed ? "max-h-0 border-transparent opacity-0" : "max-h-[min(40vh,520px)] opacity-100",
+          headerCollapsed && !compactMode ? "max-h-0 border-transparent opacity-0" : "max-h-[min(40vh,520px)] opacity-100",
         )}
-        aria-hidden={headerCollapsed}
+        aria-hidden={headerCollapsed && !compactMode}
       >
         <div className="flex flex-col gap-2 px-3 py-2 sm:px-4 md:gap-2 md:py-2.5">
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-2">
@@ -694,25 +694,6 @@ export function DistributionFullscreenEntry({
               </SelectContent>
             </Select>
           </div>
-
-          {compactMode ? (
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-xs text-muted-foreground">Отмечать как:</span>
-              {STATUS_OPTIONS.map((o) => (
-                <Button
-                  key={o.id}
-                  type="button"
-                  size="sm"
-                  variant={paintStatus === o.id ? "default" : "outline"}
-                  className="min-h-9 px-2.5 text-xs"
-                  onClick={() => setPaintStatus(o.id)}
-                  data-testid={`button-fullscreen-entry-paint-${o.id}`}
-                >
-                  {o.label}
-                </Button>
-              ))}
-            </div>
-          ) : null}
         </div>
       </div>
 
@@ -739,9 +720,6 @@ export function DistributionFullscreenEntry({
                   key={p.id}
                   product={p}
                   cardSize={cardSize}
-                  compact={compactMode}
-                  paintStatus={paintStatus}
-                  baselineStatus={baselines[p.id]?.status ?? "need_install"}
                   draft={draft[p.id]}
                   matrixModel={matrixModelById.get(p.id)}
                   onDraftChange={updateDraft}
@@ -751,39 +729,54 @@ export function DistributionFullscreenEntry({
           )}
         </div>
 
-        <div
-          className={cn(
-            "z-30 shrink-0 border-t border-border/80 bg-background/95 px-3 py-3 backdrop-blur-sm sm:px-4",
-            "md:fixed md:bottom-3 md:right-3 md:z-30 md:max-w-[min(100vw-1.5rem,28rem)] md:rounded-xl md:border md:border-t md:shadow-lg",
-          )}
-          aria-live="polite"
-        >
-          <p className="mb-2 text-center text-sm text-muted-foreground md:text-right">
-            Отмечено: <span className="font-semibold tabular-nums text-foreground">{installedCount}</span>
-          </p>
-          <div className="flex flex-wrap gap-2 md:justify-end">
-            <Button
-              type="button"
-              className="min-h-10 flex-1 sm:flex-none"
-              disabled={changedIds.length === 0 || saving}
-              onClick={() => void handleSave()}
-              data-testid="button-fullscreen-entry-save"
-            >
-              {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> : null}
-              Сохранить ({changedIds.length})
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="min-h-10"
-              onClick={() => setHistoryOpen(true)}
-              data-testid="button-fullscreen-entry-history"
-            >
-              История
-            </Button>
+        {!compactMode ? (
+          <div
+            className={cn(
+              "z-30 shrink-0 border-t border-border/80 bg-background/95 px-3 py-3 backdrop-blur-sm sm:px-4",
+              "md:fixed md:bottom-3 md:right-3 md:z-30 md:max-w-[min(100vw-1.5rem,28rem)] md:rounded-xl md:border md:border-t md:shadow-lg",
+            )}
+            aria-live="polite"
+          >
+            <p className="mb-2 text-center text-sm text-muted-foreground md:text-right">
+              Отмечено: <span className="font-semibold tabular-nums text-foreground">{installedCount}</span>
+            </p>
+            <div className="flex flex-wrap gap-2 md:justify-end">
+              <Button
+                type="button"
+                className="min-h-10 flex-1 sm:flex-none"
+                disabled={changedIds.length === 0 || saving}
+                onClick={() => void handleSave()}
+                data-testid="button-fullscreen-entry-save"
+              >
+                {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> : null}
+                Сохранить ({changedIds.length})
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-10"
+                onClick={() => setHistoryOpen(true)}
+                data-testid="button-fullscreen-entry-history"
+              >
+                История
+              </Button>
+            </div>
           </div>
-        </div>
+        ) : null}
       </div>
+
+      {compactMode && changedIds.length > 0 ? (
+        <Button
+          type="button"
+          className="fixed bottom-4 right-4 z-40 min-h-11 rounded-full px-5 shadow-lg"
+          disabled={saving}
+          onClick={() => void handleSave()}
+          data-testid="button-fullscreen-entry-save-floating"
+        >
+          {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> : null}
+          Сохранить ({changedIds.length})
+        </Button>
+      ) : null}
 
       <Sheet
         open={historyOpen}
@@ -932,18 +925,10 @@ function StatusSelectControl({
 function FullscreenProductCard({
   product,
   cardSize,
-  compact,
-  paintStatus,
-  baselineStatus,
   draft,
   matrixModel,
   onDraftChange,
-}: ProductDraftProps & {
-  cardSize: CatalogCardSize;
-  compact: boolean;
-  paintStatus: ShowcaseMatrixStatusId;
-  baselineStatus: ShowcaseMatrixStatusId;
-}) {
+}: ProductDraftProps & { cardSize: CatalogCardSize }) {
   const row = draft;
   const segment = row ? row.placementSegment : segmentForProduct(product, matrixModel);
   const placementOptions = allowedTypesForSegment(segment);
@@ -951,54 +936,7 @@ function FullscreenProductCard({
   const titleSize =
     cardSize === "xl" ? "text-sm" : cardSize === "s" ? "text-[11px]" : "text-xs";
 
-  const currentStatus = row?.status ?? baselineStatus;
-  const isMarked = currentStatus === paintStatus;
-
-  const handlePaintTap = () => {
-    if (isMarked) {
-      onDraftChange(product.id, { status: baselineStatus });
-    } else {
-      const seg = segmentForProduct(product, matrixModel);
-      onDraftChange(product.id, {
-        status: paintStatus,
-        placementSegment: row?.placementSegment ?? seg,
-        placementType: row?.placementType ?? "portal",
-      });
-    }
-  };
-
-  if (compact) {
-    return (
-      <article
-        className={cn(
-          "relative overflow-hidden rounded-lg border bg-card shadow-xs transition",
-          isMarked ? "border-primary ring-2 ring-primary" : "border-border/80",
-        )}
-      >
-        <button
-          type="button"
-          onClick={handlePaintTap}
-          className="relative block aspect-[5/4] w-full overflow-hidden rounded-md bg-muted/40 focus-visible:outline-none"
-          data-testid={`button-fullscreen-entry-paint-tap-${product.id}`}
-          aria-pressed={isMarked}
-          title={product.name}
-        >
-          {img ? (
-            <img src={img} alt="" className="h-full w-full object-contain" loading="lazy" />
-          ) : (
-            <div className="flex h-full items-center justify-center text-[10px] text-muted-foreground">
-              Нет фото
-            </div>
-          )}
-          {isMarked ? (
-            <span className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground shadow">
-              <Check className="h-3.5 w-3.5" aria-hidden />
-            </span>
-          ) : null}
-        </button>
-      </article>
-    );
-  }
+  const currentStatus = row?.status ?? "need_install";
 
   return (
     <article
