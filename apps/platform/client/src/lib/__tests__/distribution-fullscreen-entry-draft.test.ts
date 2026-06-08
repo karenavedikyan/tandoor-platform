@@ -2,8 +2,7 @@ import assert from "node:assert/strict";
 import {
   buildInitialDraftRow,
   collectChangedProductIds,
-  installedFromMatrixStatus,
-  matrixStatusFromInstalled,
+  isInstalledMatrixStatus,
   draftRowEqualsBaseline,
   countInstalledInDraft,
   type FullscreenEntryBaseline,
@@ -17,19 +16,51 @@ const baseline: FullscreenEntryBaseline = {
   comment: "",
 };
 
-assert.equal(installedFromMatrixStatus("installed"), true);
-assert.equal(installedFromMatrixStatus("postponed"), false);
-assert.equal(matrixStatusFromInstalled(true, "need_install"), "installed");
-assert.equal(matrixStatusFromInstalled(false, "installed"), "need_install");
-assert.equal(matrixStatusFromInstalled(false, "postponed"), "postponed");
+assert.equal(isInstalledMatrixStatus("installed"), true);
+assert.equal(isInstalledMatrixStatus("postponed"), false);
 
 const draft0 = buildInitialDraftRow(baseline);
-assert.equal(draft0.installed, false);
+assert.equal(draft0.status, "need_install");
 assert.equal(draft0.placementType, "portal");
 
-const draftInstalled = { ...draft0, installed: true, placementType: "cube" as const, placementSegment: "vh" as const };
+const draftInstalled = {
+  ...draft0,
+  status: "installed" as const,
+  placementType: "cube" as const,
+  placementSegment: "vh" as const,
+};
 assert.equal(draftRowEqualsBaseline(draft0, baseline), true);
 assert.equal(draftRowEqualsBaseline(draftInstalled, baseline), false);
+
+const installedBaseline: FullscreenEntryBaseline = {
+  status: "installed",
+  placementType: "portal",
+  placementSegment: "mk",
+  comment: "",
+};
+const draftInstalledMatch = buildInitialDraftRow(installedBaseline);
+assert.equal(draftRowEqualsBaseline(draftInstalledMatch, installedBaseline), true);
+assert.equal(
+  draftRowEqualsBaseline({ ...draftInstalledMatch, placementType: "cube" }, installedBaseline),
+  false,
+);
+
+assert.equal(draftRowEqualsBaseline({ ...draft0, status: "postponed" }, baseline), false);
+assert.equal(
+  draftRowEqualsBaseline({ ...draft0, status: "postponed", placementType: "cube" }, { ...baseline, status: "postponed" }),
+  true,
+);
+assert.equal(
+  draftRowEqualsBaseline({ ...draft0, status: "not_relevant" }, { ...baseline, status: "not_relevant" }),
+  true,
+);
+assert.equal(
+  draftRowEqualsBaseline(
+    { ...draft0, status: "postponed", placementType: "cube", placementSegment: "vh" },
+    { ...baseline, status: "postponed" },
+  ),
+  true,
+);
 
 const baselines: Record<string, FullscreenEntryBaseline> = {
   a: baseline,

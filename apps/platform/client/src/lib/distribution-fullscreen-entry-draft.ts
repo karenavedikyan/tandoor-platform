@@ -9,7 +9,7 @@ export type FullscreenEntryBaseline = {
 };
 
 export type FullscreenEntryDraftRow = {
-  installed: boolean;
+  status: ShowcaseMatrixStatusId;
   placementType: ShowcasePlacementType;
   placementSegment: ShowcasePlacementSegment;
 };
@@ -20,27 +20,12 @@ export function isInstalledMatrixStatus(status: ShowcaseMatrixStatusId): boolean
   return status === "installed";
 }
 
-/** Галочка «стоит» ↔ статус installed. */
-export function installedFromMatrixStatus(status: ShowcaseMatrixStatusId): boolean {
-  return isInstalledMatrixStatus(status);
-}
-
-/** Статус после снятия/установки галочки с учётом прежнего статуса матрицы. */
-export function matrixStatusFromInstalled(
-  installed: boolean,
-  baselineStatus: ShowcaseMatrixStatusId,
-): ShowcaseMatrixStatusId {
-  if (installed) return "installed";
-  if (baselineStatus === "installed") return "need_install";
-  return baselineStatus;
-}
-
 export function buildInitialDraftRow(
   baseline: FullscreenEntryBaseline,
   defaultPlacementType: ShowcasePlacementType = "portal",
 ): FullscreenEntryDraftRow {
   return {
-    installed: installedFromMatrixStatus(baseline.status),
+    status: baseline.status,
     placementType: baseline.placementType ?? defaultPlacementType,
     placementSegment: baseline.placementSegment ?? "vh",
   };
@@ -50,9 +35,8 @@ export function draftRowEqualsBaseline(
   draft: FullscreenEntryDraftRow,
   baseline: FullscreenEntryBaseline,
 ): boolean {
-  const targetStatus = matrixStatusFromInstalled(draft.installed, baseline.status);
-  if (targetStatus !== baseline.status) return false;
-  if (!draft.installed) return true;
+  if (draft.status !== baseline.status) return false;
+  if (draft.status !== "installed") return true;
   if ((baseline.placementType ?? "portal") !== draft.placementType) return false;
   if ((baseline.placementSegment ?? draft.placementSegment) !== draft.placementSegment) return false;
   return true;
@@ -73,5 +57,5 @@ export function collectChangedProductIds(
 }
 
 export function countInstalledInDraft(draft: FullscreenEntryDraftMap): number {
-  return Object.values(draft).filter((r) => r.installed).length;
+  return Object.values(draft).filter((r) => r.status === "installed").length;
 }

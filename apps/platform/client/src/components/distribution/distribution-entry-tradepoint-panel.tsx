@@ -365,6 +365,7 @@ export function DistributionEntryTradePointPanel({
       profile={profile}
       actorUserId={actorUserId}
       actorName={actorName}
+      onBackToList={() => setSelectedTradePointId(null)}
     />
   ) : (
     <Card className="rounded-xl border border-dashed border-border bg-muted/10 shadow-none">

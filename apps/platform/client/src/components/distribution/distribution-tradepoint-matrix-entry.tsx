@@ -61,6 +61,7 @@ type DistributionTradePointMatrixEntryProps = {
   profile: ReleaseDemoProfile;
   actorUserId: string;
   actorName: string;
+  onBackToList?: () => void;
 };
 
 export function DistributionTradePointMatrixEntry({
@@ -69,6 +70,7 @@ export function DistributionTradePointMatrixEntry({
   profile,
   actorUserId,
   actorName,
+  onBackToList,
 }: DistributionTradePointMatrixEntryProps) {
   const templateModelsCount = useMemo(
     () =>
@@ -315,6 +317,14 @@ export function DistributionTradePointMatrixEntry({
               actorUserId={actorUserId}
               actorName={actorName}
               onClose={() => setFullscreenOpen(false)}
+              onBackToList={
+                onBackToList
+                  ? () => {
+                      setFullscreenOpen(false);
+                      onBackToList();
+                    }
+                  : undefined
+              }
             />
           ) : null}
         </>
