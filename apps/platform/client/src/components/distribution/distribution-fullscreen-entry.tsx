@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ArrowLeft,
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   Grid3x3,
   LayoutGrid,
@@ -158,6 +160,7 @@ export function DistributionFullscreenEntry({
   );
   const [draft, setDraft] = useState<FullscreenEntryDraftMap>({});
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
   const [headerCollapsed, setHeaderCollapsed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [online, setOnline] = useState(
@@ -313,6 +316,10 @@ export function DistributionFullscreenEntry({
   const historyEvents = useMemo(
     () => getShowcaseMatrixTpHistoryEvents(dealer.id, point.id, storage),
     [dealer.id, point.id, storage],
+  );
+  const selectedHistoryEvent = useMemo(
+    () => historyEvents.find((ev) => ev.id === selectedHistoryId) ?? null,
+    [historyEvents, selectedHistoryId],
   );
 
   const updateDraft = useCallback((productId: string, patch: Partial<FullscreenEntryDraftMap[string]>) => {
@@ -668,31 +675,88 @@ export function DistributionFullscreenEntry({
         </div>
       </div>
 
-      <Sheet open={historyOpen} onOpenChange={setHistoryOpen}>
+      <Sheet
+        open={historyOpen}
+        onOpenChange={(open) => {
+          setHistoryOpen(open);
+          if (!open) setSelectedHistoryId(null);
+        }}
+      >
         <SheetContent side="right" className="flex w-full flex-col sm:max-w-md">
-          <SheetHeader>
-            <SheetTitle>История изменений</SheetTitle>
-          </SheetHeader>
-          <div
-            className="min-h-0 flex-1 overflow-y-auto py-4"
-            data-testid="distribution-fullscreen-entry-history"
-          >
-            {historyEvents.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Пока нет истории изменений</p>
-            ) : (
-              <ul className="space-y-3">
-                {historyEvents.map((ev) => (
-                  <li
-                    key={ev.id}
-                    className="rounded-lg border border-border/80 bg-muted/20 px-3 py-2 text-sm"
+          {selectedHistoryEvent ? (
+            <>
+              <SheetHeader>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 gap-1 px-2 text-xs"
+                    onClick={() => setSelectedHistoryId(null)}
+                    data-testid="button-history-detail-back"
                   >
-                    <p className="font-medium text-foreground">{formatHistoryAt(ev.at)}</p>
-                    <p className="text-muted-foreground">{ev.meta}</p>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+                    <ArrowLeft className="h-4 w-4" />
+                    Назад
+                  </Button>
+                </div>
+                <SheetTitle>Что изменено</SheetTitle>
+              </SheetHeader>
+              <div
+                className="min-h-0 flex-1 overflow-y-auto py-4"
+                data-testid="distribution-fullscreen-entry-history-detail"
+              >
+                <div className="space-y-4">
+                  <div className="rounded-lg border border-border/80 bg-muted/20 px-3 py-2 text-sm">
+                    <p className="font-medium text-foreground">{formatHistoryAt(selectedHistoryEvent.at)}</p>
+                    <p className="text-muted-foreground">{selectedHistoryEvent.meta}</p>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Изменения
+                    </p>
+                    <p className="whitespace-pre-line text-sm text-foreground">
+                      {selectedHistoryEvent.body?.trim()
+                        ? selectedHistoryEvent.body
+                        : "Детали изменения не сохранены."}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <SheetHeader>
+                <SheetTitle>История изменений</SheetTitle>
+              </SheetHeader>
+              <div
+                className="min-h-0 flex-1 overflow-y-auto py-4"
+                data-testid="distribution-fullscreen-entry-history"
+              >
+                {historyEvents.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Пока нет истории изменений</p>
+                ) : (
+                  <ul className="space-y-3">
+                    {historyEvents.map((ev) => (
+                      <li key={ev.id}>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedHistoryId(ev.id)}
+                          className="flex w-full items-center justify-between gap-2 rounded-lg border border-border/80 bg-muted/20 px-3 py-2 text-left text-sm transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          data-testid={`button-history-event-${ev.id}`}
+                        >
+                          <span className="min-w-0">
+                            <span className="block font-medium text-foreground">{formatHistoryAt(ev.at)}</span>
+                            <span className="block text-muted-foreground">{ev.meta}</span>
+                          </span>
+                          <ChevronRight className="h-4 w-4 shrink-0 opacity-60" aria-hidden />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </>
+          )}
         </SheetContent>
       </Sheet>
     </div>
