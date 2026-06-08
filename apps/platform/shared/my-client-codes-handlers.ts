@@ -76,9 +76,29 @@ export async function fetchMyClientCodes(pool: PoolLike, user: SessionUser): Pro
     };
   }
 
-  if (role === "manager" || role === "regional_manager") {
+  if (role === "manager") {
     const ownQ = await pool.query<{ client_code: string }>(
       `SELECT DISTINCT client_code FROM client_assignments WHERE responsible_user_id = $1::uuid ORDER BY client_code`,
+      [uid],
+    );
+    const ownCodes = ownQ.rows.map((r) => r.client_code).filter(Boolean);
+    const responsibleByCode: Record<string, string> = {};
+    for (const code of ownCodes) responsibleByCode[code] = uid;
+    return {
+      success: true,
+      ownCodes,
+      teamCodes: [],
+      responsibleByCode,
+      meta,
+    };
+  }
+
+  if (role === "regional_manager") {
+    const ownQ = await pool.query<{ client_code: string }>(
+      `SELECT DISTINCT upper(regexp_replace(dealer_id, '^client-', '')) AS client_code
+       FROM dealer_overrides
+       WHERE regional_manager_id = $1::uuid
+       ORDER BY client_code`,
       [uid],
     );
     const ownCodes = ownQ.rows.map((r) => r.client_code).filter(Boolean);
