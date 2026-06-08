@@ -67,7 +67,7 @@ import {
   mapSalesRoleToDealerBaseAccess,
   roleScopedDealerRows,
 } from "@/lib/dealer-base-role-views";
-import { roleScopedDealerRowsForReal } from "@/lib/dealer-base-real-scope";
+import { assignmentsScopeIsActive, roleScopedDealerRowsForReal, type AssignmentsScope } from "@/lib/dealer-base-real-scope";
 import {
   canArchiveTradePointDuringActualization,
   canActualizeClientBase,
@@ -88,6 +88,7 @@ import { displayUserName } from "@/lib/auth-api";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { mapUserRoleToDealerBaseAccess } from "@/lib/auth-user-dealer-access";
 import { useOrgSnapshot } from "@/lib/use-org-snapshot";
+import { useMyClientCodes } from "@/hooks/use-my-client-codes";
 import { useMyVisibleClientCodes } from "@/lib/use-my-visible-client-codes";
 import { buildAssignmentsMap, getVisibleReleaseClients } from "@/lib/real-client-base";
 import { buildDealerRowsFromReleaseClients } from "@/lib/dealer-base-mock-data";
@@ -270,6 +271,14 @@ export default function TradePointsPage(): ReactElement {
   const isRealUser = Boolean(me?.id);
   const orgSnapQ = useOrgSnapshot({ enabled: isRealUser });
   const visCodesQ = useMyVisibleClientCodes({ enabled: isRealUser });
+  const myCodesQ = useMyClientCodes({ enabled: isRealUser });
+  const assignmentsScope = useMemo((): AssignmentsScope | undefined => {
+    if (!myCodesQ.data) return undefined;
+    return {
+      ownCodes: myCodesQ.data.ownCodes,
+      teamCodes: myCodesQ.data.teamCodes,
+    };
+  }, [myCodesQ.data]);
   const snap = orgSnapQ.data ?? null;
   const visPayload = visCodesQ.data ?? null;
   const useReal = Boolean(
@@ -348,9 +357,17 @@ export default function TradePointsPage(): ReactElement {
   ]);
 
   const scopedActivePortfolioRowsForManagement = useMemo(() => {
-    if (useReal && snap) return roleScopedDealerRowsForReal(mergedRowsActivePortfolioForManagement, snap, access);
+    if (useReal && snap) {
+      return roleScopedDealerRowsForReal(
+        mergedRowsActivePortfolioForManagement,
+        snap,
+        access,
+        undefined,
+        assignmentsScopeIsActive(assignmentsScope) ? assignmentsScope : undefined,
+      );
+    }
     return roleScopedDealerRows(mergedRowsActivePortfolioForManagement, profile);
-  }, [useReal, snap, mergedRowsActivePortfolioForManagement, profile, access]);
+  }, [useReal, snap, mergedRowsActivePortfolioForManagement, profile, access, assignmentsScope]);
 
   const tpListRealOpts = useMemo(() => {
     if (!useReal || !snap) return undefined;
