@@ -16,6 +16,7 @@ import {
 } from "react";
 import { useLocation } from "wouter";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
+import { useAuthUser } from "@/hooks/use-auth-user";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import type { ActualizationState } from "@/lib/client-base-actualization-state";
 import {
@@ -115,12 +116,13 @@ type ManagementTeamScopeChangedDetail = { ropTeamId: string };
 
 export function ClientBaseTeamActualizationProvider({ children }: { children: ReactNode }): ReactElement {
   const { profile } = useReleaseDemoProfile();
+  const { user: me } = useAuthUser();
   const actx = useClientBaseActualization();
   const access = useMemo(() => mapSalesRoleToDealerBaseAccess(profile.role), [profile.role]);
   const [loc] = useLocation();
   const routeQs = useRouteSearchParams();
 
-  const isTeamPlane = actx.enabled && shouldUseTeamMergedActualizationPlane(profile);
+  const isTeamPlane = actx.enabled && shouldUseTeamMergedActualizationPlane(profile, me?.role);
 
   const [dashboardRopTeamId, setDashboardRopTeamId] = useState(() =>
     resolveInitialManagementDashboardRopTeamId(profile, access),
