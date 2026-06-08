@@ -9,6 +9,7 @@ import {
   List,
   Loader2,
   Maximize2,
+  Minimize2,
   Search,
   Square,
   X,
@@ -75,9 +76,18 @@ import {
 import { useToast } from "@/hooks/use-toast";
 
 const CARD_SIZE_STORAGE_KEY = "distribution-fullscreen-entry-card-size";
+const COMPACT_STORAGE_KEY = "distribution-fullscreen-entry-compact";
 
-function fullscreenEntryProductGridClass(size: CatalogCardSize): string {
+function fullscreenEntryProductGridClass(size: CatalogCardSize, compact: boolean): string {
   if (size === "list") return "flex flex-col gap-2";
+  if (compact) {
+    const compactDense: Record<Exclude<CatalogCardSize, "list">, string> = {
+      xl: "grid grid-cols-3 gap-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6",
+      m: "grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7",
+      s: "grid grid-cols-4 gap-1.5 sm:grid-cols-5 md:grid-cols-7 lg:grid-cols-9 xl:grid-cols-12",
+    };
+    return compactDense[size];
+  }
   const dense: Record<Exclude<CatalogCardSize, "list">, string> = {
     xl: "grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5",
     m: "grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6",
@@ -160,6 +170,13 @@ export function DistributionFullscreenEntry({
   const [cardSize, setCardSize] = useState<CatalogCardSize>(() =>
     readCatalogCardSizeFromStorage(CARD_SIZE_STORAGE_KEY, "m"),
   );
+  const [compactMode, setCompactMode] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(COMPACT_STORAGE_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
   const [draft, setDraft] = useState<FullscreenEntryDraftMap>({});
   const [historyOpen, setHistoryOpen] = useState(false);
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
@@ -172,6 +189,14 @@ export function DistributionFullscreenEntry({
   useEffect(() => {
     writeCatalogCardSizeToStorage(CARD_SIZE_STORAGE_KEY, cardSize);
   }, [cardSize]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(COMPACT_STORAGE_KEY, compactMode ? "1" : "0");
+    } catch {
+      // ignore storage errors
+    }
+  }, [compactMode]);
 
   useEffect(() => {
     const onOnline = () => setOnline(true);
@@ -451,7 +476,7 @@ export function DistributionFullscreenEntry({
     toast,
   ]);
 
-  const gridClass = fullscreenEntryProductGridClass(cardSize);
+  const gridClass = fullscreenEntryProductGridClass(cardSize, compactMode);
 
   return (
     <div
@@ -581,6 +606,22 @@ export function DistributionFullscreenEntry({
                   <Icon className="h-4 w-4" />
                 </Button>
               ))}
+              <Button
+                type="button"
+                size="icon"
+                variant={compactMode ? "default" : "outline"}
+                className="h-9 w-9"
+                onClick={() => setCompactMode((v) => !v)}
+                data-testid="button-fullscreen-entry-compact"
+                aria-label="Компактный режим"
+                title="Компактный режим — больше моделей на экране"
+              >
+                {compactMode ? (
+                  <Minimize2 className="h-4 w-4" aria-hidden />
+                ) : (
+                  <Maximize2 className="h-4 w-4" aria-hidden />
+                )}
+              </Button>
             </div>
           </div>
 
@@ -677,6 +718,7 @@ export function DistributionFullscreenEntry({
                   key={p.id}
                   product={p}
                   cardSize={cardSize}
+                  compact={compactMode}
                   draft={draft[p.id]}
                   matrixModel={matrixModelById.get(p.id)}
                   onDraftChange={updateDraft}
@@ -867,10 +909,11 @@ function StatusSelectControl({
 function FullscreenProductCard({
   product,
   cardSize,
+  compact,
   draft,
   matrixModel,
   onDraftChange,
-}: ProductDraftProps & { cardSize: CatalogCardSize }) {
+}: ProductDraftProps & { cardSize: CatalogCardSize; compact: boolean }) {
   const row = draft;
   const segment = row ? row.placementSegment : segmentForProduct(product, matrixModel);
   const placementOptions = allowedTypesForSegment(segment);
@@ -884,13 +927,15 @@ function FullscreenProductCard({
     <article
       className={cn(
         "relative flex flex-col overflow-hidden rounded-xl border border-border/80 bg-card shadow-xs",
-        cardSize === "s" ? "p-1.5" : "p-2",
+        compact ? "p-1" : cardSize === "s" ? "p-1.5" : "p-2",
       )}
     >
       <div
         className={cn(
-          "relative mb-2 w-full overflow-hidden rounded-lg bg-muted/40",
-          cardSize === "xl" ? "aspect-[4/5]" : cardSize === "s" ? "aspect-square" : "aspect-[3/4]",
+          "relative w-full overflow-hidden rounded-lg bg-muted/40",
+          compact ? "mb-1 aspect-[5/4]" : "mb-2",
+          !compact &&
+            (cardSize === "xl" ? "aspect-[4/5]" : cardSize === "s" ? "aspect-square" : "aspect-[3/4]"),
         )}
       >
         {img ? (
@@ -899,13 +944,21 @@ function FullscreenProductCard({
           <div className="flex h-full items-center justify-center text-xs text-muted-foreground">Нет фото</div>
         )}
       </div>
-      <h3 className={cn("line-clamp-2 font-medium leading-snug text-foreground", titleSize)}>
+      <h3
+        className={cn(
+          compact ? "line-clamp-1" : "line-clamp-2",
+          "font-medium leading-snug text-foreground",
+          titleSize,
+        )}
+      >
         {product.name}
       </h3>
-      <p className="mt-0.5 line-clamp-1 text-[10px] text-muted-foreground sm:text-xs">
-        {product.type || product.doorKind}
-        {product.article ? ` · ${product.article}` : ""}
-      </p>
+      {!compact ? (
+        <p className="mt-0.5 line-clamp-1 text-[10px] text-muted-foreground sm:text-xs">
+          {product.type || product.doorKind}
+          {product.article ? ` · ${product.article}` : ""}
+        </p>
+      ) : null}
       <StatusSelectControl
         value={currentStatus}
         onChange={(newStatus) => {
@@ -917,7 +970,7 @@ function FullscreenProductCard({
           });
         }}
         productId={product.id}
-        className="mt-2"
+        className={compact ? "mt-1" : "mt-2"}
       />
       {row?.status === "installed" ? (
         <div className="mt-2 space-y-1">
