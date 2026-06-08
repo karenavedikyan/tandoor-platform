@@ -3393,7 +3393,7 @@ async function handleTradePointsOverview(
     sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
     return;
   }
-  if (!["admin", "director", "rop", "manager"].includes(me.role) || me.status !== "active") {
+  if (!["admin", "director", "rop", "manager", "regional_manager"].includes(me.role) || me.status !== "active") {
     sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
     return;
   }
@@ -3413,6 +3413,29 @@ async function handleTradePointsOverview(
   if (me.role === "rop") {
     allowed = new Set(users.rows.filter((u) => u.rop_user_id === me.id || u.id === me.id).map((u) => u.id));
     allowed.add(me.id);
+  } else if (me.role === "regional_manager") {
+    const rmCodes = await pool.query<{ client_code: string }>(
+      `SELECT DISTINCT upper(regexp_replace(dealer_id, '^client-', '')) AS client_code
+         FROM dealer_overrides
+        WHERE regional_manager_id = $1::uuid
+          AND trashed_at IS NULL`,
+      [me.id],
+    );
+    const rmCodeSet = new Set(rmCodes.rows.map((r) => r.client_code).filter(Boolean));
+    const rmAllowed = new Set<string>();
+    if (rmCodeSet.size > 0) {
+      const ca = await pool.query<{ responsible_user_id: string | null }>(
+        `SELECT DISTINCT responsible_user_id
+           FROM client_assignments
+          WHERE client_code = ANY($1::text[])
+            AND responsible_user_id IS NOT NULL`,
+        [Array.from(rmCodeSet)],
+      );
+      for (const r of ca.rows) {
+        if (r.responsible_user_id && UUID_RE.test(r.responsible_user_id)) rmAllowed.add(r.responsible_user_id);
+      }
+    }
+    allowed = rmAllowed;
   } else if (me.role === "manager") {
     allowed = new Set([me.id]);
   }
