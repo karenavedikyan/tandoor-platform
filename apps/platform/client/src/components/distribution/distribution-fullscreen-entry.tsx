@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
+  Check,
   ChevronDown,
   ChevronRight,
   ChevronUp,
@@ -177,6 +178,7 @@ export function DistributionFullscreenEntry({
       return false;
     }
   });
+  const [paintStatus, setPaintStatus] = useState<ShowcaseMatrixStatusId>("installed");
   const [draft, setDraft] = useState<FullscreenEntryDraftMap>({});
   const [historyOpen, setHistoryOpen] = useState(false);
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
@@ -692,6 +694,25 @@ export function DistributionFullscreenEntry({
               </SelectContent>
             </Select>
           </div>
+
+          {compactMode ? (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">Отмечать как:</span>
+              {STATUS_OPTIONS.map((o) => (
+                <Button
+                  key={o.id}
+                  type="button"
+                  size="sm"
+                  variant={paintStatus === o.id ? "default" : "outline"}
+                  className="min-h-9 px-2.5 text-xs"
+                  onClick={() => setPaintStatus(o.id)}
+                  data-testid={`button-fullscreen-entry-paint-${o.id}`}
+                >
+                  {o.label}
+                </Button>
+              ))}
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -719,6 +740,8 @@ export function DistributionFullscreenEntry({
                   product={p}
                   cardSize={cardSize}
                   compact={compactMode}
+                  paintStatus={paintStatus}
+                  baselineStatus={baselines[p.id]?.status ?? "need_install"}
                   draft={draft[p.id]}
                   matrixModel={matrixModelById.get(p.id)}
                   onDraftChange={updateDraft}
@@ -910,10 +933,17 @@ function FullscreenProductCard({
   product,
   cardSize,
   compact,
+  paintStatus,
+  baselineStatus,
   draft,
   matrixModel,
   onDraftChange,
-}: ProductDraftProps & { cardSize: CatalogCardSize; compact: boolean }) {
+}: ProductDraftProps & {
+  cardSize: CatalogCardSize;
+  compact: boolean;
+  paintStatus: ShowcaseMatrixStatusId;
+  baselineStatus: ShowcaseMatrixStatusId;
+}) {
   const row = draft;
   const segment = row ? row.placementSegment : segmentForProduct(product, matrixModel);
   const placementOptions = allowedTypesForSegment(segment);
@@ -921,21 +951,66 @@ function FullscreenProductCard({
   const titleSize =
     cardSize === "xl" ? "text-sm" : cardSize === "s" ? "text-[11px]" : "text-xs";
 
-  const currentStatus = row?.status ?? "need_install";
+  const currentStatus = row?.status ?? baselineStatus;
+  const isMarked = currentStatus === paintStatus;
+
+  const handlePaintTap = () => {
+    if (isMarked) {
+      onDraftChange(product.id, { status: baselineStatus });
+    } else {
+      const seg = segmentForProduct(product, matrixModel);
+      onDraftChange(product.id, {
+        status: paintStatus,
+        placementSegment: row?.placementSegment ?? seg,
+        placementType: row?.placementType ?? "portal",
+      });
+    }
+  };
+
+  if (compact) {
+    return (
+      <article
+        className={cn(
+          "relative overflow-hidden rounded-lg border bg-card shadow-xs transition",
+          isMarked ? "border-primary ring-2 ring-primary" : "border-border/80",
+        )}
+      >
+        <button
+          type="button"
+          onClick={handlePaintTap}
+          className="relative block aspect-[5/4] w-full overflow-hidden rounded-md bg-muted/40 focus-visible:outline-none"
+          data-testid={`button-fullscreen-entry-paint-tap-${product.id}`}
+          aria-pressed={isMarked}
+          title={product.name}
+        >
+          {img ? (
+            <img src={img} alt="" className="h-full w-full object-contain" loading="lazy" />
+          ) : (
+            <div className="flex h-full items-center justify-center text-[10px] text-muted-foreground">
+              Нет фото
+            </div>
+          )}
+          {isMarked ? (
+            <span className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground shadow">
+              <Check className="h-3.5 w-3.5" aria-hidden />
+            </span>
+          ) : null}
+        </button>
+      </article>
+    );
+  }
 
   return (
     <article
       className={cn(
         "relative flex flex-col overflow-hidden rounded-xl border border-border/80 bg-card shadow-xs",
-        compact ? "p-1" : cardSize === "s" ? "p-1.5" : "p-2",
+        cardSize === "s" ? "p-1.5" : "p-2",
       )}
     >
       <div
         className={cn(
-          "relative w-full overflow-hidden rounded-lg bg-muted/40",
-          compact ? "mb-1 aspect-[5/4]" : "mb-2",
-          !compact &&
-            (cardSize === "xl" ? "aspect-[4/5]" : cardSize === "s" ? "aspect-square" : "aspect-[3/4]"),
+          "relative mb-2 w-full overflow-hidden rounded-lg bg-muted/40",
+          cardSize === "xl" ? "aspect-[4/5]" : cardSize === "s" ? "aspect-square" : "aspect-[3/4]",
         )}
       >
         {img ? (
@@ -944,21 +1019,13 @@ function FullscreenProductCard({
           <div className="flex h-full items-center justify-center text-xs text-muted-foreground">Нет фото</div>
         )}
       </div>
-      <h3
-        className={cn(
-          compact ? "line-clamp-1" : "line-clamp-2",
-          "font-medium leading-snug text-foreground",
-          titleSize,
-        )}
-      >
+      <h3 className={cn("line-clamp-2 font-medium leading-snug text-foreground", titleSize)}>
         {product.name}
       </h3>
-      {!compact ? (
-        <p className="mt-0.5 line-clamp-1 text-[10px] text-muted-foreground sm:text-xs">
-          {product.type || product.doorKind}
-          {product.article ? ` · ${product.article}` : ""}
-        </p>
-      ) : null}
+      <p className="mt-0.5 line-clamp-1 text-[10px] text-muted-foreground sm:text-xs">
+        {product.type || product.doorKind}
+        {product.article ? ` · ${product.article}` : ""}
+      </p>
       <StatusSelectControl
         value={currentStatus}
         onChange={(newStatus) => {
@@ -970,7 +1037,7 @@ function FullscreenProductCard({
           });
         }}
         productId={product.id}
-        className={compact ? "mt-1" : "mt-2"}
+        className="mt-2"
       />
       {row?.status === "installed" ? (
         <div className="mt-2 space-y-1">
