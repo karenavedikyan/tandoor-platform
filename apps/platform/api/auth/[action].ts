@@ -1122,7 +1122,7 @@ async function buildVisibleClientsPayload(pool: PoolLike, row: DbUserRow): Promi
       })),
     };
   }
-  if (role === "manager" || role === "regional_manager") {
+  if (role === "manager") {
     const q = await pool.query<ClientAssignmentRow>(
       `SELECT DISTINCT ON (client_code) client_code, responsible_user_id, team_id
        FROM client_assignments
@@ -1138,6 +1138,25 @@ async function buildVisibleClientsPayload(pool: PoolLike, row: DbUserRow): Promi
         code: r.client_code,
         responsibleUserId: r.responsible_user_id,
         teamId: r.team_id,
+      })),
+    };
+  }
+  if (role === "regional_manager") {
+    const q = await pool.query<{ client_code: string }>(
+      `SELECT DISTINCT upper(regexp_replace(dealer_id, '^client-', '')) AS client_code
+       FROM dealer_overrides
+       WHERE regional_manager_id = $1::uuid
+       ORDER BY client_code`,
+      [row.id],
+    );
+    const codes = q.rows.map((r) => r.client_code).filter(Boolean);
+    return {
+      all: false,
+      codes,
+      assignments: codes.map((code) => ({
+        code,
+        responsibleUserId: row.id,
+        teamId: null,
       })),
     };
   }
