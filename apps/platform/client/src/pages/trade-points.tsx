@@ -67,7 +67,12 @@ import {
   mapSalesRoleToDealerBaseAccess,
   roleScopedDealerRows,
 } from "@/lib/dealer-base-role-views";
-import { assignmentsScopeIsActive, roleScopedDealerRowsForReal, type AssignmentsScope } from "@/lib/dealer-base-real-scope";
+import {
+  assignmentsScopeIsActive,
+  roleScopedDealerRowsForReal,
+  rowInAssignmentsScope,
+  type AssignmentsScope,
+} from "@/lib/dealer-base-real-scope";
 import {
   canArchiveTradePointDuringActualization,
   canActualizeClientBase,
@@ -210,7 +215,7 @@ const TP_CONTACT_ICON_BTN =
   "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-card text-foreground hover:bg-primary/10 sm:h-9 sm:w-9";
 
 const TP_CONTACT_ICON_BTN_COMPACT =
-  "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-card text-foreground hover:bg-primary/10";
+  "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-card text-foreground hover:bg-primary/10";
 
 function searchMatches(haystack: string, query: string): boolean {
   const q = query.trim().toLowerCase();
@@ -587,16 +592,23 @@ export default function TradePointsPage(): ReactElement {
     return { deficit, unfilledShowcase };
   }, [filteredSorted]);
 
-  const canEdit = useCallback((row: TradePointListRow) => canEditDealerDuringActualization(profile, row.dealer), [profile]);
+  const canEdit = useCallback(
+    (row: TradePointListRow) =>
+      canEditDealerDuringActualization(profile, row.dealer) ||
+      (assignmentsScopeIsActive(assignmentsScope) && rowInAssignmentsScope(row.dealer, assignmentsScope)),
+    [profile, assignmentsScope],
+  );
 
   const canArchiveRow = useCallback(
-    (row: TradePointListRow) =>
-      actx.enabled &&
-      canEdit(row) &&
-      !row.isVirtual &&
-      canArchiveTradePointDuringActualization(profile, row.dealer, row.point) &&
-      !row.isArchived,
-    [actx.enabled, profile, canEdit],
+    (row: TradePointListRow) => {
+      if (!actx.enabled || row.isVirtual || row.isArchived) return false;
+      const inScope = assignmentsScopeIsActive(assignmentsScope) && rowInAssignmentsScope(row.dealer, assignmentsScope);
+      const baseArchive =
+        canEditDealerDuringActualization(profile, row.dealer) &&
+        canArchiveTradePointDuringActualization(profile, row.dealer, row.point);
+      return baseArchive || inScope;
+    },
+    [actx.enabled, profile, assignmentsScope],
   );
 
   const archiveBlockReason = useCallback(
@@ -604,11 +616,12 @@ export default function TradePointsPage(): ReactElement {
       if (!actx.enabled) return "Актуализация недоступна.";
       if (row.isArchived) return "Точка уже в архиве.";
       if (row.isVirtual) return "Виртуальная точка не архивируется.";
-      if (!canEdit(row)) return "Нет прав на редактирование этого клиента.";
+      if (assignmentsScopeIsActive(assignmentsScope) && rowInAssignmentsScope(row.dealer, assignmentsScope)) return null;
+      if (!canEditDealerDuringActualization(profile, row.dealer)) return "Нет прав на редактирование этого клиента.";
       if (!canArchiveTradePointDuringActualization(profile, row.dealer, row.point)) return "Нет прав на архив торговых точек.";
       return null;
     },
-    [actx.enabled, profile, canEdit],
+    [actx.enabled, profile, assignmentsScope],
   );
 
   const canShowBulkTradePointControls = actx.enabled && canActualizeClientBase(profile) && !showArchived;
@@ -948,8 +961,12 @@ export default function TradePointsPage(): ReactElement {
       for (const key of keys) {
         const row = rowsByCompositeKey.get(key);
         if (!row || row.isArchived || row.isVirtual) continue;
-        if (!canEditDealerDuringActualization(profile, row.dealer)) continue;
-        if (!canArchiveTradePointDuringActualization(profile, row.dealer, row.point)) continue;
+        const inScope = assignmentsScopeIsActive(assignmentsScope) && rowInAssignmentsScope(row.dealer, assignmentsScope);
+        const canTrash =
+          (canEditDealerDuringActualization(profile, row.dealer) &&
+            canArchiveTradePointDuringActualization(profile, row.dealer, row.point)) ||
+          inScope;
+        if (!canTrash) continue;
         next[row.tradePointId] = makeTrashedTradePointInfo({
           tradePointId: row.tradePointId,
           dealerId: row.dealerId,
@@ -975,7 +992,7 @@ export default function TradePointsPage(): ReactElement {
     } else {
       toast({ title: "Не удалось переместить в корзину", variant: "destructive" });
     }
-  }, [selectedBulkTpKeys, archivableTpKeysInView, actx, profile, user, rowsByCompositeKey]);
+  }, [selectedBulkTpKeys, archivableTpKeysInView, actx, profile, user, rowsByCompositeKey, assignmentsScope]);
 
   const confirmBulkSoftArchiveTps = useCallback(async () => {
     if (!actx.enabled) return;
@@ -991,8 +1008,12 @@ export default function TradePointsPage(): ReactElement {
       for (const key of keys) {
         const row = rowsByCompositeKey.get(key);
         if (!row || row.isArchived || row.isVirtual) continue;
-        if (!canEditDealerDuringActualization(profile, row.dealer)) continue;
-        if (!canArchiveTradePointDuringActualization(profile, row.dealer, row.point)) continue;
+        const inScope = assignmentsScopeIsActive(assignmentsScope) && rowInAssignmentsScope(row.dealer, assignmentsScope);
+        const canTrash =
+          (canEditDealerDuringActualization(profile, row.dealer) &&
+            canArchiveTradePointDuringActualization(profile, row.dealer, row.point)) ||
+          inScope;
+        if (!canTrash) continue;
         next[row.tradePointId] = {
           tradePointId: row.tradePointId,
           dealerId: row.dealerId,
@@ -1016,7 +1037,7 @@ export default function TradePointsPage(): ReactElement {
     } else {
       toast({ title: "Не удалось сохранить", variant: "destructive" });
     }
-  }, [selectedBulkTpKeys, archivableTpKeysInView, actx, profile, rowsByCompositeKey, trashActor]);
+  }, [selectedBulkTpKeys, archivableTpKeysInView, actx, profile, rowsByCompositeKey, trashActor, assignmentsScope]);
 
   const tpHref = (r: TradePointListRow) => `/dealers/${encodeURIComponent(r.dealerId)}/trade-points/${encodeURIComponent(r.tradePointId)}`;
   const dealerHref = (r: TradePointListRow) => `/dealers/${encodeURIComponent(r.dealerId)}`;
@@ -1292,6 +1313,15 @@ export default function TradePointsPage(): ReactElement {
       </Tooltip>
     );
   };
+
+  const renderTrashActionSlot = (r: TradePointListRow, archiveTestIdPrefix?: string) => (
+    <div className="flex h-8 w-8 shrink-0 items-center justify-center">
+      {!bulkDeleteMode && !canArchiveRow(r) ? renderArchiveHint(r) : null}
+      {tpRowQuickMoveProps ? (
+        <TradePointRowQuickMoveActions row={r} rowQuickMove={tpRowQuickMoveProps} archiveTestIdPrefix={archiveTestIdPrefix} />
+      ) : null}
+    </div>
+  );
 
   const renderBulkRowControl = (r: TradePointListRow, opts?: { dense?: boolean }) => {
     const dense = opts?.dense === true;
@@ -1881,20 +1911,17 @@ export default function TradePointsPage(): ReactElement {
                       {contacts.phone ? <p className="line-clamp-1 text-[10px] text-muted-foreground">{contacts.phone}</p> : null}
                     </td>
                     <td className="p-2 align-middle">
-                      <div className="flex flex-wrap items-center justify-end gap-1">
+                      <div className="flex items-center justify-end gap-1.5">
                         {renderTpContactIcons(r, "table")}
                         <Button asChild size="sm" variant="secondary" className="h-8 shrink-0 px-2 text-xs font-semibold">
                           <Link href={tpHref(r)} data-testid={`button-trade-point-table-open-${r.tradePointId}`}>
                             Открыть
                           </Link>
                         </Button>
-                        <Button asChild size="sm" variant="secondary" className="hidden h-8 shrink-0 px-2 text-xs font-semibold xl:inline-flex">
+                        <Button asChild size="sm" variant="outline" className="hidden h-8 shrink-0 px-2 text-xs font-semibold xl:inline-flex">
                           <Link href={dealerHref(r)}>К клиенту</Link>
                         </Button>
-                        {!bulkDeleteMode && !canArchiveRow(r) ? renderArchiveHint(r) : null}
-                        {tpRowQuickMoveProps ? (
-                          <TradePointRowQuickMoveActions row={r} rowQuickMove={tpRowQuickMoveProps} />
-                        ) : null}
+                        {renderTrashActionSlot(r)}
                       </div>
                     </td>
                   </tr>
@@ -1956,18 +1983,15 @@ export default function TradePointsPage(): ReactElement {
                       <p className="line-clamp-1 text-[11px] text-muted-foreground">{cleanContactDisplay(r.point.contactName)}</p>
                     ) : null}
                   </div>
-                  <div className="ml-auto flex shrink-0 flex-col items-end gap-1.5 self-center sm:flex-row sm:items-center">
+                  <div className="ml-auto flex shrink-0 items-center justify-end gap-1.5 self-center">
                     {renderTpContactIcons(r, "compact")}
                     <Button asChild size="sm" variant="secondary" className="h-8 shrink-0 px-2 text-xs font-semibold" data-testid={`button-trade-point-list-open-${r.tradePointId}`}>
                       <Link href={tpHref(r)}>Открыть</Link>
                     </Button>
-                    <Button asChild size="sm" variant="outline" className="h-8 shrink-0 border-border px-2 text-xs" data-testid={`button-trade-point-list-open-dealer-${r.dealerId}-${r.tradePointId}`}>
+                    <Button asChild size="sm" variant="outline" className="hidden h-8 shrink-0 border-border px-2 text-xs sm:inline-flex" data-testid={`button-trade-point-list-open-dealer-${r.dealerId}-${r.tradePointId}`}>
                       <Link href={dealerHref(r)}>К клиенту</Link>
                     </Button>
-                    {!bulkDeleteMode && !canArchiveRow(r) ? renderArchiveHint(r) : null}
-                    {tpRowQuickMoveProps ? (
-                      <TradePointRowQuickMoveActions row={r} rowQuickMove={tpRowQuickMoveProps} />
-                    ) : null}
+                    {renderTrashActionSlot(r)}
                   </div>
                 </li>
               );
@@ -2009,15 +2033,12 @@ export default function TradePointsPage(): ReactElement {
                       </Badge>
                     ) : null}
                   </div>
-                  <div className="mt-auto flex flex-wrap items-center gap-1 border-t border-border/60 pt-1.5">
+                  <div className="mt-auto flex items-center justify-end gap-1.5 border-t border-border/60 pt-1.5">
                     {renderTpContactIcons(r, "compact")}
-                    {!bulkDeleteMode && !canArchiveRow(r) ? renderArchiveHint(r) : null}
-                    {tpRowQuickMoveProps ? (
-                      <TradePointRowQuickMoveActions row={r} rowQuickMove={tpRowQuickMoveProps} archiveTestIdPrefix="trade-point-grid" />
-                    ) : null}
-                    <Button asChild size="sm" variant="secondary" className="ml-auto h-7 shrink-0 px-2 text-[11px] font-semibold">
+                    <Button asChild size="sm" variant="secondary" className="h-8 shrink-0 px-2 text-xs font-semibold">
                       <Link href={tpHref(r)}>Открыть</Link>
                     </Button>
+                    {renderTrashActionSlot(r, "trade-point-grid")}
                   </div>
                 </CardContent>
               </Card>
@@ -2106,20 +2127,15 @@ export default function TradePointsPage(): ReactElement {
                           <span className="font-medium text-foreground">РОП:</span> {staffDisplayForDetail(r.rop)}
                         </p>
                       </div>
-                      <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-2">
+                      <div className="flex items-center gap-1.5 border-t border-border/60 pt-2">
                         {renderTpContactIcons(r, "default")}
-                      </div>
-                      <div className="flex flex-wrap gap-2 pt-1">
-                        <Button asChild size="sm" variant="default" data-testid={`button-trade-point-large-open-${r.tradePointId}`}>
-                          <Link href={tpHref(r)}>Открыть ТТ</Link>
+                        <Button asChild size="sm" variant="secondary" className="h-8 shrink-0 px-2 text-xs font-semibold" data-testid={`button-trade-point-large-open-${r.tradePointId}`}>
+                          <Link href={tpHref(r)}>Открыть</Link>
                         </Button>
-                        <Button asChild size="sm" variant="outline" className="border-border">
+                        <Button asChild size="sm" variant="outline" className="h-8 shrink-0 border-border px-2 text-xs">
                           <Link href={dealerHref(r)}>К клиенту</Link>
                         </Button>
-                        {!bulkDeleteMode && !canArchiveRow(r) ? renderArchiveHint(r) : null}
-                        {tpRowQuickMoveProps ? (
-                          <TradePointRowQuickMoveActions row={r} rowQuickMove={tpRowQuickMoveProps} archiveTestIdPrefix="trade-point-large" />
-                        ) : null}
+                        {renderTrashActionSlot(r, "trade-point-large")}
                       </div>
                     </div>
                   </div>
