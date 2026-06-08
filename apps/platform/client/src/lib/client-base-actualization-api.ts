@@ -107,8 +107,9 @@ function normalizeRoleForActualizationApi(role: string): string {
     case "director":
       return "sales_director";
     case "rop":
-    case "regional_manager":
       return "team_lead";
+    case "regional_manager":
+      return "regional_manager";
     case "manager":
     case "marketer":
     case "analyst":

@@ -256,6 +256,7 @@ export function canonicalizeRole(role: string | null | undefined): CanonicalRole
   if (!r) return "unknown";
   if (r === "admin") return "admin";
   if (r === "director" || r === "sales_director") return "director";
+  if (r === "regional_manager") return "manager";
   if (r === "rop" || r === "team_lead") return "rop";
   if (r === "manager" || r === "sales_manager") return "manager";
   if (r === "analyst") return "analyst";
