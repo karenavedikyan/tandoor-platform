@@ -21,6 +21,7 @@ import {
 } from "@/lib/client-base-team-actualization-cache";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
+import type { UserRole } from "@shared/auth";
 
 export { invalidateTeamActualizationCache };
 
@@ -125,8 +126,17 @@ export async function fetchMergedTeamActualizationForManagement(
   );
 }
 
-/** РОП и директор при включённой актуализации используют объединённый team plane. */
-export function shouldUseTeamMergedActualizationPlane(profile: ReleaseDemoProfile): boolean {
+/**
+ * РОП и директор при включённой актуализации используют объединённый team plane.
+ * Региональный менеджер (authRole === "regional_manager") ИСКЛЮЧЁН: у него
+ * profile.role === "team_lead" (для Дистрибуции), но разделы Клиенты/ТТ он должен
+ * видеть как обычный менеджер (плоский список), а не управленческий кокпит.
+ */
+export function shouldUseTeamMergedActualizationPlane(
+  profile: ReleaseDemoProfile,
+  authRole?: UserRole | null,
+): boolean {
+  if (authRole === "regional_manager") return false;
   return canActualizeClientBase(profile) && (profile.role === "team_lead" || profile.role === "sales_director");
 }
 

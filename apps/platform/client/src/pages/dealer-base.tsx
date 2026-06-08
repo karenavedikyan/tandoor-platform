@@ -3197,7 +3197,7 @@ export default function DealerBase() {
   const canShowBulkDeleteEntry = actx.enabled && canActualizeClientBase(profile) && !showArchivedDealers;
   const bulkDeleteHasTargets = archivableDealerIdsInView.size > 0;
 
-  if (actx.enabled && shouldUseTeamMergedActualizationPlane(profile)) {
+  if (actx.enabled && shouldUseTeamMergedActualizationPlane(profile, me?.role)) {
     return (
       <DealerBaseManagementCockpit
         profile={profile}

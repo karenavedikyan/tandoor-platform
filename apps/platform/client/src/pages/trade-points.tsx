@@ -1347,7 +1347,7 @@ export default function TradePointsPage(): ReactElement {
     );
   };
 
-  if (actx.enabled && shouldUseTeamMergedActualizationPlane(profile)) {
+  if (actx.enabled && shouldUseTeamMergedActualizationPlane(profile, me?.role)) {
     return (
       <TradePointsManagementCockpit
         profile={profile}
