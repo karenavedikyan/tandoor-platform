@@ -76,6 +76,11 @@ import {
   type ShowcaseMatrixStatusId,
 } from "@/lib/trade-point-showcase-matrix-storage";
 import { useToast } from "@/hooks/use-toast";
+import {
+  OVERRIDES_PENDING_CHANGED_EVENT,
+  pendingSyncCount,
+} from "@/lib/overrides-pending-sync";
+import { runOverridesPendingSyncOnce } from "@/lib/overrides-pending-sync-worker";
 
 const CARD_SIZE_STORAGE_KEY = "distribution-fullscreen-entry-card-size";
 const COMPACT_STORAGE_KEY = "distribution-fullscreen-entry-compact";
@@ -187,6 +192,8 @@ export function DistributionFullscreenEntry({
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
   const [headerCollapsed, setHeaderCollapsed] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [pendingCount, setPendingCount] = useState<number>(() => pendingSyncCount());
   const [online, setOnline] = useState(
     () => typeof navigator === "undefined" || navigator.onLine,
   );
@@ -211,6 +218,17 @@ export function DistributionFullscreenEntry({
     return () => {
       window.removeEventListener("online", onOnline);
       window.removeEventListener("offline", onOffline);
+    };
+  }, []);
+
+  useEffect(() => {
+    const update = () => setPendingCount(pendingSyncCount());
+    update();
+    window.addEventListener(OVERRIDES_PENDING_CHANGED_EVENT, update);
+    const iv = setInterval(update, 5000);
+    return () => {
+      window.removeEventListener(OVERRIDES_PENDING_CHANGED_EVENT, update);
+      clearInterval(iv);
     };
   }, []);
 
@@ -423,11 +441,78 @@ export function DistributionFullscreenEntry({
     }
   }, [handleResetDraft, needInstallMode]);
 
+  const flushPendingNow = useCallback(async (): Promise<number> => {
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      return pendingSyncCount();
+    }
+    let guard = 0;
+    while (pendingSyncCount() > 0 && guard < 50) {
+      const res = await runOverridesPendingSyncOnce();
+      guard += 1;
+      if (!res || (res.succeeded === 0 && res.processed > 0)) {
+        await new Promise((r) => setTimeout(r, 400));
+      }
+      if (typeof navigator !== "undefined" && !navigator.onLine) break;
+    }
+    return pendingSyncCount();
+  }, []);
+
+  const showSaveSyncToast = useCallback(
+    (remaining: number) => {
+      const offline = typeof navigator !== "undefined" && !navigator.onLine;
+      if (offline) {
+        toast({
+          title: "Сохранено локально",
+          description: "Данные попадут на сервер после восстановления сети.",
+          className: "border-amber-500/40 bg-amber-500/10",
+        });
+        return;
+      }
+      if (remaining === 0) {
+        toast({
+          title: `Сохранено · ${formatSavedAt()} · ${actorName}`,
+        });
+        return;
+      }
+      toast({
+        title: `Сохраняем… отправлено на сервер, осталось ${remaining}`,
+        description: "Остальное отправится автоматически",
+        className: "border-amber-500/40 bg-amber-500/10",
+      });
+    },
+    [actorName, toast],
+  );
+
+  const handleSyncNow = useCallback(async () => {
+    if (syncing || saving) return;
+    setSyncing(true);
+    try {
+      const remaining = await flushPendingNow();
+      const offline = typeof navigator !== "undefined" && !navigator.onLine;
+      if (offline) {
+        toast({
+          title: "Нет сети",
+          description: "Данные отправятся после восстановления соединения.",
+          className: "border-amber-500/40 bg-amber-500/10",
+        });
+      } else if (remaining === 0) {
+        toast({ title: "Все изменения отправлены на сервер" });
+      } else {
+        toast({
+          title: `Отправлено частично, осталось ${remaining}`,
+          description: "Остальное отправится автоматически",
+          className: "border-amber-500/40 bg-amber-500/10",
+        });
+      }
+    } finally {
+      setSyncing(false);
+    }
+  }, [flushPendingNow, saving, syncing, toast]);
+
   const handleSave = useCallback(async () => {
     const saveIds = needInstallMode ? Array.from(needInstallSelection) : changedIds;
     if (saveIds.length === 0 || saving) return;
     setSaving(true);
-    let anyQueued = false;
     try {
       for (const productId of saveIds) {
         const baseline = baselines[productId];
@@ -438,7 +523,7 @@ export function DistributionFullscreenEntry({
         if (!model) continue;
 
         if (needInstallMode) {
-          const { queued } = setMatrixStatus({
+          setMatrixStatus({
             dealerId: dealer.id,
             tradePointId: point.id,
             targetKind: "model",
@@ -450,7 +535,6 @@ export function DistributionFullscreenEntry({
             placementType: null,
             placementSegment: null,
           });
-          if (queued) anyQueued = true;
 
           upsertShowcaseMatrixModelState({
             dealerId: dealer.id,
@@ -474,7 +558,7 @@ export function DistributionFullscreenEntry({
           ? row.placementSegment
           : null;
 
-        const { queued } = setMatrixStatus({
+        setMatrixStatus({
           dealerId: dealer.id,
           tradePointId: point.id,
           targetKind: "model",
@@ -486,7 +570,6 @@ export function DistributionFullscreenEntry({
           placementType,
           placementSegment,
         });
-        if (queued) anyQueued = true;
 
         upsertShowcaseMatrixModelState({
           dealerId: dealer.id,
@@ -537,33 +620,29 @@ export function DistributionFullscreenEntry({
       });
 
       const offline = typeof navigator !== "undefined" && !navigator.onLine;
-      if (offline || anyQueued) {
-        toast({
-          title: "Сохранено локально",
-          description: "Данные попадут на сервер после восстановления сети.",
-          className: "border-amber-500/40 bg-amber-500/10",
-        });
+      if (offline) {
+        showSaveSyncToast(pendingSyncCount());
       } else {
-        toast({
-          title: `Сохранено · ${formatSavedAt()} · ${actorName}`,
-        });
+        const remaining = await flushPendingNow();
+        showSaveSyncToast(remaining);
       }
     } finally {
       setSaving(false);
     }
   }, [
-    actorName,
     actorUserId,
+    actorName,
     baselines,
     changedIds,
     dealer.id,
     draft,
+    flushPendingNow,
     matrixModelById,
     needInstallMode,
     needInstallSelection,
     point.id,
     saving,
-    toast,
+    showSaveSyncToast,
   ]);
 
   const compactHasChanges = needInstallMode ? needInstallCount > 0 : changedIds.length > 0;
@@ -735,6 +814,28 @@ export function DistributionFullscreenEntry({
               </Button>
             </div>
           </div>
+
+          {pendingCount > 0 ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1.5">
+              <span
+                className="text-[11px] font-medium text-amber-900 dark:text-amber-200"
+                data-testid="text-fullscreen-entry-pending-count"
+              >
+                Не синхронизировано: {pendingCount}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 border-amber-500/40 px-2 text-[11px]"
+                onClick={() => void handleSyncNow()}
+                disabled={syncing || saving}
+                data-testid="button-fullscreen-entry-sync-now"
+              >
+                {syncing ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden /> : "Отправить сейчас"}
+              </Button>
+            </div>
+          ) : null}
 
           <div className="flex flex-wrap items-center gap-2">
             <Tabs
