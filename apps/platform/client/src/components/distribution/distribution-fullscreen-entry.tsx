@@ -15,7 +15,6 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -57,7 +56,6 @@ import {
   buildInitialDraftRow,
   collectChangedProductIds,
   countInstalledInDraft,
-  matrixStatusFromInstalled,
   type FullscreenEntryBaseline,
   type FullscreenEntryDraftMap,
 } from "@/lib/distribution-fullscreen-entry-draft";
@@ -141,6 +139,7 @@ type Props = {
   actorUserId: string;
   actorName: string;
   onClose: () => void;
+  onBackToList?: () => void;
 };
 
 export function DistributionFullscreenEntry({
@@ -149,6 +148,7 @@ export function DistributionFullscreenEntry({
   actorUserId,
   actorName,
   onClose,
+  onBackToList,
 }: Props) {
   const { toast } = useToast();
   const [bump, setBump] = useState(0);
@@ -339,15 +339,16 @@ export function DistributionFullscreenEntry({
         const baseline = baselines[productId];
         if (!row || !baseline) continue;
 
-        const status = matrixStatusFromInstalled(row.installed, baseline.status);
+        const status = row.status;
         const product = getProductById(productId);
         const model =
           matrixModelById.get(productId) ??
           (product ? stubMatrixModelFromProduct(product) : null);
         if (!model) continue;
 
-        const placementType: ShowcasePlacementType | null = row.installed ? row.placementType : null;
-        const placementSegment: ShowcasePlacementSegment | null = row.installed
+        const isInstalled = status === "installed";
+        const placementType: ShowcasePlacementType | null = isInstalled ? row.placementType : null;
+        const placementSegment: ShowcasePlacementSegment | null = isInstalled
           ? row.placementSegment
           : null;
 
@@ -452,6 +453,19 @@ export function DistributionFullscreenEntry({
     >
       <header className="z-20 shrink-0 border-b border-border/80 bg-background/95 px-3 py-2 backdrop-blur-sm sm:px-4 md:py-2.5">
         <div className="flex min-h-10 items-center gap-2">
+          {onBackToList ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-9 shrink-0 gap-1 px-2"
+              onClick={onBackToList}
+              data-testid="button-fullscreen-entry-back"
+            >
+              <ArrowLeft className="h-4 w-4" aria-hidden />
+              Назад
+            </Button>
+          ) : null}
           <div className="min-w-0 flex-1">
             <p className="truncate text-base font-semibold text-foreground">{point.name}</p>
             {!headerCollapsed ? (
@@ -775,6 +789,51 @@ function segmentForProduct(product: CatalogProduct, matrixModel?: ShowcaseMatrix
   return segmentFromProduct(product);
 }
 
+const STATUS_SEGMENTS: {
+  id: ShowcaseMatrixStatusId;
+  label: string;
+  activeClass: string;
+}[] = [
+  { id: "installed", label: "На витрине", activeClass: "bg-emerald-600 text-white border-emerald-600" },
+  { id: "need_install", label: "Нужно поставить", activeClass: "bg-amber-500 text-white border-amber-500" },
+  { id: "postponed", label: "Отложено", activeClass: "bg-sky-600 text-white border-sky-600" },
+  { id: "not_relevant", label: "Не актуально", activeClass: "bg-muted text-muted-foreground border-border" },
+];
+
+function StatusSegmentedControl({
+  value,
+  onChange,
+  productId,
+  size = "default",
+}: {
+  value: ShowcaseMatrixStatusId;
+  onChange: (status: ShowcaseMatrixStatusId) => void;
+  productId: string;
+  size?: "default" | "compact";
+}) {
+  return (
+    <div className={cn("flex flex-wrap gap-1", size === "compact" ? "mt-1" : "mt-2")}>
+      {STATUS_SEGMENTS.map((segment) => {
+        const active = value === segment.id;
+        return (
+          <button
+            key={segment.id}
+            type="button"
+            className={cn(
+              "h-7 rounded-md border px-2 text-[10px] transition-colors",
+              active ? segment.activeClass : "border-border bg-background text-foreground/70",
+            )}
+            onClick={() => onChange(segment.id)}
+            data-testid={`button-fullscreen-entry-status-${productId}-${segment.id}`}
+          >
+            {segment.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function FullscreenProductCard({
   product,
   cardSize,
@@ -789,6 +848,8 @@ function FullscreenProductCard({
   const titleSize =
     cardSize === "xl" ? "text-sm" : cardSize === "s" ? "text-[11px]" : "text-xs";
 
+  const currentStatus = row?.status ?? "need_install";
+
   return (
     <article
       className={cn(
@@ -796,23 +857,6 @@ function FullscreenProductCard({
         cardSize === "s" ? "p-1.5" : "p-2",
       )}
     >
-      <div className="absolute right-2 top-2 z-10">
-        <Checkbox
-          checked={row?.installed ?? false}
-          onCheckedChange={(v) => {
-            const installed = v === true;
-            const seg = segmentForProduct(product, matrixModel);
-            onDraftChange(product.id, {
-              installed,
-              placementSegment: row?.placementSegment ?? seg,
-              placementType: row?.placementType ?? "portal",
-            });
-          }}
-          className="h-5 w-5 border-2 bg-background/90"
-          data-testid={`checkbox-fullscreen-entry-${product.id}`}
-          aria-label="Стоит на витрине"
-        />
-      </div>
       <div
         className={cn(
           "relative mb-2 w-full overflow-hidden rounded-lg bg-muted/40",
@@ -832,7 +876,19 @@ function FullscreenProductCard({
         {product.type || product.doorKind}
         {product.article ? ` · ${product.article}` : ""}
       </p>
-      {row?.installed ? (
+      <StatusSegmentedControl
+        value={currentStatus}
+        onChange={(newStatus) => {
+          const seg = segmentForProduct(product, matrixModel);
+          onDraftChange(product.id, {
+            status: newStatus,
+            placementSegment: row?.placementSegment ?? seg,
+            placementType: row?.placementType ?? "portal",
+          });
+        }}
+        productId={product.id}
+      />
+      {row?.status === "installed" ? (
         <div className="mt-2 space-y-1">
           <Label className="text-[10px] text-muted-foreground">Крепление</Label>
           <Select
@@ -866,6 +922,7 @@ function FullscreenProductRow({ product, draft, matrixModel, onDraftChange }: Pr
   const segment = row ? row.placementSegment : segmentForProduct(product, matrixModel);
   const placementOptions = allowedTypesForSegment(segment);
   const img = product.image?.trim() ?? "";
+  const currentStatus = row?.status ?? "need_install";
 
   return (
     <li className="flex gap-3 rounded-xl border border-border/80 bg-card p-2">
@@ -873,30 +930,27 @@ function FullscreenProductRow({ product, draft, matrixModel, onDraftChange }: Pr
         {img ? <img src={img} alt="" className="h-full w-full object-contain" loading="lazy" /> : null}
       </div>
       <div className="min-w-0 flex-1">
-        <div className="flex items-start gap-2">
-          <Checkbox
-            checked={row?.installed ?? false}
-            onCheckedChange={(v) => {
-              const installed = v === true;
-              const seg = segmentForProduct(product, matrixModel);
-              onDraftChange(product.id, {
-                installed,
-                placementSegment: row?.placementSegment ?? seg,
-                placementType: row?.placementType ?? "portal",
-              });
-            }}
-            className="mt-0.5 h-5 w-5"
-            data-testid={`checkbox-fullscreen-entry-${product.id}`}
-          />
-          <div className="min-w-0 flex-1">
-            <p className="line-clamp-2 text-sm font-medium">{product.name}</p>
-            <p className="text-xs text-muted-foreground">
-              {product.doorKind}
-              {product.article ? ` · ${product.article}` : ""}
-            </p>
-          </div>
+        <div className="min-w-0 flex-1">
+          <p className="line-clamp-2 text-sm font-medium">{product.name}</p>
+          <p className="text-xs text-muted-foreground">
+            {product.doorKind}
+            {product.article ? ` · ${product.article}` : ""}
+          </p>
         </div>
-        {row?.installed ? (
+        <StatusSegmentedControl
+          value={currentStatus}
+          onChange={(newStatus) => {
+            const seg = segmentForProduct(product, matrixModel);
+            onDraftChange(product.id, {
+              status: newStatus,
+              placementSegment: row?.placementSegment ?? seg,
+              placementType: row?.placementType ?? "portal",
+            });
+          }}
+          productId={product.id}
+          size="compact"
+        />
+        {row?.status === "installed" ? (
           <Select
             value={row.placementType}
             onValueChange={(v) =>
