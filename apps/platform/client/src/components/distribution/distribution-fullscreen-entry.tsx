@@ -88,6 +88,7 @@ function fullscreenEntryProductGridClass(size: CatalogCardSize): string {
 
 type SourceTab = "matrix" | "catalog";
 type DoorFilter = "all" | "vh" | "mk";
+type StatusFilter = "all" | ShowcaseMatrixStatusId;
 
 function segmentFromProduct(p: CatalogProduct): ShowcasePlacementSegment {
   if (p.category.includes("Фурнитура") || p.doorKind === "Фурнитура") return "hardware";
@@ -155,6 +156,7 @@ export function DistributionFullscreenEntry({
   const [sourceTab, setSourceTab] = useState<SourceTab>("matrix");
   const [searchQuery, setSearchQuery] = useState("");
   const [doorFilter, setDoorFilter] = useState<DoorFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [cardSize, setCardSize] = useState<CatalogCardSize>(() =>
     readCatalogCardSizeFromStorage(CARD_SIZE_STORAGE_KEY, "m"),
   );
@@ -266,6 +268,7 @@ export function DistributionFullscreenEntry({
 
   const visibleProducts = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
+    let list: CatalogProduct[];
     if (sourceTab === "matrix") {
       let models = matrixModels;
       if (doorFilter === "vh") models = models.filter((m) => m.type === "entrance");
@@ -280,10 +283,16 @@ export function DistributionFullscreenEntry({
         }
         products.push(p);
       }
-      return products;
+      list = products;
+    } else {
+      list = catalogProducts;
     }
-    return catalogProducts;
-  }, [catalogProducts, doorFilter, matrixModels, searchQuery, sourceTab]);
+    if (statusFilter === "all") return list;
+    return list.filter((p) => {
+      const status = draft[p.id]?.status ?? baselines[p.id]?.status ?? "need_install";
+      return status === statusFilter;
+    });
+  }, [baselines, catalogProducts, doorFilter, draft, matrixModels, searchQuery, sourceTab, statusFilter]);
 
   useEffect(() => {
     setDraft((prev) => {
@@ -619,6 +628,28 @@ export function DistributionFullscreenEntry({
                 </Button>
               ))}
             </div>
+
+            <Select
+              value={statusFilter}
+              onValueChange={(v) => setStatusFilter(v as StatusFilter)}
+            >
+              <SelectTrigger
+                className="h-9 min-w-[10rem] text-xs sm:text-sm"
+                data-testid="select-fullscreen-entry-status-filter"
+              >
+                <SelectValue placeholder="Все статусы" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" className="text-xs">
+                  Все статусы
+                </SelectItem>
+                {STATUS_OPTIONS.map((o) => (
+                  <SelectItem key={o.id} value={o.id} className="text-xs">
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
       </div>
@@ -789,48 +820,47 @@ function segmentForProduct(product: CatalogProduct, matrixModel?: ShowcaseMatrix
   return segmentFromProduct(product);
 }
 
-const STATUS_SEGMENTS: {
-  id: ShowcaseMatrixStatusId;
-  label: string;
-  activeClass: string;
-}[] = [
-  { id: "installed", label: "На витрине", activeClass: "bg-emerald-600 text-white border-emerald-600" },
-  { id: "need_install", label: "Нужно поставить", activeClass: "bg-amber-500 text-white border-amber-500" },
-  { id: "postponed", label: "Отложено", activeClass: "bg-sky-600 text-white border-sky-600" },
-  { id: "not_relevant", label: "Не актуально", activeClass: "bg-muted text-muted-foreground border-border" },
+const STATUS_OPTIONS: { id: ShowcaseMatrixStatusId; label: string }[] = [
+  { id: "installed", label: "На витрине" },
+  { id: "need_install", label: "Нужно поставить" },
+  { id: "postponed", label: "Отложено" },
+  { id: "not_relevant", label: "Не актуально" },
 ];
 
-function StatusSegmentedControl({
+const STATUS_LABEL_RU: Record<ShowcaseMatrixStatusId, string> = {
+  installed: "На витрине",
+  need_install: "Нужно поставить",
+  postponed: "Отложено",
+  not_relevant: "Не актуально",
+};
+
+function StatusSelectControl({
   value,
   onChange,
   productId,
-  size = "default",
+  className,
 }: {
   value: ShowcaseMatrixStatusId;
   onChange: (status: ShowcaseMatrixStatusId) => void;
   productId: string;
-  size?: "default" | "compact";
+  className?: string;
 }) {
   return (
-    <div className={cn("flex flex-wrap gap-1", size === "compact" ? "mt-1" : "mt-2")}>
-      {STATUS_SEGMENTS.map((segment) => {
-        const active = value === segment.id;
-        return (
-          <button
-            key={segment.id}
-            type="button"
-            className={cn(
-              "h-7 rounded-md border px-2 text-[10px] transition-colors",
-              active ? segment.activeClass : "border-border bg-background text-foreground/70",
-            )}
-            onClick={() => onChange(segment.id)}
-            data-testid={`button-fullscreen-entry-status-${productId}-${segment.id}`}
-          >
-            {segment.label}
-          </button>
-        );
-      })}
-    </div>
+    <Select value={value} onValueChange={(v) => onChange(v as ShowcaseMatrixStatusId)}>
+      <SelectTrigger
+        className={cn("h-8 text-xs", className)}
+        data-testid={`select-fullscreen-entry-status-${productId}`}
+      >
+        <SelectValue>{STATUS_LABEL_RU[value]}</SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        {STATUS_OPTIONS.map((o) => (
+          <SelectItem key={o.id} value={o.id} className="text-xs">
+            {o.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 
@@ -876,7 +906,7 @@ function FullscreenProductCard({
         {product.type || product.doorKind}
         {product.article ? ` · ${product.article}` : ""}
       </p>
-      <StatusSegmentedControl
+      <StatusSelectControl
         value={currentStatus}
         onChange={(newStatus) => {
           const seg = segmentForProduct(product, matrixModel);
@@ -887,6 +917,7 @@ function FullscreenProductCard({
           });
         }}
         productId={product.id}
+        className="mt-2"
       />
       {row?.status === "installed" ? (
         <div className="mt-2 space-y-1">
@@ -937,7 +968,7 @@ function FullscreenProductRow({ product, draft, matrixModel, onDraftChange }: Pr
             {product.article ? ` · ${product.article}` : ""}
           </p>
         </div>
-        <StatusSegmentedControl
+        <StatusSelectControl
           value={currentStatus}
           onChange={(newStatus) => {
             const seg = segmentForProduct(product, matrixModel);
@@ -948,7 +979,7 @@ function FullscreenProductRow({ product, draft, matrixModel, onDraftChange }: Pr
             });
           }}
           productId={product.id}
-          size="compact"
+          className="mt-1"
         />
         {row?.status === "installed" ? (
           <Select
