@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
+  Check,
   ChevronDown,
   ChevronRight,
   ChevronUp,
@@ -177,6 +178,7 @@ export function DistributionFullscreenEntry({
       return false;
     }
   });
+  const [quickStatus, setQuickStatus] = useState<ShowcaseMatrixStatusId>("installed");
   const [draft, setDraft] = useState<FullscreenEntryDraftMap>({});
   const [historyOpen, setHistoryOpen] = useState(false);
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
@@ -672,6 +674,30 @@ export function DistributionFullscreenEntry({
               ))}
             </div>
 
+            {compactMode ? (
+              <div className="flex items-center gap-1.5">
+                <span className="shrink-0 text-xs text-muted-foreground">Отмечаю как:</span>
+                <Select
+                  value={quickStatus}
+                  onValueChange={(v) => setQuickStatus(v as ShowcaseMatrixStatusId)}
+                >
+                  <SelectTrigger
+                    className="h-9 min-w-[9rem] text-xs sm:text-sm"
+                    data-testid="select-fullscreen-entry-quick-status"
+                  >
+                    <SelectValue>{STATUS_LABEL_RU[quickStatus]}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {STATUS_OPTIONS.map((o) => (
+                      <SelectItem key={o.id} value={o.id} className="text-xs">
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
+
             <Select
               value={statusFilter}
               onValueChange={(v) => setStatusFilter(v as StatusFilter)}
@@ -723,6 +749,9 @@ export function DistributionFullscreenEntry({
                   draft={draft[p.id]}
                   matrixModel={matrixModelById.get(p.id)}
                   onDraftChange={updateDraft}
+                  quickMode={compactMode}
+                  quickStatus={quickStatus}
+                  baselineStatus={baselines[p.id]?.status ?? "need_install"}
                 />
               ))}
             </div>
@@ -892,6 +921,20 @@ const STATUS_LABEL_RU: Record<ShowcaseMatrixStatusId, string> = {
   not_relevant: "Не актуально",
 };
 
+const STATUS_ACCENT: Record<ShowcaseMatrixStatusId, string> = {
+  installed: "border-emerald-500 ring-2 ring-emerald-500/40 bg-emerald-50/60 dark:bg-emerald-950/30",
+  need_install: "border-amber-500 ring-2 ring-amber-500/40 bg-amber-50/60 dark:bg-amber-950/30",
+  postponed: "border-sky-500 ring-2 ring-sky-500/40 bg-sky-50/60 dark:bg-sky-950/30",
+  not_relevant: "border-zinc-400 ring-2 ring-zinc-400/40 bg-zinc-100/60 dark:bg-zinc-900/40",
+};
+
+const STATUS_BADGE: Record<ShowcaseMatrixStatusId, string> = {
+  installed: "bg-emerald-600",
+  need_install: "bg-amber-600",
+  postponed: "bg-sky-600",
+  not_relevant: "bg-zinc-500",
+};
+
 function StatusSelectControl({
   value,
   onChange,
@@ -928,7 +971,15 @@ function FullscreenProductCard({
   draft,
   matrixModel,
   onDraftChange,
-}: ProductDraftProps & { cardSize: CatalogCardSize }) {
+  quickMode,
+  quickStatus,
+  baselineStatus,
+}: ProductDraftProps & {
+  cardSize: CatalogCardSize;
+  quickMode: boolean;
+  quickStatus: ShowcaseMatrixStatusId;
+  baselineStatus: ShowcaseMatrixStatusId;
+}) {
   const row = draft;
   const segment = row ? row.placementSegment : segmentForProduct(product, matrixModel);
   const placementOptions = allowedTypesForSegment(segment);
@@ -937,13 +988,36 @@ function FullscreenProductCard({
     cardSize === "xl" ? "text-sm" : cardSize === "s" ? "text-[11px]" : "text-xs";
 
   const currentStatus = row?.status ?? "need_install";
+  const isMarked = quickMode && currentStatus === quickStatus;
+
+  const handleQuickTap = () => {
+    const seg = segmentForProduct(product, matrixModel);
+    if (currentStatus === quickStatus) {
+      onDraftChange(product.id, {
+        status: baselineStatus,
+        placementSegment: row?.placementSegment ?? seg,
+        placementType: row?.placementType ?? "portal",
+      });
+    } else {
+      onDraftChange(product.id, {
+        status: quickStatus,
+        placementSegment: row?.placementSegment ?? seg,
+        placementType: row?.placementType ?? "portal",
+      });
+    }
+  };
 
   return (
     <article
       className={cn(
-        "relative flex flex-col overflow-hidden rounded-xl border border-border/80 bg-card shadow-xs",
+        "relative flex flex-col overflow-hidden rounded-xl border bg-card shadow-xs",
+        isMarked ? STATUS_ACCENT[quickStatus] : "border-border/80",
+        quickMode && "cursor-pointer select-none",
         cardSize === "s" ? "p-1.5" : "p-2",
       )}
+      onClick={quickMode ? handleQuickTap : undefined}
+      role={quickMode ? "button" : undefined}
+      data-testid={quickMode ? `card-fullscreen-entry-quick-${product.id}` : undefined}
     >
       <div
         className={cn(
@@ -956,6 +1030,17 @@ function FullscreenProductCard({
         ) : (
           <div className="flex h-full items-center justify-center text-xs text-muted-foreground">Нет фото</div>
         )}
+        {isMarked ? (
+          <span
+            className={cn(
+              "absolute right-1 top-1 z-10 flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold text-white shadow",
+              STATUS_BADGE[quickStatus],
+            )}
+          >
+            <Check className="h-3 w-3" aria-hidden />
+            {STATUS_LABEL_RU[quickStatus]}
+          </span>
+        ) : null}
       </div>
       <h3 className={cn("line-clamp-2 font-medium leading-snug text-foreground", titleSize)}>
         {product.name}
@@ -964,43 +1049,47 @@ function FullscreenProductCard({
         {product.type || product.doorKind}
         {product.article ? ` · ${product.article}` : ""}
       </p>
-      <StatusSelectControl
-        value={currentStatus}
-        onChange={(newStatus) => {
-          const seg = segmentForProduct(product, matrixModel);
-          onDraftChange(product.id, {
-            status: newStatus,
-            placementSegment: row?.placementSegment ?? seg,
-            placementType: row?.placementType ?? "portal",
-          });
-        }}
-        productId={product.id}
-        className="mt-2"
-      />
-      {row?.status === "installed" ? (
-        <div className="mt-2 space-y-1">
-          <Label className="text-[10px] text-muted-foreground">Крепление</Label>
-          <Select
-            value={row.placementType}
-            onValueChange={(v) =>
-              onDraftChange(product.id, { placementType: v as ShowcasePlacementType })
-            }
-          >
-            <SelectTrigger
-              className="h-9 text-xs"
-              data-testid={`select-fullscreen-entry-placement-${product.id}`}
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {placementOptions.map((t) => (
-                <SelectItem key={t} value={t} className="text-xs">
-                  {PLACEMENT_TYPE_LABEL_RU[t]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+      {!quickMode ? (
+        <>
+          <StatusSelectControl
+            value={currentStatus}
+            onChange={(newStatus) => {
+              const seg = segmentForProduct(product, matrixModel);
+              onDraftChange(product.id, {
+                status: newStatus,
+                placementSegment: row?.placementSegment ?? seg,
+                placementType: row?.placementType ?? "portal",
+              });
+            }}
+            productId={product.id}
+            className="mt-2"
+          />
+          {row?.status === "installed" ? (
+            <div className="mt-2 space-y-1">
+              <Label className="text-[10px] text-muted-foreground">Крепление</Label>
+              <Select
+                value={row.placementType}
+                onValueChange={(v) =>
+                  onDraftChange(product.id, { placementType: v as ShowcasePlacementType })
+                }
+              >
+                <SelectTrigger
+                  className="h-9 text-xs"
+                  data-testid={`select-fullscreen-entry-placement-${product.id}`}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {placementOptions.map((t) => (
+                    <SelectItem key={t} value={t} className="text-xs">
+                      {PLACEMENT_TYPE_LABEL_RU[t]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
+        </>
       ) : null}
     </article>
   );
