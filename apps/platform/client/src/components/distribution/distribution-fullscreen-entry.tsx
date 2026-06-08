@@ -11,6 +11,7 @@ import {
   Loader2,
   Maximize2,
   Minimize2,
+  RotateCcw,
   Search,
   Square,
   X,
@@ -347,7 +348,23 @@ export function DistributionFullscreenEntry({
   }, [baselines, matrixModelById, visibleProducts]);
 
   const changedIds = useMemo(() => collectChangedProductIds(draft, baselines), [draft, baselines]);
+  const changedSet = useMemo(() => new Set(changedIds), [changedIds]);
   const installedCount = useMemo(() => countInstalledInDraft(draft), [draft]);
+
+  const orderedProducts = useMemo(() => {
+    if (!(compactMode && quickStatus === "need_install")) return visibleProducts;
+    return [...visibleProducts]
+      .map((p, i) => ({ p, i }))
+      .sort((a, b) => {
+        const ma = matrixModelById.get(a.p.id);
+        const mb = matrixModelById.get(b.p.id);
+        const ra = ma ? (PRIORITY_RANK[ma.basePriority] ?? 3) : 9;
+        const rb = mb ? (PRIORITY_RANK[mb.basePriority] ?? 3) : 9;
+        if (ra !== rb) return ra - rb;
+        return a.i - b.i;
+      })
+      .map((x) => x.p);
+  }, [compactMode, matrixModelById, quickStatus, visibleProducts]);
 
   const historyEvents = useMemo(
     () => getShowcaseMatrixTpHistoryEvents(dealer.id, point.id, storage),
@@ -363,6 +380,10 @@ export function DistributionFullscreenEntry({
       ...prev,
       [productId]: { ...prev[productId]!, ...patch },
     }));
+  }, []);
+
+  const handleResetDraft = useCallback(() => {
+    setDraft({});
   }, []);
 
   const handleSave = useCallback(async () => {
@@ -575,18 +596,34 @@ export function DistributionFullscreenEntry({
       >
         <div className="flex flex-col gap-2 px-3 py-2 sm:px-4 md:gap-2 md:py-2.5">
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-2">
-            <div className="relative min-w-0 flex-1">
-              <Search
-                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                aria-hidden
-              />
-              <Input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Поиск по каталогу"
-                className="min-h-9 pl-9"
-                data-testid="input-fullscreen-entry-search"
-              />
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              {compactMode && onBackToList ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9 shrink-0"
+                  onClick={onBackToList}
+                  data-testid="button-fullscreen-entry-back-compact"
+                  aria-label="Назад"
+                  title="Назад"
+                >
+                  <ArrowLeft className="h-4 w-4" aria-hidden />
+                </Button>
+              ) : null}
+              <div className="relative min-w-0 flex-1">
+                <Search
+                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                  aria-hidden
+                />
+                <Input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Поиск по каталогу"
+                  className="min-h-9 pl-9"
+                  data-testid="input-fullscreen-entry-search"
+                />
+              </div>
             </div>
             <div className="flex shrink-0 items-center gap-1 md:ml-auto">
               {(
@@ -729,7 +766,7 @@ export function DistributionFullscreenEntry({
             <p className="py-12 text-center text-sm text-muted-foreground">Ничего не найдено</p>
           ) : cardSize === "list" ? (
             <ul className={gridClass}>
-              {visibleProducts.map((p) => (
+              {orderedProducts.map((p) => (
                 <FullscreenProductRow
                   key={p.id}
                   product={p}
@@ -741,7 +778,7 @@ export function DistributionFullscreenEntry({
             </ul>
           ) : (
             <div className={gridClass}>
-              {visibleProducts.map((p) => (
+              {orderedProducts.map((p) => (
                 <FullscreenProductCard
                   key={p.id}
                   product={p}
@@ -752,6 +789,8 @@ export function DistributionFullscreenEntry({
                   quickMode={compactMode}
                   quickStatus={quickStatus}
                   baselineStatus={baselines[p.id]?.status ?? "need_install"}
+                  isChanged={changedSet.has(p.id)}
+                  isMatrixRecommended={matrixModelById.has(p.id)}
                 />
               ))}
             </div>
@@ -780,6 +819,17 @@ export function DistributionFullscreenEntry({
                 {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> : null}
                 Сохранить ({changedIds.length})
               </Button>
+              {changedIds.length > 0 ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-h-10"
+                  onClick={handleResetDraft}
+                  data-testid="button-fullscreen-entry-reset"
+                >
+                  Сбросить
+                </Button>
+              ) : null}
               <Button
                 type="button"
                 variant="outline"
@@ -793,6 +843,19 @@ export function DistributionFullscreenEntry({
           </div>
         ) : null}
       </div>
+
+      {compactMode && changedIds.length > 0 ? (
+        <Button
+          type="button"
+          variant="outline"
+          className="fixed bottom-4 left-4 z-40 min-h-11 rounded-full bg-background/95 px-4 shadow-lg backdrop-blur"
+          onClick={handleResetDraft}
+          data-testid="button-fullscreen-entry-reset-floating"
+        >
+          <RotateCcw className="mr-1.5 h-4 w-4" aria-hidden />
+          Сбросить
+        </Button>
+      ) : null}
 
       {compactMode && changedIds.length > 0 ? (
         <Button
@@ -935,6 +998,8 @@ const STATUS_BADGE: Record<ShowcaseMatrixStatusId, string> = {
   not_relevant: "bg-zinc-500",
 };
 
+const PRIORITY_RANK: Record<string, number> = { high: 0, medium: 1, low: 2 };
+
 function StatusSelectControl({
   value,
   onChange,
@@ -974,11 +1039,15 @@ function FullscreenProductCard({
   quickMode,
   quickStatus,
   baselineStatus,
+  isChanged,
+  isMatrixRecommended,
 }: ProductDraftProps & {
   cardSize: CatalogCardSize;
   quickMode: boolean;
   quickStatus: ShowcaseMatrixStatusId;
   baselineStatus: ShowcaseMatrixStatusId;
+  isChanged: boolean;
+  isMatrixRecommended: boolean;
 }) {
   const row = draft;
   const segment = row ? row.placementSegment : segmentForProduct(product, matrixModel);
@@ -988,7 +1057,9 @@ function FullscreenProductCard({
     cardSize === "xl" ? "text-sm" : cardSize === "s" ? "text-[11px]" : "text-xs";
 
   const currentStatus = row?.status ?? "need_install";
-  const isMarked = quickMode && currentStatus === quickStatus;
+  const hasExplicitMark =
+    isChanged || (baselineStatus === quickStatus && quickStatus !== "need_install");
+  const isMarked = quickMode && currentStatus === quickStatus && hasExplicitMark;
 
   const handleQuickTap = () => {
     const seg = segmentForProduct(product, matrixModel);
@@ -1011,7 +1082,11 @@ function FullscreenProductCard({
     <article
       className={cn(
         "relative flex flex-col overflow-hidden rounded-xl border bg-card shadow-xs",
-        isMarked ? STATUS_ACCENT[quickStatus] : "border-border/80",
+        isMarked
+          ? STATUS_ACCENT[quickStatus]
+          : quickMode && isMatrixRecommended
+            ? "border-primary/40"
+            : "border-border/80",
         quickMode && "cursor-pointer select-none",
         cardSize === "s" ? "p-1.5" : "p-2",
       )}
@@ -1030,6 +1105,11 @@ function FullscreenProductCard({
         ) : (
           <div className="flex h-full items-center justify-center text-xs text-muted-foreground">Нет фото</div>
         )}
+        {quickMode && isMatrixRecommended && !isMarked ? (
+          <span className="absolute left-1 top-1 z-10 rounded-full bg-primary/90 px-1.5 py-0.5 text-[9px] font-semibold text-primary-foreground shadow">
+            По матрице
+          </span>
+        ) : null}
         {isMarked ? (
           <span
             className={cn(
