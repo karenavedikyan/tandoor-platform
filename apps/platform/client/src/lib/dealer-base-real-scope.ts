@@ -35,6 +35,13 @@ function rowMatchesAssignmentCodes(r: DealerRow, codes: Set<string>): boolean {
   return codes.has(r.id);
 }
 
+export function rowInAssignmentsScope(r: DealerRow, scope: AssignmentsScope | undefined): boolean {
+  if (!assignmentsScopeIsActive(scope)) return false;
+  const catalog = r.releaseCode?.trim();
+  if (catalog && (scope!.ownCodes.has(catalog) || scope!.teamCodes.has(catalog))) return true;
+  return scope!.ownCodes.has(r.id) || scope!.teamCodes.has(r.id);
+}
+
 function rowsForAssignmentsScope(
   rows: DealerRow[],
   access: DealerBaseAccessRole,
