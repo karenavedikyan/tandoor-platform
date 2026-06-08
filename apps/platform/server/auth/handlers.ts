@@ -549,7 +549,7 @@ async function buildVisibleClientsPayloadHttp(db: NonNullable<ReturnType<typeof 
       })),
     };
   }
-  if (role === "manager" || role === "regional_manager") {
+  if (role === "manager") {
     const r = await db.execute<ClientAssignmentRowHttp>(
       sql`
         SELECT DISTINCT ON (client_code) client_code, responsible_user_id, team_id
@@ -567,6 +567,28 @@ async function buildVisibleClientsPayloadHttp(db: NonNullable<ReturnType<typeof 
         code: x.client_code,
         responsibleUserId: x.responsible_user_id,
         teamId: x.team_id,
+      })),
+    };
+  }
+  if (role === "regional_manager") {
+    const r = await db.execute<{ client_code: string }>(
+      sql`
+        SELECT DISTINCT upper(regexp_replace(dealer_id, '^client-', '')) AS client_code
+        FROM dealer_overrides
+        WHERE regional_manager_id = ${uid}::uuid
+        ORDER BY client_code
+      `,
+    );
+    const rows = (r as unknown as { rows?: { client_code: string }[] }).rows ?? (r as unknown as { client_code: string }[]);
+    const arr = Array.isArray(rows) ? rows : [];
+    const codes = arr.map((x) => x.client_code).filter(Boolean);
+    return {
+      all: false,
+      codes,
+      assignments: codes.map((code) => ({
+        code,
+        responsibleUserId: uid,
+        teamId: null,
       })),
     };
   }
