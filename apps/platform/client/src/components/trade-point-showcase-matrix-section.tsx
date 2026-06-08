@@ -49,6 +49,7 @@ import type { MatrixFilterId, TradePointMatrixSummary, TradePointProductMatrixIt
 import type { MatrixTask, MatrixTaskRecommendation } from "@/lib/trade-point-task-data";
 import { ShowcaseModelPresentationDialog } from "@/components/showcase-model-presentation-dialog";
 import { TradePointPlacementBlocksSection } from "@/components/distribution/trade-point-placement-blocks-section";
+import { resolveShowcaseMatrixPositionForEntry } from "@/lib/showcase-matrix-deficit-tasks";
 
 export type ShowcaseMatrixViewMode = "large" | "compact" | "mini" | "list";
 export type ShowcaseSectionDensity = "comfortable" | "compact";
@@ -231,6 +232,65 @@ function modelMatchesQuickFilter(st: ShowcaseMatrixStatusId, f: ShowcaseMatrixQu
   if (f === "installed") return st === "installed";
   if (f === "postponed") return st === "postponed";
   return st === "not_relevant";
+}
+
+const MANUAL_MODEL_PRESENTATION_DEFAULTS = {
+  importanceReason: "",
+  characteristics: "",
+  advantages: "",
+  benefitsDealer: "",
+  benefitsBuyer: "",
+  objections: "",
+  objectionAnswers: "",
+  copyMessage: "",
+} as const;
+
+function catalogProductMatrixType(productId: string): ShowcaseMatrixModelDefinition["type"] {
+  const p = getProductById(productId);
+  if (!p) return "interior";
+  if (p.doorKind === "Межкомнатная" || p.category.includes("Межкомнат")) return "interior";
+  return "entrance";
+}
+
+function buildManualModelFromEntry(
+  entry: ShowcaseMatrixEntryDto,
+  dealer: DealerRow,
+): ShowcaseMatrixModelDefinition {
+  const resolved = resolveShowcaseMatrixPositionForEntry(entry, dealer);
+  const product = getProductById(entry.targetId);
+  const type = catalogProductMatrixType(entry.targetId);
+  return {
+    id: entry.targetId,
+    name: resolved.productName || entry.targetId,
+    type,
+    typeLabelRu: type === "entrance" ? "ВХ" : "МК",
+    imageUrl: resolved.showcaseMatrixImageSrc ?? product?.image?.trim() ?? "",
+    basePriority: "medium",
+    categoryRules: [],
+    ...MANUAL_MODEL_PRESENTATION_DEFAULTS,
+  };
+}
+
+function sortModelsByPriorityThenName(
+  list: ShowcaseMatrixModelDefinition[],
+): ShowcaseMatrixModelDefinition[] {
+  const pr: Record<ShowcaseMatrixModelDefinition["basePriority"], number> = { high: 0, medium: 1, low: 2 };
+  return [...list].sort((a, b) => pr[a.basePriority] - pr[b.basePriority] || a.name.localeCompare(b.name));
+}
+
+function filterShowcaseModelsForDisplay(
+  list: ShowcaseMatrixModelDefinition[],
+  activeQuickFilter: ShowcaseMatrixQuickFilterId,
+  categoryFilter: ShowcaseMatrixCategoryFilter,
+  catalogFilters: Record<string, string[]>,
+  effectiveStatus: (modelId: string) => ShowcaseMatrixStatusId,
+): ShowcaseMatrixModelDefinition[] {
+  return list.filter((m) => {
+    if (!modelMatchesQuickFilter(effectiveStatus(m.id), activeQuickFilter)) return false;
+    if (categoryFilter === "entrance" && m.type !== "entrance") return false;
+    if (categoryFilter === "interior" && m.type !== "interior") return false;
+    return modelPassesMatrixCatalogFilters(m, catalogFilters);
+  });
 }
 
 type ShowcasePhotoPlaceholderDensity = "comfortable" | "compact" | "micro";
@@ -432,18 +492,29 @@ export function TradePointShowcaseMatrixSection({
   const models = resolvedMatrix.source === "managed" ? resolvedMatrix.models : [];
   const isManagedMatrix = resolvedMatrix.source === "managed";
 
+  const manualOnlyModels = useMemo(() => {
+    const matrixModelIds = new Set(models.map((m) => m.id));
+    const out: ShowcaseMatrixModelDefinition[] = [];
+    for (const entry of Array.from(backendByModelId.values())) {
+      if (entry.targetKind !== "model") continue;
+      if (matrixModelIds.has(entry.targetId)) continue;
+      out.push(buildManualModelFromEntry(entry, dealer));
+    }
+    return sortModelsByPriorityThenName(out);
+  }, [backendByModelId, dealer, models]);
+
+  const allModels = useMemo(() => [...models, ...manualOnlyModels], [manualOnlyModels, models]);
+
   const matrixCompletionPct = useMemo(
     () => computeTradePointShowcaseMatrixStats(dealer, point, storage).completionPct,
     [dealer, point, storage],
   );
 
   const priorityNeedModels = useMemo(() => {
-    const pr: Record<ShowcaseMatrixModelDefinition["basePriority"], number> = { high: 0, medium: 1, low: 2 };
-    return models
-      .filter((m) => effectiveStatus(m.id) === "need_install")
-      .sort((a, b) => pr[a.basePriority] - pr[b.basePriority] || a.name.localeCompare(b.name))
-      .slice(0, 3);
-  }, [models, effectiveStatus]);
+    return sortModelsByPriorityThenName(
+      allModels.filter((m) => effectiveStatus(m.id) === "need_install"),
+    ).slice(0, 3);
+  }, [allModels, effectiveStatus]);
 
   const statusCounts = useMemo(() => {
     const acc: Record<ShowcaseMatrixStatusId, number> = {
@@ -452,12 +523,12 @@ export function TradePointShowcaseMatrixSection({
       postponed: 0,
       not_relevant: 0,
     };
-    for (const m of models) {
+    for (const m of allModels) {
       const st = effectiveStatus(m.id);
       acc[st] += 1;
     }
     return acc;
-  }, [models, effectiveStatus]);
+  }, [allModels, effectiveStatus]);
 
   const [userQuickFilter, setUserQuickFilter] = useState<ShowcaseMatrixQuickFilterId | null>(null);
   const autoQuickFilter: ShowcaseMatrixQuickFilterId = statusCounts.need_install > 0 ? "needed" : "all";
@@ -469,15 +540,18 @@ export function TradePointShowcaseMatrixSection({
   const [matrixViewFiltersOpen, setMatrixViewFiltersOpen] = useState(false);
 
   const statusFilteredModels = useMemo(() => {
-    return models.filter((m) => {
-      const st = effectiveStatus(m.id);
-      return modelMatchesQuickFilter(st, activeQuickFilter);
-    });
+    return models.filter((m) => modelMatchesQuickFilter(effectiveStatus(m.id), activeQuickFilter));
   }, [models, effectiveStatus, activeQuickFilter]);
 
+  const statusFilteredManualModels = useMemo(() => {
+    return manualOnlyModels.filter((m) =>
+      modelMatchesQuickFilter(effectiveStatus(m.id), activeQuickFilter),
+    );
+  }, [manualOnlyModels, effectiveStatus, activeQuickFilter]);
+
   const modelsForCatalogOptionScope = useMemo(
-    () => modelsMatchingCategory(models, categoryFilter),
-    [models, categoryFilter],
+    () => modelsMatchingCategory(allModels, categoryFilter),
+    [allModels, categoryFilter],
   );
 
   const catalogFilterRows = useMemo(
@@ -508,13 +582,32 @@ export function TradePointShowcaseMatrixSection({
     if (catalogFilterRows.length === 0) setCatalogFiltersPanelOpen(false);
   }, [catalogFilterRows.length]);
 
-  const filteredModels = useMemo(() => {
-    return statusFilteredModels.filter((m) => {
-      if (categoryFilter === "entrance" && m.type !== "entrance") return false;
-      if (categoryFilter === "interior" && m.type !== "interior") return false;
-      return modelPassesMatrixCatalogFilters(m, catalogFilters);
-    });
-  }, [statusFilteredModels, categoryFilter, catalogFilters]);
+  const filteredModels = useMemo(
+    () =>
+      filterShowcaseModelsForDisplay(
+        statusFilteredModels,
+        activeQuickFilter,
+        categoryFilter,
+        catalogFilters,
+        effectiveStatus,
+      ),
+    [statusFilteredModels, activeQuickFilter, categoryFilter, catalogFilters, effectiveStatus],
+  );
+
+  const filteredManualModels = useMemo(
+    () =>
+      filterShowcaseModelsForDisplay(
+        statusFilteredManualModels,
+        activeQuickFilter,
+        categoryFilter,
+        catalogFilters,
+        effectiveStatus,
+      ),
+    [statusFilteredManualModels, activeQuickFilter, categoryFilter, catalogFilters, effectiveStatus],
+  );
+
+  const visibleModelCount = filteredModels.length + filteredManualModels.length;
+  const statusFilteredTotalCount = statusFilteredModels.length + statusFilteredManualModels.length;
 
   const setCatalogFilterKey = useCallback((key: string, next: string[]) => {
     setCatalogFilters((prev) => ({ ...prev, [key]: next }));
@@ -586,373 +679,7 @@ export function TradePointShowcaseMatrixSection({
         : viewMode === "mini"
           ? "grid max-[340px]:grid-cols-2 grid-cols-3 items-stretch gap-1 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8"
           : "flex flex-col gap-0 overflow-hidden rounded-xl border border-border/80 bg-card";
-
-  return (
-    <>
-      <section
-        id="section-trade-point-showcase-matrix"
-        data-testid="section-trade-point-showcase-matrix"
-        className={cn("scroll-mt-28 overflow-x-clip min-w-0 sm:scroll-mt-32", isCompact ? "space-y-3" : "space-y-4")}
-      >
-        <div
-          data-testid="section-trade-point-showcase-unified"
-          className={cn("rounded-2xl border border-border/80 bg-muted/10", isCompact ? "space-y-3 p-2.5 sm:p-4" : "space-y-4 p-3 sm:p-4")}
-        >
-          <div data-testid="section-trade-point-showcase" className={cn(isCompact ? "space-y-2" : "space-y-3")}>
-            <div className="space-y-1">
-              <h2 className={cn("font-semibold tracking-tight text-foreground sm:text-lg", isCompact ? "text-sm sm:text-lg" : "text-base")}>Витрина торговой точки</h2>
-              <p className={cn("max-w-2xl text-sm text-muted-foreground", isCompact && "hidden sm:block")}>
-                Что стоит, что нужно поставить и какие задачи есть по этой точке. Статусы матрицы сохраняются в этом браузере.
-              </p>
-            </div>
-
-            <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs text-muted-foreground">
-              <span>
-                Нужно поставить:{" "}
-                <span data-testid="text-showcase-matrix-needed-count" className="font-semibold tabular-nums text-foreground">
-                  {statusCounts.need_install}
-                </span>
-              </span>
-              <span className="text-muted-foreground/40" aria-hidden>
-                ·
-              </span>
-              <span>
-                На витрине:{" "}
-                <span data-testid="text-showcase-matrix-installed-count" className="font-semibold tabular-nums text-foreground">
-                  {statusCounts.installed}
-                </span>
-              </span>
-              <span className="text-muted-foreground/40" aria-hidden>
-                ·
-              </span>
-              <span>
-                Отложено:{" "}
-                <span data-testid="text-showcase-matrix-postponed-count" className="font-semibold tabular-nums text-foreground">
-                  {statusCounts.postponed}
-                </span>
-              </span>
-              <span className="text-muted-foreground/40" aria-hidden>
-                ·
-              </span>
-              <span>
-                Не актуально:{" "}
-                <span data-testid="text-showcase-matrix-not-relevant-count" className="font-semibold tabular-nums text-foreground">
-                  {statusCounts.not_relevant}
-                </span>
-              </span>
-              <span className="text-muted-foreground/40" aria-hidden>
-                ·
-              </span>
-              <span>
-                Выполнение:{" "}
-                <span className="font-semibold tabular-nums text-foreground">{matrixCompletionPct}%</span>
-              </span>
-              {page.openTasksCount > 0 ? (
-                <>
-                  <span className="text-muted-foreground/40" aria-hidden>
-                    ·
-                  </span>
-                  <span>
-                    Открытых задач:{" "}
-                    <span className="font-semibold tabular-nums text-foreground">{page.openTasksCount}</span>
-                  </span>
-                </>
-              ) : null}
-            </p>
-
-            <div
-              id="section-trade-point-showcase-focus"
-              data-testid="section-trade-point-showcase-focus"
-              className={cn("rounded-xl border border-amber-300/80 bg-gradient-to-br from-amber-50 to-orange-50/80 sm:px-4", isCompact ? "px-2.5 py-2" : "px-3 py-2.5")}
-            >
-              {priorityNeedModels.length > 0 ? (
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-amber-950/90">В первую очередь поставить</p>
-                  <ul className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-                    {priorityNeedModels.map((m) => (
-                      <li key={m.id} className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-amber-200/90 bg-background/70 px-2 py-1.5 sm:min-w-[200px] sm:flex-none">
-                        <ModelDoorPhotoFrame
-                          src={showcaseModelImageSrc(m)}
-                          alt=""
-                          frameClass="h-11 w-9 sm:h-12 sm:w-10"
-                          placeholderDensity="compact"
-                        />
-                        <button
-                          type="button"
-                          className="min-w-0 flex-1 text-left text-sm font-semibold leading-snug text-foreground hover:underline"
-                          onClick={() => openPresentation(m)}
-                        >
-                          {m.name}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : (
-                <p className="text-sm font-medium text-emerald-900">Матрица витрины выполнена по статусам «нужно поставить».</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Фильтры витрины
-              </p>
-
-              <Collapsible open={matrixViewFiltersOpen} onOpenChange={setMatrixViewFiltersOpen} className="space-y-2">
-                <div className="space-y-1.5">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Статус позиций</p>
-                  <div className="flex min-w-0 flex-wrap gap-1.5">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={activeQuickFilter === "needed" ? "default" : "outline"}
-                      className="h-8 shrink-0 text-xs"
-                      data-testid="button-showcase-matrix-filter-needed"
-                      onClick={() => setUserQuickFilter("needed")}
-                    >
-                      Нужно поставить
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={activeQuickFilter === "installed" ? "default" : "outline"}
-                      className="h-8 shrink-0 text-xs"
-                      data-testid="button-showcase-matrix-filter-installed"
-                      onClick={() => setUserQuickFilter("installed")}
-                    >
-                      На витрине
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={activeQuickFilter === "postponed" ? "default" : "outline"}
-                      className="h-8 shrink-0 text-xs"
-                      data-testid="button-showcase-matrix-filter-postponed"
-                      onClick={() => setUserQuickFilter("postponed")}
-                    >
-                      Отложено
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={activeQuickFilter === "not_relevant" ? "default" : "outline"}
-                      className="h-8 shrink-0 text-xs"
-                      data-testid="button-showcase-matrix-filter-not-relevant"
-                      onClick={() => setUserQuickFilter("not_relevant")}
-                    >
-                      Не актуально
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={activeQuickFilter === "all" ? "secondary" : "outline"}
-                      className="h-8 shrink-0 text-xs"
-                      data-testid="button-showcase-matrix-filter-all"
-                      onClick={() => setUserQuickFilter("all")}
-                    >
-                      Все
-                    </Button>
-                    <CollapsibleTrigger asChild>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        className="ml-auto h-8 w-8 shrink-0"
-                        data-testid="button-showcase-matrix-filters-toggle"
-                        aria-label="Фильтры матрицы"
-                        title="Фильтры матрицы"
-                      >
-                        <SlidersHorizontal className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
-                      </Button>
-                    </CollapsibleTrigger>
-                  </div>
-                </div>
-
-                {statusFilterActionSlot ? <div className="w-full">{statusFilterActionSlot}</div> : null}
-
-                <CollapsibleContent className="space-y-2 pt-1">
-                      <div data-testid="section-showcase-matrix-view-sticky-toolbar" className="min-w-0 space-y-1.5">
-                        <p className="text-[11px] text-muted-foreground md:hidden">
-                          <span className="font-semibold text-foreground">Вид матрицы:</span> {VIEW_MODE_LABEL_RU[viewMode]}
-                        </p>
-                        <div className="min-w-0 space-y-1.5">
-                          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                            Вид матрицы
-                          </p>
-                          <div className="flex min-w-0 flex-wrap gap-1.5">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant={viewMode === "large" ? "default" : "outline"}
-                              className="h-8 shrink-0 text-xs"
-                              data-testid="button-showcase-matrix-view-large"
-                              onClick={() => setViewMode("large")}
-                            >
-                              Крупно
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant={viewMode === "compact" ? "default" : "outline"}
-                              className="h-8 shrink-0 text-xs"
-                              data-testid="button-showcase-matrix-view-compact"
-                              onClick={() => setViewMode("compact")}
-                            >
-                              Компактно
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant={viewMode === "mini" ? "default" : "outline"}
-                              className="h-8 shrink-0 text-xs"
-                              data-testid="button-showcase-matrix-view-mini"
-                              onClick={() => setViewMode("mini")}
-                            >
-                              Мини
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant={viewMode === "list" ? "default" : "outline"}
-                              className="h-8 shrink-0 text-xs"
-                              data-testid="button-showcase-matrix-view-list"
-                              onClick={() => setViewMode("list")}
-                            >
-                              Список
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2 rounded-lg border border-border/60 bg-muted/10 px-2 py-2 sm:px-3">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
-                      <div className="min-w-0 space-y-1.5">
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Категория</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant={categoryFilter === "all" ? "secondary" : "outline"}
-                            className="h-8 shrink-0 text-xs"
-                            data-testid="button-showcase-matrix-category-all"
-                            onClick={() => setCategoryFilter("all")}
-                          >
-                            Все
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant={categoryFilter === "entrance" ? "default" : "outline"}
-                            className="h-8 shrink-0 text-xs"
-                            data-testid="button-showcase-matrix-category-entrance"
-                            onClick={() => setCategoryFilter("entrance")}
-                          >
-                            ВХ двери
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant={categoryFilter === "interior" ? "default" : "outline"}
-                            className="h-8 shrink-0 text-xs"
-                            data-testid="button-showcase-matrix-category-interior"
-                            onClick={() => setCategoryFilter("interior")}
-                          >
-                            МК двери
-                          </Button>
-                        </div>
-                      </div>
-                      {catalogFilterRows.length > 0 ? (
-                        <Collapsible
-                          open={catalogFiltersPanelOpen}
-                          onOpenChange={setCatalogFiltersPanelOpen}
-                          className="min-w-0 w-full sm:w-auto sm:max-w-md"
-                        >
-                          <CollapsibleTrigger asChild>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-8 w-full justify-between gap-2 text-xs sm:w-auto sm:min-w-[11rem]"
-                              data-testid="button-showcase-matrix-catalog-filters-toggle"
-                            >
-                              <span>Фильтры каталога</span>
-                              <ChevronDown
-                                className={cn("h-4 w-4 shrink-0 opacity-70 transition-transform", catalogFiltersPanelOpen && "rotate-180")}
-                                aria-hidden
-                              />
-                            </Button>
-                          </CollapsibleTrigger>
-                          <CollapsibleContent>
-                            <section
-                              data-testid="section-showcase-matrix-catalog-filters"
-                              className="mt-2 space-y-2 rounded-md border border-border/70 bg-background/90 p-2"
-                            >
-                              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                                {catalogFilterRows.map((row) => (
-                                  <div key={row.key} className="min-w-0 space-y-1">
-                                    <Label className="text-[10px] leading-none text-muted-foreground">{row.label}</Label>
-                                    <MultiSelect
-                                      options={row.options}
-                                      value={catalogFilters[row.key] ?? []}
-                                      onChange={(next) => setCatalogFilterKey(row.key, next)}
-                                      placeholder="Все"
-                                      allLabel="Все"
-                                      triggerClassName="min-h-9 py-1.5 text-xs"
-                                      contentClassName="w-[var(--radix-popover-trigger-width)] max-w-[min(100vw-2rem,24rem)]"
-                                      testId={`filter-showcase-matrix-catalog-${row.key}`}
-                                      ariaLabel={row.label}
-                                      showSearchThreshold={10}
-                                    />
-                                  </div>
-                                ))}
-                              </div>
-                            </section>
-                          </CollapsibleContent>
-                        </Collapsible>
-                      ) : null}
-                    </div>
-                    <p className="text-xs text-muted-foreground" data-testid="text-showcase-matrix-visible-count">
-                      Показано:{" "}
-                      <span className="font-semibold tabular-nums text-foreground">{filteredModels.length}</span>
-                      {" из "}
-                      <span className="font-semibold tabular-nums text-foreground">{statusFilteredModels.length}</span> моделей
-                    </p>
-                      </div>
-                </CollapsibleContent>
-              </Collapsible>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <div className="space-y-0.5">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Матрица клиента</p>
-              <p className="text-xs text-muted-foreground">Что поставить на витрину по плану.</p>
-            </div>
-
-        {!isManagedMatrix ? (
-          <div className="rounded-xl border border-dashed border-border/80 bg-muted/10 px-3 py-6 text-center text-sm text-muted-foreground">
-            <p>Для этой торговой точки не назначена матрица витрины. Назначьте матрицу, чтобы планировать выкладку.</p>
-          </div>
-        ) : filteredModels.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-border/80 bg-muted/10 px-3 py-6 text-center text-sm text-muted-foreground">
-            <p>Нет моделей в выбранном фильтре.</p>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              className="mt-3"
-              onClick={() => {
-                setUserQuickFilter("all");
-                setCategoryFilter("all");
-                setCatalogFilters({});
-              }}
-            >
-              Показать все
-            </Button>
-          </div>
-        ) : (
-          <div className={cn(gridClass, viewMode === "list" && "divide-y divide-border/80")}>
-            {filteredModels.map((m) => {
+  const renderShowcaseModelCard = (m: ShowcaseMatrixModelDefinition) => {
               const st = effectiveStatus(m.id);
               const entry = effectiveEntry(m.id);
               const commentVal = entry.comment ?? "";
@@ -1500,7 +1227,417 @@ export function TradePointShowcaseMatrixSection({
                   </div>
                 </Card>
               );
-            })}
+
+  };
+
+  const renderShowcaseModelGrid = (
+    modelList: ShowcaseMatrixModelDefinition[],
+    gridTestId?: string,
+  ) => (
+    <div
+      className={cn(gridClass, viewMode === "list" && "divide-y divide-border/80")}
+      data-testid={gridTestId}
+    >
+      {modelList.map(renderShowcaseModelCard)}
+    </div>
+  );
+
+  const showUnassignedMatrixMessage = !isManagedMatrix && manualOnlyModels.length === 0;
+
+
+  return (
+    <>
+      <section
+        id="section-trade-point-showcase-matrix"
+        data-testid="section-trade-point-showcase-matrix"
+        className={cn("scroll-mt-28 overflow-x-clip min-w-0 sm:scroll-mt-32", isCompact ? "space-y-3" : "space-y-4")}
+      >
+        <div
+          data-testid="section-trade-point-showcase-unified"
+          className={cn("rounded-2xl border border-border/80 bg-muted/10", isCompact ? "space-y-3 p-2.5 sm:p-4" : "space-y-4 p-3 sm:p-4")}
+        >
+          <div data-testid="section-trade-point-showcase" className={cn(isCompact ? "space-y-2" : "space-y-3")}>
+            <div className="space-y-1">
+              <h2 className={cn("font-semibold tracking-tight text-foreground sm:text-lg", isCompact ? "text-sm sm:text-lg" : "text-base")}>Витрина торговой точки</h2>
+              <p className={cn("max-w-2xl text-sm text-muted-foreground", isCompact && "hidden sm:block")}>
+                Что стоит, что нужно поставить и какие задачи есть по этой точке. Статусы матрицы сохраняются в этом браузере.
+              </p>
+            </div>
+
+            <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs text-muted-foreground">
+              <span>
+                Нужно поставить:{" "}
+                <span data-testid="text-showcase-matrix-needed-count" className="font-semibold tabular-nums text-foreground">
+                  {statusCounts.need_install}
+                </span>
+              </span>
+              <span className="text-muted-foreground/40" aria-hidden>
+                ·
+              </span>
+              <span>
+                На витрине:{" "}
+                <span data-testid="text-showcase-matrix-installed-count" className="font-semibold tabular-nums text-foreground">
+                  {statusCounts.installed}
+                </span>
+              </span>
+              <span className="text-muted-foreground/40" aria-hidden>
+                ·
+              </span>
+              <span>
+                Отложено:{" "}
+                <span data-testid="text-showcase-matrix-postponed-count" className="font-semibold tabular-nums text-foreground">
+                  {statusCounts.postponed}
+                </span>
+              </span>
+              <span className="text-muted-foreground/40" aria-hidden>
+                ·
+              </span>
+              <span>
+                Не актуально:{" "}
+                <span data-testid="text-showcase-matrix-not-relevant-count" className="font-semibold tabular-nums text-foreground">
+                  {statusCounts.not_relevant}
+                </span>
+              </span>
+              <span className="text-muted-foreground/40" aria-hidden>
+                ·
+              </span>
+              <span>
+                Выполнение:{" "}
+                <span className="font-semibold tabular-nums text-foreground">{matrixCompletionPct}%</span>
+              </span>
+              {page.openTasksCount > 0 ? (
+                <>
+                  <span className="text-muted-foreground/40" aria-hidden>
+                    ·
+                  </span>
+                  <span>
+                    Открытых задач:{" "}
+                    <span className="font-semibold tabular-nums text-foreground">{page.openTasksCount}</span>
+                  </span>
+                </>
+              ) : null}
+            </p>
+
+            <div
+              id="section-trade-point-showcase-focus"
+              data-testid="section-trade-point-showcase-focus"
+              className={cn("rounded-xl border border-amber-300/80 bg-gradient-to-br from-amber-50 to-orange-50/80 sm:px-4", isCompact ? "px-2.5 py-2" : "px-3 py-2.5")}
+            >
+              {priorityNeedModels.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-amber-950/90">В первую очередь поставить</p>
+                  <ul className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                    {priorityNeedModels.map((m) => (
+                      <li key={m.id} className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-amber-200/90 bg-background/70 px-2 py-1.5 sm:min-w-[200px] sm:flex-none">
+                        <ModelDoorPhotoFrame
+                          src={showcaseModelImageSrc(m)}
+                          alt=""
+                          frameClass="h-11 w-9 sm:h-12 sm:w-10"
+                          placeholderDensity="compact"
+                        />
+                        <button
+                          type="button"
+                          className="min-w-0 flex-1 text-left text-sm font-semibold leading-snug text-foreground hover:underline"
+                          onClick={() => openPresentation(m)}
+                        >
+                          {m.name}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <p className="text-sm font-medium text-emerald-900">Матрица витрины выполнена по статусам «нужно поставить».</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Фильтры витрины
+              </p>
+
+              <Collapsible open={matrixViewFiltersOpen} onOpenChange={setMatrixViewFiltersOpen} className="space-y-2">
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Статус позиций</p>
+                  <div className="flex min-w-0 flex-wrap gap-1.5">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={activeQuickFilter === "needed" ? "default" : "outline"}
+                      className="h-8 shrink-0 text-xs"
+                      data-testid="button-showcase-matrix-filter-needed"
+                      onClick={() => setUserQuickFilter("needed")}
+                    >
+                      Нужно поставить
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={activeQuickFilter === "installed" ? "default" : "outline"}
+                      className="h-8 shrink-0 text-xs"
+                      data-testid="button-showcase-matrix-filter-installed"
+                      onClick={() => setUserQuickFilter("installed")}
+                    >
+                      На витрине
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={activeQuickFilter === "postponed" ? "default" : "outline"}
+                      className="h-8 shrink-0 text-xs"
+                      data-testid="button-showcase-matrix-filter-postponed"
+                      onClick={() => setUserQuickFilter("postponed")}
+                    >
+                      Отложено
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={activeQuickFilter === "not_relevant" ? "default" : "outline"}
+                      className="h-8 shrink-0 text-xs"
+                      data-testid="button-showcase-matrix-filter-not-relevant"
+                      onClick={() => setUserQuickFilter("not_relevant")}
+                    >
+                      Не актуально
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={activeQuickFilter === "all" ? "secondary" : "outline"}
+                      className="h-8 shrink-0 text-xs"
+                      data-testid="button-showcase-matrix-filter-all"
+                      onClick={() => setUserQuickFilter("all")}
+                    >
+                      Все
+                    </Button>
+                    <CollapsibleTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="ml-auto h-8 w-8 shrink-0"
+                        data-testid="button-showcase-matrix-filters-toggle"
+                        aria-label="Фильтры матрицы"
+                        title="Фильтры матрицы"
+                      >
+                        <SlidersHorizontal className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
+                      </Button>
+                    </CollapsibleTrigger>
+                  </div>
+                </div>
+
+                {statusFilterActionSlot ? <div className="w-full">{statusFilterActionSlot}</div> : null}
+
+                <CollapsibleContent className="space-y-2 pt-1">
+                      <div data-testid="section-showcase-matrix-view-sticky-toolbar" className="min-w-0 space-y-1.5">
+                        <p className="text-[11px] text-muted-foreground md:hidden">
+                          <span className="font-semibold text-foreground">Вид матрицы:</span> {VIEW_MODE_LABEL_RU[viewMode]}
+                        </p>
+                        <div className="min-w-0 space-y-1.5">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            Вид матрицы
+                          </p>
+                          <div className="flex min-w-0 flex-wrap gap-1.5">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={viewMode === "large" ? "default" : "outline"}
+                              className="h-8 shrink-0 text-xs"
+                              data-testid="button-showcase-matrix-view-large"
+                              onClick={() => setViewMode("large")}
+                            >
+                              Крупно
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={viewMode === "compact" ? "default" : "outline"}
+                              className="h-8 shrink-0 text-xs"
+                              data-testid="button-showcase-matrix-view-compact"
+                              onClick={() => setViewMode("compact")}
+                            >
+                              Компактно
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={viewMode === "mini" ? "default" : "outline"}
+                              className="h-8 shrink-0 text-xs"
+                              data-testid="button-showcase-matrix-view-mini"
+                              onClick={() => setViewMode("mini")}
+                            >
+                              Мини
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={viewMode === "list" ? "default" : "outline"}
+                              className="h-8 shrink-0 text-xs"
+                              data-testid="button-showcase-matrix-view-list"
+                              onClick={() => setViewMode("list")}
+                            >
+                              Список
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2 rounded-lg border border-border/60 bg-muted/10 px-2 py-2 sm:px-3">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+                      <div className="min-w-0 space-y-1.5">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Категория</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={categoryFilter === "all" ? "secondary" : "outline"}
+                            className="h-8 shrink-0 text-xs"
+                            data-testid="button-showcase-matrix-category-all"
+                            onClick={() => setCategoryFilter("all")}
+                          >
+                            Все
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={categoryFilter === "entrance" ? "default" : "outline"}
+                            className="h-8 shrink-0 text-xs"
+                            data-testid="button-showcase-matrix-category-entrance"
+                            onClick={() => setCategoryFilter("entrance")}
+                          >
+                            ВХ двери
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={categoryFilter === "interior" ? "default" : "outline"}
+                            className="h-8 shrink-0 text-xs"
+                            data-testid="button-showcase-matrix-category-interior"
+                            onClick={() => setCategoryFilter("interior")}
+                          >
+                            МК двери
+                          </Button>
+                        </div>
+                      </div>
+                      {catalogFilterRows.length > 0 ? (
+                        <Collapsible
+                          open={catalogFiltersPanelOpen}
+                          onOpenChange={setCatalogFiltersPanelOpen}
+                          className="min-w-0 w-full sm:w-auto sm:max-w-md"
+                        >
+                          <CollapsibleTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-8 w-full justify-between gap-2 text-xs sm:w-auto sm:min-w-[11rem]"
+                              data-testid="button-showcase-matrix-catalog-filters-toggle"
+                            >
+                              <span>Фильтры каталога</span>
+                              <ChevronDown
+                                className={cn("h-4 w-4 shrink-0 opacity-70 transition-transform", catalogFiltersPanelOpen && "rotate-180")}
+                                aria-hidden
+                              />
+                            </Button>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent>
+                            <section
+                              data-testid="section-showcase-matrix-catalog-filters"
+                              className="mt-2 space-y-2 rounded-md border border-border/70 bg-background/90 p-2"
+                            >
+                              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                                {catalogFilterRows.map((row) => (
+                                  <div key={row.key} className="min-w-0 space-y-1">
+                                    <Label className="text-[10px] leading-none text-muted-foreground">{row.label}</Label>
+                                    <MultiSelect
+                                      options={row.options}
+                                      value={catalogFilters[row.key] ?? []}
+                                      onChange={(next) => setCatalogFilterKey(row.key, next)}
+                                      placeholder="Все"
+                                      allLabel="Все"
+                                      triggerClassName="min-h-9 py-1.5 text-xs"
+                                      contentClassName="w-[var(--radix-popover-trigger-width)] max-w-[min(100vw-2rem,24rem)]"
+                                      testId={`filter-showcase-matrix-catalog-${row.key}`}
+                                      ariaLabel={row.label}
+                                      showSearchThreshold={10}
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                            </section>
+                          </CollapsibleContent>
+                        </Collapsible>
+                      ) : null}
+                    </div>
+                    <p className="text-xs text-muted-foreground" data-testid="text-showcase-matrix-visible-count">
+                      Показано:{" "}
+                      <span className="font-semibold tabular-nums text-foreground">{visibleModelCount}</span>
+                      {" из "}
+                      <span className="font-semibold tabular-nums text-foreground">{statusFilteredTotalCount}</span> моделей
+                    </p>
+                      </div>
+                </CollapsibleContent>
+              </Collapsible>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="space-y-0.5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Матрица клиента</p>
+              <p className="text-xs text-muted-foreground">Что поставить на витрину по плану.</p>
+            </div>
+
+        {showUnassignedMatrixMessage ? (
+          <div className="rounded-xl border border-dashed border-border/80 bg-muted/10 px-3 py-6 text-center text-sm text-muted-foreground">
+            <p>Для этой торговой точки не назначена матрица витрины. Назначьте матрицу, чтобы планировать выкладку.</p>
+          </div>
+        ) : visibleModelCount === 0 ? (
+          <div className="rounded-xl border border-dashed border-border/80 bg-muted/10 px-3 py-6 text-center text-sm text-muted-foreground">
+            <p>Нет моделей в выбранном фильтре.</p>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="mt-3"
+              onClick={() => {
+                setUserQuickFilter("all");
+                setCategoryFilter("all");
+                setCatalogFilters({});
+              }}
+            >
+              Показать все
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {isManagedMatrix && filteredModels.length > 0 ? (
+              <div className="space-y-2">
+                {filteredManualModels.length > 0 ? (
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">По матрице</p>
+                ) : null}
+                {renderShowcaseModelGrid(filteredModels)}
+              </div>
+            ) : null}
+            {filteredManualModels.length > 0 ? (
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3
+                    className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                    data-testid="text-tradepoint-manual-group-title"
+                  >
+                    Добавлено вручную
+                  </h3>
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] tabular-nums"
+                    data-testid="badge-tradepoint-manual-group-count"
+                  >
+                    {filteredManualModels.length}
+                  </Badge>
+                </div>
+                {renderShowcaseModelGrid(filteredManualModels, "grid-tradepoint-manual-models")}
+              </div>
+            ) : null}
           </div>
         )}
           </div>
