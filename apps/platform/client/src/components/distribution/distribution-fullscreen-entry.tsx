@@ -562,13 +562,14 @@ export function DistributionFullscreenEntry({
           </Badge>
         ) : null}
       </header>
+      ) : null}
 
       <div
         className={cn(
           "z-10 shrink-0 overflow-hidden border-b border-border/60 bg-background/95 backdrop-blur-sm transition-[max-height,opacity] duration-200 ease-out",
-          headerCollapsed ? "max-h-0 border-transparent opacity-0" : "max-h-[min(40vh,520px)] opacity-100",
+          headerCollapsed && !compactMode ? "max-h-0 border-transparent opacity-0" : "max-h-[min(40vh,520px)] opacity-100",
         )}
-        aria-hidden={headerCollapsed}
+        aria-hidden={headerCollapsed && !compactMode}
       >
         <div className="flex flex-col gap-2 px-3 py-2 sm:px-4 md:gap-2 md:py-2.5">
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-2">
