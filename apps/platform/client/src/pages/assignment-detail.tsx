@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useRef, useState } from "react";
-import { Link, useParams } from "wouter";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useLocation, useParams } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -13,6 +13,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -29,9 +30,11 @@ import { cn } from "@/lib/utils";
 import { prepareImageFileForUpload } from "@/lib/client-image-upload-pipeline";
 import { uploadClientBaseImagePair } from "@/lib/client-base-actualization-upload-api";
 import {
+  createFollowup,
   getAssignment,
   setItemStatus,
   submitAssignment,
+  verifyAssignment,
   type AssignmentDto,
   type AssignmentItemStatus,
 } from "@/lib/showcase-assignments-api";
@@ -76,6 +79,12 @@ function isDueOverdue(dueDate: string | null): boolean {
   if (!dueDate) return false;
   const today = new Date().toISOString().slice(0, 10);
   return dueDate < today;
+}
+
+const VERIFY_ROLES = new Set(["admin", "director", "rop", "regional_manager"]);
+
+function isVerifyCandidate(item: AssignmentDto["items"][number]): boolean {
+  return !item.verified && (item.itemStatus === "shipped" || item.done);
 }
 
 function canUserEditAssignment(
@@ -360,13 +369,34 @@ function AssignmentDetailContent({ initial }: { initial: AssignmentDto }) {
   const { user } = useCurrentUser();
   const { toast } = useToast();
   const qc = useQueryClient();
+  const [, setLocation] = useLocation();
   const [assignment, setAssignment] = useState(initial);
   const [shippedDate, setShippedDate] = useState(initial.shippedDate ?? "");
   const [comment, setComment] = useState(initial.comment ?? "");
   const [submitting, setSubmitting] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [followupBusy, setFollowupBusy] = useState(false);
+  const [followupComment, setFollowupComment] = useState("");
 
   const canEdit = canUserEditAssignment(assignment, user?.id, user?.role);
   const isViewOnly = !canEdit;
+  const canVerify = VERIFY_ROLES.has(user?.role ?? "");
+
+  const verifyCandidates = useMemo(
+    () => assignment.items.filter(isVerifyCandidate),
+    [assignment.items],
+  );
+
+  const [selectedVerifyIds, setSelectedVerifyIds] = useState<Set<string>>(
+    () => new Set(verifyCandidates.map((i) => i.id)),
+  );
+
+  useEffect(() => {
+    setSelectedVerifyIds(new Set(verifyCandidates.map((i) => i.id)));
+  }, [assignment.id, verifyCandidates]);
+
+  const hasUnverifiedItems = assignment.items.some((i) => !i.verified);
+  const showVerifyBlock = canVerify && (verifyCandidates.length > 0 || assignment.status === "verified");
 
   const summary = useMemo(() => {
     const shipped = assignment.items.filter((i) => i.itemStatus === "shipped").length;
@@ -409,6 +439,55 @@ function AssignmentDetailContent({ initial }: { initial: AssignmentDto }) {
       });
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const toggleVerifyItem = (itemId: string, checked: boolean) => {
+    setSelectedVerifyIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(itemId);
+      else next.delete(itemId);
+      return next;
+    });
+  };
+
+  const handleVerify = async () => {
+    if (verifying || selectedVerifyIds.size === 0) return;
+    setVerifying(true);
+    try {
+      const next = await verifyAssignment({
+        assignmentId: assignment.id,
+        itemIds: Array.from(selectedVerifyIds),
+      });
+      onAssignmentUpdated(next);
+      toast({ title: "Подтверждено на витрине" });
+    } catch (err) {
+      toast({
+        title: err instanceof Error ? err.message : "Не удалось подтвердить на витрине",
+        variant: "destructive",
+      });
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const handleFollowup = async () => {
+    if (followupBusy) return;
+    setFollowupBusy(true);
+    try {
+      const next = await createFollowup({
+        assignmentId: assignment.id,
+        comment: followupComment.trim() || null,
+      });
+      toast({ title: "Создано повторное задание" });
+      setLocation(`/assignment/${next.id}`);
+    } catch (err) {
+      toast({
+        title: err instanceof Error ? err.message : "Не удалось создать повторное задание",
+        variant: "destructive",
+      });
+    } finally {
+      setFollowupBusy(false);
     }
   };
 
@@ -574,6 +653,83 @@ function AssignmentDetailContent({ initial }: { initial: AssignmentDto }) {
           ) : null}
         </CardContent>
       </Card>
+
+      {showVerifyBlock ? (
+        assignment.status === "verified" ? (
+          <p className="rounded-lg border border-emerald-200/80 bg-emerald-50/80 px-3 py-2 text-sm text-emerald-900">
+            Витрина подтверждена
+            {assignment.verifiedByName ? `: ${assignment.verifiedByName}` : ""}
+          </p>
+        ) : (
+          <Card className="rounded-xl border border-border/80" data-testid="card-assignment-verify">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Подтверждение витрины</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {verifyCandidates.length > 0 ? (
+                <ul className="space-y-2">
+                  {verifyCandidates.map((item) => (
+                    <li
+                      key={item.id}
+                      className="flex items-start gap-2 rounded-md border border-border/70 bg-muted/20 px-2 py-2"
+                      data-testid={`verify-item-${item.id}`}
+                    >
+                      <Checkbox
+                        id={`verify-check-${item.id}`}
+                        checked={selectedVerifyIds.has(item.id)}
+                        onCheckedChange={(v) => toggleVerifyItem(item.id, v === true)}
+                        className="mt-0.5"
+                      />
+                      <label htmlFor={`verify-check-${item.id}`} className="min-w-0 flex-1 cursor-pointer text-sm">
+                        <span className="font-medium">{item.modelName || item.targetId}</span>
+                        <span className="block text-xs text-muted-foreground">Отгружено · ожидает подтверждения</span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">Нет отгруженных позиций для подтверждения</p>
+              )}
+              <Button
+                type="button"
+                className="min-h-11 w-full"
+                disabled={verifying || selectedVerifyIds.size === 0}
+                onClick={() => void handleVerify()}
+                data-testid="button-assignment-verify"
+              >
+                {verifying ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> : null}
+                Подтвердить на витрине
+              </Button>
+              {hasUnverifiedItems ? (
+                <div className="space-y-2 border-t border-border/60 pt-3">
+                  <Label htmlFor="followup-comment" className="text-xs text-muted-foreground">
+                    Комментарий к повторному заданию (необязательно)
+                  </Label>
+                  <Textarea
+                    id="followup-comment"
+                    value={followupComment}
+                    onChange={(e) => setFollowupComment(e.target.value)}
+                    disabled={followupBusy}
+                    rows={2}
+                    data-testid="textarea-assignment-followup-comment"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="min-h-10 w-full"
+                    disabled={followupBusy}
+                    onClick={() => void handleFollowup()}
+                    data-testid="button-assignment-followup"
+                  >
+                    {followupBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> : null}
+                    Создать повторное задание
+                  </Button>
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+        )
+      ) : null}
     </div>
   );
 }
