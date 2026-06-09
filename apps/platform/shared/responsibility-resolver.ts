@@ -28,6 +28,17 @@ export interface ResolvedResponsibles {
 
 const ROLES: ResponsibleRole[] = ["manager", "regional_manager", "rop"];
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function nameLooksInvalid(item: { userId: string | null; userName: string | null }): boolean {
+  if (!item.userId) return false;
+  const n = item.userName;
+  if (n == null || n.trim() === "") return true;
+  if (UUID_RE.test(n.trim())) return true;
+  if (n.trim() === item.userId) return true;
+  return false;
+}
+
 const EMPTY: ResolvedResponsible = {
   userId: null,
   userName: null,
@@ -240,14 +251,13 @@ async function fillMissingNames(
   items: ResolvedResponsible[],
 ): Promise<void> {
   const needIds = items
-    .filter((i) => i.userId && !i.userName)
+    .filter((i) => nameLooksInvalid(i))
     .map((i) => i.userId as string);
   if (needIds.length === 0) return;
   const names = await fetchUserNames(pool, needIds);
   for (const item of items) {
-    if (item.userId && !item.userName) {
-      item.userName = names.get(item.userId) ?? null;
-    }
+    if (!nameLooksInvalid(item) || !item.userId) continue;
+    item.userName = names.get(item.userId) ?? item.userName;
   }
 }
 
