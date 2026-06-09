@@ -92,11 +92,8 @@ import {
   assignmentShareUrl,
   createAssignment,
 } from "@/lib/showcase-assignments-api";
-import {
-  listManagerPickerUsers,
-  pickerUserById,
-  type PickerUser,
-} from "@/lib/users-picker-api";
+import { fetchResolveTradePoint } from "@/lib/responsibility-api";
+import { pickerUserById, type PickerUser } from "@/lib/users-picker-api";
 import {
   OVERRIDES_PENDING_CHANGED_EVENT,
   pendingSyncCount,
@@ -106,6 +103,13 @@ import { runOverridesPendingSyncOnce } from "@/lib/overrides-pending-sync-worker
 const CARD_SIZE_STORAGE_KEY = "distribution-fullscreen-entry-card-size";
 const COMPACT_STORAGE_KEY = "distribution-fullscreen-entry-compact";
 const ASSIGNMENT_ASSIGNEE_NONE = "__none__";
+
+function assigneeRoleLabel(role: string): string {
+  if (role === "manager") return "менеджер";
+  if (role === "regional_manager") return "региональный менеджер";
+  if (role === "rop") return "РОП";
+  return "";
+}
 
 const ASSIGNMENT_CREATE_ROLES = new Set(["admin", "director", "rop", "regional_manager"]);
 
@@ -754,19 +758,38 @@ export function DistributionFullscreenEntry({
     resetAssignmentDialog();
     setAssignmentDialogOpen(true);
     setAssignmentManagersLoading(true);
-    void listManagerPickerUsers()
-      .then((users) => {
+    void fetchResolveTradePoint(point.id)
+      .then((resolved) => {
+        const ordered: Array<{ key: "manager" | "regional_manager" | "rop" }> = [
+          { key: "manager" },
+          { key: "regional_manager" },
+          { key: "rop" },
+        ];
+        const seen = new Set<string>();
+        const users: PickerUser[] = [];
+        for (const { key } of ordered) {
+          const r = resolved[key];
+          const id = r.userId?.trim();
+          if (!id || seen.has(id)) continue;
+          seen.add(id);
+          users.push({
+            id,
+            full_name: r.userName?.trim() || "—",
+            role: key,
+            status: "active",
+          });
+        }
         setAssignmentManagers(users);
         setAssignmentManagersError("");
       })
       .catch(() => {
         setAssignmentManagers([]);
-        setAssignmentManagersError("Не удалось загрузить список менеджеров.");
+        setAssignmentManagersError("Не удалось загрузить ответственных по точке.");
       })
       .finally(() => {
         setAssignmentManagersLoading(false);
       });
-  }, [resetAssignmentDialog]);
+  }, [resetAssignmentDialog, point.id]);
 
   const handleCreateAssignment = useCallback(async () => {
     if (assignmentSubmitting || needInstallCount === 0) return;
@@ -1277,7 +1300,7 @@ export function DistributionFullscreenEntry({
 
               <div className="space-y-1.5">
                 <Label htmlFor="assignment-assignee" className="text-sm">
-                  Исполнитель (менеджер)
+                  Исполнитель
                 </Label>
                 {assignmentManagersLoading ? (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -1302,6 +1325,11 @@ export function DistributionFullscreenEntry({
                       {assignmentManagers.map((u) => (
                         <SelectItem key={u.id} value={u.id}>
                           {u.full_name}
+                          {assigneeRoleLabel(u.role) ? (
+                            <span className="ml-1 text-xs text-muted-foreground">
+                              · {assigneeRoleLabel(u.role)}
+                            </span>
+                          ) : null}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1309,6 +1337,14 @@ export function DistributionFullscreenEntry({
                 )}
                 {assignmentManagersError ? (
                   <p className="text-xs text-destructive">{assignmentManagersError}</p>
+                ) : null}
+                {!assignmentManagersLoading &&
+                !assignmentManagersError &&
+                assignmentManagers.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    Для этой точки не назначены ответственные. Создайте задание без исполнителя или
+                    назначьте ответственных в карточке точки.
+                  </p>
                 ) : null}
               </div>
 
