@@ -21,7 +21,6 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   PieChart,
-  Search,
   Store,
   UserRound,
   Users,
@@ -30,7 +29,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "reac
 import type { UserRole } from "@shared/auth";
 import type { SalesRole } from "@/lib/sales-control-data";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { GlobalSearchDialog } from "@/components/search/global-search-dialog";
+import { GlobalSearchTrigger } from "@/components/search/global-search-trigger";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -828,6 +828,7 @@ export function AppShell({
 
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
   const [impersonationAutoOpen, setImpersonationAutoOpen] = useState(false);
   const ctx = headerContextLabel(location);
   const flatNav = useMemo(() => flattenNavModel(navigation), [navigation]);
@@ -842,6 +843,29 @@ export function AppShell({
   const { openGroups: pilotGroupedOpen, toggleGroup: pilotGroupedToggle } = usePilotGroupedNavOpenState(navigation, location);
   const showSaveBadge = ACTUALIZATION_SAVE_STATUS_ROUTES.some((p) => location === p || location.startsWith(`${p}/`));
 
+  const openGlobalSearch = useCallback(() => setGlobalSearchOpen(true), []);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+      if (key !== "k" || !(e.metaKey || e.ctrlKey)) return;
+      const target = e.target;
+      if (target instanceof HTMLElement) {
+        const tag = target.tagName;
+        const isEditable =
+          tag === "INPUT" ||
+          tag === "TEXTAREA" ||
+          tag === "SELECT" ||
+          target.isContentEditable;
+        if (isEditable && target.getAttribute("data-testid") !== "global-search-input") return;
+      }
+      e.preventDefault();
+      setGlobalSearchOpen(true);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   if (embeddedBitrix24) {
     return (
       <div
@@ -853,6 +877,7 @@ export function AppShell({
           <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3">
             <BrandBlock homeHref={homeHref} className="max-w-[132px]" />
             <div className="flex shrink-0 items-center gap-2">
+              <GlobalSearchTrigger variant="mobile" onOpen={openGlobalSearch} />
               {showSaveBadge ? <SaveStatusBadge /> : null}
               <NotificationsBell />
               <ThemeToggleDesktop className="h-9 w-9" />
@@ -874,6 +899,11 @@ export function AppShell({
           <ClientBaseActualizationShellBadge location={location} />
           {children}
         </main>
+        <GlobalSearchDialog
+          open={globalSearchOpen}
+          onOpenChange={setGlobalSearchOpen}
+          role={shellUser?.role ?? null}
+        />
       </div>
     );
   }
@@ -1001,24 +1031,9 @@ export function AppShell({
           data-testid="app-shell-topbar"
         >
           <div className="mx-auto flex w-full max-w-[1600px] min-w-0 items-center gap-4 px-4 py-2">
-          <form
-            className="flex min-w-0 max-w-xl flex-1 items-center gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-            }}
-            role="search"
-          >
-            <Input
-              type="search"
-              placeholder="Поиск..."
-              className="h-11 min-h-[44px] border-border/80 bg-card"
-              data-testid="input-global-search"
-              aria-label="Поиск по платформе"
-            />
-            <Button type="submit" size="icon" className="h-11 w-11 shrink-0" data-testid="button-global-search" aria-label="Искать">
-              <Search className="h-4 w-4" />
-            </Button>
-          </form>
+          <div className="flex min-w-0 max-w-xl flex-1" role="search">
+            <GlobalSearchTrigger variant="desktop" onOpen={openGlobalSearch} />
+          </div>
           <div className="ml-auto flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-2 sm:gap-3">
             {showSaveBadge ? <SaveStatusBadge /> : null}
             <NotificationsBell />
@@ -1130,6 +1145,7 @@ export function AppShell({
               ) : null}
             </div>
             <div className="flex shrink-0 items-center gap-2">
+              <GlobalSearchTrigger variant="mobile" onOpen={openGlobalSearch} />
               <NotificationsBell />
               {showSaveBadge ? <SaveStatusBadge /> : null}
             </div>
@@ -1143,6 +1159,7 @@ export function AppShell({
         </main>
       </div>
     </div>
+    <GlobalSearchDialog open={globalSearchOpen} onOpenChange={setGlobalSearchOpen} role={shellUser?.role ?? null} />
     </>
   );
 }
