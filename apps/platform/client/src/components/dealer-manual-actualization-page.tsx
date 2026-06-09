@@ -77,6 +77,7 @@ import {
   getDealerComments,
 } from "@/lib/dealer-card-comments";
 import { ClientResponsiblesSection } from "@/components/client-responsibles-section";
+import { fetchResolveClient, type ClientResponsibles } from "@/lib/responsibility-api";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { displayUserName } from "@/lib/auth-api";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
@@ -128,6 +129,15 @@ const TIER_LABELS: Record<string, string> = {
   other: "Прочие",
   none: "Без категории",
 };
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function asPersonName(v: string | null | undefined): string {
+  const s = (v ?? "").trim();
+  if (!s) return "";
+  if (UUID_RE.test(s)) return "";
+  return s;
+}
 
 const CLEAN_CARD_SECTION_IDS = [
   "passport",
@@ -243,6 +253,21 @@ export function DealerManualActualizationPage(props: {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [responsiblesBump, setResponsiblesBump] = useState(0);
+  const [resolvedResponsibles, setResolvedResponsibles] = useState<ClientResponsibles | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchResolveClient(baseRow.id)
+      .then((res) => {
+        if (!cancelled) setResolvedResponsibles(res);
+      })
+      .catch(() => {
+        if (!cancelled) setResolvedResponsibles(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [baseRow.id, responsiblesBump]);
 
   useEffect(() => {
     const bump = () => setResponsiblesBump((n) => n + 1);
@@ -432,14 +457,23 @@ export function DealerManualActualizationPage(props: {
     const commercialSummary =
       commercialSet === 0 ? "Коммерческие признаки не отмечены" : `Отмечено ${commercialSet} из ${commercialTri.length} блоков`;
 
-    const hasMgr = Boolean(row.manager?.trim());
-    const hasRm = Boolean(regionalManagerDisplay?.trim());
-    const hasRop = Boolean(ropDisplay?.trim());
+    const mgrName =
+      asPersonName(resolvedResponsibles?.resolved?.manager?.userName) || asPersonName(row.manager);
+    const rmName =
+      asPersonName(resolvedResponsibles?.resolved?.regional_manager?.userName) ||
+      asPersonName(regionalManagerDisplay);
+    const ropName =
+      asPersonName(resolvedResponsibles?.resolved?.rop?.userName) || asPersonName(ropDisplay);
+
+    const hasMgr = Boolean(mgrName);
+    const hasRm = Boolean(rmName);
+    const hasRop = Boolean(ropName);
     const responsiblesStatus: SectionStatusKind =
       !hasMgr && !hasRm && !hasRop ? "empty" : hasMgr && hasRm ? "complete" : "partial";
-    const responsiblesSummary = [hasMgr && `Менеджер: ${row.manager}`, hasRm && `РМ: ${regionalManagerDisplay}`]
-      .filter(Boolean)
-      .join(" · ") || "Ответственные не указаны";
+    const responsiblesSummary =
+      [hasMgr && `Менеджер: ${mgrName}`, hasRm && `РМ: ${rmName}`]
+        .filter(Boolean)
+        .join(" · ") || "Ответственные не указаны";
 
     const hasCity = Boolean(row.city?.trim());
     const hasAddr = Boolean(row.releaseAddress?.trim());
@@ -514,6 +548,9 @@ export function DealerManualActualizationPage(props: {
     passportKind,
     primary,
     row,
+    regionalManagerDisplay,
+    ropDisplay,
+    resolvedResponsibles,
     tier,
     tps.length,
     effectiveCategory,
