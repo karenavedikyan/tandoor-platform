@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
   Check,
@@ -208,8 +208,7 @@ export function DistributionFullscreenEntry({
     }
   });
   const [quickStatus, setQuickStatus] = useState<ShowcaseMatrixStatusId>("installed");
-  const [needInstallSelection, setNeedInstallSelection] = useState<Set<string>>(() => new Set());
-  const needInstallInitedRef = useRef(false);
+  const [explicitQuickMarks, setExplicitQuickMarks] = useState<Set<string>>(() => new Set());
   const [draft, setDraft] = useState<FullscreenEntryDraftMap>({});
   const [historyOpen, setHistoryOpen] = useState(false);
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
@@ -401,25 +400,27 @@ export function DistributionFullscreenEntry({
   }, [baselines, matrixModelById, visibleProducts]);
 
   const needInstallMode = compactMode && quickStatus === "need_install";
-  const needInstallCount = needInstallSelection.size;
 
   useEffect(() => {
-    const active = compactMode && quickStatus === "need_install";
-    if (!active) {
-      needInstallInitedRef.current = false;
-      return;
-    }
-    if (needInstallInitedRef.current) return;
-    needInstallInitedRef.current = true;
-    const initial = new Set<string>();
-    for (const p of visibleProducts) {
-      if (matrixModelById.has(p.id)) initial.add(p.id);
-    }
-    setNeedInstallSelection(initial);
-  }, [compactMode, matrixModelById, quickStatus, visibleProducts]);
+    setExplicitQuickMarks(new Set());
+  }, [quickStatus]);
 
   const changedIds = useMemo(() => collectChangedProductIds(draft, baselines), [draft, baselines]);
   const changedSet = useMemo(() => new Set(changedIds), [changedIds]);
+  const needInstallMarkedIds = useMemo(() => {
+    if (!needInstallMode) return new Set<string>();
+    const ids = new Set<string>();
+    for (const p of visibleProducts) {
+      const baseline = baselines[p.id]?.status ?? "need_install";
+      const currentStatus = draft[p.id]?.status ?? baseline;
+      if (currentStatus !== "need_install") continue;
+      if (changedSet.has(p.id) || explicitQuickMarks.has(p.id)) {
+        ids.add(p.id);
+      }
+    }
+    return ids;
+  }, [baselines, changedSet, draft, explicitQuickMarks, needInstallMode, visibleProducts]);
+  const needInstallCount = needInstallMarkedIds.size;
   const installedCount = useMemo(() => countInstalledInDraft(draft), [draft]);
 
   const orderedProducts = useMemo(() => {
@@ -457,18 +458,18 @@ export function DistributionFullscreenEntry({
     setDraft({});
   }, []);
 
-  const handleToggleNeedInstall = useCallback((productId: string) => {
-    setNeedInstallSelection((prev) => {
+  const setExplicitQuickMark = useCallback((productId: string, marked: boolean) => {
+    setExplicitQuickMarks((prev) => {
       const next = new Set(prev);
-      if (next.has(productId)) next.delete(productId);
-      else next.add(productId);
+      if (marked) next.add(productId);
+      else next.delete(productId);
       return next;
     });
   }, []);
 
   const handleCompactReset = useCallback(() => {
     if (needInstallMode) {
-      setNeedInstallSelection(new Set());
+      setExplicitQuickMarks(new Set());
     } else {
       handleResetDraft();
     }
@@ -543,7 +544,7 @@ export function DistributionFullscreenEntry({
   }, [flushPendingNow, saving, syncing, toast]);
 
   const handleSave = useCallback(async () => {
-    const saveIds = needInstallMode ? Array.from(needInstallSelection) : changedIds;
+    const saveIds = needInstallMode ? Array.from(needInstallMarkedIds) : changedIds;
     if (saveIds.length === 0 || saving) return;
     setSaving(true);
     try {
@@ -660,7 +661,7 @@ export function DistributionFullscreenEntry({
         showSaveSyncToast(remaining);
       }
       if (needInstallMode) {
-        setNeedInstallSelection(new Set());
+        setExplicitQuickMarks(new Set());
       }
     } finally {
       setSaving(false);
@@ -674,11 +675,10 @@ export function DistributionFullscreenEntry({
     draft,
     flushPendingNow,
     matrixModelById,
+    needInstallMarkedIds,
     needInstallMode,
-    needInstallSelection,
     point.id,
     saving,
-    setNeedInstallSelection,
     showSaveSyncToast,
   ]);
 
@@ -689,11 +689,11 @@ export function DistributionFullscreenEntry({
 
   const assignmentSelectedModels = useMemo(
     () =>
-      Array.from(needInstallSelection).map((id) => ({
+      Array.from(needInstallMarkedIds).map((id) => ({
         id,
         name: matrixModelById.get(id)?.name ?? id,
       })),
-    [matrixModelById, needInstallSelection],
+    [matrixModelById, needInstallMarkedIds],
   );
 
   const resetAssignmentDialog = useCallback(() => {
@@ -748,7 +748,7 @@ export function DistributionFullscreenEntry({
         dueDate: assignmentDueDate || null,
         assigneeUserId: assignee?.id ?? null,
         assigneeName: assignee?.full_name ?? null,
-        items: Array.from(needInstallSelection).map((id) => ({
+        items: Array.from(needInstallMarkedIds).map((id) => ({
           targetKind: "model" as const,
           targetId: id,
           modelName: matrixModelById.get(id)?.name,
@@ -774,7 +774,7 @@ export function DistributionFullscreenEntry({
     dealer.id,
     matrixModelById,
     needInstallCount,
-    needInstallSelection,
+    needInstallMarkedIds,
     point.id,
     point.name,
     toast,
@@ -1107,9 +1107,8 @@ export function DistributionFullscreenEntry({
                   baselineStatus={baselines[p.id]?.status ?? "need_install"}
                   isChanged={changedSet.has(p.id)}
                   isMatrixRecommended={matrixModelById.has(p.id)}
-                  needInstallMode={needInstallMode}
-                  isSelectedNeedInstall={needInstallSelection.has(p.id)}
-                  onToggleNeedInstall={handleToggleNeedInstall}
+                  isExplicitMark={explicitQuickMarks.has(p.id)}
+                  onSetExplicitMark={setExplicitQuickMark}
                 />
               ))}
             </div>
@@ -1520,9 +1519,8 @@ function FullscreenProductCard({
   baselineStatus,
   isChanged,
   isMatrixRecommended,
-  needInstallMode,
-  isSelectedNeedInstall,
-  onToggleNeedInstall,
+  isExplicitMark,
+  onSetExplicitMark,
 }: ProductDraftProps & {
   cardSize: CatalogCardSize;
   quickMode: boolean;
@@ -1530,9 +1528,8 @@ function FullscreenProductCard({
   baselineStatus: ShowcaseMatrixStatusId;
   isChanged: boolean;
   isMatrixRecommended: boolean;
-  needInstallMode: boolean;
-  isSelectedNeedInstall: boolean;
-  onToggleNeedInstall: (productId: string) => void;
+  isExplicitMark: boolean;
+  onSetExplicitMark: (productId: string, marked: boolean) => void;
 }) {
   const row = draft;
   const segment = row ? row.placementSegment : segmentForProduct(product, matrixModel);
@@ -1541,45 +1538,47 @@ function FullscreenProductCard({
   const titleSize =
     cardSize === "xl" ? "text-sm" : cardSize === "s" ? "text-[11px]" : "text-xs";
 
-  const currentStatus = row?.status ?? "need_install";
+  const currentStatus = row?.status ?? baselineStatus;
   const hasExplicitMark =
-    isChanged || (baselineStatus === quickStatus && quickStatus !== "need_install");
-  const isMarked =
-    !needInstallMode && quickMode && currentStatus === quickStatus && hasExplicitMark;
-  const isNeedInstallHighlighted = needInstallMode && isSelectedNeedInstall;
+    isChanged ||
+    isExplicitMark ||
+    (baselineStatus === quickStatus && quickStatus !== "need_install");
+  const isMarked = quickMode && currentStatus === quickStatus && hasExplicitMark;
 
   const handleQuickTap = () => {
-    if (needInstallMode) {
-      onToggleNeedInstall(product.id);
+    const seg = segmentForProduct(product, matrixModel);
+    if (hasExplicitMark && currentStatus === quickStatus) {
+      if (quickStatus === "need_install" && baselineStatus === quickStatus) {
+        onSetExplicitMark(product.id, false);
+      } else {
+        onDraftChange(product.id, {
+          status: baselineStatus,
+          placementSegment: row?.placementSegment ?? seg,
+          placementType: row?.placementType ?? "portal",
+        });
+      }
       return;
     }
-    const seg = segmentForProduct(product, matrixModel);
-    if (currentStatus === quickStatus) {
-      onDraftChange(product.id, {
-        status: baselineStatus,
-        placementSegment: row?.placementSegment ?? seg,
-        placementType: row?.placementType ?? "portal",
-      });
-    } else {
-      onDraftChange(product.id, {
-        status: quickStatus,
-        placementSegment: row?.placementSegment ?? seg,
-        placementType: row?.placementType ?? "portal",
-      });
+    if (quickStatus === "need_install" && baselineStatus === quickStatus) {
+      onSetExplicitMark(product.id, true);
+      return;
     }
+    onDraftChange(product.id, {
+      status: quickStatus,
+      placementSegment: row?.placementSegment ?? seg,
+      placementType: row?.placementType ?? "portal",
+    });
   };
 
   return (
     <article
       className={cn(
         "relative flex flex-col overflow-hidden rounded-xl border bg-card shadow-xs",
-        isNeedInstallHighlighted
-          ? STATUS_ACCENT.need_install
-          : isMarked
-            ? STATUS_ACCENT[quickStatus]
-            : quickMode && isMatrixRecommended
-              ? "border-primary/40"
-              : "border-border/80",
+        isMarked
+          ? STATUS_ACCENT[quickStatus]
+          : quickMode && isMatrixRecommended
+            ? "border-primary/40"
+            : "border-border/80",
         quickMode && "cursor-pointer select-none",
         cardSize === "s" ? "p-1.5" : "p-2",
       )}
@@ -1598,42 +1597,22 @@ function FullscreenProductCard({
         ) : (
           <div className="flex h-full items-center justify-center text-xs text-muted-foreground">Нет фото</div>
         )}
-        {needInstallMode ? (
-          isSelectedNeedInstall ? (
-            <span
-              className={cn(
-                "absolute right-1 top-1 z-10 flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold text-white shadow",
-                STATUS_BADGE.need_install,
-              )}
-            >
-              <Check className="h-3 w-3" aria-hidden />
-              Выбрано
-            </span>
-          ) : isMatrixRecommended ? (
-            <span className="absolute left-1 top-1 z-10 rounded-full bg-primary/90 px-1.5 py-0.5 text-[9px] font-semibold text-primary-foreground shadow">
-              По матрице
-            </span>
-          ) : null
-        ) : (
-          <>
-            {quickMode && isMatrixRecommended && !isMarked ? (
-              <span className="absolute left-1 top-1 z-10 rounded-full bg-primary/90 px-1.5 py-0.5 text-[9px] font-semibold text-primary-foreground shadow">
-                По матрице
-              </span>
-            ) : null}
-            {isMarked ? (
-              <span
-                className={cn(
-                  "absolute right-1 top-1 z-10 flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold text-white shadow",
-                  STATUS_BADGE[quickStatus],
-                )}
-              >
-                <Check className="h-3 w-3" aria-hidden />
-                {STATUS_LABEL_RU[quickStatus]}
-              </span>
-            ) : null}
-          </>
-        )}
+        {quickMode && isMatrixRecommended && !isMarked ? (
+          <span className="absolute left-1 top-1 z-10 rounded-full bg-primary/90 px-1.5 py-0.5 text-[9px] font-semibold text-primary-foreground shadow">
+            По матрице
+          </span>
+        ) : null}
+        {isMarked ? (
+          <span
+            className={cn(
+              "absolute right-1 top-1 z-10 flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold text-white shadow",
+              STATUS_BADGE[quickStatus],
+            )}
+          >
+            <Check className="h-3 w-3" aria-hidden />
+            {STATUS_LABEL_RU[quickStatus]}
+          </span>
+        ) : null}
       </div>
       <h3 className={cn("line-clamp-2 font-medium leading-snug text-foreground", titleSize)}>
         {product.name}
