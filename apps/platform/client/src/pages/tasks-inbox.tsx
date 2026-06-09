@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useLocation } from "wouter";
-import { buildHashPath } from "@/lib/hash-route-utils";
+import { Link } from "wouter";
+import { buildBrowserHashAppHref } from "@/lib/hash-route-utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Archive, Bell, ClipboardList, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -591,7 +591,6 @@ export default function TasksInboxPage() {
   const { user, isLoading: userLoading } = useCurrentUser();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [, setLocation] = useLocation();
   const [tab, setTab] = useState<TaskDirection>("incoming");
   const [incomingStatusFilter, setIncomingStatusFilter] = useState<TaskStatusFilter>("all");
   const [outgoingStatusFilter, setOutgoingStatusFilter] = useState<TaskStatusFilter>("all");
@@ -709,7 +708,7 @@ export default function TasksInboxPage() {
             <Button
               type="button"
               className="min-h-10 w-full gap-1 sm:w-auto"
-              onClick={() => setLocation(buildHashPath("/dealer-base", { taskSelect: 1 }))}
+              onClick={() => window.location.assign(buildBrowserHashAppHref("/dealer-base", { taskSelect: 1 }))}
               data-testid="button-tasks-inbox-create"
             >
               <Plus className="h-4 w-4" aria-hidden />
