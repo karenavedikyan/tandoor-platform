@@ -164,6 +164,20 @@ export async function apiArchiveLegalEntity(
   return res.ok;
 }
 
+export async function apiUnarchiveLegalEntity(
+  id: string,
+  updatedBy: string,
+  updatedByName: string,
+): Promise<boolean> {
+  const res = await fetch("/api/legal-entities/unarchive", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id, updatedByUserId: updatedBy, updatedByName }),
+  });
+  return res.ok;
+}
+
 export async function apiDeleteLegalEntity(id: string): Promise<boolean> {
   const res = await fetch(`/api/legal-entities/delete?id=${encodeURIComponent(id)}`, {
     method: "DELETE",

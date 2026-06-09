@@ -10,6 +10,7 @@
  *   POST /api/legal-entities/create-full
  *   PATCH /api/legal-entities/patch-full?id=
  *   POST /api/legal-entities/archive
+ *   POST /api/legal-entities/unarchive
  *   POST /api/legal-entities/set-main
  *   POST /api/legal-entities/bulk-import
  */
@@ -39,6 +40,7 @@ import {
   handleLegalEntitiesListFull,
   handleLegalEntitiesPatchFull,
   handleLegalEntitiesSetMain,
+  handleLegalEntitiesUnarchive,
 } from "../../shared/legal-entities-full-handlers.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -147,6 +149,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         return;
       }
       await handleLegalEntitiesArchive(res, pool, me, id, body as { updatedByName?: unknown; updatedByUserId?: unknown });
+      return;
+    }
+
+    if (action === "unarchive" && req.method === "POST") {
+      const body = (req.body ?? {}) as { id?: unknown };
+      const id = typeof body.id === "string" ? body.id.trim() : "";
+      if (!UUID_RE.test(id)) {
+        sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите id." });
+        return;
+      }
+      await handleLegalEntitiesUnarchive(res, pool, me, id, body as { updatedByName?: unknown; updatedByUserId?: unknown });
       return;
     }
 
