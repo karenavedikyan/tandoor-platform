@@ -23,16 +23,18 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import {
   addDealerLegalEntity,
-  archiveDealerLegalEntity,
   allocateNextLegalEntityCodeLocal,
+  archiveDealerLegalEntityAsync,
   buildLegalEntityPaymentUpsert,
   canEditDealerLegalEntities,
   DEALER_LEGAL_ENTITIES_EVENT,
   getMergedDealerLegalEntities,
+  unarchiveDealerLegalEntityAsync,
   type DealerLegalEntityStatus,
   type MergedDealerLegalEntity,
   updateDealerLegalEntity,
 } from "@/lib/dealer-legal-entities";
+import { refreshDbLegalEntitiesForDealer } from "@/lib/dealer-legal-entities-db-cache";
 import {
   EDO_OPERATOR_SUGGESTIONS,
   fetchLegalEntitiesForClient,
@@ -396,7 +398,14 @@ export function DealerLegalEntitiesSection({
 
   const visible = useMemo(() => {
     const active = merged.filter((e) => e.status !== "archived");
-    const arch = merged.filter((e) => e.status === "archived");
+    const arch = merged
+      .filter((e) => e.status === "archived")
+      .sort((a, b) => {
+        const ta = a.updatedAt || a.createdAt || "";
+        const tb = b.updatedAt || b.createdAt || "";
+        if (ta !== tb) return tb.localeCompare(ta);
+        return a.name.localeCompare(b.name, "ru");
+      });
     return { active, arch };
   }, [merged]);
 
@@ -856,14 +865,29 @@ export function DealerLegalEntitiesSection({
 
   const confirmArchive = useCallback(async () => {
     if (!archiveTarget || !canMutate) return;
-    const eid = archiveTarget.id;
+    const entity = merged.find((e) => e.id === archiveTarget.id);
+    if (!entity) {
+      setArchiveTarget(null);
+      return;
+    }
+
+    const ok = await archiveDealerLegalEntityAsync(row.id, entity, actorUserId, actorLabel);
+    if (!ok) {
+      toast({
+        title: "Не удалось архивировать. Проверьте соединение и попробуйте ещё раз.",
+        variant: "destructive",
+      });
+      setArchiveTarget(null);
+      return;
+    }
+
     if (useAct) {
-      const r = await actx.persist((prev) =>
+      await actx.persist((prev) =>
         mergeActualizationState(prev, {
           archivedLegalEntitiesById: {
             ...prev.archivedLegalEntitiesById,
-            [eid]: buildArchivedLegalEntityInfo({
-              legalEntityId: eid,
+            [entity.id]: buildArchivedLegalEntityInfo({
+              legalEntityId: entity.id,
               dealerId: row.id,
               archivedBy: actorUserId,
               archivedByName: actorLabel,
@@ -872,32 +896,45 @@ export function DealerLegalEntitiesSection({
           },
         }),
       );
-      if (r.success) {
-        toast({ title: "Юрлицо скрыто из рабочей карточки" });
-        setTick((n) => n + 1);
-      } else {
-        toast({ title: "Не удалось сохранить", variant: "destructive" });
-      }
-    } else {
-      archiveDealerLegalEntity(row.id, eid, actorUserId, actorLabel);
-      setTick((n) => n + 1);
-      toast({ title: "В архиве" });
     }
+
+    await refreshDbLegalEntitiesForDealer(row.id);
+    setTick((n) => n + 1);
+    toast({ title: "Юрлицо в архиве" });
     setArchiveTarget(null);
-  }, [archiveTarget, canMutate, useAct, actx, row.id, actorUserId, actorLabel]);
+  }, [archiveTarget, canMutate, useAct, actx, merged, row.id, actorUserId, actorLabel]);
 
   const onRestore = useCallback(
     async (legalEntityId: string) => {
-      if (!useAct || !canMutate) return;
-      const r = await actx.persist((prev) => restoreLegalEntityFromArchive(prev, row.id, legalEntityId));
-      if (r.success) {
-        toast({ title: "Юрлицо восстановлено в рабочем списке" });
-        setTick((n) => n + 1);
-      } else {
-        toast({ title: "Не удалось сохранить", variant: "destructive" });
+      if (!canMutate) return;
+      const entity = merged.find((e) => e.id === legalEntityId);
+      if (!entity) return;
+
+      const ok = await unarchiveDealerLegalEntityAsync(row.id, entity, actorUserId, actorLabel);
+      if (!ok) {
+        if (useAct) {
+          const r = await actx.persist((prev) => restoreLegalEntityFromArchive(prev, row.id, legalEntityId));
+          if (r.success) {
+            toast({ title: "Юрлицо восстановлено" });
+            setTick((n) => n + 1);
+            return;
+          }
+        }
+        toast({
+          title: "Не удалось восстановить. Проверьте соединение и попробуйте ещё раз.",
+          variant: "destructive",
+        });
+        return;
       }
+
+      if (useAct) {
+        await actx.persist((prev) => restoreLegalEntityFromArchive(prev, row.id, legalEntityId));
+      }
+      await refreshDbLegalEntitiesForDealer(row.id);
+      setTick((n) => n + 1);
+      toast({ title: "Юрлицо восстановлено" });
     },
-    [useAct, canMutate, actx, row.id],
+    [canMutate, merged, row.id, actorUserId, actorLabel, useAct, actx],
   );
 
   const dirtyFlags = useMemo(() => {
@@ -1698,7 +1735,7 @@ export function DealerLegalEntitiesSection({
                         entityArchived={false}
                       />
                     </div>
-                    {canMutate && (!e.isPassportSeed || useAct) ? (
+                    {canMutate ? (
                       <div className="flex shrink-0 flex-col gap-1.5 sm:flex-row">
                         <Button
                           type="button"
@@ -1752,7 +1789,7 @@ export function DealerLegalEntitiesSection({
                             Архив
                           </Badge>
                         </div>
-                        {canMutate && useAct ? (
+                        {canMutate ? (
                           <Button
                             type="button"
                             variant="outline"
@@ -1764,7 +1801,7 @@ export function DealerLegalEntitiesSection({
                             Восстановить
                           </Button>
                         ) : null}
-                        {canMutate && !useAct && !e.isPassportSeed ? (
+                        {canMutate && !e.isPassportSeed ? (
                           <Button
                             type="button"
                             variant="outline"
@@ -1797,15 +1834,15 @@ export function DealerLegalEntitiesSection({
       <AlertDialog open={archiveTarget != null} onOpenChange={(o) => !o && setArchiveTarget(null)}>
         <AlertDialogContent data-testid="dialog-legal-entity-delete-confirm">
           <AlertDialogHeader>
-            <AlertDialogTitle>Скрыть юрлицо из карточки?</AlertDialogTitle>
+            <AlertDialogTitle>Архивировать юрлицо?</AlertDialogTitle>
             <AlertDialogDescription className="text-sm leading-relaxed">
-              Юрлицо будет скрыто из рабочей карточки клиента. Данные не удаляются физически и могут быть восстановлены позднее.
+              Юрлицо будет перемещено в архив и скрыто из рабочего списка. Данные сохраняются, юрлицо можно восстановить.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel data-testid="button-legal-entity-delete-cancel">Отмена</AlertDialogCancel>
             <AlertDialogAction data-testid="button-legal-entity-delete-confirm" onClick={() => void confirmArchive()}>
-              Скрыть
+              В архив
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -12,6 +12,7 @@ import {
   apiCreateFull,
   apiDeleteLegalEntity,
   apiPatchFull,
+  apiUnarchiveLegalEntity,
 } from "@/lib/dealer-legal-entities-api";
 import { patchLegalEntity, type LegalEntityPaymentForm, type LegalEntityUpsertFields } from "@/lib/legal-entities-payment-api";
 import {
@@ -24,8 +25,49 @@ import {
 export const DEALER_LEGAL_ENTITIES_STORAGE_KEY = "tandoor-dealer-legal-entities-v1";
 export const DEALER_LEGAL_ENTITIES_EVENT = "tandoor-dealer-legal-entities-changed";
 
-const LEGAL_ENTITY_UUID_RE =
+export const LEGAL_ENTITY_UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function isLegalEntityServerUuid(id: string): boolean {
+  return LEGAL_ENTITY_UUID_RE.test(id);
+}
+
+export function normalizeLegalEntityInn(v: string | undefined): string {
+  return (v ?? "").replace(/\D/g, "");
+}
+
+/** Сопоставление UI-записи с серверным UUID по списку из Postgres-кеша. */
+export function resolveServerLegalEntityIdFromList(
+  entity: Pick<DealerLegalEntity, "id" | "name" | "inn">,
+  serverEntities: DealerLegalEntity[],
+): string | null {
+  if (isLegalEntityServerUuid(entity.id)) return entity.id;
+
+  const inn = normalizeLegalEntityInn(entity.inn);
+  if (inn) {
+    const byInn = serverEntities.find(
+      (e) => isLegalEntityServerUuid(e.id) && normalizeLegalEntityInn(e.inn) === inn,
+    );
+    if (byInn) return byInn.id;
+  }
+
+  const nameKey = entity.name.trim().toLowerCase();
+  if (nameKey && nameKey !== "—") {
+    const byName = serverEntities.find(
+      (e) => isLegalEntityServerUuid(e.id) && e.name.trim().toLowerCase() === nameKey,
+    );
+    if (byName) return byName.id;
+  }
+
+  return null;
+}
+
+export function resolveServerLegalEntityId(
+  dealerId: string,
+  entity: Pick<DealerLegalEntity, "id" | "name" | "inn">,
+): string | null {
+  return resolveServerLegalEntityIdFromList(entity, getDealerLegalEntities(dealerId));
+}
 
 export type DealerLegalEntityPaymentFields = {
   paymentForm?: LegalEntityPaymentForm | null;
@@ -356,6 +398,77 @@ export function buildLegalEntityPaymentUpsert(
   };
 }
 
+/** Создаёт запись в Postgres при отсутствии UUID (overlay / passport / optimistic id). */
+export async function ensureServerLegalEntityId(
+  dealerId: string,
+  entity: MergedDealerLegalEntity,
+  updatedBy: string,
+  updatedByName: string,
+): Promise<string | null> {
+  await refreshDbLegalEntitiesForDealer(dealerId);
+  const resolved = resolveServerLegalEntityId(dealerId, entity);
+  if (resolved) return resolved;
+
+  const name = entity.name.trim();
+  if (!name || name === "—") return null;
+
+  const status: DealerLegalEntityStatus = entity.status === "archived" ? "additional" : entity.status;
+
+  const created = await apiCreateFull({
+    clientId: dealerId,
+    name,
+    inn: entity.inn,
+    kpp: entity.kpp,
+    ogrn: entity.ogrn,
+    legalAddress: entity.legalAddress,
+    actualAddress: entity.actualAddress,
+    entityType: entity.entityType,
+    primaryContact: entity.primaryContact,
+    phone: entity.phone,
+    email: entity.email,
+    internalCode: entity.internalCode,
+    status,
+    comment: entity.comment,
+    updatedByUserId: updatedBy,
+    updatedByName,
+  });
+  if (!created.ok || !created.id) return null;
+
+  if (!isLegalEntityServerUuid(entity.id)) {
+    replaceLegalEntityIdInCache(dealerId, entity.id, created.id);
+  }
+  await refreshDbLegalEntitiesForDealer(dealerId);
+  return created.id;
+}
+
+export async function archiveDealerLegalEntityAsync(
+  dealerId: string,
+  entity: MergedDealerLegalEntity,
+  updatedBy: string,
+  updatedByName: string,
+): Promise<boolean> {
+  const serverId = await ensureServerLegalEntityId(dealerId, entity, updatedBy, updatedByName);
+  if (!serverId) return false;
+  const ok = await apiArchiveLegalEntity(serverId, updatedBy, updatedByName);
+  if (ok) await refreshDbLegalEntitiesForDealer(dealerId);
+  return ok;
+}
+
+export async function unarchiveDealerLegalEntityAsync(
+  dealerId: string,
+  entity: MergedDealerLegalEntity,
+  updatedBy: string,
+  updatedByName: string,
+): Promise<boolean> {
+  await refreshDbLegalEntitiesForDealer(dealerId);
+  const serverId = resolveServerLegalEntityId(dealerId, entity) ?? (isLegalEntityServerUuid(entity.id) ? entity.id : null);
+  if (!serverId) return false;
+  const ok = await apiUnarchiveLegalEntity(serverId, updatedBy, updatedByName);
+  if (ok) await refreshDbLegalEntitiesForDealer(dealerId);
+  return ok;
+}
+
+/** @deprecated Используйте archiveDealerLegalEntityAsync */
 export function archiveDealerLegalEntity(dealerId: string, entityId: string, updatedBy: string, updatedByName: string): void {
   if (entityId.startsWith("passport:")) return;
   fireAndRefresh(dealerId, () => apiArchiveLegalEntity(entityId, updatedBy, updatedByName));

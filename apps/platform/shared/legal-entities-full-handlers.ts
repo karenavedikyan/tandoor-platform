@@ -496,6 +496,53 @@ export async function handleLegalEntitiesArchive(
   sendJson(res, 200, { success: true, item });
 }
 
+export async function handleLegalEntitiesUnarchive(
+  res: VercelResponse,
+  pool: PoolLike,
+  me: SessionUser,
+  legalEntityId: string,
+  body: { updatedByName?: unknown; updatedByUserId?: unknown },
+): Promise<void> {
+  if (!UUID_RE.test(legalEntityId)) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите id." });
+    return;
+  }
+  const curR = await pool.query<Record<string, unknown>>(`SELECT * FROM legal_entities WHERE id = $1::uuid`, [
+    legalEntityId,
+  ]);
+  const row = curR.rows[0];
+  if (!row) {
+    sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Юрлицо не найдено." });
+    return;
+  }
+  const clientId = String(row.client_id);
+  if (!(await assertClientWriteAccess(pool, me, clientId))) {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+  const actorName = strOrNull(body.updatedByName) ?? me.id;
+  const r = await pool.query<Record<string, unknown>>(
+    `UPDATE legal_entities
+       SET is_archived = false,
+           status = CASE WHEN status = 'archived' THEN 'additional' ELSE status END,
+           updated_at = NOW(),
+           updated_by_user_id = $2,
+           updated_by_name = $3
+     WHERE id = $1::uuid RETURNING *`,
+    [legalEntityId, actorUserId(typeof body.updatedByUserId === "string" ? body.updatedByUserId : me.id), actorName],
+  );
+  const item = mapLegalEntityFullRow(r.rows[0]!);
+  await insertHistory(
+    pool,
+    clientId,
+    `Юрлицо восстановлено из архива: ${item.name ?? ""}`,
+    actorName,
+    actorUserId(me.id),
+    item.id,
+  );
+  sendJson(res, 200, { success: true, item });
+}
+
 export async function handleLegalEntitiesSetMain(
   res: VercelResponse,
   pool: PoolLike,
