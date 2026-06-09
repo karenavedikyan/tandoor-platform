@@ -48,6 +48,7 @@ import type { ShowcaseTask } from "@/lib/showcase-distribution-data";
 import type { MatrixFilterId, TradePointMatrixSummary, TradePointProductMatrixItem } from "@/lib/trade-point-matrix-data";
 import type { MatrixTask, MatrixTaskRecommendation } from "@/lib/trade-point-task-data";
 import { ShowcaseModelPresentationDialog } from "@/components/showcase-model-presentation-dialog";
+import { TradePointShowcaseAssignmentsPanel } from "@/components/distribution/trade-point-showcase-assignments-panel";
 import { TradePointPlacementBlocksSection } from "@/components/distribution/trade-point-placement-blocks-section";
 import { resolveShowcaseMatrixPositionForEntry } from "@/lib/showcase-matrix-deficit-tasks";
 
@@ -1761,49 +1762,13 @@ export function TradePointShowcaseMatrixSection({
             data-testid="section-trade-point-showcase-open-tasks"
             className="scroll-mt-28 space-y-2 sm:scroll-mt-32"
           >
-            <Collapsible defaultOpen={false}>
-              <CollapsibleTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-9 w-full justify-between text-xs sm:w-auto"
-                  data-testid="button-open-tasks-toggle"
-                >
-                  <span>Открытые задачи</span>
-                  <ChevronDown className="h-4 w-4 opacity-70" />
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="mt-2 space-y-2">
-                <div className="flex justify-end">
-                  <Button asChild variant="outline" size="sm" className="h-8 text-xs" data-testid="button-open-all-tasks">
-                    <Link href={page.tasksLinkHref}>Все задачи</Link>
-                  </Button>
-                </div>
-                {point.tasks.some((t) => t.status !== "Закрыта") ? (
-              <ul className="space-y-1.5 rounded-lg border border-border/70 bg-card/80 p-2 text-sm">
-                {point.tasks
-                  .filter((t) => t.status !== "Закрыта")
-                  .map((t, idx) => (
-                    <li key={`${point.id}-tp-task-${idx}`} className="leading-snug">
-                      <span className="font-medium text-foreground">{t.title}</span>
-                      <span className="text-muted-foreground"> · {t.status} · до {t.due}</span>
-                    </li>
-                  ))}
-              </ul>
-            ) : null}
-            {page.showcaseTasksOpen.length > 0 ? (
-              <ul className="space-y-1.5 rounded-lg border border-border/70 bg-muted/20 p-2 text-sm">
-                {page.showcaseTasksOpen.map((t) => (
-                  <li key={t.taskId} className="leading-snug text-foreground">
-                    {t.title}
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-                {page.matrixTasksSlot}
-              </CollapsibleContent>
-            </Collapsible>
+            <TradePointShowcaseAssignmentsPanel
+              dealerId={dealer.id}
+              tradePointId={point.id}
+              tradePointName={point.name}
+              actorUserId={actorUserId}
+              actorName={actorName}
+            />
           </div>
         </div>
       </section>
