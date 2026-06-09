@@ -23,6 +23,7 @@ type PoolLike = {
 
 export type AssignmentStatus = "open" | "in_progress" | "submitted" | "verified" | "closed";
 export type AssignmentTargetKind = "model" | "variant";
+export type AssignmentItemStatus = "pending" | "shipped" | "installed" | "problem";
 
 export type AssignmentSessionUser = {
   id: string;
@@ -43,6 +44,11 @@ export type AssignmentItemDto = {
   doneByName: string | null;
   verified: boolean;
   verifiedAt: string | null;
+  itemStatus: AssignmentItemStatus;
+  problemReason: string | null;
+  photoUrl: string | null;
+  photoThumbUrl: string | null;
+  shippedDate: string | null;
 };
 
 export type AssignmentDto = {
@@ -53,6 +59,7 @@ export type AssignmentDto = {
   title: string;
   comment: string | null;
   dueDate: string | null;
+  shippedDate: string | null;
   createdBy: string | null;
   createdByName: string | null;
   assigneeUserId: string | null;
@@ -109,6 +116,75 @@ function toIsoOrNull(v: unknown): string | null {
   return toIso(v);
 }
 
+function toDateOrNull(v: unknown): string | null {
+  if (v === null || v === undefined) return null;
+  return toIso(v).slice(0, 10);
+}
+
+function parseOptionalDate(raw: unknown): string | null {
+  const s = str(raw);
+  if (!s) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  return s;
+}
+
+const ITEM_STATUS_VALUES = new Set<AssignmentItemStatus>(["pending", "shipped", "installed", "problem"]);
+
+function parseItemStatus(r: Record<string, unknown>): AssignmentItemStatus {
+  const raw = r.item_status;
+  if (typeof raw === "string" && ITEM_STATUS_VALUES.has(raw as AssignmentItemStatus)) {
+    return raw as AssignmentItemStatus;
+  }
+  if (Boolean(r.verified)) return "installed";
+  if (Boolean(r.done)) return "shipped";
+  return "pending";
+}
+
+async function notifyUser(
+  pool: PoolLike,
+  args: {
+    userId: string;
+    kind: string;
+    title: string;
+    body?: string | null;
+    link?: string | null;
+    entityId?: string | null;
+    actorId?: string | null;
+    actorName?: string | null;
+  },
+): Promise<void> {
+  try {
+    await pool.query(
+      `INSERT INTO app_notifications (user_id, kind, title, body, link, entity_kind, entity_id, actor_id, actor_name)
+       VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8::uuid, $9)`,
+      [
+        args.userId,
+        args.kind,
+        args.title,
+        args.body ?? null,
+        args.link ?? null,
+        "showcase_assignment",
+        args.entityId ?? null,
+        args.actorId ?? null,
+        args.actorName ?? null,
+      ],
+    );
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    console.error("[showcase-assignments] notifyUser failed", m);
+  }
+}
+
+function assertCanExecuteAssignment(me: AssignmentSessionUser, head: AssignmentDto): void {
+  const elevated = me.role === "admin" || me.role === "director" || me.role === "rop";
+  if (!elevated && head.assigneeUserId && head.assigneeUserId !== me.id) {
+    throw new AssignmentValidationError("Это задание назначено другому исполнителю.", "FORBIDDEN");
+  }
+  if (head.status === "verified" || head.status === "closed") {
+    throw new AssignmentValidationError("Задание уже завершено.", "CONFLICT");
+  }
+}
+
 function mapItemRow(r: Record<string, unknown>): AssignmentItemDto {
   return {
     id: String(r.id),
@@ -122,6 +198,11 @@ function mapItemRow(r: Record<string, unknown>): AssignmentItemDto {
     doneByName: (r.done_by_name as string) ?? null,
     verified: Boolean(r.verified),
     verifiedAt: toIsoOrNull(r.verified_at),
+    itemStatus: parseItemStatus(r),
+    problemReason: (r.problem_reason as string) ?? null,
+    photoUrl: (r.photo_url as string) ?? null,
+    photoThumbUrl: (r.photo_thumb_url as string) ?? null,
+    shippedDate: toDateOrNull(r.shipped_date),
   };
 }
 
@@ -136,6 +217,7 @@ function mapAssignmentRow(r: Record<string, unknown>, items: AssignmentItemDto[]
     title: (r.title as string) ?? "",
     comment: (r.comment as string) ?? null,
     dueDate: r.due_date ? toIso(r.due_date).slice(0, 10) : null,
+    shippedDate: toDateOrNull(r.shipped_date),
     createdBy: r.created_by ? String(r.created_by) : null,
     createdByName: (r.created_by_name as string) ?? null,
     assigneeUserId: r.assignee_user_id ? String(r.assignee_user_id) : null,
@@ -277,6 +359,19 @@ export async function handleCreate(
     actorName: me.fullName,
   });
 
+  if (input.assigneeUserId) {
+    await notifyUser(pool, {
+      userId: input.assigneeUserId,
+      kind: "assignment_created",
+      title: "Новое задание на отгрузку",
+      body: input.title || null,
+      link: `/#/assignment/${assignmentId}`,
+      entityId: assignmentId,
+      actorId: me.id,
+      actorName: me.fullName,
+    });
+  }
+
   const dto = await loadAssignment(pool, assignmentId);
   return { success: true, assignment: dto! };
 }
@@ -359,22 +454,25 @@ export async function handleItemToggle(
 
   const head = await loadAssignment(pool, assignmentId);
   if (!head) throw new AssignmentValidationError("Задание не найдено.", "NOT_FOUND");
-  // Менеджер может отмечать только если он назначенный исполнитель (или admin/rop/director).
-  const elevated = me.role === "admin" || me.role === "director" || me.role === "rop";
-  if (!elevated && head.assigneeUserId && head.assigneeUserId !== me.id) {
-    throw new AssignmentValidationError("Это задание назначено другому исполнителю.", "FORBIDDEN");
-  }
-  if (head.status === "verified" || head.status === "closed") {
-    throw new AssignmentValidationError("Задание уже завершено.", "CONFLICT");
+  assertCanExecuteAssignment(me, head);
+  if (head.status === "submitted") {
+    throw new AssignmentValidationError("Задание уже отправлено.", "CONFLICT");
   }
 
   await pool.query(
     `UPDATE showcase_install_assignment_items
-     SET done = $2, done_at = CASE WHEN $2 THEN NOW() ELSE NULL END,
+     SET done = $2,
+         done_at = CASE WHEN $2 THEN NOW() ELSE NULL END,
          done_by = CASE WHEN $2 THEN $3::uuid ELSE NULL END,
          done_by_name = CASE WHEN $2 THEN $4 ELSE NULL END,
+         item_status = CASE
+           WHEN $2 THEN 'shipped'
+           WHEN item_status = 'installed' THEN 'installed'
+           ELSE 'pending'
+         END,
+         problem_reason = CASE WHEN $2 THEN NULL ELSE problem_reason END,
          updated_at = NOW()
-     WHERE id = $1 AND assignment_id = $5`,
+     WHERE id = $1 AND assignment_id = $5 AND item_status <> 'installed'`,
     [itemId, done, me.id, me.fullName, assignmentId],
   );
 
@@ -395,6 +493,115 @@ export async function handleItemToggle(
   return { success: true, assignment: dto! };
 }
 
+// ── item-set-status (менеджер: shipped / problem / pending + фото) ───────────
+export async function handleItemSetStatus(
+  pool: PoolLike,
+  me: AssignmentSessionUser,
+  body: Record<string, unknown>,
+): Promise<{ success: true; assignment: AssignmentDto }> {
+  assertActive(me);
+  if (!ANY_ROLE.has(me.role)) throw new AssignmentValidationError("Недостаточно прав.", "FORBIDDEN");
+  const assignmentId = str(body.assignmentId);
+  const itemId = str(body.itemId);
+  const itemStatusRaw = str(body.itemStatus);
+  if (!assignmentId || !itemId || !itemStatusRaw) {
+    throw new AssignmentValidationError("assignmentId, itemId и itemStatus обязательны.");
+  }
+  if (!ITEM_STATUS_VALUES.has(itemStatusRaw as AssignmentItemStatus) || itemStatusRaw === "installed") {
+    throw new AssignmentValidationError("Недопустимый itemStatus.");
+  }
+  const itemStatus = itemStatusRaw as AssignmentItemStatus;
+
+  const head = await loadAssignment(pool, assignmentId);
+  if (!head) throw new AssignmentValidationError("Задание не найдено.", "NOT_FOUND");
+  assertCanExecuteAssignment(me, head);
+  if (head.status === "submitted") {
+    throw new AssignmentValidationError("Задание уже отправлено.", "CONFLICT");
+  }
+
+  const item = head.items.find((i) => i.id === itemId);
+  if (!item) throw new AssignmentValidationError("Позиция не найдена.", "NOT_FOUND");
+  if (item.itemStatus === "installed") {
+    throw new AssignmentValidationError("Позиция уже на витрине и не может быть изменена.", "CONFLICT");
+  }
+
+  const problemReason = optStr(body.problemReason);
+  if (itemStatus === "problem" && !problemReason) {
+    throw new AssignmentValidationError("Укажите причину проблемы.");
+  }
+
+  const photoUrl = optStr(body.photoUrl);
+  const photoThumbUrl = optStr(body.photoThumbUrl);
+  const shippedDate = parseOptionalDate(body.shippedDate);
+
+  if (itemStatus === "shipped") {
+    await pool.query(
+      `UPDATE showcase_install_assignment_items
+       SET item_status = 'shipped',
+           done = TRUE,
+           done_at = NOW(),
+           done_by = $3::uuid,
+           done_by_name = $4,
+           problem_reason = NULL,
+           photo_url = COALESCE($5, photo_url),
+           photo_thumb_url = COALESCE($6, photo_thumb_url),
+           shipped_date = COALESCE($7::date, shipped_date),
+           updated_at = NOW()
+       WHERE id = $1 AND assignment_id = $2`,
+      [itemId, assignmentId, me.id, me.fullName, photoUrl, photoThumbUrl, shippedDate],
+    );
+  } else if (itemStatus === "problem") {
+    await pool.query(
+      `UPDATE showcase_install_assignment_items
+       SET item_status = 'problem',
+           done = FALSE,
+           done_at = NULL,
+           done_by = NULL,
+           done_by_name = NULL,
+           problem_reason = $3,
+           photo_url = COALESCE($4, photo_url),
+           photo_thumb_url = COALESCE($5, photo_thumb_url),
+           updated_at = NOW()
+       WHERE id = $1 AND assignment_id = $2`,
+      [itemId, assignmentId, problemReason, photoUrl, photoThumbUrl],
+    );
+  } else {
+    await pool.query(
+      `UPDATE showcase_install_assignment_items
+       SET item_status = 'pending',
+           done = FALSE,
+           done_at = NULL,
+           done_by = NULL,
+           done_by_name = NULL,
+           problem_reason = NULL,
+           photo_url = COALESCE($3, photo_url),
+           photo_thumb_url = COALESCE($4, photo_thumb_url),
+           updated_at = NOW()
+       WHERE id = $1 AND assignment_id = $2`,
+      [itemId, assignmentId, photoUrl, photoThumbUrl],
+    );
+  }
+
+  if (head.status === "open") {
+    await pool.query(
+      `UPDATE showcase_install_assignments SET status = 'in_progress', updated_at = NOW() WHERE id = $1`,
+      [assignmentId],
+    );
+  }
+
+  await insertEvent(pool, {
+    assignmentId,
+    kind: "item_status",
+    targetId: itemId,
+    payload: { itemStatus, problemReason: problemReason ?? null },
+    actorId: me.id,
+    actorName: me.fullName,
+  });
+
+  const dto = await loadAssignment(pool, assignmentId);
+  return { success: true, assignment: dto! };
+}
+
 // ── submit (менеджер завершил) ────────────────────────────────────────────────
 export async function handleSubmit(
   pool: PoolLike,
@@ -406,15 +613,39 @@ export async function handleSubmit(
   if (!assignmentId) throw new AssignmentValidationError("assignmentId обязателен.");
   const head = await loadAssignment(pool, assignmentId);
   if (!head) throw new AssignmentValidationError("Задание не найдено.", "NOT_FOUND");
-  const elevated = me.role === "admin" || me.role === "director" || me.role === "rop";
-  if (!elevated && head.assigneeUserId && head.assigneeUserId !== me.id) {
-    throw new AssignmentValidationError("Это задание назначено другому исполнителю.", "FORBIDDEN");
+  assertCanExecuteAssignment(me, head);
+  if (head.status === "submitted" || head.status === "verified" || head.status === "closed") {
+    throw new AssignmentValidationError("Задание уже отправлено.", "CONFLICT");
   }
+
+  const shippedDate = parseOptionalDate(body.shippedDate);
+  const comment = str(body.comment);
+
   await pool.query(
-    `UPDATE showcase_install_assignments SET status = 'submitted', submitted_at = NOW(), updated_at = NOW() WHERE id = $1`,
-    [assignmentId],
+    `UPDATE showcase_install_assignments
+     SET status = 'submitted',
+         submitted_at = NOW(),
+         updated_at = NOW(),
+         shipped_date = COALESCE($2::date, shipped_date),
+         comment = CASE WHEN $3 IS NOT NULL AND $3 <> '' THEN $3 ELSE comment END
+     WHERE id = $1`,
+    [assignmentId, shippedDate, comment ?? null],
   );
   await insertEvent(pool, { assignmentId, kind: "submitted", actorId: me.id, actorName: me.fullName });
+
+  if (head.createdBy) {
+    await notifyUser(pool, {
+      userId: head.createdBy,
+      kind: "assignment_submitted",
+      title: "Задание выполнено менеджером",
+      body: head.title,
+      link: `/#/assignment/${assignmentId}`,
+      entityId: assignmentId,
+      actorId: me.id,
+      actorName: me.fullName,
+    });
+  }
+
   const dto = await loadAssignment(pool, assignmentId);
   return { success: true, assignment: dto! };
 }
