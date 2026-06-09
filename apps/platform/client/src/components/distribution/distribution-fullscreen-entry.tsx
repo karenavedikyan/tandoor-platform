@@ -5,6 +5,7 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronUp,
+  ClipboardList,
   Grid3x3,
   LayoutGrid,
   List,
@@ -27,7 +28,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import {
@@ -76,6 +85,16 @@ import {
   type ShowcaseMatrixStatusId,
 } from "@/lib/trade-point-showcase-matrix-storage";
 import { useToast } from "@/hooks/use-toast";
+import { useCurrentUser } from "@/hooks/use-current-user";
+import {
+  assignmentShareUrl,
+  createAssignment,
+} from "@/lib/showcase-assignments-api";
+import {
+  listManagerPickerUsers,
+  pickerUserById,
+  type PickerUser,
+} from "@/lib/users-picker-api";
 import {
   OVERRIDES_PENDING_CHANGED_EVENT,
   pendingSyncCount,
@@ -84,6 +103,9 @@ import { runOverridesPendingSyncOnce } from "@/lib/overrides-pending-sync-worker
 
 const CARD_SIZE_STORAGE_KEY = "distribution-fullscreen-entry-card-size";
 const COMPACT_STORAGE_KEY = "distribution-fullscreen-entry-compact";
+const ASSIGNMENT_ASSIGNEE_NONE = "__none__";
+
+const ASSIGNMENT_CREATE_ROLES = new Set(["admin", "director", "rop", "regional_manager"]);
 
 function fullscreenEntryProductGridClass(size: CatalogCardSize, compact: boolean): string {
   if (size === "list") return "flex flex-col gap-2";
@@ -169,6 +191,7 @@ export function DistributionFullscreenEntry({
   onBackToList,
 }: Props) {
   const { toast } = useToast();
+  const { user } = useCurrentUser();
   const [bump, setBump] = useState(0);
   const [sourceTab, setSourceTab] = useState<SourceTab>("matrix");
   const [searchQuery, setSearchQuery] = useState("");
@@ -197,6 +220,16 @@ export function DistributionFullscreenEntry({
   const [online, setOnline] = useState(
     () => typeof navigator === "undefined" || navigator.onLine,
   );
+  const [assignmentDialogOpen, setAssignmentDialogOpen] = useState(false);
+  const [assignmentPhase, setAssignmentPhase] = useState<"form" | "success">("form");
+  const [assignmentShareLink, setAssignmentShareLink] = useState("");
+  const [assignmentAssigneeId, setAssignmentAssigneeId] = useState(ASSIGNMENT_ASSIGNEE_NONE);
+  const [assignmentDueDate, setAssignmentDueDate] = useState("");
+  const [assignmentComment, setAssignmentComment] = useState("");
+  const [assignmentSubmitting, setAssignmentSubmitting] = useState(false);
+  const [assignmentManagers, setAssignmentManagers] = useState<PickerUser[]>([]);
+  const [assignmentManagersLoading, setAssignmentManagersLoading] = useState(false);
+  const [assignmentManagersError, setAssignmentManagersError] = useState("");
 
   useEffect(() => {
     writeCatalogCardSizeToStorage(CARD_SIZE_STORAGE_KEY, cardSize);
@@ -645,6 +678,114 @@ export function DistributionFullscreenEntry({
     showSaveSyncToast,
   ]);
 
+  const canCreateAssignment = useMemo(
+    () => Boolean(user?.role && ASSIGNMENT_CREATE_ROLES.has(user.role)),
+    [user?.role],
+  );
+
+  const assignmentSelectedModels = useMemo(
+    () =>
+      Array.from(needInstallSelection).map((id) => ({
+        id,
+        name: matrixModelById.get(id)?.name ?? id,
+      })),
+    [matrixModelById, needInstallSelection],
+  );
+
+  const resetAssignmentDialog = useCallback(() => {
+    setAssignmentPhase("form");
+    setAssignmentShareLink("");
+    setAssignmentAssigneeId(ASSIGNMENT_ASSIGNEE_NONE);
+    setAssignmentDueDate("");
+    setAssignmentComment("");
+    setAssignmentSubmitting(false);
+    setAssignmentManagersError("");
+  }, []);
+
+  const handleAssignmentDialogOpenChange = useCallback(
+    (open: boolean) => {
+      setAssignmentDialogOpen(open);
+      if (!open) resetAssignmentDialog();
+    },
+    [resetAssignmentDialog],
+  );
+
+  const handleOpenAssignmentDialog = useCallback(() => {
+    resetAssignmentDialog();
+    setAssignmentDialogOpen(true);
+    setAssignmentManagersLoading(true);
+    void listManagerPickerUsers()
+      .then((users) => {
+        setAssignmentManagers(users);
+        setAssignmentManagersError("");
+      })
+      .catch(() => {
+        setAssignmentManagers([]);
+        setAssignmentManagersError("Не удалось загрузить список менеджеров.");
+      })
+      .finally(() => {
+        setAssignmentManagersLoading(false);
+      });
+  }, [resetAssignmentDialog]);
+
+  const handleCreateAssignment = useCallback(async () => {
+    if (assignmentSubmitting || needInstallCount === 0) return;
+    setAssignmentSubmitting(true);
+    try {
+      const assignee =
+        assignmentAssigneeId === ASSIGNMENT_ASSIGNEE_NONE
+          ? null
+          : pickerUserById(assignmentManagers, assignmentAssigneeId);
+      const assignment = await createAssignment({
+        dealerId: dealer.id,
+        tradePointId: point.id,
+        title: `Отгрузить на витрину · ${point.name}`,
+        comment: assignmentComment.trim() || null,
+        dueDate: assignmentDueDate || null,
+        assigneeUserId: assignee?.id ?? null,
+        assigneeName: assignee?.full_name ?? null,
+        items: Array.from(needInstallSelection).map((id) => ({
+          targetKind: "model" as const,
+          targetId: id,
+          modelName: matrixModelById.get(id)?.name,
+        })),
+      });
+      setAssignmentShareLink(assignmentShareUrl(assignment.id));
+      setAssignmentPhase("success");
+      toast({ title: `Задание создано · ${assignment.itemsTotal} позиций` });
+    } catch (err) {
+      toast({
+        title: err instanceof Error ? err.message : "Не удалось создать задание",
+        variant: "destructive",
+      });
+    } finally {
+      setAssignmentSubmitting(false);
+    }
+  }, [
+    assignmentAssigneeId,
+    assignmentComment,
+    assignmentDueDate,
+    assignmentManagers,
+    assignmentSubmitting,
+    dealer.id,
+    matrixModelById,
+    needInstallCount,
+    needInstallSelection,
+    point.id,
+    point.name,
+    toast,
+  ]);
+
+  const handleCopyAssignmentLink = useCallback(async () => {
+    if (!assignmentShareLink) return;
+    try {
+      await navigator.clipboard.writeText(assignmentShareLink);
+      toast({ title: "Ссылка скопирована" });
+    } catch {
+      toast({ title: "Не удалось скопировать ссылку", variant: "destructive" });
+    }
+  }, [assignmentShareLink, toast]);
+
   const compactHasChanges = needInstallMode ? needInstallCount > 0 : changedIds.length > 0;
   const compactSaveCount = needInstallMode ? needInstallCount : changedIds.length;
 
@@ -1043,6 +1184,166 @@ export function DistributionFullscreenEntry({
           Сохранить ({compactSaveCount})
         </Button>
       ) : null}
+
+      {compactMode && needInstallMode && canCreateAssignment ? (
+        <Button
+          type="button"
+          variant="outline"
+          className="fixed bottom-4 left-1/2 z-40 min-h-11 -translate-x-1/2 rounded-full bg-background/95 px-4 shadow-lg backdrop-blur"
+          disabled={needInstallCount === 0 || saving}
+          onClick={handleOpenAssignmentDialog}
+          data-testid="button-fullscreen-entry-create-assignment"
+        >
+          <ClipboardList className="mr-1.5 h-4 w-4" aria-hidden />
+          Задание на отгрузку
+        </Button>
+      ) : null}
+
+      <Dialog open={assignmentDialogOpen} onOpenChange={handleAssignmentDialogOpenChange}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Задание на отгрузку — {point.name}</DialogTitle>
+          </DialogHeader>
+
+          {assignmentPhase === "form" ? (
+            <div className="space-y-4 py-1">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <Label className="text-sm">Выбранные модели</Label>
+                  <Badge variant="secondary" data-testid="badge-assignment-models-count">
+                    {assignmentSelectedModels.length}
+                  </Badge>
+                </div>
+                <ul
+                  className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-border/80 bg-muted/20 px-3 py-2 text-sm"
+                  data-testid="list-assignment-selected-models"
+                >
+                  {assignmentSelectedModels.map((m) => (
+                    <li key={m.id} className="truncate text-foreground">
+                      {m.name}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="assignment-assignee" className="text-sm">
+                  Исполнитель (менеджер)
+                </Label>
+                {assignmentManagersLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                    Загрузка…
+                  </div>
+                ) : (
+                  <Select
+                    value={assignmentAssigneeId}
+                    onValueChange={setAssignmentAssigneeId}
+                    disabled={assignmentSubmitting}
+                  >
+                    <SelectTrigger
+                      id="assignment-assignee"
+                      className="min-h-10 w-full"
+                      data-testid="select-assignment-assignee"
+                    >
+                      <SelectValue placeholder="— не выбрано —" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={ASSIGNMENT_ASSIGNEE_NONE}>— не выбрано —</SelectItem>
+                      {assignmentManagers.map((u) => (
+                        <SelectItem key={u.id} value={u.id}>
+                          {u.full_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                {assignmentManagersError ? (
+                  <p className="text-xs text-destructive">{assignmentManagersError}</p>
+                ) : null}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="assignment-due-date" className="text-sm">
+                  Срок (необязательно)
+                </Label>
+                <Input
+                  id="assignment-due-date"
+                  type="date"
+                  value={assignmentDueDate}
+                  onChange={(e) => setAssignmentDueDate(e.target.value)}
+                  disabled={assignmentSubmitting}
+                  data-testid="input-assignment-due-date"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="assignment-comment" className="text-sm">
+                  Комментарий (необязательно)
+                </Label>
+                <Textarea
+                  id="assignment-comment"
+                  value={assignmentComment}
+                  onChange={(e) => setAssignmentComment(e.target.value)}
+                  disabled={assignmentSubmitting}
+                  rows={3}
+                  data-testid="textarea-assignment-comment"
+                />
+              </div>
+
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => handleAssignmentDialogOpenChange(false)}
+                  disabled={assignmentSubmitting}
+                >
+                  Отмена
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => void handleCreateAssignment()}
+                  disabled={assignmentSubmitting || needInstallCount === 0}
+                  data-testid="button-assignment-submit"
+                >
+                  {assignmentSubmitting ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+                  ) : null}
+                  Создать задание
+                </Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <div className="space-y-4 py-1">
+              <p className="text-sm text-muted-foreground">
+                Передайте ссылку менеджеру для выполнения задания.
+              </p>
+              <div className="flex gap-2">
+                <Input
+                  readOnly
+                  value={assignmentShareLink}
+                  className="min-h-10 font-mono text-xs"
+                  data-testid="text-assignment-share-link"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="shrink-0"
+                  onClick={() => void handleCopyAssignmentLink()}
+                  data-testid="button-assignment-copy-link"
+                >
+                  Скопировать ссылку
+                </Button>
+              </div>
+              <DialogFooter>
+                <Button type="button" onClick={() => handleAssignmentDialogOpenChange(false)}>
+                  Готово
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Sheet
         open={historyOpen}

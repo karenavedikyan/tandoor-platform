@@ -11,10 +11,12 @@ export type PickerUser = {
 
 let ropCache: PickerUser[] | null = null;
 let rmCache: PickerUser[] | null = null;
+let managerCache: PickerUser[] | null = null;
 let ropInflight: Promise<PickerUser[]> | null = null;
 let rmInflight: Promise<PickerUser[]> | null = null;
+let managerInflight: Promise<PickerUser[]> | null = null;
 
-async function fetchPicker(role: "rop" | "regional_manager"): Promise<PickerUser[]> {
+async function fetchPicker(role: "rop" | "regional_manager" | "manager"): Promise<PickerUser[]> {
   const res = await fetch(`/api/users/picker?role=${role}`, { credentials: "include" });
   const json = (await res.json()) as { success?: boolean; users?: PickerUser[] };
   if (!res.ok || !json.success || !Array.isArray(json.users)) {
@@ -53,9 +55,25 @@ export async function listRegionalManagerPickerUsers(): Promise<PickerUser[]> {
   return rmInflight;
 }
 
+export async function listManagerPickerUsers(): Promise<PickerUser[]> {
+  if (managerCache) return managerCache;
+  if (!managerInflight) {
+    managerInflight = fetchPicker("manager")
+      .then((users) => {
+        managerCache = users;
+        return users;
+      })
+      .finally(() => {
+        managerInflight = null;
+      });
+  }
+  return managerInflight;
+}
+
 export function invalidateUsersPickerCache(): void {
   ropCache = null;
   rmCache = null;
+  managerCache = null;
 }
 
 export function pickerUserById(users: PickerUser[], id: string | null | undefined): PickerUser | null {
