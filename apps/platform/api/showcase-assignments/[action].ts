@@ -25,6 +25,7 @@ import {
   handleArchive,
   handleClose,
   handleCreate,
+  handleCreateBatch,
   handleDelete,
   handleFollowup,
   handleGet,
@@ -107,6 +108,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
     if (req.method === "POST") {
       if (action === "create") { sendJson(res, 200, await handleCreate(pool, sessionUser, body)); return; }
+      if (action === "create-batch") { sendJson(res, 200, await handleCreateBatch(pool, sessionUser, body)); return; }
       if (action === "item-toggle") { sendJson(res, 200, await handleItemToggle(pool, sessionUser, body)); return; }
       if (action === "item-set-status") { sendJson(res, 200, await handleItemSetStatus(pool, sessionUser, body)); return; }
       if (action === "submit") { sendJson(res, 200, await handleSubmit(pool, sessionUser, body)); return; }

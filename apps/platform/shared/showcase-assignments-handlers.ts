@@ -16,6 +16,7 @@ import {
   upsertShowcaseMatrixEntry,
   type ShowcaseMatrixSessionUser,
 } from "./showcase-matrix-handlers.js";
+import { resolveResponsiblesForTradePoint } from "./responsibility-resolver.js";
 
 type PoolLike = {
   query<T = Record<string, unknown>>(text: string, params?: unknown[]): Promise<{ rows: T[] }>;
@@ -364,15 +365,11 @@ export function parseCreateInput(body: Record<string, unknown>): AssignmentCreat
   };
 }
 
-export async function handleCreate(
+async function insertAssignmentFromInput(
   pool: PoolLike,
   me: AssignmentSessionUser,
-  body: Record<string, unknown>,
-): Promise<{ success: true; assignment: AssignmentDto }> {
-  assertActive(me);
-  if (!CREATE_ROLES.has(me.role)) throw new AssignmentValidationError("Недостаточно прав для создания задания.", "FORBIDDEN");
-  const input = parseCreateInput(body);
-
+  input: AssignmentCreateInput,
+): Promise<AssignmentDto> {
   const ins = await pool.query<Record<string, unknown>>(
     `INSERT INTO showcase_install_assignments
        (dealer_id, trade_point_id, status, title, comment, due_date, created_by, created_by_name, assignee_user_id, assignee_name)
@@ -424,7 +421,151 @@ export async function handleCreate(
   }
 
   const dto = await loadAssignment(pool, assignmentId);
-  return { success: true, assignment: dto! };
+  if (!dto) throw new AssignmentValidationError("Не удалось создать задание.", "INTERNAL_ERROR");
+  return dto;
+}
+
+async function canUserCreateForTradePoint(
+  pool: PoolLike,
+  me: AssignmentSessionUser,
+  dealerId: string,
+  tradePointId: string,
+): Promise<boolean> {
+  const tpCheck = await pool.query<{ dealer_id: string }>(
+    `SELECT dealer_id FROM trade_point_overrides WHERE tp_id = $1 LIMIT 1`,
+    [tradePointId],
+  );
+  const row = tpCheck.rows[0];
+  if (!row) return false;
+  if (String(row.dealer_id) !== dealerId) return false;
+  if (isElevated(me)) return true;
+  const resolved = await resolveResponsiblesForTradePoint(pool, tradePointId);
+  if (me.role === "rop") return resolved.rop.userId === me.id;
+  if (me.role === "regional_manager") return resolved.regional_manager.userId === me.id;
+  return false;
+}
+
+export async function handleCreate(
+  pool: PoolLike,
+  me: AssignmentSessionUser,
+  body: Record<string, unknown>,
+): Promise<{ success: true; assignment: AssignmentDto }> {
+  assertActive(me);
+  if (!CREATE_ROLES.has(me.role)) throw new AssignmentValidationError("Недостаточно прав для создания задания.", "FORBIDDEN");
+  const input = parseCreateInput(body);
+  const assignment = await insertAssignmentFromInput(pool, me, input);
+  return { success: true, assignment };
+}
+
+export type AssignmentBatchTargetInput = { dealerId: string; tradePointId: string };
+export type AssignmentBatchCreateInput = {
+  targets: AssignmentBatchTargetInput[];
+  items: AssignmentCreateItemInput[];
+  title?: string;
+  comment?: string | null;
+  dueDate?: string | null;
+  assigneeUserId?: string | null;
+  assigneeName?: string | null;
+};
+
+function parseBatchCreateInput(body: Record<string, unknown>): AssignmentBatchCreateInput {
+  const rawTargets = Array.isArray(body.targets) ? body.targets : [];
+  const targets: AssignmentBatchTargetInput[] = [];
+  for (const t of rawTargets) {
+    if (!t || typeof t !== "object") continue;
+    const obj = t as Record<string, unknown>;
+    const dealerId = str(obj.dealerId);
+    const tradePointId = str(obj.tradePointId);
+    if (!dealerId || !tradePointId) continue;
+    targets.push({ dealerId, tradePointId });
+  }
+  if (targets.length === 0) throw new AssignmentValidationError("Нужна хотя бы одна цель (targets).");
+
+  const rawItems = Array.isArray(body.items) ? body.items : [];
+  const items: AssignmentCreateItemInput[] = [];
+  for (const it of rawItems) {
+    if (!it || typeof it !== "object") continue;
+    const obj = it as Record<string, unknown>;
+    const targetId = str(obj.targetId);
+    if (!targetId) continue;
+    const kind = str(obj.targetKind);
+    items.push({
+      targetId,
+      targetKind: kind === "variant" ? "variant" : "model",
+      modelName: str(obj.modelName) ?? "",
+    });
+  }
+  if (items.length === 0) throw new AssignmentValidationError("Нужна хотя бы одна позиция.");
+
+  const due = str(body.dueDate);
+  const commentRaw = body.comment !== undefined ? body.comment : body.note;
+  return {
+    targets,
+    items,
+    title: str(body.title) ?? "",
+    comment: optStr(commentRaw),
+    dueDate: due && /^\d{4}-\d{2}-\d{2}$/.test(due) ? due : null,
+    assigneeUserId: optStr(body.assigneeUserId),
+    assigneeName: optStr(body.assigneeName),
+  };
+}
+
+export async function handleCreateBatch(
+  pool: PoolLike,
+  me: AssignmentSessionUser,
+  body: Record<string, unknown>,
+): Promise<{ success: true; assignments: AssignmentDto[]; createdCount: number; skippedCount: number }> {
+  assertActive(me);
+  if (!CREATE_ROLES.has(me.role)) {
+    throw new AssignmentValidationError("Недостаточно прав для создания задания.", "FORBIDDEN");
+  }
+  const input = parseBatchCreateInput(body);
+  const assignments: AssignmentDto[] = [];
+  let skippedCount = 0;
+
+  for (const target of input.targets) {
+    try {
+      const allowed = await canUserCreateForTradePoint(pool, me, target.dealerId, target.tradePointId);
+      if (!allowed) {
+        skippedCount += 1;
+        continue;
+      }
+
+      let assigneeUserId = input.assigneeUserId ?? null;
+      let assigneeName = input.assigneeName ?? null;
+      if (!assigneeUserId) {
+        const resolved = await resolveResponsiblesForTradePoint(pool, target.tradePointId);
+        assigneeUserId = resolved.manager.userId ?? null;
+        assigneeName = resolved.manager.userName ?? null;
+        if (!assigneeUserId) {
+          skippedCount += 1;
+          continue;
+        }
+      }
+
+      const assignment = await insertAssignmentFromInput(pool, me, {
+        dealerId: target.dealerId,
+        tradePointId: target.tradePointId,
+        title: input.title ?? "",
+        comment: input.comment ?? null,
+        dueDate: input.dueDate,
+        assigneeUserId,
+        assigneeName,
+        items: input.items,
+      });
+      assignments.push(assignment);
+    } catch (e) {
+      console.error("[showcase-assignments] batch target skipped", e);
+      skippedCount += 1;
+    }
+  }
+
+  return {
+    success: true,
+    assignments,
+    createdCount: assignments.length,
+    skippedCount,
+  };
 }
 
 // ── get ─────────────────────────────────────────────────────────────────────

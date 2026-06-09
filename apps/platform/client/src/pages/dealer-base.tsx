@@ -244,7 +244,19 @@ import {
   useDealerCompactGridColumnCount,
 } from "@/lib/dealer-base-list-window-virtualizer";
 
-import { DealerBaseDealerShowcaseGrid } from "@/components/dealer-base-dealer-showcase-grid";
+import {
+  DealerBaseDealerShowcaseGrid,
+  type TaskSelectBulk,
+} from "@/components/dealer-base-dealer-showcase-grid";
+import { CreateTaskBatchDialog } from "@/components/tasks/create-task-batch-dialog";
+import { TaskSelectTradePointsDialog } from "@/components/tasks/task-select-trade-points-dialog";
+import {
+  activeTradePointsForDealerRow,
+  isTaskSelectModeFromParams,
+  parseTaskSelectTargetKey,
+  taskSelectTargetKey,
+  type TaskSelectTarget,
+} from "@/lib/task-select-mode";
 import { ShowcaseCoverPhotoSlot } from "@/components/showcase-cover-photo-slot";
 import { cleanContactDisplay, mailtoHref, telHref, whatsAppHref } from "@/lib/dealer-contact-links";
 import type { ActualizationState } from "@/lib/client-base-actualization-state";
@@ -429,6 +441,8 @@ type DealerListArchiveBulkProps = {
   onToggle: (dealerId: string, checked: boolean) => void;
 };
 
+type DealerListTaskSelectBulkProps = TaskSelectBulk;
+
 type DealerBaseNextStepsStorage = ReturnType<typeof loadClientNextStepsStorage>;
 
 export type DealerFocusViewListCtx = {
@@ -451,6 +465,7 @@ type DealerRowRendererBaseProps = {
   shipmentActiveDayId?: DealerShipmentDayId | null;
   shipmentUserId?: string;
   archiveBulk?: DealerListArchiveBulkProps;
+  taskSelectBulk?: DealerListTaskSelectBulkProps;
   rowQuickMove?: DealerListRowQuickMoveProps;
   nextStepsStorage: DealerBaseNextStepsStorage;
   focusList?: DealerFocusViewListCtx;
@@ -474,6 +489,7 @@ function ClientCompactGridBlock({
   shipmentActiveDayId,
   shipmentUserId,
   archiveBulk,
+  taskSelectBulk,
   rowQuickMove,
   nextStepsStorage: _nextStepsStorage,
   focusList,
@@ -594,6 +610,19 @@ function ClientCompactGridBlock({
                       className="h-4 w-4 shrink-0"
                       data-testid={`checkbox-dealer-workplan-select-${row.id}`}
                       aria-label={`Выбрать клиента ${row.name} для плана работ`}
+                    />
+                  ) : null}
+                  {taskSelectBulk ? (
+                    <Checkbox
+                      checked={
+                        taskSelectBulk.getDealerRowChecked(row) === "indeterminate"
+                          ? "indeterminate"
+                          : taskSelectBulk.getDealerRowChecked(row) === true
+                      }
+                      onCheckedChange={(v) => taskSelectBulk.onToggleDealerRow(row, v === true)}
+                      className="h-4 w-4 shrink-0"
+                      data-testid={`checkbox-task-select-dealer-${row.id}`}
+                      aria-label={`Выбрать клиента ${row.name} для задания`}
                     />
                   ) : null}
                   {archiveBulk?.selectableIds.has(row.id) ? (
@@ -725,6 +754,7 @@ function ClientListRowsBlock({
   shipmentActiveDayId,
   shipmentUserId,
   archiveBulk,
+  taskSelectBulk,
   rowQuickMove,
   nextStepsStorage,
   focusList,
@@ -799,6 +829,19 @@ function ClientListRowsBlock({
                   className="h-4 w-4"
                   data-testid={`checkbox-dealer-workplan-select-${row.id}`}
                   aria-label={`Выбрать клиента ${row.name} для плана работ`}
+                />
+              ) : null}
+              {taskSelectBulk ? (
+                <Checkbox
+                  checked={
+                    taskSelectBulk.getDealerRowChecked(row) === "indeterminate"
+                      ? "indeterminate"
+                      : taskSelectBulk.getDealerRowChecked(row) === true
+                  }
+                  onCheckedChange={(v) => taskSelectBulk.onToggleDealerRow(row, v === true)}
+                  className="h-4 w-4"
+                  data-testid={`checkbox-task-select-dealer-${row.id}`}
+                  aria-label={`Выбрать клиента ${row.name} для задания`}
                 />
               ) : null}
               {archiveBulk?.selectableIds.has(row.id) ? (
@@ -944,6 +987,7 @@ export function DealerBaseDataTable({
   shipmentActiveDayId,
   shipmentUserId,
   archiveBulk,
+  taskSelectBulk,
   rowQuickMove,
   nextStepsStorage,
   focusList,
@@ -986,6 +1030,7 @@ export function DealerBaseDataTable({
   }
 
   const showArchiveBulkCol = Boolean(archiveBulk && rows.some((r) => archiveBulk.selectableIds.has(r.id)));
+  const showTaskSelectCol = Boolean(taskSelectBulk);
 
   const sortableTh = (key: TableSortKey, label: string, className?: string) => (
     <th className={cn("whitespace-nowrap px-2 py-2", className)}>
@@ -1010,6 +1055,7 @@ export function DealerBaseDataTable({
         <thead className="border-b border-border bg-muted/40">
           <tr className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             {showWorkPlanSelect ? <th className="w-10 px-2 py-2" aria-label="Выбор" /> : null}
+            {showTaskSelectCol ? <th className="w-10 px-2 py-2 text-center">Задача</th> : null}
             {showArchiveBulkCol ? (
               <th className="w-14 px-2 py-2 text-center text-destructive">Удал.</th>
             ) : null}
@@ -1071,6 +1117,21 @@ export function DealerBaseDataTable({
                       className="h-4 w-4"
                       data-testid={`checkbox-dealer-workplan-select-${row.id}`}
                       aria-label={`Выбрать клиента ${row.name} для плана работ`}
+                    />
+                  </td>
+                ) : null}
+                {showTaskSelectCol && taskSelectBulk ? (
+                  <td className="px-2 py-1.5 text-center align-middle">
+                    <Checkbox
+                      checked={
+                        taskSelectBulk.getDealerRowChecked(row) === "indeterminate"
+                          ? "indeterminate"
+                          : taskSelectBulk.getDealerRowChecked(row) === true
+                      }
+                      onCheckedChange={(v) => taskSelectBulk.onToggleDealerRow(row, v === true)}
+                      className="h-4 w-4"
+                      data-testid={`checkbox-task-select-dealer-${row.id}`}
+                      aria-label={`Выбрать клиента ${row.name} для задания`}
                     />
                   </td>
                 ) : null}
@@ -1182,6 +1243,7 @@ function DealerBaseSegmentGroups({
   shipmentActiveDayId,
   shipmentUserId,
   archiveBulk,
+  taskSelectBulk,
   rowQuickMove,
   actualizationState,
   focusList,
@@ -1202,6 +1264,7 @@ function DealerBaseSegmentGroups({
   shipmentActiveDayId?: DealerShipmentDayId | null;
   shipmentUserId?: string;
   archiveBulk?: DealerListArchiveBulkProps;
+  taskSelectBulk?: DealerListTaskSelectBulkProps;
   rowQuickMove?: DealerListRowQuickMoveProps;
   actualizationState: ActualizationState;
   focusList?: DealerFocusViewListCtx;
@@ -1222,6 +1285,7 @@ function DealerBaseSegmentGroups({
       shipmentActiveDayId,
       shipmentUserId,
       archiveBulk,
+      taskSelectBulk,
       rowQuickMove,
       nextStepsStorage,
       focusList,
@@ -1243,6 +1307,7 @@ function DealerBaseSegmentGroups({
           shipmentActiveDayId={shipmentActiveDayId}
           shipmentUserId={shipmentUserId}
           archiveBulk={archiveBulk}
+          taskSelectBulk={taskSelectBulk}
           rowQuickMove={rowQuickMove}
         />
       );
@@ -1401,6 +1466,7 @@ export default function DealerBase() {
 
   const routeQs = useRouteSearchParams();
   const routeKey = useMemo(() => routeQs.toString(), [routeQs]);
+  const isTaskSelectMode = isTaskSelectModeFromParams(routeQs);
   const mainCityFilter = useMainDashboardCityFilterOptional();
   const [, setLocation] = useLocation();
   const actx = useClientBaseActualization();
@@ -2326,6 +2392,9 @@ export default function DealerBase() {
   );
   const [selectedWpIds, setSelectedWpIds] = useState<Set<string>>(() => new Set());
   const [selectedBulkArchiveDealerIds, setSelectedBulkArchiveDealerIds] = useState<Set<string>>(() => new Set());
+  const [selectedTaskSelectKeys, setSelectedTaskSelectKeys] = useState<Set<string>>(() => new Set());
+  const [taskSelectTpDialogRow, setTaskSelectTpDialogRow] = useState<DealerRow | null>(null);
+  const [batchCreateOpen, setBatchCreateOpen] = useState(false);
   /** Режим массового удаления: чекбоксы архива показываются только после явного включения. */
   const [bulkDeleteMode, setBulkDeleteMode] = useState(false);
   const [bulkArchiveDealerDialogOpen, setBulkArchiveDealerDialogOpen] = useState(false);
@@ -2821,8 +2890,129 @@ export default function DealerBase() {
     return false;
   }, [archivableDealerIdsInView, selectedBulkArchiveDealerIds]);
 
+  const toggleTaskSelectTradePoint = useCallback((dealerId: string, tradePointId: string, checked: boolean) => {
+    const key = taskSelectTargetKey(dealerId, tradePointId);
+    setSelectedTaskSelectKeys((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+  }, []);
+
+  const applyTaskSelectTradePointKeys = useCallback((row: DealerRow, keys: string[]) => {
+    setSelectedTaskSelectKeys((prev) => {
+      const next = new Set(prev);
+      const tps = activeTradePointsForDealerRow(row, teamActualizationPlane);
+      for (const e of tps) {
+        next.delete(taskSelectTargetKey(row.id, e.point.id));
+      }
+      for (const key of keys) next.add(key);
+      return next;
+    });
+  }, [teamActualizationPlane]);
+
+  const getDealerRowTaskSelectChecked = useCallback(
+    (row: DealerRow): boolean | "indeterminate" => {
+      const tps = activeTradePointsForDealerRow(row, teamActualizationPlane);
+      if (tps.length === 0) return false;
+      let selected = 0;
+      for (const e of tps) {
+        if (selectedTaskSelectKeys.has(taskSelectTargetKey(row.id, e.point.id))) selected += 1;
+      }
+      if (selected === 0) return false;
+      if (selected === tps.length) return true;
+      return "indeterminate";
+    },
+    [teamActualizationPlane, selectedTaskSelectKeys],
+  );
+
+  const handleToggleTaskSelectDealerRow = useCallback(
+    (row: DealerRow, checked: boolean) => {
+      const tps = activeTradePointsForDealerRow(row, teamActualizationPlane);
+      if (tps.length === 0) return;
+      if (tps.length === 1) {
+        toggleTaskSelectTradePoint(row.id, tps[0]!.point.id, checked);
+        return;
+      }
+      if (!checked) {
+        setSelectedTaskSelectKeys((prev) => {
+          const next = new Set(prev);
+          for (const e of tps) next.delete(taskSelectTargetKey(row.id, e.point.id));
+          return next;
+        });
+        return;
+      }
+      setTaskSelectTpDialogRow(row);
+    },
+    [teamActualizationPlane, toggleTaskSelectTradePoint],
+  );
+
+  const taskSelectBulkListProps = useMemo((): DealerListTaskSelectBulkProps | undefined => {
+    if (!isTaskSelectMode) return undefined;
+    return {
+      selectedKeys: selectedTaskSelectKeys,
+      onToggleTradePoint: toggleTaskSelectTradePoint,
+      onToggleDealerRow: handleToggleTaskSelectDealerRow,
+      getDealerRowChecked: getDealerRowTaskSelectChecked,
+    };
+  }, [
+    isTaskSelectMode,
+    selectedTaskSelectKeys,
+    toggleTaskSelectTradePoint,
+    handleToggleTaskSelectDealerRow,
+    getDealerRowTaskSelectChecked,
+  ]);
+
+  const taskSelectTargets = useMemo((): TaskSelectTarget[] => {
+    const rowById = new Map(rowsFinalForList.map((r) => [r.id, r]));
+    const out: TaskSelectTarget[] = [];
+    for (const key of Array.from(selectedTaskSelectKeys)) {
+      const parsed = parseTaskSelectTargetKey(key);
+      if (!parsed) continue;
+      const row = rowById.get(parsed.dealerId);
+      const tps = row ? activeTradePointsForDealerRow(row, teamActualizationPlane) : [];
+      const tp = tps.find((e) => e.point.id === parsed.tradePointId);
+      out.push({
+        dealerId: parsed.dealerId,
+        tradePointId: parsed.tradePointId,
+        dealerName: row?.name ?? parsed.dealerId,
+        tradePointName: tp?.point.name ?? parsed.tradePointId,
+        city: tp?.point.city?.trim() || row?.city?.trim() || "",
+      });
+    }
+    return out;
+  }, [selectedTaskSelectKeys, rowsFinalForList, teamActualizationPlane]);
+
+  const handleTaskSelectNext = useCallback(() => {
+    const keys = Array.from(selectedTaskSelectKeys);
+    if (keys.length === 0) return;
+    if (keys.length === 1) {
+      const parsed = parseTaskSelectTargetKey(keys[0]!);
+      if (!parsed) return;
+      setLocation(
+        `/dealers/${encodeURIComponent(parsed.dealerId)}/trade-points/${encodeURIComponent(parsed.tradePointId)}?tradePointShowcase=1`,
+      );
+      return;
+    }
+    setBatchCreateOpen(true);
+  }, [selectedTaskSelectKeys, setLocation]);
+
+  const handleRemoveBatchTarget = useCallback((tradePointId: string) => {
+    setSelectedTaskSelectKeys((prev) => {
+      const next = new Set(prev);
+      for (const key of Array.from(prev)) {
+        const parsed = parseTaskSelectTargetKey(key);
+        if (parsed?.tradePointId === tradePointId) next.delete(key);
+      }
+      return next;
+    });
+  }, []);
+
   const archiveBulkListProps = useMemo((): DealerListArchiveBulkProps | undefined => {
-    if (!actx.enabled || !canActualizeClientBase(profile) || showArchivedDealers || !bulkDeleteMode) return undefined;
+    if (isTaskSelectMode || !actx.enabled || !canActualizeClientBase(profile) || showArchivedDealers || !bulkDeleteMode) {
+      return undefined;
+    }
     return {
       selectedIds: selectedBulkArchiveDealerIds,
       selectableIds: archivableDealerIdsInView,
@@ -2832,6 +3022,7 @@ export default function DealerBase() {
     actx.enabled,
     profile,
     showArchivedDealers,
+    isTaskSelectMode,
     bulkDeleteMode,
     selectedBulkArchiveDealerIds,
     archivableDealerIdsInView,
@@ -2930,12 +3121,14 @@ export default function DealerBase() {
   );
 
   const dealerRowQuickMoveProps = useMemo((): DealerListRowQuickMoveProps | undefined => {
-    if (!actx.enabled || !canActualizeClientBase(profile) || showArchivedDealers || bulkDeleteMode) return undefined;
+    if (isTaskSelectMode || !actx.enabled || !canActualizeClientBase(profile) || showArchivedDealers || bulkDeleteMode) {
+      return undefined;
+    }
     return {
       canMoveDealerId: (id) => archivableDealerIdsInView.has(id),
       onTrash: (row) => void handleRowTrashDealer(row),
     };
-  }, [actx.enabled, profile, showArchivedDealers, bulkDeleteMode, archivableDealerIdsInView, handleRowTrashDealer]);
+  }, [isTaskSelectMode, actx.enabled, profile, showArchivedDealers, bulkDeleteMode, archivableDealerIdsInView, handleRowTrashDealer]);
 
   /** Bulk: мягкая архивация в `archivedDealersById` (Промт 70.6). */
   const confirmBulkSoftArchiveDealers = useCallback(async () => {
@@ -3187,14 +3380,15 @@ export default function DealerBase() {
     () => ({
       workPlanUserId: profile.personaUserId,
       workPlanState,
-      showWorkPlanSelect: canMutateWorkPlan,
+      showWorkPlanSelect: isTaskSelectMode ? false : canMutateWorkPlan,
       selectedIds: selectedWpIds,
       onToggleWorkPlanSelect: toggleWpSelect,
     }),
-    [profile.personaUserId, workPlanState, canMutateWorkPlan, selectedWpIds, toggleWpSelect],
+    [profile.personaUserId, workPlanState, isTaskSelectMode, canMutateWorkPlan, selectedWpIds, toggleWpSelect],
   );
 
-  const canShowBulkDeleteEntry = actx.enabled && canActualizeClientBase(profile) && !showArchivedDealers;
+  const canShowBulkDeleteEntry =
+    !isTaskSelectMode && actx.enabled && canActualizeClientBase(profile) && !showArchivedDealers;
   const bulkDeleteHasTargets = archivableDealerIdsInView.size > 0;
 
   if (actx.enabled && shouldUseTeamMergedActualizationPlane(profile, me?.role)) {
@@ -3213,6 +3407,36 @@ export default function DealerBase() {
 
   return (
     <div className="min-w-0 max-w-full overflow-x-hidden space-y-6 sm:space-y-8" data-testid="page-dealer-base">
+      {isTaskSelectMode ? (
+        <div
+          className="sticky top-0 z-30 flex flex-col gap-3 rounded-xl border border-primary/35 bg-primary/5 p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between"
+          data-testid="panel-task-select-banner"
+        >
+          <p className="text-sm font-semibold text-foreground">Выбор торговых точек для задачи</p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="min-h-10"
+              onClick={() => setLocation("/assignments")}
+              data-testid="button-task-select-cancel"
+            >
+              Отмена
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="min-h-10"
+              disabled={selectedTaskSelectKeys.size === 0}
+              onClick={handleTaskSelectNext}
+              data-testid="button-task-select-next"
+            >
+              Далее ({selectedTaskSelectKeys.size})
+            </Button>
+          </div>
+        </div>
+      ) : null}
       <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Клиентская база</h1>
@@ -4296,6 +4520,7 @@ export default function DealerBase() {
                 focusList={focusListCtx}
                 {...workPlanListProps}
                 archiveBulk={archiveBulkListProps}
+                taskSelectBulk={taskSelectBulkListProps}
                 rowQuickMove={dealerRowQuickMoveProps}
               />
             ) : (
@@ -4314,6 +4539,7 @@ export default function DealerBase() {
                 focusList={focusListCtx}
                 {...workPlanListProps}
                 archiveBulk={archiveBulkListProps}
+                taskSelectBulk={taskSelectBulkListProps}
                 rowQuickMove={dealerRowQuickMoveProps}
               />
             )}
@@ -4342,6 +4568,7 @@ export default function DealerBase() {
                 focusList={focusListCtx}
                 {...workPlanListProps}
                 archiveBulk={archiveBulkListProps}
+                taskSelectBulk={taskSelectBulkListProps}
                 rowQuickMove={dealerRowQuickMoveProps}
               />
             )}
@@ -4370,12 +4597,38 @@ export default function DealerBase() {
                 focusList={focusListCtx}
                 {...workPlanListProps}
                 archiveBulk={archiveBulkListProps}
+                taskSelectBulk={taskSelectBulkListProps}
                 rowQuickMove={dealerRowQuickMoveProps}
               />
             )}
           </div>
         ) : null}
       </section>
+
+      <TaskSelectTradePointsDialog
+        open={taskSelectTpDialogRow != null}
+        row={taskSelectTpDialogRow}
+        actualizationState={teamActualizationPlane}
+        selectedKeys={selectedTaskSelectKeys}
+        onOpenChange={(open) => {
+          if (!open) setTaskSelectTpDialogRow(null);
+        }}
+        onApply={(keys) => {
+          if (taskSelectTpDialogRow) applyTaskSelectTradePointKeys(taskSelectTpDialogRow, keys);
+          setTaskSelectTpDialogRow(null);
+        }}
+      />
+
+      <CreateTaskBatchDialog
+        open={batchCreateOpen}
+        targets={taskSelectTargets}
+        onOpenChange={setBatchCreateOpen}
+        onRemoveTarget={handleRemoveBatchTarget}
+        onSuccess={() => {
+          setSelectedTaskSelectKeys(new Set());
+          setBatchCreateOpen(false);
+        }}
+      />
 
       <AlertDialog
         open={bulkSoftArchiveDealerDialogOpen}
