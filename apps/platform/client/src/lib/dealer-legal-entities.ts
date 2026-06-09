@@ -14,7 +14,7 @@ import {
   apiPatchFull,
   apiUnarchiveLegalEntity,
 } from "@/lib/dealer-legal-entities-api";
-import { patchLegalEntity, type LegalEntityPaymentForm, type LegalEntityUpsertFields } from "@/lib/legal-entities-payment-api";
+import type { LegalEntityPaymentForm, LegalEntityUpsertFields } from "@/lib/legal-entities-payment-api";
 import {
   refreshDbLegalEntitiesForDealer,
   replaceLegalEntityIdInCache,
@@ -77,13 +77,15 @@ export type DealerLegalEntityPaymentFields = {
   edoOperator?: string | null;
 };
 
-async function persistLegalEntityPaymentFields(entityId: string, payment: LegalEntityUpsertFields | undefined): Promise<void> {
-  if (!payment || !LEGAL_ENTITY_UUID_RE.test(entityId)) return;
-  try {
-    await patchLegalEntity(entityId, payment);
-  } catch {
-    /* payment patch is best-effort if full row already saved */
-  }
+export function paymentFieldsToFullApiBody(payment: LegalEntityUpsertFields | undefined): Record<string, unknown> {
+  if (!payment) return {};
+  return {
+    paymentForm: payment.paymentForm ?? null,
+    paymentDelayDays: payment.paymentDelayDays ?? null,
+    creditLimitRub: payment.creditLimitRub ?? null,
+    edoEnabled: payment.edoEnabled ?? null,
+    edoOperator: payment.edoOperator ?? null,
+  };
 }
 
 export type DealerLegalEntityStatus = "main" | "additional" | "archived";
@@ -305,10 +307,10 @@ export function addDealerLegalEntity(
     comment: payload.comment,
     updatedByUserId: payload.updatedBy,
     updatedByName: payload.updatedByName,
+    ...paymentFieldsToFullApiBody(paymentUpsert),
   }).then(async (r) => {
     if (r.ok && r.id) {
       replaceLegalEntityIdInCache(dealerId, optimisticId, r.id);
-      await persistLegalEntityPaymentFields(r.id, paymentUpsert);
     }
     if (r.ok) void refreshDbLegalEntitiesForDealer(dealerId);
   });
@@ -353,13 +355,12 @@ export function updateDealerLegalEntity(
       edoOperator: patch.edoOperator,
     });
   fireAndRefresh(dealerId, async () => {
-    const ok = await apiPatchFull(entityId, {
+    return apiPatchFull(entityId, {
       ...patch,
+      ...paymentFieldsToFullApiBody(paymentUpsert),
       updatedByUserId: updatedBy,
       updatedByName,
     });
-    if (ok) await persistLegalEntityPaymentFields(entityId, paymentUpsert);
-    return ok;
   });
 }
 
@@ -414,6 +415,14 @@ export async function ensureServerLegalEntityId(
 
   const status: DealerLegalEntityStatus = entity.status === "archived" ? "additional" : entity.status;
 
+  const paymentUpsert = buildLegalEntityPaymentUpsert({
+    paymentForm: entity.paymentForm,
+    paymentDelayDays: entity.paymentDelayDays,
+    creditLimitRub: entity.creditLimitRub,
+    edoEnabled: entity.edoEnabled,
+    edoOperator: entity.edoOperator,
+  });
+
   const created = await apiCreateFull({
     clientId: dealerId,
     name,
@@ -431,6 +440,7 @@ export async function ensureServerLegalEntityId(
     comment: entity.comment,
     updatedByUserId: updatedBy,
     updatedByName,
+    ...paymentFieldsToFullApiBody(paymentUpsert),
   });
   if (!created.ok || !created.id) return null;
 
