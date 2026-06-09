@@ -334,6 +334,13 @@ function parseWorkViewFromQuery(raw: string | null, access: DealerBaseAccessRole
   return workViewsForAccess(access).includes(v) ? v : null;
 }
 
+/** Плоский вид списка ТТ в режиме выбора для постановки задачи. */
+function taskSelectWorkViewForAccess(access: DealerBaseAccessRole): DealerBaseWorkView {
+  if (access === "sales_director") return "table_all";
+  if (access === "team_lead") return "table_team";
+  return "my_clients";
+}
+
 function teamAllowedForProfile(
   teamId: string,
   profile: ReleaseDemoProfile,
@@ -1543,9 +1550,13 @@ export default function DealerBase() {
   ]);
 
   useEffect(() => {
+    if (isTaskSelectMode) {
+      setWorkView(taskSelectWorkViewForAccess(access));
+      return;
+    }
     const allowed = workViewsForAccess(access);
     setWorkView((prev) => (allowed.includes(prev) ? prev : defaultWorkViewForAccess(access)));
-  }, [access]);
+  }, [access, isTaskSelectMode]);
 
   const managerCatalogForRop = useMemo(
     () => (useReal && snap ? realTeamManagers(snap, ropTeam) : getManagersForRopTeam(ropTeam)),
@@ -1931,7 +1942,7 @@ export default function DealerBase() {
       setCities([]);
       setCategories([]);
       setSearch("");
-      setWorkView(defaultWorkViewForAccess(access));
+      setWorkView(isTaskSelectMode ? taskSelectWorkViewForAccess(access) : defaultWorkViewForAccess(access));
       setProgramFilters([]);
       setUrlFocusId(null);
       setUrlCharacteristicId(null);
@@ -1947,7 +1958,9 @@ export default function DealerBase() {
     let cityV: string[] = [];
     let catV: ClientCategorySelection[] = [];
     let searchV = "";
-    let vw: DealerBaseWorkView = defaultWorkViewForAccess(access);
+    let vw: DealerBaseWorkView = isTaskSelectMode
+      ? taskSelectWorkViewForAccess(access)
+      : defaultWorkViewForAccess(access);
 
     const scoped =
       useReal && snap
@@ -1985,17 +1998,19 @@ export default function DealerBase() {
       mgr = managerRaw;
     }
 
-    if (viewParsed) {
-      vw = viewParsed;
-    } else if (mgr !== "all" && !isRopOrManagerAllFilter(mgr) && (access === "sales_director" || access === "team_lead")) {
-      vw = "my_clients";
-    } else if (
-      teamRaw &&
-      teamAllowedForProfile(teamRaw, profile, access, realCtxForRoute) &&
-      !managerRaw &&
-      (access === "sales_director" || access === "team_lead")
-    ) {
-      vw = "my_team";
+    if (!isTaskSelectMode) {
+      if (viewParsed) {
+        vw = viewParsed;
+      } else if (mgr !== "all" && !isRopOrManagerAllFilter(mgr) && (access === "sales_director" || access === "team_lead")) {
+        vw = "my_clients";
+      } else if (
+        teamRaw &&
+        teamAllowedForProfile(teamRaw, profile, access, realCtxForRoute) &&
+        !managerRaw &&
+        (access === "sales_director" || access === "team_lead")
+      ) {
+        vw = "my_team";
+      }
     }
 
     const cityRaws = routeQs.getAll("city");
@@ -2076,6 +2091,7 @@ export default function DealerBase() {
     realCtxForRoute,
     me?.id,
     assignmentsScope,
+    isTaskSelectMode,
   ]);
 
   const firstRopTeamId = useMemo(
@@ -2304,24 +2320,26 @@ export default function DealerBase() {
 
   const handleSelectWorkView = useCallback(
     (v: DealerBaseWorkView) => {
+      if (isTaskSelectMode) return;
       setWorkView(v);
       if (workViewGroup(v) === "team" && (access === "sales_director" || access === "team_lead")) {
         setManager("all");
       }
     },
-    [access],
+    [access, isTaskSelectMode],
   );
 
   const handleManagerChange = useCallback(
     (v: string) => {
       setManager(v);
+      if (isTaskSelectMode) return;
       if (!isRopOrManagerAllFilter(v)) {
         if (workViewsForAccess(access).includes("my_clients")) setWorkView("my_clients");
       } else if (workViewsForAccess(access).includes("my_team")) {
         setWorkView("my_team");
       }
     },
-    [access],
+    [access, isTaskSelectMode],
   );
 
   const resultsCapTotal = useMemo(() => {
@@ -4013,82 +4031,84 @@ export default function DealerBase() {
                   </p>
                 ) : null}
 
-                <div className="space-y-2 border-t border-border/60 pt-2">
-                  <p className="text-xs font-semibold text-muted-foreground">Рабочий режим</p>
-                  <section className="space-y-3" data-testid="section-dealer-base-role-views">
-                    <div className="flex min-w-0 flex-col gap-4">
-                      {groupUi.department ? (
-                        <div className="min-w-0 space-y-1.5" data-testid="section-dealer-base-role-group-department">
-                          <p className="text-xs font-semibold text-foreground sm:text-sm">Отдел</p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {viewsInGroupForAccess(access, "department").map((vid) => (
-                              <Button
-                                key={vid}
-                                type="button"
-                                size="sm"
-                                variant={workView === vid ? "default" : "outline"}
-                                className={cn(
-                                  "h-8 rounded-full px-2.5 text-xs sm:h-9 sm:px-3",
-                                  workView !== vid && "border-border bg-card",
-                                )}
-                                onClick={() => handleSelectWorkView(vid)}
-                                data-testid={`button-dealer-base-view-${vid}`}
-                              >
-                                {DEALER_BASE_VIEW_LABELS[vid]}
-                              </Button>
-                            ))}
+                {!isTaskSelectMode ? (
+                  <div className="space-y-2 border-t border-border/60 pt-2">
+                    <p className="text-xs font-semibold text-muted-foreground">Рабочий режим</p>
+                    <section className="space-y-3" data-testid="section-dealer-base-role-views">
+                      <div className="flex min-w-0 flex-col gap-4">
+                        {groupUi.department ? (
+                          <div className="min-w-0 space-y-1.5" data-testid="section-dealer-base-role-group-department">
+                            <p className="text-xs font-semibold text-foreground sm:text-sm">Отдел</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {viewsInGroupForAccess(access, "department").map((vid) => (
+                                <Button
+                                  key={vid}
+                                  type="button"
+                                  size="sm"
+                                  variant={workView === vid ? "default" : "outline"}
+                                  className={cn(
+                                    "h-8 rounded-full px-2.5 text-xs sm:h-9 sm:px-3",
+                                    workView !== vid && "border-border bg-card",
+                                  )}
+                                  onClick={() => handleSelectWorkView(vid)}
+                                  data-testid={`button-dealer-base-view-${vid}`}
+                                >
+                                  {DEALER_BASE_VIEW_LABELS[vid]}
+                                </Button>
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                      ) : null}
-                      {groupUi.team ? (
-                        <div className="min-w-0 space-y-1.5" data-testid="section-dealer-base-role-group-team">
-                          <p className="text-xs font-semibold text-foreground sm:text-sm">Команда</p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {viewsInGroupForAccess(access, "team").map((vid) => (
-                              <Button
-                                key={vid}
-                                type="button"
-                                size="sm"
-                                variant={workView === vid ? "default" : "outline"}
-                                className={cn(
-                                  "h-8 rounded-full px-2.5 text-xs sm:h-9 sm:px-3",
-                                  workView !== vid && "border-border bg-card",
-                                )}
-                                onClick={() => handleSelectWorkView(vid)}
-                                data-testid={`button-dealer-base-view-${vid}`}
-                              >
-                                {DEALER_BASE_VIEW_LABELS[vid]}
-                              </Button>
-                            ))}
+                        ) : null}
+                        {groupUi.team ? (
+                          <div className="min-w-0 space-y-1.5" data-testid="section-dealer-base-role-group-team">
+                            <p className="text-xs font-semibold text-foreground sm:text-sm">Команда</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {viewsInGroupForAccess(access, "team").map((vid) => (
+                                <Button
+                                  key={vid}
+                                  type="button"
+                                  size="sm"
+                                  variant={workView === vid ? "default" : "outline"}
+                                  className={cn(
+                                    "h-8 rounded-full px-2.5 text-xs sm:h-9 sm:px-3",
+                                    workView !== vid && "border-border bg-card",
+                                  )}
+                                  onClick={() => handleSelectWorkView(vid)}
+                                  data-testid={`button-dealer-base-view-${vid}`}
+                                >
+                                  {DEALER_BASE_VIEW_LABELS[vid]}
+                                </Button>
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                      ) : null}
-                      {groupUi.manager ? (
-                        <div className="min-w-0 space-y-1.5" data-testid="section-dealer-base-role-group-manager">
-                          <p className="text-xs font-semibold text-foreground sm:text-sm">Менеджер</p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {viewsInGroupForAccess(access, "manager").map((vid) => (
-                              <Button
-                                key={vid}
-                                type="button"
-                                size="sm"
-                                variant={workView === vid ? "default" : "outline"}
-                                className={cn(
-                                  "h-8 rounded-full px-2.5 text-xs sm:h-9 sm:px-3",
-                                  workView !== vid && "border-border bg-card",
-                                )}
-                                onClick={() => handleSelectWorkView(vid)}
-                                data-testid={`button-dealer-base-view-${vid}`}
-                              >
-                                {DEALER_BASE_VIEW_LABELS[vid]}
-                              </Button>
-                            ))}
+                        ) : null}
+                        {groupUi.manager ? (
+                          <div className="min-w-0 space-y-1.5" data-testid="section-dealer-base-role-group-manager">
+                            <p className="text-xs font-semibold text-foreground sm:text-sm">Менеджер</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {viewsInGroupForAccess(access, "manager").map((vid) => (
+                                <Button
+                                  key={vid}
+                                  type="button"
+                                  size="sm"
+                                  variant={workView === vid ? "default" : "outline"}
+                                  className={cn(
+                                    "h-8 rounded-full px-2.5 text-xs sm:h-9 sm:px-3",
+                                    workView !== vid && "border-border bg-card",
+                                  )}
+                                  onClick={() => handleSelectWorkView(vid)}
+                                  data-testid={`button-dealer-base-view-${vid}`}
+                                >
+                                  {DEALER_BASE_VIEW_LABELS[vid]}
+                                </Button>
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                      ) : null}
-                    </div>
-                  </section>
-                </div>
+                        ) : null}
+                      </div>
+                    </section>
+                  </div>
+                ) : null}
               </section>
             </CollapsibleContent>
           </Collapsible>
