@@ -170,12 +170,12 @@ async function loadLegacyBundle(pool: PoolLike, tp: TradePointRow): Promise<Lega
        t.rop_user_id::text AS team_rop_id,
        ut.full_name AS team_rop_name
      FROM (SELECT 1) AS _one
-     LEFT JOIN dealer_overrides d ON d.dealer_id = $2
-     LEFT JOIN client_assignments ca ON ca.client_code = $3
+     LEFT JOIN dealer_overrides d ON d.dealer_id = $1
+     LEFT JOIN client_assignments ca ON ca.client_code = $2
      LEFT JOIN users um ON um.id = ca.responsible_user_id
      LEFT JOIN teams t ON t.id = ca.team_id
      LEFT JOIN users ut ON ut.id = t.rop_user_id`,
-    [tp.tp_id, dealerId, clientCode],
+    [dealerId, clientCode],
   );
 
   const row = r.rows[0];
