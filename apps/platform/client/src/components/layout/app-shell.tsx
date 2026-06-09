@@ -65,6 +65,7 @@ const TRADE_POINTS_HREF = "/trade-points";
 const CLIENT_MAP_HREF = "/client-map";
 const CATALOG_HREF = "/catalog";
 const TASKS_HREF = "/tasks";
+const TASKS_INBOX_HREF = "/assignments";
 const ANALYTICS_HREF = "/analytics";
 const TRAINING_HREF = "/training";
 const SALES_CONTROL_HREF = "/sales-control";
@@ -99,6 +100,7 @@ const ICON_BY_TESTID: Partial<Record<string, LucideIcon>> = {
   "nav-item-sales-plan-fact": ClipboardList,
   "nav-item-team-analytics": PieChart,
   "nav-item-showcase-tasks": ListTodo,
+  "nav-item-tasks-inbox": ClipboardList,
   "nav-item-catalog": LayoutGrid,
   "nav-item-training": BookOpen,
   "nav-item-communications": MessageCircle,
@@ -156,6 +158,10 @@ function isCatalogPath(path: string) {
 
 function isTasksPath(path: string) {
   return path === TASKS_HREF || path.startsWith(`${TASKS_HREF}/`);
+}
+
+function isTasksInboxPath(path: string) {
+  return path === TASKS_INBOX_HREF || path.startsWith(`${TASKS_INBOX_HREF}/`);
 }
 
 function isCommunicationsPath(path: string) {
@@ -224,6 +230,7 @@ function isNavItemActive(item: PilotNavItem, location: string, isActiveFromLink?
   if (bid === "nav-trade-points") return isTradePointsPath(location);
   if (bid === "nav-catalog") return isCatalogPath(location);
   if (bid === "nav-tasks") return isTasksPath(location);
+  if (bid === "nav-tasks-inbox") return isTasksInboxPath(location);
   if (bid === "nav-communications") return isCommunicationsPath(location);
   if (bid === "nav-territory-card") return isTerritoryCardPath(location);
   if (bid === "nav-analytics") return isAnalyticsPath(location);
@@ -278,6 +285,7 @@ function headerContextLabel(location: string) {
   if (location.startsWith("/dealers/")) return "Карточка клиента";
   if (isDealerBasePath(location)) return "Клиенты";
   if (isClientMapPath(location)) return "Карта клиентов";
+  if (isTasksInboxPath(location)) return "Задачи";
   if (isTasksPath(location)) return "Задачи по витрине";
   if (isCatalogPath(location)) return "Каталог";
   if (isTerritoryCardPath(location)) return "Карточка территории";

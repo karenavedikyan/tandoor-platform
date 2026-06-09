@@ -193,6 +193,7 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
       (x) => isUnder(x, "/tasks"),
       (x) => isUnder(x, "/distribution"),
       (x) => isUnder(x, "/assignment"),
+      (x) => isUnder(x, "/assignments"),
       (x) => isUnder(x, "/catalog"),
       (x) => isUnder(x, "/training"),
       (x) => isUnder(x, "/marketing-briefs"),
@@ -221,6 +222,7 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
       (x) => isUnder(x, "/tasks"),
       (x) => isUnder(x, "/distribution"),
       (x) => isUnder(x, "/assignment"),
+      (x) => isUnder(x, "/assignments"),
       (x) => isUnder(x, "/catalog"),
       (x) => isUnder(x, "/training"),
       (x) => isUnder(x, "/marketing-briefs"),
@@ -250,6 +252,7 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
       (x) => isUnder(x, "/tasks"),
       (x) => isUnder(x, "/distribution"),
       (x) => isUnder(x, "/assignment"),
+      (x) => isUnder(x, "/assignments"),
       (x) => isUnder(x, "/catalog"),
       (x) => isUnder(x, "/training"),
       (x) => isUnder(x, "/marketing-briefs"),
@@ -275,6 +278,7 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
       (x) => isUnder(x, "/tasks"),
       (x) => isUnder(x, "/distribution"),
       (x) => isUnder(x, "/assignment"),
+      (x) => isUnder(x, "/assignments"),
       (x) => isUnder(x, "/catalog"),
       (x) => isUnder(x, "/training"),
       (x) => isUnder(x, "/communications"),
@@ -292,6 +296,7 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
       (x) => isUnder(x, "/tasks"),
       (x) => isUnder(x, "/distribution"),
       (x) => isUnder(x, "/assignment"),
+      (x) => isUnder(x, "/assignments"),
       (x) => isUnder(x, "/catalog"),
       (x) => isUnder(x, "/marketing-briefs"),
     ]);
@@ -553,6 +558,12 @@ export function getPilotNavigation(
         navBehaviorId: "nav-distribution",
       },
       {
+        href: "/assignments",
+        label: "Задачи",
+        testId: "nav-item-tasks-inbox",
+        navBehaviorId: "nav-tasks-inbox",
+      },
+      {
         href: "/catalog",
         label: "Каталог",
         testId: "nav-item-catalog",
@@ -616,6 +627,7 @@ export function getPilotNavigation(
       push({ href: "/dealer-base", label: "Клиенты", testId: "nav-dealer-base", ...dealerNavExtras() });
       push({ href: "/trade-points", label: "Торговые точки", testId: "nav-trade-points", ...tradePointNavExtras() });
       push({ href: "/distribution", label: "Дистрибуция", testId: "nav-item-distribution" });
+      push({ href: "/assignments", label: "Задачи", testId: "nav-item-tasks-inbox", navBehaviorId: "nav-tasks-inbox" });
       push({ href: "/client-map", label: "Карта клиентов", testId: "nav-client-map" });
       push({ href: "/tasks", label: "Задачи по витрине", testId: "nav-tasks" });
       push({ href: "/communications", label: "Коммуникации", testId: "nav-communications" });
