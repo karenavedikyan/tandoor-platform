@@ -3391,7 +3391,7 @@ export default function DealerBase() {
     !isTaskSelectMode && actx.enabled && canActualizeClientBase(profile) && !showArchivedDealers;
   const bulkDeleteHasTargets = archivableDealerIdsInView.size > 0;
 
-  if (actx.enabled && shouldUseTeamMergedActualizationPlane(profile, me?.role)) {
+  if (!isTaskSelectMode && actx.enabled && shouldUseTeamMergedActualizationPlane(profile, me?.role)) {
     return (
       <DealerBaseManagementCockpit
         profile={profile}
