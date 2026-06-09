@@ -106,6 +106,7 @@ const LazyAdminTpCountDiag = lazy(() => import("@/pages/admin-tp-count-diag"));
 const LazyAdminCountsDiag = lazy(() => import("@/pages/admin-counts-diag"));
 const LazyFeatureInDevelopment = lazy(() => import("@/pages/feature-in-development"));
 const LazyListings = lazy(() => import("@/pages/listings"));
+const LazyAssignmentDetail = lazy(() => import("@/pages/assignment-detail"));
 
 function suspensePage(Lazy: LazyExoticComponent<ComponentType<any>>): ComponentType<any> {
   const Wrapped: ComponentType<any> = (props) => (
@@ -172,6 +173,7 @@ const MyProfileRoute = wrapProfileShell(suspensePage(LazyMyProfile));
 const ChangePasswordRoute = wrapProfileShell(suspensePage(LazyChangePassword));
 const FeatureInDevelopmentRoute = suspensePage(LazyFeatureInDevelopment);
 const ListingsRoute = suspensePage(LazyListings);
+const AssignmentDetailRoute = suspensePage(LazyAssignmentDetail);
 const InviteRoute = suspensePage(LazyInvite);
 const MarketingBriefPublicRoute = suspensePage(LazyMarketingBriefPublic);
 const ResetPasswordRoute = suspensePage(LazyResetPassword);
@@ -457,6 +459,7 @@ function AuthenticatedShell({
         <Route path="/orders" component={OrdersPageRoute} />
         <Route path="/dealers/:dealerId/trade-points/:pointId" component={TradePointDetailPageRoute} />
         <Route path="/dealers/:id" component={DealerCardPageRoute} />
+        <Route path="/assignment/:id" component={AssignmentDetailRoute} />
         <Route path="/dealer-card-foundation" component={DealerCardFoundationRoute} />
         <Route path="/platform-architecture" component={PreviewUnavailable} />
         {INTERNAL_PROTOTYPE_ROUTES.map((path) => (

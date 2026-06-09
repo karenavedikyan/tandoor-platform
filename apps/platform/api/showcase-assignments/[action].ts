@@ -4,6 +4,7 @@
  *   GET  /api/showcase-assignments/get?id=
  *   GET  /api/showcase-assignments/list?tradePointId=&dealerId=&status=&mine=1
  *   POST /api/showcase-assignments/item-toggle   { assignmentId, itemId, done }
+ *   POST /api/showcase-assignments/item-set-status { assignmentId, itemId, itemStatus, ... }
  *   POST /api/showcase-assignments/submit         { assignmentId }
  *   POST /api/showcase-assignments/verify         { assignmentId, itemIds? }
  *   POST /api/showcase-assignments/followup       { assignmentId, comment?, dueDate? }
@@ -24,6 +25,7 @@ import {
   handleCreate,
   handleFollowup,
   handleGet,
+  handleItemSetStatus,
   handleItemToggle,
   handleList,
   handleSubmit,
@@ -92,6 +94,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     if (req.method === "POST") {
       if (action === "create") { sendJson(res, 200, await handleCreate(pool, sessionUser, body)); return; }
       if (action === "item-toggle") { sendJson(res, 200, await handleItemToggle(pool, sessionUser, body)); return; }
+      if (action === "item-set-status") { sendJson(res, 200, await handleItemSetStatus(pool, sessionUser, body)); return; }
       if (action === "submit") { sendJson(res, 200, await handleSubmit(pool, sessionUser, body)); return; }
       if (action === "verify") { sendJson(res, 200, await handleVerify(pool, sessionUser, body)); return; }
       if (action === "followup") { sendJson(res, 200, await handleFollowup(pool, sessionUser, body)); return; }
