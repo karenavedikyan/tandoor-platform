@@ -4,7 +4,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { BackNav } from "@/components/navigation/back-nav";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
+import { breadcrumbsFor } from "@/lib/navigation/route-hierarchy";
 import { cn } from "@/lib/utils";
 import {
   applyOrdersQuickFilter,
@@ -91,6 +93,7 @@ export default function OrdersPage() {
 
   return (
     <div className="space-y-6 pb-24 sm:space-y-8" data-testid="page-orders">
+      <BackNav breadcrumbs={breadcrumbsFor("/orders")} fallbackHref="/" />
       <section className="relative overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-lg sm:p-8" data-testid="section-orders-hero">
         <div className="pointer-events-none absolute left-0 top-0 h-full w-1 rounded-l-2xl bg-primary" aria-hidden />
         <div className="relative space-y-4 pl-3 sm:pl-4">
@@ -101,9 +104,6 @@ export default function OrdersPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button asChild className="min-h-10 font-semibold" data-testid="button-orders-open-main">
-              <Link href="/main">К главному</Link>
-            </Button>
             <Button asChild variant="secondary" className="min-h-10 font-semibold" data-testid="button-orders-open-dealers">
               <Link href="/dealer-base">К клиентской базе</Link>
             </Button>

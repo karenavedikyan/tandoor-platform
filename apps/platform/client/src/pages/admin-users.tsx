@@ -31,6 +31,8 @@ import { createPasswordResetLink } from "@/lib/password-reset-api";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { formatDisplayDateTime } from "@/lib/format-display-date";
 import { Link } from "wouter";
+import { BackNav } from "@/components/navigation/back-nav";
+import { breadcrumbsFor } from "@/lib/navigation/route-hierarchy";
 import { Database, LogIn, MoreHorizontal } from "lucide-react";
 import {
   DropdownMenu,
@@ -502,6 +504,7 @@ export default function AdminUsersPage() {
 
   return (
     <div className="mx-auto max-w-[1200px] space-y-6 pb-24" data-testid="page-admin-users">
+      <BackNav breadcrumbs={breadcrumbsFor("/admin/users")} fallbackHref="/" />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 space-y-1">
           {hierarchyMode ? (

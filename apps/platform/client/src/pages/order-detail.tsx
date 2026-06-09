@@ -5,7 +5,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { BackNav } from "@/components/navigation/back-nav";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
+import { breadcrumbsFor } from "@/lib/navigation/route-hierarchy";
 import { cn } from "@/lib/utils";
 import {
   getOrderById,
@@ -22,9 +24,7 @@ import {
 function OrderNotFound() {
   return (
     <div className="mx-auto max-w-md space-y-6 py-8" data-testid="page-order-not-found">
-      <Button asChild variant="outline" className="min-h-11 w-full border-border bg-card" data-testid="button-back-to-main">
-        <Link href="/main">К главному</Link>
-      </Button>
+      <BackNav breadcrumbs={breadcrumbsFor("/orders")} fallbackHref="/orders" />
       <Card className="rounded-2xl border border-border bg-card shadow-md">
         <CardHeader>
           <CardTitle className="text-xl">Заказ не найден</CardTitle>
@@ -71,48 +71,10 @@ function OrderDetailContent({ order }: { order: OrderRow }) {
 
   return (
     <div className="space-y-4 pb-24 sm:space-y-6" data-testid="page-order-detail">
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
-        <Button
-          asChild
-          variant="outline"
-          className="min-h-11 w-full border-border bg-card sm:w-auto"
-          data-testid="button-back-to-main"
-        >
-          <Link href="/main">К главному</Link>
-        </Button>
-        <Button
-          asChild
-          variant="secondary"
-          className="min-h-11 w-full border-border sm:w-auto"
-          data-testid="button-back-to-dealer-card"
-        >
-          <Link href={`/dealers/${order.dealerId}`}>К карточке дилера</Link>
-        </Button>
-        {order.tradePointId ? (
-          <Button
-            asChild
-            variant="outline"
-            className="min-h-11 w-full border-border bg-card sm:w-auto"
-            data-testid="button-back-to-trade-point"
-          >
-            <Link href={`/dealers/${order.dealerId}/trade-points/${order.tradePointId}`}>
-              К торговой точке
-            </Link>
-          </Button>
-        ) : null}
-      </div>
-
-      <nav className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground sm:text-sm" aria-label="Навигация">
-        <Link href="/main" className="font-medium text-foreground underline-offset-4 hover:underline">
-          Главное
-        </Link>
-        <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-60" aria-hidden />
-        <Link href={`/dealers/${order.dealerId}`} className="font-medium text-foreground underline-offset-4 hover:underline">
-          {order.dealerName}
-        </Link>
-        <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-60" aria-hidden />
-        <span className="font-medium text-foreground">Заказ {order.number}</span>
-      </nav>
+      <BackNav
+        breadcrumbs={breadcrumbsFor(`/orders/${order.id}`, { order: order.number })}
+        fallbackHref="/orders"
+      />
 
       <section
         id="section-order-overview"

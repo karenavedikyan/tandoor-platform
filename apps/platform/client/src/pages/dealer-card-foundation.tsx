@@ -50,7 +50,9 @@ import { dealerRowStatusForProduct, getDealerProductPreview } from "@/lib/catalo
 import { DealerShowcaseDistributionSection, type ShowcaseCategoryListMode } from "@/components/dealer-showcase-distribution-section";
 import { DealerShowcaseMatrixSummarySection } from "@/components/dealer-showcase-matrix-summary-section";
 import { DistributionTree } from "@/components/distribution/distribution-tree";
+import { BackNav } from "@/components/navigation/back-nav";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
+import { breadcrumbsFor } from "@/lib/navigation/route-hierarchy";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { useClientContactsHydration } from "@/hooks/use-client-contacts-hydration";
 import { useDealerLegalEntitiesHydration } from "@/hooks/use-dealer-legal-entities-hydration";
@@ -702,9 +704,7 @@ function DealerTrainingAttentionSection({
 function DealerNotFound() {
   return (
     <div className="mx-auto max-w-md space-y-6 py-8" data-testid="page-dealer-not-found">
-      <Button asChild className="w-full min-h-11 font-semibold" data-testid="button-back-to-dealer-base">
-        <Link href="/dealer-base">Назад к клиентской базе</Link>
-      </Button>
+      <BackNav breadcrumbs={breadcrumbsFor("/dealers/unknown")} fallbackHref="/dealer-base" />
       <Card className="rounded-2xl border border-border bg-card shadow-md">
         <CardHeader>
           <CardTitle className="text-xl">Клиент не найден</CardTitle>
@@ -1289,14 +1289,11 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
   return (
     <div className="min-w-0 max-w-full space-y-4 overflow-x-hidden sm:space-y-6" data-testid="page-dealer-card-foundation">
       <div className="flex flex-col gap-3">
-        <Button
-          asChild
-          variant="outline"
-          className="min-h-11 w-full shrink-0 border-border bg-card sm:w-auto sm:self-start"
-          data-testid="button-back-to-dealer-base"
-        >
-          <Link href="/dealer-base">Назад к клиентской базе</Link>
-        </Button>
+        <BackNav
+          breadcrumbs={breadcrumbsFor(`/dealers/${row.id}`, { dealer: row.name })}
+          fallbackHref="/dealer-base"
+          testId="button-back-to-dealer-base"
+        />
 
         <div className="lg:grid lg:grid-cols-12 lg:items-start lg:gap-6">
           <div className="min-w-0 space-y-5 sm:space-y-6 lg:col-span-8">

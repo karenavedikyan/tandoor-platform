@@ -3,7 +3,9 @@
  */
 import { useMemo, useState } from "react";
 import { Link, Redirect, useRoute } from "wouter";
-import { ArrowLeft, ChevronRight, X } from "lucide-react";
+import { ChevronRight, X } from "lucide-react";
+import { BackNav } from "@/components/navigation/back-nav";
+import { breadcrumbsFor } from "@/lib/navigation/route-hierarchy";
 import { MainDashboardCityCoverage } from "@/components/main-dashboard-city-coverage";
 import {
   MainDashboardCityFilterProvider,
@@ -18,14 +20,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
 import {
   Table,
   TableBody,
@@ -214,42 +208,15 @@ function MainManagerDetailContent() {
 
   return (
     <div className="min-w-0 max-w-full space-y-6 overflow-x-hidden pb-10" data-testid="page-main-manager-detail">
-      <Breadcrumb>
-        <BreadcrumbList>
-          <BreadcrumbItem>
-            <BreadcrumbLink asChild>
-              <Link href="/main">Главная</Link>
-            </BreadcrumbLink>
-          </BreadcrumbItem>
-          {access === "sales_director" && ropForBreadcrumb ? (
-            <>
-              <BreadcrumbSeparator>
-                <ChevronRight className="h-3.5 w-3.5" aria-hidden />
-              </BreadcrumbSeparator>
-              <BreadcrumbItem>
-                <BreadcrumbLink asChild>
-                  <Link href={`/main/rop/${ropForBreadcrumb.id}`}>{ropForBreadcrumb.fullName}</Link>
-                </BreadcrumbLink>
-              </BreadcrumbItem>
-            </>
-          ) : null}
-          <BreadcrumbSeparator>
-            <ChevronRight className="h-3.5 w-3.5" aria-hidden />
-          </BreadcrumbSeparator>
-          <BreadcrumbItem>
-            <BreadcrumbPage>{managerName}</BreadcrumbPage>
-          </BreadcrumbItem>
-        </BreadcrumbList>
-      </Breadcrumb>
-
-      <div className="flex flex-wrap items-start gap-3">
-        <Button asChild variant="outline" size="sm" className="shrink-0" data-testid="button-main-manager-back">
-          <Link href="/main">
-            <ArrowLeft className="mr-1.5 h-4 w-4" aria-hidden />
-            Назад
-          </Link>
-        </Button>
-      </div>
+      <BackNav
+        breadcrumbs={breadcrumbsFor(`/main/manager/${manager.id}`, {
+          manager: managerName,
+          rop: ropForBreadcrumb?.fullName,
+          ropHref: ropForBreadcrumb ? `/main/rop/${ropForBreadcrumb.id}` : undefined,
+        })}
+        fallbackHref="/main"
+        testId="button-main-manager-back"
+      />
 
 <Card className="rounded-xl border border-border" data-testid="card-main-manager-profile">
         <CardContent className="flex flex-wrap items-center gap-4 p-4">

@@ -5,6 +5,8 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
+import { BackNav } from "@/components/navigation/back-nav";
+import { breadcrumbsFor } from "@/lib/navigation/route-hierarchy";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -107,6 +109,7 @@ export default function AdminAuditPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 pb-24" data-testid="page-admin-audit">
+      <BackNav breadcrumbs={breadcrumbsFor("/admin/audit")} fallbackHref="/" />
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight text-[hsl(var(--foreground))]">Журнал событий</h1>
         <p className="text-sm text-muted-foreground">Просмотр записей audit_log (только чтение).</p>

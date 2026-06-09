@@ -10,6 +10,8 @@
 import type { LucideIcon } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
 import { useEffect } from "react";
+import { BackNav } from "@/components/navigation/back-nav";
+import type { BreadcrumbItem } from "@/lib/navigation/route-hierarchy";
 import { cn } from "@/lib/utils";
 
 const DESCRIPTION_SOFT_LIMIT = 90;
@@ -22,6 +24,9 @@ export type PageHeaderProps = {
   className?: string;
   /** data-testid для корневого элемента. По умолчанию: page-header. */
   testId?: string;
+  showBack?: boolean;
+  breadcrumbs?: BreadcrumbItem[];
+  backFallbackHref?: string;
 };
 
 export function PageHeader({
@@ -31,6 +36,9 @@ export function PageHeader({
   actions,
   className,
   testId = "page-header",
+  showBack,
+  breadcrumbs,
+  backFallbackHref,
 }: PageHeaderProps): ReactElement {
   useEffect(() => {
     if (
@@ -46,9 +54,18 @@ export function PageHeader({
     }
   }, [description]);
 
+  const showNav = Boolean(showBack || (breadcrumbs && breadcrumbs.length > 0));
+
   return (
     <div className={cn("mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between", className)} data-testid={testId}>
-      <div className="min-w-0 flex-1 space-y-1">
+      <div className="min-w-0 flex-1 space-y-2">
+        {showNav ? (
+          <BackNav
+            breadcrumbs={breadcrumbs}
+            fallbackHref={backFallbackHref}
+            testId="page-header-back-nav"
+          />
+        ) : null}
         <div className="flex items-center gap-2">
           {Icon ? <Icon className="h-6 w-6 shrink-0 text-primary" aria-hidden /> : null}
           <h1 className="line-clamp-1 text-2xl font-semibold tracking-tight text-foreground">{title}</h1>

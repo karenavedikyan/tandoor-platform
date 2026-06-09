@@ -4,7 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { BackNav } from "@/components/navigation/back-nav";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
+import { breadcrumbsFor } from "@/lib/navigation/route-hierarchy";
 import { cn } from "@/lib/utils";
 import {
   getTrainingMaterialById,
@@ -96,11 +98,11 @@ export default function TrainingProgramPage() {
 
   return (
     <div className="space-y-8 pb-28 sm:space-y-10" data-testid="page-training-program">
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-        <Button asChild variant="outline" className="min-h-11 w-full border-border bg-card sm:w-auto" data-testid="button-back-to-training">
-          <Link href="/training">К обучению</Link>
-        </Button>
-      </div>
+      <BackNav
+        breadcrumbs={breadcrumbsFor(`/training/programs/${program.id}`, { program: program.title })}
+        fallbackHref="/training"
+        testId="button-back-to-training"
+      />
 
       <section
         className={cn(

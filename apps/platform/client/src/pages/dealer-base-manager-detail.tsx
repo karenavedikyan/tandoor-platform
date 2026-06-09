@@ -4,7 +4,9 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, Redirect, useRoute } from "wouter";
-import { ChevronLeft, X } from "lucide-react";
+import { X } from "lucide-react";
+import { BackNav } from "@/components/navigation/back-nav";
+import { breadcrumbsFor } from "@/lib/navigation/route-hierarchy";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -296,16 +298,15 @@ export default function DealerBaseManagerDetailPage() {
   return (
     <div className="min-w-0 space-y-6 pb-20" data-testid="page-dealer-base-manager-detail">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <Link
-            href={buildHashPath("/dealer-base")}
-            className="inline-flex items-center gap-1 text-xs text-muted-foreground no-underline hover:text-foreground"
-            data-testid="link-manager-back-dealer-base"
-          >
-            <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
-            Клиентская база
-          </Link>
-          <div className="mt-1 flex min-w-0 items-center gap-2">
+        <div className="min-w-0 space-y-2">
+          <BackNav
+            breadcrumbs={breadcrumbsFor(`/dealer-base/manager/${managerId}`, {
+              manager: dashboard.managerName,
+            })}
+            fallbackHref="/dealer-base"
+            testId="link-manager-back-dealer-base"
+          />
+          <div className="flex min-w-0 items-center gap-2">
             <div
               className={cn("h-8 w-1 shrink-0 rounded-full", managerHeatBarClass(dashboard.heatLevel))}
               aria-hidden

@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { Link } from "wouter";
 import { ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useSmartBack } from "@/lib/navigation/use-smart-back";
 
 export interface FloatingBackButtonProps {
-  href: string;
+  /** Опциональный fallback, если внутренней истории нет. */
+  href?: string;
   label: string;
   testId: string;
   ariaLabel?: string;
@@ -19,6 +20,7 @@ export function FloatingBackButton({
   showAfterPx = 240,
 }: FloatingBackButtonProps) {
   const [visible, setVisible] = useState(false);
+  const { goBack } = useSmartBack();
 
   useEffect(() => {
     const onScroll = () => {
@@ -41,20 +43,21 @@ export function FloatingBackButton({
       )}
       aria-hidden={!visible}
     >
-      <Link
-        href={href}
+      <button
+        type="button"
         data-testid={testId}
         aria-label={ariaLabel ?? label}
         tabIndex={visible ? 0 : -1}
+        onClick={() => goBack(href)}
         className={cn(
           "pointer-events-auto inline-flex min-h-11 max-w-[18rem] items-center gap-2 rounded-full border border-primary-border bg-primary px-5 py-2.5",
-          "text-sm font-semibold text-primary-foreground no-underline shadow-lg shadow-primary/30",
+          "text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/30",
           "transition-colors hover:bg-primary/95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         )}
       >
         <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden />
         <span className="truncate">{label}</span>
-      </Link>
+      </button>
     </div>
   );
 }

@@ -4,7 +4,8 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, Redirect, useRoute } from "wouter";
-import { ChevronLeft } from "lucide-react";
+import { BackNav } from "@/components/navigation/back-nav";
+import { breadcrumbsFor } from "@/lib/navigation/route-hierarchy";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -266,16 +267,15 @@ export default function DealerBaseCityDetailPage() {
   return (
     <div className="min-w-0 space-y-6 pb-20" data-testid="page-dealer-base-city-detail">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <Link
-            href={buildHashPath("/dealer-base")}
-            className="inline-flex items-center gap-1 text-xs text-muted-foreground no-underline hover:text-foreground"
-            data-testid="link-city-back-dealer-base"
-          >
-            <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
-            Клиентская база
-          </Link>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">{detail.displayName}</h1>
+        <div className="min-w-0 space-y-2">
+          <BackNav
+            breadcrumbs={breadcrumbsFor(`/dealer-base/city/${cityKey}`, {
+              city: detail.displayName,
+            })}
+            fallbackHref="/dealer-base"
+            testId="link-city-back-dealer-base"
+          />
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">{detail.displayName}</h1>
           <p className="mt-1 text-sm text-muted-foreground">Детальный обзор города.</p>
         </div>
         <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row sm:justify-end">

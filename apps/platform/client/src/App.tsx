@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppShell } from "@/components/layout/app-shell";
+import { NavigationDepthTracker } from "@/components/navigation/navigation-depth-tracker";
 import { PageLoadingFallback } from "@/components/navigation/page-loading";
 import { useCurrentUser, displayUserName } from "@/hooks/use-current-user";
 import { useDealerWorkPlanHydration } from "@/hooks/use-dealer-work-plan-hydration";
@@ -398,6 +399,7 @@ function AuthenticatedShell({
       isImpersonating={Boolean(user.impersonatedBy)}
     >
       {overridesBootstrap}
+      <NavigationDepthTracker />
       <Switch>
         <Route path="/" component={SalesManagerWorkspaceRoute} />
         <Route path="/main/rop/:ropId" component={MainRopDetailRoute} />
