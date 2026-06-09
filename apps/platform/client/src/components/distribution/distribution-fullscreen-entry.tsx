@@ -659,6 +659,9 @@ export function DistributionFullscreenEntry({
         const remaining = await flushPendingNow();
         showSaveSyncToast(remaining);
       }
+      if (needInstallMode) {
+        setNeedInstallSelection(new Set());
+      }
     } finally {
       setSaving(false);
     }
@@ -675,6 +678,7 @@ export function DistributionFullscreenEntry({
     needInstallSelection,
     point.id,
     saving,
+    setNeedInstallSelection,
     showSaveSyncToast,
   ]);
 
