@@ -37,6 +37,44 @@ function parseApiError(json: { success?: boolean; message?: string }, fallback: 
   return fallback;
 }
 
+export type CreateAssignmentsBatchBody = {
+  targets: Array<{ dealerId: string; tradePointId: string }>;
+  items: AssignmentItemInput[];
+  title?: string;
+  comment?: string | null;
+  note?: string | null;
+  dueDate?: string | null;
+  assigneeUserId?: string | null;
+  assigneeName?: string | null;
+};
+
+type ApiOkBatchCreate = {
+  success: true;
+  assignments: AssignmentDto[];
+  createdCount: number;
+  skippedCount: number;
+};
+
+export async function createAssignmentsBatch(
+  body: CreateAssignmentsBatchBody,
+): Promise<{ created: AssignmentDto[]; createdCount: number; skippedCount: number }> {
+  const res = await fetch("/api/showcase-assignments/create-batch", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const json = (await res.json()) as ApiOkBatchCreate | ApiErr;
+  if (!res.ok || json.success !== true) {
+    throw new Error(parseApiError(json, "Не удалось создать задания"));
+  }
+  return {
+    created: json.assignments,
+    createdCount: json.createdCount,
+    skippedCount: json.skippedCount,
+  };
+}
+
 export async function createAssignment(body: CreateAssignmentBody): Promise<AssignmentDto> {
   const res = await fetch("/api/showcase-assignments/create", {
     method: "POST",

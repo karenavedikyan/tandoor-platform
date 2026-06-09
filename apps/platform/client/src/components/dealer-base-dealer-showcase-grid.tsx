@@ -52,6 +52,7 @@ import {
   useDealerBaseListScrollMargin,
   useDealerBaseWindowVirtualizer,
 } from "@/lib/dealer-base-list-window-virtualizer";
+import { taskSelectTargetKey } from "@/lib/task-select-mode";
 
 const badgeOutline = "border-primary/35 bg-card text-foreground";
 const badgeSoft = "border-primary/30 bg-primary/10 text-foreground";
@@ -61,6 +62,13 @@ type ArchiveBulk = {
   selectedIds: Set<string>;
   selectableIds: Set<string>;
   onToggle: (dealerId: string, checked: boolean) => void;
+};
+
+export type TaskSelectBulk = {
+  selectedKeys: Set<string>;
+  onToggleTradePoint: (dealerId: string, tradePointId: string, checked: boolean) => void;
+  onToggleDealerRow: (row: DealerRow, checked: boolean) => void;
+  getDealerRowChecked: (row: DealerRow) => boolean | "indeterminate";
 };
 
 export type DealerShowcaseGridProps = {
@@ -76,6 +84,7 @@ export type DealerShowcaseGridProps = {
   shipmentActiveDayId?: DealerShipmentDayId | null;
   shipmentUserId?: string;
   archiveBulk?: ArchiveBulk;
+  taskSelectBulk?: TaskSelectBulk;
   rowQuickMove?: DealerListRowQuickMoveProps;
 };
 
@@ -212,6 +221,7 @@ const TradePointShowcaseRow = memo(function TradePointShowcaseRow({
   shipmentActiveDayId,
   shipmentUserId,
   workPlanState,
+  taskSelectBulk,
 }: {
   dealer: DealerRow;
   tp: DealerTradePoint;
@@ -220,6 +230,7 @@ const TradePointShowcaseRow = memo(function TradePointShowcaseRow({
   shipmentActiveDayId?: DealerShipmentDayId | null;
   shipmentUserId?: string;
   workPlanState?: DealerWorkPlanState;
+  taskSelectBulk?: TaskSelectBulk;
 }) {
   const sh = act.tradePointShowcaseActualizationById[tp.id];
   const summary = computePortalSummary(sh);
@@ -258,6 +269,15 @@ const TradePointShowcaseRow = memo(function TradePointShowcaseRow({
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
             <div className="flex min-w-0 items-start gap-2">
+              {taskSelectBulk ? (
+                <Checkbox
+                  checked={taskSelectBulk.selectedKeys.has(taskSelectTargetKey(dealer.id, tp.id))}
+                  onCheckedChange={(v) => taskSelectBulk.onToggleTradePoint(dealer.id, tp.id, v === true)}
+                  className="mt-1 h-4 w-4 shrink-0"
+                  data-testid={`checkbox-task-select-tp-${tp.id}`}
+                  aria-label={`Выбрать ТТ ${tp.name} для задания`}
+                />
+              ) : null}
               <ShowcaseCoverPhotoSlot
                 kind="trade_point"
                 dealer={dealer}
@@ -347,6 +367,7 @@ const DealerShowcaseCard = memo(function DealerShowcaseCard({
   shipmentActiveDayId,
   shipmentUserId,
   archiveBulk,
+  taskSelectBulk,
   rowQuickMove,
 }: {
   row: DealerRow;
@@ -360,6 +381,7 @@ const DealerShowcaseCard = memo(function DealerShowcaseCard({
   shipmentActiveDayId?: DealerShipmentDayId | null;
   shipmentUserId?: string;
   archiveBulk?: ArchiveBulk;
+  taskSelectBulk?: TaskSelectBulk;
   rowQuickMove?: DealerListRowQuickMoveProps;
 }) {
   const wp = workPlanUserId && workPlanState;
@@ -513,6 +535,19 @@ const DealerShowcaseCard = memo(function DealerShowcaseCard({
                   aria-label={`Выбрать клиента ${row.name} для плана работ`}
                 />
               ) : null}
+              {taskSelectBulk ? (
+                <Checkbox
+                  checked={
+                    taskSelectBulk.getDealerRowChecked(row) === "indeterminate"
+                      ? "indeterminate"
+                      : taskSelectBulk.getDealerRowChecked(row) === true
+                  }
+                  onCheckedChange={(v) => taskSelectBulk.onToggleDealerRow(row, v === true)}
+                  className="mt-1 h-4 w-4 shrink-0"
+                  data-testid={`checkbox-task-select-dealer-${row.id}`}
+                  aria-label={`Выбрать клиента ${row.name} для задания`}
+                />
+              ) : null}
               {archiveBulk?.selectableIds.has(row.id) ? (
                 <span
                   className={cn(
@@ -627,6 +662,7 @@ const DealerShowcaseCard = memo(function DealerShowcaseCard({
                   shipmentActiveDayId={shipmentActiveDayId}
                   shipmentUserId={shipmentUserId}
                   workPlanState={workPlanState}
+                  taskSelectBulk={taskSelectBulk}
                 />
               ))}
             </div>
@@ -662,6 +698,7 @@ export function DealerBaseDealerShowcaseGrid(props: DealerShowcaseGridProps) {
     shipmentActiveDayId,
     shipmentUserId,
     archiveBulk,
+    taskSelectBulk,
     rowQuickMove,
   } = props;
 
@@ -714,6 +751,7 @@ export function DealerBaseDealerShowcaseGrid(props: DealerShowcaseGridProps) {
                 shipmentActiveDayId={shipmentActiveDayId}
                 shipmentUserId={shipmentUserId}
                 archiveBulk={archiveBulk}
+                taskSelectBulk={taskSelectBulk}
                 rowQuickMove={rowQuickMove}
               />
             </div>
