@@ -42,6 +42,7 @@ import {
 import triangleMarkUrl from "@/assets/brand/tandoor-triangle-mark.svg";
 import { TandoorLogo } from "@/components/tandoor-logo";
 import { ThemeToggleDesktop, ThemeToggleSidebarCompact } from "@/components/theme-toggle";
+import { NotificationsBell } from "@/components/layout/notifications-bell";
 import { SaveStatusBadge } from "@/components/client-base-actualization-save-status-badge";
 import { cn } from "@/lib/utils";
 import { flattenGroupedPilotNavigation, type PilotNavGroup, type PilotNavItem, type PilotNavigationModel } from "@/lib/auth-access";
@@ -845,6 +846,7 @@ export function AppShell({
             <BrandBlock homeHref={homeHref} className="max-w-[132px]" />
             <div className="flex shrink-0 items-center gap-2">
               {showSaveBadge ? <SaveStatusBadge /> : null}
+              <NotificationsBell />
               <ThemeToggleDesktop className="h-9 w-9" />
               <Button
                 type="button"
@@ -1011,6 +1013,7 @@ export function AppShell({
           </form>
           <div className="ml-auto flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-2 sm:gap-3">
             {showSaveBadge ? <SaveStatusBadge /> : null}
+            <NotificationsBell />
             <ThemeToggleDesktop />
             <Button type="button" variant="outline" size="sm" className="max-w-[10rem] truncate border-border/80" data-testid="button-current-city">
               <span data-testid="text-current-city">{cityLabel}</span>
@@ -1118,7 +1121,10 @@ export function AppShell({
                 </p>
               ) : null}
             </div>
-            {showSaveBadge ? <SaveStatusBadge /> : null}
+            <div className="flex shrink-0 items-center gap-2">
+              <NotificationsBell />
+              {showSaveBadge ? <SaveStatusBadge /> : null}
+            </div>
           </div>
         </header>
 
