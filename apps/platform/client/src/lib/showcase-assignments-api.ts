@@ -127,6 +127,45 @@ export async function submitAssignment(body: SubmitAssignmentBody): Promise<Assi
   return json.assignment;
 }
 
+export type VerifyAssignmentBody = {
+  assignmentId: string;
+  itemIds?: string[];
+};
+
+export async function verifyAssignment(body: VerifyAssignmentBody): Promise<AssignmentDto> {
+  const res = await fetch("/api/showcase-assignments/verify", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const json = (await res.json()) as ApiOkAssignment | ApiErr;
+  if (!res.ok || json.success !== true) {
+    throw new Error(parseApiError(json, "Не удалось подтвердить на витрине"));
+  }
+  return json.assignment;
+}
+
+export type CreateFollowupBody = {
+  assignmentId: string;
+  comment?: string | null;
+  dueDate?: string | null;
+};
+
+export async function createFollowup(body: CreateFollowupBody): Promise<AssignmentDto> {
+  const res = await fetch("/api/showcase-assignments/followup", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const json = (await res.json()) as ApiOkAssignment | ApiErr;
+  if (!res.ok || json.success !== true) {
+    throw new Error(parseApiError(json, "Не удалось создать повторное задание"));
+  }
+  return json.assignment;
+}
+
 export function assignmentShareUrl(id: string): string {
   return `${window.location.origin}/#/assignment/${id}`;
 }

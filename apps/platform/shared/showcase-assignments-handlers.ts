@@ -716,6 +716,40 @@ export async function handleVerify(
     await pool.query(`UPDATE showcase_install_assignments SET updated_at = NOW() WHERE id = $1`, [assignmentId]);
   }
 
+  const verifiedCount = toVerify.length;
+  if (verifiedCount > 0) {
+    const notifyBody = `${verifiedCount} позиций подтверждено на витрине по заданию «${head.title}»`;
+    const notifyLink = `/#/assignment/${assignmentId}`;
+    if (head.createdBy && head.createdBy !== me.id) {
+      await notifyUser(pool, {
+        userId: head.createdBy,
+        kind: "assignment_verified",
+        title: "Витрина подтверждена",
+        body: notifyBody,
+        link: notifyLink,
+        entityId: assignmentId,
+        actorId: me.id,
+        actorName: me.fullName,
+      });
+    }
+    if (
+      head.assigneeUserId &&
+      head.assigneeUserId !== me.id &&
+      head.assigneeUserId !== head.createdBy
+    ) {
+      await notifyUser(pool, {
+        userId: head.assigneeUserId,
+        kind: "assignment_verified",
+        title: "Витрина подтверждена",
+        body: notifyBody,
+        link: notifyLink,
+        entityId: assignmentId,
+        actorId: me.id,
+        actorName: me.fullName,
+      });
+    }
+  }
+
   const dto = await loadAssignment(pool, assignmentId);
   return { success: true, assignment: dto! };
 }
