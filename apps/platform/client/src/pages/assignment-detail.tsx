@@ -30,11 +30,14 @@ import { cn } from "@/lib/utils";
 import { prepareImageFileForUpload } from "@/lib/client-image-upload-pipeline";
 import { uploadClientBaseImagePair } from "@/lib/client-base-actualization-upload-api";
 import {
+  addAssignmentComment,
   createFollowup,
   getAssignment,
+  listAssignmentComments,
   setItemStatus,
   submitAssignment,
   verifyAssignment,
+  type AssignmentCommentDto,
   type AssignmentDto,
   type AssignmentItemStatus,
 } from "@/lib/showcase-assignments-api";
@@ -100,6 +103,135 @@ function canUserEditAssignment(
     return false;
   }
   return true;
+}
+
+function canUserCommentAssignment(
+  assignment: AssignmentDto,
+  userId: string | undefined,
+  role: string | undefined,
+): boolean {
+  if (!userId || !role) return false;
+  if (VERIFY_ROLES.has(role)) return true;
+  return assignment.createdBy === userId || assignment.assigneeUserId === userId;
+}
+
+function AssignmentCommentsBlock({
+  assignmentId,
+  userId,
+  canComment,
+}: {
+  assignmentId: string;
+  userId: string | undefined;
+  canComment: boolean;
+}) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+
+  const commentsQ = useQuery({
+    queryKey: ["assignment-comments", assignmentId],
+    queryFn: () => listAssignmentComments(assignmentId),
+    enabled: canComment && Boolean(assignmentId),
+    retry: false,
+  });
+
+  if (!canComment) return null;
+
+  const comments = commentsQ.data ?? [];
+
+  const handleSend = async () => {
+    const text = draft.trim();
+    if (!text || sending) return;
+    setSending(true);
+    try {
+      await addAssignmentComment(assignmentId, text);
+      setDraft("");
+      void qc.invalidateQueries({ queryKey: ["assignment-comments", assignmentId] });
+      toast({ title: "Комментарий отправлен" });
+    } catch (err) {
+      toast({
+        title: err instanceof Error ? err.message : "Не удалось отправить комментарий",
+        variant: "destructive",
+      });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <Card className="rounded-xl border border-border/80" data-testid="card-assignment-comments">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">Комментарии</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {commentsQ.isLoading ? (
+          <p className="text-sm text-muted-foreground">Загрузка…</p>
+        ) : commentsQ.isError ? null : (
+          <ul className="space-y-3" data-testid="assignment-comments-list">
+            {comments.length === 0 ? (
+              <li className="text-sm text-muted-foreground">Комментариев пока нет</li>
+            ) : (
+              comments.map((c: AssignmentCommentDto) => {
+                const isOwn = c.authorId === userId;
+                return (
+                  <li
+                    key={c.id}
+                    className={cn(
+                      "rounded-lg border px-3 py-2 text-sm",
+                      isOwn ? "border-primary/20 bg-primary/5" : "border-border/70 bg-muted/20",
+                    )}
+                  >
+                    <p className="text-xs text-muted-foreground">
+                      {c.authorName ?? "—"}
+                      {c.authorRole ? ` · ${c.authorRole}` : ""}
+                      {" · "}
+                      {formatCommentDate(c.createdAt)}
+                    </p>
+                    <p className="mt-1 whitespace-pre-wrap break-words text-foreground">{c.body}</p>
+                  </li>
+                );
+              })
+            )}
+          </ul>
+        )}
+        <div className="space-y-2 border-t border-border/60 pt-3">
+          <Textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            rows={3}
+            placeholder="Написать комментарий…"
+            disabled={sending}
+            data-testid="textarea-assignment-comment-new"
+          />
+          <Button
+            type="button"
+            className="min-h-10 w-full sm:w-auto"
+            disabled={!draft.trim() || sending}
+            onClick={() => void handleSend()}
+            data-testid="button-assignment-comment-send"
+          >
+            {sending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> : null}
+            Отправить
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function formatCommentDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString("ru-RU", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
 }
 
 function AssignmentNotFound() {
@@ -381,6 +513,7 @@ function AssignmentDetailContent({ initial }: { initial: AssignmentDto }) {
   const canEdit = canUserEditAssignment(assignment, user?.id, user?.role);
   const isViewOnly = !canEdit;
   const canVerify = VERIFY_ROLES.has(user?.role ?? "");
+  const canComment = canUserCommentAssignment(assignment, user?.id, user?.role);
 
   const verifyCandidates = useMemo(
     () => assignment.items.filter(isVerifyCandidate),
@@ -730,6 +863,8 @@ function AssignmentDetailContent({ initial }: { initial: AssignmentDto }) {
           </Card>
         )
       ) : null}
+
+      <AssignmentCommentsBlock assignmentId={assignment.id} userId={user?.id} canComment={canComment} />
     </div>
   );
 }
