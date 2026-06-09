@@ -10,7 +10,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { BackNav } from "@/components/navigation/back-nav";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
+import { breadcrumbsFor } from "@/lib/navigation/route-hierarchy";
 import { TradePointContactsSection } from "@/components/trade-point-contacts-section";
 import { getDealerById, type DealerRow, type DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import { invalidateMatrixTasksCache } from "@/lib/trade-point-task-data";
@@ -704,16 +706,13 @@ function TradePointDetailContent({
       className="max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom))] space-y-4 sm:space-y-6"
       data-testid="page-trade-point-detail"
     >
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
-        <Button asChild variant="outline" className="min-h-11 w-full border-border bg-card sm:w-auto">
-          <Link href={`/dealers/${dealer.id}`} data-testid="link-trade-point-back-to-dealer">
-            Назад к клиенту
-          </Link>
-        </Button>
-        <Button asChild variant="secondary" className="min-h-11 w-full border-border sm:w-auto" data-testid="button-back-to-dealer-base">
-          <Link href="/dealer-base">К клиентской базе</Link>
-        </Button>
-      </div>
+      <BackNav
+        breadcrumbs={breadcrumbsFor(`/dealers/${dealer.id}/trade-points/${point.id}`, {
+          dealer: dealer.name,
+          tradePoint: point.name,
+        })}
+        fallbackHref={`/dealers/${dealer.id}`}
+      />
 
       <div className="rounded-2xl border border-border/80 bg-muted/20 p-4 sm:p-5">
         <p className="text-xs text-muted-foreground">Клиент</p>

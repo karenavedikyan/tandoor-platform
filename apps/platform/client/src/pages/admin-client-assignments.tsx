@@ -5,6 +5,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
+import { BackNav } from "@/components/navigation/back-nav";
+import { breadcrumbsFor } from "@/lib/navigation/route-hierarchy";
 import { History, Loader2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -300,6 +302,7 @@ export default function AdminClientAssignmentsPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 pb-24" data-testid="page-admin-client-assignments">
+      <BackNav breadcrumbs={breadcrumbsFor("/admin/client-assignments")} fallbackHref="/" />
       <div className="flex flex-wrap items-center gap-2 text-sm">
         {userHas(user.role, "users.list") ? (
           <Button asChild variant="outline" size="sm" className="h-9">

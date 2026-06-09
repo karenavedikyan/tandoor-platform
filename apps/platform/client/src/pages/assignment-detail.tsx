@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation, useParams } from "wouter";
+import { useLocation, useParams } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { BackNav } from "@/components/navigation/back-nav";
+import { breadcrumbsFor } from "@/lib/navigation/route-hierarchy";
 import {
-  ArrowLeft,
   Camera,
   CheckCircle2,
   AlertTriangle,
@@ -237,9 +238,7 @@ function formatCommentDate(iso: string): string {
 function AssignmentNotFound() {
   return (
     <div className="mx-auto max-w-md space-y-6 py-8" data-testid="page-assignment-not-found">
-      <Button asChild variant="outline" className="min-h-11 w-full">
-        <Link href="/main">К главному</Link>
-      </Button>
+      <BackNav breadcrumbs={breadcrumbsFor("/assignments")} fallbackHref="/assignments" />
       <Card className="rounded-2xl border border-border bg-card shadow-md">
         <CardHeader>
           <CardTitle className="text-xl">Задание не найдено</CardTitle>
@@ -626,28 +625,13 @@ function AssignmentDetailContent({ initial }: { initial: AssignmentDto }) {
 
   return (
     <div className="mx-auto max-w-lg space-y-4 pb-28 pt-2" data-testid="page-assignment-detail">
-      <div className="flex items-center gap-2">
-        {backHref ? (
-          <Button asChild variant="outline" size="sm" className="min-h-9 gap-1" data-testid="button-assignment-back-tt">
-            <Link href={backHref}>
-              <ArrowLeft className="h-4 w-4" aria-hidden />
-              К ТТ
-            </Link>
-          </Button>
-        ) : (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="min-h-9 gap-1"
-            onClick={() => window.history.back()}
-            data-testid="button-assignment-back"
-          >
-            <ArrowLeft className="h-4 w-4" aria-hidden />
-            Назад
-          </Button>
-        )}
-      </div>
+      <BackNav
+        breadcrumbs={breadcrumbsFor(`/assignment/${assignment.id}`, {
+          assignment: assignment.title || "Задание",
+        })}
+        fallbackHref={backHref ?? "/assignments"}
+        testId="button-assignment-back"
+      />
 
       <Card className="rounded-2xl border border-border shadow-sm">
         <CardHeader className="space-y-2 pb-3">

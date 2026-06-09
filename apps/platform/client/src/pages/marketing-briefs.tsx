@@ -30,7 +30,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { BackNav } from "@/components/navigation/back-nav";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
+import { breadcrumbsFor } from "@/lib/navigation/route-hierarchy";
 import { useRouteSearchParams } from "@/lib/hash-route-utils";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { canManageMarketingBriefs } from "@/lib/auth-access";
@@ -48,6 +50,7 @@ import {
 import { TEMPLATE_BLOCKS } from "@/lib/marketing-briefs-template";
 import {
   archiveBrief,
+  briefDisplayTitle,
   createBlock,
   createBrief,
   DEFAULT_MARKETING_BRIEF_ACCENT,
@@ -170,7 +173,13 @@ export function MarketingBriefPublishedPage() {
 
   return (
     <div className="pb-8" data-testid="page-marketing-brief-view">
-      <div className="px-4 pt-4 sm:px-6">
+      <div className="space-y-3 px-4 pt-4 sm:px-6">
+        <BackNav
+          breadcrumbs={breadcrumbsFor(`/marketing-briefs/view/${brief.id}`, {
+            brief: briefDisplayTitle(brief.title ?? "").text,
+          })}
+          fallbackHref="/marketing-briefs"
+        />
         <FloatingBackButton href="/marketing-briefs" label="К брифам" testId="button-floating-back-marketing-brief-view" />
       </div>
       <BrandBriefView

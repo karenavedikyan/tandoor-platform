@@ -3,7 +3,9 @@
  */
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Link, Redirect, useRoute } from "wouter";
-import { ArrowLeft, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
+import { BackNav } from "@/components/navigation/back-nav";
+import { breadcrumbsFor } from "@/lib/navigation/route-hierarchy";
 import { DealerCardSheet } from "@/components/dealer-card-sheet";
 import { TradePointSheet } from "@/components/trade-point-sheet";
 import { ClientAvatar } from "@/components/ui/client-avatar";
@@ -13,14 +15,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
 import {
   Table,
   TableBody,
@@ -231,30 +225,11 @@ export default function MainRopDetailPage() {
 
   return (
     <div className="min-w-0 max-w-full space-y-6 overflow-x-hidden pb-10" data-testid="page-main-rop-detail">
-      <Breadcrumb>
-        <BreadcrumbList>
-          <BreadcrumbItem>
-            <BreadcrumbLink asChild>
-              <Link href="/main">Главная</Link>
-            </BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator>
-            <ChevronRight className="h-3.5 w-3.5" aria-hidden />
-          </BreadcrumbSeparator>
-          <BreadcrumbItem>
-            <BreadcrumbPage>{ropName}</BreadcrumbPage>
-          </BreadcrumbItem>
-        </BreadcrumbList>
-      </Breadcrumb>
-
-      <div className="flex flex-wrap items-start gap-3">
-        <Button asChild variant="outline" size="sm" className="shrink-0" data-testid="button-main-rop-back">
-          <Link href="/main">
-            <ArrowLeft className="mr-1.5 h-4 w-4" aria-hidden />
-            Назад
-          </Link>
-        </Button>
-      </div>
+      <BackNav
+        breadcrumbs={breadcrumbsFor(`/main/rop/${rop.id}`, { rop: ropName })}
+        fallbackHref="/main"
+        testId="button-main-rop-back"
+      />
 
       <Card className="rounded-xl border border-border" data-testid="card-main-rop-profile">
         <CardContent className="flex flex-wrap items-center gap-4 p-4">

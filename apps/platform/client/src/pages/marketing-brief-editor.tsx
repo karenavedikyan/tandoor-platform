@@ -24,7 +24,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { BackNav } from "@/components/navigation/back-nav";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
+import { breadcrumbsFor } from "@/lib/navigation/route-hierarchy";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { canManageMarketingBriefs } from "@/lib/auth-access";
 import {
@@ -217,6 +219,12 @@ export default function MarketingBriefEditorPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 pb-24" data-testid="page-marketing-brief-editor">
+      <BackNav
+        breadcrumbs={breadcrumbsFor(`/marketing-briefs/${brief.id}`, {
+          brief: briefDisplayTitle(brief.title ?? "").text,
+        })}
+        fallbackHref="/marketing-briefs"
+      />
       <FloatingBackButton href="/marketing-briefs" label="К брифам" testId="button-floating-back-marketing-brief-editor" />
 
       <div
