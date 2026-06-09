@@ -505,7 +505,6 @@ export function getPilotNavigation(
     const items: PilotNavItem[] = [
       { href: "/training", label: "Обучение", testId: "nav-item-training", navBehaviorId: "nav-training" },
       { href: "/client-map", label: "Карта клиентов", testId: "nav-item-client-map", navBehaviorId: "nav-client-map" },
-      { href: "/tasks", label: "Задачи по витрине", testId: "nav-item-showcase-tasks", navBehaviorId: "nav-tasks" },
       {
         href: "/analytics-workspace",
         label: "Аналитика команды",
@@ -629,7 +628,6 @@ export function getPilotNavigation(
       push({ href: "/distribution", label: "Дистрибуция", testId: "nav-item-distribution" });
       push({ href: "/assignments", label: "Задачи", testId: "nav-item-tasks-inbox", navBehaviorId: "nav-tasks-inbox" });
       push({ href: "/client-map", label: "Карта клиентов", testId: "nav-client-map" });
-      push({ href: "/tasks", label: "Задачи по витрине", testId: "nav-tasks" });
       push({ href: "/communications", label: "Коммуникации", testId: "nav-communications" });
       push({ href: "/catalog", label: "Каталог", testId: "nav-catalog" });
       push({ href: "/marketing-briefs", label: "Маркетинговые брифы", testId: "nav-marketing-briefs" });
