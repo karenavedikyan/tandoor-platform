@@ -1474,6 +1474,7 @@ export default function DealerBase() {
   const routeQs = useRouteSearchParams();
   const routeKey = useMemo(() => routeQs.toString(), [routeQs]);
   const isTaskSelectMode = isTaskSelectModeFromParams(routeQs);
+  const taskSelectFiltersInitedRef = useRef(false);
   const mainCityFilter = useMainDashboardCityFilterOptional();
   const [, setLocation] = useLocation();
   const actx = useClientBaseActualization();
@@ -1558,10 +1559,12 @@ export default function DealerBase() {
     setWorkView((prev) => (allowed.includes(prev) ? prev : defaultWorkViewForAccess(access)));
   }, [access, isTaskSelectMode]);
 
-  const managerCatalogForRop = useMemo(
-    () => (useReal && snap ? realTeamManagers(snap, ropTeam) : getManagersForRopTeam(ropTeam)),
-    [useReal, snap, ropTeam],
-  );
+  const managerCatalogForRop = useMemo(() => {
+    if (useReal && snap) {
+      return isRopOrManagerAllFilter(ropTeam) ? realAllSalesManagers(snap) : realTeamManagers(snap, ropTeam);
+    }
+    return getManagersForRopTeam(ropTeam);
+  }, [useReal, snap, ropTeam]);
   const managerOptions = useMemo(
     () =>
       useReal && snap
@@ -1934,6 +1937,19 @@ export default function DealerBase() {
   }, [scopedRows, geoRegion, geoDistrict]);
 
   useEffect(() => {
+    if (!isTaskSelectMode) {
+      taskSelectFiltersInitedRef.current = false;
+    }
+  }, [isTaskSelectMode]);
+
+  useEffect(() => {
+    if (isTaskSelectMode && taskSelectFiltersInitedRef.current) {
+      return;
+    }
+    if (isTaskSelectMode) {
+      taskSelectFiltersInitedRef.current = true;
+    }
+
     const d = useReal && snap ? realInitialRopManagerDefaults(snap, access) : initialRopManagerForProfile(profile, access);
     if (!routeKey) {
       setRopTeam(d.ropTeam);
