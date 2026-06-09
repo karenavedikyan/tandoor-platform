@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { LEGAL_ENTITY_UUID_RE } from "@/lib/dealer-legal-entities";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -42,6 +43,12 @@ function formatMessengers(c: ClientContact): string {
   return bits.join(" · ");
 }
 
+type SeedContact = {
+  fullName?: string;
+  phone?: string;
+  email?: string;
+};
+
 type Props = {
   row: DealerRow;
   legalEntityId: string;
@@ -49,7 +56,34 @@ type Props = {
   profile: ReleaseDemoProfile;
   canEdit: boolean;
   entityArchived: boolean;
+  /** Legacy primary_contact/phone/email from legal_entities — migrated once into the contacts list. */
+  seedContact?: SeedContact;
+  /** Resolves server UUID for overlay/manual ids before contact API calls. */
+  resolveServerLegalEntityId?: () => Promise<string | null>;
 };
+
+const primaryContactSeedStarted = new Set<string>();
+
+function seedMigrationKey(dealerId: string, scopeId: string): string {
+  return `${dealerId}|${scopeId}`;
+}
+
+function mergeLegalEntityContacts(dealerId: string, uiId: string, serverId: string | null): ClientContact[] {
+  const fromUi = getLegalEntityContacts(dealerId, uiId);
+  if (!serverId || serverId === uiId) return fromUi;
+  const fromServer = getLegalEntityContacts(dealerId, serverId);
+  if (fromServer.length === 0) return fromUi;
+  if (fromUi.length === 0) return fromServer;
+  const byId = new Map<string, ClientContact>();
+  for (const c of fromUi) byId.set(c.id, c);
+  for (const c of fromServer) byId.set(c.id, c);
+  return Array.from(byId.values()).sort((a, b) => {
+    const ap = a.isPrimary && isClientContactActive(a) ? 0 : 1;
+    const bp = b.isPrimary && isClientContactActive(b) ? 0 : 1;
+    if (ap !== bp) return ap - bp;
+    return a.createdAt < b.createdAt ? 1 : -1;
+  });
+}
 
 const emptyDraft = (): Omit<ClientContact, "id" | "createdAt" | "updatedAt" | "createdBy" | "source"> => ({
   fullName: "",
@@ -63,8 +97,18 @@ const emptyDraft = (): Omit<ClientContact, "id" | "createdAt" | "updatedAt" | "c
   isActual: true,
 });
 
-export function LegalEntityContactsSubsection({ row, legalEntityId, legalEntityName, profile, canEdit, entityArchived }: Props) {
+export function LegalEntityContactsSubsection({
+  row,
+  legalEntityId,
+  legalEntityName,
+  profile,
+  canEdit,
+  entityArchived,
+  seedContact,
+  resolveServerLegalEntityId,
+}: Props) {
   const [tick, setTick] = useState(0);
+  const [contactsScopeId, setContactsScopeId] = useState(legalEntityId);
   const [showAll, setShowAll] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -82,7 +126,82 @@ export function LegalEntityContactsSubsection({ row, legalEntityId, legalEntityN
     return () => window.removeEventListener(CLIENT_CONTACTS_EVENT, fn);
   }, []);
 
-  const contacts = useMemo(() => getLegalEntityContacts(row.id, legalEntityId), [row.id, legalEntityId, tick]);
+  useEffect(() => {
+    if (LEGAL_ENTITY_UUID_RE.test(legalEntityId)) {
+      setContactsScopeId(legalEntityId);
+      return;
+    }
+    if (!resolveServerLegalEntityId) return;
+    let cancelled = false;
+    void resolveServerLegalEntityId().then((id) => {
+      if (!cancelled && id) setContactsScopeId(id);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [legalEntityId, resolveServerLegalEntityId]);
+
+  useEffect(() => {
+    if (entityArchived || !seedContact) return;
+    const hasSeed =
+      isFilled(seedContact.fullName) || isFilled(seedContact.phone) || isFilled(seedContact.email);
+    if (!hasSeed) return;
+    if (!LEGAL_ENTITY_UUID_RE.test(contactsScopeId)) return;
+
+    const key = seedMigrationKey(row.id, contactsScopeId);
+    if (primaryContactSeedStarted.has(key)) return;
+
+    const activeNow = getLegalEntityContacts(row.id, contactsScopeId).filter(isClientContactActive);
+    if (activeNow.length > 0) {
+      primaryContactSeedStarted.add(key);
+      return;
+    }
+
+    const phoneNorm = seedContact.phone?.trim() ? formatRussianPhoneInput(seedContact.phone) : "";
+    const emailNorm = seedContact.email?.trim() ?? "";
+    const fullName = seedContact.fullName?.trim() || "Контакт";
+
+    const dup = activeNow.some(
+      (c) =>
+        (phoneNorm && (c.phone ?? "").trim() === phoneNorm) ||
+        (emailNorm && (c.email ?? "").trim().toLowerCase() === emailNorm.toLowerCase()),
+    );
+    if (dup) {
+      primaryContactSeedStarted.add(key);
+      return;
+    }
+
+    primaryContactSeedStarted.add(key);
+    addLegalEntityContact(
+      row.id,
+      contactsScopeId,
+      {
+        fullName,
+        role: "",
+        phone: phoneNorm,
+        whatsapp: "",
+        telegram: "",
+        email: emailNorm,
+        comment: "",
+        isPrimary: true,
+        isActual: true,
+      },
+      profile,
+      { legalEntityDisplayName: legalEntityName },
+    );
+  }, [entityArchived, seedContact, contactsScopeId, row.id, legalEntityName, profile]);
+
+  const scopeIdForWrite = LEGAL_ENTITY_UUID_RE.test(contactsScopeId) ? contactsScopeId : null;
+
+  const contacts = useMemo(
+    () =>
+      mergeLegalEntityContacts(
+        row.id,
+        legalEntityId,
+        contactsScopeId !== legalEntityId ? contactsScopeId : null,
+      ),
+    [row.id, legalEntityId, contactsScopeId, tick],
+  );
   const active = useMemo(() => contacts.filter(isClientContactActive), [contacts]);
   const pending = useMemo(() => contacts.filter((c) => c.deleteRequestedAt), [contacts]);
   const primary = useMemo(() => active.find((c) => c.isPrimary) ?? active[0], [active]);
@@ -118,7 +237,7 @@ export function LegalEntityContactsSubsection({ row, legalEntityId, legalEntityN
       setFormErr("Укажите ФИО.");
       return;
     }
-    if (entityArchived || !canEdit) return;
+    if (entityArchived || !canEdit || !scopeIdForWrite) return;
     const phoneRaw = draft.phone ?? "";
     if (phoneRaw.trim() && !isValidRussianPhoneLoose(phoneRaw)) {
       setFormErr(RU_PHONE_INVALID_MESSAGE);
@@ -128,7 +247,7 @@ export function LegalEntityContactsSubsection({ row, legalEntityId, legalEntityN
     if (editingId) {
       updateLegalEntityContact(
         row.id,
-        legalEntityId,
+        scopeIdForWrite,
         editingId,
         {
           fullName: draft.fullName,
@@ -146,7 +265,7 @@ export function LegalEntityContactsSubsection({ row, legalEntityId, legalEntityN
     } else {
       addLegalEntityContact(
         row.id,
-        legalEntityId,
+        scopeIdForWrite,
         {
           fullName: draft.fullName,
           role: draft.role,
@@ -164,7 +283,7 @@ export function LegalEntityContactsSubsection({ row, legalEntityId, legalEntityN
     }
     setTick((n) => n + 1);
     setEditOpen(false);
-  }, [draft, editingId, entityArchived, canEdit, row.id, legalEntityId, legalEntityName, profile]);
+  }, [draft, editingId, entityArchived, canEdit, row.id, scopeIdForWrite, legalEntityName, profile]);
 
   if (entityArchived) {
     return (
@@ -230,7 +349,7 @@ export function LegalEntityContactsSubsection({ row, legalEntityId, legalEntityN
                   className="h-8 px-2 text-[11px] font-semibold"
                   data-testid={`button-legal-entity-contact-set-primary-${primary.id}`}
                   onClick={() => {
-                    setPrimaryLegalEntityContact(row.id, legalEntityId, primary.id, profile);
+                    if (scopeIdForWrite) setPrimaryLegalEntityContact(row.id, scopeIdForWrite, primary.id, profile);
                     setTick((n) => n + 1);
                   }}
                 >
@@ -318,7 +437,7 @@ export function LegalEntityContactsSubsection({ row, legalEntityId, legalEntityN
                           className="h-8 px-2 text-[11px] font-semibold"
                           data-testid={`button-legal-entity-contact-set-primary-${c.id}`}
                           onClick={() => {
-                            setPrimaryLegalEntityContact(row.id, legalEntityId, c.id, profile);
+                            if (scopeIdForWrite) setPrimaryLegalEntityContact(row.id, scopeIdForWrite, c.id, profile);
                             setTick((n) => n + 1);
                           }}
                         >
@@ -490,7 +609,9 @@ export function LegalEntityContactsSubsection({ row, legalEntityId, legalEntityN
               data-testid="button-legal-entity-contact-delete-confirm"
               onClick={() => {
                 if (deleteContactId) {
-                  requestDeleteLegalEntityContact(row.id, legalEntityId, deleteContactId, deleteReason, profile);
+                  if (scopeIdForWrite) {
+                    requestDeleteLegalEntityContact(row.id, scopeIdForWrite, deleteContactId, deleteReason, profile);
+                  }
                   setTick((n) => n + 1);
                 }
                 setDeleteOpen(false);
@@ -508,7 +629,7 @@ export function LegalEntityContactsSubsection({ row, legalEntityId, legalEntityN
           onOpenChange={setCopyOpen}
           row={row}
           profile={profile}
-          source={{ type: "legalEntity", legalEntityId, contactId: copyContact.id }}
+          source={{ type: "legalEntity", legalEntityId: scopeIdForWrite ?? legalEntityId, contactId: copyContact.id }}
           sourceContact={copyContact}
           onCopied={() => setTick((n) => n + 1)}
         />
