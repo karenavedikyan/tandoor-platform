@@ -70,12 +70,6 @@ import {
   restoreLegalEntityFromArchive,
 } from "@/lib/client-base-actualization-legal-entities";
 import { cn } from "@/lib/utils";
-import {
-  formatRussianPhoneInput,
-  isValidRussianPhoneLoose,
-  RU_PHONE_INVALID_MESSAGE,
-  RU_PHONE_PLACEHOLDER,
-} from "@/lib/phone-format";
 import { formatDisplayDate } from "@/lib/format-display-date";
 
 type Props = {
@@ -112,9 +106,6 @@ type DraftSnapshot = {
   ogrn: string;
   legalAddress: string;
   actualAddress: string;
-  primaryContact: string;
-  phone: string;
-  email: string;
   comment: string;
   paymentForm: LegalEntityPaymentForm | "";
   paymentDelayDays: string;
@@ -131,9 +122,6 @@ const EMPTY_SNAPSHOT: DraftSnapshot = {
   ogrn: "",
   legalAddress: "",
   actualAddress: "",
-  primaryContact: "",
-  phone: "",
-  email: "",
   comment: "",
   paymentForm: "",
   paymentDelayDays: "",
@@ -202,9 +190,6 @@ function snapshotFromDrafts(params: {
   ogrn: string;
   legalAddress: string;
   actualAddress: string;
-  primaryContact: string;
-  phone: string;
-  email: string;
   comment: string;
   paymentForm: LegalEntityPaymentForm | "";
   paymentDelayDays: string;
@@ -220,9 +205,6 @@ function snapshotFromDrafts(params: {
     ogrn: params.ogrn.trim(),
     legalAddress: params.legalAddress.trim(),
     actualAddress: params.actualAddress.trim(),
-    primaryContact: params.primaryContact.trim(),
-    phone: params.phone.trim(),
-    email: params.email.trim(),
     comment: params.comment.trim(),
     paymentForm: params.paymentForm,
     paymentDelayDays: params.paymentDelayDays.trim(),
@@ -241,9 +223,6 @@ function snapshotsEqual(a: DraftSnapshot, b: DraftSnapshot): boolean {
     a.ogrn === b.ogrn &&
     a.legalAddress === b.legalAddress &&
     a.actualAddress === b.actualAddress &&
-    a.primaryContact === b.primaryContact &&
-    a.phone === b.phone &&
-    a.email === b.email &&
     a.comment === b.comment &&
     a.paymentForm === b.paymentForm &&
     a.paymentDelayDays === b.paymentDelayDays &&
@@ -271,9 +250,6 @@ type FieldDirtyKey =
   | "ogrn"
   | "legalAddress"
   | "actualAddress"
-  | "primaryContact"
-  | "phone"
-  | "email"
   | "comment"
   | "paymentForm"
   | "paymentDelayDays"
@@ -360,9 +336,6 @@ export function DealerLegalEntitiesSection({
   const [draftAddress, setDraftAddress] = useState("");
   const [draftActualAddress, setDraftActualAddress] = useState("");
   const [sameAsLegal, setSameAsLegal] = useState(true);
-  const [draftPrimaryContact, setDraftPrimaryContact] = useState("");
-  const [draftPhone, setDraftPhone] = useState("");
-  const [draftEmail, setDraftEmail] = useState("");
   const [draftComment, setDraftComment] = useState("");
   const [draftPaymentForm, setDraftPaymentForm] = useState<LegalEntityPaymentForm | "">("");
   const [draftPaymentDelayDays, setDraftPaymentDelayDays] = useState("");
@@ -438,6 +411,11 @@ export function DealerLegalEntitiesSection({
     [useAct, actx.state, row.id],
   );
 
+  const resolveLegalEntityServerId = useCallback(
+    (entity: MergedDealerLegalEntity) => ensureServerLegalEntityId(row.id, entity, actorUserId, actorLabel),
+    [row.id, actorUserId, actorLabel],
+  );
+
   const findInnDuplicate = useCallback(
     (innRaw: string, excludeId: string | null) => {
       const inn = normalizeInn(innRaw);
@@ -461,9 +439,6 @@ export function DealerLegalEntitiesSection({
         ogrn: draftOgrn,
         legalAddress: draftAddress,
         actualAddress: draftActualAddress,
-        primaryContact: draftPrimaryContact,
-        phone: draftPhone,
-        email: draftEmail,
         comment: draftComment,
         paymentForm: draftPaymentForm,
         paymentDelayDays: draftPaymentDelayDays,
@@ -479,9 +454,6 @@ export function DealerLegalEntitiesSection({
       draftOgrn,
       draftAddress,
       draftActualAddress,
-      draftPrimaryContact,
-      draftPhone,
-      draftEmail,
       draftComment,
       draftPaymentForm,
       draftPaymentDelayDays,
@@ -520,9 +492,6 @@ export function DealerLegalEntitiesSection({
     setDraftAddress("");
     setDraftActualAddress("");
     setSameAsLegal(true);
-    setDraftPrimaryContact("");
-    setDraftPhone("");
-    setDraftEmail("");
     setDraftComment("");
     setDraftPaymentForm("");
     setDraftPaymentDelayDays("");
@@ -572,9 +541,6 @@ export function DealerLegalEntitiesSection({
       const la = (e.legalAddress ?? "").trim();
       const aa = (e.actualAddress ?? "").trim();
       setSameAsLegal(la === aa);
-      setDraftPrimaryContact(e.primaryContact ?? "");
-      setDraftPhone(formatRussianPhoneInput(e.phone ?? ""));
-      setDraftEmail(e.email ?? "");
       setDraftComment(e.comment ?? "");
       const payment = paymentFieldsFromEntity(e, paymentByEntityId[id]);
       setDraftPaymentForm(payment.paymentForm);
@@ -599,9 +565,6 @@ export function DealerLegalEntitiesSection({
             ogrn: e.ogrn ?? "",
             legalAddress: e.legalAddress ?? "",
             actualAddress: e.actualAddress ?? "",
-            primaryContact: e.primaryContact ?? "",
-            phone: formatRussianPhoneInput(e.phone ?? ""),
-            email: e.email ?? "",
             comment: e.comment ?? "",
             ...paymentFieldsFromEntity(paymentByEntityId[id] ?? e),
           }),
@@ -624,12 +587,6 @@ export function DealerLegalEntitiesSection({
       toast({ title: "Выберите тип юрлица", variant: "destructive" });
       return false;
     }
-
-    if (draftPhone.trim() && !isValidRussianPhoneLoose(draftPhone)) {
-      toast({ title: RU_PHONE_INVALID_MESSAGE, variant: "destructive" });
-      return false;
-    }
-    const legalEntityPhoneFormatted = draftPhone.trim() ? formatRussianPhoneInput(draftPhone) : "";
 
     const targetId = editingId ?? newEntityIdRef.current;
     if (!targetId) {
@@ -688,9 +645,9 @@ export function DealerLegalEntitiesSection({
           ogrn: draftOgrn.trim(),
           legalAddress: draftAddress.trim(),
           actualAddress: draftActualAddress.trim(),
-          primaryContact: draftPrimaryContact.trim(),
-          phone: legalEntityPhoneFormatted,
-          email: draftEmail.trim(),
+          primaryContact: prevEntitySnap?.primaryContact ?? "",
+          phone: prevEntitySnap?.phone ?? "",
+          email: prevEntitySnap?.email ?? "",
           comment: draftComment.trim(),
           internalCode,
           status: statusResolved,
@@ -742,9 +699,9 @@ export function DealerLegalEntitiesSection({
           legalAddress: draftAddress.trim(),
           actualAddress: draftActualAddress.trim(),
           entityType: draftEntityType,
-          primaryContact: draftPrimaryContact.trim(),
-          phone: legalEntityPhoneFormatted,
-          email: draftEmail.trim(),
+          primaryContact: prevEntitySnap?.primaryContact,
+          phone: prevEntitySnap?.phone,
+          email: prevEntitySnap?.email,
           comment: draftComment.trim(),
           internalCode: internalCodeOut || prevEntitySnap?.internalCode,
           status: statusResolved,
@@ -777,9 +734,6 @@ export function DealerLegalEntitiesSection({
           ogrn: draftOgrn.trim(),
           legalAddress: draftAddress.trim(),
           actualAddress: draftActualAddress.trim(),
-          primaryContact: draftPrimaryContact.trim(),
-          phone: legalEntityPhoneFormatted,
-          email: draftEmail.trim(),
           comment: draftComment.trim(),
           internalCode: internalCodeOut || prevEntitySnap?.internalCode,
           status: statusResolved,
@@ -843,9 +797,6 @@ export function DealerLegalEntitiesSection({
           legalAddress: draftAddress,
           actualAddress: draftActualAddress,
           entityType: draftEntityType,
-          primaryContact: draftPrimaryContact,
-          phone: legalEntityPhoneFormatted,
-          email: draftEmail,
           status: "additional",
           comment: draftComment,
           paymentForm: draftPaymentForm || null,
@@ -874,9 +825,6 @@ export function DealerLegalEntitiesSection({
           legalAddress: draftAddress,
           actualAddress: draftActualAddress,
           entityType: draftEntityType,
-          primaryContact: draftPrimaryContact,
-          phone: legalEntityPhoneFormatted,
-          email: draftEmail,
           internalCode: allocateNextLegalEntityCodeLocal(),
           status: "additional",
           comment: draftComment,
@@ -918,9 +866,6 @@ export function DealerLegalEntitiesSection({
     draftOgrn,
     draftAddress,
     draftActualAddress,
-    draftPrimaryContact,
-    draftPhone,
-    draftEmail,
     draftComment,
     draftPaymentForm,
     draftPaymentDelayDays,
@@ -1041,9 +986,6 @@ export function DealerLegalEntitiesSection({
         ogrn: false,
         legalAddress: false,
         actualAddress: false,
-        primaryContact: false,
-        phone: false,
-        email: false,
         comment: false,
       } as Record<FieldDirtyKey, boolean>;
     }
@@ -1057,9 +999,6 @@ export function DealerLegalEntitiesSection({
       ogrn: b.ogrn !== c.ogrn,
       legalAddress: b.legalAddress !== c.legalAddress,
       actualAddress: b.actualAddress !== c.actualAddress,
-      primaryContact: b.primaryContact !== c.primaryContact,
-      phone: b.phone !== c.phone,
-      email: b.email !== c.email,
       comment: b.comment !== c.comment,
       paymentForm: b.paymentForm !== c.paymentForm,
       paymentDelayDays: b.paymentDelayDays !== c.paymentDelayDays,
@@ -1465,56 +1404,6 @@ export function DealerLegalEntitiesSection({
                 </DirtyFieldWrap>
               </section>
 
-              <section data-testid="section-legal-entity-form-contacts" className="space-y-4 rounded-lg border border-border/60 bg-card/30 p-3 sm:p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Контакты</p>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="sm:col-span-2">
-                    <DirtyFieldWrap dirty={dirtyFlags.primaryContact} fieldKey="primaryContact" label="Основной контакт" htmlFor="le-contact">
-                      <Input
-                        id="le-contact"
-                        value={draftPrimaryContact}
-                        onChange={(e) => {
-                          setDraftPrimaryContact(e.target.value);
-                          markFormEdited();
-                        }}
-                        disabled={!canMutate}
-                        className="min-h-10 w-full min-w-0"
-                        data-testid="input-legal-entity-contact"
-                      />
-                    </DirtyFieldWrap>
-                  </div>
-                  <DirtyFieldWrap dirty={dirtyFlags.phone} fieldKey="phone" label="Телефон" htmlFor="le-phone">
-                    <Input
-                      id="le-phone"
-                      value={draftPhone}
-                      inputMode="tel"
-                      placeholder={RU_PHONE_PLACEHOLDER}
-                      onChange={(e) => {
-                        setDraftPhone(formatRussianPhoneInput(e.target.value));
-                        markFormEdited();
-                      }}
-                      disabled={!canMutate}
-                      className="min-h-10 w-full min-w-0"
-                      data-testid="input-legal-entity-phone"
-                    />
-                  </DirtyFieldWrap>
-                  <DirtyFieldWrap dirty={dirtyFlags.email} fieldKey="email" label="Email" htmlFor="le-email">
-                    <Input
-                      id="le-email"
-                      type="email"
-                      value={draftEmail}
-                      onChange={(e) => {
-                        setDraftEmail(e.target.value);
-                        markFormEdited();
-                      }}
-                      disabled={!canMutate}
-                      className="min-h-10 w-full min-w-0"
-                      data-testid="input-legal-entity-email"
-                    />
-                  </DirtyFieldWrap>
-                </div>
-              </section>
-
               <section
                 data-testid="section-legal-entity-form-payment"
                 className="space-y-3 rounded-lg border border-border/60 bg-muted/30 p-3 sm:p-4"
@@ -1800,15 +1689,6 @@ export function DealerLegalEntitiesSection({
                       {isFilled(e.actualAddress) && (e.actualAddress ?? "").trim() !== (e.legalAddress ?? "").trim() ? (
                         <p className="text-xs leading-relaxed text-muted-foreground">Фактический адрес: {e.actualAddress}</p>
                       ) : null}
-                      {isFilled(e.primaryContact) || isFilled(e.phone) || isFilled(e.email) ? (
-                        <p className="text-xs text-muted-foreground">
-                          {isFilled(e.primaryContact) ? <span>Контакт: {e.primaryContact}. </span> : null}
-                          {isFilled(e.phone) ? <span>Тел.: {e.phone}. </span> : null}
-                          {isFilled(e.email) ? <span>{e.email}</span> : null}
-                        </p>
-                      ) : (
-                        <p className="text-xs italic text-muted-foreground">Контакт не указан</p>
-                      )}
                       {updatedLabel !== "Не указано" ? (
                         <p className="text-[11px] text-muted-foreground">Обновлено: {updatedLabel}</p>
                       ) : null}
@@ -1827,6 +1707,12 @@ export function DealerLegalEntitiesSection({
                         profile={profile}
                         canEdit={canEditDealerLegalEntities(profile, row)}
                         entityArchived={false}
+                        seedContact={{
+                          fullName: e.primaryContact,
+                          phone: e.phone,
+                          email: e.email,
+                        }}
+                        resolveServerLegalEntityId={() => resolveLegalEntityServerId(e)}
                       />
                     </div>
                     {canMutate ? (
@@ -1914,6 +1800,12 @@ export function DealerLegalEntitiesSection({
                           profile={profile}
                           canEdit={canEditDealerLegalEntities(profile, row)}
                           entityArchived={true}
+                          seedContact={{
+                            fullName: e.primaryContact,
+                            phone: e.phone,
+                            email: e.email,
+                          }}
+                          resolveServerLegalEntityId={() => resolveLegalEntityServerId(e)}
                         />
                       </CardContent>
                     </Card>
