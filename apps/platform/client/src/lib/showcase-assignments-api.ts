@@ -3,12 +3,13 @@
  */
 
 import type {
+  AssignmentCommentDto,
   AssignmentDto,
   AssignmentItemStatus,
   AssignmentStatus,
 } from "@shared/showcase-assignments-handlers";
 
-export type { AssignmentDto, AssignmentItemStatus, AssignmentStatus };
+export type { AssignmentCommentDto, AssignmentDto, AssignmentItemStatus, AssignmentStatus };
 
 export type AssignmentItemInput = {
   targetKind: "model" | "variant";
@@ -57,6 +58,8 @@ export type ListAssignmentsParams = {
   mine?: boolean;
   createdBy?: string;
   assigneeUserId?: string;
+  includeArchived?: boolean;
+  archivedOnly?: boolean;
 };
 
 export async function listAssignments(params: ListAssignmentsParams): Promise<AssignmentDto[]> {
@@ -67,6 +70,8 @@ export async function listAssignments(params: ListAssignmentsParams): Promise<As
   if (params.mine) qs.set("mine", "1");
   if (params.createdBy) qs.set("createdBy", params.createdBy);
   if (params.assigneeUserId) qs.set("assigneeUserId", params.assigneeUserId);
+  if (params.includeArchived) qs.set("includeArchived", "1");
+  if (params.archivedOnly) qs.set("archivedOnly", "1");
   const query = qs.toString();
   const res = await fetch(`/api/showcase-assignments/list${query ? `?${query}` : ""}`, {
     credentials: "include",
@@ -83,8 +88,11 @@ export async function listIncomingAssignments(): Promise<AssignmentDto[]> {
   return listAssignments({ mine: true });
 }
 
-export async function listOutgoingAssignments(userId: string): Promise<AssignmentDto[]> {
-  return listAssignments({ createdBy: userId });
+export async function listOutgoingAssignments(
+  userId: string,
+  opts?: Pick<ListAssignmentsParams, "archivedOnly" | "includeArchived">,
+): Promise<AssignmentDto[]> {
+  return listAssignments({ createdBy: userId, ...opts });
 }
 
 export async function getAssignment(id: string): Promise<AssignmentDto> {
@@ -184,4 +192,120 @@ export async function createFollowup(body: CreateFollowupBody): Promise<Assignme
 
 export function assignmentShareUrl(id: string): string {
   return `${window.location.origin}/#/assignment/${id}`;
+}
+
+type BatchResult = { success: true; archived?: number; unarchived?: number; deleted?: number; reminded?: number; skipped: number };
+
+export async function updateAssignment(body: {
+  assignmentId: string;
+  title?: string;
+  comment?: string | null;
+  dueDate?: string | null;
+  assigneeUserId?: string | null;
+  assigneeName?: string | null;
+}): Promise<AssignmentDto> {
+  const res = await fetch("/api/showcase-assignments/update", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const json = (await res.json()) as ApiOkAssignment | ApiErr;
+  if (!res.ok || json.success !== true) {
+    throw new Error(parseApiError(json, "Не удалось обновить задание"));
+  }
+  return json.assignment;
+}
+
+export async function archiveAssignments(
+  assignmentIds: string[],
+): Promise<{ archived: number; skipped: number }> {
+  const res = await fetch("/api/showcase-assignments/archive", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ assignmentIds }),
+  });
+  const json = (await res.json()) as BatchResult | ApiErr;
+  if (!res.ok || json.success !== true) {
+    throw new Error(parseApiError(json, "Не удалось архивировать задания"));
+  }
+  return { archived: json.archived ?? 0, skipped: json.skipped };
+}
+
+export async function unarchiveAssignments(
+  assignmentIds: string[],
+): Promise<{ unarchived: number; skipped: number }> {
+  const res = await fetch("/api/showcase-assignments/unarchive", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ assignmentIds }),
+  });
+  const json = (await res.json()) as BatchResult | ApiErr;
+  if (!res.ok || json.success !== true) {
+    throw new Error(parseApiError(json, "Не удалось вернуть задания из архива"));
+  }
+  return { unarchived: json.unarchived ?? 0, skipped: json.skipped };
+}
+
+export async function deleteAssignments(
+  assignmentIds: string[],
+): Promise<{ deleted: number; skipped: number }> {
+  const res = await fetch("/api/showcase-assignments/delete", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ assignmentIds }),
+  });
+  const json = (await res.json()) as BatchResult | ApiErr;
+  if (!res.ok || json.success !== true) {
+    throw new Error(parseApiError(json, "Не удалось удалить задания"));
+  }
+  return { deleted: json.deleted ?? 0, skipped: json.skipped };
+}
+
+export async function remindAssignees(
+  assignmentIds: string[],
+): Promise<{ reminded: number; skipped: number }> {
+  const res = await fetch("/api/showcase-assignments/remind", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ assignmentIds }),
+  });
+  const json = (await res.json()) as BatchResult | ApiErr;
+  if (!res.ok || json.success !== true) {
+    throw new Error(parseApiError(json, "Не удалось отправить напоминание"));
+  }
+  return { reminded: json.reminded ?? 0, skipped: json.skipped };
+}
+
+export async function listAssignmentComments(assignmentId: string): Promise<AssignmentCommentDto[]> {
+  const res = await fetch(
+    `/api/showcase-assignments/comments?assignmentId=${encodeURIComponent(assignmentId)}`,
+    { credentials: "include", cache: "no-store" },
+  );
+  const json = (await res.json()) as { success: true; comments: AssignmentCommentDto[] } | ApiErr;
+  if (!res.ok || json.success !== true) {
+    throw new Error(parseApiError(json, "Не удалось загрузить комментарии"));
+  }
+  return json.comments;
+}
+
+export async function addAssignmentComment(
+  assignmentId: string,
+  body: string,
+): Promise<AssignmentCommentDto> {
+  const res = await fetch("/api/showcase-assignments/add-comment", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ assignmentId, body }),
+  });
+  const json = (await res.json()) as { success: true; comment: AssignmentCommentDto } | ApiErr;
+  if (!res.ok || json.success !== true) {
+    throw new Error(parseApiError(json, "Не удалось отправить комментарий"));
+  }
+  return json.comment;
 }

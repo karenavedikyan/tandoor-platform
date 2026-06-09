@@ -21,14 +21,21 @@ import {
 } from "../../shared/admin/admin-auth.js";
 import {
   AssignmentValidationError,
+  handleAddComment,
+  handleArchive,
   handleClose,
   handleCreate,
+  handleDelete,
   handleFollowup,
   handleGet,
   handleItemSetStatus,
   handleItemToggle,
   handleList,
+  handleListComments,
+  handleRemind,
   handleSubmit,
+  handleUnarchive,
+  handleUpdate,
   handleVerify,
   type AssignmentSessionUser,
 } from "../../shared/showcase-assignments-handlers.js";
@@ -87,7 +94,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         createdBy: parseQueryString(req.query.createdBy),
         status: parseQueryString(req.query.status),
         mine: parseQueryString(req.query.mine) === "1",
+        includeArchived: parseQueryString(req.query.includeArchived) === "1",
+        archivedOnly: parseQueryString(req.query.archivedOnly) === "1",
       }));
+      return;
+    }
+
+    if (action === "comments" && req.method === "GET") {
+      sendJson(res, 200, await handleListComments(pool, sessionUser, parseQueryString(req.query.assignmentId)));
       return;
     }
 
@@ -99,6 +113,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       if (action === "verify") { sendJson(res, 200, await handleVerify(pool, sessionUser, body)); return; }
       if (action === "followup") { sendJson(res, 200, await handleFollowup(pool, sessionUser, body)); return; }
       if (action === "close") { sendJson(res, 200, await handleClose(pool, sessionUser, body)); return; }
+      if (action === "update") { sendJson(res, 200, await handleUpdate(pool, sessionUser, body)); return; }
+      if (action === "archive") { sendJson(res, 200, await handleArchive(pool, sessionUser, body)); return; }
+      if (action === "unarchive") { sendJson(res, 200, await handleUnarchive(pool, sessionUser, body)); return; }
+      if (action === "delete") { sendJson(res, 200, await handleDelete(pool, sessionUser, body)); return; }
+      if (action === "remind") { sendJson(res, 200, await handleRemind(pool, sessionUser, body)); return; }
+      if (action === "add-comment") { sendJson(res, 200, await handleAddComment(pool, sessionUser, body)); return; }
     }
 
     if (req.method !== "GET" && req.method !== "POST") {

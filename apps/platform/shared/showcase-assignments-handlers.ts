@@ -70,11 +70,23 @@ export type AssignmentDto = {
   verifiedByName: string | null;
   createdAt: string;
   updatedAt: string;
+  isArchived: boolean;
+  archivedAt: string | null;
   items: AssignmentItemDto[];
   // Сводка для UI.
   itemsTotal: number;
   itemsDone: number;
   itemsVerified: number;
+};
+
+export type AssignmentCommentDto = {
+  id: string;
+  assignmentId: string;
+  authorId: string | null;
+  authorName: string | null;
+  authorRole: string | null;
+  body: string;
+  createdAt: string;
 };
 
 export class AssignmentValidationError extends Error {
@@ -89,6 +101,31 @@ export class AssignmentValidationError extends Error {
 const CREATE_ROLES = new Set(["admin", "director", "rop", "regional_manager"]);
 const VERIFY_ROLES = new Set(["admin", "director", "rop", "regional_manager"]);
 const ANY_ROLE = new Set(["admin", "director", "rop", "regional_manager", "manager"]);
+const ELEVATED_ROLES = new Set(["admin", "director"]);
+const COMMENT_ACCESS_ROLES = new Set(["admin", "director", "rop", "regional_manager"]);
+
+function isElevated(me: AssignmentSessionUser): boolean {
+  return ELEVATED_ROLES.has(me.role);
+}
+
+function canManageAssignment(me: AssignmentSessionUser, head: AssignmentDto): boolean {
+  return isElevated(me) || head.createdBy === me.id;
+}
+
+function canAccessAssignmentComments(me: AssignmentSessionUser, head: AssignmentDto): boolean {
+  return (
+    COMMENT_ACCESS_ROLES.has(me.role) ||
+    head.createdBy === me.id ||
+    (head.assigneeUserId != null && head.assigneeUserId === me.id)
+  );
+}
+
+function parseAssignmentIds(body: Record<string, unknown>): string[] {
+  const single = str(body.assignmentId);
+  if (single) return [single];
+  if (!Array.isArray(body.assignmentIds)) return [];
+  return body.assignmentIds.map((x) => String(x)).filter((id) => id.trim().length > 0);
+}
 
 function assertActive(me: AssignmentSessionUser): void {
   if (me.status !== "active") throw new AssignmentValidationError("Недостаточно прав.", "FORBIDDEN");
@@ -228,10 +265,24 @@ function mapAssignmentRow(r: Record<string, unknown>, items: AssignmentItemDto[]
     verifiedByName: (r.verified_by_name as string) ?? null,
     createdAt: toIso(r.created_at),
     updatedAt: toIso(r.updated_at),
+    isArchived: Boolean(r.is_archived),
+    archivedAt: toIsoOrNull(r.archived_at),
     items,
     itemsTotal: items.length,
     itemsDone,
     itemsVerified,
+  };
+}
+
+function mapCommentRow(r: Record<string, unknown>): AssignmentCommentDto {
+  return {
+    id: String(r.id),
+    assignmentId: String(r.assignment_id),
+    authorId: r.author_id ? String(r.author_id) : null,
+    authorName: (r.author_name as string) ?? null,
+    authorRole: (r.author_role as string) ?? null,
+    body: String(r.body),
+    createdAt: toIso(r.created_at),
   };
 }
 
@@ -398,6 +449,8 @@ export type AssignmentListFilter = {
   createdBy?: string;
   status?: string;
   mine?: boolean; // задания, где текущий пользователь — исполнитель
+  includeArchived?: boolean;
+  archivedOnly?: boolean;
 };
 
 export async function handleList(
@@ -418,6 +471,11 @@ export async function handleList(
   if (filter.tradePointId) push("trade_point_id = $?", filter.tradePointId);
   if (filter.dealerId) push("dealer_id = $?", filter.dealerId);
   if (filter.status) push("status = $?", filter.status);
+  if (filter.archivedOnly) {
+    conds.push("is_archived = true");
+  } else if (!filter.includeArchived) {
+    conds.push("is_archived = false");
+  }
   // Менеджер видит только свои задания (как исполнитель), если не указано иное.
   if (filter.mine || me.role === "manager") {
     push("assignee_user_id = $?::uuid", me.id);
@@ -807,4 +865,271 @@ export async function handleClose(
   await insertEvent(pool, { assignmentId, kind: "closed", actorId: me.id, actorName: me.fullName });
   const dto = await loadAssignment(pool, assignmentId);
   return { success: true, assignment: dto! };
+}
+
+// ── update (создатель / elevated) ───────────────────────────────────────────
+export async function handleUpdate(
+  pool: PoolLike,
+  me: AssignmentSessionUser,
+  body: Record<string, unknown>,
+): Promise<{ success: true; assignment: AssignmentDto }> {
+  assertActive(me);
+  const assignmentId = str(body.assignmentId);
+  if (!assignmentId) throw new AssignmentValidationError("assignmentId обязателен.");
+  const head = await loadAssignment(pool, assignmentId);
+  if (!head) throw new AssignmentValidationError("Задание не найдено.", "NOT_FOUND");
+  if (!canManageAssignment(me, head)) {
+    throw new AssignmentValidationError("Недостаточно прав.", "FORBIDDEN");
+  }
+  if (head.status === "verified" || head.status === "closed") {
+    throw new AssignmentValidationError("Завершённое задание нельзя редактировать.", "CONFLICT");
+  }
+
+  const titleRaw = body.title !== undefined ? str(body.title) : undefined;
+  const titleParam = titleRaw && titleRaw.length > 0 ? titleRaw : null;
+  const commentParam = body.comment !== undefined ? optStr(body.comment) : null;
+  const dueParam = body.dueDate !== undefined ? parseOptionalDate(body.dueDate) : null;
+  const assigneeIdParam = body.assigneeUserId !== undefined ? optStr(body.assigneeUserId) : null;
+  const assigneeNameParam = body.assigneeName !== undefined ? optStr(body.assigneeName) : null;
+  const prevAssignee = head.assigneeUserId;
+
+  await pool.query(
+    `UPDATE showcase_install_assignments SET
+       title = CASE WHEN $2::text IS NOT NULL THEN $2::text ELSE title END,
+       comment = CASE WHEN $8::boolean THEN $3::text ELSE comment END,
+       due_date = CASE WHEN $4::boolean THEN $5::date ELSE due_date END,
+       assignee_user_id = CASE WHEN $6::boolean THEN $7::uuid ELSE assignee_user_id END,
+       assignee_name = CASE WHEN $9::boolean THEN $10::text ELSE assignee_name END,
+       updated_at = NOW()
+     WHERE id = $1`,
+    [
+      assignmentId,
+      titleParam,
+      commentParam,
+      body.dueDate !== undefined,
+      dueParam,
+      body.assigneeUserId !== undefined,
+      assigneeIdParam,
+      body.comment !== undefined,
+      body.assigneeName !== undefined,
+      assigneeNameParam,
+    ],
+  );
+
+  const dto = (await loadAssignment(pool, assignmentId))!;
+  const newAssignee = dto.assigneeUserId;
+  if (body.assigneeUserId !== undefined && newAssignee && newAssignee !== prevAssignee) {
+    await notifyUser(pool, {
+      userId: newAssignee,
+      kind: "assignment_reassigned",
+      title: "Вам назначено задание",
+      body: dto.title,
+      link: `/#/assignment/${assignmentId}`,
+      entityId: assignmentId,
+      actorId: me.id,
+      actorName: me.fullName,
+    });
+  }
+
+  await insertEvent(pool, {
+    assignmentId,
+    kind: "updated",
+    actorId: me.id,
+    actorName: me.fullName,
+  });
+
+  return { success: true, assignment: dto };
+}
+
+// ── archive / unarchive ───────────────────────────────────────────────────────
+export async function handleArchive(
+  pool: PoolLike,
+  me: AssignmentSessionUser,
+  body: Record<string, unknown>,
+): Promise<{ success: true; archived: number; skipped: number }> {
+  assertActive(me);
+  const ids = parseAssignmentIds(body);
+  if (ids.length === 0) throw new AssignmentValidationError("Укажите assignmentId или assignmentIds.");
+  let archived = 0;
+  let skipped = 0;
+  for (const id of ids) {
+    const head = await loadAssignment(pool, id);
+    if (!head || !canManageAssignment(me, head)) {
+      skipped++;
+      continue;
+    }
+    await pool.query(
+      `UPDATE showcase_install_assignments SET is_archived = true, archived_at = NOW(), updated_at = NOW() WHERE id = $1`,
+      [id],
+    );
+    await insertEvent(pool, { assignmentId: id, kind: "archived", actorId: me.id, actorName: me.fullName });
+    archived++;
+  }
+  return { success: true, archived, skipped };
+}
+
+export async function handleUnarchive(
+  pool: PoolLike,
+  me: AssignmentSessionUser,
+  body: Record<string, unknown>,
+): Promise<{ success: true; unarchived: number; skipped: number }> {
+  assertActive(me);
+  const ids = parseAssignmentIds(body);
+  if (ids.length === 0) throw new AssignmentValidationError("Укажите assignmentId или assignmentIds.");
+  let unarchived = 0;
+  let skipped = 0;
+  for (const id of ids) {
+    const head = await loadAssignment(pool, id);
+    if (!head || !canManageAssignment(me, head)) {
+      skipped++;
+      continue;
+    }
+    await pool.query(
+      `UPDATE showcase_install_assignments SET is_archived = false, archived_at = NULL, updated_at = NOW() WHERE id = $1`,
+      [id],
+    );
+    await insertEvent(pool, { assignmentId: id, kind: "unarchived", actorId: me.id, actorName: me.fullName });
+    unarchived++;
+  }
+  return { success: true, unarchived, skipped };
+}
+
+// ── delete (жёсткое) ──────────────────────────────────────────────────────────
+export async function handleDelete(
+  pool: PoolLike,
+  me: AssignmentSessionUser,
+  body: Record<string, unknown>,
+): Promise<{ success: true; deleted: number; skipped: number }> {
+  assertActive(me);
+  const ids = parseAssignmentIds(body);
+  if (ids.length === 0) throw new AssignmentValidationError("Укажите assignmentId или assignmentIds.");
+  const toDelete: string[] = [];
+  let skipped = 0;
+  for (const id of ids) {
+    const head = await loadAssignment(pool, id);
+    if (!head || !canManageAssignment(me, head)) {
+      skipped++;
+      continue;
+    }
+    toDelete.push(id);
+  }
+  if (toDelete.length > 0) {
+    await pool.query(`DELETE FROM showcase_install_assignment_items WHERE assignment_id = ANY($1::uuid[])`, [toDelete]);
+    await pool.query(`DELETE FROM showcase_install_assignment_events WHERE assignment_id = ANY($1::uuid[])`, [toDelete]);
+    await pool.query(`DELETE FROM showcase_install_assignment_comments WHERE assignment_id = ANY($1::uuid[])`, [toDelete]);
+    await pool.query(`DELETE FROM showcase_install_assignments WHERE id = ANY($1::uuid[])`, [toDelete]);
+  }
+  return { success: true, deleted: toDelete.length, skipped };
+}
+
+// ── remind ────────────────────────────────────────────────────────────────────
+export async function handleRemind(
+  pool: PoolLike,
+  me: AssignmentSessionUser,
+  body: Record<string, unknown>,
+): Promise<{ success: true; reminded: number; skipped: number }> {
+  assertActive(me);
+  const ids = parseAssignmentIds(body);
+  if (ids.length === 0) throw new AssignmentValidationError("Укажите assignmentId или assignmentIds.");
+  let reminded = 0;
+  let skipped = 0;
+  for (const id of ids) {
+    const head = await loadAssignment(pool, id);
+    if (!head || !canManageAssignment(me, head)) {
+      skipped++;
+      continue;
+    }
+    if (!head.assigneeUserId || head.status === "verified" || head.status === "closed") {
+      skipped++;
+      continue;
+    }
+    await notifyUser(pool, {
+      userId: head.assigneeUserId,
+      kind: "assignment_reminder",
+      title: "Напоминание о задании",
+      body: head.title,
+      link: `/#/assignment/${id}`,
+      entityId: id,
+      actorId: me.id,
+      actorName: me.fullName,
+    });
+    reminded++;
+  }
+  return { success: true, reminded, skipped };
+}
+
+// ── comments ──────────────────────────────────────────────────────────────────
+export async function handleListComments(
+  pool: PoolLike,
+  me: AssignmentSessionUser,
+  assignmentId: string | undefined,
+): Promise<{ success: true; comments: AssignmentCommentDto[] }> {
+  assertActive(me);
+  if (!assignmentId) throw new AssignmentValidationError("assignmentId обязателен.");
+  const head = await loadAssignment(pool, assignmentId);
+  if (!head) throw new AssignmentValidationError("Задание не найдено.", "NOT_FOUND");
+  if (!canAccessAssignmentComments(me, head)) {
+    throw new AssignmentValidationError("Недостаточно прав.", "FORBIDDEN");
+  }
+  const r = await pool.query<Record<string, unknown>>(
+    `SELECT * FROM showcase_install_assignment_comments WHERE assignment_id = $1 ORDER BY created_at ASC`,
+    [assignmentId],
+  );
+  return { success: true, comments: r.rows.map(mapCommentRow) };
+}
+
+export async function handleAddComment(
+  pool: PoolLike,
+  me: AssignmentSessionUser,
+  body: Record<string, unknown>,
+): Promise<{ success: true; comment: AssignmentCommentDto }> {
+  assertActive(me);
+  const assignmentId = str(body.assignmentId);
+  if (!assignmentId) throw new AssignmentValidationError("assignmentId обязателен.");
+  const text = str(body.body);
+  if (!text) throw new AssignmentValidationError("Укажите текст комментария.");
+  const head = await loadAssignment(pool, assignmentId);
+  if (!head) throw new AssignmentValidationError("Задание не найдено.", "NOT_FOUND");
+  if (!canAccessAssignmentComments(me, head)) {
+    throw new AssignmentValidationError("Недостаточно прав.", "FORBIDDEN");
+  }
+
+  const ins = await pool.query<Record<string, unknown>>(
+    `INSERT INTO showcase_install_assignment_comments (assignment_id, author_id, author_name, author_role, body)
+     VALUES ($1, $2::uuid, $3, $4, $5)
+     RETURNING *`,
+    [assignmentId, me.id, me.fullName, me.role, text],
+  );
+  const comment = mapCommentRow(ins.rows[0]!);
+
+  const notifyTarget =
+    me.id === head.createdBy
+      ? head.assigneeUserId && head.assigneeUserId !== me.id
+        ? head.assigneeUserId
+        : null
+      : head.createdBy && head.createdBy !== me.id
+        ? head.createdBy
+        : null;
+  if (notifyTarget) {
+    await notifyUser(pool, {
+      userId: notifyTarget,
+      kind: "assignment_comment",
+      title: "Новый комментарий к заданию",
+      body: head.title,
+      link: `/#/assignment/${assignmentId}`,
+      entityId: assignmentId,
+      actorId: me.id,
+      actorName: me.fullName,
+    });
+  }
+
+  await insertEvent(pool, {
+    assignmentId,
+    kind: "comment",
+    payload: { commentId: comment.id },
+    actorId: me.id,
+    actorName: me.fullName,
+  });
+
+  return { success: true, comment };
 }
