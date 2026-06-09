@@ -37,7 +37,7 @@ function Block({ title, children }: { title: string; children: string }) {
   return (
     <div className="space-y-1.5">
       <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
-      <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{children}</p>
+      <p className="break-words whitespace-pre-wrap text-[13px] leading-relaxed text-foreground sm:text-sm">{children}</p>
     </div>
   );
 }
@@ -70,7 +70,7 @@ export function ShowcaseModelPresentationDialog({ open, onOpenChange, model }: P
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-h-[min(90vh,720px)] gap-0 overflow-y-auto p-0 sm:max-w-lg"
+        className="w-[calc(100vw-1.5rem)] max-h-[min(90vh,720px)] gap-0 overflow-y-auto p-0 sm:w-full sm:max-w-lg"
         data-testid="dialog-showcase-model-presentation"
       >
         <DialogHeader className="sticky top-0 z-10 border-b border-border bg-card px-4 pb-3 pt-4 sm:px-5">
@@ -86,8 +86,8 @@ export function ShowcaseModelPresentationDialog({ open, onOpenChange, model }: P
             />
           </div>
           <div>
-            <p className="text-lg font-semibold leading-snug text-foreground">{model.name}</p>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="break-words text-base font-semibold leading-snug text-foreground sm:text-lg">{model.name}</p>
+            <p className="mt-1 break-words text-xs text-muted-foreground">
               Тип: {model.typeLabelRu} · Приоритет матрицы: {priorityLabelRu(model.basePriority)}
             </p>
           </div>
@@ -104,7 +104,7 @@ export function ShowcaseModelPresentationDialog({ open, onOpenChange, model }: P
               type="button"
               variant="outline"
               size="sm"
-              className="min-h-9 font-semibold"
+              className="min-h-10 w-full font-semibold sm:min-h-9 sm:w-auto"
               data-testid="button-showcase-copy-characteristics"
               onClick={handleCopyChars}
             >
@@ -114,7 +114,7 @@ export function ShowcaseModelPresentationDialog({ open, onOpenChange, model }: P
               type="button"
               variant="outline"
               size="sm"
-              className="min-h-9 font-semibold"
+              className="min-h-10 w-full font-semibold sm:min-h-9 sm:w-auto"
               data-testid="button-showcase-copy-benefits"
               onClick={handleCopyAdv}
             >
@@ -124,7 +124,7 @@ export function ShowcaseModelPresentationDialog({ open, onOpenChange, model }: P
               type="button"
               variant="default"
               size="sm"
-              className="min-h-9 font-semibold"
+              className="min-h-10 w-full font-semibold sm:min-h-9 sm:w-auto"
               data-testid="button-showcase-copy-message"
               onClick={handleCopyMsg}
             >

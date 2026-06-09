@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
@@ -753,8 +754,8 @@ export function TradePointShowcaseMatrixSection({
                         </Button>
                       ) : null}
                       {canEdit ? (
-                        <Collapsible>
-                          <CollapsibleTrigger asChild>
+                        <Popover>
+                          <PopoverTrigger asChild>
                             <Button
                               type="button"
                               variant="outline"
@@ -765,8 +766,13 @@ export function TradePointShowcaseMatrixSection({
                               Ещё
                               <ChevronDown className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
                             </Button>
-                          </CollapsibleTrigger>
-                          <CollapsibleContent className="absolute right-0 top-full z-20 mt-0.5 min-w-[12rem] max-w-[min(calc(100vw-2rem),18rem)] space-y-2 rounded-md border border-border/60 bg-popover p-2 shadow-lg">
+                          </PopoverTrigger>
+                          <PopoverContent
+                            align="end"
+                            side="bottom"
+                            sideOffset={4}
+                            className="max-h-[min(70vh,28rem)] w-[min(calc(100vw-2rem),18rem)] space-y-2 overflow-y-auto p-2"
+                          >
                             <Button
                               type="button"
                               variant="outline"
@@ -824,8 +830,8 @@ export function TradePointShowcaseMatrixSection({
                             <Button asChild variant="ghost" size="sm" className="h-auto px-0 text-xs font-semibold text-primary underline-offset-2 hover:underline">
                               <Link href={`/catalog/${m.id}`}>Каталог</Link>
                             </Button>
-                          </CollapsibleContent>
-                        </Collapsible>
+                          </PopoverContent>
+                        </Popover>
                       ) : null}
                     </div>
                   </div>
