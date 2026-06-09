@@ -3439,38 +3439,53 @@ export default function DealerBase() {
       ) : null}
       <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Клиентская база</h1>
-          <p className="mt-1 text-sm text-muted-foreground sm:text-base">
-            Клиентская база: поиск, фильтры и переход в карточку клиента.
-          </p>
+          {isTaskSelectMode ? (
+            <>
+              <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+                Выбор торговой точки для задачи
+              </h1>
+              <p className="mt-1 text-sm text-muted-foreground sm:text-base">
+                Найдите точку через фильтры или поиск и отметьте одну или несколько витрин для постановки задачи.
+              </p>
+            </>
+          ) : (
+            <>
+              <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Клиентская база</h1>
+              <p className="mt-1 text-sm text-muted-foreground sm:text-base">
+                Клиентская база: поиск, фильтры и переход в карточку клиента.
+              </p>
+            </>
+          )}
         </div>
-        <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row sm:justify-end">
-          {canCreateDealerDuringActualization(profile) && actx.enabled ? (
-            <Button
-              type="button"
-              variant="default"
-              size="sm"
-              className="min-h-10 w-full font-semibold sm:w-auto"
-              data-testid="button-dealer-create"
-              onClick={() => setCreateDealerOpen(true)}
-            >
-              Добавить клиента
+        {!isTaskSelectMode ? (
+          <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row sm:justify-end">
+            {canCreateDealerDuringActualization(profile) && actx.enabled ? (
+              <Button
+                type="button"
+                variant="default"
+                size="sm"
+                className="min-h-10 w-full font-semibold sm:w-auto"
+                data-testid="button-dealer-create"
+                onClick={() => setCreateDealerOpen(true)}
+              >
+                Добавить клиента
+              </Button>
+            ) : null}
+            <Button variant="outline" size="sm" className="shrink-0 self-start sm:self-start" asChild>
+              <Link
+                href={buildHashPath("/client-map", {
+                  ...(cities.length > 0 ? { city: cities.join(",") } : {}),
+                  ...(isRopOrManagerAllFilter(ropTeam) ? {} : { team: ropTeam }),
+                  ...(isRopOrManagerAllFilter(manager) ? {} : { manager }),
+                  ...(quick !== "all" ? { quick } : {}),
+                })}
+                data-testid="button-dealer-base-open-client-map"
+              >
+                Карта клиентов
+              </Link>
             </Button>
-          ) : null}
-          <Button variant="outline" size="sm" className="shrink-0 self-start sm:self-start" asChild>
-            <Link
-              href={buildHashPath("/client-map", {
-                ...(cities.length > 0 ? { city: cities.join(",") } : {}),
-                ...(isRopOrManagerAllFilter(ropTeam) ? {} : { team: ropTeam }),
-                ...(isRopOrManagerAllFilter(manager) ? {} : { manager }),
-                ...(quick !== "all" ? { quick } : {}),
-              })}
-              data-testid="button-dealer-base-open-client-map"
-            >
-              Карта клиентов
-            </Link>
-          </Button>
-        </div>
+          </div>
+        ) : null}
       </div>
 
       {showActualizationSync ? (
