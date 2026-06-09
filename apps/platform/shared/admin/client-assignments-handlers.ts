@@ -17,7 +17,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const CLIENT_CATEGORIES = new Set(["top150", "top350", "top500", "top500plus", "new_client"]);
 
 const DEALER_OVERRIDE_JOIN =
-  "LEFT JOIN dealer_overrides do ON upper(regexp_replace(do.dealer_id, '^client-', '')) = ca.client_code";
+  "LEFT JOIN dealer_overrides dov ON upper(regexp_replace(dov.dealer_id, '^client-', '')) = ca.client_code";
 
 function sanitizeLikeFragment(raw: string): string {
   return raw.replace(/[%_\\]/g, "");
@@ -48,23 +48,23 @@ type DealerOverrideFilters = {
 function appendDealerOverrideFilters(cond: string[], params: unknown[], filters: DealerOverrideFilters): void {
   if (filters.searchFrag) {
     params.push(`%${filters.searchFrag}%`);
-    cond.push(`(ca.client_code ILIKE $${params.length} OR do.name ILIKE $${params.length})`);
+    cond.push(`(ca.client_code ILIKE $${params.length} OR dov.name ILIKE $${params.length})`);
   }
   if (filters.city) {
     params.push(filters.city);
-    cond.push(`lower(do.city) = lower($${params.length})`);
+    cond.push(`lower(dov.city) = lower($${params.length})`);
   }
   if (filters.category) {
     params.push(filters.category);
-    cond.push(`do.client_category = $${params.length}`);
+    cond.push(`dov.client_category = $${params.length}`);
   }
   if (filters.regionalManager) {
     params.push(filters.regionalManager);
-    cond.push(`lower(do.regional_manager_name) = lower($${params.length})`);
+    cond.push(`lower(dov.regional_manager_name) = lower($${params.length})`);
   }
   if (filters.rop) {
     params.push(filters.rop);
-    cond.push(`lower(do.rop_name) = lower($${params.length})`);
+    cond.push(`lower(dov.rop_name) = lower($${params.length})`);
   }
 }
 
@@ -507,11 +507,11 @@ export async function handleClientsAssignmentsList(
             t.name AS team_name,
             ca.since,
             ca.updated_at,
-            do.name AS client_name,
-            do.city AS client_city,
-            do.client_category AS client_category,
-            do.regional_manager_name AS regional_manager_name,
-            do.rop_name AS rop_name
+            dov.name AS client_name,
+            dov.city AS client_city,
+            dov.client_category AS client_category,
+            dov.regional_manager_name AS regional_manager_name,
+            dov.rop_name AS rop_name
      FROM client_assignments ca
      JOIN users u ON u.id = ca.responsible_user_id
      LEFT JOIN teams t ON t.id = ca.team_id
@@ -570,7 +570,7 @@ export async function handleClientAssignmentFilterOptions(
     const r = await pool.query<{ value: string }>(
       `SELECT DISTINCT btrim(${column}) AS value
        FROM client_assignments ca
-       JOIN dealer_overrides do ON upper(regexp_replace(do.dealer_id, '^client-', '')) = ca.client_code
+       JOIN dealer_overrides dov ON upper(regexp_replace(dov.dealer_id, '^client-', '')) = ca.client_code
        WHERE ${column} IS NOT NULL AND btrim(${column}) <> '' ${ropTeamCond}
        ORDER BY value ASC`,
       baseParams,
@@ -579,10 +579,10 @@ export async function handleClientAssignmentFilterOptions(
   }
 
   const [cities, categories, regionalManagers, rops] = await Promise.all([
-    distinctField("do.city"),
-    distinctField("do.client_category"),
-    distinctField("do.regional_manager_name"),
-    distinctField("do.rop_name"),
+    distinctField("dov.city"),
+    distinctField("dov.client_category"),
+    distinctField("dov.regional_manager_name"),
+    distinctField("dov.rop_name"),
   ]);
 
   sendJson(res, 200, {
