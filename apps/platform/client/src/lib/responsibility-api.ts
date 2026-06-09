@@ -19,6 +19,15 @@ export interface ResolvedResponsibles {
   rop: ResolvedResponsible;
 }
 
+export interface ClientResponsibles {
+  /** Резолв на уровне клиента (берётся из первой точки; null, если у клиента нет точек). */
+  resolved: ResolvedResponsibles | null;
+  /** Роли, по которым у точек клиента разные ответственные. */
+  sharedByRole: { manager?: boolean; regional_manager?: boolean; rop?: boolean };
+  /** Кол-во торговых точек клиента. */
+  tradePointsCount: number;
+}
+
 export interface PickerUser {
   id: string;
   full_name: string;
@@ -75,6 +84,34 @@ export async function fetchResolveTradePoint(tradePointId: string): Promise<Reso
   } catch (e) {
     if (e instanceof ResponsibilityApiError) throw e;
     throw parseApiRequestFailure(e, "Не удалось загрузить ответственных");
+  }
+}
+
+export async function fetchResolveClient(dealerId: string): Promise<ClientResponsibles> {
+  try {
+    const res = await apiRequest(
+      "GET",
+      `/api/responsibility/client?dealerId=${encodeURIComponent(dealerId)}`,
+    );
+    const json = await readJson<
+      | {
+          success: true;
+          tradePoints: Array<{ resolved: ResolvedResponsibles }>;
+          sharedByRole: { manager?: boolean; regional_manager?: boolean; rop?: boolean };
+        }
+      | ApiErr
+    >(res);
+    if (json.success !== true || !Array.isArray(json.tradePoints)) {
+      throw parseApiError(json, "Не удалось загрузить ответственных клиента");
+    }
+    return {
+      resolved: json.tradePoints[0]?.resolved ?? null,
+      sharedByRole: json.sharedByRole ?? {},
+      tradePointsCount: json.tradePoints.length,
+    };
+  } catch (e) {
+    if (e instanceof ResponsibilityApiError) throw e;
+    throw parseApiRequestFailure(e, "Не удалось загрузить ответственных клиента");
   }
 }
 

@@ -76,6 +76,7 @@ import {
   DEALER_CARD_COMMENTS_EVENT,
   getDealerComments,
 } from "@/lib/dealer-card-comments";
+import { ClientResponsiblesSection } from "@/components/client-responsibles-section";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { displayUserName } from "@/lib/auth-api";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
@@ -699,29 +700,8 @@ export function DealerManualActualizationPage(props: {
           className="overflow-hidden rounded-lg border border-border/50 bg-card !border-b-0 shadow-sm"
         >
           <AccordionSectionTrigger title="Ответственные" summary={sectionMeta.responsibles.summary} status={sectionMeta.responsibles.status} />
-          <AccordionContent className="border-t border-border/35 px-3 pb-2.5 pt-1.5 text-sm sm:px-3.5">
-            <div className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
-            <Field label="Менеджер" value={row.manager || "—"} />
-            <Field label="Региональный менеджер" value={regionalManagerDisplay?.trim() || "—"} />
-            <Field label="РОП" value={ropDisplay?.trim() || "—"} />
-            <Field label="Территория / зона" value={str(f.territoryZone) || "—"} />
-            <Field label="Кто актуализировал" value={audit?.lastUpdatedByName ?? manual?.createdByName ?? "—"} />
-            <Field
-              label="Дата последней актуализации"
-              value={
-                audit?.lastUpdatedAt
-                  ? formatDisplayDateTime(audit.lastUpdatedAt)
-                  : manual?.createdAt
-                    ? formatDisplayDateTime(manual.createdAt)
-                    : ""
-              }
-            />
-            </div>
-            {canEdit ? (
-              <Button type="button" variant="outline" size="sm" className="mt-2 h-8 px-3 text-xs font-medium" onClick={() => setEditOpen(true)}>
-                Редактировать
-              </Button>
-            ) : null}
+          <AccordionContent className="border-t border-border/35 px-3 pb-2.5 pt-1.5 sm:px-3.5">
+            <ClientResponsiblesSection dealerId={baseRow.id} currentUserRole={user?.role} />
           </AccordionContent>
         </AccordionItem>
 
