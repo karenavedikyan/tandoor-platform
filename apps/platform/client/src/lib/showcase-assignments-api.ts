@@ -2,9 +2,13 @@
  * HTTP API заданий на отгрузку (showcase assignments).
  */
 
-import type { AssignmentDto, AssignmentItemStatus } from "@shared/showcase-assignments-handlers";
+import type {
+  AssignmentDto,
+  AssignmentItemStatus,
+  AssignmentStatus,
+} from "@shared/showcase-assignments-handlers";
 
-export type { AssignmentDto, AssignmentItemStatus };
+export type { AssignmentDto, AssignmentItemStatus, AssignmentStatus };
 
 export type AssignmentItemInput = {
   targetKind: "model" | "variant";
@@ -51,6 +55,8 @@ export type ListAssignmentsParams = {
   dealerId?: string;
   status?: string;
   mine?: boolean;
+  createdBy?: string;
+  assigneeUserId?: string;
 };
 
 export async function listAssignments(params: ListAssignmentsParams): Promise<AssignmentDto[]> {
@@ -59,6 +65,8 @@ export async function listAssignments(params: ListAssignmentsParams): Promise<As
   if (params.dealerId) qs.set("dealerId", params.dealerId);
   if (params.status) qs.set("status", params.status);
   if (params.mine) qs.set("mine", "1");
+  if (params.createdBy) qs.set("createdBy", params.createdBy);
+  if (params.assigneeUserId) qs.set("assigneeUserId", params.assigneeUserId);
   const query = qs.toString();
   const res = await fetch(`/api/showcase-assignments/list${query ? `?${query}` : ""}`, {
     credentials: "include",
@@ -69,6 +77,14 @@ export async function listAssignments(params: ListAssignmentsParams): Promise<As
     throw new Error(parseApiError(json, "Не удалось загрузить задания"));
   }
   return json.assignments;
+}
+
+export async function listIncomingAssignments(): Promise<AssignmentDto[]> {
+  return listAssignments({ mine: true });
+}
+
+export async function listOutgoingAssignments(userId: string): Promise<AssignmentDto[]> {
+  return listAssignments({ createdBy: userId });
 }
 
 export async function getAssignment(id: string): Promise<AssignmentDto> {
