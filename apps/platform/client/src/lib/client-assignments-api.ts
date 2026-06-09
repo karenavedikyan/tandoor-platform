@@ -12,6 +12,18 @@ export type ClientAssignmentRow = {
   teamName?: string | null;
   since: string;
   updatedAt: string;
+  clientName?: string | null;
+  city?: string | null;
+  clientCategory?: string | null;
+  regionalManagerName?: string | null;
+  ropName?: string | null;
+};
+
+export type ClientAssignmentFilterOptions = {
+  cities: string[];
+  categories: string[];
+  regionalManagers: string[];
+  rops: string[];
 };
 
 export type ClientAssignmentHistoryRow = {
@@ -46,6 +58,21 @@ export type ListAssignmentsParams = {
   search?: string;
   userId?: string;
   teamId?: string;
+  city?: string;
+  category?: string;
+  regionalManager?: string;
+  rop?: string;
+};
+
+export type ReassignClientsFilter = {
+  fromUserId?: string;
+  responsibleUserId?: string;
+  fromTeamId?: string;
+  city?: string;
+  category?: string;
+  regionalManager?: string;
+  rop?: string;
+  search?: string;
 };
 
 async function readJson(res: Response): Promise<Record<string, unknown>> {
@@ -75,7 +102,45 @@ function parseAssignmentRow(raw: unknown): ClientAssignmentRow | null {
   if (!clientCode || !responsibleUserId || !responsibleFullName || !since || !updatedAt) return null;
   const teamId = r.teamId === null ? null : typeof r.teamId === "string" ? r.teamId : null;
   const teamName = r.teamName === null || r.teamName === undefined ? null : typeof r.teamName === "string" ? r.teamName : null;
-  return { clientCode, responsibleUserId, responsibleFullName, teamId, teamName, since, updatedAt };
+  const clientName = r.clientName === null || r.clientName === undefined ? null : typeof r.clientName === "string" ? r.clientName : null;
+  const city = r.city === null || r.city === undefined ? null : typeof r.city === "string" ? r.city : null;
+  const clientCategory =
+    r.clientCategory === null || r.clientCategory === undefined
+      ? null
+      : typeof r.clientCategory === "string"
+        ? r.clientCategory
+        : null;
+  const regionalManagerName =
+    r.regionalManagerName === null || r.regionalManagerName === undefined
+      ? null
+      : typeof r.regionalManagerName === "string"
+        ? r.regionalManagerName
+        : null;
+  const ropName = r.ropName === null || r.ropName === undefined ? null : typeof r.ropName === "string" ? r.ropName : null;
+  return {
+    clientCode,
+    responsibleUserId,
+    responsibleFullName,
+    teamId,
+    teamName,
+    since,
+    updatedAt,
+    clientName,
+    city,
+    clientCategory,
+    regionalManagerName,
+    ropName,
+  };
+}
+
+function parseStringArray(raw: unknown): string[] | null {
+  if (!Array.isArray(raw)) return null;
+  const out: string[] = [];
+  for (const item of raw) {
+    if (typeof item !== "string") return null;
+    out.push(item);
+  }
+  return out;
 }
 
 function parseHistoryRow(raw: unknown): ClientAssignmentHistoryRow | null {
@@ -132,6 +197,10 @@ export async function listAssignments(
   if (params.search?.trim()) sp.set("search", params.search.trim());
   if (params.userId?.trim()) sp.set("userId", params.userId.trim());
   if (params.teamId?.trim()) sp.set("teamId", params.teamId.trim());
+  if (params.city?.trim()) sp.set("city", params.city.trim());
+  if (params.category?.trim()) sp.set("category", params.category.trim());
+  if (params.regionalManager?.trim()) sp.set("regionalManager", params.regionalManager.trim());
+  if (params.rop?.trim()) sp.set("rop", params.rop.trim());
   const qs = sp.toString();
   const url = qs ? `${ASSIGNMENTS_BASE}/clients-assignments-list?${qs}` : `${ASSIGNMENTS_BASE}/clients-assignments-list`;
   const res = await fetch(url, { method: "GET", credentials: "include" });
@@ -151,6 +220,27 @@ export async function listAssignments(
     items.push(p);
   }
   return { ok: true, items, total };
+}
+
+export async function listAssignmentFilterOptions(): Promise<
+  { ok: true; options: ClientAssignmentFilterOptions } | { ok: false; code: string; message: string }
+> {
+  const res = await fetch(`${ASSIGNMENTS_BASE}/client-assignment-filter-options`, {
+    method: "GET",
+    credentials: "include",
+  });
+  const body = await readJson(res);
+  if (!res.ok || body.success !== true) {
+    return { ok: false, ...errFromBody(body, "Не удалось загрузить опции фильтров.") };
+  }
+  const cities = parseStringArray(body.cities);
+  const categories = parseStringArray(body.categories);
+  const regionalManagers = parseStringArray(body.regionalManagers);
+  const rops = parseStringArray(body.rops);
+  if (!cities || !categories || !regionalManagers || !rops) {
+    return { ok: false, code: "INVALID_RESPONSE", message: "Некорректный ответ сервера." };
+  }
+  return { ok: true, options: { cities, categories, regionalManagers, rops } };
 }
 
 export async function listTeams(): Promise<{ ok: true; teams: AdminTeamOption[] } | { ok: false; code: string; message: string }> {
@@ -220,19 +310,25 @@ export async function getUserTeamHistory(
 }
 
 export async function reassignClients(input: {
-  clientCodes: string[];
+  clientCodes?: string[];
+  filter?: ReassignClientsFilter;
   toUserId: string;
   reason?: string;
 }): Promise<{ ok: true; reassigned: number } | { ok: false; code: string; message: string }> {
+  const payload: Record<string, unknown> = {
+    toUserId: input.toUserId,
+    reason: input.reason,
+  };
+  if (input.filter) {
+    payload.filter = input.filter;
+  } else if (input.clientCodes) {
+    payload.clientCodes = input.clientCodes;
+  }
   const res = await fetch(`${ASSIGNMENTS_BASE}/clients-reassign`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      clientCodes: input.clientCodes,
-      toUserId: input.toUserId,
-      reason: input.reason,
-    }),
+    body: JSON.stringify(payload),
   });
   const body = await readJson(res);
   if (!res.ok || body.success !== true) {

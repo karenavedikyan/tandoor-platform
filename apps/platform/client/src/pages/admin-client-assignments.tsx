@@ -42,12 +42,14 @@ import { formatDisplayDateTime } from "@/lib/format-display-date";
 import { listUsers, type AdminUser } from "@/lib/admin-users-api";
 import {
   getClientHistory,
+  listAssignmentFilterOptions,
   listAssignments,
   listTeams,
   reassignClients,
   type ClientAssignmentHistoryRow,
   type ClientAssignmentRow,
   type AdminTeamOption,
+  type ReassignClientsFilter,
 } from "@/lib/client-assignments-api";
 import { userCanManageInvitations, userHas } from "@/lib/auth-rbac";
 import { canManageClientAssignments, defaultHomePathForUserRole } from "@/lib/auth-access";
@@ -55,8 +57,25 @@ import { cn } from "@/lib/utils";
 
 const LIMIT = 50;
 
+const CATEGORY_LABELS: Record<string, string> = {
+  top150: "Топ 150",
+  top350: "Топ 350",
+  top500: "Топ 500",
+  top500plus: "Топ 500+",
+  new_client: "Новый клиент",
+};
+
 const ctaButtonClass =
   "min-h-11 bg-primary text-primary-foreground shadow-sm hover:bg-[#86B832] focus-visible:ring-primary";
+
+function cellText(value: string | null | undefined): string {
+  return value?.trim() || "—";
+}
+
+function categoryLabel(code: string | null | undefined): string {
+  if (!code?.trim()) return "—";
+  return CATEGORY_LABELS[code] ?? code;
+}
 
 function AssignmentHistoryPopover({ clientCode }: { clientCode: string }) {
   const [open, setOpen] = useState(false);
@@ -118,11 +137,15 @@ export default function AdminClientAssignmentsPage() {
 
   const [userIdFilter, setUserIdFilter] = useState<string>("");
   const [teamIdFilter, setTeamIdFilter] = useState<string>("");
+  const [cityFilter, setCityFilter] = useState<string>("");
+  const [categoryFilter, setCategoryFilter] = useState<string>("");
+  const [regionalFilter, setRegionalFilter] = useState<string>("");
+  const [ropFilter, setRopFilter] = useState<string>("");
   const [offset, setOffset] = useState(0);
 
   useEffect(() => {
     setOffset(0);
-  }, [searchDebounced, userIdFilter, teamIdFilter]);
+  }, [searchDebounced, userIdFilter, teamIdFilter, cityFilter, categoryFilter, regionalFilter, ropFilter]);
 
   const teamsQ = useQuery({
     queryKey: ["client-assignments", "teams"],
@@ -130,6 +153,16 @@ export default function AdminClientAssignmentsPage() {
       const r = await listTeams();
       if (!r.ok) throw new Error(r.message);
       return r.teams;
+    },
+    enabled: canPage,
+  });
+
+  const filterOptionsQ = useQuery({
+    queryKey: ["client-assignments", "filter-options"],
+    queryFn: async () => {
+      const r = await listAssignmentFilterOptions();
+      if (!r.ok) throw new Error(r.message);
+      return r.options;
     },
     enabled: canPage,
   });
@@ -145,7 +178,18 @@ export default function AdminClientAssignmentsPage() {
   });
 
   const listQ = useQuery({
-    queryKey: ["client-assignments", "list", searchDebounced, userIdFilter, teamIdFilter, offset],
+    queryKey: [
+      "client-assignments",
+      "list",
+      searchDebounced,
+      userIdFilter,
+      teamIdFilter,
+      cityFilter,
+      categoryFilter,
+      regionalFilter,
+      ropFilter,
+      offset,
+    ],
     queryFn: async () => {
       const r = await listAssignments({
         limit: LIMIT,
@@ -153,6 +197,10 @@ export default function AdminClientAssignmentsPage() {
         search: searchDebounced.trim() || undefined,
         userId: userIdFilter || undefined,
         teamId: teamIdFilter || undefined,
+        city: cityFilter || undefined,
+        category: categoryFilter || undefined,
+        regionalManager: regionalFilter || undefined,
+        rop: ropFilter || undefined,
       });
       if (!r.ok) throw new Error(r.message);
       return r;
@@ -166,7 +214,33 @@ export default function AdminClientAssignmentsPage() {
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   useEffect(() => {
     setSelected({});
-  }, [items, offset, searchDebounced, userIdFilter, teamIdFilter]);
+  }, [items, offset, searchDebounced, userIdFilter, teamIdFilter, cityFilter, categoryFilter, regionalFilter, ropFilter]);
+
+  const currentReassignFilter = useMemo((): ReassignClientsFilter => {
+    const filter: ReassignClientsFilter = {};
+    if (userIdFilter) filter.responsibleUserId = userIdFilter;
+    if (teamIdFilter) filter.fromTeamId = teamIdFilter;
+    if (cityFilter) filter.city = cityFilter;
+    if (categoryFilter) filter.category = categoryFilter;
+    if (regionalFilter) filter.regionalManager = regionalFilter;
+    if (ropFilter) filter.rop = ropFilter;
+    if (searchDebounced.trim()) filter.search = searchDebounced.trim();
+    return filter;
+  }, [userIdFilter, teamIdFilter, cityFilter, categoryFilter, regionalFilter, ropFilter, searchDebounced]);
+
+  const hasActiveFilter = useMemo(
+    () =>
+      Boolean(
+        searchDebounced.trim() ||
+          userIdFilter ||
+          teamIdFilter ||
+          cityFilter ||
+          categoryFilter ||
+          regionalFilter ||
+          ropFilter,
+      ),
+    [searchDebounced, userIdFilter, teamIdFilter, cityFilter, categoryFilter, regionalFilter, ropFilter],
+  );
 
   const selectedCodes = useMemo(() => Object.keys(selected).filter((k) => selected[k]), [selected]);
   const selectedCount = selectedCodes.length;
@@ -182,6 +256,7 @@ export default function AdminClientAssignmentsPage() {
   };
 
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkMode, setBulkMode] = useState<"selected" | "filter">("selected");
   const [bulkToUserId, setBulkToUserId] = useState<string>("");
   const [bulkReason, setBulkReason] = useState("");
   const [bulkLoading, setBulkLoading] = useState(false);
@@ -203,6 +278,7 @@ export default function AdminClientAssignmentsPage() {
 
   const teams: AdminTeamOption[] = teamsQ.data ?? [];
   const users: AdminUser[] = usersQ.data ?? [];
+  const filterOptions = filterOptionsQ.data;
 
   if (!user || !canManageClientAssignments(user.role)) {
     return (
@@ -252,16 +328,16 @@ export default function AdminClientAssignmentsPage() {
       <Card className="rounded-xl border border-border bg-card shadow-sm">
         <CardHeader>
           <CardTitle>Фильтры</CardTitle>
-          <CardDescription>Поиск по коду клиента, ответственный и команда (необязательно).</CardDescription>
+          <CardDescription>Поиск по коду или имени клиента, ответственный, команда и поля карточки клиента.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4 lg:flex-row lg:flex-wrap lg:items-end">
           <div className="min-w-0 flex-1 space-y-2 lg:min-w-[200px]">
-            <Label htmlFor="ca-search">Поиск по коду</Label>
+            <Label htmlFor="ca-search">Поиск</Label>
             <Input
               id="ca-search"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Например MA-MA085529"
+              placeholder="Код или имя клиента"
               className="min-h-11"
               data-testid="input-client-assignments-search"
             />
@@ -298,8 +374,95 @@ export default function AdminClientAssignmentsPage() {
               </SelectContent>
             </Select>
           </div>
+          <div className="min-w-0 flex-1 space-y-2 lg:min-w-[180px]">
+            <Label>Город</Label>
+            <Select value={cityFilter || "all"} onValueChange={(v) => setCityFilter(v === "all" ? "" : v)}>
+              <SelectTrigger className="min-h-11" data-testid="select-client-assignments-city">
+                <SelectValue placeholder="Все" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Все</SelectItem>
+                {(filterOptions?.cities ?? []).map((city) => (
+                  <SelectItem key={city} value={city}>
+                    {city}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="min-w-0 flex-1 space-y-2 lg:min-w-[180px]">
+            <Label>Категория</Label>
+            <Select value={categoryFilter || "all"} onValueChange={(v) => setCategoryFilter(v === "all" ? "" : v)}>
+              <SelectTrigger className="min-h-11" data-testid="select-client-assignments-category">
+                <SelectValue placeholder="Все" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Все</SelectItem>
+                {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="min-w-0 flex-1 space-y-2 lg:min-w-[200px]">
+            <Label>Регионал</Label>
+            <Select value={regionalFilter || "all"} onValueChange={(v) => setRegionalFilter(v === "all" ? "" : v)}>
+              <SelectTrigger className="min-h-11" data-testid="select-client-assignments-regional">
+                <SelectValue placeholder="Все" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Все</SelectItem>
+                {(filterOptions?.regionalManagers ?? []).map((name) => (
+                  <SelectItem key={name} value={name}>
+                    {name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="min-w-0 flex-1 space-y-2 lg:min-w-[200px]">
+            <Label>РОП</Label>
+            <Select value={ropFilter || "all"} onValueChange={(v) => setRopFilter(v === "all" ? "" : v)}>
+              <SelectTrigger className="min-h-11" data-testid="select-client-assignments-rop">
+                <SelectValue placeholder="Все" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Все</SelectItem>
+                {(filterOptions?.rops ?? []).map((name) => (
+                  <SelectItem key={name} value={name}>
+                    {name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </CardContent>
       </Card>
+
+      {hasActiveFilter ? (
+        <div
+          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/30 px-4 py-3"
+          data-testid="toolbar-client-assignments-filter-bulk"
+        >
+          <div className="text-sm text-muted-foreground">
+            По текущему фильтру: <span className="font-semibold text-foreground">{total}</span> (сервер переназначит до 1000)
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11"
+            onClick={() => {
+              setBulkMode("filter");
+              setBulkOpen(true);
+            }}
+            data-testid="button-client-assignments-bulk-filter"
+          >
+            Переназначить всё по фильтру
+          </Button>
+        </div>
+      ) : null}
 
       {selectedCount > 0 ? (
         <div
@@ -309,7 +472,15 @@ export default function AdminClientAssignmentsPage() {
           <div className="text-sm text-muted-foreground">
             Выбрано: <span className="font-semibold text-foreground">{selectedCount}</span>
           </div>
-          <Button type="button" className={ctaButtonClass} onClick={() => setBulkOpen(true)} data-testid="button-client-assignments-bulk">
+          <Button
+            type="button"
+            className={ctaButtonClass}
+            onClick={() => {
+              setBulkMode("selected");
+              setBulkOpen(true);
+            }}
+            data-testid="button-client-assignments-bulk"
+          >
             Переназначить выбранных
           </Button>
         </div>
@@ -371,6 +542,11 @@ export default function AdminClientAssignmentsPage() {
                       />
                     </TableHead>
                     <TableHead className="px-2 py-1.5 text-xs">Код клиента</TableHead>
+                    <TableHead className="px-2 py-1.5 text-xs">Клиент</TableHead>
+                    <TableHead className="px-2 py-1.5 text-xs">Город</TableHead>
+                    <TableHead className="px-2 py-1.5 text-xs">Категория</TableHead>
+                    <TableHead className="px-2 py-1.5 text-xs">Регионал</TableHead>
+                    <TableHead className="px-2 py-1.5 text-xs">РОП</TableHead>
                     <TableHead className="px-2 py-1.5 text-xs">Ответственный</TableHead>
                     <TableHead className="px-2 py-1.5 text-xs">Команда</TableHead>
                     <TableHead className="px-2 py-1.5 text-xs">Назначен с</TableHead>
@@ -405,6 +581,11 @@ export default function AdminClientAssignmentsPage() {
                           {row.clientCode}
                         </button>
                       </TableCell>
+                      <TableCell className="max-w-[180px] truncate px-2 py-1.5 text-sm">{cellText(row.clientName)}</TableCell>
+                      <TableCell className="max-w-[120px] truncate px-2 py-1.5 text-sm">{cellText(row.city)}</TableCell>
+                      <TableCell className="max-w-[120px] truncate px-2 py-1.5 text-sm">{categoryLabel(row.clientCategory)}</TableCell>
+                      <TableCell className="max-w-[140px] truncate px-2 py-1.5 text-sm">{cellText(row.regionalManagerName)}</TableCell>
+                      <TableCell className="max-w-[140px] truncate px-2 py-1.5 text-sm">{cellText(row.ropName)}</TableCell>
                       <TableCell className="max-w-[200px] truncate px-2 py-1.5 text-sm">{row.responsibleFullName}</TableCell>
                       <TableCell className="max-w-[220px] truncate px-2 py-1.5 text-sm">{row.teamName ?? row.teamId ?? "—"}</TableCell>
                       <TableCell className="whitespace-nowrap px-2 py-1.5 text-xs text-muted-foreground">
@@ -448,6 +629,18 @@ export default function AdminClientAssignmentsPage() {
                         <span className="shrink-0 text-[10px] text-muted-foreground">{formatDisplayDateTime(row.since)}</span>
                       </div>
                       <div className="mt-1 truncate text-sm font-medium text-foreground">{row.responsibleFullName}</div>
+                      <div className="truncate text-xs text-muted-foreground">
+                        {[cellText(row.clientName), cellText(row.city)].filter((v) => v !== "—").join(" · ") || "—"}
+                      </div>
+                      <div className="truncate text-xs text-muted-foreground">
+                        {[
+                          categoryLabel(row.clientCategory) !== "—" ? categoryLabel(row.clientCategory) : null,
+                          cellText(row.regionalManagerName) !== "—" ? cellText(row.regionalManagerName) : null,
+                          cellText(row.ropName) !== "—" ? cellText(row.ropName) : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ") || "—"}
+                      </div>
                       <div className="truncate text-xs text-muted-foreground">{row.teamName ?? row.teamId ?? "—"}</div>
                     </div>
                     <div className="shrink-0">
@@ -464,8 +657,12 @@ export default function AdminClientAssignmentsPage() {
       <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Переназначить выбранных</DialogTitle>
-            <DialogDescription>Будет переназначено клиентов: {selectedCount}. Целевой пользователь должен состоять в команде.</DialogDescription>
+            <DialogTitle>{bulkMode === "filter" ? "Переназначить по фильтру" : "Переназначить выбранных"}</DialogTitle>
+            <DialogDescription>
+              {bulkMode === "filter"
+                ? `Будут переназначены все клиенты, подходящие под текущий фильтр (до 1000 за раз). По фильтру сейчас: ${total}.`
+                : `Будет переназначено клиентов: ${selectedCount}. Целевой пользователь должен состоять в команде.`}
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
@@ -495,16 +692,30 @@ export default function AdminClientAssignmentsPage() {
             <Button
               type="button"
               className={ctaButtonClass}
-              disabled={!bulkToUserId || selectedCount === 0 || bulkLoading}
+              disabled={
+                !bulkToUserId ||
+                bulkLoading ||
+                (bulkMode === "selected" ? selectedCount === 0 : !hasActiveFilter)
+              }
               onClick={async () => {
-                if (!bulkToUserId || selectedCount === 0) return;
+                if (!bulkToUserId) return;
+                if (bulkMode === "selected" && selectedCount === 0) return;
+                if (bulkMode === "filter" && !hasActiveFilter) return;
                 setBulkLoading(true);
                 try {
-                  const r = await reassignClients({
-                    clientCodes: selectedCodes,
-                    toUserId: bulkToUserId,
-                    reason: bulkReason.trim() || undefined,
-                  });
+                  const r = await reassignClients(
+                    bulkMode === "filter"
+                      ? {
+                          filter: currentReassignFilter,
+                          toUserId: bulkToUserId,
+                          reason: bulkReason.trim() || undefined,
+                        }
+                      : {
+                          clientCodes: selectedCodes,
+                          toUserId: bulkToUserId,
+                          reason: bulkReason.trim() || undefined,
+                        },
+                  );
                   if (!r.ok) {
                     toast({ title: r.message, variant: "destructive" });
                     return;
@@ -513,6 +724,7 @@ export default function AdminClientAssignmentsPage() {
                   setBulkOpen(false);
                   setBulkReason("");
                   setBulkToUserId("");
+                  setSelected({});
                   await qc.invalidateQueries({ queryKey: ["client-assignments"] });
                 } finally {
                   setBulkLoading(false);

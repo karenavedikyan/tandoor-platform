@@ -14,8 +14,80 @@ export type SessionUser = {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+const CLIENT_CATEGORIES = new Set(["top150", "top350", "top500", "top500plus", "new_client"]);
+
+const DEALER_OVERRIDE_JOIN =
+  "LEFT JOIN dealer_overrides do ON upper(regexp_replace(do.dealer_id, '^client-', '')) = ca.client_code";
+
 function sanitizeLikeFragment(raw: string): string {
   return raw.replace(/[%_\\]/g, "");
+}
+
+function qsParam(q: Record<string, unknown>, ...keys: string[]): string | undefined {
+  for (const key of keys) {
+    const v = q[key];
+    if (typeof v === "string" && v.trim()) return v.trim();
+    if (Array.isArray(v) && typeof v[0] === "string" && v[0].trim()) return v[0]!.trim();
+  }
+  return undefined;
+}
+
+function parseClientCategory(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  return CLIENT_CATEGORIES.has(raw) ? raw : undefined;
+}
+
+type DealerOverrideFilters = {
+  city?: string;
+  category?: string;
+  regionalManager?: string;
+  rop?: string;
+  searchFrag?: string;
+};
+
+function appendDealerOverrideFilters(cond: string[], params: unknown[], filters: DealerOverrideFilters): void {
+  if (filters.searchFrag) {
+    params.push(`%${filters.searchFrag}%`);
+    cond.push(`(ca.client_code ILIKE $${params.length} OR do.name ILIKE $${params.length})`);
+  }
+  if (filters.city) {
+    params.push(filters.city);
+    cond.push(`lower(do.city) = lower($${params.length})`);
+  }
+  if (filters.category) {
+    params.push(filters.category);
+    cond.push(`do.client_category = $${params.length}`);
+  }
+  if (filters.regionalManager) {
+    params.push(filters.regionalManager);
+    cond.push(`lower(do.regional_manager_name) = lower($${params.length})`);
+  }
+  if (filters.rop) {
+    params.push(filters.rop);
+    cond.push(`lower(do.rop_name) = lower($${params.length})`);
+  }
+}
+
+function hasAnyReassignFilter(filter: {
+  fromUserId?: string | null;
+  fromTeamId?: string | null;
+  responsibleUserId?: string | null;
+  city?: string;
+  category?: string;
+  regionalManager?: string;
+  rop?: string;
+  searchFrag?: string;
+}): boolean {
+  return Boolean(
+    filter.fromUserId ||
+      filter.fromTeamId ||
+      filter.responsibleUserId ||
+      filter.city ||
+      filter.category ||
+      filter.regionalManager ||
+      filter.rop ||
+      filter.searchFrag,
+  );
 }
 
 function sendJson(res: VercelResponse, status: number, body: Record<string, unknown>): void {
@@ -92,23 +164,49 @@ export async function handleClientsReassign(
   if (Array.isArray(body.clientCodes) && body.clientCodes.length > 0) {
     codes = body.clientCodes.filter((c): c is string => typeof c === "string" && c.trim() !== "").map((c) => c.trim());
   } else if (body.filter && typeof body.filter === "object" && body.filter !== null) {
-    const f = body.filter as { fromUserId?: unknown; fromTeamId?: unknown };
-    const fromUserId = typeof f.fromUserId === "string" && UUID_RE.test(f.fromUserId) ? f.fromUserId : null;
-    const fromTeamId = typeof f.fromTeamId === "string" && UUID_RE.test(f.fromTeamId) ? f.fromTeamId : null;
-    if (!fromUserId && !fromTeamId) {
-      sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите clientCodes или filter.fromUserId / fromTeamId." });
+    const f = body.filter as {
+      fromUserId?: unknown;
+      fromTeamId?: unknown;
+      responsibleUserId?: unknown;
+      city?: unknown;
+      category?: unknown;
+      regionalManager?: unknown;
+      rop?: unknown;
+      search?: unknown;
+    };
+    const responsibleRaw =
+      typeof f.responsibleUserId === "string" && UUID_RE.test(f.responsibleUserId.trim())
+        ? f.responsibleUserId.trim()
+        : typeof f.fromUserId === "string" && UUID_RE.test(f.fromUserId.trim())
+          ? f.fromUserId.trim()
+          : null;
+    const fromTeamId = typeof f.fromTeamId === "string" && UUID_RE.test(f.fromTeamId.trim()) ? f.fromTeamId.trim() : null;
+    const city = typeof f.city === "string" && f.city.trim() ? f.city.trim() : undefined;
+    const category = parseClientCategory(typeof f.category === "string" ? f.category.trim() : undefined);
+    const regionalManager =
+      typeof f.regionalManager === "string" && f.regionalManager.trim() ? f.regionalManager.trim() : undefined;
+    const rop = typeof f.rop === "string" && f.rop.trim() ? f.rop.trim() : undefined;
+    const searchRaw = typeof f.search === "string" ? f.search.trim() : "";
+    const searchFrag = searchRaw ? sanitizeLikeFragment(searchRaw) : undefined;
+    if (!hasAnyReassignFilter({ fromUserId: responsibleRaw, fromTeamId, city, category, regionalManager, rop, searchFrag })) {
+      sendJson(res, 400, {
+        success: false,
+        code: "VALIDATION_ERROR",
+        message: "Укажите clientCodes или хотя бы одно поле filter.",
+      });
       return;
     }
-    let q = `SELECT client_code FROM client_assignments WHERE 1=1`;
+    const cond: string[] = ["1=1"];
     const pr: unknown[] = [];
-    if (fromUserId) {
-      pr.push(fromUserId);
-      q += ` AND responsible_user_id = $${pr.length}::uuid`;
+    if (responsibleRaw) {
+      pr.push(responsibleRaw);
+      cond.push(`ca.responsible_user_id = $${pr.length}::uuid`);
     }
     if (fromTeamId) {
       pr.push(fromTeamId);
-      q += ` AND team_id = $${pr.length}::uuid`;
+      cond.push(`ca.team_id = $${pr.length}::uuid`);
     }
+    appendDealerOverrideFilters(cond, pr, { city, category, regionalManager, rop, searchFrag });
     if (me.role === "rop") {
       const myTeam = await resolveRopTeamId(pool, me.id);
       if (!myTeam) {
@@ -116,10 +214,17 @@ export async function handleClientsReassign(
         return;
       }
       pr.push(myTeam);
-      q += ` AND team_id = $${pr.length}::uuid`;
+      cond.push(`ca.team_id = $${pr.length}::uuid`);
     }
-    q += ` LIMIT 1000`;
-    const sel = await pool.query<{ client_code: string }>(q, pr);
+    const whereSql = cond.join(" AND ");
+    const sel = await pool.query<{ client_code: string }>(
+      `SELECT ca.client_code
+       FROM client_assignments ca
+       ${DEALER_OVERRIDE_JOIN}
+       WHERE ${whereSql}
+       LIMIT 1000`,
+      pr,
+    );
     codes = sel.rows.map((r) => r.client_code);
   } else {
     sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите clientCodes или filter." });
@@ -318,17 +423,16 @@ export async function handleClientsAssignmentsList(
     return;
   }
   const q = req.query ?? {};
-  const qs = (v: unknown): string | undefined => {
-    if (typeof v === "string" && v.trim()) return v.trim();
-    if (Array.isArray(v) && typeof v[0] === "string" && v[0].trim()) return v[0]!.trim();
-    return undefined;
-  };
-  const userIdFilter = qs(q.userId) ?? qs(q.responsibleUserId);
-  const teamId = qs(q.teamId);
-  const searchRaw = qs(q.search) ?? qs(q.q);
+  const userIdFilter = qsParam(q, "userId", "responsibleUserId");
+  const teamId = qsParam(q, "teamId");
+  const searchRaw = qsParam(q, "search", "q");
   const searchFrag = searchRaw ? sanitizeLikeFragment(searchRaw) : "";
-  const limitRaw = qs(q.limit);
-  const offsetRaw = qs(q.offset);
+  const city = qsParam(q, "city");
+  const category = parseClientCategory(qsParam(q, "category"));
+  const regionalManager = qsParam(q, "regionalManager");
+  const rop = qsParam(q, "rop");
+  const limitRaw = qsParam(q, "limit");
+  const offsetRaw = qsParam(q, "offset");
   let limit = 50;
   if (limitRaw) {
     const n = Number.parseInt(limitRaw, 10);
@@ -350,10 +454,13 @@ export async function handleClientsAssignmentsList(
     params.push(teamId);
     cond.push(`ca.team_id = $${params.length}::uuid`);
   }
-  if (searchFrag) {
-    params.push(`%${searchFrag}%`);
-    cond.push(`ca.client_code ILIKE $${params.length}`);
-  }
+  appendDealerOverrideFilters(cond, params, {
+    searchFrag: searchFrag || undefined,
+    city,
+    category,
+    regionalManager,
+    rop,
+  });
   if (me.role === "rop") {
     const myTeam = await resolveRopTeamId(pool, me.id);
     if (!myTeam) {
@@ -371,7 +478,10 @@ export async function handleClientsAssignmentsList(
 
   const whereSql = cond.join(" AND ");
   const cnt = await pool.query<{ n: string }>(
-    `SELECT COUNT(*)::bigint AS n FROM client_assignments ca WHERE ${whereSql}`,
+    `SELECT COUNT(*)::bigint AS n
+     FROM client_assignments ca
+     ${DEALER_OVERRIDE_JOIN}
+     WHERE ${whereSql}`,
     params.slice(0, -2),
   );
   const total = Number(cnt.rows[0]?.n ?? 0);
@@ -384,11 +494,28 @@ export async function handleClientsAssignmentsList(
     team_name: string | null;
     since: string;
     updated_at: string;
+    client_name: string | null;
+    client_city: string | null;
+    client_category: string | null;
+    regional_manager_name: string | null;
+    rop_name: string | null;
   }>(
-    `SELECT ca.client_code, ca.responsible_user_id, u.full_name AS responsible_full_name, ca.team_id, t.name AS team_name, ca.since, ca.updated_at
+    `SELECT ca.client_code,
+            ca.responsible_user_id,
+            u.full_name AS responsible_full_name,
+            ca.team_id,
+            t.name AS team_name,
+            ca.since,
+            ca.updated_at,
+            do.name AS client_name,
+            do.city AS client_city,
+            do.client_category AS client_category,
+            do.regional_manager_name AS regional_manager_name,
+            do.rop_name AS rop_name
      FROM client_assignments ca
      JOIN users u ON u.id = ca.responsible_user_id
      LEFT JOIN teams t ON t.id = ca.team_id
+     ${DEALER_OVERRIDE_JOIN}
      WHERE ${whereSql}
      ORDER BY ca.client_code ASC
      LIMIT $${limPos} OFFSET $${offPos}`,
@@ -405,8 +532,65 @@ export async function handleClientsAssignmentsList(
       teamName: r.team_name ?? null,
       since: r.since,
       updatedAt: r.updated_at,
+      clientName: r.client_name ?? null,
+      city: r.client_city ?? null,
+      clientCategory: r.client_category ?? null,
+      regionalManagerName: r.regional_manager_name ?? null,
+      ropName: r.rop_name ?? null,
     })),
     total,
+  });
+}
+
+export async function handleClientAssignmentFilterOptions(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  me: SessionUser,
+): Promise<void> {
+  void req;
+  if (me.status !== "active" || (me.role !== "admin" && me.role !== "director" && me.role !== "rop")) {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+
+  let ropTeamCond = "";
+  const baseParams: unknown[] = [];
+  if (me.role === "rop") {
+    const myTeam = await resolveRopTeamId(pool, me.id);
+    if (!myTeam) {
+      sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Не найдена команда РОПа." });
+      return;
+    }
+    baseParams.push(myTeam);
+    ropTeamCond = `AND ca.team_id = $${baseParams.length}::uuid`;
+  }
+
+  async function distinctField(column: string): Promise<string[]> {
+    const r = await pool.query<{ value: string }>(
+      `SELECT DISTINCT btrim(${column}) AS value
+       FROM client_assignments ca
+       JOIN dealer_overrides do ON upper(regexp_replace(do.dealer_id, '^client-', '')) = ca.client_code
+       WHERE ${column} IS NOT NULL AND btrim(${column}) <> '' ${ropTeamCond}
+       ORDER BY value ASC`,
+      baseParams,
+    );
+    return r.rows.map((row) => row.value).filter(Boolean);
+  }
+
+  const [cities, categories, regionalManagers, rops] = await Promise.all([
+    distinctField("do.city"),
+    distinctField("do.client_category"),
+    distinctField("do.regional_manager_name"),
+    distinctField("do.rop_name"),
+  ]);
+
+  sendJson(res, 200, {
+    success: true,
+    cities,
+    categories,
+    regionalManagers,
+    rops,
   });
 }
 
