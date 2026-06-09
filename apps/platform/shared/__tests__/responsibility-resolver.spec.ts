@@ -75,8 +75,8 @@ class MockResponsibilityDb implements PoolLike {
     }
 
     if (sql.includes("FROM (SELECT 1) AS _one")) {
-      const dealerId = params[1] as string | null;
-      const clientCode = params[2] as string | null;
+      const dealerId = params[0] as string | null;
+      const clientCode = params[1] as string | null;
       const dealer = dealerId ? this.dealerOverrides.get(dealerId) : undefined;
       const ca = clientCode ? this.clientAssignments.get(clientCode) : undefined;
       const team = ca?.team_id ? this.teams.get(ca.team_id) : undefined;
@@ -153,6 +153,39 @@ describe("responsibility-resolver", () => {
   it("cityScopeKey returns null for «Без города»", () => {
     expect(cityScopeKey("—", null)).toBeNull();
     expect(cityScopeKey(null, "—")).toBeNull();
+  });
+
+  it("loadLegacyBundle uses exactly two SQL placeholders ($1, $2)", async () => {
+    let legacySql = "";
+    let legacyParams: unknown[] = [];
+    const base = new MockResponsibilityDb();
+    base.tradePoints.set("tp-sql", {
+      tp_id: "tp-sql",
+      dealer_id: DEALER_ID,
+      name: "SQL check",
+      city: "Москва",
+      address: null,
+      regional_manager_id: null,
+      regional_manager_name: null,
+      rop_id: null,
+      rop_name: null,
+    });
+    const pool: PoolLike = {
+      query: async (text, params = []) => {
+        if (text.includes("FROM (SELECT 1) AS _one")) {
+          legacySql = text.replace(/\s+/g, " ").trim();
+          legacyParams = params;
+        }
+        return base.query(text, params);
+      },
+    };
+    await resolveResponsiblesForTradePoint(pool, "tp-sql");
+    expect(legacySql).toContain("$1");
+    expect(legacySql).toContain("$2");
+    expect(legacySql).not.toContain("$3");
+    expect(legacyParams).toHaveLength(2);
+    expect(legacyParams[0]).toBe(DEALER_ID);
+    expect(legacyParams[1]).toBe(CLIENT_CODE);
   });
 
   it("prefers trade_point assignment over client, city and legacy", async () => {
