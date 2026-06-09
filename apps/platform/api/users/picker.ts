@@ -11,7 +11,7 @@ import {
   vercelHeaders,
 } from "../../shared/admin/admin-auth.js";
 
-const PICKER_ROLES = new Set(["rop", "regional_manager"]);
+const PICKER_ROLES = new Set(["rop", "regional_manager", "manager"]);
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   try {
@@ -38,7 +38,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       sendJson(res, 400, {
         success: false,
         code: "INVALID_ROLE",
-        message: "Укажите role=rop или role=regional_manager.",
+        message: "Укажите role=rop, role=regional_manager или role=manager.",
       });
       return;
     }
