@@ -7,6 +7,7 @@
  *   GET  /api/admin/client-assignments/clients-assignments-list
  *   GET  /api/admin/client-assignments/client-assignment-history
  *   GET  /api/admin/client-assignments/user-team-history
+ *   GET  /api/admin/client-assignments/client-assignment-filter-options
  *
  * Изолировано от `api/admin/[action].ts`, чтобы не раздувать главный admin-бандл.
  */
@@ -20,6 +21,7 @@ import {
   vercelHeaders,
 } from "../../../shared/admin/admin-auth.js";
 import {
+  handleClientAssignmentFilterOptions,
   handleClientAssignmentHistory,
   handleClientsAssignmentsList,
   handleClientsReassign,
@@ -67,6 +69,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "user-team-history" && req.method === "GET") {
       await handleUserTeamHistory(req, res, pool, me);
+      return;
+    }
+    if (action === "client-assignment-filter-options" && req.method === "GET") {
+      await handleClientAssignmentFilterOptions(req, res, pool, me);
       return;
     }
 
