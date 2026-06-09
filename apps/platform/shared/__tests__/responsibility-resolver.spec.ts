@@ -292,6 +292,90 @@ describe("responsibility-resolver", () => {
     expect(resolved.rop.sourceLevel).toBe("client");
   });
 
+  it("replaces UUID garbage in legacy regional_manager_name with users.full_name", async () => {
+    const db = new MockResponsibilityDb();
+    db.tradePoints.set("tp-uuid-rm", {
+      tp_id: "tp-uuid-rm",
+      dealer_id: DEALER_ID,
+      name: "UUID RM",
+      city: "Москва",
+      address: null,
+      regional_manager_id: U_RM_DEALER,
+      regional_manager_name: U_RM_DEALER,
+      rop_id: null,
+      rop_name: null,
+    });
+    db.dealerOverrides.set(DEALER_ID, {
+      regional_manager_id: U_RM_DEALER,
+      regional_manager_name: U_RM_DEALER,
+      rop_id: U_ROP_DEALER,
+      rop_name: U_ROP_DEALER,
+    });
+    db.users.set(U_RM_DEALER, "Мельник Виктор Викторович");
+    db.users.set(U_ROP_DEALER, "Скалабан Александр");
+
+    const resolved = await resolveResponsiblesForTradePoint(db, "tp-uuid-rm");
+    expect(resolved.regional_manager.userName).toBe("Мельник Виктор Викторович");
+  });
+
+  it("fills empty legacy userName from users", async () => {
+    const db = new MockResponsibilityDb();
+    db.tradePoints.set("tp-empty-name", {
+      tp_id: "tp-empty-name",
+      dealer_id: DEALER_ID,
+      name: "Empty name",
+      city: "Самара",
+      address: null,
+      regional_manager_id: null,
+      regional_manager_name: null,
+      rop_id: null,
+      rop_name: null,
+    });
+    db.dealerOverrides.set(DEALER_ID, {
+      regional_manager_id: U_RM_DEALER,
+      regional_manager_name: "",
+      rop_id: null,
+      rop_name: null,
+    });
+    db.users.set(U_RM_DEALER, "Мельник Виктор Викторович");
+
+    const resolved = await resolveResponsiblesForTradePoint(db, "tp-empty-name");
+    expect(resolved.regional_manager.userName).toBe("Мельник Виктор Викторович");
+  });
+
+  it("keeps valid FIO from legacy without fetching users", async () => {
+    const fetchedUserIds: string[] = [];
+    const base = new MockResponsibilityDb();
+    base.tradePoints.set("tp-valid-fio", {
+      tp_id: "tp-valid-fio",
+      dealer_id: DEALER_ID,
+      name: "Valid FIO",
+      city: "Казань",
+      address: null,
+      regional_manager_id: U_RM_TP,
+      regional_manager_name: "RM TP Legacy",
+      rop_id: U_ROP_TP,
+      rop_name: "ROP TP Legacy",
+    });
+    base.users.set(U_RM_TP, "Should Not Replace RM");
+    base.users.set(U_ROP_TP, "Should Not Replace ROP");
+
+    const pool: PoolLike = {
+      query: async (text, params = []) => {
+        if (text.startsWith("SELECT id::text AS id, full_name FROM users")) {
+          fetchedUserIds.push(...(params[0] as string[]));
+        }
+        return base.query(text, params);
+      },
+    };
+
+    const resolved = await resolveResponsiblesForTradePoint(pool, "tp-valid-fio");
+    expect(resolved.regional_manager.userName).toBe("RM TP Legacy");
+    expect(resolved.rop.userName).toBe("ROP TP Legacy");
+    expect(fetchedUserIds).not.toContain(U_RM_TP);
+    expect(fetchedUserIds).not.toContain(U_ROP_TP);
+  });
+
   it("sharedByRole is true when trade points have different responsible users", async () => {
     const db = new MockResponsibilityDb();
     db.tradePoints.set("tp-a", {
