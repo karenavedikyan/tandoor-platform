@@ -82,6 +82,7 @@ import { DEALER_SHIPMENT_DAY_LABELS, DEALER_SHIPMENT_DAY_ORDER, type DealerShipm
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
 import { toast } from "@/hooks/use-toast";
 import { TradePointShowcaseAssignmentsPanel } from "@/components/distribution/trade-point-showcase-assignments-panel";
+import { TradePointResponsiblesSection } from "@/components/trade-point-responsibles-section";
 import { TradePointPhotoBlock } from "@/components/trade-point-photo-block";
 import { TradePointLegalEntitiesSection } from "@/components/trade-point-legal-entities-section";
 import { ShowcaseCoverPhotoSlot } from "@/components/showcase-cover-photo-slot";
@@ -93,11 +94,12 @@ import {
   SHOWCASE_MATRIX_CHANGED_EVENT,
 } from "@/lib/trade-point-showcase-matrix-storage";
 
-const SECTION_IDS = ["overview", "training", "matrix", "showcase", "distribution", "tasks", "comments", "history", "photos"] as const;
+const SECTION_IDS = ["overview", "responsibles", "training", "matrix", "showcase", "distribution", "tasks", "comments", "history", "photos"] as const;
 type SectionId = (typeof SECTION_IDS)[number];
 
 const SECTION_DOM_IDS: Record<SectionId, string> = {
   overview: "trade-point-section-overview",
+  responsibles: "section-trade-point-responsibles",
   training: "section-trade-point-training-attention",
   matrix: "section-trade-point-matrix",
   showcase: "section-trade-point-showcase-matrix",
@@ -110,6 +112,7 @@ const SECTION_DOM_IDS: Record<SectionId, string> = {
 
 const SECTION_LABELS: Record<SectionId, string> = {
   overview: "Общее",
+  responsibles: "Ответственные",
   training: "Обучение",
   matrix: "Матрица",
   showcase: "Витрина",
@@ -122,6 +125,7 @@ const SECTION_LABELS: Record<SectionId, string> = {
 
 const NAV_TEST_IDS: Record<SectionId, string> = {
   overview: "trade-point-section-nav-overview",
+  responsibles: "trade-point-section-nav-responsibles",
   training: "trade-point-section-nav-training",
   matrix: "trade-point-section-nav-matrix",
   showcase: "trade-point-section-nav-showcase",
@@ -1054,6 +1058,18 @@ function TradePointDetailContent({
               </SurfaceCard>
               <TradePointContactsSection row={dealer} tradePoint={point} profile={profile} />
             </div>
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            id="responsibles"
+            domId={SECTION_DOM_IDS.responsibles}
+            title={SECTION_LABELS.responsibles}
+            subtitle="Ответственные за точку по ролям."
+            open={openSections.has("responsibles")}
+            onToggle={toggleSection}
+            testId="section-trade-point-responsibles-wrap"
+          >
+            <TradePointResponsiblesSection tradePointId={point.id} currentUserRole={user?.role} />
           </CollapsibleSection>
 
           <CollapsibleSection
