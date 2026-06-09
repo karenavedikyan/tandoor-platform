@@ -43,6 +43,7 @@ import {
   DEALER_BASE_ROWS,
   type DealerRow,
   type DealerStatus,
+  type DealerTradePoint,
 } from "@/lib/dealer-base-mock-data";
 import {
   getManagersForRopTeam,
@@ -249,6 +250,7 @@ import {
   type TaskSelectBulk,
 } from "@/components/dealer-base-dealer-showcase-grid";
 import { CreateTaskBatchDialog } from "@/components/tasks/create-task-batch-dialog";
+import { TaskSelectFlatTradePointsList } from "@/components/tasks/task-select-flat-tradepoints-list";
 import { TaskSelectTradePointsDialog } from "@/components/tasks/task-select-trade-points-dialog";
 import {
   activeTradePointsForDealerRow,
@@ -1841,6 +1843,11 @@ export default function DealerBase() {
     [useReal, snap, profile, access],
   );
 
+  const ropTeamLabel = useMemo(() => {
+    if (isRopOrManagerAllFilter(ropTeam)) return undefined;
+    return ropSelectOptions.find((o) => o.teamId === ropTeam)?.label;
+  }, [ropTeam, ropSelectOptions]);
+
   const pickerArgs = useMemo(
     () => ({
       search,
@@ -1848,6 +1855,7 @@ export default function DealerBase() {
       cities,
       categories,
       ropTeam,
+      ropTeamLabel,
       manager,
       managerCatalogForRop,
       geoRegion,
@@ -1860,6 +1868,7 @@ export default function DealerBase() {
       cities,
       categories,
       ropTeam,
+      ropTeamLabel,
       manager,
       managerCatalogForRop,
       geoRegion,
@@ -1869,6 +1878,31 @@ export default function DealerBase() {
   );
 
   const pickerFiltered = useMemo(() => applyDealerBasePickerFilters(scopedRows, pickerArgs), [scopedRows, pickerArgs]);
+
+  const taskSelectFlatTradePointsAll = useMemo(() => {
+    if (!isTaskSelectMode) return [];
+    const out: Array<{ row: DealerRow; point: DealerTradePoint }> = [];
+    for (const row of pickerFiltered) {
+      for (const e of activeTradePointsForDealerRow(row, teamActualizationPlane)) {
+        out.push({ row, point: e.point });
+      }
+    }
+    out.sort((a, b) => {
+      const cityA = (a.point.city?.trim() || a.row.city || "").toLowerCase();
+      const cityB = (b.point.city?.trim() || b.row.city || "").toLowerCase();
+      const cityCmp = cityA.localeCompare(cityB, "ru");
+      if (cityCmp !== 0) return cityCmp;
+      const nameA = (a.point.name?.trim() || a.row.name || "").toLowerCase();
+      const nameB = (b.point.name?.trim() || b.row.name || "").toLowerCase();
+      return nameA.localeCompare(nameB, "ru");
+    });
+    return out;
+  }, [isTaskSelectMode, pickerFiltered, teamActualizationPlane]);
+
+  const taskSelectFlatTradePointsVisible = useMemo(
+    () => taskSelectFlatTradePointsAll.slice(0, DEALER_BASE_DISPLAY_LIMIT),
+    [taskSelectFlatTradePointsAll],
+  );
 
   const kpis = useMemo(() => {
     const total = pickerFiltered.length;
@@ -2998,8 +3032,17 @@ export default function DealerBase() {
     getDealerRowTaskSelectChecked,
   ]);
 
+  const openTaskSelectTradePointShowcase = useCallback(
+    (dealerId: string, tradePointId: string) => {
+      setLocation(
+        `/dealers/${encodeURIComponent(dealerId)}/trade-points/${encodeURIComponent(tradePointId)}?tradePointShowcase=1`,
+      );
+    },
+    [setLocation],
+  );
+
   const taskSelectTargets = useMemo((): TaskSelectTarget[] => {
-    const rowById = new Map(rowsFinalForList.map((r) => [r.id, r]));
+    const rowById = new Map(pickerFiltered.map((r) => [r.id, r]));
     const out: TaskSelectTarget[] = [];
     for (const key of Array.from(selectedTaskSelectKeys)) {
       const parsed = parseTaskSelectTargetKey(key);
@@ -3016,7 +3059,7 @@ export default function DealerBase() {
       });
     }
     return out;
-  }, [selectedTaskSelectKeys, rowsFinalForList, teamActualizationPlane]);
+  }, [selectedTaskSelectKeys, pickerFiltered, teamActualizationPlane]);
 
   const handleTaskSelectNext = useCallback(() => {
     const keys = Array.from(selectedTaskSelectKeys);
@@ -4131,7 +4174,15 @@ export default function DealerBase() {
         </CardContent>
       </Card>
 
-      {resultsCapTotal !== null && !hideResultsCap ? (
+      {isTaskSelectMode ? (
+        <p className="text-sm text-muted-foreground" data-testid="text-dealer-base-display-cap">
+          Показано {taskSelectFlatTradePointsVisible.length} из {taskSelectFlatTradePointsAll.length}
+          {taskSelectFlatTradePointsAll.length > cap ? ` (лимит ${cap})` : ""}.
+          {taskSelectFlatTradePointsAll.length > taskSelectFlatTradePointsVisible.length
+            ? " Уточните поиск или фильтры, чтобы сузить список."
+            : null}
+        </p>
+      ) : resultsCapTotal !== null && !hideResultsCap ? (
         <p className="text-sm text-muted-foreground" data-testid="text-dealer-base-display-cap">
           Показано {rowsFinalForList.length} из {resultsCapTotal}
           {workView === "today" ? ` (лимит режима «Сегодня» ${TODAY_LIMIT})` : ""}
@@ -4143,6 +4194,15 @@ export default function DealerBase() {
       ) : null}
 
       <section className="min-w-0" data-testid="section-dealer-base-results">
+        {isTaskSelectMode ? (
+          <TaskSelectFlatTradePointsList
+            entries={taskSelectFlatTradePointsVisible}
+            selectedKeys={selectedTaskSelectKeys}
+            onToggle={toggleTaskSelectTradePoint}
+            onOpenShowcase={openTaskSelectTradePointShowcase}
+          />
+        ) : (
+          <>
         {isFocusView && focusChipMeta ? (
           <DealerBaseFocusViewBanner
             meta={
@@ -4654,8 +4714,11 @@ export default function DealerBase() {
             )}
           </div>
         ) : null}
+          </>
+        )}
       </section>
 
+      {!isTaskSelectMode ? (
       <TaskSelectTradePointsDialog
         open={taskSelectTpDialogRow != null}
         row={taskSelectTpDialogRow}
@@ -4669,6 +4732,7 @@ export default function DealerBase() {
           setTaskSelectTpDialogRow(null);
         }}
       />
+      ) : null}
 
       <CreateTaskBatchDialog
         open={batchCreateOpen}

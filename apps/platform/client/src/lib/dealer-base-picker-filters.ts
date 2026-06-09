@@ -24,6 +24,8 @@ export type DealerBasePickerArgs = {
   cities: string[];
   categories: ClientCategorySelection[];
   ropTeam: string;
+  /** Подпись выбранной команды РОП (ФИО) — fallback при UUID в real-режиме. */
+  ropTeamLabel?: string;
   manager: string;
   managerCatalogForRop: SalesUser[];
   /** Пустая строка — без фильтра */
@@ -66,7 +68,11 @@ export function applyDealerBasePickerFilters(rows: DealerRow[], args: DealerBase
     }
     if (!rowMatchesGeoFilters(row, args.geoRegion, args.geoDistrict, args.geoLocality)) return false;
     if (!isRopOrManagerAllFilter(args.ropTeam)) {
-      if (row.releaseTeamId !== args.ropTeam) return false;
+      let ropOk = row.releaseTeamId === args.ropTeam;
+      if (!ropOk && args.ropTeamLabel) {
+        ropOk = managerDisplayMatchesCatalogName(getDealerRopDisplay(row), args.ropTeamLabel);
+      }
+      if (!ropOk) return false;
     }
     if (!isRopOrManagerAllFilter(args.manager)) {
       let mgrOk = row.releaseManagerId === args.manager;
