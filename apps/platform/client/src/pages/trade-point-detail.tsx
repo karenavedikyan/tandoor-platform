@@ -81,7 +81,7 @@ import { getDealerRowWithProfileOverrides, DEALER_PROFILE_OVERRIDES_EVENT } from
 import { DEALER_SHIPMENT_DAY_LABELS, DEALER_SHIPMENT_DAY_ORDER, type DealerShipmentDayId } from "@/lib/dealer-shipment-days";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
 import { toast } from "@/hooks/use-toast";
-import { Bitrix24TasksPanel } from "@/components/bitrix24-tasks-panel";
+import { TradePointShowcaseAssignmentsPanel } from "@/components/distribution/trade-point-showcase-assignments-panel";
 import { TradePointPhotoBlock } from "@/components/trade-point-photo-block";
 import { TradePointLegalEntitiesSection } from "@/components/trade-point-legal-entities-section";
 import { ShowcaseCoverPhotoSlot } from "@/components/showcase-cover-photo-slot";
@@ -1171,16 +1171,12 @@ function TradePointDetailContent({
             onToggle={toggleSection}
             testId="section-trade-point-tasks"
           >
-            <Bitrix24TasksPanel
-              scope="trade_point"
+            <TradePointShowcaseAssignmentsPanel
               dealerId={dealer.id}
-              dealerName={dealer.name}
               tradePointId={point.id}
               tradePointName={point.name}
-              canCreate={canCreateBitrix24Task}
               actorUserId={user?.id ?? profile.personaUserId}
-              actorLabel={displayUserName(user) ?? userLabelFromProfile(profile)}
-              compact
+              actorName={displayUserName(user) ?? userLabelFromProfile(profile)}
             />
           </CollapsibleSection>
 
