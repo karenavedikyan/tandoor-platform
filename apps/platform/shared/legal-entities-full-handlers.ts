@@ -11,6 +11,7 @@ import {
 import {
   mapLegalEntityFullRow,
   mapLegalEntityHistoryRow,
+  parsePaymentForm,
   type LegalEntityFullRow,
 } from "./legal-entities-types.js";
 
@@ -141,9 +142,58 @@ type FullFieldsInput = {
   comment?: unknown;
   updatedByUserId?: unknown;
   updatedByName?: unknown;
+  paymentForm?: unknown;
+  paymentDelayDays?: unknown;
+  creditLimitRub?: unknown;
+  edoEnabled?: unknown;
+  edoOperator?: unknown;
 };
 
+function parsePaymentDelayDays(raw: unknown): number | null {
+  if (raw == null || raw === "") return null;
+  const n = Number(raw);
+  return Number.isNaN(n) ? null : Math.max(0, Math.floor(n));
+}
+
+function parseCreditLimitRub(raw: unknown): number | null {
+  if (raw == null || raw === "") return null;
+  const n = Number(String(raw).replace(/\s/g, "").replace(",", "."));
+  return Number.isFinite(n) ? n : null;
+}
+
+function parseEdoEnabled(raw: unknown): boolean | null {
+  if (raw == null) return null;
+  return Boolean(raw);
+}
+
+function pickPaymentFullFields(
+  body: FullFieldsInput,
+): {
+  payment_form: ReturnType<typeof parsePaymentForm>;
+  payment_delay_days: number | null;
+  credit_limit_rub: number | null;
+  edo_enabled: boolean | null;
+  edo_operator: string | null;
+} {
+  const edoEnabled = body.edoEnabled !== undefined ? parseEdoEnabled(body.edoEnabled) : null;
+  return {
+    payment_form: body.paymentForm !== undefined ? parsePaymentForm(body.paymentForm) : null,
+    payment_delay_days: body.paymentDelayDays !== undefined ? parsePaymentDelayDays(body.paymentDelayDays) : null,
+    credit_limit_rub: body.creditLimitRub !== undefined ? parseCreditLimitRub(body.creditLimitRub) : null,
+    edo_enabled: edoEnabled,
+    edo_operator:
+      body.edoOperator !== undefined
+        ? edoEnabled
+          ? strOrNull(body.edoOperator)
+          : null
+        : edoEnabled
+          ? null
+          : null,
+  };
+}
+
 function pickFullFields(body: FullFieldsInput): Record<string, unknown> {
+  const payment = pickPaymentFullFields(body);
   return {
     name: strOrNull(body.name),
     inn: strOrNull(body.inn),
@@ -160,6 +210,11 @@ function pickFullFields(body: FullFieldsInput): Record<string, unknown> {
     comment: strOrNull(body.comment),
     updated_by_user_id: actorUserId(typeof body.updatedByUserId === "string" ? body.updatedByUserId : undefined),
     updated_by_name: strOrNull(body.updatedByName),
+    payment_form: payment.payment_form,
+    payment_delay_days: payment.payment_delay_days,
+    credit_limit_rub: payment.credit_limit_rub,
+    edo_enabled: payment.edo_enabled,
+    edo_operator: payment.edo_operator,
   };
 }
 
@@ -198,12 +253,19 @@ async function updateRowFromFields(
   if (!mergeEmptyOnly && fields.status != null) next.status = fields.status;
   if (!mergeEmptyOnly && fields.updated_by_user_id !== undefined) next.updated_by_user_id = fields.updated_by_user_id;
   if (!mergeEmptyOnly && fields.updated_by_name !== undefined) next.updated_by_name = fields.updated_by_name;
+  if (!mergeEmptyOnly && fields.payment_form !== undefined) next.payment_form = fields.payment_form;
+  if (!mergeEmptyOnly && fields.payment_delay_days !== undefined) next.payment_delay_days = fields.payment_delay_days;
+  if (!mergeEmptyOnly && fields.credit_limit_rub !== undefined) next.credit_limit_rub = fields.credit_limit_rub;
+  if (!mergeEmptyOnly && fields.edo_enabled !== undefined) next.edo_enabled = fields.edo_enabled;
+  if (!mergeEmptyOnly && fields.edo_operator !== undefined) next.edo_operator = fields.edo_operator;
 
   const r = await pool.query<Record<string, unknown>>(
     `UPDATE legal_entities SET
        name = $2, inn = $3, kpp = $4, ogrn = $5, legal_address = $6, actual_address = $7,
        entity_type = $8, primary_contact = $9, phone = $10, email = $11, internal_code = $12,
-       status = $13, comment = $14, updated_by_user_id = $15, updated_by_name = $16, updated_at = NOW()
+       status = $13, comment = $14, updated_by_user_id = $15, updated_by_name = $16,
+       payment_form = $17, payment_delay_days = $18, credit_limit_rub = $19, edo_enabled = $20, edo_operator = $21,
+       updated_at = NOW()
      WHERE id = $1::uuid RETURNING *`,
     [
       rowId,
@@ -222,6 +284,11 @@ async function updateRowFromFields(
       next.comment,
       next.updated_by_user_id,
       next.updated_by_name,
+      next.payment_form,
+      next.payment_delay_days,
+      next.credit_limit_rub,
+      next.edo_enabled,
+      next.edo_operator,
     ],
   );
   return mapLegalEntityFullRow(r.rows[0]!);
@@ -309,8 +376,10 @@ export async function handleLegalEntitiesCreateFull(
     `INSERT INTO legal_entities (
        client_id, name, inn, kpp, ogrn, legal_address, actual_address, entity_type,
        primary_contact, phone, email, internal_code, status, comment,
-       updated_by_user_id, updated_by_name, source, is_archived, updated_at
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'manual',false,NOW())
+       updated_by_user_id, updated_by_name, source, is_archived,
+       payment_form, payment_delay_days, credit_limit_rub, edo_enabled, edo_operator,
+       updated_at
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'manual',false,$17,$18,$19,$20,$21,NOW())
      RETURNING *`,
     [
       clientId,
@@ -329,6 +398,11 @@ export async function handleLegalEntitiesCreateFull(
       fields.comment,
       fields.updated_by_user_id ?? actorUserId(me.id),
       actorName,
+      fields.payment_form,
+      fields.payment_delay_days,
+      fields.credit_limit_rub,
+      fields.edo_enabled,
+      fields.edo_operator,
     ],
   );
   const item = mapLegalEntityFullRow(r.rows[0]!);
@@ -418,6 +492,39 @@ export async function handleLegalEntitiesPatchFull(
           ? String(existing.updated_by_name)
           : null,
     is_archived: nextStatus === "archived",
+    payment_form:
+      body.paymentForm !== undefined
+        ? parsePaymentForm(body.paymentForm)
+        : parsePaymentForm(existing.payment_form),
+    payment_delay_days:
+      body.paymentDelayDays !== undefined
+        ? parsePaymentDelayDays(body.paymentDelayDays)
+        : existing.payment_delay_days == null || existing.payment_delay_days === ""
+          ? null
+          : Number(existing.payment_delay_days),
+    credit_limit_rub:
+      body.creditLimitRub !== undefined
+        ? parseCreditLimitRub(body.creditLimitRub)
+        : existing.credit_limit_rub == null || existing.credit_limit_rub === ""
+          ? null
+          : Number(existing.credit_limit_rub),
+    edo_enabled:
+      body.edoEnabled !== undefined
+        ? parseEdoEnabled(body.edoEnabled)
+        : existing.edo_enabled == null
+          ? null
+          : Boolean(existing.edo_enabled),
+    edo_operator: (() => {
+      const nextEdoEnabled =
+        body.edoEnabled !== undefined
+          ? parseEdoEnabled(body.edoEnabled)
+          : existing.edo_enabled == null
+            ? null
+            : Boolean(existing.edo_enabled);
+      if (!nextEdoEnabled) return null;
+      if (body.edoOperator !== undefined) return strOrNull(body.edoOperator);
+      return existing.edo_operator != null ? String(existing.edo_operator) : null;
+    })(),
   };
 
   const r = await pool.query<Record<string, unknown>>(
@@ -425,7 +532,8 @@ export async function handleLegalEntitiesPatchFull(
        name = $2, inn = $3, kpp = $4, ogrn = $5, legal_address = $6, actual_address = $7,
        entity_type = $8, primary_contact = $9, phone = $10, email = $11, internal_code = $12,
        status = $13, comment = $14, updated_by_user_id = $15, updated_by_name = $16,
-       is_archived = $17, updated_at = NOW()
+       is_archived = $17, payment_form = $18, payment_delay_days = $19, credit_limit_rub = $20,
+       edo_enabled = $21, edo_operator = $22, updated_at = NOW()
      WHERE id = $1::uuid RETURNING *`,
     [
       legalEntityId,
@@ -445,6 +553,11 @@ export async function handleLegalEntitiesPatchFull(
       next.updated_by_user_id,
       next.updated_by_name,
       next.is_archived,
+      next.payment_form,
+      next.payment_delay_days,
+      next.credit_limit_rub,
+      next.edo_enabled,
+      next.edo_operator,
     ],
   );
   const item = mapLegalEntityFullRow(r.rows[0]!);

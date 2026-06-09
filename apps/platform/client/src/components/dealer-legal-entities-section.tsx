@@ -28,17 +28,19 @@ import {
   buildLegalEntityPaymentUpsert,
   canEditDealerLegalEntities,
   DEALER_LEGAL_ENTITIES_EVENT,
+  ensureServerLegalEntityId,
   getMergedDealerLegalEntities,
+  paymentFieldsToFullApiBody,
   unarchiveDealerLegalEntityAsync,
   type DealerLegalEntityStatus,
   type MergedDealerLegalEntity,
   updateDealerLegalEntity,
 } from "@/lib/dealer-legal-entities";
+import { apiPatchFull } from "@/lib/dealer-legal-entities-api";
 import { refreshDbLegalEntitiesForDealer } from "@/lib/dealer-legal-entities-db-cache";
 import {
   EDO_OPERATOR_SUGGESTIONS,
   fetchLegalEntitiesForClient,
-  patchLegalEntity,
   PAYMENT_FORM_OPTIONS,
   type LegalEntityDto,
   type LegalEntityPaymentForm,
@@ -140,16 +142,34 @@ const EMPTY_SNAPSHOT: DraftSnapshot = {
   edoOperator: "",
 };
 
+function mergeEntityPaymentFields(
+  primary: MergedDealerLegalEntity | LegalEntityDto,
+  secondary?: MergedDealerLegalEntity | LegalEntityDto,
+): MergedDealerLegalEntity | LegalEntityDto {
+  return {
+    ...primary,
+    paymentForm: primary.paymentForm ?? secondary?.paymentForm ?? null,
+    paymentDelayDays: primary.paymentDelayDays ?? secondary?.paymentDelayDays ?? null,
+    creditLimitRub: primary.creditLimitRub ?? secondary?.creditLimitRub ?? null,
+    edoEnabled: primary.edoEnabled ?? secondary?.edoEnabled ?? null,
+    edoOperator: primary.edoOperator ?? secondary?.edoOperator ?? null,
+  };
+}
+
 function paymentFieldsFromEntity(
   e: MergedDealerLegalEntity | LegalEntityDto | undefined,
+  fallback?: MergedDealerLegalEntity | LegalEntityDto | undefined,
 ): Pick<DraftSnapshot, "paymentForm" | "paymentDelayDays" | "creditLimitRub" | "edoEnabled" | "edoOperator"> {
+  const source = e ? mergeEntityPaymentFields(e, fallback) : fallback;
   return {
-    paymentForm: e?.paymentForm ?? "",
-    paymentDelayDays: e?.paymentDelayDays != null ? String(e.paymentDelayDays) : "",
+    paymentForm: source?.paymentForm ?? "",
+    paymentDelayDays: source?.paymentDelayDays != null ? String(source.paymentDelayDays) : "",
     creditLimitRub:
-      e?.creditLimitRub != null && String(e.creditLimitRub).trim() !== "" ? String(e.creditLimitRub) : "",
-    edoEnabled: e?.edoEnabled === true,
-    edoOperator: e?.edoOperator ?? "",
+      source?.creditLimitRub != null && String(source.creditLimitRub).trim() !== ""
+        ? String(source.creditLimitRub)
+        : "",
+    edoEnabled: source?.edoEnabled === true,
+    edoOperator: source?.edoOperator ?? "",
   };
 }
 
@@ -556,7 +576,7 @@ export function DealerLegalEntitiesSection({
       setDraftPhone(formatRussianPhoneInput(e.phone ?? ""));
       setDraftEmail(e.email ?? "");
       setDraftComment(e.comment ?? "");
-      const payment = paymentFieldsFromEntity(paymentByEntityId[id] ?? e);
+      const payment = paymentFieldsFromEntity(e, paymentByEntityId[id]);
       setDraftPaymentForm(payment.paymentForm);
       setDraftPaymentDelayDays(payment.paymentDelayDays);
       setDraftCreditLimitRub(payment.creditLimitRub);
@@ -711,21 +731,95 @@ export function DealerLegalEntitiesSection({
         setLastSavedInternalCode(savedCode);
         setInnDupInline(null);
         setSaveError(null);
-        try {
-          await patchLegalEntity(targetId, paymentUpsert);
-            setPaymentByEntityId((prev) => ({
-              ...prev,
-              [targetId]: {
-                ...(prev[targetId] ?? { id: targetId, clientId: row.id, name: draftName.trim(), createdAt: now, updatedAt: now }),
-                ...paymentUpsert,
-                paymentForm: paymentUpsert.paymentForm ?? null,
-                creditLimitRub:
-                  paymentUpsert.creditLimitRub != null ? String(paymentUpsert.creditLimitRub) : null,
-              } as LegalEntityDto,
-            }));
-        } catch {
-          /* best-effort */
+        const statusResolved: DealerLegalEntityStatus =
+          prevEntitySnap?.isPassportSeed && prevEntitySnap.status === "main" ? "main" : "additional";
+        const entityForServer: MergedDealerLegalEntity = {
+          id: targetId,
+          name: draftName.trim(),
+          inn: normalizeInn(draftInn),
+          kpp: draftKpp.trim(),
+          ogrn: draftOgrn.trim(),
+          legalAddress: draftAddress.trim(),
+          actualAddress: draftActualAddress.trim(),
+          entityType: draftEntityType,
+          primaryContact: draftPrimaryContact.trim(),
+          phone: legalEntityPhoneFormatted,
+          email: draftEmail.trim(),
+          comment: draftComment.trim(),
+          internalCode: internalCodeOut || prevEntitySnap?.internalCode,
+          status: statusResolved,
+          paymentForm: paymentUpsert.paymentForm ?? null,
+          paymentDelayDays: paymentUpsert.paymentDelayDays ?? null,
+          creditLimitRub:
+            paymentUpsert.creditLimitRub != null ? String(paymentUpsert.creditLimitRub) : null,
+          edoEnabled: paymentUpsert.edoEnabled ?? null,
+          edoOperator: paymentUpsert.edoOperator ?? null,
+          createdAt: prevEntitySnap?.createdAt ?? now,
+          updatedAt: now,
+          updatedBy: actorUserId,
+          updatedByName: actorLabel,
+          isPassportSeed: prevEntitySnap?.isPassportSeed ?? false,
+        };
+        const serverId = await ensureServerLegalEntityId(row.id, entityForServer, actorUserId, actorLabel);
+        if (!serverId) {
+          toast({
+            title: "Не удалось сохранить платёжные данные",
+            description: "Проверьте соединение и попробуйте ещё раз.",
+            variant: "destructive",
+          });
+          return false;
         }
+        const patchOk = await apiPatchFull(serverId, {
+          name: draftName.trim(),
+          inn: normalizeInn(draftInn),
+          entityType: draftEntityType,
+          kpp: draftKpp.trim(),
+          ogrn: draftOgrn.trim(),
+          legalAddress: draftAddress.trim(),
+          actualAddress: draftActualAddress.trim(),
+          primaryContact: draftPrimaryContact.trim(),
+          phone: legalEntityPhoneFormatted,
+          email: draftEmail.trim(),
+          comment: draftComment.trim(),
+          internalCode: internalCodeOut || prevEntitySnap?.internalCode,
+          status: statusResolved,
+          ...paymentFieldsToFullApiBody(paymentUpsert),
+          updatedByUserId: actorUserId,
+          updatedByName: actorLabel,
+        });
+        if (!patchOk) {
+          toast({
+            title: "Не удалось сохранить платёжные данные",
+            description: "Проверьте соединение и попробуйте ещё раз.",
+            variant: "destructive",
+          });
+          return false;
+        }
+        await refreshDbLegalEntitiesForDealer(row.id);
+        try {
+          const items = await fetchLegalEntitiesForClient(row.id);
+          const map: Record<string, LegalEntityDto> = {};
+          for (const it of items) map[it.id] = it;
+          setPaymentByEntityId(map);
+        } catch {
+          setPaymentByEntityId((prev) => ({
+            ...prev,
+            [serverId]: {
+              ...(prev[serverId] ?? {
+                id: serverId,
+                clientId: row.id,
+                name: draftName.trim(),
+                createdAt: now,
+                updatedAt: now,
+              }),
+              ...paymentUpsert,
+              paymentForm: paymentUpsert.paymentForm ?? null,
+              creditLimitRub:
+                paymentUpsert.creditLimitRub != null ? String(paymentUpsert.creditLimitRub) : null,
+            } as LegalEntityDto,
+          }));
+        }
+        setTick((n) => n + 1);
         return true;
       }
       setSaveError("Не удалось сохранить");
@@ -1638,7 +1732,7 @@ export function DealerLegalEntitiesSection({
       ) : (
         <div className="space-y-2">
           {visible.active.map((e) => {
-            const paymentSummary = formatEntityPaymentSummary(paymentByEntityId[e.id] ?? e);
+            const paymentSummary = formatEntityPaymentSummary(mergeEntityPaymentFields(e, paymentByEntityId[e.id]));
             const updatedLabel = formatDisplayDate(e.updatedAt);
             const manualBadge =
               e.isPassportSeed && legalEntityHasOverrides(e.id) ? (
