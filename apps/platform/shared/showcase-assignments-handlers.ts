@@ -627,7 +627,7 @@ export async function handleSubmit(
          submitted_at = NOW(),
          updated_at = NOW(),
          shipped_date = COALESCE($2::date, shipped_date),
-         comment = CASE WHEN $3 IS NOT NULL AND $3 <> '' THEN $3 ELSE comment END
+         comment = CASE WHEN $3::text IS NOT NULL AND $3::text <> '' THEN $3::text ELSE comment END
      WHERE id = $1`,
     [assignmentId, shippedDate, comment ?? null],
   );
