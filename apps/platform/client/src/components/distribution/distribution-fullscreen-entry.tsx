@@ -87,6 +87,7 @@ import {
 } from "@/lib/trade-point-showcase-matrix-storage";
 import { useToast } from "@/hooks/use-toast";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { buildBrowserHashAppHref } from "@/lib/hash-route-utils";
 import {
   assignmentShareUrl,
   createAssignment,
@@ -223,6 +224,7 @@ export function DistributionFullscreenEntry({
   const [assignmentDialogOpen, setAssignmentDialogOpen] = useState(false);
   const [assignmentPhase, setAssignmentPhase] = useState<"form" | "success">("form");
   const [assignmentShareLink, setAssignmentShareLink] = useState("");
+  const [assignmentCreatedId, setAssignmentCreatedId] = useState<string | null>(null);
   const [assignmentAssigneeId, setAssignmentAssigneeId] = useState(ASSIGNMENT_ASSIGNEE_NONE);
   const [assignmentDueDate, setAssignmentDueDate] = useState("");
   const [assignmentComment, setAssignmentComment] = useState("");
@@ -732,6 +734,7 @@ export function DistributionFullscreenEntry({
   const resetAssignmentDialog = useCallback(() => {
     setAssignmentPhase("form");
     setAssignmentShareLink("");
+    setAssignmentCreatedId(null);
     setAssignmentAssigneeId(ASSIGNMENT_ASSIGNEE_NONE);
     setAssignmentDueDate("");
     setAssignmentComment("");
@@ -788,6 +791,7 @@ export function DistributionFullscreenEntry({
         })),
       });
       setAssignmentShareLink(assignmentShareUrl(assignment.id));
+      setAssignmentCreatedId(assignment.id);
       setAssignmentPhase("success");
       toast({ title: `Задание создано · ${assignment.itemsTotal} позиций` });
     } catch (err) {
@@ -822,6 +826,15 @@ export function DistributionFullscreenEntry({
       toast({ title: "Не удалось скопировать ссылку", variant: "destructive" });
     }
   }, [assignmentShareLink, toast]);
+
+  const handleOpenAssignmentDetail = useCallback(() => {
+    if (!assignmentCreatedId) return;
+    window.location.assign(buildBrowserHashAppHref(`/assignment/${assignmentCreatedId}`));
+  }, [assignmentCreatedId]);
+
+  const handleGoToAssignmentsList = useCallback(() => {
+    window.location.assign(buildBrowserHashAppHref("/assignments"));
+  }, []);
 
   const compactHasChanges = needInstallMode ? needInstallCount > 0 : changedIds.length > 0;
   const compactSaveCount = needInstallMode ? needInstallCount : changedIds.length;
@@ -1352,9 +1365,9 @@ export function DistributionFullscreenEntry({
           ) : (
             <div className="space-y-4 py-1">
               <p className="text-sm text-muted-foreground">
-                Передайте ссылку менеджеру для выполнения задания.
+                Задание создано. Откройте его или передайте ссылку ответственному менеджеру.
               </p>
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row">
                 <Input
                   readOnly
                   value={assignmentShareLink}
@@ -1364,15 +1377,38 @@ export function DistributionFullscreenEntry({
                 <Button
                   type="button"
                   variant="outline"
-                  className="shrink-0"
+                  className="min-h-10 shrink-0 whitespace-nowrap"
                   onClick={() => void handleCopyAssignmentLink()}
                   data-testid="button-assignment-copy-link"
                 >
                   Скопировать ссылку
                 </Button>
               </div>
-              <DialogFooter>
-                <Button type="button" onClick={() => handleAssignmentDialogOpenChange(false)}>
+              <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+                <Button
+                  type="button"
+                  className="min-h-10 w-full whitespace-nowrap sm:w-auto"
+                  disabled={!assignmentCreatedId}
+                  onClick={handleOpenAssignmentDetail}
+                  data-testid="button-assignment-open-detail"
+                >
+                  Открыть задачу
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-h-10 w-full whitespace-nowrap sm:w-auto"
+                  onClick={handleGoToAssignmentsList}
+                  data-testid="button-assignment-go-to-list"
+                >
+                  К списку задач
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="min-h-10 w-full whitespace-nowrap sm:w-auto"
+                  onClick={() => handleAssignmentDialogOpenChange(false)}
+                >
                   Готово
                 </Button>
               </DialogFooter>
