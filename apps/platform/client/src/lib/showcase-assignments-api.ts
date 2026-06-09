@@ -23,10 +23,11 @@ type CreateAssignmentBody = {
   items: AssignmentItemInput[];
 };
 
-type ApiOk = { success: true; assignment: AssignmentDto };
+type ApiOkAssignment = { success: true; assignment: AssignmentDto };
+type ApiOkList = { success: true; assignments: AssignmentDto[] };
 type ApiErr = { success: false; message?: string; code?: string };
 
-function parseApiError(json: ApiOk | ApiErr, fallback: string): string {
+function parseApiError(json: { success?: boolean; message?: string }, fallback: string): string {
   if (json.success === false && json.message) return json.message;
   return fallback;
 }
@@ -38,11 +39,36 @@ export async function createAssignment(body: CreateAssignmentBody): Promise<Assi
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  const json = (await res.json()) as ApiOk | ApiErr;
+  const json = (await res.json()) as ApiOkAssignment | ApiErr;
   if (!res.ok || json.success !== true) {
     throw new Error(parseApiError(json, "Не удалось создать задание"));
   }
   return json.assignment;
+}
+
+export type ListAssignmentsParams = {
+  tradePointId?: string;
+  dealerId?: string;
+  status?: string;
+  mine?: boolean;
+};
+
+export async function listAssignments(params: ListAssignmentsParams): Promise<AssignmentDto[]> {
+  const qs = new URLSearchParams();
+  if (params.tradePointId) qs.set("tradePointId", params.tradePointId);
+  if (params.dealerId) qs.set("dealerId", params.dealerId);
+  if (params.status) qs.set("status", params.status);
+  if (params.mine) qs.set("mine", "1");
+  const query = qs.toString();
+  const res = await fetch(`/api/showcase-assignments/list${query ? `?${query}` : ""}`, {
+    credentials: "include",
+    cache: "no-store",
+  });
+  const json = (await res.json()) as ApiOkList | ApiErr;
+  if (!res.ok || json.success !== true) {
+    throw new Error(parseApiError(json, "Не удалось загрузить задания"));
+  }
+  return json.assignments;
 }
 
 export async function getAssignment(id: string): Promise<AssignmentDto> {
@@ -50,7 +76,7 @@ export async function getAssignment(id: string): Promise<AssignmentDto> {
     credentials: "include",
     cache: "no-store",
   });
-  const json = (await res.json()) as ApiOk | ApiErr;
+  const json = (await res.json()) as ApiOkAssignment | ApiErr;
   if (!res.ok || json.success !== true) {
     throw new Error(parseApiError(json, "Задание не найдено или у вас нет доступа"));
   }
@@ -74,7 +100,7 @@ export async function setItemStatus(body: SetItemStatusBody): Promise<Assignment
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  const json = (await res.json()) as ApiOk | ApiErr;
+  const json = (await res.json()) as ApiOkAssignment | ApiErr;
   if (!res.ok || json.success !== true) {
     throw new Error(parseApiError(json, "Не удалось обновить позицию"));
   }
@@ -94,7 +120,7 @@ export async function submitAssignment(body: SubmitAssignmentBody): Promise<Assi
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  const json = (await res.json()) as ApiOk | ApiErr;
+  const json = (await res.json()) as ApiOkAssignment | ApiErr;
   if (!res.ok || json.success !== true) {
     throw new Error(parseApiError(json, "Не удалось завершить задание"));
   }
