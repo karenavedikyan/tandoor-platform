@@ -15,6 +15,7 @@ import type { OrgSnapshot } from "../use-org-snapshot";
 const SKLYAROV_UUID = "dc958e02-d80e-4615-bb8a-8a46be70daed";
 const KULAKOVA_UUID = "6f1ed04c-18a8-412d-a4db-efa8ed2258d6";
 const LYSENKO_UUID = "9e6056c9-9c8c-477b-94fd-45dab490e382";
+const TEAM_KUPIANSKY_UUID = "e5387f40-c693-44e6-ab17-e61a3ed0bd95";
 
 function snapForManager(uuid: string, catalogMgrId: string): OrgSnapshot {
   const u = getSalesUserById(catalogMgrId);
@@ -86,4 +87,35 @@ function pickerFilteredCount(snap: OrgSnapshot, access: "sales_manager"): number
   assert.equal(broken.length, 0, "UUID picker defaults отсекают все строки (до hotfix)");
 }
 
-console.log("dealer-base-real-picker-hotfix: ok (4 cases)");
+// РОП: UUID teamId + ropTeamLabel (ФИО из org snapshot) — fallback по ropName строки.
+{
+  const allRows = buildDealerRowsFromReleaseClients(getReleaseClients());
+  const baseArgs = {
+    search: "",
+    quick: "all" as const,
+    cities: [] as string[],
+    categories: [] as DealerBasePickerArgs["categories"],
+    manager: "all",
+    managerCatalogForRop: [] as DealerBasePickerArgs["managerCatalogForRop"],
+    geoRegion: "",
+    geoDistrict: "",
+    geoLocality: "",
+  };
+  const withoutLabel = applyDealerBasePickerFilters(allRows, {
+    ...baseArgs,
+    ropTeam: TEAM_KUPIANSKY_UUID,
+  });
+  assert.equal(withoutLabel.length, 0, "РОП UUID без ropTeamLabel — 0 строк (catalog id не совпадает)");
+
+  const withLabel = applyDealerBasePickerFilters(allRows, {
+    ...baseArgs,
+    ropTeam: TEAM_KUPIANSKY_UUID,
+    ropTeamLabel: "Купянский",
+  });
+  assert.ok(
+    withLabel.length >= 600,
+    `РОП UUID + ropTeamLabel: команда Купянский >= 600 (got ${withLabel.length})`,
+  );
+}
+
+console.log("dealer-base-real-picker-hotfix: ok (5 cases)");
