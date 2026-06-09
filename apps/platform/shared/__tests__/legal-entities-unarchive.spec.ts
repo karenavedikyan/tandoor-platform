@@ -6,10 +6,18 @@ import { handleLegalEntitiesUnarchive } from "../legal-entities-full-handlers.js
 const ENTITY_ID = "8b2d51d7-284a-4ee2-87ad-6d809c3488f1";
 const CLIENT_ID = "client-ma-ma138425";
 
-function mockRes(): VercelResponse {
-  const res = {
+type MockRes = {
+  statusCode: number;
+  body: Record<string, unknown> | null;
+  setHeader: ReturnType<typeof vi.fn>;
+  status(code: number): MockRes;
+  json(payload: Record<string, unknown>): MockRes;
+};
+
+function mockRes(): MockRes {
+  const res: MockRes = {
     statusCode: 200,
-    body: null as Record<string, unknown> | null,
+    body: null,
     setHeader: vi.fn(),
     status(code: number) {
       this.statusCode = code;
@@ -20,6 +28,10 @@ function mockRes(): VercelResponse {
       return this;
     },
   };
+  return res;
+}
+
+function asRes(res: MockRes): VercelResponse {
   return res as unknown as VercelResponse;
 }
 
@@ -50,7 +62,7 @@ describe("handleLegalEntitiesUnarchive", () => {
     };
 
     const pool: PoolLike = {
-      query: vi.fn(async (sql: string) => {
+      query: (vi.fn(async (sql: string) => {
         if (sql.includes("SELECT * FROM legal_entities WHERE id")) {
           return { rows: [row] };
         }
@@ -66,12 +78,12 @@ describe("handleLegalEntitiesUnarchive", () => {
           return { rows: [{ n: "1" }] };
         }
         return { rows: [] };
-      }),
+      }) as unknown) as PoolLike["query"],
     };
 
     const res = mockRes();
     await handleLegalEntitiesUnarchive(
-      res,
+      asRes(res),
       pool,
       { id: "00000000-0000-4000-8000-000000000001", role: "admin", status: "active" },
       ENTITY_ID,
@@ -87,9 +99,9 @@ describe("handleLegalEntitiesUnarchive", () => {
 
   it("rejects non-uuid id", async () => {
     const res = mockRes();
-    const pool: PoolLike = { query: vi.fn(async () => ({ rows: [] })) };
+    const pool: PoolLike = { query: vi.fn(async () => ({ rows: [] })) as PoolLike["query"] };
     await handleLegalEntitiesUnarchive(
-      res,
+      asRes(res),
       pool,
       { id: "00000000-0000-4000-8000-000000000001", role: "admin", status: "active" },
       "manual-legal-entity-1",
