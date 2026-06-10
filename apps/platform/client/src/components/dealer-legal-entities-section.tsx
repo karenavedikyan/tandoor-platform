@@ -343,6 +343,8 @@ export function DealerLegalEntitiesSection({
   const [draftEdoEnabled, setDraftEdoEnabled] = useState(false);
   const [draftEdoOperator, setDraftEdoOperator] = useState("");
   const [paymentByEntityId, setPaymentByEntityId] = useState<Record<string, LegalEntityDto>>({});
+  const paymentByEntityIdRef = useRef(paymentByEntityId);
+  paymentByEntityIdRef.current = paymentByEntityId;
   const [innLookupResults, setInnLookupResults] = useState<LegalEntityInnLookupResult[]>([]);
   const [innLookupNote, setInnLookupNote] = useState("");
 
@@ -465,6 +467,41 @@ export function DealerLegalEntitiesSection({
 
   const isDirty = Boolean(baselineSnapshot && !snapshotsEqual(baselineSnapshot, currentSnapshot));
 
+  useEffect(() => {
+    if (!formOpen || !editingId || isDirty) return;
+    const e = merged.find((x) => x.id === editingId && (!x.isPassportSeed || useAct));
+    if (!e) return;
+    const paymentDto = paymentByEntityId[editingId];
+    if (!paymentDto) return;
+
+    const et = (e.entityType ?? "ooo") as EntityTypeValue;
+    const entityType = (ENTITY_TYPE_VALUES as readonly string[]).includes(et) ? et : "other";
+    const payment = paymentFieldsFromEntity(e, paymentDto);
+
+    setDraftPaymentForm(payment.paymentForm);
+    setDraftPaymentDelayDays(payment.paymentDelayDays);
+    setDraftCreditLimitRub(payment.creditLimitRub);
+    setDraftEdoEnabled(payment.edoEnabled);
+    setDraftEdoOperator(payment.edoOperator);
+    setBaselineSnapshot(
+      snapshotFromDrafts({
+        name: e.name,
+        inn: e.inn ?? "",
+        entityType,
+        kpp: e.kpp ?? "",
+        ogrn: e.ogrn ?? "",
+        legalAddress: e.legalAddress ?? "",
+        actualAddress: e.actualAddress ?? "",
+        comment: e.comment ?? "",
+        paymentForm: payment.paymentForm,
+        paymentDelayDays: payment.paymentDelayDays,
+        creditLimitRub: payment.creditLimitRub,
+        edoEnabled: payment.edoEnabled,
+        edoOperator: payment.edoOperator,
+      }),
+    );
+  }, [formOpen, editingId, isDirty, merged, paymentByEntityId, useAct]);
+
   const editingEntity = useMemo(
     () => (editingId ? merged.find((x) => x.id === editingId && (!x.isPassportSeed || useAct)) : undefined),
     [editingId, merged, useAct],
@@ -542,7 +579,8 @@ export function DealerLegalEntitiesSection({
       const aa = (e.actualAddress ?? "").trim();
       setSameAsLegal(la === aa);
       setDraftComment(e.comment ?? "");
-      const payment = paymentFieldsFromEntity(e, paymentByEntityId[id]);
+      const entityType = (ENTITY_TYPE_VALUES as readonly string[]).includes(et) ? et : "other";
+      const payment = paymentFieldsFromEntity(e, paymentByEntityIdRef.current[id]);
       setDraftPaymentForm(payment.paymentForm);
       setDraftPaymentDelayDays(payment.paymentDelayDays);
       setDraftCreditLimitRub(payment.creditLimitRub);
@@ -560,18 +598,22 @@ export function DealerLegalEntitiesSection({
           snapshotFromDrafts({
             name: e.name,
             inn: e.inn ?? "",
-            entityType: (ENTITY_TYPE_VALUES as readonly string[]).includes(et) ? et : "other",
+            entityType,
             kpp: e.kpp ?? "",
             ogrn: e.ogrn ?? "",
             legalAddress: e.legalAddress ?? "",
             actualAddress: e.actualAddress ?? "",
             comment: e.comment ?? "",
-            ...paymentFieldsFromEntity(paymentByEntityId[id] ?? e),
+            paymentForm: payment.paymentForm,
+            paymentDelayDays: payment.paymentDelayDays,
+            creditLimitRub: payment.creditLimitRub,
+            edoEnabled: payment.edoEnabled,
+            edoOperator: payment.edoOperator,
           }),
         );
       });
     },
-    [merged, useAct, legalFormSave, paymentByEntityId],
+    [merged, useAct, legalFormSave],
   );
 
   const onSave = useCallback(async (): Promise<boolean> => {
@@ -1017,8 +1059,17 @@ export function DealerLegalEntitiesSection({
     return "Есть несохранённые изменения";
   }, [saveError, legalFormSave.phase, lastSavedInternalCode, isDirty]);
 
+  const saveNameOk = Boolean(draftName.trim() || (editingId && editingEntity?.name?.trim()));
+  const saveInnOk = Boolean(
+    normalizeInn(draftInn) || (editingId && normalizeInn(editingEntity?.inn ?? "")),
+  );
+  const saveValidationBlocked = !saveNameOk || !saveInnOk;
+
   const saveDisabled =
-    !draftName.trim() || !normalizeInn(draftInn) || !isDirty || legalFormSave.phase === "saving" || legalFormSave.phase === "success";
+    saveValidationBlocked ||
+    !isDirty ||
+    legalFormSave.phase === "saving" ||
+    legalFormSave.phase === "success";
 
   const showDoneCta = Boolean(lastSavedInternalCode && !isDirty && legalFormSave.phase !== "saving");
 
@@ -1561,6 +1612,11 @@ export function DealerLegalEntitiesSection({
                 >
                   {saveStatusText}
                 </p>
+                {isDirty && saveValidationBlocked ? (
+                  <p className="text-xs text-amber-600 dark:text-amber-500">
+                    Заполните обязательные поля: название и ИНН.
+                  </p>
+                ) : null}
                 <span className="sr-only" data-testid="text-save-status-legal-entities" aria-live="polite">
                   {legalFormSave.phase}
                 </span>
