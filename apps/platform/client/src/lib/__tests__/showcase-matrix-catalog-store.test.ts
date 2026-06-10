@@ -182,7 +182,7 @@ getResponse = {
     ...created,
     status: "published",
     updatedAt: "2026-06-02T12:00:00.000Z",
-    models: [{ id: "srv-m1", defId: created.id, targetKind: "model", targetId: "srv", segment: "vh", priority: "medium", valueWeight: null, sortOrder: 0, createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" }],
+    models: [{ id: "srv-m1", defId: created.id, targetKind: "model", targetId: "srv", segment: "vh", priority: "medium", valueWeight: null, catalog1cId: null, sortOrder: 0, createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" }],
   },
 };
 remoteEvents.length = 0;

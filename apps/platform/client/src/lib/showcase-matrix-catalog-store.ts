@@ -308,6 +308,7 @@ export function replaceMatrixDefModelsLocal(
     priority: m.priority ?? "medium",
     segment: m.segment,
     valueWeight: m.valueWeight ?? null,
+    catalog1cId: m.catalog1cId ?? null,
     sortOrder: m.sortOrder ?? index,
     createdAt: now,
     updatedAt: now,
