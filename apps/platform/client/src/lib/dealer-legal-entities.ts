@@ -479,8 +479,9 @@ export async function ensureServerLegalEntityId(
       (e) => isLegalEntityServerUuid(e.id) && normalizeInternalCode(e.internalCode) === internalCode,
     );
     if (byCode) return byCode.id;
-
-    return null;
+    // Запись с таким internalCode ещё не существует на сервере — продолжаем к созданию ниже.
+    // Серверный дедуп (handleLegalEntitiesCreateFull → findExistingForDedup по internal_code)
+    // защитит от появления дубля, если запись всё же есть.
   }
 
   const inn = normalizeLegalEntityInn(entity.inn);
