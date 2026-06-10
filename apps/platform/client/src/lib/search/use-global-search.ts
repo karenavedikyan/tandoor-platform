@@ -73,7 +73,11 @@ export function useGlobalSearch(open: boolean, role: UserRole | null | undefined
 
   const assignmentsScope = useMemo((): AssignmentsScope | undefined => {
     if (!myCodesQ.data) return undefined;
-    return { ownCodes: myCodesQ.data.ownCodes, teamCodes: myCodesQ.data.teamCodes };
+    return {
+      ownCodes: myCodesQ.data.ownCodes,
+      teamCodes: myCodesQ.data.teamCodes,
+      grantedCodes: myCodesQ.data.grantedCodes,
+    };
   }, [myCodesQ.data]);
 
   const actState = actx.enabled ? teamCtx.mergedState : buildDefaultLocalSearchContext(profile).actState;

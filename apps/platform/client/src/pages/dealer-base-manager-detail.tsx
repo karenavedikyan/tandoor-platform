@@ -113,7 +113,11 @@ export default function DealerBaseManagerDetailPage() {
 
   const assignmentsScope = useMemo(() => {
     if (!myCodesQ.data) return undefined;
-    return { ownCodes: myCodesQ.data.ownCodes, teamCodes: myCodesQ.data.teamCodes };
+    return {
+      ownCodes: myCodesQ.data.ownCodes,
+      teamCodes: myCodesQ.data.teamCodes,
+      grantedCodes: myCodesQ.data.grantedCodes,
+    };
   }, [myCodesQ.data]);
 
   const scopedRows = useMemo(() => {
@@ -165,9 +169,11 @@ export default function DealerBaseManagerDetailPage() {
     [profile, teamCtx.dashboardRopTeamId, orgTeamCtx],
   );
 
+  const grantedCodes = myCodesQ.data?.grantedCodes;
+
   const ropGroups = useMemo(
-    () => buildRopGroups(scopedRows, teams, orgTeamCtx?.snap, responsibleByCode, userIdToCatalogMgrId),
-    [scopedRows, teams, orgTeamCtx, responsibleByCode, userIdToCatalogMgrId],
+    () => buildRopGroups(scopedRows, teams, orgTeamCtx?.snap, responsibleByCode, userIdToCatalogMgrId, grantedCodes),
+    [scopedRows, teams, orgTeamCtx, responsibleByCode, userIdToCatalogMgrId, grantedCodes],
   );
 
   const managerCtx = useMemo(() => findManagerInRopGroups(managerId, ropGroups), [managerId, ropGroups]);

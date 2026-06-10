@@ -15,6 +15,7 @@ export type MyClientCodesResponse =
       ownCodes: string[];
       teamCodes: string[];
       responsibleByCode: Record<string, string>;
+      grantedCodes: string[];
       meta: MyClientCodesMeta;
     }
   | { success: false; code: string; message?: string };
@@ -22,6 +23,7 @@ export type MyClientCodesResponse =
 export type MyClientCodesData = {
   ownCodes: Set<string>;
   teamCodes: Set<string>;
+  grantedCodes: Set<string>;
   responsibleByCode: Record<string, string>;
   meta: MyClientCodesMeta;
 };
@@ -37,6 +39,7 @@ async function fetchMyClientCodes(): Promise<MyClientCodesData | null> {
   return {
     ownCodes: new Set(json.ownCodes),
     teamCodes: new Set(json.teamCodes),
+    grantedCodes: new Set(json.grantedCodes ?? []),
     responsibleByCode: json.responsibleByCode ?? {},
     meta: json.meta,
   };

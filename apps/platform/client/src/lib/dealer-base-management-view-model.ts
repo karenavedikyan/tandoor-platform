@@ -259,6 +259,50 @@ function bestTopSegmentLabel(rows: DealerRow[]): string {
   return getClientCategoryLabel(pick.clientCategory);
 }
 
+function managerKeyForDealerRow(row: DealerRow): string {
+  const mgrId = row.releaseManagerId?.trim();
+  if (mgrId) return mgrId;
+  const display = getDealerManagerDisplay(row).trim();
+  return display || row.id;
+}
+
+function buildExternalManagerModelsFromRows(
+  teamRows: DealerRow[],
+  matchedRowIds: Set<string>,
+  teamId: string,
+  orgSnap?: OrgSnapshot | null,
+): ManagerRowModel[] {
+  const unmatched = teamRows.filter((r) => !matchedRowIds.has(r.id));
+  if (unmatched.length === 0) return [];
+
+  const byKey = new Map<string, DealerRow[]>();
+  for (const r of unmatched) {
+    const key = managerKeyForDealerRow(r);
+    const bucket = byKey.get(key);
+    if (bucket) bucket.push(r);
+    else byKey.set(key, [r]);
+  }
+
+  const out: ManagerRowModel[] = [];
+  for (const [key, rows] of Array.from(byKey.entries())) {
+    const mgrCatalogId = catalogManagerIdFromUserRef(key);
+    const fromSnap = orgSnap?.users.find((u) => u.id === key)?.fullName?.trim();
+    const name = fromSnap || getDealerManagerDisplay(rows[0]!) || key;
+    out.push({
+      managerId: mgrCatalogId,
+      name,
+      teamId,
+      active: rows.filter((r) => r.status === "активный").length,
+      potential: rows.filter((r) => r.status === "потенциальный").length,
+      attention: rows.filter((r) => dealerNeedsAttention(r)).length,
+      outlets: rows.reduce((a, r) => a + r.outlets, 0),
+      topSegmentLabel: bestTopSegmentLabel(rows),
+      rows,
+    });
+  }
+  return out.sort((a, b) => a.name.localeCompare(b.name, "ru"));
+}
+
 export function aggregateManagersForTeam(
   teamId: string,
   teamRows: DealerRow[],
@@ -269,7 +313,7 @@ export function aggregateManagersForTeam(
   void _userIdToCatalogMgrId;
   const catalogTeamId = resolveManagementCatalogTeamId(teamId, orgSnap);
   const managers = managersCatalogForTeam(catalogTeamId, orgSnap);
-  return managers.map((m) => {
+  const catalogResults = managers.map((m) => {
     const mgrCatalogId = catalogManagerIdFromUserRef(m.id);
     const match = buildDbAwareManagerMatcherForPreGroupedTeamRows(mgrCatalogId, m.name, responsibleByCode);
     const rows = teamRows.filter(match);
@@ -288,6 +332,31 @@ export function aggregateManagersForTeam(
       topSegmentLabel: bestTopSegmentLabel(rows),
       rows,
     };
+  });
+
+  const matchedRowIds = new Set<string>();
+  for (const m of catalogResults) {
+    for (const r of m.rows) matchedRowIds.add(r.id);
+  }
+  const external = buildExternalManagerModelsFromRows(teamRows, matchedRowIds, teamId, orgSnap);
+  return [...catalogResults, ...external];
+}
+
+function collectGrantedOrphanRows(
+  rows: DealerRow[],
+  teams: { teamId: string }[],
+  orgSnap: OrgSnapshot | null | undefined,
+  grantedCodes?: Set<string>,
+): DealerRow[] {
+  if (!grantedCodes?.size) return [];
+  const teamCatalogIds = new Set(teams.map((t) => resolveManagementCatalogTeamId(t.teamId, orgSnap)));
+  return rows.filter((r) => {
+    const code = dealerRowClientCodeForAssignments(r);
+    if (!grantedCodes.has(code) && !grantedCodes.has(r.id)) return false;
+    const tid = resolveDealerRowTeamId(r);
+    if (!tid) return true;
+    const catalogTid = resolveManagementCatalogTeamId(tid, orgSnap);
+    return !teamCatalogIds.has(catalogTid);
   });
 }
 
@@ -424,13 +493,18 @@ export function buildRopGroups(
   orgSnap?: OrgSnapshot | null,
   responsibleByCode?: ResponsibleByCodeMap,
   userIdToCatalogMgrId?: Map<string, string>,
+  grantedCodes?: Set<string>,
 ): RopGroupModel[] {
   void userIdToCatalogMgrId;
   const rowsByCatalogTeamId = groupRowsByResolvedTeamId(rows);
+  const orphanGranted = collectGrantedOrphanRows(rows, teams, orgSnap, grantedCodes);
 
-  const teamBundles = teams.map((t) => {
+  const teamBundles = teams.map((t, index) => {
     const catalogTeamId = resolveManagementCatalogTeamId(t.teamId, orgSnap);
-    const teamRows = rowsByCatalogTeamId.get(catalogTeamId) ?? [];
+    let teamRows = rowsByCatalogTeamId.get(catalogTeamId) ?? [];
+    if (index === 0 && orphanGranted.length > 0) {
+      teamRows = [...teamRows, ...orphanGranted];
+    }
     return { t, catalogTeamId, teamRows, stats: summarizeTeamRows(teamRows) };
   });
   const maxTeamActive = teamBundles.reduce((m, x) => Math.max(m, x.stats.active), 0);
