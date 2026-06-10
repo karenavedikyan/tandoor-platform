@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronUp,
+  Grid3x3,
   LayoutGrid,
   List,
   Loader2,
@@ -110,11 +111,13 @@ const CARD_SIZE_STORAGE_KEY = "distribution-fullscreen-entry-card-size";
 const COMPACT_STORAGE_KEY = "distribution-fullscreen-entry-compact";
 const ASSIGNMENT_ASSIGNEE_NONE = "__none__";
 
-type FullscreenViewMode = "m" | "list";
+type FullscreenViewMode = "m" | "s" | "list";
 
 function readFullscreenViewMode(): FullscreenViewMode {
   const raw = readCatalogCardSizeFromStorage(CARD_SIZE_STORAGE_KEY, "m");
-  return raw === "list" ? "list" : "m";
+  if (raw === "list") return "list";
+  if (raw === "s") return "s";
+  return "m";
 }
 
 function assigneeRoleLabel(role: string): string {
@@ -563,8 +566,8 @@ export function DistributionFullscreenEntry({
     });
   }, [baselines, matrixModelById, visibleProducts]);
 
-  const needInstallMode = compactMode && workStatus === "need_install";
-  const statusBrushActive = compactMode && workStatus !== "all";
+  const needInstallMode = workStatus === "need_install";
+  const statusBrushActive = workStatus !== "all";
   const brushStatus: ShowcaseMatrixStatusId =
     workStatus === "all" ? "installed" : workStatus;
 
@@ -621,7 +624,7 @@ export function DistributionFullscreenEntry({
   const assigneeRequired = user?.role !== "manager";
 
   const orderedProducts = useMemo(() => {
-    if (!(compactMode && workStatus === "need_install")) return visibleProducts;
+    if (workStatus !== "need_install") return visibleProducts;
     return [...visibleProducts]
       .map((p, i) => ({ p, i }))
       .sort((a, b) => {
@@ -633,7 +636,7 @@ export function DistributionFullscreenEntry({
         return a.i - b.i;
       })
       .map((x) => x.p);
-  }, [compactMode, matrixModelById, workStatus, visibleProducts]);
+  }, [matrixModelById, workStatus, visibleProducts]);
 
   const placementTypeMode = workStatus === "installed";
   const placementSegmentContext = useMemo(
@@ -1272,6 +1275,7 @@ export function DistributionFullscreenEntry({
             {(
               [
                 ["m", LayoutGrid, "Сетка"],
+                ["s", Grid3x3, "Мельче"],
                 ["list", List, "Список"],
               ] as const
             ).map(([size, Icon, label]) => (
