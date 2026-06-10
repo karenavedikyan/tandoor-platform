@@ -43,15 +43,19 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { formatDisplayDateTime } from "@/lib/format-display-date";
 import { listUsers, type AdminUser } from "@/lib/admin-users-api";
 import {
+  addRopGrants,
   getClientHistory,
   listAssignmentFilterOptions,
   listAssignments,
+  listRopGrants,
   listTeams,
   reassignClients,
+  removeRopGrants,
   type ClientAssignmentHistoryRow,
   type ClientAssignmentRow,
   type AdminTeamOption,
   type ReassignClientsFilter,
+  type RopClientGrantRow,
 } from "@/lib/client-assignments-api";
 import { userCanManageInvitations, userHas } from "@/lib/auth-rbac";
 import { canManageClientAssignments, defaultHomePathForUserRole } from "@/lib/auth-access";
@@ -128,6 +132,7 @@ export default function AdminClientAssignmentsPage() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const canPage = Boolean(user && canManageClientAssignments(user.role));
+  const canManageRopGrants = user?.role === "admin" || user?.role === "director";
   const homeHref = user ? defaultHomePathForUserRole(user.role) : "/";
 
   const [searchInput, setSearchInput] = useState("");
@@ -263,6 +268,10 @@ export default function AdminClientAssignmentsPage() {
   const [bulkReason, setBulkReason] = useState("");
   const [bulkLoading, setBulkLoading] = useState(false);
 
+  const [grantRopUserId, setGrantRopUserId] = useState("");
+  const [grantReason, setGrantReason] = useState("");
+  const [grantLoading, setGrantLoading] = useState(false);
+
   const [sheetCode, setSheetCode] = useState<string | null>(null);
   const sheetQ = useQuery({
     queryKey: ["client-assignments", "history-full", sheetCode],
@@ -280,7 +289,19 @@ export default function AdminClientAssignmentsPage() {
 
   const teams: AdminTeamOption[] = teamsQ.data ?? [];
   const users: AdminUser[] = usersQ.data ?? [];
+  const ropUsers = useMemo(() => users.filter((u) => u.role === "rop"), [users]);
   const filterOptions = filterOptionsQ.data;
+
+  const ropGrantsQ = useQuery({
+    queryKey: ["client-assignments", "rop-grants", grantRopUserId],
+    queryFn: async () => {
+      const r = await listRopGrants(grantRopUserId);
+      if (!r.ok) throw new Error(r.message);
+      return r.grants;
+    },
+    enabled: canPage && canManageRopGrants && Boolean(grantRopUserId),
+  });
+  const ropGrants: RopClientGrantRow[] = ropGrantsQ.data ?? [];
 
   if (!user || !canManageClientAssignments(user.role)) {
     return (
@@ -443,6 +464,152 @@ export default function AdminClientAssignmentsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {canManageRopGrants ? (
+        <Card className="rounded-xl border border-border bg-card shadow-sm" data-testid="section-rop-client-grants">
+          <CardHeader>
+            <CardTitle>Доп. доступ РОПа</CardTitle>
+            <CardDescription>
+              РОП дополнительно увидит выбранных клиентов и их ТТ. Владелец и команда клиента не меняются.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="space-y-2">
+                <Label>РОП</Label>
+                <Select value={grantRopUserId || undefined} onValueChange={setGrantRopUserId}>
+                  <SelectTrigger className="min-h-11" data-testid="select-rop-grants-rop">
+                    <SelectValue placeholder="Выберите РОПа" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ropUsers.map((u) => (
+                      <SelectItem key={u.id} value={u.id}>
+                        {u.fullName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="rop-grant-reason">Причина (необязательно)</Label>
+                <Input
+                  id="rop-grant-reason"
+                  value={grantReason}
+                  onChange={(e) => setGrantReason(e.target.value)}
+                  className="min-h-11"
+                  data-testid="input-rop-grants-reason"
+                />
+              </div>
+            </div>
+
+            {grantRopUserId ? (
+              <div className="space-y-2">
+                <Label>Текущие гранты</Label>
+                {ropGrantsQ.isLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Загрузка…
+                  </div>
+                ) : ropGrantsQ.isError ? (
+                  <p className="text-sm text-destructive">{(ropGrantsQ.error as Error)?.message ?? "Ошибка"}</p>
+                ) : ropGrants.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Нет дополнительных грантов</p>
+                ) : (
+                  <ul className="space-y-2 rounded-md border border-border/80 bg-muted/20 p-3 text-sm">
+                    {ropGrants.map((g) => (
+                      <li key={g.id} className="flex items-start justify-between gap-2">
+                        <span className="min-w-0 break-words">
+                          {g.clientCode ? (
+                            <>
+                              <span className="font-mono">{g.clientCode}</span>
+                              {g.clientName ? ` · ${g.clientName}` : null}
+                            </>
+                          ) : (
+                            <>
+                              <span className="font-mono">{g.tradePointId}</span>
+                              {g.tradePointName ? ` · ${g.tradePointName}` : null}
+                            </>
+                          )}
+                          {g.reason ? (
+                            <span className="mt-0.5 block text-xs text-muted-foreground">{g.reason}</span>
+                          ) : null}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 shrink-0"
+                          aria-label="Удалить грант"
+                          data-testid={`button-rop-grant-remove-${g.id}`}
+                          onClick={async () => {
+                            const r = await removeRopGrants([g.id]);
+                            if (!r.ok) {
+                              toast({ title: r.message, variant: "destructive" });
+                              return;
+                            }
+                            toast({ title: "Доступ снят" });
+                            await qc.invalidateQueries({ queryKey: ["client-assignments", "rop-grants"] });
+                          }}
+                        >
+                          ×
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ) : null}
+
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-muted-foreground">
+                Выберите клиентов в таблице ниже (галочки) и выдайте доступ выбранному РОПу.
+                {selectedCount > 0 ? (
+                  <>
+                    {" "}
+                    Выбрано: <span className="font-semibold text-foreground">{selectedCount}</span>
+                  </>
+                ) : null}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11"
+                disabled={!grantRopUserId || selectedCount === 0 || grantLoading}
+                data-testid="button-rop-grants-add"
+                onClick={async () => {
+                  if (!grantRopUserId || selectedCount === 0) return;
+                  setGrantLoading(true);
+                  try {
+                    const r = await addRopGrants({
+                      ropUserId: grantRopUserId,
+                      clientCodes: selectedCodes,
+                      reason: grantReason.trim() || undefined,
+                    });
+                    if (!r.ok) {
+                      toast({ title: r.message, variant: "destructive" });
+                      return;
+                    }
+                    toast({ title: `Доступ выдан: ${r.added} грант(ов)` });
+                    setSelected({});
+                    await qc.invalidateQueries({ queryKey: ["client-assignments", "rop-grants"] });
+                  } finally {
+                    setGrantLoading(false);
+                  }
+                }}
+              >
+                {grantLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Сохранение…
+                  </>
+                ) : (
+                  "Дать доступ РОПу"
+                )}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {hasActiveFilter ? (
         <div

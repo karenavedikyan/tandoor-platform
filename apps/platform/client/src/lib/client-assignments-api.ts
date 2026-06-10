@@ -52,6 +52,18 @@ export type UserTeamHistoryRow = {
 
 export type AdminTeamOption = { id: string; name: string };
 
+export type RopClientGrantRow = {
+  id: string;
+  ropUserId: string;
+  clientCode: string | null;
+  tradePointId: string | null;
+  grantedBy: string | null;
+  createdAt: string;
+  reason: string | null;
+  clientName?: string | null;
+  tradePointName?: string | null;
+};
+
 export type ListAssignmentsParams = {
   limit?: number;
   offset?: number;
@@ -337,6 +349,109 @@ export async function reassignClients(input: {
   const reassigned = typeof body.reassigned === "number" ? body.reassigned : Number(body.reassigned);
   if (!Number.isFinite(reassigned)) return { ok: false, code: "INVALID_RESPONSE", message: "Некорректный ответ сервера." };
   return { ok: true, reassigned };
+}
+
+function parseRopGrantRow(raw: unknown): RopClientGrantRow | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const id = typeof r.id === "string" ? r.id : null;
+  const ropUserId = typeof r.ropUserId === "string" ? r.ropUserId : null;
+  const createdAt = typeof r.createdAt === "string" ? r.createdAt : null;
+  if (!id || !ropUserId || !createdAt) return null;
+  return {
+    id,
+    ropUserId,
+    clientCode: r.clientCode === null ? null : typeof r.clientCode === "string" ? r.clientCode : null,
+    tradePointId: r.tradePointId === null ? null : typeof r.tradePointId === "string" ? r.tradePointId : null,
+    grantedBy: r.grantedBy === null ? null : typeof r.grantedBy === "string" ? r.grantedBy : null,
+    createdAt,
+    reason: r.reason === null ? null : typeof r.reason === "string" ? r.reason : null,
+    clientName:
+      r.clientName === null || r.clientName === undefined
+        ? null
+        : typeof r.clientName === "string"
+          ? r.clientName
+          : null,
+    tradePointName:
+      r.tradePointName === null || r.tradePointName === undefined
+        ? null
+        : typeof r.tradePointName === "string"
+          ? r.tradePointName
+          : null,
+  };
+}
+
+export async function listRopGrants(
+  ropUserId: string,
+): Promise<{ ok: true; grants: RopClientGrantRow[] } | { ok: false; code: string; message: string }> {
+  const q = new URLSearchParams({ ropUserId: ropUserId.trim() });
+  const res = await fetch(`${ASSIGNMENTS_BASE}/rop-grants?${q.toString()}`, {
+    method: "GET",
+    credentials: "include",
+  });
+  const body = await readJson(res);
+  if (!res.ok || body.success !== true) {
+    return { ok: false, ...errFromBody(body, "Не удалось загрузить гранты РОПа.") };
+  }
+  const rawGrants = body.grants;
+  if (!Array.isArray(rawGrants)) {
+    return { ok: false, code: "INVALID_RESPONSE", message: "Некорректный ответ сервера." };
+  }
+  const grants: RopClientGrantRow[] = [];
+  for (const row of rawGrants) {
+    const p = parseRopGrantRow(row);
+    if (!p) return { ok: false, code: "INVALID_RESPONSE", message: "Некорректный ответ сервера." };
+    grants.push(p);
+  }
+  return { ok: true, grants };
+}
+
+export async function addRopGrants(input: {
+  ropUserId: string;
+  clientCodes?: string[];
+  tradePointIds?: string[];
+  reason?: string;
+}): Promise<{ ok: true; added: number } | { ok: false; code: string; message: string }> {
+  const res = await fetch(`${ASSIGNMENTS_BASE}/rop-grants-add`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      ropUserId: input.ropUserId,
+      clientCodes: input.clientCodes,
+      tradePointIds: input.tradePointIds,
+      reason: input.reason,
+    }),
+  });
+  const body = await readJson(res);
+  if (!res.ok || body.success !== true) {
+    return { ok: false, ...errFromBody(body, "Не удалось выдать доступ РОПу.") };
+  }
+  const added = typeof body.added === "number" ? body.added : Number(body.added);
+  if (!Number.isFinite(added)) {
+    return { ok: false, code: "INVALID_RESPONSE", message: "Некорректный ответ сервера." };
+  }
+  return { ok: true, added };
+}
+
+export async function removeRopGrants(
+  ids: string[],
+): Promise<{ ok: true; removed: number } | { ok: false; code: string; message: string }> {
+  const res = await fetch(`${ASSIGNMENTS_BASE}/rop-grants-remove`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids }),
+  });
+  const body = await readJson(res);
+  if (!res.ok || body.success !== true) {
+    return { ok: false, ...errFromBody(body, "Не удалось снять доступ РОПа.") };
+  }
+  const removed = typeof body.removed === "number" ? body.removed : Number(body.removed);
+  if (!Number.isFinite(removed)) {
+    return { ok: false, code: "INVALID_RESPONSE", message: "Некорректный ответ сервера." };
+  }
+  return { ok: true, removed };
 }
 
 export async function reassignUserTeam(input: {

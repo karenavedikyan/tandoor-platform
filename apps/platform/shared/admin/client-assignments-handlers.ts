@@ -739,3 +739,163 @@ export async function handleTeamsList(
   const rows = await pool.query<{ id: string; name: string }>(`SELECT id, name FROM teams ORDER BY name ASC`);
   sendJson(res, 200, { success: true, teams: rows.rows });
 }
+
+function assertDirectorOrAdmin(me: SessionUser, res: VercelResponse): boolean {
+  if (me.status !== "active" || (me.role !== "admin" && me.role !== "director")) {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return false;
+  }
+  return true;
+}
+
+export async function handleRopGrantsList(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  me: SessionUser,
+): Promise<void> {
+  if (!assertDirectorOrAdmin(me, res)) return;
+  const ropUserId = qsParam(req.query as Record<string, unknown>, "ropUserId");
+  if (!ropUserId || !UUID_RE.test(ropUserId)) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите корректный ropUserId." });
+    return;
+  }
+  const rows = await pool.query<{
+    id: string;
+    rop_user_id: string;
+    client_code: string | null;
+    trade_point_id: string | null;
+    granted_by: string | null;
+    created_at: string;
+    reason: string | null;
+    client_name: string | null;
+    trade_point_name: string | null;
+  }>(
+    `SELECT g.id, g.rop_user_id, g.client_code, g.trade_point_id, g.granted_by, g.created_at, g.reason,
+            dov.name AS client_name,
+            tpo.name AS trade_point_name
+     FROM rop_client_grants g
+     LEFT JOIN dealer_overrides dov
+       ON g.client_code IS NOT NULL
+      AND upper(regexp_replace(dov.dealer_id, '^client-', '')) = upper(g.client_code)
+     LEFT JOIN trade_point_overrides tpo ON tpo.tp_id = g.trade_point_id
+     WHERE g.rop_user_id = $1::uuid
+     ORDER BY g.created_at DESC`,
+    [ropUserId],
+  );
+  sendJson(res, 200, {
+    success: true,
+    grants: rows.rows.map((r) => ({
+      id: r.id,
+      ropUserId: r.rop_user_id,
+      clientCode: r.client_code,
+      tradePointId: r.trade_point_id,
+      grantedBy: r.granted_by,
+      createdAt: r.created_at,
+      reason: r.reason,
+      clientName: r.client_name,
+      tradePointName: r.trade_point_name,
+    })),
+  });
+}
+
+export async function handleRopGrantsAdd(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  me: SessionUser,
+): Promise<void> {
+  if (!assertDirectorOrAdmin(me, res)) return;
+  const body = (req.body ?? {}) as {
+    ropUserId?: unknown;
+    clientCodes?: unknown;
+    tradePointIds?: unknown;
+    reason?: unknown;
+  };
+  const ropUserId = typeof body.ropUserId === "string" ? body.ropUserId.trim() : "";
+  if (!UUID_RE.test(ropUserId)) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Некорректный ropUserId." });
+    return;
+  }
+  const clientCodes = Array.isArray(body.clientCodes)
+    ? body.clientCodes
+        .filter((c): c is string => typeof c === "string" && c.trim() !== "")
+        .map((c) => c.trim().toUpperCase())
+    : [];
+  const tradePointIds = Array.isArray(body.tradePointIds)
+    ? body.tradePointIds.filter((c): c is string => typeof c === "string" && c.trim() !== "").map((c) => c.trim())
+    : [];
+  const total = clientCodes.length + tradePointIds.length;
+  if (total === 0) {
+    sendJson(res, 400, {
+      success: false,
+      code: "VALIDATION_ERROR",
+      message: "Укажите clientCodes или tradePointIds.",
+    });
+    return;
+  }
+  if (total > 1000) {
+    sendJson(res, 400, {
+      success: false,
+      code: "VALIDATION_ERROR",
+      message: "Не более 1000 грантов за один запрос.",
+    });
+    return;
+  }
+  const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 500) : null;
+  let added = 0;
+  for (const code of clientCodes) {
+    const ins = await pool.query<{ id: string }>(
+      `INSERT INTO rop_client_grants (rop_user_id, client_code, granted_by, reason)
+       VALUES ($1::uuid, $2, $3::uuid, $4)
+       ON CONFLICT (rop_user_id, client_code) WHERE client_code IS NOT NULL DO NOTHING
+       RETURNING id`,
+      [ropUserId, code, me.id, reason],
+    );
+    if (ins.rows.length > 0) added += 1;
+  }
+  for (const tpId of tradePointIds) {
+    const ins = await pool.query<{ id: string }>(
+      `INSERT INTO rop_client_grants (rop_user_id, trade_point_id, granted_by, reason)
+       VALUES ($1::uuid, $2, $3::uuid, $4)
+       ON CONFLICT (rop_user_id, trade_point_id) WHERE trade_point_id IS NOT NULL DO NOTHING
+       RETURNING id`,
+      [ropUserId, tpId, me.id, reason],
+    );
+    if (ins.rows.length > 0) added += 1;
+  }
+  await tryAudit(pool, {
+    actorUserId: me.id,
+    action: "rop_client_grants.add",
+    entityType: "rop_client_grants",
+    entityId: ropUserId,
+    metadata: { clientCodes, tradePointIds, added, reason },
+  });
+  sendJson(res, 200, { success: true, added });
+}
+
+export async function handleRopGrantsRemove(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  me: SessionUser,
+): Promise<void> {
+  if (!assertDirectorOrAdmin(me, res)) return;
+  const body = (req.body ?? {}) as { ids?: unknown };
+  const ids = Array.isArray(body.ids)
+    ? body.ids.filter((id): id is string => typeof id === "string" && UUID_RE.test(id.trim())).map((id) => id.trim())
+    : [];
+  if (ids.length === 0) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите ids грантов." });
+    return;
+  }
+  const del = await pool.query(`DELETE FROM rop_client_grants WHERE id = ANY($1::uuid[])`, [ids]);
+  await tryAudit(pool, {
+    actorUserId: me.id,
+    action: "rop_client_grants.remove",
+    entityType: "rop_client_grants",
+    entityId: ids.join(","),
+    metadata: { ids, removed: del.rowCount ?? 0 },
+  });
+  sendJson(res, 200, { success: true, removed: del.rowCount ?? 0 });
+}
