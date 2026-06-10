@@ -18,6 +18,10 @@ export const SHOWCASE_MATRIX_STORE_CHANGED_EVENT = "tandoor:showcase-matrix:chan
 
 export const SHOWCASE_MATRIX_REMOTE_UPDATE_EVENT = "tandoor:showcase-matrix:remote-update";
 
+export function normalizeShowcaseMatrixModelId(id: string): string {
+  return id.trim().toLowerCase();
+}
+
 export function showcaseMatrixCacheKey(
   tradePointId: string,
   targetKind: ShowcaseMatrixTargetKind,

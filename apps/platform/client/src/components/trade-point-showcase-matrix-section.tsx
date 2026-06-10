@@ -28,21 +28,20 @@ import {
   canEditTradePointShowcaseMatrix,
   canViewTradePointShowcaseMatrix,
   computeTradePointShowcaseMatrixStats,
-  getEffectiveMatrixEntry,
-  getEffectiveMatrixStatus,
   loadShowcaseMatrixStorage,
+  resolveMatrixModelEntry,
+  resolveMatrixModelStatus,
   SHOWCASE_MATRIX_CHANGED_EVENT,
   SHOWCASE_MATRIX_VIEW_MODE_STORAGE_KEY,
   statusLabelRu,
   upsertShowcaseMatrixModelState,
-  type ShowcaseMatrixEntryStored,
   type ShowcaseMatrixStatusId,
 } from "@/lib/trade-point-showcase-matrix-storage";
-import type { ShowcaseMatrixEntryDto, ShowcaseMatrixStatus } from "@/lib/showcase-matrix-api";
+import type { ShowcaseMatrixEntryDto } from "@/lib/showcase-matrix-api";
 import {
   loadCachedMatrix,
+  normalizeShowcaseMatrixModelId,
   refreshMatrixFromServer,
-  setMatrixStatus,
   SHOWCASE_MATRIX_STORE_CHANGED_EVENT,
 } from "@/lib/showcase-matrix-store";
 import type { ShowcaseTask } from "@/lib/showcase-distribution-data";
@@ -78,10 +77,6 @@ type MatrixCatalogFilterRow = {
   label: string;
   options: { value: string; label: string }[];
 };
-
-function showcaseStatusToLocal(status: ShowcaseMatrixStatus): ShowcaseMatrixStatusId {
-  return status;
-}
 
 function modelsMatchingCategory(
   list: ShowcaseMatrixModelDefinition[],
@@ -453,33 +448,38 @@ export function TradePointShowcaseMatrixSection({
     void bump;
     const map = new Map<string, ShowcaseMatrixEntryDto>();
     for (const entry of loadCachedMatrix(point.id)) {
-      if (entry.targetKind === "model") map.set(entry.targetId, entry);
+      if (entry.targetKind !== "model") continue;
+      const key = normalizeShowcaseMatrixModelId(entry.targetId);
+      const prev = map.get(key);
+      if (!prev || entry.updatedAt > prev.updatedAt) map.set(key, entry);
     }
     return map;
   }, [bump, point.id]);
 
   const effectiveStatus = useCallback(
     (modelId: string): ShowcaseMatrixStatusId => {
-      const backend = backendByModelId.get(modelId);
-      if (backend) return showcaseStatusToLocal(backend.status);
-      return getEffectiveMatrixStatus(dealer.id, point.id, modelId, storage);
+      const backend = backendByModelId.get(normalizeShowcaseMatrixModelId(modelId));
+      return resolveMatrixModelStatus({
+        dealerId: dealer.id,
+        tradePointId: point.id,
+        modelId,
+        backend,
+        storage,
+      });
     },
     [backendByModelId, storage, dealer.id, point.id],
   );
 
   const effectiveEntry = useCallback(
-    (modelId: string): ShowcaseMatrixEntryStored => {
-      const backend = backendByModelId.get(modelId);
-      if (backend) {
-        return {
-          status: showcaseStatusToLocal(backend.status),
-          comment: backend.comment ?? "",
-          updatedAt: backend.updatedAt,
-          updatedBy: backend.updatedBy ?? "",
-          updatedByName: backend.updatedByName ?? "",
-        };
-      }
-      return getEffectiveMatrixEntry(dealer.id, point.id, modelId, storage);
+    (modelId: string) => {
+      const backend = backendByModelId.get(normalizeShowcaseMatrixModelId(modelId));
+      return resolveMatrixModelEntry({
+        dealerId: dealer.id,
+        tradePointId: point.id,
+        modelId,
+        backend,
+        storage,
+      });
     },
     [backendByModelId, storage, dealer.id, point.id],
   );
@@ -649,43 +649,28 @@ export function TradePointShowcaseMatrixSection({
     setPresentationOpen(true);
   }, []);
 
-  const persist = useCallback(
-    (model: ShowcaseMatrixModelDefinition, status: ShowcaseMatrixStatusId, comment: string) => {
-      setMatrixStatus({
-        dealerId: dealer.id,
-        tradePointId: point.id,
-        targetKind: "model",
-        targetId: model.id,
-        status,
-        comment,
-        updatedBy: actorUserId,
-        updatedByName: actorName,
-      });
-      upsertShowcaseMatrixModelState({
-        dealerId: dealer.id,
-        tradePointId: point.id,
-        model,
-        status,
-        comment,
-        actorUserId,
-        actorName,
-      });
-    },
-    [actorName, actorUserId, dealer.id, point.id],
-  );
-
-  const tryOpenEntry = useCallback(
-    (modelId: string): boolean => {
-      if (onOpenEntry) {
-        onOpenEntry(modelId);
-        return true;
-      }
-      return false;
-    },
-    [onOpenEntry],
-  );
-
   if (!canView) return null;
+
+  const renderOpenEntryButton = (
+    modelId: string,
+    status: ShowcaseMatrixStatusId,
+    className?: string,
+  ) => {
+    if (!canEdit || !onOpenEntry) return null;
+    const label = status === "need_install" ? "Внести" : "Изменить";
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className={cn("font-semibold", className)}
+        data-testid={`button-trade-point-showcase-open-entry-${modelId}`}
+        onClick={() => onOpenEntry(modelId)}
+      >
+        {label}
+      </Button>
+    );
+  };
 
   const gridClass =
     viewMode === "large"
@@ -752,23 +737,7 @@ export function TradePointShowcaseMatrixSection({
                       </div>
                     </div>
                     <div className="relative flex shrink-0 flex-col items-stretch gap-1">
-                      {canEdit ? (
-                        <Button
-                          type="button"
-                          variant={st === "need_install" ? "default" : "secondary"}
-                          size="sm"
-                          className={cn(
-                            "h-7 px-2 text-[10px] font-semibold leading-none",
-                            st === "need_install" && "ring-1 ring-amber-400/50",
-                          )}
-                          data-testid={`button-trade-point-showcase-mark-installed-${m.id}`}
-                          onClick={() => {
-                            if (!tryOpenEntry(m.id)) persist(m, "installed", commentVal);
-                          }}
-                        >
-                          На витрине
-                        </Button>
-                      ) : null}
+                      {renderOpenEntryButton(m.id, st, "h-7 px-2 text-[10px] leading-none")}
                       {canEdit ? (
                         <Popover>
                           <PopoverTrigger asChild>
@@ -798,29 +767,6 @@ export function TradePointShowcaseMatrixSection({
                               onClick={() => openPresentation(m)}
                             >
                               Презентация
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-8 w-full text-xs"
-                              data-testid={`button-trade-point-showcase-postpone-${m.id}`}
-                              onClick={() => {
-                                if (!tryOpenEntry(m.id)) persist(m, "postponed", commentVal);
-                              }}
-                            >
-                              Отложить
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 w-full text-xs text-muted-foreground"
-                              onClick={() => {
-                                if (!tryOpenEntry(m.id)) persist(m, "not_relevant", commentVal);
-                              }}
-                            >
-                              Не актуально
                             </Button>
                             <div className="space-y-1">
                               <Label className="text-[10px] text-muted-foreground" htmlFor={`showcase-cmt-list-${m.id}`}>
@@ -943,25 +889,11 @@ export function TradePointShowcaseMatrixSection({
                           )}
                         </div>
 
-                        {canEdit ? (
-                          <Button
-                            type="button"
-                            variant={st === "need_install" ? "default" : "secondary"}
-                            size="sm"
-                            className={cn(
-                              "w-full text-xs",
-                              isMini ? "h-7 text-[10px]" : "h-9",
-                              st === "need_install" && "font-semibold shadow-sm ring-1 ring-amber-400/55",
-                              st === "installed" && "border border-emerald-200/90 bg-emerald-50/80 font-medium text-emerald-950 hover:bg-emerald-50",
-                            )}
-                            data-testid={`button-trade-point-showcase-mark-installed-${m.id}`}
-                            onClick={() => {
-                            if (!tryOpenEntry(m.id)) persist(m, "installed", commentVal);
-                          }}
-                          >
-                            На витрине
-                          </Button>
-                        ) : null}
+                        {renderOpenEntryButton(
+                          m.id,
+                          st,
+                          cn("w-full text-xs", isMini ? "h-7 text-[10px]" : "h-9"),
+                        )}
 
                         <Collapsible
                           open={detailsOpen}
@@ -1034,33 +966,6 @@ export function TradePointShowcaseMatrixSection({
                               >
                                 Презентация
                               </Button>
-                              {canEdit ? (
-                                <>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-8 w-full text-xs"
-                                    data-testid={`button-trade-point-showcase-postpone-${m.id}`}
-                                    onClick={() => {
-                                if (!tryOpenEntry(m.id)) persist(m, "postponed", commentVal);
-                              }}
-                                  >
-                                    Отложить
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-8 w-full text-xs text-muted-foreground"
-                                    onClick={() => {
-                                if (!tryOpenEntry(m.id)) persist(m, "not_relevant", commentVal);
-                              }}
-                                  >
-                                    Не актуально
-                                  </Button>
-                                </>
-                              ) : null}
                               <div className="space-y-1">
                                 <Label className="text-[10px] text-muted-foreground" htmlFor={`showcase-cmt-density-${m.id}`}>
                                   Комментарий менеджера
@@ -1180,6 +1085,7 @@ export function TradePointShowcaseMatrixSection({
                       </Collapsible>
 
                       <div className="flex flex-wrap gap-1.5">
+                        {renderOpenEntryButton(m.id, st, "min-h-9 flex-1 sm:flex-none")}
                         <Button
                           type="button"
                           variant="outline"
@@ -1190,45 +1096,6 @@ export function TradePointShowcaseMatrixSection({
                         >
                           Презентация
                         </Button>
-                        {canEdit ? (
-                          <>
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              size="sm"
-                              className="min-h-9 flex-1 font-semibold sm:flex-none"
-                              data-testid={`button-trade-point-showcase-mark-installed-${m.id}`}
-                              onClick={() => {
-                            if (!tryOpenEntry(m.id)) persist(m, "installed", commentVal);
-                          }}
-                            >
-                              Стоит на витрине
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="min-h-9 flex-1 font-semibold sm:flex-none"
-                              data-testid={`button-trade-point-showcase-postpone-${m.id}`}
-                              onClick={() => {
-                                if (!tryOpenEntry(m.id)) persist(m, "postponed", commentVal);
-                              }}
-                            >
-                              Отложить
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="min-h-9 flex-1 text-muted-foreground sm:flex-none"
-                              onClick={() => {
-                                if (!tryOpenEntry(m.id)) persist(m, "not_relevant", commentVal);
-                              }}
-                            >
-                              Не актуально
-                            </Button>
-                          </>
-                        ) : null}
                       </div>
 
                       <div className="space-y-1.5 border-t border-border/60 pt-2">
@@ -1397,7 +1264,12 @@ export function TradePointShowcaseMatrixSection({
 
               <Collapsible open={matrixViewFiltersOpen} onOpenChange={setMatrixViewFiltersOpen} className="space-y-2">
                 <div className="space-y-1.5">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Статус позиций</p>
+                  <div className="flex items-center gap-1.5">
+                    <SlidersHorizontal className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Фильтр по статусу
+                    </p>
+                  </div>
                   <div className="flex min-w-0 flex-wrap gap-1.5">
                     <Button
                       type="button"
