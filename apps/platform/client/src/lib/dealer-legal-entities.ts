@@ -229,7 +229,36 @@ function resolveState(dealerId: string, state?: DealerLegalEntitiesState): Deale
 
 export function getDealerLegalEntities(dealerId: string, state?: DealerLegalEntitiesState): DealerLegalEntity[] {
   const st = state ?? resolveState(dealerId);
-  return [...(st.entitiesByDealer[dealerId] ?? [])];
+  return dedupStoredLegalEntities(st.entitiesByDealer[dealerId] ?? []);
+}
+
+/**
+ * Схлопывает optimistic/DB-двойников: одна и та же запись может временно
+ * присутствовать дважды (optimistic le-... + серверная UUID с тем же internalCode).
+ * Сохраняем серверную запись (UUID) при конфликте по internalCode.
+ */
+function dedupStoredLegalEntities(list: DealerLegalEntity[]): DealerLegalEntity[] {
+  const byCode = new Map<string, number>();
+  const out: DealerLegalEntity[] = [];
+  for (const e of list) {
+    const code = normalizeInternalCode(e.internalCode);
+    if (!code) {
+      out.push(e);
+      continue;
+    }
+    const existingIdx = byCode.get(code);
+    if (existingIdx == null) {
+      byCode.set(code, out.length);
+      out.push(e);
+      continue;
+    }
+    const existing = out[existingIdx]!;
+    // Предпочитаем серверную (UUID) запись optimistic le-... дублю.
+    if (!isLegalEntityServerUuid(existing.id) && isLegalEntityServerUuid(e.id)) {
+      out[existingIdx] = e;
+    }
+  }
+  return out;
 }
 
 function normalizeEntityName(s: string): string {
