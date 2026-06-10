@@ -54,7 +54,9 @@ const LazyDealerCardPage = lazy(() => import("@/pages/dealer-card-foundation").t
 const LazyTradePointDetailPage = lazy(() => import("@/pages/trade-point-detail").then((m) => ({ default: m.TradePointDetailPage })));
 const LazyCatalogPage = lazy(() => import("@/pages/catalog"));
 const LazyCatalogProduct1cPage = lazy(() => import("@/pages/catalog-product-1c"));
-const LazyProductDetailPage = lazy(() => import("@/pages/product-detail").then((m) => ({ default: m.ProductDetailPage })));
+const LazyCatalogLegacyRedirect = lazy(() =>
+  import("@/pages/catalog-legacy-redirect").then((m) => ({ default: m.CatalogLegacyRedirect })),
+);
 const LazyTasksPage = lazy(() => import("@/pages/tasks"));
 const LazyDistributionPage = lazy(() => import("@/pages/distribution"));
 const LazyDistributionMatrixCatalogPage = lazy(() => import("@/pages/distribution-matrix-catalog"));
@@ -132,7 +134,7 @@ const DealerCardPageRoute = suspensePage(LazyDealerCardPage);
 const TradePointDetailPageRoute = suspensePage(LazyTradePointDetailPage);
 const CatalogPageRoute = suspensePage(LazyCatalogPage);
 const CatalogProduct1cPageRoute = suspensePage(LazyCatalogProduct1cPage);
-const ProductDetailPageRoute = suspensePage(LazyProductDetailPage);
+const CatalogLegacyRedirectRoute = suspensePage(LazyCatalogLegacyRedirect);
 const TasksPageRoute = suspensePage(LazyTasksPage);
 const DistributionPageRoute = suspensePage(LazyDistributionPage);
 const DistributionMatrixCatalogPageRoute = suspensePage(LazyDistributionMatrixCatalogPage);
@@ -435,7 +437,7 @@ function AuthenticatedShell({
         <Route path="/trade-points" component={TradePointsRoute} />
         <Route path="/client-map" component={ClientMapRoute} />
         <Route path="/catalog/1c/:productId" component={CatalogProduct1cPageRoute} />
-        <Route path="/catalog/:productId" component={ProductDetailPageRoute} />
+        <Route path="/catalog/:productId" component={CatalogLegacyRedirectRoute} />
         <Route path="/catalog" component={CatalogPageRoute} />
         <Route path="/tasks" component={TasksPageRoute} />
         <Route path="/distribution/matrix-catalog" component={DistributionMatrixCatalogPageRoute} />

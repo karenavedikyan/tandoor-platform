@@ -9,6 +9,8 @@ export type ShowcaseMatrixTier = "expanded" | "medium" | "base" | "starter";
 
 export type ShowcaseMatrixModelDefinition = {
   id: string;
+  /** UUID товара в каталоге 1С, если известен. */
+  catalog1cId?: string;
   name: string;
   type: ShowcaseMatrixModelType;
   typeLabelRu: "ВХ" | "МК";
@@ -269,4 +271,10 @@ export function priorityLabelRu(p: ShowcaseMatrixPriorityRank): "Высокий"
   if (p === "high") return "Высокий";
   if (p === "medium") return "Средний";
   return "Низкий";
+}
+
+/** Ссылка на карточку каталога: напрямую в 1С при известном UUID, иначе через legacy-мост. */
+export function catalogHrefForMatrixModel(m: ShowcaseMatrixModelDefinition): string {
+  if (m.catalog1cId) return `/catalog/1c/${m.catalog1cId}`;
+  return `/catalog/${m.id}`;
 }

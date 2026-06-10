@@ -16,7 +16,11 @@ import { getProductById } from "@/lib/catalog-data";
 import { MultiSelect } from "@/components/ui/multi-select";
 import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
-import { priorityLabelRu, type ShowcaseMatrixModelDefinition } from "@/lib/trade-point-showcase-matrix-models";
+import {
+  catalogHrefForMatrixModel,
+  priorityLabelRu,
+  type ShowcaseMatrixModelDefinition,
+} from "@/lib/trade-point-showcase-matrix-models";
 import { fetchActiveMatrixDef } from "@/lib/showcase-matrix-catalog-api";
 import {
   refreshMatrixDefFromServer,
@@ -794,7 +798,7 @@ export function TradePointShowcaseMatrixSection({
                               />
                             </div>
                             <Button asChild variant="ghost" size="sm" className="h-auto px-0 text-xs font-semibold text-primary underline-offset-2 hover:underline">
-                              <Link href={`/catalog/${m.id}`}>Каталог</Link>
+                              <Link href={catalogHrefForMatrixModel(m)}>Каталог</Link>
                             </Button>
                           </PopoverContent>
                         </Popover>
@@ -998,7 +1002,7 @@ export function TradePointShowcaseMatrixSection({
                                   size="sm"
                                   className="h-auto px-0 text-xs font-semibold text-primary underline-offset-2 hover:underline"
                                 >
-                                  <Link href={`/catalog/${m.id}`}>Открыть в каталоге</Link>
+                                  <Link href={catalogHrefForMatrixModel(m)}>Открыть в каталоге</Link>
                                 </Button>
                               ) : null}
                             </section>
@@ -1126,7 +1130,7 @@ export function TradePointShowcaseMatrixSection({
 
                       {canEdit ? (
                         <Button asChild variant="ghost" size="sm" className="h-auto px-0 text-xs font-semibold text-primary underline-offset-2 hover:underline">
-                          <Link href={`/catalog/${m.id}`}>Открыть в каталоге</Link>
+                          <Link href={catalogHrefForMatrixModel(m)}>Открыть в каталоге</Link>
                         </Button>
                       ) : null}
                     </CardContent>
