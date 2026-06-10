@@ -3,7 +3,6 @@
  */
 
 import type { ClientCategoryId } from "@/lib/client-category";
-import { getProductById } from "@/lib/catalog-data";
 import type { ShowcaseMatrixCatalogPriority, ShowcaseMatrixDefModelDto } from "@/lib/showcase-matrix-catalog-api";
 import { resolveActiveMatrixDefFromCache, todayIsoDateLocal } from "@/lib/showcase-matrix-catalog-resolve";
 import type { ShowcaseMatrixEntryDto } from "@/lib/showcase-matrix-api";
@@ -34,11 +33,17 @@ export type ResolvedTradePointMatrix = {
 
 const HARDCODED_BY_ID = new Map(SHOWCASE_MATRIX_MODEL_DEFINITIONS.map((m) => [m.id, m]));
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const DEFAULT_WEIGHT_BY_PRIORITY: Record<ShowcaseMatrixCatalogPriority, number> = {
   high: 3,
   medium: 2,
   low: 1,
 };
+
+function isUuid(id: string): boolean {
+  return UUID_RE.test(id.trim());
+}
 
 function catalogSegmentToModelType(segment: ShowcaseMatrixDefModelDto["segment"]): ShowcaseMatrixModelType {
   if (segment === "vh") return "entrance";
@@ -71,40 +76,45 @@ function modelRowToDefinition(
   clientCategory: ClientCategoryId,
 ): ShowcaseMatrixModelDefinition | null {
   const productId = row.targetId;
+  const effective1cId = row.catalog1cId ?? row.targetId;
   const hardcoded = HARDCODED_BY_ID.get(productId);
-  const product = getProductById(productId);
 
-  if (!hardcoded && !product) return null;
+  if (hardcoded) {
+    return {
+      id: productId,
+      catalog1cId: row.catalog1cId ?? undefined,
+      name: hardcoded.name,
+      type: hardcoded.type,
+      typeLabelRu: hardcoded.typeLabelRu,
+      imageUrl: hardcoded.imageUrl,
+      basePriority: row.priority as ShowcaseMatrixPriorityRank,
+      categoryRules: hardcoded.categoryRules,
+      importanceReason: hardcoded.importanceReason,
+      characteristics: hardcoded.characteristics,
+      advantages: hardcoded.advantages,
+      benefitsDealer: hardcoded.benefitsDealer,
+      benefitsBuyer: hardcoded.benefitsBuyer,
+      objections: hardcoded.objections,
+      objectionAnswers: hardcoded.objectionAnswers,
+      copyMessage: hardcoded.copyMessage,
+    };
+  }
 
-  let type: ShowcaseMatrixModelType;
-  if (hardcoded) type = hardcoded.type;
-  else if (product?.doorKind === "Входная") type = "entrance";
-  else type = "interior";
+  if (isUuid(productId)) {
+    const type = catalogSegmentToModelType(row.segment);
+    return {
+      id: productId,
+      catalog1cId: effective1cId,
+      name: productId,
+      type,
+      typeLabelRu: typeLabelFor(type),
+      imageUrl: "",
+      basePriority: row.priority as ShowcaseMatrixPriorityRank,
+      ...emptyPresentation(clientCategory),
+    };
+  }
 
-  const pres = hardcoded
-    ? {
-        categoryRules: hardcoded.categoryRules,
-        importanceReason: hardcoded.importanceReason,
-        characteristics: hardcoded.characteristics,
-        advantages: hardcoded.advantages,
-        benefitsDealer: hardcoded.benefitsDealer,
-        benefitsBuyer: hardcoded.benefitsBuyer,
-        objections: hardcoded.objections,
-        objectionAnswers: hardcoded.objectionAnswers,
-        copyMessage: hardcoded.copyMessage,
-      }
-    : emptyPresentation(clientCategory);
-
-  return {
-    id: productId,
-    catalog1cId: row.catalog1cId ?? undefined,
-    name: hardcoded?.name ?? product!.name,
-    type,
-    typeLabelRu: hardcoded?.typeLabelRu ?? typeLabelFor(type),
-    imageUrl: hardcoded?.imageUrl ?? product!.image ?? "",
-    basePriority: row.priority as ShowcaseMatrixPriorityRank,
-    ...pres,
-  };
+  return null;
 }
 
 function buildManagedModels(
