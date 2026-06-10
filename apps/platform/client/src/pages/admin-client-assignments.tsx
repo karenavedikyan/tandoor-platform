@@ -98,21 +98,30 @@ type FilterComboboxOption = {
 };
 
 function FilterCombobox({
-  value,
-  onValueChange,
+  values,
+  onValuesChange,
   options,
   placeholder = "Все",
   testId,
 }: {
-  value: string;
-  onValueChange: (value: string) => void;
+  values: string[];
+  onValuesChange: (next: string[]) => void;
   options: FilterComboboxOption[];
   placeholder?: string;
   testId: string;
 }) {
   const [open, setOpen] = useState(false);
-  const selectedOption = options.find((o) => o.value === value);
-  const displayLabel = selectedOption?.label ?? "";
+  const selectedLabels = values
+    .map((v) => options.find((o) => o.value === v)?.label)
+    .filter((label): label is string => Boolean(label));
+  let displayLabel = placeholder;
+  if (selectedLabels.length === 1) displayLabel = selectedLabels[0]!;
+  else if (selectedLabels.length > 1) displayLabel = `${selectedLabels[0]} +${selectedLabels.length - 1}`;
+
+  const toggleValue = (value: string) => {
+    if (values.includes(value)) onValuesChange(values.filter((v) => v !== value));
+    else onValuesChange([...values, value]);
+  };
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -124,11 +133,11 @@ function FilterCombobox({
           aria-expanded={open}
           className={cn(
             "min-h-11 w-full justify-between bg-background px-3 text-left font-normal",
-            !value && "text-muted-foreground",
+            values.length === 0 && "text-muted-foreground",
           )}
           data-testid={testId}
         >
-          <span className="min-w-0 truncate">{displayLabel || placeholder}</span>
+          <span className="min-w-0 truncate">{displayLabel}</span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
         </Button>
       </PopoverTrigger>
@@ -141,11 +150,13 @@ function FilterCombobox({
               <CommandItem
                 value="__all__"
                 onSelect={() => {
-                  onValueChange("");
-                  setOpen(false);
+                  onValuesChange([]);
                 }}
               >
-                <Check className={cn("h-4 w-4 text-primary", !value ? "opacity-100" : "opacity-0")} aria-hidden />
+                <Check
+                  className={cn("h-4 w-4 text-primary", values.length === 0 ? "opacity-100" : "opacity-0")}
+                  aria-hidden
+                />
                 <span className="min-w-0 truncate">Все</span>
               </CommandItem>
               {options.map((option) => (
@@ -153,12 +164,11 @@ function FilterCombobox({
                   key={option.value}
                   value={option.searchValue ?? option.label}
                   onSelect={() => {
-                    onValueChange(option.value);
-                    setOpen(false);
+                    toggleValue(option.value);
                   }}
                 >
                   <Check
-                    className={cn("h-4 w-4 text-primary", value === option.value ? "opacity-100" : "opacity-0")}
+                    className={cn("h-4 w-4 text-primary", values.includes(option.value) ? "opacity-100" : "opacity-0")}
                     aria-hidden
                   />
                   <span className="min-w-0 truncate">{option.label}</span>
@@ -166,6 +176,19 @@ function FilterCombobox({
               ))}
             </CommandGroup>
           </CommandList>
+          {values.length > 0 ? (
+            <div className="border-t border-border p-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 w-full"
+                onClick={() => onValuesChange([])}
+              >
+                Очистить
+              </Button>
+            </div>
+          ) : null}
         </Command>
       </PopoverContent>
     </Popover>
@@ -231,17 +254,24 @@ export default function AdminClientAssignmentsPage() {
     return () => window.clearTimeout(t);
   }, [searchInput]);
 
-  const [userIdFilter, setUserIdFilter] = useState<string>("");
-  const [teamIdFilter, setTeamIdFilter] = useState<string>("");
-  const [cityFilter, setCityFilter] = useState<string>("");
-  const [categoryFilter, setCategoryFilter] = useState<string>("");
-  const [regionalFilter, setRegionalFilter] = useState<string>("");
-  const [ropFilter, setRopFilter] = useState<string>("");
+  const [userIdFilter, setUserIdFilter] = useState<string[]>([]);
+  const [teamIdFilter, setTeamIdFilter] = useState<string[]>([]);
+  const [cityFilter, setCityFilter] = useState<string[]>([]);
+  const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
+  const [regionalFilter, setRegionalFilter] = useState<string[]>([]);
+  const [ropFilter, setRopFilter] = useState<string[]>([]);
   const [offset, setOffset] = useState(0);
+
+  const userIdFilterKey = userIdFilter.join(",");
+  const teamIdFilterKey = teamIdFilter.join(",");
+  const cityFilterKey = cityFilter.join(",");
+  const categoryFilterKey = categoryFilter.join(",");
+  const regionalFilterKey = regionalFilter.join(",");
+  const ropFilterKey = ropFilter.join(",");
 
   useEffect(() => {
     setOffset(0);
-  }, [searchDebounced, userIdFilter, teamIdFilter, cityFilter, categoryFilter, regionalFilter, ropFilter]);
+  }, [searchDebounced, userIdFilterKey, teamIdFilterKey, cityFilterKey, categoryFilterKey, regionalFilterKey, ropFilterKey]);
 
   const teamsQ = useQuery({
     queryKey: ["client-assignments", "teams"],
@@ -278,12 +308,12 @@ export default function AdminClientAssignmentsPage() {
       "client-assignments",
       "list",
       searchDebounced,
-      userIdFilter,
-      teamIdFilter,
-      cityFilter,
-      categoryFilter,
-      regionalFilter,
-      ropFilter,
+      userIdFilterKey,
+      teamIdFilterKey,
+      cityFilterKey,
+      categoryFilterKey,
+      regionalFilterKey,
+      ropFilterKey,
       offset,
     ],
     queryFn: async () => {
@@ -291,12 +321,12 @@ export default function AdminClientAssignmentsPage() {
         limit: LIMIT,
         offset,
         search: searchDebounced.trim() || undefined,
-        userId: userIdFilter || undefined,
-        teamId: teamIdFilter || undefined,
-        city: cityFilter || undefined,
-        category: categoryFilter || undefined,
-        regionalManager: regionalFilter || undefined,
-        rop: ropFilter || undefined,
+        userId: userIdFilter.length ? userIdFilter : undefined,
+        teamId: teamIdFilter.length ? teamIdFilter : undefined,
+        city: cityFilter.length ? cityFilter : undefined,
+        category: categoryFilter.length ? categoryFilter : undefined,
+        regionalManager: regionalFilter.length ? regionalFilter : undefined,
+        rop: ropFilter.length ? ropFilter : undefined,
       });
       if (!r.ok) throw new Error(r.message);
       return r;
@@ -310,16 +340,16 @@ export default function AdminClientAssignmentsPage() {
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   useEffect(() => {
     setSelected({});
-  }, [items, offset, searchDebounced, userIdFilter, teamIdFilter, cityFilter, categoryFilter, regionalFilter, ropFilter]);
+  }, [items, offset, searchDebounced, userIdFilterKey, teamIdFilterKey, cityFilterKey, categoryFilterKey, regionalFilterKey, ropFilterKey]);
 
   const currentReassignFilter = useMemo((): ReassignClientsFilter => {
     const filter: ReassignClientsFilter = {};
-    if (userIdFilter) filter.responsibleUserId = userIdFilter;
-    if (teamIdFilter) filter.fromTeamId = teamIdFilter;
-    if (cityFilter) filter.city = cityFilter;
-    if (categoryFilter) filter.category = categoryFilter;
-    if (regionalFilter) filter.regionalManager = regionalFilter;
-    if (ropFilter) filter.rop = ropFilter;
+    if (userIdFilter.length) filter.responsibleUserId = userIdFilter;
+    if (teamIdFilter.length) filter.fromTeamId = teamIdFilter;
+    if (cityFilter.length) filter.city = cityFilter;
+    if (categoryFilter.length) filter.category = categoryFilter;
+    if (regionalFilter.length) filter.regionalManager = regionalFilter;
+    if (ropFilter.length) filter.rop = ropFilter;
     if (searchDebounced.trim()) filter.search = searchDebounced.trim();
     return filter;
   }, [userIdFilter, teamIdFilter, cityFilter, categoryFilter, regionalFilter, ropFilter, searchDebounced]);
@@ -328,12 +358,12 @@ export default function AdminClientAssignmentsPage() {
     () =>
       Boolean(
         searchDebounced.trim() ||
-          userIdFilter ||
-          teamIdFilter ||
-          cityFilter ||
-          categoryFilter ||
-          regionalFilter ||
-          ropFilter,
+          userIdFilter.length ||
+          teamIdFilter.length ||
+          cityFilter.length ||
+          categoryFilter.length ||
+          regionalFilter.length ||
+          ropFilter.length,
       ),
     [searchDebounced, userIdFilter, teamIdFilter, cityFilter, categoryFilter, regionalFilter, ropFilter],
   );
@@ -522,8 +552,8 @@ export default function AdminClientAssignmentsPage() {
           <div className="min-w-0 flex-1 space-y-2 lg:min-w-[220px]">
             <Label>Ответственный</Label>
             <FilterCombobox
-              value={userIdFilter}
-              onValueChange={setUserIdFilter}
+              values={userIdFilter}
+              onValuesChange={setUserIdFilter}
               options={userFilterOptions}
               testId="select-client-assignments-user"
             />
@@ -531,8 +561,8 @@ export default function AdminClientAssignmentsPage() {
           <div className="min-w-0 flex-1 space-y-2 lg:min-w-[220px]">
             <Label>Команда</Label>
             <FilterCombobox
-              value={teamIdFilter}
-              onValueChange={setTeamIdFilter}
+              values={teamIdFilter}
+              onValuesChange={setTeamIdFilter}
               options={teamFilterOptions}
               testId="select-client-assignments-team"
             />
@@ -540,33 +570,26 @@ export default function AdminClientAssignmentsPage() {
           <div className="min-w-0 flex-1 space-y-2 lg:min-w-[180px]">
             <Label>Город</Label>
             <FilterCombobox
-              value={cityFilter}
-              onValueChange={setCityFilter}
+              values={cityFilter}
+              onValuesChange={setCityFilter}
               options={cityFilterOptions}
               testId="select-client-assignments-city"
             />
           </div>
           <div className="min-w-0 flex-1 space-y-2 lg:min-w-[180px]">
             <Label>Категория</Label>
-            <Select value={categoryFilter || "all"} onValueChange={(v) => setCategoryFilter(v === "all" ? "" : v)}>
-              <SelectTrigger className="min-h-11" data-testid="select-client-assignments-category">
-                <SelectValue placeholder="Все" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Все</SelectItem>
-                {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <FilterCombobox
+              values={categoryFilter}
+              onValuesChange={setCategoryFilter}
+              options={Object.entries(CATEGORY_LABELS).map(([value, label]) => ({ value, label }))}
+              testId="select-client-assignments-category"
+            />
           </div>
           <div className="min-w-0 flex-1 space-y-2 lg:min-w-[200px]">
             <Label>Регионал</Label>
             <FilterCombobox
-              value={regionalFilter}
-              onValueChange={setRegionalFilter}
+              values={regionalFilter}
+              onValuesChange={setRegionalFilter}
               options={regionalFilterOptions}
               testId="select-client-assignments-regional"
             />
@@ -574,8 +597,8 @@ export default function AdminClientAssignmentsPage() {
           <div className="min-w-0 flex-1 space-y-2 lg:min-w-[200px]">
             <Label>РОП</Label>
             <FilterCombobox
-              value={ropFilter}
-              onValueChange={setRopFilter}
+              values={ropFilter}
+              onValuesChange={setRopFilter}
               options={ropFilterOptions}
               testId="select-client-assignments-rop"
             />

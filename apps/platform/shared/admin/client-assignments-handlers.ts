@@ -32,16 +32,66 @@ function qsParam(q: Record<string, unknown>, ...keys: string[]): string | undefi
   return undefined;
 }
 
+function qsParamArray(q: Record<string, unknown>, ...keys: string[]): string[] {
+  const out: string[] = [];
+  for (const key of keys) {
+    const v = q[key];
+    if (typeof v === "string") {
+      for (const part of v.split(",")) {
+        const t = part.trim();
+        if (t) out.push(t);
+      }
+    } else if (Array.isArray(v)) {
+      for (const item of v) {
+        if (typeof item !== "string") continue;
+        for (const part of item.split(",")) {
+          const t = part.trim();
+          if (t) out.push(t);
+        }
+      }
+    }
+  }
+  return Array.from(new Set(out));
+}
+
+function normalizeStringArray(raw: unknown): string[] | undefined {
+  if (raw == null) return undefined;
+  if (typeof raw === "string") {
+    const t = raw.trim();
+    return t ? [t] : undefined;
+  }
+  if (!Array.isArray(raw)) return undefined;
+  const out = raw
+    .filter((x): x is string => typeof x === "string")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return out.length ? out : undefined;
+}
+
+function normalizeUuidArray(raw: unknown): string[] | undefined {
+  const arr = normalizeStringArray(raw);
+  if (!arr) return undefined;
+  const uuids = arr.filter((s) => UUID_RE.test(s));
+  return uuids.length ? uuids : undefined;
+}
+
+function normalizeCategoryArray(raw: unknown): string[] | undefined {
+  const arr = normalizeStringArray(raw);
+  if (!arr) return undefined;
+  const cats = arr.map((s) => parseClientCategory(s)).filter((c): c is string => Boolean(c));
+  return cats.length ? cats : undefined;
+}
+
 function parseClientCategory(raw: string | undefined): string | undefined {
   if (!raw) return undefined;
   return CLIENT_CATEGORIES.has(raw) ? raw : undefined;
 }
 
 type DealerOverrideFilters = {
-  city?: string;
-  category?: string;
-  regionalManager?: string;
-  rop?: string;
+  city?: string[];
+  category?: string[];
+  regionalManager?: string[];
+  rop?: string[];
   searchFrag?: string;
 };
 
@@ -50,44 +100,110 @@ function appendDealerOverrideFilters(cond: string[], params: unknown[], filters:
     params.push(`%${filters.searchFrag}%`);
     cond.push(`(ca.client_code ILIKE $${params.length} OR dov.name ILIKE $${params.length})`);
   }
-  if (filters.city) {
-    params.push(filters.city);
-    cond.push(`lower(dov.city) = lower($${params.length})`);
+  if (filters.city?.length) {
+    params.push(filters.city.map((s) => s.toLowerCase()));
+    cond.push(`lower(dov.city) = ANY($${params.length})`);
   }
-  if (filters.category) {
+  if (filters.category?.length) {
     params.push(filters.category);
-    cond.push(`dov.client_category = $${params.length}`);
+    cond.push(`dov.client_category = ANY($${params.length})`);
   }
-  if (filters.regionalManager) {
-    params.push(filters.regionalManager);
-    cond.push(`lower(dov.regional_manager_name) = lower($${params.length})`);
+  if (filters.regionalManager?.length) {
+    params.push(filters.regionalManager.map((s) => s.toLowerCase()));
+    cond.push(`lower(dov.regional_manager_name) = ANY($${params.length})`);
   }
-  if (filters.rop) {
-    params.push(filters.rop);
-    cond.push(`lower(dov.rop_name) = lower($${params.length})`);
+  if (filters.rop?.length) {
+    params.push(filters.rop.map((s) => s.toLowerCase()));
+    cond.push(`lower(dov.rop_name) = ANY($${params.length})`);
   }
 }
 
 function hasAnyReassignFilter(filter: {
   fromUserId?: string | null;
-  fromTeamId?: string | null;
-  responsibleUserId?: string | null;
-  city?: string;
-  category?: string;
-  regionalManager?: string;
-  rop?: string;
+  fromTeamId?: string[] | null;
+  responsibleUserId?: string[] | null;
+  city?: string[];
+  category?: string[];
+  regionalManager?: string[];
+  rop?: string[];
   searchFrag?: string;
 }): boolean {
   return Boolean(
     filter.fromUserId ||
-      filter.fromTeamId ||
-      filter.responsibleUserId ||
-      filter.city ||
-      filter.category ||
-      filter.regionalManager ||
-      filter.rop ||
+      (filter.fromTeamId?.length ?? 0) > 0 ||
+      (filter.responsibleUserId?.length ?? 0) > 0 ||
+      (filter.city?.length ?? 0) > 0 ||
+      (filter.category?.length ?? 0) > 0 ||
+      (filter.regionalManager?.length ?? 0) > 0 ||
+      (filter.rop?.length ?? 0) > 0 ||
       filter.searchFrag,
   );
+}
+
+type ParsedReassignFilter = {
+  fromUserId?: string;
+  responsibleUserId?: string[];
+  fromTeamId?: string[];
+  city?: string[];
+  category?: string[];
+  regionalManager?: string[];
+  rop?: string[];
+  searchFrag?: string;
+};
+
+function parseReassignFilterBody(f: {
+  fromUserId?: unknown;
+  fromTeamId?: unknown;
+  responsibleUserId?: unknown;
+  city?: unknown;
+  category?: unknown;
+  regionalManager?: unknown;
+  rop?: unknown;
+  search?: unknown;
+}): ParsedReassignFilter {
+  let responsibleUserId = normalizeUuidArray(f.responsibleUserId);
+  const fromUserIdRaw = typeof f.fromUserId === "string" && UUID_RE.test(f.fromUserId.trim()) ? f.fromUserId.trim() : undefined;
+  if (!responsibleUserId?.length) {
+    responsibleUserId = normalizeUuidArray(f.fromUserId);
+  }
+  const fromTeamId = normalizeUuidArray(f.fromTeamId);
+  const city = normalizeStringArray(f.city);
+  const category = normalizeCategoryArray(f.category);
+  const regionalManager = normalizeStringArray(f.regionalManager);
+  const rop = normalizeStringArray(f.rop);
+  const searchRaw = typeof f.search === "string" ? f.search.trim() : "";
+  const searchFrag = searchRaw ? sanitizeLikeFragment(searchRaw) : undefined;
+  return {
+    fromUserId: fromUserIdRaw,
+    responsibleUserId,
+    fromTeamId,
+    city,
+    category,
+    regionalManager,
+    rop,
+    searchFrag,
+  };
+}
+
+function appendReassignAssignmentFilters(cond: string[], pr: unknown[], parsed: ParsedReassignFilter): void {
+  if (parsed.responsibleUserId?.length) {
+    pr.push(parsed.responsibleUserId);
+    cond.push(`ca.responsible_user_id = ANY($${pr.length}::uuid[])`);
+  } else if (parsed.fromUserId) {
+    pr.push(parsed.fromUserId);
+    cond.push(`ca.responsible_user_id = $${pr.length}::uuid`);
+  }
+  if (parsed.fromTeamId?.length) {
+    pr.push(parsed.fromTeamId);
+    cond.push(`ca.team_id = ANY($${pr.length}::uuid[])`);
+  }
+  appendDealerOverrideFilters(cond, pr, {
+    city: parsed.city,
+    category: parsed.category,
+    regionalManager: parsed.regionalManager,
+    rop: parsed.rop,
+    searchFrag: parsed.searchFrag,
+  });
 }
 
 function sendJson(res: VercelResponse, status: number, body: Record<string, unknown>): void {
@@ -164,31 +280,8 @@ export async function handleClientsReassign(
   if (Array.isArray(body.clientCodes) && body.clientCodes.length > 0) {
     codes = body.clientCodes.filter((c): c is string => typeof c === "string" && c.trim() !== "").map((c) => c.trim());
   } else if (body.filter && typeof body.filter === "object" && body.filter !== null) {
-    const f = body.filter as {
-      fromUserId?: unknown;
-      fromTeamId?: unknown;
-      responsibleUserId?: unknown;
-      city?: unknown;
-      category?: unknown;
-      regionalManager?: unknown;
-      rop?: unknown;
-      search?: unknown;
-    };
-    const responsibleRaw =
-      typeof f.responsibleUserId === "string" && UUID_RE.test(f.responsibleUserId.trim())
-        ? f.responsibleUserId.trim()
-        : typeof f.fromUserId === "string" && UUID_RE.test(f.fromUserId.trim())
-          ? f.fromUserId.trim()
-          : null;
-    const fromTeamId = typeof f.fromTeamId === "string" && UUID_RE.test(f.fromTeamId.trim()) ? f.fromTeamId.trim() : null;
-    const city = typeof f.city === "string" && f.city.trim() ? f.city.trim() : undefined;
-    const category = parseClientCategory(typeof f.category === "string" ? f.category.trim() : undefined);
-    const regionalManager =
-      typeof f.regionalManager === "string" && f.regionalManager.trim() ? f.regionalManager.trim() : undefined;
-    const rop = typeof f.rop === "string" && f.rop.trim() ? f.rop.trim() : undefined;
-    const searchRaw = typeof f.search === "string" ? f.search.trim() : "";
-    const searchFrag = searchRaw ? sanitizeLikeFragment(searchRaw) : undefined;
-    if (!hasAnyReassignFilter({ fromUserId: responsibleRaw, fromTeamId, city, category, regionalManager, rop, searchFrag })) {
+    const parsed = parseReassignFilterBody(body.filter as Record<string, unknown>);
+    if (!hasAnyReassignFilter(parsed)) {
       sendJson(res, 400, {
         success: false,
         code: "VALIDATION_ERROR",
@@ -198,15 +291,7 @@ export async function handleClientsReassign(
     }
     const cond: string[] = ["1=1"];
     const pr: unknown[] = [];
-    if (responsibleRaw) {
-      pr.push(responsibleRaw);
-      cond.push(`ca.responsible_user_id = $${pr.length}::uuid`);
-    }
-    if (fromTeamId) {
-      pr.push(fromTeamId);
-      cond.push(`ca.team_id = $${pr.length}::uuid`);
-    }
-    appendDealerOverrideFilters(cond, pr, { city, category, regionalManager, rop, searchFrag });
+    appendReassignAssignmentFilters(cond, pr, parsed);
     if (me.role === "rop") {
       const myTeam = await resolveRopTeamId(pool, me.id);
       if (!myTeam) {
@@ -423,14 +508,14 @@ export async function handleClientsAssignmentsList(
     return;
   }
   const q = req.query ?? {};
-  const userIdFilter = qsParam(q, "userId", "responsibleUserId");
-  const teamId = qsParam(q, "teamId");
+  const userIdFilters = normalizeUuidArray(qsParamArray(q, "userId", "responsibleUserId"));
+  const teamIds = normalizeUuidArray(qsParamArray(q, "teamId"));
   const searchRaw = qsParam(q, "search", "q");
   const searchFrag = searchRaw ? sanitizeLikeFragment(searchRaw) : "";
-  const city = qsParam(q, "city");
-  const category = parseClientCategory(qsParam(q, "category"));
-  const regionalManager = qsParam(q, "regionalManager");
-  const rop = qsParam(q, "rop");
+  const city = normalizeStringArray(qsParamArray(q, "city"));
+  const category = normalizeCategoryArray(qsParamArray(q, "category"));
+  const regionalManager = normalizeStringArray(qsParamArray(q, "regionalManager"));
+  const rop = normalizeStringArray(qsParamArray(q, "rop"));
   const limitRaw = qsParam(q, "limit");
   const offsetRaw = qsParam(q, "offset");
   let limit = 50;
@@ -446,13 +531,13 @@ export async function handleClientsAssignmentsList(
 
   const cond: string[] = ["1=1"];
   const params: unknown[] = [];
-  if (userIdFilter && UUID_RE.test(userIdFilter)) {
-    params.push(userIdFilter);
-    cond.push(`ca.responsible_user_id = $${params.length}::uuid`);
+  if (userIdFilters?.length) {
+    params.push(userIdFilters);
+    cond.push(`ca.responsible_user_id = ANY($${params.length}::uuid[])`);
   }
-  if (teamId && UUID_RE.test(teamId)) {
-    params.push(teamId);
-    cond.push(`ca.team_id = $${params.length}::uuid`);
+  if (teamIds?.length) {
+    params.push(teamIds);
+    cond.push(`ca.team_id = ANY($${params.length}::uuid[])`);
   }
   appendDealerOverrideFilters(cond, params, {
     searchFrag: searchFrag || undefined,

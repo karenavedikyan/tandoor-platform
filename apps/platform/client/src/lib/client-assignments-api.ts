@@ -68,24 +68,32 @@ export type ListAssignmentsParams = {
   limit?: number;
   offset?: number;
   search?: string;
-  userId?: string;
-  teamId?: string;
-  city?: string;
-  category?: string;
-  regionalManager?: string;
-  rop?: string;
+  userId?: string[];
+  teamId?: string[];
+  city?: string[];
+  category?: string[];
+  regionalManager?: string[];
+  rop?: string[];
 };
 
 export type ReassignClientsFilter = {
   fromUserId?: string;
-  responsibleUserId?: string;
-  fromTeamId?: string;
-  city?: string;
-  category?: string;
-  regionalManager?: string;
-  rop?: string;
+  responsibleUserId?: string[];
+  fromTeamId?: string[];
+  city?: string[];
+  category?: string[];
+  regionalManager?: string[];
+  rop?: string[];
   search?: string;
 };
+
+function appendQueryArray(sp: URLSearchParams, key: string, values?: string[]): void {
+  if (!values?.length) return;
+  for (const v of values) {
+    const t = v.trim();
+    if (t) sp.append(key, t);
+  }
+}
 
 async function readJson(res: Response): Promise<Record<string, unknown>> {
   try {
@@ -207,12 +215,12 @@ export async function listAssignments(
   if (params.limit != null) sp.set("limit", String(params.limit));
   if (params.offset != null) sp.set("offset", String(params.offset));
   if (params.search?.trim()) sp.set("search", params.search.trim());
-  if (params.userId?.trim()) sp.set("userId", params.userId.trim());
-  if (params.teamId?.trim()) sp.set("teamId", params.teamId.trim());
-  if (params.city?.trim()) sp.set("city", params.city.trim());
-  if (params.category?.trim()) sp.set("category", params.category.trim());
-  if (params.regionalManager?.trim()) sp.set("regionalManager", params.regionalManager.trim());
-  if (params.rop?.trim()) sp.set("rop", params.rop.trim());
+  appendQueryArray(sp, "userId", params.userId);
+  appendQueryArray(sp, "teamId", params.teamId);
+  appendQueryArray(sp, "city", params.city);
+  appendQueryArray(sp, "category", params.category);
+  appendQueryArray(sp, "regionalManager", params.regionalManager);
+  appendQueryArray(sp, "rop", params.rop);
   const qs = sp.toString();
   const url = qs ? `${ASSIGNMENTS_BASE}/clients-assignments-list?${qs}` : `${ASSIGNMENTS_BASE}/clients-assignments-list`;
   const res = await fetch(url, { method: "GET", credentials: "include" });
@@ -332,7 +340,17 @@ export async function reassignClients(input: {
     reason: input.reason,
   };
   if (input.filter) {
-    payload.filter = input.filter;
+    const f = input.filter;
+    const filter: Record<string, unknown> = {};
+    if (f.fromUserId) filter.fromUserId = f.fromUserId;
+    if (f.responsibleUserId?.length) filter.responsibleUserId = f.responsibleUserId;
+    if (f.fromTeamId?.length) filter.fromTeamId = f.fromTeamId;
+    if (f.city?.length) filter.city = f.city;
+    if (f.category?.length) filter.category = f.category;
+    if (f.regionalManager?.length) filter.regionalManager = f.regionalManager;
+    if (f.rop?.length) filter.rop = f.rop;
+    if (f.search?.trim()) filter.search = f.search.trim();
+    payload.filter = filter;
   } else if (input.clientCodes) {
     payload.clientCodes = input.clientCodes;
   }
