@@ -83,6 +83,55 @@ async function findByInn(
   return r.rows[0] ?? null;
 }
 
+async function findByInternalCode(
+  pool: PoolLike,
+  clientId: string,
+  code: string,
+): Promise<Record<string, unknown> | null> {
+  const r = await pool.query<Record<string, unknown>>(
+    `SELECT * FROM legal_entities
+     WHERE client_id = $1 AND internal_code IS NOT NULL
+       AND upper(btrim(internal_code)) = upper(btrim($2)) LIMIT 1`,
+    [clientId, code],
+  );
+  return r.rows[0] ?? null;
+}
+
+async function findByNormName(
+  pool: PoolLike,
+  clientId: string,
+  name: string,
+): Promise<Record<string, unknown> | null> {
+  const r = await pool.query<Record<string, unknown>>(
+    `SELECT * FROM legal_entities
+     WHERE client_id = $1 AND is_archived = false
+       AND lower(btrim(name)) = lower(btrim($2))
+     ORDER BY (inn IS NOT NULL) DESC, (internal_code IS NOT NULL) DESC, created_at ASC
+     LIMIT 1`,
+    [clientId, name],
+  );
+  return r.rows[0] ?? null;
+}
+
+async function findExistingForDedup(
+  pool: PoolLike,
+  clientId: string,
+  fields: Record<string, unknown>,
+  name: string,
+): Promise<Record<string, unknown> | null> {
+  const internalCode = strOrNull(fields.internal_code);
+  const inn = normInn(fields.inn as string | null);
+  let existing: Record<string, unknown> | null = null;
+  if (internalCode) existing = await findByInternalCode(pool, clientId, internalCode);
+  if (!existing && inn) existing = await findByInn(pool, clientId, inn);
+  if (!existing && name) existing = await findByNormName(pool, clientId, name);
+  return existing;
+}
+
+function isPgUniqueViolation(err: unknown): boolean {
+  return typeof err === "object" && err !== null && "code" in err && (err as { code: string }).code === "23505";
+}
+
 async function clearMainStatus(pool: PoolLike, clientId: string, exceptId?: string): Promise<void> {
   await pool.query(
     `UPDATE legal_entities SET status = 'additional', updated_at = NOW()
@@ -358,53 +407,63 @@ export async function handleLegalEntitiesCreateFull(
     return;
   }
 
-  const inn = normInn(fields.inn as string | null);
-  if (inn) {
-    const existing = await findByInn(pool, clientId, inn);
-    if (existing) {
-      const item = await updateRowFromFields(pool, String(existing.id), fields, true);
-      sendJson(res, 200, { success: true, item, deduplicated: true });
-      return;
-    }
+  const existing = await findExistingForDedup(pool, clientId, fields, name);
+  if (existing) {
+    const item = await updateRowFromFields(pool, String(existing.id), fields, true);
+    sendJson(res, 200, { success: true, item, deduplicated: true });
+    return;
   }
 
   const status = fields.status as string;
   if (status === "main") await clearMainStatus(pool, clientId);
 
   const actorName = strOrNull(body.updatedByName) ?? me.id;
-  const r = await pool.query<Record<string, unknown>>(
-    `INSERT INTO legal_entities (
-       client_id, name, inn, kpp, ogrn, legal_address, actual_address, entity_type,
-       primary_contact, phone, email, internal_code, status, comment,
-       updated_by_user_id, updated_by_name, source, is_archived,
-       payment_form, payment_delay_days, credit_limit_rub, edo_enabled, edo_operator,
-       updated_at
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'manual',false,$17,$18,$19,$20,$21,NOW())
-     RETURNING *`,
-    [
-      clientId,
-      name,
-      fields.inn,
-      fields.kpp,
-      fields.ogrn,
-      fields.legal_address,
-      fields.actual_address,
-      fields.entity_type,
-      fields.primary_contact,
-      fields.phone,
-      fields.email,
-      fields.internal_code,
-      status,
-      fields.comment,
-      fields.updated_by_user_id ?? actorUserId(me.id),
-      actorName,
-      fields.payment_form,
-      fields.payment_delay_days,
-      fields.credit_limit_rub,
-      fields.edo_enabled,
-      fields.edo_operator,
-    ],
-  );
+  let r: { rows: Record<string, unknown>[] };
+  try {
+    r = await pool.query<Record<string, unknown>>(
+      `INSERT INTO legal_entities (
+         client_id, name, inn, kpp, ogrn, legal_address, actual_address, entity_type,
+         primary_contact, phone, email, internal_code, status, comment,
+         updated_by_user_id, updated_by_name, source, is_archived,
+         payment_form, payment_delay_days, credit_limit_rub, edo_enabled, edo_operator,
+         updated_at
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'manual',false,$17,$18,$19,$20,$21,NOW())
+       RETURNING *`,
+      [
+        clientId,
+        name,
+        fields.inn,
+        fields.kpp,
+        fields.ogrn,
+        fields.legal_address,
+        fields.actual_address,
+        fields.entity_type,
+        fields.primary_contact,
+        fields.phone,
+        fields.email,
+        fields.internal_code,
+        status,
+        fields.comment,
+        fields.updated_by_user_id ?? actorUserId(me.id),
+        actorName,
+        fields.payment_form,
+        fields.payment_delay_days,
+        fields.credit_limit_rub,
+        fields.edo_enabled,
+        fields.edo_operator,
+      ],
+    );
+  } catch (err) {
+    if (isPgUniqueViolation(err)) {
+      const raced = await findExistingForDedup(pool, clientId, fields, name);
+      if (raced) {
+        const item = await updateRowFromFields(pool, String(raced.id), fields, true);
+        sendJson(res, 200, { success: true, item, deduplicated: true });
+        return;
+      }
+    }
+    throw err;
+  }
   const item = mapLegalEntityFullRow(r.rows[0]!);
   await insertHistory(pool, clientId, `Добавлено юрлицо: ${name}`, actorName, actorUserId(me.id), item.id);
   sendJson(res, 201, { success: true, item });
