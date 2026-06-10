@@ -4,7 +4,6 @@ import { BriefShareActions } from "@/components/marketing-brief/brief-visibility
 import { TandoorLogo } from "@/components/tandoor-logo";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { getProductById } from "@/lib/catalog-data";
 import {
   formatMarketingBriefPeriodLabel,
   type CalloutBlockPayload,
@@ -156,19 +155,7 @@ function BrandFooter({ theme, themeMode }: { theme: BrandBriefTheme; themeMode: 
   );
 }
 
-function enrichProductItem(item: ReturnType<typeof asProductsBlock>["items"][number]) {
-  if (item.manual || !item.catalog_id) return item;
-  const cat = getProductById(item.catalog_id);
-  if (!cat) return item;
-  return {
-    ...item,
-    name: item.name?.trim() ? item.name : cat.name,
-    article: item.article?.trim() ? item.article : cat.article,
-    image_url: item.image_url?.trim() ? item.image_url : cat.image ?? undefined,
-  };
-}
-
-function productPriceLine(item: ReturnType<typeof enrichProductItem>): string {
+function productPriceLine(item: ReturnType<typeof asProductsBlock>["items"][number]): string {
   const name = productDisplayName(item);
   const price = item.price_retail ?? item.price_showroom;
   if (price != null) return `${name} (${formatBriefPriceRub(price).replace(/\s/g, " ")})`;
@@ -312,7 +299,7 @@ function renderBrandBlock(
           ) : null}
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
             {p.items.map((raw) => {
-              const item = enrichProductItem(raw);
+              const item = raw;
               const segLabels = (item.segments ?? []).map(
                 (k) => BRIEF_SEGMENT_OPTIONS.find((o) => o.key === k)?.label ?? k,
               );

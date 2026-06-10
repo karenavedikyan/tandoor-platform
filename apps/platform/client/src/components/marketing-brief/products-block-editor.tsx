@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import {
   DndContext,
@@ -33,6 +33,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ClientAvatar } from "@/components/ui/client-avatar";
 import {
   asProductsBlock,
+  catalog1cProductHref,
   formatBriefPriceRub,
   newBriefBlockItemId,
   parseBriefPriceInput,
@@ -41,13 +42,87 @@ import {
   SegmentMultiSelect,
 } from "@/components/marketing-brief/marketing-brief-block-shared";
 import type { MarketingBriefBlockRow, ProductsBlockItem } from "@/lib/marketing-briefs-api";
-import {
-  getProductById,
-  searchCatalog,
-  snapshotCatalogProduct,
-  type CatalogProduct,
-} from "@/lib/catalog-data";
 import { cn } from "@/lib/utils";
+
+type Catalog1cBriefItem = {
+  id: string;
+  name: string;
+  display_name: string | null;
+  brand: string | null;
+  image_path: string | null;
+  image_url: string | null;
+  price_retail: number | null;
+};
+
+function catalog1cDisplayName(item: Catalog1cBriefItem): string {
+  return item.display_name?.trim() || item.name;
+}
+
+function catalog1cImageUrl(item: Catalog1cBriefItem): string {
+  return item.image_url?.trim() || item.image_path?.trim() || "";
+}
+
+function snapshotFrom1cItem(item: Catalog1cBriefItem) {
+  return {
+    catalog_id: item.id,
+    name: catalog1cDisplayName(item),
+    article: "",
+    image_url: catalog1cImageUrl(item),
+    price_retail: item.price_retail ?? null,
+  };
+}
+
+function useCatalog1cSearch(query: string, limit: number, enabled: boolean) {
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [items, setItems] = useState<Catalog1cBriefItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedQuery(query.trim()), 300);
+    return () => window.clearTimeout(t);
+  }, [query]);
+
+  useEffect(() => {
+    if (!enabled) return;
+    const ac = new AbortController();
+    setLoading(true);
+    setError(null);
+
+    const params = new URLSearchParams();
+    if (debouncedQuery) params.set("q", debouncedQuery);
+    params.set("limit", String(limit));
+    params.set("offset", "0");
+
+    void (async () => {
+      try {
+        const r = await fetch(`/api/catalog/products?${params}`, {
+          credentials: "include",
+          signal: ac.signal,
+        });
+        const data = await r.json();
+        if (!r.ok || !data.success) {
+          throw new Error(data.message || `HTTP ${r.status}`);
+        }
+        if (!ac.signal.aborted) {
+          setItems((data.items ?? []) as Catalog1cBriefItem[]);
+        }
+      } catch (e) {
+        if ((e as Error).name === "AbortError") return;
+        if (!ac.signal.aborted) {
+          setItems([]);
+          setError(e instanceof Error ? e.message : String(e));
+        }
+      } finally {
+        if (!ac.signal.aborted) setLoading(false);
+      }
+    })();
+
+    return () => ac.abort();
+  }, [debouncedQuery, limit, enabled]);
+
+  return { items, loading, error };
+}
 
 function ProductThumb({ item }: { item: ProductsBlockItem }) {
   const url = item.image_url?.trim();
@@ -189,19 +264,22 @@ function ProductItemForm({
   readOnly?: boolean;
 }) {
   const [catalogQuery, setCatalogQuery] = useState("");
-  const catalogProduct = form.catalog_id ? getProductById(form.catalog_id) : undefined;
-  const catalogHref = form.catalog_id ? `/catalog/${form.catalog_id}` : null;
-  const catalogResults = useMemo(() => searchCatalog(catalogQuery, 12), [catalogQuery]);
+  const catalogHref = catalog1cProductHref(form.catalog_id);
+  const { items: catalogResults, loading: catalogLoading, error: catalogError } = useCatalog1cSearch(
+    catalogQuery,
+    12,
+    !form.manual,
+  );
 
-  function applyCatalogProduct(p: CatalogProduct) {
-    const snap = snapshotCatalogProduct(p);
+  function applyCatalogProduct(p: Catalog1cBriefItem) {
+    const snap = snapshotFrom1cItem(p);
     setForm({
       ...form,
       manual: false,
       catalog_id: snap.catalog_id,
       name: snap.name,
       article: snap.article,
-      image_url: snap.image_url ?? "",
+      image_url: snap.image_url,
       price_retail: snap.price_retail != null ? String(snap.price_retail) : form.price_retail,
     });
     setCatalogQuery("");
@@ -238,28 +316,42 @@ function ProductItemForm({
             data-testid="input-product-catalog-search"
           />
           <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-border/60 p-1">
-            {catalogResults.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                disabled={readOnly}
-                className={cn(
-                  "flex w-full gap-2 rounded-md p-2 text-left text-sm hover:bg-muted/60",
-                  form.catalog_id === p.id && "bg-[#9ACA3C]/10 ring-1 ring-[#9ACA3C]/40",
-                )}
-                onClick={() => applyCatalogProduct(p)}
-              >
-                {p.image ? (
-                  <img src={p.image} alt="" className="h-10 w-10 shrink-0 rounded object-cover" />
-                ) : null}
-                <span className="min-w-0 truncate font-medium">{p.name}</span>
-              </button>
-            ))}
+            {catalogLoading ? (
+              <p className="p-3 text-center text-xs text-muted-foreground">Загрузка…</p>
+            ) : catalogError ? (
+              <p className="p-3 text-center text-xs text-destructive">{catalogError}</p>
+            ) : catalogResults.length === 0 ? (
+              <p className="p-3 text-center text-xs text-muted-foreground">Ничего не найдено</p>
+            ) : (
+              catalogResults.map((p) => {
+                const img = catalog1cImageUrl(p);
+                const title = catalog1cDisplayName(p);
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    disabled={readOnly}
+                    className={cn(
+                      "flex w-full gap-2 rounded-md p-2 text-left text-sm hover:bg-muted/60",
+                      form.catalog_id === p.id && "bg-[#9ACA3C]/10 ring-1 ring-[#9ACA3C]/40",
+                    )}
+                    onClick={() => applyCatalogProduct(p)}
+                  >
+                    {img ? (
+                      <img src={img} alt="" className="h-10 w-10 shrink-0 rounded object-cover" />
+                    ) : (
+                      <ClientAvatar size={40} shape="square" name={title} seed={p.id} className="shrink-0" />
+                    )}
+                    <span className="min-w-0 truncate font-medium">{title}</span>
+                  </button>
+                );
+              })
+            )}
           </div>
           {form.catalog_id ? (
             <p className="text-xs text-[#5a7a28]">
-              Выбран: {form.name || catalogProduct?.name}
-              {catalogHref && catalogProduct ? (
+              Выбран: {form.name}
+              {catalogHref ? (
                 <>
                   {" · "}
                   <Link href={catalogHref} className="underline">
@@ -355,20 +447,20 @@ function CatalogPickDialog({
   onAdd: (item: ProductsBlockItem) => void;
 }) {
   const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState<CatalogProduct | null>(null);
+  const [selected, setSelected] = useState<Catalog1cBriefItem | null>(null);
   const [form, setForm] = useState<ProductFormState | null>(null);
 
-  const results = useMemo(() => searchCatalog(query, 30), [query]);
+  const { items: results, loading, error } = useCatalog1cSearch(query, 30, open);
 
-  function selectProduct(p: CatalogProduct) {
+  function selectProduct(p: Catalog1cBriefItem) {
     setSelected(p);
-    const snap = snapshotCatalogProduct(p);
+    const snap = snapshotFrom1cItem(p);
     setForm({
       manual: false,
       catalog_id: snap.catalog_id,
       name: snap.name,
       article: snap.article,
-      image_url: snap.image_url ?? "",
+      image_url: snap.image_url,
       price_showroom: "",
       price_retail: snap.price_retail != null ? String(snap.price_retail) : "",
       note: "",
@@ -400,35 +492,46 @@ function CatalogPickDialog({
               data-testid="input-catalog-brief-search"
             />
             <div className="max-h-[min(50vh,360px)] space-y-1 overflow-y-auto rounded-lg border border-border/60 p-1">
-              {results.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  className={cn(
-                    "flex w-full gap-2 rounded-md p-2 text-left hover:bg-muted/60",
-                    selected?.id === p.id && "bg-[#9ACA3C]/10 ring-1 ring-[#9ACA3C]/40",
-                  )}
-                  onClick={() => selectProduct(p)}
-                >
-                  {p.image ? (
-                    <img src={p.image} alt="" className="h-12 w-12 shrink-0 rounded object-cover" />
-                  ) : (
-                    <ClientAvatar size={48} shape="square" name={p.name} seed={p.id} />
-                  )}
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{p.name}</p>
-                    <p className="truncate text-xs text-[#8F96B0]">
-                      {p.article} · {p.series}
-                    </p>
-                    {p.priceRetailRub != null ? (
-                      <p className="text-xs text-muted-foreground">{formatBriefPriceRub(p.priceRetailRub)}</p>
-                    ) : null}
-                  </div>
-                </button>
-              ))}
-              {results.length === 0 ? (
+              {loading ? (
+                <p className="p-4 text-center text-sm text-muted-foreground">Загрузка…</p>
+              ) : error ? (
+                <p className="p-4 text-center text-sm text-destructive">{error}</p>
+              ) : results.length === 0 ? (
                 <p className="p-4 text-center text-sm text-muted-foreground">Ничего не найдено</p>
-              ) : null}
+              ) : (
+                results.map((p) => {
+                  const img = catalog1cImageUrl(p);
+                  const title = catalog1cDisplayName(p);
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      className={cn(
+                        "flex w-full gap-2 rounded-md p-2 text-left hover:bg-muted/60",
+                        selected?.id === p.id && "bg-[#9ACA3C]/10 ring-1 ring-[#9ACA3C]/40",
+                      )}
+                      onClick={() => selectProduct(p)}
+                    >
+                      {img ? (
+                        <img src={img} alt="" className="h-12 w-12 shrink-0 rounded object-cover" />
+                      ) : (
+                        <ClientAvatar size={48} shape="square" name={title} seed={p.id} />
+                      )}
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{title}</p>
+                        {p.brand?.trim() ? (
+                          <p className="truncate text-xs text-[#8F96B0]">{p.brand}</p>
+                        ) : null}
+                        {p.price_retail != null ? (
+                          <p className="text-xs text-muted-foreground">
+                            {formatBriefPriceRub(p.price_retail)}
+                          </p>
+                        ) : null}
+                      </div>
+                    </button>
+                  );
+                })
+              )}
             </div>
           </div>
           <div className="space-y-2">

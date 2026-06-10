@@ -7,7 +7,6 @@ import type {
   SegmentsBlockPayload,
   TextBlockPayload,
 } from "@/lib/marketing-briefs-api";
-import { getProductById } from "@/lib/catalog-data";
 import { ClientAvatar } from "@/components/ui/client-avatar";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -16,6 +15,7 @@ import {
   asProductsBlock,
   calcPriceBenefit,
   formatBriefDateRu,
+  catalog1cProductHref,
   formatBriefPriceRub,
   productDisplayName,
   SegmentBadges,
@@ -90,8 +90,7 @@ function ProductCard({
   accentColor: string;
 }) {
   const name = productDisplayName(item);
-  const catalogHref =
-    item.catalog_id && getProductById(item.catalog_id) ? `/catalog/${item.catalog_id}` : null;
+  const catalogHref = catalog1cProductHref(item.catalog_id);
   const inner = (
     <>
       <div className="relative">

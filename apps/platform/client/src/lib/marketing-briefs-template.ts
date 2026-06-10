@@ -1,4 +1,3 @@
-import { CATALOG_PRODUCTS } from "@/lib/catalog-data";
 import type { MarketingBriefBlockType } from "@/lib/marketing-briefs-api";
 
 export type TemplateBlock = {
@@ -7,18 +6,6 @@ export type TemplateBlock = {
 };
 
 function pickProducts(n: number) {
-  const items = CATALOG_PRODUCTS.slice(0, n).map((p, idx) => ({
-    id: `tmpl-prod-${idx + 1}`,
-    catalog_id: p.id,
-    manual: false,
-    name: p.name,
-    article: p.article,
-    image_url: p.image ?? undefined,
-    segments: ["top150", "top350"] as const,
-    price_showroom: null,
-    price_retail: p.priceRetailRub ?? null,
-  }));
-  if (items.length > 0) return items;
   return Array.from({ length: n }).map((_, idx) => ({
     id: `tmpl-prod-${idx + 1}`,
     catalog_id: null,
