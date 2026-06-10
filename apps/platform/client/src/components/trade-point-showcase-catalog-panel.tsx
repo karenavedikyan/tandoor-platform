@@ -191,23 +191,26 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
     return () => window.clearTimeout(t);
   }, [jumpHighlightId, mainTab, viewMode, search, preset, doorType]);
 
-  const backendVariantStatus = useMemo(() => {
+  const backendModelStatus = useMemo(() => {
     void bump;
     const map = new Map<string, ShowcaseMatrixStatus>();
     for (const entry of loadCachedMatrix(tradePointId)) {
       if (entry.targetKind === "variant") map.set(entry.targetId, entry.status);
+    }
+    for (const entry of loadCachedMatrix(tradePointId)) {
+      if (entry.targetKind === "model") map.set(entry.targetId, entry.status);
     }
     return map;
   }, [bump, tradePointId]);
 
   const isProductSelected = useCallback(
     (productId: string): boolean => {
-      const backend = backendVariantStatus.get(productId);
+      const backend = backendModelStatus.get(productId);
       if (backend === "not_relevant") return false;
       if (backend === "installed") return true;
       return selectedShowcaseModels.some((m) => m.productId === productId);
     },
-    [backendVariantStatus, selectedShowcaseModels],
+    [backendModelStatus, selectedShowcaseModels],
   );
 
   const requiredDefs = useMemo(() => {
@@ -291,7 +294,7 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
         setMatrixStatus({
           dealerId,
           tradePointId,
-          targetKind: "variant",
+          targetKind: "model",
           targetId: p.id,
           status: "installed",
           updatedBy: actorUserId,
@@ -315,7 +318,7 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
         setMatrixStatus({
           dealerId,
           tradePointId,
-          targetKind: "variant",
+          targetKind: "model",
           targetId: p.id,
           status: "not_relevant",
           updatedBy: actorUserId,
