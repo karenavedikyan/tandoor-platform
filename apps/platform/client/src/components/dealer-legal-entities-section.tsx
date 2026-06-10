@@ -437,8 +437,15 @@ export function DealerLegalEntitiesSection({
     (innRaw: string, excludeId: string | null) => {
       const inn = normalizeInn(innRaw);
       if (!inn) return null as { id: string; name: string } | null;
+      // Код редактируемой записи, чтобы исключить её optimistic/DB-двойника
+      // (одна и та же запись может временно присутствовать дважды: optimistic le-...
+      // и серверная UUID — у обеих совпадает internalCode и ИНН → ложное «уже есть»).
+      const excludeCode = excludeId
+        ? (visible.active.find((e) => e.id === excludeId)?.internalCode ?? "").trim().toLowerCase()
+        : "";
       for (const e of visible.active) {
         if (excludeId && e.id === excludeId) continue;
+        if (excludeCode && (e.internalCode ?? "").trim().toLowerCase() === excludeCode) continue;
         if (normalizeInn(e.inn ?? "") === inn) return { id: e.id, name: e.name };
       }
       return null;
