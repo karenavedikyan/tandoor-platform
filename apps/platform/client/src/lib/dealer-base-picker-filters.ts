@@ -57,6 +57,7 @@ export function applyQuickFilter(row: DealerRow, q: QuickFilter): boolean {
 
 export function applyDealerBasePickerFilters(rows: DealerRow[], args: DealerBasePickerArgs): DealerRow[] {
   const q = args.search.trim().toLowerCase();
+  const qDigits = q ? q.replace(/\D/g, "") : "";
   const citySet = args.cities.length > 0 ? new Set(args.cities) : null;
   const categorySelections = args.categories;
   return rows.filter((row) => {
@@ -101,7 +102,6 @@ export function applyDealerBasePickerFilters(rows: DealerRow[], args: DealerBase
       .join(" ")
       .toLowerCase();
     if (hay.includes(q)) return true;
-    const qDigits = q.replace(/\D/g, "");
     return Boolean(qDigits && innDigits && innDigits.includes(qDigits));
   });
 }

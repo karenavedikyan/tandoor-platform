@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import {
@@ -380,6 +380,8 @@ function managerAllowedForRop(
       : getManagersForRopTeam(ropTeamId);
   return pool.some((m) => m.id === managerId);
 }
+
+const RU_COLLATOR = new Intl.Collator("ru", { sensitivity: "base" });
 
 const QUICK_FILTERS: { id: QuickFilter; label: string; testId: string }[] = [
   { id: "all", label: "Все", testId: "filter-dealers-all" },
@@ -1445,6 +1447,8 @@ export default function DealerBase() {
     return defaultWorkViewForAccess(mapSalesRoleToDealerBaseAccess(p.role));
   });
   const [search, setSearch] = useState("");
+  const deferredSearch = useDeferredValue(search);
+  const searchFilterPending = search !== deferredSearch;
   const [quick, setQuick] = useState<QuickFilter>("all");
   const [cities, setCities] = useState<string[]>([]);
   const [categories, setCategories] = useState<ClientCategorySelection[]>([]);
@@ -1851,7 +1855,7 @@ export default function DealerBase() {
 
   const pickerArgs = useMemo(
     () => ({
-      search,
+      search: deferredSearch,
       quick,
       cities,
       categories,
@@ -1864,7 +1868,7 @@ export default function DealerBase() {
       geoLocality,
     }),
     [
-      search,
+      deferredSearch,
       quick,
       cities,
       categories,
@@ -1889,13 +1893,13 @@ export default function DealerBase() {
       }
     }
     out.sort((a, b) => {
-      const cityA = (a.point.city?.trim() || a.row.city || "").toLowerCase();
-      const cityB = (b.point.city?.trim() || b.row.city || "").toLowerCase();
-      const cityCmp = cityA.localeCompare(cityB, "ru");
+      const cityA = a.point.city?.trim() || a.row.city || "";
+      const cityB = b.point.city?.trim() || b.row.city || "";
+      const cityCmp = RU_COLLATOR.compare(cityA, cityB);
       if (cityCmp !== 0) return cityCmp;
-      const nameA = (a.point.name?.trim() || a.row.name || "").toLowerCase();
-      const nameB = (b.point.name?.trim() || b.row.name || "").toLowerCase();
-      return nameA.localeCompare(nameB, "ru");
+      const nameA = a.point.name?.trim() || a.row.name || "";
+      const nameB = b.point.name?.trim() || b.row.name || "";
+      return RU_COLLATOR.compare(nameA, nameB);
     });
     return out;
   }, [isTaskSelectMode, pickerFiltered, teamActualizationPlane]);
@@ -3670,7 +3674,16 @@ export default function DealerBase() {
                 placeholder="Поиск: название, код, город, РОП, менеджер, тип, адрес, ИНН"
                 className="min-h-9 rounded-lg border-border pl-9 text-sm sm:min-h-10 sm:rounded-xl sm:pl-10"
                 data-testid="input-dealer-base-search"
+                aria-busy={searchFilterPending}
               />
+              {searchFilterPending ? (
+                <span
+                  className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground sm:right-3"
+                  aria-hidden
+                >
+                  …
+                </span>
+              ) : null}
             </div>
             <div
               className="flex min-w-0 shrink-0 flex-col gap-2 sm:ml-auto sm:items-end"
@@ -4194,7 +4207,10 @@ export default function DealerBase() {
         </p>
       ) : null}
 
-      <section className="min-w-0" data-testid="section-dealer-base-results">
+      <section
+        className={cn("min-w-0 transition-opacity duration-150", searchFilterPending && "opacity-70")}
+        data-testid="section-dealer-base-results"
+      >
         {isTaskSelectMode ? (
           <TaskSelectFlatTradePointsList
             entries={taskSelectFlatTradePointsVisible}
