@@ -1742,7 +1742,11 @@ function FullscreenProductCard({
     cardSize === "xl" ? "text-sm" : cardSize === "s" ? "text-[11px]" : "text-xs";
 
   const effectiveStatus = row?.status ?? baselineStatus;
-  const isMarked = quickMode && effectiveStatus === quickStatus;
+  const isMarked =
+    quickMode &&
+    (quickStatus === "need_install"
+      ? isExplicitMark || (isChanged && effectiveStatus === "need_install")
+      : effectiveStatus === quickStatus);
 
   const handleQuickTap = () => {
     const seg = segmentForProduct(product, matrixModel);
