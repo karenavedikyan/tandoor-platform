@@ -23,7 +23,7 @@ import {
   TRAINING_TYPE_LABEL,
   type RelatedTaskContext,
 } from "@/lib/training-data";
-import { getProductById } from "@/lib/catalog-data";
+import { catalog1cProductHref } from "@/lib/catalog-1c-product-link";
 
 function statusBadgeClass(status: "required" | "recommended" | "new" | "updated") {
   if (status === "required") return "border-primary/50 bg-primary/15 text-foreground";
@@ -177,27 +177,28 @@ function TrainingArticleFound({ articleId }: { articleId: string }) {
           <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Связанные товары</h2>
           <div className="grid min-w-0 gap-3 sm:grid-cols-2">
             {material.relatedProductIds.map((pid) => {
-              const p = getProductById(pid);
-              const title = p?.name ?? `Товар ${pid}`;
+              const productHref = catalog1cProductHref(pid);
+              const title = `Товар ${pid}`;
               return (
                 <Card key={pid} className="min-w-0 border-border/70 shadow-xs">
                   <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-foreground">{title}</p>
-                      {p ? <p className="mt-1 font-mono text-xs text-muted-foreground">{p.article}</p> : null}
                     </div>
-                    <Button
-                      asChild
-                      variant="outline"
-                      size="sm"
-                      className="w-full shrink-0 font-semibold sm:w-auto"
-                      data-testid={`button-open-related-product-${pid}`}
-                    >
-                      <Link href={`/catalog/${pid}`}>
-                        Открыть в каталоге
-                        <ChevronRight className="h-4 w-4" aria-hidden />
-                      </Link>
-                    </Button>
+                    {productHref ? (
+                      <Button
+                        asChild
+                        variant="outline"
+                        size="sm"
+                        className="w-full shrink-0 font-semibold sm:w-auto"
+                        data-testid={`button-open-related-product-${pid}`}
+                      >
+                        <Link href={productHref}>
+                          Открыть в каталоге
+                          <ChevronRight className="h-4 w-4" aria-hidden />
+                        </Link>
+                      </Button>
+                    ) : null}
                   </CardContent>
                 </Card>
               );

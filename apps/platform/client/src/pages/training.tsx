@@ -30,7 +30,7 @@ import {
   type TrainingRole,
   type TrainingSection,
 } from "@/lib/training-data";
-import { getProductById } from "@/lib/catalog-data";
+import { catalog1cProductHref } from "@/lib/catalog-1c-product-link";
 import {
   filterTrainingModelPhotoPilotItems,
   getTrainingModelPhotoPilotItems,
@@ -503,7 +503,7 @@ export default function TrainingPage() {
         </div>
         <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {pilotFiltered.map((row) => {
-            const product = row.productId ? getProductById(row.productId) : undefined;
+            const productHref = catalog1cProductHref(row.productId);
             const primaryMaterialId = row.relatedTrainingMaterialIds[0];
             return (
               <Card
@@ -559,9 +559,9 @@ export default function TrainingPage() {
                     <p className="mt-1 text-muted-foreground">{row.objectionAnswer}</p>
                   </div>
                   <div className="mt-auto flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
-                    {product && row.productId ? (
+                    {productHref ? (
                       <Button asChild variant="secondary" size="sm" className="min-h-10 w-full font-semibold sm:flex-1" data-testid={`button-training-model-open-product-${row.id}`}>
-                        <Link href={`/catalog/${row.productId}`}>
+                        <Link href={productHref}>
                           Открыть товар
                           <ChevronRight className="h-4 w-4" aria-hidden />
                         </Link>
@@ -870,9 +870,7 @@ export default function TrainingPage() {
                         <p className="text-xs text-muted-foreground">
                           Связанные товары:{" "}
                           <span className="font-medium text-foreground">
-                            {m.relatedProductIds
-                              .map((pid) => getProductById(pid)?.name ?? pid)
-                              .join(", ")}
+                            {m.relatedProductIds.join(", ")}
                           </span>
                         </p>
                       ) : null}
