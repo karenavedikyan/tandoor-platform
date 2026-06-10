@@ -16,9 +16,12 @@ import {
 } from "@/lib/dealer-legal-entities-api";
 import type { LegalEntityPaymentForm, LegalEntityUpsertFields } from "@/lib/legal-entities-payment-api";
 import {
+  getDbLegalEntitiesStateForDealer,
+  notifyDealerLegalEntitiesChanged,
   refreshDbLegalEntitiesForDealer,
   replaceLegalEntityIdInCache,
   resolveLegalEntitiesStateForDealer,
+  setDbLegalEntitiesStateForDealer,
   upsertOptimisticLegalEntity,
 } from "@/lib/dealer-legal-entities-db-cache";
 
@@ -36,27 +39,39 @@ export function normalizeLegalEntityInn(v: string | undefined): string {
   return (v ?? "").replace(/\D/g, "");
 }
 
+function normalizeInternalCode(v: string | undefined): string {
+  return (v ?? "").trim().toLowerCase();
+}
+
 /** Сопоставление UI-записи с серверным UUID по списку из Postgres-кеша. */
 export function resolveServerLegalEntityIdFromList(
-  entity: Pick<DealerLegalEntity, "id" | "name" | "inn">,
+  entity: Pick<DealerLegalEntity, "id" | "name" | "inn" | "internalCode">,
   serverEntities: DealerLegalEntity[],
 ): string | null {
   if (isLegalEntityServerUuid(entity.id)) return entity.id;
 
+  const internalCode = normalizeInternalCode(entity.internalCode);
+  if (internalCode) {
+    const byCode = serverEntities.find(
+      (e) => isLegalEntityServerUuid(e.id) && normalizeInternalCode(e.internalCode) === internalCode,
+    );
+    if (byCode) return byCode.id;
+  }
+
   const inn = normalizeLegalEntityInn(entity.inn);
   if (inn) {
-    const byInn = serverEntities.find(
+    const byInnMatches = serverEntities.filter(
       (e) => isLegalEntityServerUuid(e.id) && normalizeLegalEntityInn(e.inn) === inn,
     );
-    if (byInn) return byInn.id;
+    if (byInnMatches.length === 1) return byInnMatches[0]!.id;
   }
 
   const nameKey = entity.name.trim().toLowerCase();
   if (nameKey && nameKey !== "—") {
-    const byName = serverEntities.find(
+    const byNameMatches = serverEntities.filter(
       (e) => isLegalEntityServerUuid(e.id) && e.name.trim().toLowerCase() === nameKey,
     );
-    if (byName) return byName.id;
+    if (byNameMatches.length === 1) return byNameMatches[0]!.id;
   }
 
   return null;
@@ -64,9 +79,39 @@ export function resolveServerLegalEntityIdFromList(
 
 export function resolveServerLegalEntityId(
   dealerId: string,
-  entity: Pick<DealerLegalEntity, "id" | "name" | "inn">,
+  entity: Pick<DealerLegalEntity, "id" | "name" | "inn" | "internalCode">,
 ): string | null {
   return resolveServerLegalEntityIdFromList(entity, getDealerLegalEntities(dealerId));
+}
+
+function applyArchivedStatusInCache(
+  dealerId: string,
+  entity: Pick<DealerLegalEntity, "id" | "internalCode">,
+  serverId: string,
+): void {
+  const st = getDbLegalEntitiesStateForDealer(dealerId);
+  if (!st) return;
+  const list = st.entitiesByDealer[dealerId] ?? [];
+  const codeKey = normalizeInternalCode(entity.internalCode);
+  const nextList = list.map((e) => {
+    const matches =
+      e.id === entity.id ||
+      e.id === serverId ||
+      (codeKey !== "" && normalizeInternalCode(e.internalCode) === codeKey);
+    if (!matches) return e;
+    return { ...e, id: serverId, status: "archived" as const };
+  });
+  setDbLegalEntitiesStateForDealer(dealerId, {
+    ...st,
+    entitiesByDealer: { ...st.entitiesByDealer, [dealerId]: nextList },
+  });
+  notifyDealerLegalEntitiesChanged();
+}
+
+/** Обновить кеш ЮЛ дилера после мутации (архив/восстановление). */
+export async function refreshDealerLegalEntitiesAfterMutation(dealerId: string): Promise<void> {
+  await refreshDbLegalEntitiesForDealer(dealerId);
+  notifyDealerLegalEntitiesChanged();
 }
 
 export type DealerLegalEntityPaymentFields = {
@@ -462,16 +507,36 @@ export async function ensureServerLegalEntityId(
   return created.id;
 }
 
+async function resolveServerLegalEntityIdForArchive(
+  dealerId: string,
+  entity: MergedDealerLegalEntity,
+  updatedBy: string,
+  updatedByName: string,
+): Promise<string | null> {
+  await refreshDbLegalEntitiesForDealer(dealerId);
+  const resolved = resolveServerLegalEntityIdFromList(entity, getDealerLegalEntities(dealerId));
+  if (resolved) return resolved;
+
+  const hasIdentity = isLegalEntityServerUuid(entity.id) || Boolean(entity.internalCode?.trim());
+  if (hasIdentity) return null;
+
+  return ensureServerLegalEntityId(dealerId, entity, updatedBy, updatedByName);
+}
+
 export async function archiveDealerLegalEntityAsync(
   dealerId: string,
   entity: MergedDealerLegalEntity,
   updatedBy: string,
   updatedByName: string,
+  options?: { skipRefresh?: boolean },
 ): Promise<boolean> {
-  const serverId = await ensureServerLegalEntityId(dealerId, entity, updatedBy, updatedByName);
+  const serverId = await resolveServerLegalEntityIdForArchive(dealerId, entity, updatedBy, updatedByName);
   if (!serverId) return false;
   const ok = await apiArchiveLegalEntity(serverId, updatedBy, updatedByName);
-  if (ok) await refreshDbLegalEntitiesForDealer(dealerId);
+  if (ok) {
+    applyArchivedStatusInCache(dealerId, entity, serverId);
+    if (!options?.skipRefresh) await refreshDealerLegalEntitiesAfterMutation(dealerId);
+  }
   return ok;
 }
 

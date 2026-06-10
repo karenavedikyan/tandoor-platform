@@ -31,6 +31,7 @@ import {
   ensureServerLegalEntityId,
   getMergedDealerLegalEntities,
   paymentFieldsToFullApiBody,
+  refreshDealerLegalEntitiesAfterMutation,
   unarchiveDealerLegalEntityAsync,
   type DealerLegalEntityStatus,
   type MergedDealerLegalEntity,
@@ -349,6 +350,9 @@ export function DealerLegalEntitiesSection({
   const [innLookupNote, setInnLookupNote] = useState("");
 
   const [archiveTarget, setArchiveTarget] = useState<{ id: string; name: string } | null>(null);
+  const [bulkArchiveOpen, setBulkArchiveOpen] = useState(false);
+  const [selectedEntityIds, setSelectedEntityIds] = useState<Set<string>>(() => new Set());
+  const [bulkArchiveBusy, setBulkArchiveBusy] = useState(false);
   const [innDupInline, setInnDupInline] = useState<{ existingId: string; existingName: string } | null>(null);
   const [unsavedConfirmOpen, setUnsavedConfirmOpen] = useState(false);
   const [baselineSnapshot, setBaselineSnapshot] = useState<DraftSnapshot | null>(null);
@@ -403,6 +407,17 @@ export function DealerLegalEntitiesSection({
       });
     return { active, arch };
   }, [merged]);
+
+  const selectedCount = selectedEntityIds.size;
+
+  useEffect(() => {
+    const activeIds = new Set(visible.active.map((e) => e.id));
+    setSelectedEntityIds((prev) => {
+      if (prev.size === 0) return prev;
+      const next = new Set(Array.from(prev).filter((id) => activeIds.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [visible.active]);
 
   const legalEntityHasOverrides = useCallback(
     (entityId: string) => {
@@ -944,6 +959,53 @@ export function DealerLegalEntitiesSection({
     requestCloseForm();
   }, [requestCloseForm]);
 
+  const finalizeArchiveUi = useCallback(async () => {
+    await refreshDealerLegalEntitiesAfterMutation(row.id);
+    try {
+      const items = await fetchLegalEntitiesForClient(row.id);
+      const map: Record<string, LegalEntityDto> = {};
+      for (const it of items) map[it.id] = it;
+      setPaymentByEntityId(map);
+    } catch {
+      /* оставляем прежний кэш платёжных полей */
+    }
+    setTick((n) => n + 1);
+  }, [row.id]);
+
+  const applyActualizationArchive = useCallback(
+    async (entities: MergedDealerLegalEntity[]) => {
+      if (!useAct || entities.length === 0) return;
+      await actx.persist((prev) => {
+        let next = prev;
+        for (const entity of entities) {
+          next = mergeActualizationState(next, {
+            archivedLegalEntitiesById: {
+              ...next.archivedLegalEntitiesById,
+              [entity.id]: buildArchivedLegalEntityInfo({
+                legalEntityId: entity.id,
+                dealerId: row.id,
+                archivedBy: actorUserId,
+                archivedByName: actorLabel,
+                source: "manual_actualization",
+              }),
+            },
+          });
+        }
+        return next;
+      });
+    },
+    [useAct, actx, row.id, actorUserId, actorLabel],
+  );
+
+  const toggleEntitySelected = useCallback((entityId: string, checked: boolean) => {
+    setSelectedEntityIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(entityId);
+      else next.delete(entityId);
+      return next;
+    });
+  }, []);
+
   const confirmArchive = useCallback(async () => {
     if (!archiveTarget || !canMutate) return;
     const entity = merged.find((e) => e.id === archiveTarget.id);
@@ -962,28 +1024,83 @@ export function DealerLegalEntitiesSection({
       return;
     }
 
-    if (useAct) {
-      await actx.persist((prev) =>
-        mergeActualizationState(prev, {
-          archivedLegalEntitiesById: {
-            ...prev.archivedLegalEntitiesById,
-            [entity.id]: buildArchivedLegalEntityInfo({
-              legalEntityId: entity.id,
-              dealerId: row.id,
-              archivedBy: actorUserId,
-              archivedByName: actorLabel,
-              source: "manual_actualization",
-            }),
-          },
-        }),
-      );
-    }
-
-    await refreshDbLegalEntitiesForDealer(row.id);
-    setTick((n) => n + 1);
+    await applyActualizationArchive([entity]);
+    await finalizeArchiveUi();
+    setSelectedEntityIds((prev) => {
+      if (!prev.has(entity.id)) return prev;
+      const next = new Set(prev);
+      next.delete(entity.id);
+      return next;
+    });
     toast({ title: "Юрлицо в архиве" });
     setArchiveTarget(null);
-  }, [archiveTarget, canMutate, useAct, actx, merged, row.id, actorUserId, actorLabel]);
+  }, [
+    archiveTarget,
+    canMutate,
+    merged,
+    row.id,
+    actorUserId,
+    actorLabel,
+    applyActualizationArchive,
+    finalizeArchiveUi,
+  ]);
+
+  const confirmBulkArchive = useCallback(async () => {
+    if (!canMutate || bulkArchiveBusy) return;
+    const targets = visible.active.filter((e) => selectedEntityIds.has(e.id));
+    if (targets.length === 0) {
+      setBulkArchiveOpen(false);
+      return;
+    }
+
+    setBulkArchiveBusy(true);
+    const archived: MergedDealerLegalEntity[] = [];
+    let failCount = 0;
+
+    for (const entity of targets) {
+      const ok = await archiveDealerLegalEntityAsync(row.id, entity, actorUserId, actorLabel, {
+        skipRefresh: true,
+      });
+      if (ok) archived.push(entity);
+      else failCount += 1;
+    }
+
+    if (archived.length > 0) {
+      await applyActualizationArchive(archived);
+      await finalizeArchiveUi();
+    }
+
+    setSelectedEntityIds(new Set());
+    setBulkArchiveOpen(false);
+    setBulkArchiveBusy(false);
+
+    if (failCount === 0) {
+      toast({ title: `Юрлица в архиве (${archived.length})` });
+      return;
+    }
+    if (archived.length === 0) {
+      toast({
+        title: "Не удалось архивировать выбранные юрлица",
+        variant: "destructive",
+      });
+      return;
+    }
+    toast({
+      title: `Архивировано ${archived.length} из ${targets.length}`,
+      description: `Не удалось: ${failCount}`,
+      variant: "destructive",
+    });
+  }, [
+    canMutate,
+    bulkArchiveBusy,
+    visible.active,
+    selectedEntityIds,
+    row.id,
+    actorUserId,
+    actorLabel,
+    applyActualizationArchive,
+    finalizeArchiveUi,
+  ]);
 
   const onRestore = useCallback(
     async (legalEntityId: string) => {
@@ -1676,6 +1793,32 @@ export function DealerLegalEntitiesSection({
         </p>
       ) : (
         <div className="space-y-2">
+          {canMutate && selectedCount > 0 ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/70 bg-muted/20 px-3 py-2">
+              <p className="text-xs text-muted-foreground">Выбрано: {selectedCount}</p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="min-h-8 text-xs"
+                  onClick={() => setSelectedEntityIds(new Set())}
+                >
+                  Снять выбор
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-h-8 border-destructive/25 text-xs font-medium text-destructive hover:bg-destructive/[0.05]"
+                  data-testid="button-legal-entities-bulk-archive"
+                  onClick={() => setBulkArchiveOpen(true)}
+                >
+                  В архив ({selectedCount})
+                </Button>
+              </div>
+            </div>
+          ) : null}
           {visible.active.map((e) => {
             const paymentSummary = formatEntityPaymentSummary(mergeEntityPaymentFields(e, paymentByEntityId[e.id]));
             const updatedLabel = formatDisplayDate(e.updatedAt);
@@ -1703,6 +1846,15 @@ export function DealerLegalEntitiesSection({
               >
                 <CardContent className="space-y-2 p-3 pt-3 sm:p-3.5">
                   <div className="flex flex-wrap items-start justify-between gap-2">
+                    {canMutate ? (
+                      <Checkbox
+                        checked={selectedEntityIds.has(e.id)}
+                        onCheckedChange={(checked) => toggleEntitySelected(e.id, checked === true)}
+                        className="mt-0.5 shrink-0"
+                        data-testid={`checkbox-legal-entity-select-${e.id}`}
+                        aria-label={`Выбрать ${e.name}`}
+                      />
+                    ) : null}
                     <div className="min-w-0 flex-1 space-y-1.5">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="text-sm font-semibold leading-snug text-foreground">{e.name}</p>
@@ -1885,6 +2037,23 @@ export function DealerLegalEntitiesSection({
             <AlertDialogCancel data-testid="button-legal-entity-delete-cancel">Отмена</AlertDialogCancel>
             <AlertDialogAction data-testid="button-legal-entity-delete-confirm" onClick={() => void confirmArchive()}>
               В архив
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={bulkArchiveOpen} onOpenChange={(o) => !bulkArchiveBusy && setBulkArchiveOpen(o)}>
+        <AlertDialogContent data-testid="dialog-legal-entities-bulk-archive-confirm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Архивировать выбранные юрлица ({selectedCount})?</AlertDialogTitle>
+            <AlertDialogDescription className="text-sm leading-relaxed">
+              Они будут перемещены в архив и скрыты из рабочего списка. Данные сохраняются, можно восстановить.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkArchiveBusy}>Отмена</AlertDialogCancel>
+            <AlertDialogAction disabled={bulkArchiveBusy} onClick={() => void confirmBulkArchive()}>
+              В архив ({selectedCount})
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
