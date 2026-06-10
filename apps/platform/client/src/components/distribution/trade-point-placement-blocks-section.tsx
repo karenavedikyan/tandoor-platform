@@ -85,6 +85,7 @@ export function TradePointPlacementBlocksSection({
   const [competitorDraftByBlock, setCompetitorDraftByBlock] = useState<
     Record<string, { brand: string; count: string }>
   >({});
+  const [competitorErrorByBlock, setCompetitorErrorByBlock] = useState<Record<string, string | null>>({});
 
   const bumpCache = useCallback(() => setCacheBump((n) => n + 1), []);
 
@@ -181,6 +182,7 @@ export function TradePointPlacementBlocksSection({
   };
 
   const handleAddCompetitor = (block: ShowcaseMatrixEntryDto) => {
+    setCompetitorErrorByBlock((prev) => ({ ...prev, [block.targetId]: null }));
     const draft = competitorDraftByBlock[block.targetId] ?? { brand: "", count: "1" };
     const brand = draft.brand.trim();
     const count = Number.parseInt(draft.count.trim(), 10);
@@ -189,6 +191,16 @@ export function TradePointPlacementBlocksSection({
       ...(block.placementCompetitors ?? []),
       { brand: brand.slice(0, 120), count },
     ];
+    const capacity = block.placementCapacity ?? 0;
+    const actual = block.placementActual ?? 0;
+    const sumCompetitors = next.reduce((acc, c) => acc + (c?.count ?? 0), 0);
+    if (actual + sumCompetitors > capacity) {
+      setCompetitorErrorByBlock((prev) => ({
+        ...prev,
+        [block.targetId]: "Сумма наших и конкурентов превышает общую вместимость",
+      }));
+      return;
+    }
     persistCompetitors(block, next);
     setCompetitorDraftByBlock((prev) => ({
       ...prev,
@@ -521,6 +533,9 @@ export function TradePointPlacementBlocksSection({
                             <Plus className="h-4 w-4" aria-hidden />
                           </Button>
                         </div>
+                        {competitorErrorByBlock[block.targetId] ? (
+                          <p className="text-xs text-destructive">{competitorErrorByBlock[block.targetId]}</p>
+                        ) : null}
                       </div>
                     ) : null}
                   </CardContent>
