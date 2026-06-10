@@ -105,7 +105,13 @@ const PERMISSIONS_BY_ROLE: Record<UserRole, ReadonlySet<Permission>> = {
   ]),
   manager: new Set<Permission>(["profile.read_self", "profile.update_self", "sessions.read_self", "sessions.revoke_self"]),
   marketer: new Set<Permission>(["profile.read_self", "profile.update_self", "sessions.read_self", "sessions.revoke_self"]),
-  analyst: new Set<Permission>(["profile.read_self", "profile.update_self", "sessions.read_self", "sessions.revoke_self"]),
+  analyst: new Set<Permission>([
+    "profile.read_self",
+    "profile.update_self",
+    "audit.read",
+    "sessions.read_self",
+    "sessions.revoke_self",
+  ]),
 };
 
 function roleHasPermission(role: UserRole, perm: Permission): boolean {
@@ -3691,7 +3697,7 @@ async function handleTpCountDiag(
     sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
     return;
   }
-  if (!["admin", "director", "rop"].includes(me.role) || me.status !== "active") {
+  if (!["admin", "director", "rop", "analyst"].includes(me.role) || me.status !== "active") {
     sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
     return;
   }

@@ -148,10 +148,10 @@ export function canAccessPathForUser(role: UserRole, path: string): boolean {
     return role === "admin";
   }
   if (p === "/admin/sync-health") {
-    return role === "admin" || role === "director";
+    return role === "admin" || role === "director" || role === "analyst";
   }
   if (p === "/admin/tp-count-diag" || p === "/admin/counts-diag") {
-    return role === "admin" || role === "director" || role === "rop";
+    return role === "admin" || role === "director" || role === "rop" || role === "analyst";
   }
   if (p === "/profile" || isUnder(p, "/profile")) {
     return userHas(role, "profile.read_self");
@@ -340,6 +340,39 @@ export function canAccessClientBaseActivityDashboard(role: SalesRole): boolean {
 
 function buildAdministrationNavGroup(platformUserRole: UserRole | null | undefined): PilotNavGroup | null {
   if (!platformUserRole) return null;
+  if (platformUserRole === "analyst") {
+    return {
+      key: "administration",
+      label: "АДМИНИСТРИРОВАНИЕ",
+      testId: "nav-group-administration",
+      items: [
+        {
+          href: "/admin/sync-health",
+          label: "Sync health overrides",
+          testId: "nav-item-admin-sync-health",
+          navBehaviorId: "nav-admin-sync-health",
+        },
+        {
+          href: "/admin/audit",
+          label: "Журнал событий",
+          testId: "nav-item-admin-audit",
+          navBehaviorId: "nav-admin-audit",
+        },
+        {
+          href: "/admin/counts-diag",
+          label: "Счётчики",
+          testId: "nav-item-admin-counts-diag",
+          navBehaviorId: "nav-admin-counts-diag",
+        },
+        {
+          href: "/admin/tp-count-diag",
+          label: "ТТ-счётчики",
+          testId: "nav-item-admin-tp-count-diag",
+          navBehaviorId: "nav-admin-tp-count-diag",
+        },
+      ],
+    };
+  }
   const items: PilotNavItem[] = [];
   if (userHas(platformUserRole, "users.list")) {
     items.push({

@@ -81,7 +81,8 @@ export default function AdminSyncHealthPage(): ReactElement {
   const { user } = useCurrentUser();
   const [, bump] = useState(0);
   const homeHref = user ? defaultHomePathForUserRole(user.role) : "/main";
-  const canView = user?.role === "admin" || user?.role === "director";
+  const canView =
+    user?.role === "admin" || user?.role === "director" || user?.role === "analyst";
 
   const pending = useMemo(() => listAllPendingSyncItems(), [bump]);
   const pendingActive = useMemo(() => listPendingSyncItems(), [bump]);
@@ -201,7 +202,9 @@ export default function AdminSyncHealthPage(): ReactElement {
 
   if (!user) return <div className="p-6">Загрузка…</div>;
   if (!canView) {
-    return <div className="p-6 text-sm text-muted-foreground">Доступ только для admin/director.</div>;
+    return (
+      <div className="p-6 text-sm text-muted-foreground">Доступ только для admin/director/analyst.</div>
+    );
   }
 
   const backfillDone = typeof localStorage !== "undefined" && localStorage.getItem(OVERRIDES_BACKFILL_DONE_KEY) === "1";

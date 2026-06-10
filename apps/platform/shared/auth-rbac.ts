@@ -106,7 +106,13 @@ const PERMISSIONS_BY_ROLE: Record<UserRole, ReadonlySet<Permission>> = {
   ]),
   manager: new Set<Permission>(["profile.read_self", "profile.update_self", "sessions.read_self", "sessions.revoke_self"]),
   marketer: new Set<Permission>(["profile.read_self", "profile.update_self", "sessions.read_self", "sessions.revoke_self"]),
-  analyst: new Set<Permission>(["profile.read_self", "profile.update_self", "sessions.read_self", "sessions.revoke_self"]),
+  analyst: new Set<Permission>([
+    "profile.read_self",
+    "profile.update_self",
+    "audit.read",
+    "sessions.read_self",
+    "sessions.revoke_self",
+  ]),
 };
 
 /** Базовая проверка: есть ли у роли заданный permission. */
