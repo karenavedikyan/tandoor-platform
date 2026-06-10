@@ -28,8 +28,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
       return;
     }
-    if (me.role !== "admin" && me.role !== "director") {
-      sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Только для admin/director." });
+    if (me.role !== "admin" && me.role !== "director" && me.role !== "analyst") {
+      sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Только для admin/director/analyst." });
       return;
     }
 

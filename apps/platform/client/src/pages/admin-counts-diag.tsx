@@ -135,7 +135,7 @@ export default function AdminCountsDiagPage() {
   const overviewQ = useQuery({
     queryKey: ["trade-points-overview"],
     queryFn: fetchTradePointsOverview,
-    enabled: Boolean(user && ["admin", "director", "rop"].includes(user.role)),
+    enabled: Boolean(user && ["admin", "director", "rop", "analyst"].includes(user.role)),
     staleTime: 30_000,
   });
 
@@ -281,7 +281,7 @@ export default function AdminCountsDiagPage() {
     ];
   }, [pickerFiltered, overview, overviewQ.isLoading]);
 
-  if (!user || !["admin", "director", "rop"].includes(user.role)) {
+  if (!user || !["admin", "director", "rop", "analyst"].includes(user.role)) {
     return (
       <div className="p-6 text-sm text-muted-foreground">
         Недостаточно прав.{" "}

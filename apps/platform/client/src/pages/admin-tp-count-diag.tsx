@@ -118,7 +118,7 @@ export default function AdminTpCountDiagPage() {
     }
   }, [toast]);
 
-  if (!user || !["admin", "director", "rop"].includes(user.role)) {
+  if (!user || !["admin", "director", "rop", "analyst"].includes(user.role)) {
     return (
       <div className="p-6 text-sm text-muted-foreground">
         Недостаточно прав.{" "}
