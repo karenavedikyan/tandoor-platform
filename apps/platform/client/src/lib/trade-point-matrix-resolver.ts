@@ -97,6 +97,7 @@ function modelRowToDefinition(
 
   return {
     id: productId,
+    catalog1cId: row.catalog1cId ?? undefined,
     name: hardcoded?.name ?? product!.name,
     type,
     typeLabelRu: hardcoded?.typeLabelRu ?? typeLabelFor(type),

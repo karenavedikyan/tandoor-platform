@@ -51,7 +51,11 @@ import {
 import type { ShowcaseTask } from "@/lib/showcase-distribution-data";
 import type { MatrixFilterId, TradePointMatrixSummary, TradePointProductMatrixItem } from "@/lib/trade-point-matrix-data";
 import type { MatrixTask, MatrixTaskRecommendation } from "@/lib/trade-point-task-data";
-import { ShowcaseModelPresentationDialog } from "@/components/showcase-model-presentation-dialog";
+import {
+  ShowcaseModelPresentationDialog,
+  type ShowcasePresentationBinding,
+} from "@/components/showcase-model-presentation-dialog";
+import { loadCachedMatrixDef } from "@/lib/showcase-matrix-catalog-store";
 import { TradePointShowcaseAssignmentsPanel } from "@/components/distribution/trade-point-showcase-assignments-panel";
 import { TradePointPlacementBlocksSection } from "@/components/distribution/trade-point-placement-blocks-section";
 import { resolveShowcaseMatrixPositionForEntry } from "@/lib/showcase-matrix-deficit-tasks";
@@ -640,6 +644,7 @@ export function TradePointShowcaseMatrixSection({
   }, [viewMode, viewHydrated]);
 
   const [presentationModel, setPresentationModel] = useState<ShowcaseMatrixModelDefinition | null>(null);
+  const [presentationBinding, setPresentationBinding] = useState<ShowcasePresentationBinding | null>(null);
   const [presentationOpen, setPresentationOpen] = useState(false);
   /** Локальное раскрытие деталей карточки (компакт/мини), без localStorage. */
   const [matrixCardDetailsOpenById, setMatrixCardDetailsOpenById] = useState<Record<string, boolean>>({});
@@ -648,10 +653,20 @@ export function TradePointShowcaseMatrixSection({
     setMatrixCardDetailsOpenById({});
   }, [viewMode, categoryFilter]);
 
-  const openPresentation = useCallback((m: ShowcaseMatrixModelDefinition) => {
-    setPresentationModel(m);
-    setPresentationOpen(true);
-  }, []);
+  const openPresentation = useCallback(
+    (m: ShowcaseMatrixModelDefinition) => {
+      setPresentationModel(m);
+      let binding: ShowcasePresentationBinding | null = null;
+      if (isManagedMatrix && resolvedMatrix.defId) {
+        const def = loadCachedMatrixDef(resolvedMatrix.defId);
+        const row = def?.models.find((r) => r.targetId === m.id);
+        if (row) binding = { defId: resolvedMatrix.defId, modelRow: row };
+      }
+      setPresentationBinding(binding);
+      setPresentationOpen(true);
+    },
+    [isManagedMatrix, resolvedMatrix.defId],
+  );
 
   if (!canView) return null;
 
@@ -1687,7 +1702,17 @@ export function TradePointShowcaseMatrixSection({
         </div>
       </section>
 
-      <ShowcaseModelPresentationDialog open={presentationOpen} onOpenChange={setPresentationOpen} model={presentationModel} />
+      <ShowcaseModelPresentationDialog
+        open={presentationOpen}
+        onOpenChange={setPresentationOpen}
+        model={presentationModel}
+        profile={profile}
+        matrixBinding={presentationBinding}
+        onBindingSaved={(catalog1cId) => {
+          setPresentationModel((prev) => (prev ? { ...prev, catalog1cId } : prev));
+          setCatalogBump((n) => n + 1);
+        }}
+      />
     </>
   );
 }
