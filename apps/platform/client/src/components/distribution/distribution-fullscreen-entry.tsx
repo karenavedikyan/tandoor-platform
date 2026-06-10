@@ -213,7 +213,8 @@ export function DistributionFullscreenEntry({
   const [sourceTab, setSourceTab] = useState<SourceTab>("matrix");
   const [searchQuery, setSearchQuery] = useState("");
   const [doorFilter, setDoorFilter] = useState<DoorFilter>("all");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  /** Единый селектор: фильтр списка + кисть в compact-режиме (кроме «Все статусы»). */
+  const [workStatus, setWorkStatus] = useState<StatusFilter>("all");
   const [cardSize, setCardSize] = useState<CatalogCardSize>(() =>
     readCatalogCardSizeFromStorage(CARD_SIZE_STORAGE_KEY, "m"),
   );
@@ -224,7 +225,6 @@ export function DistributionFullscreenEntry({
       return false;
     }
   });
-  const [quickStatus, setQuickStatus] = useState<ShowcaseMatrixStatusId>("installed");
   const [explicitQuickMarks, setExplicitQuickMarks] = useState<Set<string>>(() => new Set());
   const [draft, setDraft] = useState<FullscreenEntryDraftMap>({});
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -366,7 +366,7 @@ export function DistributionFullscreenEntry({
     if (!initialProductId) return;
     const inMatrix = matrixModels.some((m) => m.id === initialProductId);
     setSourceTab(inMatrix ? "matrix" : "catalog");
-    setStatusFilter("all");
+    setWorkStatus("all");
     setSearchQuery("");
     const t = window.setTimeout(() => {
       const el = document.querySelector(`[data-testid="card-fullscreen-entry-quick-${initialProductId}"]`);
@@ -450,12 +450,12 @@ export function DistributionFullscreenEntry({
     } else {
       list = catalogProducts;
     }
-    if (statusFilter === "all") return list;
+    if (workStatus === "all") return list;
     return list.filter((p) => {
       const status = draft[p.id]?.status ?? baselines[p.id]?.status ?? "need_install";
-      return status === statusFilter;
+      return status === workStatus;
     });
-  }, [baselines, catalogProducts, doorFilter, draft, matrixModels, searchQuery, sourceTab, statusFilter]);
+  }, [baselines, catalogProducts, doorFilter, draft, matrixModels, searchQuery, sourceTab, workStatus]);
 
   useEffect(() => {
     setDraft((prev) => {
@@ -482,11 +482,18 @@ export function DistributionFullscreenEntry({
     });
   }, [baselines, matrixModelById, visibleProducts]);
 
-  const needInstallMode = compactMode && quickStatus === "need_install";
+  const needInstallMode = compactMode && workStatus === "need_install";
+  const statusBrushActive = compactMode && workStatus !== "all";
+  const brushStatus: ShowcaseMatrixStatusId =
+    workStatus === "all" ? "installed" : workStatus;
 
   useEffect(() => {
     setExplicitQuickMarks(new Set());
-  }, [quickStatus]);
+  }, [workStatus]);
+
+  const handleBack = useCallback(() => {
+    (onBackToList ?? onClose)();
+  }, [onBackToList, onClose]);
 
   const changedIds = useMemo(() => collectChangedProductIds(draft, baselines), [draft, baselines]);
   const changedSet = useMemo(() => new Set(changedIds), [changedIds]);
@@ -514,7 +521,7 @@ export function DistributionFullscreenEntry({
   const assigneeRequired = user?.role !== "manager";
 
   const orderedProducts = useMemo(() => {
-    if (!(compactMode && quickStatus === "need_install")) return visibleProducts;
+    if (!(compactMode && workStatus === "need_install")) return visibleProducts;
     return [...visibleProducts]
       .map((p, i) => ({ p, i }))
       .sort((a, b) => {
@@ -526,7 +533,7 @@ export function DistributionFullscreenEntry({
         return a.i - b.i;
       })
       .map((x) => x.p);
-  }, [compactMode, matrixModelById, quickStatus, visibleProducts]);
+  }, [compactMode, matrixModelById, workStatus, visibleProducts]);
 
   const historyEvents = useMemo(
     () => getShowcaseMatrixTpHistoryEvents(dealer.id, point.id, storage),
@@ -966,19 +973,17 @@ export function DistributionFullscreenEntry({
       {!compactMode ? (
       <header className="z-20 shrink-0 border-b border-border/80 bg-background/95 px-3 py-2 backdrop-blur-sm sm:px-4 md:py-2.5">
         <div className="flex min-h-10 items-center gap-2">
-          {onBackToList ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-9 shrink-0 gap-1 px-2"
-              onClick={onBackToList}
-              data-testid="button-fullscreen-entry-back"
-            >
-              <ArrowLeft className="h-4 w-4" aria-hidden />
-              Назад
-            </Button>
-          ) : null}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-9 shrink-0 gap-1 px-2"
+            onClick={handleBack}
+            data-testid="button-fullscreen-entry-back"
+          >
+            <ArrowLeft className="h-4 w-4" aria-hidden />
+            Назад
+          </Button>
           <div className="min-w-0 flex-1">
             <p className="truncate text-base font-semibold text-foreground">{point.name}</p>
             {!headerCollapsed ? (
@@ -1052,20 +1057,18 @@ export function DistributionFullscreenEntry({
         <div className="flex flex-col gap-2 px-3 py-2 sm:px-4 md:gap-2 md:py-2.5">
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-2">
             <div className="flex min-w-0 flex-1 items-center gap-2">
-              {compactMode && onBackToList ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  className="h-9 w-9 shrink-0"
-                  onClick={onBackToList}
-                  data-testid="button-fullscreen-entry-back-compact"
-                  aria-label="Назад"
-                  title="Назад"
-                >
-                  <ArrowLeft className="h-4 w-4" aria-hidden />
-                </Button>
-              ) : null}
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-9 w-9 shrink-0"
+                onClick={handleBack}
+                data-testid="button-fullscreen-entry-back-compact"
+                aria-label="Назад"
+                title="Назад"
+              >
+                <ArrowLeft className="h-4 w-4" aria-hidden />
+              </Button>
               <div className="relative min-w-0 flex-1">
                 <Search
                   className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
@@ -1188,20 +1191,22 @@ export function DistributionFullscreenEntry({
               ))}
             </div>
 
-            {compactMode ? (
-              <div className="flex items-center gap-1.5">
-                <span className="shrink-0 text-xs text-muted-foreground">Отмечаю как:</span>
-                <Select
-                  value={quickStatus}
-                  onValueChange={(v) => setQuickStatus(v as ShowcaseMatrixStatusId)}
-                >
+            <div className="flex min-w-0 flex-col gap-1 sm:min-w-[14rem]">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="shrink-0 text-xs text-muted-foreground">Работаю со статусом:</span>
+                <Select value={workStatus} onValueChange={(v) => setWorkStatus(v as StatusFilter)}>
                   <SelectTrigger
-                    className="h-9 min-w-[9rem] text-xs sm:text-sm"
+                    className="h-9 min-w-[10rem] text-xs sm:text-sm"
                     data-testid="select-fullscreen-entry-quick-status"
                   >
-                    <SelectValue>{STATUS_LABEL_RU[quickStatus]}</SelectValue>
+                    <SelectValue>
+                      {workStatus === "all" ? "Все статусы" : STATUS_LABEL_RU[workStatus]}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="all" className="text-xs">
+                      Все статусы
+                    </SelectItem>
                     {STATUS_OPTIONS.map((o) => (
                       <SelectItem key={o.id} value={o.id} className="text-xs">
                         {o.label}
@@ -1210,33 +1215,10 @@ export function DistributionFullscreenEntry({
                   </SelectContent>
                 </Select>
               </div>
-            ) : null}
-
-            <div className="flex min-w-[10rem] flex-col gap-1">
-              <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                Фильтр: статус
-              </span>
-              <Select
-                value={statusFilter}
-                onValueChange={(v) => setStatusFilter(v as StatusFilter)}
-              >
-              <SelectTrigger
-                className="h-9 min-w-[10rem] text-xs sm:text-sm"
-                data-testid="select-fullscreen-entry-status-filter"
-              >
-                <SelectValue placeholder="Все статусы" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all" className="text-xs">
-                  Все статусы
-                </SelectItem>
-                {STATUS_OPTIONS.map((o) => (
-                  <SelectItem key={o.id} value={o.id} className="text-xs">
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-              </Select>
+              <p className="text-[10px] leading-snug text-muted-foreground sm:text-[11px]">
+                Выбранный статус показывается в списке. Тапните по карточкам — статус применится к ним и
+                сохранится по кнопке «Сохранить».
+              </p>
             </div>
           </div>
         </div>
@@ -1268,8 +1250,8 @@ export function DistributionFullscreenEntry({
                   draft={draft[p.id]}
                   matrixModel={matrixModelById.get(p.id)}
                   onDraftChange={updateDraft}
-                  quickMode={compactMode}
-                  quickStatus={quickStatus}
+                  quickMode={statusBrushActive}
+                  quickStatus={brushStatus}
                   baselineStatus={baselines[p.id]?.status ?? "need_install"}
                   isChanged={changedSet.has(p.id)}
                   isMatrixRecommended={matrixModelById.has(p.id)}
