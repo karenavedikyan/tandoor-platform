@@ -8,6 +8,7 @@ import {
   LayoutGrid,
   LayoutTemplate,
   List,
+  Loader2,
   Mail,
   MessageCircle,
   Phone,
@@ -3672,17 +3673,15 @@ export default function DealerBase() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Поиск: название, код, город, РОП, менеджер, тип, адрес, ИНН"
-                className="min-h-9 rounded-lg border-border pl-9 text-sm sm:min-h-10 sm:rounded-xl sm:pl-10"
+                className="min-h-9 rounded-lg border-border pl-9 pr-9 text-sm sm:min-h-10 sm:rounded-xl sm:pl-10 sm:pr-10"
                 data-testid="input-dealer-base-search"
                 aria-busy={searchFilterPending}
               />
               {searchFilterPending ? (
-                <span
-                  className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground sm:right-3"
+                <Loader2
+                  className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-primary sm:right-3"
                   aria-hidden
-                >
-                  …
-                </span>
+                />
               ) : null}
             </div>
             <div
@@ -4208,7 +4207,10 @@ export default function DealerBase() {
       ) : null}
 
       <section
-        className={cn("min-w-0 transition-opacity duration-150", searchFilterPending && "opacity-70")}
+        className={cn(
+          "min-w-0 transition-opacity duration-200",
+          searchFilterPending && "pointer-events-none opacity-60",
+        )}
         data-testid="section-dealer-base-results"
       >
         {isTaskSelectMode ? (
