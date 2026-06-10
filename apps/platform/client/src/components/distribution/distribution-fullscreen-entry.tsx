@@ -58,9 +58,14 @@ import {
   allowedTypesForSegment,
   PLACEMENT_TYPE_LABEL_RU,
 } from "@/lib/showcase-placement-labels";
-import type { ShowcasePlacementSegment, ShowcasePlacementType } from "@/lib/showcase-matrix-api";
+import type {
+  ShowcaseMatrixEntryDto,
+  ShowcasePlacementSegment,
+  ShowcasePlacementType,
+} from "@/lib/showcase-matrix-api";
 import {
   loadCachedMatrix,
+  loadCachedPlacements,
   normalizeShowcaseMatrixModelId,
   setMatrixStatus,
   SHOWCASE_MATRIX_STORE_CHANGED_EVENT,
@@ -71,6 +76,7 @@ import {
   countInstalledInDraft,
   type FullscreenEntryBaseline,
   type FullscreenEntryDraftMap,
+  type FullscreenEntryDraftRow,
 } from "@/lib/distribution-fullscreen-entry-draft";
 import {
   getShowcaseMatrixModelsForTradePoint,
@@ -187,6 +193,72 @@ function formatSavedAt(): string {
   return new Intl.DateTimeFormat("ru-RU", { dateStyle: "medium", timeStyle: "short" }).format(new Date());
 }
 
+function sumPlacementCompetitors(block: ShowcaseMatrixEntryDto): number {
+  return (block.placementCompetitors ?? []).reduce((acc, c) => acc + (c?.count ?? 0), 0);
+}
+
+function findPlacementBlock(
+  placements: ShowcaseMatrixEntryDto[],
+  segment: ShowcasePlacementSegment,
+  placementType: ShowcasePlacementType,
+): ShowcaseMatrixEntryDto | null {
+  return (
+    placements.find(
+      (p) => p.placementSegment === segment && p.placementType === placementType,
+    ) ?? null
+  );
+}
+
+function ourMarkLimitFromBlock(block: ShowcaseMatrixEntryDto | null): number | null {
+  if (!block || block.placementCapacity == null || block.placementCapacity <= 0) return null;
+  return Math.max(0, block.placementCapacity - sumPlacementCompetitors(block));
+}
+
+function effectiveDraftRow(
+  productId: string,
+  draft: FullscreenEntryDraftMap,
+  baselines: Record<string, FullscreenEntryBaseline>,
+): FullscreenEntryDraftRow | null {
+  const row = draft[productId];
+  if (row) return row;
+  const baseline = baselines[productId];
+  if (!baseline) return null;
+  return buildInitialDraftRow(baseline);
+}
+
+function countMarkedOursInPlacement(
+  draft: FullscreenEntryDraftMap,
+  baselines: Record<string, FullscreenEntryBaseline>,
+  segment: ShowcasePlacementSegment,
+  placementType: ShowcasePlacementType,
+): number {
+  let count = 0;
+  for (const id of Object.keys({ ...draft, ...baselines })) {
+    const row = effectiveDraftRow(id, draft, baselines);
+    if (!row || row.status !== "installed") continue;
+    if (row.placementSegment !== segment || row.placementType !== placementType) continue;
+    count++;
+  }
+  return count;
+}
+
+function segmentContextFromDoorFilter(doorFilter: DoorFilter): ShowcasePlacementSegment {
+  if (doorFilter === "mk") return "mk";
+  return "vh";
+}
+
+function isInstalledInPlacementType(
+  productId: string,
+  draft: FullscreenEntryDraftMap,
+  baselines: Record<string, FullscreenEntryBaseline>,
+  segment: ShowcasePlacementSegment,
+  placementType: ShowcasePlacementType,
+): boolean {
+  const row = effectiveDraftRow(productId, draft, baselines);
+  if (!row || row.status !== "installed") return false;
+  return row.placementSegment === segment && row.placementType === placementType;
+}
+
 type Props = {
   dealer: DealerRow;
   point: DealerTradePoint;
@@ -226,6 +298,7 @@ export function DistributionFullscreenEntry({
     }
   });
   const [explicitQuickMarks, setExplicitQuickMarks] = useState<Set<string>>(() => new Set());
+  const [activePlacementType, setActivePlacementType] = useState<ShowcasePlacementType>("portal");
   const [draft, setDraft] = useState<FullscreenEntryDraftMap>({});
   const [historyOpen, setHistoryOpen] = useState(false);
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
@@ -554,6 +627,94 @@ export function DistributionFullscreenEntry({
       })
       .map((x) => x.p);
   }, [compactMode, matrixModelById, workStatus, visibleProducts]);
+
+  const placementTypeMode = workStatus === "installed";
+  const placementSegmentContext = useMemo(
+    () => segmentContextFromDoorFilter(doorFilter),
+    [doorFilter],
+  );
+  const placementTypeOptions = useMemo(
+    () => allowedTypesForSegment(placementSegmentContext),
+    [placementSegmentContext],
+  );
+
+  useEffect(() => {
+    if (!placementTypeOptions.includes(activePlacementType)) {
+      setActivePlacementType(placementTypeOptions[0] ?? "portal");
+    }
+  }, [placementTypeOptions, activePlacementType]);
+
+  const placements = useMemo(() => {
+    void bump;
+    return loadCachedPlacements(point.id);
+  }, [point.id, bump]);
+
+  const activePlacementBlock = useMemo(
+    () => findPlacementBlock(placements, placementSegmentContext, activePlacementType),
+    [placements, placementSegmentContext, activePlacementType],
+  );
+
+  const activeSlotLimit = useMemo(
+    () => ourMarkLimitFromBlock(activePlacementBlock),
+    [activePlacementBlock],
+  );
+
+  const activeCompetitorCount = useMemo(
+    () => (activePlacementBlock ? sumPlacementCompetitors(activePlacementBlock) : 0),
+    [activePlacementBlock],
+  );
+
+  const markedInActivePlacement = useMemo(
+    () =>
+      countMarkedOursInPlacement(draft, baselines, placementSegmentContext, activePlacementType),
+    [draft, baselines, placementSegmentContext, activePlacementType],
+  );
+
+  const slotLimitReached =
+    activeSlotLimit !== null && markedInActivePlacement >= activeSlotLimit;
+
+  const slotLimitMessage = useMemo(() => {
+    if (!slotLimitReached || activeSlotLimit == null) return null;
+    const typeLabel = PLACEMENT_TYPE_LABEL_RU[activePlacementType];
+    return `Достигнут лимит мест для типа «${typeLabel}»: ${activeSlotLimit} мест (из них ${activeCompetitorCount} у конкурентов)`;
+  }, [slotLimitReached, activeSlotLimit, activePlacementType, activeCompetitorCount]);
+
+  const canMarkInstalledInActiveType = useCallback(
+    (productId: string, segment: ShowcasePlacementSegment) => {
+      if (isInstalledInPlacementType(productId, draft, baselines, segment, activePlacementType)) {
+        return true;
+      }
+      const block = findPlacementBlock(placements, segment, activePlacementType);
+      const limit = ourMarkLimitFromBlock(block);
+      if (limit === null) return true;
+      const count = countMarkedOursInPlacement(draft, baselines, segment, activePlacementType);
+      return count < limit;
+    },
+    [draft, baselines, activePlacementType, placements],
+  );
+
+  const productsForList = useMemo(() => {
+    if (!placementTypeMode) return orderedProducts;
+    return orderedProducts.filter((p) => {
+      const row = effectiveDraftRow(p.id, draft, baselines);
+      const status = row?.status ?? "need_install";
+      if (status !== "installed") return true;
+      const seg =
+        row?.placementSegment ??
+        (matrixModelById.get(p.id)
+          ? segmentFromMatrixModel(matrixModelById.get(p.id)!)
+          : segmentFromProduct(p));
+      return row?.placementType === activePlacementType && seg === placementSegmentContext;
+    });
+  }, [
+    placementTypeMode,
+    orderedProducts,
+    draft,
+    baselines,
+    activePlacementType,
+    placementSegmentContext,
+    matrixModelById,
+  ]);
 
   const historyEvents = useMemo(
     () => getShowcaseMatrixTpHistoryEvents(dealer.id, point.id, storage),
@@ -1249,39 +1410,101 @@ export function DistributionFullscreenEntry({
 
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 pb-4 sm:px-4 md:pb-28 md:pr-4">
-          {visibleProducts.length === 0 ? (
+          {placementTypeMode ? (
+            <div
+              className="mb-3 space-y-2 rounded-xl border border-border/80 bg-muted/20 px-3 py-2.5"
+              data-testid="section-fullscreen-entry-placement-type"
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-muted-foreground">Тип витрины:</span>
+                <div className="flex flex-wrap gap-1">
+                  {placementTypeOptions.map((t) => (
+                    <Button
+                      key={t}
+                      type="button"
+                      size="sm"
+                      variant={activePlacementType === t ? "default" : "outline"}
+                      className="min-h-8 px-2.5 text-xs"
+                      data-testid={`button-fullscreen-entry-placement-type-${t}`}
+                      onClick={() => setActivePlacementType(t)}
+                    >
+                      {PLACEMENT_TYPE_LABEL_RU[t]}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground" data-testid="text-fullscreen-entry-placement-counter">
+                Отмечено{" "}
+                <span className="font-semibold tabular-nums text-foreground">{markedInActivePlacement}</span>
+                {activeSlotLimit != null ? (
+                  <>
+                    {" "}
+                    из <span className="font-semibold tabular-nums text-foreground">{activeSlotLimit}</span>
+                  </>
+                ) : null}
+              </p>
+              {activeSlotLimit == null ? (
+                <p className="text-xs text-muted-foreground">
+                  Ёмкость для типа «{PLACEMENT_TYPE_LABEL_RU[activePlacementType]}» не задана — лимит не
+                  контролируется
+                </p>
+              ) : null}
+              {slotLimitMessage ? (
+                <p className="text-xs text-amber-800 dark:text-amber-200">{slotLimitMessage}</p>
+              ) : null}
+            </div>
+          ) : null}
+          {productsForList.length === 0 ? (
             <p className="py-12 text-center text-sm text-muted-foreground">Ничего не найдено</p>
           ) : cardSize === "list" ? (
             <ul className={gridClass}>
-              {orderedProducts.map((p) => (
-                <FullscreenProductRow
-                  key={p.id}
-                  product={p}
-                  draft={draft[p.id]}
-                  matrixModel={matrixModelById.get(p.id)}
-                  onDraftChange={updateDraft}
-                />
-              ))}
+              {productsForList.map((p) => {
+                const seg = matrixModelById.get(p.id)
+                  ? segmentFromMatrixModel(matrixModelById.get(p.id)!)
+                  : segmentFromProduct(p);
+                return (
+                  <FullscreenProductRow
+                    key={p.id}
+                    product={p}
+                    draft={draft[p.id]}
+                    matrixModel={matrixModelById.get(p.id)}
+                    onDraftChange={updateDraft}
+                    placementTypeMode={placementTypeMode}
+                    activePlacementType={activePlacementType}
+                    canMarkInstalled={canMarkInstalledInActiveType(p.id, seg)}
+                    slotLimitHint={slotLimitMessage}
+                  />
+                );
+              })}
             </ul>
           ) : (
             <div className={gridClass}>
-              {orderedProducts.map((p) => (
-                <FullscreenProductCard
-                  key={p.id}
-                  product={p}
-                  cardSize={cardSize}
-                  draft={draft[p.id]}
-                  matrixModel={matrixModelById.get(p.id)}
-                  onDraftChange={updateDraft}
-                  quickMode={statusBrushActive}
-                  quickStatus={brushStatus}
-                  baselineStatus={baselines[p.id]?.status ?? "need_install"}
-                  isChanged={changedSet.has(p.id)}
-                  isMatrixRecommended={matrixModelById.has(p.id)}
-                  isExplicitMark={explicitQuickMarks.has(p.id)}
-                  onSetExplicitMark={setExplicitQuickMark}
-                />
-              ))}
+              {productsForList.map((p) => {
+                const seg = matrixModelById.get(p.id)
+                  ? segmentFromMatrixModel(matrixModelById.get(p.id)!)
+                  : segmentFromProduct(p);
+                return (
+                  <FullscreenProductCard
+                    key={p.id}
+                    product={p}
+                    cardSize={cardSize}
+                    draft={draft[p.id]}
+                    matrixModel={matrixModelById.get(p.id)}
+                    onDraftChange={updateDraft}
+                    quickMode={statusBrushActive}
+                    quickStatus={brushStatus}
+                    baselineStatus={baselines[p.id]?.status ?? "need_install"}
+                    isChanged={changedSet.has(p.id)}
+                    isMatrixRecommended={matrixModelById.has(p.id)}
+                    isExplicitMark={explicitQuickMarks.has(p.id)}
+                    onSetExplicitMark={setExplicitQuickMark}
+                    placementTypeMode={placementTypeMode}
+                    activePlacementType={activePlacementType}
+                    canMarkInstalled={canMarkInstalledInActiveType(p.id, seg)}
+                    slotLimitHint={slotLimitMessage}
+                  />
+                );
+              })}
             </div>
           )}
         </div>
@@ -1724,6 +1947,10 @@ function FullscreenProductCard({
   isMatrixRecommended,
   isExplicitMark,
   onSetExplicitMark,
+  placementTypeMode,
+  activePlacementType,
+  canMarkInstalled,
+  slotLimitHint,
 }: ProductDraftProps & {
   cardSize: CatalogCardSize;
   quickMode: boolean;
@@ -1733,10 +1960,14 @@ function FullscreenProductCard({
   isMatrixRecommended: boolean;
   isExplicitMark: boolean;
   onSetExplicitMark: (productId: string, marked: boolean) => void;
+  placementTypeMode: boolean;
+  activePlacementType: ShowcasePlacementType;
+  canMarkInstalled: boolean;
+  slotLimitHint: string | null;
 }) {
   const row = draft;
   const segment = row ? row.placementSegment : segmentForProduct(product, matrixModel);
-  const placementOptions = allowedTypesForSegment(segment);
+  const defaultPlacementType = placementTypeMode ? activePlacementType : (row?.placementType ?? "portal");
   const img = product.image?.trim() ?? "";
   const titleSize =
     cardSize === "xl" ? "text-sm" : cardSize === "s" ? "text-[11px]" : "text-xs";
@@ -1748,6 +1979,12 @@ function FullscreenProductCard({
       ? isExplicitMark || (isChanged && effectiveStatus === "need_install")
       : effectiveStatus === quickStatus);
 
+  const installBlocked =
+    placementTypeMode &&
+    quickStatus === "installed" &&
+    !canMarkInstalled &&
+    effectiveStatus !== "installed";
+
   const handleQuickTap = () => {
     const seg = segmentForProduct(product, matrixModel);
     const isToggledOn = (isExplicitMark || isChanged) && effectiveStatus === quickStatus;
@@ -1758,7 +1995,7 @@ function FullscreenProductCard({
         onDraftChange(product.id, {
           status: baselineStatus,
           placementSegment: row?.placementSegment ?? seg,
-          placementType: row?.placementType ?? "portal",
+          placementType: row?.placementType ?? defaultPlacementType,
         });
         onSetExplicitMark(product.id, false);
       }
@@ -1768,10 +2005,13 @@ function FullscreenProductCard({
       onSetExplicitMark(product.id, true);
       return;
     }
+    if (quickStatus === "installed" && placementTypeMode && !canMarkInstalled) {
+      return;
+    }
     onDraftChange(product.id, {
       status: quickStatus,
       placementSegment: row?.placementSegment ?? seg,
-      placementType: row?.placementType ?? "portal",
+      placementType: placementTypeMode && quickStatus === "installed" ? activePlacementType : defaultPlacementType,
     });
     onSetExplicitMark(product.id, true);
   };
@@ -1785,11 +2025,13 @@ function FullscreenProductCard({
           : quickMode && isMatrixRecommended
             ? "border-primary/40"
             : "border-border/80",
-        quickMode && "cursor-pointer select-none",
+        quickMode && !installBlocked && "cursor-pointer select-none",
+        installBlocked && "opacity-60",
         cardSize === "s" ? "p-1.5" : "p-2",
       )}
-      onClick={quickMode ? handleQuickTap : undefined}
-      role={quickMode ? "button" : undefined}
+      onClick={quickMode && !installBlocked ? handleQuickTap : undefined}
+      role={quickMode && !installBlocked ? "button" : undefined}
+      title={installBlocked && slotLimitHint ? slotLimitHint : undefined}
       data-testid={quickMode ? `card-fullscreen-entry-quick-${product.id}` : undefined}
     >
       <div
@@ -1833,39 +2075,33 @@ function FullscreenProductCard({
             value={effectiveStatus}
             onChange={(newStatus) => {
               const seg = segmentForProduct(product, matrixModel);
+              if (
+                newStatus === "installed" &&
+                placementTypeMode &&
+                effectiveStatus !== "installed" &&
+                !canMarkInstalled
+              ) {
+                return;
+              }
               onDraftChange(product.id, {
                 status: newStatus,
                 placementSegment: row?.placementSegment ?? seg,
-                placementType: row?.placementType ?? "portal",
+                placementType:
+                  newStatus === "installed" && placementTypeMode
+                    ? activePlacementType
+                    : (row?.placementType ?? defaultPlacementType),
               });
             }}
             productId={product.id}
             className="mt-2"
           />
-          {row?.status === "installed" ? (
-            <div className="mt-2 space-y-1">
-              <Label className="text-[10px] text-muted-foreground">Крепление</Label>
-              <Select
-                value={row.placementType}
-                onValueChange={(v) =>
-                  onDraftChange(product.id, { placementType: v as ShowcasePlacementType })
-                }
-              >
-                <SelectTrigger
-                  className="h-9 text-xs"
-                  data-testid={`select-fullscreen-entry-placement-${product.id}`}
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {placementOptions.map((t) => (
-                    <SelectItem key={t} value={t} className="text-xs">
-                      {PLACEMENT_TYPE_LABEL_RU[t]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          {row?.status === "installed" && row.placementType ? (
+            <p className="mt-2 text-[10px] text-muted-foreground">
+              Крепление:{" "}
+              <span className="font-medium text-foreground">
+                {PLACEMENT_TYPE_LABEL_RU[row.placementType]}
+              </span>
+            </p>
           ) : null}
         </>
       ) : null}
@@ -1873,15 +2109,33 @@ function FullscreenProductCard({
   );
 }
 
-function FullscreenProductRow({ product, draft, matrixModel, onDraftChange }: ProductDraftProps) {
+function FullscreenProductRow({
+  product,
+  draft,
+  matrixModel,
+  onDraftChange,
+  placementTypeMode,
+  activePlacementType,
+  canMarkInstalled,
+  slotLimitHint,
+}: ProductDraftProps & {
+  placementTypeMode: boolean;
+  activePlacementType: ShowcasePlacementType;
+  canMarkInstalled: boolean;
+  slotLimitHint: string | null;
+}) {
   const row = draft;
-  const segment = row ? row.placementSegment : segmentForProduct(product, matrixModel);
-  const placementOptions = allowedTypesForSegment(segment);
+  const defaultPlacementType = placementTypeMode ? activePlacementType : (row?.placementType ?? "portal");
   const img = product.image?.trim() ?? "";
   const currentStatus = row?.status ?? "need_install";
+  const installBlocked =
+    placementTypeMode && currentStatus !== "installed" && !canMarkInstalled;
 
   return (
-    <li className="flex gap-3 rounded-xl border border-border/80 bg-card p-2">
+    <li
+      className={cn("flex gap-3 rounded-xl border border-border/80 bg-card p-2", installBlocked && "opacity-60")}
+      title={installBlocked && slotLimitHint ? slotLimitHint : undefined}
+    >
       <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-muted/40">
         {img ? <img src={img} alt="" className="h-full w-full object-contain" loading="lazy" /> : null}
       </div>
@@ -1897,36 +2151,33 @@ function FullscreenProductRow({ product, draft, matrixModel, onDraftChange }: Pr
           value={currentStatus}
           onChange={(newStatus) => {
             const seg = segmentForProduct(product, matrixModel);
+            if (
+              newStatus === "installed" &&
+              placementTypeMode &&
+              currentStatus !== "installed" &&
+              !canMarkInstalled
+            ) {
+              return;
+            }
             onDraftChange(product.id, {
               status: newStatus,
               placementSegment: row?.placementSegment ?? seg,
-              placementType: row?.placementType ?? "portal",
+              placementType:
+                newStatus === "installed" && placementTypeMode
+                  ? activePlacementType
+                  : (row?.placementType ?? defaultPlacementType),
             });
           }}
           productId={product.id}
           className="mt-1"
         />
-        {row?.status === "installed" ? (
-          <Select
-            value={row.placementType}
-            onValueChange={(v) =>
-              onDraftChange(product.id, { placementType: v as ShowcasePlacementType })
-            }
-          >
-            <SelectTrigger
-              className="mt-2 h-9 text-xs"
-              data-testid={`select-fullscreen-entry-placement-${product.id}`}
-            >
-              <SelectValue placeholder="Крепление" />
-            </SelectTrigger>
-            <SelectContent>
-              {placementOptions.map((t) => (
-                <SelectItem key={t} value={t}>
-                  {PLACEMENT_TYPE_LABEL_RU[t]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        {row?.status === "installed" && row.placementType ? (
+          <p className="mt-2 text-[10px] text-muted-foreground">
+            Крепление:{" "}
+            <span className="font-medium text-foreground">
+              {PLACEMENT_TYPE_LABEL_RU[row.placementType]}
+            </span>
+          </p>
         ) : null}
       </div>
     </li>
