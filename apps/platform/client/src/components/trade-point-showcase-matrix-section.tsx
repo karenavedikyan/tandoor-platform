@@ -264,7 +264,7 @@ function buildManualModelFromEntry(
   const type = catalogProductMatrixType(entry.targetId);
   return {
     id: entry.targetId,
-    name: resolved.productName || entry.targetId,
+    name: resolved.productName?.trim() || getProductById(entry.targetId)?.name?.trim() || entry.targetId,
     type,
     typeLabelRu: type === "entrance" ? "ВХ" : "МК",
     imageUrl: resolved.showcaseMatrixImageSrc ?? product?.image?.trim() ?? "",
