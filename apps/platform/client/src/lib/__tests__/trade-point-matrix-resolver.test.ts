@@ -103,15 +103,18 @@ const cityHeader = def({
   clientCategory: "top150",
 });
 
+const ONE_C_PRODUCT_ID = "e626a249-a8ef-11ec-8115-00155d0a0a4e";
+
 const modelRow = {
   id: "m1",
   defId: "def-city",
   targetKind: "model" as const,
-  targetId: "tc-vh-era-grafit-belyy-matovyy-860kh2050-levaya",
+  targetId: ONE_C_PRODUCT_ID,
   priority: "high" as const,
   segment: "vh" as const,
   valueWeight: 5,
   sortOrder: 0,
+  catalog1cId: null,
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
 };
@@ -143,7 +146,8 @@ const managed = resolveActiveManagedMatrix({
 assert.ok(managed);
 assert.equal(managed!.source, "managed");
 assert.equal(managed!.models.length, 1);
-assert.equal(managed!.models[0]!.id, modelRow.targetId);
+assert.equal(managed!.models[0]!.id, ONE_C_PRODUCT_ID);
+assert.equal(managed!.models[0]!.catalog1cId, ONE_C_PRODUCT_ID);
 
 const fromResolver = resolveTradePointMatrixModels({
   dealerId: "d1",
@@ -154,7 +158,7 @@ const fromResolver = resolveTradePointMatrixModels({
   onDate: "2026-06-15",
 });
 assert.equal(fromResolver.length, 1);
-assert.equal(fromResolver[0]!.id, modelRow.targetId);
+assert.equal(fromResolver[0]!.id, ONE_C_PRODUCT_ID);
 
 seedCache({ headers: [globalHeader], defsById: {} });
 const onlyGlobal = resolveActiveMatrixDefFromCache({

@@ -181,6 +181,15 @@ export function inferMatrixSegmentFromCatalogProduct(
   return "hardware";
 }
 
+/** Сегмент матрицы по подсказкам из каталога 1С (название, тип двери, категория). */
+export function inferMatrixSegmentFrom1c(hint: string | null | undefined): ShowcaseMatrixCatalogSegment {
+  const h = (hint ?? "").toLocaleLowerCase("ru");
+  if (h.includes("межкомнат")) return "mk";
+  if (h.includes("входн")) return "vh";
+  if (h.includes("фурнитур")) return "hardware";
+  return "vh";
+}
+
 export function clientCategoryLabel(id: ShowcaseMatrixCatalogClientCategory): string {
   return getClientCategoryMeta(id as ClientCategoryId).label;
 }

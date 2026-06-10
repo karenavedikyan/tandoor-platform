@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Loader2, Package, Search } from "lucide-react";
+import { Loader2, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -9,27 +9,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { LightboxModal } from "@/components/catalog/LightboxModal";
-import { useAuthUser } from "@/hooks/use-auth-user";
-import { canManageShowcaseMatrixCatalog } from "@/lib/auth-access";
 import { optimizedImage } from "@/lib/catalog-image";
-import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
-import {
-  apiBatchSyncMatrixCatalog,
-  type ShowcaseMatrixDefModelDto,
-} from "@/lib/showcase-matrix-catalog-api";
-import { refreshMatrixDefFromServer } from "@/lib/showcase-matrix-catalog-store";
-import {
-  catalogHrefForMatrixModel,
-  priorityLabelRu,
-  resolveCatalog1cId,
-  type ShowcaseMatrixModelDefinition,
-} from "@/lib/trade-point-showcase-matrix-models";
+import { priorityLabelRu, type ShowcaseMatrixModelDefinition } from "@/lib/trade-point-showcase-matrix-models";
 import { cn } from "@/lib/utils";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const PRESENTATION_PROPERTY_EXCLUDE_PREFIXES = ["Ссылка"] as const;
 const PRESENTATION_PROPERTY_EXCLUDE_CONTAINS = ["АкцияДействует"] as const;
@@ -55,26 +43,19 @@ type Catalog1cProduct = {
   properties: Catalog1cProperty[];
 };
 
-type CatalogSearchItem = {
-  id: string;
-  name: string;
-  display_name: string | null;
-  image_url?: string | null;
-};
-
-export type ShowcasePresentationBinding = {
-  defId: string;
-  modelRow: ShowcaseMatrixDefModelDto;
-};
-
 type Props = {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   model: ShowcaseMatrixModelDefinition | null;
-  profile: ReleaseDemoProfile;
-  matrixBinding?: ShowcasePresentationBinding | null;
-  onBindingSaved?: (catalog1cId: string) => void;
 };
+
+function isUuid(value: string): boolean {
+  return UUID_RE.test(value.trim());
+}
+
+function effective1cIdForModel(model: ShowcaseMatrixModelDefinition): string {
+  return (model.catalog1cId ?? model.id).trim();
+}
 
 type ResolveResponse =
   | { success: true; result: "matched"; productId: string }
@@ -191,51 +172,27 @@ function PhotoPlaceholder() {
   );
 }
 
-export function ShowcaseModelPresentationDialog({
-  open,
-  onOpenChange,
-  model,
-  profile,
-  matrixBinding = null,
-  onBindingSaved,
-}: Props) {
-  const queryClient = useQueryClient();
-  const { user } = useAuthUser();
-  const canManage = canManageShowcaseMatrixCatalog(user?.role, profile.role);
-
+export function ShowcaseModelPresentationDialog({ open, onOpenChange, model }: Props) {
   const [fallbackText, setFallbackText] = useState("");
-  const [savedCatalog1cId, setSavedCatalog1cId] = useState<string | null>(null);
-  const [bindSearch, setBindSearch] = useState("");
-  const [debouncedBindSearch, setDebouncedBindSearch] = useState("");
-  const [bindingSaving, setBindingSaving] = useState(false);
-  const [bindError, setBindError] = useState<string | null>(null);
   const [activeImg, setActiveImg] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [brokenImages, setBrokenImages] = useState<Set<number>>(() => new Set());
 
-  const seedCatalog1cId = model ? resolveCatalog1cId(model) : null;
+  const rawEffectiveId = model ? effective1cIdForModel(model) : "";
+  const hasUuidId = Boolean(rawEffectiveId && isUuid(rawEffectiveId));
 
   useEffect(() => {
     if (!open) {
       setFallbackText("");
-      setSavedCatalog1cId(null);
-      setBindSearch("");
-      setDebouncedBindSearch("");
-      setBindError(null);
       setActiveImg(0);
       setLightboxOpen(false);
       setBrokenImages(new Set());
     }
   }, [open, model?.id]);
 
-  useEffect(() => {
-    const t = window.setTimeout(() => setDebouncedBindSearch(bindSearch.trim()), 300);
-    return () => window.clearTimeout(t);
-  }, [bindSearch]);
-
   const resolveQuery = useQuery({
     queryKey: ["catalog-resolve-by-name", model?.id, model?.name],
-    enabled: open && Boolean(model) && !seedCatalog1cId && !savedCatalog1cId,
+    enabled: open && Boolean(model) && !hasUuidId,
     queryFn: async (): Promise<ResolveResponse> => {
       const r = await fetch(
         `/api/catalog/resolve-by-name?name=${encodeURIComponent(model!.name)}`,
@@ -248,21 +205,11 @@ export function ShowcaseModelPresentationDialog({
   });
 
   const resolvedProductId = useMemo(() => {
-    if (savedCatalog1cId) return savedCatalog1cId;
-    if (seedCatalog1cId) return seedCatalog1cId;
+    if (hasUuidId) return rawEffectiveId;
     const data = resolveQuery.data;
     if (data?.success && data.result === "matched" && data.productId) return data.productId;
     return null;
-  }, [resolveQuery.data, savedCatalog1cId, seedCatalog1cId]);
-
-  const needsManualBinding =
-    open &&
-    Boolean(model) &&
-    !resolvedProductId &&
-    !resolveQuery.isLoading &&
-    (resolveQuery.isError ||
-      (resolveQuery.data?.success &&
-        (resolveQuery.data.result === "ambiguous" || resolveQuery.data.result === "not_found")));
+  }, [hasUuidId, rawEffectiveId, resolveQuery.data]);
 
   const productQuery = useQuery({
     queryKey: ["catalog-product-presentation", resolvedProductId],
@@ -274,26 +221,14 @@ export function ShowcaseModelPresentationDialog({
       );
       const data = await r.json();
       if (!r.ok || !data.success) {
-        throw new Error(data.message || `HTTP ${r.status}`);
+        const err = new Error(data.message || `HTTP ${r.status}`) as Error & { status?: number };
+        err.status = r.status;
+        throw err;
       }
       return data.product as Catalog1cProduct;
     },
     staleTime: 30_000,
-  });
-
-  const bindSearchQuery = useQuery({
-    queryKey: ["catalog-products-bind-search", debouncedBindSearch],
-    enabled: open && needsManualBinding && canManage && debouncedBindSearch.length >= 2,
-    queryFn: async (): Promise<CatalogSearchItem[]> => {
-      const params = new URLSearchParams({ q: debouncedBindSearch, limit: "20", offset: "0" });
-      const r = await fetch(`/api/catalog/products?${params}`, { credentials: "include" });
-      const data = await r.json();
-      if (!r.ok || !data.success) {
-        throw new Error(data.message || `HTTP ${r.status}`);
-      }
-      return (data.items ?? []) as CatalogSearchItem[];
-    },
-    staleTime: 10_000,
+    retry: false,
   });
 
   const product = productQuery.data ?? null;
@@ -358,51 +293,10 @@ export function ShowcaseModelPresentationDialog({
     void copyText("Сообщение клиенту", messageText, setFallbackText);
   }, [messageText]);
 
-  const handleBindProduct = useCallback(
-    async (productId: string) => {
-      if (!matrixBinding || !model) return;
-      setBindingSaving(true);
-      setBindError(null);
-      try {
-        const row = matrixBinding.modelRow;
-        const result = await apiBatchSyncMatrixCatalog([
-          {
-            op: "upsertModel",
-            defId: matrixBinding.defId,
-            model: {
-              id: row.id,
-              targetKind: row.targetKind,
-              targetId: row.targetId,
-              priority: row.priority,
-              segment: row.segment,
-              valueWeight: row.valueWeight,
-              sortOrder: row.sortOrder,
-              catalog1cId: productId,
-            },
-          },
-        ]);
-        if (!result.ok) {
-          throw new Error("Не удалось сохранить привязку");
-        }
-        await refreshMatrixDefFromServer(matrixBinding.defId);
-        setSavedCatalog1cId(productId);
-        onBindingSaved?.(productId);
-        await queryClient.invalidateQueries({ queryKey: ["catalog-product-presentation", productId] });
-      } catch (e) {
-        setBindError(e instanceof Error ? e.message : String(e));
-      } finally {
-        setBindingSaving(false);
-      }
-    },
-    [matrixBinding, model, onBindingSaved, queryClient],
-  );
-
   if (!model) return null;
 
   const displayTitle = product?.display_name?.trim() || product?.name || model.name;
-  const catalogHref = resolvedProductId
-    ? `/catalog/1c/${resolvedProductId}`
-    : catalogHrefForMatrixModel(model);
+  const catalogHref = resolvedProductId ? `/catalog/1c/${resolvedProductId}` : "/catalog";
 
   const currentImg = product?.images[activeImg];
   const mainImageUrl = currentImg?.blob_url?.trim();
@@ -411,11 +305,19 @@ export function ShowcaseModelPresentationDialog({
 
   const isResolving = !resolvedProductId && resolveQuery.isLoading;
   const isLoadingProduct = Boolean(resolvedProductId) && productQuery.isLoading;
-  const productError = productQuery.isError
-    ? productQuery.error instanceof Error
-      ? productQuery.error.message
-      : "Не удалось загрузить данные товара"
-    : null;
+  const productNotFound =
+    Boolean(resolvedProductId) &&
+    productQuery.isError &&
+    ((productQuery.error as Error & { status?: number })?.status === 404 ||
+      productQuery.error?.message?.includes("404") ||
+      productQuery.error?.message?.toLowerCase().includes("не найден"));
+  const resolveData = resolveQuery.data;
+  const legacyResolveFailed =
+    !hasUuidId &&
+    !resolveQuery.isLoading &&
+    resolveData?.success === true &&
+    resolveData.result !== "matched";
+  const showNotFound = legacyResolveFailed || productNotFound;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -435,69 +337,19 @@ export function ShowcaseModelPresentationDialog({
             </div>
           ) : null}
 
-          {needsManualBinding ? (
-            <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3">
-              {canManage && matrixBinding ? (
-                <>
-                  <p className="text-sm text-muted-foreground">
-                    Товар не найден однозначно. Найдите позицию в каталоге 1С и сохраните привязку.
-                  </p>
-                  <div className="relative">
-                    <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden />
-                    <Input
-                      value={bindSearch}
-                      onChange={(e) => setBindSearch(e.target.value)}
-                      placeholder="Поиск по названию"
-                      className="pl-8"
-                      data-testid="input-showcase-bind-catalog-search"
-                    />
-                  </div>
-                  {bindError ? <p className="text-xs text-destructive">{bindError}</p> : null}
-                  {bindSearchQuery.isLoading ? (
-                    <p className="text-xs text-muted-foreground">Поиск</p>
-                  ) : null}
-                  <ul className="max-h-48 space-y-1 overflow-y-auto">
-                    {(bindSearchQuery.data ?? []).map((item) => {
-                      const label = item.display_name?.trim() || item.name;
-                      const thumb = item.image_url?.trim()
-                        ? optimizedImage(item.image_url, 64)
-                        : null;
-                      return (
-                        <li key={item.id}>
-                          <button
-                            type="button"
-                            disabled={bindingSaving}
-                            className="flex w-full items-center gap-2 rounded-md border border-transparent px-2 py-1.5 text-left text-sm hover:border-border hover:bg-muted/40 disabled:opacity-50"
-                            onClick={() => void handleBindProduct(item.id)}
-                            data-testid={`button-showcase-bind-product-${item.id}`}
-                          >
-                            <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded bg-muted">
-                              {thumb ? (
-                                <img src={thumb} alt="" className="h-full w-full object-contain" />
-                              ) : (
-                                <Package className="h-4 w-4 text-muted-foreground" aria-hidden />
-                              )}
-                            </span>
-                            <span className="min-w-0 flex-1 break-words leading-snug">{label}</span>
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  Товар не привязан к каталогу 1С. Обратитесь к администратору матрицы.
-                </p>
-              )}
+          {showNotFound ? (
+            <div
+              className="flex flex-col items-center gap-3 py-8 text-center"
+              data-testid="page-showcase-presentation-not-found"
+            >
+              <p className="text-sm text-muted-foreground">Модель не найдена в каталоге 1С</p>
+              <Button asChild variant="outline" size="sm">
+                <Link href="/catalog">Открыть в каталоге</Link>
+              </Button>
             </div>
           ) : null}
 
-          {productError ? (
-            <p className="text-sm text-muted-foreground">{productError}</p>
-          ) : null}
-
-          {!isResolving && !isLoadingProduct && product ? (
+          {!showNotFound && !isResolving && !isLoadingProduct && product ? (
             <>
               <div className="overflow-hidden rounded-xl border border-border bg-muted/20">
                 <button

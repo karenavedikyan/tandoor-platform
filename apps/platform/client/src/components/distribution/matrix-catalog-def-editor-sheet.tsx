@@ -20,14 +20,12 @@ import {
 } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
-import { MatrixCatalogProductPicker } from "@/components/distribution/matrix-catalog-product-picker";
-import type { CatalogProduct } from "@/lib/catalog-product-type";
-import { CLIENT_CATEGORY_META, type ClientCategoryId } from "@/lib/client-category";
-import { getProductById } from "@/lib/catalog-data";
 import {
-  inferMatrixSegmentFromCatalogProduct,
-  isMatrixPeriodRangeValid,
-} from "@/lib/distribution-matrix-catalog-view-model";
+  MatrixCatalogProductPicker,
+  type Catalog1cPicked,
+} from "@/components/distribution/matrix-catalog-product-picker";
+import { CLIENT_CATEGORY_META, type ClientCategoryId } from "@/lib/client-category";
+import { inferMatrixSegmentFrom1c, isMatrixPeriodRangeValid } from "@/lib/distribution-matrix-catalog-view-model";
 import { PLACEMENT_SEGMENT_LABEL_RU } from "@/lib/showcase-placement-labels";
 import type {
   ShowcaseMatrixCatalogPriority,
@@ -59,7 +57,12 @@ export type MatrixCatalogDefEditorSheetProps = {
   onSaved: () => void;
 };
 
-type EditorModelRow = ShowcaseMatrixDefModelInput & { key: string };
+type EditorModelRow = ShowcaseMatrixDefModelInput & {
+  key: string;
+  displayName?: string | null;
+  imageUrl?: string | null;
+  brand?: string | null;
+};
 
 const PRIORITIES: ShowcaseMatrixCatalogPriority[] = ["high", "medium", "low"];
 const SEGMENTS: ShowcaseMatrixCatalogSegment[] = ["vh", "mk", "hardware"];
@@ -228,19 +231,23 @@ export function MatrixCatalogDefEditorSheet(props: MatrixCatalogDefEditorSheetPr
     setModels((prev) => prev.map((m) => (m.key === key ? { ...m, ...patch } : m)));
   };
 
-  const addProducts = (products: CatalogProduct[]) => {
+  const addProducts = (products: Catalog1cPicked[]) => {
     setModels((prev) => {
       const next = [...prev];
       for (const p of products) {
         if (next.some((m) => m.targetId === p.id)) continue;
+        const hint = [p.doorTypeHint, p.categoryHint, p.name, p.displayName].filter(Boolean).join(" ");
         next.push({
           key: newRowKey(),
           targetKind: "model",
           targetId: p.id,
           priority: "medium",
-          segment: inferMatrixSegmentFromCatalogProduct(p),
+          segment: inferMatrixSegmentFrom1c(hint),
           valueWeight: null,
           sortOrder: next.length,
+          displayName: p.displayName ?? p.name,
+          imageUrl: p.imageUrl ?? null,
+          brand: p.brand ?? null,
         });
       }
       return next;
@@ -459,26 +466,28 @@ export function MatrixCatalogDefEditorSheet(props: MatrixCatalogDefEditorSheetPr
                 ) : (
                   <ul className="space-y-3">
                     {models.map((m, index) => {
-                      const product = getProductById(m.targetId);
                       const typeShort =
-                        product?.doorKind === "Входная" ? "ВХ" : product?.doorKind === "Межкомнатная" ? "МК" : "—";
+                        m.segment === "vh" ? "ВХ" : m.segment === "mk" ? "МК" : m.segment === "hardware" ? "Фурн." : "—";
+                      const label = m.displayName?.trim() || m.targetId;
                       return (
                         <li key={m.key} className="rounded-lg border border-border bg-card p-3">
                           <div className="flex gap-2">
                             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-muted/40">
-                              {product?.image ? (
-                                <img src={product.image} alt="" className="max-h-full max-w-full object-contain" loading="lazy" />
+                              {m.imageUrl ? (
+                                <img src={m.imageUrl} alt="" className="max-h-full max-w-full object-contain" loading="lazy" />
                               ) : null}
                             </div>
                             <div className="min-w-0 flex-1">
-                              <p className="text-sm font-medium text-foreground">{product?.name ?? m.targetId}</p>
+                              <p className="text-sm font-medium text-foreground">{label}</p>
                               <div className="mt-1 flex flex-wrap gap-1">
                                 <Badge variant="outline" className="h-5 px-1.5 text-[10px] font-normal">
                                   {typeShort}
                                 </Badge>
-                                <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-normal">
-                                  {product?.type ?? "—"}
-                                </Badge>
+                                {m.brand?.trim() ? (
+                                  <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-normal">
+                                    {m.brand}
+                                  </Badge>
+                                ) : null}
                               </div>
                             </div>
                             {canEdit ? (

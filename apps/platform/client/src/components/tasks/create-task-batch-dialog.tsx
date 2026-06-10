@@ -20,9 +20,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { MatrixCatalogProductPicker } from "@/components/distribution/matrix-catalog-product-picker";
+import {
+  MatrixCatalogProductPicker,
+  type Catalog1cPicked,
+} from "@/components/distribution/matrix-catalog-product-picker";
 import { useToast } from "@/hooks/use-toast";
-import type { CatalogProduct } from "@/lib/catalog-product-type";
 import { createAssignmentsBatch, type AssignmentItemInput } from "@/lib/showcase-assignments-api";
 import type { TaskSelectTarget } from "@/lib/task-select-mode";
 import { listManagerPickerUsers, pickerUserById, type PickerUser } from "@/lib/users-picker-api";
@@ -82,10 +84,10 @@ export function CreateTaskBatchDialog({
 
   const excludeCatalogIds = useMemo(() => new Set(selectedModels.keys()), [selectedModels]);
 
-  const handleCatalogConfirm = useCallback((products: CatalogProduct[]) => {
+  const handleCatalogConfirm = useCallback((products: Catalog1cPicked[]) => {
     setSelectedModels((prev) => {
       const next = new Map(prev);
-      for (const p of products) next.set(p.id, p.name);
+      for (const p of products) next.set(p.id, p.displayName?.trim() || p.name);
       return next;
     });
   }, []);
