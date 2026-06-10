@@ -11,6 +11,7 @@ import assert from "node:assert/strict";
 import {
   canonicalizeRole,
   fetchActualizationBatchParts,
+  fetchRopGrantOwnerUserIds,
   getBatchUserIds,
   fetchTeamScopedUserIds,
   resolveVisibleUserScopeKeys,
@@ -45,10 +46,16 @@ import {
 // =====================================================
 // 2. SQL-mock helper
 // =====================================================
-type Call = { kind: "scope_keys" | "team" | "unknown"; raw: string };
+type Call = { kind: "scope_keys" | "team" | "grants" | "owners" | "tp_dealer" | "unknown"; raw: string };
 
 function makeMockSql(
-  responses: Partial<{ scopeKeys: Array<{ scope_key: string }>; teamUserIds: Array<{ user_id: string }> }>,
+  responses: Partial<{
+    scopeKeys: Array<{ scope_key: string }>;
+    teamUserIds: Array<{ user_id: string }>;
+    ropGrants: Array<{ client_code: string | null; trade_point_id: string | null }>;
+    grantOwners: Array<{ user_id: string }>;
+    tpDealer: Array<{ dealer_id: string }>;
+  }>,
 ): { sql: SqlFn; calls: Call[] } {
   const calls: Call[] = [];
   const sql: SqlFn = (strings, ..._params) => {
@@ -60,6 +67,18 @@ function makeMockSql(
     if (raw.includes("user_team_memberships")) {
       calls.push({ kind: "team", raw });
       return Promise.resolve(responses.teamUserIds ?? []);
+    }
+    if (raw.includes("rop_client_grants")) {
+      calls.push({ kind: "grants", raw });
+      return Promise.resolve(responses.ropGrants ?? []);
+    }
+    if (raw.includes("client_assignments") && raw.includes("responsible_user_id")) {
+      calls.push({ kind: "owners", raw });
+      return Promise.resolve(responses.grantOwners ?? []);
+    }
+    if (raw.includes("trade_point_overrides")) {
+      calls.push({ kind: "tp_dealer", raw });
+      return Promise.resolve(responses.tpDealer ?? []);
     }
     calls.push({ kind: "unknown", raw });
     return Promise.resolve([]);
@@ -97,15 +116,16 @@ async function testRopRoles(): Promise<void> {
     const { sql, calls } = makeMockSql({ teamUserIds: teamRows });
     const r = await fetchTeamScopedUserIds(sql, "rop-kupiansky", "rop");
     assert.deepEqual(r.sort(), ["mgr-boyko-em", "mgr-sklyarov-dv", "rop-kupiansky"].sort(), "case C: rop → команда");
-    assert.equal(calls.length, 1, "case C: должен быть один SQL");
+    assert.equal(calls.length, 2, "case C: team + rop_client_grants");
     assert.equal(calls[0]?.kind, "team", "case C: team-запрос");
+    assert.equal(calls[1]?.kind, "grants", "case C: grants-запрос");
   }
   // case D: role="team_lead" (синоним)
   {
     const { sql, calls } = makeMockSql({ teamUserIds: teamRows });
     const r = await fetchTeamScopedUserIds(sql, "rop-kupiansky", "team_lead");
     assert.deepEqual(r.sort(), ["mgr-boyko-em", "mgr-sklyarov-dv", "rop-kupiansky"].sort(), "case D: team_lead → команда");
-    assert.equal(calls.length, 1, "case D: один SQL");
+    assert.equal(calls.length, 2, "case D: team + grants");
   }
   // case C.1: РОП без своего currentUserId в результате — должен быть добавлен (fallback в код).
   {
@@ -115,6 +135,30 @@ async function testRopRoles(): Promise<void> {
     const r = await fetchTeamScopedUserIds(sql, "rop-kupiansky", "rop");
     assert.ok(r.includes("rop-kupiansky"), "case C.1: currentUserId добавлен в результат");
   }
+  // case C.2: РОП с грантом на чужой client_code — видит userId владельца дополнительно к команде.
+  {
+    const { sql } = makeMockSql({
+      teamUserIds: [{ user_id: "mgr-boyko-em" }, { user_id: "rop-kupiansky" }],
+      ropGrants: [{ client_code: "MA-MA138425", trade_point_id: null }],
+      grantOwners: [{ user_id: "mgr-yakubova-ys" }],
+    });
+    const r = await fetchTeamScopedUserIds(sql, "rop-voronezh", "rop");
+    assert.ok(r.includes("mgr-boyko-em"), "case C.2: команда сохранена");
+    assert.ok(r.includes("rop-voronezh"), "case C.2: self в scope");
+    assert.ok(r.includes("mgr-yakubova-ys"), "case C.2: владелец из гранта добавлен");
+  }
+}
+
+// =====================================================
+// 4b. fetchRopGrantOwnerUserIds — только владельцы из грантов
+// =====================================================
+async function testRopGrantOwners(): Promise<void> {
+  const { sql } = makeMockSql({
+    ropGrants: [{ client_code: "MA-MA138425", trade_point_id: null }],
+    grantOwners: [{ user_id: "mgr-yakubova-ys" }],
+  });
+  const owners = await fetchRopGrantOwnerUserIds(sql, "rop-voronezh");
+  assert.deepEqual(owners, ["mgr-yakubova-ys"], "grant owners: responsible_user_id из client_assignments");
 }
 
 // =====================================================
@@ -241,11 +285,12 @@ function testGetBatchUserIdsParsing(): void {
   testGetBatchUserIdsParsing();
   await testManagerRoles();
   await testRopRoles();
+  await testRopGrantOwners();
   await testAllAccessRoles();
   await testUnknownRoles();
   await testResolveVisibleScopeKeys();
   await testBatchFetchParts();
-  console.log("scope-isolation: ok (canonicalize + 7 integration cases)");
+  console.log("scope-isolation: ok (canonicalize + 8 integration cases)");
 })().catch((e) => {
   console.error(e);
   process.exit(1);

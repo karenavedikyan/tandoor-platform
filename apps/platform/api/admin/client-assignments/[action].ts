@@ -25,6 +25,9 @@ import {
   handleClientAssignmentHistory,
   handleClientsAssignmentsList,
   handleClientsReassign,
+  handleRopGrantsAdd,
+  handleRopGrantsList,
+  handleRopGrantsRemove,
   handleUserTeamHistory,
   handleUserTeamReassign,
 } from "../../../shared/admin/client-assignments-handlers.js";
@@ -73,6 +76,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "client-assignment-filter-options" && req.method === "GET") {
       await handleClientAssignmentFilterOptions(req, res, pool, me);
+      return;
+    }
+    if (action === "rop-grants" && req.method === "GET") {
+      await handleRopGrantsList(req, res, pool, me);
+      return;
+    }
+    if (action === "rop-grants-add" && req.method === "POST") {
+      await handleRopGrantsAdd(req, res, pool, me);
+      return;
+    }
+    if (action === "rop-grants-remove" && req.method === "POST") {
+      await handleRopGrantsRemove(req, res, pool, me);
       return;
     }
 

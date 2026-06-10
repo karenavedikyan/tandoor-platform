@@ -273,6 +273,42 @@ export function canonicalizeRole(role: string | null | undefined): CanonicalRole
  *
  * `unknown` (роль не передана) — самый узкий scope: только current user.
  */
+function dealerIdToClientCode(dealerId: string): string {
+  return dealerId.replace(/^client-/i, "").toUpperCase();
+}
+
+/** Владельцы клиентов из rop_client_grants (только для роли rop). */
+export async function fetchRopGrantOwnerUserIds(sql: SqlFn, ropUserId: string): Promise<string[]> {
+  const grantRows = await sql`
+    SELECT client_code, trade_point_id
+    FROM rop_client_grants
+    WHERE rop_user_id = ${ropUserId}
+  `;
+  const clientCodes = new Set<string>();
+  for (const row of grantRows) {
+    const cc = row.client_code != null ? String(row.client_code).trim() : "";
+    if (cc) clientCodes.add(cc.toUpperCase());
+    const tpId = row.trade_point_id != null ? String(row.trade_point_id).trim() : "";
+    if (tpId) {
+      const tpRows = await sql`
+        SELECT dealer_id FROM trade_point_overrides WHERE tp_id = ${tpId} LIMIT 1
+      `;
+      const dealerId = tpRows[0]?.dealer_id != null ? String(tpRows[0].dealer_id) : "";
+      if (dealerId) clientCodes.add(dealerIdToClientCode(dealerId));
+    }
+  }
+  if (clientCodes.size === 0) return [];
+  const codes = Array.from(clientCodes);
+  const ownerRows = await sql`
+    SELECT DISTINCT responsible_user_id::text AS user_id
+    FROM client_assignments
+    WHERE upper(client_code) = ANY(${codes})
+  `;
+  return ownerRows
+    .map((r) => String(r.user_id ?? "").trim())
+    .filter((id) => id.length > 0);
+}
+
 export async function fetchTeamScopedUserIds(
   sql: SqlFn,
   currentUserId: string,
@@ -298,6 +334,10 @@ export async function fetchTeamScopedUserIds(
     `;
     const ids = rows.map((r) => String(r.user_id));
     if (!ids.includes(currentUserId)) ids.push(currentUserId);
+    const grantOwners = await fetchRopGrantOwnerUserIds(sql, currentUserId);
+    for (const ownerId of grantOwners) {
+      if (!ids.includes(ownerId)) ids.push(ownerId);
+    }
     return ids;
   }
 
