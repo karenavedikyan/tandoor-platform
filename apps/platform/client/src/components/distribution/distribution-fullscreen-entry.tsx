@@ -506,7 +506,7 @@ export function DistributionFullscreenEntry({
 
   const workStatusHint = useMemo(() => {
     if (workStatus === "all") {
-      return "Выбранный статус показывается в списке. Тапните по карточкам — статус применится к ним и сохранится по кнопке «Сохранить».";
+      return "Выбранный статус показывается в списке. Отметьте модели нужным статусом и сохраните по кнопке «Сохранить».";
     }
     if (workStatus === "need_install") {
       return "Показаны модели из матрицы, которые нужно поставить. Чтобы добавить другие — откройте «Весь каталог».";
@@ -1171,17 +1171,23 @@ export function DistributionFullscreenEntry({
               onValueChange={(v) => setSourceTab(v as SourceTab)}
               className="min-w-0 shrink-0"
             >
-              <TabsList className="grid h-auto min-h-9 w-full min-w-[12rem] max-w-md grid-cols-2 gap-1 p-0.5">
+              <TabsList className="grid h-auto min-h-9 w-full min-w-[12rem] max-w-md grid-cols-2 gap-1 rounded-lg border border-border bg-muted/60 p-0.5">
                 <TabsTrigger
                   value="matrix"
-                  className="min-h-9 text-xs sm:text-sm"
+                  className={cn(
+                    "min-h-9 text-xs sm:text-sm",
+                    "data-[state=active]:bg-primary data-[state=active]:font-semibold data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm",
+                  )}
                   data-testid="tab-fullscreen-entry-matrix"
                 >
                   Из матрицы
                 </TabsTrigger>
                 <TabsTrigger
                   value="catalog"
-                  className="min-h-9 text-xs sm:text-sm"
+                  className={cn(
+                    "min-h-9 text-xs sm:text-sm",
+                    "data-[state=active]:bg-primary data-[state=active]:font-semibold data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm",
+                  )}
                   data-testid="tab-fullscreen-entry-catalog"
                 >
                   Весь каталог
