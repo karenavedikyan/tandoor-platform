@@ -4,7 +4,7 @@
  */
 
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import { getPassportLegalEntities } from "@/lib/dealer-card-release-signals";
+import { getPassportLegalEntities, type PassportLegalEntity } from "@/lib/dealer-card-release-signals";
 import { canEditClientNextStep } from "@/lib/client-next-step-data";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import {
@@ -236,21 +236,23 @@ function normalizeEntityName(s: string): string {
   return s.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-/** Объединяет юрлица из localStorage и справочные названия из релиза (паспорт). */
+function isPassportSeedCoveredByStored(p: PassportLegalEntity, stored: DealerLegalEntity[]): boolean {
+  const storedNames = new Set(
+    stored.map((e) => normalizeEntityName(e.name)).filter(Boolean) as string[],
+  );
+  const name = normalizeEntityName(p.name);
+  if (!name) return true;
+  return storedNames.has(name);
+}
+
+/** Объединяет юрлица из Postgres-кеша и справочные названия из релиза (паспорт). */
 export function getMergedDealerLegalEntities(row: DealerRow, state?: DealerLegalEntitiesState): MergedDealerLegalEntity[] {
   const st = state ?? resolveState(row.id);
   const stored = getDealerLegalEntities(row.id, st);
-  const storedNorm = stored.map((e) => normalizeEntityName(e.name)).filter(Boolean);
   const passport = getPassportLegalEntities(row);
 
-  const isCoveredByStored = (seedName: string): boolean => {
-    const n = normalizeEntityName(seedName);
-    if (!n) return true;
-    return storedNorm.some((s) => s === n || s.includes(n) || n.includes(s));
-  };
-
   const seeds: MergedDealerLegalEntity[] = passport
-    .filter((p) => !isCoveredByStored(p.name))
+    .filter((p) => !isPassportSeedCoveredByStored(p, stored))
     .map((p) => ({
       id: `passport:${p.legalEntityId}`,
       name: p.name,
@@ -463,8 +465,32 @@ export async function ensureServerLegalEntityId(
   updatedByName: string,
 ): Promise<string | null> {
   await refreshDbLegalEntitiesForDealer(dealerId);
-  const resolved = resolveServerLegalEntityId(dealerId, entity);
+  let resolved = resolveServerLegalEntityId(dealerId, entity);
   if (resolved) return resolved;
+
+  const internalCode = normalizeInternalCode(entity.internalCode);
+  if (internalCode) {
+    await refreshDbLegalEntitiesForDealer(dealerId);
+    const serverEntities = getDealerLegalEntities(dealerId);
+    resolved = resolveServerLegalEntityIdFromList(entity, serverEntities);
+    if (resolved) return resolved;
+
+    const byCode = serverEntities.find(
+      (e) => isLegalEntityServerUuid(e.id) && normalizeInternalCode(e.internalCode) === internalCode,
+    );
+    if (byCode) return byCode.id;
+
+    return null;
+  }
+
+  const inn = normalizeLegalEntityInn(entity.inn);
+  if (inn) {
+    const byInnMatches = getDealerLegalEntities(dealerId).filter(
+      (e) => isLegalEntityServerUuid(e.id) && normalizeLegalEntityInn(e.inn) === inn,
+    );
+    if (byInnMatches.length === 1) return byInnMatches[0]!.id;
+    if (byInnMatches.length > 1) return null;
+  }
 
   const name = entity.name.trim();
   if (!name || name === "—") return null;
