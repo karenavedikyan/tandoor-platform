@@ -7,8 +7,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { BackNav } from "@/components/navigation/back-nav";
 import { breadcrumbsFor } from "@/lib/navigation/route-hierarchy";
-import { Check, ChevronsUpDown, History, Loader2 } from "lucide-react";
+import { Check, ChevronDown, ChevronsUpDown, History, Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -392,6 +394,7 @@ export default function AdminClientAssignmentsPage() {
   const [grantRopUserId, setGrantRopUserId] = useState("");
   const [grantReason, setGrantReason] = useState("");
   const [grantLoading, setGrantLoading] = useState(false);
+  const [grantsOpen, setGrantsOpen] = useState(false);
 
   const [sheetCode, setSheetCode] = useState<string | null>(null);
   const sheetQ = useQuery({
@@ -533,11 +536,11 @@ export default function AdminClientAssignmentsPage() {
       </div>
 
       <Card className="rounded-xl border border-border bg-card shadow-sm">
-        <CardHeader>
+        <CardHeader className="pb-3">
           <CardTitle>Фильтры</CardTitle>
           <CardDescription>Поиск по коду или имени клиента, ответственный, команда и поля карточки клиента.</CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col gap-4 lg:flex-row lg:flex-wrap lg:items-end">
+        <CardContent className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end">
           <div className="min-w-0 flex-1 space-y-2 lg:min-w-[200px]">
             <Label htmlFor="ca-search">Поиск</Label>
             <Input
@@ -631,7 +634,7 @@ export default function AdminClientAssignmentsPage() {
               Дать доступ РОПу
             </ToggleGroupItem>
           </ToggleGroup>
-          <p className="text-sm text-muted-foreground" data-testid="text-client-assignments-mode-hint">
+          <p className="text-xs text-muted-foreground" data-testid="text-client-assignments-mode-hint">
             {actionMode === "reassign"
               ? "Меняется ответственный (владелец) у выбранных клиентов."
               : "РОП дополнительно видит выбранных клиентов. Владелец и команда НЕ меняются."}
@@ -641,10 +644,10 @@ export default function AdminClientAssignmentsPage() {
 
       {canManageRopGrants && actionMode === "grant" ? (
         <Card className="rounded-xl border border-border bg-card shadow-sm" data-testid="section-rop-client-grants">
-          <CardHeader>
+          <CardHeader className="pb-3">
             <CardTitle>Доп. доступ РОПа</CardTitle>
             <CardDescription>
-              РОП дополнительно увидит выбранных клиентов и их ТТ. Владелец и команда клиента не меняются.
+              РОП дополнительно видит выбранных клиентов. Владелец и команда не меняются.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -677,61 +680,98 @@ export default function AdminClientAssignmentsPage() {
             </div>
 
             {grantRopUserId ? (
-              <div className="space-y-2">
-                <Label>Текущие гранты</Label>
-                {ropGrantsQ.isLoading ? (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Загрузка…
-                  </div>
-                ) : ropGrantsQ.isError ? (
-                  <p className="text-sm text-destructive">{(ropGrantsQ.error as Error)?.message ?? "Ошибка"}</p>
-                ) : ropGrants.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Нет дополнительных грантов</p>
-                ) : (
-                  <ul className="space-y-2 rounded-md border border-border/80 bg-muted/20 p-3 text-sm">
-                    {ropGrants.map((g) => (
-                      <li key={g.id} className="flex items-start justify-between gap-2">
-                        <span className="min-w-0 break-words">
-                          {g.clientCode ? (
-                            <>
-                              <span className="font-mono">{g.clientCode}</span>
-                              {g.clientName ? ` · ${g.clientName}` : null}
-                            </>
-                          ) : (
-                            <>
-                              <span className="font-mono">{g.tradePointId}</span>
-                              {g.tradePointName ? ` · ${g.tradePointName}` : null}
-                            </>
-                          )}
-                          {g.reason ? (
-                            <span className="mt-0.5 block text-xs text-muted-foreground">{g.reason}</span>
+              <Collapsible open={grantsOpen} onOpenChange={setGrantsOpen}>
+                <CollapsibleTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="min-h-11 w-full justify-between px-2 font-normal"
+                    data-testid="toggle-rop-grants-list"
+                  >
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="text-sm font-medium">Текущие гранты</span>
+                      {ropGrantsQ.isLoading ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden />
+                      ) : (
+                        <>
+                          <Badge variant="secondary" className="font-normal tabular-nums">
+                            {ropGrants.length}
+                          </Badge>
+                          {ropGrants.length === 0 ? (
+                            <span className="text-xs text-muted-foreground">нет</span>
                           ) : null}
-                        </span>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 shrink-0"
-                          aria-label="Удалить грант"
-                          data-testid={`button-rop-grant-remove-${g.id}`}
-                          onClick={async () => {
-                            const r = await removeRopGrants([g.id]);
-                            if (!r.ok) {
-                              toast({ title: r.message, variant: "destructive" });
-                              return;
-                            }
-                            toast({ title: "Доступ снят" });
-                            await qc.invalidateQueries({ queryKey: ["client-assignments", "rop-grants"] });
-                          }}
-                        >
-                          ×
-                        </Button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+                        </>
+                      )}
+                    </span>
+                    <ChevronDown
+                      className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", grantsOpen && "rotate-180")}
+                      aria-hidden
+                    />
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  {ropGrantsQ.isLoading ? (
+                    <div className="mt-2 flex items-center gap-2 px-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Загрузка…
+                    </div>
+                  ) : ropGrantsQ.isError ? (
+                    <p className="mt-2 px-2 text-sm text-destructive">
+                      {(ropGrantsQ.error as Error)?.message ?? "Ошибка"}
+                    </p>
+                  ) : ropGrants.length === 0 ? (
+                    <p className="mt-2 px-2 text-sm text-muted-foreground">Нет дополнительных грантов</p>
+                  ) : (
+                    <ul className="mt-2 max-h-64 space-y-2 overflow-auto rounded-md border border-border/80 bg-muted/20 p-3 text-sm">
+                      {ropGrants.map((g) => (
+                        <li key={g.id} className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex min-w-0 items-center gap-1.5">
+                              {g.clientCode ? (
+                                <>
+                                  <span className="shrink-0 font-mono text-xs">{g.clientCode}</span>
+                                  {g.clientName ? (
+                                    <span className="min-w-0 truncate text-xs">{g.clientName}</span>
+                                  ) : null}
+                                </>
+                              ) : (
+                                <>
+                                  <span className="shrink-0 font-mono text-xs">{g.tradePointId}</span>
+                                  {g.tradePointName ? (
+                                    <span className="min-w-0 truncate text-xs">{g.tradePointName}</span>
+                                  ) : null}
+                                </>
+                              )}
+                            </div>
+                            {g.reason ? (
+                              <p className="mt-0.5 text-xs text-muted-foreground">{g.reason}</p>
+                            ) : null}
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 shrink-0"
+                            aria-label="Удалить грант"
+                            data-testid={`button-rop-grant-remove-${g.id}`}
+                            onClick={async () => {
+                              const r = await removeRopGrants([g.id]);
+                              if (!r.ok) {
+                                toast({ title: r.message, variant: "destructive" });
+                                return;
+                              }
+                              toast({ title: "Доступ снят" });
+                              await qc.invalidateQueries({ queryKey: ["client-assignments", "rop-grants"] });
+                            }}
+                          >
+                            ×
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </CollapsibleContent>
+              </Collapsible>
             ) : null}
           </CardContent>
         </Card>
