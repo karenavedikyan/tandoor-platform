@@ -187,14 +187,25 @@ export function getDealerLegalEntities(dealerId: string, state?: DealerLegalEnti
   return [...(st.entitiesByDealer[dealerId] ?? [])];
 }
 
+function normalizeEntityName(s: string): string {
+  return s.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
 /** Объединяет юрлица из localStorage и справочные названия из релиза (паспорт). */
 export function getMergedDealerLegalEntities(row: DealerRow, state?: DealerLegalEntitiesState): MergedDealerLegalEntity[] {
   const st = state ?? resolveState(row.id);
   const stored = getDealerLegalEntities(row.id, st);
-  const storedNames = new Set(stored.map((e) => e.name.trim().toLowerCase()));
+  const storedNorm = stored.map((e) => normalizeEntityName(e.name)).filter(Boolean);
   const passport = getPassportLegalEntities(row);
+
+  const isCoveredByStored = (seedName: string): boolean => {
+    const n = normalizeEntityName(seedName);
+    if (!n) return true;
+    return storedNorm.some((s) => s === n || s.includes(n) || n.includes(s));
+  };
+
   const seeds: MergedDealerLegalEntity[] = passport
-    .filter((p) => !storedNames.has(p.name.trim().toLowerCase()))
+    .filter((p) => !isCoveredByStored(p.name))
     .map((p) => ({
       id: `passport:${p.legalEntityId}`,
       name: p.name,

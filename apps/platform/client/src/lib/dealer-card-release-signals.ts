@@ -144,9 +144,9 @@ export function getPassportLegalEntities(row: DealerRow): PassportLegalEntity[] 
   for (const raw of [row.legalEntity, row.holding]) {
     const t = raw.trim();
     if (!t || t === "—" || t === "-") continue;
-    for (const part of t.split(/[;,]/)) {
+    for (const part of t.split(/;/)) {
       const p = part.trim();
-      if (p && p !== "—") chunks.push(p);
+      if (p && p !== "—" && p !== "-") chunks.push(p);
     }
   }
   const uniq = Array.from(new Set(chunks));
