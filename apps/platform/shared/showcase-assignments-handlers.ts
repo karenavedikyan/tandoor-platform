@@ -99,7 +99,7 @@ export class AssignmentValidationError extends Error {
 }
 
 // Роли, которым разрешено работать с заданиями.
-const CREATE_ROLES = new Set(["admin", "director", "rop", "regional_manager"]);
+const CREATE_ROLES = new Set(["admin", "director", "rop", "regional_manager", "manager"]);
 const VERIFY_ROLES = new Set(["admin", "director", "rop", "regional_manager"]);
 const ANY_ROLE = new Set(["admin", "director", "rop", "regional_manager", "manager"]);
 const ELEVATED_ROLES = new Set(["admin", "director"]);

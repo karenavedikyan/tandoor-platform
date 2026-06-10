@@ -6,7 +6,6 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronUp,
-  ClipboardList,
   Grid3x3,
   LayoutGrid,
   List,
@@ -111,7 +110,7 @@ function assigneeRoleLabel(role: string): string {
   return "";
 }
 
-const ASSIGNMENT_CREATE_ROLES = new Set(["admin", "director", "rop", "regional_manager"]);
+const ASSIGNMENT_CREATE_ROLES = new Set(["admin", "director", "rop", "regional_manager", "manager"]);
 
 function fullscreenEntryProductGridClass(size: CatalogCardSize, compact: boolean): string {
   if (size === "list") return "flex flex-col gap-2";
@@ -236,6 +235,8 @@ export function DistributionFullscreenEntry({
   const [assignmentManagers, setAssignmentManagers] = useState<PickerUser[]>([]);
   const [assignmentManagersLoading, setAssignmentManagersLoading] = useState(false);
   const [assignmentManagersError, setAssignmentManagersError] = useState("");
+  const [assignmentDialogItemIds, setAssignmentDialogItemIds] = useState<string[]>([]);
+  const [pendingAssignmentOpenIds, setPendingAssignmentOpenIds] = useState<string[] | null>(null);
 
   useEffect(() => {
     writeCatalogCardSizeToStorage(CARD_SIZE_STORAGE_KEY, cardSize);
@@ -462,6 +463,13 @@ export function DistributionFullscreenEntry({
   const needInstallCount = needInstallMarkedIds.size;
   const installedCount = useMemo(() => countInstalledInDraft(draft), [draft]);
 
+  const canCreateAssignment = useMemo(
+    () => Boolean(user?.role && ASSIGNMENT_CREATE_ROLES.has(user.role)),
+    [user?.role],
+  );
+
+  const assigneeRequired = user?.role !== "manager";
+
   const orderedProducts = useMemo(() => {
     if (!(compactMode && quickStatus === "need_install")) return visibleProducts;
     return [...visibleProducts]
@@ -585,6 +593,8 @@ export function DistributionFullscreenEntry({
   const handleSave = useCallback(async () => {
     const saveIds = needInstallMode ? Array.from(needInstallMarkedIds) : changedIds;
     if (saveIds.length === 0 || saving) return;
+    const shouldOpenAssignmentDialog =
+      needInstallMode && canCreateAssignment && saveIds.length > 0;
     setSaving(true);
     try {
       for (const productId of saveIds) {
@@ -702,6 +712,9 @@ export function DistributionFullscreenEntry({
       if (needInstallMode) {
         setExplicitQuickMarks(new Set());
       }
+      if (shouldOpenAssignmentDialog) {
+        setPendingAssignmentOpenIds([...saveIds]);
+      }
     } finally {
       setSaving(false);
     }
@@ -709,6 +722,7 @@ export function DistributionFullscreenEntry({
     actorUserId,
     actorName,
     baselines,
+    canCreateAssignment,
     changedIds,
     dealer.id,
     draft,
@@ -721,18 +735,13 @@ export function DistributionFullscreenEntry({
     showSaveSyncToast,
   ]);
 
-  const canCreateAssignment = useMemo(
-    () => Boolean(user?.role && ASSIGNMENT_CREATE_ROLES.has(user.role)),
-    [user?.role],
-  );
-
   const assignmentSelectedModels = useMemo(
     () =>
-      Array.from(needInstallMarkedIds).map((id) => ({
+      assignmentDialogItemIds.map((id) => ({
         id,
         name: matrixModelById.get(id)?.name ?? id,
       })),
-    [matrixModelById, needInstallMarkedIds],
+    [matrixModelById, assignmentDialogItemIds],
   );
 
   const resetAssignmentDialog = useCallback(() => {
@@ -744,6 +753,7 @@ export function DistributionFullscreenEntry({
     setAssignmentComment("");
     setAssignmentSubmitting(false);
     setAssignmentManagersError("");
+    setAssignmentDialogItemIds([]);
   }, []);
 
   const handleAssignmentDialogOpenChange = useCallback(
@@ -754,45 +764,61 @@ export function DistributionFullscreenEntry({
     [resetAssignmentDialog],
   );
 
-  const handleOpenAssignmentDialog = useCallback(() => {
-    resetAssignmentDialog();
-    setAssignmentDialogOpen(true);
-    setAssignmentManagersLoading(true);
-    void fetchResolveTradePoint(point.id)
-      .then((resolved) => {
-        const ordered: Array<{ key: "manager" | "regional_manager" | "rop" }> = [
-          { key: "manager" },
-          { key: "regional_manager" },
-          { key: "rop" },
-        ];
-        const seen = new Set<string>();
-        const users: PickerUser[] = [];
-        for (const { key } of ordered) {
-          const r = resolved[key];
-          const id = r.userId?.trim();
-          if (!id || seen.has(id)) continue;
-          seen.add(id);
-          users.push({
-            id,
-            full_name: r.userName?.trim() || "—",
-            role: key,
-            status: "active",
-          });
-        }
-        setAssignmentManagers(users);
-        setAssignmentManagersError("");
-      })
-      .catch(() => {
-        setAssignmentManagers([]);
-        setAssignmentManagersError("Не удалось загрузить ответственных по точке.");
-      })
-      .finally(() => {
-        setAssignmentManagersLoading(false);
-      });
-  }, [resetAssignmentDialog, point.id]);
+  const handleOpenAssignmentDialog = useCallback(
+    (itemIds?: readonly string[]) => {
+      resetAssignmentDialog();
+      const ids = itemIds?.length ? [...itemIds] : Array.from(needInstallMarkedIds);
+      setAssignmentDialogItemIds(ids);
+      setAssignmentDialogOpen(true);
+      setAssignmentManagersLoading(true);
+      void fetchResolveTradePoint(point.id)
+        .then((resolved) => {
+          const ordered: Array<{ key: "manager" | "regional_manager" | "rop" }> = [
+            { key: "manager" },
+            { key: "regional_manager" },
+            { key: "rop" },
+          ];
+          const seen = new Set<string>();
+          const users: PickerUser[] = [];
+          for (const { key } of ordered) {
+            const r = resolved[key];
+            const id = r.userId?.trim();
+            if (!id || seen.has(id)) continue;
+            seen.add(id);
+            users.push({
+              id,
+              full_name: r.userName?.trim() || "—",
+              role: key,
+              status: "active",
+            });
+          }
+          setAssignmentManagers(users);
+          setAssignmentManagersError("");
+          if (actorUserId && users.some((u) => u.id === actorUserId)) {
+            setAssignmentAssigneeId(actorUserId);
+          } else {
+            setAssignmentAssigneeId(ASSIGNMENT_ASSIGNEE_NONE);
+          }
+        })
+        .catch(() => {
+          setAssignmentManagers([]);
+          setAssignmentManagersError("Не удалось загрузить ответственных по точке.");
+        })
+        .finally(() => {
+          setAssignmentManagersLoading(false);
+        });
+    },
+    [actorUserId, needInstallMarkedIds, point.id, resetAssignmentDialog],
+  );
+
+  useEffect(() => {
+    if (saving || !pendingAssignmentOpenIds?.length) return;
+    handleOpenAssignmentDialog(pendingAssignmentOpenIds);
+    setPendingAssignmentOpenIds(null);
+  }, [saving, pendingAssignmentOpenIds, handleOpenAssignmentDialog]);
 
   const handleCreateAssignment = useCallback(async () => {
-    if (assignmentSubmitting || needInstallCount === 0) return;
+    if (assignmentSubmitting || assignmentDialogItemIds.length === 0) return;
     setAssignmentSubmitting(true);
     try {
       const assignee =
@@ -807,7 +833,7 @@ export function DistributionFullscreenEntry({
         dueDate: assignmentDueDate || null,
         assigneeUserId: assignee?.id ?? null,
         assigneeName: assignee?.full_name ?? null,
-        items: Array.from(needInstallMarkedIds).map((id) => ({
+        items: assignmentDialogItemIds.map((id) => ({
           targetKind: "model" as const,
           targetId: id,
           modelName: matrixModelById.get(id)?.name,
@@ -829,12 +855,11 @@ export function DistributionFullscreenEntry({
     assignmentAssigneeId,
     assignmentComment,
     assignmentDueDate,
+    assignmentDialogItemIds,
     assignmentManagers,
     assignmentSubmitting,
     dealer.id,
     matrixModelById,
-    needInstallCount,
-    needInstallMarkedIds,
     point.id,
     point.name,
     toast,
@@ -1257,20 +1282,6 @@ export function DistributionFullscreenEntry({
         </Button>
       ) : null}
 
-      {compactMode && needInstallMode && canCreateAssignment ? (
-        <Button
-          type="button"
-          variant="outline"
-          className="fixed bottom-4 left-1/2 z-40 min-h-11 -translate-x-1/2 rounded-full bg-background/95 px-4 shadow-lg backdrop-blur"
-          disabled={needInstallCount === 0 || saving}
-          onClick={handleOpenAssignmentDialog}
-          data-testid="button-fullscreen-entry-create-assignment"
-        >
-          <ClipboardList className="mr-1.5 h-4 w-4" aria-hidden />
-          Задание на отгрузку
-        </Button>
-      ) : null}
-
       <Dialog open={assignmentDialogOpen} onOpenChange={handleAssignmentDialogOpenChange}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
           <DialogHeader>
@@ -1346,6 +1357,11 @@ export function DistributionFullscreenEntry({
                     назначьте ответственных в карточке точки.
                   </p>
                 ) : null}
+                {assigneeRequired && assignmentAssigneeId === ASSIGNMENT_ASSIGNEE_NONE ? (
+                  <p className="text-xs text-amber-600 dark:text-amber-500">
+                    Выберите ответственного исполнителя.
+                  </p>
+                ) : null}
               </div>
 
               <div className="space-y-1.5">
@@ -1388,7 +1404,11 @@ export function DistributionFullscreenEntry({
                 <Button
                   type="button"
                   onClick={() => void handleCreateAssignment()}
-                  disabled={assignmentSubmitting || needInstallCount === 0}
+                  disabled={
+                    assignmentSubmitting ||
+                    assignmentDialogItemIds.length === 0 ||
+                    (assigneeRequired && assignmentAssigneeId === ASSIGNMENT_ASSIGNEE_NONE)
+                  }
                   data-testid="button-assignment-submit"
                 >
                   {assignmentSubmitting ? (
