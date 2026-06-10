@@ -44,6 +44,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ResponsiveList, ResponsiveListDesktop, ResponsiveListMobile, ResponsiveListMobileItem } from "@/components/ui/responsive-list";
 import { useToast } from "@/hooks/use-toast";
@@ -79,8 +80,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   new_client: "Новый клиент",
 };
 
-const ctaButtonClass =
-  "min-h-11 bg-primary text-primary-foreground shadow-sm hover:bg-[#86B832] focus-visible:ring-primary";
+type ActionMode = "reassign" | "grant";
 
 function cellText(value: string | null | undefined): string {
   return value?.trim() || "—";
@@ -357,6 +357,8 @@ export default function AdminClientAssignmentsPage() {
   const [bulkReason, setBulkReason] = useState("");
   const [bulkLoading, setBulkLoading] = useState(false);
 
+  const [actionMode, setActionMode] = useState<ActionMode>("reassign");
+  const [grantConfirmOpen, setGrantConfirmOpen] = useState(false);
   const [grantRopUserId, setGrantRopUserId] = useState("");
   const [grantReason, setGrantReason] = useState("");
   const [grantLoading, setGrantLoading] = useState(false);
@@ -421,6 +423,38 @@ export default function AdminClientAssignmentsPage() {
     enabled: canPage && canManageRopGrants && Boolean(grantRopUserId),
   });
   const ropGrants: RopClientGrantRow[] = ropGrantsQ.data ?? [];
+
+  const bulkTargetUserName = useMemo(() => {
+    if (!bulkToUserId) return "";
+    return users.find((u) => u.id === bulkToUserId)?.fullName?.trim() ?? "";
+  }, [bulkToUserId, users]);
+
+  const grantRopUserName = useMemo(() => {
+    if (!grantRopUserId) return "";
+    return ropUsers.find((u) => u.id === grantRopUserId)?.fullName?.trim() ?? "";
+  }, [grantRopUserId, ropUsers]);
+
+  const confirmGrantAccess = async () => {
+    if (!grantRopUserId || selectedCount === 0) return;
+    setGrantLoading(true);
+    try {
+      const r = await addRopGrants({
+        ropUserId: grantRopUserId,
+        clientCodes: selectedCodes,
+        reason: grantReason.trim() || undefined,
+      });
+      if (!r.ok) {
+        toast({ title: r.message, variant: "destructive" });
+        return;
+      }
+      toast({ title: `Доступ выдан: ${r.added} грант(ов)` });
+      setSelected({});
+      setGrantConfirmOpen(false);
+      await qc.invalidateQueries({ queryKey: ["client-assignments", "rop-grants"] });
+    } finally {
+      setGrantLoading(false);
+    }
+  };
 
   if (!user || !canManageClientAssignments(user.role)) {
     return (
@@ -550,6 +584,39 @@ export default function AdminClientAssignmentsPage() {
       </Card>
 
       {canManageRopGrants ? (
+        <div className="space-y-2" data-testid="section-client-assignments-action-mode">
+          <ToggleGroup
+            type="single"
+            value={actionMode}
+            onValueChange={(v) => {
+              if (v === "reassign" || v === "grant") setActionMode(v);
+            }}
+            className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row"
+          >
+            <ToggleGroupItem
+              value="reassign"
+              className="min-h-11 flex-1 px-4 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+              data-testid="toggle-client-assignments-mode-reassign"
+            >
+              Переназначить ответственного
+            </ToggleGroupItem>
+            <ToggleGroupItem
+              value="grant"
+              className="min-h-11 flex-1 px-4 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+              data-testid="toggle-client-assignments-mode-grant"
+            >
+              Дать доступ РОПу
+            </ToggleGroupItem>
+          </ToggleGroup>
+          <p className="text-sm text-muted-foreground" data-testid="text-client-assignments-mode-hint">
+            {actionMode === "reassign"
+              ? "Меняется ответственный (владелец) у выбранных клиентов."
+              : "РОП дополнительно видит выбранных клиентов. Владелец и команда НЕ меняются."}
+          </p>
+        </div>
+      ) : null}
+
+      {canManageRopGrants && actionMode === "grant" ? (
         <Card className="rounded-xl border border-border bg-card shadow-sm" data-testid="section-rop-client-grants">
           <CardHeader>
             <CardTitle>Доп. доступ РОПа</CardTitle>
@@ -643,101 +710,8 @@ export default function AdminClientAssignmentsPage() {
                 )}
               </div>
             ) : null}
-
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm text-muted-foreground">
-                Выберите клиентов в таблице ниже (галочки) и выдайте доступ выбранному РОПу.
-                {selectedCount > 0 ? (
-                  <>
-                    {" "}
-                    Выбрано: <span className="font-semibold text-foreground">{selectedCount}</span>
-                  </>
-                ) : null}
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                className="min-h-11"
-                disabled={!grantRopUserId || selectedCount === 0 || grantLoading}
-                data-testid="button-rop-grants-add"
-                onClick={async () => {
-                  if (!grantRopUserId || selectedCount === 0) return;
-                  setGrantLoading(true);
-                  try {
-                    const r = await addRopGrants({
-                      ropUserId: grantRopUserId,
-                      clientCodes: selectedCodes,
-                      reason: grantReason.trim() || undefined,
-                    });
-                    if (!r.ok) {
-                      toast({ title: r.message, variant: "destructive" });
-                      return;
-                    }
-                    toast({ title: `Доступ выдан: ${r.added} грант(ов)` });
-                    setSelected({});
-                    await qc.invalidateQueries({ queryKey: ["client-assignments", "rop-grants"] });
-                  } finally {
-                    setGrantLoading(false);
-                  }
-                }}
-              >
-                {grantLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Сохранение…
-                  </>
-                ) : (
-                  "Дать доступ РОПу"
-                )}
-              </Button>
-            </div>
           </CardContent>
         </Card>
-      ) : null}
-
-      {hasActiveFilter ? (
-        <div
-          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/30 px-4 py-3"
-          data-testid="toolbar-client-assignments-filter-bulk"
-        >
-          <div className="text-sm text-muted-foreground">
-            По текущему фильтру: <span className="font-semibold text-foreground">{total}</span> (сервер переназначит до 1000)
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            className="min-h-11"
-            onClick={() => {
-              setBulkMode("filter");
-              setBulkOpen(true);
-            }}
-            data-testid="button-client-assignments-bulk-filter"
-          >
-            Переназначить всё по фильтру
-          </Button>
-        </div>
-      ) : null}
-
-      {selectedCount > 0 ? (
-        <div
-          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 px-4 py-3"
-          data-testid="toolbar-client-assignments-bulk"
-        >
-          <div className="text-sm text-muted-foreground">
-            Выбрано: <span className="font-semibold text-foreground">{selectedCount}</span>
-          </div>
-          <Button
-            type="button"
-            className={ctaButtonClass}
-            onClick={() => {
-              setBulkMode("selected");
-              setBulkOpen(true);
-            }}
-            data-testid="button-client-assignments-bulk"
-          >
-            Переназначить выбранных
-          </Button>
-        </div>
       ) : null}
 
       <Card className="rounded-xl border border-border bg-card shadow-sm">
@@ -908,14 +882,80 @@ export default function AdminClientAssignmentsPage() {
         </CardContent>
       </Card>
 
+      {(!canManageRopGrants || actionMode === "reassign") ? (
+        <div
+          className="flex flex-col gap-3 rounded-lg border border-border bg-muted/30 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end"
+          data-testid="toolbar-client-assignments-actions"
+        >
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11 w-full sm:w-auto"
+            disabled={!hasActiveFilter}
+            onClick={() => {
+              setBulkMode("filter");
+              setBulkOpen(true);
+            }}
+            data-testid="button-client-assignments-bulk-filter"
+          >
+            Переназначить всё по фильтру ({total})
+          </Button>
+          <Button
+            type="button"
+            variant="default"
+            className="min-h-11 w-full sm:w-auto"
+            disabled={selectedCount === 0}
+            onClick={() => {
+              setBulkMode("selected");
+              setBulkOpen(true);
+            }}
+            data-testid="button-client-assignments-bulk"
+          >
+            Переназначить выбранных ({selectedCount})
+          </Button>
+        </div>
+      ) : null}
+
+      {canManageRopGrants && actionMode === "grant" ? (
+        <div
+          className="flex flex-col gap-3 rounded-lg border border-border bg-muted/30 px-4 py-3 sm:flex-row sm:items-center sm:justify-end"
+          data-testid="toolbar-client-assignments-grant-action"
+        >
+          <Button
+            type="button"
+            variant="default"
+            className="min-h-11 w-full sm:w-auto"
+            disabled={!grantRopUserId || selectedCount === 0}
+            data-testid="button-rop-grants-add"
+            onClick={() => setGrantConfirmOpen(true)}
+          >
+            Дать доступ РОПу ({selectedCount})
+          </Button>
+        </div>
+      ) : null}
+
       <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>{bulkMode === "filter" ? "Переназначить по фильтру" : "Переназначить выбранных"}</DialogTitle>
             <DialogDescription>
-              {bulkMode === "filter"
-                ? `Будут переназначены все клиенты, подходящие под текущий фильтр (до 1000 за раз). По фильтру сейчас: ${total}.`
-                : `Будет переназначено клиентов: ${selectedCount}. Целевой пользователь должен состоять в команде.`}
+              {bulkToUserId && bulkTargetUserName ? (
+                bulkMode === "filter" ? (
+                  <>
+                    Будет изменён ответственный у всех клиентов под фильтром (до 1000, сейчас {total}) на:{" "}
+                    <span className="font-medium text-foreground">{bulkTargetUserName}</span>.
+                  </>
+                ) : (
+                  <>
+                    Будет изменён ответственный у {selectedCount} клиентов на:{" "}
+                    <span className="font-medium text-foreground">{bulkTargetUserName}</span>. Действие меняет владельца.
+                  </>
+                )
+              ) : bulkMode === "filter" ? (
+                `Выберите нового ответственного. Будут затронуты все клиенты под фильтром (до 1000, сейчас ${total}).`
+              ) : (
+                `Выберите нового ответственного. Будут затронуты ${selectedCount} выбранных клиентов.`
+              )}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -945,7 +985,6 @@ export default function AdminClientAssignmentsPage() {
             </Button>
             <Button
               type="button"
-              className={ctaButtonClass}
               disabled={
                 !bulkToUserId ||
                 bulkLoading ||
@@ -992,6 +1031,43 @@ export default function AdminClientAssignmentsPage() {
                 </>
               ) : (
                 "Переназначить"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={grantConfirmOpen} onOpenChange={(o) => !grantLoading && setGrantConfirmOpen(o)}>
+        <DialogContent className="max-w-md" data-testid="dialog-rop-grants-confirm">
+          <DialogHeader>
+            <DialogTitle>Дать доступ РОПу</DialogTitle>
+            <DialogDescription>
+              {grantRopUserName ? (
+                <>
+                  РОП <span className="font-medium text-foreground">{grantRopUserName}</span> получит доступ к просмотру{" "}
+                  {selectedCount} выбранных клиентов и их ТТ. Владелец и команда клиентов НЕ изменятся.
+                </>
+              ) : (
+                "Выберите РОПа в секции выше."
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={grantLoading} onClick={() => setGrantConfirmOpen(false)}>
+              Отмена
+            </Button>
+            <Button
+              type="button"
+              disabled={!grantRopUserId || selectedCount === 0 || grantLoading}
+              onClick={() => void confirmGrantAccess()}
+            >
+              {grantLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Сохранение…
+                </>
+              ) : (
+                "Дать доступ"
               )}
             </Button>
           </DialogFooter>
