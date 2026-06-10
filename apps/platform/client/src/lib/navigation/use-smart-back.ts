@@ -1,6 +1,10 @@
 import { useCallback } from "react";
 import { useLocation } from "wouter";
-import { getInternalNavDepth, markNextNavigationAsReplace } from "@/lib/navigation/navigation-depth";
+import {
+  getInternalNavDepth,
+  markNextNavigationAsReplace,
+  saveScrollForCurrentLocation,
+} from "@/lib/navigation/navigation-depth";
 import { parentRouteFor } from "@/lib/navigation/route-hierarchy";
 
 export function useSmartBack() {
@@ -9,7 +13,8 @@ export function useSmartBack() {
   const goBack = useCallback(
     (fallbackHref?: string) => {
       const depth = getInternalNavDepth();
-      if (depth > 0 && window.history.length > 1) {
+      if (depth > 0) {
+        saveScrollForCurrentLocation();
         window.history.back();
         return;
       }

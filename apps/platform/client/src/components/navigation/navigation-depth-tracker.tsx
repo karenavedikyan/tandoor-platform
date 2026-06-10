@@ -1,26 +1,41 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { useLocation } from "wouter";
-import { onLocationChange, onPopState } from "@/lib/navigation/navigation-depth";
+import {
+  onPopState,
+  saveScrollForCurrentLocation,
+  syncInAppLocation,
+} from "@/lib/navigation/navigation-depth";
 
 /** Подключается один раз в корне приложения для учёта глубины внутренней навигации. */
 export function NavigationDepthTracker() {
   const [location] = useLocation();
-  const isFirst = useRef(true);
 
   useEffect(() => {
-    const handlePop = () => onPopState();
-    window.addEventListener("popstate", handlePop);
-    return () => window.removeEventListener("popstate", handlePop);
+    const onPop = () => {
+      onPopState();
+      syncInAppLocation();
+    };
+    const onHash = () => syncInAppLocation();
+
+    window.addEventListener("popstate", onPop);
+    window.addEventListener("hashchange", onHash);
+    syncInAppLocation(true);
+
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      window.removeEventListener("hashchange", onHash);
+    };
   }, []);
 
   useEffect(() => {
-    if (isFirst.current) {
-      isFirst.current = false;
-      onLocationChange(location, true);
-      return;
-    }
-    onLocationChange(location);
+    syncInAppLocation();
   }, [location]);
+
+  useEffect(() => {
+    const onBeforeUnload = () => saveScrollForCurrentLocation();
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, []);
 
   return null;
 }

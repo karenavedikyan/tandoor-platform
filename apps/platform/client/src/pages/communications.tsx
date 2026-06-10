@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { useLocation } from "wouter";
 import { Info } from "lucide-react";
+import { BackNav } from "@/components/navigation/back-nav";
+import { breadcrumbsFor } from "@/lib/navigation/route-hierarchy";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +24,15 @@ import { toast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 const LAST_DIALOG_SESSION_KEY = "tandoor-communications-last-dialog-v1";
+
+function CommunicationsPageShell({ children }: { children: React.ReactNode }): ReactElement {
+  return (
+    <div className="mx-auto w-full max-w-6xl space-y-6" data-testid="page-communications">
+      <BackNav breadcrumbs={breadcrumbsFor("/communications")} fallbackHref="/main" />
+      {children}
+    </div>
+  );
+}
 
 type UiMode = "loading" | "error" | "not_configured" | "not_connected" | "connected";
 
@@ -322,18 +333,18 @@ export default function CommunicationsPage() {
 
   if (uiMode === "loading") {
     return (
-      <div className="mx-auto w-full max-w-6xl space-y-6" data-testid="page-communications">
+      <CommunicationsPageShell>
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Коммуникации</h1>
           <p className="mt-1 text-sm text-muted-foreground">Загрузка…</p>
         </div>
-      </div>
+      </CommunicationsPageShell>
     );
   }
 
   if (uiMode === "error") {
     return (
-      <div className="mx-auto w-full max-w-6xl space-y-6" data-testid="page-communications">
+      <CommunicationsPageShell>
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Коммуникации</h1>
           <p className="mt-1 text-sm text-muted-foreground">Bitrix24</p>
@@ -342,13 +353,13 @@ export default function CommunicationsPage() {
           <Info className="h-4 w-4" aria-hidden />
           <AlertDescription data-testid="text-communications-error">{pageError ?? "Произошла ошибка."}</AlertDescription>
         </Alert>
-      </div>
+      </CommunicationsPageShell>
     );
   }
 
   if (uiMode === "not_configured") {
     return (
-      <div className="mx-auto w-full max-w-6xl space-y-6" data-testid="page-communications">
+      <CommunicationsPageShell>
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Коммуникации</h1>
           <p className="mt-1 text-sm text-muted-foreground">Личные чаты и сообщения Bitrix24.</p>
@@ -360,13 +371,13 @@ export default function CommunicationsPage() {
             BITRIX24_OAUTH_CLIENT_SECRET и BITRIX24_PORTAL_DOMAIN.
           </AlertDescription>
         </Alert>
-      </div>
+      </CommunicationsPageShell>
     );
   }
 
   if (uiMode === "not_connected") {
     return (
-      <div className="mx-auto w-full max-w-6xl space-y-6" data-testid="page-communications">
+      <CommunicationsPageShell>
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Коммуникации</h1>
           <p className="mt-1 text-sm text-muted-foreground">Личные чаты только после персонального подключения Bitrix24.</p>
@@ -403,13 +414,13 @@ export default function CommunicationsPage() {
             </p>
           </CardContent>
         </Card>
-      </div>
+      </CommunicationsPageShell>
     );
   }
 
   // --- connected ---
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-6" data-testid="page-communications">
+    <CommunicationsPageShell>
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Коммуникации</h1>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -619,6 +630,6 @@ export default function CommunicationsPage() {
           </CardContent>
         </Card>
       </div>
-    </div>
+    </CommunicationsPageShell>
   );
 }

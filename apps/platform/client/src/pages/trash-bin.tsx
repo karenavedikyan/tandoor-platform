@@ -3,8 +3,9 @@
  */
 
 import { useCallback, useEffect, useMemo, useState, type ReactElement } from "react";
-import { Link } from "wouter";
 import { Archive, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
+import { BackNav } from "@/components/navigation/back-nav";
+import { breadcrumbsFor } from "@/lib/navigation/route-hierarchy";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -39,7 +40,6 @@ import {
   type TrashedTradePointInfo,
 } from "@/lib/client-base-actualization-state";
 import { formatDisplayDate, formatDisplayDateTime } from "@/lib/format-display-date";
-import { buildHashPath } from "@/lib/hash-route-utils";
 import { getReleaseClients } from "@/lib/release-client-data";
 import {
   ARCHIVE_PAGE_SIZE,
@@ -937,6 +937,7 @@ export function TrashBinPage(): ReactElement {
 
   return (
     <div className="min-w-0 max-w-full space-y-6 overflow-x-hidden pb-20" data-testid="page-trash-bin">
+      <BackNav breadcrumbs={breadcrumbsFor("/trash")} fallbackHref="/dealer-base" />
       <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
@@ -948,9 +949,6 @@ export function TrashBinPage(): ReactElement {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" asChild>
-            <Link href={buildHashPath("/dealer-base")}>К рабочей базе</Link>
-          </Button>
           {canRunPurge ? (
             <Button
               type="button"

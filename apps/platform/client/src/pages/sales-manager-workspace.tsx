@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { FloatingBackButton } from "@/components/navigation/floating-back-button";
+import { BackNav } from "@/components/navigation/back-nav";
+import { breadcrumbsFor } from "@/lib/navigation/route-hierarchy";
 import { canAccessPath } from "@/lib/auth-access";
 import { getClientCategoryBadgeClass, getClientCategoryLabel } from "@/lib/client-category";
 import { cn } from "@/lib/utils";
@@ -254,6 +255,7 @@ export default function SalesManagerWorkspace() {
 
   return (
     <div className="space-y-8 pb-24 sm:space-y-10" data-testid="page-sales-manager-workspace">
+      <BackNav breadcrumbs={breadcrumbsFor(path)} fallbackHref="/dealer-base" />
       <section
         className="relative overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-lg sm:p-8"
         data-testid="section-sales-manager-hero"
@@ -658,12 +660,6 @@ export default function SalesManagerWorkspace() {
         </div>
       </section>
 
-      <FloatingBackButton
-        href="/dealer-base"
-        label="К клиентской базе"
-        testId="floating-back-to-dealer-base"
-        ariaLabel="Назад к клиентской базе"
-      />
     </div>
   );
 }
