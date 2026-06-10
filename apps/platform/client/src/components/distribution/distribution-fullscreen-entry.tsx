@@ -450,6 +450,7 @@ export function DistributionFullscreenEntry({
     } else {
       list = catalogProducts;
     }
+    if (sourceTab === "catalog") return list;
     if (workStatus === "all") return list;
     return list.filter((p) => {
       const status = draft[p.id]?.status ?? baselines[p.id]?.status ?? "need_install";
