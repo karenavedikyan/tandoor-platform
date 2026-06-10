@@ -241,10 +241,11 @@ export function DealerBaseManagementCockpit({
     [],
   );
   const responsibleByCode = myCodesQ.data?.responsibleByCode ?? EMPTY_RESPONSIBLE_BY_CODE;
+  const grantedCodes = myCodesQ.data?.grantedCodes;
 
   const ropGroups = useMemo(
-    () => buildRopGroups(rows, teams, orgTeamCtx?.snap, responsibleByCode, userIdToCatalogMgrId),
-    [rows, teams, orgTeamCtx, responsibleByCode, userIdToCatalogMgrId],
+    () => buildRopGroups(rows, teams, orgTeamCtx?.snap, responsibleByCode, userIdToCatalogMgrId, grantedCodes),
+    [rows, teams, orgTeamCtx, responsibleByCode, userIdToCatalogMgrId, grantedCodes],
   );
 
   const ownTeamIds = useMemo(

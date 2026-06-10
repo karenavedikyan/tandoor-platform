@@ -1411,6 +1411,7 @@ export default function DealerBase() {
     return {
       ownCodes: myCodesQ.data.ownCodes,
       teamCodes: myCodesQ.data.teamCodes,
+      grantedCodes: myCodesQ.data.grantedCodes,
     };
   }, [myCodesQ.data]);
 

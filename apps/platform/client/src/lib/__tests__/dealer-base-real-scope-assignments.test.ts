@@ -4,6 +4,7 @@
 import assert from "node:assert/strict";
 import {
   assignmentsScopeIsActive,
+  rowInAssignmentsScope,
   roleScopedDealerRowsForReal,
   type AssignmentsScope,
 } from "../dealer-base-real-scope";
@@ -130,6 +131,38 @@ const scope: AssignmentsScope = {
     teamCodes: new Set(),
   });
   assert.equal(byIdOnly.length, 1, "id-only scope still works as fallback");
+}
+
+// Промт 275: grantedCodes — read-scope поверх own/team.
+{
+  const grantedScope: AssignmentsScope = {
+    ownCodes: new Set(),
+    teamCodes: new Set(),
+    grantedCodes: new Set(["MA-GRANTED"]),
+  };
+  assert.equal(assignmentsScopeIsActive(grantedScope), true);
+  const grantedRow = row("client-granted", { releaseCode: "MA-GRANTED" });
+  const otherRow = row("client-other", { releaseCode: "MA-OTHER" });
+  assert.equal(rowInAssignmentsScope(grantedRow, grantedScope), true);
+  assert.equal(rowInAssignmentsScope(otherRow, grantedScope), false);
+  const outMgr = roleScopedDealerRowsForReal(
+    [grantedRow, otherRow],
+    managerSnap,
+    "sales_manager",
+    undefined,
+    grantedScope,
+  );
+  assert.equal(outMgr.length, 1);
+  assert.equal(outMgr[0]!.releaseCode, "MA-GRANTED");
+  const outLead = roleScopedDealerRowsForReal(
+    [grantedRow, otherRow],
+    ropSnap,
+    "team_lead",
+    undefined,
+    grantedScope,
+  );
+  assert.equal(outLead.length, 1);
+  assert.equal(outLead[0]!.releaseCode, "MA-GRANTED");
 }
 
 console.log("dealer-base-real-scope-assignments: ok");

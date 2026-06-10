@@ -22,11 +22,13 @@ export type RoleScopedDealerRowsForRealOptions = {
 export type AssignmentsScope = {
   ownCodes: Set<string>;
   teamCodes: Set<string>;
+  /** Клиенты, выданные ропу через rop_client_grants — read-scope поверх own/team. */
+  grantedCodes?: Set<string>;
 };
 
 export function assignmentsScopeIsActive(scope: AssignmentsScope | undefined): boolean {
   if (!scope) return false;
-  return scope.ownCodes.size > 0 || scope.teamCodes.size > 0;
+  return scope.ownCodes.size > 0 || scope.teamCodes.size > 0 || (scope.grantedCodes?.size ?? 0) > 0;
 }
 
 function rowMatchesAssignmentCodes(r: DealerRow, codes: Set<string>): boolean {
@@ -38,8 +40,14 @@ function rowMatchesAssignmentCodes(r: DealerRow, codes: Set<string>): boolean {
 export function rowInAssignmentsScope(r: DealerRow, scope: AssignmentsScope | undefined): boolean {
   if (!assignmentsScopeIsActive(scope)) return false;
   const catalog = r.releaseCode?.trim();
-  if (catalog && (scope!.ownCodes.has(catalog) || scope!.teamCodes.has(catalog))) return true;
-  return scope!.ownCodes.has(r.id) || scope!.teamCodes.has(r.id);
+  const granted = scope!.grantedCodes;
+  if (catalog && (scope!.ownCodes.has(catalog) || scope!.teamCodes.has(catalog) || (granted?.has(catalog) ?? false)))
+    return true;
+  return (
+    scope!.ownCodes.has(r.id) ||
+    scope!.teamCodes.has(r.id) ||
+    (granted?.has(r.id) ?? false)
+  );
 }
 
 function rowsForAssignmentsScope(
@@ -50,10 +58,12 @@ function rowsForAssignmentsScope(
   if (access === "sales_director") return rows;
   const matchesOwn = (r: DealerRow) => rowMatchesAssignmentCodes(r, scope.ownCodes);
   const matchesTeam = (r: DealerRow) => rowMatchesAssignmentCodes(r, scope.teamCodes);
+  const matchesGranted = (r: DealerRow) =>
+    scope.grantedCodes ? rowMatchesAssignmentCodes(r, scope.grantedCodes) : false;
   if (access === "team_lead") {
-    return rows.filter((r) => matchesTeam(r) || matchesOwn(r));
+    return rows.filter((r) => matchesTeam(r) || matchesOwn(r) || matchesGranted(r));
   }
-  return rows.filter(matchesOwn);
+  return rows.filter((r) => matchesOwn(r) || matchesGranted(r));
 }
 
 export function realEffectiveTeamLeadTeamIdFromSnap(snap: OrgSnapshot): string {

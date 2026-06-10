@@ -282,6 +282,7 @@ export default function TradePointsPage(): ReactElement {
     return {
       ownCodes: myCodesQ.data.ownCodes,
       teamCodes: myCodesQ.data.teamCodes,
+      grantedCodes: myCodesQ.data.grantedCodes,
     };
   }, [myCodesQ.data]);
   const snap = orgSnapQ.data ?? null;

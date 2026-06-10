@@ -18,6 +18,8 @@ export type MyClientCodesPayload = {
   teamCodes: string[];
   /** client_code → responsible_user_id (БД), для агрегации карточек менеджеров. */
   responsibleByCode: Record<string, string>;
+  /** client_code, выданные ропу через rop_client_grants (read-scope поверх own/team). */
+  grantedCodes: string[];
   meta: MyClientCodesMeta;
 };
 
@@ -40,7 +42,7 @@ export async function fetchMyClientCodes(pool: PoolLike, user: SessionUser): Pro
   const meta = buildMeta(uid, role);
 
   if (role === "admin" || role === "director" || role === "analyst" || role === "marketer") {
-    return { success: true, ownCodes: [], teamCodes: [], responsibleByCode: {}, meta };
+    return { success: true, ownCodes: [], teamCodes: [], responsibleByCode: {}, grantedCodes: [], meta };
   }
 
   if (role === "rop") {
@@ -67,11 +69,16 @@ export async function fetchMyClientCodes(pool: PoolLike, user: SessionUser): Pro
     for (const r of responsibleQ.rows) {
       if (r.client_code && r.responsible_user_id) responsibleByCode[r.client_code] = r.responsible_user_id;
     }
+    const grantedQ = await pool.query<{ client_code: string }>(
+      `SELECT DISTINCT client_code FROM rop_client_grants WHERE rop_user_id = $1::uuid ORDER BY client_code`,
+      [uid],
+    );
     return {
       success: true,
       ownCodes: ownQ.rows.map((r) => r.client_code).filter(Boolean),
       teamCodes: teamQ.rows.map((r) => r.client_code).filter(Boolean),
       responsibleByCode,
+      grantedCodes: grantedQ.rows.map((r) => r.client_code).filter(Boolean),
       meta,
     };
   }
@@ -89,6 +96,7 @@ export async function fetchMyClientCodes(pool: PoolLike, user: SessionUser): Pro
       ownCodes,
       teamCodes: [],
       responsibleByCode,
+      grantedCodes: [],
       meta,
     };
   }
@@ -109,9 +117,10 @@ export async function fetchMyClientCodes(pool: PoolLike, user: SessionUser): Pro
       ownCodes,
       teamCodes: [],
       responsibleByCode,
+      grantedCodes: [],
       meta,
     };
   }
 
-  return { success: true, ownCodes: [], teamCodes: [], responsibleByCode: {}, meta };
+  return { success: true, ownCodes: [], teamCodes: [], responsibleByCode: {}, grantedCodes: [], meta };
 }
