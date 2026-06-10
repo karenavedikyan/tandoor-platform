@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Link, useLocation, useParams } from "wouter";
+import { Link, useParams } from "wouter";
+import { useHashLocation } from "wouter/use-hash-location";
 import { Button } from "@/components/ui/button";
 import { PageLoadingFallback } from "@/components/navigation/page-loading";
 import { getProductById } from "@/lib/catalog-data";
@@ -13,7 +14,7 @@ type ResolveResponse =
 
 export function CatalogLegacyRedirect() {
   const params = useParams<{ productId: string }>();
-  const [, setLocation] = useLocation();
+  const [, setLoc] = useHashLocation();
   const productId = params.productId?.trim() ?? "";
   const [notFound, setNotFound] = useState(false);
 
@@ -24,7 +25,7 @@ export function CatalogLegacyRedirect() {
     }
 
     if (UUID_RE.test(productId)) {
-      setLocation(`/catalog/1c/${productId}`, { replace: true });
+      setLoc(`/catalog/1c/${productId}`);
       return;
     }
 
@@ -43,7 +44,7 @@ export function CatalogLegacyRedirect() {
         const data = (await r.json()) as ResolveResponse;
         if (cancelled) return;
         if (r.ok && data.success && data.result === "matched" && data.productId) {
-          setLocation(`/catalog/1c/${data.productId}`, { replace: true });
+          setLoc(`/catalog/1c/${data.productId}`);
           return;
         }
         setNotFound(true);
@@ -55,7 +56,7 @@ export function CatalogLegacyRedirect() {
     return () => {
       cancelled = true;
     };
-  }, [productId, setLocation]);
+  }, [productId, setLoc]);
 
   if (notFound) {
     return (
