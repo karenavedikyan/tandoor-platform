@@ -1450,6 +1450,18 @@ export default function DealerBase() {
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
   const searchFilterPending = search !== deferredSearch;
+  const [searchIndicatorVisible, setSearchIndicatorVisible] = useState(false);
+
+  useEffect(() => {
+    if (searchFilterPending) {
+      setSearchIndicatorVisible(true);
+      return;
+    }
+    if (!searchIndicatorVisible) return;
+    const t = window.setTimeout(() => setSearchIndicatorVisible(false), 350);
+    return () => window.clearTimeout(t);
+  }, [searchFilterPending, searchIndicatorVisible]);
+
   const [quick, setQuick] = useState<QuickFilter>("all");
   const [cities, setCities] = useState<string[]>([]);
   const [categories, setCategories] = useState<ClientCategorySelection[]>([]);
@@ -3675,9 +3687,9 @@ export default function DealerBase() {
                 placeholder="Поиск: название, код, город, РОП, менеджер, тип, адрес, ИНН"
                 className="min-h-9 rounded-lg border-border pl-9 pr-9 text-sm sm:min-h-10 sm:rounded-xl sm:pl-10 sm:pr-10"
                 data-testid="input-dealer-base-search"
-                aria-busy={searchFilterPending}
+                aria-busy={searchIndicatorVisible}
               />
-              {searchFilterPending ? (
+              {searchIndicatorVisible ? (
                 <Loader2
                   className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-primary sm:right-3"
                   aria-hidden
@@ -4209,7 +4221,7 @@ export default function DealerBase() {
       <section
         className={cn(
           "min-w-0 transition-opacity duration-200",
-          searchFilterPending && "pointer-events-none opacity-60",
+          searchIndicatorVisible && "opacity-60",
         )}
         data-testid="section-dealer-base-results"
       >
