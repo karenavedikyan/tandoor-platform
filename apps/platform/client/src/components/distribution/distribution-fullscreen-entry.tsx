@@ -91,7 +91,7 @@ import {
   assignmentShareUrl,
   createAssignment,
 } from "@/lib/showcase-assignments-api";
-import { fetchResolveTradePoint } from "@/lib/responsibility-api";
+import { fetchResolveTradePoint, fetchUsersForRole } from "@/lib/responsibility-api";
 import { pickerUserById, type PickerUser } from "@/lib/users-picker-api";
 import {
   OVERRIDES_PENDING_CHANGED_EVENT,
@@ -108,6 +108,14 @@ function assigneeRoleLabel(role: string): string {
   if (role === "regional_manager") return "региональный менеджер";
   if (role === "rop") return "РОП";
   return "";
+}
+
+function resolveModelDisplayName(id: string, matrixName?: string): string {
+  const trimmed = matrixName?.trim();
+  if (trimmed && trimmed !== id) return trimmed;
+  const product = getProductById(id);
+  if (product?.name?.trim()) return product.name.trim();
+  return trimmed || id;
 }
 
 const ASSIGNMENT_CREATE_ROLES = new Set(["admin", "director", "rop", "regional_manager", "manager"]);
@@ -739,7 +747,7 @@ export function DistributionFullscreenEntry({
     () =>
       assignmentDialogItemIds.map((id) => ({
         id,
-        name: matrixModelById.get(id)?.name ?? id,
+        name: resolveModelDisplayName(id, matrixModelById.get(id)?.name),
       })),
     [matrixModelById, assignmentDialogItemIds],
   );
@@ -771,15 +779,16 @@ export function DistributionFullscreenEntry({
       setAssignmentDialogItemIds(ids);
       setAssignmentDialogOpen(true);
       setAssignmentManagersLoading(true);
-      void fetchResolveTradePoint(point.id)
-        .then((resolved) => {
+      void (async () => {
+        try {
+          const resolved = await fetchResolveTradePoint(point.id);
           const ordered: Array<{ key: "manager" | "regional_manager" | "rop" }> = [
             { key: "manager" },
             { key: "regional_manager" },
             { key: "rop" },
           ];
           const seen = new Set<string>();
-          const users: PickerUser[] = [];
+          let users: PickerUser[] = [];
           for (const { key } of ordered) {
             const r = resolved[key];
             const id = r.userId?.trim();
@@ -792,6 +801,24 @@ export function DistributionFullscreenEntry({
               status: "active",
             });
           }
+
+          if (users.length === 0) {
+            const [mgrs, rms, rops] = await Promise.all([
+              fetchUsersForRole("manager"),
+              fetchUsersForRole("regional_manager"),
+              fetchUsersForRole("rop"),
+            ]);
+            const merged: PickerUser[] = [];
+            const fallbackSeen = new Set<string>();
+            for (const u of [...mgrs, ...rms, ...rops]) {
+              const id = u.id?.trim();
+              if (!id || fallbackSeen.has(id)) continue;
+              fallbackSeen.add(id);
+              merged.push(u);
+            }
+            users = merged;
+          }
+
           setAssignmentManagers(users);
           setAssignmentManagersError("");
           if (actorUserId && users.some((u) => u.id === actorUserId)) {
@@ -799,14 +826,13 @@ export function DistributionFullscreenEntry({
           } else {
             setAssignmentAssigneeId(ASSIGNMENT_ASSIGNEE_NONE);
           }
-        })
-        .catch(() => {
+        } catch {
           setAssignmentManagers([]);
           setAssignmentManagersError("Не удалось загрузить ответственных по точке.");
-        })
-        .finally(() => {
+        } finally {
           setAssignmentManagersLoading(false);
-        });
+        }
+      })();
     },
     [actorUserId, needInstallMarkedIds, point.id, resetAssignmentDialog],
   );
@@ -836,7 +862,7 @@ export function DistributionFullscreenEntry({
         items: assignmentDialogItemIds.map((id) => ({
           targetKind: "model" as const,
           targetId: id,
-          modelName: matrixModelById.get(id)?.name,
+          modelName: resolveModelDisplayName(id, matrixModelById.get(id)?.name),
         })),
       });
       setAssignmentShareLink(assignmentShareUrl(assignment.id));
@@ -1283,14 +1309,14 @@ export function DistributionFullscreenEntry({
       ) : null}
 
       <Dialog open={assignmentDialogOpen} onOpenChange={handleAssignmentDialogOpenChange}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
+        <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] overflow-y-auto overflow-x-hidden sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Задание на отгрузку — {point.name}</DialogTitle>
+            <DialogTitle className="break-words pr-6">Задание на отгрузку — {point.name}</DialogTitle>
           </DialogHeader>
 
           {assignmentPhase === "form" ? (
-            <div className="space-y-4 py-1">
-              <div className="space-y-2">
+            <div className="min-w-0 space-y-4 py-1">
+              <div className="min-w-0 space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <Label className="text-sm">Выбранные модели</Label>
                   <Badge variant="secondary" data-testid="badge-assignment-models-count">
@@ -1298,11 +1324,11 @@ export function DistributionFullscreenEntry({
                   </Badge>
                 </div>
                 <ul
-                  className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-border/80 bg-muted/20 px-3 py-2 text-sm"
+                  className="max-h-40 w-full min-w-0 space-y-1 overflow-y-auto rounded-md border border-border/80 bg-muted/20 px-3 py-2 text-sm"
                   data-testid="list-assignment-selected-models"
                 >
                   {assignmentSelectedModels.map((m) => (
-                    <li key={m.id} className="truncate text-foreground">
+                    <li key={m.id} className="min-w-0 break-words text-foreground">
                       {m.name}
                     </li>
                   ))}
